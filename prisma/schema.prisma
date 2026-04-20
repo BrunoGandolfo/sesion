@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Organizaciones — multi-tenant desde el día 1
+// En el MVP hay una sola fila. Cuando escale
+// a SaaS, no tocamos el modelo.
+// ============================================
+
+model Organization {
+  id        String   @id @default(cuid())
+  nombre    String
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  configuracion Configuracion?
+  pacientes     Paciente[]
+  turnos        Turno[]
+  usuarios      User[]
+
+  @@map("organizaciones")
+}
+
+// ============================================
+// Auth — single user en MVP, multi-user en SaaS
+// ============================================
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  hashedPassword String       @map("hashed_password")
+  nombre         String
+  organizationId String       @map("organization_id")
+  creadoEn       DateTime     @default(now()) @map("creado_en")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("usuarios")
+}
+
+// ============================================
+// Configuración — singleton por organización
+// ============================================
+
+model Configuracion {
+  id                   String @id @default(cuid())
+  nombreProfesional    String @map("nombre_profesional")
+  direccion            String @default("")
+  whatsappOrigen       String @default("") @map("whatsapp_origen")
+  tarifaDefault        Int    @map("tarifa_default")
+  horasAnticipacion    Int    @default(24) @map("horas_anticipacion")
+  templateRecordatorio String @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
+
+  organizationId String       @unique @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("configuraciones")
+}
+
+// ============================================
+// Pacientes
+// ============================================
+
+model Paciente {
+  id             String   @id @default(cuid())
+  nombre         String
+  apellido       String
+  telefono       String
+  email          String?
+  tarifa         Int
+  notas          String?  @db.Text
+  activo         Boolean  @default(true)
+  creadoEn       DateTime @default(now()) @map("creado_en")
+  actualizadoEn  DateTime @updatedAt @map("actualizado_en")
+
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  turnos         Turno[]
+
+  @@index([organizationId, activo])
+  @@index([organizationId, apellido])
+  @@map("pacientes")
+}
+
+// ============================================
+// Turnos — con pago inline
+// ============================================
+
+model Turno {
+  id             String   @id @default(cuid())
+  fecha          DateTime
+  duracion       Int      @default(50)
+  modalidad      String   @default("presencial")
+  estado         String   @default("programado")
+  tarifaCobrada  Int      @map("tarifa_cobrada")
+  pagoEstado     String   @default("pendiente") @map("pago_estado")
+  pagoFecha      DateTime? @map("pago_fecha")
+  pagoMetodo     String?  @map("pago_metodo")
+  notas          String?  @db.Text
+  creadoEn       DateTime @default(now()) @map("creado_en")
+  actualizadoEn  DateTime @updatedAt @map("actualizado_en")
+
+  pacienteId     String       @map("paciente_id")
+  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  recordatorios  Recordatorio[]
+
+  @@index([organizationId, fecha])
+  @@index([organizationId, pagoEstado])
+  @@index([pacienteId])
+  @@map("turnos")
+}
+
+// ============================================
+// Recordatorios de WhatsApp
+// ============================================
+
+model Recordatorio {
+  id            String    @id @default(cuid())
+  programadoEn  DateTime  @map("programado_en")
+  enviadoEn     DateTime? @map("enviado_en")
+  estado        String    @default("pendiente")
+  textoEnviado  String?   @db.Text @map("texto_enviado")
+  error         String?   @db.Text
+  intentos      Int       @default(0)
+  creadoEn      DateTime  @default(now()) @map("creado_en")
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+
+  turnoId String @map("turno_id")
+  turno   Turno  @relation(fields: [turnoId], references: [id])
+
+  @@index([estado, programadoEn])
+  @@map("recordatorios")
+}

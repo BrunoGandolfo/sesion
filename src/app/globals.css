@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
+/* ============================================
+   SESIÓN — Design Tokens
+   Fuente de verdad visual del proyecto.
+   NO modificar sin consenso de diseño.
+   ============================================ */
+
+@theme {
+  /* Sage — primary, brand, focus */
+  --color-sage-50:  #F3F6F4;
+  --color-sage-100: #E2EBE6;
+  --color-sage-200: #C2D4CB;
+  --color-sage-300: #9BB6AA;
+  --color-sage-400: #6F9384;
+  --color-sage-500: #4F7A6A;
+  --color-sage-600: #3E6355;
+  --color-sage-700: #304E43;
+  --color-sage-800: #243A32;
+  --color-sage-900: #1A2A24;
+
+  /* Cream — warm surfaces */
+  --color-cream-50:  #FAFAF6;
+  --color-cream-100: #F4F0E8;
+  --color-cream-200: #E8E1D2;
+
+  /* Ink — texto */
+  --color-ink-900: #1A2628;
+  --color-ink-700: #3F4F52;
+  --color-ink-500: #6B7A7C;
+  --color-ink-300: #A5B0B2;
+
+  /* Terracotta — deudas, warnings */
+  --color-terracotta-50:  #FBF3EB;
+  --color-terracotta-100: #F5E0CC;
+  --color-terracotta-500: #B26B45;
+  --color-terracotta-600: #8F5436;
+
+  /* Gold — acento editorial */
+  --color-gold-50:  #FAF4E4;
+  --color-gold-500: #A88534;
+
+  /* Semantic */
+  --color-success: #4F7A6A;
+  --color-warning: #B26B45;
+  --color-error:   #A04040;
+  --color-info:    #4A6B7D;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Shadows */
+  --shadow-subtle: 0 1px 2px rgba(26,38,40,.04), 0 1px 3px rgba(26,38,40,.06);
+  --shadow-raised: 0 2px 4px rgba(26,38,40,.04), 0 4px 12px rgba(26,38,40,.08);
+
+  /* Fonts */
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+}
+
+/* ============================================
+   Motion tokens
+   ============================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 240ms;
+
+  /* Borders */
+  --border-subtle: var(--color-cream-200);
+  --border-strong: #C4BDAE;
+  --border-focus: var(--color-sage-500);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ============================================
+   Base
+   ============================================ */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  background-color: var(--color-cream-50);
+  color: var(--color-ink-900);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus visible global */
+*:focus-visible {
+  outline: 2px solid var(--color-sage-500);
+  outline-offset: 2px;
 }
