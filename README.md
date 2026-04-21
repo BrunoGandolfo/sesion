@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sesión
 
-## Getting Started
+App web para gestionar una consulta de salud mental: pacientes, turnos, cobros y recordatorios.
 
-First, run the development server:
+## Qué es
+
+Sesión es una herramienta de gestión para profesionales de salud mental. Centraliza agenda, fichas de pacientes, seguimiento de pagos y recordatorios por WhatsApp en una interfaz simple. El MVP usa un único usuario autenticado y está preparado para evolucionar a multi-tenant.
+
+## Stack
+
+| Tecnología | Versión | Rol |
+| --- | --- | --- |
+| Next.js | 16.2.4 | App Router, frontend y API routes |
+| React | 19.2.4 | UI |
+| TypeScript | strict | Tipado de aplicación |
+| Tailwind CSS | 4 | Estilos |
+| Prisma | 5.22 | ORM |
+| PostgreSQL | 17 | Base de datos |
+| Auth.js / next-auth | 5.0.0-beta.31 | Login con credenciales y JWT |
+| Vercel | Hobby | Hosting y API |
+| Neon | Free | PostgreSQL administrado |
+| Evolution API / Twilio | Migración | Envío de WhatsApp |
+
+## Requisitos
+
+- Node.js 18+
+- npm
+- PostgreSQL 17 compatible
+- Cuenta Neon para base de datos remota
+
+## Setup local
+
+1. Clonar el repo:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/BrunoGandolfo/sesion.git
+cd sesion
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Instalar dependencias:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Crear variables locales:
 
-## Learn More
+```bash
+cp .env.example .env
+```
 
-To learn more about Next.js, take a look at the following resources:
+4. Completar `.env` con valores locales o de desarrollo.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+5. Generar Prisma Client:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npx prisma generate
+```
 
-## Deploy on Vercel
+6. Sincronizar la base:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npx prisma db push
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+7. Levantar desarrollo:
+
+```bash
+npm run dev -- -p 3001
+```
+
+## Puerto
+
+El entorno local corre en `http://localhost:3001`.
+
+## Estructura del proyecto
+
+```text
+src/
+  app/                 Rutas App Router, pantallas y API routes
+  components/          Componentes UI, layout y formularios
+  lib/                 Auth, Prisma, formato y servicios externos
+  types/               Tipos de dominio compartidos
+prisma/
+  schema.prisma        Modelo de datos
+public/                Assets estáticos
+```
+
+## Scripts
+
+| Script | Uso |
+| --- | --- |
+| `npm run dev -- -p 3001` | Levanta Next.js en desarrollo |
+| `npm run build` | Compila producción |
+| `npm run lint` | Ejecuta ESLint |
+| `npx prisma generate` | Genera Prisma Client |
+| `npx prisma studio` | Abre Prisma Studio |
+
+## Variables de entorno
+
+Las variables necesarias están documentadas en `.env.example`. No commitear `.env` ni secretos reales.
+
+## Deploy
+
+Push a `main` auto-deploya en Vercel.
+
+## Licencia
+
+Privado.

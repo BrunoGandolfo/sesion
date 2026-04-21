@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { normalizePhone } from "@/lib/phone";
 import type { Paciente } from "@/types/domain";
 
 import { getOrganizationId } from "../../_lib/auth";
@@ -75,10 +76,25 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       throw new ApiError("Paciente no encontrado", 404);
     }
 
+    let telefonoNormalizado: string | undefined;
+    if (parsed.data.telefono !== undefined) {
+      try {
+        telefonoNormalizado = normalizePhone(parsed.data.telefono);
+      } catch (err) {
+        throw new ApiError(
+          err instanceof Error
+            ? err.message
+            : "El teléfono no tiene un formato válido. Usá el formato +598 99 123 456",
+          400,
+        );
+      }
+    }
+
     const paciente = await db.paciente.update({
       where: { id },
       data: {
         ...parsed.data,
+        telefono: telefonoNormalizado ?? parsed.data.telefono,
         email: parsed.data.email === undefined ? undefined : parsed.data.email,
         notas: parsed.data.notas === undefined ? undefined : parsed.data.notas,
       },

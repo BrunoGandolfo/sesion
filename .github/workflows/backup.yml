@@ -1,0 +1,247 @@
+# ============================================================================
+# Backup diario de la base de datos de Sesión a Cloudflare R2.
+#
+# Flujo:
+#   pg_dump (formato custom) → gpg --symmetric (AES-256) → aws s3 cp a R2 →
+#   verificación → retención 30 días → alerta por webhook si algo falló.
+#
+# La clave del bucket usa timestamp en UTC con segundos, así dos corridas el
+# mismo día (scheduled + manual, p. ej.) generan archivos distintos y no se
+# pisan: el workflow es seguro de ejecutar N veces.
+#
+# Secrets requeridos (configurados en GitHub Settings → Secrets → Actions):
+#   - DATABASE_URL              (Neon, incluir sslmode=require)
+#   - R2_ACCESS_KEY_ID          (token R2 con permiso Object Read/Write)
+#   - R2_SECRET_ACCESS_KEY
+#   - R2_BUCKET                 (solo el nombre, sin s3://)
+#   - R2_ENDPOINT               (https://<accountid>.r2.cloudflarestorage.com)
+#   - BACKUP_ENCRYPTION_KEY     (passphrase fuerte — guardarla offline también)
+#   - BACKUP_ALERT_WEBHOOK      (opcional; Slack/Discord/otro)
+# ============================================================================
+
+name: Backup diario de base de datos
+
+on:
+  # 06:00 UTC = 03:00 America/Montevideo (UY no tiene DST, es UTC-3 fijo).
+  schedule:
+    - cron: "0 6 * * *"
+  # Permite correr el backup manualmente desde la pestaña Actions.
+  workflow_dispatch:
+
+# Evita que dos ejecuciones (cron + dispatch manual) corran en paralelo contra
+# R2 y se enreden con la retención. Encolamos en vez de cancelar.
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+# Este workflow no escribe en el repo ni usa el GITHUB_TOKEN — le damos el
+# mínimo posible.
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Backup Postgres → R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+
+    steps:
+      # ---------------------------------------------------------------------
+      # 1. Instalar postgresql-client-17.
+      # ubuntu-latest no trae el cliente 17 por defecto. Usamos el repo oficial
+      # de PostgreSQL (PGDG) con keyring moderno (apt-key está deprecado).
+      # TODO: cuando Neon actualice a Postgres 18+, cambiar postgresql-client-17
+      # por la versión que matchee el server. pg_dump debe ser >= al server.
+      # ---------------------------------------------------------------------
+      - name: Instalar postgresql-client-17
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          codename="$(lsb_release -cs)"
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_dump --version
+
+      # ---------------------------------------------------------------------
+      # 2. Calcular nombre del backup.
+      # Timestamp en UTC (sin ambigüedad de zona) y con segundos para evitar
+      # colisiones entre corridas concurrentes/dispatch.
+      # ---------------------------------------------------------------------
+      - name: Calcular nombre del backup
+        run: |
+          set -euo pipefail
+          stamp="$(date -u +'%Y-%m-%d-%H%M%S')"
+          file="sesion-backup-${stamp}.dump"
+          key="backups/${file}.gpg"
+          echo "BACKUP_FILE=${file}" >> "$GITHUB_ENV"
+          echo "BACKUP_KEY=${key}" >> "$GITHUB_ENV"
+          echo "Archivo local: ${file}"
+          echo "Clave en R2:  ${key}"
+
+      # ---------------------------------------------------------------------
+      # 3. pg_dump en formato custom (-Fc).
+      # --no-owner / --no-privileges para facilitar restore a otra DB con
+      # roles distintos. La URL de Neon ya trae sslmode=require, no hace falta
+      # configurar SSL a mano.
+      # ---------------------------------------------------------------------
+      - name: Ejecutar pg_dump
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "ERROR: falta el secret DATABASE_URL." >&2
+            exit 1
+          fi
+          pg_dump \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --file="${BACKUP_FILE}" \
+            "${DATABASE_URL}"
+          ls -lh "${BACKUP_FILE}"
+
+      # ---------------------------------------------------------------------
+      # 4. Cifrado simétrico con gpg (AES-256).
+      # La passphrase entra por stdin (--passphrase-fd 0) para que nunca
+      # aparezca en la tabla de procesos. Borramos el dump plano apenas está
+      # el .gpg listo.
+      # ---------------------------------------------------------------------
+      - name: Cifrar backup con gpg
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+            echo "ERROR: falta el secret BACKUP_ENCRYPTION_KEY." >&2
+            exit 1
+          fi
+          printf '%s' "${BACKUP_ENCRYPTION_KEY}" | gpg \
+            --batch --yes --quiet \
+            --symmetric \
+            --cipher-algo AES256 \
+            --passphrase-fd 0 \
+            --output "${BACKUP_FILE}.gpg" \
+            "${BACKUP_FILE}"
+          rm -f "${BACKUP_FILE}"
+          ls -lh "${BACKUP_FILE}.gpg"
+
+      # ---------------------------------------------------------------------
+      # 5. Configurar aws cli para R2.
+      # R2 es S3-compatible, solo hace falta apuntar --endpoint-url. La región
+      # la ignora pero el SDK la exige → "auto".
+      # Los flags de checksum deshabilitan el comportamiento nuevo del aws-cli
+      # v2.23+ que R2 todavía no soporta en todas las rutas y puede romper
+      # uploads multipart.
+      # ---------------------------------------------------------------------
+      - name: Configurar credenciales AWS CLI para R2
+        run: |
+          set -euo pipefail
+          aws configure set aws_access_key_id "${R2_ACCESS_KEY_ID}"
+          aws configure set aws_secret_access_key "${R2_SECRET_ACCESS_KEY}"
+          aws configure set default.region auto
+          aws configure set default.s3.request_checksum_calculation when_required
+          aws configure set default.s3.response_checksum_validation when_required
+
+      # ---------------------------------------------------------------------
+      # 6. Upload a R2.
+      # ---------------------------------------------------------------------
+      - name: Subir backup cifrado a R2
+        run: |
+          set -euo pipefail
+          aws s3 cp \
+            "${BACKUP_FILE}.gpg" \
+            "s3://${R2_BUCKET}/${BACKUP_KEY}" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --only-show-errors
+          echo "Subido: s3://${R2_BUCKET}/${BACKUP_KEY}"
+
+      # ---------------------------------------------------------------------
+      # 7. Verificación de integridad de ubicación.
+      # head-object devuelve error si la clave no existe → el job falla y se
+      # dispara la alerta. También chequeamos que el ContentLength > 0.
+      # ---------------------------------------------------------------------
+      - name: Verificar que el backup está en R2
+        run: |
+          set -euo pipefail
+          meta="$(aws s3api head-object \
+            --bucket "${R2_BUCKET}" \
+            --key "${BACKUP_KEY}" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --output json)"
+          echo "${meta}"
+          size="$(printf '%s' "${meta}" | jq -r '.ContentLength // 0')"
+          if [ "${size}" -le 0 ]; then
+            echo "ERROR: el objeto subido tiene tamaño 0." >&2
+            exit 1
+          fi
+          echo "OK: backup verificado (${size} bytes)."
+
+      # ---------------------------------------------------------------------
+      # 8. Retención: borrar backups con LastModified > 30 días.
+      # Filtramos con JMESPath del lado del CLI para no traer todo el listado.
+      # Con backup diario y retención 30, esto borra 1 archivo por día.
+      # ---------------------------------------------------------------------
+      - name: Limpiar backups > 30 días
+        run: |
+          set -euo pipefail
+          cutoff="$(date -u -d '30 days ago' +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "Borrando objetos anteriores a ${cutoff}"
+
+          old_keys="$(aws s3api list-objects-v2 \
+            --bucket "${R2_BUCKET}" \
+            --prefix "backups/" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --query "Contents[?LastModified<'${cutoff}'].Key" \
+            --output text)"
+
+          if [ -z "${old_keys}" ] || [ "${old_keys}" = "None" ]; then
+            echo "No hay backups viejos para borrar."
+            exit 0
+          fi
+
+          # --output text separa claves con tabs → las pasamos a una línea c/u.
+          while IFS= read -r key; do
+            [ -z "${key}" ] && continue
+            echo "Borrando s3://${R2_BUCKET}/${key}"
+            aws s3 rm "s3://${R2_BUCKET}/${key}" \
+              --endpoint-url "${R2_ENDPOINT}"
+          done < <(printf '%s\n' "${old_keys}" | tr '\t' '\n')
+
+      # ---------------------------------------------------------------------
+      # 9. Alerta por webhook si cualquier paso previo falló.
+      # El payload lleva `text` y `content` para cubrir Slack (text) y Discord
+      # (content) con el mismo JSON; los servicios ignoran los campos extras.
+      # Si el webhook no está seteado, salimos sin error para no enmascarar
+      # la falla original.
+      # TODO: cuando Bruno defina el destino final (Slack app, Discord, etc.)
+      # ajustar el payload al schema específico (bloques, embeds, etc.).
+      # ---------------------------------------------------------------------
+      - name: Avisar falla vía webhook
+        if: failure()
+        env:
+          BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          if [ -z "${BACKUP_ALERT_WEBHOOK:-}" ]; then
+            echo "BACKUP_ALERT_WEBHOOK no configurado — salto la alerta."
+            exit 0
+          fi
+          msg="🚨 Backup de Sesión falló. Run: ${RUN_URL}"
+          payload="$(jq -nc --arg m "${msg}" '{text:$m, content:$m}')"
+          curl --silent --show-error --max-time 15 \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data "${payload}" \
+            "${BACKUP_ALERT_WEBHOOK}" \
+            || echo "El webhook no respondió OK, pero seguimos."

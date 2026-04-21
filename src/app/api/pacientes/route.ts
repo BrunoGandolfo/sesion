@@ -1,11 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { normalizePhone } from "@/lib/phone";
 import type { Paciente } from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
 import { toBooleanParam } from "../_lib/schemas";
-import { errorResponse, ok, validationError } from "../_lib/responses";
+import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
 import { toPacienteConDeuda } from "../_lib/domain";
 
 export const runtime = "nodejs";
@@ -86,11 +87,23 @@ export async function POST(request: Request) {
       return validationError(parsed.error);
     }
 
+    let telefonoNormalizado: string;
+    try {
+      telefonoNormalizado = normalizePhone(parsed.data.telefono);
+    } catch (err) {
+      throw new ApiError(
+        err instanceof Error
+          ? err.message
+          : "El teléfono no tiene un formato válido. Usá el formato +598 99 123 456",
+        400,
+      );
+    }
+
     const paciente = await db.paciente.create({
       data: {
         nombre: parsed.data.nombre,
         apellido: parsed.data.apellido,
-        telefono: parsed.data.telefono,
+        telefono: telefonoNormalizado,
         email: parsed.data.email ?? null,
         tarifa: parsed.data.tarifa,
         notas: parsed.data.notas ?? null,

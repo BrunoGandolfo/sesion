@@ -81,13 +81,33 @@ function weekdayDates(start: Date, count: number, fromOffset: number) {
   return dates;
 }
 
-export async function POST() {
+function isAuthorized(request: Request) {
+  const secret = process.env.SEED_SECRET;
+  if (!secret) return false;
+
+  return request.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production") {
     return Response.json({ error: "No encontrado" }, { status: 404 });
   }
 
+  if (!isAuthorized(request)) {
+    return Response.json({ error: "No autorizado" }, { status: 401 });
+  }
+
   try {
-    const hashedPassword = await bcrypt.hash("sesion2026", 10);
+    const seedUserPassword = process.env.SEED_USER_PASSWORD;
+
+    if (!seedUserPassword) {
+      return Response.json(
+        { error: "SEED_USER_PASSWORD no configurada" },
+        { status: 500 },
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(seedUserPassword, 10);
     const now = new Date();
     const today = startOfDay(now);
 
