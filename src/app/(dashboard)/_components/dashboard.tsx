@@ -29,6 +29,7 @@ import {
   saludo,
 } from "@/lib/format";
 import type {
+  Configuracion,
   DeudaPaciente,
   KPIsDashboard,
   MetodoPago,
@@ -141,11 +142,33 @@ function parsePaciente(raw: JsonPaciente): PacienteConDeuda {
   };
 }
 
+function getFirstName(name: string | null | undefined): string | null {
+  const first = name?.trim().split(/\s+/)[0];
+  return first || null;
+}
+
+async function fetchNombreProfesional(): Promise<string | null> {
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as {
+      data: Pick<Configuracion, "nombreProfesional">;
+    };
+    return payload.data.nombreProfesional;
+  } catch {
+    return null;
+  }
+}
+
 // ============================================
 export function Dashboard() {
   const router = useRouter();
   const [now, setNow] = React.useState(() => new Date());
   const [data, setData] = React.useState<DashboardData | null>(null);
+  const [nombreProfesional, setNombreProfesional] = React.useState<
+    string | null
+  >(null);
   const [loadState, setLoadState] = React.useState<
     "loading" | "ready" | "error"
   >("loading");
@@ -164,12 +187,16 @@ export function Dashboard() {
   const fetchDashboard = React.useCallback(async () => {
     setLoadState((prev) => (prev === "ready" ? prev : "loading"));
     try {
-      const res = await fetch("/api/dashboard", { cache: "no-store" });
+      const [res, nextNombreProfesional] = await Promise.all([
+        fetch("/api/dashboard", { cache: "no-store" }),
+        fetchNombreProfesional(),
+      ]);
       if (!res.ok) throw new Error("dashboard fetch failed");
       const payload = (await res.json()) as {
         data: Parameters<typeof parseDashboard>[0];
       };
       setData(parseDashboard(payload.data));
+      setNombreProfesional((current) => nextNombreProfesional ?? current);
       setNow(new Date());
       setLoadState("ready");
     } catch {
@@ -354,11 +381,16 @@ export function Dashboard() {
   const sesionesPagas = turnos.filter(
     (turno) => turno.pagoEstado === "pagado",
   ).length;
+  const nombreProfesionalCorto = getFirstName(nombreProfesional);
 
   return (
     <>
       <div className="mx-auto flex min-h-full w-full max-w-[1200px] flex-col gap-7 p-5 lg:gap-10 lg:p-14">
-        <HeroDelDia today={now} sesionesHoy={turnos.length} />
+        <HeroDelDia
+          today={now}
+          sesionesHoy={turnos.length}
+          nombreProfesional={nombreProfesionalCorto}
+        />
 
         {proximaSesion ? (
           <ProximaSesionCard turno={proximaSesion} now={now} />
@@ -466,7 +498,7 @@ function DashboardSkeleton({ today }: { today: Date }) {
       <section className="min-w-0">
         <div className="flex items-center text-[13px] font-medium text-ink-500">
           <EditorialRule />
-          <span>{saludo(today)}, Mariana</span>
+          <span>{saludo(today)}</span>
         </div>
         <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="font-[family-name:var(--font-display)] text-[52px] font-medium italic leading-[0.92] tracking-[-0.03em] text-ink-900 lg:text-[80px]">
@@ -539,9 +571,11 @@ function DashboardError({ onRetry }: { onRetry: () => void }) {
 function HeroDelDia({
   today,
   sesionesHoy,
+  nombreProfesional,
 }: {
   today: Date;
   sesionesHoy: number;
+  nombreProfesional: string | null;
 }) {
   const [dayNumber, shortMonth] = fechaCorta(today).split(" ");
   const fechaCompleta = fechaLarga(today);
@@ -550,7 +584,10 @@ function HeroDelDia({
     <section aria-label={fechaCompleta} className="min-w-0">
       <div className="flex items-center text-[13px] font-medium text-ink-500">
         <EditorialRule />
-        <span>{saludo(today)}, Mariana</span>
+        <span>
+          {saludo(today)}
+          {nombreProfesional ? `, ${nombreProfesional}` : ""}
+        </span>
       </div>
 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">

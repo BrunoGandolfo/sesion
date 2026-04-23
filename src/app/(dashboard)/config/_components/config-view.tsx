@@ -22,7 +22,7 @@ const PLACEHOLDERS = [
 ] as const;
 
 const DEFAULT_TEMPLATE =
-  "Hola {{nombre}}, te recuerdo tu sesión del {{fecha}} a las {{hora}}. Hasta pronto, Mariana.";
+  "Hola {{nombre}}, te recuerdo tu sesión del {{fecha}} a las {{hora}}. Hasta pronto, {{profesional}}.";
 
 type ConfigField =
   | "nombreProfesional"
@@ -53,7 +53,7 @@ type ConfigPatch = Partial<{
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 const DEFAULT_FORM: ConfigForm = {
-  nombreProfesional: "Mariana Roldán",
+  nombreProfesional: "",
   direccion: "Rivera 2540, Montevideo",
   whatsappOrigen: "+598 99 876 543",
   tarifaDefault: "2200",

@@ -39,7 +39,7 @@ export default function LoginPage() {
       <div className="flex w-full flex-col items-center text-center">
         <div className="flex items-baseline justify-center gap-2">
           <h1 className="font-[family-name:var(--font-display)] text-[34px] font-medium leading-none tracking-[-0.015em] text-ink-900">
-            Mariana
+            Sesión
           </h1>
           <span
             aria-hidden="true"

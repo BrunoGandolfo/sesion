@@ -73,25 +73,56 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       estado: parsed.data.estado,
     };
 
-    const turno =
-      parsed.data.estado === "cancelado"
-        ? await db.$transaction(async (tx) => {
-            const updated = await tx.turno.update({
-              where: { id },
-              data,
-            });
+    const turno = await db.$transaction(async (tx) => {
+      const updated = await tx.turno.update({
+        where: { id },
+        data,
+      });
 
-            await tx.recordatorio.updateMany({
-              where: { turnoId: id, estado: "pendiente" },
-              data: { estado: "cancelado" },
-            });
+      if (updated.estado === "cancelado") {
+        await tx.recordatorio.updateMany({
+          where: { turnoId: id, estado: "pendiente" },
+          data: { estado: "cancelado" },
+        });
 
-            return updated;
-          })
-        : await db.turno.update({
-            where: { id },
-            data,
-          });
+        return updated;
+      }
+
+      // Si la fecha no cambió, no se reprograma ningún recordatorio.
+      const fechaCambio =
+        parsed.data.fecha !== undefined &&
+        updated.fecha.getTime() !== existing.fecha.getTime();
+
+      if (!fechaCambio) {
+        return updated;
+      }
+
+      await tx.recordatorio.updateMany({
+        where: { turnoId: id, estado: "pendiente" },
+        data: { estado: "cancelado" },
+      });
+
+      const configuracion = await tx.configuracion.findUnique({
+        where: { organizationId },
+        select: { horasAnticipacion: true },
+      });
+
+      const horasAnticipacion = configuracion?.horasAnticipacion ?? 24;
+      const programadoEn = new Date(
+        updated.fecha.getTime() - horasAnticipacion * 60 * 60 * 1000,
+      );
+
+      // La reprogramación genera un recordatorio nuevo alineado a la nueva fecha.
+      await tx.recordatorio.create({
+        data: {
+          turnoId: updated.id,
+          programadoEn,
+          estado: "pendiente",
+        },
+      });
+
+      return updated;
+    });
 
     return ok(toTurno(turno));
   } catch (error) {
