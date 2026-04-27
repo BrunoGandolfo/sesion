@@ -1,5 +1,6 @@
-// Init de Sentry en el cliente. Detectado automáticamente por @sentry/nextjs
-// y inyectado en el bundle del browser.
+// Init de Sentry en el cliente. Convención de Next.js 16 (Turbopack):
+// debe vivir en la raíz como `instrumentation-client.ts`. El antiguo
+// `sentry.client.config.ts` es ignorado por Turbopack en producción.
 import * as Sentry from "@sentry/nextjs";
 
 if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
