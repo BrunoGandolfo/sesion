@@ -22,9 +22,10 @@
 name: Backup diario de base de datos
 
 on:
+  # schedule desactivado hasta configurar secrets R2
   # 06:00 UTC = 03:00 America/Montevideo (UY no tiene DST, es UTC-3 fijo).
   schedule:
-    - cron: "0 6 * * *"
+  #     - cron: "0 6 * * *"
   # Permite correr el backup manualmente desde la pestaña Actions.
   workflow_dispatch:
 
