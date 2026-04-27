@@ -27,7 +27,10 @@
   /* Ink — texto */
   --color-ink-900: #1A2628;
   --color-ink-700: #3F4F52;
-  --color-ink-500: #6B7A7C;
+  /* WCAG AA texto normal sobre #FFF / #FAFAF6 / #F4F0E8:
+     viejo #6B7A7C = 4.47 / 4.27 / 3.93
+     nuevo #627072 = 5.15 / 4.92 / 4.53 */
+  --color-ink-500: #627072;
   --color-ink-300: #A5B0B2;
 
   /* Terracotta — deudas, warnings */
@@ -39,6 +42,21 @@
   /* Gold — acento editorial */
   --color-gold-50:  #FAF4E4;
   --color-gold-500: #A88534;
+
+  /* Variantes AA solo para texto.
+     Mantienen intactos los tokens base usados como fondo o borde. */
+  /* Sage texto sobre #FFF / #FAFAF6 / #F4F0E8:
+     viejo #4F7A6A = 4.86 / 4.64 / 4.27
+     nuevo #4A7364 = 5.35 / 5.11 / 4.70 */
+  --color-sage-text: #4A7364;
+  /* Terracotta texto sobre #FFF / #FAFAF6 / #FBF3EB:
+     viejo #B26B45 = 4.13 / 3.95 / 3.76
+     nuevo #9A5C3B = 5.29 / 5.06 / 4.82 */
+  --color-terracotta-text: #9A5C3B;
+  /* Gold texto sobre #FFF / #FAFAF6 / #FAF4E4:
+     viejo #A88534 = 3.46 / 3.31 / 3.15
+     nuevo #866929 = 5.16 / 4.94 / 4.70 */
+  --color-gold-text: #866929;
 
   /* Semantic */
   --color-success: #4F7A6A;
@@ -84,6 +102,24 @@ body {
   color: var(--color-ink-900);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   Ajustes WCAG AA para utilidades de texto
+   No alteran bg-* ni border-* de la paleta.
+   ============================================ */
+@layer utilities {
+  .text-sage-500 {
+    color: var(--color-sage-text);
+  }
+
+  .text-terracotta-500 {
+    color: var(--color-terracotta-text);
+  }
+
+  .text-gold-500 {
+    color: var(--color-gold-text);
+  }
 }
 
 /* Focus visible global */
