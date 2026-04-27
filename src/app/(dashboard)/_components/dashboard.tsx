@@ -184,29 +184,57 @@ export function Dashboard() {
   );
   const paidPopTimer = React.useRef<number | null>(null);
 
+  const readDashboardData = React.useCallback(async () => {
+    const [res, nextNombreProfesional] = await Promise.all([
+      fetch("/api/dashboard", { cache: "no-store" }),
+      fetchNombreProfesional(),
+    ]);
+    if (!res.ok) throw new Error("dashboard fetch failed");
+
+    const payload = (await res.json()) as {
+      data: Parameters<typeof parseDashboard>[0];
+    };
+
+    return {
+      data: parseDashboard(payload.data),
+      nombreProfesional: nextNombreProfesional,
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    readDashboardData()
+      .then(({ data: nextData, nombreProfesional: nextNombreProfesional }) => {
+        if (cancelled) return;
+        setData(nextData);
+        setNombreProfesional((current) => nextNombreProfesional ?? current);
+        setNow(new Date());
+        setLoadState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadState("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [readDashboardData]);
+
   const fetchDashboard = React.useCallback(async () => {
-    setLoadState((prev) => (prev === "ready" ? prev : "loading"));
+    setLoadState("loading");
     try {
-      const [res, nextNombreProfesional] = await Promise.all([
-        fetch("/api/dashboard", { cache: "no-store" }),
-        fetchNombreProfesional(),
-      ]);
-      if (!res.ok) throw new Error("dashboard fetch failed");
-      const payload = (await res.json()) as {
-        data: Parameters<typeof parseDashboard>[0];
-      };
-      setData(parseDashboard(payload.data));
+      const { data: nextData, nombreProfesional: nextNombreProfesional } =
+        await readDashboardData();
+      setData(nextData);
       setNombreProfesional((current) => nextNombreProfesional ?? current);
       setNow(new Date());
       setLoadState("ready");
     } catch {
       setLoadState("error");
     }
-  }, []);
-
-  React.useEffect(() => {
-    void fetchDashboard();
-  }, [fetchDashboard]);
+  }, [readDashboardData]);
 
   React.useEffect(() => {
     return () => {

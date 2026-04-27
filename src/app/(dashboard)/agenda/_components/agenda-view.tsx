@@ -355,6 +355,7 @@ export function AgendaView() {
         ) : null}
       </Sheet>
       <TurnoDetailSheet
+        key={detalleId ?? "closed"}
         open={detalleId !== null}
         turno={selectedTurno}
         onClose={closeDetalle}

@@ -19,8 +19,10 @@ export const viewport: Viewport = {
   themeColor: "#4F7A6A",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Permitimos zoom hasta 5x para cumplir WCAG 2.1 (1.4.4 Resize Text).
+  // Auto-zoom en inputs de iOS se evita con font-size >= 16px en globals.css.
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({

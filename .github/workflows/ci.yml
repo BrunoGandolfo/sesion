@@ -1,0 +1,106 @@
+# ============================================================================
+# CI básico para Sesión.
+#
+# Corre en cada push a main y en cada PR contra main, antes de que Vercel
+# auto-deploye. Si rompe el build / typecheck / lint, nos enteramos acá y no
+# en producción.
+#
+# Tres jobs en paralelo:
+#   - typecheck: tsc --noEmit
+#   - build:     next build
+#   - lint:      eslint
+#
+# Notas:
+#   - postinstall del package.json ya corre `prisma generate`, pero igual lo
+#     llamamos explícito después de npm ci por si en el futuro alguien lo saca.
+#   - Prisma necesita DATABASE_URL para `generate` (parsea el schema, no se
+#     conecta), así que pasamos una URL dummy. NO usar la DB real acá.
+#   - Next build también lee DATABASE_URL al evaluar rutas que la importan;
+#     la dummy alcanza porque no se ejecuta ninguna query en build time.
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Si llega un push nuevo a la misma branch/PR, cancelamos la corrida anterior
+# en vez de encolar — ahorra minutos y feedback más rápido.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # DATABASE_URL dummy: prisma generate y next build solo necesitan que la
+  # variable exista y sea parseable como URL de Postgres. No se conecta a nada.
+  DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar Prisma Client
+        run: npx prisma generate
+
+      - name: Chequear tipos
+        run: npx tsc --noEmit
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar Prisma Client
+        run: npx prisma generate
+
+      - name: Build de Next.js
+        run: npm run build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar ESLint
+        run: npm run lint

@@ -91,3 +91,16 @@ body {
   outline: 2px solid var(--color-sage-500);
   outline-offset: 2px;
 }
+
+/* ============================================
+   Anti auto-zoom en iOS
+   Safari aplica zoom automático al enfocar inputs con font-size < 16px.
+   Forzamos 16px solo en mobile para no alterar el diseño en desktop.
+   ============================================ */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

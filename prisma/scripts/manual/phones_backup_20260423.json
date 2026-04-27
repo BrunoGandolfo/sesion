@@ -1,0 +1,110 @@
+[
+  {
+    "id": "cmo7ohsjd0007p0lfsmeykj1b",
+    "nombre": "Alejandro",
+    "apellido": "Sosa",
+    "telefono": "+598 99 123 456"
+  },
+  {
+    "id": "cmo7ohsjd0009p0lfz3aqwytz",
+    "nombre": "Lucía",
+    "apellido": "Fernández",
+    "telefono": "+598 99 234 567"
+  },
+  {
+    "id": "cmo7ohsjd000bp0lfekd2oplj",
+    "nombre": "Martín",
+    "apellido": "Rodríguez",
+    "telefono": "+598 99 345 678"
+  },
+  {
+    "id": "cmo7ohsjd000dp0lfzvhy6jtl",
+    "nombre": "Sofía",
+    "apellido": "Gutiérrez",
+    "telefono": "+598 99 456 789"
+  },
+  {
+    "id": "cmo7ohsjd000fp0lfp5ib673s",
+    "nombre": "Diego",
+    "apellido": "Martínez",
+    "telefono": "+598 99 567 890"
+  },
+  {
+    "id": "cmo7ohsjd000hp0lf9y0ksswn",
+    "nombre": "Ana",
+    "apellido": "Rodríguez",
+    "telefono": "+598 98 111 222"
+  },
+  {
+    "id": "cmo7ohsjd000jp0lf7qkr21i8",
+    "nombre": "Federico",
+    "apellido": "Pérez",
+    "telefono": "+598 98 222 333"
+  },
+  {
+    "id": "cmo7ohsjd000lp0lfae4plwky",
+    "nombre": "Camila",
+    "apellido": "Silva",
+    "telefono": "+598 98 333 444"
+  },
+  {
+    "id": "cmo7ohsjd000np0lfs2kxv45t",
+    "nombre": "Gonzalo",
+    "apellido": "Méndez",
+    "telefono": "+598 98 444 555"
+  },
+  {
+    "id": "cmo7ohsje000pp0lffemr9e0x",
+    "nombre": "Valentina",
+    "apellido": "Castro",
+    "telefono": "+598 98 555 666"
+  },
+  {
+    "id": "cmo7ohsje000rp0lfasgm64sc",
+    "nombre": "Nicolás",
+    "apellido": "Barrios",
+    "telefono": "+598 97 111 222"
+  },
+  {
+    "id": "cmo7ohsje000tp0lfsbq6wxqe",
+    "nombre": "Carolina",
+    "apellido": "Píriz",
+    "telefono": "+598 97 222 333"
+  },
+  {
+    "id": "cmo7ohsje000vp0lf5z0w9gbe",
+    "nombre": "Rodrigo",
+    "apellido": "Acosta",
+    "telefono": "+598 97 333 444"
+  },
+  {
+    "id": "cmo7ohsje000zp0lf6k2hewgv",
+    "nombre": "Javier",
+    "apellido": "Correa",
+    "telefono": "+598 97 555 666"
+  },
+  {
+    "id": "cmo7ohsje0011p0lf4ujhjeze",
+    "nombre": "Paula",
+    "apellido": "Larrañaga",
+    "telefono": "+598 96 111 222"
+  },
+  {
+    "id": "cmo7ohsje0013p0lf5d6gq96x",
+    "nombre": "Sebastián",
+    "apellido": "Viera",
+    "telefono": "+598 96 222 333"
+  },
+  {
+    "id": "cmo7ohsje0015p0lf9zzsllgy",
+    "nombre": "Mercedes",
+    "apellido": "Etcheverry",
+    "telefono": "+598 96 333 444"
+  },
+  {
+    "id": "cmo7ohsje000xp0lfqcmdfhg3",
+    "nombre": "Florencia",
+    "apellido": "Benítez",
+    "telefono": "+598 97 444 555"
+  }
+]

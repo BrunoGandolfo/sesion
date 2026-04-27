@@ -16,9 +16,24 @@ import {
   Textarea,
 } from "@/components/ui";
 import { fechaLarga, hora, money } from "@/lib/format";
-import type { Duracion, Modalidad, TurnoConPaciente } from "@/types/domain";
+import type {
+  Duracion,
+  MetodoPago,
+  Modalidad,
+  TurnoConPaciente,
+} from "@/types/domain";
 
 const DURACIONES: Duracion[] = [30, 45, 50, 60, 90];
+
+// Mismos métodos que dashboard.tsx y paciente-detail-view.tsx.
+const METODOS_PAGO: { value: MetodoPago; label: string }[] = [
+  { value: "efectivo", label: "Efectivo" },
+  { value: "transferencia", label: "Transferencia" },
+  { value: "mercadopago", label: "MercadoPago" },
+  { value: "debito", label: "Débito" },
+  { value: "credito", label: "Crédito" },
+  { value: "otro", label: "Otro" },
+];
 
 const editSchema = z.object({
   fecha: z.string().min(1, "Falta la fecha"),
@@ -88,6 +103,8 @@ export function TurnoDetailSheet({
   const [mode, setMode] = React.useState<Mode>("view");
   const [submitting, setSubmitting] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
+  // Cuando es true, en vez del botón "Cobrar" se muestra el selector de método.
+  const [eligiendoMetodo, setEligiendoMetodo] = React.useState(false);
 
   const {
     register,
@@ -111,27 +128,19 @@ export function TurnoDetailSheet({
   const duracion = useWatch({ control, name: "duracion" });
   const modalidad = useWatch({ control, name: "modalidad" });
 
-  React.useEffect(() => {
-    if (!open) {
-      setMode("view");
-      setFormError(null);
-      setSubmitting(false);
-    }
-  }, [open]);
-
-  React.useEffect(() => {
+  const openEditMode = React.useCallback(() => {
     if (!turno) return;
-    if (mode === "edit") {
-      reset({
-        fecha: toDateInput(turno.fecha),
-        hora: toTimeInput(turno.fecha),
-        duracion: turno.duracion,
-        modalidad: turno.modalidad,
-        notas: turno.notas ?? "",
-      });
-      setFormError(null);
-    }
-  }, [mode, turno, reset]);
+
+    reset({
+      fecha: toDateInput(turno.fecha),
+      hora: toTimeInput(turno.fecha),
+      duracion: turno.duracion,
+      modalidad: turno.modalidad,
+      notas: turno.notas ?? "",
+    });
+    setFormError(null);
+    setMode("edit");
+  }, [reset, turno]);
 
   if (!turno) {
     return (
@@ -174,7 +183,7 @@ export function TurnoDetailSheet({
     }
   }
 
-  async function cobrarEfectivo() {
+  async function cobrar(metodo: MetodoPago) {
     if (!turno) return;
     setSubmitting(true);
     setFormError(null);
@@ -182,9 +191,10 @@ export function TurnoDetailSheet({
       const res = await fetch(`/api/turnos/${turno.id}/cobrar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metodo: "efectivo" }),
+        body: JSON.stringify({ metodo }),
       });
       if (!res.ok) throw new Error(await parseError(res));
+      setEligiendoMetodo(false);
       onUpdated("Cobro registrado");
     } catch (err) {
       const message =
@@ -329,7 +339,7 @@ export function TurnoDetailSheet({
               <Button
                 variant="secondary"
                 className="flex-1"
-                onClick={() => setMode("edit")}
+                onClick={openEditMode}
                 disabled={submitting}
               >
                 Editar turno
@@ -348,16 +358,48 @@ export function TurnoDetailSheet({
 
         {mode === "view" && esRealizadoPorCobrar ? (
           <div className="border-t border-[color:var(--border-subtle)] pt-5">
-            <Button
-              className="w-full"
-              onClick={cobrarEfectivo}
-              disabled={submitting}
-            >
-              Cobrar
-            </Button>
-            <p className="mt-2 text-[11px] text-ink-300">
-              Se registra como pago en efectivo.
-            </p>
+            {!eligiendoMetodo ? (
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setFormError(null);
+                  setEligiendoMetodo(true);
+                }}
+                disabled={submitting}
+              >
+                Cobrar
+              </Button>
+            ) : (
+              <div>
+                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                  Elegí el método de pago
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {METODOS_PAGO.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => cobrar(m.value)}
+                      disabled={submitting}
+                      className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEligiendoMetodo(false)}
+                    disabled={submitting}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
 
