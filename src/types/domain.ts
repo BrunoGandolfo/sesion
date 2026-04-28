@@ -117,3 +117,114 @@ export interface KPIsDashboard {
   deudaAcumulada: number;
   ingresosMes: number;
 }
+
+// ============================================
+// Módulo de grabación + IA
+// ============================================
+
+/** Estados del pipeline de procesamiento de una sesión clínica */
+export type EstadoProcesamiento =
+  | "pendiente"    // creado, esperando grabación
+  | "grabando"     // MediaRecorder activo en el browser
+  | "subiendo"     // audio cifrado subiendo a R2
+  | "procesando"   // La Escondida procesando (ASR + diarización + LLM)
+  | "revision"     // nota generada, esperando aprobación de la profesional
+  | "aprobado"     // nota aprobada por la profesional
+  | "error";       // error en cualquier paso del pipeline
+
+/** Nivel de alianza terapéutica inferido por el LLM */
+export type AlianzaTerapeutica = "fragil" | "inestable" | "estable" | "fuerte";
+
+/** Datos estructurados extraídos por el LLM a partir de la transcripción */
+export interface DatosEstructurados {
+  temas: string[];
+  emocionesPaciente: string[];
+  intensidadEmocional: number;        // escala 1-10
+  alianzaTerapeutica: AlianzaTerapeutica;
+  intervenciones: string[];
+  compromisos: string[];
+  senalesAlerta: string[];
+  progresoPercibido: string;
+}
+
+/** Nota clínica en formato SOAP */
+export interface NotaSOAP {
+  subjetivo: string;
+  objetivo: string;
+  analisis: string;
+  plan: string;
+}
+
+// ============================================
+// Requests
+// ============================================
+
+/** Iniciar grabación para un turno existente */
+export interface IniciarGrabacionRequest {
+  turnoId: string;
+}
+
+/** Subir chunk de audio cifrado al backend */
+export interface SubirAudioRequest {
+  sesionClinicaId: string;
+  audioBase64: string;        // audio cifrado en base64
+  duracionSegundos: number;
+}
+
+/** Aprobar (con o sin edición) una nota clínica generada */
+export interface AprobarNotaRequest {
+  sesionClinicaId: string;
+  notaEditada?: NotaSOAP;     // presente si la profesional editó algo
+  notasEdicion?: string;      // comentarios de la edición
+}
+
+/** Firmar el consentimiento informado de un paciente */
+export interface FirmarConsentimientoRequest {
+  pacienteId: string;
+  firmaDigital: string;       // base64 del canvas de firma
+}
+
+// ============================================
+// Responses
+// ============================================
+
+/** Estado actual de una sesión clínica (grabación + nota generada) */
+export interface SesionClinicaResponse {
+  id: string;
+  turnoId: string;
+  estado: EstadoProcesamiento;
+  duracionAudioSeg: number | null;
+  nota: NotaSOAP | null;
+  datosEstructurados: DatosEstructurados | null;
+  modeloASR: string | null;
+  modeloLLM: string | null;
+  procesadoEn: string | null;  // ISO date
+  aprobadoEn: string | null;   // ISO date
+  error: string | null;
+}
+
+/** Estado del consentimiento informado de un paciente */
+export interface ConsentimientoResponse {
+  id: string;
+  pacienteId: string;
+  firmadoEn: string;           // ISO date
+  revocadoEn: string | null;   // ISO date, null = aún vigente
+  textoVersion: string;
+  vigente: boolean;            // computed: firmadoEn != null && revocadoEn == null
+}
+
+// ============================================
+// Callbacks
+// ============================================
+
+/** Callback de La Escondida con el resultado del procesamiento */
+export interface ResultadoProcesamientoCallback {
+  sesionClinicaId: string;
+  estado: "revision" | "error";
+  transcripcion?: string;
+  nota?: NotaSOAP;
+  datosEstructurados?: DatosEstructurados;
+  modeloASR?: string;
+  modeloLLM?: string;
+  error?: string;
+}

@@ -14,14 +14,16 @@ datasource db {
 // ============================================
 
 model Organization {
-  id        String   @id @default(cuid())
-  nombre    String
-  creadoEn  DateTime @default(now()) @map("creado_en")
+  id       String   @id @default(cuid())
+  nombre   String
+  creadoEn DateTime @default(now()) @map("creado_en")
 
-  configuracion Configuracion?
-  pacientes     Paciente[]
-  turnos        Turno[]
-  usuarios      User[]
+  configuracion    Configuracion?
+  pacientes        Paciente[]
+  turnos           Turno[]
+  usuarios         User[]
+  consentimientos  ConsentimientoGrabacion[]
+  sesionesClinicas SesionClinica[]
 
   @@map("organizaciones")
 }
@@ -31,12 +33,12 @@ model Organization {
 // ============================================
 
 model User {
-  id             String       @id @default(cuid())
-  email          String       @unique
-  hashedPassword String       @map("hashed_password")
+  id             String   @id @default(cuid())
+  email          String   @unique
+  hashedPassword String   @map("hashed_password")
   nombre         String
-  organizationId String       @map("organization_id")
-  creadoEn       DateTime     @default(now()) @map("creado_en")
+  organizationId String   @map("organization_id")
+  creadoEn       DateTime @default(now()) @map("creado_en")
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -67,20 +69,21 @@ model Configuracion {
 // ============================================
 
 model Paciente {
-  id             String   @id @default(cuid())
-  nombre         String
-  apellido       String
-  telefono       String
-  email          String?
-  tarifa         Int
-  notas          String?  @db.Text
-  activo         Boolean  @default(true)
-  creadoEn       DateTime @default(now()) @map("creado_en")
-  actualizadoEn  DateTime @updatedAt @map("actualizado_en")
+  id            String   @id @default(cuid())
+  nombre        String
+  apellido      String
+  telefono      String
+  email         String?
+  tarifa        Int
+  notas         String?  @db.Text
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
 
-  organizationId String       @map("organization_id")
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  turnos         Turno[]
+  organizationId  String                    @map("organization_id")
+  organization    Organization              @relation(fields: [organizationId], references: [id])
+  turnos          Turno[]
+  consentimientos ConsentimientoGrabacion[]
 
   @@index([organizationId, activo])
   @@index([organizationId, apellido])
@@ -92,24 +95,25 @@ model Paciente {
 // ============================================
 
 model Turno {
-  id             String   @id @default(cuid())
-  fecha          DateTime
-  duracion       Int      @default(50)
-  modalidad      String   @default("presencial")
-  estado         String   @default("programado")
-  tarifaCobrada  Int      @map("tarifa_cobrada")
-  pagoEstado     String   @default("pendiente") @map("pago_estado")
-  pagoFecha      DateTime? @map("pago_fecha")
-  pagoMetodo     String?  @map("pago_metodo")
-  notas          String?  @db.Text
-  creadoEn       DateTime @default(now()) @map("creado_en")
-  actualizadoEn  DateTime @updatedAt @map("actualizado_en")
+  id            String    @id @default(cuid())
+  fecha         DateTime
+  duracion      Int       @default(50)
+  modalidad     String    @default("presencial")
+  estado        String    @default("programado")
+  tarifaCobrada Int       @map("tarifa_cobrada")
+  pagoEstado    String    @default("pendiente") @map("pago_estado")
+  pagoFecha     DateTime? @map("pago_fecha")
+  pagoMetodo    String?   @map("pago_metodo")
+  notas         String?   @db.Text
+  creadoEn      DateTime  @default(now()) @map("creado_en")
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
 
-  pacienteId     String       @map("paciente_id")
-  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
-  organizationId String       @map("organization_id")
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  pacienteId     String         @map("paciente_id")
+  paciente       Paciente       @relation(fields: [pacienteId], references: [id])
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id])
   recordatorios  Recordatorio[]
+  sesionClinica  SesionClinica?
 
   @@index([organizationId, fecha])
   @@index([organizationId, pagoEstado])
@@ -126,7 +130,7 @@ model Recordatorio {
   programadoEn  DateTime  @map("programado_en")
   enviadoEn     DateTime? @map("enviado_en")
   estado        String    @default("pendiente")
-  textoEnviado  String?   @db.Text @map("texto_enviado")
+  textoEnviado  String?   @map("texto_enviado") @db.Text
   error         String?   @db.Text
   intentos      Int       @default(0)
   creadoEn      DateTime  @default(now()) @map("creado_en")
@@ -137,4 +141,82 @@ model Recordatorio {
 
   @@index([estado, programadoEn])
   @@map("recordatorios")
+}
+
+// ============================================
+// Consentimiento para grabación de sesiones
+// ============================================
+
+model ConsentimientoGrabacion {
+  id             String       @id @default(cuid())
+  pacienteId     String
+  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  firmadoEn     DateTime // Timestamp de la firma
+  revocadoEn    DateTime? // Null = vigente, con fecha = revocado
+  textoVersion  String // Versión del texto de consentimiento firmado (ej: "1.0")
+  textoCompleto String    @db.Text // Texto íntegro que el paciente firmó
+  firmaDigital  String // Representación de la firma (base64 del canvas)
+  ipOrigen      String? // IP desde donde se firmó (auditoría)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pacienteId])
+  @@index([organizationId])
+  @@map("consentimientos_grabacion")
+}
+
+// ============================================
+// Sesión clínica — datos generados por IA
+// a partir de la grabación de un turno realizado.
+// ============================================
+
+model SesionClinica {
+  id             String       @id @default(cuid())
+  turnoId        String       @unique // Relación 1:1 con Turno
+  turno          Turno        @relation(fields: [turnoId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Estado del pipeline
+  estado String @default("pendiente")
+  // Valores: pendiente | grabando | subiendo | procesando | revision | aprobado | error
+
+  // Audio
+  duracionAudioSeg Int? // Duración del audio en segundos
+  audioR2Key       String? // Key del audio cifrado en R2 (null después de borrar)
+  audioBorradoEn   DateTime? // Cuándo se borró el audio
+
+  // Transcripción (cifrada en DB)
+  transcripcion String? @db.Text // Transcripción diarizada completa
+
+  // Nota SOAP generada por IA
+  notaSubjetivo String? @db.Text // S: lo que expresó el paciente
+  notaObjetivo  String? @db.Text // O: lo que observó la terapeuta
+  notaAnalisis  String? @db.Text // A: progreso, alianza, alertas
+  notaPlan      String? @db.Text // P: compromisos, temas a retomar
+
+  // JSON estructurado extraído por IA
+  datosEstructurados String? @db.Text // JSON: temas, emociones, alianza, alertas, etc.
+
+  // Metadatos de procesamiento
+  modeloASR   String? // Ej: "qwen3-asr-1.7b"
+  modeloLLM   String? // Ej: "qwen3.5-72b-q4"
+  procesadoEn DateTime? // Cuándo terminó el procesamiento
+  error       String?   @db.Text // Detalle del error si estado = "error"
+  intentos    Int       @default(0)
+
+  // Aprobación por la profesional
+  aprobadoEn   DateTime? // Cuándo Mariana aprobó la nota
+  notasEdicion String?   @db.Text // Ediciones manuales de Mariana (si las hubo)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([estado])
+  @@map("sesiones_clinicas")
 }
