@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LoaderCircle, Mic } from "lucide-react";
 import {
   Avatar,
   Button,
@@ -15,11 +15,17 @@ import {
   Sheet,
   Textarea,
 } from "@/components/ui";
+import { GrabadorSesion } from "@/components/grabacion/GrabadorSesion";
+import { NotaClinicaView } from "@/components/grabacion/NotaClinicaView";
 import { fechaLarga, hora, money } from "@/lib/format";
 import type {
+  DatosEstructurados,
   Duracion,
+  EstadoProcesamiento,
   MetodoPago,
   Modalidad,
+  NotaSOAP,
+  SesionClinicaResponse,
   TurnoConPaciente,
 } from "@/types/domain";
 
@@ -93,6 +99,84 @@ async function parseError(res: Response): Promise<string> {
   return body?.error ?? `HTTP ${res.status}`;
 }
 
+// Forma cruda devuelta por la API de sesion-clinica (mapea 1:1 con el modelo Prisma).
+type RawSesionClinica = {
+  id: string;
+  turnoId: string;
+  estado: string;
+  duracionAudioSeg: number | null;
+  notaSubjetivo: string | null;
+  notaObjetivo: string | null;
+  notaAnalisis: string | null;
+  notaPlan: string | null;
+  datosEstructurados: string | null;
+  modeloASR: string | null;
+  modeloLLM: string | null;
+  procesadoEn: string | null;
+  aprobadoEn: string | null;
+  error: string | null;
+};
+
+function parseDatosEstructurados(value: string | null): DatosEstructurados | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as DatosEstructurados;
+  } catch {
+    return null;
+  }
+}
+
+function toSesionClinicaResponse(raw: RawSesionClinica): SesionClinicaResponse {
+  const nota: NotaSOAP | null =
+    raw.notaSubjetivo !== null &&
+    raw.notaObjetivo !== null &&
+    raw.notaAnalisis !== null &&
+    raw.notaPlan !== null
+      ? {
+          subjetivo: raw.notaSubjetivo,
+          objetivo: raw.notaObjetivo,
+          analisis: raw.notaAnalisis,
+          plan: raw.notaPlan,
+        }
+      : null;
+
+  return {
+    id: raw.id,
+    turnoId: raw.turnoId,
+    estado: raw.estado as EstadoProcesamiento,
+    duracionAudioSeg: raw.duracionAudioSeg,
+    nota,
+    datosEstructurados: parseDatosEstructurados(raw.datosEstructurados),
+    modeloASR: raw.modeloASR,
+    modeloLLM: raw.modeloLLM,
+    procesadoEn: raw.procesadoEn,
+    aprobadoEn: raw.aprobadoEn,
+    error: raw.error,
+  };
+}
+
+function chipDeProcesamiento(estado: EstadoProcesamiento): {
+  variant: "sage" | "terracotta" | "gold" | "neutral";
+  label: string;
+} {
+  switch (estado) {
+    case "grabando":
+      return { variant: "terracotta", label: "Grabando…" };
+    case "subiendo":
+      return { variant: "gold", label: "Subiendo audio…" };
+    case "procesando":
+      return { variant: "gold", label: "Procesando con IA…" };
+    case "revision":
+      return { variant: "sage", label: "Lista para revisar" };
+    case "aprobado":
+      return { variant: "sage", label: "Nota clínica aprobada ✓" };
+    case "error":
+      return { variant: "terracotta", label: "Error en el procesamiento" };
+    default:
+      return { variant: "neutral", label: "Pendiente" };
+  }
+}
+
 export function TurnoDetailSheet({
   open,
   turno,
@@ -105,6 +189,16 @@ export function TurnoDetailSheet({
   const [formError, setFormError] = React.useState<string | null>(null);
   // Cuando es true, en vez del botón "Cobrar" se muestra el selector de método.
   const [eligiendoMetodo, setEligiendoMetodo] = React.useState(false);
+
+  // Sesión clínica (grabación + nota generada por IA)
+  const [sesionClinica, setSesionClinica] =
+    React.useState<SesionClinicaResponse | null>(null);
+  const [consentimientoVigente, setConsentimientoVigente] =
+    React.useState<boolean | null>(null);
+  const [seccionGrabacion, setSeccionGrabacion] =
+    React.useState<"idle" | "grabando" | "nota">("idle");
+  const [grabacionError, setGrabacionError] = React.useState<string | null>(null);
+  const [grabacionSubmitting, setGrabacionSubmitting] = React.useState(false);
 
   const {
     register,
@@ -142,6 +236,68 @@ export function TurnoDetailSheet({
     setMode("edit");
   }, [reset, turno]);
 
+  // Carga consentimiento + sesión clínica cuando el turno está realizado.
+  // Resetea el estado al cambiar de turno.
+  const turnoId = turno?.id;
+  const turnoEstado = turno?.estado;
+  const turnoPacienteId = turno?.pacienteId;
+
+  React.useEffect(() => {
+    setSesionClinica(null);
+    setConsentimientoVigente(null);
+    setSeccionGrabacion("idle");
+    setGrabacionError(null);
+
+    if (!turnoId || turnoEstado !== "realizado" || !turnoPacienteId) {
+      return;
+    }
+
+    let cancelado = false;
+
+    async function cargar() {
+      try {
+        const consentRes = await fetch(
+          `/api/pacientes/${turnoPacienteId}/consentimiento`,
+        );
+        if (cancelado) return;
+        if (consentRes.ok) {
+          const body = (await consentRes.json()) as { consentimiento: unknown };
+          setConsentimientoVigente(body.consentimiento !== null);
+        } else {
+          setConsentimientoVigente(false);
+        }
+      } catch {
+        if (!cancelado) setConsentimientoVigente(false);
+      }
+
+      // TODO: depende de un endpoint GET /api/sesion-clinica?turnoId=... que aún
+      // no existe. Mientras tanto un 404/405 se interpreta como "no hay sesión
+      // clínica todavía" y la sección arranca en el estado inicial.
+      try {
+        const sesionRes = await fetch(
+          `/api/sesion-clinica?turnoId=${turnoId}`,
+        );
+        if (cancelado) return;
+        if (sesionRes.ok) {
+          const body = (await sesionRes.json()) as {
+            data: RawSesionClinica | null;
+          };
+          if (body.data) {
+            setSesionClinica(toSesionClinicaResponse(body.data));
+          }
+        }
+      } catch {
+        // sin sesión clínica accesible — se mantiene null
+      }
+    }
+
+    void cargar();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [turnoId, turnoEstado, turnoPacienteId]);
+
   if (!turno) {
     return (
       <Sheet open={open} onClose={onClose} ariaLabel="Detalle del turno">
@@ -155,8 +311,11 @@ export function TurnoDetailSheet({
   const chip = statusChip(turno);
   const esProgramado = turno.estado === "programado";
   const esCancelado = turno.estado === "cancelado";
+  const esRealizado = turno.estado === "realizado";
   const esRealizadoPorCobrar =
     turno.estado === "realizado" && turno.pagoEstado === "pendiente";
+
+  const pacienteNombreCompleto = `${turno.paciente.nombre} ${turno.paciente.apellido}`;
 
   async function patchTurno(
     payload: Record<string, unknown>,
@@ -203,6 +362,144 @@ export function TurnoDetailSheet({
       onError(message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function patchSesionClinica(payload: Record<string, unknown>) {
+    if (!sesionClinica) return null;
+    const res = await fetch(`/api/sesion-clinica/${sesionClinica.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseError(res));
+    const body = (await res.json()) as { data: RawSesionClinica };
+    const next = toSesionClinicaResponse(body.data);
+    setSesionClinica(next);
+    return next;
+  }
+
+  async function iniciarGrabacionFlow() {
+    if (!turno) return;
+    setGrabacionError(null);
+    setGrabacionSubmitting(true);
+    try {
+      const createRes = await fetch("/api/sesion-clinica", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turnoId: turno.id }),
+      });
+      if (!createRes.ok) throw new Error(await parseError(createRes));
+      const createBody = (await createRes.json()) as { data: RawSesionClinica };
+      setSesionClinica(toSesionClinicaResponse(createBody.data));
+
+      // pendiente → grabando
+      const patchRes = await fetch(
+        `/api/sesion-clinica/${createBody.data.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estado: "grabando" }),
+        },
+      );
+      if (!patchRes.ok) throw new Error(await parseError(patchRes));
+      const patchBody = (await patchRes.json()) as { data: RawSesionClinica };
+      setSesionClinica(toSesionClinicaResponse(patchBody.data));
+      setSeccionGrabacion("grabando");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "No se pudo iniciar la grabación";
+      setGrabacionError(message);
+      onError(message);
+    } finally {
+      setGrabacionSubmitting(false);
+    }
+  }
+
+  async function manejarGrabacionCompleta(datos: {
+    audioBlob: Blob;
+    claveCifrado: string;
+    ivCifrado: string;
+    duracionSegundos: number;
+  }) {
+    if (!sesionClinica) return;
+    const sesionId = sesionClinica.id;
+    setGrabacionError(null);
+    setGrabacionSubmitting(true);
+    try {
+      // grabando → subiendo
+      await patchSesionClinica({
+        estado: "subiendo",
+        duracionAudioSeg: datos.duracionSegundos,
+      });
+
+      // TODO: este endpoint todavía no existe — lo construye el agente de upload.
+      // Hasta entonces va a devolver 404/405 y el flujo cae al catch.
+      const formData = new FormData();
+      formData.append("audio", datos.audioBlob, "sesion.bin");
+      formData.append("claveCifrado", datos.claveCifrado);
+      formData.append("ivCifrado", datos.ivCifrado);
+      formData.append("duracionSegundos", String(datos.duracionSegundos));
+
+      const uploadRes = await fetch(
+        `/api/sesion-clinica/${sesionId}/upload`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      if (!uploadRes.ok) throw new Error(await parseError(uploadRes));
+
+      // subiendo → procesando
+      await patchSesionClinica({ estado: "procesando" });
+      setSeccionGrabacion("idle");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Error al subir el audio";
+      setGrabacionError(message);
+      onError(message);
+      // Best-effort: marcar como error. La transición puede ser rechazada por
+      // la state machine según en qué paso falló — se ignora silenciosamente.
+      try {
+        await fetch(`/api/sesion-clinica/${sesionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estado: "error" }),
+        });
+      } catch {
+        // tragar
+      }
+    } finally {
+      setGrabacionSubmitting(false);
+    }
+  }
+
+  async function reintentarProcesamiento() {
+    if (!sesionClinica) return;
+    setGrabacionError(null);
+    setGrabacionSubmitting(true);
+    try {
+      await patchSesionClinica({ estado: "procesando" });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "No se pudo reintentar";
+      setGrabacionError(message);
+      onError(message);
+    } finally {
+      setGrabacionSubmitting(false);
+    }
+  }
+
+  async function refrescarSesion() {
+    if (!sesionClinica) return;
+    try {
+      const res = await fetch(`/api/sesion-clinica/${sesionClinica.id}`);
+      if (!res.ok) return;
+      const body = (await res.json()) as { data: RawSesionClinica };
+      setSesionClinica(toSesionClinicaResponse(body.data));
+      setSeccionGrabacion("idle");
+    } catch {
+      // tragar
     }
   }
 
@@ -400,6 +697,169 @@ export function TurnoDetailSheet({
                 </div>
               </div>
             )}
+          </div>
+        ) : null}
+
+        {/* Sesión clínica — solo en turnos realizados */}
+        {mode === "view" && esRealizado ? (
+          <div className="flex flex-col gap-3 border-t border-[color:var(--border-subtle)] pt-5">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+              Sesión clínica
+            </div>
+
+            {seccionGrabacion === "grabando" && sesionClinica ? (
+              <GrabadorSesion
+                turnoId={turno.id}
+                pacienteNombre={pacienteNombreCompleto}
+                onGrabacionCompleta={(datos) => {
+                  void manejarGrabacionCompleta(datos);
+                }}
+                onError={(mensaje) => {
+                  setGrabacionError(mensaje);
+                  onError(mensaje);
+                }}
+              />
+            ) : null}
+
+            {seccionGrabacion === "nota" &&
+            sesionClinica &&
+            sesionClinica.nota ? (
+              <NotaClinicaView
+                sesionClinicaId={sesionClinica.id}
+                nota={sesionClinica.nota}
+                datosEstructurados={sesionClinica.datosEstructurados}
+                pacienteNombre={pacienteNombreCompleto}
+                fechaSesion={fechaLarga(turno.fecha)}
+                onAprobado={() => {
+                  void refrescarSesion();
+                }}
+              />
+            ) : null}
+
+            {seccionGrabacion === "idle" ? (
+              <>
+                {/* Mientras carga el estado del consentimiento + sesión */}
+                {sesionClinica === null && consentimientoVigente === null ? (
+                  <p className="text-[13px] text-ink-500">Cargando…</p>
+                ) : null}
+
+                {/* Caso A — sin sesión, con consentimiento vigente */}
+                {sesionClinica === null && consentimientoVigente === true ? (
+                  <Button
+                    variant="secondary"
+                    icon={<Mic size={16} strokeWidth={1.8} aria-hidden="true" />}
+                    onClick={() => {
+                      void iniciarGrabacionFlow();
+                    }}
+                    disabled={grabacionSubmitting}
+                  >
+                    Grabar sesión
+                  </Button>
+                ) : null}
+
+                {/* Caso B — sin sesión, sin consentimiento */}
+                {sesionClinica === null && consentimientoVigente === false ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[13px] text-ink-500">
+                      Para grabar sesiones, el paciente necesita autorizar la
+                      grabación desde su perfil.
+                    </p>
+                    <Link
+                      href={`/pacientes/${turno.paciente.id}`}
+                      className="inline-flex items-center gap-1 text-[13px] font-semibold text-sage-600 hover:text-sage-700"
+                    >
+                      Ir al perfil
+                      <ArrowRight size={14} strokeWidth={2} />
+                    </Link>
+                  </div>
+                ) : null}
+
+                {/* Caso C — grabando / subiendo / procesando */}
+                {sesionClinica &&
+                (sesionClinica.estado === "grabando" ||
+                  sesionClinica.estado === "subiendo" ||
+                  sesionClinica.estado === "procesando") ? (
+                  <div className="flex items-center gap-3 rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-3 py-3">
+                    <LoaderCircle
+                      size={16}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                      className="shrink-0 animate-spin text-sage-500"
+                    />
+                    <Chip
+                      variant={chipDeProcesamiento(sesionClinica.estado).variant}
+                      size="sm"
+                    >
+                      {chipDeProcesamiento(sesionClinica.estado).label}
+                    </Chip>
+                  </div>
+                ) : null}
+
+                {/* Caso D — revision: mostrar la nota para aprobar */}
+                {sesionClinica &&
+                sesionClinica.estado === "revision" &&
+                sesionClinica.nota ? (
+                  <NotaClinicaView
+                    sesionClinicaId={sesionClinica.id}
+                    nota={sesionClinica.nota}
+                    datosEstructurados={sesionClinica.datosEstructurados}
+                    pacienteNombre={pacienteNombreCompleto}
+                    fechaSesion={fechaLarga(turno.fecha)}
+                    onAprobado={() => {
+                      void refrescarSesion();
+                    }}
+                  />
+                ) : null}
+
+                {/* Caso E — aprobado */}
+                {sesionClinica && sesionClinica.estado === "aprobado" ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-sage-200 bg-sage-50 px-3 py-2">
+                    <Chip variant="sage" size="sm">
+                      Nota clínica aprobada ✓
+                    </Chip>
+                    {sesionClinica.nota ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSeccionGrabacion("nota")}
+                      >
+                        Ver nota
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* Caso F — error */}
+                {sesionClinica && sesionClinica.estado === "error" ? (
+                  <div className="flex flex-col gap-2 rounded-md border border-terracotta-100 bg-terracotta-50 px-3 py-3">
+                    <Chip variant="terracotta" size="sm">
+                      Error en el procesamiento
+                    </Chip>
+                    {sesionClinica.error ? (
+                      <p className="text-[13px] text-ink-500">
+                        {sesionClinica.error}
+                      </p>
+                    ) : null}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        void reintentarProcesamiento();
+                      }}
+                      disabled={grabacionSubmitting}
+                    >
+                      Reintentar
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {grabacionError ? (
+              <p className="text-[12px] text-[color:var(--color-error)]">
+                {grabacionError}
+              </p>
+            ) : null}
           </div>
         ) : null}
 

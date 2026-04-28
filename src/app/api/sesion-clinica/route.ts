@@ -11,6 +11,66 @@ const createSchema = z.object({
   turnoId: z.string().cuid("Turno inválido"),
 });
 
+function parseDatosEstructurados(raw: string | null): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const organizationId = await getOrganizationId();
+    const turnoId = new URL(request.url).searchParams.get("turnoId");
+
+    if (!turnoId) {
+      throw new ApiError("Falta turnoId", 400);
+    }
+
+    const sesion = await db.sesionClinica.findFirst({
+      where: { turnoId, organizationId },
+      select: {
+        id: true,
+        turnoId: true,
+        estado: true,
+        duracionAudioSeg: true,
+        notaSubjetivo: true,
+        notaObjetivo: true,
+        notaAnalisis: true,
+        notaPlan: true,
+        datosEstructurados: true,
+        modeloASR: true,
+        modeloLLM: true,
+        procesadoEn: true,
+        aprobadoEn: true,
+        error: true,
+        intentos: true,
+        turno: {
+          select: {
+            id: true,
+            paciente: {
+              select: { id: true, nombre: true, apellido: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!sesion) {
+      return ok(null);
+    }
+
+    return ok({
+      ...sesion,
+      datosEstructurados: parseDatosEstructurados(sesion.datosEstructurados),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const organizationId = await getOrganizationId();

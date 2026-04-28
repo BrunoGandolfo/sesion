@@ -1,0 +1,255 @@
+import { describe, it, expect } from "vitest";
+
+import {
+  esTransicionValida,
+  parseDatosEstructurados,
+  esNotaCompleta,
+} from "@/lib/sesion-clinica-utils";
+import type {
+  AlianzaTerapeutica,
+  DatosEstructurados,
+  EstadoProcesamiento,
+} from "@/types/domain";
+
+describe("Sesión clínica - validaciones", () => {
+  describe("esTransicionValida — transiciones válidas", () => {
+    const valid: Array<[EstadoProcesamiento, EstadoProcesamiento]> = [
+      ["pendiente", "grabando"],
+      ["grabando", "subiendo"],
+      ["subiendo", "procesando"],
+      ["procesando", "revision"],
+      ["procesando", "error"],
+      ["error", "procesando"],
+    ];
+
+    it.each(valid)("permite %s → %s", (desde, hasta) => {
+      expect(esTransicionValida(desde, hasta)).toBe(true);
+    });
+  });
+
+  describe("esTransicionValida — transiciones inválidas", () => {
+    it("rechaza pendiente → procesando (saltea grabando+subiendo)", () => {
+      expect(esTransicionValida("pendiente", "procesando")).toBe(false);
+    });
+
+    it("rechaza pendiente → revision", () => {
+      expect(esTransicionValida("pendiente", "revision")).toBe(false);
+    });
+
+    it("rechaza grabando → revision (no se puede saltar pasos)", () => {
+      expect(esTransicionValida("grabando", "revision")).toBe(false);
+    });
+
+    it("rechaza grabando → procesando (debe pasar por subiendo)", () => {
+      expect(esTransicionValida("grabando", "procesando")).toBe(false);
+    });
+
+    it("rechaza revision → grabando (no se vuelve a grabar)", () => {
+      expect(esTransicionValida("revision", "grabando")).toBe(false);
+    });
+
+    it("revision es estado terminal vía PATCH", () => {
+      const todos: EstadoProcesamiento[] = [
+        "pendiente",
+        "grabando",
+        "subiendo",
+        "procesando",
+        "revision",
+        "aprobado",
+        "error",
+      ];
+      for (const destino of todos) {
+        expect(esTransicionValida("revision", destino)).toBe(false);
+      }
+    });
+
+    it("aprobado es terminal: rechaza cualquier transición", () => {
+      const todos: EstadoProcesamiento[] = [
+        "pendiente",
+        "grabando",
+        "subiendo",
+        "procesando",
+        "revision",
+        "aprobado",
+        "error",
+      ];
+      for (const destino of todos) {
+        expect(esTransicionValida("aprobado", destino)).toBe(false);
+      }
+    });
+
+    it("permite reintento: error → procesando", () => {
+      expect(esTransicionValida("error", "procesando")).toBe(true);
+    });
+
+    it("error no salta a revision sin re-procesar", () => {
+      expect(esTransicionValida("error", "revision")).toBe(false);
+    });
+
+    it("rechaza un estado consigo mismo (no-op)", () => {
+      expect(esTransicionValida("grabando", "grabando")).toBe(false);
+    });
+  });
+
+  describe("parseDatosEstructurados", () => {
+    const validoBase: DatosEstructurados = {
+      temas: ["ansiedad", "trabajo"],
+      emocionesPaciente: ["frustración"],
+      intensidadEmocional: 7,
+      alianzaTerapeutica: "estable",
+      intervenciones: ["psicoeducación"],
+      compromisos: ["registro diario"],
+      senalesAlerta: [],
+      progresoPercibido: "leve mejora",
+    };
+
+    it("parsea JSON válido y devuelve los datos", () => {
+      const result = parseDatosEstructurados(JSON.stringify(validoBase));
+      expect(result).toEqual(validoBase);
+    });
+
+    it("acepta intensidad en los bordes (1 y 10)", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, intensidadEmocional: 1 }),
+        ),
+      ).not.toBeNull();
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, intensidadEmocional: 10 }),
+        ),
+      ).not.toBeNull();
+    });
+
+    it("rechaza intensidadEmocional < 1", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, intensidadEmocional: 0 }),
+        ),
+      ).toBeNull();
+    });
+
+    it("rechaza intensidadEmocional > 10", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, intensidadEmocional: 11 }),
+        ),
+      ).toBeNull();
+    });
+
+    it("rechaza intensidadEmocional no numérica", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, intensidadEmocional: "alta" }),
+        ),
+      ).toBeNull();
+    });
+
+    it("rechaza intensidadEmocional NaN/Infinity", () => {
+      const conNaN = `{"temas":[],"emocionesPaciente":[],"intensidadEmocional":NaN,"alianzaTerapeutica":"estable","intervenciones":[],"compromisos":[],"senalesAlerta":[],"progresoPercibido":""}`;
+      // NaN no es JSON válido, el parser falla
+      expect(parseDatosEstructurados(conNaN)).toBeNull();
+    });
+
+    it("acepta cada alianza terapéutica válida", () => {
+      const alianzas: AlianzaTerapeutica[] = [
+        "fragil",
+        "inestable",
+        "estable",
+        "fuerte",
+      ];
+      for (const alianza of alianzas) {
+        const result = parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, alianzaTerapeutica: alianza }),
+        );
+        expect(result?.alianzaTerapeutica).toBe(alianza);
+      }
+    });
+
+    it("rechaza alianza terapéutica inválida", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, alianzaTerapeutica: "rota" }),
+        ),
+      ).toBeNull();
+    });
+
+    it("devuelve null para JSON malformado", () => {
+      expect(parseDatosEstructurados("{ no es json")).toBeNull();
+      expect(parseDatosEstructurados("undefined")).toBeNull();
+    });
+
+    it("devuelve null para entrada null", () => {
+      expect(parseDatosEstructurados(null)).toBeNull();
+    });
+
+    it("devuelve null para string vacío o whitespace", () => {
+      expect(parseDatosEstructurados("")).toBeNull();
+      expect(parseDatosEstructurados("   ")).toBeNull();
+    });
+
+    it("devuelve null si JSON parsea a primitivo", () => {
+      expect(parseDatosEstructurados("123")).toBeNull();
+      expect(parseDatosEstructurados('"texto"')).toBeNull();
+      expect(parseDatosEstructurados("null")).toBeNull();
+      expect(parseDatosEstructurados("true")).toBeNull();
+    });
+
+    it("devuelve null si falta un campo obligatorio (temas)", () => {
+      const obj: Partial<DatosEstructurados> = { ...validoBase };
+      delete obj.temas;
+      expect(parseDatosEstructurados(JSON.stringify(obj))).toBeNull();
+    });
+
+    it("devuelve null si un array contiene elementos no-string", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, temas: ["ok", 42] }),
+        ),
+      ).toBeNull();
+    });
+
+    it("devuelve null si progresoPercibido no es string", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, progresoPercibido: null }),
+        ),
+      ).toBeNull();
+    });
+  });
+
+  describe("esNotaCompleta", () => {
+    const completa = {
+      subjetivo: "Refiere ansiedad ante situaciones laborales.",
+      objetivo: "Tono ansioso, contacto visual sostenido.",
+      analisis: "Cuadro de ansiedad reactiva, alianza estable.",
+      plan: "Continuar TCC, próxima sesión en una semana.",
+    };
+
+    it("devuelve true cuando los 4 campos tienen contenido", () => {
+      expect(esNotaCompleta(completa)).toBe(true);
+    });
+
+    it("devuelve false cuando falta el plan", () => {
+      expect(esNotaCompleta({ ...completa, plan: "" })).toBe(false);
+    });
+
+    it("devuelve false cuando falta subjetivo", () => {
+      expect(esNotaCompleta({ ...completa, subjetivo: "" })).toBe(false);
+    });
+
+    it("devuelve false cuando un campo es solo whitespace", () => {
+      expect(esNotaCompleta({ ...completa, analisis: "   \n\t " })).toBe(false);
+    });
+
+    it("devuelve false con objeto vacío", () => {
+      expect(esNotaCompleta({})).toBe(false);
+    });
+
+    it("devuelve false con campos undefined", () => {
+      expect(
+        esNotaCompleta({ subjetivo: "x", objetivo: "x", analisis: "x" }),
+      ).toBe(false);
+    });
+  });
+});
