@@ -25,6 +25,8 @@ export const config = {
   matcher: [
     // Cron endpoints se autentican por CRON_SECRET header, no por sesión.
     // /api/health es público para servicios de monitoreo (UptimeRobot, etc.).
-    "/((?!_next/static|_next/image|static|favicon.ico|api/auth|api/seed|api/cron|api/health|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+    // /api/sesion-clinica/callback es machine-to-machine (La Escondida),
+    // se autentica por PROCESSING_SECRET header.
+    "/((?!_next/static|_next/image|static|favicon.ico|api/auth|api/seed|api/cron|api/health|api/sesion-clinica/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };

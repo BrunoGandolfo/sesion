@@ -1,11 +1,6 @@
-import { randomUUID } from "node:crypto";
-
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-
-// TODO: reemplazar el placeholder por la implementación real cuando exista.
-// import { getTextoConsentimientoGrabacion } from "@/lib/consentimiento";
+import { generarTextoConsentimiento } from "@/lib/consentimiento";
 
 import { getOrganizationId } from "../../../_lib/auth";
 import { ApiError, errorResponse, validationError } from "../../../_lib/responses";
@@ -17,9 +12,7 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-type SqlClient = Prisma.TransactionClient | typeof db;
-
-type ConsentimientoRow = {
+type ConsentimientoResponseInput = {
   id: string;
   pacienteId: string;
   firmadoEn: Date;
@@ -32,11 +25,15 @@ const createConsentimientoSchema = z.object({
   textoVersion: z.string().trim().min(1, "Falta la versión del texto"),
 });
 
-function getTextoConsentimientoPlaceholder(textoVersion: string) {
-  return `Consentimiento de grabación versión ${textoVersion}. TODO: reemplazar este texto placeholder por el contenido real desde @/lib/consentimiento.`;
-}
+const consentimientoSelect = {
+  id: true,
+  pacienteId: true,
+  firmadoEn: true,
+  textoVersion: true,
+  revocadoEn: true,
+} as const;
 
-function toConsentimientoResponse(consentimiento: ConsentimientoRow) {
+function toConsentimientoResponse(consentimiento: ConsentimientoResponseInput) {
   return {
     id: consentimiento.id,
     pacienteId: consentimiento.pacienteId,
@@ -80,41 +77,6 @@ async function assertPacienteExists(id: string, organizationId: string) {
   }
 }
 
-async function findLatestConsentimiento(
-  client: SqlClient,
-  pacienteId: string,
-  organizationId: string,
-) {
-  const consentimientos = await client.$queryRaw<ConsentimientoRow[]>`
-    SELECT "id", "pacienteId", "firmadoEn", "textoVersion", "revocadoEn"
-    FROM "consentimientos_grabacion"
-    WHERE "pacienteId" = ${pacienteId}
-      AND "organizationId" = ${organizationId}
-    ORDER BY "firmadoEn" DESC
-    LIMIT 1
-  `;
-
-  return consentimientos[0] ?? null;
-}
-
-async function findVigenteConsentimiento(
-  client: SqlClient,
-  pacienteId: string,
-  organizationId: string,
-) {
-  const consentimientos = await client.$queryRaw<ConsentimientoRow[]>`
-    SELECT "id", "pacienteId", "firmadoEn", "textoVersion", "revocadoEn"
-    FROM "consentimientos_grabacion"
-    WHERE "pacienteId" = ${pacienteId}
-      AND "organizationId" = ${organizationId}
-      AND "revocadoEn" IS NULL
-    ORDER BY "firmadoEn" DESC
-    LIMIT 1
-  `;
-
-  return consentimientos[0] ?? null;
-}
-
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();
@@ -122,9 +84,17 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     await assertPacienteExists(id, organizationId);
 
-    const consentimiento = await findLatestConsentimiento(db, id, organizationId);
+    const consentimiento = await db.consentimientoGrabacion.findFirst({
+      where: {
+        pacienteId: id,
+        organizationId,
+        revocadoEn: null,
+      },
+      orderBy: { firmadoEn: "desc" },
+      select: consentimientoSelect,
+    });
 
-    if (!consentimiento || consentimiento.revocadoEn !== null) {
+    if (!consentimiento) {
       return Response.json({ consentimiento: null });
     }
 
@@ -141,8 +111,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     const organizationId = await getOrganizationId();
     const { id } = await params;
 
-    await assertPacienteExists(id, organizationId);
-
     const body = await parseJsonBody(request);
     const parsed = createConsentimientoSchema.safeParse(body);
 
@@ -150,56 +118,56 @@ export async function POST(request: Request, { params }: RouteParams) {
       return validationError(parsed.error);
     }
 
-    const now = new Date();
-    const consentimientoId = randomUUID();
+    const [paciente, configuracion] = await Promise.all([
+      db.paciente.findFirst({
+        where: { id, organizationId },
+        select: { id: true, nombre: true, apellido: true },
+      }),
+      db.configuracion.findUnique({
+        where: { organizationId },
+        select: { nombreProfesional: true, direccion: true },
+      }),
+    ]);
+
+    if (!paciente) {
+      throw new ApiError("Paciente no encontrado", 404);
+    }
+
+    if (!configuracion) {
+      throw new ApiError("Configuración de la organización no encontrada", 500);
+    }
+
+    const textoCompleto = generarTextoConsentimiento({
+      nombrePaciente: `${paciente.nombre} ${paciente.apellido}`.trim(),
+      nombreProfesional: configuracion.nombreProfesional,
+      direccionConsultorio: configuracion.direccion,
+    });
+
     const ipOrigen = getIpOrigen(request);
+    const now = new Date();
 
     const consentimiento = await db.$transaction(async (tx) => {
-      await tx.$executeRaw`
-        UPDATE "consentimientos_grabacion"
-        SET "revocadoEn" = ${now}, "updatedAt" = ${now}
-        WHERE "pacienteId" = ${id}
-          AND "organizationId" = ${organizationId}
-          AND "revocadoEn" IS NULL
-      `;
+      await tx.consentimientoGrabacion.updateMany({
+        where: {
+          pacienteId: id,
+          organizationId,
+          revocadoEn: null,
+        },
+        data: { revocadoEn: now },
+      });
 
-      const created = await tx.$queryRaw<ConsentimientoRow[]>`
-        INSERT INTO "consentimientos_grabacion" (
-          "id",
-          "pacienteId",
-          "organizationId",
-          "firmadoEn",
-          "revocadoEn",
-          "textoVersion",
-          "textoCompleto",
-          "firmaDigital",
-          "ipOrigen",
-          "createdAt",
-          "updatedAt"
-        )
-        VALUES (
-          ${consentimientoId},
-          ${id},
-          ${organizationId},
-          ${now},
-          ${null},
-          ${parsed.data.textoVersion},
-          ${getTextoConsentimientoPlaceholder(parsed.data.textoVersion)},
-          ${parsed.data.firmaDigital},
-          ${ipOrigen},
-          ${now},
-          ${now}
-        )
-        RETURNING "id", "pacienteId", "firmadoEn", "textoVersion", "revocadoEn"
-      `;
-
-      const [nuevoConsentimiento] = created;
-
-      if (!nuevoConsentimiento) {
-        throw new ApiError("No se pudo registrar el consentimiento", 500);
-      }
-
-      return nuevoConsentimiento;
+      return tx.consentimientoGrabacion.create({
+        data: {
+          pacienteId: id,
+          organizationId,
+          firmadoEn: now,
+          textoVersion: parsed.data.textoVersion,
+          textoCompleto,
+          firmaDigital: parsed.data.firmaDigital,
+          ipOrigen,
+        },
+        select: consentimientoSelect,
+      });
     });
 
     return Response.json(
@@ -218,23 +186,18 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     await assertPacienteExists(id, organizationId);
 
-    await db.$transaction(async (tx) => {
-      const consentimiento = await findVigenteConsentimiento(tx, id, organizationId);
-
-      if (!consentimiento) {
-        throw new ApiError("Consentimiento vigente no encontrado", 404);
-      }
-
-      const now = new Date();
-
-      await tx.$executeRaw`
-        UPDATE "consentimientos_grabacion"
-        SET "revocadoEn" = ${now}, "updatedAt" = ${now}
-        WHERE "pacienteId" = ${id}
-          AND "organizationId" = ${organizationId}
-          AND "revocadoEn" IS NULL
-      `;
+    const { count } = await db.consentimientoGrabacion.updateMany({
+      where: {
+        pacienteId: id,
+        organizationId,
+        revocadoEn: null,
+      },
+      data: { revocadoEn: new Date() },
     });
+
+    if (count === 0) {
+      throw new ApiError("Consentimiento vigente no encontrado", 404);
+    }
 
     return Response.json({ success: true });
   } catch (error) {

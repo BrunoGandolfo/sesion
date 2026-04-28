@@ -22,9 +22,11 @@ import {
   Textarea,
   Toast,
 } from "@/components/ui";
+import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge";
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
 import { EditarPacienteForm } from "./editar-paciente-form";
 import type {
+  Configuracion,
   MetodoPago,
   Modalidad,
   Paciente,
@@ -113,6 +115,7 @@ export function PacienteDetailView({ id }: { id: string }) {
   const router = useRouter();
   const [paciente, setPaciente] = React.useState<PacienteConDeuda | null>(null);
   const [turnos, setTurnos] = React.useState<Turno[]>([]);
+  const [config, setConfig] = React.useState<Configuracion | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -141,6 +144,19 @@ export function PacienteDetailView({ id }: { id: string }) {
 
     return () => controller.abort();
   }, [id, reloadKey]);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    fetch("/api/config", { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((json: { data: Configuracion } | null) => {
+        if (json) setConfig(json.data);
+      })
+      .catch(() => {});
+
+    return () => controller.abort();
+  }, []);
 
   function retryLoad() {
     setLoading(true);
@@ -312,6 +328,19 @@ export function PacienteDetailView({ id }: { id: string }) {
           accent={deudaTotal > 0 ? "terracotta" : "default"}
         />
       </div>
+
+      <section className="mt-8 lg:mt-10">
+        <h2 className="flex items-center text-[10px] uppercase tracking-[0.08em] font-semibold text-ink-500 mb-3">
+          <EditorialRule />
+          <span>Grabación de sesiones</span>
+        </h2>
+        <ConsentimientoBadge
+          pacienteId={paciente.id}
+          nombrePaciente={`${paciente.nombre} ${paciente.apellido}`}
+          nombreProfesional={config?.nombreProfesional ?? ""}
+          direccionConsultorio={config?.direccion ?? ""}
+        />
+      </section>
 
       <section className="mt-8 lg:mt-10">
         <h2 className="flex items-center text-[10px] uppercase tracking-[0.08em] font-semibold text-ink-500 mb-3">
