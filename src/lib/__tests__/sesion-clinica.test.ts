@@ -9,6 +9,7 @@ import type {
   AlianzaTerapeutica,
   DatosEstructurados,
   EstadoProcesamiento,
+  IntervencionTerapeuta,
 } from "@/types/domain";
 
 describe("Sesión clínica - validaciones", () => {
@@ -92,14 +93,36 @@ describe("Sesión clínica - validaciones", () => {
   });
 
   describe("parseDatosEstructurados", () => {
+    const intervencionBase: IntervencionTerapeuta = {
+      tipo: "validacion",
+      descripcion: "Valida la angustia y ordena la secuencia del relato.",
+      timestampAprox: "12:34",
+    };
+
     const validoBase: DatosEstructurados = {
       temas: ["ansiedad", "trabajo"],
       emocionesPaciente: ["frustración"],
       intensidadEmocional: 7,
       alianzaTerapeutica: "estable",
-      intervenciones: ["psicoeducación"],
+      intervenciones: [intervencionBase],
       compromisos: ["registro diario"],
-      senalesAlerta: [],
+      materialRecurrente: ["exigencia laboral"],
+      materialNuevo: ["conflicto con supervisión"],
+      focoProximaSesion: "Explorar autoexigencia y anticipación ansiosa.",
+      flagsRiesgo: {
+        ideacionSuicida: false,
+        autolesion: false,
+        violenciaTerceros: false,
+        sintomasPsicoticos: false,
+        crisisPanico: false,
+        detalle: "",
+      },
+      confianzaModelo: "media",
+      resumenSesion:
+        "Se trabajó sobre ansiedad laboral, con registro de disparadores y validación afectiva.",
+      estadoEmocionalObservado:
+        "Se observó tono ansioso con momentos de alivio al ordenar la secuencia.",
+      duracionRealMin: 50,
       progresoPercibido: "leve mejora",
     };
 
@@ -146,7 +169,7 @@ describe("Sesión clínica - validaciones", () => {
     });
 
     it("rechaza intensidadEmocional NaN/Infinity", () => {
-      const conNaN = `{"temas":[],"emocionesPaciente":[],"intensidadEmocional":NaN,"alianzaTerapeutica":"estable","intervenciones":[],"compromisos":[],"senalesAlerta":[],"progresoPercibido":""}`;
+      const conNaN = `{"temas":[],"emocionesPaciente":[],"intensidadEmocional":NaN,"alianzaTerapeutica":"estable","intervenciones":[],"compromisos":[],"materialRecurrente":[],"materialNuevo":[],"focoProximaSesion":"","flagsRiesgo":{"ideacionSuicida":false,"autolesion":false,"violenciaTerceros":false,"sintomasPsicoticos":false,"crisisPanico":false,"detalle":""},"confianzaModelo":"media","resumenSesion":"","estadoEmocionalObservado":"","duracionRealMin":50,"progresoPercibido":""}`;
       // NaN no es JSON válido, el parser falla
       expect(parseDatosEstructurados(conNaN)).toBeNull();
     });
@@ -205,6 +228,101 @@ describe("Sesión clínica - validaciones", () => {
       expect(
         parseDatosEstructurados(
           JSON.stringify({ ...validoBase, temas: ["ok", 42] }),
+        ),
+      ).toBeNull();
+    });
+
+    it("acepta intervenciones como objetos tipados", () => {
+      const result = parseDatosEstructurados(JSON.stringify(validoBase));
+      expect(result?.intervenciones).toEqual([intervencionBase]);
+    });
+
+    it("rechaza intervenciones con tipo inválido", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({
+            ...validoBase,
+            intervenciones: [
+              {
+                ...intervencionBase,
+                tipo: "psicoeducacion",
+              },
+            ],
+          }),
+        ),
+      ).toBeNull();
+    });
+
+    it("rechaza intervenciones con timestampAprox inválido", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({
+            ...validoBase,
+            intervenciones: [
+              {
+                ...intervencionBase,
+                timestampAprox: "12:99",
+              },
+            ],
+          }),
+        ),
+      ).toBeNull();
+    });
+
+    it("acepta flagsRiesgo completos", () => {
+      const result = parseDatosEstructurados(
+        JSON.stringify({
+          ...validoBase,
+          flagsRiesgo: {
+            ideacionSuicida: true,
+            autolesion: false,
+            violenciaTerceros: false,
+            sintomasPsicoticos: false,
+            crisisPanico: true,
+            detalle: "Refiere ideas de muerte sin plan y episodio agudo de pánico.",
+          },
+        }),
+      );
+
+      expect(result?.flagsRiesgo).toEqual({
+        ideacionSuicida: true,
+        autolesion: false,
+        violenciaTerceros: false,
+        sintomasPsicoticos: false,
+        crisisPanico: true,
+        detalle: "Refiere ideas de muerte sin plan y episodio agudo de pánico.",
+      });
+    });
+
+    it("rechaza flagsRiesgo incompletos", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({
+            ...validoBase,
+            flagsRiesgo: {
+              ideacionSuicida: false,
+              autolesion: false,
+              violenciaTerceros: false,
+              sintomasPsicoticos: false,
+              detalle: "",
+            },
+          }),
+        ),
+      ).toBeNull();
+    });
+
+    it("rechaza confianzaModelo inválida", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, confianzaModelo: "incierta" }),
+        ),
+      ).toBeNull();
+    });
+
+    it("rechaza duracionRealMin negativa", () => {
+      expect(
+        parseDatosEstructurados(
+          JSON.stringify({ ...validoBase, duracionRealMin: -1 }),
         ),
       ).toBeNull();
     });

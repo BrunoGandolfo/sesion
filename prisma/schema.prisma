@@ -24,6 +24,7 @@ model Organization {
   usuarios         User[]
   consentimientos  ConsentimientoGrabacion[]
   sesionesClinicas SesionClinica[]
+  hotWords         HotWord[]
 
   @@map("organizaciones")
 }
@@ -84,6 +85,7 @@ model Paciente {
   organization    Organization              @relation(fields: [organizationId], references: [id])
   turnos          Turno[]
   consentimientos ConsentimientoGrabacion[]
+  hotWords        HotWord[]
 
   @@index([organizationId, activo])
   @@index([organizationId, apellido])
@@ -219,4 +221,33 @@ model SesionClinica {
   @@index([organizationId])
   @@index([estado])
   @@map("sesiones_clinicas")
+}
+
+// ============================================
+// HotWords — vocabulario clínico para mejorar
+// la transcripción ASR (términos clínicos,
+// modismos rioplatenses, nombres propios).
+// ============================================
+
+model HotWord {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  scope      String // "global" | "profesional" | "paciente"
+  pacienteId String? // Solo si scope === "paciente"
+  paciente   Paciente? @relation(fields: [pacienteId], references: [id])
+
+  termino   String  @db.VarChar(200)
+  categoria String? @db.VarChar(50) // "termino_clinico" | "modismo_rioplatense" | "nombre_propio" | "otro"
+  activo    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, scope, pacienteId, termino])
+  @@index([organizationId])
+  @@index([scope])
+  @@index([pacienteId])
+  @@map("hot_words")
 }

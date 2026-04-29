@@ -4,6 +4,7 @@ import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   CircleAlert,
+  Clock,
   LoaderCircle,
   Mic,
   RotateCcw,
@@ -11,21 +12,34 @@ import {
   ShieldCheck,
   Square,
   Trash2,
+  X,
 } from "lucide-react";
 
 import { cifrar, generarClave } from "@/lib/crypto";
 import { Button, Card, Chip, EditorialRule } from "@/components/ui";
 
+interface DatosGrabacion {
+  audioBlob: Blob;
+  claveCifrado: string;
+  ivCifrado: string;
+  duracionSegundos: number;
+  esParte?: number; // undefined = grabación única; 1, 2, 3… = parte de un split por límite de 60 min
+}
+
+interface DatosGrabacionParte1 {
+  audioBlob: Blob;
+  claveCifrado: string;
+  ivCifrado: string;
+  duracionSegundos: number;
+  esParte: number;
+}
+
 interface GrabadorSesionProps {
   turnoId: string;
   pacienteNombre: string;
-  onGrabacionCompleta: (datos: {
-    audioBlob: Blob;
-    claveCifrado: string;
-    ivCifrado: string;
-    duracionSegundos: number;
-  }) => void;
+  onGrabacionCompleta: (datos: DatosGrabacion) => void;
   onError: (mensaje: string) => void;
+  onParte2?: (datosParte1: DatosGrabacionParte1) => void;
 }
 
 type EstadoGrabador = "idle" | "grabando" | "procesando" | "listo" | "error";
@@ -42,6 +56,51 @@ const transicion = {
   duration: 0.24,
   ease: [0.16, 1, 0.3, 1] as const,
 };
+
+// Límite duro del modelo ASR (VibeVoice-ASR): 60 min por inferencia.
+const LIMITE_SEGUNDOS = 3600;
+
+type NivelWarning = 50 | 55 | 58;
+
+const UMBRALES_WARNING: { nivel: NivelWarning; desde: number }[] = [
+  { nivel: 58, desde: 3480 },
+  { nivel: 55, desde: 3300 },
+  { nivel: 50, desde: 3000 },
+];
+
+interface ConfigBanner {
+  texto: string;
+  containerClass: string;
+  iconClass: string;
+}
+
+const CONFIG_BANNER: Record<NivelWarning, ConfigBanner> = {
+  50: {
+    texto: "10 minutos restantes",
+    containerClass:
+      "bg-sage-50 text-sage-700 border-sage-200",
+    iconClass: "text-sage-500",
+  },
+  55: {
+    texto: "5 minutos, considerá cerrar",
+    containerClass:
+      "bg-gold-50 text-gold-500 border-[color:var(--color-gold-100,#F2E2BE)]",
+    iconClass: "text-gold-500",
+  },
+  58: {
+    texto: "2 min antes del corte automático",
+    containerClass:
+      "bg-terracotta-50 text-terracotta-500 border-terracotta-100",
+    iconClass: "text-terracotta-500",
+  },
+};
+
+function calcularNivelWarning(segundos: number): NivelWarning | null {
+  for (const { nivel, desde } of UMBRALES_WARNING) {
+    if (segundos >= desde) return nivel;
+  }
+  return null;
+}
 
 function formatearDuracion(totalSegundos: number) {
   const minutos = Math.floor(totalSegundos / 60)
@@ -129,11 +188,14 @@ export function GrabadorSesion({
   pacienteNombre,
   onGrabacionCompleta,
   onError,
+  onParte2,
 }: GrabadorSesionProps) {
   const [estado, setEstado] = React.useState<EstadoGrabador>("idle");
   const [segundosActuales, setSegundosActuales] = React.useState(0);
   const [duracionFinal, setDuracionFinal] = React.useState<number | null>(null);
   const [mensajeError, setMensajeError] = React.useState<string | null>(null);
+  const [bannerDismissed, setBannerDismissed] = React.useState<NivelWarning | null>(null);
+  const [mostrarModalCorte, setMostrarModalCorte] = React.useState(false);
 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -144,11 +206,20 @@ export function GrabadorSesion({
   const grabacionListaRef = React.useRef<GrabacionCifrada | null>(null);
   const componenteMontadoRef = React.useRef(true);
   const onErrorRef = React.useRef(onError);
+  const onParte2Ref = React.useRef(onParte2);
   const detenerActivaRef = React.useRef<(modo: ModoDetencion) => void>(() => {});
+  const parteActualRef = React.useRef(1);
+  const intencionParte2Ref = React.useRef(false);
+  const recorderPausadoRef = React.useRef(false);
+  const cortePendienteRef = React.useRef(false);
 
   React.useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
+
+  React.useEffect(() => {
+    onParte2Ref.current = onParte2;
+  }, [onParte2]);
 
   function limpiarTimer() {
     if (intervaloTimerRef.current !== null) {
@@ -197,10 +268,17 @@ export function GrabadorSesion({
     liberarStream();
     limpiarMemoria();
 
+    parteActualRef.current = 1;
+    intencionParte2Ref.current = false;
+    recorderPausadoRef.current = false;
+    cortePendienteRef.current = false;
+
     if (componenteMontadoRef.current) {
       setSegundosActuales(0);
       setDuracionFinal(null);
       setMensajeError(null);
+      setBannerDismissed(null);
+      setMostrarModalCorte(false);
       setEstado("idle");
     }
   }
@@ -257,6 +335,11 @@ export function GrabadorSesion({
         duracionSegundos,
       };
 
+      if (intencionParte2Ref.current) {
+        await emitirYRestartParte2();
+        return;
+      }
+
       if (componenteMontadoRef.current) {
         setMensajeError(null);
         setSegundosActuales(duracionSegundos);
@@ -266,6 +349,54 @@ export function GrabadorSesion({
     } catch {
       irAError("No se pudo cifrar el audio. Probá de nuevo.");
     }
+  }
+
+  async function emitirYRestartParte2() {
+    const datos = grabacionListaRef.current;
+    intencionParte2Ref.current = false;
+
+    if (!datos) {
+      irAError("La grabación cifrada ya no está disponible.");
+      return;
+    }
+
+    const parteCompletada = parteActualRef.current;
+    const datosParte: DatosGrabacionParte1 = {
+      audioBlob: datos.audioBlob,
+      claveCifrado: datos.claveCifrado,
+      ivCifrado: datos.ivCifrado,
+      duracionSegundos: datos.duracionSegundos,
+      esParte: parteCompletada,
+    };
+
+    try {
+      onGrabacionCompleta(datosParte);
+    } catch (error) {
+      const mensaje =
+        error instanceof Error && error.message
+          ? error.message
+          : "No se pudo enviar la grabación.";
+      irAError(mensaje);
+      return;
+    }
+
+    try {
+      onParte2Ref.current?.(datosParte);
+    } catch {
+      // El padre se ocupa de loguear su propio error; no rompemos el flujo de grabación.
+    }
+
+    grabacionListaRef.current = null;
+    parteActualRef.current = parteCompletada + 1;
+
+    if (componenteMontadoRef.current) {
+      setBannerDismissed(null);
+      setMensajeError(null);
+      setSegundosActuales(0);
+      setDuracionFinal(null);
+    }
+
+    await iniciarGrabacion();
   }
 
   function detenerGrabacionActiva(modo: ModoDetencion) {
@@ -329,10 +460,15 @@ export function GrabadorSesion({
     liberarStream();
     limpiarMemoria();
 
+    cortePendienteRef.current = false;
+    recorderPausadoRef.current = false;
+
     if (componenteMontadoRef.current) {
       setMensajeError(null);
       setDuracionFinal(null);
       setSegundosActuales(0);
+      setBannerDismissed(null);
+      setMostrarModalCorte(false);
     }
 
     try {
@@ -390,10 +526,117 @@ export function GrabadorSesion({
           return;
         }
 
-        setSegundosActuales(Math.max(0, Math.floor((Date.now() - inicio) / 1000)));
+        const transcurridos = Math.max(
+          0,
+          Math.floor((Date.now() - inicio) / 1000),
+        );
+
+        if (transcurridos >= LIMITE_SEGUNDOS && !cortePendienteRef.current) {
+          cortePendienteRef.current = true;
+          setSegundosActuales(LIMITE_SEGUNDOS);
+          handleCorte60();
+          return;
+        }
+
+        if (cortePendienteRef.current) {
+          return;
+        }
+
+        setSegundosActuales(transcurridos);
       }, 1000);
     } catch (error) {
       irAError(mensajeErrorGrabacion(error));
+    }
+  }
+
+  function handleCorte60() {
+    limpiarTimer();
+
+    const recorder = mediaRecorderRef.current;
+    let pausado = false;
+
+    if (recorder && recorder.state === "recording" && typeof recorder.pause === "function") {
+      try {
+        recorder.pause();
+        pausado = true;
+      } catch {
+        pausado = false;
+      }
+    }
+
+    recorderPausadoRef.current = pausado;
+
+    if (componenteMontadoRef.current) {
+      setMostrarModalCorte(true);
+    }
+
+    // Fallback: si pause() no funcionó, cortamos suavemente. La encriptación
+    // arranca en paralelo y la decisión del modal se aplica al resultado.
+    if (!pausado) {
+      const r = mediaRecorderRef.current;
+      if (r && r.state !== "inactive") {
+        try {
+          modoDetencionRef.current = "completar";
+          r.stop();
+        } catch {
+          // ignorado: si stop falla, irAError se disparará via onerror del recorder
+        }
+      }
+    }
+  }
+
+  function reanudarSiPausado() {
+    if (!recorderPausadoRef.current) return;
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    try {
+      if (recorder.state === "paused" && typeof recorder.resume === "function") {
+        recorder.resume();
+      }
+    } catch {
+      // ignorado: si no se puede reanudar, stop() sigue funcionando desde estado paused
+    }
+    recorderPausadoRef.current = false;
+  }
+
+  function handleTerminarCorte() {
+    intencionParte2Ref.current = false;
+
+    if (componenteMontadoRef.current) {
+      setMostrarModalCorte(false);
+    }
+
+    if (recorderPausadoRef.current) {
+      reanudarSiPausado();
+      if (componenteMontadoRef.current) {
+        setEstado("procesando");
+      }
+      detenerGrabacionActiva("completar");
+    }
+    // Si ya estaba detenido (camino fallback), procesarGrabacion ya está en curso
+    // y va a transicionar a "listo" porque intencionParte2Ref es false.
+  }
+
+  async function handleContinuarParte2() {
+    intencionParte2Ref.current = true;
+
+    if (componenteMontadoRef.current) {
+      setMostrarModalCorte(false);
+    }
+
+    if (recorderPausadoRef.current) {
+      reanudarSiPausado();
+      if (componenteMontadoRef.current) {
+        setEstado("procesando");
+      }
+      detenerGrabacionActiva("completar");
+      return;
+    }
+
+    // Fallback: ya se llamó stop(). Si la encriptación terminó, emitimos ya;
+    // si todavía está en curso, procesarGrabacion va a detectar la intención.
+    if (grabacionListaRef.current) {
+      await emitirYRestartParte2();
     }
   }
 
@@ -443,6 +686,14 @@ export function GrabadorSesion({
     estado === "listo"
       ? formatearDuracion(duracionFinal ?? 0)
       : formatearDuracion(segundosActuales);
+
+  const nivelWarning =
+    estado === "grabando" ? calcularNivelWarning(segundosActuales) : null;
+  const mostrarBanner =
+    nivelWarning !== null &&
+    (bannerDismissed === null || nivelWarning > bannerDismissed);
+  const bannerConfig = nivelWarning !== null ? CONFIG_BANNER[nivelWarning] : null;
+  const ofrecerParte2 = typeof onParte2 === "function";
 
   return (
     <Card
@@ -523,6 +774,40 @@ export function GrabadorSesion({
                 transition={transicion}
                 className="flex flex-col items-center gap-5 text-center"
               >
+                <AnimatePresence initial={false}>
+                  {mostrarBanner && bannerConfig && nivelWarning !== null && (
+                    <motion.div
+                      key={`banner-${nivelWarning}`}
+                      role="status"
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={transicion}
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 ${bannerConfig.containerClass}`}
+                    >
+                      <div className="flex items-center gap-2 text-left">
+                        <Clock
+                          size={16}
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                          className={bannerConfig.iconClass}
+                        />
+                        <span className="font-sans text-[13px] font-semibold">
+                          {bannerConfig.texto}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBannerDismissed(nivelWarning)}
+                        aria-label="Descartar aviso"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-black/5"
+                      >
+                        <X size={14} strokeWidth={1.8} aria-hidden="true" />
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <motion.div
                   aria-hidden="true"
                   className="flex h-14 w-14 items-center justify-center rounded-full bg-[rgba(160,64,64,0.12)]"
@@ -671,6 +956,63 @@ export function GrabadorSesion({
           </AnimatePresence>
         </div>
       </div>
+
+      <AnimatePresence>
+        {mostrarModalCorte && (
+          <>
+            <motion.div
+              key="corte-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              aria-hidden="true"
+              className="fixed inset-0 z-40 bg-[rgba(26,38,40,0.4)] backdrop-blur-[2px]"
+            />
+            <motion.div
+              key="corte-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Llegaste al límite de 60 minutos"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={transicion}
+              className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-32px)] max-w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-6 shadow-raised"
+            >
+              <div className="space-y-2">
+                <h3 className="font-display text-[20px] leading-tight text-ink-900">
+                  Llegaste al límite de 60 minutos
+                </h3>
+                <p className="text-[14px] leading-6 text-ink-700">
+                  La grabación se pausó automáticamente. ¿Querés terminar acá o
+                  seguir en una segunda parte?
+                </p>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                {ofrecerParte2 && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      void handleContinuarParte2();
+                    }}
+                    className="w-full sm:w-auto"
+                  >
+                    Continuar en Parte 2
+                  </Button>
+                )}
+                <Button
+                  onClick={handleTerminarCorte}
+                  className="w-full sm:w-auto"
+                >
+                  Terminar grabación
+                </Button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </Card>
   );
 }

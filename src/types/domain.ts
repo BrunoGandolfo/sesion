@@ -135,16 +135,54 @@ export type EstadoProcesamiento =
 /** Nivel de alianza terapéutica inferido por el LLM */
 export type AlianzaTerapeutica = "fragil" | "inestable" | "estable" | "fuerte";
 
-/** Datos estructurados extraídos por el LLM a partir de la transcripción */
+/** Intervención del terapeuta detectada por IA */
+export interface IntervencionTerapeuta {
+  tipo:
+    | "reformulacion"
+    | "senalamiento"
+    | "confrontacion"
+    | "interpretacion"
+    | "pregunta_circular"
+    | "validacion"
+    | "silencio_terapeutico"
+    | "otra";
+  descripcion: string;
+  timestampAprox: string; // formato "MM:SS"
+}
+
+/** Flags de riesgo clínico — cada uno requiere dismissal explícito */
+export interface FlagsRiesgo {
+  ideacionSuicida: boolean;
+  autolesion: boolean;
+  violenciaTerceros: boolean;
+  sintomasPsicoticos: boolean;
+  crisisPanico: boolean;
+  detalle: string; // Segmento textual donde se detectó, vacío si todos false
+}
+
+/** Confianza del modelo en la nota generada */
+export type ConfianzaModelo = "alta" | "media" | "baja";
+
+/** Datos estructurados extraídos por el LLM (versión enriquecida) */
 export interface DatosEstructurados {
+  // Campos originales
   temas: string[];
   emocionesPaciente: string[];
-  intensidadEmocional: number;        // escala 1-10
-  alianzaTerapeutica: AlianzaTerapeutica;
-  intervenciones: string[];
+  intensidadEmocional: number; // 1-10
+  alianzaTerapeutica: "fragil" | "inestable" | "estable" | "fuerte";
   compromisos: string[];
-  senalesAlerta: string[];
   progresoPercibido: string;
+
+  // Campos nuevos
+  intervenciones: IntervencionTerapeuta[];
+  materialRecurrente: string[]; // Temas que ya aparecieron en sesiones anteriores
+  materialNuevo: string[]; // Temas que aparecen por primera vez
+  focoProximaSesion: string; // Sugerencia de foco para la próxima sesión
+  flagsRiesgo: FlagsRiesgo;
+  confianzaModelo: ConfianzaModelo;
+  resumenSesion: string; // 200-300 palabras
+  estadoEmocionalObservado: string; // 100-150 palabras
+  duracionRealMin: number; // Duración real de la sesión en minutos
 }
 
 /** Nota clínica en formato SOAP */

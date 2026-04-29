@@ -3,28 +3,30 @@
 import * as React from "react";
 import { AlertTriangle, ChevronDown, Sparkles } from "lucide-react";
 import { Button, Chip } from "@/components/ui";
+import type {
+  AlianzaTerapeutica,
+  ConfianzaModelo,
+  DatosEstructurados as DatosEstructuradosBase,
+  FlagsRiesgo,
+  IntervencionTerapeuta,
+  NotaSOAP,
+} from "@/types/domain";
 
-type AlianzaTerapeutica = "fragil" | "inestable" | "estable" | "fuerte";
+type RiesgoKey =
+  | "ideacionSuicida"
+  | "autolesion"
+  | "violenciaTerceros"
+  | "sintomasPsicoticos"
+  | "crisisPanico";
 
-interface DatosEstructurados {
-  temas: string[];
-  emocionesPaciente: string[];
-  intensidadEmocional: number;
-  alianzaTerapeutica: AlianzaTerapeutica;
-  intervenciones: string[];
-  compromisos: string[];
-  senalesAlerta: string[];
-  progresoPercibido: string;
-}
+type DatosEstructurados = Omit<DatosEstructuradosBase, "intervenciones"> & {
+  intervenciones: IntervencionTerapeuta[] | string[];
+  senalesAlerta?: string[] | null;
+};
 
 interface NotaClinicaViewProps {
   sesionClinicaId: string;
-  nota: {
-    subjetivo: string;
-    objetivo: string;
-    analisis: string;
-    plan: string;
-  };
+  nota: NotaSOAP;
   datosEstructurados: DatosEstructurados | null;
   pacienteNombre: string;
   fechaSesion: string;
@@ -37,6 +39,34 @@ interface AutoTextareaProps {
   onChange: (value: string) => void;
   disabled?: boolean;
 }
+
+interface RiesgoActivo {
+  key: RiesgoKey;
+  label: string;
+}
+
+interface IntervencionNormalizada {
+  id: string;
+  tipo: string;
+  descripcion: string;
+  timestamp: string | null;
+}
+
+const RIESGO_LABELS: Record<RiesgoKey, string> = {
+  ideacionSuicida: "Ideación suicida",
+  autolesion: "Autolesión",
+  violenciaTerceros: "Violencia hacia terceros",
+  sintomasPsicoticos: "Síntomas psicóticos",
+  crisisPanico: "Crisis de pánico",
+};
+
+const RIESGO_KEYS: RiesgoKey[] = [
+  "ideacionSuicida",
+  "autolesion",
+  "violenciaTerceros",
+  "sintomasPsicoticos",
+  "crisisPanico",
+];
 
 function AutoTextarea({ label, value, onChange, disabled }: AutoTextareaProps) {
   const id = React.useId();
@@ -74,17 +104,19 @@ function AutoTextarea({ label, value, onChange, disabled }: AutoTextareaProps) {
   );
 }
 
-function alianzaTone(a: AlianzaTerapeutica): "sage" | "terracotta" | "gold" | "neutral" {
-  if (a === "fragil") return "terracotta";
-  if (a === "inestable") return "gold";
-  if (a === "estable") return "neutral";
+function alianzaTone(
+  alianza: AlianzaTerapeutica,
+): "sage" | "terracotta" | "gold" | "neutral" {
+  if (alianza === "fragil") return "terracotta";
+  if (alianza === "inestable") return "gold";
+  if (alianza === "estable") return "neutral";
   return "sage";
 }
 
-function alianzaLabel(a: AlianzaTerapeutica): string {
-  if (a === "fragil") return "Frágil";
-  if (a === "inestable") return "Inestable";
-  if (a === "estable") return "Estable";
+function alianzaLabel(alianza: AlianzaTerapeutica): string {
+  if (alianza === "fragil") return "Frágil";
+  if (alianza === "inestable") return "Inestable";
+  if (alianza === "estable") return "Estable";
   return "Fuerte";
 }
 
@@ -92,6 +124,127 @@ function intensidadColor(intensidad: number): string {
   if (intensidad <= 3) return "var(--color-sage-500)";
   if (intensidad <= 6) return "var(--color-gold-500)";
   return "var(--color-terracotta-500)";
+}
+
+function confianzaTone(
+  confianza: ConfianzaModelo,
+): "sage" | "terracotta" | "gold" {
+  if (confianza === "alta") return "sage";
+  if (confianza === "media") return "gold";
+  return "terracotta";
+}
+
+function confianzaLabel(confianza: ConfianzaModelo): string {
+  if (confianza === "alta") return "Confianza alta";
+  if (confianza === "media") return "Confianza media";
+  return "Confianza baja";
+}
+
+function normalizarTexto(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "Intervención";
+  return trimmed.replace(/[_-]+/g, " ");
+}
+
+function parseTimestampSeconds(timestamp: string | number | null): number {
+  if (typeof timestamp === "number" && Number.isFinite(timestamp)) {
+    return timestamp;
+  }
+
+  if (typeof timestamp !== "string") {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const trimmed = timestamp.trim();
+  if (!trimmed) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const numericValue = Number(trimmed);
+  if (Number.isFinite(numericValue)) {
+    return numericValue;
+  }
+
+  const parts = trimmed.split(":").map((part) => Number(part));
+  if (parts.some((part) => !Number.isFinite(part))) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  }
+
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+
+  return Number.POSITIVE_INFINITY;
+}
+
+function formatTimestamp(timestamp: string | number | null): string | null {
+  if (typeof timestamp === "number" && Number.isFinite(timestamp)) {
+    const total = Math.max(0, Math.round(timestamp));
+    const minutes = Math.floor(total / 60)
+      .toString()
+      .padStart(2, "0");
+    const seconds = (total % 60).toString().padStart(2, "0");
+    return `~${minutes}:${seconds}`;
+  }
+
+  if (typeof timestamp === "string") {
+    const trimmed = timestamp.trim();
+    if (trimmed) {
+      const numericValue = Number(trimmed);
+      if (Number.isFinite(numericValue)) {
+        return formatTimestamp(numericValue);
+      }
+      return `~${trimmed}`;
+    }
+  }
+
+  return null;
+}
+
+function getRiesgosActivos(flagsRiesgo: FlagsRiesgo | null | undefined): RiesgoActivo[] {
+  if (!flagsRiesgo) {
+    return [];
+  }
+
+  return RIESGO_KEYS.filter((key) => flagsRiesgo[key]).map((key) => ({
+    key,
+    label: RIESGO_LABELS[key],
+  }));
+}
+
+function normalizarIntervenciones(
+  intervenciones: DatosEstructurados["intervenciones"] | undefined,
+): IntervencionNormalizada[] {
+  if (!intervenciones || intervenciones.length === 0) {
+    return [];
+  }
+
+  return intervenciones
+    .map((intervencion, index) => {
+      if (typeof intervencion === "string") {
+        return {
+          id: `intervencion-${index}-${intervencion}`,
+          tipo: "Intervención",
+          descripcion: intervencion,
+          timestamp: null,
+        };
+      }
+
+      return {
+        id: `intervencion-${index}-${intervencion.tipo}-${intervencion.timestampAprox}`,
+        tipo: normalizarTexto(intervencion.tipo),
+        descripcion: intervencion.descripcion,
+        timestamp: intervencion.timestampAprox,
+      };
+    })
+    .sort(
+      (a, b) =>
+        parseTimestampSeconds(a.timestamp) - parseTimestampSeconds(b.timestamp),
+    );
 }
 
 export function NotaClinicaView({
@@ -111,22 +264,45 @@ export function NotaClinicaView({
   const [error, setError] = React.useState<string | null>(null);
   const [confirmDescartar, setConfirmDescartar] = React.useState(false);
   const [datosAbierto, setDatosAbierto] = React.useState(true);
+  const [flagsDismissed, setFlagsDismissed] = React.useState<
+    Record<string, boolean>
+  >({});
+
+  const riesgosActivos = getRiesgosActivos(datosEstructurados?.flagsRiesgo);
+  const flagsDismissedActivos = riesgosActivos.reduce<Record<string, boolean>>(
+    (acc, { key }) => {
+      acc[key] = flagsDismissed[key] ?? false;
+      return acc;
+    },
+    {},
+  );
+  const todosLosRiesgosRevisados =
+    riesgosActivos.length === 0 ||
+    riesgosActivos.every(({ key }) => flagsDismissedActivos[key]);
+  const requiereRevisionRiesgo = !todosLosRiesgosRevisados;
+  const mostrarAlertasLegacy =
+    riesgosActivos.length === 0 &&
+    datosEstructurados !== null &&
+    (datosEstructurados.senalesAlerta?.length ?? 0) > 0;
+  const intervenciones = normalizarIntervenciones(datosEstructurados?.intervenciones);
 
   const handleAprobar = async () => {
+    if (requiereRevisionRiesgo) {
+      setError("Revisá y marcá cada señal de riesgo antes de aprobar la nota.");
+      return;
+    }
+
     setEnviando(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/sesion-clinica/${sesionClinicaId}/aprobar`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sesionClinicaId,
-            notaEditada: { subjetivo, objetivo, analisis, plan },
-          }),
-        },
-      );
+      const res = await fetch(`/api/sesion-clinica/${sesionClinicaId}/aprobar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sesionClinicaId,
+          notaEditada: { subjetivo, objetivo, analisis, plan },
+        }),
+      });
       if (!res.ok) {
         throw new Error("No pudimos guardar la nota. Intentá de nuevo.");
       }
@@ -169,11 +345,83 @@ export function NotaClinicaView({
     }
   };
 
-  const tieneAlertas =
-    datosEstructurados !== null && datosEstructurados.senalesAlerta.length > 0;
+  const toggleFlagDismissed = (key: RiesgoKey, checked: boolean) => {
+    setFlagsDismissed((prev) => ({
+      ...prev,
+      [key]: checked,
+    }));
+  };
 
   return (
     <div className="flex flex-col gap-6">
+      {riesgosActivos.length > 0 && (
+        <section
+          role="alert"
+          className="rounded-lg border-2 border-terracotta-500 bg-terracotta-50 px-4 py-4 sm:px-5"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle
+                size={26}
+                strokeWidth={1.9}
+                aria-hidden="true"
+                className="mt-[2px] shrink-0 text-terracotta-500"
+              />
+              <div className="flex flex-col gap-1">
+                <h2 className="font-display text-[20px] font-medium text-ink-900">
+                  ⚠ Señales de riesgo detectadas
+                </h2>
+                <p className="font-sans text-[14px] leading-[1.6] text-ink-700">
+                  Antes de aprobar la nota, revisá y confirmá cada señal marcada.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {riesgosActivos.map(({ key, label }) => {
+                const checkboxId = `riesgo-${key}`;
+                return (
+                  <label
+                    key={key}
+                    htmlFor={checkboxId}
+                    className="flex items-start gap-3 rounded-md border border-terracotta-100 bg-white/80 px-3 py-3"
+                  >
+                    <input
+                      id={checkboxId}
+                      type="checkbox"
+                      checked={Boolean(flagsDismissedActivos[key])}
+                      onChange={(event) =>
+                        toggleFlagDismissed(key, event.target.checked)
+                      }
+                      className="mt-[3px] h-[18px] w-[18px] shrink-0 cursor-pointer accent-sage-500"
+                    />
+                    <div className="flex flex-1 flex-col gap-1">
+                      <span className="font-sans text-[15px] font-semibold leading-[1.5] text-ink-900">
+                        {label}
+                      </span>
+                      <span className="font-sans text-[13px] text-ink-500">
+                        Revisé esta señal
+                      </span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {datosEstructurados?.flagsRiesgo?.detalle && (
+              <div className="rounded-md border border-terracotta-100 bg-white/80 px-4 py-3">
+                <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-terracotta-500">
+                  Segmento citado
+                </p>
+                <p className="mt-2 font-sans text-[14px] leading-[1.7] text-ink-900">
+                  {datosEstructurados.flagsRiesgo.detalle}
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       <header className="flex flex-col gap-2">
         <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
           Nota clínica
@@ -184,20 +432,57 @@ export function NotaClinicaView({
         <p className="font-sans text-[14px] text-ink-500">{fechaSesion}</p>
       </header>
 
-      <div className="flex items-center gap-2 rounded-md border border-gold-50 bg-gold-50 px-3 py-2">
-        <Sparkles
-          size={14}
-          strokeWidth={1.8}
-          aria-hidden="true"
-          className="shrink-0 text-gold-500"
-        />
-        <Chip variant="gold" size="sm">
-          Generada por IA
-        </Chip>
+      <div className="flex flex-col gap-2 rounded-md border border-gold-50 bg-gold-50 px-3 py-2 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2">
+          <Sparkles
+            size={14}
+            strokeWidth={1.8}
+            aria-hidden="true"
+            className="shrink-0 text-gold-500"
+          />
+          <Chip variant="gold" size="sm">
+            Generada por IA
+          </Chip>
+          {datosEstructurados?.confianzaModelo && (
+            <Chip
+              variant={confianzaTone(datosEstructurados.confianzaModelo)}
+              size="sm"
+            >
+              {confianzaLabel(datosEstructurados.confianzaModelo)}
+            </Chip>
+          )}
+        </div>
         <span className="font-sans text-[13px] leading-[1.4] text-gold-500">
           Revisá antes de aprobar.
         </span>
       </div>
+
+      {(datosEstructurados?.resumenSesion ||
+        datosEstructurados?.estadoEmocionalObservado) && (
+        <div className="flex flex-col gap-3">
+          {datosEstructurados?.resumenSesion && (
+            <section className="rounded-lg bg-cream-100 px-4 py-4">
+              <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                Resumen de la sesión
+              </p>
+              <p className="mt-2 font-sans text-[14px] leading-[1.7] text-ink-900">
+                {datosEstructurados.resumenSesion}
+              </p>
+            </section>
+          )}
+
+          {datosEstructurados?.estadoEmocionalObservado && (
+            <section className="rounded-lg bg-cream-100 px-4 py-4">
+              <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                Estado emocional observado
+              </p>
+              <p className="mt-2 font-sans text-[14px] leading-[1.7] text-ink-900">
+                {datosEstructurados.estadoEmocionalObservado}
+              </p>
+            </section>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-5">
         <AutoTextarea
@@ -253,7 +538,7 @@ export function NotaClinicaView({
               id="datos-extraidos-panel"
               className="flex flex-col gap-5 border-t border-[color:var(--border-subtle)] px-5 py-5"
             >
-              {tieneAlertas && (
+              {mostrarAlertasLegacy && (
                 <div
                   role="alert"
                   className="flex items-start gap-2 rounded-md border border-terracotta-100 bg-terracotta-50 px-3 py-3"
@@ -269,12 +554,12 @@ export function NotaClinicaView({
                       Señales de alerta
                     </p>
                     <ul className="flex flex-col gap-1">
-                      {datosEstructurados.senalesAlerta.map((s, i) => (
+                      {datosEstructurados.senalesAlerta?.map((senal, index) => (
                         <li
-                          key={i}
+                          key={`${senal}-${index}`}
                           className="font-sans text-[14px] leading-[1.5] text-ink-900"
                         >
-                          {s}
+                          {senal}
                         </li>
                       ))}
                     </ul>
@@ -288,9 +573,9 @@ export function NotaClinicaView({
                     Temas
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {datosEstructurados.temas.map((t, i) => (
-                      <Chip key={i} variant="neutral">
-                        {t}
+                    {datosEstructurados.temas.map((tema, index) => (
+                      <Chip key={`${tema}-${index}`} variant="neutral">
+                        {tema}
                       </Chip>
                     ))}
                   </div>
@@ -303,9 +588,9 @@ export function NotaClinicaView({
                     Emociones del paciente
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {datosEstructurados.emocionesPaciente.map((e, i) => (
-                      <Chip key={i} variant="sage">
-                        {e}
+                    {datosEstructurados.emocionesPaciente.map((emocion, index) => (
+                      <Chip key={`${emocion}-${index}`} variant="sage">
+                        {emocion}
                       </Chip>
                     ))}
                   </div>
@@ -333,7 +618,10 @@ export function NotaClinicaView({
                   <div
                     className="h-full rounded-full transition-all duration-200"
                     style={{
-                      width: `${Math.min(100, Math.max(0, datosEstructurados.intensidadEmocional * 10))}%`,
+                      width: `${Math.min(
+                        100,
+                        Math.max(0, datosEstructurados.intensidadEmocional * 10),
+                      )}%`,
                       backgroundColor: intensidadColor(
                         datosEstructurados.intensidadEmocional,
                       ),
@@ -355,21 +643,63 @@ export function NotaClinicaView({
                 </div>
               </div>
 
-              {datosEstructurados.intervenciones.length > 0 && (
+              {intervenciones.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                    Intervenciones de la terapeuta
+                  </span>
+                  <div className="flex flex-col gap-3">
+                    {intervenciones.map((intervencion) => (
+                      <div
+                        key={intervencion.id}
+                        className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3"
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Chip variant="neutral">{intervencion.tipo}</Chip>
+                            {formatTimestamp(intervencion.timestamp) && (
+                              <span className="font-sans text-[12px] text-ink-500">
+                                {formatTimestamp(intervencion.timestamp)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="font-sans text-[14px] leading-[1.6] text-ink-900 sm:max-w-[70%]">
+                            {intervencion.descripcion}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(datosEstructurados.materialRecurrente?.length ?? 0) > 0 && (
                 <div className="flex flex-col gap-2">
                   <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                    Intervenciones
+                    Material recurrente
                   </span>
-                  <ul className="list-disc pl-5 flex flex-col gap-1">
-                    {datosEstructurados.intervenciones.map((it, i) => (
-                      <li
-                        key={i}
-                        className="font-sans text-[14px] leading-[1.6] text-ink-900"
-                      >
-                        {it}
-                      </li>
+                  <div className="flex flex-wrap gap-1.5">
+                    {datosEstructurados.materialRecurrente?.map((material, index) => (
+                      <Chip key={`${material}-${index}`} variant="neutral">
+                        {material}
+                      </Chip>
                     ))}
-                  </ul>
+                  </div>
+                </div>
+              )}
+
+              {(datosEstructurados.materialNuevo?.length ?? 0) > 0 && (
+                <div className="flex flex-col gap-2">
+                  <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                    Material nuevo
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {datosEstructurados.materialNuevo?.map((material, index) => (
+                      <Chip key={`${material}-${index}`} variant="sage">
+                        {material}
+                      </Chip>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -379,12 +709,12 @@ export function NotaClinicaView({
                     Compromisos
                   </span>
                   <ul className="list-disc pl-5 flex flex-col gap-1">
-                    {datosEstructurados.compromisos.map((c, i) => (
+                    {datosEstructurados.compromisos.map((compromiso, index) => (
                       <li
-                        key={i}
+                        key={`${compromiso}-${index}`}
                         className="font-sans text-[14px] leading-[1.6] text-ink-900"
                       >
-                        {c}
+                        {compromiso}
                       </li>
                     ))}
                   </ul>
@@ -398,6 +728,17 @@ export function NotaClinicaView({
                   </span>
                   <p className="font-sans text-[14px] leading-[1.6] text-ink-900">
                     {datosEstructurados.progresoPercibido}
+                  </p>
+                </div>
+              )}
+
+              {datosEstructurados.focoProximaSesion && (
+                <div className="rounded-md bg-cream-100 px-4 py-4">
+                  <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                    Foco sugerido para próxima sesión
+                  </span>
+                  <p className="mt-2 font-sans text-[14px] leading-[1.6] text-ink-900">
+                    {datosEstructurados.focoProximaSesion}
                   </p>
                 </div>
               )}
@@ -415,37 +756,47 @@ export function NotaClinicaView({
         </p>
       )}
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex flex-col gap-2">
+        {requiereRevisionRiesgo && (
+          <p className="font-sans text-[13px] leading-[1.5] text-terracotta-500">
+            Para aprobar la nota, primero tenés que revisar y marcar cada señal de
+            riesgo detectada.
+          </p>
+        )}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleDescartar}
+              disabled={enviando}
+              className="!text-terracotta-500"
+            >
+              {confirmDescartar ? "Confirmá: descartar" : "Descartar nota"}
+            </Button>
+            {confirmDescartar && (
+              <button
+                type="button"
+                onClick={() => setConfirmDescartar(false)}
+                className="font-sans text-[13px] text-ink-500 underline-offset-2 hover:underline"
+                disabled={enviando}
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
           <Button
             type="button"
-            variant="ghost"
-            onClick={handleDescartar}
-            disabled={enviando}
-            className={confirmDescartar ? "!text-terracotta-500" : "!text-terracotta-500"}
+            variant="primary"
+            onClick={handleAprobar}
+            disabled={enviando || requiereRevisionRiesgo}
+            aria-disabled={enviando || requiereRevisionRiesgo}
+            className="w-full sm:w-auto"
           >
-            {confirmDescartar ? "Confirmá: descartar" : "Descartar nota"}
+            {enviando ? "Aprobando…" : "Aprobar nota"}
           </Button>
-          {confirmDescartar && (
-            <button
-              type="button"
-              onClick={() => setConfirmDescartar(false)}
-              className="font-sans text-[13px] text-ink-500 underline-offset-2 hover:underline"
-              disabled={enviando}
-            >
-              Cancelar
-            </button>
-          )}
         </div>
-        <Button
-          type="button"
-          variant="primary"
-          onClick={handleAprobar}
-          disabled={enviando}
-          aria-disabled={enviando}
-        >
-          {enviando ? "Aprobando…" : "Aprobar nota"}
-        </Button>
       </div>
     </div>
   );
