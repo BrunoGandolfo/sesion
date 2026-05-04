@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const CLINICAL_PROMPT_VERSION = "v2.0";
+const CLINICAL_PROMPT_VERSION = "v2.1";
 
 export function cargarPromptClinico(): string {
   const path = join(
