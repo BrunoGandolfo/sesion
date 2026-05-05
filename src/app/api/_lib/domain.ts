@@ -91,6 +91,28 @@ export function maxFecha(turnos: TurnoStats[]) {
   }, null);
 }
 
+export function minFecha(turnos: TurnoStats[]) {
+  if (turnos.length === 0) return null;
+  return turnos.reduce<Date | null>((earliest, turno) => {
+    if (!earliest || turno.fecha < earliest) return turno.fecha;
+    return earliest;
+  }, null);
+}
+
+/**
+ * Días enteros transcurridos desde la fecha del turno hasta hoy, calculados
+ * sobre el inicio del día (no fracciones). Devuelve 0 si la fecha es de hoy
+ * o futura.
+ */
+export function diasDesde(fecha: Date | null, ahora: Date): number {
+  if (!fecha) return 0;
+  const todayStart = startOfDay(ahora);
+  const turnoStart = startOfDay(fecha);
+  const diff = todayStart.getTime() - turnoStart.getTime();
+  if (diff <= 0) return 0;
+  return Math.floor(diff / 86_400_000);
+}
+
 export function startOfDay(date: Date) {
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);

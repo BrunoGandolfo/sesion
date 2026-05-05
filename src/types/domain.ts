@@ -109,6 +109,8 @@ export interface DeudaPaciente {
   apellido: string;
   sesionesImpagas: number;
   montoTotal: number;
+  /** Días desde el turno realizado+pendiente más antiguo. 0 si es de hoy. */
+  diasAtraso: number;
 }
 
 export interface KPIsDashboard {

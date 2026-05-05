@@ -5,8 +5,10 @@ import { getOrganizationId } from "../_lib/auth";
 import {
   addDays,
   DashboardData,
+  diasDesde,
   endOfDay,
   endOfMonth,
+  minFecha,
   startOfDay,
   startOfMonth,
   startOfWeekMonday,
@@ -125,9 +127,16 @@ export async function GET() {
         apellido: paciente.apellido,
         sesionesImpagas: paciente.turnos.length,
         montoTotal: sumTarifas(paciente.turnos),
+        diasAtraso: diasDesde(minFecha(paciente.turnos), now),
       }))
       .filter((deudor) => deudor.sesionesImpagas > 0)
-      .sort((a, b) => b.montoTotal - a.montoTotal)
+      // Más viejos primero — la deuda añeja es la que "duele". A igualdad de
+      // días de atraso, desempata por monto descendente.
+      .sort((a, b) =>
+        b.diasAtraso !== a.diasAtraso
+          ? b.diasAtraso - a.diasAtraso
+          : b.montoTotal - a.montoTotal,
+      )
       .slice(0, 10);
 
     const sesionesSemana = Array.from({ length: 7 }, () => 0);

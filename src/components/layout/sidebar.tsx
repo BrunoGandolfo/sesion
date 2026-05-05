@@ -1,14 +1,25 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { Home, Calendar, Users, Settings, LogOut } from "lucide-react";
+import {
+  AlertCircle,
+  Calendar,
+  Home,
+  LogOut,
+  Settings,
+  Users,
+} from "lucide-react";
+import type { DeudaPaciente } from "@/types/domain";
+import { zonaDeuda } from "@/lib/deudas";
 
 const NAV_ITEMS = [
   { href: "/", label: "Hoy", icon: Home },
   { href: "/agenda", label: "Agenda", icon: Calendar },
   { href: "/pacientes", label: "Pacientes", icon: Users },
+  { href: "/deudores", label: "Deudores", icon: AlertCircle },
   { href: "/config", label: "Configuración", icon: Settings },
 ] as const;
 
@@ -27,10 +38,35 @@ function getFirstName(name: string): string {
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [redCount, setRedCount] = React.useState(0);
 
   const name = session?.user?.name?.trim() || "Usuario";
   const initials = getInitials(name);
   const firstName = getFirstName(name);
+
+  // Cuenta de deudores en zona terracotta (31+ días). Refetch al cambiar de
+  // ruta dentro del dashboard para mantener el badge razonablemente fresco
+  // (el sidebar vive en el layout y no se desmonta entre páginas).
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/deudores", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as { data: DeudaPaciente[] };
+        if (cancelled) return;
+        const rojos = json.data.filter(
+          (d) => zonaDeuda(d.diasAtraso) === "terracotta",
+        ).length;
+        setRedCount(rojos);
+      } catch {
+        /* silencioso: el badge es informativo, no crítico */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -53,6 +89,7 @@ export function Sidebar() {
       <nav className="flex flex-col gap-0.5 px-3">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
+          const showBadge = href === "/deudores" && redCount > 0;
           return (
             <Link
               key={href}
@@ -64,7 +101,15 @@ export function Sidebar() {
               }`}
             >
               <Icon size={18} strokeWidth={active ? 2 : 1.6} />
-              {label}
+              <span className="flex-1">{label}</span>
+              {showBadge ? (
+                <span
+                  aria-label={`${redCount} ${redCount === 1 ? "deudor" : "deudores"} con más de 30 días`}
+                  className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-terracotta-500 px-1.5 text-[10px] font-semibold leading-[18px] text-white"
+                >
+                  {redCount}
+                </span>
+              ) : null}
             </Link>
           );
         })}

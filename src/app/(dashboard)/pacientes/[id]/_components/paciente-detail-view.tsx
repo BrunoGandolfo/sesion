@@ -4,12 +4,16 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { differenceInDays } from "date-fns";
 import {
+  AlertCircle,
   Archive,
+  ArrowRight,
   Calendar as CalendarIcon,
   ChevronLeft,
   Edit3,
   Mail,
+  MessageCircle,
   Phone,
   Wallet,
 } from "lucide-react";
@@ -23,6 +27,11 @@ import {
   Toast,
 } from "@/components/ui";
 import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge";
+import {
+  buildWhatsAppUrl,
+  interpolarTemplateCobro,
+  TEMPLATE_COBRO_DEFAULT,
+} from "@/lib/deudas";
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
 import { EditarPacienteForm } from "./editar-paciente-form";
 import type {
@@ -36,6 +45,64 @@ import type {
 } from "@/types/domain";
 
 const MAX_VISIBLES = 12;
+
+type ZonaDeuda = "sage" | "gold" | "terracotta";
+
+function zonaDeudaPorDias(dias: number): ZonaDeuda {
+  if (dias <= 14) return "sage";
+  if (dias <= 30) return "gold";
+  return "terracotta";
+}
+
+const ZONA_STYLES: Record<
+  ZonaDeuda,
+  {
+    card: string;
+    banner: string;
+    icon: string;
+    valueColor: string;
+    button: string;
+  }
+> = {
+  sage: {
+    card: "border-sage-200 bg-white",
+    banner: "border-sage-200 bg-sage-50",
+    icon: "text-sage-600",
+    valueColor: "text-ink-900",
+    button:
+      "bg-white text-sage-600 border border-sage-200 hover:bg-sage-50",
+  },
+  gold: {
+    card: "border-gold-500/40 bg-cream-50",
+    banner: "border-gold-500/40 bg-cream-50",
+    icon: "text-gold-500",
+    valueColor: "text-ink-900",
+    button:
+      "bg-gold-50 text-gold-500 border border-gold-500/30 hover:bg-gold-50/70",
+  },
+  terracotta: {
+    card: "border-terracotta-100 bg-terracotta-50/70",
+    banner: "border-terracotta-100 bg-terracotta-50/70",
+    icon: "text-terracotta-500",
+    valueColor: "text-terracotta-500",
+    button:
+      "bg-white text-terracotta-500 border border-terracotta-100 hover:bg-terracotta-50",
+  },
+};
+
+function diasLabel(dias: number): string {
+  return dias === 1 ? "1 día" : `${dias} días`;
+}
+
+function tiempoTrabajadoLabel(minutos: number): string {
+  const horas = Math.floor(minutos / 60);
+  const mins = minutos % 60;
+  if (horas === 0) return mins === 1 ? "1 minuto" : `${mins} minutos`;
+  const horasLabel = horas === 1 ? "1 hora" : `${horas} horas`;
+  if (mins === 0) return horasLabel;
+  const minsLabel = mins === 1 ? "1 minuto" : `${mins} minutos`;
+  return `${horasLabel} y ${minsLabel}`;
+}
 
 type PacienteJson = Omit<
   PacienteConDeuda,
@@ -177,15 +244,29 @@ export function PacienteDetailView({ id }: { id: string }) {
       ),
     [sesionesRealizadas],
   );
-  const deudaTotal = React.useMemo(
+  const sesionesImpagas = React.useMemo(
     () =>
-      sesionesRealizadas.reduce(
-        (acc, turno) =>
-          turno.pagoEstado === "pendiente" ? acc + turno.tarifaCobrada : acc,
-        0,
-      ),
+      sesionesRealizadas
+        .filter((turno) => turno.pagoEstado === "pendiente")
+        .sort((a, b) => a.fecha.getTime() - b.fecha.getTime()),
     [sesionesRealizadas],
   );
+  const deudaTotal = React.useMemo(
+    () =>
+      sesionesImpagas.reduce((acc, turno) => acc + turno.tarifaCobrada, 0),
+    [sesionesImpagas],
+  );
+  const sesionMasAntigua = sesionesImpagas[0] ?? null;
+  const diasMaxAtraso = sesionMasAntigua
+    ? Math.max(0, differenceInDays(new Date(), sesionMasAntigua.fecha))
+    : 0;
+  const minutosImpagos = React.useMemo(
+    () => sesionesImpagas.reduce((acc, turno) => acc + turno.duracion, 0),
+    [sesionesImpagas],
+  );
+  const zonaDeuda: ZonaDeuda | null = sesionMasAntigua
+    ? zonaDeudaPorDias(diasMaxAtraso)
+    : null;
 
   async function cobrar(turnoId: string, metodo: MetodoPago) {
     if (!paciente) return;
@@ -319,13 +400,27 @@ export function PacienteDetailView({ id }: { id: string }) {
         onArchive={archivarPaciente}
       />
 
+      {sesionMasAntigua && zonaDeuda ? (
+        <DeudaBanner
+          cantidad={sesionesImpagas.length}
+          monto={deudaTotal}
+          dias={diasMaxAtraso}
+          zona={zonaDeuda}
+          minutosImpagos={minutosImpagos}
+          pacienteNombre={paciente.nombre}
+          pacienteTelefono={paciente.telefono}
+          nombreProfesional={config?.nombreProfesional ?? ""}
+          onCobrar={() => setCobroTarget(sesionMasAntigua)}
+        />
+      ) : null}
+
       <div className="grid grid-cols-3 gap-3 lg:gap-4 mt-6 lg:mt-8">
         <KpiTile label="Sesiones" value={sesionesRealizadas.length} />
         <KpiTile label="Total cobrado" value={moneyShort(totalCobrado)} />
-        <KpiTile
-          label="Deuda"
-          value={deudaTotal > 0 ? moneyShort(deudaTotal) : "-"}
-          accent={deudaTotal > 0 ? "terracotta" : "default"}
+        <DeudaKpiTile
+          monto={deudaTotal}
+          dias={diasMaxAtraso}
+          zona={zonaDeuda}
         />
       </div>
 
@@ -560,6 +655,129 @@ function KpiTile({
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+function DeudaKpiTile({
+  monto,
+  dias,
+  zona,
+}: {
+  monto: number;
+  dias: number;
+  zona: ZonaDeuda | null;
+}) {
+  if (!zona || monto <= 0) {
+    return <KpiTile label="Deuda" value="-" />;
+  }
+
+  const styles = ZONA_STYLES[zona];
+
+  return (
+    <div
+      className={`border rounded-lg p-[14px] lg:p-5 flex flex-col gap-1 ${styles.card}`}
+    >
+      <span className="font-sans font-semibold text-[10px] uppercase tracking-[0.08em] text-ink-500">
+        Deuda
+      </span>
+      <span
+        className={`font-display font-medium tabular-nums leading-none text-[22px] lg:text-[26px] ${styles.valueColor}`}
+      >
+        {moneyShort(monto)}
+      </span>
+      <span className="font-sans text-[11px] text-ink-500 tabular-nums">
+        hace {diasLabel(dias)}
+      </span>
+    </div>
+  );
+}
+
+function DeudaBanner({
+  cantidad,
+  monto,
+  dias,
+  zona,
+  minutosImpagos,
+  pacienteNombre,
+  pacienteTelefono,
+  nombreProfesional,
+  onCobrar,
+}: {
+  cantidad: number;
+  monto: number;
+  dias: number;
+  zona: ZonaDeuda;
+  minutosImpagos: number;
+  pacienteNombre: string;
+  pacienteTelefono: string;
+  nombreProfesional: string;
+  onCobrar: () => void;
+}) {
+  const styles = ZONA_STYLES[zona];
+  const cantidadLabel = cantidad === 1 ? "1 sesión sin cobrar" : `${cantidad} sesiones sin cobrar`;
+  const tiempoLabel =
+    cantidad === 1
+      ? `hace ${diasLabel(dias)}`
+      : `la más antigua hace ${diasLabel(dias)}`;
+  const tiempoGratis = tiempoTrabajadoLabel(minutosImpagos);
+
+  const mensajeWhatsApp = interpolarTemplateCobro(TEMPLATE_COBRO_DEFAULT, {
+    nombre: pacienteNombre,
+    sesiones: cantidad,
+    monto: money(monto),
+    profesional: nombreProfesional,
+  });
+  const whatsappHref = buildWhatsAppUrl(pacienteTelefono, mensajeWhatsApp);
+
+  return (
+    <div
+      role="status"
+      className={`mt-4 lg:mt-5 flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${styles.banner}`}
+    >
+      <div className="flex items-start gap-2 min-w-0 flex-1">
+        <AlertCircle
+          size={16}
+          strokeWidth={1.8}
+          aria-hidden="true"
+          className={`mt-[2px] shrink-0 ${styles.icon}`}
+        />
+        <div className="flex flex-col gap-1 min-w-0">
+          <p className="font-sans text-[13px] leading-[1.45] text-ink-700">
+            <span className="font-semibold text-ink-900">{cantidadLabel}</span>
+            <span className="text-ink-500"> · </span>
+            <span className="tabular-nums text-ink-900">{money(monto)}</span>
+            <span className="text-ink-500"> · </span>
+            <span className="tabular-nums">{tiempoLabel}</span>
+          </p>
+          <p className="font-sans text-[12px] leading-[1.5] text-ink-500">
+            Trabajaste{" "}
+            <span className="font-display font-medium text-terracotta-500">
+              {tiempoGratis}
+            </span>{" "}
+            gratis con {pacienteNombre}.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0 sm:items-center">
+        <button
+          type="button"
+          onClick={onCobrar}
+          className={`inline-flex items-center justify-center gap-1 rounded-full px-3 py-[6px] text-[12px] font-semibold transition-colors duration-150 focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 ${styles.button}`}
+        >
+          Cobrar
+          <ArrowRight size={14} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+        <a
+          href={whatsappHref}
+          target="_blank"
+          rel="noopener"
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-sage-500 bg-white px-3 py-[6px] text-[12px] font-semibold text-sage-600 transition-colors duration-150 hover:bg-sage-50 focus:outline-none focus:ring-[3px] focus:ring-sage-500/20"
+        >
+          <MessageCircle size={14} strokeWidth={1.8} aria-hidden="true" />
+          Recordar cobro
+        </a>
+      </div>
     </div>
   );
 }

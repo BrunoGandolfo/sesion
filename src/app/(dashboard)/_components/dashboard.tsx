@@ -28,6 +28,7 @@ import {
   moneyShort,
   saludo,
 } from "@/lib/format";
+import { textoAtraso, zonaDeuda } from "@/lib/deudas";
 import type {
   Configuracion,
   DeudaPaciente,
@@ -441,7 +442,7 @@ export function Dashboard() {
           />
 
           <aside className="flex flex-col gap-7 lg:gap-6">
-            <PorCobrar deudores={data.deudores} />
+            <Deudores deudores={data.deudores} />
             <RitmoSemana today={now} sesionesSemana={data.sesionesSemana} />
             <DelCuaderno today={now} />
           </aside>
@@ -929,12 +930,12 @@ function AgendaEmptyState({ onNuevoTurno }: { onNuevoTurno: () => void }) {
   );
 }
 
-function PorCobrar({ deudores }: { deudores: DeudaPaciente[] }) {
+function Deudores({ deudores }: { deudores: DeudaPaciente[] }) {
   const visibles = deudores.slice(0, 4);
 
   return (
     <section>
-      <SectionCaption>Por cobrar</SectionCaption>
+      <SectionCaption>Deudores</SectionCaption>
 
       {visibles.length > 0 ? (
         <Card className="overflow-hidden rounded-[8px] p-0">
@@ -970,9 +971,13 @@ function PorCobrar({ deudores }: { deudores: DeudaPaciente[] }) {
                     <span className="block truncate text-[13px] font-semibold text-ink-900">
                       {fullName}
                     </span>
-                    <span className="block text-[11px] text-ink-500">
-                      {deudor.sesionesImpagas}{" "}
-                      {deudor.sesionesImpagas === 1 ? "sesión" : "sesiones"}
+                    <span className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-500">
+                      <span>
+                        {deudor.sesionesImpagas}{" "}
+                        {deudor.sesionesImpagas === 1 ? "sesión" : "sesiones"}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <DiasAtrasoIndicator dias={deudor.diasAtraso} />
                     </span>
                   </span>
                   <span className="font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-terracotta-600">
@@ -983,14 +988,12 @@ function PorCobrar({ deudores }: { deudores: DeudaPaciente[] }) {
             })}
           </div>
 
-          {deudores.length > 4 ? (
-            <Link
-              href="/pacientes"
-              className="block border-t border-[color:var(--border-subtle)] px-4 py-3 text-center text-[13px] font-semibold text-sage-600 hover:bg-cream-50"
-            >
-              Ver todos ({deudores.length})
-            </Link>
-          ) : null}
+          <Link
+            href="/deudores"
+            className="block border-t border-[color:var(--border-subtle)] px-4 py-3 text-center text-[13px] font-semibold text-sage-600 hover:bg-cream-50"
+          >
+            Ver todos ({deudores.length})
+          </Link>
         </Card>
       ) : (
         <Card className="rounded-[8px] p-6 text-center text-[13px] text-ink-500">
@@ -999,6 +1002,29 @@ function PorCobrar({ deudores }: { deudores: DeudaPaciente[] }) {
       )}
     </section>
   );
+}
+
+function DiasAtrasoIndicator({ dias }: { dias: number }) {
+  const zona = zonaDeuda(dias);
+  const texto = textoAtraso(dias);
+
+  if (zona === "terracotta") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-terracotta-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-terracotta-600">
+        {texto}
+      </span>
+    );
+  }
+
+  if (zona === "gold") {
+    return (
+      <span className="font-medium text-gold-500">
+        {texto} <span aria-hidden="true">⚠</span>
+      </span>
+    );
+  }
+
+  return <span className="text-sage-600">{texto}</span>;
 }
 
 function RitmoSemana({
