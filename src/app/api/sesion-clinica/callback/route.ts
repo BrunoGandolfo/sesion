@@ -46,6 +46,22 @@ function isAuthorized(request: Request): boolean {
   return header === `Bearer ${secret}`;
 }
 
+/**
+ * El worker en Python serializa `datos_estructurados` como string JSON;
+ * otras versiones del cliente lo mandan ya como objeto. Aceptamos ambas
+ * formas y null/undefined; un string que no parsea queda como string para
+ * que la validación Zod (que espera objeto) emita un error claro.
+ */
+function normalizeDatosEstructurados(input: unknown): unknown {
+  if (input == null) return input;
+  if (typeof input !== "string") return input;
+  try {
+    return JSON.parse(input);
+  } catch {
+    return input;
+  }
+}
+
 export async function POST(request: Request) {
   if (!isAuthorized(request)) {
     return Response.json({ error: "No autorizado" }, { status: 401 });
@@ -53,6 +69,12 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    if (body && typeof body === "object" && "datosEstructurados" in body) {
+      (body as Record<string, unknown>).datosEstructurados =
+        normalizeDatosEstructurados(
+          (body as Record<string, unknown>).datosEstructurados,
+        );
+    }
     const parsed = callbackSchema.safeParse(body);
 
     if (!parsed.success) {

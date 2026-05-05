@@ -109,7 +109,9 @@ type RawSesionClinica = {
   notaObjetivo: string | null;
   notaAnalisis: string | null;
   notaPlan: string | null;
-  datosEstructurados: string | null;
+  // Post-extensión Prisma: la columna cifrada se deserializa a objeto.
+  // Se sigue aceptando string para compatibilidad con filas legacy/sin migrar.
+  datosEstructurados: DatosEstructurados | string | null;
   modeloASR: string | null;
   modeloLLM: string | null;
   procesadoEn: string | null;
@@ -117,13 +119,18 @@ type RawSesionClinica = {
   error: string | null;
 };
 
-function parseDatosEstructurados(value: string | null): DatosEstructurados | null {
-  if (!value) return null;
-  try {
-    return JSON.parse(value) as DatosEstructurados;
-  } catch {
-    return null;
+function parseDatosEstructurados(
+  value: DatosEstructurados | string | null,
+): DatosEstructurados | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as DatosEstructurados;
+    } catch {
+      return null;
+    }
   }
+  return value;
 }
 
 function toSesionClinicaResponse(raw: RawSesionClinica): SesionClinicaResponse {

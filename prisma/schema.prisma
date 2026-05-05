@@ -192,17 +192,31 @@ model SesionClinica {
   audioR2Key       String? // Key del audio cifrado en R2 (null después de borrar)
   audioBorradoEn   DateTime? // Cuándo se borró el audio
 
-  // Transcripción (cifrada en DB)
-  transcripcion String? @db.Text // Transcripción diarizada completa
+  // ──────────────────────────────────────────────────────────────────────
+  // Notas clínicas — cifrado en reposo (AES-256-GCM)
+  //
+  // Estas columnas en texto plano (transcripcion, 4 columnas SOAP,
+  // datosEstructurados acá, y notasEdicion abajo) se MANTIENEN durante la
+  // fase 1 del rollout para que scripts/migrate-encrypt-existing-notas.ts
+  // pueda leer los datos originales y poblar las *_encrypted.
+  // Una migración posterior (fase 2) eliminará las 7 columnas legacy y
+  // renombrará nota_soap_encrypted → nota_soap, etc.
+  // ──────────────────────────────────────────────────────────────────────
+  transcripcion      String? @db.Text // Transcripción diarizada completa (legacy, se borra en fase 2)
+  notaSubjetivo      String? @db.Text // S: lo que expresó el paciente (legacy)
+  notaObjetivo       String? @db.Text // O: lo que observó la terapeuta (legacy)
+  notaAnalisis       String? @db.Text // A: progreso, alianza, alertas (legacy)
+  notaPlan           String? @db.Text // P: compromisos, temas a retomar (legacy)
+  datosEstructurados String? @db.Text // JSON: temas, emociones, alianza, alertas, etc. (legacy)
 
-  // Nota SOAP generada por IA
-  notaSubjetivo String? @db.Text // S: lo que expresó el paciente
-  notaObjetivo  String? @db.Text // O: lo que observó la terapeuta
-  notaAnalisis  String? @db.Text // A: progreso, alianza, alertas
-  notaPlan      String? @db.Text // P: compromisos, temas a retomar
-
-  // JSON estructurado extraído por IA
-  datosEstructurados String? @db.Text // JSON: temas, emociones, alianza, alertas, etc.
+  // Versiones cifradas (AES-256-GCM). Formato del blob:
+  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
+  // Clave maestra en NOTES_ENCRYPTION_KEY (32 bytes en base64).
+  // El cifrado/descifrado es a nivel aplicación (Prisma Client extension).
+  // Estos campos NO deben usarse en WHERE / ORDER BY / índices.
+  transcripcionEncrypted      Bytes? @map("transcripcion_encrypted") // texto plano: transcripcion
+  notaSoapEncrypted           Bytes? @map("nota_soap_encrypted") // texto plano: JSON.stringify({subjetivo, objetivo, analisis, plan})
+  datosEstructuradosEncrypted Bytes? @map("datos_estructurados_encrypted") // texto plano: JSON.stringify(datosEstructurados ya parseado)
 
   // Metadatos de procesamiento
   modeloASR   String? // Ej: "qwen3-asr-1.7b"
@@ -212,8 +226,11 @@ model SesionClinica {
   intentos    Int       @default(0)
 
   // Aprobación por la profesional
-  aprobadoEn   DateTime? // Cuándo Mariana aprobó la nota
-  notasEdicion String?   @db.Text // Ediciones manuales de Mariana (si las hubo)
+  aprobadoEn            DateTime? // Cuándo Mariana aprobó la nota
+  notasEdicion          String?   @db.Text // Ediciones manuales de Mariana (legacy, se borra en fase 2)
+  // Versión cifrada de notasEdicion. Mismo formato que el resto:
+  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
+  notasEdicionEncrypted Bytes?    @map("notas_edicion_encrypted")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

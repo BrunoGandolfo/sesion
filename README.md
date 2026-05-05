@@ -100,6 +100,10 @@ public/                Assets estáticos
 
 Las variables necesarias están documentadas en `.env.example`. No commitear `.env` ni secretos reales.
 
+## Operación
+
+- [Cifrado de notas clínicas](docs/operations/encryption.md) — cómo generar la clave, migrar datos, rotar y recuperar.
+
 ## Deploy
 
 Push a `main` auto-deploya en Vercel.

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(sed 's/=.*$/=<redacted>/')",
+      "Bash(npx prisma *)",
+      "Bash(grep -v \"Update available\\\\|major update\\\\|please follow\\\\|Run the following\\\\|prisma@latest\\\\|@prisma/client@latest\\\\|major-version-upgrade\\\\|^│\\\\|^└\\\\|^┌\\\\|^$\")",
+      "Bash(npm test *)"
+    ]
+  }
+}

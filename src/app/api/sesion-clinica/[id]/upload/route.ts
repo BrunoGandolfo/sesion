@@ -70,15 +70,18 @@ async function getR2Module(): Promise<R2Module | null> {
 }
 
 function construirMetadataTemporal(
-  datosEstructuradosActuales: string | null,
+  datosEstructuradosActuales: unknown,
   claveCifrado: string,
   iv: string,
 ) {
   let metadataActual: Record<string, unknown> = {};
 
-  if (datosEstructuradosActuales) {
+  if (datosEstructuradosActuales != null) {
     try {
-      const parsed: unknown = JSON.parse(datosEstructuradosActuales);
+      const parsed: unknown =
+        typeof datosEstructuradosActuales === "string"
+          ? JSON.parse(datosEstructuradosActuales)
+          : datosEstructuradosActuales;
       if (isPlainObject(parsed)) {
         metadataActual = parsed;
       }

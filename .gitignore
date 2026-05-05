@@ -41,3 +41,4 @@ yarn-error.log*
 next-env.d.ts
 !.env.example
 prisma/migrations/manual/phones_backup_*.json
+.env.test

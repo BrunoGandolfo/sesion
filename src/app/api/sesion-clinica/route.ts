@@ -11,8 +11,9 @@ const createSchema = z.object({
   turnoId: z.string().cuid("Turno inválido"),
 });
 
-function parseDatosEstructurados(raw: string | null): unknown {
-  if (!raw) return null;
+function parseDatosEstructurados(raw: unknown): unknown {
+  if (raw == null) return null;
+  if (typeof raw !== "string") return raw;
   try {
     return JSON.parse(raw);
   } catch {
