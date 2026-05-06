@@ -17,15 +17,58 @@ const notaSchema = z.object({
   plan: z.string(),
 });
 
+const intervencionSchema = z.object({
+  tipo: z.enum([
+    "reformulacion",
+    "senalamiento",
+    "confrontacion",
+    "interpretacion",
+    "pregunta_circular",
+    "validacion",
+    "silencio_terapeutico",
+    "otra",
+  ]),
+  descripcion: z.string(),
+  timestampAprox: z.string().optional(),
+});
+
+const flagsRiesgoSchema = z.object({
+  ideacionSuicida: z.boolean(),
+  autolesion: z.boolean(),
+  violenciaTerceros: z.boolean(),
+  sintomasPsicoticos: z.boolean(),
+  crisisPanico: z.boolean(),
+  detalle: z.string(),
+});
+
+const speechAnalyticsSchema = z.object({
+  ratioHablaTerapeuta: z.number(),
+  ratioHablaPaciente: z.number(),
+  cantidadSilencios: z.number(),
+  duracionPromedioSilenciosSeg: z.number(),
+  tiempoTotalHablaSeg: z.number(),
+});
+
 const datosEstructuradosSchema = z.object({
-  temas: z.array(z.string()),
-  emocionesPaciente: z.array(z.string()),
-  intensidadEmocional: z.number(),
-  alianzaTerapeutica: z.enum(["fragil", "inestable", "estable", "fuerte"]),
-  intervenciones: z.array(z.string()),
-  compromisos: z.array(z.string()),
-  senalesAlerta: z.array(z.string()),
-  progresoPercibido: z.string(),
+  temas: z.array(z.string()).optional(),
+  emocionesPaciente: z.array(z.string()).optional(),
+  intensidadEmocional: z.number().min(1).max(10).optional(),
+  alianzaTerapeutica: z
+    .enum(["fragil", "inestable", "estable", "fuerte"])
+    .optional(),
+  intervenciones: z.array(intervencionSchema).optional(),
+  compromisos: z.array(z.string()).optional(),
+  progresoPercibido: z.string().optional(),
+  materialRecurrente: z.array(z.string()).optional(),
+  materialNuevo: z.array(z.string()).optional(),
+  focoProximaSesion: z.string().optional(),
+  flagsRiesgo: flagsRiesgoSchema.optional(),
+  confianzaModelo: z.enum(["alta", "media", "baja"]).optional(),
+  resumenSesion: z.string().optional(),
+  estadoEmocionalObservado: z.string().optional(),
+  duracionRealMin: z.number().optional(),
+  speechAnalytics: speechAnalyticsSchema.optional(),
+  observacionIA: z.string().optional(),
 });
 
 const callbackSchema = z.object({

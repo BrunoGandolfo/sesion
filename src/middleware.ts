@@ -27,6 +27,6 @@ export const config = {
     // /api/health es público para servicios de monitoreo (UptimeRobot, etc.).
     // /api/sesion-clinica/callback es machine-to-machine (La Escondida),
     // se autentica por PROCESSING_SECRET header.
-    "/((?!_next/static|_next/image|static|favicon.ico|api/auth|api/seed|api/cron|api/health|api/sesion-clinica/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+    "/((?!_next/static|_next/image|static|favicon.ico|api/auth|api/seed|api/cron|api/health|api/sesion-clinica/callback|api/sesion-clinica/pendientes|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };

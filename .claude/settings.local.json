@@ -6,7 +6,8 @@
       "Bash(git -C /home/brunogandolfo/sesion log --oneline -5 src/app/api/dashboard/route.ts src/types/domain.ts)",
       "Bash(git -C /home/brunogandolfo/sesion status)",
       "Bash(git stash *)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

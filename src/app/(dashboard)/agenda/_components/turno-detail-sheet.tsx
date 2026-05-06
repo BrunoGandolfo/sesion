@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import { GrabadorSesion } from "@/components/grabacion/GrabadorSesion";
 import { NotaClinicaView } from "@/components/grabacion/NotaClinicaView";
+import { useSesionClinicaPolling } from "@/hooks/useSesionClinicaPolling";
 import { fechaLarga, hora, money } from "@/lib/format";
 import type {
   DatosEstructurados,
@@ -305,6 +306,26 @@ export function TurnoDetailSheet({
     };
   }, [turnoId, turnoEstado, turnoPacienteId]);
 
+  // Polling automático mientras la sesión está siendo procesada por el pipeline.
+  // El hook hace fetch cada 10s; cuando estado pasa a revision/aprobado/error,
+  // deja de pollear y la última lectura ya trae el cambio.
+  const sesionEnProcesamiento =
+    sesionClinica !== null &&
+    (sesionClinica.estado === "grabando" ||
+      sesionClinica.estado === "subiendo" ||
+      sesionClinica.estado === "procesando");
+
+  const { data: sesionPolled } = useSesionClinicaPolling({
+    sesionClinicaId: sesionEnProcesamiento ? sesionClinica?.id ?? null : null,
+    enabled: sesionEnProcesamiento,
+  });
+
+  React.useEffect(() => {
+    if (sesionPolled) {
+      setSesionClinica(sesionPolled);
+    }
+  }, [sesionPolled]);
+
   if (!turno) {
     return (
       <Sheet open={open} onClose={onClose} ariaLabel="Detalle del turno">
@@ -445,7 +466,7 @@ export function TurnoDetailSheet({
       const formData = new FormData();
       formData.append("audio", datos.audioBlob, "sesion.bin");
       formData.append("claveCifrado", datos.claveCifrado);
-      formData.append("ivCifrado", datos.ivCifrado);
+      formData.append("iv", datos.ivCifrado);
       formData.append("duracionSegundos", String(datos.duracionSegundos));
 
       const uploadRes = await fetch(

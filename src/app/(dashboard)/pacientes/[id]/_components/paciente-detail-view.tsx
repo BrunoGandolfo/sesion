@@ -34,6 +34,7 @@ import {
 } from "@/lib/deudas";
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
 import { EditarPacienteForm } from "./editar-paciente-form";
+import { ProgresoClinicoSection } from "./progreso-clinico";
 import type {
   Configuracion,
   MetodoPago,
@@ -456,6 +457,8 @@ export function PacienteDetailView({ id }: { id: string }) {
           onSaved={handleNotasSaved}
         />
       </section>
+
+      <ProgresoClinicoSection pacienteId={paciente.id} />
 
       <Toast
         open={toast.open}

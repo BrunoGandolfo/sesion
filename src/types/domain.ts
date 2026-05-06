@@ -185,6 +185,18 @@ export interface DatosEstructurados {
   resumenSesion: string; // 200-300 palabras
   estadoEmocionalObservado: string; // 100-150 palabras
   duracionRealMin: number; // Duración real de la sesión en minutos
+
+  /** Speech analytics derivado de diarización VibeVoice-ASR */
+  speechAnalytics?: {
+    ratioHablaTerapeuta: number;    // 0-100, porcentaje del tiempo que habla el terapeuta
+    ratioHablaPaciente: number;     // 0-100, porcentaje del tiempo que habla el paciente
+    cantidadSilencios: number;      // cantidad de pausas > 3 segundos
+    duracionPromedioSilenciosSeg: number;  // duración promedio de silencios en segundos
+    tiempoTotalHablaSeg: number;    // duración total del audio analizado en segundos
+  };
+
+  /** Análisis longitudinal generado por IA cruzando múltiples sesiones */
+  observacionIA?: string;
 }
 
 /** Nota clínica en formato SOAP */
