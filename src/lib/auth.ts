@@ -43,8 +43,8 @@ export const authConfig = {
 
         if (!email || !password) return null;
 
-        const [{ db }, { compare }] = await Promise.all([
-          import("@/lib/db"),
+        const [{ dbAuth: db }, { compare }] = await Promise.all([
+          import("@/lib/db-auth"),
           import("bcryptjs"),
         ]);
 
