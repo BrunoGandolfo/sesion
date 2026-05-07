@@ -7,7 +7,15 @@
       "Bash(git -C /home/brunogandolfo/sesion status)",
       "Bash(git stash *)",
       "Bash(echo \"exit=$?\")",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(python3 -m py_compile ~/sesion-processor/transcriber.py)",
+      "Read(//home/brunogandolfo/sesion-processor/**)",
+      "Read(//home/brunogandolfo/sesion-processor/prompts/**)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('worker.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python3 -c \"import clinical_analyzer; print\\(clinical_analyzer.version_prompt\\(\\)\\)\")",
+      "Bash(python -c \"import config; print\\('VIBEVOICE_URL:', config.VIBEVOICE_URL\\); print\\('VIBEVOICE_HEALTH_URL:', config.VIBEVOICE_HEALTH_URL\\); print\\('PENDIENTES_URL:', config.PENDIENTES_URL\\); print\\('OLLAMA_BASE_URL:', config.OLLAMA_BASE_URL\\); print\\('ASR_MODEL_ID:', config.ASR_MODEL_ID\\)\")",
+      "Bash(python -c \"import processor; import inspect; print\\(inspect.signature\\(processor.procesar_sesion\\)\\)\")",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in \\('worker.py','processor.py','config.py'\\)]; print\\('PY OK'\\)\")"
     ]
   }
 }
