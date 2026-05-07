@@ -1,6 +1,7 @@
 """
 Transcripcion + diarizacion via servicio HTTP de VibeVoice.
 """
+import json
 import logging
 import os
 
@@ -20,6 +21,64 @@ def _vibevoice_url() -> str:
         "VIBEVOICE_URL",
         os.getenv("VIBEVOICE_URL", _DEFAULT_VIBEVOICE_URL),
     )
+
+
+def _parsear_transcription(raw: str) -> list:
+    """Extrae el array JSON del string crudo, despues del ultimo 'assistant\\n'."""
+    if not raw:
+        return []
+    marker = "assistant\n"
+    idx = raw.rfind(marker)
+    payload = raw[idx + len(marker):] if idx >= 0 else raw
+    payload = payload.strip()
+    if not payload:
+        return []
+    try:
+        items = json.loads(payload)
+    except json.JSONDecodeError as e:
+        logger.warning(f"No se pudo parsear array JSON de transcription: {e}")
+        return []
+    return items if isinstance(items, list) else []
+
+
+def _mapear_segments(items: list) -> tuple[list[dict], int]:
+    """
+    Normaliza items al formato {speaker, start, end, text}. Acepta tanto el
+    formato crudo de VibeVoice (Speaker/Start/End/Content) como un fallback ya
+    en minusculas. Items sin Speaker (ruidos ambientales) o con speaker
+    'unknown' se descartan.
+    """
+    salida: list[dict] = []
+    descartados = 0
+    for item in items:
+        if not isinstance(item, dict):
+            descartados += 1
+            continue
+        speaker_raw = item.get("Speaker")
+        if speaker_raw is None:
+            speaker_raw = item.get("speaker")
+        if speaker_raw is None or speaker_raw == "unknown":
+            descartados += 1
+            continue
+        start_val = item.get("Start", item.get("start"))
+        end_val = item.get("End", item.get("end"))
+        if start_val is None or end_val is None:
+            descartados += 1
+            continue
+        try:
+            start = float(start_val)
+            end = float(end_val)
+        except (TypeError, ValueError):
+            descartados += 1
+            continue
+        text = item.get("Content", item.get("text", ""))
+        if isinstance(speaker_raw, bool) or not isinstance(speaker_raw, int):
+            s = str(speaker_raw)
+            speaker = s if s.startswith("S") else f"S{s}"
+        else:
+            speaker = f"S{speaker_raw}"
+        salida.append({"speaker": speaker, "start": start, "end": end, "text": text})
+    return salida, descartados
 
 
 def transcribir(audio_path: str, hot_words: list[str] | None = None) -> dict:
@@ -49,11 +108,23 @@ def transcribir(audio_path: str, hot_words: list[str] | None = None) -> dict:
     except ValueError as e:
         raise RuntimeError(f"VibeVoice devolvio respuesta no-JSON: {e}") from e
 
-    segments = data.get("segments") or []
-    duracion = max((s["end"] for s in segments), default=0)
-    resultado = {"duration_seconds": int(duracion), "segments": segments}
-    logger.info(f"Transcripcion: {len(segments)} segmentos, {duracion:.0f}s")
-    return resultado
+    raw_items = _parsear_transcription(data.get("transcription") or "")
+    fuente = "transcription"
+
+    if not raw_items:
+        fallback = data.get("segments") or []
+        if isinstance(fallback, list) and fallback:
+            raw_items = fallback
+            fuente = "segments"
+
+    segments, descartados = _mapear_segments(raw_items)
+    duracion = max((s["end"] for s in segments), default=0.0)
+    logger.info(
+        f"Transcripcion ({fuente}): {len(raw_items)} totales, "
+        f"{len(segments)} validos, {descartados} descartados sin speaker, "
+        f"{duracion:.0f}s"
+    )
+    return {"duration_seconds": int(duracion), "segments": segments}
 
 
 def formatear_para_llm(transcripcion: dict) -> str:
