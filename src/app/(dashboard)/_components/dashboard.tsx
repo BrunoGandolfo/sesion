@@ -165,7 +165,11 @@ async function fetchNombreProfesional(): Promise<string | null> {
 // ============================================
 export function Dashboard() {
   const router = useRouter();
-  const [now, setNow] = React.useState(() => new Date());
+  // `now` parte en null para que el primer render sea igual en server (UTC) y
+  // client (Montevideo). Construir el Date durante SSR producía mismatches en
+  // `saludo`/`diaSemana` cerca de la frontera horaria y disparaba React #418,
+  // rompiendo todos los event handlers de la página en producción.
+  const [now, setNow] = React.useState<Date | null>(null);
   const [data, setData] = React.useState<DashboardData | null>(null);
   const [nombreProfesional, setNombreProfesional] = React.useState<
     string | null
@@ -204,6 +208,7 @@ export function Dashboard() {
 
   React.useEffect(() => {
     let cancelled = false;
+    setNow(new Date());
 
     readDashboardData()
       .then(({ data: nextData, nombreProfesional: nextNombreProfesional }) => {
@@ -397,7 +402,7 @@ export function Dashboard() {
     return <DashboardError onRetry={fetchDashboard} />;
   }
 
-  if (!data) return null;
+  if (!data || !now) return null;
 
   const turnos = data.sesionesHoy;
   const turnosOrdenados = [...turnos].sort(
@@ -517,8 +522,11 @@ export function Dashboard() {
 }
 
 // ============================================
-function DashboardSkeleton({ today }: { today: Date }) {
+function DashboardSkeleton({ today }: { today: Date | null }) {
   const kpiLabels = ["Pacientes", "Sesiones hoy", "Por cobrar", "Este mes"];
+  // Mientras `today` sea null evitamos cualquier texto derivado de fecha/hora:
+  // ese primer render corre en server (UTC) y en client (Montevideo) y los
+  // strings de `saludo`/`diaSemana` no coinciden — ese mismatch dispara #418.
   return (
     <div
       aria-busy="true"
@@ -527,11 +535,11 @@ function DashboardSkeleton({ today }: { today: Date }) {
       <section className="min-w-0">
         <div className="flex items-center text-[13px] font-medium text-ink-500">
           <EditorialRule />
-          <span>{saludo(today)}</span>
+          <span>{today ? saludo(today) : " "}</span>
         </div>
         <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="font-[family-name:var(--font-display)] text-[52px] font-medium italic leading-[0.92] tracking-[-0.03em] text-ink-900 lg:text-[80px]">
-            {diaSemana(today)}
+            {today ? diaSemana(today) : " "}
           </h1>
         </div>
         <p className="mt-2 text-[13px] text-ink-300">cargando tu día…</p>

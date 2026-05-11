@@ -92,21 +92,33 @@ export function AgendaView() {
     getMobileServerSnapshot,
   );
   const [userView, setUserView] = React.useState<AgendaViewMode | null>(null);
-  const [anchor, setAnchor] = React.useState<Date>(() => new Date());
+  // `anchor` y `today` parten en null para que el primer render sea idéntico
+  // en server (UTC) y client (Montevideo). Renderizar `fechaLarga(anchor)` en
+  // el header con un `new Date()` distinto en cada entorno disparaba React
+  // #418 y rompía todos los event handlers de la página en producción.
+  const [anchor, setAnchor] = React.useState<Date | null>(null);
+  const [today, setToday] = React.useState<Date | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [detalleId, setDetalleId] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ open: boolean; message: string }>(
     { open: false, message: "" },
   );
-  const today = React.useMemo(() => new Date(), []);
+
+  React.useEffect(() => {
+    const now = new Date();
+    setAnchor((current) => current ?? now);
+    setToday((current) => current ?? now);
+  }, []);
 
   const view: AgendaViewMode = userView ?? (isMobile ? "día" : "semana");
 
-  const { desde, hasta } = React.useMemo(
-    () => computeRange(view, anchor),
+  const range = React.useMemo(
+    () => (anchor ? computeRange(view, anchor) : null),
     [view, anchor],
   );
-  const rangeKey = `${desde.toISOString()}|${hasta.toISOString()}`;
+  const rangeKey = range
+    ? `${range.desde.toISOString()}|${range.hasta.toISOString()}`
+    : null;
 
   const cacheRef = React.useRef<Map<string, TurnoConPaciente[]>>(new Map());
   const [turnos, setTurnos] = React.useState<TurnoConPaciente[] | null>(null);
@@ -114,6 +126,7 @@ export function AgendaView() {
   const [refreshKey, setRefreshKey] = React.useState(0);
 
   React.useEffect(() => {
+    if (!rangeKey || !range) return;
     const cached = cacheRef.current.get(rangeKey);
     if (cached) {
       setTurnos(cached);
@@ -125,8 +138,8 @@ export function AgendaView() {
     setTurnosStatus("loading");
 
     const url =
-      `/api/turnos?desde=${encodeURIComponent(desde.toISOString())}` +
-      `&hasta=${encodeURIComponent(hasta.toISOString())}`;
+      `/api/turnos?desde=${encodeURIComponent(range.desde.toISOString())}` +
+      `&hasta=${encodeURIComponent(range.hasta.toISOString())}`;
 
     fetch(url, { signal: controller.signal })
       .then(async (res) => {
@@ -146,7 +159,7 @@ export function AgendaView() {
       });
 
     return () => controller.abort();
-  }, [rangeKey, desde, hasta, refreshKey]);
+  }, [rangeKey, range, refreshKey]);
 
   const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
     null,
@@ -173,6 +186,7 @@ export function AgendaView() {
 
   const handlePrev = () => {
     setAnchor((d) => {
+      if (!d) return d;
       if (view === "día") return addDays(d, -1);
       if (view === "semana") return addWeeks(d, -1);
       return addMonths(d, -1);
@@ -180,6 +194,7 @@ export function AgendaView() {
   };
   const handleNext = () => {
     setAnchor((d) => {
+      if (!d) return d;
       if (view === "día") return addDays(d, 1);
       if (view === "semana") return addWeeks(d, 1);
       return addMonths(d, 1);
@@ -255,7 +270,7 @@ export function AgendaView() {
   };
 
   const retryTurnos = () => {
-    cacheRef.current.delete(rangeKey);
+    if (rangeKey) cacheRef.current.delete(rangeKey);
     setRefreshKey((k) => k + 1);
   };
 
@@ -263,18 +278,28 @@ export function AgendaView() {
   const showFullLoading = turnos === null && turnosStatus === "loading";
   const showUpdateHint = turnos !== null && turnosStatus === "loading";
 
+  // Hasta tener `anchor`/`today` (post-mount) renderizamos un placeholder neutro
+  // sin fechas: cualquier `fechaLarga(anchor)` con un `new Date()` recién creado
+  // produce strings distintos en server (UTC) y client (Montevideo) y dispara
+  // el mismo React #418 que rompe los event handlers.
+  const isReady = anchor !== null && today !== null;
+
   return (
     <>
       <div className="mx-auto w-full max-w-[1200px] p-5 lg:p-12">
-        <AgendaHeader
-          view={view}
-          onViewChange={setUserView}
-          anchor={anchor}
-          onPrev={handlePrev}
-          onNext={handleNext}
-          onToday={handleToday}
-          onNewTurno={openSheet}
-        />
+        {isReady ? (
+          <AgendaHeader
+            view={view}
+            onViewChange={setUserView}
+            anchor={anchor}
+            onPrev={handlePrev}
+            onNext={handleNext}
+            onToday={handleToday}
+            onNewTurno={openSheet}
+          />
+        ) : (
+          <header className="h-[44px] lg:h-[40px]" aria-hidden="true" />
+        )}
         <div
           aria-live="polite"
           className="mt-3 h-4 text-[11px] text-ink-300"
@@ -282,7 +307,7 @@ export function AgendaView() {
           {showUpdateHint ? "Actualizando…" : null}
         </div>
         <div className="mt-3 lg:mt-4">
-          {showFullLoading ? (
+          {!isReady || showFullLoading ? (
             <div className="py-16 text-center text-[14px] text-ink-500">
               Cargando agenda…
             </div>
