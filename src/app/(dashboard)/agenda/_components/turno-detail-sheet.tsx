@@ -450,8 +450,10 @@ export function TurnoDetailSheet({
     ivCifrado: string;
     duracionSegundos: number;
   }) {
-    if (!sesionClinica) return;
+    if (!sesionClinica || !turno) return;
     const sesionId = sesionClinica.id;
+    const turnoIdLocal = turno.id;
+    const eraProgramado = turno.estado === "programado";
     setGrabacionError(null);
     setGrabacionSubmitting(true);
     try {
@@ -461,8 +463,6 @@ export function TurnoDetailSheet({
         duracionAudioSeg: datos.duracionSegundos,
       });
 
-      // TODO: este endpoint todavía no existe — lo construye el agente de upload.
-      // Hasta entonces va a devolver 404/405 y el flujo cae al catch.
       const formData = new FormData();
       formData.append("audio", datos.audioBlob, "sesion.bin");
       formData.append("claveCifrado", datos.claveCifrado);
@@ -480,6 +480,38 @@ export function TurnoDetailSheet({
 
       // subiendo → procesando
       await patchSesionClinica({ estado: "procesando" });
+
+      // Auto-transición del turno cuando se grabó durante uno programado:
+      // grabar y subir el audio sin errores implica que la sesión ocurrió,
+      // así que cerramos el turno sin pedir un tap extra al usuario. Si el
+      // PATCH falla no rompemos el flujo (el audio ya está subido y procesando);
+      // la psicóloga puede marcar manualmente desde el sheet si hace falta.
+      if (eraProgramado) {
+        try {
+          const turnoRes = await fetch(`/api/turnos/${turnoIdLocal}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estado: "realizado" }),
+          });
+          if (turnoRes.ok) {
+            // onUpdated cierra el sheet y refresca la agenda — el siguiente
+            // open va a mostrar el turno como realizado con la sesión clínica
+            // en "procesando". Salimos antes de tocar seccionGrabacion.
+            onUpdated("Sesión grabada · turno marcado como realizado");
+            return;
+          }
+          console.warn(
+            "No se pudo marcar el turno como realizado tras grabar:",
+            await parseError(turnoRes),
+          );
+        } catch (turnoErr) {
+          console.warn(
+            "Error PATCH del turno post-grabación:",
+            turnoErr,
+          );
+        }
+      }
+
       setSeccionGrabacion("idle");
     } catch (err) {
       const message =
@@ -649,87 +681,12 @@ export function TurnoDetailSheet({
           </div>
         ) : null}
 
-        {/* Acciones en modo view */}
-        {mode === "view" && esProgramado ? (
-          <div className="flex flex-col gap-2 border-t border-[color:var(--border-subtle)] pt-5">
-            <Button
-              onClick={() =>
-                patchTurno({ estado: "realizado" }, "Turno marcado como realizado")
-              }
-              disabled={submitting}
-            >
-              Marcar como realizado
-            </Button>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={openEditMode}
-                disabled={submitting}
-              >
-                Editar turno
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1 !border-terracotta-500 !text-terracotta-600 hover:!bg-terracotta-50"
-                onClick={() => setMode("confirm-cancel")}
-                disabled={submitting}
-              >
-                Cancelar turno
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {mode === "view" && esRealizadoPorCobrar ? (
-          <div className="border-t border-[color:var(--border-subtle)] pt-5">
-            {!eligiendoMetodo ? (
-              <Button
-                className="w-full"
-                onClick={() => {
-                  setFormError(null);
-                  setEligiendoMetodo(true);
-                }}
-                disabled={submitting}
-              >
-                Cobrar
-              </Button>
-            ) : (
-              <div>
-                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                  Elegí el método de pago
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {METODOS_PAGO.map((m) => (
-                    <button
-                      key={m.value}
-                      type="button"
-                      onClick={() => cobrar(m.value)}
-                      disabled={submitting}
-                      className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEligiendoMetodo(false)}
-                    disabled={submitting}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {/* Sesión clínica — solo en turnos realizados */}
-        {mode === "view" && esRealizado ? (
+        {/* Sesión clínica — turnos programados (grabar durante la sesión) o
+            realizados (caso edge: ya ocurrió pero no se grabó en su momento).
+            Va arriba de las acciones del turno para que "Grabar sesión" sea
+            el CTA visualmente dominante en un turno programado; ese flujo es
+            el que cierra el turno automáticamente al subir el audio. */}
+        {mode === "view" && (esProgramado || esRealizado) ? (
           <div className="flex flex-col gap-3 border-t border-[color:var(--border-subtle)] pt-5">
             <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
               Sesión clínica
@@ -771,10 +728,12 @@ export function TurnoDetailSheet({
                   <p className="text-[13px] text-ink-500">Cargando…</p>
                 ) : null}
 
-                {/* Caso A — sin sesión, con consentimiento vigente */}
+                {/* Caso A — sin sesión, con consentimiento vigente.
+                    Variant primaria: para un turno programado este es el CTA
+                    principal del sheet; para un realizado-sin-sesión también
+                    es la próxima acción significativa. */}
                 {sesionClinica === null && consentimientoVigente === true ? (
                   <Button
-                    variant="secondary"
                     icon={<Mic size={16} strokeWidth={1.8} aria-hidden="true" />}
                     onClick={() => {
                       void iniciarGrabacionFlow();
@@ -888,6 +847,90 @@ export function TurnoDetailSheet({
                 {grabacionError}
               </p>
             ) : null}
+          </div>
+        ) : null}
+
+        {/* Acciones en modo view — "Marcar como realizado" queda como ruta
+            alternativa de baja prominencia: el flujo principal para cerrar un
+            turno programado es grabarlo (la grabación lo cierra al subir el
+            audio). Este botón existe para sesiones que ya ocurrieron sin
+            grabar. */}
+        {mode === "view" && esProgramado ? (
+          <div className="flex flex-col gap-2 border-t border-[color:var(--border-subtle)] pt-5">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                patchTurno({ estado: "realizado" }, "Turno marcado como realizado")
+              }
+              disabled={submitting}
+            >
+              Marcar como realizado
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={openEditMode}
+                disabled={submitting}
+              >
+                Editar turno
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1 !border-terracotta-500 !text-terracotta-600 hover:!bg-terracotta-50"
+                onClick={() => setMode("confirm-cancel")}
+                disabled={submitting}
+              >
+                Cancelar turno
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {mode === "view" && esRealizadoPorCobrar ? (
+          <div className="border-t border-[color:var(--border-subtle)] pt-5">
+            {!eligiendoMetodo ? (
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setFormError(null);
+                  setEligiendoMetodo(true);
+                }}
+                disabled={submitting}
+              >
+                Cobrar
+              </Button>
+            ) : (
+              <div>
+                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                  Elegí el método de pago
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {METODOS_PAGO.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => cobrar(m.value)}
+                      disabled={submitting}
+                      className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEligiendoMetodo(false)}
+                    disabled={submitting}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
 

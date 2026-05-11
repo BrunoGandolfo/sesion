@@ -15,7 +15,11 @@
       "Bash(python3 -c \"import clinical_analyzer; print\\(clinical_analyzer.version_prompt\\(\\)\\)\")",
       "Bash(python -c \"import config; print\\('VIBEVOICE_URL:', config.VIBEVOICE_URL\\); print\\('VIBEVOICE_HEALTH_URL:', config.VIBEVOICE_HEALTH_URL\\); print\\('PENDIENTES_URL:', config.PENDIENTES_URL\\); print\\('OLLAMA_BASE_URL:', config.OLLAMA_BASE_URL\\); print\\('ASR_MODEL_ID:', config.ASR_MODEL_ID\\)\")",
       "Bash(python -c \"import processor; import inspect; print\\(inspect.signature\\(processor.procesar_sesion\\)\\)\")",
-      "Bash(python -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in \\('worker.py','processor.py','config.py'\\)]; print\\('PY OK'\\)\")"
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in \\('worker.py','processor.py','config.py'\\)]; print\\('PY OK'\\)\")",
+      "Bash(bash -n /home/brunogandolfo/sesion/processor/deploy.sh)",
+      "Bash(systemd-analyze verify *)",
+      "WebSearch",
+      "Bash(SKIP_ENV_VALIDATION=1 npx next build)"
     ]
   }
 }

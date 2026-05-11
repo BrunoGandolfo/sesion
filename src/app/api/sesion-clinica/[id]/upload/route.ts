@@ -122,7 +122,7 @@ function getAudioFile(formData: FormData) {
   }
 
   if (audio.size > MAX_AUDIO_BYTES) {
-    throw new ApiError("El archivo de audio supera el límite de 50 MB", 400);
+    throw new ApiError("El archivo de audio supera el límite de 120 MB", 400);
   }
 
   return audio;

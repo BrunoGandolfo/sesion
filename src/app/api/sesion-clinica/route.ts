@@ -92,9 +92,12 @@ export async function POST(request: Request) {
         throw new ApiError("Turno no encontrado", 404);
       }
 
-      if (turno.estado !== "realizado") {
+      // Permitimos grabar durante un turno programado (la grabación cierra el
+      // turno automáticamente al subir el audio) o sobre uno ya realizado que
+      // no se grabó en su momento (caso edge, retrocompatibilidad).
+      if (turno.estado !== "programado" && turno.estado !== "realizado") {
         throw new ApiError(
-          "Solo se puede grabar la nota de un turno realizado",
+          "Solo se puede grabar sesiones de turnos programados o realizados",
           400,
         );
       }
