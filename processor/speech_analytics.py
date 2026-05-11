@@ -1,4 +1,4 @@
-"""Compute speech analytics from VibeVoice diarized segments."""
+"""Compute speech analytics from diarized ASR segments (WhisperX)."""
 
 SILENCIO_UMBRAL_SEG = 3.0
 
@@ -14,7 +14,7 @@ def _zeros() -> dict:
 
 
 def compute(segments: list[dict]) -> dict:
-    """Compute speech analytics from VibeVoice diarized segments.
+    """Compute speech analytics from diarized ASR segments.
 
     Args:
         segments: list of {"speaker": "S0"|"S1"|..., "start": float, "end": float, "text": str}

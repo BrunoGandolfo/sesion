@@ -17,13 +17,12 @@ R2_ENDPOINT = os.getenv("R2_ENDPOINT") or (
     f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com" if R2_ACCOUNT_ID else ""
 )
 
-# ASR — VibeVoice corre como servicio HTTP en Atlas (no se carga local) ─────
-# ASR_MODEL_ID se conserva sólo para reporting en el callback (campo modelo_asr).
-ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "microsoft/VibeVoice-ASR")
-VIBEVOICE_URL = os.getenv("VIBEVOICE_URL", "http://100.71.155.25:8090/transcribe")
-VIBEVOICE_HEALTH_URL = os.getenv(
-    "VIBEVOICE_HEALTH_URL", "http://100.71.155.25:8090/health"
-)
+# ASR — WhisperX (Whisper large-v3 + pyannote) corre como servicio HTTP en
+# Atlas. ASR_MODEL_ID se reporta en el callback (campo modelo_asr).
+ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "whisperx-large-v3")
+ASR_URL = os.getenv("ASR_URL", "http://100.71.155.25:8090/transcribe")
+ASR_HEALTH_URL = os.getenv("ASR_HEALTH_URL", "http://100.71.155.25:8090/health")
+ASR_TIMEOUT_SECONDS = int(os.getenv("ASR_TIMEOUT_SECONDS", "600"))
 
 # LLM (nota clínica SOAP) ───────────────────────────────────────────────────
 LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "qwen3.6:27b")

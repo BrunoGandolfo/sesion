@@ -15,8 +15,6 @@ from callback import enviar_resultado
 
 logger = logging.getLogger(__name__)
 
-ASR_MODELO_REPORTADO = "microsoft/VibeVoice-ASR"
-
 
 def procesar_sesion(
     sesion_clinica_id: str,
@@ -83,7 +81,7 @@ def procesar_sesion(
             transcripcion=transcripcion_fmt,
             nota=resultado.get("nota"),
             datos_estructurados=datos_estructurados,
-            modelo_asr=ASR_MODELO_REPORTADO,
+            modelo_asr=config.ASR_MODEL_ID,
             modelo_llm=f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}",
         )
         if not exito:
@@ -106,7 +104,7 @@ def procesar_sesion(
                 sesion_clinica_id=sesion_clinica_id,
                 estado="error",
                 error=str(e),
-                modelo_asr=ASR_MODELO_REPORTADO,
+                modelo_asr=config.ASR_MODEL_ID,
                 modelo_llm=f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}",
             )
         except Exception as cb_err:
