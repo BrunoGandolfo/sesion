@@ -29,7 +29,7 @@ type R2Module = {
   ) => Promise<string>;
 };
 
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 120 * 1024 * 1024;
 const estadosPermitidos = new Set<EstadoUpload>(["grabando", "subiendo"]);
 
 const uploadSchema = z.object({
