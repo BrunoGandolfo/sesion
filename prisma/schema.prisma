@@ -18,13 +18,14 @@ model Organization {
   nombre   String
   creadoEn DateTime @default(now()) @map("creado_en")
 
-  configuracion    Configuracion?
-  pacientes        Paciente[]
-  turnos           Turno[]
-  usuarios         User[]
-  consentimientos  ConsentimientoGrabacion[]
-  sesionesClinicas SesionClinica[]
-  hotWords         HotWord[]
+  configuracion       Configuracion?
+  pacientes           Paciente[]
+  turnos              Turno[]
+  usuarios            User[]
+  consentimientos     ConsentimientoGrabacion[]
+  sesionesClinicas    SesionClinica[]
+  hotWords            HotWord[]
+  contextosClinicos   PacienteContextoClinico[]
 
   @@map("organizaciones")
 }
@@ -86,6 +87,7 @@ model Paciente {
   turnos          Turno[]
   consentimientos ConsentimientoGrabacion[]
   hotWords        HotWord[]
+  contextoClinico PacienteContextoClinico?
 
   @@index([organizationId, activo])
   @@index([organizationId, apellido])
@@ -267,4 +269,87 @@ model HotWord {
   @@index([scope])
   @@index([pacienteId])
   @@map("hot_words")
+}
+
+// ============================================
+// Golden Thread — contexto longitudinal del
+// paciente que se inyecta al LLM antes de
+// generar cada nota SOAP. Una fila por paciente.
+//
+// El artefacto es editable por la terapeuta: las
+// actualizaciones automáticas generadas tras
+// aprobar una sesión quedan con
+// `aprobadoPorTerapeutaEn = null` hasta que la
+// profesional revisa.
+// ============================================
+
+model PacienteContextoClinico {
+  id             String       @id @default(cuid())
+  pacienteId     String       @unique @map("paciente_id")
+  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Estructura editable, sin cifrar.
+  //
+  // Son arrays de strings cortos / objetos pequeños útiles para queries y
+  // dashboards. Tomada la decisión deliberada de no cifrarlos: si en algún
+  // momento queremos tablero "pacientes con objetivos activos sobre X",
+  // necesitamos poder consultar estas columnas. PHI clínicamente densa va
+  // abajo en las columnas *_encrypted.
+  // ──────────────────────────────────────────────────────────────────────
+  objetivosTerapeuticos  Json @default("[]") @map("objetivos_terapeuticos")
+  // Array de {id, descripcion, estado: "activo"|"cerrado"|"pausado", fechaInicio, fechaCierre?}
+
+  intervencionesProbadas Json @default("[]") @map("intervenciones_probadas")
+  // Array de {tecnica, eficaciaPercibida: "alta"|"media"|"baja", sesiones: number[]}
+
+  temasRecurrentes       Json @default("[]") @map("temas_recurrentes")
+  // Array de {tema, conteo}
+
+  // ──────────────────────────────────────────────────────────────────────
+  // PHI sensible — cifrado en reposo (AES-256-GCM)
+  //
+  // Mismo patrón que SesionClinica: cada campo tiene su columna legacy en
+  // texto plano (queda siempre NULL — la extensión Prisma intercepta los
+  // writes y los manda a la columna *_encrypted) más una columna Bytes? que
+  // guarda el blob cifrado en formato:
+  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
+  //
+  // Las columnas legacy se mantienen acá por consistencia con el resto del
+  // schema y con la lógica actual de prisma-encryption.ts. La fase 2 de
+  // limpieza (la misma que va a borrar las legacy de SesionClinica) va a
+  // dropearlas y renombrar *_encrypted → nombre lógico.
+  //
+  // Estos campos NO pueden usarse en WHERE / ORDER BY / índices — la
+  // extensión Prisma lo enforza en runtime.
+  // ──────────────────────────────────────────────────────────────────────
+  hipotesisDiagnostica          String? @map("hipotesis_diagnostica") @db.Text
+  resumenAcumulativo            String? @map("resumen_acumulativo") @db.Text
+  // riesgosHistoricos se guarda como JSON serializado (timeline de flags):
+  // [{ sesionId, fecha, flag: "ideacionSuicida"|..., detalle }]
+  riesgosHistoricos             String? @map("riesgos_historicos") @db.Text
+
+  hipotesisDiagnosticaEncrypted Bytes?  @map("hipotesis_diagnostica_encrypted")
+  resumenAcumulativoEncrypted   Bytes?  @map("resumen_acumulativo_encrypted")
+  riesgosHistoricosEncrypted    Bytes?  @map("riesgos_historicos_encrypted")
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Tracking del Golden Thread
+  // ──────────────────────────────────────────────────────────────────────
+  // String suelto (no FK): la sesión que generó la última actualización del
+  // contexto. Mantenerlo desacoplado evita ciclos de relación y permite que
+  // sea null para contextos creados manualmente por la terapeuta.
+  ultimaSesionId         String?   @map("ultima_sesion_id")
+  version                Int       @default(1)
+  // null = sugerencia generada por la IA pendiente de revisión humana.
+  // Con timestamp = aprobado por la terapeuta y considerado canónico.
+  aprobadoPorTerapeutaEn DateTime? @map("aprobado_por_terapeuta_en")
+  creadoEn               DateTime  @default(now()) @map("creado_en")
+  actualizadoEn          DateTime  @updatedAt @map("actualizado_en")
+
+  @@index([organizationId])
+  @@index([aprobadoPorTerapeutaEn])
+  @@map("paciente_contexto_clinico")
 }

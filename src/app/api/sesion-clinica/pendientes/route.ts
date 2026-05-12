@@ -1,6 +1,6 @@
-// TODO: agregar `api/sesion-clinica/pendientes` a las exclusiones del matcher en
-// src/middleware.ts. Este endpoint se autentica machine-to-machine con
-// PROCESSING_SECRET (Bearer token), no con sesión de usuario.
+// Endpoint M2M: lo consume el worker Python (processor/). Se autentica con
+// PROCESSING_SECRET (Bearer token); está excluido del matcher de auth en
+// src/middleware.ts.
 
 import { db } from "@/lib/db";
 
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
         createdAt: true,
         turno: {
           select: {
-            paciente: { select: { nombre: true, apellido: true } },
+            paciente: { select: { id: true, nombre: true, apellido: true } },
           },
         },
       },
@@ -80,6 +80,7 @@ export async function GET(request: Request) {
         turnoId: s.turnoId,
         audioR2Key: s.audioR2Key,
         duracionAudioSeg: s.duracionAudioSeg,
+        pacienteId: s.turno.paciente.id,
         pacienteNombre: `${s.turno.paciente.nombre} ${s.turno.paciente.apellido}`,
         claveCifrado,
         iv,

@@ -35,6 +35,7 @@ import {
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
 import { EditarPacienteForm } from "./editar-paciente-form";
 import { ProgresoClinicoSection } from "./progreso-clinico";
+import { RiesgoBanner } from "./riesgo-banner";
 import type {
   Configuracion,
   MetodoPago,
@@ -400,6 +401,8 @@ export function PacienteDetailView({ id }: { id: string }) {
         onEdit={() => setShowEditar(true)}
         onArchive={archivarPaciente}
       />
+
+      <RiesgoBanner pacienteId={paciente.id} />
 
       {sesionMasAntigua && zonaDeuda ? (
         <DeudaBanner

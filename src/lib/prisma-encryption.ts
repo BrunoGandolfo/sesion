@@ -16,6 +16,18 @@ const LOGICAL_FIELDS = [
 type LogicalField = (typeof LOGICAL_FIELDS)[number];
 const LOGICAL_FIELD_SET = new Set<string>(LOGICAL_FIELDS);
 
+// Mismos invariantes que SesionClinica pero para el contexto longitudinal del
+// paciente (Golden Thread). Tres campos PHI separados, sin bundling: cada uno
+// se consume independientemente (el resumen va al prompt del LLM, la hipótesis
+// va al panel de la terapeuta, riesgos al banner de alerta), así que no
+// conviene meterlos en un JSON único como notaSoap.
+const CONTEXTO_LOGICAL_FIELDS = [
+  "hipotesisDiagnostica",
+  "resumenAcumulativo",
+  "riesgosHistoricos",
+] as const;
+const CONTEXTO_LOGICAL_FIELD_SET = new Set<string>(CONTEXTO_LOGICAL_FIELDS);
+
 const SOAP_LOGICAL = [
   "notaSubjetivo",
   "notaObjetivo",
@@ -62,38 +74,71 @@ function toBuffer(value: unknown): Buffer | null {
   return null;
 }
 
-function rejectEncryptedField(field: string, kind: "filter" | "order"): never {
+function rejectEncryptedField(
+  model: string,
+  field: string,
+  kind: "filter" | "order",
+): never {
   throw new Error(
-    `Cannot ${kind} SesionClinica by encrypted field ${field}. ` +
-      `Filter by id, turnoId, or estado instead.`,
+    `Cannot ${kind} ${model} by encrypted field ${field}. ` +
+      `Use a non-encrypted column instead.`,
   );
 }
 
-function assertNoEncryptedInWhere(where: unknown): void {
-  if (!isPlainObject(where)) return;
-  for (const [k, v] of Object.entries(where)) {
-    if (LOGICAL_FIELD_SET.has(k)) rejectEncryptedField(k, "filter");
-    if (k === "AND" || k === "OR" || k === "NOT") {
-      if (Array.isArray(v)) {
-        for (const sub of v) assertNoEncryptedInWhere(sub);
-      } else {
-        assertNoEncryptedInWhere(v);
+function makeAssertNoEncryptedInWhere(
+  model: string,
+  fieldSet: ReadonlySet<string>,
+) {
+  const fn = (where: unknown): void => {
+    if (!isPlainObject(where)) return;
+    for (const [k, v] of Object.entries(where)) {
+      if (fieldSet.has(k)) rejectEncryptedField(model, k, "filter");
+      if (k === "AND" || k === "OR" || k === "NOT") {
+        if (Array.isArray(v)) {
+          for (const sub of v) fn(sub);
+        } else {
+          fn(v);
+        }
       }
     }
-  }
+  };
+  return fn;
 }
 
-function assertNoEncryptedInOrderBy(orderBy: unknown): void {
-  if (orderBy === undefined || orderBy === null) return;
-  if (Array.isArray(orderBy)) {
-    for (const o of orderBy) assertNoEncryptedInOrderBy(o);
-    return;
-  }
-  if (!isPlainObject(orderBy)) return;
-  for (const k of Object.keys(orderBy)) {
-    if (LOGICAL_FIELD_SET.has(k)) rejectEncryptedField(k, "order");
-  }
+function makeAssertNoEncryptedInOrderBy(
+  model: string,
+  fieldSet: ReadonlySet<string>,
+) {
+  const fn = (orderBy: unknown): void => {
+    if (orderBy === undefined || orderBy === null) return;
+    if (Array.isArray(orderBy)) {
+      for (const o of orderBy) fn(o);
+      return;
+    }
+    if (!isPlainObject(orderBy)) return;
+    for (const k of Object.keys(orderBy)) {
+      if (fieldSet.has(k)) rejectEncryptedField(model, k, "order");
+    }
+  };
+  return fn;
 }
+
+const assertNoEncryptedInWhere = makeAssertNoEncryptedInWhere(
+  "SesionClinica",
+  LOGICAL_FIELD_SET,
+);
+const assertNoEncryptedInOrderBy = makeAssertNoEncryptedInOrderBy(
+  "SesionClinica",
+  LOGICAL_FIELD_SET,
+);
+const assertNoContextoEncryptedInWhere = makeAssertNoEncryptedInWhere(
+  "PacienteContextoClinico",
+  CONTEXTO_LOGICAL_FIELD_SET,
+);
+const assertNoContextoEncryptedInOrderBy = makeAssertNoEncryptedInOrderBy(
+  "PacienteContextoClinico",
+  CONTEXTO_LOGICAL_FIELD_SET,
+);
 
 function transformWriteData(data: Raw): Raw {
   const out: Raw = { ...data };
@@ -265,6 +310,119 @@ function originalSelectOf(args: Raw): Raw | undefined {
   return isPlainObject(args.select) ? args.select : undefined;
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// PacienteContextoClinico — Golden Thread.
+//
+// Simétrico al pipeline de SesionClinica pero sin bundling: cada campo PHI
+// va a su propia columna `*_encrypted`. `hipotesisDiagnostica` y
+// `resumenAcumulativo` son strings de prosa clínica; `riesgosHistoricos` es
+// un array de objetos (timeline de flags), que se serializa a JSON antes de
+// cifrar y se re-parsea al leer.
+// ────────────────────────────────────────────────────────────────────────────
+
+function transformContextoWriteData(data: Raw): Raw {
+  const out: Raw = { ...data };
+
+  if ("hipotesisDiagnostica" in out) {
+    const v = out.hipotesisDiagnostica;
+    delete out.hipotesisDiagnostica;
+    if (v === null) {
+      out.hipotesisDiagnosticaEncrypted = null;
+    } else if (typeof v === "string") {
+      out.hipotesisDiagnosticaEncrypted = encrypt(v);
+    }
+  }
+
+  if ("resumenAcumulativo" in out) {
+    const v = out.resumenAcumulativo;
+    delete out.resumenAcumulativo;
+    if (v === null) {
+      out.resumenAcumulativoEncrypted = null;
+    } else if (typeof v === "string") {
+      out.resumenAcumulativoEncrypted = encrypt(v);
+    }
+  }
+
+  if ("riesgosHistoricos" in out) {
+    const v = out.riesgosHistoricos;
+    delete out.riesgosHistoricos;
+    if (v === null) {
+      out.riesgosHistoricosEncrypted = null;
+    } else if (typeof v === "string") {
+      // Si ya viene serializado lo cifrámos tal cual; el lado de lectura
+      // siempre JSON.parse para devolver objeto.
+      out.riesgosHistoricosEncrypted = encrypt(v);
+    } else if (isPlainObject(v) || Array.isArray(v)) {
+      out.riesgosHistoricosEncrypted = encrypt(JSON.stringify(v));
+    }
+  }
+
+  return out;
+}
+
+function injectContextoEncryptedSelect(args: Raw): Raw {
+  if (!isPlainObject(args.select)) return args;
+  const select: Raw = { ...args.select };
+  if (select.hipotesisDiagnostica === true) {
+    select.hipotesisDiagnosticaEncrypted = true;
+  }
+  if (select.resumenAcumulativo === true) {
+    select.resumenAcumulativoEncrypted = true;
+  }
+  if (select.riesgosHistoricos === true) {
+    select.riesgosHistoricosEncrypted = true;
+  }
+  return { ...args, select };
+}
+
+function transformContextoRow(row: unknown): unknown {
+  if (!isPlainObject(row)) return row;
+
+  if ("hipotesisDiagnosticaEncrypted" in row) {
+    const blob = toBuffer(row.hipotesisDiagnosticaEncrypted);
+    if (blob && isEncrypted(blob)) {
+      row.hipotesisDiagnostica = decrypt(blob);
+    } else if (blob) {
+      console.warn(
+        "[prisma-encryption] hipotesisDiagnosticaEncrypted lacks magic prefix; falling back to legacy column",
+      );
+    }
+    delete row.hipotesisDiagnosticaEncrypted;
+  }
+
+  if ("resumenAcumulativoEncrypted" in row) {
+    const blob = toBuffer(row.resumenAcumulativoEncrypted);
+    if (blob && isEncrypted(blob)) {
+      row.resumenAcumulativo = decrypt(blob);
+    } else if (blob) {
+      console.warn(
+        "[prisma-encryption] resumenAcumulativoEncrypted lacks magic prefix; falling back to legacy column",
+      );
+    }
+    delete row.resumenAcumulativoEncrypted;
+  }
+
+  if ("riesgosHistoricosEncrypted" in row) {
+    const blob = toBuffer(row.riesgosHistoricosEncrypted);
+    if (blob && isEncrypted(blob)) {
+      try {
+        row.riesgosHistoricos = JSON.parse(decrypt(blob));
+      } catch (err) {
+        throw new Error(
+          `Failed to decrypt or parse riesgosHistoricosEncrypted: ${(err as Error).message}`,
+        );
+      }
+    } else if (blob) {
+      console.warn(
+        "[prisma-encryption] riesgosHistoricosEncrypted lacks magic prefix; falling back to legacy column",
+      );
+    }
+    delete row.riesgosHistoricosEncrypted;
+  }
+
+  return row;
+}
+
 export function withEncryption<C extends PrismaClient>(client: C) {
   validateKey();
 
@@ -385,6 +543,114 @@ export function withEncryption<C extends PrismaClient>(client: C) {
         async deleteMany({ args, query }) {
           const a = args as unknown as Raw;
           assertNoEncryptedInWhere(a.where);
+          return query(args);
+        },
+      },
+      pacienteContextoClinico: {
+        async create({ args, query }) {
+          const a = args as unknown as Raw;
+          if (isPlainObject(a.data)) {
+            a.data = transformContextoWriteData(a.data);
+          }
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async createMany({ args, query }) {
+          const a = args as unknown as Raw;
+          if (Array.isArray(a.data)) {
+            a.data = a.data.map((d) =>
+              isPlainObject(d) ? transformContextoWriteData(d) : d,
+            );
+          } else if (isPlainObject(a.data)) {
+            a.data = transformContextoWriteData(a.data);
+          }
+          return query(args);
+        },
+        async update({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          if (isPlainObject(a.data)) {
+            a.data = transformContextoWriteData(a.data);
+          }
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async updateMany({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          if (isPlainObject(a.data)) {
+            a.data = transformContextoWriteData(a.data);
+          }
+          return query(args);
+        },
+        async upsert({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          if (isPlainObject(a.create)) {
+            a.create = transformContextoWriteData(a.create);
+          }
+          if (isPlainObject(a.update)) {
+            a.update = transformContextoWriteData(a.update);
+          }
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async findUnique({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async findUniqueOrThrow({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async findFirst({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          assertNoContextoEncryptedInOrderBy(a.orderBy);
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async findFirstOrThrow({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          assertNoContextoEncryptedInOrderBy(a.orderBy);
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async findMany({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          assertNoContextoEncryptedInOrderBy(a.orderBy);
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          if (Array.isArray(result)) {
+            return result.map((row) =>
+              transformContextoRow(row),
+            ) as typeof result;
+          }
+          return result;
+        },
+        async delete({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
+          const modified = injectContextoEncryptedSelect(a) as typeof args;
+          const result = await query(modified);
+          return transformContextoRow(result) as typeof result;
+        },
+        async deleteMany({ args, query }) {
+          const a = args as unknown as Raw;
+          assertNoContextoEncryptedInWhere(a.where);
           return query(args);
         },
       },
