@@ -27,6 +27,9 @@ export const config = {
     // /api/health es público para servicios de monitoreo (UptimeRobot, etc.).
     // /api/sesion-clinica/callback es machine-to-machine (La Escondida),
     // se autentica por PROCESSING_SECRET header.
-    "/((?!_next/static|_next/image|static|favicon.ico|api/auth|api/seed|api/cron|api/health|api/sesion-clinica/callback|api/sesion-clinica/pendientes|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+    // /api/pacientes/{id}/contexto-clinico (GET) acepta Bearer PROCESSING_SECRET
+    // para que el worker arme el prompt del LLM; la propia ruta decide entre
+    // auth M2M y session.
+    "/((?!_next/static|_next/image|static|favicon.ico|api/auth|api/seed|api/cron|api/health|api/sesion-clinica/callback|api/sesion-clinica/pendientes|api/pacientes/[^/]+/contexto-clinico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };

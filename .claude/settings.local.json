@@ -21,7 +21,8 @@
       "WebSearch",
       "Bash(SKIP_ENV_VALIDATION=1 npx next build)",
       "Bash(echo \"Exit: $?\")",
-      "Bash(npx prisma *)"
+      "Bash(npx prisma *)",
+      "Bash(python3 -m py_compile clinical_analyzer.py processor.py worker.py)"
     ]
   }
 }

@@ -10,20 +10,25 @@ import config
 
 logger = logging.getLogger(__name__)
 
-def _cargar_prompt() -> str:
-    prompt_path = os.path.join(config.PROMPTS_DIR, "clinical_note_v2.1.md")
+PROMPT_NOTA_SOAP = "clinical_note_v2.1.md"
+PROMPT_UPDATE_CONTEXTO = "update_context_v1.md"
+
+
+def _cargar_prompt(nombre: str) -> str:
+    prompt_path = os.path.join(config.PROMPTS_DIR, nombre)
     if not os.path.exists(prompt_path):
         raise FileNotFoundError(f"Prompt no encontrado: {prompt_path}")
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
 
-def _llamar_ollama(system_prompt: str, transcripcion: str) -> str:
+
+def _llamar_ollama(system_prompt: str, user_content: str) -> str:
     url = f"{config.OLLAMA_BASE_URL}/api/chat"
     payload = {
         "model": config.LLM_MODEL_ID,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": transcripcion},
+            {"role": "user", "content": user_content},
         ],
         "stream": False,
         "options": {"temperature": 0.3, "num_predict": 8192},
@@ -33,13 +38,14 @@ def _llamar_ollama(system_prompt: str, transcripcion: str) -> str:
     response.raise_for_status()
     return response.json()["message"]["content"]
 
-def _llamar_vllm(system_prompt: str, transcripcion: str) -> str:
+
+def _llamar_vllm(system_prompt: str, user_content: str) -> str:
     url = f"{config.VLLM_BASE_URL}/v1/chat/completions"
     payload = {
         "model": config.LLM_MODEL_ID,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": transcripcion},
+            {"role": "user", "content": user_content},
         ],
         "temperature": 0.3,
         "max_tokens": 8192,
@@ -48,6 +54,15 @@ def _llamar_vllm(system_prompt: str, transcripcion: str) -> str:
     response = requests.post(url, json=payload, timeout=300)
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
+
+
+def _llamar_llm(system_prompt: str, user_content: str) -> str:
+    if config.LLM_BACKEND == "ollama":
+        return _llamar_ollama(system_prompt, user_content + "\n\n/no_think")
+    if config.LLM_BACKEND == "vllm":
+        return _llamar_vllm(system_prompt, user_content)
+    raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
+
 
 def _parsear_respuesta(raw: str) -> dict:
     cleaned = raw.strip()
@@ -69,27 +84,31 @@ def _parsear_respuesta(raw: str) -> dict:
         logger.error(f"Raw (500 chars): {cleaned[:500]}")
         raise ValueError(f"LLM no devolvio JSON valido: {e}")
 
-def analizar(transcripcion_formateada: str, sesiones_previas: list[dict] | None = None) -> dict:
-    system_prompt = _cargar_prompt()
-    user_content = f"TRANSCRIPCION DE LA SESION:\n\n{transcripcion_formateada}"
-    if sesiones_previas and len(sesiones_previas) >= 4:
-        contexto = "\n\n---\n\n".join(
-            f"SESION ANTERIOR ({i+1}):\n{json.dumps(s, ensure_ascii=False, indent=2)}"
-            for i, s in enumerate(sesiones_previas[-5:])
+
+def analizar(
+    transcripcion_formateada: str,
+    contexto_clinico: str | None = None,
+) -> dict:
+    """
+    Genera la nota SOAP. Si `contexto_clinico` está presente (string
+    pre-formateado por el endpoint /contexto-clinico?format=llm), se inyecta
+    en un bloque <contexto_previo> antes de la transcripcion.
+    """
+    system_prompt = _cargar_prompt(PROMPT_NOTA_SOAP)
+
+    bloques = []
+    if contexto_clinico and contexto_clinico.strip():
+        bloques.append(
+            "<contexto_previo>\n"
+            f"{contexto_clinico.strip()}\n"
+            "</contexto_previo>"
         )
-        user_content = (
-            f"CONTEXTO: {len(sesiones_previas)} sesiones anteriores.\n\n"
-            f"{contexto}\n\n---\n\n{user_content}\n\n"
-            f"Inclui materialRecurrente y materialNuevo comparando con sesiones anteriores."
-        )
-    if config.LLM_BACKEND == "ollama":
-        user_content += "\n\n/no_think"
-        raw = _llamar_ollama(system_prompt, user_content)
-    elif config.LLM_BACKEND == "vllm":
-        raw = _llamar_vllm(system_prompt, user_content)
-    else:
-        raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
+    bloques.append(f"TRANSCRIPCION DE LA SESION:\n\n{transcripcion_formateada}")
+    user_content = "\n\n".join(bloques)
+
+    raw = _llamar_llm(system_prompt, user_content)
     resultado = _parsear_respuesta(raw)
+
     if "nota" not in resultado:
         raise ValueError("Respuesta sin 'nota'")
     if "datosEstructurados" not in resultado:
@@ -97,8 +116,37 @@ def analizar(transcripcion_formateada: str, sesiones_previas: list[dict] | None 
     for campo in ("subjetivo", "objetivo", "analisis", "plan"):
         if campo not in resultado["nota"]:
             raise ValueError(f"Nota SOAP incompleta: falta '{campo}'")
+
     logger.info("Nota clinica generada")
     return resultado
+
+
+def actualizar_contexto_clinico(
+    contexto_previo: dict,
+    nota: dict,
+    datos_estructurados: dict,
+) -> dict:
+    """
+    Llamada B: a partir del PacienteContextoClinico previo y la nota SOAP
+    recien aprobada, devuelve el contexto actualizado segun el prompt
+    update_context_v1.md. Output es el objeto completo (no diff).
+    """
+    system_prompt = _cargar_prompt(PROMPT_UPDATE_CONTEXTO)
+    nota_soap = {"nota": nota, "datosEstructurados": datos_estructurados}
+    user_content = (
+        "<contexto_previo>\n"
+        f"{json.dumps(contexto_previo or {}, ensure_ascii=False, indent=2)}\n"
+        "</contexto_previo>\n\n"
+        "<nota_soap_aprobada>\n"
+        f"{json.dumps(nota_soap, ensure_ascii=False, indent=2)}\n"
+        "</nota_soap_aprobada>"
+    )
+
+    raw = _llamar_llm(system_prompt, user_content)
+    actualizado = _parsear_respuesta(raw)
+    logger.info("Contexto clinico actualizado (Llamada B)")
+    return actualizado
+
 
 def version_prompt() -> str:
     return "v2.1"
