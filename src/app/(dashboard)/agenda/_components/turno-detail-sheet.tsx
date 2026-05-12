@@ -256,7 +256,7 @@ export function TurnoDetailSheet({
     setSeccionGrabacion("idle");
     setGrabacionError(null);
 
-    if (!turnoId || turnoEstado !== "realizado" || !turnoPacienteId) {
+    if (!turnoId || turnoEstado !== "realizado" && turnoEstado !== "programado" || !turnoPacienteId) {
       return;
     }
 
