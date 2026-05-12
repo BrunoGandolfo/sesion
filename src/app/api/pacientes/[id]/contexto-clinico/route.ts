@@ -50,11 +50,16 @@ type AuthResult =
   | { kind: "session"; organizationId: string };
 
 /**
- * Resuelve la auth para GET: primero intenta Bearer (cheaper), después sesión.
- * El M2M caller no tiene organizationId — el scoping se hace por el paciente
- * que el worker pidió. El session caller queda scopeado por su org.
+ * Resuelve la auth para GET y PATCH: primero intenta Bearer (cheaper), después
+ * sesión. El M2M caller (worker Python) no tiene organizationId — el scoping
+ * se hace por el paciente que el worker pidió, vía `resolverPaciente`. El
+ * session caller queda scopeado por su org.
+ *
+ * Semánticamente la auth es la misma para ambos verbos; lo único que cambia
+ * según `kind` en el PATCH es el valor de `aprobadoPorTerapeutaEn` (ver más
+ * abajo: sugerencia del worker vs revisión humana).
  */
-async function authorizeRead(request: Request): Promise<AuthResult> {
+async function authorizeRequest(request: Request): Promise<AuthResult> {
   if (isM2MAuthorized(request)) {
     return { kind: "m2m" };
   }
@@ -411,7 +416,7 @@ function formatearLLM(payload: ContextoPayload): string {
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const auth = await authorizeRead(request);
+    const auth = await authorizeRequest(request);
     const { id: pacienteId } = await params;
     const { organizationId } = await resolverPaciente(pacienteId, auth);
 
@@ -436,16 +441,19 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// PATCH — actualiza el contexto. Sólo sesión next-auth.
+// PATCH — actualiza el contexto. Doble auth (mismo patrón que GET).
 //
-// Upsert: si no existe, lo crea. Si existe, mergea sólo los campos enviados
-// y bumpea `version`. Cada PATCH humano se considera revisión clínica, así
-// que también seteamos `aprobadoPorTerapeutaEn = now()` automáticamente.
+// Upsert: si no existe lo crea, si existe mergea sólo los campos enviados y
+// bumpea `version`.
 //
-// Nota: las actualizaciones automáticas generadas por el worker
-// (post-aprobación de una sesión) viven en otro endpoint dedicado — ese path
-// permanece M2M y deja `aprobadoPorTerapeutaEn = null` para que la terapeuta
-// vea el badge "sugerencia pendiente". Acá NO entran esos updates.
+// Lo único que cambia según el tipo de caller:
+//   - Session (terapeuta editando en la UI): seteamos
+//     `aprobadoPorTerapeutaEn = now()`. La acción humana ES la revisión.
+//   - M2M (worker Python emitiendo la Llamada B del Golden Thread): seteamos
+//     `aprobadoPorTerapeutaEn = null`. Es una sugerencia automática que la
+//     terapeuta tiene que revisar antes de que el contexto se considere
+//     canónico. La UI muestra el badge "sugerencia pendiente" mientras está
+//     null.
 // ────────────────────────────────────────────────────────────────────────────
 
 const objetivoSchema = z.object({
@@ -490,17 +498,9 @@ const updateSchema = z
 
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    // PATCH es session-only — no aceptamos M2M acá.
-    const organizationId = await getOrganizationId();
+    const auth = await authorizeRequest(request);
     const { id: pacienteId } = await params;
-
-    const paciente = await db.paciente.findFirst({
-      where: { id: pacienteId, organizationId },
-      select: { id: true },
-    });
-    if (!paciente) {
-      throw new ApiError("Paciente no encontrado", 404);
-    }
+    const { organizationId } = await resolverPaciente(pacienteId, auth);
 
     const body = await request.json().catch(() => null);
     const parsed = updateSchema.safeParse(body);
@@ -508,8 +508,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return validationError(parsed.error);
     }
 
-    const ahora = new Date();
     const data = parsed.data;
+    // Sugerencia (worker) → null. Revisión humana (terapeuta en la UI) → now().
+    const aprobadoPorTerapeutaEn = auth.kind === "session" ? new Date() : null;
 
     // Para upsert necesitamos saber si existe (para bumpear version).
     const existente = await db.pacienteContextoClinico.findUnique({
@@ -518,7 +519,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     });
 
     const updateData: Record<string, unknown> = {
-      aprobadoPorTerapeutaEn: ahora,
+      aprobadoPorTerapeutaEn,
       version: (existente?.version ?? 0) + 1,
     };
     if (data.hipotesisDiagnostica !== undefined) {
@@ -565,7 +566,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
           : null,
         ultimaSesionId: data.ultimaSesionId ?? null,
         version: 1,
-        aprobadoPorTerapeutaEn: ahora,
+        aprobadoPorTerapeutaEn,
       },
     });
 
