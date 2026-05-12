@@ -457,12 +457,14 @@ export function TurnoDetailSheet({
     setGrabacionError(null);
     setGrabacionSubmitting(true);
     try {
-      // grabando → subiendo
-      await patchSesionClinica({
-        estado: "subiendo",
-        duracionAudioSeg: datos.duracionSegundos,
-      });
-
+      // No patcheamos "subiendo" antes del upload: el endpoint
+      // /api/sesion-clinica/{id}/upload acepta entrada desde "grabando" y, en
+      // la misma transacción, persiste `duracionAudioSeg` + estado "procesando"
+      // (via db.update directo, sin pasar por el state machine). Patchear
+      // "subiendo" antes era una llamada HTTP extra que no aportaba nada al
+      // flujo y que, combinada con el PATCH "procesando" post-upload que ya
+      // habíamos removido, era la causa del error "Transición inválida:
+      // procesando → procesando".
       const formData = new FormData();
       formData.append("audio", datos.audioBlob, "sesion.bin");
       formData.append("claveCifrado", datos.claveCifrado);
@@ -477,9 +479,6 @@ export function TurnoDetailSheet({
         },
       );
       if (!uploadRes.ok) throw new Error(await parseError(uploadRes));
-
-      // subiendo → procesando
-      await patchSesionClinica({ estado: "procesando" });
 
       // Auto-transición del turno cuando se grabó durante uno programado:
       // grabar y subir el audio sin errores implica que la sesión ocurrió,
