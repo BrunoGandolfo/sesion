@@ -132,8 +132,17 @@ export function useSesionClinicaPolling(
         throw new Error(`HTTP ${res.status}`);
       }
 
-      const raw = (await res.json()) as RawSesionClinicaResponse;
-      const normalized = normalize(raw);
+      // La API envuelve la sesión en { data: ... } (responses.ts → ok()).
+      // Antes leíamos el body crudo como `RawSesionClinicaResponse` directo:
+      // `raw.id` daba undefined (no existe a ese nivel, vive en raw.data.id)
+      // y `setData({ id: undefined, ... })` corrompía el state de sesionClinica
+      // en el componente padre. Al detener la grabación el siguiente
+      // `patchSesionClinica` armaba la URL `/api/sesion-clinica/undefined`.
+      const body = (await res.json()) as { data: RawSesionClinicaResponse | null };
+      if (!body.data) {
+        throw new Error("Sesión clínica no disponible");
+      }
+      const normalized = normalize(body.data);
 
       if (controller.signal.aborted) return;
 
