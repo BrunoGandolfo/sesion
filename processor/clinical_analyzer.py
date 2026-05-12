@@ -5,13 +5,15 @@ import json
 import logging
 import os
 import re
+from datetime import date
 import requests
 import config
 
 logger = logging.getLogger(__name__)
 
-PROMPT_NOTA_SOAP = "clinical_note_v2.1.md"
-PROMPT_UPDATE_CONTEXTO = "update_context_v1.md"
+PROMPT_NOTA_SOAP = "clinical_note_v3.0.md"
+PROMPT_UPDATE_CONTEXTO = "update_context_v2.0.md"
+PROMPT_FEEDBACK_TERAPEUTA = "therapist_feedback_v1.0.md"
 
 
 def _cargar_prompt(nombre: str) -> str:
@@ -88,22 +90,32 @@ def _parsear_respuesta(raw: str) -> dict:
 def analizar(
     transcripcion_formateada: str,
     contexto_clinico: str | None = None,
+    speech_analytics: dict | None = None,
 ) -> dict:
     """
-    Genera la nota SOAP. Si `contexto_clinico` está presente (string
-    pre-formateado por el endpoint /contexto-clinico?format=llm), se inyecta
-    en un bloque <contexto_previo> antes de la transcripcion.
+    Genera la nota SOAP (Llamada A) usando el prompt clinical_note_v3.0.
+    Arma el user message con los tags XML que el prompt espera:
+    <transcripcion>, <contexto_previo>, <speech_analytics>.
     """
     system_prompt = _cargar_prompt(PROMPT_NOTA_SOAP)
 
-    bloques = []
+    bloques = [
+        "<transcripcion>\n"
+        f"{transcripcion_formateada}\n"
+        "</transcripcion>"
+    ]
+    if speech_analytics:
+        bloques.append(
+            "<speech_analytics>\n"
+            f"{json.dumps(speech_analytics, ensure_ascii=False, indent=2)}\n"
+            "</speech_analytics>"
+        )
     if contexto_clinico and contexto_clinico.strip():
         bloques.append(
             "<contexto_previo>\n"
             f"{contexto_clinico.strip()}\n"
             "</contexto_previo>"
         )
-    bloques.append(f"TRANSCRIPCION DE LA SESION:\n\n{transcripcion_formateada}")
     user_content = "\n\n".join(bloques)
 
     raw = _llamar_llm(system_prompt, user_content)
@@ -125,15 +137,30 @@ def actualizar_contexto_clinico(
     contexto_previo: dict,
     nota: dict,
     datos_estructurados: dict,
+    sesion_clinica_id: str,
+    fecha: str | None = None,
+    numero_sesion: int = 0,
 ) -> dict:
     """
-    Llamada B: a partir del PacienteContextoClinico previo y la nota SOAP
-    recien aprobada, devuelve el contexto actualizado segun el prompt
-    update_context_v1.md. Output es el objeto completo (no diff).
+    Llamada B: actualiza el PacienteContextoClinico tras nota SOAP aprobada.
+    Usa el prompt update_context_v2.0.md, que exige tres bloques:
+    <sesion_actual>, <contexto_previo>, <nota_soap_aprobada>.
+    Output es el objeto completo (no diff) con los campos que el modelo
+    Prisma persiste: hipotesisDiagnostica, resumenAcumulativo,
+    objetivosTerapeuticos, intervencionesProbadas, temasRecurrentes,
+    riesgosHistoricos, ultimaSesionId.
     """
     system_prompt = _cargar_prompt(PROMPT_UPDATE_CONTEXTO)
+    sesion_actual = {
+        "sesionClinicaId": sesion_clinica_id,
+        "fecha": fecha or date.today().isoformat(),
+        "numeroSesion": numero_sesion,
+    }
     nota_soap = {"nota": nota, "datosEstructurados": datos_estructurados}
     user_content = (
+        "<sesion_actual>\n"
+        f"{json.dumps(sesion_actual, ensure_ascii=False, indent=2)}\n"
+        "</sesion_actual>\n\n"
         "<contexto_previo>\n"
         f"{json.dumps(contexto_previo or {}, ensure_ascii=False, indent=2)}\n"
         "</contexto_previo>\n\n"
@@ -148,5 +175,39 @@ def actualizar_contexto_clinico(
     return actualizado
 
 
+def generar_feedback_terapeuta(
+    transcripcion_formateada: str,
+    speech_analytics: dict | None = None,
+) -> dict | None:
+    """
+    Llamada C: reporte de auto-supervisión MITI/CTS-R sobre la sesión.
+    Best-effort — si falla el LLM o el parsing, retorna None y deja
+    warning en log (mismo patrón que Llamada B). El campo final se
+    embebe en datosEstructurados.feedbackTerapeuta.
+    """
+    try:
+        system_prompt = _cargar_prompt(PROMPT_FEEDBACK_TERAPEUTA)
+        bloques = [
+            "<transcripcion>\n"
+            f"{transcripcion_formateada}\n"
+            "</transcripcion>"
+        ]
+        if speech_analytics:
+            bloques.append(
+                "<speech_analytics>\n"
+                f"{json.dumps(speech_analytics, ensure_ascii=False, indent=2)}\n"
+                "</speech_analytics>"
+            )
+        user_content = "\n\n".join(bloques)
+
+        raw = _llamar_llm(system_prompt, user_content)
+        feedback = _parsear_respuesta(raw)
+        logger.info("Feedback terapeuta generado (Llamada C)")
+        return feedback
+    except Exception as e:
+        logger.warning(f"Llamada C (feedback_terapeuta) fallo: {e}")
+        return None
+
+
 def version_prompt() -> str:
-    return "v2.1"
+    return "v3.0"

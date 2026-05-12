@@ -10,7 +10,11 @@ import r2_client
 import speech_analytics
 from crypto import descifrar
 from transcriber import transcribir, formatear_para_llm
-from clinical_analyzer import analizar, actualizar_contexto_clinico
+from clinical_analyzer import (
+    analizar,
+    actualizar_contexto_clinico,
+    generar_feedback_terapeuta,
+)
 from callback import enviar_resultado
 
 logger = logging.getLogger(__name__)
@@ -75,13 +79,25 @@ def procesar_sesion(
 
         # 8. Nota clínica
         logger.info(f"[{etiqueta}] Generando nota...")
-        resultado = analizar(transcripcion_fmt, contexto_clinico=contexto_llm)
+        resultado = analizar(
+            transcripcion_fmt,
+            contexto_clinico=contexto_llm,
+            speech_analytics=speech_metrics,
+        )
 
         # 9. Mergear speech analytics en datosEstructurados
         datos_estructurados = resultado.get("datosEstructurados") or {}
         datos_estructurados["speechAnalytics"] = speech_metrics
 
-        # 10. Callback
+        # 10. Feedback terapeuta (Llamada C) — best-effort, va en el callback
+        logger.info(f"[{etiqueta}] Generando feedback terapeuta...")
+        feedback_terapeuta = generar_feedback_terapeuta(
+            transcripcion_fmt, speech_analytics=speech_metrics
+        )
+        if feedback_terapeuta:
+            datos_estructurados["feedbackTerapeuta"] = feedback_terapeuta
+
+        # 11. Callback
         exito = enviar_resultado(
             sesion_clinica_id=sesion_clinica_id,
             estado="revision",
@@ -95,14 +111,18 @@ def procesar_sesion(
             logger.error(f"[{etiqueta}] Callback fallo — audio NO se borra")
             return
 
-        # 11. Llamada B: actualizar contexto clínico longitudinal (best-effort)
+        # 12. Llamada B: actualizar contexto clínico longitudinal (best-effort)
         nota_soap = resultado.get("nota")
         if paciente_id and nota_soap:
             _llamada_b_update_context(
-                paciente_id, nota_soap, datos_estructurados, etiqueta
+                paciente_id,
+                nota_soap,
+                datos_estructurados,
+                sesion_clinica_id,
+                etiqueta,
             )
 
-        # 12. Borrar audio
+        # 13. Borrar audio
         try:
             r2_client.borrar_audio(audio_r2_key)
             logger.info(f"[{etiqueta}] Audio borrado de R2")
@@ -198,6 +218,7 @@ def _llamada_b_update_context(
     paciente_id: str,
     nota: dict,
     datos_estructurados: dict,
+    sesion_clinica_id: str,
     etiqueta: str,
 ) -> None:
     """
@@ -207,7 +228,10 @@ def _llamada_b_update_context(
     try:
         contexto_actual = _obtener_contexto_clinico_raw(paciente_id)
         actualizado = actualizar_contexto_clinico(
-            contexto_actual, nota, datos_estructurados
+            contexto_actual,
+            nota,
+            datos_estructurados,
+            sesion_clinica_id=sesion_clinica_id,
         )
         if _patch_contexto_clinico(paciente_id, actualizado):
             logger.info(f"[{etiqueta}] Contexto clinico actualizado")
