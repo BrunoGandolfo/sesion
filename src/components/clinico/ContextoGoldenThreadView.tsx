@@ -634,8 +634,8 @@ function SectionIntervenciones({
                     Eficacia {i.eficaciaPercibida}
                   </Chip>
                   <span className="font-sans text-[12px] text-ink-500">
-                    {i.sesiones.length} sesión
-                    {i.sesiones.length === 1 ? "" : "es"}
+                    {i.sesiones?.length ?? 0} sesión
+                    {(i.sesiones?.length ?? 0) === 1 ? "" : "es"}
                   </span>
                 </div>
               </li>

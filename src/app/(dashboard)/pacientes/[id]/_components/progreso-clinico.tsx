@@ -611,7 +611,7 @@ function LineChart({
 function TemasTable({ sesiones }: { sesiones: SesionProgreso[] }) {
   const counts = new Map<string, number>();
   sesiones.forEach((s) => {
-    s.temas.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
+    (s.temas ?? []).forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
   });
   const temas = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -726,7 +726,7 @@ function IntervencionesChart({ sesiones }: { sesiones: SesionProgreso[] }) {
       confrontacion: 0,
       otros: 0,
     };
-    for (const [k, v] of Object.entries(s.intervenciones)) {
+    for (const [k, v] of Object.entries(s.intervenciones ?? {})) {
       buckets[normalizeKey(k)] += v;
     }
     return buckets;
