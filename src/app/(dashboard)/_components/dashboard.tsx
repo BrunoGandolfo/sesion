@@ -28,7 +28,6 @@ import {
   moneyShort,
   saludo,
 } from "@/lib/format";
-import { textoAtraso, zonaDeuda } from "@/lib/deudas";
 import type {
   Configuracion,
   DeudaPaciente,
@@ -756,68 +755,97 @@ function KpiStrip({
   deudoresCount: number;
 }) {
   const mesActual = fechaLarga(today).split(" de ").at(-1) ?? "";
-  const items = [
+  const items: {
+    label: string;
+    value: React.ReactNode;
+    subtext: string;
+    accent: boolean;
+    href: string | null;
+  }[] = [
     {
       label: "Pacientes",
       value: kpis.pacientesActivos,
       subtext: "activos",
       accent: false,
+      href: null,
     },
     {
       label: "Sesiones hoy",
       value: kpis.sesionesHoy,
       subtext: `${sesionesPagas} pagas`,
       accent: false,
+      href: null,
     },
     {
       label: "Por cobrar",
       value: moneyShort(kpis.deudaAcumulada),
       subtext: `${deudoresCount} pacientes`,
       accent: kpis.deudaAcumulada > 0,
+      href: "/finanzas",
     },
     {
       label: "Este mes",
       value: moneyShort(kpis.ingresosMes),
       subtext: `cobrado ${mesActual}`,
       accent: false,
+      href: null,
     },
   ];
 
   return (
     <Card className="overflow-hidden rounded-[8px] p-0">
       <div className="grid grid-cols-2 lg:grid-cols-4">
-        {items.map((item, index) => (
-          <div
-            key={item.label}
-            className={[
-              "min-w-0 p-4 lg:p-5",
-              index < 2 ? "border-b border-[color:var(--border-subtle)]" : "",
-              index % 2 === 0
-                ? "border-r border-[color:var(--border-subtle)]"
-                : "",
-              "lg:border-b-0",
-              index < 3
-                ? "lg:border-r lg:border-[color:var(--border-subtle)]"
-                : "lg:border-r-0",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-              {item.label}
-            </span>
-            <span
-              className={`mt-2 block font-[family-name:var(--font-display)] text-[26px] font-medium leading-none tabular-nums lg:text-[30px] ${
-                item.accent ? "text-terracotta-600" : "text-ink-900"
-              }`}
-            >
-              {item.value}
-            </span>
-            <span className="mt-1.5 block text-[12px] text-ink-500">
-              {item.subtext}
-            </span>
-          </div>
-        ))}
+        {items.map((item, index) => {
+          const cellClasses = [
+            "min-w-0 p-4 lg:p-5",
+            index < 2 ? "border-b border-[color:var(--border-subtle)]" : "",
+            index % 2 === 0
+              ? "border-r border-[color:var(--border-subtle)]"
+              : "",
+            "lg:border-b-0",
+            index < 3
+              ? "lg:border-r lg:border-[color:var(--border-subtle)]"
+              : "lg:border-r-0",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          const content = (
+            <>
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                {item.label}
+              </span>
+              <span
+                className={`mt-2 block font-[family-name:var(--font-display)] text-[26px] font-medium leading-none tabular-nums lg:text-[30px] ${
+                  item.accent ? "text-terracotta-600" : "text-ink-900"
+                }`}
+              >
+                {item.value}
+              </span>
+              <span className="mt-1.5 block text-[12px] text-ink-500">
+                {item.subtext}
+              </span>
+            </>
+          );
+
+          if (item.href) {
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={`${cellClasses} block transition-colors duration-150 hover:bg-cream-50 focus:outline-none focus:ring-[3px] focus:ring-sage-500/20`}
+              >
+                {content}
+              </Link>
+            );
+          }
+
+          return (
+            <div key={item.label} className={cellClasses}>
+              {content}
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
@@ -939,54 +967,37 @@ function AgendaEmptyState({ onNuevoTurno }: { onNuevoTurno: () => void }) {
 }
 
 function Deudores({ deudores }: { deudores: DeudaPaciente[] }) {
-  const visibles = deudores.slice(0, 4);
+  const visibles = deudores.slice(0, 3);
 
   return (
     <section>
-      <SectionCaption>Deudores</SectionCaption>
+      <SectionCaption
+        action={
+          <Link
+            href="/finanzas"
+            className="text-[13px] font-semibold text-sage-600 hover:text-sage-700"
+          >
+            Ver todo →
+          </Link>
+        }
+      >
+        Deudores
+      </SectionCaption>
 
       {visibles.length > 0 ? (
         <Card className="overflow-hidden rounded-[8px] p-0">
           <div className="divide-y divide-[color:var(--border-subtle)]">
             {visibles.map((deudor) => {
               const fullName = `${deudor.nombre} ${deudor.apellido}`;
-              const avatarTone = avatarColor(fullName);
-              const avatarInitials = initials(deudor.nombre, deudor.apellido);
-
               return (
                 <Link
                   key={deudor.pacienteId}
                   href={`/pacientes/${deudor.pacienteId}`}
                   aria-label={`Abrir ficha de ${fullName}`}
                   className="flex items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-cream-50"
-                  style={
-                    {
-                      "--deudor-color": avatarTone.bg,
-                    } as React.CSSProperties
-                  }
                 >
-                  <span
-                    className="inline-flex rounded-full ring-1 ring-[var(--deudor-color)]"
-                    title={avatarInitials}
-                  >
-                    <Avatar
-                      nombre={deudor.nombre}
-                      apellido={deudor.apellido}
-                      size={32}
-                    />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold text-ink-900">
-                      {fullName}
-                    </span>
-                    <span className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-500">
-                      <span>
-                        {deudor.sesionesImpagas}{" "}
-                        {deudor.sesionesImpagas === 1 ? "sesión" : "sesiones"}
-                      </span>
-                      <span aria-hidden="true">·</span>
-                      <DiasAtrasoIndicator dias={deudor.diasAtraso} />
-                    </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-900">
+                    {fullName}
                   </span>
                   <span className="font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-terracotta-600">
                     {money(deudor.montoTotal)}
@@ -995,13 +1006,6 @@ function Deudores({ deudores }: { deudores: DeudaPaciente[] }) {
               );
             })}
           </div>
-
-          <Link
-            href="/deudores"
-            className="block border-t border-[color:var(--border-subtle)] px-4 py-3 text-center text-[13px] font-semibold text-sage-600 hover:bg-cream-50"
-          >
-            Ver todos ({deudores.length})
-          </Link>
         </Card>
       ) : (
         <Card className="rounded-[8px] p-6 text-center text-[13px] text-ink-500">
@@ -1010,29 +1014,6 @@ function Deudores({ deudores }: { deudores: DeudaPaciente[] }) {
       )}
     </section>
   );
-}
-
-function DiasAtrasoIndicator({ dias }: { dias: number }) {
-  const zona = zonaDeuda(dias);
-  const texto = textoAtraso(dias);
-
-  if (zona === "terracotta") {
-    return (
-      <span className="inline-flex items-center rounded-full bg-terracotta-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-terracotta-600">
-        {texto}
-      </span>
-    );
-  }
-
-  if (zona === "gold") {
-    return (
-      <span className="font-medium text-gold-500">
-        {texto} <span aria-hidden="true">⚠</span>
-      </span>
-    );
-  }
-
-  return <span className="text-sage-600">{texto}</span>;
 }
 
 function RitmoSemana({

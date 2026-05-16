@@ -165,6 +165,100 @@ export interface FlagsRiesgo {
 /** Confianza del modelo en la nota generada */
 export type ConfianzaModelo = "alta" | "media" | "baja";
 
+// ============================================
+// Feedback terapeuta (Llamada C — MITI 4.2.1 + CTS-R subset)
+// Schema definido por processor/prompts/therapist_feedback_v1.0.md
+// ============================================
+
+/** Cita literal de la transcripción que ancla un score */
+export interface EvidenciaFeedback {
+  timestamp: string; // formato "MM:SS"
+  quote: string;     // cita textual del segmento
+}
+
+/** Score MITI global (escala 1-5, default 3) o null si no determinable */
+export interface ScoreMITIGlobal {
+  score: number | null;          // 1-5; null cuando no hay material suficiente
+  evidence: EvidenciaFeedback[]; // ≥1 si score no es null; vacío si null
+  razon?: string;                // requerido si score es null
+}
+
+/** Score CTS-R (escala 0-6) o null si no determinable */
+export interface ScoreCTSR {
+  score: number | null;          // 0-6; null cuando no es evaluable
+  evidence: EvidenciaFeedback[];
+  razon?: string;
+}
+
+/** Globales MITI 4.2.1 — 4 escalas */
+export interface MITIGlobales {
+  cultivatingChangeTalk: ScoreMITIGlobal;
+  softeningSustainTalk: ScoreMITIGlobal;
+  partnership: ScoreMITIGlobal;
+  empathy: ScoreMITIGlobal;
+}
+
+/** Conteos MITI 4.2.1 — 10 categorías de comportamiento */
+export interface MITICounts {
+  Q: number;   // Question
+  SR: number;  // Simple Reflection
+  CR: number;  // Complex Reflection
+  AF: number;  // Affirm
+  SC: number;  // Seeking Collaboration
+  EA: number;  // Emphasizing Autonomy
+  GI: number;  // Giving Information
+  PWP: number; // Persuade with Permission
+  P: number;   // Persuade
+  C: number;   // Confront
+}
+
+export type BenchmarkMITI = "insufficient" | "fair" | "good";
+
+export interface RatiosDerivadosMITI {
+  rq: number | null;            // (SR + CR) / Q; null si Q === 0
+  porcentajeCR: number | null;  // CR / (SR + CR) * 100; null si SR+CR === 0
+  benchmarkRQ: BenchmarkMITI;
+  benchmarkPorcentajeCR: BenchmarkMITI;
+}
+
+/** Subset CTS-R: 4 ítems factibles desde transcripción */
+export interface CTSRSubset {
+  agendaSetting: ScoreCTSR;
+  feedback: ScoreCTSR;
+  collaboration: ScoreCTSR;
+  guidedDiscovery: ScoreCTSR;
+}
+
+export interface SpeechAnalyticsInferido {
+  ratioHablaTerapeutaPaciente: number | null;
+  comentario: string | null;
+}
+
+export interface FortalezaFeedback {
+  descripcion: string;
+  evidence: EvidenciaFeedback[];
+}
+
+export interface AreaCrecimientoFeedback {
+  observacion: string; // qué se observó en la sesión
+  sugerencia: string;  // qué probar la próxima vez
+  evidence: EvidenciaFeedback[];
+}
+
+/** Reporte de auto-supervisión MITI/CTS-R generado por la Llamada C.
+ *  Se embebe en datosEstructurados antes de persistir cifrado. */
+export interface FeedbackTerapeuta {
+  mitiGlobales: MITIGlobales;
+  mitiCounts: MITICounts;
+  ratiosDerivados: RatiosDerivadosMITI;
+  ctsrSubset: CTSRSubset;
+  speechAnalyticsInferido: SpeechAnalyticsInferido;
+  fortalezas: FortalezaFeedback[];              // máx 3
+  areasCrecimiento: AreaCrecimientoFeedback[];  // máx 3
+  sugerenciaProximaSesion: string;
+  disclaimer: string;
+}
+
 /** Datos estructurados extraídos por el LLM (versión enriquecida) */
 export interface DatosEstructurados {
   // Campos originales
@@ -197,6 +291,9 @@ export interface DatosEstructurados {
 
   /** Análisis longitudinal generado por IA cruzando múltiples sesiones */
   observacionIA?: string;
+
+  /** Reporte de auto-supervisión (Llamada C). Best-effort: ausente si el LLM falló. */
+  feedbackTerapeuta?: FeedbackTerapeuta;
 }
 
 /** Nota clínica en formato SOAP */

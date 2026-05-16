@@ -72,6 +72,43 @@ export async function GET(_request: Request, { params }: RouteParams) {
   }
 }
 
+export async function DELETE(_request: Request, { params }: RouteParams) {
+  try {
+    const organizationId = await getOrganizationId();
+    const { id } = await params;
+
+    const existente = await db.sesionClinica.findFirst({
+      where: { id, organizationId },
+      select: { id: true, estado: true },
+    });
+
+    if (!existente) {
+      throw new ApiError("Sesión clínica no encontrada", 404);
+    }
+
+    if (existente.estado !== "revision") {
+      throw new ApiError(
+        `Solo se puede descartar una nota en revisión (estado actual: ${existente.estado})`,
+        409,
+      );
+    }
+
+    await db.sesionClinica.update({
+      where: { id },
+      data: {
+        estado: "error",
+        notaSoapEncrypted: null,
+        datosEstructuradosEncrypted: null,
+        transcripcionEncrypted: null,
+      },
+    });
+
+    return ok({ success: true });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();

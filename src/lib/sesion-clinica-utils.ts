@@ -6,6 +6,7 @@ import type {
   FlagsRiesgo,
   IntervencionTerapeuta,
   NotaSOAP,
+  SesionClinicaResponse,
 } from "@/types/domain";
 
 // Mantener sincronizado con el endpoint PATCH /api/sesion-clinica/[id].
@@ -200,4 +201,87 @@ export function esNotaCompleta(nota: Partial<NotaSOAP>): boolean {
       nota.analisis?.trim() &&
       nota.plan?.trim(),
   );
+}
+
+// Versión permisiva (sin validación de shape): acepta el objeto ya
+// deserializado por la extensión Prisma o el string JSON crudo de filas
+// legacy. Para inputs de fronteras no confiables, usar parseDatosEstructurados.
+export function coerceDatosEstructurados(
+  value: DatosEstructurados | string | null | undefined,
+): DatosEstructurados | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as DatosEstructurados;
+  } catch {
+    return null;
+  }
+}
+
+// Retorna null SOLO si los cuatro campos están ausentes; si al menos uno
+// trae valor, los faltantes se completan con "".
+export function ensamblarNotaSOAP(campos: {
+  subjetivo?: string | null;
+  objetivo?: string | null;
+  analisis?: string | null;
+  plan?: string | null;
+}): NotaSOAP | null {
+  const { subjetivo, objetivo, analisis, plan } = campos;
+  if (
+    subjetivo == null &&
+    objetivo == null &&
+    analisis == null &&
+    plan == null
+  ) {
+    return null;
+  }
+  return {
+    subjetivo: subjetivo ?? "",
+    objetivo: objetivo ?? "",
+    analisis: analisis ?? "",
+    plan: plan ?? "",
+  };
+}
+
+export interface RawSesionClinica {
+  id: string;
+  turnoId: string;
+  estado: EstadoProcesamiento | string;
+  duracionAudioSeg: number | null;
+  nota?: NotaSOAP | null;
+  notaSubjetivo?: string | null;
+  notaObjetivo?: string | null;
+  notaAnalisis?: string | null;
+  notaPlan?: string | null;
+  datosEstructurados?: DatosEstructurados | string | null;
+  modeloASR: string | null;
+  modeloLLM: string | null;
+  procesadoEn: string | null;
+  aprobadoEn: string | null;
+  error: string | null;
+}
+
+export function normalizeSesionClinica(
+  raw: RawSesionClinica,
+): SesionClinicaResponse {
+  return {
+    id: raw.id,
+    turnoId: raw.turnoId,
+    estado: raw.estado as EstadoProcesamiento,
+    duracionAudioSeg: raw.duracionAudioSeg,
+    nota:
+      raw.nota ??
+      ensamblarNotaSOAP({
+        subjetivo: raw.notaSubjetivo,
+        objetivo: raw.notaObjetivo,
+        analisis: raw.notaAnalisis,
+        plan: raw.notaPlan,
+      }),
+    datosEstructurados: coerceDatosEstructurados(raw.datosEstructurados),
+    modeloASR: raw.modeloASR,
+    modeloLLM: raw.modeloLLM,
+    procesadoEn: raw.procesadoEn,
+    aprobadoEn: raw.aprobadoEn,
+    error: raw.error,
+  };
 }

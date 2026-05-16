@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Calendar, Users, MoreHorizontal } from "lucide-react";
+import { Home, Calendar, Users, Wallet } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Hoy", icon: Home },
   { href: "/agenda", label: "Agenda", icon: Calendar },
   { href: "/pacientes", label: "Pacientes", icon: Users },
-  { href: "/config", label: "Más", icon: MoreHorizontal },
+  { href: "/finanzas", label: "Finanzas", icon: Wallet },
 ] as const;
 
 export function BottomNav() {

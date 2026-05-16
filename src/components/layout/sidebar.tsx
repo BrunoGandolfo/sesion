@@ -5,12 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
-  AlertCircle,
   Calendar,
   Home,
   LogOut,
   Settings,
   Users,
+  Wallet,
 } from "lucide-react";
 import type { DeudaPaciente } from "@/types/domain";
 import { zonaDeuda } from "@/lib/deudas";
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Hoy", icon: Home },
   { href: "/agenda", label: "Agenda", icon: Calendar },
   { href: "/pacientes", label: "Pacientes", icon: Users },
-  { href: "/deudores", label: "Deudores", icon: AlertCircle },
+  { href: "/finanzas", label: "Finanzas", icon: Wallet },
   { href: "/config", label: "Configuración", icon: Settings },
 ] as const;
 
@@ -89,7 +89,7 @@ export function Sidebar() {
       <nav className="flex flex-col gap-0.5 px-3">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
-          const showBadge = href === "/deudores" && redCount > 0;
+          const showBadge = href === "/finanzas" && redCount > 0;
           return (
             <Link
               key={href}

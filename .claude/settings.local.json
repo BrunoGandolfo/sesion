@@ -22,7 +22,16 @@
       "Bash(SKIP_ENV_VALIDATION=1 npx next build)",
       "Bash(echo \"Exit: $?\")",
       "Bash(npx prisma *)",
-      "Bash(python3 -m py_compile clinical_analyzer.py processor.py worker.py)"
+      "Bash(python3 -m py_compile clinical_analyzer.py processor.py worker.py)",
+      "Bash(python -c \"import clinical_analyzer; import processor; print\\('OK'\\)\")",
+      "Bash(python -m py_compile clinical_analyzer.py processor.py)",
+      "Bash(python *)",
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(xargs ls *)",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(echo \"---END--- EXIT=$?\")"
     ]
   }
 }
