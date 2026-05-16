@@ -187,10 +187,10 @@ export function ContextoGoldenThreadView({
     setDraft({
       hipotesisDiagnostica: data.hipotesisDiagnostica,
       resumenAcumulativo: data.resumenAcumulativo,
-      objetivosTerapeuticos: [...data.objetivosTerapeuticos],
-      intervencionesProbadas: [...data.intervencionesProbadas],
-      temasRecurrentes: [...data.temasRecurrentes],
-      riesgosHistoricos: [...data.riesgosHistoricos],
+      objetivosTerapeuticos: [...(data.objetivosTerapeuticos ?? [])],
+      intervencionesProbadas: [...(data.intervencionesProbadas ?? [])],
+      temasRecurrentes: [...(data.temasRecurrentes ?? [])],
+      riesgosHistoricos: [...(data.riesgosHistoricos ?? [])],
     });
     setErrorGuardado(null);
     setEditando(true);
@@ -365,7 +365,9 @@ function ContextoBody({
 
       <SectionObjetivos
         objetivos={
-          editando ? (draft?.objetivosTerapeuticos ?? []) : data.objetivosTerapeuticos
+          editando
+            ? (draft?.objetivosTerapeuticos ?? [])
+            : (data.objetivosTerapeuticos ?? [])
         }
         editando={editando}
         onChange={(objetivos) =>
@@ -377,12 +379,16 @@ function ContextoBody({
         intervenciones={
           editando
             ? (draft?.intervencionesProbadas ?? [])
-            : data.intervencionesProbadas
+            : (data.intervencionesProbadas ?? [])
         }
       />
 
       <SectionTemas
-        temas={editando ? (draft?.temasRecurrentes ?? []) : data.temasRecurrentes}
+        temas={
+          editando
+            ? (draft?.temasRecurrentes ?? [])
+            : (data.temasRecurrentes ?? [])
+        }
         editando={editando}
         onChange={(temas) =>
           setDraft((d) => (d ? { ...d, temasRecurrentes: temas } : d))
@@ -391,7 +397,7 @@ function ContextoBody({
 
       <SectionResumen resumen={data.resumenAcumulativo} />
 
-      <SectionRiesgos riesgos={data.riesgosHistoricos} />
+      <SectionRiesgos riesgos={data.riesgosHistoricos ?? []} />
 
       {errorGuardado && (
         <p

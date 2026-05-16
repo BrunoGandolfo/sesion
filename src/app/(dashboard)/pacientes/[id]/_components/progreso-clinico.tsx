@@ -197,7 +197,10 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
 
   if (!data) return null;
 
-  if (data.totalSesiones < 3 && !usingMock) {
+  const sesiones = Array.isArray(data.sesiones) ? data.sesiones : [];
+  const totalSesiones = data.totalSesiones ?? sesiones.length;
+
+  if (totalSesiones < 3 && !usingMock) {
     return <EmptyState />;
   }
 
@@ -214,13 +217,13 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
         </div>
       ) : null}
 
-      <FlagsRiesgoTimeline sesiones={data.sesiones} />
-      <IntensidadChart sesiones={data.sesiones} />
-      <AlianzaChart sesiones={data.sesiones} />
-      <TemasTable sesiones={data.sesiones} />
-      <IntervencionesChart sesiones={data.sesiones} />
-      <RatioHablaChart sesiones={data.sesiones} />
-      <ObservacionIA sesiones={data.sesiones} />
+      <FlagsRiesgoTimeline sesiones={sesiones} />
+      <IntensidadChart sesiones={sesiones} />
+      <AlianzaChart sesiones={sesiones} />
+      <TemasTable sesiones={sesiones} />
+      <IntervencionesChart sesiones={sesiones} />
+      <RatioHablaChart sesiones={sesiones} />
+      <ObservacionIA sesiones={sesiones} />
     </div>
   );
 }
