@@ -259,98 +259,106 @@ export function PacienteDetailView({ id }: { id: string }) {
     refetchData();
   }
 
-  if (loading && !paciente) {
-    return <DetailSkeleton />;
-  }
-
-  if (error || !paciente) {
-    return (
-      <div className="px-5 lg:px-10 py-6 lg:py-8 max-w-[1120px] mx-auto">
-        <BackLink />
-        <div className="bg-white border border-[color:var(--border-subtle)] rounded-lg px-6 py-14 text-center">
-          <p className="font-display text-[18px] font-medium text-ink-900">
-            No pudimos abrir la ficha.
-          </p>
-          <p className="mt-1 text-[13px] text-ink-500">
-            {error ?? "Probá de nuevo en un momento."}
-          </p>
-          <div className="mt-5">
-            <Button variant="secondary" onClick={retryLoad}>
-              Reintentar
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const nombreCompleto = `${paciente.nombre} ${paciente.apellido}`;
-  const tarifaDefault = config?.tarifaDefault ?? paciente.tarifa;
+  const nombreCompleto = paciente
+    ? `${paciente.nombre} ${paciente.apellido}`
+    : "";
+  const tarifaDefault = config?.tarifaDefault ?? paciente?.tarifa ?? 0;
+  const mostrarSkeleton = loading && !paciente;
+  const mostrarError = !mostrarSkeleton && (error !== null || !paciente);
 
   return (
-    <div className="px-5 lg:px-10 py-6 lg:py-8 max-w-[1120px] mx-auto">
-      <BackLink />
+    <>
+      <div className="px-5 lg:px-10 py-6 lg:py-8 max-w-[1120px] mx-auto">
+        <BackLink />
 
-      <div className="mb-6 lg:mb-8 overflow-x-auto">
-        <Segmented
-          options={TAB_OPTIONS}
-          value={activeTab}
-          onChange={setActiveTab}
-          ariaLabel="Secciones del paciente"
-        />
+        {mostrarSkeleton ? <DetailSkeletonInner /> : null}
+
+        {mostrarError ? (
+          <div className="bg-white border border-[color:var(--border-subtle)] rounded-lg px-6 py-14 text-center">
+            <p className="font-display text-[18px] font-medium text-ink-900">
+              No pudimos abrir la ficha.
+            </p>
+            <p className="mt-1 text-[13px] text-ink-500">
+              {error ?? "Probá de nuevo en un momento."}
+            </p>
+            <div className="mt-5">
+              <Button variant="secondary" onClick={retryLoad}>
+                Reintentar
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {paciente && !mostrarError ? (
+          <>
+            <div className="mb-6 lg:mb-8 overflow-x-auto">
+              <Segmented
+                options={TAB_OPTIONS}
+                value={activeTab}
+                onChange={setActiveTab}
+                ariaLabel="Secciones del paciente"
+              />
+            </div>
+
+            {activeTab === "resumen" && (
+              <ResumenTab
+                paciente={paciente}
+                turnos={turnos}
+                config={{ tarifaDefault }}
+                onEditar={() => setEditarOpen(true)}
+                onCambiarTab={(tab) => setActiveTab(tab)}
+              />
+            )}
+
+            {activeTab === "historia" && (
+              <HistoriaTab
+                pacienteId={paciente.id}
+                pacienteNombre={nombreCompleto}
+                turnoHoy={turnoHoy}
+                consentimientoVigente={consentimientoVigente}
+                onTurnoActualizado={refetchData}
+              />
+            )}
+
+            {activeTab === "progreso" && (
+              <ProgresoTab
+                pacienteId={paciente.id}
+                nombrePaciente={nombreCompleto}
+              />
+            )}
+
+            {activeTab === "turnos" && (
+              <TurnosPagosTab
+                pacienteId={paciente.id}
+                turnos={turnos}
+                onTurnoActualizado={refetchData}
+              />
+            )}
+
+            {activeTab === "datos" && (
+              <DatosTab
+                paciente={paciente}
+                onPacienteActualizado={refetchData}
+              />
+            )}
+          </>
+        ) : null}
       </div>
 
-      {activeTab === "resumen" && (
-        <ResumenTab
-          paciente={paciente}
-          turnos={turnos}
-          config={{ tarifaDefault }}
-          onEditar={() => setEditarOpen(true)}
-          onCambiarTab={(tab) => setActiveTab(tab)}
-        />
-      )}
-
-      {activeTab === "historia" && (
-        <HistoriaTab
-          pacienteId={paciente.id}
-          pacienteNombre={nombreCompleto}
-          turnoHoy={turnoHoy}
-          consentimientoVigente={consentimientoVigente}
-          onTurnoActualizado={refetchData}
-        />
-      )}
-
-      {activeTab === "progreso" && (
-        <ProgresoTab
-          pacienteId={paciente.id}
-          nombrePaciente={nombreCompleto}
-        />
-      )}
-
-      {activeTab === "turnos" && (
-        <TurnosPagosTab
-          pacienteId={paciente.id}
-          turnos={turnos}
-          onTurnoActualizado={refetchData}
-        />
-      )}
-
-      {activeTab === "datos" && (
-        <DatosTab paciente={paciente} onPacienteActualizado={refetchData} />
-      )}
-
-      <Sheet
-        open={editarOpen}
-        onClose={() => setEditarOpen(false)}
-        maxWidth={520}
-        ariaLabel="Editar paciente"
-      >
-        <EditarPacienteForm
-          paciente={paciente}
-          onSuccess={handleEditarSuccess}
-          onCancel={() => setEditarOpen(false)}
-        />
-      </Sheet>
+      {paciente ? (
+        <Sheet
+          open={editarOpen}
+          onClose={() => setEditarOpen(false)}
+          maxWidth={520}
+          ariaLabel="Editar paciente"
+        >
+          <EditarPacienteForm
+            paciente={paciente}
+            onSuccess={handleEditarSuccess}
+            onCancel={() => setEditarOpen(false)}
+          />
+        </Sheet>
+      ) : null}
 
       <Sheet
         open={grabacionSheetOpen}
@@ -380,7 +388,7 @@ export function PacienteDetailView({ id }: { id: string }) {
         message={toast.message}
         onClose={() => setToast((c) => ({ ...c, open: false }))}
       />
-    </div>
+    </>
   );
 }
 
@@ -719,10 +727,9 @@ function BackLink() {
   );
 }
 
-function DetailSkeleton() {
+function DetailSkeletonInner() {
   return (
-    <div className="px-5 lg:px-10 py-6 lg:py-8 max-w-[1120px] mx-auto">
-      <div className="h-4 w-24 rounded-sm bg-cream-200 mb-5" />
+    <>
       <div className="h-10 w-full max-w-[420px] rounded-md bg-cream-200 mb-8" />
       <div className="flex items-center gap-4">
         <div className="h-16 w-16 rounded-full bg-cream-200" />
@@ -742,6 +749,6 @@ function DetailSkeleton() {
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
 }
