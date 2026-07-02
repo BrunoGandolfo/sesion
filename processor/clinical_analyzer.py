@@ -33,7 +33,8 @@ def _llamar_ollama(system_prompt: str, user_content: str) -> str:
             {"role": "user", "content": user_content},
         ],
         "stream": False,
-        "options": {"temperature": 0.3, "num_predict": 8192},
+        "think": False,
+        "options": {"temperature": 0.3, "num_predict": 8192, "num_ctx": config.LLM_NUM_CTX},
     }
     logger.info(f"Llamando Ollama ({config.LLM_MODEL_ID})...")
     response = requests.post(url, json=payload, timeout=300)
@@ -60,7 +61,7 @@ def _llamar_vllm(system_prompt: str, user_content: str) -> str:
 
 def _llamar_llm(system_prompt: str, user_content: str) -> str:
     if config.LLM_BACKEND == "ollama":
-        return _llamar_ollama(system_prompt, user_content + "\n\n/no_think")
+        return _llamar_ollama(system_prompt, user_content)
     if config.LLM_BACKEND == "vllm":
         return _llamar_vllm(system_prompt, user_content)
     raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")

@@ -27,6 +27,7 @@ ASR_TIMEOUT_SECONDS = int(os.getenv("ASR_TIMEOUT_SECONDS", "600"))
 # LLM (nota clínica SOAP) ───────────────────────────────────────────────────
 LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "qwen3.6:27b")
 LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama")
+LLM_NUM_CTX = int(os.getenv("LLM_NUM_CTX", "65536"))
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://100.71.155.25:11434")
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8091")
 
