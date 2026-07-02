@@ -27,6 +27,7 @@ const updateConfigSchema = z.object({
     .trim()
     .min(1, "Falta el template")
     .optional(),
+  orientacionTeorica: z.enum(["cbt_mi", "gestalt"]).optional(),
 });
 
 export async function GET() {

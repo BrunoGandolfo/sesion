@@ -76,7 +76,14 @@ export function toRecordatorio(recordatorio: PrismaRecordatorio): Recordatorio {
 export function toConfiguracion(
   configuracion: PrismaConfiguracion,
 ): Configuracion {
-  return configuracion;
+  // En DB orientacionTeorica es String (sin migración por orientación nueva);
+  // acá se narrowea a la unión, con fallback "cbt_mi" ante valores desconocidos
+  // (misma regla que el contrato multi-orientación).
+  return {
+    ...configuracion,
+    orientacionTeorica:
+      configuracion.orientacionTeorica === "gestalt" ? "gestalt" : "cbt_mi",
+  };
 }
 
 export function sumTarifas(turnos: TurnoStats[]) {

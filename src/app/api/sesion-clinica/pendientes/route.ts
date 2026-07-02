@@ -61,6 +61,7 @@ export async function GET(request: Request) {
       select: {
         id: true,
         turnoId: true,
+        organizationId: true,
         audioR2Key: true,
         duracionAudioSeg: true,
         datosEstructurados: true,
@@ -72,6 +73,20 @@ export async function GET(request: Request) {
         },
       },
     });
+
+    // La orientación teórica vive en la Configuracion (singleton por
+    // organización). Una sola query por las orgs presentes en el batch;
+    // default "cbt_mi" si la org aún no tiene configuración.
+    const orgIds = [...new Set(sesiones.map((s) => s.organizationId))];
+    const configuraciones = orgIds.length
+      ? await db.configuracion.findMany({
+          where: { organizationId: { in: orgIds } },
+          select: { organizationId: true, orientacionTeorica: true },
+        })
+      : [];
+    const orientacionPorOrg = new Map(
+      configuraciones.map((c) => [c.organizationId, c.orientacionTeorica]),
+    );
 
     const payload = sesiones.map((s) => {
       const { claveCifrado, iv } = extraerCriptoTemporal(s.datosEstructurados);
@@ -85,6 +100,7 @@ export async function GET(request: Request) {
         claveCifrado,
         iv,
         createdAt: s.createdAt.toISOString(),
+        orientacionTeorica: orientacionPorOrg.get(s.organizationId) ?? "cbt_mi",
       };
     });
 

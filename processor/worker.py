@@ -69,16 +69,17 @@ def _consultar_pendientes() -> list[dict]:
 
 def _extraer_args(
     item: dict,
-) -> tuple[str, str, str, str, str, str | None] | None:
+) -> tuple[str, str, str, str, str, str | None, str] | None:
     sesion_id = item.get("sesionClinicaId") or item.get("id")
     audio_key = item.get("audioR2Key") or item.get("audio_r2_key")
     clave = item.get("claveCifrado") or item.get("clave_cifrado")
     iv = item.get("iv") or item.get("ivCifrado") or item.get("iv_cifrado")
     paciente = item.get("pacienteNombre") or item.get("paciente_nombre") or ""
     paciente_id = item.get("pacienteId") or item.get("paciente_id") or None
+    orientacion = item.get("orientacionTeorica") or "cbt_mi"
     if not sesion_id or not audio_key or not clave or not iv:
         return None
-    return sesion_id, audio_key, clave, iv, paciente, paciente_id
+    return sesion_id, audio_key, clave, iv, paciente, paciente_id, orientacion
 
 
 def _procesar_pendientes(items: list[dict]) -> None:
@@ -90,7 +91,7 @@ def _procesar_pendientes(items: list[dict]) -> None:
         if not args:
             logger.warning(f"Item ignorado por falta de campos: {item}")
             continue
-        sesion_id, audio_key, clave, iv, paciente, paciente_id = args
+        sesion_id, audio_key, clave, iv, paciente, paciente_id, orientacion = args
         logger.info(f"Procesando sesion {sesion_id} (audio: {audio_key})")
         try:
             procesar_sesion(
@@ -100,6 +101,7 @@ def _procesar_pendientes(items: list[dict]) -> None:
                 iv_cifrado=iv,
                 paciente_nombre=paciente,
                 paciente_id=paciente_id,
+                orientacion_teorica=orientacion,
             )
             logger.info(f"Sesion {sesion_id} procesada")
         except Exception as e:
@@ -165,6 +167,7 @@ def procesar_modo_manual(
     clave_cifrado: str,
     iv_cifrado: str,
     paciente_nombre: str = "",
+    orientacion_teorica: str = "cbt_mi",
 ) -> bool:
     logger.info(f"=== Procesamiento manual: {sesion_clinica_id} ===")
     try:
@@ -174,6 +177,7 @@ def procesar_modo_manual(
             clave_cifrado=clave_cifrado,
             iv_cifrado=iv_cifrado,
             paciente_nombre=paciente_nombre,
+            orientacion_teorica=orientacion_teorica,
         )
         logger.info("=== Procesamiento manual exitoso ===")
         return True

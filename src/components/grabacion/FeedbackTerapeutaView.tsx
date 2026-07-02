@@ -5,9 +5,13 @@ import { CheckCircle2, Lightbulb, Sparkles } from "lucide-react";
 import type {
   AreaCrecimientoFeedback,
   EvidenciaFeedback,
+  FeedbackGestalt,
+  FeedbackMitiCtsr,
+  FeedbackNucleoPanteorico,
   FeedbackTerapeuta,
   FeedbackTerapeutaLegacy,
   FortalezaFeedback,
+  ItemGTFS,
   ScoreCTSR,
   ScoreMITIGlobal,
 } from "@/types/domain";
@@ -125,7 +129,7 @@ function EvidenceItem({ evidencia }: { evidencia: EvidenciaFeedback }) {
   return (
     <li className="flex flex-col gap-0.5 border-l-2 border-cream-200 pl-3">
       {evidencia.timestamp && (
-        <span className="font-sans text-[11px] font-semibold text-ink-500">
+        <span className="font-mono text-[11px] font-semibold tabular-nums text-ink-500">
           {evidencia.timestamp}
         </span>
       )}
@@ -209,31 +213,6 @@ export function FeedbackTerapeutaView({
   // al leer (nunca se migran).
   const feedback = normalizarFeedback(feedbackTerapeuta);
 
-  // El render específico por instrumento (GTFS) llega en Wave 2.
-  // Por ahora este componente solo sabe renderizar MITI/CTS-R.
-  if (feedback.instrumento !== "cbt_mi") return null;
-
-  const {
-    mitiGlobales,
-    ctsrSubset,
-    fortalezas,
-    areasCrecimiento,
-    sugerenciaProximaSesion,
-  } = feedback;
-
-  const empathy: ScoreMITIGlobal = mitiGlobales.empathy;
-  const partnership: ScoreMITIGlobal = mitiGlobales.partnership;
-
-  const ctsrItems: Array<{ key: string; label: string; score: ScoreCTSR }> = [
-    { key: "agendaSetting", label: "Establecimiento de agenda", score: ctsrSubset.agendaSetting },
-    { key: "feedback", label: "Feedback del paciente", score: ctsrSubset.feedback },
-    { key: "collaboration", label: "Colaboración", score: ctsrSubset.collaboration },
-    { key: "guidedDiscovery", label: "Descubrimiento guiado", score: ctsrSubset.guidedDiscovery },
-  ];
-
-  const fortalezasVisibles = fortalezas.slice(0, 3);
-  const areasVisibles = areasCrecimiento.slice(0, 3);
-
   return (
     <section
       aria-label="Auto-supervisión de la sesión"
@@ -246,6 +225,90 @@ export function FeedbackTerapeutaView({
         </h2>
       </header>
 
+      {feedback.instrumento === "cbt_mi" ? (
+        <BloqueMitiCtsr feedback={feedback} />
+      ) : (
+        <BloqueGestalt feedback={feedback} />
+      )}
+
+      <NucleoPanteoricoSections nucleo={feedback} />
+
+      <p className="border-t border-cream-200 pt-4 font-sans text-[12px] leading-[1.55] italic text-ink-500">
+        {DISCLAIMER_TEXT}
+      </p>
+    </section>
+  );
+}
+
+// ─── Núcleo panteórico (compartido por todo instrumento) ─────────────
+
+function NucleoPanteoricoSections({
+  nucleo,
+}: {
+  nucleo: FeedbackNucleoPanteorico;
+}) {
+  const fortalezasVisibles = nucleo.fortalezas.slice(0, 3);
+  const areasVisibles = nucleo.areasCrecimiento.slice(0, 3);
+
+  return (
+    <>
+      {fortalezasVisibles.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <SectionTitle>Fortalezas observadas</SectionTitle>
+          <ul className="flex flex-col gap-3">
+            {fortalezasVisibles.map((fortaleza, index) => (
+              <FortalezaItem
+                key={`${fortaleza.descripcion}-${index}`}
+                fortaleza={fortaleza}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {areasVisibles.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <SectionTitle>Áreas de crecimiento</SectionTitle>
+          <ul className="flex flex-col gap-3">
+            {areasVisibles.map((area, index) => (
+              <AreaCrecimientoItem
+                key={`${area.observacion}-${index}`}
+                area={area}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {nucleo.sugerenciaProximaSesion.trim() && (
+        <div className="flex flex-col gap-2">
+          <SectionTitle>Observación general</SectionTitle>
+          <p className="font-sans text-[14px] leading-[1.65] text-ink-900">
+            {nucleo.sugerenciaProximaSesion}
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Bloque MITI 4.2.1 + CTS-R (instrumento cbt_mi) ──────────────────
+
+function BloqueMitiCtsr({ feedback }: { feedback: FeedbackMitiCtsr }) {
+  const { mitiGlobales, ctsrSubset } = feedback;
+
+  const empathy: ScoreMITIGlobal = mitiGlobales.empathy;
+  const partnership: ScoreMITIGlobal = mitiGlobales.partnership;
+
+  const ctsrItems: Array<{ key: string; label: string; score: ScoreCTSR }> = [
+    { key: "agendaSetting", label: "Establecimiento de agenda", score: ctsrSubset.agendaSetting },
+    { key: "feedback", label: "Feedback del paciente", score: ctsrSubset.feedback },
+    { key: "collaboration", label: "Colaboración", score: ctsrSubset.collaboration },
+    { key: "guidedDiscovery", label: "Descubrimiento guiado", score: ctsrSubset.guidedDiscovery },
+  ];
+
+  return (
+    <>
       <div className="flex flex-col gap-3">
         <SectionTitle>MITI 4.2.1 · Globales</SectionTitle>
         <div className="flex flex-col gap-4">
@@ -284,47 +347,172 @@ export function FeedbackTerapeutaView({
           ))}
         </div>
       </div>
+    </>
+  );
+}
 
-      {fortalezasVisibles.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <SectionTitle>Fortalezas observadas</SectionTitle>
-          <ul className="flex flex-col gap-3">
-            {fortalezasVisibles.map((fortaleza, index) => (
-              <FortalezaItem
-                key={`${fortaleza.descripcion}-${index}`}
-                fortaleza={fortaleza}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
+// ─── Bloque GTFS (instrumento gestalt) ───────────────────────────────
 
-      {areasVisibles.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <SectionTitle>Áreas de crecimiento</SectionTitle>
-          <ul className="flex flex-col gap-3">
-            {areasVisibles.map((area, index) => (
-              <AreaCrecimientoItem
-                key={`${area.observacion}-${index}`}
-                area={area}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
+/** Dimensiones de la GTFS (Fogarty et al. 2019). La pertenencia de un
+ *  ítem se deriva del número en su id ("gtfs_NN"). */
+const DIMENSIONES_GTFS: Array<{ titulo: string; desde: number; hasta: number }> = [
+  { titulo: "Relación dialogal", desde: 1, hasta: 4 },
+  { titulo: "Aquí y ahora", desde: 5, hasta: 6 },
+  { titulo: "Práctica fenomenológica", desde: 7, hasta: 9 },
+  { titulo: "Conciencia corporal", desde: 10, hasta: 12 },
+  { titulo: "Sensible al campo", desde: 13, hasta: 14 },
+  { titulo: "Procesos de contacto", desde: 15, hasta: 17 },
+  { titulo: "Actitud experimental", desde: 18, hasta: 20 },
+];
 
-      {sugerenciaProximaSesion.trim() && (
-        <div className="flex flex-col gap-2">
-          <SectionTitle>Observación general</SectionTitle>
-          <p className="font-sans text-[14px] leading-[1.65] text-ink-900">
-            {sugerenciaProximaSesion}
+function numeroDeItemGTFS(id: string): number | null {
+  const match = /^gtfs_(\d+)$/.exec(id);
+  return match ? Number(match[1]) : null;
+}
+
+function BloqueGestalt({ feedback }: { feedback: FeedbackGestalt }) {
+  const items = feedback.itemsGTFS;
+  const evaluables = items.filter((item) => item.score !== null);
+  const presentes = evaluables.filter((item) => (item.score ?? 0) > 0);
+
+  const dimensiones = DIMENSIONES_GTFS.map((dimension) => ({
+    titulo: dimension.titulo,
+    items: items.filter((item) => {
+      const numero = numeroDeItemGTFS(item.id);
+      return numero !== null && numero >= dimension.desde && numero <= dimension.hasta;
+    }),
+  })).filter((dimension) => dimension.items.length > 0);
+
+  const sinDimension = items.filter((item) => {
+    const numero = numeroDeItemGTFS(item.id);
+    return numero === null || numero < 1 || numero > 20;
+  });
+
+  return (
+    <>
+      <div className="flex flex-col gap-2 rounded-lg bg-cream-100 p-4 sm:p-5">
+        <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+          Adherencia global · GTFS
+        </span>
+        {evaluables.length === 0 ? (
+          <p className="font-sans text-[14px] leading-[1.6] text-ink-700">
+            Ningún ítem fue evaluable a partir de la transcripción de esta
+            sesión.
           </p>
-        </div>
-      )}
+        ) : (
+          <p className="flex items-baseline gap-2">
+            <span className="font-display text-[34px] font-medium leading-none text-ink-900">
+              {presentes.length}
+            </span>
+            <span className="font-sans text-[14px] text-ink-700">
+              de {evaluables.length} ítems evaluables presentes
+            </span>
+          </p>
+        )}
+        <p className="font-sans text-[12px] leading-[1.55] text-ink-500">
+          La GTFS releva la presencia de prácticas gestálticas en la sesión.
+          Es una referencia para tu auto-supervisión, no una calificación.
+        </p>
+      </div>
 
-      <p className="border-t border-cream-200 pt-4 font-sans text-[12px] leading-[1.55] italic text-ink-500">
-        {DISCLAIMER_TEXT}
-      </p>
-    </section>
+      <div className="flex flex-col gap-5">
+        <SectionTitle>GTFS · Ítems por dimensión</SectionTitle>
+        {dimensiones.map((dimension) => (
+          <div key={dimension.titulo} className="flex flex-col gap-3">
+            <h4 className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+              {dimension.titulo}
+            </h4>
+            <ul className="flex flex-col gap-3">
+              {dimension.items.map((item) => (
+                <ItemGTFSRow key={item.id} item={item} />
+              ))}
+            </ul>
+          </div>
+        ))}
+        {sinDimension.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <h4 className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+              Otros ítems
+            </h4>
+            <ul className="flex flex-col gap-3">
+              {sinDimension.map((item) => (
+                <ItemGTFSRow key={item.id} item={item} />
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+type EstadoItemGTFS = "presente" | "ausente" | "no_determinable";
+
+function estadoDeItemGTFS(item: ItemGTFS): EstadoItemGTFS {
+  if (item.score === null) return "no_determinable";
+  return item.score > 0 ? "presente" : "ausente";
+}
+
+const ESTADO_GTFS_LABEL: Record<EstadoItemGTFS, string> = {
+  presente: "Presente",
+  ausente: "Ausente",
+  no_determinable: "No determinable",
+};
+
+const ESTADO_GTFS_TEXT: Record<EstadoItemGTFS, string> = {
+  presente: "text-sage-700",
+  ausente: "text-ink-500",
+  no_determinable: "text-ink-500",
+};
+
+const ESTADO_GTFS_DOT: Record<EstadoItemGTFS, string> = {
+  presente: "bg-sage-500",
+  ausente: "bg-ink-300",
+  no_determinable: "border border-dashed border-ink-300 bg-transparent",
+};
+
+function ItemGTFSRow({ item }: { item: ItemGTFS }) {
+  const estado = estadoDeItemGTFS(item);
+
+  return (
+    <li className="flex min-h-[44px] gap-3 py-1">
+      <span
+        aria-hidden="true"
+        className={`mt-[5px] h-2.5 w-2.5 shrink-0 rounded-full ${ESTADO_GTFS_DOT[estado]}`}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-sans text-[14px] leading-[1.5] text-ink-900">
+            {item.nombre}
+          </span>
+          <span
+            className={`shrink-0 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] ${ESTADO_GTFS_TEXT[estado]}`}
+          >
+            {ESTADO_GTFS_LABEL[estado]}
+          </span>
+        </div>
+
+        {estado === "no_determinable" && item.razon && (
+          <p className="font-sans text-[12px] italic text-ink-500">
+            {item.razon}
+          </p>
+        )}
+
+        {item.evidence.length > 0 && (
+          <details>
+            <summary className="cursor-pointer list-none font-sans text-[12px] font-semibold text-ink-500 transition-colors duration-150 hover:text-ink-700 [&::-webkit-details-marker]:hidden">
+              {item.evidence.length === 1
+                ? "Ver 1 evidencia"
+                : `Ver ${item.evidence.length} evidencias`}
+            </summary>
+            <ul className="flex flex-col gap-1.5 pt-1.5">
+              {item.evidence.map((ev, index) => (
+                <EvidenceItem key={`${ev.timestamp}-${index}`} evidencia={ev} />
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+    </li>
   );
 }

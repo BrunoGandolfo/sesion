@@ -27,6 +27,7 @@ def procesar_sesion(
     iv_cifrado: str,
     paciente_nombre: str = "",
     paciente_id: str | None = None,
+    orientacion_teorica: str = "cbt_mi",
 ) -> None:
     audio_path = None
     etiqueta = f"{sesion_clinica_id}{f' · {paciente_nombre}' if paciente_nombre else ''}"
@@ -92,7 +93,9 @@ def procesar_sesion(
         # 10. Feedback terapeuta (Llamada C) — best-effort, va en el callback
         logger.info(f"[{etiqueta}] Generando feedback terapeuta...")
         feedback_terapeuta = generar_feedback_terapeuta(
-            transcripcion_fmt, speech_analytics=speech_metrics
+            transcripcion_fmt,
+            speech_analytics=speech_metrics,
+            orientacion=orientacion_teorica,
         )
         if feedback_terapeuta:
             datos_estructurados["feedbackTerapeuta"] = feedback_terapeuta

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { LogOut } from "lucide-react";
+import { ChevronDown, LogOut } from "lucide-react";
 import { getSession, signOut } from "next-auth/react";
 import {
   Button,
@@ -10,7 +10,7 @@ import {
   Input,
   Textarea,
 } from "@/components/ui";
-import type { Configuracion } from "@/types/domain";
+import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 const PLACEHOLDERS = [
   { label: "nombre", key: "nombre" },
@@ -30,7 +30,8 @@ type ConfigField =
   | "whatsappOrigen"
   | "tarifaDefault"
   | "horasAnticipacion"
-  | "templateRecordatorio";
+  | "templateRecordatorio"
+  | "orientacionTeorica";
 
 type ConfigForm = {
   nombreProfesional: string;
@@ -39,6 +40,7 @@ type ConfigForm = {
   tarifaDefault: string;
   horasAnticipacion: number;
   templateRecordatorio: string;
+  orientacionTeorica: OrientacionTeorica;
 };
 
 type ConfigPatch = Partial<{
@@ -48,6 +50,7 @@ type ConfigPatch = Partial<{
   tarifaDefault: number;
   horasAnticipacion: number;
   templateRecordatorio: string;
+  orientacionTeorica: OrientacionTeorica;
 }>;
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -59,6 +62,7 @@ const DEFAULT_FORM: ConfigForm = {
   tarifaDefault: "2200",
   horasAnticipacion: 24,
   templateRecordatorio: DEFAULT_TEMPLATE,
+  orientacionTeorica: "cbt_mi",
 };
 
 function formFromConfig(config: Configuracion): ConfigForm {
@@ -69,6 +73,7 @@ function formFromConfig(config: Configuracion): ConfigForm {
     tarifaDefault: String(config.tarifaDefault),
     horasAnticipacion: config.horasAnticipacion,
     templateRecordatorio: config.templateRecordatorio,
+    orientacionTeorica: config.orientacionTeorica,
   };
 }
 
@@ -94,6 +99,12 @@ function patchFromFields(
 
     if (field === "horasAnticipacion") {
       patch.horasAnticipacion = form.horasAnticipacion;
+      included.push(field);
+      continue;
+    }
+
+    if (field === "orientacionTeorica") {
+      patch.orientacionTeorica = form.orientacionTeorica;
       included.push(field);
       continue;
     }
@@ -399,6 +410,21 @@ export function ConfigView() {
         </section>
 
         <section>
+          <SectionHeading>Orientación teórica</SectionHeading>
+          <Card>
+            <OrientacionSelect
+              value={form.orientacionTeorica}
+              onChange={(value) => updateField("orientacionTeorica", value)}
+            />
+            <p className="mt-2 text-[12px] text-ink-500">
+              Define el instrumento con el que se evalúa el feedback de tus
+              sesiones. Cognitivo-conductual usa CTS-R + MITI; Gestalt usa la
+              GTFS.
+            </p>
+          </Card>
+        </section>
+
+        <section>
           <SectionHeading>Tarifa por defecto</SectionHeading>
           <Card>
             <div className="relative">
@@ -529,6 +555,53 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
       <EditorialRule />
       <span>{children}</span>
     </h2>
+  );
+}
+
+const ORIENTACIONES: Array<{ value: OrientacionTeorica; label: string }> = [
+  {
+    value: "cbt_mi",
+    label: "Cognitivo-conductual / Entrevista Motivacional",
+  },
+  { value: "gestalt", label: "Terapia Gestalt" },
+];
+
+function OrientacionSelect({
+  value,
+  onChange,
+}: {
+  value: OrientacionTeorica;
+  onChange: (v: OrientacionTeorica) => void;
+}) {
+  const selectId = React.useId();
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label
+        htmlFor={selectId}
+        className="font-sans font-semibold text-[11px] uppercase tracking-[0.08em] text-ink-500"
+      >
+        Orientación teórica
+      </label>
+      <div className="relative flex items-center bg-cream-50 border border-[color:var(--border-subtle)] rounded-sm transition-colors duration-150 focus-within:bg-white focus-within:border-sage-500 focus-within:ring-[3px] focus-within:ring-sage-500/20">
+        <select
+          id={selectId}
+          value={value}
+          onChange={(e) => onChange(e.target.value as OrientacionTeorica)}
+          className="flex-1 min-w-0 appearance-none bg-transparent px-[14px] py-[10px] pr-10 text-[15px] text-ink-900 outline-none cursor-pointer"
+        >
+          {ORIENTACIONES.map((opcion) => (
+            <option key={opcion.value} value={opcion.value}>
+              {opcion.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          aria-hidden="true"
+          className="pointer-events-none absolute right-[14px] h-4 w-4 text-ink-500"
+        />
+      </div>
+    </div>
   );
 }
 

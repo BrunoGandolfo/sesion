@@ -85,10 +85,10 @@ export interface Configuracion {
   horasAnticipacion: number; // default 24
   templateRecordatorio: string;
   /** Orientación teórica de la profesional. Determina el instrumento de
-   *  auto-supervisión (ver contrato multi-orientación). Optional durante
-   *  Wave 1 — Wave 2 la vuelve obligatoria al actualizar mappers/endpoints.
-   *  En DB: Configuracion.orientacionTeorica, default "cbt_mi". */
-  orientacionTeorica?: OrientacionTeorica;
+   *  auto-supervisión (ver contrato multi-orientación). Siempre presente:
+   *  en DB Configuracion.orientacionTeorica tiene default "cbt_mi" y el
+   *  mapper toConfiguracion() narrowea con fallback a "cbt_mi". */
+  orientacionTeorica: OrientacionTeorica;
   organizationId: string;
 }
 

@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 
 PROMPT_NOTA_SOAP = "clinical_note_v3.0.md"
 PROMPT_UPDATE_CONTEXTO = "update_context_v2.0.md"
-PROMPT_FEEDBACK_TERAPEUTA = "therapist_feedback_v1.0.md"
+# Prompt de feedback por orientación teórica (contrato: docs/contrato-multi-orientacion.md)
+PROMPTS_FEEDBACK = {
+    "cbt_mi": "therapist_feedback_v1.0.md",
+    "gestalt": "therapist_feedback_gestalt_v1.0.md",
+}
 
 
 def _cargar_prompt(nombre: str) -> str:
@@ -179,15 +183,20 @@ def actualizar_contexto_clinico(
 def generar_feedback_terapeuta(
     transcripcion_formateada: str,
     speech_analytics: dict | None = None,
+    orientacion: str = "cbt_mi",
 ) -> dict | None:
     """
-    Llamada C: reporte de auto-supervisión MITI/CTS-R sobre la sesión.
+    Llamada C: reporte de auto-supervisión sobre la sesión, con instrumento
+    según la orientación teórica (MITI/CTS-R para cbt_mi, GTFS para gestalt).
+    Orientación desconocida cae al default cbt_mi, nunca rompe.
     Best-effort — si falla el LLM o el parsing, retorna None y deja
     warning en log (mismo patrón que Llamada B). El campo final se
     embebe en datosEstructurados.feedbackTerapeuta.
     """
     try:
-        system_prompt = _cargar_prompt(PROMPT_FEEDBACK_TERAPEUTA)
+        nombre_prompt = PROMPTS_FEEDBACK.get(orientacion, PROMPTS_FEEDBACK["cbt_mi"])
+        logger.info(f"Feedback terapeuta: orientacion={orientacion}, prompt={nombre_prompt}")
+        system_prompt = _cargar_prompt(nombre_prompt)
         bloques = [
             "<transcripcion>\n"
             f"{transcripcion_formateada}\n"

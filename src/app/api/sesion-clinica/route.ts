@@ -37,6 +37,8 @@ export async function GET(request: Request) {
         turnoId: true,
         estado: true,
         duracionAudioSeg: true,
+        audioR2Key: true,
+        createdAt: true,
         notaSubjetivo: true,
         notaObjetivo: true,
         notaAnalisis: true,
