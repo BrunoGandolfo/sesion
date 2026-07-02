@@ -126,7 +126,7 @@ def loop_principal() -> None:
                 minutos = ciclos_asr_caido * config.POLL_INTERVAL_SECONDS // 60
                 logger.error(
                     f"WhisperX caído hace {minutos} min — verificar: "
-                    f"curl {config.ASR_HEALTH_URL} / sudo systemctl status <servicio>"
+                    f"curl {config.ASR_HEALTH_URL} | docker ps | docker restart sesion-asr"
                 )
             else:
                 logger.warning(
