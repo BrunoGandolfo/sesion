@@ -18,6 +18,10 @@ import requests
 
 import config
 from processor import procesar_sesion
+from transcriber import asr_saludable
+
+# Ciclos consecutivos con el ASR caído antes de escalar el log a ERROR.
+CICLOS_ASR_CAIDO_UMBRAL = 10
 
 logging.basicConfig(
     level=logging.INFO,
@@ -113,7 +117,25 @@ def loop_principal() -> None:
     logger.info(f"  R2:   {'si' if config.r2_configurado() else 'NO'}")
     logger.info(f"  Poll: cada {config.POLL_INTERVAL_SECONDS}s")
 
+    ciclos_asr_caido = 0
+
     while _running:
+        if not asr_saludable():
+            ciclos_asr_caido += 1
+            if ciclos_asr_caido >= CICLOS_ASR_CAIDO_UMBRAL:
+                minutos = ciclos_asr_caido * config.POLL_INTERVAL_SECONDS // 60
+                logger.error(
+                    f"WhisperX caído hace {minutos} min — verificar: "
+                    f"curl {config.ASR_HEALTH_URL} / sudo systemctl status <servicio>"
+                )
+            else:
+                logger.warning(
+                    f"WhisperX no responde — reintento en {config.POLL_INTERVAL_SECONDS}s"
+                )
+            _dormir_interrumpible(config.POLL_INTERVAL_SECONDS)
+            continue
+        ciclos_asr_caido = 0
+
         try:
             pendientes = _consultar_pendientes()
         except requests.RequestException as e:

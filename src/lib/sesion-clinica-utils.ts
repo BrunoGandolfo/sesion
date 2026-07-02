@@ -32,6 +32,44 @@ export function esTransicionValida(
   return TRANSICIONES_PERMITIDAS[estadoActual].includes(estadoNuevo);
 }
 
+// Umbral para considerar abandonada una sesión en "grabando": una sesión
+// real dura máx ~90 min; con margen amplio, >4 h sin actualización significa
+// que el navegador murió y el audio nunca se subió.
+export const UMBRAL_HUERFANA_HORAS = 4;
+
+const UMBRAL_HUERFANA_MS = UMBRAL_HUERFANA_HORAS * 60 * 60 * 1000;
+
+function toEpochMs(value: Date | string | null | undefined): number | null {
+  if (value == null) return null;
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Fuente de verdad única de la regla de "sesión huérfana".
+ *
+ * - estado "error": siempre huérfana (el pipeline murió; requiere acción
+ *   de la usuaria: reintentar o descartar).
+ * - estado "grabando": huérfana si la última actualización (updatedAt,
+ *   con fallback a createdAt) fue hace más de UMBRAL_HUERFANA_HORAS.
+ *   Si no hay timestamp disponible NO se considera huérfana — default
+ *   seguro: nunca ofrecer descartar una grabación posiblemente activa.
+ */
+export function esSesionHuerfana(sesion: {
+  estado: EstadoProcesamiento | string;
+  updatedAt?: Date | string | null;
+  createdAt?: Date | string | null;
+}): boolean {
+  if (sesion.estado === "error") return true;
+  if (sesion.estado !== "grabando") return false;
+
+  const referencia =
+    toEpochMs(sesion.updatedAt) ?? toEpochMs(sesion.createdAt);
+  if (referencia === null) return false;
+
+  return Date.now() - referencia > UMBRAL_HUERFANA_MS;
+}
+
 const ALIANZAS_VALIDAS: ReadonlyArray<AlianzaTerapeutica> = [
   "fragil",
   "inestable",

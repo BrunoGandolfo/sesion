@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { limpiarGrabacion } from "@/lib/grabacion-storage";
 import { useSesionClinicaPolling } from "@/hooks/useSesionClinicaPolling";
 import type {
   DatosEstructurados,
@@ -222,6 +223,11 @@ export function useGrabacionSesion({
           { method: "POST", body: formData },
         );
         if (!uploadRes.ok) throw new Error(await parseError(uploadRes));
+
+        // Upload exitoso: el backup incremental en IndexedDB ya no hace
+        // falta. GrabadorSesion persiste los chunks con el turnoId como
+        // clave (fire-and-forget: nunca bloquea el flujo).
+        void limpiarGrabacion(turnoId);
 
         if (eraProgramado) {
           try {

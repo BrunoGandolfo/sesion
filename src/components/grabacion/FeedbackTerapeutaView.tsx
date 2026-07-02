@@ -6,13 +6,19 @@ import type {
   AreaCrecimientoFeedback,
   EvidenciaFeedback,
   FeedbackTerapeuta,
+  FeedbackTerapeutaLegacy,
   FortalezaFeedback,
   ScoreCTSR,
   ScoreMITIGlobal,
 } from "@/types/domain";
+import { normalizarFeedback } from "@/types/domain";
 
 interface FeedbackTerapeutaViewProps {
-  feedbackTerapeuta: FeedbackTerapeuta | null | undefined;
+  feedbackTerapeuta:
+    | FeedbackTerapeuta
+    | FeedbackTerapeutaLegacy
+    | null
+    | undefined;
 }
 
 type Tono = "sage" | "gold" | "terracotta" | "neutral";
@@ -198,13 +204,22 @@ export function FeedbackTerapeutaView({
 }: FeedbackTerapeutaViewProps) {
   if (!feedbackTerapeuta) return null;
 
+  // Punto de entrada de datos: las sesiones persistidas antes del contrato
+  // multi-orientación no traen discriminador `instrumento` — se normalizan
+  // al leer (nunca se migran).
+  const feedback = normalizarFeedback(feedbackTerapeuta);
+
+  // El render específico por instrumento (GTFS) llega en Wave 2.
+  // Por ahora este componente solo sabe renderizar MITI/CTS-R.
+  if (feedback.instrumento !== "cbt_mi") return null;
+
   const {
     mitiGlobales,
     ctsrSubset,
     fortalezas,
     areasCrecimiento,
     sugerenciaProximaSesion,
-  } = feedbackTerapeuta;
+  } = feedback;
 
   const empathy: ScoreMITIGlobal = mitiGlobales.empathy;
   const partnership: ScoreMITIGlobal = mitiGlobales.partnership;

@@ -84,6 +84,11 @@ export interface Configuracion {
   tarifaDefault: number;    // en UYU
   horasAnticipacion: number; // default 24
   templateRecordatorio: string;
+  /** Orientación teórica de la profesional. Determina el instrumento de
+   *  auto-supervisión (ver contrato multi-orientación). Optional durante
+   *  Wave 1 — Wave 2 la vuelve obligatoria al actualizar mappers/endpoints.
+   *  En DB: Configuracion.orientacionTeorica, default "cbt_mi". */
+  orientacionTeorica?: OrientacionTeorica;
   organizationId: string;
 }
 
@@ -166,9 +171,19 @@ export interface FlagsRiesgo {
 export type ConfianzaModelo = "alta" | "media" | "baja";
 
 // ============================================
-// Feedback terapeuta (Llamada C — MITI 4.2.1 + CTS-R subset)
-// Schema definido por processor/prompts/therapist_feedback_v1.0.md
+// Feedback terapeuta (Llamada C) — contrato multi-orientación
+//
+// El instrumento de auto-supervisión depende de la orientación teórica
+// configurada (Configuracion.orientacionTeorica). El feedback es una
+// unión discriminada por `instrumento`: núcleo panteórico común + bloque
+// específico del instrumento. Ver docs/contrato-multi-orientacion.md.
+//
+// Shape MITI/CTS-R definido por processor/prompts/therapist_feedback_v1.0.md
 // ============================================
+
+/** Orientación teórica de la profesional — determina el instrumento
+ *  de auto-supervisión. Fuente de verdad: Configuracion.orientacionTeorica. */
+export type OrientacionTeorica = "cbt_mi" | "gestalt";
 
 /** Cita literal de la transcripción que ancla un score */
 export interface EvidenciaFeedback {
@@ -245,9 +260,63 @@ export interface AreaCrecimientoFeedback {
   evidence: EvidenciaFeedback[];
 }
 
-/** Reporte de auto-supervisión MITI/CTS-R generado por la Llamada C.
- *  Se embebe en datosEstructurados antes de persistir cifrado. */
-export interface FeedbackTerapeuta {
+// ─── Núcleo panteórico ───────────────────────────────────────────────
+// Común a TODA orientación teórica. Es lo que "Mi Práctica" puede cruzar
+// longitudinalmente sin importar el instrumento con que se generó cada
+// sesión. Los bloques específicos de instrumento extienden este núcleo.
+
+export interface FeedbackNucleoPanteorico {
+  fortalezas: FortalezaFeedback[];              // máx 3
+  areasCrecimiento: AreaCrecimientoFeedback[];  // máx 3
+  sugerenciaProximaSesion: string;
+  speechAnalyticsInferido?: SpeechAnalyticsInferido;
+  disclaimer: string;
+}
+
+// ─── Bloque específico MITI 4.2.1 + CTS-R (orientación cbt_mi) ───────
+
+export interface FeedbackMitiCtsr extends FeedbackNucleoPanteorico {
+  instrumento: "cbt_mi";
+  mitiGlobales: MITIGlobales;
+  mitiCounts: MITICounts;
+  ratiosDerivados: RatiosDerivadosMITI;
+  ctsrSubset: CTSRSubset;
+}
+
+// ─── Bloque específico GTFS (orientación gestalt) ────────────────────
+// Gestalt Therapy Fidelity Scale — 21 ítems (Fogarty et al. 2019).
+// Estructura preparada en Wave 1; los ítems concretos se definen en
+// Wave 2 tras el análisis del instrumento original.
+
+export interface ItemGTFS {
+  id: string;            // identificador del ítem GTFS (ej. "gtfs_04")
+  nombre: string;        // nombre corto del ítem en español
+  score: number | null;  // escala GTFS; null si no inferible desde transcripción
+  razon?: string;        // por qué null, si aplica
+  evidence: EvidenciaFeedback[];
+}
+
+export interface FeedbackGestalt extends FeedbackNucleoPanteorico {
+  instrumento: "gestalt";
+  itemsGTFS: ItemGTFS[];
+  adherenciaGlobal: number | null; // suma GTFS de ítems evaluables
+}
+
+// ─── Unión discriminada ──────────────────────────────────────────────
+
+/** Reporte de auto-supervisión generado por la Llamada C.
+ *  Unión discriminada por `instrumento`. Se embebe en datosEstructurados
+ *  antes de persistir cifrado. */
+export type FeedbackTerapeuta = FeedbackMitiCtsr | FeedbackGestalt;
+
+// ─── Compatibilidad con datos persistidos pre-contrato ───────────────
+// Las sesiones aprobadas antes del contrato multi-orientación guardaron
+// el feedback SIN discriminador `instrumento` (siempre era MITI/CTS-R).
+// Esos datos NO se migran: se normalizan al leer con normalizarFeedback().
+
+/** Shape histórico del feedback (sin discriminador). Solo para lectura
+ *  de sesiones persistidas antes del contrato multi-orientación. */
+export interface FeedbackTerapeutaLegacy {
   mitiGlobales: MITIGlobales;
   mitiCounts: MITICounts;
   ratiosDerivados: RatiosDerivadosMITI;
@@ -257,6 +326,26 @@ export interface FeedbackTerapeuta {
   areasCrecimiento: AreaCrecimientoFeedback[];  // máx 3
   sugerenciaProximaSesion: string;
   disclaimer: string;
+}
+
+/** True si el feedback fue persistido antes del contrato multi-orientación
+ *  (no tiene el discriminador `instrumento`). */
+export function esFeedbackLegacy(
+  raw: FeedbackTerapeuta | FeedbackTerapeutaLegacy,
+): raw is FeedbackTerapeutaLegacy {
+  return !("instrumento" in raw);
+}
+
+/** Normaliza un feedback leído de persistencia al contrato actual.
+ *  Un legacy (pre-contrato) siempre fue MITI/CTS-R → instrumento "cbt_mi".
+ *  No muta el original. */
+export function normalizarFeedback(
+  raw: FeedbackTerapeuta | FeedbackTerapeutaLegacy,
+): FeedbackTerapeuta {
+  if (esFeedbackLegacy(raw)) {
+    return { ...raw, instrumento: "cbt_mi" };
+  }
+  return raw;
 }
 
 /** Datos estructurados extraídos por el LLM (versión enriquecida) */
@@ -292,8 +381,11 @@ export interface DatosEstructurados {
   /** Análisis longitudinal generado por IA cruzando múltiples sesiones */
   observacionIA?: string;
 
-  /** Reporte de auto-supervisión (Llamada C). Best-effort: ausente si el LLM falló. */
-  feedbackTerapeuta?: FeedbackTerapeuta;
+  /** Reporte de auto-supervisión (Llamada C). Best-effort: ausente si el LLM falló.
+   *  Puede venir en shape legacy (sin `instrumento`) si la sesión se persistió
+   *  antes del contrato multi-orientación — normalizar al leer con
+   *  normalizarFeedback(). */
+  feedbackTerapeuta?: FeedbackTerapeuta | FeedbackTerapeutaLegacy;
 }
 
 /** Nota clínica en formato SOAP */

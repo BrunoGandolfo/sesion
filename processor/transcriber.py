@@ -11,6 +11,18 @@ import config
 logger = logging.getLogger(__name__)
 
 
+def asr_saludable() -> bool:
+    """
+    True si el health endpoint de WhisperX responde 200.
+    Nunca propaga excepciones: cualquier fallo de red/timeout devuelve False.
+    """
+    try:
+        response = requests.get(config.ASR_HEALTH_URL, timeout=5)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
 def _mapear_segments(items: list) -> tuple[list[dict], int]:
     """
     Normaliza items de WhisperX al formato {speaker, start, end, text}.

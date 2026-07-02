@@ -6,6 +6,7 @@ import {
   CircleAlert,
   LoaderCircle,
   Mic,
+  MicOff,
   RotateCcw,
   Send,
   ShieldCheck,
@@ -14,6 +15,12 @@ import {
 } from "lucide-react";
 
 import { cifrar, generarClave } from "@/lib/crypto";
+import {
+  guardarChunk,
+  iniciarSesionGrabacion,
+  limpiarGrabacion,
+  recuperarGrabacionPendiente,
+} from "@/lib/grabacion-storage";
 import { Button, Card, Chip, EditorialRule } from "@/components/ui";
 
 interface DatosGrabacion {
@@ -30,14 +37,28 @@ interface GrabadorSesionProps {
   onError: (mensaje: string) => void;
 }
 
-type EstadoGrabador = "idle" | "grabando" | "procesando" | "listo" | "error";
-type ModoDetencion = "completar" | "descartar";
+type EstadoGrabador =
+  | "idle"
+  | "grabando"
+  | "interrumpida"
+  | "procesando"
+  | "listo"
+  | "error";
+
+// "pausar": detención por interrupción del micrófono — los chunks en RAM y
+// en IndexedDB se preservan para reanudar o completar más tarde.
+type ModoDetencion = "completar" | "descartar" | "pausar";
 
 type GrabacionCifrada = {
   audioBlob: Blob;
   claveCifrado: string;
   ivCifrado: string;
   duracionSegundos: number;
+};
+
+type GrabacionPendienteUI = {
+  chunks: Blob[];
+  duracionAproxSeg: number;
 };
 
 const transicion = {
@@ -48,6 +69,10 @@ const transicion = {
 // Safety net por tamaño máximo de upload (120 MB). WhisperX no tiene límite
 // práctico de duración; el corte por timer es solo para evitar archivos enormes.
 const LIMITE_SEGUNDOS = 5400;
+
+// Si el track de audio queda muteado más de este tiempo (Android le quitó el
+// micrófono a Chrome por una llamada, etc.), lo tratamos como interrupción.
+const MUTE_INTERRUPCION_MS = 3000;
 
 function formatearDuracion(totalSegundos: number) {
   const minutos = Math.floor(totalSegundos / 60)
@@ -119,6 +144,8 @@ function chipDeEstado(estado: EstadoGrabador) {
   switch (estado) {
     case "grabando":
       return { label: "Grabando", variant: "terracotta" as const };
+    case "interrumpida":
+      return { label: "Interrumpida", variant: "terracotta" as const };
     case "procesando":
       return { label: "Cifrando", variant: "gold" as const };
     case "listo":
@@ -141,26 +168,55 @@ export function GrabadorSesion({
   const [duracionFinal, setDuracionFinal] = React.useState<number | null>(null);
   const [mensajeError, setMensajeError] = React.useState<string | null>(null);
   const [limiteAlcanzado, setLimiteAlcanzado] = React.useState(false);
+  const [pendiente, setPendiente] =
+    React.useState<GrabacionPendienteUI | null>(null);
 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
+  const chunkIndiceRef = React.useRef(0);
   const inicioGrabacionRef = React.useRef<number | null>(null);
+  // Segundos acumulados de segmentos previos (antes de una interrupción).
+  const segundosPreviosRef = React.useRef(0);
   const intervaloTimerRef = React.useRef<number | null>(null);
+  const muteTimeoutRef = React.useRef<number | null>(null);
+  const mimeTypeRef = React.useRef("audio/webm");
   const modoDetencionRef = React.useRef<ModoDetencion>("descartar");
   const grabacionListaRef = React.useRef<GrabacionCifrada | null>(null);
+  const wakeLockRef = React.useRef<WakeLockSentinel | null>(null);
+  const estadoRef = React.useRef<EstadoGrabador>("idle");
   const componenteMontadoRef = React.useRef(true);
   const onErrorRef = React.useRef(onError);
   const detenerActivaRef = React.useRef<(modo: ModoDetencion) => void>(() => {});
+  const manejarInterrupcionRef = React.useRef<() => void>(() => {});
+
+  // Clave con la que se persisten los chunks en IndexedDB. El componente no
+  // recibe el id de la sesión clínica, pero turno ↔ sesión clínica es 1:1.
+  const claveGrabacion = turnoId;
 
   React.useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
 
+  function cambiarEstado(nuevo: EstadoGrabador) {
+    estadoRef.current = nuevo;
+
+    if (componenteMontadoRef.current) {
+      setEstado(nuevo);
+    }
+  }
+
   function limpiarTimer() {
     if (intervaloTimerRef.current !== null) {
       window.clearInterval(intervaloTimerRef.current);
       intervaloTimerRef.current = null;
+    }
+  }
+
+  function limpiarMuteTimeout() {
+    if (muteTimeoutRef.current !== null) {
+      window.clearTimeout(muteTimeoutRef.current);
+      muteTimeoutRef.current = null;
     }
   }
 
@@ -170,38 +226,83 @@ export function GrabadorSesion({
     }
 
     for (const track of streamRef.current.getTracks()) {
+      track.onended = null;
+      track.onmute = null;
+      track.onunmute = null;
       track.stop();
     }
 
     streamRef.current = null;
   }
 
+  async function adquirirWakeLock() {
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        "wakeLock" in navigator &&
+        navigator.wakeLock
+      ) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+      }
+    } catch (error) {
+      // No es fatal: la grabación sigue, solo perdemos la pantalla encendida.
+      console.warn("[GrabadorSesion] No se pudo adquirir el wake lock", error);
+    }
+  }
+
+  function liberarWakeLock() {
+    const lock = wakeLockRef.current;
+    wakeLockRef.current = null;
+
+    if (lock) {
+      void lock.release().catch(() => {
+        // El lock ya pudo haberse liberado solo (pantalla bloqueada).
+      });
+    }
+  }
+
+  function calcularDuracionActual() {
+    const inicio = inicioGrabacionRef.current;
+    const segmentoActual =
+      inicio === null ? 0 : Math.max(0, Math.floor((Date.now() - inicio) / 1000));
+
+    return segundosPreviosRef.current + segmentoActual;
+  }
+
   function limpiarMemoria() {
     chunksRef.current = [];
+    chunkIndiceRef.current = 0;
     grabacionListaRef.current = null;
     inicioGrabacionRef.current = null;
+    segundosPreviosRef.current = 0;
     modoDetencionRef.current = "descartar";
     mediaRecorderRef.current = null;
   }
 
+  // OJO: irAError NO borra los chunks persistidos en IndexedDB — si el
+  // cifrado falla, esa copia es la única que queda y se puede recuperar.
   function irAError(mensaje: string) {
     limpiarTimer();
+    limpiarMuteTimeout();
     liberarStream();
+    liberarWakeLock();
     limpiarMemoria();
 
     if (componenteMontadoRef.current) {
       setSegundosActuales(0);
       setDuracionFinal(null);
       setMensajeError(mensaje);
-      setEstado("error");
     }
 
+    cambiarEstado("error");
     onErrorRef.current(mensaje);
   }
 
   function resetearAIdle() {
     limpiarTimer();
+    limpiarMuteTimeout();
     liberarStream();
+    liberarWakeLock();
     limpiarMemoria();
 
     if (componenteMontadoRef.current) {
@@ -209,22 +310,22 @@ export function GrabadorSesion({
       setDuracionFinal(null);
       setMensajeError(null);
       setLimiteAlcanzado(false);
-      setEstado("idle");
     }
+
+    cambiarEstado("idle");
   }
 
   async function procesarGrabacion(mimeType: string) {
-    const inicio = inicioGrabacionRef.current;
-    const duracionSegundos =
-      inicio === null
-        ? 0
-        : Math.max(1, Math.round((Date.now() - inicio) / 1000));
+    const duracionSegundos = Math.max(1, calcularDuracionActual());
     const chunks = chunksRef.current;
 
     limpiarTimer();
+    limpiarMuteTimeout();
     liberarStream();
+    liberarWakeLock();
     mediaRecorderRef.current = null;
     inicioGrabacionRef.current = null;
+    segundosPreviosRef.current = 0;
     chunksRef.current = [];
     modoDetencionRef.current = "descartar";
 
@@ -233,9 +334,7 @@ export function GrabadorSesion({
       return;
     }
 
-    if (componenteMontadoRef.current) {
-      setEstado("procesando");
-    }
+    cambiarEstado("procesando");
 
     let audioSinCifrar: Blob | null = new Blob(chunks, {
       type: mimeType || "audio/webm",
@@ -269,11 +368,166 @@ export function GrabadorSesion({
         setMensajeError(null);
         setSegundosActuales(duracionSegundos);
         setDuracionFinal(duracionSegundos);
-        setEstado("listo");
       }
+
+      cambiarEstado("listo");
     } catch {
       irAError("No se pudo cifrar el audio. Probá de nuevo.");
     }
+  }
+
+  // El micrófono murió o quedó muteado demasiado tiempo (bloqueo de pantalla,
+  // llamada entrante, etc.). Pausamos sin descartar nada: los chunks en RAM y
+  // en IndexedDB se preservan para reanudar o completar.
+  function manejarInterrupcion() {
+    if (estadoRef.current !== "grabando") {
+      return;
+    }
+
+    const inicio = inicioGrabacionRef.current;
+
+    if (inicio !== null) {
+      segundosPreviosRef.current += Math.max(
+        0,
+        Math.floor((Date.now() - inicio) / 1000),
+      );
+      inicioGrabacionRef.current = null;
+    }
+
+    limpiarTimer();
+    limpiarMuteTimeout();
+    modoDetencionRef.current = "pausar";
+
+    const recorder = mediaRecorderRef.current;
+
+    if (recorder && recorder.state !== "inactive") {
+      try {
+        recorder.stop();
+      } catch {
+        // El recorder ya estaba muerto; seguimos igual.
+      }
+    }
+
+    mediaRecorderRef.current = null;
+    liberarStream();
+
+    if (componenteMontadoRef.current) {
+      setSegundosActuales(segundosPreviosRef.current);
+      setMensajeError(null);
+    }
+
+    cambiarEstado("interrumpida");
+  }
+
+  React.useEffect(() => {
+    manejarInterrupcionRef.current = manejarInterrupcion;
+  });
+
+  function vigilarPistaDeAudio(stream: MediaStream) {
+    const pista = stream.getAudioTracks()[0];
+
+    if (!pista) {
+      return;
+    }
+
+    pista.onended = () => {
+      manejarInterrupcionRef.current();
+    };
+
+    pista.onmute = () => {
+      limpiarMuteTimeout();
+      muteTimeoutRef.current = window.setTimeout(() => {
+        muteTimeoutRef.current = null;
+        manejarInterrupcionRef.current();
+      }, MUTE_INTERRUPCION_MS);
+    };
+
+    pista.onunmute = () => {
+      limpiarMuteTimeout();
+    };
+  }
+
+  // Cablea recorder + stream + persistencia. Usado tanto al iniciar como al
+  // reanudar tras una interrupción (los chunks nuevos se anexan a los previos).
+  function conectarRecorder(stream: MediaStream) {
+    const recorder = crearMediaRecorder(stream);
+
+    streamRef.current = stream;
+    mediaRecorderRef.current = recorder;
+    mimeTypeRef.current = recorder.mimeType || mimeTypeRef.current;
+
+    recorder.ondataavailable = (event: BlobEvent) => {
+      if (event.data.size > 0) {
+        chunksRef.current.push(event.data);
+        // Fire-and-forget: el backup en disco nunca bloquea la grabación.
+        void guardarChunk(claveGrabacion, chunkIndiceRef.current, event.data);
+        chunkIndiceRef.current += 1;
+      }
+    };
+
+    recorder.onerror = () => {
+      // Un problema del navegador se trata como interrupción: los chunks ya
+      // capturados nunca se descartan por esto.
+      manejarInterrupcionRef.current();
+    };
+
+    recorder.onstop = () => {
+      const mimeType = mimeTypeRef.current || "audio/webm";
+
+      if (modoDetencionRef.current === "completar") {
+        void procesarGrabacion(mimeType);
+        return;
+      }
+
+      if (modoDetencionRef.current === "pausar") {
+        // Interrupción: manejarInterrupcion ya dejó el estado listo para
+        // reanudar. No se descarta nada.
+        return;
+      }
+
+      // Descartar: se limpia la RAM. Los chunks persistidos en IndexedDB se
+      // conservan a propósito — son el seguro contra pagehide/cierre.
+      limpiarTimer();
+      limpiarMuteTimeout();
+      liberarStream();
+      liberarWakeLock();
+      limpiarMemoria();
+
+      if (componenteMontadoRef.current) {
+        setSegundosActuales(0);
+        setDuracionFinal(null);
+      }
+
+      cambiarEstado("idle");
+    };
+
+    vigilarPistaDeAudio(stream);
+    recorder.start(1000);
+  }
+
+  function iniciarTimer() {
+    limpiarTimer();
+
+    intervaloTimerRef.current = window.setInterval(() => {
+      if (inicioGrabacionRef.current === null) {
+        return;
+      }
+
+      const transcurridos = calcularDuracionActual();
+
+      if (transcurridos >= LIMITE_SEGUNDOS) {
+        limpiarTimer();
+        setSegundosActuales(LIMITE_SEGUNDOS);
+        if (componenteMontadoRef.current) {
+          setLimiteAlcanzado(true);
+        }
+        cambiarEstado("procesando");
+        detenerGrabacionActiva("completar");
+        return;
+      }
+
+      setSegundosActuales(transcurridos);
+    }, 1000);
   }
 
   function detenerGrabacionActiva(modo: ModoDetencion) {
@@ -298,6 +552,7 @@ export function GrabadorSesion({
 
     if (modo === "descartar") {
       liberarStream();
+      liberarWakeLock();
     }
   }
 
@@ -307,6 +562,8 @@ export function GrabadorSesion({
 
   React.useEffect(() => {
     const onPageHide = () => {
+      // Descarta lo que vive en RAM (el proceso puede morir), pero los chunks
+      // ya persistidos en IndexedDB quedan: son la recuperación post-cierre.
       detenerActivaRef.current("descartar");
     };
 
@@ -317,10 +574,63 @@ export function GrabadorSesion({
       window.removeEventListener("pagehide", onPageHide);
       detenerActivaRef.current("descartar");
       limpiarTimer();
+      limpiarMuteTimeout();
       liberarStream();
+      liberarWakeLock();
       limpiarMemoria();
     };
   }, []);
+
+  // Wake lock: el SO lo libera solo al bloquear la pantalla o cambiar de app.
+  // Al volver a ser visible con una grabación activa, lo re-adquirimos.
+  React.useEffect(() => {
+    const onVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        estadoRef.current === "grabando"
+      ) {
+        void adquirirWakeLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
+  // Recuperación al montar: si quedó una grabación persistida de esta misma
+  // sesión (el navegador mató el proceso a mitad de grabación), se ofrece
+  // enviarla o descartarla. Este componente solo se monta cuando la sesión
+  // clínica activa está en estado "grabando", así que la coincidencia de
+  // clave alcanza para saber que es la grabación huérfana de esta sesión.
+  React.useEffect(() => {
+    let cancelado = false;
+
+    void recuperarGrabacionPendiente().then((recuperada) => {
+      if (cancelado || !recuperada) {
+        return;
+      }
+
+      if (recuperada.sesionClinicaId !== claveGrabacion) {
+        return;
+      }
+
+      if (estadoRef.current !== "idle") {
+        return;
+      }
+
+      setPendiente({
+        chunks: recuperada.chunks,
+        duracionAproxSeg: recuperada.duracionAproxSeg,
+      });
+    });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [claveGrabacion]);
 
   async function iniciarGrabacion() {
     if (
@@ -334,6 +644,7 @@ export function GrabadorSesion({
     }
 
     limpiarTimer();
+    limpiarMuteTimeout();
     liberarStream();
     limpiarMemoria();
 
@@ -342,6 +653,8 @@ export function GrabadorSesion({
       setDuracionFinal(null);
       setSegundosActuales(0);
       setLimiteAlcanzado(false);
+      // Empezar una grabación nueva reemplaza la pendiente del mismo turno.
+      setPendiente(null);
     }
 
     try {
@@ -349,77 +662,64 @@ export function GrabadorSesion({
         audio: true,
         video: false,
       });
-      const recorder = crearMediaRecorder(stream);
 
-      streamRef.current = stream;
-      mediaRecorderRef.current = recorder;
       chunksRef.current = [];
+      chunkIndiceRef.current = 0;
+      segundosPreviosRef.current = 0;
       inicioGrabacionRef.current = Date.now();
       modoDetencionRef.current = "descartar";
 
-      recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
+      // Fire-and-forget: registra el inicio y limpia chunks viejos del turno.
+      void iniciarSesionGrabacion(claveGrabacion);
 
-      recorder.onerror = () => {
-        irAError("La grabación se interrumpió por un problema del navegador.");
-      };
+      conectarRecorder(stream);
+      void adquirirWakeLock();
 
-      recorder.onstop = () => {
-        const mimeType = recorder.mimeType || "audio/webm";
-
-        if (modoDetencionRef.current === "completar") {
-          void procesarGrabacion(mimeType);
-          return;
-        }
-
-        limpiarTimer();
-        liberarStream();
-        limpiarMemoria();
-
-        if (componenteMontadoRef.current) {
-          setSegundosActuales(0);
-          setDuracionFinal(null);
-          setEstado("idle");
-        }
-      };
-
-      recorder.start(1000);
-
-      if (componenteMontadoRef.current) {
-        setEstado("grabando");
-      }
-
-      intervaloTimerRef.current = window.setInterval(() => {
-        const inicio = inicioGrabacionRef.current;
-
-        if (inicio === null) {
-          return;
-        }
-
-        const transcurridos = Math.max(
-          0,
-          Math.floor((Date.now() - inicio) / 1000),
-        );
-
-        if (transcurridos >= LIMITE_SEGUNDOS) {
-          limpiarTimer();
-          setSegundosActuales(LIMITE_SEGUNDOS);
-          if (componenteMontadoRef.current) {
-            setLimiteAlcanzado(true);
-            setEstado("procesando");
-          }
-          detenerGrabacionActiva("completar");
-          return;
-        }
-
-        setSegundosActuales(transcurridos);
-      }, 1000);
+      cambiarEstado("grabando");
+      iniciarTimer();
     } catch (error) {
       irAError(mensajeErrorGrabacion(error));
     }
+  }
+
+  async function reanudarTrasInterrupcion() {
+    if (estadoRef.current !== "interrumpida") {
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+
+      modoDetencionRef.current = "descartar";
+      inicioGrabacionRef.current = Date.now();
+
+      conectarRecorder(stream);
+      void adquirirWakeLock();
+
+      if (componenteMontadoRef.current) {
+        setMensajeError(null);
+      }
+
+      cambiarEstado("grabando");
+      iniciarTimer();
+    } catch (error) {
+      // Seguimos en "interrumpida": lo grabado no se pierde y se puede
+      // reintentar o completar con lo que hay.
+      if (componenteMontadoRef.current) {
+        setMensajeError(mensajeErrorGrabacion(error));
+      }
+    }
+  }
+
+  function completarDesdeInterrupcion() {
+    if (estadoRef.current !== "interrumpida") {
+      return;
+    }
+
+    void procesarGrabacion(mimeTypeRef.current);
   }
 
   function detenerGrabacion() {
@@ -427,10 +727,7 @@ export function GrabadorSesion({
       return;
     }
 
-    if (componenteMontadoRef.current) {
-      setEstado("procesando");
-    }
-
+    cambiarEstado("procesando");
     detenerGrabacionActiva("completar");
   }
 
@@ -443,6 +740,9 @@ export function GrabadorSesion({
     }
 
     try {
+      // Los chunks persistidos se limpian recién tras el upload exitoso
+      // (lo hace useGrabacionSesion), no acá: si la subida falla, siguen
+      // siendo recuperables.
       onGrabacionCompleta(grabacion);
       resetearAIdle();
     } catch (error) {
@@ -455,7 +755,30 @@ export function GrabadorSesion({
   }
 
   function descartarGrabacion() {
+    void limpiarGrabacion(claveGrabacion);
     resetearAIdle();
+  }
+
+  function enviarPendiente() {
+    const recuperada = pendiente;
+
+    if (!recuperada || estadoRef.current !== "idle") {
+      return;
+    }
+
+    setPendiente(null);
+
+    chunksRef.current = [...recuperada.chunks];
+    chunkIndiceRef.current = recuperada.chunks.length;
+    segundosPreviosRef.current = recuperada.duracionAproxSeg;
+    inicioGrabacionRef.current = null;
+
+    void procesarGrabacion("audio/webm");
+  }
+
+  function descartarPendiente() {
+    setPendiente(null);
+    void limpiarGrabacion(claveGrabacion);
   }
 
   async function reintentar() {
@@ -468,6 +791,9 @@ export function GrabadorSesion({
     estado === "listo"
       ? formatearDuracion(duracionFinal ?? 0)
       : formatearDuracion(segundosActuales);
+  const minutosPendiente = pendiente
+    ? Math.max(1, Math.round(pendiente.duracionAproxSeg / 60))
+    : 0;
 
   return (
     <Card
@@ -513,6 +839,45 @@ export function GrabadorSesion({
                 transition={transicion}
                 className="flex flex-col gap-5"
               >
+                {pendiente && (
+                  <div className="flex flex-col gap-3 rounded-[12px] border border-[color:var(--color-error)]/20 bg-[rgba(160,64,64,0.06)] p-4">
+                    <div className="flex items-start gap-3">
+                      <CircleAlert
+                        size={18}
+                        strokeWidth={1.9}
+                        aria-hidden="true"
+                        className="mt-[2px] shrink-0 text-[color:var(--color-error)]"
+                      />
+                      <div className="space-y-1">
+                        <p className="text-[15px] font-semibold text-ink-900">
+                          Hay una grabación interrumpida de ~{minutosPendiente} min
+                        </p>
+                        <p className="text-[13px] leading-6 text-ink-700">
+                          La sesión anterior se cortó antes de enviarse, pero el
+                          audio quedó guardado en este dispositivo.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        onClick={enviarPendiente}
+                        icon={<Send size={15} strokeWidth={1.8} aria-hidden="true" />}
+                        className="w-full sm:flex-1"
+                      >
+                        Enviar
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={descartarPendiente}
+                        icon={<Trash2 size={15} strokeWidth={1.8} aria-hidden="true" />}
+                        className="w-full sm:w-auto"
+                      >
+                        Descartar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <p className="text-[15px] leading-6 text-ink-700">
                     Cuando arranques, el grabador va a capturar solo audio. El archivo
@@ -577,6 +942,62 @@ export function GrabadorSesion({
                 >
                   Detener
                 </Button>
+              </motion.div>
+            )}
+
+            {estado === "interrumpida" && (
+              <motion.div
+                key="interrumpida"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={transicion}
+                className="flex flex-col gap-5"
+              >
+                <div className="flex items-start gap-3 rounded-[12px] border border-[color:var(--color-error)]/20 bg-[rgba(160,64,64,0.06)] p-4">
+                  <MicOff
+                    size={18}
+                    strokeWidth={1.9}
+                    aria-hidden="true"
+                    className="mt-[2px] shrink-0 text-[color:var(--color-error)]"
+                  />
+                  <div className="space-y-1">
+                    <p className="text-[15px] font-semibold text-ink-900">
+                      El micrófono se interrumpió — tocá Reanudar
+                    </p>
+                    <p className="text-[13px] leading-6 text-ink-700">
+                      Puede pasar por una llamada entrante o el bloqueo de
+                      pantalla. Lo grabado hasta ahora (
+                      <span className="font-mono tabular-nums">{tiempoVisible}</span>
+                      ) está a salvo.
+                    </p>
+                    {mensajeError && (
+                      <p className="pt-1 text-[13px] leading-6 text-[color:var(--color-error)]">
+                        {mensajeError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    onClick={() => {
+                      void reanudarTrasInterrupcion();
+                    }}
+                    icon={<Mic size={16} strokeWidth={1.8} aria-hidden="true" />}
+                    className="w-full sm:flex-1"
+                  >
+                    Reanudar
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={completarDesdeInterrupcion}
+                    icon={<Square size={15} strokeWidth={2} aria-hidden="true" />}
+                    className="w-full sm:w-auto"
+                  >
+                    Detener y usar lo grabado
+                  </Button>
+                </div>
               </motion.div>
             )}
 

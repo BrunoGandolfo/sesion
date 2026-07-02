@@ -60,6 +60,11 @@ model Configuracion {
   horasAnticipacion    Int    @default(24) @map("horas_anticipacion")
   templateRecordatorio String @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
 
+  // Orientación teórica de la profesional. Determina el instrumento de
+  // auto-supervisión (Llamada C): "cbt_mi" → MITI 4.2.1 + CTS-R,
+  // "gestalt" → GTFS. Ver docs/contrato-multi-orientacion.md.
+  orientacionTeorica String @default("cbt_mi") @map("orientacion_teorica")
+
   organizationId String       @unique @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
