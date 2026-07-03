@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertTriangle, ChevronDown, Sparkles } from "lucide-react";
 import { Button, Chip } from "@/components/ui";
+import { RiesgoDetectadoBanner } from "@/components/grabacion/RiesgoDetectadoBanner";
 import type {
   AlianzaTerapeutica,
   ConfianzaModelo,
@@ -421,6 +422,10 @@ export function NotaClinicaView({
           </div>
         </section>
       )}
+
+      <RiesgoDetectadoBanner
+        riesgoDetectado={datosEstructurados?.riesgoDetectado}
+      />
 
       <header className="flex flex-col gap-2">
         <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">

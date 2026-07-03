@@ -11,7 +11,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-PROMPT_NOTA_SOAP = "clinical_note_v3.0.md"
+PROMPT_NOTA_SOAP = "clinical_note_v3.1.md"
 PROMPT_UPDATE_CONTEXTO = "update_context_v2.0.md"
 # Prompt de feedback por orientación teórica (contrato: docs/contrato-multi-orientacion.md)
 PROMPTS_FEEDBACK = {
@@ -98,7 +98,7 @@ def analizar(
     speech_analytics: dict | None = None,
 ) -> dict:
     """
-    Genera la nota SOAP (Llamada A) usando el prompt clinical_note_v3.0.
+    Genera la nota SOAP (Llamada A) usando el prompt clinical_note_v3.1.
     Arma el user message con los tags XML que el prompt espera:
     <transcripcion>, <contexto_previo>, <speech_analytics>.
     """
@@ -220,4 +220,4 @@ def generar_feedback_terapeuta(
 
 
 def version_prompt() -> str:
-    return "v3.0"
+    return "v3.1"

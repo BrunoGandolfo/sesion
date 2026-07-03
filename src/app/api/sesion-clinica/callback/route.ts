@@ -41,6 +41,22 @@ const flagsRiesgoSchema = z.object({
   detalle: z.string(),
 });
 
+// Contrato de riesgo clínico (docs/contrato-riesgo-clinico.md): el campo es
+// best-effort y nunca debe bloquear la nota — por eso lleva .catch(undefined):
+// un shape inválido se descarta (los lectores lo normalizan a nivel "ninguno")
+// en vez de rechazar el callback entero.
+const evidenciaRiesgoSchema = z.object({
+  timestamp: z.string(),
+  quote: z.string(),
+});
+
+const riesgoDetectadoSchema = z.object({
+  nivel: z.enum(["ninguno", "bajo", "moderado", "alto"]),
+  indicadores: z.array(z.string()),
+  evidencia: z.array(evidenciaRiesgoSchema),
+  notaParaTerapeuta: z.string().nullable(),
+});
+
 const speechAnalyticsSchema = z.object({
   ratioHablaTerapeuta: z.number(),
   ratioHablaPaciente: z.number(),
@@ -63,6 +79,10 @@ const datosEstructuradosSchema = z.object({
   materialNuevo: z.array(z.string()).optional(),
   focoProximaSesion: z.string().optional(),
   flagsRiesgo: flagsRiesgoSchema.optional(),
+  riesgoDetectado: riesgoDetectadoSchema.optional().catch(undefined),
+  // Unión discriminada por orientación (docs/contrato-multi-orientacion.md):
+  // el shape se valida al LEER con normalizarFeedback, acá solo se preserva.
+  feedbackTerapeuta: z.unknown().optional(),
   confianzaModelo: z.enum(["alta", "media", "baja"]).optional(),
   resumenSesion: z.string().optional(),
   estadoEmocionalObservado: z.string().optional(),

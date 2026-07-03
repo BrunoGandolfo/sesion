@@ -12,6 +12,7 @@ import { Button, Card, Chip } from "@/components/ui";
 import { GrabadorSesion } from "@/components/grabacion/GrabadorSesion";
 import { NotaClinicaView } from "@/components/grabacion/NotaClinicaView";
 import { FeedbackTerapeutaView } from "@/components/grabacion/FeedbackTerapeutaView";
+import { RiesgoDetectadoBanner } from "@/components/grabacion/RiesgoDetectadoBanner";
 import { SesionHuerfanaBanner } from "@/components/grabacion/SesionHuerfanaBanner";
 import { useSesionClinicaPolling } from "@/hooks/useSesionClinicaPolling";
 import { fechaLarga, hora } from "@/lib/format";
@@ -839,6 +840,8 @@ function SesionTimelineCard({ sesion }: { sesion: DocSesion }) {
 
       {open ? (
         <div className="flex flex-col gap-5 border-t border-[color:var(--border-subtle)] px-4 py-5 sm:px-5">
+          <RiesgoDetectadoBanner riesgoDetectado={datos?.riesgoDetectado} />
+
           {sesion.nota ? <NotaSOAPReadOnly nota={sesion.nota} /> : null}
 
           {datos?.feedbackTerapeuta ? (

@@ -125,7 +125,10 @@ function ScoreBar({ label, score, maxScore, tono, razon, evidence }: ScoreBarPro
   );
 }
 
-function EvidenceItem({ evidencia }: { evidencia: EvidenciaFeedback }) {
+/** Cita literal con timestamp. Exportado para reutilizar el patrón fuera
+ *  del feedback (ej. RiesgoDetectadoBanner): EvidenciaRiesgo comparte el
+ *  shape { timestamp, quote } y es asignable estructuralmente. */
+export function EvidenceItem({ evidencia }: { evidencia: EvidenciaFeedback }) {
   return (
     <li className="flex flex-col gap-0.5 border-l-2 border-cream-200 pl-3">
       {evidencia.timestamp && (
