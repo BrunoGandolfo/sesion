@@ -12,8 +12,10 @@ import { Button, Card, Chip } from "@/components/ui";
 import { GrabadorSesion } from "@/components/grabacion/GrabadorSesion";
 import { NotaClinicaView } from "@/components/grabacion/NotaClinicaView";
 import { FeedbackTerapeutaView } from "@/components/grabacion/FeedbackTerapeutaView";
+import { SesionHuerfanaBanner } from "@/components/grabacion/SesionHuerfanaBanner";
 import { useSesionClinicaPolling } from "@/hooks/useSesionClinicaPolling";
 import { fechaLarga, hora } from "@/lib/format";
+import { esSesionHuerfana } from "@/lib/sesion-clinica-utils";
 import type {
   DatosEstructurados,
   EstadoProcesamiento,
@@ -35,6 +37,10 @@ type RawSesionClinica = {
   turnoId: string;
   estado: string;
   duracionAudioSeg: number | null;
+  // Presentes en el GET por turnoId (y en las filas crudas de POST/PATCH);
+  // opcionales porque SesionClinicaResponse no los garantiza.
+  createdAt?: string | null;
+  audioR2Key?: string | null;
   notaSubjetivo: string | null;
   notaObjetivo: string | null;
   notaAnalisis: string | null;
@@ -84,7 +90,17 @@ function parseDatosEstructurados(
   return value;
 }
 
-function toSesionClinicaResponse(raw: RawSesionClinica): SesionClinicaResponse {
+// createdAt/audioR2Key no viven en SesionClinicaResponse pero el banner de
+// sesión huérfana los necesita: createdAt para el umbral de abandono y
+// audioR2Key para decidir si ofrece reintentar.
+type SesionClinicaConMetadatos = SesionClinicaResponse & {
+  createdAt?: string | null;
+  audioR2Key?: string | null;
+};
+
+function toSesionClinicaResponse(
+  raw: RawSesionClinica,
+): SesionClinicaConMetadatos {
   const nota: NotaSOAP | null =
     raw.notaSubjetivo !== null &&
     raw.notaObjetivo !== null &&
@@ -110,6 +126,8 @@ function toSesionClinicaResponse(raw: RawSesionClinica): SesionClinicaResponse {
     procesadoEn: raw.procesadoEn,
     aprobadoEn: raw.aprobadoEn,
     error: raw.error,
+    createdAt: raw.createdAt ?? null,
+    audioR2Key: raw.audioR2Key ?? null,
   };
 }
 
@@ -156,12 +174,12 @@ export function HistoriaTab({
   onTurnoActualizado,
 }: HistoriaTabProps) {
   // ===== Sesión de hoy (grabación) =====
-  const [sesionHoy, setSesionHoy] = React.useState<SesionClinicaResponse | null>(
-    null,
-  );
+  const [sesionHoy, setSesionHoy] =
+    React.useState<SesionClinicaConMetadatos | null>(null);
   const [sesionHoyLoading, setSesionHoyLoading] = React.useState<boolean>(
     Boolean(turnoHoy),
   );
+  const [sesionReloadKey, setSesionReloadKey] = React.useState<number>(0);
   const [seccionGrabacion, setSeccionGrabacion] = React.useState<
     "idle" | "grabando" | "nota"
   >("idle");
@@ -207,7 +225,7 @@ export function HistoriaTab({
     return () => {
       cancelado = true;
     };
-  }, [turnoHoyId]);
+  }, [turnoHoyId, sesionReloadKey]);
 
   // Polling mientras la sesión está en pipeline
   const sesionEnProcesamiento =
@@ -223,7 +241,14 @@ export function HistoriaTab({
 
   React.useEffect(() => {
     if (sesionPolled) {
-      setSesionHoy(sesionPolled);
+      // El polling normaliza a SesionClinicaResponse (sin createdAt ni
+      // audioR2Key); merge sobre el estado previo para no perder los
+      // metadatos que usa la detección de sesión huérfana.
+      setSesionHoy((prev) =>
+        prev && prev.id === sesionPolled.id
+          ? { ...prev, ...sesionPolled }
+          : sesionPolled,
+      );
     }
   }, [sesionPolled]);
 
@@ -442,6 +467,25 @@ export function HistoriaTab({
     return docs.filter((d) => d.sesionClinicaId !== sesionHoy.id);
   }, [docs, sesionHoy]);
 
+  // ===== Sesión huérfana =====
+  // Única candidata: la sesión del turno de hoy (la timeline de documentación
+  // solo trae revision/aprobado, nunca huérfanas). El guard de seccion evita
+  // mostrar el banner mientras el grabador está montado (grabación activa).
+  const sesionHuerfana =
+    sesionHoy !== null &&
+    seccionGrabacion === "idle" &&
+    esSesionHuerfana(sesionHoy)
+      ? sesionHoy
+      : null;
+
+  // Tras descartar/reintentar desde el banner: re-fetch de la sesión por
+  // turnoId (un GET por id daría 404 si el DELETE eliminó la fila) y de la
+  // timeline.
+  function manejarHuerfanaResuelta() {
+    setSesionReloadKey((k) => k + 1);
+    setReloadKey((k) => k + 1);
+  }
+
   // ===== Render =====
   return (
     <div className="flex flex-col gap-8">
@@ -451,6 +495,7 @@ export function HistoriaTab({
           pacienteNombre={pacienteNombre}
           consentimientoVigente={consentimientoVigente}
           sesion={sesionHoy}
+          sesionHuerfana={sesionHuerfana !== null}
           sesionLoading={sesionHoyLoading}
           seccion={seccionGrabacion}
           submitting={grabacionSubmitting}
@@ -461,6 +506,13 @@ export function HistoriaTab({
           onReintentar={() => void reintentarProcesamiento()}
           onAprobado={() => void refrescarSesionHoy()}
           onVerNota={() => setSeccionGrabacion("nota")}
+        />
+      ) : null}
+
+      {sesionHuerfana ? (
+        <SesionHuerfanaBanner
+          sesion={sesionHuerfana}
+          onResuelta={manejarHuerfanaResuelta}
         />
       ) : null}
 
@@ -527,6 +579,10 @@ interface ZonaGrabacionProps {
   pacienteNombre: string;
   consentimientoVigente: boolean;
   sesion: SesionClinicaResponse | null;
+  // Cuando es true, el banner de sesión huérfana (renderizado por HistoriaTab)
+  // es el único punto de acción: acá se ocultan el chip de estado, el spinner
+  // de pipeline y el bloque de error para no duplicar mensajes.
+  sesionHuerfana: boolean;
   sesionLoading: boolean;
   seccion: "idle" | "grabando" | "nota";
   submitting: boolean;
@@ -549,6 +605,7 @@ function ZonaGrabacion({
   pacienteNombre,
   consentimientoVigente,
   sesion,
+  sesionHuerfana,
   sesionLoading,
   seccion,
   submitting,
@@ -572,7 +629,7 @@ function ZonaGrabacion({
             {turno.modalidad === "online" ? "Online" : "Presencial"}
           </span>
         </div>
-        {sesion ? (
+        {sesion && !sesionHuerfana ? (
           <Chip
             variant={chipDeProcesamiento(sesion.estado).variant}
             size="sm"
@@ -640,6 +697,7 @@ function ZonaGrabacion({
 
           {/* En pipeline */}
           {sesion &&
+          !sesionHuerfana &&
           (sesion.estado === "grabando" ||
             sesion.estado === "subiendo" ||
             sesion.estado === "procesando") ? (
@@ -682,8 +740,8 @@ function ZonaGrabacion({
             </div>
           ) : null}
 
-          {/* Error en pipeline */}
-          {sesion && sesion.estado === "error" ? (
+          {/* Error en pipeline (si es huérfana lo resuelve el banner) */}
+          {sesion && !sesionHuerfana && sesion.estado === "error" ? (
             <div className="flex flex-col gap-2 rounded-md border border-terracotta-100 bg-terracotta-50 px-3 py-3">
               <Chip variant="terracotta" size="sm">
                 Error en el procesamiento
