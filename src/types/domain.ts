@@ -348,6 +348,83 @@ export function normalizarFeedback(
   return raw;
 }
 
+// ============================================
+// Riesgo clínico (señal graduada) — contrato panteórico
+//
+// Señal derivada SOLO de señales explícitas en la transcripción. No varía
+// por orientación teórica y coexiste con FlagsRiesgo (booleanos por
+// categoría): este contrato no reemplaza ni modifica los flags.
+// El sistema señala, NUNCA diagnostica. Ver docs/contrato-riesgo-clinico.md.
+// ============================================
+
+/** Nivel de la señal de riesgo. "ninguno" es el default seguro: sin
+ *  evidencia textual explícita no se gradúa riesgo. */
+export type NivelRiesgo = "ninguno" | "bajo" | "moderado" | "alto";
+
+/** Cita literal de la transcripción que ancla un indicador de riesgo */
+export interface EvidenciaRiesgo {
+  timestamp: string; // formato "MM:SS"
+  quote: string;     // cita textual del segmento
+}
+
+/** Señal de riesgo clínico graduada. Se embebe en datosEstructurados
+ *  antes de persistir cifrado. */
+export interface RiesgoDetectado {
+  nivel: NivelRiesgo;
+  indicadores: string[];            // ej: "ideación suicida pasiva"
+  evidencia: EvidenciaRiesgo[];     // vacía solo si nivel es "ninguno"
+  notaParaTerapeuta: string | null; // 1-2 frases, tono calmo, sin diagnóstico
+}
+
+const NIVELES_RIESGO: ReadonlyArray<NivelRiesgo> = [
+  "ninguno",
+  "bajo",
+  "moderado",
+  "alto",
+];
+
+function esEvidenciaRiesgoValida(value: unknown): value is EvidenciaRiesgo {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.timestamp === "string" && typeof obj.quote === "string";
+}
+
+/** Guard estructural del contrato de riesgo. Pensado para fronteras que
+ *  reciben JSON no confiable (parseDatosEstructurados, lectores de datos
+ *  persistidos legacy). */
+export function esRiesgoDetectadoValido(
+  value: unknown,
+): value is RiesgoDetectado {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.nivel === "string" &&
+    (NIVELES_RIESGO as ReadonlyArray<string>).includes(obj.nivel) &&
+    Array.isArray(obj.indicadores) &&
+    obj.indicadores.every((i) => typeof i === "string") &&
+    Array.isArray(obj.evidencia) &&
+    obj.evidencia.every(esEvidenciaRiesgoValida) &&
+    (obj.notaParaTerapeuta === null ||
+      typeof obj.notaParaTerapeuta === "string")
+  );
+}
+
+/** Normaliza la señal de riesgo leída de persistencia. Ausente o inválida
+ *  → nivel "ninguno" (default seguro; misma filosofía que
+ *  normalizarFeedback: los datos viejos NO se migran, se normalizan al
+ *  leer). No muta el original. */
+export function normalizarRiesgo(raw: unknown): RiesgoDetectado {
+  if (esRiesgoDetectadoValido(raw)) {
+    return raw;
+  }
+  return {
+    nivel: "ninguno",
+    indicadores: [],
+    evidencia: [],
+    notaParaTerapeuta: null,
+  };
+}
+
 /** Datos estructurados extraídos por el LLM (versión enriquecida) */
 export interface DatosEstructurados {
   // Campos originales
@@ -386,6 +463,12 @@ export interface DatosEstructurados {
    *  antes del contrato multi-orientación — normalizar al leer con
    *  normalizarFeedback(). */
   feedbackTerapeuta?: FeedbackTerapeuta | FeedbackTerapeutaLegacy;
+
+  /** Señal de riesgo clínico graduada (ver docs/contrato-riesgo-clinico.md).
+   *  OPCIONAL en todos los niveles: ausente en datos legacy y cuando la
+   *  llamada que la genera falla. Ausente o inválida → normalizar al leer
+   *  con normalizarRiesgo() (equivale a nivel "ninguno"). */
+  riesgoDetectado?: RiesgoDetectado;
 }
 
 /** Nota clínica en formato SOAP */

@@ -1,3 +1,4 @@
+import { esRiesgoDetectadoValido } from "@/types/domain";
 import type {
   AlianzaTerapeutica,
   ConfianzaModelo,
@@ -213,6 +214,14 @@ export function parseDatosEstructurados(
   if (typeof obj.resumenSesion !== "string") return null;
   if (typeof obj.estadoEmocionalObservado !== "string") return null;
 
+  // riesgoDetectado es OPCIONAL en todos los niveles (contrato de riesgo
+  // clínico): su ausencia o un shape inválido NUNCA invalidan el objeto —
+  // se omite y los lectores normalizan con normalizarRiesgo() (nivel
+  // "ninguno"). Un datosEstructurados legacy pasa igual que antes.
+  const riesgoDetectado = esRiesgoDetectadoValido(obj.riesgoDetectado)
+    ? obj.riesgoDetectado
+    : undefined;
+
   return {
     temas: obj.temas,
     emocionesPaciente: obj.emocionesPaciente,
@@ -229,6 +238,7 @@ export function parseDatosEstructurados(
     estadoEmocionalObservado: obj.estadoEmocionalObservado,
     duracionRealMin,
     progresoPercibido: obj.progresoPercibido,
+    ...(riesgoDetectado !== undefined ? { riesgoDetectado } : {}),
   };
 }
 
