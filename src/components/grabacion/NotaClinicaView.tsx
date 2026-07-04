@@ -319,11 +319,10 @@ export function NotaClinicaView({
     }
   };
 
-  const handleDescartar = async () => {
-    if (!confirmDescartar) {
-      setConfirmDescartar(true);
-      return;
-    }
+  // Paso 2 del descarte (el paso 1 arma el panel de confirmación explícito).
+  // El DELETE para "revision" limpia SOLO la nota y los datos generados: la
+  // transcripción y el audio no se tocan y la sesión queda reprocesable.
+  const ejecutarDescarte = async () => {
     setEnviando(true);
     setError(null);
     try {
@@ -769,18 +768,31 @@ export function NotaClinicaView({
           </p>
         )}
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleDescartar}
-              disabled={enviando}
-              className="!text-terracotta-500"
-            >
-              {confirmDescartar ? "Confirmá: descartar" : "Descartar nota"}
-            </Button>
-            {confirmDescartar && (
+        {confirmDescartar && (
+          <section
+            role="alertdialog"
+            aria-label="Confirmar descarte de la nota"
+            className="rounded-lg border-2 border-terracotta-500 bg-terracotta-50 px-4 py-4"
+          >
+            <h3 className="font-display text-[17px] font-medium text-ink-900">
+              ¿Descartar esta nota?
+            </h3>
+            <ul className="mt-2 flex flex-col gap-1">
+              <li className="font-sans text-[14px] leading-[1.6] text-ink-900">
+                <strong>Se descarta:</strong> la nota generada y los datos
+                extraídos.
+              </li>
+              <li className="font-sans text-[14px] leading-[1.6] text-ink-900">
+                <strong>Se conserva:</strong> la transcripción, y el audio si
+                todavía está disponible. La sesión queda para reprocesar.
+              </li>
+            </ul>
+            <p className="mt-2 font-sans text-[13px] leading-[1.5] text-ink-700">
+              Esto no elimina la sesión: el borrado definitivo es una acción
+              separada, con su propia confirmación, disponible después del
+              descarte.
+            </p>
+            <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:gap-3">
               <button
                 type="button"
                 onClick={() => setConfirmDescartar(false)}
@@ -789,8 +801,29 @@ export function NotaClinicaView({
               >
                 Cancelar
               </button>
-            )}
-          </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={ejecutarDescarte}
+                disabled={enviando}
+                className="!text-terracotta-500"
+              >
+                {enviando ? "Descartando…" : "Sí, descartar la nota"}
+              </Button>
+            </div>
+          </section>
+        )}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setConfirmDescartar(true)}
+            disabled={enviando || confirmDescartar}
+            className="!text-terracotta-500"
+          >
+            Descartar nota
+          </Button>
           <Button
             type="button"
             variant="primary"

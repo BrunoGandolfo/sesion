@@ -58,9 +58,11 @@ export function SesionHuerfanaBanner({
   }
 
   const esError = sesion.estado === "error";
-  const tieneAudio =
-    (sesion.audioR2Key != null && sesion.audioR2Key !== "dev-no-r2") ||
-    sesion.duracionAudioSeg != null;
+  // Espejo del branch del DELETE (caso "grabando"): el backend decide por
+  // audioR2Key, no por duracionAudioSeg.
+  const audioSubido =
+    sesion.audioR2Key != null && sesion.audioR2Key !== "dev-no-r2";
+  const tieneAudio = audioSubido || sesion.duracionAudioSeg != null;
   const puedeReintentar = esError && tieneAudio;
 
   const mensaje = esError
@@ -169,6 +171,18 @@ export function SesionHuerfanaBanner({
           </p>
         )}
 
+        {confirmDescartar && (
+          <div className="rounded-md border border-terracotta-100 bg-white/80 px-3 py-3">
+            <p className="font-sans text-[13px] leading-[1.6] text-ink-900">
+              {esError
+                ? "Se elimina la sesión de forma definitiva, incluida la grabación si todavía existe. No se puede deshacer."
+                : audioSubido
+                  ? "El audio subido se conserva: la sesión pasa a error y desde ahí vas a poder reintentar el procesamiento o eliminarla definitivamente."
+                  : "No hay audio subido: la sesión se elimina y el turno queda libre para volver a grabar."}
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
             <Button
@@ -178,7 +192,13 @@ export function SesionHuerfanaBanner({
               disabled={enviando}
               className="!text-terracotta-500"
             >
-              {confirmDescartar ? "Confirmá: descartar" : "Descartar"}
+              {esError
+                ? confirmDescartar
+                  ? "Confirmá: eliminar definitivamente"
+                  : "Eliminar definitivamente"
+                : confirmDescartar
+                  ? "Confirmá: descartar"
+                  : "Descartar"}
             </Button>
             {confirmDescartar && (
               <button

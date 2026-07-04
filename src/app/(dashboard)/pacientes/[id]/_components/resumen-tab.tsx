@@ -14,6 +14,7 @@ import {
 import { fechaCorta, fechaRelativa, hora, money } from "@/lib/format";
 import type { Paciente, Turno } from "@/types/domain";
 
+import { BriefPreSesion } from "./brief-pre-sesion";
 import { RiesgoBanner } from "./riesgo-banner";
 
 type TabKey = "historia" | "progreso" | "turnos" | "datos";
@@ -155,6 +156,8 @@ export function ResumenTab({
           </Button>
         </div>
       </section>
+
+      <BriefPreSesion pacienteId={paciente.id} />
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <KpiCard label="Sesiones" value={totalSesiones} />

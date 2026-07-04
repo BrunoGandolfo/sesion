@@ -125,13 +125,10 @@ def procesar_sesion(
                 etiqueta,
             )
 
-        # 13. Borrar audio
-        try:
-            r2_client.borrar_audio(audio_r2_key)
-            logger.info(f"[{etiqueta}] Audio borrado de R2")
-        except Exception as e:
-            logger.warning(f"[{etiqueta}] No se pudo borrar de R2: {e}")
-
+        # 13. El audio NO se borra acá: el material fuente vive hasta que la
+        # profesional aprueba la nota (POST /aprobar borra R2 y nulea
+        # audioR2Key) o elimina la sesion definitivamente (DELETE). Asi, el
+        # descarte de una nota en revision deja la sesion reprocesable.
         logger.info(f"[{etiqueta}] Completado")
 
     except Exception as e:

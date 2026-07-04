@@ -126,6 +126,31 @@ function normalizeDatosEstructurados(input: unknown): unknown {
   }
 }
 
+/**
+ * La clave temporal de cifrado del audio (upload la guarda en
+ * datosEstructurados._audioCifradoTemporal; pendientes la lee para el
+ * worker) debe vivir exactamente lo que vive el audio: hasta la aprobación
+ * de la nota o la eliminación definitiva. El resultado del LLM no la trae y
+ * el schema Zod la descarta, así que al persistir el callback se re-adjunta
+ * desde la fila previa — sin esto, el audio en "revision" queda vivo pero
+ * indescifrable y el reproceso tras un descarte es imposible.
+ */
+function extraerClaveTemporal(raw: unknown): unknown {
+  if (raw == null) return null;
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  return (
+    (parsed as Record<string, unknown>)._audioCifradoTemporal ?? null
+  );
+}
+
 export async function POST(request: Request) {
   if (!isAuthorized(request)) {
     return Response.json({ error: "No autorizado" }, { status: 401 });
@@ -147,7 +172,12 @@ export async function POST(request: Request) {
 
     const sesion = await db.sesionClinica.findUnique({
       where: { id: parsed.data.sesionClinicaId },
-      select: { id: true, estado: true, intentos: true },
+      select: {
+        id: true,
+        estado: true,
+        intentos: true,
+        datosEstructurados: true,
+      },
     });
 
     if (!sesion) {
@@ -160,6 +190,13 @@ export async function POST(request: Request) {
     const ahora = new Date();
     const esError = parsed.data.estado === "error";
 
+    // Re-adjuntar la clave temporal del audio al persistir el resultado
+    // (ver extraerClaveTemporal). En callbacks de error datosEstructurados
+    // viene undefined y la columna no se toca, así que la clave ya sobrevive.
+    const claveTemporal = parsed.data.datosEstructurados
+      ? extraerClaveTemporal(sesion.datosEstructurados)
+      : null;
+
     await db.sesionClinica.update({
       where: { id: sesion.id },
       data: {
@@ -170,7 +207,14 @@ export async function POST(request: Request) {
         notaAnalisis: parsed.data.nota?.analisis,
         notaPlan: parsed.data.nota?.plan,
         datosEstructurados: parsed.data.datosEstructurados
-          ? JSON.stringify(parsed.data.datosEstructurados)
+          ? JSON.stringify(
+              claveTemporal
+                ? {
+                    ...parsed.data.datosEstructurados,
+                    _audioCifradoTemporal: claveTemporal,
+                  }
+                : parsed.data.datosEstructurados,
+            )
           : undefined,
         modeloASR: parsed.data.modeloASR,
         modeloLLM: parsed.data.modeloLLM,

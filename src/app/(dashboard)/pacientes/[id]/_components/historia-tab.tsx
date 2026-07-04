@@ -59,6 +59,7 @@ type DocSesion = {
   turnoId: string;
   fecha: string;
   duracionMin: number;
+  duracionAudioSeg?: number | null;
   modalidad: "presencial" | "online";
   estado: "revision" | "aprobado";
   nota: NotaSOAP | null;
@@ -165,6 +166,25 @@ function resumenCorto(datos: DatosEstructurados | null): string {
   if (!datos?.resumenSesion) return "";
   const t = datos.resumenSesion.trim();
   return t.length > 200 ? `${t.slice(0, 200).trimEnd()}…` : t;
+}
+
+// "42 s" por debajo del minuto; "1,4 min" (un decimal, coma es-UY) desde ahí.
+function formatDuracionAudio(seg: number): string {
+  if (seg < 60) return `${Math.round(seg)} s`;
+  const min = seg / 60;
+  const conDecimal = min.toFixed(1);
+  return conDecimal.endsWith(".0")
+    ? `${min.toFixed(0)} min`
+    : `${conDecimal.replace(".", ",")} min`;
+}
+
+// La duración del turno es la agenda; el audio es lo que realmente se grabó.
+// Solo se muestra el audio cuando difiere en más de 20% del turno — mostrar
+// "50 min · audio 50 min" sería ruido.
+function audioDifiereDelTurno(audioSeg: number, turnoMin: number): boolean {
+  if (turnoMin <= 0) return audioSeg > 0;
+  const audioMin = audioSeg / 60;
+  return Math.abs(audioMin - turnoMin) / turnoMin > 0.2;
 }
 
 export function HistoriaTab({
@@ -781,6 +801,13 @@ function SesionTimelineCard({ sesion }: { sesion: DocSesion }) {
   const temas = datos?.temas?.slice(0, 5) ?? [];
   const resumen = resumenCorto(datos);
   const esRevision = sesion.estado === "revision";
+  const duracionAudio =
+    typeof sesion.duracionAudioSeg === "number" && sesion.duracionAudioSeg >= 0
+      ? sesion.duracionAudioSeg
+      : null;
+  const mostrarAudio =
+    duracionAudio !== null &&
+    audioDifiereDelTurno(duracionAudio, sesion.duracionMin);
 
   return (
     <Card className="border-[color:var(--border-subtle)] !p-0">
@@ -796,8 +823,11 @@ function SesionTimelineCard({ sesion }: { sesion: DocSesion }) {
               {fechaLarga(fecha)}
             </span>
             <span className="font-sans text-[12px] text-ink-500 tabular-nums">
-              {hora(fecha)} · {sesion.duracionMin} min ·{" "}
-              {sesion.modalidad === "online" ? "Online" : "Presencial"}
+              {hora(fecha)} · {sesion.duracionMin} min
+              {mostrarAudio
+                ? ` · audio ${formatDuracionAudio(duracionAudio)}`
+                : ""}{" "}
+              · {sesion.modalidad === "online" ? "Online" : "Presencial"}
             </span>
           </div>
           <div className="flex items-center gap-2">

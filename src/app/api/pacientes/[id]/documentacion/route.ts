@@ -100,6 +100,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         select: {
           id: true,
           estado: true,
+          duracionAudioSeg: true,
           procesadoEn: true,
           aprobadoEn: true,
           notaSubjetivo: true,
@@ -127,6 +128,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       turnoId: s.turno.id,
       fecha: s.turno.fecha.toISOString(),
       duracionMin: s.turno.duracion,
+      duracionAudioSeg: s.duracionAudioSeg,
       modalidad: s.turno.modalidad,
       estado: s.estado,
       nota: buildNota(s),

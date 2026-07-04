@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { esSesionHuerfana } from "@/lib/sesion-clinica-utils";
 
+import { borrarAudioBestEffort } from "../../_lib/audio";
 import { getOrganizationId } from "../../_lib/auth";
 import { ApiError, errorResponse, ok, validationError } from "../../_lib/responses";
 
@@ -73,22 +74,24 @@ export async function GET(_request: Request, { params }: RouteParams) {
   }
 }
 
-// Best-effort: borra el audio cifrado de R2 antes de eliminar la fila.
-// Import dinámico (mismo patrón que upload/route.ts) para tolerar entornos
-// de desarrollo sin R2 configurado.
-async function borrarAudioBestEffort(audioR2Key: string | null): Promise<void> {
-  if (!audioR2Key || audioR2Key === "dev-no-r2") return;
-  try {
-    const r2 = await import("@/lib/r2");
-    if (r2.r2Configurado()) {
-      await r2.borrarAudio(audioR2Key);
+// Stash de la clave temporal de cifrado del audio: upload lo guarda en
+// datosEstructurados._audioCifradoTemporal y pendientes lo lee para el
+// worker. Debe vivir exactamente lo que vive el audio — si el descarte lo
+// mata, el reproceso queda colgado (pendientes devuelve claveCifrado null y
+// el worker ignora el item). Mismo manejo tolerante string/objeto que
+// extraerClaveTemporal() en callback/route.ts.
+function extraerClaveTemporal(raw: unknown): unknown {
+  if (raw == null) return null;
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
     }
-  } catch (error) {
-    console.warn(
-      "[sesion-clinica/DELETE] No se pudo borrar el audio de R2; se continúa con el descarte.",
-      { audioR2Key, error },
-    );
   }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  return (parsed as Record<string, unknown>)._audioCifradoTemporal ?? null;
 }
 
 export async function DELETE(_request: Request, { params }: RouteParams) {
@@ -102,6 +105,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         id: true,
         estado: true,
         audioR2Key: true,
+        datosEstructurados: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -111,21 +115,38 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       throw new ApiError("Sesión clínica no encontrada", 404);
     }
 
-    // Caso 1 — nota en revisión (comportamiento preexistente): descarte
-    // "suave", se limpia la nota generada y la fila queda en error para que
-    // la usuaria pueda reintentar o descartar definitivamente.
+    // Caso 1 — nota en revisión: descartar ≠ destruir. Se limpia SOLO lo
+    // generado por el LLM (nota SOAP + datos estructurados); la transcripción
+    // y el audio NO se tocan acá. La fila queda en "error", el único estado
+    // reprocesable (error → procesando vía PATCH re-encola al worker).
+    // El audio vive de la grabación a la aprobación (el worker ya no lo
+    // borra al procesar); solo sesiones aprobadas antes de ese cambio pueden
+    // tener audioR2Key apuntando a un objeto ya inexistente.
     if (existente.estado === "revision") {
+      const audioConservado = Boolean(
+        existente.audioR2Key && existente.audioR2Key !== "dev-no-r2",
+      );
+      // Se limpia todo lo generado, pero el stash de la clave temporal se
+      // preserva (es lo único necesario para reprocesar). Escrito por el
+      // campo LÓGICO datosEstructurados para que la extensión lo cifre —
+      // escribir el *Encrypted directo saltea la extensión (anti-patrón);
+      // con null el resultado es idéntico al comportamiento previo.
+      const claveTemporal = extraerClaveTemporal(existente.datosEstructurados);
       await db.sesionClinica.update({
         where: { id },
         data: {
           estado: "error",
           notaSoapEncrypted: null,
-          datosEstructuradosEncrypted: null,
-          transcripcionEncrypted: null,
+          datosEstructurados: claveTemporal
+            ? JSON.stringify({ _audioCifradoTemporal: claveTemporal })
+            : null,
+          error: audioConservado
+            ? "Nota descartada por la usuaria. La transcripción y el audio se conservan: podés reprocesar o eliminar definitivamente."
+            : "Nota descartada por la usuaria. La transcripción se conserva; no hay audio para reprocesar.",
         },
       });
 
-      return ok({ success: true });
+      return ok({ success: true, estado: "error", audioConservado });
     }
 
     // Caso 2 — sesión en error: descarte definitivo. Ningún otro modelo
