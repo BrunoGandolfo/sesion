@@ -453,6 +453,7 @@ export interface DatosEstructurados {
     cantidadSilencios: number;      // cantidad de pausas > 3 segundos
     duracionPromedioSilenciosSeg: number;  // duración promedio de silencios en segundos
     tiempoTotalHablaSeg: number;    // duración total del audio analizado en segundos
+    speakersDetectados?: number;    // hablantes únicos en la diarización; <2 = colapso (ausente en payloads legacy)
   };
 
   /** Análisis longitudinal generado por IA cruzando múltiples sesiones */

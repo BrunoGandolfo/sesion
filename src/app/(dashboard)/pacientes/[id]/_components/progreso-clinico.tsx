@@ -3,6 +3,18 @@
 import * as React from "react";
 import { Button, EditorialRule } from "@/components/ui";
 
+import {
+  contieneTerminosDeterioro,
+  lecturaAlianza,
+  lecturaIntensidad,
+  lecturaIntervenciones,
+  lecturaRatioHabla,
+  lecturaTemas,
+  topTemas,
+  type Lectura,
+  type TonoLectura,
+} from "./progreso-lecturas";
+
 const COLOR = {
   sage: "#4F7A6A",
   sageSoft: "#C2D4CB",
@@ -29,6 +41,7 @@ type SpeechAnalytics = {
   cantidadSilencios: number;
   duracionPromedioSilenciosSeg: number;
   tiempoTotalHablaSeg: number;
+  speakersDetectados?: number; // ausente en payloads previos al campo
 };
 
 type SesionProgreso = {
@@ -42,6 +55,7 @@ type SesionProgreso = {
   flagsRiesgo?: FlagsRiesgo;
   speechAnalytics?: SpeechAnalytics;
   observacionIA?: string;
+  progresoPercibido?: string | null;
 };
 
 type ProgresoResponse = {
@@ -87,8 +101,8 @@ const MOCK_DATA: ProgresoResponse = {
       temas: ["pareja", "familia"],
       intervenciones: { reformulacion: 2, validacion: 4, senalamiento: 3, otros: 1 },
       speechAnalytics: {
-        ratioHablaTerapeuta: 0.42,
-        ratioHablaPaciente: 0.58,
+        ratioHablaTerapeuta: 42,
+        ratioHablaPaciente: 58,
         cantidadSilencios: 6,
         duracionPromedioSilenciosSeg: 4,
         tiempoTotalHablaSeg: 2700,
@@ -103,8 +117,8 @@ const MOCK_DATA: ProgresoResponse = {
       temas: ["familia", "trabajo"],
       intervenciones: { reformulacion: 3, validacion: 2, confrontacion: 2 },
       speechAnalytics: {
-        ratioHablaTerapeuta: 0.48,
-        ratioHablaPaciente: 0.52,
+        ratioHablaTerapeuta: 48,
+        ratioHablaPaciente: 52,
         cantidadSilencios: 4,
         duracionPromedioSilenciosSeg: 5,
         tiempoTotalHablaSeg: 2820,
@@ -119,8 +133,8 @@ const MOCK_DATA: ProgresoResponse = {
       temas: ["trabajo", "ansiedad"],
       intervenciones: { reformulacion: 2, validacion: 5, senalamiento: 2 },
       speechAnalytics: {
-        ratioHablaTerapeuta: 0.38,
-        ratioHablaPaciente: 0.62,
+        ratioHablaTerapeuta: 38,
+        ratioHablaPaciente: 62,
         cantidadSilencios: 8,
         duracionPromedioSilenciosSeg: 6,
         tiempoTotalHablaSeg: 2880,
@@ -135,14 +149,16 @@ const MOCK_DATA: ProgresoResponse = {
       temas: ["pareja", "logros"],
       intervenciones: { reformulacion: 1, validacion: 6, senalamiento: 1 },
       speechAnalytics: {
-        ratioHablaTerapeuta: 0.35,
-        ratioHablaPaciente: 0.65,
+        ratioHablaTerapeuta: 35,
+        ratioHablaPaciente: 65,
         cantidadSilencios: 9,
         duracionPromedioSilenciosSeg: 7,
         tiempoTotalHablaSeg: 2820,
       },
       observacionIA:
         "Hay un descenso sostenido de la intensidad emocional y la alianza pasó a fuerte. Los temas de logros emergen por primera vez.",
+      progresoPercibido:
+        "Avance sostenido. La intensidad al iniciar sesión viene bajando y aparecen logros como material nuevo.",
     },
   ],
 };
@@ -217,6 +233,7 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
         </div>
       ) : null}
 
+      <ProgresoDestacado sesiones={sesiones} />
       <FlagsRiesgoTimeline sesiones={sesiones} />
       <IntensidadChart sesiones={sesiones} />
       <AlianzaChart sesiones={sesiones} />
@@ -276,13 +293,53 @@ function EmptyState() {
   );
 }
 
+// ============================================
+// Progreso percibido (card destacada)
+// ============================================
+function ProgresoDestacado({ sesiones }: { sesiones: SesionProgreso[] }) {
+  const ultima = [...sesiones]
+    .reverse()
+    .find(
+      (s) => s.progresoPercibido && s.progresoPercibido.trim().length > 0,
+    );
+  if (!ultima) return null;
+
+  const texto = (ultima.progresoPercibido ?? "").trim();
+  const alerta = contieneTerminosDeterioro(texto);
+
+  return (
+    <section
+      className={
+        alerta
+          ? "rounded-lg border border-terracotta-100 border-l-2 border-l-terracotta-500 bg-terracotta-50/40 p-4 lg:p-5"
+          : "rounded-lg border border-[color:var(--border-subtle)] border-l-2 border-l-sage-500 bg-cream-50 p-4 lg:p-5"
+      }
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+        Progreso percibido — Sesión {ultima.numero}
+      </p>
+      <p className="mt-2 font-[family-name:var(--font-display)] text-[17px] italic leading-[1.5] text-ink-900">
+        «{texto}»
+      </p>
+    </section>
+  );
+}
+
+const LECTURA_ACCENT: Record<TonoLectura, string> = {
+  positivo: COLOR.sage,
+  neutral: COLOR.inkSoft,
+  atencion: COLOR.terracotta,
+};
+
 function ChartCard({
   title,
   subtitle,
+  lectura,
   children,
 }: {
   title: string;
   subtitle: string;
+  lectura?: Lectura | null;
   children: React.ReactNode;
 }) {
   return (
@@ -293,6 +350,14 @@ function ChartCard({
         </h3>
         <p className="mt-1 text-[12px] leading-[1.4] text-ink-500">{subtitle}</p>
       </header>
+      {lectura ? (
+        <p
+          className="mb-4 border-l-2 pl-3 text-[13px] leading-[1.55] text-ink-900"
+          style={{ borderLeftColor: LECTURA_ACCENT[lectura.tono] }}
+        >
+          {lectura.texto}
+        </p>
+      ) : null}
       {children}
     </section>
   );
@@ -420,14 +485,13 @@ function FlagsRiesgoTimeline({ sesiones }: { sesiones: SesionProgreso[] }) {
 function IntensidadChart({ sesiones }: { sesiones: SesionProgreso[] }) {
   const values = sesiones.map((s) => s.intensidadEmocional);
   const labels = sessionLabels(sesiones);
-  const last = values.at(-1) ?? 0;
-  const first = values[0] ?? 0;
-  const delta = last - first;
+  const lectura = lecturaIntensidad(values);
 
   return (
     <ChartCard
       title="Intensidad emocional"
       subtitle="Cómo se siente al iniciar cada sesión (1 a 10). La baja sostenida indica mejora."
+      lectura={lectura}
     >
       <LineChart
         values={values}
@@ -439,13 +503,6 @@ function IntensidadChart({ sesiones }: { sesiones: SesionProgreso[] }) {
         fillColor={COLOR.terracottaSoft}
         ariaLabel="Intensidad emocional por sesión"
       />
-      <p className="mt-3 text-[11px] text-ink-500">
-        {delta < 0
-          ? `Bajó ${Math.abs(delta)} puntos desde la primera sesión.`
-          : delta > 0
-            ? `Subió ${delta} puntos desde la primera sesión.`
-            : "Sin cambios respecto a la primera sesión."}
-      </p>
     </ChartCard>
   );
 }
@@ -462,11 +519,18 @@ function AlianzaChart({ sesiones }: { sesiones: SesionProgreso[] }) {
   for (let i = 1; i < values.length; i++) {
     if (values[i] < values[i - 1]) drops.push(i);
   }
+  const lectura = lecturaAlianza(
+    sesiones.map((s) => ({
+      nivel: s.alianzaTerapeutica,
+      etiqueta: s.alianzaLabel,
+    })),
+  );
 
   return (
     <ChartCard
       title="Alianza terapéutica"
       subtitle="Calidad del vínculo en cada sesión. Las caídas marcadas en terracotta son posibles rupturas."
+      lectura={lectura}
     >
       <LineChart
         values={values}
@@ -612,19 +676,14 @@ function LineChart({
 // 3. Temas recurrentes (Tabla)
 // ============================================
 function TemasTable({ sesiones }: { sesiones: SesionProgreso[] }) {
-  const counts = new Map<string, number>();
-  sesiones.forEach((s) => {
-    (s.temas ?? []).forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
-  });
-  const temas = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([t]) => t);
+  const temasPorSesion = sesiones.map((s) => s.temas ?? []);
+  const ordenados = topTemas(temasPorSesion, Infinity);
 
-  if (temas.length === 0) {
+  if (ordenados.length === 0) {
     return (
       <ChartCard
         title="Temas recurrentes"
-        subtitle="Qué temas aparecen en cada sesión, ordenados por frecuencia."
+        subtitle="Qué temas se repiten a lo largo del recorrido."
       >
         <p className="py-6 text-center text-[13px] text-ink-500">
           Aún no hay temas registrados.
@@ -633,64 +692,91 @@ function TemasTable({ sesiones }: { sesiones: SesionProgreso[] }) {
     );
   }
 
+  const lectura = lecturaTemas(temasPorSesion);
+  const top = ordenados.slice(0, 5);
+  const totalSesiones = sesiones.length;
+
   return (
     <ChartCard
       title="Temas recurrentes"
-      subtitle="Qué temas aparecen en cada sesión, ordenados por frecuencia."
+      subtitle="Qué temas se repiten a lo largo del recorrido."
+      lectura={lectura}
     >
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[320px] border-collapse text-[12px]">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-[1] bg-white py-2 pr-3 text-left font-semibold uppercase tracking-[0.06em] text-[10px] text-ink-500">
-                Tema
-              </th>
-              {sesiones.map((s) => (
-                <th
-                  key={s.numero}
-                  className="px-1 py-2 text-center font-semibold uppercase tracking-[0.06em] text-[10px] text-ink-500"
-                >
-                  S{s.numero}
+      <ul>
+        {top.map((t) => (
+          <li
+            key={t.tema}
+            className="flex items-baseline justify-between gap-3 border-t border-[color:var(--border-subtle)] py-2 first:border-t-0"
+          >
+            <span className="text-[13px] capitalize text-ink-900">
+              {t.tema}
+            </span>
+            <span className="text-[12px] tabular-nums text-ink-500">
+              {t.apariciones} de {totalSesiones}{" "}
+              {totalSesiones === 1 ? "sesión" : "sesiones"}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <details className="mt-4">
+        <summary className="cursor-pointer text-[12px] font-medium text-sage-500">
+          Ver detalle por sesión
+        </summary>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[320px] border-collapse text-[12px]">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-[1] bg-white py-2 pr-3 text-left font-semibold uppercase tracking-[0.06em] text-[10px] text-ink-500">
+                  Tema
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {temas.map((tema) => (
-              <tr
-                key={tema}
-                className="border-t border-[color:var(--border-subtle)]"
-              >
-                <td className="sticky left-0 z-[1] bg-white py-2 pr-3 text-ink-900 capitalize">
-                  {tema}
-                </td>
-                {sesiones.map((s) => {
-                  const present = s.temas.includes(tema);
-                  return (
-                    <td
-                      key={s.numero}
-                      className="px-1 py-2 text-center text-[16px] leading-none tabular-nums"
-                      aria-label={
-                        present
-                          ? `${tema} apareció en S${s.numero}`
-                          : `${tema} no apareció en S${s.numero}`
-                      }
-                    >
-                      <span
-                        style={{
-                          color: present ? COLOR.sage : COLOR.inkSoft,
-                        }}
-                      >
-                        {present ? "●" : "○"}
-                      </span>
-                    </td>
-                  );
-                })}
+                {sesiones.map((s) => (
+                  <th
+                    key={s.numero}
+                    className="px-1 py-2 text-center font-semibold uppercase tracking-[0.06em] text-[10px] text-ink-500"
+                  >
+                    S{s.numero}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {ordenados.map(({ tema }) => (
+                <tr
+                  key={tema}
+                  className="border-t border-[color:var(--border-subtle)]"
+                >
+                  <td className="sticky left-0 z-[1] bg-white py-2 pr-3 text-ink-900 capitalize">
+                    {tema}
+                  </td>
+                  {sesiones.map((s) => {
+                    const present = (s.temas ?? []).includes(tema);
+                    return (
+                      <td
+                        key={s.numero}
+                        className="px-1 py-2 text-center text-[16px] leading-none tabular-nums"
+                        aria-label={
+                          present
+                            ? `${tema} apareció en S${s.numero}`
+                            : `${tema} no apareció en S${s.numero}`
+                        }
+                      >
+                        <span
+                          style={{
+                            color: present ? COLOR.sage : COLOR.inkSoft,
+                          }}
+                        >
+                          {present ? "●" : "○"}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </ChartCard>
   );
 }
@@ -746,11 +832,13 @@ function IntervencionesChart({ sesiones }: { sesiones: SesionProgreso[] }) {
 
   const keys = ["validacion", "reformulacion", "senalamiento", "confrontacion", "otros"];
   const labels = sessionLabels(sesiones);
+  const lectura = lecturaIntervenciones(aggregated, INTERVENCION_LABELS);
 
   return (
     <ChartCard
       title="Intervenciones del terapeuta"
       subtitle="Cantidad y tipo de intervenciones por sesión."
+      lectura={lectura}
     >
       <StackedBarChart
         labels={labels}
@@ -900,25 +988,46 @@ function StackedBarChart({
 // ============================================
 // 5. Ratio de habla (StackedBarChart 100%)
 // ============================================
+/** Colapso de diarización: un solo hablante detectado. En payloads viejos sin
+ *  `speakersDetectados`, un ratio 100/0 (o 0/100) se asume colapso — nunca se
+ *  muestra como distribución real. */
+function esColapsoDiarizacion(sa: SpeechAnalytics): boolean {
+  if (typeof sa.speakersDetectados === "number") {
+    return sa.speakersDetectados < 2;
+  }
+  const t = Math.round(sa.ratioHablaTerapeuta);
+  const p = Math.round(sa.ratioHablaPaciente);
+  return (t === 100 && p === 0) || (t === 0 && p === 100);
+}
+
 function RatioHablaChart({ sesiones }: { sesiones: SesionProgreso[] }) {
   const conSpeech = sesiones.filter((s) => s.speechAnalytics);
   if (conSpeech.length === 0) return null;
 
+  let huboColapso = false;
   const data = sesiones.map((s) => {
-    if (!s.speechAnalytics) {
+    const sa = s.speechAnalytics;
+    if (!sa) {
       return { terapeuta: 0, paciente: 0, vacio: 100 };
     }
-    const t = Math.round(s.speechAnalytics.ratioHablaTerapeuta * 100);
-    const p = Math.round(s.speechAnalytics.ratioHablaPaciente * 100);
+    if (esColapsoDiarizacion(sa)) {
+      huboColapso = true;
+      return { terapeuta: 0, paciente: 0, vacio: 100 };
+    }
+    // Contrato (domain.ts): los ratios ya vienen en 0-100.
+    const t = Math.round(sa.ratioHablaTerapeuta);
+    const p = Math.round(sa.ratioHablaPaciente);
     return { terapeuta: t, paciente: p, vacio: 0 };
   });
 
   const labels = sessionLabels(sesiones);
+  const lectura = lecturaRatioHabla();
 
   return (
     <ChartCard
       title="Ratio de habla"
       subtitle="Distribución del tiempo de habla entre terapeuta y paciente."
+      lectura={lectura}
     >
       <StackedBarChart
         labels={labels}
@@ -939,6 +1048,11 @@ function RatioHablaChart({ sesiones }: { sesiones: SesionProgreso[] }) {
         ariaLabel="Ratio de habla por sesión"
         yFormatter={(v) => `${v}%`}
       />
+      {huboColapso ? (
+        <p className="mt-2 text-[11px] text-ink-500">
+          Sin datos: un solo hablante detectado en esa sesión.
+        </p>
+      ) : null}
     </ChartCard>
   );
 }

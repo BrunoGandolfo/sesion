@@ -105,6 +105,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
         flagsRiesgo: (datos?.flagsRiesgo ?? null) as FlagsRiesgo | null,
         speechAnalytics: datos?.speechAnalytics ?? null,
         observacionIA: datos?.observacionIA ?? null,
+        progresoPercibido:
+          typeof datos?.progresoPercibido === "string"
+            ? datos.progresoPercibido
+            : null,
       };
     });
 

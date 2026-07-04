@@ -10,6 +10,7 @@ def _zeros() -> dict:
         "cantidadSilencios": 0,
         "duracionPromedioSilenciosSeg": 0.0,
         "tiempoTotalHablaSeg": 0.0,
+        "speakersDetectados": 0,
     }
 
 
@@ -61,4 +62,5 @@ def compute(segments: list[dict]) -> dict:
         "cantidadSilencios": cantidad_silencios,
         "duracionPromedioSilenciosSeg": duracion_promedio,
         "tiempoTotalHablaSeg": round(tiempo_total, 2),
+        "speakersDetectados": len({s["speaker"] for s in segments if "speaker" in s}),
     }

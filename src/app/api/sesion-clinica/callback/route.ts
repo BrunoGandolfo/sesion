@@ -63,6 +63,7 @@ const speechAnalyticsSchema = z.object({
   cantidadSilencios: z.number(),
   duracionPromedioSilenciosSeg: z.number(),
   tiempoTotalHablaSeg: z.number(),
+  speakersDetectados: z.number().int().optional(),
 });
 
 const datosEstructuradosSchema = z.object({
