@@ -22,10 +22,11 @@
 name: Backup diario de base de datos
 
 on:
-  # schedule desactivado hasta configurar secrets R2
   # 06:00 UTC = 03:00 America/Montevideo (UY no tiene DST, es UTC-3 fijo).
+  # Requiere los secrets listados arriba; sin ellos el job falla en el paso
+  # correspondiente y dispara la alerta (si BACKUP_ALERT_WEBHOOK está seteado).
   schedule:
-  #     - cron: "0 6 * * *"
+    - cron: "0 6 * * *"
   # Permite correr el backup manualmente desde la pestaña Actions.
   workflow_dispatch:
 

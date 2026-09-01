@@ -89,7 +89,23 @@ def _procesar_pendientes(items: list[dict]) -> None:
             return
         args = _extraer_args(item)
         if not args:
-            logger.warning(f"Item ignorado por falta de campos: {item}")
+            # Nunca loguear el item completo: trae claveCifrado, iv y el
+            # nombre del paciente. Solo el id y qué campos faltan.
+            sesion_id_log = item.get("sesionClinicaId") or item.get("id") or "?"
+            faltan = [
+                nombre
+                for nombre, presente in (
+                    ("sesionClinicaId", bool(item.get("sesionClinicaId") or item.get("id"))),
+                    ("audioR2Key", bool(item.get("audioR2Key") or item.get("audio_r2_key"))),
+                    ("claveCifrado", bool(item.get("claveCifrado") or item.get("clave_cifrado"))),
+                    ("iv", bool(item.get("iv") or item.get("ivCifrado") or item.get("iv_cifrado"))),
+                )
+                if not presente
+            ]
+            logger.warning(
+                f"Item ignorado por falta de campos: sesion={sesion_id_log} "
+                f"faltan={','.join(faltan) or '?'}"
+            )
             continue
         sesion_id, audio_key, clave, iv, paciente, paciente_id, orientacion = args
         logger.info(f"Procesando sesion {sesion_id} (audio: {audio_key})")

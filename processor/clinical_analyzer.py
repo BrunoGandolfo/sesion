@@ -87,8 +87,15 @@ def _parsear_respuesta(raw: str) -> dict:
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
-        logger.error(f"JSON invalido del LLM: {e}")
-        logger.error(f"Raw (500 chars): {cleaned[:500]}")
+        # No volcar el texto crudo: puede contener la nota clinica entera.
+        # Solo metadatos de forma para diagnosticar el fallo de parseo.
+        logger.error(
+            f"JSON invalido del LLM: {e} "
+            f"(len={len(cleaned)} chars, "
+            f"empieza_con_llave={cleaned.startswith('{')}, "
+            f"termina_con_llave={cleaned.endswith('}')}, "
+            f"tenia_fence={raw.strip().startswith('```')})"
+        )
         raise ValueError(f"LLM no devolvio JSON valido: {e}")
 
 

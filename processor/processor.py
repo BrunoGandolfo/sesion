@@ -30,7 +30,11 @@ def procesar_sesion(
     orientacion_teorica: str = "cbt_mi",
 ) -> None:
     audio_path = None
-    etiqueta = f"{sesion_clinica_id}{f' · {paciente_nombre}' if paciente_nombre else ''}"
+    # La etiqueta de log es solo el id de sesion. paciente_nombre se sigue
+    # recibiendo por compatibilidad con el payload de /pendientes y el modo
+    # manual, pero no se loguea: es PII y journald no esta cifrado.
+    etiqueta = sesion_clinica_id
+    del paciente_nombre
 
     try:
         if not clave_cifrado or not iv_cifrado:
