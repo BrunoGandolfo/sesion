@@ -1,10 +1,19 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { esSesionHuerfana } from "@/lib/sesion-clinica-utils";
+import {
+  ESTADOS_SESION,
+  esSesionHuerfana,
+  esTransicionPermitidaAlCliente,
+} from "@/lib/sesion-clinica-utils";
 
 import { borrarAudioBestEffort } from "../../_lib/audio";
 import { getOrganizationId } from "../../_lib/auth";
 import { ApiError, errorResponse, ok, validationError } from "../../_lib/responses";
+import {
+  assertTransicionValida,
+  extraerClaveTemporal,
+  sinClaveTemporal,
+} from "../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,33 +22,56 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-const estadoSchema = z.enum([
-  "pendiente",
-  "grabando",
-  "subiendo",
-  "procesando",
-  "revision",
-  "aprobado",
-  "error",
-]);
-
-type Estado = z.infer<typeof estadoSchema>;
-
-const transicionesPermitidas: Record<Estado, Estado[]> = {
-  pendiente: ["grabando"],
-  grabando: ["subiendo"],
-  subiendo: ["procesando"],
-  procesando: ["revision", "error"],
-  revision: [],
-  aprobado: [],
-  error: ["procesando"],
-};
+// Solo valida el shape del body. La validez de la transición la decide
+// esTransicionPermitidaAlCliente (PATCH) o assertTransicionValida (DELETE),
+// ambas sobre la tabla única de src/lib/sesion-clinica-utils.ts.
+const estadoSchema = z.enum(
+  ESTADOS_SESION as unknown as [string, ...string[]],
+);
 
 const updateSchema = z.object({
   estado: estadoSchema.optional(),
   duracionAudioSeg: z.number().int().nonnegative().optional(),
   audioR2Key: z.string().min(1).optional(),
 });
+
+// Select explícito de la sesión para la UI. NUNCA transcripcion: es PHI
+// que la UI no necesita y no debe viajar por esta API.
+const SESION_SELECT = {
+  id: true,
+  turnoId: true,
+  estado: true,
+  duracionAudioSeg: true,
+  audioR2Key: true,
+  audioBorradoEn: true,
+  notaSubjetivo: true,
+  notaObjetivo: true,
+  notaAnalisis: true,
+  notaPlan: true,
+  datosEstructurados: true,
+  modeloASR: true,
+  modeloLLM: true,
+  procesadoEn: true,
+  aprobadoEn: true,
+  error: true,
+  intentos: true,
+  createdAt: true,
+  updatedAt: true,
+  turno: {
+    select: {
+      id: true,
+      fecha: true,
+      paciente: {
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          telefono: true,
+        },
+      },
+    },
+  },
+} as const;
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
@@ -48,51 +80,21 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const sesion = await db.sesionClinica.findFirst({
       where: { id, organizationId },
-      include: {
-        turno: {
-          include: {
-            paciente: {
-              select: {
-                id: true,
-                nombre: true,
-                apellido: true,
-                telefono: true,
-              },
-            },
-          },
-        },
-      },
+      select: SESION_SELECT,
     });
 
     if (!sesion) {
       throw new ApiError("Sesión clínica no encontrada", 404);
     }
 
-    return ok(sesion);
+    return ok(sinClaveTemporal(sesion));
   } catch (error) {
     return errorResponse(error);
   }
 }
 
-// Stash de la clave temporal de cifrado del audio: upload lo guarda en
-// datosEstructurados._audioCifradoTemporal y pendientes lo lee para el
-// worker. Debe vivir exactamente lo que vive el audio — si el descarte lo
-// mata, el reproceso queda colgado (pendientes devuelve claveCifrado null y
-// el worker ignora el item). Mismo manejo tolerante string/objeto que
-// extraerClaveTemporal() en callback/route.ts.
-function extraerClaveTemporal(raw: unknown): unknown {
-  if (raw == null) return null;
-  let parsed: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  return (parsed as Record<string, unknown>)._audioCifradoTemporal ?? null;
-}
+const MENSAJE_AUDIO_NO_BORRADO =
+  "No se pudo borrar el audio en R2; la sesión se conserva para reintentar la eliminación";
 
 export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
@@ -123,6 +125,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     // borra al procesar); solo sesiones aprobadas antes de ese cambio pueden
     // tener audioR2Key apuntando a un objeto ya inexistente.
     if (existente.estado === "revision") {
+      assertTransicionValida(existente.estado, "error");
       const audioConservado = Boolean(
         existente.audioR2Key && existente.audioR2Key !== "dev-no-r2",
       );
@@ -152,8 +155,21 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     // Caso 2 — sesión en error: descarte definitivo. Ningún otro modelo
     // referencia SesionClinica (es el lado dependiente de la 1:1 con Turno),
     // así que el delete es seguro y libera el turno para volver a grabar.
+    // Si el audio real no se pudo borrar de R2, la fila NO se elimina:
+    // audioR2Key es el único puntero al blob y perderlo lo dejaría huérfano
+    // e imborrable. La sesión queda en error con el motivo para reintentar.
     if (existente.estado === "error") {
-      await borrarAudioBestEffort(existente.audioR2Key);
+      const audioBorrado = await borrarAudioBestEffort(existente.audioR2Key);
+      const audioReal = Boolean(
+        existente.audioR2Key && existente.audioR2Key !== "dev-no-r2",
+      );
+      if (!audioBorrado && audioReal) {
+        await db.sesionClinica.update({
+          where: { id },
+          data: { error: MENSAJE_AUDIO_NO_BORRADO },
+        });
+        throw new ApiError(MENSAJE_AUDIO_NO_BORRADO, 409);
+      }
       await db.sesionClinica.delete({ where: { id } });
 
       return ok({ success: true, eliminada: true });
@@ -165,6 +181,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       if (existente.audioR2Key) {
         // Hay audio subido: conservamos fila y audio, transición a error
         // (desde ahí la usuaria puede reintentar o descartar definitivamente).
+        assertTransicionValida(existente.estado, "error");
         await db.sesionClinica.update({
           where: { id },
           data: {
@@ -215,11 +232,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     let esReintento = false;
 
     if (parsed.data.estado !== undefined) {
-      const desde = existente.estado as Estado;
-      const permitidas = transicionesPermitidas[desde] ?? [];
-      if (!permitidas.includes(parsed.data.estado)) {
+      // El PATCH solo acepta las transiciones que el navegador pide de
+      // verdad (pendiente→grabando, grabando→error, error→procesando). Las
+      // demás son válidas a nivel sistema pero tienen efectos que viven en
+      // su propia ruta (upload, callback, aprobar, DELETE); permitirlas acá
+      // sería un bypass de esos efectos.
+      if (
+        !esTransicionPermitidaAlCliente(existente.estado, parsed.data.estado)
+      ) {
         throw new ApiError(
-          `Transición inválida: ${existente.estado} → ${parsed.data.estado}`,
+          `La transición ${existente.estado} → ${parsed.data.estado} no se puede pedir por PATCH: se realiza por su ruta específica (upload, callback, aprobar o DELETE).`,
           400,
         );
       }
@@ -228,7 +250,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       // sesiones en "procesando" vía /pendientes, así que la transición
       // re-encola sola. Pero sin audio en R2 no hay nada que procesar y la
       // sesión quedaría colgada en "procesando" para siempre.
-      esReintento = desde === "error" && parsed.data.estado === "procesando";
+      esReintento =
+        existente.estado === "error" && parsed.data.estado === "procesando";
       if (
         esReintento &&
         !parsed.data.audioR2Key &&
@@ -248,12 +271,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         duracionAudioSeg: parsed.data.duracionAudioSeg,
         audioR2Key: parsed.data.audioR2Key,
         // Al reintentar se limpia el error anterior (mismo criterio que
-        // upload/route.ts al pasar a "procesando").
-        ...(esReintento ? { error: null } : {}),
+        // upload/route.ts al pasar a "procesando") y se resetea el contador
+        // de intentos: /pendientes lo usa como lease y tope (3); sin el
+        // reset, una sesión que agotó los reintentos volvería a "error" en
+        // el primer poll.
+        ...(esReintento ? { error: null, intentos: 0 } : {}),
       },
+      select: SESION_SELECT,
     });
 
-    return ok(sesion);
+    return ok(sinClaveTemporal(sesion));
   } catch (error) {
     return errorResponse(error);
   }

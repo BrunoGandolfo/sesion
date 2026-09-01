@@ -1,23 +1,49 @@
 """
-Genera nota clinica SOAP a partir de transcripcion usando LLM.
+Llamadas al LLM (Anthropic) con structured outputs: nota clinica SOAP
+(Llamada A), actualizacion de contexto longitudinal (Llamada B) y feedback
+de auto-supervision (Llamada C).
+
+Cada funcion publica devuelve (resultado, nombre_de_prompt) para que el
+pipeline reporte la version de prompt usada.
 """
 import json
 import logging
 import os
-import re
 from datetime import date
-import requests
+
+import anthropic
+
 import config
+from errores import PipelineError
+from schemas_llm import (
+    SCHEMA_CONTEXTO,
+    SCHEMA_FEEDBACK_CBT_MI,
+    SCHEMA_FEEDBACK_GESTALT,
+    SCHEMA_NOTA,
+    validar_rangos_nota,
+)
 
 logger = logging.getLogger(__name__)
 
-PROMPT_NOTA_SOAP = "clinical_note_v3.1.md"
-PROMPT_UPDATE_CONTEXTO = "update_context_v2.0.md"
-# Prompt de feedback por orientación teórica (contrato: docs/contrato-multi-orientacion.md)
-PROMPTS_FEEDBACK = {
-    "cbt_mi": "therapist_feedback_v1.0.md",
-    "gestalt": "therapist_feedback_gestalt_v1.0.md",
+PROMPTS = {
+    "nota": "clinical_note_v3.1.md",
+    "contexto": "update_context_v2.0.md",
+    "feedback_cbt_mi": "therapist_feedback_v1.0.md",
+    "feedback_gestalt": "therapist_feedback_gestalt_v1.0.md",
 }
+
+# Orientacion teorica -> (clave en PROMPTS, schema). Desconocida cae a cbt_mi.
+_FEEDBACK_POR_ORIENTACION = {
+    "cbt_mi": ("feedback_cbt_mi", SCHEMA_FEEDBACK_CBT_MI),
+    "gestalt": ("feedback_gestalt", SCHEMA_FEEDBACK_GESTALT),
+}
+
+
+def version_de(nombre_archivo: str) -> str:
+    """'clinical_note_v3.1.md' -> 'v3.1'. Si no hay sufijo _vX.Y devuelve el nombre base."""
+    base = nombre_archivo.rsplit(".", 1)[0] if "." in nombre_archivo else nombre_archivo
+    idx = base.rfind("_v")
+    return base[idx + 1:] if idx >= 0 else base
 
 
 def _cargar_prompt(nombre: str) -> str:
@@ -28,88 +54,114 @@ def _cargar_prompt(nombre: str) -> str:
         return f.read()
 
 
-def _llamar_ollama(system_prompt: str, user_content: str) -> str:
-    url = f"{config.OLLAMA_BASE_URL}/api/chat"
-    payload = {
-        "model": config.LLM_MODEL_ID,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        "stream": False,
-        "think": False,
-        "options": {"temperature": 0.3, "num_predict": 8192, "num_ctx": config.LLM_NUM_CTX},
-    }
-    logger.info(f"Llamando Ollama ({config.LLM_MODEL_ID})...")
-    response = requests.post(url, json=payload, timeout=300)
-    response.raise_for_status()
-    return response.json()["message"]["content"]
+# Cliente Anthropic ─────────────────────────────────────────────────────────
+
+_cliente_anthropic: anthropic.Anthropic | None = None
 
 
-def _llamar_vllm(system_prompt: str, user_content: str) -> str:
-    url = f"{config.VLLM_BASE_URL}/v1/chat/completions"
-    payload = {
-        "model": config.LLM_MODEL_ID,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        "temperature": 0.3,
-        "max_tokens": 8192,
-    }
-    logger.info(f"Llamando vLLM ({config.LLM_MODEL_ID})...")
-    response = requests.post(url, json=payload, timeout=300)
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+def _cliente() -> anthropic.Anthropic:
+    global _cliente_anthropic
+    if _cliente_anthropic is None:
+        _cliente_anthropic = anthropic.Anthropic(
+            api_key=config.ANTHROPIC_API_KEY,
+            max_retries=3,
+            timeout=config.LLM_TIMEOUT_SECONDS,
+        )
+    return _cliente_anthropic
 
 
-def _llamar_llm(system_prompt: str, user_content: str) -> str:
-    if config.LLM_BACKEND == "ollama":
-        return _llamar_ollama(system_prompt, user_content)
-    if config.LLM_BACKEND == "vllm":
-        return _llamar_vllm(system_prompt, user_content)
-    raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
+def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> dict:
+    """
+    Una llamada a la Messages API con structured output (json_schema).
+    El system prompt lleva cache_control: es identico entre sesiones y
+    representa la mayor parte del input.
+    """
+    output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
+    # `effort` vive dentro de output_config en la API actual. Los niveles
+    # aceptados dependen del modelo; vacio = no enviar y usar el default.
+    if config.LLM_EFFORT:
+        output_config["effort"] = config.LLM_EFFORT
 
-
-def _parsear_respuesta(raw: str) -> dict:
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.split("\n")
-        start = 1 if lines[0].strip().startswith("```") else 0
-        end = len(lines)
-        for i in range(len(lines) - 1, -1, -1):
-            if lines[i].strip() == "```":
-                end = i
-                break
-        cleaned = "\n".join(lines[start:end]).strip()
-    if "<think>" in cleaned:
-        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+    logger.info(f"Llamando Anthropic ({config.LLM_MODEL_ID}, effort={config.LLM_EFFORT or 'default'})...")
     try:
-        return json.loads(cleaned)
+        response = _cliente().messages.create(
+            model=config.LLM_MODEL_ID,
+            max_tokens=config.LLM_MAX_TOKENS,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user_content}],
+            output_config=output_config,
+        )
+    except anthropic.APITimeoutError as e:
+        logger.error(f"Anthropic timeout tras {config.LLM_TIMEOUT_SECONDS}s")
+        raise PipelineError("llm_timeout", "Anthropic no respondio a tiempo") from e
+    except anthropic.APIStatusError as e:
+        logger.error(f"Anthropic HTTP {e.status_code} (request_id={getattr(e, 'request_id', None)})")
+        raise PipelineError("llm_error", f"Anthropic respondio {e.status_code}") from e
+    except anthropic.APIConnectionError as e:
+        logger.error(f"Anthropic sin conexion ({type(e).__name__})")
+        raise PipelineError("llm_error", "Anthropic no responde") from e
+
+    usage = response.usage
+    logger.info(
+        f"Anthropic OK (request_id={getattr(response, '_request_id', None)}): "
+        f"input={usage.input_tokens} output={usage.output_tokens} "
+        f"cache_read={getattr(usage, 'cache_read_input_tokens', None)} "
+        f"cache_write={getattr(usage, 'cache_creation_input_tokens', None)} "
+        f"stop={response.stop_reason}"
+    )
+
+    if response.stop_reason == "max_tokens":
+        raise PipelineError(
+            "llm_truncado", f"Respuesta truncada en {config.LLM_MAX_TOKENS} tokens"
+        )
+    if response.stop_reason == "refusal":
+        raise PipelineError("llm_rechazo", "El modelo rechazo la solicitud")
+
+    texto = next((b.text for b in response.content if b.type == "text"), None)
+    if texto is None:
+        raise PipelineError("llm_sin_texto", "La respuesta no contiene bloque de texto")
+
+    try:
+        return json.loads(texto)
     except json.JSONDecodeError as e:
         # No volcar el texto crudo: puede contener la nota clinica entera.
         # Solo metadatos de forma para diagnosticar el fallo de parseo.
+        stripped = texto.strip()
         logger.error(
-            f"JSON invalido del LLM: {e} "
-            f"(len={len(cleaned)} chars, "
-            f"empieza_con_llave={cleaned.startswith('{')}, "
-            f"termina_con_llave={cleaned.endswith('}')}, "
-            f"tenia_fence={raw.strip().startswith('```')})"
+            f"JSON invalido del LLM: linea {e.lineno} col {e.colno} "
+            f"(len={len(stripped)} chars, "
+            f"empieza_con_llave={stripped.startswith('{')}, "
+            f"termina_con_llave={stripped.endswith('}')})"
         )
-        raise ValueError(f"LLM no devolvio JSON valido: {e}")
+        raise PipelineError("llm_json_invalido", "El LLM no devolvio JSON valido") from e
 
+
+def _llamar_llm(system_prompt: str, user_content: str, schema: dict) -> dict:
+    if config.LLM_BACKEND == "anthropic":
+        return _llamar_anthropic(system_prompt, user_content, schema)
+    raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
+
+
+# Llamada A — nota SOAP ─────────────────────────────────────────────────────
 
 def analizar(
     transcripcion_formateada: str,
     contexto_clinico: str | None = None,
     speech_analytics: dict | None = None,
-) -> dict:
+) -> tuple[dict, str]:
     """
-    Genera la nota SOAP (Llamada A) usando el prompt clinical_note_v3.1.
-    Arma el user message con los tags XML que el prompt espera:
-    <transcripcion>, <contexto_previo>, <speech_analytics>.
+    Genera la nota SOAP usando el prompt de PROMPTS["nota"]. Arma el user
+    message con los tags XML que el prompt espera: <transcripcion>,
+    <speech_analytics>, <contexto_previo>. Devuelve (resultado, nombre_prompt).
     """
-    system_prompt = _cargar_prompt(PROMPT_NOTA_SOAP)
+    nombre_prompt = PROMPTS["nota"]
+    system_prompt = _cargar_prompt(nombre_prompt)
 
     bloques = [
         "<transcripcion>\n"
@@ -130,20 +182,17 @@ def analizar(
         )
     user_content = "\n\n".join(bloques)
 
-    raw = _llamar_llm(system_prompt, user_content)
-    resultado = _parsear_respuesta(raw)
+    resultado = _llamar_llm(system_prompt, user_content, SCHEMA_NOTA)
+    try:
+        validar_rangos_nota(resultado)
+    except ValueError as e:
+        raise PipelineError("llm_rango_invalido", str(e)) from e
 
-    if "nota" not in resultado:
-        raise ValueError("Respuesta sin 'nota'")
-    if "datosEstructurados" not in resultado:
-        raise ValueError("Respuesta sin 'datosEstructurados'")
-    for campo in ("subjetivo", "objetivo", "analisis", "plan"):
-        if campo not in resultado["nota"]:
-            raise ValueError(f"Nota SOAP incompleta: falta '{campo}'")
+    logger.info(f"Nota clinica generada ({nombre_prompt})")
+    return resultado, nombre_prompt
 
-    logger.info("Nota clinica generada")
-    return resultado
 
+# Llamada B — contexto longitudinal ─────────────────────────────────────────
 
 def actualizar_contexto_clinico(
     contexto_previo: dict,
@@ -152,17 +201,14 @@ def actualizar_contexto_clinico(
     sesion_clinica_id: str,
     fecha: str | None = None,
     numero_sesion: int = 0,
-) -> dict:
+) -> tuple[dict, str]:
     """
-    Llamada B: actualiza el PacienteContextoClinico tras nota SOAP aprobada.
-    Usa el prompt update_context_v2.0.md, que exige tres bloques:
-    <sesion_actual>, <contexto_previo>, <nota_soap_aprobada>.
-    Output es el objeto completo (no diff) con los campos que el modelo
-    Prisma persiste: hipotesisDiagnostica, resumenAcumulativo,
-    objetivosTerapeuticos, intervencionesProbadas, temasRecurrentes,
-    riesgosHistoricos, ultimaSesionId.
+    Actualiza el PacienteContextoClinico tras una nota SOAP aprobada, con el
+    prompt de PROMPTS["contexto"] (bloques <sesion_actual>, <contexto_previo>,
+    <nota_soap_aprobada>). Devuelve (contexto_actualizado, nombre_prompt).
     """
-    system_prompt = _cargar_prompt(PROMPT_UPDATE_CONTEXTO)
+    nombre_prompt = PROMPTS["contexto"]
+    system_prompt = _cargar_prompt(nombre_prompt)
     sesion_actual = {
         "sesionClinicaId": sesion_clinica_id,
         "fecha": fecha or date.today().isoformat(),
@@ -181,28 +227,30 @@ def actualizar_contexto_clinico(
         "</nota_soap_aprobada>"
     )
 
-    raw = _llamar_llm(system_prompt, user_content)
-    actualizado = _parsear_respuesta(raw)
-    logger.info("Contexto clinico actualizado (Llamada B)")
-    return actualizado
+    actualizado = _llamar_llm(system_prompt, user_content, SCHEMA_CONTEXTO)
+    logger.info(f"Contexto clinico actualizado ({nombre_prompt})")
+    return actualizado, nombre_prompt
 
+
+# Llamada C — feedback terapeuta ────────────────────────────────────────────
 
 def generar_feedback_terapeuta(
     transcripcion_formateada: str,
     speech_analytics: dict | None = None,
     orientacion: str = "cbt_mi",
-) -> dict | None:
+) -> tuple[dict | None, str]:
     """
-    Llamada C: reporte de auto-supervisión sobre la sesión, con instrumento
-    según la orientación teórica (MITI/CTS-R para cbt_mi, GTFS para gestalt).
-    Orientación desconocida cae al default cbt_mi, nunca rompe.
-    Best-effort — si falla el LLM o el parsing, retorna None y deja
-    warning en log (mismo patrón que Llamada B). El campo final se
-    embebe en datosEstructurados.feedbackTerapeuta.
+    Reporte de auto-supervision segun orientacion teorica (MITI/CTS-R para
+    cbt_mi, GTFS para gestalt). Orientacion desconocida cae a cbt_mi.
+    Best-effort: si falla el LLM devuelve (None, nombre_prompt) y deja
+    warning en log. Se embebe en datosEstructurados.feedbackTerapeuta.
     """
+    clave, schema = _FEEDBACK_POR_ORIENTACION.get(
+        orientacion, _FEEDBACK_POR_ORIENTACION["cbt_mi"]
+    )
+    nombre_prompt = PROMPTS[clave]
+    logger.info(f"Feedback terapeuta: orientacion={orientacion}, prompt={nombre_prompt}")
     try:
-        nombre_prompt = PROMPTS_FEEDBACK.get(orientacion, PROMPTS_FEEDBACK["cbt_mi"])
-        logger.info(f"Feedback terapeuta: orientacion={orientacion}, prompt={nombre_prompt}")
         system_prompt = _cargar_prompt(nombre_prompt)
         bloques = [
             "<transcripcion>\n"
@@ -217,14 +265,12 @@ def generar_feedback_terapeuta(
             )
         user_content = "\n\n".join(bloques)
 
-        raw = _llamar_llm(system_prompt, user_content)
-        feedback = _parsear_respuesta(raw)
-        logger.info("Feedback terapeuta generado (Llamada C)")
-        return feedback
+        feedback = _llamar_llm(system_prompt, user_content, schema)
+        logger.info(f"Feedback terapeuta generado ({nombre_prompt})")
+        return feedback, nombre_prompt
+    except PipelineError as e:
+        logger.warning(f"Feedback terapeuta fallo: {e.codigo}: {e.mensaje_publico}")
+        return None, nombre_prompt
     except Exception as e:
-        logger.warning(f"Llamada C (feedback_terapeuta) fallo: {e}")
-        return None
-
-
-def version_prompt() -> str:
-    return "v3.1"
+        logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}: {str(e)[:200]}")
+        return None, nombre_prompt

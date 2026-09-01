@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  esTransicionPermitidaAlCliente,
   esTransicionValida,
   parseDatosEstructurados,
   esNotaCompleta,
@@ -12,15 +13,32 @@ import type {
   IntervencionTerapeuta,
 } from "@/types/domain";
 
+const TODOS_LOS_ESTADOS: EstadoProcesamiento[] = [
+  "pendiente",
+  "grabando",
+  "subiendo",
+  "procesando",
+  "revision",
+  "aprobado",
+  "error",
+];
+
 describe("Sesión clínica - validaciones", () => {
-  describe("esTransicionValida — transiciones válidas", () => {
+  // ─── Tabla del SISTEMA: lo que alguna ruta (PATCH, upload, callback,
+  // aprobar o DELETE) puede hacer. ───────────────────────────────────────
+  describe("esTransicionValida — transiciones válidas a nivel sistema", () => {
     const valid: Array<[EstadoProcesamiento, EstadoProcesamiento]> = [
       ["pendiente", "grabando"],
       ["grabando", "subiendo"],
+      ["grabando", "procesando"], // upload salta "subiendo"
+      ["grabando", "error"], // fallo de upload / huérfana con audio
       ["subiendo", "procesando"],
-      ["procesando", "revision"],
-      ["procesando", "error"],
-      ["error", "procesando"],
+      ["subiendo", "error"],
+      ["procesando", "revision"], // callback
+      ["procesando", "error"], // callback o tope de reintentos
+      ["revision", "aprobado"], // solo /aprobar
+      ["revision", "error"], // descarte (DELETE)
+      ["error", "procesando"], // reintento
     ];
 
     it.each(valid)("permite %s → %s", (desde, hasta) => {
@@ -28,8 +46,8 @@ describe("Sesión clínica - validaciones", () => {
     });
   });
 
-  describe("esTransicionValida — transiciones inválidas", () => {
-    it("rechaza pendiente → procesando (saltea grabando+subiendo)", () => {
+  describe("esTransicionValida — transiciones inválidas a nivel sistema", () => {
+    it("rechaza pendiente → procesando (saltea grabando)", () => {
       expect(esTransicionValida("pendiente", "procesando")).toBe(false);
     });
 
@@ -37,50 +55,25 @@ describe("Sesión clínica - validaciones", () => {
       expect(esTransicionValida("pendiente", "revision")).toBe(false);
     });
 
-    it("rechaza grabando → revision (no se puede saltar pasos)", () => {
+    it("rechaza grabando → revision (no se puede saltar el procesamiento)", () => {
       expect(esTransicionValida("grabando", "revision")).toBe(false);
-    });
-
-    it("rechaza grabando → procesando (debe pasar por subiendo)", () => {
-      expect(esTransicionValida("grabando", "procesando")).toBe(false);
     });
 
     it("rechaza revision → grabando (no se vuelve a grabar)", () => {
       expect(esTransicionValida("revision", "grabando")).toBe(false);
     });
 
-    it("revision es estado terminal vía PATCH", () => {
-      const todos: EstadoProcesamiento[] = [
-        "pendiente",
-        "grabando",
-        "subiendo",
-        "procesando",
-        "revision",
-        "aprobado",
-        "error",
-      ];
-      for (const destino of todos) {
-        expect(esTransicionValida("revision", destino)).toBe(false);
+    it("revision solo puede ir a aprobado o error", () => {
+      for (const destino of TODOS_LOS_ESTADOS) {
+        const esperado = destino === "aprobado" || destino === "error";
+        expect(esTransicionValida("revision", destino)).toBe(esperado);
       }
     });
 
     it("aprobado es terminal: rechaza cualquier transición", () => {
-      const todos: EstadoProcesamiento[] = [
-        "pendiente",
-        "grabando",
-        "subiendo",
-        "procesando",
-        "revision",
-        "aprobado",
-        "error",
-      ];
-      for (const destino of todos) {
+      for (const destino of TODOS_LOS_ESTADOS) {
         expect(esTransicionValida("aprobado", destino)).toBe(false);
       }
-    });
-
-    it("permite reintento: error → procesando", () => {
-      expect(esTransicionValida("error", "procesando")).toBe(true);
     });
 
     it("error no salta a revision sin re-procesar", () => {
@@ -89,6 +82,78 @@ describe("Sesión clínica - validaciones", () => {
 
     it("rechaza un estado consigo mismo (no-op)", () => {
       expect(esTransicionValida("grabando", "grabando")).toBe(false);
+    });
+
+    it("rechaza estados desconocidos sin lanzar", () => {
+      expect(esTransicionValida("corrupto", "grabando")).toBe(false);
+      expect(esTransicionValida("grabando", "corrupto")).toBe(false);
+    });
+  });
+
+  // ─── Tabla del CLIENTE: lo que el navegador puede pedir por PATCH
+  // /api/sesion-clinica/[id] { estado }. Es un subconjunto estricto de la
+  // tabla del sistema; el resto se hace por su ruta con efectos. ─────────
+  describe("esTransicionPermitidaAlCliente — lo que el PATCH acepta", () => {
+    const permitidas: Array<[EstadoProcesamiento, EstadoProcesamiento]> = [
+      ["pendiente", "grabando"],
+      ["grabando", "error"],
+      ["error", "procesando"],
+    ];
+
+    it.each(permitidas)("el cliente puede pedir %s → %s", (desde, hasta) => {
+      expect(esTransicionPermitidaAlCliente(desde, hasta)).toBe(true);
+    });
+
+    it("el cliente no puede pedir revision → aprobado (solo /aprobar)", () => {
+      expect(esTransicionValida("revision", "aprobado")).toBe(true);
+      expect(esTransicionPermitidaAlCliente("revision", "aprobado")).toBe(
+        false,
+      );
+    });
+
+    it("el cliente no puede pedir grabando → procesando (solo /upload)", () => {
+      expect(esTransicionValida("grabando", "procesando")).toBe(true);
+      expect(esTransicionPermitidaAlCliente("grabando", "procesando")).toBe(
+        false,
+      );
+    });
+
+    it("el cliente no puede pedir subiendo → procesando (solo /upload)", () => {
+      expect(esTransicionValida("subiendo", "procesando")).toBe(true);
+      expect(esTransicionPermitidaAlCliente("subiendo", "procesando")).toBe(
+        false,
+      );
+    });
+
+    it("el cliente no puede pedir procesando → revision (solo callback)", () => {
+      expect(esTransicionValida("procesando", "revision")).toBe(true);
+      expect(esTransicionPermitidaAlCliente("procesando", "revision")).toBe(
+        false,
+      );
+    });
+
+    it("el cliente no puede pedir revision → error (solo DELETE)", () => {
+      expect(esTransicionPermitidaAlCliente("revision", "error")).toBe(false);
+    });
+
+    it("nunca permite lo que el sistema tampoco permite", () => {
+      for (const desde of TODOS_LOS_ESTADOS) {
+        for (const hasta of TODOS_LOS_ESTADOS) {
+          if (!esTransicionValida(desde, hasta)) {
+            expect(esTransicionPermitidaAlCliente(desde, hasta)).toBe(false);
+          }
+        }
+      }
+    });
+
+    it("exactamente tres transiciones son de cliente", () => {
+      let total = 0;
+      for (const desde of TODOS_LOS_ESTADOS) {
+        for (const hasta of TODOS_LOS_ESTADOS) {
+          if (esTransicionPermitidaAlCliente(desde, hasta)) total += 1;
+        }
+      }
+      expect(total).toBe(3);
     });
   });
 

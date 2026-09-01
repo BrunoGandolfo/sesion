@@ -1,11 +1,12 @@
-// TODO: agregar `api/sesion-clinica/callback` a las exclusiones del matcher en
-// src/middleware.ts. Este endpoint se autentica machine-to-machine con
-// PROCESSING_SECRET (Bearer token), no con sesión de usuario.
+// Endpoint M2M: el worker Python (processor/) entrega acá el resultado del
+// procesamiento. Se autentica con PROCESSING_SECRET (Bearer token); está
+// excluido del matcher de auth en src/middleware.ts.
 
 import { z } from "zod";
 import { db } from "@/lib/db";
 
 import { errorResponse, validationError } from "../../_lib/responses";
+import { extraerClaveTemporal } from "../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +65,9 @@ const speechAnalyticsSchema = z.object({
   duracionPromedioSilenciosSeg: z.number(),
   tiempoTotalHablaSeg: z.number(),
   speakersDetectados: z.number().int().optional(),
+  // Origen de los roles terapeuta/paciente: etiquetas del ASR o heurística
+  // posicional (fallback del worker cuando la diarización colapsa).
+  rolesOrigen: z.enum(["asr_role", "posicional"]).optional(),
 });
 
 const datosEstructuradosSchema = z.object({
@@ -90,6 +94,10 @@ const datosEstructuradosSchema = z.object({
   duracionRealMin: z.number().optional(),
   speechAnalytics: speechAnalyticsSchema.optional(),
   observacionIA: z.string().optional(),
+  // Metadata de trazabilidad del pipeline (versiones de prompts, tiempos,
+  // etc.). Opaca para la app: se persiste tal cual dentro de
+  // datosEstructurados y no se valida su shape.
+  _pipeline: z.record(z.string(), z.unknown()).optional(),
 });
 
 const callbackSchema = z.object({
@@ -100,6 +108,7 @@ const callbackSchema = z.object({
   datosEstructurados: datosEstructuradosSchema.optional(),
   modeloASR: z.string().optional(),
   modeloLLM: z.string().optional(),
+  promptVersion: z.string().max(200).optional(),
   error: z.string().optional(),
 });
 
@@ -124,31 +133,6 @@ function normalizeDatosEstructurados(input: unknown): unknown {
   } catch {
     return input;
   }
-}
-
-/**
- * La clave temporal de cifrado del audio (upload la guarda en
- * datosEstructurados._audioCifradoTemporal; pendientes la lee para el
- * worker) debe vivir exactamente lo que vive el audio: hasta la aprobación
- * de la nota o la eliminación definitiva. El resultado del LLM no la trae y
- * el schema Zod la descarta, así que al persistir el callback se re-adjunta
- * desde la fila previa — sin esto, el audio en "revision" queda vivo pero
- * indescifrable y el reproceso tras un descarte es imposible.
- */
-function extraerClaveTemporal(raw: unknown): unknown {
-  if (raw == null) return null;
-  let parsed: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  return (
-    (parsed as Record<string, unknown>)._audioCifradoTemporal ?? null
-  );
 }
 
 export async function POST(request: Request) {
@@ -190,15 +174,33 @@ export async function POST(request: Request) {
     const ahora = new Date();
     const esError = parsed.data.estado === "error";
 
-    // Re-adjuntar la clave temporal del audio al persistir el resultado
-    // (ver extraerClaveTemporal). En callbacks de error datosEstructurados
-    // viene undefined y la columna no se toca, así que la clave ya sobrevive.
+    // Re-adjuntar la clave temporal del audio al persistir el resultado.
+    // La clave (upload la guarda en datosEstructurados._audioCifradoTemporal;
+    // pendientes la lee para el worker) debe vivir exactamente lo que vive el
+    // audio: hasta la aprobación de la nota o la eliminación definitiva. El
+    // resultado del LLM no la trae y el schema Zod la descarta, así que se
+    // re-adjunta desde la fila previa — sin esto, el audio en "revision"
+    // queda vivo pero indescifrable y el reproceso tras un descarte es
+    // imposible. En callbacks de error datosEstructurados viene undefined y
+    // la columna no se toca, así que la clave ya sobrevive.
     const claveTemporal = parsed.data.datosEstructurados
       ? extraerClaveTemporal(sesion.datosEstructurados)
       : null;
 
-    await db.sesionClinica.update({
-      where: { id: sesion.id },
+    // No hay columna para la versión del prompt: se persiste junto al modelo
+    // como "modelo | promptVersion" (trazabilidad sin migración). Los
+    // lectores de modeloLLM lo tratan como string opaco.
+    const modeloLLM =
+      parsed.data.modeloLLM && parsed.data.promptVersion
+        ? `${parsed.data.modeloLLM} | ${parsed.data.promptVersion}`
+        : parsed.data.modeloLLM;
+
+    // Escritura condicionada al estado: solo se acepta el resultado si la
+    // sesión sigue en "procesando". Un callback tardío (lease vencido y
+    // re-entregado, sesión descartada/reintentada mientras tanto) no pisa
+    // nada. updateMany pasa por la extensión de cifrado igual que update.
+    const { count } = await db.sesionClinica.updateMany({
+      where: { id: sesion.id, estado: "procesando" },
       data: {
         estado: parsed.data.estado,
         transcripcion: parsed.data.transcripcion,
@@ -217,12 +219,19 @@ export async function POST(request: Request) {
             )
           : undefined,
         modeloASR: parsed.data.modeloASR,
-        modeloLLM: parsed.data.modeloLLM,
+        modeloLLM,
         procesadoEn: ahora,
         error: esError ? parsed.data.error ?? null : null,
         intentos: esError ? sesion.intentos + 1 : undefined,
       },
     });
+
+    if (count === 0) {
+      return Response.json(
+        { error: "La sesión no está en procesamiento; callback ignorado" },
+        { status: 409 },
+      );
+    }
 
     return Response.json({ success: true });
   } catch (error) {

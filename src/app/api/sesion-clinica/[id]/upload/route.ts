@@ -10,6 +10,10 @@ import {
   ok,
   validationError,
 } from "../../../_lib/responses";
+import {
+  assertTransicionValida,
+  sinClaveTemporal,
+} from "../../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -188,6 +192,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // Tabla única de transiciones (grabando|subiendo → procesando).
+    assertTransicionValida(sesion.estado, "procesando");
+
     const actualizada = await db.sesionClinica.update({
       where: { id: sesion.id },
       data: {
@@ -203,7 +210,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       },
     });
 
-    return ok(actualizada);
+    // La clave temporal del audio recién guardada no vuelve al cliente.
+    return ok(sinClaveTemporal(actualizada));
   } catch (error) {
     return errorResponse(error);
   }

@@ -3,11 +3,15 @@ Worker principal del servicio de procesamiento de sesiones clinicas.
 
 Modo loop (default):
     python worker.py
-    Hace polling a /api/sesion-clinica/pendientes cada POLL_INTERVAL_SECONDS
-    y procesa cada sesion devuelta.
+    Cada POLL_INTERVAL_SECONDS: procesa /api/sesion-clinica/pendientes y
+    luego integra /api/sesion-clinica/aprobadas-sin-contexto.
 
 Modo manual:
-    python worker.py manual <sesion_clinica_id> <audio_r2_key> [paciente_nombre]
+    python worker.py manual <sesion_clinica_id> <audio_r2_key> <clave_cifrado> <iv>
+
+La app aplica un lease sobre las pendientes (re-entrega a los 45 min con
+intento+1, error automatico al superar 3 intentos): el worker no reintenta
+por su cuenta.
 """
 import logging
 import signal
@@ -17,11 +21,8 @@ import time
 import requests
 
 import config
+import contexto_worker
 from processor import procesar_sesion
-from transcriber import asr_saludable
-
-# Ciclos consecutivos con el ASR caído antes de escalar el log a ERROR.
-CICLOS_ASR_CAIDO_UMBRAL = 10
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,9 +53,8 @@ def _dormir_interrumpible(segundos: int) -> None:
 
 
 def _consultar_pendientes() -> list[dict]:
-    url = f"{config.APP_BASE_URL}/api/sesion-clinica/pendientes"
     headers = {"Authorization": f"Bearer {config.PROCESSING_SECRET}"}
-    response = requests.get(url, headers=headers, timeout=15)
+    response = requests.get(config.PENDIENTES_URL, headers=headers, timeout=15)
     response.raise_for_status()
     body = response.json()
     if isinstance(body, list):
@@ -69,17 +69,20 @@ def _consultar_pendientes() -> list[dict]:
 
 def _extraer_args(
     item: dict,
-) -> tuple[str, str, str, str, str, str | None, str] | None:
+) -> tuple[str, str, str, str, str | None, str, int] | None:
     sesion_id = item.get("sesionClinicaId") or item.get("id")
     audio_key = item.get("audioR2Key") or item.get("audio_r2_key")
     clave = item.get("claveCifrado") or item.get("clave_cifrado")
     iv = item.get("iv") or item.get("ivCifrado") or item.get("iv_cifrado")
-    paciente = item.get("pacienteNombre") or item.get("paciente_nombre") or ""
     paciente_id = item.get("pacienteId") or item.get("paciente_id") or None
     orientacion = item.get("orientacionTeorica") or "cbt_mi"
+    try:
+        intento = int(item.get("intento") or 1)
+    except (TypeError, ValueError):
+        intento = 1
     if not sesion_id or not audio_key or not clave or not iv:
         return None
-    return sesion_id, audio_key, clave, iv, paciente, paciente_id, orientacion
+    return sesion_id, audio_key, clave, iv, paciente_id, orientacion, intento
 
 
 def _procesar_pendientes(items: list[dict]) -> None:
@@ -89,8 +92,8 @@ def _procesar_pendientes(items: list[dict]) -> None:
             return
         args = _extraer_args(item)
         if not args:
-            # Nunca loguear el item completo: trae claveCifrado, iv y el
-            # nombre del paciente. Solo el id y qué campos faltan.
+            # Nunca loguear el item completo: trae claveCifrado e iv.
+            # Solo el id y que campos faltan.
             sesion_id_log = item.get("sesionClinicaId") or item.get("id") or "?"
             faltan = [
                 nombre
@@ -107,21 +110,22 @@ def _procesar_pendientes(items: list[dict]) -> None:
                 f"faltan={','.join(faltan) or '?'}"
             )
             continue
-        sesion_id, audio_key, clave, iv, paciente, paciente_id, orientacion = args
-        logger.info(f"Procesando sesion {sesion_id} (audio: {audio_key})")
+        sesion_id, audio_key, clave, iv, paciente_id, orientacion, intento = args
+        logger.info(f"Procesando sesion {sesion_id} (audio: {audio_key}, intento {intento})")
         try:
             procesar_sesion(
                 sesion_clinica_id=sesion_id,
                 audio_r2_key=audio_key,
                 clave_cifrado=clave,
                 iv_cifrado=iv,
-                paciente_nombre=paciente,
                 paciente_id=paciente_id,
                 orientacion_teorica=orientacion,
+                intento=intento,
             )
             logger.info(f"Sesion {sesion_id} procesada")
         except Exception as e:
-            logger.error(f"Error procesando {sesion_id}: {e}", exc_info=True)
+            # procesar_sesion captura todo internamente; esto es solo red de seguridad.
+            logger.error(f"Error procesando {sesion_id}: {type(e).__name__}", exc_info=True)
 
 
 def loop_principal() -> None:
@@ -129,39 +133,22 @@ def loop_principal() -> None:
     signal.signal(signal.SIGTERM, _signal_handler)
 
     logger.info("=== Sesion Processor Worker iniciado ===")
-    logger.info(f"  App:  {config.APP_BASE_URL}")
-    logger.info(f"  ASR:  {config.ASR_MODEL_ID}")
-    logger.info(f"  LLM:  {config.LLM_BACKEND}:{config.LLM_MODEL_ID}")
-    logger.info(f"  R2:   {'si' if config.r2_configurado() else 'NO'}")
-    logger.info(f"  Poll: cada {config.POLL_INTERVAL_SECONDS}s")
-
-    ciclos_asr_caido = 0
+    logger.info(f"  App:    {config.APP_BASE_URL}")
+    logger.info(f"  ASR:    assemblyai:{config.ASR_MODEL_ID}")
+    logger.info(f"  LLM:    {config.LLM_BACKEND}:{config.LLM_MODEL_ID}")
+    logger.info(f"  Worker: {config.WORKER_VERSION}")
+    logger.info(f"  R2:     {'si' if config.r2_configurado() else 'NO'}")
+    logger.info(f"  Poll:   cada {config.POLL_INTERVAL_SECONDS}s")
 
     while _running:
-        if not asr_saludable():
-            ciclos_asr_caido += 1
-            if ciclos_asr_caido >= CICLOS_ASR_CAIDO_UMBRAL:
-                minutos = ciclos_asr_caido * config.POLL_INTERVAL_SECONDS // 60
-                logger.error(
-                    f"WhisperX caído hace {minutos} min — verificar: "
-                    f"curl {config.ASR_HEALTH_URL} | docker ps | docker restart sesion-asr"
-                )
-            else:
-                logger.warning(
-                    f"WhisperX no responde — reintento en {config.POLL_INTERVAL_SECONDS}s"
-                )
-            _dormir_interrumpible(config.POLL_INTERVAL_SECONDS)
-            continue
-        ciclos_asr_caido = 0
-
         try:
             pendientes = _consultar_pendientes()
         except requests.RequestException as e:
-            logger.error(f"Error consultando pendientes: {e}")
+            logger.error(f"Error consultando pendientes ({type(e).__name__})")
             _dormir_interrumpible(config.POLL_INTERVAL_SECONDS)
             continue
         except Exception as e:
-            logger.error(f"Error inesperado en el loop: {e}", exc_info=True)
+            logger.error(f"Error inesperado en el loop: {type(e).__name__}", exc_info=True)
             _dormir_interrumpible(config.POLL_INTERVAL_SECONDS)
             continue
 
@@ -170,6 +157,12 @@ def loop_principal() -> None:
             _procesar_pendientes(pendientes)
         else:
             logger.info("Sin sesiones pendientes")
+
+        if _running:
+            try:
+                contexto_worker.procesar_aprobadas()
+            except Exception as e:
+                logger.error(f"Error en contexto_worker: {type(e).__name__}", exc_info=True)
 
         if _running:
             _dormir_interrumpible(config.POLL_INTERVAL_SECONDS)
@@ -182,7 +175,6 @@ def procesar_modo_manual(
     audio_r2_key: str,
     clave_cifrado: str,
     iv_cifrado: str,
-    paciente_nombre: str = "",
     orientacion_teorica: str = "cbt_mi",
 ) -> bool:
     logger.info(f"=== Procesamiento manual: {sesion_clinica_id} ===")
@@ -192,13 +184,12 @@ def procesar_modo_manual(
             audio_r2_key=audio_r2_key,
             clave_cifrado=clave_cifrado,
             iv_cifrado=iv_cifrado,
-            paciente_nombre=paciente_nombre,
             orientacion_teorica=orientacion_teorica,
         )
-        logger.info("=== Procesamiento manual exitoso ===")
+        logger.info("=== Procesamiento manual terminado ===")
         return True
     except Exception as e:
-        logger.error(f"=== Procesamiento manual fallo: {e} ===", exc_info=True)
+        logger.error(f"=== Procesamiento manual fallo: {type(e).__name__} ===", exc_info=True)
         return False
 
 
@@ -208,7 +199,7 @@ def main() -> None:
         if len(sys.argv) < 6:
             print(
                 "Uso: python worker.py manual <sesion_clinica_id> <audio_r2_key> "
-                "<clave_cifrado> <iv> [paciente_nombre]"
+                "<clave_cifrado> <iv> [orientacion_teorica]"
             )
             sys.exit(1)
         ok = procesar_modo_manual(
@@ -216,7 +207,7 @@ def main() -> None:
             audio_r2_key=sys.argv[3],
             clave_cifrado=sys.argv[4],
             iv_cifrado=sys.argv[5],
-            paciente_nombre=sys.argv[6] if len(sys.argv) > 6 else "",
+            orientacion_teorica=sys.argv[6] if len(sys.argv) > 6 else "cbt_mi",
         )
         sys.exit(0 if ok else 1)
     loop_principal()

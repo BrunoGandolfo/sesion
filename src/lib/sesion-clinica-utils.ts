@@ -10,27 +10,95 @@ import type {
   SesionClinicaResponse,
 } from "@/types/domain";
 
-// Mantener sincronizado con el endpoint PATCH /api/sesion-clinica/[id].
-// revision/aprobado no transicionan vía PATCH: aprobado se setea en el
-// endpoint dedicado /aprobar.
+export type EstadoSesion = EstadoProcesamiento;
+
+export const ESTADOS_SESION: ReadonlyArray<EstadoSesion> = [
+  "pendiente",
+  "grabando",
+  "subiendo",
+  "procesando",
+  "revision",
+  "aprobado",
+  "error",
+];
+
+// ÚNICA fuente de verdad de la máquina de estados de SesionClinica. La
+// consumen todos los endpoints que mutan `estado` (PATCH/DELETE de [id],
+// upload, aprobar) vía assertTransicionValida() en src/app/api/_lib/
+// sesion-clinica.ts. No duplicar esta tabla en las rutas.
+//
+// - grabando → error / subiendo → error: descarte de una grabación abandonada
+//   con audio subido (DELETE) o fallo de subida.
+// - grabando → procesando: upload salta "subiendo" cuando el cliente no lo
+//   reportó.
+// - revision → error: descarte de la nota (DELETE), la sesión queda
+//   reprocesable. revision → aprobado: solo el endpoint /aprobar.
+// - error → procesando: reintento (PATCH), re-encola al worker.
 const TRANSICIONES_PERMITIDAS: Record<
-  EstadoProcesamiento,
-  ReadonlyArray<EstadoProcesamiento>
+  EstadoSesion,
+  ReadonlyArray<EstadoSesion>
 > = {
   pendiente: ["grabando"],
-  grabando: ["subiendo"],
-  subiendo: ["procesando"],
+  grabando: ["subiendo", "procesando", "error"],
+  subiendo: ["procesando", "error"],
   procesando: ["revision", "error"],
-  revision: [],
+  revision: ["aprobado", "error"],
   aprobado: [],
   error: ["procesando"],
 };
 
+export function esEstadoSesion(value: unknown): value is EstadoSesion {
+  return (
+    typeof value === "string" &&
+    (ESTADOS_SESION as ReadonlyArray<string>).includes(value)
+  );
+}
+
+// Tolerante a strings desconocidos (filas con estado corrupto): un estado
+// que no está en la tabla no puede transicionar a nada.
 export function esTransicionValida(
-  estadoActual: EstadoProcesamiento,
-  estadoNuevo: EstadoProcesamiento,
+  estadoActual: EstadoSesion | string,
+  estadoNuevo: EstadoSesion | string,
 ): boolean {
+  if (!esEstadoSesion(estadoActual) || !esEstadoSesion(estadoNuevo)) {
+    return false;
+  }
   return TRANSICIONES_PERMITIDAS[estadoActual].includes(estadoNuevo);
+}
+
+// Subconjunto de TRANSICIONES_PERMITIDAS que el navegador puede pedir
+// directamente vía PATCH /api/sesion-clinica/[id] { estado }. Todo lo demás
+// tiene una ruta con efectos propios y NO puede pedirse por PATCH:
+//   grabando/subiendo → procesando  → POST [id]/upload (sube a R2, guarda clave)
+//   procesando → revision|error     → POST callback (M2M, escribe la nota)
+//   revision → aprobado             → POST [id]/aprobar (chequeo de riesgo,
+//                                     borrado de audio, destrucción de clave)
+//   revision → error, grabando → error con audio → DELETE [id]
+//
+// Evidencia de uso real en el frontend (única fuente para esta lista):
+//   pendiente → grabando : useGrabacionSesion.ts:184-190 y
+//                          historia-tab.tsx:307-313, tras crear la sesión.
+//   grabando → error     : useGrabacionSesion.ts:249-253 y
+//                          historia-tab.tsx:381-385, cuando falla el upload
+//                          (la fila no tiene audio; el DELETE no aplica).
+//   error → procesando   : useGrabacionSesion.ts:269-273 e
+//                          historia-tab.tsx:399-403, "Reintentar"; re-encola
+//                          al worker vía /pendientes.
+const TRANSICIONES_CLIENTE: Partial<
+  Record<EstadoSesion, ReadonlyArray<EstadoSesion>>
+> = {
+  pendiente: ["grabando"],
+  grabando: ["error"],
+  error: ["procesando"],
+};
+
+export function esTransicionPermitidaAlCliente(
+  estadoActual: EstadoSesion | string,
+  estadoNuevo: EstadoSesion | string,
+): boolean {
+  if (!esTransicionValida(estadoActual, estadoNuevo)) return false;
+  const permitidas = TRANSICIONES_CLIENTE[estadoActual as EstadoSesion] ?? [];
+  return permitidas.includes(estadoNuevo as EstadoSesion);
 }
 
 // Umbral para considerar abandonada una sesión en "grabando": una sesión

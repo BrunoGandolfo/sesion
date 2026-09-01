@@ -170,6 +170,9 @@ export function GrabadorSesion({
   const [limiteAlcanzado, setLimiteAlcanzado] = React.useState(false);
   const [pendiente, setPendiente] =
     React.useState<GrabacionPendienteUI | null>(null);
+  // false cuando el navegador no soporta wake lock, el request rechazó o el SO
+  // lo soltó (evento "release"). Solo se muestra un aviso mientras se graba.
+  const [wakeLockActivo, setWakeLockActivo] = React.useState(true);
 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -184,6 +187,7 @@ export function GrabadorSesion({
   const modoDetencionRef = React.useRef<ModoDetencion>("descartar");
   const grabacionListaRef = React.useRef<GrabacionCifrada | null>(null);
   const wakeLockRef = React.useRef<WakeLockSentinel | null>(null);
+  const wakeLockReleaseHandlerRef = React.useRef<(() => void) | null>(null);
   const estadoRef = React.useRef<EstadoGrabador>("idle");
   const componenteMontadoRef = React.useRef(true);
   const onErrorRef = React.useRef(onError);
@@ -235,30 +239,78 @@ export function GrabadorSesion({
     streamRef.current = null;
   }
 
+  function marcarWakeLock(activo: boolean) {
+    if (componenteMontadoRef.current) {
+      setWakeLockActivo(activo);
+    }
+  }
+
   async function adquirirWakeLock() {
+    if (
+      typeof navigator === "undefined" ||
+      !("wakeLock" in navigator) ||
+      !navigator.wakeLock
+    ) {
+      marcarWakeLock(false);
+      return;
+    }
+
+    // Idempotente: si ya hay un lock vivo, no pedimos otro.
+    if (wakeLockRef.current && !wakeLockRef.current.released) {
+      return;
+    }
+
     try {
-      if (
-        typeof navigator !== "undefined" &&
-        "wakeLock" in navigator &&
-        navigator.wakeLock
-      ) {
-        wakeLockRef.current = await navigator.wakeLock.request("screen");
+      const lock = await navigator.wakeLock.request("screen");
+
+      // Mientras esperábamos, la grabación pudo terminar o el componente
+      // desmontarse: no nos quedamos con un lock que nadie va a liberar.
+      if (!componenteMontadoRef.current || estadoRef.current !== "grabando") {
+        void lock.release().catch(() => {});
+        return;
       }
+
+      const onRelease = () => {
+        // El SO lo soltó (pantalla bloqueada, cambio de app, batería baja).
+        if (wakeLockRef.current === lock) {
+          wakeLockRef.current = null;
+          wakeLockReleaseHandlerRef.current = null;
+        }
+        marcarWakeLock(false);
+      };
+
+      lock.addEventListener("release", onRelease);
+      wakeLockRef.current = lock;
+      wakeLockReleaseHandlerRef.current = onRelease;
+      marcarWakeLock(true);
     } catch (error) {
       // No es fatal: la grabación sigue, solo perdemos la pantalla encendida.
       console.warn("[GrabadorSesion] No se pudo adquirir el wake lock", error);
+      marcarWakeLock(false);
     }
   }
 
   function liberarWakeLock() {
     const lock = wakeLockRef.current;
+    const handler = wakeLockReleaseHandlerRef.current;
     wakeLockRef.current = null;
+    wakeLockReleaseHandlerRef.current = null;
 
     if (lock) {
+      // Quitamos el listener antes de liberar: una liberación a propósito no
+      // debe disparar el aviso de "mantené la pantalla encendida".
+      if (handler) {
+        lock.removeEventListener("release", handler);
+      }
+
       void lock.release().catch(() => {
         // El lock ya pudo haberse liberado solo (pantalla bloqueada).
       });
     }
+
+    // Estado neutral hasta el próximo request; evita que un aviso viejo
+    // parpadee al arrancar/reanudar antes de que el request resuelva.
+    marcarWakeLock(true);
   }
 
   function calcularDuracionActual() {
@@ -410,6 +462,7 @@ export function GrabadorSesion({
 
     mediaRecorderRef.current = null;
     liberarStream();
+    liberarWakeLock();
 
     if (componenteMontadoRef.current) {
       setSegundosActuales(segundosPreviosRef.current);
@@ -933,6 +986,11 @@ export function GrabadorSesion({
                   <p className="text-[14px] text-ink-500">
                     Grabando la sesión de {pacienteNombre}
                   </p>
+                  {!wakeLockActivo && (
+                    <p className="text-[13px] text-ink-500">
+                      Mantené la pantalla encendida mientras grabás.
+                    </p>
+                  )}
                 </div>
 
                 <Button

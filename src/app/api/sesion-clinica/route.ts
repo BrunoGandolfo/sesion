@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../_lib/auth";
 import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
+import { sinClaveTemporal } from "../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,16 +11,6 @@ export const dynamic = "force-dynamic";
 const createSchema = z.object({
   turnoId: z.string().cuid("Turno inválido"),
 });
-
-function parseDatosEstructurados(raw: unknown): unknown {
-  if (raw == null) return null;
-  if (typeof raw !== "string") return raw;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(request: Request) {
   try {
@@ -65,10 +56,8 @@ export async function GET(request: Request) {
       return ok(null);
     }
 
-    return ok({
-      ...sesion,
-      datosEstructurados: parseDatosEstructurados(sesion.datosEstructurados),
-    });
+    // datosEstructurados sale como objeto y sin la clave temporal del audio.
+    return ok(sinClaveTemporal(sesion));
   } catch (error) {
     return errorResponse(error);
   }

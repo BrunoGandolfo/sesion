@@ -4,6 +4,7 @@ import * as React from "react";
 import { AlertTriangle, ChevronDown, Sparkles } from "lucide-react";
 import { Button, Chip } from "@/components/ui";
 import { RiesgoDetectadoBanner } from "@/components/grabacion/RiesgoDetectadoBanner";
+import { normalizarRiesgo } from "@/types/domain";
 import type {
   AlianzaTerapeutica,
   ConfianzaModelo,
@@ -27,7 +28,7 @@ type DatosEstructurados = Omit<DatosEstructuradosBase, "intervenciones"> & {
 
 interface NotaClinicaViewProps {
   sesionClinicaId: string;
-  nota: NotaSOAP;
+  nota: NotaSOAP | null;
   datosEstructurados: DatosEstructurados | null;
   pacienteNombre: string;
   fechaSesion: string;
@@ -256,10 +257,11 @@ export function NotaClinicaView({
   fechaSesion,
   onAprobado,
 }: NotaClinicaViewProps) {
-  const [subjetivo, setSubjetivo] = React.useState(nota.subjetivo);
-  const [objetivo, setObjetivo] = React.useState(nota.objetivo);
-  const [analisis, setAnalisis] = React.useState(nota.analisis);
-  const [plan, setPlan] = React.useState(nota.plan);
+  // Los hooks van antes de la guarda de nota nula (reglas de hooks).
+  const [subjetivo, setSubjetivo] = React.useState(nota?.subjetivo ?? "");
+  const [objetivo, setObjetivo] = React.useState(nota?.objetivo ?? "");
+  const [analisis, setAnalisis] = React.useState(nota?.analisis ?? "");
+  const [plan, setPlan] = React.useState(nota?.plan ?? "");
 
   const [enviando, setEnviando] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -268,6 +270,14 @@ export function NotaClinicaView({
   const [flagsDismissed, setFlagsDismissed] = React.useState<
     Record<string, boolean>
   >({});
+  // Confirmación de la señal de riesgo graduada (riesgoDetectado). Separada
+  // de los flags booleanos: el backend (/aprobar) exige confirmoRiesgo=true
+  // cuando el nivel es alto o moderado.
+  const [riesgoRevisado, setRiesgoRevisado] = React.useState(false);
+
+  const riesgo = normalizarRiesgo(datosEstructurados?.riesgoDetectado);
+  const nivelExigeConfirmacion =
+    riesgo.nivel === "alto" || riesgo.nivel === "moderado";
 
   const riesgosActivos = getRiesgosActivos(datosEstructurados?.flagsRiesgo);
   const flagsDismissedActivos = riesgosActivos.reduce<Record<string, boolean>>(
@@ -280,12 +290,49 @@ export function NotaClinicaView({
   const todosLosRiesgosRevisados =
     riesgosActivos.length === 0 ||
     riesgosActivos.every(({ key }) => flagsDismissedActivos[key]);
-  const requiereRevisionRiesgo = !todosLosRiesgosRevisados;
+  const requiereRevisionRiesgo =
+    !todosLosRiesgosRevisados || (nivelExigeConfirmacion && !riesgoRevisado);
   const mostrarAlertasLegacy =
     riesgosActivos.length === 0 &&
     datosEstructurados !== null &&
     (datosEstructurados.senalesAlerta?.length ?? 0) > 0;
   const intervenciones = normalizarIntervenciones(datosEstructurados?.intervenciones);
+
+  // Guarda defensiva: los padres ya chequean sesion.nota, pero si la nota
+  // todavía no llegó no hay nada que revisar ni aprobar.
+  if (!nota) {
+    return (
+      <p
+        role="status"
+        className="font-sans text-[14px] leading-[1.6] text-ink-500"
+      >
+        La nota todavía no está disponible.
+      </p>
+    );
+  }
+
+  // Lee el mensaje `error` del JSON de un 400/409 (ApiError del backend);
+  // para cualquier otro fallo devuelve el genérico.
+  const mensajeDeRespuesta = async (
+    res: Response,
+    generico: string,
+  ): Promise<string> => {
+    if (res.status === 400 || res.status === 409) {
+      try {
+        const json: unknown = await res.json();
+        if (
+          json &&
+          typeof json === "object" &&
+          typeof (json as { error?: unknown }).error === "string"
+        ) {
+          return (json as { error: string }).error;
+        }
+      } catch {
+        // body no-JSON: cae al genérico
+      }
+    }
+    return generico;
+  };
 
   const handleAprobar = async () => {
     if (requiereRevisionRiesgo) {
@@ -302,10 +349,16 @@ export function NotaClinicaView({
         body: JSON.stringify({
           sesionClinicaId,
           notaEditada: { subjetivo, objetivo, analisis, plan },
+          ...(nivelExigeConfirmacion ? { confirmoRiesgo: true } : {}),
         }),
       });
       if (!res.ok) {
-        throw new Error("No pudimos guardar la nota. Intentá de nuevo.");
+        throw new Error(
+          await mensajeDeRespuesta(
+            res,
+            "No pudimos guardar la nota. Intentá de nuevo.",
+          ),
+        );
       }
       onAprobado();
     } catch (err) {
@@ -330,7 +383,12 @@ export function NotaClinicaView({
         method: "DELETE",
       });
       if (!res.ok) {
-        throw new Error("No pudimos descartar la nota. Intentá de nuevo.");
+        throw new Error(
+          await mensajeDeRespuesta(
+            res,
+            "No pudimos descartar la nota. Intentá de nuevo.",
+          ),
+        );
       }
       onAprobado();
     } catch (err) {
@@ -425,6 +483,30 @@ export function NotaClinicaView({
       <RiesgoDetectadoBanner
         riesgoDetectado={datosEstructurados?.riesgoDetectado}
       />
+
+      {nivelExigeConfirmacion && (
+        <label
+          htmlFor="riesgo-detectado-revisado"
+          className="flex items-start gap-3 rounded-md border border-terracotta-100 bg-white/80 px-3 py-3"
+        >
+          <input
+            id="riesgo-detectado-revisado"
+            type="checkbox"
+            checked={riesgoRevisado}
+            onChange={(event) => setRiesgoRevisado(event.target.checked)}
+            className="mt-[3px] h-[18px] w-[18px] shrink-0 cursor-pointer accent-sage-500"
+          />
+          <div className="flex flex-1 flex-col gap-1">
+            <span className="font-sans text-[15px] font-semibold leading-[1.5] text-ink-900">
+              Revisé esta señal de riesgo
+            </span>
+            <span className="font-sans text-[13px] text-ink-500">
+              Nivel {riesgo.nivel}: la aprobación requiere confirmar que la
+              revisaste.
+            </span>
+          </div>
+        </label>
+      )}
 
       <header className="flex flex-col gap-2">
         <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">

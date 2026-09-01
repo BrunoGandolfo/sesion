@@ -1,5 +1,8 @@
 """
 Configuración del servicio de procesamiento de sesiones clínicas.
+
+Ola 3: ASR en AssemblyAI, LLM en Anthropic, worker hosteado en Railway.
+Todo se lee de variables de entorno; ver .env.example.
 """
 import os
 
@@ -7,45 +10,59 @@ import os
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3001")
 PROCESSING_SECRET = os.getenv("PROCESSING_SECRET", "")
 
-# Cloudflare R2 ─────────────────────────────────────────────────────────────
-# Preferido: R2_ENDPOINT directo. Fallback legacy: derivarlo desde R2_ACCOUNT_ID.
-R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "")
+# Cloudflare R2 (audio cifrado) ─────────────────────────────────────────────
+R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "sesion-audio")
-R2_ENDPOINT = os.getenv("R2_ENDPOINT") or (
-    f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com" if R2_ACCOUNT_ID else ""
-)
 
-# ASR — WhisperX (Whisper large-v3 + pyannote) corre como servicio HTTP en
-# Atlas. ASR_MODEL_ID se reporta en el callback (campo modelo_asr).
-ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "whisperx-large-v3")
-ASR_URL = os.getenv("ASR_URL", "http://100.71.155.25:8090/transcribe")
-ASR_HEALTH_URL = os.getenv("ASR_HEALTH_URL", "http://100.71.155.25:8090/health")
-ASR_TIMEOUT_SECONDS = int(os.getenv("ASR_TIMEOUT_SECONDS", "600"))
+# ASR — AssemblyAI ──────────────────────────────────────────────────────────
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
+# Confirmar el identificador vigente de Universal-3.5 Pro en docs.assemblyai.com
+# antes del primer deploy; se reporta en el callback como modeloASR.
+ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "universal-3-pro")
+ASR_POLL_SECONDS = int(os.getenv("ASR_POLL_SECONDS", "10"))
+ASR_TIMEOUT_SECONDS = int(os.getenv("ASR_TIMEOUT_SECONDS", "1800"))
 
-# LLM (nota clínica SOAP) ───────────────────────────────────────────────────
-LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "qwen3.6:27b")
-LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama")
-LLM_NUM_CTX = int(os.getenv("LLM_NUM_CTX", "65536"))
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://100.71.155.25:11434")
-VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8091")
+# LLM — Anthropic ───────────────────────────────────────────────────────────
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+LLM_BACKEND = os.getenv("LLM_BACKEND", "anthropic")
+LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "claude-sonnet-5")
+# Nivel de esfuerzo (low|medium|high|xhigh|max). Vacío = no enviar el parámetro.
+LLM_EFFORT = os.getenv("LLM_EFFORT", "medium")
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "8192"))
+LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "300"))
 
 # Worker ────────────────────────────────────────────────────────────────────
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "30"))
-AUDIO_TEMP_DIR = os.getenv("AUDIO_TEMP_DIR", "/tmp/sesion-audio")
 PROMPTS_DIR = os.getenv("PROMPTS_DIR", os.path.join(os.path.dirname(__file__), "prompts"))
+WORKER_VERSION = os.getenv("WORKER_VERSION", "ola3")
 
 # Endpoints de la app ───────────────────────────────────────────────────────
-HOT_WORDS_ENDPOINT = f"{APP_BASE_URL}/api/hot-words/paciente"
 PENDIENTES_URL = f"{APP_BASE_URL}/api/sesion-clinica/pendientes"
+CALLBACK_URL = f"{APP_BASE_URL}/api/sesion-clinica/callback"
+APROBADAS_URL = f"{APP_BASE_URL}/api/sesion-clinica/aprobadas-sin-contexto"
+
+
+def contexto_clinico_url(paciente_id: str) -> str:
+    return f"{APP_BASE_URL}/api/pacientes/{paciente_id}/contexto-clinico"
+
 
 def r2_configurado() -> bool:
     return all([R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME])
 
-def validar_config():
+
+def validar_config() -> None:
     errores = []
     if not PROCESSING_SECRET:
         errores.append("PROCESSING_SECRET no configurado")
+    if not ANTHROPIC_API_KEY:
+        errores.append("ANTHROPIC_API_KEY no configurado")
+    if not ASSEMBLYAI_API_KEY:
+        errores.append("ASSEMBLYAI_API_KEY no configurado")
+    if not r2_configurado():
+        errores.append(
+            "R2 incompleto (R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME)"
+        )
     if errores:
         raise RuntimeError(f"Configuración inválida: {', '.join(errores)}")
