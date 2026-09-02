@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
 
+// Se importa la parte pura (sin @/lib/db) para que el test corra sin base.
+import {
+  DETALLE_MAX_STRING,
+  detalleSeguro,
+  hashTexto,
+} from "@/app/api/_lib/auditoria-pura";
 import {
   esTransicionPermitidaAlCliente,
   esTransicionValida,
@@ -434,5 +440,81 @@ describe("Sesión clínica - validaciones", () => {
         esNotaCompleta({ subjetivo: "x", objetivo: "x", analisis: "x" }),
       ).toBe(false);
     });
+  });
+});
+
+describe("auditoría — detalleSeguro", () => {
+  it("descarta las claves de la lista negra (texto clínico, PII, cripto)", () => {
+    const out = detalleSeguro({
+      nota: "texto clínico",
+      transcripcion: "…",
+      texto: "…",
+      nombre: "Ana",
+      apellido: "Pérez",
+      telefono: "+598",
+      email: "a@b.c",
+      subjetivo: "…",
+      objetivo: "…",
+      analisis: "…",
+      plan: "…",
+      detalle: "…",
+      quote: "…",
+      resumen: "…",
+      hipotesis: "…",
+      datosEstructurados: "…",
+      claveCifrado: "…",
+      iv: "…",
+      estado: "revision",
+    });
+    expect(out).toEqual({ estado: "revision" });
+  });
+
+  it("trunca strings de más de 120 caracteres", () => {
+    const largo = "x".repeat(DETALLE_MAX_STRING + 50);
+    const out = detalleSeguro({ modeloLLM: largo, corto: "ok" });
+    expect((out?.modeloLLM as string).length).toBe(DETALLE_MAX_STRING);
+    expect(out?.corto).toBe("ok");
+  });
+
+  it("descarta objetos anidados pero conserva arrays de primitivos", () => {
+    const out = detalleSeguro({
+      anidado: { subjetivo: "texto" },
+      camposEnviados: ["hipotesisDiagnostica", "resumenAcumulativo"],
+      mixto: ["a", { b: 1 }, 2, null],
+    });
+    expect(out).toEqual({
+      camposEnviados: ["hipotesisDiagnostica", "resumenAcumulativo"],
+      mixto: ["a", 2, null],
+    });
+    expect(out).not.toHaveProperty("anidado");
+  });
+
+  it("conserva number, boolean y null; descarta undefined y NaN", () => {
+    const out = detalleSeguro({
+      page: 2,
+      audioBorrado: true,
+      promptVersion: null,
+      nada: undefined,
+      nan: Number.NaN,
+    });
+    expect(out).toEqual({ page: 2, audioBorrado: true, promptVersion: null });
+  });
+
+  it("devuelve undefined si el detalle es undefined", () => {
+    expect(detalleSeguro(undefined)).toBeUndefined();
+  });
+
+  it("no muta el objeto de entrada", () => {
+    const entrada = { nota: "x", estado: "ok" };
+    detalleSeguro(entrada);
+    expect(entrada).toEqual({ nota: "x", estado: "ok" });
+  });
+
+  it("hashTexto es determinista y devuelve hex de 64 chars", () => {
+    const a = hashTexto('{"subjetivo":"a"}');
+    const b = hashTexto('{"subjetivo":"a"}');
+    expect(a).toBe(b);
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashTexto('{"subjetivo":"b"}')).not.toBe(a);
   });
 });

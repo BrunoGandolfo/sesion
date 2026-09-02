@@ -29,10 +29,24 @@ type DatosEstructurados = Omit<DatosEstructuradosBase, "intervenciones"> & {
 interface NotaClinicaViewProps {
   sesionClinicaId: string;
   nota: NotaSOAP | null;
+  /** Nota tal como la generó la IA (sesion.notaSoapOriginal). Solo se
+   *  muestra si existe y difiere de `nota`. */
+  notaOriginal?: NotaSOAP | null;
   datosEstructurados: DatosEstructurados | null;
   pacienteNombre: string;
   fechaSesion: string;
   onAprobado: () => void;
+}
+
+const SOAP_SECCIONES: ReadonlyArray<{ key: keyof NotaSOAP; label: string }> = [
+  { key: "subjetivo", label: "Subjetivo (S)" },
+  { key: "objetivo", label: "Objetivo (O)" },
+  { key: "analisis", label: "Análisis (A)" },
+  { key: "plan", label: "Plan (P)" },
+];
+
+function notasDifieren(a: NotaSOAP, b: NotaSOAP): boolean {
+  return SOAP_SECCIONES.some(({ key }) => (a[key] ?? "") !== (b[key] ?? ""));
 }
 
 interface AutoTextareaProps {
@@ -252,6 +266,7 @@ function normalizarIntervenciones(
 export function NotaClinicaView({
   sesionClinicaId,
   nota,
+  notaOriginal = null,
   datosEstructurados,
   pacienteNombre,
   fechaSesion,
@@ -267,6 +282,7 @@ export function NotaClinicaView({
   const [error, setError] = React.useState<string | null>(null);
   const [confirmDescartar, setConfirmDescartar] = React.useState(false);
   const [datosAbierto, setDatosAbierto] = React.useState(true);
+  const [originalAbierto, setOriginalAbierto] = React.useState(false);
   const [flagsDismissed, setFlagsDismissed] = React.useState<
     Record<string, boolean>
   >({});
@@ -297,6 +313,11 @@ export function NotaClinicaView({
     datosEstructurados !== null &&
     (datosEstructurados.senalesAlerta?.length ?? 0) > 0;
   const intervenciones = normalizarIntervenciones(datosEstructurados?.intervenciones);
+  // Se compara contra la nota persistida (prop), no contra el texto que la
+  // terapeuta está editando ahora: la sección muestra "qué generó la IA vs
+  // qué quedó guardado", no un diff en vivo.
+  const mostrarOriginal =
+    notaOriginal !== null && nota !== null && notasDifieren(notaOriginal, nota);
 
   // Guarda defensiva: los padres ya chequean sesion.nota, pero si la nota
   // todavía no llegó no hay nada que revisar ni aprobar.
@@ -596,6 +617,48 @@ export function NotaClinicaView({
           disabled={enviando}
         />
       </div>
+
+      {mostrarOriginal && notaOriginal && (
+        <section className="rounded-lg border border-[color:var(--border-subtle)] bg-white">
+          <button
+            type="button"
+            aria-expanded={originalAbierto}
+            aria-controls="nota-original-panel"
+            onClick={() => setOriginalAbierto((open) => !open)}
+            className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
+          >
+            <span className="font-display text-[16px] font-medium text-ink-900">
+              Ver la nota original generada por la IA
+            </span>
+            <ChevronDown
+              size={18}
+              strokeWidth={1.8}
+              aria-hidden="true"
+              className={`shrink-0 text-ink-500 transition-transform duration-150 ${
+                originalAbierto ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {originalAbierto && (
+            <div
+              id="nota-original-panel"
+              className="flex flex-col gap-5 border-t border-[color:var(--border-subtle)] px-5 py-5"
+            >
+              {SOAP_SECCIONES.map(({ key, label }) => (
+                <div key={key} className="flex flex-col gap-2">
+                  <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                    {label}
+                  </span>
+                  <p className="whitespace-pre-wrap font-sans text-[14px] leading-[1.6] text-ink-700">
+                    {notaOriginal[key] || "—"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {datosEstructurados && (
         <section className="rounded-lg border border-[color:var(--border-subtle)] bg-white">

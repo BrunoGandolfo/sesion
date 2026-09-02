@@ -3,7 +3,8 @@ import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../../../_lib/auth";
+import { registrarAuditoria } from "../../../_lib/auditoria";
+import { getSessionActor } from "../../../_lib/auth";
 import {
   ApiError,
   errorResponse,
@@ -143,7 +144,7 @@ function assertEstadoPermitido(estado: string): asserts estado is EstadoUpload {
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
     const sesion = await db.sesionClinica.findFirst({
@@ -207,6 +208,20 @@ export async function POST(request: Request, { params }: RouteParams) {
           parsed.data.claveCifrado,
           parsed.data.iv,
         ),
+      },
+    });
+
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: "usuario",
+      actorId: userId,
+      accion: "sesion.subir_audio",
+      entidad: "sesion_clinica",
+      entidadId: sesion.id,
+      detalle: {
+        duracionSegundos: parsed.data.duracionSegundos,
+        bytes: audioBuffer.length,
+        r2: audioR2Key !== "dev-no-r2",
       },
     });
 

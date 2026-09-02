@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 
+import { registrarAuditoria } from "../../_lib/auditoria";
 import { errorResponse, validationError } from "../../_lib/responses";
 import { extraerClaveTemporal } from "../../_lib/sesion-clinica";
 
@@ -112,6 +113,19 @@ const callbackSchema = z.object({
   error: z.string().optional(),
 });
 
+// Fila previa que necesita el callback. `notaSoapOriginal` es un campo
+// lógico de la extensión de cifrado (sin columna legacy): vive en una const
+// y no en un literal inline para que TS no lo rechace como propiedad
+// sobrante del tipo generado; la extensión lo traduce a la columna cifrada.
+const SESION_PREVIA_SELECT = {
+  id: true,
+  estado: true,
+  intentos: true,
+  organizationId: true,
+  datosEstructurados: true,
+  notaSoapOriginal: true,
+} as const;
+
 function isAuthorized(request: Request): boolean {
   const secret = process.env.PROCESSING_SECRET;
   if (!secret) return false;
@@ -156,12 +170,7 @@ export async function POST(request: Request) {
 
     const sesion = await db.sesionClinica.findUnique({
       where: { id: parsed.data.sesionClinicaId },
-      select: {
-        id: true,
-        estado: true,
-        intentos: true,
-        datosEstructurados: true,
-      },
+      select: SESION_PREVIA_SELECT,
     });
 
     if (!sesion) {
@@ -187,13 +196,47 @@ export async function POST(request: Request) {
       ? extraerClaveTemporal(sesion.datosEstructurados)
       : null;
 
-    // No hay columna para la versión del prompt: se persiste junto al modelo
-    // como "modelo | promptVersion" (trazabilidad sin migración). Los
-    // lectores de modeloLLM lo tratan como string opaco.
-    const modeloLLM =
-      parsed.data.modeloLLM && parsed.data.promptVersion
-        ? `${parsed.data.modeloLLM} | ${parsed.data.promptVersion}`
-        : parsed.data.modeloLLM;
+    // notaSoapOriginal se escribe UNA sola vez: la primera nota que llega del
+    // worker. En un reproceso (descarte → error → procesando → callback) la
+    // fila ya la tiene y NO se pisa: es el registro de "qué generó la IA"
+    // antes de cualquier intervención humana. La extensión Prisma la cifra
+    // (campo lógico, sin columna legacy: por eso el cast — el tipo generado
+    // no la conoce).
+    const notaOriginalPrevia = (sesion as { notaSoapOriginal?: unknown })
+      .notaSoapOriginal;
+    const escribirNotaOriginal =
+      notaOriginalPrevia == null && parsed.data.nota !== undefined;
+
+    // Objeto NO literal en la llamada: TS solo aplica el chequeo de
+    // propiedades sobrantes a literales frescos, y notaSoapOriginal no existe
+    // en el tipo generado (la extensión la consume antes de llegar a Prisma).
+    const data = {
+      estado: parsed.data.estado,
+      transcripcion: parsed.data.transcripcion,
+      notaSubjetivo: parsed.data.nota?.subjetivo,
+      notaObjetivo: parsed.data.nota?.objetivo,
+      notaAnalisis: parsed.data.nota?.analisis,
+      notaPlan: parsed.data.nota?.plan,
+      ...(escribirNotaOriginal ? { notaSoapOriginal: parsed.data.nota } : {}),
+      // Convención del worker: la terapeuta es siempre el hablante S0.
+      ...(parsed.data.nota ? { hablanteTerapeuta: "S0" } : {}),
+      datosEstructurados: parsed.data.datosEstructurados
+        ? JSON.stringify(
+            claveTemporal
+              ? {
+                  ...parsed.data.datosEstructurados,
+                  _audioCifradoTemporal: claveTemporal,
+                }
+              : parsed.data.datosEstructurados,
+          )
+        : undefined,
+      modeloASR: parsed.data.modeloASR,
+      modeloLLM: parsed.data.modeloLLM,
+      promptVersion: parsed.data.promptVersion,
+      procesadoEn: ahora,
+      error: esError ? parsed.data.error ?? null : null,
+      intentos: esError ? sesion.intentos + 1 : undefined,
+    };
 
     // Escritura condicionada al estado: solo se acepta el resultado si la
     // sesión sigue en "procesando". Un callback tardío (lease vencido y
@@ -201,29 +244,7 @@ export async function POST(request: Request) {
     // nada. updateMany pasa por la extensión de cifrado igual que update.
     const { count } = await db.sesionClinica.updateMany({
       where: { id: sesion.id, estado: "procesando" },
-      data: {
-        estado: parsed.data.estado,
-        transcripcion: parsed.data.transcripcion,
-        notaSubjetivo: parsed.data.nota?.subjetivo,
-        notaObjetivo: parsed.data.nota?.objetivo,
-        notaAnalisis: parsed.data.nota?.analisis,
-        notaPlan: parsed.data.nota?.plan,
-        datosEstructurados: parsed.data.datosEstructurados
-          ? JSON.stringify(
-              claveTemporal
-                ? {
-                    ...parsed.data.datosEstructurados,
-                    _audioCifradoTemporal: claveTemporal,
-                  }
-                : parsed.data.datosEstructurados,
-            )
-          : undefined,
-        modeloASR: parsed.data.modeloASR,
-        modeloLLM,
-        procesadoEn: ahora,
-        error: esError ? parsed.data.error ?? null : null,
-        intentos: esError ? sesion.intentos + 1 : undefined,
-      },
+      data,
     });
 
     if (count === 0) {
@@ -232,6 +253,32 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
+
+    const pipeline = parsed.data.datosEstructurados?._pipeline;
+    const intentoPipeline = pipeline?.intento;
+    await registrarAuditoria({
+      organizationId: sesion.organizationId,
+      actorTipo: "worker",
+      actorId: null,
+      accion: "sesion.callback",
+      entidad: "sesion_clinica",
+      entidadId: sesion.id,
+      detalle: {
+        estadoResultado: parsed.data.estado,
+        promptVersion: parsed.data.promptVersion ?? null,
+        modeloASR: parsed.data.modeloASR ?? null,
+        modeloLLM: parsed.data.modeloLLM ?? null,
+        rolesOrigen:
+          parsed.data.datosEstructurados?.speechAnalytics?.rolesOrigen ?? null,
+        ...(typeof intentoPipeline === "number" ||
+        typeof intentoPipeline === "string"
+          ? { intento: intentoPipeline }
+          : {}),
+        nivelRiesgo:
+          parsed.data.datosEstructurados?.riesgoDetectado?.nivel ?? null,
+        huboError: esError,
+      },
+    });
 
     return Response.json({ success: true });
   } catch (error) {

@@ -10,6 +10,10 @@ import {
   Input,
   Textarea,
 } from "@/components/ui";
+import {
+  contarLongitudSms,
+  TEMPLATE_SMS_SUGERIDO,
+} from "@/lib/recordatorios-sms";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 const PLACEHOLDERS = [
@@ -19,10 +23,12 @@ const PLACEHOLDERS = [
   { label: "hora", key: "hora" },
   { label: "dirección", key: "direccion" },
   { label: "profesional", key: "profesional" },
+  { label: "teléfono", key: "telefonoConsultorio" },
 ] as const;
 
-const DEFAULT_TEMPLATE =
-  "Hola {{nombre}}, te recuerdo tu sesión del {{fecha}} a las {{hora}}. Hasta pronto, {{profesional}}.";
+// Mismo texto que TEMPLATE_SMS_SUGERIDO; la línea final de contacto es
+// obligatoria (el cron la agrega si la usuaria la borra).
+const DEFAULT_TEMPLATE = TEMPLATE_SMS_SUGERIDO;
 
 type ConfigField =
   | "nombreProfesional"
@@ -338,8 +344,14 @@ export function ConfigView() {
       .replaceAll("{{fecha}}", "martes 21 de abril")
       .replaceAll("{{hora}}", "10:00")
       .replaceAll("{{direccion}}", form.direccion)
-      .replaceAll("{{profesional}}", form.nombreProfesional);
+      .replaceAll("{{profesional}}", form.nombreProfesional)
+      .replaceAll("{{telefonoConsultorio}}", form.whatsappOrigen);
   }, [form]);
+
+  const longitudSms = React.useMemo(
+    () => contarLongitudSms(preview),
+    [preview],
+  );
 
   if (loading) {
     return (
@@ -398,8 +410,9 @@ export function ConfigView() {
                 value={form.direccion}
                 onChange={(e) => updateField("direccion", e.target.value)}
               />
+              {/* La columna conserva el nombre whatsappOrigen hasta la próxima migración. */}
               <Input
-                label="WhatsApp de origen"
+                label="Teléfono del consultorio (va en los SMS)"
                 value={form.whatsappOrigen}
                 onChange={(e) =>
                   updateField("whatsappOrigen", e.target.value)
@@ -452,7 +465,7 @@ export function ConfigView() {
         </section>
 
         <section>
-          <SectionHeading>Recordatorios por WhatsApp</SectionHeading>
+          <SectionHeading>Recordatorios por SMS</SectionHeading>
           <Card>
             <div className="flex flex-col gap-5">
               <AntelacionSlider
@@ -471,7 +484,7 @@ export function ConfigView() {
                 onInsert={insertPlaceholder}
               />
 
-              <Preview text={preview} />
+              <Preview text={preview} longitud={longitudSms} />
             </div>
           </Card>
         </section>
@@ -680,7 +693,14 @@ function TemplateEditor({
   );
 }
 
-function Preview({ text }: { text: string }) {
+function Preview({
+  text,
+  longitud,
+}: {
+  text: string;
+  longitud: ReturnType<typeof contarLongitudSms>;
+}) {
+  const excede = longitud.segmentos > 1;
   return (
     <div>
       <span className="block text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-500 mb-2">
@@ -689,6 +709,16 @@ function Preview({ text }: { text: string }) {
       <div className="bg-cream-100 rounded-[10px] px-4 py-[14px] italic text-[14px] text-ink-900 leading-[1.5] border-l-[3px] border-l-sage-500 whitespace-pre-wrap">
         {text}
       </div>
+      <p
+        className={`mt-2 text-[12px] tabular-nums ${
+          excede ? "text-[color:var(--color-error)]" : "text-ink-500"
+        }`}
+      >
+        {longitud.caracteres} caracteres · {longitud.segmentos}{" "}
+        {longitud.segmentos === 1 ? "segmento" : "segmentos"} SMS
+        {longitud.gsm7 ? "" : " (con tildes o símbolos: límite 70 por segmento)"}
+        {excede ? " · Se cobra como más de un SMS." : ""}
+      </p>
     </div>
   );
 }

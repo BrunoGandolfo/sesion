@@ -1,5 +1,11 @@
 import { db } from "@/lib/db";
-import { buildReminderMessage, sendWhatsApp } from "@/lib/whatsapp";
+import {
+  asegurarLineaContacto,
+  buildSmsMessage,
+  estaVencido,
+  sendSms,
+  smsConfigurado,
+} from "@/lib/recordatorios-sms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +22,27 @@ function isAuthorized(request: Request): boolean {
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return Response.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  // Sin canal configurado no se toca ningún recordatorio: quedan pendientes
+  // hasta que exista TWILIO_SMS_FROM + credenciales.
+  const cfg = smsConfigurado();
+  if (!cfg.ok) {
+    console.log(
+      `[cron] SMS desactivado: ${
+        cfg.motivo === "falta_from"
+          ? "falta TWILIO_SMS_FROM"
+          : "faltan credenciales de Twilio"
+      } ts=${new Date().toISOString()}`,
+    );
+    return Response.json({
+      procesados: 0,
+      enviados: 0,
+      fallidos: 0,
+      saltados: 0,
+      vencidos: 0,
+      desactivado: cfg.motivo,
+    });
   }
 
   const ahora = new Date();
@@ -38,6 +65,7 @@ export async function GET(request: Request) {
   let enviados = 0;
   let fallidos = 0;
   let saltados = 0;
+  let vencidos = 0;
   const errores: string[] = [];
 
   for (const recordatorio of recordatorios) {
@@ -69,21 +97,44 @@ export async function GET(request: Request) {
       intentosActual = recordatorio.intentos + 1;
 
       const { turno } = recordatorio;
+
+      // Turno pasado, cancelado o ausente: no se envía. Se cierra el
+      // recordatorio con el motivo en `error` (el modelo no tiene "motivo").
+      if (estaVencido(turno, ahora)) {
+        const motivo =
+          turno.estado === "cancelado" || turno.estado === "ausente"
+            ? "turno_cancelado"
+            : "vencido";
+        await db.recordatorio.updateMany({
+          where: { id: recordatorio.id, intentos: intentosActual },
+          data: { estado: "cancelado", error: motivo },
+        });
+        vencidos += 1;
+        console.log(
+          `[cron][vencido] turno=${turno.id} id=${recordatorio.id} resultado=${motivo} ts=${new Date().toISOString()}`,
+        );
+        continue;
+      }
+
       const config = turno.organization.configuracion;
 
       if (!config) {
         throw new Error(`Organización ${turno.organizationId} sin configuración`);
       }
 
-      const texto = buildReminderMessage(config.templateRecordatorio, {
-        nombre: turno.paciente.nombre,
-        apellido: turno.paciente.apellido,
-        fecha: turno.fecha,
-        direccion: config.direccion,
-        profesional: config.nombreProfesional,
-      });
+      const texto = buildSmsMessage(
+        asegurarLineaContacto(config.templateRecordatorio),
+        {
+          nombre: turno.paciente.nombre,
+          apellido: turno.paciente.apellido,
+          fecha: turno.fecha,
+          direccion: config.direccion,
+          profesional: config.nombreProfesional,
+          telefonoConsultorio: config.whatsappOrigen,
+        },
+      );
 
-      const resultado = await sendWhatsApp({
+      const resultado = await sendSms({
         to: turno.paciente.telefono,
         text: texto,
       });
@@ -143,6 +194,7 @@ export async function GET(request: Request) {
     enviados,
     fallidos,
     saltados,
+    vencidos,
     errores,
   });
 }

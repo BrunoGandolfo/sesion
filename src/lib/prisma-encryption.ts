@@ -12,6 +12,9 @@ const LOGICAL_FIELDS = [
   "notaPlan",
   "datosEstructurados",
   "notasEdicion",
+  // Objeto {subjetivo, objetivo, analisis, plan} | null ↔ notaSoapOriginalEncrypted
+  // (mismo bundle JSON que notaSoapEncrypted, pero sin desarmar en 4 campos).
+  "notaSoapOriginal",
 ] as const;
 type LogicalField = (typeof LOGICAL_FIELDS)[number];
 const LOGICAL_FIELD_SET = new Set<string>(LOGICAL_FIELDS);
@@ -207,6 +210,24 @@ function transformWriteData(data: Raw): Raw {
     }
   }
 
+  if ("notaSoapOriginal" in out) {
+    const v = out.notaSoapOriginal;
+    delete out.notaSoapOriginal;
+    if (v === null) {
+      out.notaSoapOriginalEncrypted = null;
+    } else if (isPlainObject(v)) {
+      // Solo las 4 claves SOAP: cualquier extra del caller se descarta para
+      // que el blob tenga exactamente la misma forma que notaSoapEncrypted.
+      const soap: Record<SoapKey, unknown> = {
+        subjetivo: v.subjetivo ?? null,
+        objetivo: v.objetivo ?? null,
+        analisis: v.analisis ?? null,
+        plan: v.plan ?? null,
+      };
+      out.notaSoapOriginalEncrypted = encrypt(JSON.stringify(soap));
+    }
+  }
+
   return out;
 }
 
@@ -221,6 +242,13 @@ function injectEncryptedSelect(args: Raw): Raw {
     select.datosEstructuradosEncrypted = true;
   }
   if (select.notasEdicion === true) select.notasEdicionEncrypted = true;
+  if (select.notaSoapOriginal === true) {
+    // A diferencia del resto, este campo lógico NO tiene columna legacy en el
+    // schema: hay que quitarlo del select o Prisma lo rechaza como campo
+    // desconocido. transformRow lo repone a partir de la columna cifrada.
+    select.notaSoapOriginalEncrypted = true;
+    delete select.notaSoapOriginal;
+  }
   return { ...args, select };
 }
 
@@ -301,6 +329,35 @@ function transformRow(row: unknown, originalSelect: Raw | undefined): unknown {
       );
     }
     delete row.notasEdicionEncrypted;
+  }
+
+  if ("notaSoapOriginalEncrypted" in row) {
+    const blob = toBuffer(row.notaSoapOriginalEncrypted);
+    row.notaSoapOriginal = null;
+    if (blob && isEncrypted(blob)) {
+      try {
+        const parsed: unknown = JSON.parse(decrypt(blob));
+        row.notaSoapOriginal = isPlainObject(parsed)
+          ? {
+              subjetivo: parsed.subjetivo ?? null,
+              objetivo: parsed.objetivo ?? null,
+              analisis: parsed.analisis ?? null,
+              plan: parsed.plan ?? null,
+            }
+          : null;
+      } catch (err) {
+        throw new Error(
+          `Failed to decrypt or parse notaSoapOriginalEncrypted: ${(err as Error).message}`,
+        );
+      }
+    } else if (blob) {
+      // No hay columna legacy para este campo: un blob sin magic es
+      // inservible, se devuelve null.
+      console.warn(
+        "[prisma-encryption] notaSoapOriginalEncrypted lacks magic prefix; returning null",
+      );
+    }
+    delete row.notaSoapOriginalEncrypted;
   }
 
   return row;

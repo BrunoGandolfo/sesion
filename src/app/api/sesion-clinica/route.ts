@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../_lib/auth";
+import { registrarAuditoria } from "../_lib/auditoria";
+import { getOrganizationId, getSessionActor } from "../_lib/auth";
 import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
 import { sinClaveTemporal } from "../_lib/sesion-clinica";
 
@@ -65,7 +66,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const body = await request.json();
     const parsed = createSchema.safeParse(body);
 
@@ -121,6 +122,16 @@ export async function POST(request: Request) {
           estado: "pendiente",
         },
       });
+    });
+
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: "usuario",
+      actorId: userId,
+      accion: "sesion.crear",
+      entidad: "sesion_clinica",
+      entidadId: sesion.id,
+      detalle: { turnoId: sesion.turnoId },
     });
 
     return ok(sesion, 201);

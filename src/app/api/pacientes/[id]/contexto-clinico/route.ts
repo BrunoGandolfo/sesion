@@ -15,7 +15,8 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../../../_lib/auth";
+import { registrarAuditoria } from "../../../_lib/auditoria";
+import { getSessionActor } from "../../../_lib/auth";
 import {
   ApiError,
   errorResponse,
@@ -47,7 +48,7 @@ function isM2MAuthorized(request: Request): boolean {
 
 type AuthResult =
   | { kind: "m2m" }
-  | { kind: "session"; organizationId: string };
+  | { kind: "session"; organizationId: string; userId: string };
 
 /**
  * Resuelve la auth para GET y PATCH: primero intenta Bearer (cheaper), después
@@ -63,8 +64,8 @@ async function authorizeRequest(request: Request): Promise<AuthResult> {
   if (isM2MAuthorized(request)) {
     return { kind: "m2m" };
   }
-  const organizationId = await getOrganizationId();
-  return { kind: "session", organizationId };
+  const { organizationId, userId } = await getSessionActor();
+  return { kind: "session", organizationId, userId };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -567,6 +568,21 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         ultimaSesionId: data.ultimaSesionId ?? null,
         version: 1,
         aprobadoPorTerapeutaEn,
+      },
+    });
+
+    // Solo NOMBRES de campos enviados y la versión resultante: el contenido
+    // del contexto es PHI y no va al registro.
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: auth.kind === "session" ? "usuario" : "worker",
+      actorId: auth.kind === "session" ? auth.userId : null,
+      accion: "contexto.actualizar",
+      entidad: "paciente_contexto_clinico",
+      entidadId: pacienteId,
+      detalle: {
+        version: (existente?.version ?? 0) + 1,
+        camposEnviados: Object.keys(data),
       },
     });
 

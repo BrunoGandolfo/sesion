@@ -224,10 +224,21 @@ model SesionClinica {
   transcripcionEncrypted      Bytes? @map("transcripcion_encrypted") // texto plano: transcripcion
   notaSoapEncrypted           Bytes? @map("nota_soap_encrypted") // texto plano: JSON.stringify({subjetivo, objetivo, analisis, plan})
   datosEstructuradosEncrypted Bytes? @map("datos_estructurados_encrypted") // texto plano: JSON.stringify(datosEstructurados ya parseado)
+  // Nota tal como la generó la IA (antes de cualquier edición humana). Misma
+  // forma y cifrado que notaSoapEncrypted. Se escribe UNA sola vez (primer
+  // callback con nota); aprobar/reproceso nunca la pisan. Campo lógico en la
+  // extensión Prisma: notaSoapOriginal ({subjetivo, objetivo, analisis, plan} | null).
+  notaSoapOriginalEncrypted   Bytes? @map("nota_soap_original_encrypted")
 
   // Metadatos de procesamiento
   modeloASR   String? // Ej: "qwen3-asr-1.7b"
   modeloLLM   String? // Ej: "qwen3.5-72b-q4"
+  // Versión del prompt con el que el worker generó la nota (trazabilidad).
+  promptVersion String? @map("prompt_version")
+  // Etiqueta de hablante que el pipeline asignó a la terapeuta ("S0" por
+  // convención del worker). Permite reinterpretar la transcripción si la
+  // diarización invirtió los roles.
+  hablanteTerapeuta String? @default("S0") @map("hablante_terapeuta")
   procesadoEn DateTime? // Cuándo terminó el procesamiento
   error       String?   @db.Text // Detalle del error si estado = "error"
   intentos    Int       @default(0)
@@ -357,4 +368,38 @@ model PacienteContextoClinico {
   @@index([organizationId])
   @@index([aprobadoPorTerapeutaEn])
   @@map("paciente_contexto_clinico")
+}
+
+// ============================================
+// Auditoría — registro de acciones sobre datos
+// clínicos (quién, qué, cuándo, sobre qué).
+//
+// append-only: nunca update ni delete desde la app.
+// Sin relación a Organization ni a las entidades
+// auditadas: no queremos cascadas que borren el
+// rastro cuando se elimina lo auditado. `detalle`
+// jamás contiene texto clínico ni datos personales
+// (ver src/app/api/_lib/auditoria.ts → detalleSeguro).
+// ============================================
+
+enum ActorAuditoria {
+  usuario
+  worker
+  sistema
+}
+
+model EventoAuditoria {
+  id             String         @id @default(cuid())
+  organizationId String         @map("organization_id")
+  actorTipo      ActorAuditoria @map("actor_tipo")
+  actorId        String?        @map("actor_id")
+  accion         String
+  entidad        String
+  entidadId      String         @map("entidad_id")
+  detalle        Json?
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt])
+  @@index([entidad, entidadId])
+  @@map("eventos_auditoria")
 }

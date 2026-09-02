@@ -7,7 +7,8 @@ import {
 } from "@/lib/sesion-clinica-utils";
 
 import { borrarAudioBestEffort } from "../../_lib/audio";
-import { getOrganizationId } from "../../_lib/auth";
+import { registrarAuditoria } from "../../_lib/auditoria";
+import { getSessionActor } from "../../_lib/auth";
 import { ApiError, errorResponse, ok, validationError } from "../../_lib/responses";
 import {
   assertTransicionValida,
@@ -37,6 +38,10 @@ const updateSchema = z.object({
 
 // Select explícito de la sesión para la UI. NUNCA transcripcion: es PHI
 // que la UI no necesita y no debe viajar por esta API.
+// `notaSoapOriginal` es un campo lógico de la extensión de cifrado (sin
+// columna legacy): el tipo generado por Prisma no lo conoce, pero al vivir
+// en esta const (no en un literal inline) TS no lo marca como sobrante, y la
+// extensión lo traduce a nota_soap_original_encrypted.
 const SESION_SELECT = {
   id: true,
   turnoId: true,
@@ -48,9 +53,12 @@ const SESION_SELECT = {
   notaObjetivo: true,
   notaAnalisis: true,
   notaPlan: true,
+  notaSoapOriginal: true,
   datosEstructurados: true,
   modeloASR: true,
   modeloLLM: true,
+  promptVersion: true,
+  hablanteTerapeuta: true,
   procesadoEn: true,
   aprobadoEn: true,
   error: true,
@@ -75,7 +83,7 @@ const SESION_SELECT = {
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
     const sesion = await db.sesionClinica.findFirst({
@@ -86,6 +94,16 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (!sesion) {
       throw new ApiError("Sesión clínica no encontrada", 404);
     }
+
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: "usuario",
+      actorId: userId,
+      accion: "sesion.ver",
+      entidad: "sesion_clinica",
+      entidadId: sesion.id,
+      detalle: { estado: sesion.estado },
+    });
 
     return ok(sinClaveTemporal(sesion));
   } catch (error) {
@@ -98,8 +116,25 @@ const MENSAJE_AUDIO_NO_BORRADO =
 
 export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
+
+    // Cuatro salidas exitosas (dos descartes, dos eliminaciones): un solo
+    // helper para no repetir el evento en cada rama.
+    const auditar = (
+      accion: "sesion.descartar" | "sesion.eliminar",
+      audioConservado: boolean,
+      estadoPrevio: string,
+    ) =>
+      registrarAuditoria({
+        organizationId,
+        actorTipo: "usuario",
+        actorId: userId,
+        accion,
+        entidad: "sesion_clinica",
+        entidadId: id,
+        detalle: { estadoPrevio, audioConservado },
+      });
 
     const existente = await db.sesionClinica.findFirst({
       where: { id, organizationId },
@@ -149,6 +184,8 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         },
       });
 
+      await auditar("sesion.descartar", audioConservado, existente.estado);
+
       return ok({ success: true, estado: "error", audioConservado });
     }
 
@@ -172,6 +209,8 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       }
       await db.sesionClinica.delete({ where: { id } });
 
+      await auditar("sesion.eliminar", false, existente.estado);
+
       return ok({ success: true, eliminada: true });
     }
 
@@ -190,12 +229,16 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
           },
         });
 
+        await auditar("sesion.descartar", true, existente.estado);
+
         return ok({ success: true, estado: "error" });
       }
 
       // Sin audio subido no hay nada que procesar ni conservar: eliminación
       // limpia, que además libera el turno (relación 1:1 por turnoId único).
       await db.sesionClinica.delete({ where: { id } });
+
+      await auditar("sesion.eliminar", false, existente.estado);
 
       return ok({ success: true, eliminada: true });
     }
@@ -211,7 +254,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
     const body = await request.json();
     const parsed = updateSchema.safeParse(body);
@@ -279,6 +322,23 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       },
       select: SESION_SELECT,
     });
+
+    // Solo se audita el cambio de estado: un PATCH de duracion/audioR2Key
+    // sin `estado` no es una transición.
+    if (
+      parsed.data.estado !== undefined &&
+      parsed.data.estado !== existente.estado
+    ) {
+      await registrarAuditoria({
+        organizationId,
+        actorTipo: "usuario",
+        actorId: userId,
+        accion: "sesion.cambiar_estado",
+        entidad: "sesion_clinica",
+        entidadId: sesion.id,
+        detalle: { desde: existente.estado, hacia: parsed.data.estado },
+      });
+    }
 
     return ok(sinClaveTemporal(sesion));
   } catch (error) {

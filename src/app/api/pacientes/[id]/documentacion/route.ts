@@ -2,7 +2,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import type { DatosEstructurados, NotaSOAP } from "@/types/domain";
 
-import { getOrganizationId } from "../../../_lib/auth";
+import { registrarAuditoria } from "../../../_lib/auditoria";
+import { getSessionActor } from "../../../_lib/auth";
 import {
   ApiError,
   errorResponse,
@@ -63,7 +64,7 @@ function buildNota(s: {
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
     const url = new URL(request.url);
@@ -138,6 +139,17 @@ export async function GET(request: Request, { params }: RouteParams) {
       aprobadoEn: s.aprobadoEn ? s.aprobadoEn.toISOString() : null,
       procesadoEn: s.procesadoEn ? s.procesadoEn.toISOString() : null,
     }));
+
+    // Este GET devuelve notas completas en lote: cuenta como exportación.
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: "usuario",
+      actorId: userId,
+      accion: "sesion.exportar",
+      entidad: "paciente",
+      entidadId: id,
+      detalle: { page, limit, total: totalSesiones },
+    });
 
     return ok({
       pacienteId: id,

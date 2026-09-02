@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { normalizarRiesgo } from "@/types/domain";
 
 import { borrarAudioBestEffort } from "../../../_lib/audio";
-import { getOrganizationId } from "../../../_lib/auth";
+import { hashTexto, registrarAuditoria } from "../../../_lib/auditoria";
+import { getSessionActor } from "../../../_lib/auth";
 import {
   ApiError,
   errorResponse,
@@ -78,7 +79,7 @@ function quitarClaveTemporal(
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
     const body = await request.json();
     const parsed = aprobarSchema.safeParse(body);
@@ -172,6 +173,32 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!sesion) {
       throw new ApiError("Sesión clínica no encontrada", 404);
     }
+
+    // Solo el hash de la nota final: permite probar después que lo aprobado
+    // es exactamente esto, sin copiar texto clínico al registro.
+    const hashNotaAprobada = hashTexto(
+      JSON.stringify({
+        subjetivo: sesion.notaSubjetivo ?? null,
+        objetivo: sesion.notaObjetivo ?? null,
+        analisis: sesion.notaAnalisis ?? null,
+        plan: sesion.notaPlan ?? null,
+      }),
+    );
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: "usuario",
+      actorId: userId,
+      accion: "sesion.aprobar",
+      entidad: "sesion_clinica",
+      entidadId: sesion.id,
+      detalle: {
+        confirmoRiesgo: parsed.data.confirmoRiesgo === true,
+        nivelRiesgo: riesgo.nivel,
+        notaEditada: parsed.data.notaEditada !== undefined,
+        hashNotaAprobada,
+        audioBorrado: habiaAudio && audioBorrado,
+      },
+    });
 
     return ok(sinClaveTemporal(sesion));
   } catch (error) {

@@ -19,7 +19,7 @@ Sesión es una herramienta de gestión para profesionales de salud mental. Centr
 | Auth.js / next-auth | 5.0.0-beta.31 | Login con credenciales y JWT |
 | Vercel | Hobby | Hosting y API |
 | Neon | Free | PostgreSQL administrado |
-| Evolution API / Twilio | Migración | Envío de WhatsApp |
+| Twilio SMS | — | Recordatorios por SMS |
 
 ## Requisitos
 

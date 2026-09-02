@@ -25,37 +25,47 @@ from errores import PipelineError
 
 logger = logging.getLogger(__name__)
 
+# Endpoints (docs vigentes):
+#   POST   /v2/upload            https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/files/upload
+#   POST   /v2/transcript        https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/submit
+#   GET    /v2/transcript/{id}   https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/get
+#   DELETE /v2/transcript/{id}   https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/delete
+# Autenticacion: header `authorization: <api key>` (la key cruda, sin "Bearer").
 API_BASE = "https://api.assemblyai.com/v2"
 
-# Identificacion de hablantes por rol. Verificar contra docs.assemblyai.com al
-# primer deploy: tanto el nombre del parametro como la forma del objeto
-# (speaker_type / speakers[{role, description}]) no pudieron verificarse
-# desde este entorno.
-PARAM_SPEAKER_IDENTIFICATION = "speaker_identification"
+ROL_TERAPEUTA = "Terapeuta"
+ROL_PACIENTE = "Paciente"
+
+# Identificacion de hablantes por rol (Speech Understanding). Anidamiento,
+# requisito de speaker_labels=true y forma de la respuesta segun:
+#   https://www.assemblyai.com/docs/speech-understanding/speaker-identification
+# Request: speech_understanding.request.speaker_identification
+#          {speaker_type: "role", speakers: [{role, description}]}
+# Respuesta: utterances[].speaker pasa a ser el rol, y ademas
+#          speech_understanding.response.speaker_identification.mapping
+#          ({"A": "Terapeuta", ...}) con `status`. Soporta espanol (es).
 SPEAKER_IDENTIFICATION = {
     "speaker_type": "role",
     "speakers": [
         {
-            "role": "Terapeuta",
+            "role": ROL_TERAPEUTA,
             "description": (
                 "profesional que conduce la sesión de psicoterapia: saluda, "
                 "encuadra, pregunta, señala"
             ),
         },
         {
-            "role": "Paciente",
+            "role": ROL_PACIENTE,
             "description": "persona consultante que relata su vivencia y responde",
         },
     ],
 }
 
-# Opciones de diarizacion. Una sesion de psicoterapia es diadica; fijar 2
-# hablantes esperados mejora la separacion. Verificar nombre/forma en docs.
-PARAM_SPEAKER_OPTIONS = "speaker_options"
+# Opciones de diarizacion. Una sesion de psicoterapia es diadica; fijar
+# min=max=2 acota la separacion. `speaker_options` (no combinable con
+# `speakers_expected`) segun:
+#   https://www.assemblyai.com/docs/pre-recorded-audio/label-speakers
 SPEAKER_OPTIONS = {"min_speakers_expected": 2, "max_speakers_expected": 2}
-
-ROL_TERAPEUTA = "Terapeuta"
-ROL_PACIENTE = "Paciente"
 
 TIMEOUT_UPLOAD_SEG = 600  # audios de 60-90 min pueden pesar decenas de MB
 TIMEOUT_HTTP_SEG = 30
@@ -98,6 +108,9 @@ def _fallo_red(e: Exception, etapa: str) -> PipelineError:
 # Etapas ────────────────────────────────────────────────────────────────────
 
 def _subir(audio_bytes: bytes) -> str:
+    # Cuerpo binario crudo (no multipart) con content-type
+    # application/octet-stream; responde {"upload_url": ...}:
+    #   https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/files/upload
     try:
         response = requests.post(
             f"{API_BASE}/upload",
@@ -115,15 +128,38 @@ def _subir(audio_bytes: bytes) -> str:
     return upload_url
 
 
+def _modelos() -> list[str]:
+    """Lista ordenada principal + fallback, sin vacios ni duplicados."""
+    modelos: list[str] = []
+    for m in (config.ASR_MODEL_ID, config.ASR_MODEL_FALLBACK):
+        m = (m or "").strip()
+        if m and m not in modelos:
+            modelos.append(m)
+    return modelos
+
+
 def _crear_transcript(upload_url: str) -> str:
-    payload = {
+    # Parametros segun
+    #   https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/submit
+    # - speech_models: lista en orden de prioridad (reemplaza a `speech_model`,
+    #   deprecado); si el modelo principal no soporta el idioma cae al siguiente.
+    #   https://www.assemblyai.com/docs/pre-recorded-audio/select-the-speech-model
+    # - language_code "es": valor valido del enum TranscriptLanguageCode.
+    # - prompt: contexto en lenguaje natural, solo Universal-3.5 Pro.
+    #   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro/prompting
+    payload: dict = {
         "audio_url": upload_url,
-        "speech_model": config.ASR_MODEL_ID,
+        "speech_models": _modelos(),
         "language_code": "es",
         "speaker_labels": True,
-        PARAM_SPEAKER_OPTIONS: SPEAKER_OPTIONS,
-        PARAM_SPEAKER_IDENTIFICATION: SPEAKER_IDENTIFICATION,
+        "speaker_options": SPEAKER_OPTIONS,
+        "speech_understanding": {
+            "request": {"speaker_identification": SPEAKER_IDENTIFICATION},
+        },
     }
+    prompt = (config.ASR_PROMPT_ESCENARIO or "").strip()
+    if prompt:
+        payload["prompt"] = prompt
     try:
         response = requests.post(
             f"{API_BASE}/transcript",
@@ -142,7 +178,11 @@ def _crear_transcript(upload_url: str) -> str:
 
 
 def _esperar(transcript_id: str) -> dict:
-    """Polling hasta status completed/error o hasta ASR_TIMEOUT_SECONDS."""
+    """
+    Polling hasta status completed/error o hasta ASR_TIMEOUT_SECONDS.
+    status ∈ {queued, processing, completed, error}:
+      https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/get
+    """
     url = f"{API_BASE}/transcript/{transcript_id}"
     deadline = time.monotonic() + config.ASR_TIMEOUT_SECONDS
     fallos_consecutivos = 0
@@ -197,7 +237,11 @@ def _esperar(transcript_id: str) -> dict:
 
 
 def _borrar(transcript_id: str) -> None:
-    """DELETE best-effort: solo se loguea el status, nunca falla."""
+    """
+    DELETE best-effort: solo se loguea el status, nunca falla.
+    Borra el transcript y el archivo subido via /upload:
+      https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/delete
+    """
     try:
         response = requests.delete(
             f"{API_BASE}/transcript/{transcript_id}",
@@ -211,13 +255,37 @@ def _borrar(transcript_id: str) -> None:
 
 # Normalizacion ─────────────────────────────────────────────────────────────
 
+def _mapping_roles(data: dict) -> dict[str, str]:
+    """
+    speech_understanding.response.speaker_identification.mapping
+    ({"A": "Terapeuta", "B": "Paciente"}) si vino; {} en cualquier otro caso.
+    Docs: https://www.assemblyai.com/docs/speech-understanding/speaker-identification
+    """
+    su = data.get("speech_understanding")
+    if not isinstance(su, dict):
+        return {}
+    resp = su.get("response")
+    if not isinstance(resp, dict):
+        return {}
+    ident = resp.get("speaker_identification")
+    if not isinstance(ident, dict):
+        return {}
+    mapping = ident.get("mapping")
+    if not isinstance(mapping, dict):
+        return {}
+    return {str(k): str(v) for k, v in mapping.items() if v is not None}
+
+
 def _normalizar(data: dict, transcript_id: str) -> dict:
     utterances = data.get("utterances") or []
     if not isinstance(utterances, list):
         utterances = []
 
+    # Con identificacion por rol, utterances[].speaker ya trae el rol; el
+    # `mapping` cubre el caso en que vengan las letras (A/B) y el rol aparte.
+    mapping = _mapping_roles(data)
     etiquetas = [
-        str(u.get("speaker"))
+        mapping.get(str(u.get("speaker")), str(u.get("speaker")))
         for u in utterances
         if isinstance(u, dict) and u.get("speaker") is not None
     ]
@@ -255,23 +323,28 @@ def _normalizar(data: dict, transcript_id: str) -> dict:
         except (TypeError, ValueError):
             descartados += 1
             continue
+        etiqueta = mapping.get(str(speaker), str(speaker))
         segments.append({
-            "speaker": a_speaker(str(speaker)),
+            "speaker": a_speaker(etiqueta),
             "start": start,
             "end": end,
             "text": str(u.get("text") or ""),
         })
 
+    # audio_duration: entero en segundos (GET /v2/transcript/{id}).
     duracion_reportada = data.get("audio_duration")
     if isinstance(duracion_reportada, (int, float)) and duracion_reportada > 0:
         duracion = float(duracion_reportada)
     else:
         duracion = max((s["end"] for s in segments), default=0.0)
 
+    # speech_model_used: cual de los speech_models proceso el audio.
+    modelo_usado = data.get("speech_model_used")
     logger.info(
         f"AssemblyAI {transcript_id}: {len(utterances)} utterances, "
         f"{len(segments)} validas, {descartados} descartadas, "
         f"{duracion:.0f}s, hablantes={len(set(etiquetas))}, roles={roles_origen}"
+        + (f", modelo={modelo_usado}" if modelo_usado else "")
     )
     return {
         "duration_seconds": int(duracion),

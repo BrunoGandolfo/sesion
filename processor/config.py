@@ -18,9 +18,22 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "sesion-audio")
 
 # ASR — AssemblyAI ──────────────────────────────────────────────────────────
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
-# Confirmar el identificador vigente de Universal-3.5 Pro en docs.assemblyai.com
-# antes del primer deploy; se reporta en el callback como modeloASR.
-ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "universal-3-pro")
+# Modelo principal y fallback. Se envian como lista ordenada `speech_models`
+# (el singular `speech_model` esta deprecado). Identificadores vigentes:
+#   https://www.assemblyai.com/docs/pre-recorded-audio/select-the-speech-model
+#   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro
+# ASR_MODEL_ID se reporta en el callback como modeloASR.
+ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "universal-3-5-pro")
+ASR_MODEL_FALLBACK = os.getenv("ASR_MODEL_FALLBACK", "universal-2")
+# Prompt de contexto (`prompt`, solo Universal-3.5 Pro; hasta 1.500 palabras,
+# la doc recomienda 5-15 palabras para describir el escenario en lenguaje llano):
+#   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro/prompting
+# Vacio = no enviar el parametro.
+ASR_PROMPT_ESCENARIO = os.getenv(
+    "ASR_PROMPT_ESCENARIO",
+    "Sesión de psicoterapia entre una psicóloga y un paciente, "
+    "en español rioplatense, en consultorio.",
+)
 ASR_POLL_SECONDS = int(os.getenv("ASR_POLL_SECONDS", "10"))
 ASR_TIMEOUT_SECONDS = int(os.getenv("ASR_TIMEOUT_SECONDS", "1800"))
 
