@@ -7,8 +7,10 @@ import {
   hashTexto,
 } from "@/app/api/_lib/auditoria-pura";
 import {
+  esKeyAudioDeSesion,
   esTransicionPermitidaAlCliente,
   esTransicionValida,
+  keyAudioEsperada,
   parseDatosEstructurados,
   esNotaCompleta,
 } from "@/lib/sesion-clinica-utils";
@@ -38,7 +40,8 @@ describe("Sesión clínica - validaciones", () => {
       ["grabando", "subiendo"],
       ["grabando", "procesando"], // upload salta "subiendo"
       ["grabando", "error"], // fallo de upload / huérfana con audio
-      ["subiendo", "procesando"],
+      ["subiendo", "procesando"], // upload-confirmar (HeadObject OK)
+      ["subiendo", "grabando"], // reintento de subida (PUT o confirmación fallaron)
       ["subiendo", "error"],
       ["procesando", "revision"], // callback
       ["procesando", "error"], // callback o tope de reintentos
@@ -103,11 +106,19 @@ describe("Sesión clínica - validaciones", () => {
     const permitidas: Array<[EstadoProcesamiento, EstadoProcesamiento]> = [
       ["pendiente", "grabando"],
       ["grabando", "error"],
+      ["subiendo", "grabando"], // reintento de subida directa a R2
       ["error", "procesando"],
     ];
 
     it.each(permitidas)("el cliente puede pedir %s → %s", (desde, hasta) => {
       expect(esTransicionPermitidaAlCliente(desde, hasta)).toBe(true);
+    });
+
+    it("el cliente no puede pedir grabando → subiendo (la hace el servidor en upload-url)", () => {
+      expect(esTransicionValida("grabando", "subiendo")).toBe(true);
+      expect(esTransicionPermitidaAlCliente("grabando", "subiendo")).toBe(
+        false,
+      );
     });
 
     it("el cliente no puede pedir revision → aprobado (solo /aprobar)", () => {
@@ -152,14 +163,53 @@ describe("Sesión clínica - validaciones", () => {
       }
     });
 
-    it("exactamente tres transiciones son de cliente", () => {
+    it("exactamente cuatro transiciones son de cliente", () => {
       let total = 0;
       for (const desde of TODOS_LOS_ESTADOS) {
         for (const hasta of TODOS_LOS_ESTADOS) {
           if (esTransicionPermitidaAlCliente(desde, hasta)) total += 1;
         }
       }
-      expect(total).toBe(3);
+      expect(total).toBe(4);
+    });
+  });
+
+  // ─── Key del audio en R2: determinística por sesión; upload-confirmar
+  // solo acepta la que coincide, nunca una key arbitraria del cliente. ────
+  describe("keyAudioEsperada / esKeyAudioDeSesion", () => {
+    it("arma audio/<org>/<sesion>/<turno>.enc", () => {
+      expect(keyAudioEsperada("org1", "ses1", "tur1")).toBe(
+        "audio/org1/ses1/tur1.enc",
+      );
+    });
+
+    it("acepta solo la key exacta de la sesión", () => {
+      expect(
+        esKeyAudioDeSesion("audio/org1/ses1/tur1.enc", "org1", "ses1", "tur1"),
+      ).toBe(true);
+    });
+
+    it("rechaza keys de otra sesión, otra org u otro turno", () => {
+      expect(
+        esKeyAudioDeSesion("audio/org1/ses2/tur1.enc", "org1", "ses1", "tur1"),
+      ).toBe(false);
+      expect(
+        esKeyAudioDeSesion("audio/org2/ses1/tur1.enc", "org1", "ses1", "tur1"),
+      ).toBe(false);
+      expect(
+        esKeyAudioDeSesion("audio/org1/ses1/tur2.enc", "org1", "ses1", "tur1"),
+      ).toBe(false);
+    });
+
+    it("rechaza prefijos, sufijos, traversal y no-strings", () => {
+      expect(
+        esKeyAudioDeSesion("audio/org1/ses1/tur1.enc/x", "org1", "ses1", "tur1"),
+      ).toBe(false);
+      expect(
+        esKeyAudioDeSesion("../audio/org1/ses1/tur1.enc", "org1", "ses1", "tur1"),
+      ).toBe(false);
+      expect(esKeyAudioDeSesion(null, "org1", "ses1", "tur1")).toBe(false);
+      expect(esKeyAudioDeSesion(42, "org1", "ses1", "tur1")).toBe(false);
     });
   });
 

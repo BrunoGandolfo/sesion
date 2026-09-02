@@ -27,10 +27,16 @@ export const ESTADOS_SESION: ReadonlyArray<EstadoSesion> = [
 // upload, aprobar) vía assertTransicionValida() en src/app/api/_lib/
 // sesion-clinica.ts. No duplicar esta tabla en las rutas.
 //
+// - grabando → subiendo: POST [id]/upload-url (guarda clave+IV y emite la
+//   URL prefirmada de R2). Desde acá el navegador sube DIRECTO a R2.
+// - subiendo → procesando: POST [id]/upload-confirmar, tras verificar con
+//   HeadObject que el objeto existe en R2.
+// - subiendo → grabando: reintento de la subida (cliente por PATCH, o el
+//   propio upload-confirmar cuando el objeto no llegó a R2).
 // - grabando → error / subiendo → error: descarte de una grabación abandonada
 //   con audio subido (DELETE) o fallo de subida.
-// - grabando → procesando: upload salta "subiendo" cuando el cliente no lo
-//   reportó.
+// - grabando → procesando: se conserva por compatibilidad con filas viejas;
+//   ya no lo usa ninguna ruta (el /upload monolítico devuelve 410).
 // - revision → error: descarte de la nota (DELETE), la sesión queda
 //   reprocesable. revision → aprobado: solo el endpoint /aprobar.
 // - error → procesando: reintento (PATCH), re-encola al worker.
@@ -40,7 +46,7 @@ const TRANSICIONES_PERMITIDAS: Record<
 > = {
   pendiente: ["grabando"],
   grabando: ["subiendo", "procesando", "error"],
-  subiendo: ["procesando", "error"],
+  subiendo: ["procesando", "grabando", "error"],
   procesando: ["revision", "error"],
   revision: ["aprobado", "error"],
   aprobado: [],
@@ -69,28 +75,61 @@ export function esTransicionValida(
 // Subconjunto de TRANSICIONES_PERMITIDAS que el navegador puede pedir
 // directamente vía PATCH /api/sesion-clinica/[id] { estado }. Todo lo demás
 // tiene una ruta con efectos propios y NO puede pedirse por PATCH:
-//   grabando/subiendo → procesando  → POST [id]/upload (sube a R2, guarda clave)
+//   grabando → subiendo             → POST [id]/upload-url (guarda clave+IV,
+//                                     emite URL prefirmada). NO es de cliente:
+//                                     la hace el servidor al emitir la URL.
+//   subiendo → procesando           → POST [id]/upload-confirmar (HeadObject)
 //   procesando → revision|error     → POST callback (M2M, escribe la nota)
 //   revision → aprobado             → POST [id]/aprobar (chequeo de riesgo,
 //                                     borrado de audio, destrucción de clave)
 //   revision → error, grabando → error con audio → DELETE [id]
 //
 // Evidencia de uso real en el frontend (única fuente para esta lista):
-//   pendiente → grabando : useGrabacionSesion.ts:184-190 y
-//                          historia-tab.tsx:307-313, tras crear la sesión.
-//   grabando → error     : useGrabacionSesion.ts:249-253 y
-//                          historia-tab.tsx:381-385, cuando falla el upload
-//                          (la fila no tiene audio; el DELETE no aplica).
-//   error → procesando   : useGrabacionSesion.ts:269-273 e
-//                          historia-tab.tsx:399-403, "Reintentar"; re-encola
-//                          al worker vía /pendientes.
+//   pendiente → grabando : useGrabacionSesion.ts (iniciar) y
+//                          historia-tab.tsx (iniciarGrabacionFlow), tras
+//                          crear la sesión.
+//   grabando → error     : historia-tab.tsx (manejarGrabacionCompleta) cuando
+//                          falla la subida; el hook nuevo ya no lo usa, pero
+//                          la pestaña Historia todavía sí.
+//   subiendo → grabando  : useGrabacionSesion.ts (volverAGrabando) tras un
+//                          fallo en el PUT a R2 o en la confirmación: la
+//                          sesión vuelve a "grabando" para repetir desde
+//                          upload-url con el mismo blob cifrado.
+//   error → procesando   : useGrabacionSesion.ts (reintentar) e
+//                          historia-tab.tsx, "Reintentar"; re-encola al
+//                          worker vía /pendientes.
 const TRANSICIONES_CLIENTE: Partial<
   Record<EstadoSesion, ReadonlyArray<EstadoSesion>>
 > = {
   pendiente: ["grabando"],
   grabando: ["error"],
+  subiendo: ["grabando"],
   error: ["procesando"],
 };
+
+// Key del objeto de audio cifrado en R2. Es determinística por sesión: el
+// servidor la calcula al emitir la URL prefirmada y la vuelve a calcular al
+// confirmar, y solo acepta la que coincide (nunca una key arbitraria que
+// mande el cliente).
+export function keyAudioEsperada(
+  organizationId: string,
+  sesionClinicaId: string,
+  turnoId: string,
+): string {
+  return `audio/${organizationId}/${sesionClinicaId}/${turnoId}.enc`;
+}
+
+export function esKeyAudioDeSesion(
+  key: unknown,
+  organizationId: string,
+  sesionClinicaId: string,
+  turnoId: string,
+): boolean {
+  return (
+    typeof key === "string" &&
+    key === keyAudioEsperada(organizationId, sesionClinicaId, turnoId)
+  );
+}
 
 export function esTransicionPermitidaAlCliente(
   estadoActual: EstadoSesion | string,

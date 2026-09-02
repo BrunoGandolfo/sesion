@@ -35,6 +35,17 @@ interface GrabadorSesionProps {
   pacienteNombre: string;
   onGrabacionCompleta: (datos: DatosGrabacion) => void;
   onError: (mensaje: string) => void;
+  // Estado de la subida directa a R2 (la maneja useGrabacionSesion). Son
+  // opcionales para no romper a los padres que todavía no los pasan; sin
+  // ellos el bloque "Reintentar subida" no se muestra.
+  /** true cuando la subida falló y el blob cifrado sigue en memoria. */
+  subidaPendiente?: boolean;
+  /** 0-100 mientras el PUT a R2 está en curso; null fuera de eso. */
+  progresoSubida?: number | null;
+  /** Mensaje del último fallo de subida. */
+  errorSubida?: string | null;
+  /** Repite la subida (upload-url → PUT → upload-confirmar) con el mismo blob. */
+  onReintentarSubida?: () => void;
 }
 
 type EstadoGrabador =
@@ -162,6 +173,10 @@ export function GrabadorSesion({
   pacienteNombre,
   onGrabacionCompleta,
   onError,
+  subidaPendiente = false,
+  progresoSubida = null,
+  errorSubida = null,
+  onReintentarSubida,
 }: GrabadorSesionProps) {
   const [estado, setEstado] = React.useState<EstadoGrabador>("idle");
   const [segundosActuales, setSegundosActuales] = React.useState(0);
@@ -892,6 +907,55 @@ export function GrabadorSesion({
                 transition={transicion}
                 className="flex flex-col gap-5"
               >
+                {progresoSubida !== null && (
+                  <div className="flex items-center gap-3 rounded-[12px] border border-sage-200 bg-white/80 p-4">
+                    <LoaderCircle
+                      size={18}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                      className="shrink-0 animate-spin text-sage-500"
+                    />
+                    <p className="text-[14px] text-ink-700">
+                      Subiendo el audio cifrado…{" "}
+                      <span className="font-mono tabular-nums text-ink-900">
+                        {progresoSubida}%
+                      </span>
+                    </p>
+                  </div>
+                )}
+
+                {subidaPendiente && progresoSubida === null && (
+                  <div className="flex flex-col gap-3 rounded-[12px] border border-[color:var(--color-error)]/20 bg-[rgba(160,64,64,0.06)] p-4">
+                    <div className="flex items-start gap-3">
+                      <CircleAlert
+                        size={18}
+                        strokeWidth={1.9}
+                        aria-hidden="true"
+                        className="mt-[2px] shrink-0 text-[color:var(--color-error)]"
+                      />
+                      <div className="space-y-1">
+                        <p className="text-[15px] font-semibold text-ink-900">
+                          No se pudo subir el audio
+                        </p>
+                        <p className="text-[13px] leading-6 text-ink-700">
+                          {errorSubida ?? "La subida a R2 no se completó."}{" "}
+                          El audio cifrado sigue en este dispositivo; no se
+                          perdió nada.
+                        </p>
+                      </div>
+                    </div>
+                    {onReintentarSubida && (
+                      <Button
+                        onClick={onReintentarSubida}
+                        icon={<RotateCcw size={15} strokeWidth={1.8} aria-hidden="true" />}
+                        className="w-full sm:w-auto"
+                      >
+                        Reintentar subida
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 {pendiente && (
                   <div className="flex flex-col gap-3 rounded-[12px] border border-[color:var(--color-error)]/20 bg-[rgba(160,64,64,0.06)] p-4">
                     <div className="flex items-start gap-3">

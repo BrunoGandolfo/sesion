@@ -14,8 +14,14 @@ import { NotaClinicaView } from "@/components/grabacion/NotaClinicaView";
 import { FeedbackTerapeutaView } from "@/components/grabacion/FeedbackTerapeutaView";
 import { RiesgoDetectadoBanner } from "@/components/grabacion/RiesgoDetectadoBanner";
 import { SesionHuerfanaBanner } from "@/components/grabacion/SesionHuerfanaBanner";
+import {
+  ErrorSubida,
+  subirAudioCifrado,
+  type DatosGrabacion,
+} from "@/hooks/useGrabacionSesion";
 import { useSesionClinicaPolling } from "@/hooks/useSesionClinicaPolling";
 import { fechaLarga, hora } from "@/lib/format";
+import { limpiarGrabacion } from "@/lib/grabacion-storage";
 import { esSesionHuerfana } from "@/lib/sesion-clinica-utils";
 import type {
   DatosEstructurados,
@@ -209,6 +215,14 @@ export function HistoriaTab({
   );
   const [grabacionSubmitting, setGrabacionSubmitting] =
     React.useState<boolean>(false);
+  // Subida directa a R2 (mismo flujo de tres pasos que useGrabacionSesion):
+  // el blob cifrado cuya subida falló queda en memoria para "Reintentar
+  // subida"; los chunks de IndexedDB no se borran hasta confirmar.
+  const [subidaPendiente, setSubidaPendiente] = React.useState<boolean>(false);
+  const [progresoSubida, setProgresoSubida] = React.useState<number | null>(
+    null,
+  );
+  const ultimoAudioRef = React.useRef<DatosGrabacion | null>(null);
 
   const turnoHoyId = turnoHoy?.id ?? null;
   const turnoHoyEstado = turnoHoy?.estado ?? null;
@@ -325,31 +339,49 @@ export function HistoriaTab({
     }
   }
 
-  async function manejarGrabacionCompleta(datos: {
-    audioBlob: Blob;
-    claveCifrado: string;
-    ivCifrado: string;
-    duracionSegundos: number;
-  }) {
+  // Tras un fallo en el PUT a R2 o en la confirmación, la sesión puede haber
+  // quedado en "subiendo": se consulta el estado real y, solo si es
+  // "subiendo", se la vuelve a "grabando" (transición de cliente permitida)
+  // para poder repetir desde upload-url. Best-effort.
+  async function volverAGrabando(sesionId: string) {
+    try {
+      const res = await fetch(`/api/sesion-clinica/${sesionId}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { data: { estado?: string } | null };
+      if (body.data?.estado !== "subiendo") return;
+      await fetch(`/api/sesion-clinica/${sesionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: "grabando" }),
+      });
+    } catch {
+      // tragar
+    }
+  }
+
+  async function manejarGrabacionCompleta(datos: DatosGrabacion) {
     if (!sesionHoy || !turnoHoyId) return;
     const sesionId = sesionHoy.id;
     const eraProgramado = turnoHoyEstado === "programado";
+    ultimoAudioRef.current = datos;
     setGrabacionError(null);
     setGrabacionSubmitting(true);
+    setProgresoSubida(null);
     try {
-      // El endpoint /upload acepta entrada desde "grabando" y persiste en la
-      // misma transacción duracionAudioSeg + estado "procesando".
-      const formData = new FormData();
-      formData.append("audio", datos.audioBlob, "sesion.bin");
-      formData.append("claveCifrado", datos.claveCifrado);
-      formData.append("iv", datos.ivCifrado);
-      formData.append("duracionSegundos", String(datos.duracionSegundos));
-
-      const uploadRes = await fetch(
-        `/api/sesion-clinica/${sesionId}/upload`,
-        { method: "POST", body: formData },
+      // Tres pasos, sin pasar el audio por Vercel:
+      // upload-url → PUT directo a R2 → upload-confirmar (HeadObject).
+      const actualizada = await subirAudioCifrado(sesionId, datos, (p) =>
+        setProgresoSubida(p),
       );
-      if (!uploadRes.ok) throw new Error(await parseError(uploadRes));
+      setSesionHoy(toSesionClinicaResponse(actualizada as RawSesionClinica));
+
+      // Confirmación OK: el backup incremental en IndexedDB deja de hacer
+      // falta (clave = turnoId, fire-and-forget).
+      ultimoAudioRef.current = null;
+      setSubidaPendiente(false);
+      void limpiarGrabacion(turnoHoyId);
 
       // Auto-cierre del turno cuando se grabó durante uno programado.
       if (eraProgramado) {
@@ -373,22 +405,32 @@ export function HistoriaTab({
 
       setSeccionGrabacion("idle");
     } catch (err) {
+      // Nada se borra: el blob cifrado queda en memoria y los chunks en
+      // IndexedDB. La sesión vuelve a "grabando" para repetir desde el
+      // paso 1 con el mismo blob ("Reintentar subida" en el grabador).
       setGrabacionError(
         err instanceof Error ? err.message : "Error al subir el audio",
       );
-      // Best-effort: marcar como error.
-      try {
-        await fetch(`/api/sesion-clinica/${sesionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ estado: "error" }),
-        });
-      } catch {
-        // tragar
+      setSubidaPendiente(true);
+      const paso = err instanceof ErrorSubida ? err.paso : "put";
+      if (paso !== "url") {
+        await volverAGrabando(sesionId);
       }
     } finally {
+      setProgresoSubida(null);
       setGrabacionSubmitting(false);
     }
+  }
+
+  function reintentarSubida() {
+    const datos = ultimoAudioRef.current;
+    if (!datos) {
+      setGrabacionError(
+        "No queda un audio cifrado en memoria para reenviar. Si la grabación quedó guardada en el dispositivo, el grabador la ofrece al volver a entrar.",
+      );
+      return;
+    }
+    void manejarGrabacionCompleta(datos);
   }
 
   async function reintentarProcesamiento() {
@@ -521,6 +563,9 @@ export function HistoriaTab({
           seccion={seccionGrabacion}
           submitting={grabacionSubmitting}
           error={grabacionError}
+          subidaPendiente={subidaPendiente}
+          progresoSubida={progresoSubida}
+          onReintentarSubida={reintentarSubida}
           onIniciar={() => void iniciarGrabacionFlow()}
           onGrabacionCompleta={(d) => void manejarGrabacionCompleta(d)}
           onErrorGrabacion={(m) => setGrabacionError(m)}
@@ -608,13 +653,11 @@ interface ZonaGrabacionProps {
   seccion: "idle" | "grabando" | "nota";
   submitting: boolean;
   error: string | null;
+  subidaPendiente: boolean;
+  progresoSubida: number | null;
+  onReintentarSubida: () => void;
   onIniciar: () => void;
-  onGrabacionCompleta: (datos: {
-    audioBlob: Blob;
-    claveCifrado: string;
-    ivCifrado: string;
-    duracionSegundos: number;
-  }) => void;
+  onGrabacionCompleta: (datos: DatosGrabacion) => void;
   onErrorGrabacion: (mensaje: string) => void;
   onReintentar: () => void;
   onAprobado: () => void;
@@ -631,6 +674,9 @@ function ZonaGrabacion({
   seccion,
   submitting,
   error,
+  subidaPendiente,
+  progresoSubida,
+  onReintentarSubida,
   onIniciar,
   onGrabacionCompleta,
   onErrorGrabacion,
@@ -667,6 +713,10 @@ function ZonaGrabacion({
           pacienteNombre={pacienteNombre}
           onGrabacionCompleta={onGrabacionCompleta}
           onError={onErrorGrabacion}
+          subidaPendiente={subidaPendiente}
+          progresoSubida={progresoSubida}
+          errorSubida={error}
+          onReintentarSubida={onReintentarSubida}
         />
       ) : null}
 

@@ -198,8 +198,11 @@ export function PacienteDetailView({ id }: { id: string }) {
     sesionClinica,
     submitting: grabacionSubmitting,
     error: grabacionError,
+    subidaPendiente,
+    progresoSubida,
     iniciar: iniciarGrabacion,
     completar: completarGrabacion,
+    reintentarSubida,
     reintentar: reintentarGrabacion,
     refrescar: refrescarGrabacion,
   } = useGrabacionSesion({
@@ -372,10 +375,14 @@ export function PacienteDetailView({ id }: { id: string }) {
           submitting={grabacionSubmitting}
           turno={turnoHoy}
           pacienteNombre={nombreCompleto}
+          subidaPendiente={subidaPendiente}
+          progresoSubida={progresoSubida}
+          errorSubida={grabacionError}
           onGrabacionCompleta={(d) => void completarGrabacion(d)}
           onErrorGrabacion={(m) =>
             setToast({ open: true, message: m })
           }
+          onReintentarSubida={() => void reintentarSubida()}
           onReintentar={() => void reintentarGrabacion()}
           onAprobado={() => void handleNotaResuelta()}
         />
@@ -570,8 +577,12 @@ function GrabacionSheetContent({
   submitting,
   turno,
   pacienteNombre,
+  subidaPendiente,
+  progresoSubida,
+  errorSubida,
   onGrabacionCompleta,
   onErrorGrabacion,
+  onReintentarSubida,
   onReintentar,
   onAprobado,
 }: {
@@ -580,6 +591,9 @@ function GrabacionSheetContent({
   submitting: boolean;
   turno: Turno | null;
   pacienteNombre: string;
+  subidaPendiente: boolean;
+  progresoSubida: number | null;
+  errorSubida: string | null;
   onGrabacionCompleta: (datos: {
     audioBlob: Blob;
     claveCifrado: string;
@@ -587,6 +601,7 @@ function GrabacionSheetContent({
     duracionSegundos: number;
   }) => void;
   onErrorGrabacion: (mensaje: string) => void;
+  onReintentarSubida: () => void;
   onReintentar: () => void;
   onAprobado: () => void;
 }) {
@@ -621,6 +636,10 @@ function GrabacionSheetContent({
         pacienteNombre={pacienteNombre}
         onGrabacionCompleta={onGrabacionCompleta}
         onError={onErrorGrabacion}
+        subidaPendiente={subidaPendiente}
+        progresoSubida={progresoSubida}
+        errorSubida={errorSubida}
+        onReintentarSubida={onReintentarSubida}
       />
     );
   }

@@ -66,6 +66,33 @@ export function extraerCriptoTemporal(raw: unknown): {
 }
 
 /**
+ * Stash de la clave temporal del audio en datosEstructurados, conservando lo
+ * que ya hubiera. Lo escribe upload-url (antes lo hacía el /upload
+ * monolítico); lo leen pendientes y callback; lo borra aprobar. El contrato
+ * con el worker (claveCifrado + ivCifrado dentro de _audioCifradoTemporal)
+ * no cambia.
+ */
+export function conClaveTemporal(
+  datosActuales: unknown,
+  claveCifrado: string,
+  iv: string,
+): string {
+  const actual = parseDatosEstructuradosRaw(datosActuales) ?? {};
+  return JSON.stringify({
+    ...actual,
+    // TODO: mover clave + IV a una columna propia cifrada por la extensión
+    // (migración humana). Mientras tanto vive acá, cifrada en reposo por la
+    // extensión Prisma como parte de datosEstructurados.
+    _audioCifradoTemporal: {
+      claveCifrado,
+      ivCifrado: iv,
+      guardadoEn: "datosEstructurados",
+      actualizadoEn: new Date().toISOString(),
+    },
+  });
+}
+
+/**
  * Versión de la fila apta para responder al cliente: datosEstructurados
  * como OBJETO (o null) y SIN `_audioCifradoTemporal`. La clave del audio
  * es material criptográfico del pipeline; nunca debe salir por la API de
