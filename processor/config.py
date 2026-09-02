@@ -39,6 +39,10 @@ ASR_TIMEOUT_SECONDS = int(os.getenv("ASR_TIMEOUT_SECONDS", "1800"))
 
 # LLM — Anthropic ───────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# Las API keys "identity-linked" exigen la cabecera anthropic-workspace-id en
+# cada pedido (sin ella la API responde 400). Opcional: vacío = no se manda
+# ninguna cabecera y el cliente se construye exactamente como antes.
+ANTHROPIC_WORKSPACE_ID = os.getenv("ANTHROPIC_WORKSPACE_ID", "").strip()
 LLM_BACKEND = os.getenv("LLM_BACKEND", "anthropic")
 LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "claude-sonnet-5")
 # Nivel de esfuerzo (low|medium|high|xhigh|max). Vacío = no enviar el parámetro.

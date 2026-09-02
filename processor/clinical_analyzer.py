@@ -62,12 +62,42 @@ _cliente_anthropic: anthropic.Anthropic | None = None
 def _cliente() -> anthropic.Anthropic:
     global _cliente_anthropic
     if _cliente_anthropic is None:
-        _cliente_anthropic = anthropic.Anthropic(
-            api_key=config.ANTHROPIC_API_KEY,
-            max_retries=3,
-            timeout=config.LLM_TIMEOUT_SECONDS,
-        )
+        kwargs: dict = {
+            "api_key": config.ANTHROPIC_API_KEY,
+            "max_retries": 3,
+            "timeout": config.LLM_TIMEOUT_SECONDS,
+        }
+        # Keys "identity-linked": la API exige anthropic-workspace-id en cada
+        # pedido. El SDK lo aplica a todas las llamadas via default_headers.
+        # Sin la env no se agrega nada: mismo constructor que antes.
+        if config.ANTHROPIC_WORKSPACE_ID:
+            kwargs["default_headers"] = {
+                "anthropic-workspace-id": config.ANTHROPIC_WORKSPACE_ID
+            }
+        _cliente_anthropic = anthropic.Anthropic(**kwargs)
     return _cliente_anthropic
+
+
+def _mensaje_error_api(e: anthropic.APIStatusError) -> str:
+    """
+    Texto de validacion que devuelve la API en el cuerpo del error
+    ({"error": {"type", "message"}}). Es diagnostico de la API, no contenido
+    clinico; se trunca a 300 chars por si algun dia incluyera eco del input.
+    """
+    mensaje = ""
+    body = getattr(e, "body", None)
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict):
+            mensaje = str(err.get("message") or "")
+            tipo = err.get("type")
+            if tipo and mensaje:
+                mensaje = f"{tipo}: {mensaje}"
+        if not mensaje:
+            mensaje = str(body.get("message") or "")
+    if not mensaje:
+        mensaje = str(getattr(e, "message", "") or "")
+    return mensaje[:300]
 
 
 def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> dict:
@@ -101,7 +131,10 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
         logger.error(f"Anthropic timeout tras {config.LLM_TIMEOUT_SECONDS}s")
         raise PipelineError("llm_timeout", "Anthropic no respondio a tiempo") from e
     except anthropic.APIStatusError as e:
-        logger.error(f"Anthropic HTTP {e.status_code} (request_id={getattr(e, 'request_id', None)})")
+        logger.error(
+            f"Anthropic HTTP {e.status_code} (request_id={getattr(e, 'request_id', None)}): "
+            f"{_mensaje_error_api(e) or 'sin mensaje en el cuerpo'}"
+        )
         raise PipelineError("llm_error", f"Anthropic respondio {e.status_code}") from e
     except anthropic.APIConnectionError as e:
         logger.error(f"Anthropic sin conexion ({type(e).__name__})")
