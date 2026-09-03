@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Button, EditorialRule } from "@/components/ui";
+import { AlertTriangle } from "lucide-react";
+import { Button, Card, EditorialRule } from "@/components/ui";
 
 import {
   contieneTerminosDeterioro,
@@ -68,100 +69,7 @@ type ProgresoResponse = {
 
 type LoadState = "loading" | "ready" | "error";
 
-const MOCK_DATA: ProgresoResponse = {
-  pacienteId: "mock",
-  nombre: "Demo",
-  apellido: "Mock",
-  totalSesiones: 6,
-  sesiones: [
-    {
-      fecha: "2026-03-04",
-      numero: 1,
-      intensidadEmocional: 8,
-      alianzaTerapeutica: 2,
-      alianzaLabel: "inestable",
-      temas: ["ansiedad", "trabajo"],
-      intervenciones: { reformulacion: 3, validacion: 2, senalamiento: 1 },
-    },
-    {
-      fecha: "2026-03-11",
-      numero: 2,
-      intensidadEmocional: 7,
-      alianzaTerapeutica: 3,
-      alianzaLabel: "estable",
-      temas: ["ansiedad", "pareja"],
-      intervenciones: { reformulacion: 4, validacion: 3, senalamiento: 2 },
-    },
-    {
-      fecha: "2026-03-18",
-      numero: 3,
-      intensidadEmocional: 6,
-      alianzaTerapeutica: 3,
-      alianzaLabel: "estable",
-      temas: ["pareja", "familia"],
-      intervenciones: { reformulacion: 2, validacion: 4, senalamiento: 3, otros: 1 },
-      speechAnalytics: {
-        ratioHablaTerapeuta: 42,
-        ratioHablaPaciente: 58,
-        cantidadSilencios: 6,
-        duracionPromedioSilenciosSeg: 4,
-        tiempoTotalHablaSeg: 2700,
-      },
-    },
-    {
-      fecha: "2026-03-25",
-      numero: 4,
-      intensidadEmocional: 5,
-      alianzaTerapeutica: 2,
-      alianzaLabel: "inestable",
-      temas: ["familia", "trabajo"],
-      intervenciones: { reformulacion: 3, validacion: 2, confrontacion: 2 },
-      speechAnalytics: {
-        ratioHablaTerapeuta: 48,
-        ratioHablaPaciente: 52,
-        cantidadSilencios: 4,
-        duracionPromedioSilenciosSeg: 5,
-        tiempoTotalHablaSeg: 2820,
-      },
-    },
-    {
-      fecha: "2026-04-01",
-      numero: 5,
-      intensidadEmocional: 4,
-      alianzaTerapeutica: 3,
-      alianzaLabel: "estable",
-      temas: ["trabajo", "ansiedad"],
-      intervenciones: { reformulacion: 2, validacion: 5, senalamiento: 2 },
-      speechAnalytics: {
-        ratioHablaTerapeuta: 38,
-        ratioHablaPaciente: 62,
-        cantidadSilencios: 8,
-        duracionPromedioSilenciosSeg: 6,
-        tiempoTotalHablaSeg: 2880,
-      },
-    },
-    {
-      fecha: "2026-04-08",
-      numero: 6,
-      intensidadEmocional: 3,
-      alianzaTerapeutica: 4,
-      alianzaLabel: "fuerte",
-      temas: ["pareja", "logros"],
-      intervenciones: { reformulacion: 1, validacion: 6, senalamiento: 1 },
-      speechAnalytics: {
-        ratioHablaTerapeuta: 35,
-        ratioHablaPaciente: 65,
-        cantidadSilencios: 9,
-        duracionPromedioSilenciosSeg: 7,
-        tiempoTotalHablaSeg: 2820,
-      },
-      observacionIA:
-        "Hay un descenso sostenido de la intensidad emocional y la alianza pasó a fuerte. Los temas de logros emergen por primera vez.",
-      progresoPercibido:
-        "Avance sostenido. La intensidad al iniciar sesión viene bajando y aparecen logros como material nuevo.",
-    },
-  ],
-};
+const MENSAJE_ERROR_CARGA = "No pudimos cargar el progreso. Intentá de nuevo.";
 
 async function fetchProgreso(
   pacienteId: string,
@@ -171,7 +79,13 @@ async function fetchProgreso(
     signal,
     cache: "no-store",
   });
-  if (!response.ok) throw new Error("No se pudo cargar el progreso.");
+  if (!response.ok) {
+    throw new Error(
+      response.status === 404
+        ? "Paciente no encontrado."
+        : MENSAJE_ERROR_CARGA,
+    );
+  }
   const json = (await response.json()) as ProgresoResponse;
   return json;
 }
@@ -179,13 +93,13 @@ async function fetchProgreso(
 export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
   const [data, setData] = React.useState<ProgresoResponse | null>(null);
   const [loadState, setLoadState] = React.useState<LoadState>("loading");
-  const [usingMock, setUsingMock] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
 
   React.useEffect(() => {
     const controller = new AbortController();
     setLoadState("loading");
-    setUsingMock(false);
+    setError(null);
 
     fetchProgreso(pacienteId, controller.signal)
       .then((next) => {
@@ -195,8 +109,10 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setData(MOCK_DATA);
-        setUsingMock(true);
+        // Ante un fallo nunca se muestran datos: los gráficos anteriores se
+        // descartan para no mezclar un estado viejo con un error actual.
+        setData(null);
+        setError(err instanceof Error ? err.message : MENSAJE_ERROR_CARGA);
         setLoadState("error");
       });
 
@@ -207,8 +123,12 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
     setReloadKey((k) => k + 1);
   }
 
-  if (loadState === "loading" && !data) {
+  if (loadState === "loading") {
     return <ProgresoSkeleton />;
+  }
+
+  if (loadState === "error" || error) {
+    return <ErrorState mensaje={error ?? MENSAJE_ERROR_CARGA} onRetry={retry} />;
   }
 
   if (!data) return null;
@@ -216,23 +136,16 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
   const sesiones = Array.isArray(data.sesiones) ? data.sesiones : [];
   const totalSesiones = data.totalSesiones ?? sesiones.length;
 
-  if (totalSesiones < 3 && !usingMock) {
-    return <EmptyState />;
+  if (totalSesiones === 0) {
+    return <EmptyState variante="sin-sesiones" />;
+  }
+
+  if (totalSesiones < 3) {
+    return <EmptyState variante="poco-recorrido" />;
   }
 
   return (
     <div className="flex flex-col gap-5 lg:gap-6">
-      {usingMock ? (
-        <div className="flex flex-col gap-2 rounded-lg border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[12px] text-ink-500">
-            Mostrando datos de ejemplo. No pudimos conectar con el servidor.
-          </p>
-          <Button variant="secondary" size="sm" onClick={retry}>
-            Reintentar
-          </Button>
-        </div>
-      ) : null}
-
       <ProgresoDestacado sesiones={sesiones} />
       <FlagsRiesgoTimeline sesiones={sesiones} />
       <IntensidadChart sesiones={sesiones} />
@@ -262,7 +175,56 @@ function ProgresoSkeleton() {
   );
 }
 
-function EmptyState() {
+// Mismo patrón que ErrorView en ContextoGoldenThreadView: Card + ícono +
+// mensaje corto + "Reintentar". Nunca se muestran datos junto al error.
+function ErrorState({
+  mensaje,
+  onRetry,
+}: {
+  mensaje: string;
+  onRetry: () => void;
+}) {
+  return (
+    <Card>
+      <div className="flex flex-col items-start gap-3" role="alert">
+        <div className="flex items-start gap-2">
+          <AlertTriangle
+            size={20}
+            strokeWidth={1.8}
+            aria-hidden="true"
+            className="mt-[2px] shrink-0 text-terracotta-500"
+          />
+          <p className="font-sans text-[14px] leading-[1.6] text-ink-900">
+            {mensaje}
+          </p>
+        </div>
+        <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+          Reintentar
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+const EMPTY_STATE_TEXTOS = {
+  "sin-sesiones": {
+    titulo: "Todavía no hay sesiones para mirar en perspectiva.",
+    detalle:
+      "Cuando grabes y apruebes las primeras sesiones, acá vas a ver cómo evoluciona el recorrido.",
+  },
+  "poco-recorrido": {
+    titulo: "Todavía no hay suficiente recorrido.",
+    detalle:
+      "Los gráficos de progreso aparecen a partir de la tercera sesión grabada.",
+  },
+} as const;
+
+function EmptyState({
+  variante,
+}: {
+  variante: keyof typeof EMPTY_STATE_TEXTOS;
+}) {
+  const textos = EMPTY_STATE_TEXTOS[variante];
   return (
     <div className="rounded-lg border border-dashed border-[color:var(--border-strong,#C2D4CB)] bg-cream-50 px-6 py-10 text-center">
       <svg
@@ -284,10 +246,10 @@ function EmptyState() {
         <circle cx="40" cy="12" r="2.5" fill="currentColor" />
       </svg>
       <p className="mt-4 font-[family-name:var(--font-display)] text-[18px] font-medium italic text-ink-900">
-        Todavía no hay suficiente recorrido.
+        {textos.titulo}
       </p>
       <p className="mt-2 text-[13px] leading-[1.5] text-ink-500">
-        Los gráficos de progreso aparecen a partir de la tercera sesión grabada.
+        {textos.detalle}
       </p>
     </div>
   );

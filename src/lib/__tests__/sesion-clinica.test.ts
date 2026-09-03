@@ -128,14 +128,14 @@ describe("Sesión clínica - validaciones", () => {
       );
     });
 
-    it("el cliente no puede pedir grabando → procesando (solo /upload)", () => {
+    it("el cliente no puede pedir grabando → procesando (solo upload-url/upload-confirmar)", () => {
       expect(esTransicionValida("grabando", "procesando")).toBe(true);
       expect(esTransicionPermitidaAlCliente("grabando", "procesando")).toBe(
         false,
       );
     });
 
-    it("el cliente no puede pedir subiendo → procesando (solo /upload)", () => {
+    it("el cliente no puede pedir subiendo → procesando (solo upload-url/upload-confirmar)", () => {
       expect(esTransicionValida("subiendo", "procesando")).toBe(true);
       expect(esTransicionPermitidaAlCliente("subiendo", "procesando")).toBe(
         false,

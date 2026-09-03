@@ -7,7 +7,11 @@ Contrato de salida de transcribir():
       "segments": [{"speaker": "S0"|"S1", "start": float, "end": float, "text": str}],
       "roles_origen": "asr_role" | "posicional",
       "asr_id": str,
+      "speech_model": str,   # modelo que efectivamente proceso el audio
     }
+speech_model sale de `speech_model_used` de la respuesta (principal o
+fallback de `speech_models`); si la respuesta no lo trae, se asume el modelo
+principal con el que se hizo la request y se deja constancia en el log.
 S0 = Terapeuta, S1 = Paciente (mismo mapeo que consume speech_analytics y
 transcripcion.formatear_para_llm).
 
@@ -276,7 +280,23 @@ def _mapping_roles(data: dict) -> dict[str, str]:
     return {str(k): str(v) for k, v in mapping.items() if v is not None}
 
 
-def _normalizar(data: dict, transcript_id: str) -> dict:
+def _modelo_usado(data: dict, transcript_id: str, modelo_solicitado: str) -> str:
+    """
+    speech_model_used: cual de los `speech_models` proceso el audio (puede
+    ser el fallback). Si no vino, se asume el principal de la request.
+    """
+    usado = data.get("speech_model_used")
+    usado = str(usado).strip() if usado is not None else ""
+    if usado:
+        return usado
+    logger.warning(
+        f"AssemblyAI {transcript_id}: la respuesta no trae speech_model_used; "
+        f"se asume el modelo solicitado ({modelo_solicitado})"
+    )
+    return modelo_solicitado
+
+
+def _normalizar(data: dict, transcript_id: str, modelo_solicitado: str) -> dict:
     utterances = data.get("utterances") or []
     if not isinstance(utterances, list):
         utterances = []
@@ -338,19 +358,19 @@ def _normalizar(data: dict, transcript_id: str) -> dict:
     else:
         duracion = max((s["end"] for s in segments), default=0.0)
 
-    # speech_model_used: cual de los speech_models proceso el audio.
-    modelo_usado = data.get("speech_model_used")
+    modelo_usado = _modelo_usado(data, transcript_id, modelo_solicitado)
     logger.info(
         f"AssemblyAI {transcript_id}: {len(utterances)} utterances, "
         f"{len(segments)} validas, {descartados} descartadas, "
-        f"{duracion:.0f}s, hablantes={len(set(etiquetas))}, roles={roles_origen}"
-        + (f", modelo={modelo_usado}" if modelo_usado else "")
+        f"{duracion:.0f}s, hablantes={len(set(etiquetas))}, roles={roles_origen}, "
+        f"modelo={modelo_usado}"
     )
     return {
         "duration_seconds": int(duracion),
         "segments": segments,
         "roles_origen": roles_origen,
         "asr_id": transcript_id,
+        "speech_model": modelo_usado,
     }
 
 
@@ -366,8 +386,12 @@ def transcribir(audio_bytes: bytes, content_type: str = "audio/webm") -> dict:
     upload_url = _subir(audio_bytes)
     transcript_id = _crear_transcript(upload_url)
     logger.info(f"AssemblyAI: transcript {transcript_id} creado, esperando...")
+    # Principal de `speech_models`: es lo que se asume si la respuesta no
+    # informa speech_model_used.
+    modelos = _modelos()
+    modelo_solicitado = modelos[0] if modelos else config.ASR_MODEL_ID
     try:
         data = _esperar(transcript_id)
-        return _normalizar(data, transcript_id)
+        return _normalizar(data, transcript_id, modelo_solicitado)
     finally:
         _borrar(transcript_id)

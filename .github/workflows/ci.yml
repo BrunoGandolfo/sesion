@@ -2,13 +2,14 @@
 # CI básico para Sesión.
 #
 # Corre en cada push a main y en cada PR contra main, antes de que Vercel
-# auto-deploye. Si rompe el build / typecheck / lint, nos enteramos acá y no
-# en producción.
+# auto-deploye. Si rompe el build / typecheck / lint / tests, nos enteramos
+# acá y no en producción.
 #
-# Tres jobs en paralelo:
+# Cuatro jobs en paralelo:
 #   - typecheck: tsc --noEmit
 #   - build:     next build
 #   - lint:      eslint
+#   - test:      vitest run (incluye tests de integración contra la DB de test)
 #
 # Notas:
 #   - postinstall del package.json ya corre `prisma generate`, pero igual lo
@@ -17,6 +18,12 @@
 #     conecta), así que pasamos una URL dummy. NO usar la DB real acá.
 #   - Next build también lee DATABASE_URL al evaluar rutas que la importan;
 #     la dummy alcanza porque no se ejecuta ninguna query en build time.
+#   - src/lib/db.ts construye el cliente Prisma al importarse y pasa por
+#     withEncryption() (src/lib/prisma-encryption.ts), que llama validateKey()
+#     (src/lib/encryption.ts): NOTES_ENCRYPTION_KEY tiene que existir y
+#     decodificar en base64 a exactamente 32 bytes, si no el import lanza.
+#     Por eso typecheck, build y test reciben una clave dummy: 32 bytes en
+#     cero, codificados en base64. No cifra nada real; solo pasa el guard.
 # ============================================================================
 
 name: CI
@@ -46,11 +53,14 @@ jobs:
     name: Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Dummy: 32 bytes 0x00 en base64 (44 chars). Ver nota en el encabezado.
+      NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -68,11 +78,14 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Dummy: 32 bytes 0x00 en base64 (44 chars). Ver nota en el encabezado.
+      NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -91,10 +104,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -104,3 +117,35 @@ jobs:
 
       - name: Ejecutar ESLint
         run: npm run lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # src/lib/__tests__/prisma-encryption.test.ts lanza al importarse si
+      # DATABASE_URL_TEST no está definida (líneas 54-58). Debe apuntar a una
+      # rama de Neon dedicada a tests con todas las migraciones aplicadas:
+      # el test hace TRUNCATE ... CASCADE en cada caso. NUNCA la DB de prod.
+      DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+      # Mismo dummy que typecheck/build. Los tests de cifrado sobreescriben la
+      # variable con una clave aleatoria propia (líneas 69, 115, 126), pero el
+      # resto de la suite puede importar src/lib/db.ts y necesita el guard.
+      NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar Prisma Client
+        run: npx prisma generate
+
+      - name: Ejecutar tests
+        run: npm test

@@ -37,6 +37,9 @@ def procesar_sesion(
     intento: int = 1,
 ) -> None:
     etiqueta = sesion_clinica_id
+    # Valor provisional (modelo configurado) para los callbacks de error que
+    # ocurren antes de transcribir; tras el ASR se reemplaza por el modelo
+    # que AssemblyAI uso de verdad (principal o fallback).
     modelo_asr = f"assemblyai:{config.ASR_MODEL_ID}"
     modelo_llm = f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"
 
@@ -76,9 +79,12 @@ def procesar_sesion(
         if not segments:
             raise PipelineError("asr_vacio", "La transcripcion no contiene segmentos")
         transcripcion_fmt = formatear_para_llm(transcripcion)
+        # Modelo efectivamente usado por AssemblyAI, no el configurado.
+        modelo_asr = f"assemblyai:{transcripcion['speech_model']}"
         logger.info(
             f"[{etiqueta}] {len(segments)} segmentos, "
-            f"{transcripcion['duration_seconds']}s, roles={transcripcion['roles_origen']}"
+            f"{transcripcion['duration_seconds']}s, roles={transcripcion['roles_origen']}, "
+            f"modelo={modelo_asr}"
         )
 
         # 4. Speech analytics

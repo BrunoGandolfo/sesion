@@ -40,6 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
-prisma/migrations/manual/phones_backup_*.json
+prisma/scripts/manual/*.json
 .env.test
 processor/*.wav
