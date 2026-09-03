@@ -8,6 +8,12 @@
 //   aprobar). Todos toleran el campo como objeto (descifrado por la
 //   extensión Prisma) o como string JSON (filas legacy).
 
+import {
+  notaSoapOriginalSchema,
+  parseDatosEstructurados,
+  sesionClinicaResponseSchema,
+  type SesionClinicaResponse,
+} from "@/lib/sesion-clinica/schema";
 import { esTransicionValida } from "@/lib/sesion-clinica-utils";
 
 import { ApiError } from "./responses";
@@ -107,4 +113,153 @@ export function sinClaveTemporal<T extends { datosEstructurados?: unknown }>(
   }
   const { _audioCifradoTemporal: _clave, ...resto } = obj;
   return { ...row, datosEstructurados: resto };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Select único de sesión clínica para la UI y mapper a la respuesta.
+//
+// SESION_SELECT es el superset de los selects que hoy repiten GET/PATCH [id],
+// upload-confirmar, aprobar y GET ?turnoId. NUNCA transcripcion (PHI que la
+// UI no necesita). `notaSoapOriginal` es un campo lógico de la extensión de
+// cifrado sin columna propia en el tipo generado: por eso no se puede usar
+// `satisfies Prisma.SesionClinicaSelect` y el objeto vive en una const (TS
+// no chequea propiedades sobrantes en no-literales).
+// ────────────────────────────────────────────────────────────────────────────
+
+export const SESION_SELECT = {
+  id: true,
+  turnoId: true,
+  estado: true,
+  duracionAudioSeg: true,
+  audioR2Key: true,
+  audioBorradoEn: true,
+  notaSubjetivo: true,
+  notaObjetivo: true,
+  notaAnalisis: true,
+  notaPlan: true,
+  notaSoapOriginal: true,
+  datosEstructurados: true,
+  modeloASR: true,
+  modeloLLM: true,
+  promptVersion: true,
+  hablanteTerapeuta: true,
+  procesadoEn: true,
+  aprobadoEn: true,
+  error: true,
+  intentos: true,
+  createdAt: true,
+  updatedAt: true,
+  turno: {
+    select: {
+      id: true,
+      fecha: true,
+      paciente: {
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          telefono: true,
+        },
+      },
+    },
+  },
+} as const;
+
+/** Fila de Prisma leída con SESION_SELECT (o un subconjunto sin `turno`). */
+export interface FilaSesionClinica {
+  id: string;
+  turnoId: string;
+  estado: string;
+  duracionAudioSeg: number | null;
+  audioR2Key: string | null;
+  audioBorradoEn: Date | null;
+  notaSubjetivo: string | null;
+  notaObjetivo: string | null;
+  notaAnalisis: string | null;
+  notaPlan: string | null;
+  /** Campo lógico de la extensión: objeto SOAP con secciones nullable, o null. */
+  notaSoapOriginal?: unknown;
+  /** Objeto (extensión) o string JSON (fila legacy). */
+  datosEstructurados?: unknown;
+  modeloASR: string | null;
+  modeloLLM: string | null;
+  promptVersion: string | null;
+  hablanteTerapeuta: string | null;
+  procesadoEn: Date | null;
+  aprobadoEn: Date | null;
+  error: string | null;
+  intentos: number;
+  createdAt: Date;
+  updatedAt: Date;
+  turno?: {
+    id: string;
+    fecha: Date;
+    paciente: {
+      id: string;
+      nombre: string;
+      apellido: string;
+      telefono?: string;
+    };
+  } | null;
+}
+
+function aIso(fecha: Date | null | undefined): string | null {
+  return fecha ? fecha.toISOString() : null;
+}
+
+/**
+ * Fila de Prisma → respuesta para la UI. Quita la clave temporal del audio
+ * (sinClaveTemporal), parsea datosEstructurados si vino como string, serializa
+ * fechas a ISO y valida contra sesionClinicaResponseSchema antes de devolver:
+ * si algo no cumple el contrato, lanza en el servidor en vez de mandar una
+ * forma inesperada al cliente.
+ */
+export function toSesionClinicaResponse(
+  fila: FilaSesionClinica,
+): SesionClinicaResponse {
+  const limpia = sinClaveTemporal(fila);
+  const original = notaSoapOriginalSchema
+    .nullable()
+    .safeParse(limpia.notaSoapOriginal ?? null);
+
+  return sesionClinicaResponseSchema.parse({
+    id: limpia.id,
+    turnoId: limpia.turnoId,
+    estado: limpia.estado,
+    duracionAudioSeg: limpia.duracionAudioSeg,
+    audioR2Key: limpia.audioR2Key,
+    audioBorradoEn: aIso(limpia.audioBorradoEn),
+    notaSubjetivo: limpia.notaSubjetivo,
+    notaObjetivo: limpia.notaObjetivo,
+    notaAnalisis: limpia.notaAnalisis,
+    notaPlan: limpia.notaPlan,
+    notaSoapOriginal: original.success ? original.data : null,
+    datosEstructurados: parseDatosEstructurados(limpia.datosEstructurados),
+    modeloASR: limpia.modeloASR,
+    modeloLLM: limpia.modeloLLM,
+    promptVersion: limpia.promptVersion,
+    hablanteTerapeuta: limpia.hablanteTerapeuta,
+    procesadoEn: aIso(limpia.procesadoEn),
+    aprobadoEn: aIso(limpia.aprobadoEn),
+    error: limpia.error,
+    intentos: limpia.intentos,
+    createdAt: limpia.createdAt.toISOString(),
+    updatedAt: limpia.updatedAt.toISOString(),
+    ...(limpia.turno
+      ? {
+          turno: {
+            id: limpia.turno.id,
+            fecha: limpia.turno.fecha.toISOString(),
+            paciente: {
+              id: limpia.turno.paciente.id,
+              nombre: limpia.turno.paciente.nombre,
+              apellido: limpia.turno.paciente.apellido,
+              ...(limpia.turno.paciente.telefono !== undefined
+                ? { telefono: limpia.turno.paciente.telefono }
+                : {}),
+            },
+          },
+        }
+      : {}),
+  });
 }

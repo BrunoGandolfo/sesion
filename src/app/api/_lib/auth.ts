@@ -1,6 +1,6 @@
 import { getCurrentOrganizationId, getServerSession } from "@/lib/auth-utils";
 
-import { ApiError } from "./responses";
+import { ApiError, errorResponse } from "./responses";
 
 export async function getOrganizationId() {
   try {
@@ -26,4 +26,23 @@ export async function getSessionActor(): Promise<SessionActor> {
     throw new ApiError("No autorizado", 401);
   }
   return { organizationId: session.organizationId, userId: session.userId };
+}
+
+/**
+ * Auth M2M para el worker Python: `Authorization: Bearer ${PROCESSING_SECRET}`
+ * exacto. Devuelve null si está autorizado; si no, la misma respuesta 401
+ * que producían las copias locales de isAuthorized en callback, pendientes,
+ * aprobadas-sin-contexto y contexto-clinico. Sin secret configurado nunca
+ * autoriza. Cubre solo el caso Bearer puro: contexto-clinico además acepta
+ * sesión de usuario, y los crons/seed usan otros secrets (CRON_SECRET,
+ * SEED_SECRET); esos casos siguen en sus rutas.
+ */
+export function requireM2M(request: Request): Response | null {
+  const secret = process.env.PROCESSING_SECRET;
+  if (!secret) {
+    return errorResponse(new ApiError("No autorizado", 401));
+  }
+  const header = request.headers.get("authorization");
+  if (header === `Bearer ${secret}`) return null;
+  return errorResponse(new ApiError("No autorizado", 401));
 }

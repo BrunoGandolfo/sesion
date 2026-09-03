@@ -152,3 +152,62 @@ export function addDays(date: Date, days: number) {
   next.setDate(next.getDate() + days);
   return next;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Deuda — única fuente de la regla "sesión impaga".
+// Misma regla que hoy repiten dashboard, deudores, toPacienteConDeuda,
+// resumen-tab y turnos-pagos-tab: turno realizado con pago pendiente.
+// ────────────────────────────────────────────────────────────────────────────
+
+export function esDeudaPendiente(turno: {
+  estado: string;
+  pagoEstado: string;
+}): boolean {
+  return turno.estado === "realizado" && turno.pagoEstado === "pendiente";
+}
+
+export interface TurnoParaDeuda {
+  pacienteId: string;
+  paciente: { nombre: string; apellido: string };
+  estado: string;
+  pagoEstado: string;
+  tarifaCobrada: number;
+  duracionMin?: number;
+}
+
+export interface DeudorAgrupado {
+  pacienteId: string;
+  nombre: string;
+  apellido: string;
+  sesionesImpagas: number;
+  montoTotal: number;
+  minutosTotales: number;
+}
+
+/**
+ * Agrupa por paciente los turnos que son deuda pendiente. Devuelve cantidad,
+ * monto y minutos por paciente, ordenado por monto descendente (a igual
+ * monto, orden de aparición). Sin tope: el tope lo aplica el consumidor.
+ * Un paciente sin turnos impagos no aparece.
+ */
+export function calcularDeudores(turnos: TurnoParaDeuda[]): DeudorAgrupado[] {
+  const porPaciente = new Map<string, DeudorAgrupado>();
+
+  for (const turno of turnos) {
+    if (!esDeudaPendiente(turno)) continue;
+    const actual = porPaciente.get(turno.pacienteId) ?? {
+      pacienteId: turno.pacienteId,
+      nombre: turno.paciente.nombre,
+      apellido: turno.paciente.apellido,
+      sesionesImpagas: 0,
+      montoTotal: 0,
+      minutosTotales: 0,
+    };
+    actual.sesionesImpagas += 1;
+    actual.montoTotal += turno.tarifaCobrada;
+    actual.minutosTotales += turno.duracionMin ?? 0;
+    porPaciente.set(turno.pacienteId, actual);
+  }
+
+  return [...porPaciente.values()].sort((a, b) => b.montoTotal - a.montoTotal);
+}
