@@ -304,6 +304,14 @@ export function HistoriaTab({
     }
   }
 
+  // Aprobación/descarte desde una tarjeta de la timeline (sesión en revisión
+  // cuyo turno no es el de hoy): mismo refresco del listado que usa
+  // refrescarSesionHoy, sin tocar la sesión de hoy.
+  function refrescarTimeline() {
+    setReloadKey((k) => k + 1);
+    onTurnoActualizado?.();
+  }
+
   async function iniciarGrabacionFlow() {
     if (!turnoHoyId) return;
     setGrabacionError(null);
@@ -618,7 +626,18 @@ export function HistoriaTab({
           <ul className="flex flex-col gap-3">
             {docsVisibles.map((sesion) => (
               <li key={sesion.sesionClinicaId}>
-                <SesionTimelineCard sesion={sesion} />
+                <SesionTimelineCard
+                  sesion={sesion}
+                  pacienteNombre={pacienteNombre}
+                  // La sesión de hoy en revisión ya se aprueba desde
+                  // ZonaGrabacion: mientras se carga (o si coincide el id) la
+                  // tarjeta queda en solo lectura para no duplicar "Aprobar".
+                  aprobable={
+                    !sesionHoyLoading &&
+                    sesion.sesionClinicaId !== sesionHoy?.id
+                  }
+                  onAprobado={refrescarTimeline}
+                />
               </li>
             ))}
           </ul>
@@ -844,13 +863,27 @@ function ZonaGrabacion({
   );
 }
 
-function SesionTimelineCard({ sesion }: { sesion: DocSesion }) {
+function SesionTimelineCard({
+  sesion,
+  pacienteNombre,
+  aprobable,
+  onAprobado,
+}: {
+  sesion: DocSesion;
+  pacienteNombre: string;
+  // false cuando la sesión ya se ofrece para aprobar en ZonaGrabacion.
+  aprobable: boolean;
+  onAprobado: () => void;
+}) {
   const [open, setOpen] = React.useState<boolean>(false);
   const fecha = new Date(sesion.fecha);
   const datos = sesion.datosEstructurados;
   const temas = datos?.temas?.slice(0, 5) ?? [];
   const resumen = resumenCorto(datos);
   const esRevision = sesion.estado === "revision";
+  // Nota editable con checkboxes de riesgo y "Aprobar nota" (misma vista que
+  // "Sesión de hoy"). NotaClinicaView ya incluye el banner de riesgo.
+  const mostrarAprobacion = esRevision && aprobable && sesion.nota !== null;
   const duracionAudio =
     typeof sesion.duracionAudioSeg === "number" && sesion.duracionAudioSeg >= 0
       ? sesion.duracionAudioSeg
@@ -920,9 +953,23 @@ function SesionTimelineCard({ sesion }: { sesion: DocSesion }) {
 
       {open ? (
         <div className="flex flex-col gap-5 border-t border-[color:var(--border-subtle)] px-4 py-5 sm:px-5">
-          <RiesgoDetectadoBanner riesgoDetectado={datos?.riesgoDetectado} />
-
-          {sesion.nota ? <NotaSOAPReadOnly nota={sesion.nota} /> : null}
+          {mostrarAprobacion && sesion.nota ? (
+            <NotaClinicaView
+              sesionClinicaId={sesion.sesionClinicaId}
+              nota={sesion.nota}
+              datosEstructurados={sesion.datosEstructurados}
+              pacienteNombre={pacienteNombre}
+              fechaSesion={fechaLarga(fecha)}
+              onAprobado={onAprobado}
+            />
+          ) : (
+            <>
+              <RiesgoDetectadoBanner
+                riesgoDetectado={datos?.riesgoDetectado}
+              />
+              {sesion.nota ? <NotaSOAPReadOnly nota={sesion.nota} /> : null}
+            </>
+          )}
 
           {datos?.feedbackTerapeuta ? (
             <FeedbackTerapeutaView
@@ -930,7 +977,9 @@ function SesionTimelineCard({ sesion }: { sesion: DocSesion }) {
             />
           ) : null}
 
-          {datos ? <DatosExtraidosBloque datos={datos} /> : null}
+          {!mostrarAprobacion && datos ? (
+            <DatosExtraidosBloque datos={datos} />
+          ) : null}
         </div>
       ) : null}
     </Card>
