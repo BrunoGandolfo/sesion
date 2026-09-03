@@ -75,7 +75,7 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client-17
-          pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       # ---------------------------------------------------------------------
       # 2. Calcular nombre del backup.
@@ -106,7 +106,7 @@ jobs:
             echo "ERROR: falta el secret DATABASE_URL." >&2
             exit 1
           fi
-          pg_dump \
+          /usr/lib/postgresql/17/bin/pg_dump \
             --format=custom \
             --no-owner \
             --no-privileges \
