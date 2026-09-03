@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { registrarAuditoria } from "../_lib/auditoria";
 import { getOrganizationId, getSessionActor } from "../_lib/auth";
 import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
-import { sinClaveTemporal } from "../_lib/sesion-clinica";
+import { SESION_SELECT, toSesionClinicaResponse } from "../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,41 +24,14 @@ export async function GET(request: Request) {
 
     const sesion = await db.sesionClinica.findFirst({
       where: { turnoId, organizationId },
-      select: {
-        id: true,
-        turnoId: true,
-        estado: true,
-        duracionAudioSeg: true,
-        audioR2Key: true,
-        createdAt: true,
-        notaSubjetivo: true,
-        notaObjetivo: true,
-        notaAnalisis: true,
-        notaPlan: true,
-        datosEstructurados: true,
-        modeloASR: true,
-        modeloLLM: true,
-        procesadoEn: true,
-        aprobadoEn: true,
-        error: true,
-        intentos: true,
-        turno: {
-          select: {
-            id: true,
-            paciente: {
-              select: { id: true, nombre: true, apellido: true },
-            },
-          },
-        },
-      },
+      select: SESION_SELECT,
     });
 
     if (!sesion) {
       return ok(null);
     }
 
-    // datosEstructurados sale como objeto y sin la clave temporal del audio.
-    return ok(sinClaveTemporal(sesion));
+    return ok(toSesionClinicaResponse(sesion));
   } catch (error) {
     return errorResponse(error);
   }
@@ -67,7 +40,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { organizationId, userId } = await getSessionActor();
-    const body = await request.json();
+    const body: unknown = await request.json();
     const parsed = createSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -121,6 +94,7 @@ export async function POST(request: Request) {
           organizationId,
           estado: "pendiente",
         },
+        select: SESION_SELECT,
       });
     });
 
@@ -134,7 +108,7 @@ export async function POST(request: Request) {
       detalle: { turnoId: sesion.turnoId },
     });
 
-    return ok(sesion, 201);
+    return ok(toSesionClinicaResponse(sesion), 201);
   } catch (error) {
     return errorResponse(error);
   }

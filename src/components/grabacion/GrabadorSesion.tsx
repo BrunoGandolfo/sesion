@@ -254,13 +254,17 @@ export function GrabadorSesion({
     streamRef.current = null;
   }
 
-  function marcarWakeLock(activo: boolean) {
+  // marcarWakeLock / adquirirWakeLock / liberarWakeLock van en useCallback
+  // porque los efectos de montaje y de visibilitychange los usan y los
+  // declaran como dependencia: solo tocan refs y un setState, así que son
+  // estables entre renders.
+  const marcarWakeLock = React.useCallback((activo: boolean) => {
     if (componenteMontadoRef.current) {
       setWakeLockActivo(activo);
     }
-  }
+  }, []);
 
-  async function adquirirWakeLock() {
+  const adquirirWakeLock = React.useCallback(async () => {
     if (
       typeof navigator === "undefined" ||
       !("wakeLock" in navigator) ||
@@ -303,9 +307,9 @@ export function GrabadorSesion({
       console.warn("[GrabadorSesion] No se pudo adquirir el wake lock", error);
       marcarWakeLock(false);
     }
-  }
+  }, [marcarWakeLock]);
 
-  function liberarWakeLock() {
+  const liberarWakeLock = React.useCallback(() => {
     const lock = wakeLockRef.current;
     const handler = wakeLockReleaseHandlerRef.current;
     wakeLockRef.current = null;
@@ -326,7 +330,7 @@ export function GrabadorSesion({
     // Estado neutral hasta el próximo request; evita que un aviso viejo
     // parpadee al arrancar/reanudar antes de que el request resuelva.
     marcarWakeLock(true);
-  }
+  }, [marcarWakeLock]);
 
   function calcularDuracionActual() {
     const inicio = inicioGrabacionRef.current;
@@ -647,7 +651,7 @@ export function GrabadorSesion({
       liberarWakeLock();
       limpiarMemoria();
     };
-  }, []);
+  }, [liberarWakeLock]);
 
   // Wake lock: el SO lo libera solo al bloquear la pantalla o cambiar de app.
   // Al volver a ser visible con una grabación activa, lo re-adquirimos.
@@ -666,7 +670,7 @@ export function GrabadorSesion({
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [adquirirWakeLock]);
 
   // Recuperación al montar: si quedó una grabación persistida de esta misma
   // sesión (el navegador mató el proceso a mitad de grabación), se ofrece

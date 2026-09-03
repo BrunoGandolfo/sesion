@@ -208,6 +208,7 @@ export function PacienteDetailView({ id }: { id: string }) {
   } = useGrabacionSesion({
     turno: turnoHoy,
     onTurnoActualizado: refetchData,
+    onError: (mensaje) => setToast({ open: true, message: mensaje }),
   });
 
   const [grabacionSheetOpen, setGrabacionSheetOpen] = React.useState(false);
@@ -249,12 +250,6 @@ export function PacienteDetailView({ id }: { id: string }) {
     await refrescarGrabacion();
     setGrabacionSheetOpen(false);
   }
-
-  React.useEffect(() => {
-    if (grabacionError) {
-      setToast({ open: true, message: grabacionError });
-    }
-  }, [grabacionError]);
 
   function handleEditarSuccess() {
     setEditarOpen(false);

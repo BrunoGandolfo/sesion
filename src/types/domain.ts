@@ -2,7 +2,21 @@
 // SESIÓN — Tipos del dominio
 // Fuente de verdad para toda la aplicación.
 // Si algo cambia acá, cambia en todos lados.
+//
+// Excepción: el contrato de sesión clínica (estados, nota SOAP, datos
+// estructurados, enumeraciones de riesgo/alianza/intervención) vive en
+// src/lib/sesion-clinica/schema.ts (Zod, única definición). Acá se
+// re-exporta para que los importadores existentes sigan compilando.
 // ============================================
+
+import type {
+  AlianzaTerapeutica,
+  ConfianzaModelo,
+  DatosEstructurados as DatosEstructuradosSchema,
+  EstadoSesion,
+  NivelRiesgo,
+  NotaSoap,
+} from "@/lib/sesion-clinica/schema";
 
 /** Estados del ciclo de vida de un turno */
 export type TurnoEstado = "programado" | "realizado" | "cancelado" | "ausente";
@@ -25,7 +39,7 @@ export type Modalidad = "presencial" | "online";
 /** Duraciones permitidas en minutos */
 export type Duracion = 30 | 45 | 50 | 60 | 90;
 
-/** Estados del recordatorio de WhatsApp */
+/** Estados del recordatorio por SMS */
 export type RecordatorioEstado = "pendiente" | "enviado" | "fallido" | "cancelado";
 
 // ============================================
@@ -127,48 +141,54 @@ export interface KPIsDashboard {
 
 // ============================================
 // Módulo de grabación + IA
+//
+// Definiciones en src/lib/sesion-clinica/schema.ts; acá solo re-exports y
+// alias derivados de ese schema.
 // ============================================
 
-/** Estados del pipeline de procesamiento de una sesión clínica */
-export type EstadoProcesamiento =
-  | "pendiente"    // creado, esperando grabación
-  | "grabando"     // MediaRecorder activo en el browser
-  | "subiendo"     // audio cifrado subiendo a R2
-  | "procesando"   // La Escondida procesando (ASR + diarización + LLM)
-  | "revision"     // nota generada, esperando aprobación de la profesional
-  | "aprobado"     // nota aprobada por la profesional
-  | "error";       // error en cualquier paso del pipeline
+/** Estados del pipeline de procesamiento de una sesión clínica
+ *  (pendiente → grabando → subiendo → procesando → revision → aprobado,
+ *  más error). Alias de EstadoSesion del schema. */
+export type EstadoProcesamiento = EstadoSesion;
 
 /** Nivel de alianza terapéutica inferido por el LLM */
-export type AlianzaTerapeutica = "fragil" | "inestable" | "estable" | "fuerte";
-
-/** Intervención del terapeuta detectada por IA */
-export interface IntervencionTerapeuta {
-  tipo:
-    | "reformulacion"
-    | "senalamiento"
-    | "confrontacion"
-    | "interpretacion"
-    | "pregunta_circular"
-    | "validacion"
-    | "silencio_terapeutico"
-    | "otra";
-  descripcion: string;
-  timestampAprox: string; // formato "MM:SS"
-}
-
-/** Flags de riesgo clínico — cada uno requiere dismissal explícito */
-export interface FlagsRiesgo {
-  ideacionSuicida: boolean;
-  autolesion: boolean;
-  violenciaTerceros: boolean;
-  sintomasPsicoticos: boolean;
-  crisisPanico: boolean;
-  detalle: string; // Segmento textual donde se detectó, vacío si todos false
-}
+export type { AlianzaTerapeutica };
 
 /** Confianza del modelo en la nota generada */
-export type ConfianzaModelo = "alta" | "media" | "baja";
+export type { ConfianzaModelo };
+
+/** Nivel de la señal de riesgo. "ninguno" es el default seguro: sin
+ *  evidencia textual explícita no se gradúa riesgo. */
+export type { NivelRiesgo };
+
+/** Nota clínica en formato SOAP */
+export type NotaSOAP = NotaSoap;
+
+/** Intervención del terapeuta detectada por IA. `timestampAprox` ("MM:SS")
+ *  es opcional: el worker no siempre lo manda. */
+export type IntervencionTerapeuta = NonNullable<
+  DatosEstructuradosSchema["intervenciones"]
+>[number];
+
+/** Flags de riesgo clínico — cada uno requiere dismissal explícito.
+ *  `detalle`: segmento textual donde se detectó, vacío si todos false. */
+export type FlagsRiesgo = NonNullable<DatosEstructuradosSchema["flagsRiesgo"]>;
+
+/** Señal de riesgo clínico graduada (ver docs/contrato-riesgo-clinico.md).
+ *  Derivada SOLO de señales explícitas en la transcripción; coexiste con
+ *  FlagsRiesgo sin reemplazarlo. El sistema señala, NUNCA diagnostica. */
+export type RiesgoDetectado = NonNullable<
+  DatosEstructuradosSchema["riesgoDetectado"]
+>;
+
+/** Cita literal de la transcripción que ancla un indicador de riesgo */
+export type EvidenciaRiesgo = RiesgoDetectado["evidencia"][number];
+
+/** Speech analytics derivado de diarización (ratios en 0-100;
+ *  `speakersDetectados` < 2 = colapso; ausente en payloads legacy). */
+export type SpeechAnalytics = NonNullable<
+  DatosEstructuradosSchema["speechAnalytics"]
+>;
 
 // ============================================
 // Feedback terapeuta (Llamada C) — contrato multi-orientación
@@ -179,6 +199,8 @@ export type ConfianzaModelo = "alta" | "media" | "baja";
 // específico del instrumento. Ver docs/contrato-multi-orientacion.md.
 //
 // Shape MITI/CTS-R definido por processor/prompts/therapist_feedback_v1.0.md
+// El schema del tablero lo transporta como `unknown`; la forma se valida al
+// leer con normalizarFeedback (src/lib/sesion-clinica/normalizar.ts).
 // ============================================
 
 /** Orientación teórica de la profesional — determina el instrumento
@@ -328,110 +350,33 @@ export interface FeedbackTerapeutaLegacy {
   disclaimer: string;
 }
 
-/** True si el feedback fue persistido antes del contrato multi-orientación
- *  (no tiene el discriminador `instrumento`). */
-export function esFeedbackLegacy(
-  raw: FeedbackTerapeuta | FeedbackTerapeutaLegacy,
-): raw is FeedbackTerapeutaLegacy {
-  return !("instrumento" in raw);
-}
+// ─── Normalización al leer (implementación en src/lib/sesion-clinica/normalizar.ts)
 
-/** Normaliza un feedback leído de persistencia al contrato actual.
- *  Un legacy (pre-contrato) siempre fue MITI/CTS-R → instrumento "cbt_mi".
- *  No muta el original. */
-export function normalizarFeedback(
-  raw: FeedbackTerapeuta | FeedbackTerapeutaLegacy,
-): FeedbackTerapeuta {
-  if (esFeedbackLegacy(raw)) {
-    return { ...raw, instrumento: "cbt_mi" };
-  }
-  return raw;
-}
+/** @deprecated Importar desde "@/lib/sesion-clinica/normalizar". */
+export {
+  esFeedbackLegacy,
+  esRiesgoDetectadoValido,
+  normalizarFeedback,
+  normalizarRiesgo,
+} from "@/lib/sesion-clinica/normalizar";
 
 // ============================================
-// Riesgo clínico (señal graduada) — contrato panteórico
-//
-// Señal derivada SOLO de señales explícitas en la transcripción. No varía
-// por orientación teórica y coexiste con FlagsRiesgo (booleanos por
-// categoría): este contrato no reemplaza ni modifica los flags.
-// El sistema señala, NUNCA diagnostica. Ver docs/contrato-riesgo-clinico.md.
+// Datos estructurados y respuesta de sesión clínica — shapes históricos
 // ============================================
 
-/** Nivel de la señal de riesgo. "ninguno" es el default seguro: sin
- *  evidencia textual explícita no se gradúa riesgo. */
-export type NivelRiesgo = "ninguno" | "bajo" | "moderado" | "alto";
-
-/** Cita literal de la transcripción que ancla un indicador de riesgo */
-export interface EvidenciaRiesgo {
-  timestamp: string; // formato "MM:SS"
-  quote: string;     // cita textual del segmento
-}
-
-/** Señal de riesgo clínico graduada. Se embebe en datosEstructurados
- *  antes de persistir cifrado. */
-export interface RiesgoDetectado {
-  nivel: NivelRiesgo;
-  indicadores: string[];            // ej: "ideación suicida pasiva"
-  evidencia: EvidenciaRiesgo[];     // vacía solo si nivel es "ninguno"
-  notaParaTerapeuta: string | null; // 1-2 frases, tono calmo, sin diagnóstico
-}
-
-const NIVELES_RIESGO: ReadonlyArray<NivelRiesgo> = [
-  "ninguno",
-  "bajo",
-  "moderado",
-  "alto",
-];
-
-function esEvidenciaRiesgoValida(value: unknown): value is EvidenciaRiesgo {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return typeof obj.timestamp === "string" && typeof obj.quote === "string";
-}
-
-/** Guard estructural del contrato de riesgo. Pensado para fronteras que
- *  reciben JSON no confiable (parseDatosEstructurados, lectores de datos
- *  persistidos legacy). */
-export function esRiesgoDetectadoValido(
-  value: unknown,
-): value is RiesgoDetectado {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.nivel === "string" &&
-    (NIVELES_RIESGO as ReadonlyArray<string>).includes(obj.nivel) &&
-    Array.isArray(obj.indicadores) &&
-    obj.indicadores.every((i) => typeof i === "string") &&
-    Array.isArray(obj.evidencia) &&
-    obj.evidencia.every(esEvidenciaRiesgoValida) &&
-    (obj.notaParaTerapeuta === null ||
-      typeof obj.notaParaTerapeuta === "string")
-  );
-}
-
-/** Normaliza la señal de riesgo leída de persistencia. Ausente o inválida
- *  → nivel "ninguno" (default seguro; misma filosofía que
- *  normalizarFeedback: los datos viejos NO se migran, se normalizan al
- *  leer). No muta el original. */
-export function normalizarRiesgo(raw: unknown): RiesgoDetectado {
-  if (esRiesgoDetectadoValido(raw)) {
-    return raw;
-  }
-  return {
-    nivel: "ninguno",
-    indicadores: [],
-    evidencia: [],
-    notaParaTerapeuta: null,
-  };
-}
-
-/** Datos estructurados extraídos por el LLM (versión enriquecida) */
+/**
+ * @deprecated Usar `DatosEstructurados` de "@/lib/sesion-clinica/schema"
+ * (todos los campos opcionales, `feedbackTerapeuta` como unknown). Esta
+ * versión, con campos obligatorios y feedback tipado, se conserva solo
+ * porque la UI (historia-tab, NotaClinicaView, FeedbackTerapeutaView) y
+ * los hooks de grabación todavía dependen de esa forma.
+ */
 export interface DatosEstructurados {
   // Campos originales
   temas: string[];
   emocionesPaciente: string[];
   intensidadEmocional: number; // 1-10
-  alianzaTerapeutica: "fragil" | "inestable" | "estable" | "fuerte";
+  alianzaTerapeutica: AlianzaTerapeutica;
   compromisos: string[];
   progresoPercibido: string;
 
@@ -447,14 +392,7 @@ export interface DatosEstructurados {
   duracionRealMin: number; // Duración real de la sesión en minutos
 
   /** Speech analytics derivado de diarización VibeVoice-ASR */
-  speechAnalytics?: {
-    ratioHablaTerapeuta: number;    // 0-100, porcentaje del tiempo que habla el terapeuta
-    ratioHablaPaciente: number;     // 0-100, porcentaje del tiempo que habla el paciente
-    cantidadSilencios: number;      // cantidad de pausas > 3 segundos
-    duracionPromedioSilenciosSeg: number;  // duración promedio de silencios en segundos
-    tiempoTotalHablaSeg: number;    // duración total del audio analizado en segundos
-    speakersDetectados?: number;    // hablantes únicos en la diarización; <2 = colapso (ausente en payloads legacy)
-  };
+  speechAnalytics?: SpeechAnalytics;
 
   /** Análisis longitudinal generado por IA cruzando múltiples sesiones */
   observacionIA?: string;
@@ -472,48 +410,13 @@ export interface DatosEstructurados {
   riesgoDetectado?: RiesgoDetectado;
 }
 
-/** Nota clínica en formato SOAP */
-export interface NotaSOAP {
-  subjetivo: string;
-  objetivo: string;
-  analisis: string;
-  plan: string;
-}
-
-// ============================================
-// Requests
-// ============================================
-
-/** Iniciar grabación para un turno existente */
-export interface IniciarGrabacionRequest {
-  turnoId: string;
-}
-
-/** Subir chunk de audio cifrado al backend */
-export interface SubirAudioRequest {
-  sesionClinicaId: string;
-  audioBase64: string;        // audio cifrado en base64
-  duracionSegundos: number;
-}
-
-/** Aprobar (con o sin edición) una nota clínica generada */
-export interface AprobarNotaRequest {
-  sesionClinicaId: string;
-  notaEditada?: NotaSOAP;     // presente si la profesional editó algo
-  notasEdicion?: string;      // comentarios de la edición
-}
-
-/** Firmar el consentimiento informado de un paciente */
-export interface FirmarConsentimientoRequest {
-  pacienteId: string;
-  firmaDigital: string;       // base64 del canvas de firma
-}
-
-// ============================================
-// Responses
-// ============================================
-
-/** Estado actual de una sesión clínica (grabación + nota generada) */
+/**
+ * @deprecated Usar `SesionClinicaResponse` de "@/lib/sesion-clinica/schema"
+ * (la fila completa: nota en cuatro columnas, notaSoapOriginal, audioR2Key,
+ * createdAt/updatedAt, turno). Esta forma con `nota` ensamblada es la que
+ * todavía consumen useGrabacionSesion, useSesionClinicaPolling, historia-tab
+ * y paciente-detail-view; se conserva hasta que migren.
+ */
 export interface SesionClinicaResponse {
   id: string;
   turnoId: string;
@@ -528,7 +431,43 @@ export interface SesionClinicaResponse {
   error: string | null;
 }
 
-/** Estado del consentimiento informado de un paciente */
+// ============================================
+// Requests y responses históricos (sin consumidor o desactualizados)
+// ============================================
+
+/** @deprecated Sin consumidor. POST /api/sesion-clinica valida el body con
+ *  su propio schema Zod ({ turnoId }). */
+export interface IniciarGrabacionRequest {
+  turnoId: string;
+}
+
+/** @deprecated Sin consumidor. El audio ya no pasa por la API: se sube
+ *  directo a R2 (upload-url → PUT → upload-confirmar). */
+export interface SubirAudioRequest {
+  sesionClinicaId: string;
+  audioBase64: string;        // audio cifrado en base64
+  duracionSegundos: number;
+}
+
+/** @deprecated Desactualizado: el schema real vive en
+ *  src/app/api/sesion-clinica/[id]/aprobar/route.ts (agrega confirmoRiesgo;
+ *  sesionClinicaId se ignora, la sesión sale de la ruta). */
+export interface AprobarNotaRequest {
+  sesionClinicaId: string;
+  notaEditada?: NotaSOAP;     // presente si la profesional editó algo
+  notasEdicion?: string;      // comentarios de la edición
+}
+
+/** @deprecated Sin consumidor. ConsentimientoForm envía
+ *  { firmaDigital, textoVersion }; el schema vive en
+ *  src/app/api/pacientes/[id]/consentimiento/route.ts. */
+export interface FirmarConsentimientoRequest {
+  pacienteId: string;
+  firmaDigital: string;       // base64 del canvas de firma
+}
+
+/** @deprecated Desactualizado: la ruta de consentimiento responde
+ *  { id, pacienteId, firmadoEn, textoVersion, vigente } sin revocadoEn. */
 export interface ConsentimientoResponse {
   id: string;
   pacienteId: string;
@@ -538,11 +477,9 @@ export interface ConsentimientoResponse {
   vigente: boolean;            // computed: firmadoEn != null && revocadoEn == null
 }
 
-// ============================================
-// Callbacks
-// ============================================
-
-/** Callback de La Escondida con el resultado del procesamiento */
+/** @deprecated Desactualizado: el payload del worker se valida con
+ *  callbackSchema en src/app/api/sesion-clinica/callback/route.ts sobre el
+ *  schema del tablero (incluye promptVersion). */
 export interface ResultadoProcesamientoCallback {
   sesionClinicaId: string;
   estado: "revision" | "error";

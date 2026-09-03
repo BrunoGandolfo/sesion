@@ -60,6 +60,37 @@ const METODO_LABEL: Record<MetodoPago, string> = {
 type TabKey = "deudores" | "cobros";
 type LoadState = "loading" | "ready" | "error";
 
+type DatosFinanzas = {
+  kpis: KPIsDashboard;
+  deudores: DeudoresApiItem[];
+  cobros: TurnoConPaciente[];
+};
+
+async function cargarFinanzas(signal: AbortSignal): Promise<DatosFinanzas> {
+  const [resDashboard, resDeudores, resCobros] = await Promise.all([
+    fetch("/api/dashboard", { cache: "no-store", signal }),
+    fetch("/api/deudores", { cache: "no-store", signal }),
+    fetch("/api/turnos/cobros", { cache: "no-store", signal }),
+  ]);
+  if (!resDashboard.ok || !resDeudores.ok || !resCobros.ok) {
+    throw new Error("finanzas fetch failed");
+  }
+
+  const dashboardJson = (await resDashboard.json()) as {
+    data: { kpis: KPIsDashboard };
+  };
+  const deudoresJson = (await resDeudores.json()) as {
+    data: DeudoresApiItem[];
+  };
+  const cobrosJson = (await resCobros.json()) as { data: JsonTurno[] };
+
+  return {
+    kpis: dashboardJson.data.kpis,
+    deudores: deudoresJson.data,
+    cobros: cobrosJson.data.map(parseTurno),
+  };
+}
+
 // ============================================
 export function FinanzasView() {
   const [tab, setTab] = React.useState<TabKey>("deudores");
@@ -68,47 +99,41 @@ export function FinanzasView() {
   const [cobros, setCobros] = React.useState<TurnoConPaciente[]>([]);
   const [now, setNow] = React.useState<Date | null>(null);
   const [loadState, setLoadState] = React.useState<LoadState>("loading");
+  const [reloadKey, setReloadKey] = React.useState(0);
 
-  const fetchAll = React.useCallback(async () => {
-    setLoadState("loading");
-    try {
-      const [resDashboard, resDeudores, resCobros] = await Promise.all([
-        fetch("/api/dashboard", { cache: "no-store" }),
-        fetch("/api/deudores", { cache: "no-store" }),
-        fetch("/api/turnos/cobros", { cache: "no-store" }),
-      ]);
-      if (!resDashboard.ok || !resDeudores.ok || !resCobros.ok) {
-        throw new Error("finanzas fetch failed");
-      }
-
-      const dashboardJson = (await resDashboard.json()) as {
-        data: { kpis: KPIsDashboard };
-      };
-      const deudoresJson = (await resDeudores.json()) as {
-        data: DeudoresApiItem[];
-      };
-      const cobrosJson = (await resCobros.json()) as { data: JsonTurno[] };
-
-      setKpis(dashboardJson.data.kpis);
-      setDeudores(deudoresJson.data);
-      setCobros(cobrosJson.data.map(parseTurno));
-      setNow(new Date());
-      setLoadState("ready");
-    } catch {
-      setLoadState("error");
-    }
-  }, []);
-
+  // No pone "loading" acá: es el estado inicial, y el reintento lo setea en
+  // su propio handler.
   React.useEffect(() => {
-    void fetchAll();
-  }, [fetchAll]);
+    const controller = new AbortController();
+
+    cargarFinanzas(controller.signal)
+      .then((datos) => {
+        setKpis(datos.kpis);
+        setDeudores(datos.deudores);
+        setCobros(datos.cobros);
+        setNow(new Date());
+        setLoadState("ready");
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLoadState("error");
+      });
+
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  const reintentar = () => {
+    setLoadState("loading");
+    setReloadKey((k) => k + 1);
+  };
 
   if (loadState === "loading" && !kpis) {
     return <FinanzasSkeleton />;
   }
 
   if (loadState === "error" && !kpis) {
-    return <FinanzasError onRetry={fetchAll} />;
+    return <FinanzasError onRetry={reintentar} />;
   }
 
   if (!kpis || !now) return null;

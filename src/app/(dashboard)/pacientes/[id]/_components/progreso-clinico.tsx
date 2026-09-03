@@ -96,10 +96,10 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
   const [error, setError] = React.useState<string | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
 
+  // No resetea loadState/error acá: el estado inicial ya es "loading" y el
+  // reintento lo hace en `retry`.
   React.useEffect(() => {
     const controller = new AbortController();
-    setLoadState("loading");
-    setError(null);
 
     fetchProgreso(pacienteId, controller.signal)
       .then((next) => {
@@ -120,6 +120,8 @@ export function ProgresoClinico({ pacienteId }: { pacienteId: string }) {
   }, [pacienteId, reloadKey]);
 
   function retry() {
+    setLoadState("loading");
+    setError(null);
     setReloadKey((k) => k + 1);
   }
 
@@ -966,14 +968,15 @@ function RatioHablaChart({ sesiones }: { sesiones: SesionProgreso[] }) {
   const conSpeech = sesiones.filter((s) => s.speechAnalytics);
   if (conSpeech.length === 0) return null;
 
-  let huboColapso = false;
+  const huboColapso = sesiones.some(
+    (s) => s.speechAnalytics !== undefined && esColapsoDiarizacion(s.speechAnalytics),
+  );
   const data = sesiones.map((s) => {
     const sa = s.speechAnalytics;
     if (!sa) {
       return { terapeuta: 0, paciente: 0, vacio: 100 };
     }
     if (esColapsoDiarizacion(sa)) {
-      huboColapso = true;
       return { terapeuta: 0, paciente: 0, vacio: 100 };
     }
     // Contrato (domain.ts): los ratios ya vienen en 0-100.

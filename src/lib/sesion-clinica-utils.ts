@@ -1,31 +1,25 @@
-import { esRiesgoDetectadoValido } from "@/types/domain";
+import {
+  estadoSesionSchema,
+  parseDatosEstructurados as parseDatosEstructuradosTablero,
+  type DatosEstructurados as DatosEstructuradosTablero,
+  type EstadoSesion,
+} from "@/lib/sesion-clinica/schema";
 import type {
-  AlianzaTerapeutica,
-  ConfianzaModelo,
   DatosEstructurados,
-  EstadoProcesamiento,
-  FlagsRiesgo,
-  IntervencionTerapeuta,
   NotaSOAP,
   SesionClinicaResponse,
 } from "@/types/domain";
 
-export type EstadoSesion = EstadoProcesamiento;
+export type { EstadoSesion };
 
-export const ESTADOS_SESION: ReadonlyArray<EstadoSesion> = [
-  "pendiente",
-  "grabando",
-  "subiendo",
-  "procesando",
-  "revision",
-  "aprobado",
-  "error",
-];
+// Lista derivada del enum del tablero: existe una sola vez.
+export const ESTADOS_SESION: ReadonlyArray<EstadoSesion> =
+  estadoSesionSchema.options;
 
 // ÚNICA fuente de verdad de la máquina de estados de SesionClinica. La
 // consumen todos los endpoints que mutan `estado` (PATCH/DELETE de [id],
-// upload, aprobar) vía assertTransicionValida() en src/app/api/_lib/
-// sesion-clinica.ts. No duplicar esta tabla en las rutas.
+// upload-url, upload-confirmar, aprobar) vía assertTransicionValida() en
+// src/app/api/_lib/sesion-clinica.ts. No duplicar esta tabla en las rutas.
 //
 // - grabando → subiendo: POST [id]/upload-url (guarda clave+IV y emite la
 //   URL prefirmada de R2). Desde acá el navegador sube DIRECTO a R2.
@@ -36,7 +30,7 @@ export const ESTADOS_SESION: ReadonlyArray<EstadoSesion> = [
 // - grabando → error / subiendo → error: descarte de una grabación abandonada
 //   con audio subido (DELETE) o fallo de subida.
 // - grabando → procesando: se conserva por compatibilidad con filas viejas;
-//   ya no lo usa ninguna ruta (el /upload monolítico devuelve 410).
+//   ninguna ruta la usa (la subida siempre pasa por "subiendo").
 // - revision → error: descarte de la nota (DELETE), la sesión queda
 //   reprocesable. revision → aprobado: solo el endpoint /aprobar.
 // - error → procesando: reintento (PATCH), re-encola al worker.
@@ -54,10 +48,7 @@ const TRANSICIONES_PERMITIDAS: Record<
 };
 
 export function esEstadoSesion(value: unknown): value is EstadoSesion {
-  return (
-    typeof value === "string" &&
-    (ESTADOS_SESION as ReadonlyArray<string>).includes(value)
-  );
+  return estadoSesionSchema.safeParse(value).success;
 }
 
 // Tolerante a strings desconocidos (filas con estado corrupto): un estado
@@ -88,13 +79,14 @@ export function esTransicionValida(
 //   pendiente → grabando : useGrabacionSesion.ts (iniciar) y
 //                          historia-tab.tsx (iniciarGrabacionFlow), tras
 //                          crear la sesión.
-//   grabando → error     : historia-tab.tsx (manejarGrabacionCompleta) cuando
-//                          falla la subida; el hook nuevo ya no lo usa, pero
-//                          la pestaña Historia todavía sí.
-//   subiendo → grabando  : useGrabacionSesion.ts (volverAGrabando) tras un
-//                          fallo en el PUT a R2 o en la confirmación: la
-//                          sesión vuelve a "grabando" para repetir desde
-//                          upload-url con el mismo blob cifrado.
+//   grabando → error     : sin uso en el frontend actual (ambos flujos
+//                          vuelven a "grabando" tras un fallo de subida).
+//                          Se conserva para el descarte desde la UI vía
+//                          SesionHuerfanaBanner / DELETE.
+//   subiendo → grabando  : useGrabacionSesion.ts e historia-tab.tsx
+//                          (volverAGrabando) tras un fallo en el PUT a R2 o
+//                          en la confirmación: la sesión vuelve a "grabando"
+//                          para repetir desde upload-url con el mismo blob.
 //   error → procesando   : useGrabacionSesion.ts (reintentar) e
 //                          historia-tab.tsx, "Reintentar"; re-encola al
 //                          worker vía /pendientes.
@@ -136,8 +128,11 @@ export function esTransicionPermitidaAlCliente(
   estadoNuevo: EstadoSesion | string,
 ): boolean {
   if (!esTransicionValida(estadoActual, estadoNuevo)) return false;
-  const permitidas = TRANSICIONES_CLIENTE[estadoActual as EstadoSesion] ?? [];
-  return permitidas.includes(estadoNuevo as EstadoSesion);
+  if (!esEstadoSesion(estadoActual) || !esEstadoSesion(estadoNuevo)) {
+    return false;
+  }
+  const permitidas = TRANSICIONES_CLIENTE[estadoActual] ?? [];
+  return permitidas.includes(estadoNuevo);
 }
 
 // Umbral para considerar abandonada una sesión en "grabando": una sesión
@@ -164,7 +159,7 @@ function toEpochMs(value: Date | string | null | undefined): number | null {
  *   seguro: nunca ofrecer descartar una grabación posiblemente activa.
  */
 export function esSesionHuerfana(sesion: {
-  estado: EstadoProcesamiento | string;
+  estado: EstadoSesion | string;
   updatedAt?: Date | string | null;
   createdAt?: Date | string | null;
 }): boolean {
@@ -178,175 +173,16 @@ export function esSesionHuerfana(sesion: {
   return Date.now() - referencia > UMBRAL_HUERFANA_MS;
 }
 
-const ALIANZAS_VALIDAS: ReadonlyArray<AlianzaTerapeutica> = [
-  "fragil",
-  "inestable",
-  "estable",
-  "fuerte",
-];
-
-const CONFIANZAS_VALIDAS: ReadonlyArray<ConfianzaModelo> = [
-  "alta",
-  "media",
-  "baja",
-];
-
-const INTERVENCIONES_VALIDAS: ReadonlyArray<IntervencionTerapeuta["tipo"]> = [
-  "reformulacion",
-  "senalamiento",
-  "confrontacion",
-  "interpretacion",
-  "pregunta_circular",
-  "validacion",
-  "silencio_terapeutico",
-  "otra",
-];
-
-function esAlianzaValida(value: unknown): value is AlianzaTerapeutica {
-  return (
-    typeof value === "string" &&
-    (ALIANZAS_VALIDAS as ReadonlyArray<string>).includes(value)
-  );
-}
-
-function esConfianzaValida(value: unknown): value is ConfianzaModelo {
-  return (
-    typeof value === "string" &&
-    (CONFIANZAS_VALIDAS as ReadonlyArray<string>).includes(value)
-  );
-}
-
-function esArrayDeStrings(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((v) => typeof v === "string");
-}
-
-function esRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function esTimestampAproxValido(value: unknown): value is string {
-  if (typeof value !== "string") {
-    return false;
-  }
-
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) {
-    return false;
-  }
-
-  const segundos = Number(match[2]);
-  return segundos >= 0 && segundos <= 59;
-}
-
-function esIntervencionValida(value: unknown): value is IntervencionTerapeuta {
-  if (!esRecord(value)) {
-    return false;
-  }
-
-  return (
-    typeof value.tipo === "string" &&
-    (INTERVENCIONES_VALIDAS as ReadonlyArray<string>).includes(value.tipo) &&
-    typeof value.descripcion === "string" &&
-    esTimestampAproxValido(value.timestampAprox)
-  );
-}
-
-function esArrayDeIntervenciones(
-  value: unknown,
-): value is IntervencionTerapeuta[] {
-  return Array.isArray(value) && value.every(esIntervencionValida);
-}
-
-function esFlagsRiesgoValido(value: unknown): value is FlagsRiesgo {
-  if (!esRecord(value)) {
-    return false;
-  }
-
-  return (
-    typeof value.ideacionSuicida === "boolean" &&
-    typeof value.autolesion === "boolean" &&
-    typeof value.violenciaTerceros === "boolean" &&
-    typeof value.sintomasPsicoticos === "boolean" &&
-    typeof value.crisisPanico === "boolean" &&
-    typeof value.detalle === "string"
-  );
-}
-
+/**
+ * @deprecated Usar `parseDatosEstructurados` de
+ * "@/lib/sesion-clinica/schema" (única definición del contrato). Este
+ * nombre se conserva solo por compatibilidad de importadores y delega en
+ * el tablero: acepta objeto o string JSON, devuelve null si no valida.
+ */
 export function parseDatosEstructurados(
-  json: string | null,
-): DatosEstructurados | null {
-  if (json === null) return null;
-  if (json.trim() === "") return null;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    return null;
-  }
-
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const obj = parsed as Record<string, unknown>;
-
-  const intensidad = obj.intensidadEmocional;
-  const duracionRealMin = obj.duracionRealMin;
-  if (
-    typeof intensidad !== "number" ||
-    !Number.isFinite(intensidad) ||
-    intensidad < 1 ||
-    intensidad > 10
-  ) {
-    return null;
-  }
-
-  if (
-    typeof duracionRealMin !== "number" ||
-    !Number.isFinite(duracionRealMin) ||
-    duracionRealMin < 0
-  ) {
-    return null;
-  }
-
-  if (!esAlianzaValida(obj.alianzaTerapeutica)) return null;
-  if (!esConfianzaValida(obj.confianzaModelo)) return null;
-  if (!esArrayDeStrings(obj.temas)) return null;
-  if (!esArrayDeStrings(obj.emocionesPaciente)) return null;
-  if (!esArrayDeIntervenciones(obj.intervenciones)) return null;
-  if (!esArrayDeStrings(obj.compromisos)) return null;
-  if (!esArrayDeStrings(obj.materialRecurrente)) return null;
-  if (!esArrayDeStrings(obj.materialNuevo)) return null;
-  if (!esFlagsRiesgoValido(obj.flagsRiesgo)) return null;
-  if (typeof obj.progresoPercibido !== "string") return null;
-  if (typeof obj.focoProximaSesion !== "string") return null;
-  if (typeof obj.resumenSesion !== "string") return null;
-  if (typeof obj.estadoEmocionalObservado !== "string") return null;
-
-  // riesgoDetectado es OPCIONAL en todos los niveles (contrato de riesgo
-  // clínico): su ausencia o un shape inválido NUNCA invalidan el objeto —
-  // se omite y los lectores normalizan con normalizarRiesgo() (nivel
-  // "ninguno"). Un datosEstructurados legacy pasa igual que antes.
-  const riesgoDetectado = esRiesgoDetectadoValido(obj.riesgoDetectado)
-    ? obj.riesgoDetectado
-    : undefined;
-
-  return {
-    temas: obj.temas,
-    emocionesPaciente: obj.emocionesPaciente,
-    intensidadEmocional: intensidad,
-    alianzaTerapeutica: obj.alianzaTerapeutica,
-    intervenciones: obj.intervenciones,
-    compromisos: obj.compromisos,
-    materialRecurrente: obj.materialRecurrente,
-    materialNuevo: obj.materialNuevo,
-    focoProximaSesion: obj.focoProximaSesion,
-    flagsRiesgo: obj.flagsRiesgo,
-    confianzaModelo: obj.confianzaModelo,
-    resumenSesion: obj.resumenSesion,
-    estadoEmocionalObservado: obj.estadoEmocionalObservado,
-    duracionRealMin,
-    progresoPercibido: obj.progresoPercibido,
-    ...(riesgoDetectado !== undefined ? { riesgoDetectado } : {}),
-  };
+  raw: unknown,
+): DatosEstructuradosTablero | null {
+  return parseDatosEstructuradosTablero(raw);
 }
 
 export function esNotaCompleta(nota: Partial<NotaSOAP>): boolean {
@@ -360,7 +196,8 @@ export function esNotaCompleta(nota: Partial<NotaSOAP>): boolean {
 
 // Versión permisiva (sin validación de shape): acepta el objeto ya
 // deserializado por la extensión Prisma o el string JSON crudo de filas
-// legacy. Para inputs de fronteras no confiables, usar parseDatosEstructurados.
+// legacy. Para inputs de fronteras no confiables, usar
+// parseDatosEstructurados del tablero (src/lib/sesion-clinica/schema.ts).
 export function coerceDatosEstructurados(
   value: DatosEstructurados | string | null | undefined,
 ): DatosEstructurados | null {
@@ -401,7 +238,7 @@ export function ensamblarNotaSOAP(campos: {
 export interface RawSesionClinica {
   id: string;
   turnoId: string;
-  estado: EstadoProcesamiento | string;
+  estado: EstadoSesion | string;
   duracionAudioSeg: number | null;
   nota?: NotaSOAP | null;
   notaSubjetivo?: string | null;
@@ -422,7 +259,7 @@ export function normalizeSesionClinica(
   return {
     id: raw.id,
     turnoId: raw.turnoId,
-    estado: raw.estado as EstadoProcesamiento,
+    estado: raw.estado as EstadoSesion,
     duracionAudioSeg: raw.duracionAudioSeg,
     nota:
       raw.nota ??

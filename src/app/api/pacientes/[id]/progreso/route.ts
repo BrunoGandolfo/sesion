@@ -1,13 +1,12 @@
 import { db } from "@/lib/db";
-import type {
-  AlianzaTerapeutica,
-  DatosEstructurados,
-  FlagsRiesgo,
-  IntervencionTerapeuta,
-} from "@/types/domain";
+import {
+  parseDatosEstructurados,
+  type AlianzaTerapeutica,
+  type DatosEstructurados,
+} from "@/lib/sesion-clinica/schema";
 
 import { getOrganizationId } from "../../../_lib/auth";
-import { errorResponse } from "../../../_lib/responses";
+import { ApiError, errorResponse } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,27 +22,13 @@ const ALIANZA_MAP: Record<AlianzaTerapeutica, number> = {
   fuerte: 4,
 };
 
-function parseDatos(raw: unknown): Partial<DatosEstructurados> | null {
-  if (raw == null) return null;
-  if (typeof raw === "string") {
-    try {
-      return JSON.parse(raw) as Partial<DatosEstructurados>;
-    } catch {
-      return null;
-    }
-  }
-  if (typeof raw === "object") return raw as Partial<DatosEstructurados>;
-  return null;
-}
-
 function countIntervenciones(
-  intervenciones: IntervencionTerapeuta[] | undefined,
+  intervenciones: DatosEstructurados["intervenciones"],
 ): Record<string, number> {
   const acc: Record<string, number> = {};
-  if (!Array.isArray(intervenciones)) return acc;
+  if (!intervenciones) return acc;
   for (const i of intervenciones) {
-    const tipo = i?.tipo;
-    if (typeof tipo === "string") acc[tipo] = (acc[tipo] ?? 0) + 1;
+    acc[i.tipo] = (acc[i.tipo] ?? 0) + 1;
   }
   return acc;
 }
@@ -53,19 +38,15 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const organizationId = await getOrganizationId();
     const { id } = await params;
 
+    // Esta ruta necesita nombre y apellido, así que hace su propio select en
+    // vez de requirePaciente (que solo devuelve el id) para no consultar dos
+    // veces. 404 como el resto de /api/pacientes/[id]/** (antes 200 vacío).
     const paciente = await db.paciente.findFirst({
       where: { id, organizationId },
       select: { id: true, nombre: true, apellido: true },
     });
-
     if (!paciente) {
-      return Response.json({
-        pacienteId: id,
-        nombre: null,
-        apellido: null,
-        totalSesiones: 0,
-        sesiones: [],
-      });
+      throw new ApiError("Paciente no encontrado", 404);
     }
 
     const sesiones = await db.sesionClinica.findMany({
@@ -74,6 +55,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         estado: { in: ["revision", "aprobado"] },
         turno: { pacienteId: id },
       },
+      orderBy: { turno: { fecha: "asc" } },
       select: {
         id: true,
         datosEstructurados: true,
@@ -81,34 +63,23 @@ export async function GET(_request: Request, { params }: RouteParams) {
       },
     });
 
-    const ordenadas = sesiones
-      .slice()
-      .sort((a, b) => a.turno.fecha.getTime() - b.turno.fecha.getTime());
-
-    const payload = ordenadas.map((s, idx) => {
-      const datos = parseDatos(s.datosEstructurados);
-      const alianzaLabel = (datos?.alianzaTerapeutica ?? null) as
-        | AlianzaTerapeutica
-        | null;
+    const payload = sesiones.map((s, idx) => {
+      // Parseo del tablero (valida el shape; fila corrupta → null).
+      const datos = parseDatosEstructurados(s.datosEstructurados);
+      const alianzaLabel = datos?.alianzaTerapeutica ?? null;
 
       return {
         fecha: s.turno.fecha.toISOString(),
         numero: idx + 1,
-        intensidadEmocional:
-          typeof datos?.intensidadEmocional === "number"
-            ? datos.intensidadEmocional
-            : null,
+        intensidadEmocional: datos?.intensidadEmocional ?? null,
         alianzaTerapeutica: alianzaLabel ? ALIANZA_MAP[alianzaLabel] : null,
         alianzaLabel,
-        temas: Array.isArray(datos?.temas) ? datos!.temas : [],
+        temas: datos?.temas ?? [],
         intervenciones: countIntervenciones(datos?.intervenciones),
-        flagsRiesgo: (datos?.flagsRiesgo ?? null) as FlagsRiesgo | null,
+        flagsRiesgo: datos?.flagsRiesgo ?? null,
         speechAnalytics: datos?.speechAnalytics ?? null,
         observacionIA: datos?.observacionIA ?? null,
-        progresoPercibido:
-          typeof datos?.progresoPercibido === "string"
-            ? datos.progresoPercibido
-            : null,
+        progresoPercibido: datos?.progresoPercibido ?? null,
       };
     });
 

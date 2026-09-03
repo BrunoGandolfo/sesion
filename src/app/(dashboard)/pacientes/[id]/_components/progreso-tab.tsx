@@ -26,9 +26,9 @@ type ProbeState =
 export function ProgresoTab({ pacienteId, nombrePaciente }: ProgresoTabProps) {
   const [probe, setProbe] = React.useState<ProbeState>({ kind: "loading" });
 
+  // No resetea el probe acá: el estado inicial ya es "loading".
   React.useEffect(() => {
     let cancelado = false;
-    setProbe({ kind: "loading" });
 
     fetch(`/api/pacientes/${pacienteId}/contexto-clinico`, {
       cache: "no-store",

@@ -1,12 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { normalizePhone } from "@/lib/phone";
 import type { Paciente } from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
-import { toBooleanParam } from "../_lib/schemas";
-import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
+import { pacienteCreateSchema, toBooleanParam } from "../_lib/schemas";
+import { errorResponse, ok, validationError } from "../_lib/responses";
 import { toPacienteConDeuda } from "../_lib/domain";
 
 export const runtime = "nodejs";
@@ -15,20 +14,6 @@ export const dynamic = "force-dynamic";
 const querySchema = z.object({
   activo: z.boolean(),
   q: z.string().trim().optional(),
-});
-
-const optionalEmailSchema = z.preprocess(
-  (value) => (value === "" ? null : value),
-  z.string().email().nullable().optional(),
-);
-
-const createPacienteSchema = z.object({
-  nombre: z.string().trim().min(1, "Falta el nombre"),
-  apellido: z.string().trim().min(1, "Falta el apellido"),
-  telefono: z.string().trim().min(1, "Falta el teléfono"),
-  email: optionalEmailSchema,
-  tarifa: z.number().int().min(0, "La tarifa no puede ser negativa"),
-  notas: z.string().trim().nullable().optional(),
 });
 
 export async function GET(request: Request) {
@@ -81,29 +66,18 @@ export async function POST(request: Request) {
   try {
     const organizationId = await getOrganizationId();
     const body = await request.json();
-    const parsed = createPacienteSchema.safeParse(body);
+    const parsed = pacienteCreateSchema.safeParse(body);
 
     if (!parsed.success) {
       return validationError(parsed.error);
     }
 
-    let telefonoNormalizado: string;
-    try {
-      telefonoNormalizado = normalizePhone(parsed.data.telefono);
-    } catch (err) {
-      throw new ApiError(
-        err instanceof Error
-          ? err.message
-          : "El teléfono no tiene un formato válido. Usá el formato +598 99 123 456",
-        400,
-      );
-    }
-
+    // telefono ya viene normalizado a E.164 por el .transform del esquema.
     const paciente = await db.paciente.create({
       data: {
         nombre: parsed.data.nombre,
         apellido: parsed.data.apellido,
-        telefono: telefonoNormalizado,
+        telefono: parsed.data.telefono,
         email: parsed.data.email ?? null,
         tarifa: parsed.data.tarifa,
         notas: parsed.data.notas ?? null,

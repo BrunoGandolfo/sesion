@@ -37,6 +37,19 @@ function getMobileServerSnapshot() {
   return false;
 }
 
+// useSyncExternalStore con snapshot de servidor null: el servidor (UTC) y el
+// cliente (Montevideo) renderizan lo mismo (sin fecha) y no hay mismatch #418.
+function suscribirNoop() {
+  return () => {};
+}
+function obtenerHoyCliente(): string {
+  // Clave estable del día: mismo string en llamadas consecutivas del render.
+  return new Date().toDateString();
+}
+function obtenerHoyServidor(): null {
+  return null;
+}
+
 type RawTurno = Omit<
   TurnoConPaciente,
   "fecha" | "pagoFecha" | "creadoEn" | "actualizadoEn"
@@ -92,23 +105,28 @@ export function AgendaView() {
     getMobileServerSnapshot,
   );
   const [userView, setUserView] = React.useState<AgendaViewMode | null>(null);
-  // `anchor` y `today` parten en null para que el primer render sea idéntico
-  // en server (UTC) y client (Montevideo). Renderizar `fechaLarga(anchor)` en
-  // el header con un `new Date()` distinto en cada entorno disparaba React
-  // #418 y rompía todos los event handlers de la página en producción.
-  const [anchor, setAnchor] = React.useState<Date | null>(null);
-  const [today, setToday] = React.useState<Date | null>(null);
+  // `anchor` y `today` son null en el servidor para que el primer render sea
+  // idéntico en server (UTC) y client (Montevideo). Renderizar
+  // `fechaLarga(anchor)` con un `new Date()` distinto en cada entorno
+  // disparaba React #418 y rompía todos los event handlers en producción.
+  // `today` se construye una vez por clave de día; `anchor` es lo que eligió
+  // la usuaria (prev/next/hoy/día del mes) o, hasta entonces, `today`.
+  const claveHoy = React.useSyncExternalStore(
+    suscribirNoop,
+    obtenerHoyCliente,
+    obtenerHoyServidor,
+  );
+  const today = React.useMemo(
+    () => (claveHoy === null ? null : new Date()),
+    [claveHoy],
+  );
+  const [anchorUsuario, setAnchorUsuario] = React.useState<Date | null>(null);
+  const anchor = anchorUsuario ?? today;
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [detalleId, setDetalleId] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ open: boolean; message: string }>(
     { open: false, message: "" },
   );
-
-  React.useEffect(() => {
-    const now = new Date();
-    setAnchor((current) => current ?? now);
-    setToday((current) => current ?? now);
-  }, []);
 
   const view: AgendaViewMode = userView ?? (isMobile ? "día" : "semana");
 
@@ -185,24 +203,26 @@ export function AgendaView() {
   }, []);
 
   const handlePrev = () => {
-    setAnchor((d) => {
-      if (!d) return d;
+    setAnchorUsuario((elegido) => {
+      const d = elegido ?? today;
+      if (!d) return elegido;
       if (view === "día") return addDays(d, -1);
       if (view === "semana") return addWeeks(d, -1);
       return addMonths(d, -1);
     });
   };
   const handleNext = () => {
-    setAnchor((d) => {
-      if (!d) return d;
+    setAnchorUsuario((elegido) => {
+      const d = elegido ?? today;
+      if (!d) return elegido;
       if (view === "día") return addDays(d, 1);
       if (view === "semana") return addWeeks(d, 1);
       return addMonths(d, 1);
     });
   };
-  const handleToday = () => setAnchor(new Date());
+  const handleToday = () => setAnchorUsuario(new Date());
   const handleDayClick = (day: Date) => {
-    setAnchor(day);
+    setAnchorUsuario(day);
     setUserView("día");
   };
   const handleEventClick = (turno: TurnoConPaciente) => {

@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { existeAudio, r2Configurado } from "@/lib/r2";
 import { esKeyAudioDeSesion } from "@/lib/sesion-clinica-utils";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
@@ -23,7 +24,8 @@ import {
 } from "../../../_lib/responses";
 import {
   assertTransicionValida,
-  sinClaveTemporal,
+  SESION_SELECT,
+  toSesionClinicaResponse,
 } from "../../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
@@ -44,35 +46,11 @@ const bodySchema = z.object({
     .nonnegative("La duración no puede ser negativa"),
 });
 
-// Respuesta con la misma forma que el GET por id (sin transcripción ni
-// clave temporal): los hooks del cliente la normalizan igual.
-const SESION_SELECT = {
-  id: true,
-  turnoId: true,
-  estado: true,
-  duracionAudioSeg: true,
-  audioR2Key: true,
-  audioBorradoEn: true,
-  notaSubjetivo: true,
-  notaObjetivo: true,
-  notaAnalisis: true,
-  notaPlan: true,
-  datosEstructurados: true,
-  modeloASR: true,
-  modeloLLM: true,
-  procesadoEn: true,
-  aprobadoEn: true,
-  error: true,
-  intentos: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
-
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const body = await request.json().catch(() => null);
+    const body: unknown = await request.json().catch(() => null);
     const parsed = bodySchema.safeParse(body);
 
     if (!parsed.success) {
@@ -107,15 +85,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const key = parsed.data.key;
 
-    const r2 = await import("@/lib/r2");
-    if (!r2.r2Configurado()) {
+    if (!r2Configurado()) {
       throw new ApiError(
         "El almacenamiento de audio (R2) no está configurado en este entorno",
         503,
       );
     }
 
-    const { existe, bytes } = await r2.existeAudio(key);
+    const { existe, bytes } = await existeAudio(key);
 
     if (!existe) {
       assertTransicionValida(sesion.estado, "grabando");
@@ -173,7 +150,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       },
     });
 
-    return ok(sinClaveTemporal(actualizada));
+    return ok(toSesionClinicaResponse(actualizada));
   } catch (error) {
     return errorResponse(error);
   }

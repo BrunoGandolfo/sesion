@@ -16,7 +16,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
-import { getSessionActor } from "../../../_lib/auth";
+import { getSessionActor, requireM2M } from "../../../_lib/auth";
 import {
   ApiError,
   errorResponse,
@@ -39,13 +39,6 @@ const ULTIMAS_NOTAS_LIMIT = 3;
 // Auth helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function isM2MAuthorized(request: Request): boolean {
-  const secret = process.env.PROCESSING_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("authorization");
-  return header === `Bearer ${secret}`;
-}
-
 type AuthResult =
   | { kind: "m2m" }
   | { kind: "session"; organizationId: string; userId: string };
@@ -61,7 +54,9 @@ type AuthResult =
  * abajo: sugerencia del worker vs revisión humana).
  */
 async function authorizeRequest(request: Request): Promise<AuthResult> {
-  if (isM2MAuthorized(request)) {
+  // requireM2M devuelve null cuando el Bearer es el PROCESSING_SECRET; su 401
+  // se descarta porque acá el fallo del Bearer no es final: se prueba sesión.
+  if (requireM2M(request) === null) {
     return { kind: "m2m" };
   }
   const { organizationId, userId } = await getSessionActor();

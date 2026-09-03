@@ -36,6 +36,29 @@ const fechaFormatter = new Intl.DateTimeFormat("es-UY", {
   year: "numeric",
 });
 
+// Devuelve el estado "vigente" o "sin"; lanza si el fetch falla. Nunca
+// llama a setState: eso queda en el .then/.catch del efecto o del handler.
+async function cargarConsentimiento(
+  pacienteId: string,
+  signal?: AbortSignal,
+): Promise<Estado> {
+  const res = await fetch(`/api/pacientes/${pacienteId}/consentimiento`, {
+    signal,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error("fetch_failed");
+  }
+
+  const data = (await res.json()) as ConsentimientoApiResponse;
+
+  if (data.consentimiento && data.consentimiento.vigente) {
+    return { tipo: "vigente", consentimiento: data.consentimiento };
+  }
+  return { tipo: "sin" };
+}
+
 export function ConsentimientoBadge({
   pacienteId,
   nombrePaciente,
@@ -46,44 +69,30 @@ export function ConsentimientoBadge({
   const [sheetAbierto, setSheetAbierto] = React.useState(false);
   const [revocando, setRevocando] = React.useState(false);
 
-  const cargarEstado = React.useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const res = await fetch(
-          `/api/pacientes/${pacienteId}/consentimiento`,
-          { signal, cache: "no-store" },
-        );
-
-        if (!res.ok) {
-          throw new Error("fetch_failed");
-        }
-
-        const data = (await res.json()) as ConsentimientoApiResponse;
-
-        if (data.consentimiento && data.consentimiento.vigente) {
-          setEstado({ tipo: "vigente", consentimiento: data.consentimiento });
-        } else {
-          setEstado({ tipo: "sin" });
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setEstado({ tipo: "error" });
-      }
-    },
-    [pacienteId],
-  );
-
+  // No resetea a "cargando" acá: es el estado inicial, y los handlers que
+  // recargan (handleFirmado, handleRevocar) lo manejan ellos mismos.
   React.useEffect(() => {
     const controller = new AbortController();
-    setEstado({ tipo: "cargando" });
-    void cargarEstado(controller.signal);
+
+    cargarConsentimiento(pacienteId, controller.signal)
+      .then(setEstado)
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setEstado({ tipo: "error" });
+      });
+
     return () => controller.abort();
-  }, [cargarEstado]);
+  }, [pacienteId]);
 
   const handleFirmado = async () => {
     setSheetAbierto(false);
     setEstado({ tipo: "cargando" });
-    await cargarEstado();
+    try {
+      setEstado(await cargarConsentimiento(pacienteId));
+    } catch {
+      setEstado({ tipo: "error" });
+    }
   };
 
   const handleRevocar = async () => {
@@ -101,7 +110,7 @@ export function ConsentimientoBadge({
       if (!res.ok) {
         throw new Error("delete_failed");
       }
-      await cargarEstado();
+      setEstado(await cargarConsentimiento(pacienteId));
     } catch {
       setEstado({ tipo: "error" });
     } finally {

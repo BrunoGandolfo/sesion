@@ -11,15 +11,9 @@ import {
   esTransicionPermitidaAlCliente,
   esTransicionValida,
   keyAudioEsperada,
-  parseDatosEstructurados,
   esNotaCompleta,
 } from "@/lib/sesion-clinica-utils";
-import type {
-  AlianzaTerapeutica,
-  DatosEstructurados,
-  EstadoProcesamiento,
-  IntervencionTerapeuta,
-} from "@/types/domain";
+import type { EstadoProcesamiento } from "@/types/domain";
 
 const TODOS_LOS_ESTADOS: EstadoProcesamiento[] = [
   "pendiente",
@@ -32,13 +26,13 @@ const TODOS_LOS_ESTADOS: EstadoProcesamiento[] = [
 ];
 
 describe("Sesión clínica - validaciones", () => {
-  // ─── Tabla del SISTEMA: lo que alguna ruta (PATCH, upload, callback,
-  // aprobar o DELETE) puede hacer. ───────────────────────────────────────
+  // ─── Tabla del SISTEMA: lo que alguna ruta (PATCH, upload-url,
+  // upload-confirmar, callback, aprobar o DELETE) puede hacer. ───────────
   describe("esTransicionValida — transiciones válidas a nivel sistema", () => {
     const valid: Array<[EstadoProcesamiento, EstadoProcesamiento]> = [
       ["pendiente", "grabando"],
       ["grabando", "subiendo"],
-      ["grabando", "procesando"], // upload salta "subiendo"
+      ["grabando", "procesando"], // conservada por compatibilidad con filas viejas; ninguna ruta la usa
       ["grabando", "error"], // fallo de upload / huérfana con audio
       ["subiendo", "procesando"], // upload-confirmar (HeadObject OK)
       ["subiendo", "grabando"], // reintento de subida (PUT o confirmación fallaron)
@@ -128,14 +122,14 @@ describe("Sesión clínica - validaciones", () => {
       );
     });
 
-    it("el cliente no puede pedir grabando → procesando (solo upload-url/upload-confirmar)", () => {
+    it("el cliente no puede pedir grabando → procesando (transición conservada por compatibilidad, sin ruta que la use)", () => {
       expect(esTransicionValida("grabando", "procesando")).toBe(true);
       expect(esTransicionPermitidaAlCliente("grabando", "procesando")).toBe(
         false,
       );
     });
 
-    it("el cliente no puede pedir subiendo → procesando (solo upload-url/upload-confirmar)", () => {
+    it("el cliente no puede pedir subiendo → procesando (solo upload-confirmar)", () => {
       expect(esTransicionValida("subiendo", "procesando")).toBe(true);
       expect(esTransicionPermitidaAlCliente("subiendo", "procesando")).toBe(
         false,
@@ -163,14 +157,19 @@ describe("Sesión clínica - validaciones", () => {
       }
     });
 
-    it("exactamente cuatro transiciones son de cliente", () => {
-      let total = 0;
+    it("las transiciones de cliente son exactamente las de la tabla, ni una más", () => {
+      const encontradas: Array<[EstadoProcesamiento, EstadoProcesamiento]> = [];
       for (const desde of TODOS_LOS_ESTADOS) {
         for (const hasta of TODOS_LOS_ESTADOS) {
-          if (esTransicionPermitidaAlCliente(desde, hasta)) total += 1;
+          if (esTransicionPermitidaAlCliente(desde, hasta)) {
+            encontradas.push([desde, hasta]);
+          }
         }
       }
-      expect(total).toBe(4);
+      const clave = (par: [string, string]) => par.join("→");
+      expect(encontradas.map(clave).sort()).toEqual(
+        permitidas.map(clave).sort(),
+      );
     });
   });
 
@@ -213,249 +212,8 @@ describe("Sesión clínica - validaciones", () => {
     });
   });
 
-  describe("parseDatosEstructurados", () => {
-    const intervencionBase: IntervencionTerapeuta = {
-      tipo: "validacion",
-      descripcion: "Valida la angustia y ordena la secuencia del relato.",
-      timestampAprox: "12:34",
-    };
-
-    const validoBase: DatosEstructurados = {
-      temas: ["ansiedad", "trabajo"],
-      emocionesPaciente: ["frustración"],
-      intensidadEmocional: 7,
-      alianzaTerapeutica: "estable",
-      intervenciones: [intervencionBase],
-      compromisos: ["registro diario"],
-      materialRecurrente: ["exigencia laboral"],
-      materialNuevo: ["conflicto con supervisión"],
-      focoProximaSesion: "Explorar autoexigencia y anticipación ansiosa.",
-      flagsRiesgo: {
-        ideacionSuicida: false,
-        autolesion: false,
-        violenciaTerceros: false,
-        sintomasPsicoticos: false,
-        crisisPanico: false,
-        detalle: "",
-      },
-      confianzaModelo: "media",
-      resumenSesion:
-        "Se trabajó sobre ansiedad laboral, con registro de disparadores y validación afectiva.",
-      estadoEmocionalObservado:
-        "Se observó tono ansioso con momentos de alivio al ordenar la secuencia.",
-      duracionRealMin: 50,
-      progresoPercibido: "leve mejora",
-    };
-
-    it("parsea JSON válido y devuelve los datos", () => {
-      const result = parseDatosEstructurados(JSON.stringify(validoBase));
-      expect(result).toEqual(validoBase);
-    });
-
-    it("acepta intensidad en los bordes (1 y 10)", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, intensidadEmocional: 1 }),
-        ),
-      ).not.toBeNull();
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, intensidadEmocional: 10 }),
-        ),
-      ).not.toBeNull();
-    });
-
-    it("rechaza intensidadEmocional < 1", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, intensidadEmocional: 0 }),
-        ),
-      ).toBeNull();
-    });
-
-    it("rechaza intensidadEmocional > 10", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, intensidadEmocional: 11 }),
-        ),
-      ).toBeNull();
-    });
-
-    it("rechaza intensidadEmocional no numérica", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, intensidadEmocional: "alta" }),
-        ),
-      ).toBeNull();
-    });
-
-    it("rechaza intensidadEmocional NaN/Infinity", () => {
-      const conNaN = `{"temas":[],"emocionesPaciente":[],"intensidadEmocional":NaN,"alianzaTerapeutica":"estable","intervenciones":[],"compromisos":[],"materialRecurrente":[],"materialNuevo":[],"focoProximaSesion":"","flagsRiesgo":{"ideacionSuicida":false,"autolesion":false,"violenciaTerceros":false,"sintomasPsicoticos":false,"crisisPanico":false,"detalle":""},"confianzaModelo":"media","resumenSesion":"","estadoEmocionalObservado":"","duracionRealMin":50,"progresoPercibido":""}`;
-      // NaN no es JSON válido, el parser falla
-      expect(parseDatosEstructurados(conNaN)).toBeNull();
-    });
-
-    it("acepta cada alianza terapéutica válida", () => {
-      const alianzas: AlianzaTerapeutica[] = [
-        "fragil",
-        "inestable",
-        "estable",
-        "fuerte",
-      ];
-      for (const alianza of alianzas) {
-        const result = parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, alianzaTerapeutica: alianza }),
-        );
-        expect(result?.alianzaTerapeutica).toBe(alianza);
-      }
-    });
-
-    it("rechaza alianza terapéutica inválida", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, alianzaTerapeutica: "rota" }),
-        ),
-      ).toBeNull();
-    });
-
-    it("devuelve null para JSON malformado", () => {
-      expect(parseDatosEstructurados("{ no es json")).toBeNull();
-      expect(parseDatosEstructurados("undefined")).toBeNull();
-    });
-
-    it("devuelve null para entrada null", () => {
-      expect(parseDatosEstructurados(null)).toBeNull();
-    });
-
-    it("devuelve null para string vacío o whitespace", () => {
-      expect(parseDatosEstructurados("")).toBeNull();
-      expect(parseDatosEstructurados("   ")).toBeNull();
-    });
-
-    it("devuelve null si JSON parsea a primitivo", () => {
-      expect(parseDatosEstructurados("123")).toBeNull();
-      expect(parseDatosEstructurados('"texto"')).toBeNull();
-      expect(parseDatosEstructurados("null")).toBeNull();
-      expect(parseDatosEstructurados("true")).toBeNull();
-    });
-
-    it("devuelve null si falta un campo obligatorio (temas)", () => {
-      const obj: Partial<DatosEstructurados> = { ...validoBase };
-      delete obj.temas;
-      expect(parseDatosEstructurados(JSON.stringify(obj))).toBeNull();
-    });
-
-    it("devuelve null si un array contiene elementos no-string", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, temas: ["ok", 42] }),
-        ),
-      ).toBeNull();
-    });
-
-    it("acepta intervenciones como objetos tipados", () => {
-      const result = parseDatosEstructurados(JSON.stringify(validoBase));
-      expect(result?.intervenciones).toEqual([intervencionBase]);
-    });
-
-    it("rechaza intervenciones con tipo inválido", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({
-            ...validoBase,
-            intervenciones: [
-              {
-                ...intervencionBase,
-                tipo: "psicoeducacion",
-              },
-            ],
-          }),
-        ),
-      ).toBeNull();
-    });
-
-    it("rechaza intervenciones con timestampAprox inválido", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({
-            ...validoBase,
-            intervenciones: [
-              {
-                ...intervencionBase,
-                timestampAprox: "12:99",
-              },
-            ],
-          }),
-        ),
-      ).toBeNull();
-    });
-
-    it("acepta flagsRiesgo completos", () => {
-      const result = parseDatosEstructurados(
-        JSON.stringify({
-          ...validoBase,
-          flagsRiesgo: {
-            ideacionSuicida: true,
-            autolesion: false,
-            violenciaTerceros: false,
-            sintomasPsicoticos: false,
-            crisisPanico: true,
-            detalle: "Refiere ideas de muerte sin plan y episodio agudo de pánico.",
-          },
-        }),
-      );
-
-      expect(result?.flagsRiesgo).toEqual({
-        ideacionSuicida: true,
-        autolesion: false,
-        violenciaTerceros: false,
-        sintomasPsicoticos: false,
-        crisisPanico: true,
-        detalle: "Refiere ideas de muerte sin plan y episodio agudo de pánico.",
-      });
-    });
-
-    it("rechaza flagsRiesgo incompletos", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({
-            ...validoBase,
-            flagsRiesgo: {
-              ideacionSuicida: false,
-              autolesion: false,
-              violenciaTerceros: false,
-              sintomasPsicoticos: false,
-              detalle: "",
-            },
-          }),
-        ),
-      ).toBeNull();
-    });
-
-    it("rechaza confianzaModelo inválida", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, confianzaModelo: "incierta" }),
-        ),
-      ).toBeNull();
-    });
-
-    it("rechaza duracionRealMin negativa", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, duracionRealMin: -1 }),
-        ),
-      ).toBeNull();
-    });
-
-    it("devuelve null si progresoPercibido no es string", () => {
-      expect(
-        parseDatosEstructurados(
-          JSON.stringify({ ...validoBase, progresoPercibido: null }),
-        ),
-      ).toBeNull();
-    });
-  });
+  // El parser de datosEstructurados es el del tablero
+  // (src/lib/sesion-clinica/schema.ts) y se prueba en su propio test.
 
   describe("esNotaCompleta", () => {
     const completa = {

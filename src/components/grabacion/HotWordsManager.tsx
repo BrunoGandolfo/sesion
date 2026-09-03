@@ -67,6 +67,19 @@ function infoCategoria(cat: Categoria): CategoriaInfo {
   return CATEGORIAS.find((c) => c.value === cat) ?? CATEGORIAS[3];
 }
 
+async function cargarHotWords(
+  scope: Scope,
+  pacienteId: string | undefined,
+  signal: AbortSignal,
+): Promise<HotWord[]> {
+  const params = new URLSearchParams({ scope });
+  if (pacienteId) params.set("pacienteId", pacienteId);
+  const res = await fetch(`/api/hot-words?${params.toString()}`, { signal });
+  if (!res.ok) throw new Error("No se pudo cargar el vocabulario.");
+  const json = (await res.json()) as { data: HotWord[] };
+  return json.data;
+}
+
 function tituloScope(scope: Scope, pacienteNombre?: string): string {
   if (scope === "global") return "Vocabulario global";
   if (scope === "profesional") return "Vocabulario propio";
@@ -133,27 +146,33 @@ export function HotWordsManager({
   const [bulkError, setBulkError] = React.useState<string | null>(null);
 
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null);
+  const [reloadKey, setReloadKey] = React.useState(0);
 
-  const cargar = React.useCallback(async () => {
+  // No resetea loading/loadError acá: es el estado inicial, y el reintento lo
+  // hace en su propio handler.
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    cargarHotWords(scope, pacienteId, controller.signal)
+      .then((data) => {
+        setItems(data);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLoadError(true);
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [scope, pacienteId, reloadKey]);
+
+  const reintentarCarga = () => {
     setLoading(true);
     setLoadError(false);
-    try {
-      const params = new URLSearchParams({ scope });
-      if (pacienteId) params.set("pacienteId", pacienteId);
-      const res = await fetch(`/api/hot-words?${params.toString()}`);
-      if (!res.ok) throw new Error("No se pudo cargar el vocabulario.");
-      const json = (await res.json()) as { data: HotWord[] };
-      setItems(json.data);
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [scope, pacienteId]);
-
-  React.useEffect(() => {
-    void cargar();
-  }, [cargar]);
+    setReloadKey((k) => k + 1);
+  };
 
   React.useEffect(() => {
     if (confirmDelete === null) return;
@@ -373,7 +392,7 @@ export function HotWordsManager({
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => void cargar()}
+              onClick={reintentarCarga}
             >
               Reintentar
             </Button>

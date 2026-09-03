@@ -151,9 +151,9 @@ export function TurnoDetailSheet({
   const turnoId = turno?.id;
   const turnoEstado = turno?.estado;
 
+  // No se resetea `sesionActiva` acá: el padre monta este sheet con
+  // key={detalleId}, así que cada turno arranca con el estado inicial (false).
   React.useEffect(() => {
-    setSesionActiva(false);
-
     if (!turnoId) return;
     if (turnoEstado !== "programado" && turnoEstado !== "realizado") return;
 

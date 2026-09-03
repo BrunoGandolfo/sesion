@@ -11,9 +11,10 @@ import {
   Textarea,
 } from "@/components/ui";
 import {
+  buildSmsMessage,
   contarLongitudSms,
   TEMPLATE_SMS_SUGERIDO,
-} from "@/lib/recordatorios-sms";
+} from "@/lib/sms-texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 const PLACEHOLDERS = [
@@ -29,6 +30,9 @@ const PLACEHOLDERS = [
 // Mismo texto que TEMPLATE_SMS_SUGERIDO; la línea final de contacto es
 // obligatoria (el cron la agrega si la usuaria la borra).
 const DEFAULT_TEMPLATE = TEMPLATE_SMS_SUGERIDO;
+
+// Datos de ejemplo de la previsualización: martes 21 de abril, 10:00.
+const FECHA_PREVIEW = new Date(2026, 3, 21, 10, 0);
 
 type ConfigField =
   | "nombreProfesional"
@@ -337,16 +341,18 @@ export function ConfigView() {
     });
   };
 
-  const preview = React.useMemo(() => {
-    return form.templateRecordatorio
-      .replaceAll("{{nombre}}", "Lucía")
-      .replaceAll("{{apellido}}", "Fernández")
-      .replaceAll("{{fecha}}", "martes 21 de abril")
-      .replaceAll("{{hora}}", "10:00")
-      .replaceAll("{{direccion}}", form.direccion)
-      .replaceAll("{{profesional}}", form.nombreProfesional)
-      .replaceAll("{{telefonoConsultorio}}", form.whatsappOrigen);
-  }, [form]);
+  const preview = React.useMemo(
+    () =>
+      buildSmsMessage(form.templateRecordatorio, {
+        nombre: "Lucía",
+        apellido: "Fernández",
+        fecha: FECHA_PREVIEW,
+        direccion: form.direccion,
+        profesional: form.nombreProfesional,
+        telefonoConsultorio: form.whatsappOrigen,
+      }),
+    [form],
+  );
 
   const longitudSms = React.useMemo(
     () => contarLongitudSms(preview),

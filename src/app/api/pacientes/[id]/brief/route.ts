@@ -9,10 +9,12 @@
 //   - proximoTurno: próximo turno programado.
 
 import { db } from "@/lib/db";
+import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
 import { normalizarRiesgo } from "@/types/domain";
-import type { DatosEstructurados, NivelRiesgo } from "@/types/domain";
+import type { NivelRiesgo } from "@/types/domain";
 
 import { getOrganizationId } from "../../../_lib/auth";
+import { requirePaciente } from "../../../_lib/pacientes";
 import { ApiError, errorResponse, ok } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
@@ -50,22 +52,8 @@ interface RiesgoHistorico {
   detalle?: string;
 }
 
-// La extensión de cifrado descifra datosEstructuradosEncrypted a objeto, pero
-// filas legacy pueden traer el string JSON crudo. Mismo criterio que
-// documentacion/route.ts.
-function parseDatos(raw: unknown): Partial<DatosEstructurados> | null {
-  if (raw == null) return null;
-  if (typeof raw === "string") {
-    try {
-      return JSON.parse(raw) as Partial<DatosEstructurados>;
-    } catch {
-      return null;
-    }
-  }
-  if (typeof raw === "object") return raw as Partial<DatosEstructurados>;
-  return null;
-}
-
+// asArray y parseRiesgosHistoricos están repetidos en contexto-clinico/route.ts
+// y aprobadas-sin-contexto/route.ts (fuera de esta tarea); pendiente unificar.
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
@@ -123,7 +111,9 @@ async function cargarUltimaSesion(
 
   if (!sesion) return null;
 
-  const datos = parseDatos(sesion.datosEstructurados as unknown);
+  // Parseo del tablero: valida el shape; una fila corrupta da null y el brief
+  // se compone vacío en vez de fallar.
+  const datos = parseDatosEstructurados(sesion.datosEstructurados);
   const flagsActivos = FLAG_KEYS.filter(
     (key) => datos?.flagsRiesgo?.[key] === true,
   );
@@ -132,19 +122,10 @@ async function cargarUltimaSesion(
   return {
     fecha: sesion.turno.fecha.toISOString(),
     pendienteAprobacion: sesion.estado === "revision",
-    resumenSesion:
-      typeof datos?.resumenSesion === "string" ? datos.resumenSesion : null,
-    focoProximaSesion:
-      typeof datos?.focoProximaSesion === "string"
-        ? datos.focoProximaSesion
-        : null,
-    progresoPercibido:
-      typeof datos?.progresoPercibido === "string"
-        ? datos.progresoPercibido
-        : null,
-    temas: Array.isArray(datos?.temas)
-      ? datos.temas.filter((t): t is string => typeof t === "string")
-      : [],
+    resumenSesion: datos?.resumenSesion ?? null,
+    focoProximaSesion: datos?.focoProximaSesion ?? null,
+    progresoPercibido: datos?.progresoPercibido ?? null,
+    temas: datos?.temas ?? [],
     riesgo: {
       flagsActivos: [...flagsActivos],
       nivel: riesgo.nivel,
@@ -211,13 +192,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const organizationId = await getOrganizationId();
     const { id: pacienteId } = await params;
 
-    const paciente = await db.paciente.findFirst({
-      where: { id: pacienteId, organizationId },
-      select: { id: true },
-    });
-    if (!paciente) {
-      throw new ApiError("Paciente no encontrado", 404);
-    }
+    await requirePaciente(db, pacienteId, organizationId);
 
     const [ultimaSesion, hiloLongitudinal, proximoTurno] = await Promise.all([
       cargarUltimaSesion(organizationId, pacienteId),

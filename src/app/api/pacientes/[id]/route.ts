@@ -1,11 +1,11 @@
-import { z } from "zod";
 import { db } from "@/lib/db";
-import { normalizePhone } from "@/lib/phone";
 import type { Paciente } from "@/types/domain";
 
 import { getOrganizationId } from "../../_lib/auth";
 import { toPacienteConDeuda, toTurno } from "../../_lib/domain";
+import { requirePaciente } from "../../_lib/pacientes";
 import { ApiError, errorResponse, ok, validationError } from "../../_lib/responses";
+import { pacienteUpdateSchema } from "../../_lib/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,21 +13,6 @@ export const dynamic = "force-dynamic";
 type RouteParams = {
   params: Promise<{ id: string }>;
 };
-
-const optionalEmailSchema = z.preprocess(
-  (value) => (value === "" ? null : value),
-  z.string().email().nullable().optional(),
-);
-
-const updatePacienteSchema = z.object({
-  nombre: z.string().trim().min(1, "Falta el nombre").optional(),
-  apellido: z.string().trim().min(1, "Falta el apellido").optional(),
-  telefono: z.string().trim().min(1, "Falta el teléfono").optional(),
-  email: optionalEmailSchema,
-  tarifa: z.number().int().min(0, "La tarifa no puede ser negativa").optional(),
-  notas: z.string().trim().nullable().optional(),
-  activo: z.boolean().optional(),
-});
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
@@ -61,43 +46,19 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const organizationId = await getOrganizationId();
     const { id } = await params;
     const body = await request.json();
-    const parsed = updatePacienteSchema.safeParse(body);
+    const parsed = pacienteUpdateSchema.safeParse(body);
 
     if (!parsed.success) {
       return validationError(parsed.error);
     }
 
-    const existing = await db.paciente.findFirst({
-      where: { id, organizationId },
-      select: { id: true },
-    });
+    await requirePaciente(db, id, organizationId);
 
-    if (!existing) {
-      throw new ApiError("Paciente no encontrado", 404);
-    }
-
-    let telefonoNormalizado: string | undefined;
-    if (parsed.data.telefono !== undefined) {
-      try {
-        telefonoNormalizado = normalizePhone(parsed.data.telefono);
-      } catch (err) {
-        throw new ApiError(
-          err instanceof Error
-            ? err.message
-            : "El teléfono no tiene un formato válido. Usá el formato +598 99 123 456",
-          400,
-        );
-      }
-    }
-
+    // Los campos ausentes quedan undefined y Prisma no los toca; telefono, si
+    // vino, ya está normalizado a E.164 por el esquema.
     const paciente = await db.paciente.update({
       where: { id },
-      data: {
-        ...parsed.data,
-        telefono: telefonoNormalizado ?? parsed.data.telefono,
-        email: parsed.data.email === undefined ? undefined : parsed.data.email,
-        notas: parsed.data.notas === undefined ? undefined : parsed.data.notas,
-      },
+      data: parsed.data,
     });
 
     return ok<Paciente>(paciente);

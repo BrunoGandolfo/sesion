@@ -90,4 +90,61 @@ describe("calcularDeudores", () => {
     calcularDeudores(turnos);
     expect(turnos).toEqual(copia);
   });
+
+  it("sin fecha en los turnos no agrega diasAtraso", () => {
+    const deudores = calcularDeudores(turnos);
+    expect(deudores.every((d) => !("diasAtraso" in d))).toBe(true);
+  });
+});
+
+describe("calcularDeudores — diasAtraso", () => {
+  const ana = { nombre: "Ana", apellido: "Pérez" };
+  const luis = { nombre: "Luis", apellido: "García" };
+  // Mediodía para que el redondeo a inicio de día no dependa del reloj.
+  const hoy = new Date(2026, 8, 3, 12, 0, 0);
+  const diasAntes = (n: number) =>
+    new Date(2026, 8, 3 - n, 15, 30, 0);
+
+  const turnos: TurnoParaDeuda[] = [
+    // Ana: impagas hace 10 y hace 3 días → cuenta la más antigua (10)
+    { pacienteId: "ana", paciente: ana, estado: "realizado", pagoEstado: "pendiente", tarifaCobrada: 2000, fecha: diasAntes(3) },
+    { pacienteId: "ana", paciente: ana, estado: "realizado", pagoEstado: "pendiente", tarifaCobrada: 2000, fecha: diasAntes(10) },
+    // Ana: una pagada más vieja aún, no cuenta para el atraso
+    { pacienteId: "ana", paciente: ana, estado: "realizado", pagoEstado: "pagado", tarifaCobrada: 2000, fecha: diasAntes(40) },
+    // Luis: impaga de hoy → 0 días
+    { pacienteId: "luis", paciente: luis, estado: "realizado", pagoEstado: "pendiente", tarifaCobrada: 5000, fecha: diasAntes(0) },
+  ];
+
+  it("toma el impago más antiguo del paciente", () => {
+    const deAna = calcularDeudores(turnos, hoy).find((d) => d.pacienteId === "ana");
+    expect(deAna?.diasAtraso).toBe(10);
+  });
+
+  it("un impago de hoy tiene 0 días de atraso", () => {
+    const deLuis = calcularDeudores(turnos, hoy).find((d) => d.pacienteId === "luis");
+    expect(deLuis?.diasAtraso).toBe(0);
+  });
+
+  it("ignora la fecha de los turnos pagados", () => {
+    const deAna = calcularDeudores(turnos, hoy).find((d) => d.pacienteId === "ana");
+    expect(deAna?.diasAtraso).not.toBe(40);
+  });
+
+  it("cuenta días enteros sobre el inicio del día, no fracciones", () => {
+    const ayerTarde = new Date(2026, 8, 2, 23, 0, 0);
+    const hoyTemprano = new Date(2026, 8, 3, 1, 0, 0);
+    const [deudor] = calcularDeudores(
+      [{ pacienteId: "x", paciente: ana, estado: "realizado", pagoEstado: "pendiente", tarifaCobrada: 1, fecha: ayerTarde }],
+      hoyTemprano,
+    );
+    expect(deudor.diasAtraso).toBe(1);
+  });
+
+  it("una fecha futura da 0, nunca negativo", () => {
+    const [deudor] = calcularDeudores(
+      [{ pacienteId: "x", paciente: ana, estado: "realizado", pagoEstado: "pendiente", tarifaCobrada: 1, fecha: diasAntes(-5) }],
+      hoy,
+    );
+    expect(deudor.diasAtraso).toBe(0);
+  });
 });

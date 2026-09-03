@@ -254,7 +254,7 @@ function normalizarIntervenciones(
         id: `intervencion-${index}-${intervencion.tipo}-${intervencion.timestampAprox}`,
         tipo: normalizarTexto(intervencion.tipo),
         descripcion: intervencion.descripcion,
-        timestamp: intervencion.timestampAprox,
+        timestamp: intervencion.timestampAprox ?? null,
       };
     })
     .sort(

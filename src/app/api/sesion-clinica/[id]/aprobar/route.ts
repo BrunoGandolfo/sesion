@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { notaSoapSchema } from "@/lib/sesion-clinica/schema";
 import { normalizarRiesgo } from "@/types/domain";
 
 import { borrarAudioBestEffort } from "../../../_lib/audio";
@@ -14,7 +15,9 @@ import {
 import {
   assertTransicionValida,
   parseDatosEstructuradosRaw,
+  SESION_SELECT,
   sinClaveTemporal,
+  toSesionClinicaResponse,
 } from "../../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
@@ -24,46 +27,20 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-const notaSchema = z.object({
-  subjetivo: z.string(),
-  objetivo: z.string(),
-  analisis: z.string(),
-  plan: z.string(),
-});
-
 const aprobarSchema = z.object({
-  notaEditada: notaSchema.optional(),
+  // El cliente (NotaClinicaView) lo manda además de ponerlo en la URL. Se
+  // acepta para no rechazar el body, pero la sesión se toma SIEMPRE de la
+  // ruta: el valor del body se ignora.
+  sesionClinicaId: z.string().optional(),
+  notaEditada: notaSoapSchema.optional(),
   notasEdicion: z.string().optional(),
   // Confirmación explícita de que la terapeuta revisó la señal de riesgo
   // graduada (riesgoDetectado nivel alto/moderado). Sin ella no se aprueba.
   confirmoRiesgo: z.boolean().optional(),
 });
 
-// Select de la fila que se devuelve tras aprobar. NUNCA transcripcion.
-const SESION_SELECT = {
-  id: true,
-  turnoId: true,
-  estado: true,
-  duracionAudioSeg: true,
-  audioR2Key: true,
-  audioBorradoEn: true,
-  notaSubjetivo: true,
-  notaObjetivo: true,
-  notaAnalisis: true,
-  notaPlan: true,
-  datosEstructurados: true,
-  modeloASR: true,
-  modeloLLM: true,
-  procesadoEn: true,
-  aprobadoEn: true,
-  error: true,
-  intentos: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
-
 // La aprobación cierra el ciclo de vida del audio (grabación → aprobación):
-// la clave temporal de cifrado que upload guardó en
+// la clave temporal de cifrado que upload-url guardó en
 // datosEstructurados._audioCifradoTemporal no debe sobrevivir al audio.
 // Devuelve el JSON re-serializado SIN la clave, o undefined si no hay nada
 // que limpiar (datos ausentes, corruptos o ya sin clave) — undefined evita
@@ -73,15 +50,16 @@ function quitarClaveTemporal(
 ): string | undefined {
   if (!datos) return undefined;
   if (!("_audioCifradoTemporal" in datos)) return undefined;
-  const { _audioCifradoTemporal: _clave, ...resto } = datos;
-  return JSON.stringify(resto);
+  return JSON.stringify(
+    sinClaveTemporal({ datosEstructurados: datos }).datosEstructurados,
+  );
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
     const parsed = aprobarSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -200,7 +178,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       },
     });
 
-    return ok(sinClaveTemporal(sesion));
+    return ok(toSesionClinicaResponse(sesion));
   } catch (error) {
     return errorResponse(error);
   }

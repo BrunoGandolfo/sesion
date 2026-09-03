@@ -7,22 +7,16 @@ import {
   smsConfigurado,
 } from "@/lib/recordatorios-sms";
 
+import { requireCron } from "../../_lib/auth";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_INTENTOS = 3;
 
-function isAuthorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("authorization");
-  return header === `Bearer ${secret}`;
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const denegado = requireCron(request);
+  if (denegado) return denegado;
 
   // Sin canal configurado no se toca ningún recordatorio: quedan pendientes
   // hasta que exista TWILIO_SMS_FROM + credenciales.

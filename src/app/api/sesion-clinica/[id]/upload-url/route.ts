@@ -17,6 +17,7 @@
 
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { generarUrlSubida, r2Configurado } from "@/lib/r2";
 import { keyAudioEsperada } from "@/lib/sesion-clinica-utils";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
@@ -61,7 +62,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const body = await request.json().catch(() => null);
+    const body: unknown = await request.json().catch(() => null);
     const parsed = bodySchema.safeParse(body);
 
     if (!parsed.success) {
@@ -92,8 +93,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     assertTransicionValida(sesion.estado, "subiendo");
 
-    const r2 = await import("@/lib/r2");
-    if (!r2.r2Configurado()) {
+    if (!r2Configurado()) {
       // Sin R2 no hay dónde subir: no existe más el modo "dev-no-r2".
       throw new ApiError(
         "El almacenamiento de audio (R2) no está configurado en este entorno",
@@ -105,7 +105,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // La URL se genera ANTES de tocar la fila: si R2 falla, la sesión sigue
     // en grabando y el cliente puede reintentar sin PATCH.
-    const { url, expiraEn } = await r2.generarUrlSubida(key, {
+    const { url, expiraEn } = await generarUrlSubida(key, {
       contentType: parsed.data.mime,
       contentLength: parsed.data.tamanoBytes,
       expiraEnSegundos: EXPIRA_EN_SEGUNDOS,

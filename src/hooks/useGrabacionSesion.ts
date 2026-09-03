@@ -3,14 +3,14 @@
 import * as React from "react";
 
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
-import { useSesionClinicaPolling } from "@/hooks/useSesionClinicaPolling";
-import type {
-  DatosEstructurados,
-  EstadoProcesamiento,
-  NotaSOAP,
-  SesionClinicaResponse,
-  Turno,
-} from "@/types/domain";
+import {
+  ESTADOS_ACTIVOS,
+  normalizarSesionClinica,
+  useSesionClinicaPolling,
+  type SesionClinicaApi,
+  type SesionClinicaApiBase,
+} from "@/hooks/useSesionClinicaPolling";
+import type { SesionClinicaResponse, Turno } from "@/types/domain";
 
 export interface DatosGrabacion {
   audioBlob: Blob;
@@ -22,6 +22,8 @@ export interface DatosGrabacion {
 interface UseGrabacionSesionOptions {
   turno: Turno | null;
   onTurnoActualizado?: () => void;
+  /** Se invoca con el mismo mensaje cada vez que el hook setea `error`. */
+  onError?: (mensaje: string) => void;
 }
 
 interface UseGrabacionSesionResult {
@@ -39,66 +41,6 @@ interface UseGrabacionSesionResult {
   reintentarSubida: () => Promise<void>;
   reintentar: () => Promise<void>;
   refrescar: () => Promise<void>;
-}
-
-type RawSesionClinica = {
-  id: string;
-  turnoId: string;
-  estado: string;
-  duracionAudioSeg: number | null;
-  notaSubjetivo: string | null;
-  notaObjetivo: string | null;
-  notaAnalisis: string | null;
-  notaPlan: string | null;
-  datosEstructurados: DatosEstructurados | string | null;
-  modeloASR: string | null;
-  modeloLLM: string | null;
-  procesadoEn: string | null;
-  aprobadoEn: string | null;
-  error: string | null;
-};
-
-function parseDatosEstructurados(
-  value: DatosEstructurados | string | null,
-): DatosEstructurados | null {
-  if (value == null) return null;
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value) as DatosEstructurados;
-    } catch {
-      return null;
-    }
-  }
-  return value;
-}
-
-function toSesionClinicaResponse(raw: RawSesionClinica): SesionClinicaResponse {
-  const nota: NotaSOAP | null =
-    raw.notaSubjetivo != null &&
-    raw.notaObjetivo != null &&
-    raw.notaAnalisis != null &&
-    raw.notaPlan != null
-      ? {
-          subjetivo: raw.notaSubjetivo,
-          objetivo: raw.notaObjetivo,
-          analisis: raw.notaAnalisis,
-          plan: raw.notaPlan,
-        }
-      : null;
-
-  return {
-    id: raw.id,
-    turnoId: raw.turnoId,
-    estado: raw.estado as EstadoProcesamiento,
-    duracionAudioSeg: raw.duracionAudioSeg,
-    nota,
-    datosEstructurados: parseDatosEstructurados(raw.datosEstructurados),
-    modeloASR: raw.modeloASR,
-    modeloLLM: raw.modeloLLM,
-    procesadoEn: raw.procesadoEn,
-    aprobadoEn: raw.aprobadoEn,
-    error: raw.error,
-  };
 }
 
 async function parseError(res: Response): Promise<string> {
@@ -185,7 +127,7 @@ export async function subirAudioCifrado(
   sesionClinicaId: string,
   datos: DatosGrabacion,
   onProgreso?: (porcentaje: number) => void,
-): Promise<RawSesionClinica> {
+): Promise<SesionClinicaApiBase> {
   const mime = datos.audioBlob.type || "application/octet-stream";
 
   // 1. URL prefirmada (guarda clave + IV en el servidor).
@@ -228,7 +170,7 @@ export async function subirAudioCifrado(
       resConfirmar.status,
     );
   }
-  const body = (await resConfirmar.json()) as { data: RawSesionClinica };
+  const body = (await resConfirmar.json()) as { data: SesionClinicaApiBase };
   return body.data;
 }
 
@@ -245,7 +187,9 @@ async function volverAGrabando(sesionClinicaId: string): Promise<void> {
       cache: "no-store",
     });
     if (!res.ok) return;
-    const body = (await res.json()) as { data: { estado?: string } | null };
+    const body = (await res.json()) as {
+      data: Pick<SesionClinicaApi, "estado"> | null;
+    };
     if (body.data?.estado !== "subiendo") return;
     await fetch(`/api/sesion-clinica/${sesionClinicaId}`, {
       method: "PATCH",
@@ -257,13 +201,20 @@ async function volverAGrabando(sesionClinicaId: string): Promise<void> {
   }
 }
 
+// Sesión atada al turno que la cargó: si cambia el turno, la sesión anterior
+// deja de ser visible (y `loading` vuelve a true) sin resetear estado dentro
+// de un efecto.
+type CargaSesion = {
+  turnoId: string;
+  sesion: SesionClinicaResponse | null;
+};
+
 export function useGrabacionSesion({
   turno,
   onTurnoActualizado,
+  onError,
 }: UseGrabacionSesionOptions): UseGrabacionSesionResult {
-  const [sesionClinica, setSesionClinica] =
-    React.useState<SesionClinicaResponse | null>(null);
-  const [loading, setLoading] = React.useState<boolean>(Boolean(turno));
+  const [carga, setCarga] = React.useState<CargaSesion | null>(null);
   const [submitting, setSubmitting] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [subidaPendiente, setSubidaPendiente] = React.useState<boolean>(false);
@@ -282,34 +233,52 @@ export function useGrabacionSesion({
   React.useEffect(() => {
     onTurnoActualizadoRef.current = onTurnoActualizado;
   }, [onTurnoActualizado]);
+  const onErrorRef = React.useRef(onError);
+  React.useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  // Único punto que setea `error`: el estado sigue expuesto para los
+  // consumidores existentes y, además, se avisa al callback (para toasts).
+  const reportarError = React.useCallback((mensaje: string) => {
+    setError(mensaje);
+    onErrorRef.current?.(mensaje);
+  }, []);
+
+  const sesionClinica =
+    carga && carga.turnoId === turnoId ? carga.sesion : null;
+  const loading =
+    turnoId !== null && (carga === null || carga.turnoId !== turnoId);
+
+  const guardarSesion = React.useCallback(
+    (sesion: SesionClinicaResponse | null) => {
+      if (!turnoId) return;
+      setCarga({ turnoId, sesion });
+    },
+    [turnoId],
+  );
 
   React.useEffect(() => {
-    if (!turnoId) {
-      setSesionClinica(null);
-      setLoading(false);
-      return;
-    }
+    if (!turnoId) return;
     let cancelado = false;
-    setLoading(true);
     (async () => {
+      let sesion: SesionClinicaResponse | null = null;
       try {
         const res = await fetch(`/api/sesion-clinica?turnoId=${turnoId}`, {
           cache: "no-store",
         });
         if (cancelado) return;
         if (res.ok) {
-          const body = (await res.json()) as { data: RawSesionClinica | null };
-          setSesionClinica(
-            body.data ? toSesionClinicaResponse(body.data) : null,
-          );
-        } else {
-          setSesionClinica(null);
+          const body = (await res.json()) as {
+            data: SesionClinicaApiBase | null;
+          };
+          sesion = body.data ? normalizarSesionClinica(body.data) : null;
         }
       } catch {
-        if (!cancelado) setSesionClinica(null);
-      } finally {
-        if (!cancelado) setLoading(false);
+        sesion = null;
       }
+      if (cancelado) return;
+      setCarga({ turnoId, sesion });
     })();
     return () => {
       cancelado = true;
@@ -317,19 +286,13 @@ export function useGrabacionSesion({
   }, [turnoId]);
 
   const enProcesamiento =
-    sesionClinica !== null &&
-    (sesionClinica.estado === "grabando" ||
-      sesionClinica.estado === "subiendo" ||
-      sesionClinica.estado === "procesando");
+    sesionClinica !== null && ESTADOS_ACTIVOS.has(sesionClinica.estado);
 
-  const { data: polled } = useSesionClinicaPolling({
+  useSesionClinicaPolling({
     sesionClinicaId: enProcesamiento ? (sesionClinica?.id ?? null) : null,
     enabled: enProcesamiento,
+    onSesion: ({ sesion }) => guardarSesion(sesion),
   });
-
-  React.useEffect(() => {
-    if (polled) setSesionClinica(polled);
-  }, [polled]);
 
   const iniciar = React.useCallback(async () => {
     if (!turnoId) return;
@@ -342,8 +305,10 @@ export function useGrabacionSesion({
         body: JSON.stringify({ turnoId }),
       });
       if (!createRes.ok) throw new Error(await parseError(createRes));
-      const createBody = (await createRes.json()) as { data: RawSesionClinica };
-      setSesionClinica(toSesionClinicaResponse(createBody.data));
+      const createBody = (await createRes.json()) as {
+        data: SesionClinicaApiBase;
+      };
+      guardarSesion(normalizarSesionClinica(createBody.data));
 
       const patchRes = await fetch(
         `/api/sesion-clinica/${createBody.data.id}`,
@@ -354,10 +319,12 @@ export function useGrabacionSesion({
         },
       );
       if (!patchRes.ok) throw new Error(await parseError(patchRes));
-      const patchBody = (await patchRes.json()) as { data: RawSesionClinica };
-      setSesionClinica(toSesionClinicaResponse(patchBody.data));
+      const patchBody = (await patchRes.json()) as {
+        data: SesionClinicaApiBase;
+      };
+      guardarSesion(normalizarSesionClinica(patchBody.data));
     } catch (err) {
-      setError(
+      reportarError(
         err instanceof Error
           ? err.message
           : "No se pudo iniciar la grabación",
@@ -365,7 +332,7 @@ export function useGrabacionSesion({
     } finally {
       setSubmitting(false);
     }
-  }, [turnoId]);
+  }, [turnoId, guardarSesion, reportarError]);
 
   const completar = React.useCallback(
     async (datos: DatosGrabacion) => {
@@ -381,7 +348,7 @@ export function useGrabacionSesion({
         const actualizada = await subirAudioCifrado(sesionId, datos, (p) =>
           setProgresoSubida(p),
         );
-        setSesionClinica(toSesionClinicaResponse(actualizada));
+        guardarSesion(normalizarSesionClinica(actualizada));
 
         // Confirmación OK: recién ahora el backup incremental en IndexedDB
         // deja de hacer falta (GrabadorSesion lo persiste con el turnoId
@@ -408,7 +375,7 @@ export function useGrabacionSesion({
         // paso 1 con el mismo blob ("Reintentar subida").
         const mensaje =
           err instanceof Error ? err.message : "Error al subir el audio";
-        setError(mensaje);
+        reportarError(mensaje);
         setSubidaPendiente(true);
         const paso = err instanceof ErrorSubida ? err.paso : "put";
         if (paso !== "url") {
@@ -419,19 +386,19 @@ export function useGrabacionSesion({
         setSubmitting(false);
       }
     },
-    [sesionClinica, turnoId, turnoEstado],
+    [sesionClinica, turnoId, turnoEstado, guardarSesion, reportarError],
   );
 
   const reintentarSubida = React.useCallback(async () => {
     const datos = ultimoAudioRef.current;
     if (!datos) {
-      setError(
+      reportarError(
         "No queda un audio cifrado en memoria para reenviar. Si la grabación quedó guardada en el dispositivo, el grabador la ofrece al volver a entrar.",
       );
       return;
     }
     await completar(datos);
-  }, [completar]);
+  }, [completar, reportarError]);
 
   const reintentar = React.useCallback(async () => {
     if (!sesionClinica) return;
@@ -444,16 +411,16 @@ export function useGrabacionSesion({
         body: JSON.stringify({ estado: "procesando" }),
       });
       if (!res.ok) throw new Error(await parseError(res));
-      const body = (await res.json()) as { data: RawSesionClinica };
-      setSesionClinica(toSesionClinicaResponse(body.data));
+      const body = (await res.json()) as { data: SesionClinicaApiBase };
+      guardarSesion(normalizarSesionClinica(body.data));
     } catch (err) {
-      setError(
+      reportarError(
         err instanceof Error ? err.message : "No se pudo reintentar",
       );
     } finally {
       setSubmitting(false);
     }
-  }, [sesionClinica]);
+  }, [sesionClinica, guardarSesion, reportarError]);
 
   const refrescar = React.useCallback(async () => {
     if (!sesionClinica) return;
@@ -462,13 +429,13 @@ export function useGrabacionSesion({
         cache: "no-store",
       });
       if (!res.ok) return;
-      const body = (await res.json()) as { data: RawSesionClinica };
-      setSesionClinica(toSesionClinicaResponse(body.data));
+      const body = (await res.json()) as { data: SesionClinicaApiBase };
+      guardarSesion(normalizarSesionClinica(body.data));
       onTurnoActualizadoRef.current?.();
     } catch {
       // tragar
     }
-  }, [sesionClinica]);
+  }, [sesionClinica, guardarSesion]);
 
   return {
     sesionClinica,

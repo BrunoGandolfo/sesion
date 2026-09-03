@@ -13,29 +13,54 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("incluye el nombre del paciente", () => {
-    const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("María González");
+  it("la versión vigente del texto es la 1.0", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("1.0");
   });
 
-  it("incluye el nombre del profesional", () => {
-    const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("Lic. Ana Pérez");
-  });
+  // Texto legal completo: cualquier cambio de redacción tiene que ser
+  // deliberado (y, en general, subir CONSENTIMIENTO_VERSION).
+  it("genera el texto legal completo con los datos interpolados", () => {
+    expect(generarTextoConsentimiento(baseParams)).toMatchInlineSnapshot(`
+      "Consentimiento informado para grabación de sesiones
+      Versión 1.0
 
-  it("incluye la dirección del consultorio", () => {
-    const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("Av. 18 de Julio 1234, Montevideo");
-  });
+      Hola María González.
 
-  it("incluye la versión del consentimiento", () => {
-    const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain(CONSENTIMIENTO_VERSION);
-  });
+      Antes de empezar, queremos contarte cómo funciona la grabación de las sesiones y pedirte que la autorices por escrito. Es un trámite simple y querés tomarte el tiempo de leerlo: se trata de tus datos y de tu intimidad.
 
-  it("menciona la Ley 18.331", () => {
-    const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("18.331");
+      ¿Qué se graba?
+      Se graba el audio de tu sesión de psicoterapia con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo. No se graba video.
+
+      ¿Para qué se graba?
+      El audio se usa para generar, con ayuda de inteligencia artificial, una nota clínica escrita que Lic. Ana Pérez usa para documentar la sesión en tu historia clínica. Esto le permite estar más presente durante la sesión y dedicarle menos tiempo a escribir después.
+
+      ¿Quién puede escuchar el audio?
+      Solamente Lic. Ana Pérez, que es la profesional que te atiende. Nadie más tiene acceso al audio de tus sesiones.
+
+      ¿Dónde se procesa el audio?
+      El audio se procesa en un servidor privado al que solo accede Lic. Ana Pérez. No se sube a servicios en internet de uso general ni queda guardado en servidores de empresas externas.
+
+      ¿Cuánto tiempo se guarda el audio?
+      El audio se borra automáticamente apenas se genera la nota clínica. En la práctica esto pasa pocos minutos después de que termina la sesión. No queda una copia.
+
+      ¿Qué queda guardado entonces?
+      Solo queda la nota clínica escrita, incorporada a tu historia clínica, igual que las notas que Lic. Ana Pérez escribiría a mano. El audio no queda.
+
+      ¿Podés cambiar de opinión?
+      Sí, en cualquier momento. Podés revocar esta autorización cuando quieras, simplemente avisándole a Lic. Ana Pérez. A partir de ese momento las sesiones siguientes no se graban. Esto no afecta para nada la continuidad de tu tratamiento ni la relación con tu profesional.
+
+      ¿Es obligatorio aceptar?
+      No. La grabación es totalmente opcional. Si preferís que no se grabe, la sesión sigue de manera normal y Lic. Ana Pérez toma notas como siempre. No hay ninguna consecuencia por decir que no.
+
+      Marco legal
+      Esta autorización se enmarca en la Ley 18.331 de Protección de Datos Personales de la República Oriental del Uruguay, que exige que el tratamiento de datos sensibles —como los datos de salud— se haga con tu consentimiento previo, libre, expreso e informado.
+
+      Al firmar, declaro que:
+      - Leí y entendí esta información
+      - Autorizo la grabación de mis sesiones con Lic. Ana Pérez
+      - Sé que puedo revocar esta autorización cuando quiera
+      "
+    `);
   });
 });
 

@@ -13,6 +13,9 @@ import type {
   Turno,
   TurnoConPaciente,
 } from "@/types/domain";
+// Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
+// base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
+import type { db } from "@/lib/db";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -173,6 +176,9 @@ export interface TurnoParaDeuda {
   pagoEstado: string;
   tarifaCobrada: number;
   duracionMin?: number;
+  /** Fecha del turno. Si al menos un turno impago la trae, el deudor sale
+   *  con `diasAtraso` (días desde el impago más antiguo). */
+  fecha?: Date;
 }
 
 export interface DeudorAgrupado {
@@ -182,6 +188,8 @@ export interface DeudorAgrupado {
   sesionesImpagas: number;
   montoTotal: number;
   minutosTotales: number;
+  /** Solo presente cuando la entrada trae `fecha` (ver TurnoParaDeuda). */
+  diasAtraso?: number;
 }
 
 /**
@@ -189,9 +197,17 @@ export interface DeudorAgrupado {
  * monto y minutos por paciente, ordenado por monto descendente (a igual
  * monto, orden de aparición). Sin tope: el tope lo aplica el consumidor.
  * Un paciente sin turnos impagos no aparece.
+ *
+ * Si los turnos traen `fecha`, cada deudor sale además con `diasAtraso`,
+ * calculado con diasDesde() sobre el impago más antiguo respecto de `ahora`
+ * (default: hoy). Sin `fecha` la salida es idéntica a la de antes.
  */
-export function calcularDeudores(turnos: TurnoParaDeuda[]): DeudorAgrupado[] {
+export function calcularDeudores(
+  turnos: TurnoParaDeuda[],
+  ahora: Date = new Date(),
+): DeudorAgrupado[] {
   const porPaciente = new Map<string, DeudorAgrupado>();
+  const impagoMasAntiguo = new Map<string, Date>();
 
   for (const turno of turnos) {
     if (!esDeudaPendiente(turno)) continue;
@@ -207,7 +223,78 @@ export function calcularDeudores(turnos: TurnoParaDeuda[]): DeudorAgrupado[] {
     actual.montoTotal += turno.tarifaCobrada;
     actual.minutosTotales += turno.duracionMin ?? 0;
     porPaciente.set(turno.pacienteId, actual);
+
+    if (turno.fecha) {
+      const previa = impagoMasAntiguo.get(turno.pacienteId);
+      if (!previa || turno.fecha < previa) {
+        impagoMasAntiguo.set(turno.pacienteId, turno.fecha);
+      }
+    }
+  }
+
+  for (const [pacienteId, fecha] of impagoMasAntiguo) {
+    const deudor = porPaciente.get(pacienteId);
+    if (deudor) deudor.diasAtraso = diasDesde(fecha, ahora);
   }
 
   return [...porPaciente.values()].sort((a, b) => b.montoTotal - a.montoTotal);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Deudores — query única y forma de respuesta de /api/deudores.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Item de /api/deudores: DeudaPaciente más lo que la UI de finanzas
+ *  necesita para el recordatorio de cobro (teléfono para wa.me y minutos
+ *  impagos para "Trabajaste X horas gratis"). */
+export type DeudoresApiItem = DeudaPaciente & {
+  telefono: string;
+  minutosTotales: number;
+};
+
+/** Turno con deuda pendiente tal como lo devuelve buscarTurnosConDeuda. */
+export interface TurnoConDeuda extends TurnoParaDeuda {
+  fecha: Date;
+  duracionMin: number;
+  paciente: { nombre: string; apellido: string; telefono: string };
+}
+
+/**
+ * Query única de los turnos que son deuda pendiente de una organización
+ * (regla esDeudaPendiente aplicada en la propia consulta). La consumen
+ * /api/dashboard y /api/deudores, que después pasan el resultado por
+ * calcularDeudores y aplican cada uno su orden y su tope.
+ */
+export async function buscarTurnosConDeuda(
+  prisma: typeof db,
+  organizationId: string,
+): Promise<TurnoConDeuda[]> {
+  const turnos = await prisma.turno.findMany({
+    where: {
+      organizationId,
+      estado: "realizado",
+      pagoEstado: "pendiente",
+    },
+    select: {
+      pacienteId: true,
+      fecha: true,
+      estado: true,
+      pagoEstado: true,
+      tarifaCobrada: true,
+      duracion: true,
+      paciente: {
+        select: { nombre: true, apellido: true, telefono: true },
+      },
+    },
+  });
+
+  return turnos.map((turno) => ({
+    pacienteId: turno.pacienteId,
+    paciente: turno.paciente,
+    estado: turno.estado,
+    pagoEstado: turno.pagoEstado,
+    tarifaCobrada: turno.tarifaCobrada,
+    duracionMin: turno.duracion,
+    fecha: turno.fecha,
+  }));
 }

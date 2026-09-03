@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { estadoSesionSchema } from "@/lib/sesion-clinica/schema";
 import {
-  ESTADOS_SESION,
   esSesionHuerfana,
   esTransicionPermitidaAlCliente,
 } from "@/lib/sesion-clinica-utils";
@@ -13,7 +13,8 @@ import { ApiError, errorResponse, ok, validationError } from "../../_lib/respons
 import {
   assertTransicionValida,
   extraerClaveTemporal,
-  sinClaveTemporal,
+  SESION_SELECT,
+  toSesionClinicaResponse,
 } from "../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
@@ -26,60 +27,11 @@ type RouteParams = {
 // Solo valida el shape del body. La validez de la transición la decide
 // esTransicionPermitidaAlCliente (PATCH) o assertTransicionValida (DELETE),
 // ambas sobre la tabla única de src/lib/sesion-clinica-utils.ts.
-const estadoSchema = z.enum(
-  ESTADOS_SESION as unknown as [string, ...string[]],
-);
-
 const updateSchema = z.object({
-  estado: estadoSchema.optional(),
+  estado: estadoSesionSchema.optional(),
   duracionAudioSeg: z.number().int().nonnegative().optional(),
   audioR2Key: z.string().min(1).optional(),
 });
-
-// Select explícito de la sesión para la UI. NUNCA transcripcion: es PHI
-// que la UI no necesita y no debe viajar por esta API.
-// `notaSoapOriginal` es un campo lógico de la extensión de cifrado (sin
-// columna legacy): el tipo generado por Prisma no lo conoce, pero al vivir
-// en esta const (no en un literal inline) TS no lo marca como sobrante, y la
-// extensión lo traduce a nota_soap_original_encrypted.
-const SESION_SELECT = {
-  id: true,
-  turnoId: true,
-  estado: true,
-  duracionAudioSeg: true,
-  audioR2Key: true,
-  audioBorradoEn: true,
-  notaSubjetivo: true,
-  notaObjetivo: true,
-  notaAnalisis: true,
-  notaPlan: true,
-  notaSoapOriginal: true,
-  datosEstructurados: true,
-  modeloASR: true,
-  modeloLLM: true,
-  promptVersion: true,
-  hablanteTerapeuta: true,
-  procesadoEn: true,
-  aprobadoEn: true,
-  error: true,
-  intentos: true,
-  createdAt: true,
-  updatedAt: true,
-  turno: {
-    select: {
-      id: true,
-      fecha: true,
-      paciente: {
-        select: {
-          id: true,
-          nombre: true,
-          apellido: true,
-          telefono: true,
-        },
-      },
-    },
-  },
-} as const;
 
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
@@ -105,7 +57,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       detalle: { estado: sesion.estado },
     });
 
-    return ok(sinClaveTemporal(sesion));
+    return ok(toSesionClinicaResponse(sesion));
   } catch (error) {
     return errorResponse(error);
   }
@@ -256,7 +208,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
     const parsed = updateSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -276,15 +228,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     if (parsed.data.estado !== undefined) {
       // El PATCH solo acepta las transiciones que el navegador pide de
-      // verdad (pendiente→grabando, grabando→error, error→procesando). Las
-      // demás son válidas a nivel sistema pero tienen efectos que viven en
-      // su propia ruta (upload, callback, aprobar, DELETE); permitirlas acá
-      // sería un bypass de esos efectos.
+      // verdad (pendiente→grabando, grabando→error, subiendo→grabando,
+      // error→procesando). Las demás son válidas a nivel sistema pero tienen
+      // efectos que viven en su propia ruta (upload-url, upload-confirmar,
+      // callback, aprobar, DELETE); permitirlas acá sería un bypass.
       if (
         !esTransicionPermitidaAlCliente(existente.estado, parsed.data.estado)
       ) {
         throw new ApiError(
-          `La transición ${existente.estado} → ${parsed.data.estado} no se puede pedir por PATCH: se realiza por su ruta específica (upload, callback, aprobar o DELETE).`,
+          `La transición ${existente.estado} → ${parsed.data.estado} no se puede pedir por PATCH: se realiza por su ruta específica (upload-url, upload-confirmar, callback, aprobar o DELETE).`,
           400,
         );
       }
@@ -314,7 +266,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         duracionAudioSeg: parsed.data.duracionAudioSeg,
         audioR2Key: parsed.data.audioR2Key,
         // Al reintentar se limpia el error anterior (mismo criterio que
-        // upload/route.ts al pasar a "procesando") y se resetea el contador
+        // upload-confirmar al pasar a "procesando") y se resetea el contador
         // de intentos: /pendientes lo usa como lease y tope (3); sin el
         // reset, una sesión que agotó los reintentos volvería a "error" en
         // el primer poll.
@@ -340,7 +292,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       });
     }
 
-    return ok(sinClaveTemporal(sesion));
+    return ok(toSesionClinicaResponse(sesion));
   } catch (error) {
     return errorResponse(error);
   }

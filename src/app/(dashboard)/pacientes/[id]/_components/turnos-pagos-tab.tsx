@@ -14,6 +14,8 @@ import type {
 } from "@/types/domain";
 
 interface TurnosPagosTabProps {
+  // Lo pasa paciente-detail-view; esta pestaña no lo usa. Se conserva en el
+  // tipo para no romper al padre (fuera de este cambio).
   pacienteId: string;
   turnos: Turno[];
   onTurnoActualizado?: () => void;
@@ -82,21 +84,46 @@ function estadoChipVariant(
   return "neutral";
 }
 
+// Cobros optimistas sobre la lista recibida por props. Van atados a la
+// referencia de `turnos` que los originó: cuando el padre entrega una lista
+// nueva (refetch tras onTurnoActualizado) los ajustes viejos dejan de
+// aplicarse solos, sin sincronizar props → estado en un efecto.
+type AjustesCobro = {
+  base: Turno[];
+  porId: Record<string, Turno>;
+};
+
 export function TurnosPagosTab({
-  pacienteId: _pacienteId,
   turnos,
   onTurnoActualizado,
 }: TurnosPagosTabProps) {
-  const [localTurnos, setLocalTurnos] = React.useState<Turno[]>(turnos);
+  const [ajustes, setAjustes] = React.useState<AjustesCobro | null>(null);
   const [cobroTarget, setCobroTarget] = React.useState<Turno | null>(null);
   const [toast, setToast] = React.useState<ToastState>({
     open: false,
     message: "",
   });
 
-  React.useEffect(() => {
-    setLocalTurnos(turnos);
-  }, [turnos]);
+  const ajustesVigentes =
+    ajustes && ajustes.base === turnos ? ajustes.porId : null;
+  const localTurnos = React.useMemo(
+    () =>
+      ajustesVigentes
+        ? turnos.map((turno) => ajustesVigentes[turno.id] ?? turno)
+        : turnos,
+    [turnos, ajustesVigentes],
+  );
+
+  function ajustarTurno(turnoId: string, turno: Turno) {
+    const base = turnos;
+    setAjustes((prev) => ({
+      base,
+      porId: {
+        ...(prev && prev.base === base ? prev.porId : {}),
+        [turnoId]: turno,
+      },
+    }));
+  }
 
   const turnosOrdenados = React.useMemo(
     () =>
@@ -121,22 +148,16 @@ export function TurnosPagosTab({
   );
 
   async function cobrar(turnoId: string, metodo: MetodoPago) {
-    const previous = localTurnos;
+    const previous = ajustes;
     const target = localTurnos.find((t) => t.id === turnoId);
     if (!target || target.pagoEstado === "pagado") return;
 
-    setLocalTurnos((items) =>
-      items.map((turno) =>
-        turno.id === turnoId
-          ? {
-              ...turno,
-              pagoEstado: "pagado",
-              pagoFecha: new Date(),
-              pagoMetodo: metodo,
-            }
-          : turno,
-      ),
-    );
+    ajustarTurno(turnoId, {
+      ...target,
+      pagoEstado: "pagado",
+      pagoFecha: new Date(),
+      pagoMetodo: metodo,
+    });
     setToast({ open: true, message: "Cobrado" });
 
     try {
@@ -151,13 +172,10 @@ export function TurnosPagosTab({
       }
 
       const json = (await response.json()) as TurnoResponse;
-      const updated = parseTurno(json.data);
-      setLocalTurnos((items) =>
-        items.map((turno) => (turno.id === turnoId ? updated : turno)),
-      );
+      ajustarTurno(turnoId, parseTurno(json.data));
       onTurnoActualizado?.();
     } catch {
-      setLocalTurnos(previous);
+      setAjustes(previous);
       setToast({ open: true, message: "No se pudo cobrar" });
     }
   }
@@ -311,12 +329,12 @@ function TurnoRow({
             {turno.duracion} min
           </span>
           <Chip variant="neutral" size="sm">
-            {MODALIDAD_LABEL[turno.modalidad as Modalidad]}
+            {MODALIDAD_LABEL[turno.modalidad]}
           </Chip>
         </div>
 
-        <Chip variant={estadoChipVariant(turno.estado as TurnoEstado)} size="sm">
-          {ESTADO_LABEL[turno.estado as TurnoEstado]}
+        <Chip variant={estadoChipVariant(turno.estado)} size="sm">
+          {ESTADO_LABEL[turno.estado]}
         </Chip>
 
         <div className="flex flex-col gap-1">
@@ -333,7 +351,7 @@ function TurnoRow({
           )}
           {mostrarPagado && turno.pagoMetodo && (
             <span className="font-sans text-[11px] text-ink-500">
-              {METODO_PAGO_LABEL[turno.pagoMetodo as MetodoPago]}
+              {METODO_PAGO_LABEL[turno.pagoMetodo]}
             </span>
           )}
         </div>

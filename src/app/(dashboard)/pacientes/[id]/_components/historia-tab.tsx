@@ -19,13 +19,24 @@ import {
   subirAudioCifrado,
   type DatosGrabacion,
 } from "@/hooks/useGrabacionSesion";
-import { useSesionClinicaPolling } from "@/hooks/useSesionClinicaPolling";
+import {
+  ESTADOS_ACTIVOS,
+  normalizarSesionClinica,
+  useSesionClinicaPolling,
+  type SesionClinicaApi,
+  type SesionClinicaApiBase,
+} from "@/hooks/useSesionClinicaPolling";
 import { fechaLarga, hora } from "@/lib/format";
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
+import type {
+  EstadoSesion,
+  NotaSoap,
+} from "@/lib/sesion-clinica/schema";
 import { esSesionHuerfana } from "@/lib/sesion-clinica-utils";
 import type {
   DatosEstructurados,
   EstadoProcesamiento,
+  Modalidad,
   NotaSOAP,
   SesionClinicaResponse,
   Turno,
@@ -39,39 +50,20 @@ interface HistoriaTabProps {
   onTurnoActualizado?: () => void;
 }
 
-type RawSesionClinica = {
-  id: string;
-  turnoId: string;
-  estado: string;
-  duracionAudioSeg: number | null;
-  // Presentes en el GET por turnoId (y en las filas crudas de POST/PATCH);
-  // opcionales porque SesionClinicaResponse no los garantiza.
-  createdAt?: string | null;
-  audioR2Key?: string | null;
-  notaSubjetivo: string | null;
-  notaObjetivo: string | null;
-  notaAnalisis: string | null;
-  notaPlan: string | null;
-  datosEstructurados: DatosEstructurados | string | null;
-  modeloASR: string | null;
-  modeloLLM: string | null;
-  procesadoEn: string | null;
-  aprobadoEn: string | null;
-  error: string | null;
-};
-
-type DocSesion = {
+// Ítem de GET /api/pacientes/[id]/documentacion: la sesión ya viene con la
+// nota ensamblada y datosEstructurados parseados en el servidor, más los
+// datos del turno. Lo que coincide con el contrato de sesión se toma de ahí.
+type DocSesion = Pick<
+  SesionClinicaApi,
+  "turnoId" | "duracionAudioSeg" | "aprobadoEn" | "procesadoEn"
+> & {
   sesionClinicaId: string;
-  turnoId: string;
   fecha: string;
   duracionMin: number;
-  duracionAudioSeg?: number | null;
-  modalidad: "presencial" | "online";
-  estado: "revision" | "aprobado";
-  nota: NotaSOAP | null;
+  modalidad: Modalidad;
+  estado: Extract<EstadoSesion, "revision" | "aprobado">;
+  nota: NotaSoap | null;
   datosEstructurados: DatosEstructurados | null;
-  aprobadoEn: string | null;
-  procesadoEn: string | null;
 };
 
 type DocResponse = {
@@ -84,58 +76,38 @@ type DocResponse = {
 
 const PAGE_SIZE = 10;
 
-function parseDatosEstructurados(
-  value: DatosEstructurados | string | null,
-): DatosEstructurados | null {
-  if (value == null) return null;
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value) as DatosEstructurados;
-    } catch {
-      return null;
-    }
-  }
-  return value;
-}
+type SeccionGrabacion = "idle" | "grabando" | "nota";
 
-// createdAt/audioR2Key no viven en SesionClinicaResponse pero el banner de
-// sesión huérfana los necesita: createdAt para el umbral de abandono y
-// audioR2Key para decidir si ofrece reintentar.
-type SesionClinicaConMetadatos = SesionClinicaResponse & {
-  createdAt?: string | null;
-  audioR2Key?: string | null;
+// Sesión de hoy atada al turno que la cargó. Si cambia el turno, la sesión,
+// la sección y el "cargando" anteriores dejan de aplicar solos (valor
+// derivado) sin resetear estado dentro de un efecto.
+type SesionHoyState = {
+  turnoId: string;
+  sesion: SesionClinicaApiBase | null;
+  seccion: SeccionGrabacion;
+  cargando: boolean;
 };
 
-function toSesionClinicaResponse(
-  raw: RawSesionClinica,
-): SesionClinicaConMetadatos {
-  const nota: NotaSOAP | null =
-    raw.notaSubjetivo !== null &&
-    raw.notaObjetivo !== null &&
-    raw.notaAnalisis !== null &&
-    raw.notaPlan !== null
-      ? {
-          subjetivo: raw.notaSubjetivo,
-          objetivo: raw.notaObjetivo,
-          analisis: raw.notaAnalisis,
-          plan: raw.notaPlan,
-        }
-      : null;
+// Timeline atada al paciente que la cargó, por la misma razón.
+type DocsState = {
+  pacienteId: string;
+  docs: DocSesion[];
+  totalPages: number;
+  totalSesiones: number;
+  page: number;
+  loading: boolean;
+  error: string | null;
+};
 
+function docsIniciales(pacienteId: string): DocsState {
   return {
-    id: raw.id,
-    turnoId: raw.turnoId,
-    estado: raw.estado as EstadoProcesamiento,
-    duracionAudioSeg: raw.duracionAudioSeg,
-    nota,
-    datosEstructurados: parseDatosEstructurados(raw.datosEstructurados),
-    modeloASR: raw.modeloASR,
-    modeloLLM: raw.modeloLLM,
-    procesadoEn: raw.procesadoEn,
-    aprobadoEn: raw.aprobadoEn,
-    error: raw.error,
-    createdAt: raw.createdAt ?? null,
-    audioR2Key: raw.audioR2Key ?? null,
+    pacienteId,
+    docs: [],
+    totalPages: 0,
+    totalSesiones: 0,
+    page: 1,
+    loading: true,
+    error: null,
   };
 }
 
@@ -201,15 +173,9 @@ export function HistoriaTab({
   onTurnoActualizado,
 }: HistoriaTabProps) {
   // ===== Sesión de hoy (grabación) =====
-  const [sesionHoy, setSesionHoy] =
-    React.useState<SesionClinicaConMetadatos | null>(null);
-  const [sesionHoyLoading, setSesionHoyLoading] = React.useState<boolean>(
-    Boolean(turnoHoy),
-  );
+  const [sesionHoyState, setSesionHoyState] =
+    React.useState<SesionHoyState | null>(null);
   const [sesionReloadKey, setSesionReloadKey] = React.useState<number>(0);
-  const [seccionGrabacion, setSeccionGrabacion] = React.useState<
-    "idle" | "grabando" | "nota"
-  >("idle");
   const [grabacionError, setGrabacionError] = React.useState<string | null>(
     null,
   );
@@ -224,37 +190,77 @@ export function HistoriaTab({
   );
   const ultimoAudioRef = React.useRef<DatosGrabacion | null>(null);
 
+  // ===== Timeline (documentación clínica): estado =====
+  const [docsState, setDocsState] = React.useState<DocsState>(() =>
+    docsIniciales(pacienteId),
+  );
+  const [reloadKey, setReloadKey] = React.useState<number>(0);
+
   const turnoHoyId = turnoHoy?.id ?? null;
   const turnoHoyEstado = turnoHoy?.estado ?? null;
 
-  // Carga la sesión clínica asociada al turno de hoy (si existe)
+  // Valores derivados: solo cuentan si pertenecen al turno de hoy actual.
+  const sesionHoyActual =
+    sesionHoyState && sesionHoyState.turnoId === turnoHoyId
+      ? sesionHoyState
+      : null;
+  const sesionHoy = sesionHoyActual?.sesion ?? null;
+  const seccionGrabacion: SeccionGrabacion =
+    sesionHoyActual?.seccion ?? "idle";
+  const sesionHoyLoading =
+    turnoHoyId !== null &&
+    (sesionHoyActual === null || sesionHoyActual.cargando);
+
+  // Actualiza la sesión de hoy bajo el turno vigente al momento de llamar.
+  // Si el turno cambió mientras tanto, el valor queda atado al turno viejo
+  // y el derivado lo ignora (mismo efecto que el guard `cancelado`).
+  function actualizarSesionHoy(
+    parcial: Partial<Omit<SesionHoyState, "turnoId">>,
+  ) {
+    const turnoId = turnoHoyId;
+    if (!turnoId) return;
+    setSesionHoyState((prev) =>
+      prev && prev.turnoId === turnoId
+        ? { ...prev, ...parcial }
+        : {
+            turnoId,
+            sesion: null,
+            seccion: "idle",
+            cargando: false,
+            ...parcial,
+          },
+    );
+  }
+
+  // Carga la sesión clínica asociada al turno de hoy (si existe). Mientras
+  // no hay resultado para este turno, `sesionHoyLoading` ya es true por
+  // derivación; la recarga explícita la marca manejarHuerfanaResuelta.
   React.useEffect(() => {
-    if (!turnoHoyId) {
-      setSesionHoy(null);
-      setSesionHoyLoading(false);
-      setSeccionGrabacion("idle");
-      return;
-    }
+    if (!turnoHoyId) return;
 
     let cancelado = false;
-    setSesionHoyLoading(true);
-    setSeccionGrabacion("idle");
 
     (async () => {
+      let sesion: SesionClinicaApiBase | null = null;
       try {
         const res = await fetch(`/api/sesion-clinica?turnoId=${turnoHoyId}`);
         if (cancelado) return;
         if (res.ok) {
-          const body = (await res.json()) as { data: RawSesionClinica | null };
-          setSesionHoy(body.data ? toSesionClinicaResponse(body.data) : null);
-        } else {
-          setSesionHoy(null);
+          const body = (await res.json()) as {
+            data: SesionClinicaApiBase | null;
+          };
+          sesion = body.data ?? null;
         }
       } catch {
-        if (!cancelado) setSesionHoy(null);
-      } finally {
-        if (!cancelado) setSesionHoyLoading(false);
+        sesion = null;
       }
+      if (cancelado) return;
+      setSesionHoyState({
+        turnoId: turnoHoyId,
+        sesion,
+        seccion: "idle",
+        cargando: false,
+      });
     })();
 
     return () => {
@@ -262,45 +268,61 @@ export function HistoriaTab({
     };
   }, [turnoHoyId, sesionReloadKey]);
 
-  // Polling mientras la sesión está en pipeline
+  // Polling mientras la sesión está en pipeline. La fila que devuelve trae
+  // el contrato completo (createdAt, audioR2Key incluidos), así que
+  // reemplaza a la sesión de hoy sin merge.
   const sesionEnProcesamiento =
-    sesionHoy !== null &&
-    (sesionHoy.estado === "grabando" ||
-      sesionHoy.estado === "subiendo" ||
-      sesionHoy.estado === "procesando");
+    sesionHoy !== null && ESTADOS_ACTIVOS.has(sesionHoy.estado);
 
-  const { data: sesionPolled } = useSesionClinicaPolling({
-    sesionClinicaId: sesionEnProcesamiento ? sesionHoy?.id ?? null : null,
+  useSesionClinicaPolling({
+    sesionClinicaId: sesionEnProcesamiento ? (sesionHoy?.id ?? null) : null,
     enabled: sesionEnProcesamiento,
+    onSesion: ({ fila }) => actualizarSesionHoy({ sesion: fila }),
   });
 
-  React.useEffect(() => {
-    if (sesionPolled) {
-      // El polling normaliza a SesionClinicaResponse (sin createdAt ni
-      // audioR2Key); merge sobre el estado previo para no perder los
-      // metadatos que usa la detección de sesión huérfana.
-      setSesionHoy((prev) =>
-        prev && prev.id === sesionPolled.id
-          ? { ...prev, ...sesionPolled }
-          : sesionPolled,
-      );
-    }
-  }, [sesionPolled]);
+  // Forma que consumen ZonaGrabacion y SesionHuerfanaBanner (nota ensamblada
+  // y datosEstructurados validados), más los metadatos del banner.
+  const sesionHoyVista = React.useMemo(
+    () =>
+      sesionHoy
+        ? {
+            ...normalizarSesionClinica(sesionHoy),
+            createdAt: sesionHoy.createdAt,
+            audioR2Key: sesionHoy.audioR2Key,
+          }
+        : null,
+    [sesionHoy],
+  );
+
+  // Refresco del listado de documentación (timeline): marca la carga en el
+  // mismo evento que la dispara.
+  function recargarTimeline() {
+    setDocsState((prev) =>
+      prev.pacienteId === pacienteId
+        ? { ...prev, loading: true, error: null }
+        : docsIniciales(pacienteId),
+    );
+    setReloadKey((k) => k + 1);
+  }
 
   async function refrescarSesionHoy() {
     if (!sesionHoy) return;
     try {
       const res = await fetch(`/api/sesion-clinica/${sesionHoy.id}`);
-      if (!res.ok) return;
-      const body = (await res.json()) as { data: RawSesionClinica };
-      setSesionHoy(toSesionClinicaResponse(body.data));
-      setSeccionGrabacion("idle");
+      if (!res.ok) {
+        setGrabacionError(await parseError(res));
+        return;
+      }
+      const body = (await res.json()) as { data: SesionClinicaApiBase };
+      actualizarSesionHoy({ sesion: body.data, seccion: "idle" });
       // Refrescar la timeline también: una sesión recién aprobada/descartada
       // cambia el listado.
-      setReloadKey((k) => k + 1);
+      recargarTimeline();
       onTurnoActualizado?.();
-    } catch {
-      // tragar
+    } catch (err) {
+      setGrabacionError(
+        err instanceof Error ? err.message : "No se pudo actualizar la sesión",
+      );
     }
   }
 
@@ -308,7 +330,7 @@ export function HistoriaTab({
   // cuyo turno no es el de hoy): mismo refresco del listado que usa
   // refrescarSesionHoy, sin tocar la sesión de hoy.
   function refrescarTimeline() {
-    setReloadKey((k) => k + 1);
+    recargarTimeline();
     onTurnoActualizado?.();
   }
 
@@ -323,8 +345,10 @@ export function HistoriaTab({
         body: JSON.stringify({ turnoId: turnoHoyId }),
       });
       if (!createRes.ok) throw new Error(await parseError(createRes));
-      const createBody = (await createRes.json()) as { data: RawSesionClinica };
-      setSesionHoy(toSesionClinicaResponse(createBody.data));
+      const createBody = (await createRes.json()) as {
+        data: SesionClinicaApiBase;
+      };
+      actualizarSesionHoy({ sesion: createBody.data });
 
       const patchRes = await fetch(
         `/api/sesion-clinica/${createBody.data.id}`,
@@ -335,9 +359,10 @@ export function HistoriaTab({
         },
       );
       if (!patchRes.ok) throw new Error(await parseError(patchRes));
-      const patchBody = (await patchRes.json()) as { data: RawSesionClinica };
-      setSesionHoy(toSesionClinicaResponse(patchBody.data));
-      setSeccionGrabacion("grabando");
+      const patchBody = (await patchRes.json()) as {
+        data: SesionClinicaApiBase;
+      };
+      actualizarSesionHoy({ sesion: patchBody.data, seccion: "grabando" });
     } catch (err) {
       setGrabacionError(
         err instanceof Error ? err.message : "No se pudo iniciar la grabación",
@@ -350,22 +375,38 @@ export function HistoriaTab({
   // Tras un fallo en el PUT a R2 o en la confirmación, la sesión puede haber
   // quedado en "subiendo": se consulta el estado real y, solo si es
   // "subiendo", se la vuelve a "grabando" (transición de cliente permitida)
-  // para poder repetir desde upload-url. Best-effort.
+  // para poder repetir desde upload-url. Si esto también falla, se agrega al
+  // error de subida ya visible (no lo reemplaza: el primario es el que
+  // explica qué pasó).
   async function volverAGrabando(sesionId: string) {
+    const registrarFallo = (detalle: string) =>
+      setGrabacionError((prev) =>
+        prev
+          ? `${prev} No se pudo preparar la sesión para reintentar (${detalle}).`
+          : `No se pudo preparar la sesión para reintentar (${detalle}).`,
+      );
     try {
       const res = await fetch(`/api/sesion-clinica/${sesionId}`, {
         cache: "no-store",
       });
-      if (!res.ok) return;
-      const body = (await res.json()) as { data: { estado?: string } | null };
+      if (!res.ok) {
+        registrarFallo(await parseError(res));
+        return;
+      }
+      const body = (await res.json()) as {
+        data: Pick<SesionClinicaApi, "estado"> | null;
+      };
       if (body.data?.estado !== "subiendo") return;
-      await fetch(`/api/sesion-clinica/${sesionId}`, {
+      const patchRes = await fetch(`/api/sesion-clinica/${sesionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ estado: "grabando" }),
       });
-    } catch {
-      // tragar
+      if (!patchRes.ok) {
+        registrarFallo(await parseError(patchRes));
+      }
+    } catch (err) {
+      registrarFallo(err instanceof Error ? err.message : "error de red");
     }
   }
 
@@ -383,7 +424,7 @@ export function HistoriaTab({
       const actualizada = await subirAudioCifrado(sesionId, datos, (p) =>
         setProgresoSubida(p),
       );
-      setSesionHoy(toSesionClinicaResponse(actualizada as RawSesionClinica));
+      actualizarSesionHoy({ sesion: actualizada });
 
       // Confirmación OK: el backup incremental en IndexedDB deja de hacer
       // falta (clave = turnoId, fire-and-forget).
@@ -411,7 +452,7 @@ export function HistoriaTab({
         onTurnoActualizado?.();
       }
 
-      setSeccionGrabacion("idle");
+      actualizarSesionHoy({ seccion: "idle" });
     } catch (err) {
       // Nada se borra: el blob cifrado queda en memoria y los chunks en
       // IndexedDB. La sesión vuelve a "grabando" para repetir desde el
@@ -452,8 +493,8 @@ export function HistoriaTab({
         body: JSON.stringify({ estado: "procesando" }),
       });
       if (!res.ok) throw new Error(await parseError(res));
-      const body = (await res.json()) as { data: RawSesionClinica };
-      setSesionHoy(toSesionClinicaResponse(body.data));
+      const body = (await res.json()) as { data: SesionClinicaApiBase };
+      actualizarSesionHoy({ sesion: body.data });
     } catch (err) {
       setGrabacionError(
         err instanceof Error ? err.message : "No se pudo reintentar",
@@ -463,19 +504,23 @@ export function HistoriaTab({
     }
   }
 
-  // ===== Timeline (documentación clínica) =====
-  const [docs, setDocs] = React.useState<DocSesion[]>([]);
-  const [docsTotalPages, setDocsTotalPages] = React.useState<number>(0);
-  const [docsTotalSesiones, setDocsTotalSesiones] = React.useState<number>(0);
-  const [docsPage, setDocsPage] = React.useState<number>(1);
-  const [docsLoading, setDocsLoading] = React.useState<boolean>(true);
-  const [docsError, setDocsError] = React.useState<string | null>(null);
-  const [reloadKey, setReloadKey] = React.useState<number>(0);
+  // ===== Timeline (documentación clínica): carga =====
+  const docsActual =
+    docsState.pacienteId === pacienteId ? docsState : docsIniciales(pacienteId);
+  const {
+    docs,
+    totalPages: docsTotalPages,
+    totalSesiones: docsTotalSesiones,
+    page: docsPage,
+    loading: docsLoading,
+    error: docsError,
+  } = docsActual;
 
+  // Carga la primera página. Mientras no hay resultado para este paciente,
+  // `loading` ya es true por el estado inicial; las recargas lo marcan en
+  // recargarTimeline.
   React.useEffect(() => {
     let cancelado = false;
-    setDocsLoading(true);
-    setDocsError(null);
 
     (async () => {
       try {
@@ -485,20 +530,27 @@ export function HistoriaTab({
         if (cancelado) return;
         if (!res.ok) throw new Error(await parseError(res));
         const body = (await res.json()) as { data: DocResponse };
-        setDocs(body.data.sesiones);
-        setDocsTotalPages(body.data.totalPages);
-        setDocsTotalSesiones(body.data.totalSesiones);
-        setDocsPage(1);
+        if (cancelado) return;
+        setDocsState({
+          pacienteId,
+          docs: body.data.sesiones,
+          totalPages: body.data.totalPages,
+          totalSesiones: body.data.totalSesiones,
+          page: 1,
+          loading: false,
+          error: null,
+        });
       } catch (err) {
-        if (!cancelado) {
-          setDocsError(
-            err instanceof Error
-              ? err.message
-              : "No se pudo cargar la documentación",
-          );
-        }
-      } finally {
-        if (!cancelado) setDocsLoading(false);
+        if (cancelado) return;
+        const mensaje =
+          err instanceof Error
+            ? err.message
+            : "No se pudo cargar la documentación";
+        setDocsState((prev) => ({
+          ...(prev.pacienteId === pacienteId ? prev : docsIniciales(pacienteId)),
+          loading: false,
+          error: mensaje,
+        }));
       }
     })();
 
@@ -510,24 +562,27 @@ export function HistoriaTab({
   async function cargarMas() {
     const next = docsPage + 1;
     if (next > docsTotalPages) return;
-    setDocsLoading(true);
-    setDocsError(null);
+    setDocsState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const res = await fetch(
         `/api/pacientes/${pacienteId}/documentacion?page=${next}&limit=${PAGE_SIZE}`,
       );
       if (!res.ok) throw new Error(await parseError(res));
       const body = (await res.json()) as { data: DocResponse };
-      setDocs((prev) => [...prev, ...body.data.sesiones]);
-      setDocsPage(next);
-      setDocsTotalPages(body.data.totalPages);
-      setDocsTotalSesiones(body.data.totalSesiones);
+      setDocsState((prev) => ({
+        ...prev,
+        docs: [...prev.docs, ...body.data.sesiones],
+        page: next,
+        totalPages: body.data.totalPages,
+        totalSesiones: body.data.totalSesiones,
+        loading: false,
+      }));
     } catch (err) {
-      setDocsError(
-        err instanceof Error ? err.message : "No se pudo cargar más",
-      );
-    } finally {
-      setDocsLoading(false);
+      setDocsState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : "No se pudo cargar más",
+      }));
     }
   }
 
@@ -543,18 +598,19 @@ export function HistoriaTab({
   // solo trae revision/aprobado, nunca huérfanas). El guard de seccion evita
   // mostrar el banner mientras el grabador está montado (grabación activa).
   const sesionHuerfana =
-    sesionHoy !== null &&
+    sesionHoyVista !== null &&
     seccionGrabacion === "idle" &&
-    esSesionHuerfana(sesionHoy)
-      ? sesionHoy
+    esSesionHuerfana(sesionHoyVista)
+      ? sesionHoyVista
       : null;
 
   // Tras descartar/reintentar desde el banner: re-fetch de la sesión por
   // turnoId (un GET por id daría 404 si el DELETE eliminó la fila) y de la
-  // timeline.
+  // timeline. La carga se marca acá, en el evento que la dispara.
   function manejarHuerfanaResuelta() {
+    actualizarSesionHoy({ cargando: true, seccion: "idle" });
     setSesionReloadKey((k) => k + 1);
-    setReloadKey((k) => k + 1);
+    recargarTimeline();
   }
 
   // ===== Render =====
@@ -565,7 +621,7 @@ export function HistoriaTab({
           turno={turnoHoy}
           pacienteNombre={pacienteNombre}
           consentimientoVigente={consentimientoVigente}
-          sesion={sesionHoy}
+          sesion={sesionHoyVista}
           sesionHuerfana={sesionHuerfana !== null}
           sesionLoading={sesionHoyLoading}
           seccion={seccionGrabacion}
@@ -579,7 +635,7 @@ export function HistoriaTab({
           onErrorGrabacion={(m) => setGrabacionError(m)}
           onReintentar={() => void reintentarProcesamiento()}
           onAprobado={() => void refrescarSesionHoy()}
-          onVerNota={() => setSeccionGrabacion("nota")}
+          onVerNota={() => actualizarSesionHoy({ seccion: "nota" })}
         />
       ) : null}
 
@@ -786,11 +842,7 @@ function ZonaGrabacion({
           ) : null}
 
           {/* En pipeline */}
-          {sesion &&
-          !sesionHuerfana &&
-          (sesion.estado === "grabando" ||
-            sesion.estado === "subiendo" ||
-            sesion.estado === "procesando") ? (
+          {sesion && !sesionHuerfana && ESTADOS_ACTIVOS.has(sesion.estado) ? (
             <div className="flex items-center gap-3 rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-3 py-3">
               <LoaderCircle
                 size={16}

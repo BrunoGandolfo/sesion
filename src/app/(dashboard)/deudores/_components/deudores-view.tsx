@@ -22,39 +22,61 @@ type DeudoresPageItem = DeudaPaciente & {
 
 type LoadState = "loading" | "ready" | "error";
 
+type DatosDeudores = {
+  deudores: DeudoresPageItem[];
+  nombreProfesional: string;
+};
+
+async function cargarDeudores(signal: AbortSignal): Promise<DatosDeudores> {
+  const [resDeudores, resConfig] = await Promise.all([
+    fetch("/api/deudores", { cache: "no-store", signal }),
+    fetch("/api/config", { cache: "no-store", signal }),
+  ]);
+  if (!resDeudores.ok) throw new Error("deudores fetch failed");
+
+  const dJson = (await resDeudores.json()) as { data: DeudoresPageItem[] };
+
+  // /api/config puede fallar (e.g. sin configuración inicial); en ese caso
+  // dejamos el nombre vacío y el template sale sin firma.
+  let nombreProfesional = "";
+  if (resConfig.ok) {
+    const cJson = (await resConfig.json()) as { data: Configuracion };
+    nombreProfesional = cJson.data.nombreProfesional ?? "";
+  }
+
+  return { deudores: dJson.data, nombreProfesional };
+}
+
 export function DeudoresView() {
   const [deudores, setDeudores] = React.useState<DeudoresPageItem[]>([]);
   const [nombreProfesional, setNombreProfesional] = React.useState<string>("");
   const [loadState, setLoadState] = React.useState<LoadState>("loading");
+  const [reloadKey, setReloadKey] = React.useState(0);
 
-  const fetchAll = React.useCallback(async () => {
-    setLoadState("loading");
-    try {
-      const [resDeudores, resConfig] = await Promise.all([
-        fetch("/api/deudores", { cache: "no-store" }),
-        fetch("/api/config", { cache: "no-store" }),
-      ]);
-      if (!resDeudores.ok) throw new Error("deudores fetch failed");
-
-      const dJson = (await resDeudores.json()) as { data: DeudoresPageItem[] };
-      setDeudores(dJson.data);
-
-      // /api/config puede fallar (e.g. sin configuración inicial); en ese caso
-      // dejamos el nombre vacío y el template sale sin firma.
-      if (resConfig.ok) {
-        const cJson = (await resConfig.json()) as { data: Configuracion };
-        setNombreProfesional(cJson.data.nombreProfesional ?? "");
-      }
-
-      setLoadState("ready");
-    } catch {
-      setLoadState("error");
-    }
-  }, []);
-
+  // No pone "loading" acá: es el estado inicial, y el reintento lo setea en
+  // su propio handler.
   React.useEffect(() => {
-    void fetchAll();
-  }, [fetchAll]);
+    const controller = new AbortController();
+
+    cargarDeudores(controller.signal)
+      .then((datos) => {
+        setDeudores(datos.deudores);
+        setNombreProfesional(datos.nombreProfesional);
+        setLoadState("ready");
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLoadState("error");
+      });
+
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  const reintentar = () => {
+    setLoadState("loading");
+    setReloadKey((k) => k + 1);
+  };
 
   if (loadState === "loading" && deudores.length === 0) {
     return <DeudoresSkeleton />;
@@ -66,7 +88,7 @@ export function DeudoresView() {
         <p className="font-[family-name:var(--font-display)] text-[22px] font-medium italic text-ink-900">
           No se pudieron cargar los deudores.
         </p>
-        <Button variant="secondary" size="sm" onClick={fetchAll}>
+        <Button variant="secondary" size="sm" onClick={reintentar}>
           Reintentar
         </Button>
       </div>

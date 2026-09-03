@@ -41,5 +41,4 @@ yarn-error.log*
 next-env.d.ts
 !.env.example
 prisma/scripts/manual/*.json
-.env.test
 processor/*.wav

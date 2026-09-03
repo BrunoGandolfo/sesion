@@ -13,9 +13,14 @@
 // dejaría la segunda fuera para siempre.
 
 import { db } from "@/lib/db";
+import { ensamblarNotaSOAP } from "@/lib/sesion-clinica-utils";
 
+import { requireM2M } from "../../_lib/auth";
 import { errorResponse } from "../../_lib/responses";
-import { parseDatosEstructuradosRaw } from "../../_lib/sesion-clinica";
+import {
+  parseDatosEstructuradosRaw,
+  sinClaveTemporal,
+} from "../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,12 +28,7 @@ export const dynamic = "force-dynamic";
 const TAKE_CANDIDATAS = 20;
 const MAX_RESULTADOS = 5;
 
-function isAuthorized(request: Request): boolean {
-  const secret = process.env.PROCESSING_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("authorization");
-  return header === `Bearer ${secret}`;
-}
+const NOTA_VACIA = { subjetivo: "", objetivo: "", analisis: "", plan: "" };
 
 // Fecha de corte: CONTEXTO_DESDE (ISO). Si falta o no parsea, el inicio del
 // día de hoy (hora local del server) — así un deploy sin la env no dispara
@@ -58,18 +58,9 @@ function parseRiesgosHistoricos(raw: unknown): unknown[] {
   return [];
 }
 
-function sinClave(
-  datos: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-  if (!datos) return null;
-  const { _audioCifradoTemporal: _clave, ...resto } = datos;
-  return resto;
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const noAutorizado = requireM2M(request);
+  if (noAutorizado) return noAutorizado;
 
   try {
     const desde = fechaCorte();
@@ -90,6 +81,58 @@ export async function GET(request: Request) {
         turno: { select: { fecha: true, pacienteId: true } },
       },
     });
+
+    // Tres consultas agrupadas ANTES del loop (antes eran tres por
+    // candidata): contextos de los pacientes del batch, la sesión a la que
+    // apunta cada ultimaSesionId (para saber hasta dónde se integró), y las
+    // sesiones aprobadas de esos pacientes (para numerar en memoria).
+    const pacienteIds = [...new Set(candidatas.map((s) => s.turno.pacienteId))];
+
+    const contextos = pacienteIds.length
+      ? await db.pacienteContextoClinico.findMany({
+          where: { pacienteId: { in: pacienteIds } },
+          select: {
+            pacienteId: true,
+            ultimaSesionId: true,
+            hipotesisDiagnostica: true,
+            resumenAcumulativo: true,
+            objetivosTerapeuticos: true,
+            intervencionesProbadas: true,
+            temasRecurrentes: true,
+            riesgosHistoricos: true,
+            version: true,
+          },
+        })
+      : [];
+    const contextoPorPaciente = new Map(
+      contextos.map((c) => [c.pacienteId, c]),
+    );
+
+    const ultimaIds = contextos
+      .map((c) => c.ultimaSesionId)
+      .filter((id): id is string => id !== null);
+    const ultimas = ultimaIds.length
+      ? await db.sesionClinica.findMany({
+          where: { id: { in: ultimaIds } },
+          select: { id: true, aprobadoEn: true },
+        })
+      : [];
+    const aprobadoEnPorSesion = new Map(
+      ultimas.map((u) => [u.id, u.aprobadoEn]),
+    );
+
+    const aprobadasDePacientes = pacienteIds.length
+      ? await db.sesionClinica.findMany({
+          where: {
+            estado: "aprobado",
+            turno: { pacienteId: { in: pacienteIds } },
+          },
+          select: {
+            organizationId: true,
+            turno: { select: { pacienteId: true, fecha: true } },
+          },
+        })
+      : [];
 
     const pacientesIncluidos = new Set<string>();
     const resultado: Array<{
@@ -124,20 +167,7 @@ export async function GET(request: Request) {
       // orderBy): la siguiente se entrega cuando esta ya esté integrada.
       if (pacientesIncluidos.has(pacienteId)) continue;
 
-      const contexto = await db.pacienteContextoClinico.findUnique({
-        where: { pacienteId },
-        select: {
-          ultimaSesionId: true,
-          actualizadoEn: true,
-          hipotesisDiagnostica: true,
-          resumenAcumulativo: true,
-          objetivosTerapeuticos: true,
-          intervencionesProbadas: true,
-          temasRecurrentes: true,
-          riesgosHistoricos: true,
-          version: true,
-        },
-      });
+      const contexto = contextoPorPaciente.get(pacienteId) ?? null;
 
       // Ya integrada: el contexto apunta a esta sesión, o esta sesión se
       // aprobó antes que la última integrada (el worker integra en orden de
@@ -145,14 +175,9 @@ export async function GET(request: Request) {
       // una sesión que ya no existe, no se excluye nada: en el peor caso se
       // re-integra una vez desde CONTEXTO_DESDE.
       if (contexto?.ultimaSesionId === s.id) continue;
-      let integradaHasta: Date | null = null;
-      if (contexto?.ultimaSesionId) {
-        const ultima = await db.sesionClinica.findUnique({
-          where: { id: contexto.ultimaSesionId },
-          select: { aprobadoEn: true },
-        });
-        integradaHasta = ultima?.aprobadoEn ?? null;
-      }
+      const integradaHasta = contexto?.ultimaSesionId
+        ? (aprobadoEnPorSesion.get(contexto.ultimaSesionId) ?? null)
+        : null;
       if (
         integradaHasta &&
         s.aprobadoEn &&
@@ -161,13 +186,14 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const numeroSesion = await db.sesionClinica.count({
-        where: {
-          organizationId: s.organizationId,
-          estado: "aprobado",
-          turno: { pacienteId, fecha: { lte: s.turno.fecha } },
-        },
-      });
+      // Misma regla que el count previo: aprobadas de la misma organización
+      // y paciente con fecha de turno hasta la de esta sesión (inclusive).
+      const numeroSesion = aprobadasDePacientes.filter(
+        (a) =>
+          a.organizationId === s.organizationId &&
+          a.turno.pacienteId === pacienteId &&
+          a.turno.fecha.getTime() <= s.turno.fecha.getTime(),
+      ).length;
 
       pacientesIncluidos.add(pacienteId);
       resultado.push({
@@ -175,15 +201,16 @@ export async function GET(request: Request) {
         pacienteId,
         fechaSesion: s.turno.fecha.toISOString(),
         numeroSesion,
-        nota: {
-          subjetivo: s.notaSubjetivo ?? "",
-          objetivo: s.notaObjetivo ?? "",
-          analisis: s.notaAnalisis ?? "",
-          plan: s.notaPlan ?? "",
-        },
-        datosEstructurados: sinClave(
-          parseDatosEstructuradosRaw(s.datosEstructurados),
-        ),
+        nota:
+          ensamblarNotaSOAP({
+            subjetivo: s.notaSubjetivo,
+            objetivo: s.notaObjetivo,
+            analisis: s.notaAnalisis,
+            plan: s.notaPlan,
+          }) ?? NOTA_VACIA,
+        datosEstructurados: sinClaveTemporal({
+          datosEstructurados: parseDatosEstructuradosRaw(s.datosEstructurados),
+        }).datosEstructurados,
         contextoActual: contexto
           ? {
               hipotesisDiagnostica: contexto.hipotesisDiagnostica ?? null,

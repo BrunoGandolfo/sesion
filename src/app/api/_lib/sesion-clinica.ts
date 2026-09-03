@@ -111,7 +111,8 @@ export function sinClaveTemporal<T extends { datosEstructurados?: unknown }>(
   if (!obj) {
     return { ...row, datosEstructurados: null };
   }
-  const { _audioCifradoTemporal: _clave, ...resto } = obj;
+  const resto: Record<string, unknown> = { ...obj };
+  delete resto._audioCifradoTemporal;
   return { ...row, datosEstructurados: resto };
 }
 

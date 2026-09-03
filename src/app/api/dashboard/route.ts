@@ -4,11 +4,11 @@ import type { DeudaPaciente, KPIsDashboard } from "@/types/domain";
 import { getOrganizationId } from "../_lib/auth";
 import {
   addDays,
+  buscarTurnosConDeuda,
+  calcularDeudores,
   DashboardData,
-  diasDesde,
   endOfDay,
   endOfMonth,
-  minFecha,
   startOfDay,
   startOfMonth,
   startOfWeekMonday,
@@ -19,6 +19,8 @@ import { errorResponse, ok } from "../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const TOPE_DEUDORES = 10;
 
 export async function GET() {
   try {
@@ -34,10 +36,9 @@ export async function GET() {
     const [
       pacientesActivos,
       sesionesHoyCount,
-      deudaTurnos,
+      turnosConDeuda,
       ingresosMes,
       sesionesHoyRows,
-      deudorPacientes,
       sesionesSemanaRows,
     ] = await Promise.all([
       db.paciente.count({
@@ -50,14 +51,8 @@ export async function GET() {
           estado: { not: "cancelado" },
         },
       }),
-      db.turno.findMany({
-        where: {
-          organizationId,
-          estado: "realizado",
-          pagoEstado: "pendiente",
-        },
-        select: { tarifaCobrada: true, fecha: true, estado: true, pagoEstado: true },
-      }),
+      // Una sola lectura de la deuda: alimenta el KPI y el ranking.
+      buscarTurnosConDeuda(db, organizationId),
       db.turno.aggregate({
         where: {
           organizationId,
@@ -84,31 +79,6 @@ export async function GET() {
         },
         orderBy: { fecha: "asc" },
       }),
-      db.paciente.findMany({
-        where: {
-          organizationId,
-          turnos: {
-            some: {
-              estado: "realizado",
-              pagoEstado: "pendiente",
-            },
-          },
-        },
-        include: {
-          turnos: {
-            where: {
-              estado: "realizado",
-              pagoEstado: "pendiente",
-            },
-            select: {
-              fecha: true,
-              estado: true,
-              pagoEstado: true,
-              tarifaCobrada: true,
-            },
-          },
-        },
-      }),
       db.turno.findMany({
         where: {
           organizationId,
@@ -120,24 +90,24 @@ export async function GET() {
     ]);
 
     const sesionesHoy = sesionesHoyRows.map(toTurnoConPaciente);
-    const deudores: DeudaPaciente[] = deudorPacientes
-      .map((paciente) => ({
-        pacienteId: paciente.id,
-        nombre: paciente.nombre,
-        apellido: paciente.apellido,
-        sesionesImpagas: paciente.turnos.length,
-        montoTotal: sumTarifas(paciente.turnos),
-        diasAtraso: diasDesde(minFecha(paciente.turnos), now),
+
+    // Más viejos primero — la deuda añeja es la que "duele". A igualdad de
+    // días de atraso, desempata por monto descendente. Top 10.
+    const deudores: DeudaPaciente[] = calcularDeudores(turnosConDeuda, now)
+      .map((d) => ({
+        pacienteId: d.pacienteId,
+        nombre: d.nombre,
+        apellido: d.apellido,
+        sesionesImpagas: d.sesionesImpagas,
+        montoTotal: d.montoTotal,
+        diasAtraso: d.diasAtraso ?? 0,
       }))
-      .filter((deudor) => deudor.sesionesImpagas > 0)
-      // Más viejos primero — la deuda añeja es la que "duele". A igualdad de
-      // días de atraso, desempata por monto descendente.
       .sort((a, b) =>
         b.diasAtraso !== a.diasAtraso
           ? b.diasAtraso - a.diasAtraso
           : b.montoTotal - a.montoTotal,
       )
-      .slice(0, 10);
+      .slice(0, TOPE_DEUDORES);
 
     const sesionesSemana = Array.from({ length: 7 }, () => 0);
     for (const turno of sesionesSemanaRows) {
@@ -148,7 +118,7 @@ export async function GET() {
     const kpis: KPIsDashboard = {
       pacientesActivos,
       sesionesHoy: sesionesHoyCount,
-      deudaAcumulada: sumTarifas(deudaTurnos),
+      deudaAcumulada: sumTarifas(turnosConDeuda),
       ingresosMes: ingresosMes._sum.tarifaCobrada ?? 0,
     };
 

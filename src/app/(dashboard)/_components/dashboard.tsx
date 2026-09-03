@@ -28,6 +28,7 @@ import {
   moneyShort,
   saludo,
 } from "@/lib/format";
+import type { DashboardData } from "@/app/api/_lib/domain";
 import type {
   Configuracion,
   DeudaPaciente,
@@ -76,14 +77,6 @@ const THOUGHTS = [
 
 const WEEK_DAYS = ["L", "M", "M", "J", "V", "S", "D"] as const;
 
-type DashboardData = {
-  kpis: KPIsDashboard;
-  sesionesHoy: TurnoConPaciente[];
-  deudores: DeudaPaciente[];
-  proximaSesion: TurnoConPaciente | null;
-  sesionesSemana: number[];
-};
-
 // ============================================
 // Deserialización: JSON convierte Date → string.
 // Volvemos a Date solo donde el UI lo necesita.
@@ -117,13 +110,12 @@ function parseTurno(raw: JsonTurno): TurnoConPaciente {
   };
 }
 
-function parseDashboard(raw: {
-  kpis: KPIsDashboard;
+type JsonDashboard = Omit<DashboardData, "sesionesHoy" | "proximaSesion"> & {
   sesionesHoy: JsonTurno[];
-  deudores: DeudaPaciente[];
   proximaSesion: JsonTurno | null;
-  sesionesSemana: number[];
-}): DashboardData {
+};
+
+function parseDashboard(raw: JsonDashboard): DashboardData {
   return {
     kpis: raw.kpis,
     sesionesHoy: raw.sesionesHoy.map(parseTurno),
@@ -147,6 +139,19 @@ function getFirstName(name: string | null | undefined): string | null {
   return first || null;
 }
 
+// useSyncExternalStore con snapshot de servidor null: el servidor (UTC) y el
+// cliente (Montevideo) renderizan lo mismo (sin fecha) y no hay mismatch #418.
+function suscribirNoop() {
+  return () => {};
+}
+function obtenerHoyCliente(): string {
+  // Clave estable del día: mismo string en llamadas consecutivas del render.
+  return new Date().toDateString();
+}
+function obtenerHoyServidor(): null {
+  return null;
+}
+
 async function fetchNombreProfesional(): Promise<string | null> {
   try {
     const response = await fetch("/api/config", { cache: "no-store" });
@@ -164,11 +169,23 @@ async function fetchNombreProfesional(): Promise<string | null> {
 // ============================================
 export function Dashboard() {
   const router = useRouter();
-  // `now` parte en null para que el primer render sea igual en server (UTC) y
-  // client (Montevideo). Construir el Date durante SSR producía mismatches en
-  // `saludo`/`diaSemana` cerca de la frontera horaria y disparaba React #418,
-  // rompiendo todos los event handlers de la página en producción.
-  const [now, setNow] = React.useState<Date | null>(null);
+  // `now` es null en el servidor para que el primer render sea igual en server
+  // (UTC) y client (Montevideo). Construir el Date durante SSR producía
+  // mismatches en `saludo`/`diaSemana` cerca de la frontera horaria y disparaba
+  // React #418, rompiendo todos los event handlers de la página en producción.
+  // El Date se construye una vez por clave de día (memo) y se refresca tras
+  // cada carga de datos.
+  const claveHoy = React.useSyncExternalStore(
+    suscribirNoop,
+    obtenerHoyCliente,
+    obtenerHoyServidor,
+  );
+  const nowInicial = React.useMemo(
+    () => (claveHoy === null ? null : new Date()),
+    [claveHoy],
+  );
+  const [nowRefrescado, setNowRefrescado] = React.useState<Date | null>(null);
+  const now = nowRefrescado ?? nowInicial;
   const [data, setData] = React.useState<DashboardData | null>(null);
   const [nombreProfesional, setNombreProfesional] = React.useState<
     string | null
@@ -195,9 +212,7 @@ export function Dashboard() {
     ]);
     if (!res.ok) throw new Error("dashboard fetch failed");
 
-    const payload = (await res.json()) as {
-      data: Parameters<typeof parseDashboard>[0];
-    };
+    const payload = (await res.json()) as { data: JsonDashboard };
 
     return {
       data: parseDashboard(payload.data),
@@ -207,14 +222,13 @@ export function Dashboard() {
 
   React.useEffect(() => {
     let cancelled = false;
-    setNow(new Date());
 
     readDashboardData()
       .then(({ data: nextData, nombreProfesional: nextNombreProfesional }) => {
         if (cancelled) return;
         setData(nextData);
         setNombreProfesional((current) => nextNombreProfesional ?? current);
-        setNow(new Date());
+        setNowRefrescado(new Date());
         setLoadState("ready");
       })
       .catch(() => {
@@ -234,7 +248,7 @@ export function Dashboard() {
         await readDashboardData();
       setData(nextData);
       setNombreProfesional((current) => nextNombreProfesional ?? current);
-      setNow(new Date());
+      setNowRefrescado(new Date());
       setLoadState("ready");
     } catch {
       setLoadState("error");

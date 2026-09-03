@@ -1,80 +1,41 @@
 import { db } from "@/lib/db";
-import type { DeudaPaciente } from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
-import { diasDesde, minFecha, sumTarifas } from "../_lib/domain";
+import {
+  buscarTurnosConDeuda,
+  calcularDeudores,
+  type DeudoresApiItem,
+} from "../_lib/domain";
 import { errorResponse, ok } from "../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Item enriquecido para la página /deudores. Extiende DeudaPaciente con los
- * campos que necesita la UI para armar el recordatorio de cobro:
- *   - telefono:        para construir el link wa.me
- *   - minutosTotales:  suma de duración (en minutos) de las sesiones impagas;
- *                      alimenta el resumen "Trabajaste X horas Y minutos gratis"
- *
- * El sidebar también consume este endpoint y se quedó tipado contra el
- * `DeudaPaciente` base; los campos extra le son inocuos (sólo lee diasAtraso).
- */
-export type DeudoresApiItem = DeudaPaciente & {
-  telefono: string;
-  minutosTotales: number;
-};
-
-/**
- * Lista completa de deudores para la página /deudores y para el badge del
- * sidebar. A diferencia de /api/dashboard (que devuelve top 10 y otros
- * widgets), acá no hay tope.
+ * Lista completa de deudores. A diferencia de /api/dashboard (top 10), acá
+ * no hay tope. Orden: más días de atraso primero; a igualdad, mayor monto.
  */
 export async function GET() {
   try {
     const organizationId = await getOrganizationId();
     const now = new Date();
 
-    const pacientes = await db.paciente.findMany({
-      where: {
-        organizationId,
-        turnos: {
-          some: {
-            estado: "realizado",
-            pagoEstado: "pendiente",
-          },
-        },
-      },
-      include: {
-        turnos: {
-          where: {
-            estado: "realizado",
-            pagoEstado: "pendiente",
-          },
-          select: {
-            fecha: true,
-            estado: true,
-            pagoEstado: true,
-            tarifaCobrada: true,
-            duracion: true,
-          },
-        },
-      },
-    });
+    const turnos = await buscarTurnosConDeuda(db, organizationId);
+    const telefonos = new Map(
+      turnos.map((t) => [t.pacienteId, t.paciente.telefono]),
+    );
 
-    const deudores: DeudoresApiItem[] = pacientes
-      .map((paciente) => ({
-        pacienteId: paciente.id,
-        nombre: paciente.nombre,
-        apellido: paciente.apellido,
-        telefono: paciente.telefono,
-        sesionesImpagas: paciente.turnos.length,
-        montoTotal: sumTarifas(paciente.turnos),
-        minutosTotales: paciente.turnos.reduce(
-          (sum, t) => sum + t.duracion,
-          0,
-        ),
-        diasAtraso: diasDesde(minFecha(paciente.turnos), now),
+    const deudores: DeudoresApiItem[] = calcularDeudores(turnos, now)
+      .map((d) => ({
+        pacienteId: d.pacienteId,
+        nombre: d.nombre,
+        apellido: d.apellido,
+        telefono: telefonos.get(d.pacienteId) ?? "",
+        sesionesImpagas: d.sesionesImpagas,
+        montoTotal: d.montoTotal,
+        minutosTotales: d.minutosTotales,
+        diasAtraso: d.diasAtraso ?? 0,
       }))
-      .filter((deudor) => deudor.sesionesImpagas > 0)
       .sort((a, b) =>
         b.diasAtraso !== a.diasAtraso
           ? b.diasAtraso - a.diasAtraso

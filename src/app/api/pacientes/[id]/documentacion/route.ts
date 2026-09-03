@@ -1,15 +1,12 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import type { DatosEstructurados, NotaSOAP } from "@/types/domain";
+import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
+import { ensamblarNotaSOAP } from "@/lib/sesion-clinica-utils";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
-import {
-  ApiError,
-  errorResponse,
-  ok,
-  validationError,
-} from "../../../_lib/responses";
+import { requirePaciente } from "../../../_lib/pacientes";
+import { errorResponse, ok, validationError } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,45 +19,6 @@ const querySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
 });
-
-// La extensión de cifrado descifra `datosEstructuradosEncrypted` a un objeto
-// vía JSON.parse, pero el tipo generado por Prisma sigue siendo `string | null`
-// (la columna legacy es String?). Aceptamos ambas formas + null para ser
-// robustos frente a filas no migradas.
-function parseDatosEstructurados(raw: unknown): DatosEstructurados | null {
-  if (raw == null) return null;
-  if (typeof raw === "string") {
-    try {
-      return JSON.parse(raw) as DatosEstructurados;
-    } catch {
-      return null;
-    }
-  }
-  if (typeof raw === "object") return raw as DatosEstructurados;
-  return null;
-}
-
-function buildNota(s: {
-  notaSubjetivo: string | null;
-  notaObjetivo: string | null;
-  notaAnalisis: string | null;
-  notaPlan: string | null;
-}): NotaSOAP | null {
-  if (
-    s.notaSubjetivo == null &&
-    s.notaObjetivo == null &&
-    s.notaAnalisis == null &&
-    s.notaPlan == null
-  ) {
-    return null;
-  }
-  return {
-    subjetivo: s.notaSubjetivo ?? "",
-    objetivo: s.notaObjetivo ?? "",
-    analisis: s.notaAnalisis ?? "",
-    plan: s.notaPlan ?? "",
-  };
-}
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
@@ -77,13 +35,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
     const { page, limit } = parsedQuery.data;
 
-    const paciente = await db.paciente.findFirst({
-      where: { id, organizationId },
-      select: { id: true },
-    });
-    if (!paciente) {
-      throw new ApiError("Paciente no encontrado", 404);
-    }
+    await requirePaciente(db, id, organizationId);
 
     const where = {
       organizationId,
@@ -132,10 +84,14 @@ export async function GET(request: Request, { params }: RouteParams) {
       duracionAudioSeg: s.duracionAudioSeg,
       modalidad: s.turno.modalidad,
       estado: s.estado,
-      nota: buildNota(s),
-      datosEstructurados: parseDatosEstructurados(
-        s.datosEstructurados as unknown,
-      ),
+      nota: ensamblarNotaSOAP({
+        subjetivo: s.notaSubjetivo,
+        objetivo: s.notaObjetivo,
+        analisis: s.notaAnalisis,
+        plan: s.notaPlan,
+      }),
+      // Parseo del tablero (valida el shape; fila corrupta → null).
+      datosEstructurados: parseDatosEstructurados(s.datosEstructurados),
       aprobadoEn: s.aprobadoEn ? s.aprobadoEn.toISOString() : null,
       procesadoEn: s.procesadoEn ? s.procesadoEn.toISOString() : null,
     }));

@@ -12,7 +12,7 @@ import {
   KpiCard,
 } from "@/components/ui";
 import { fechaCorta, fechaRelativa, hora, money } from "@/lib/format";
-import type { Paciente, Turno } from "@/types/domain";
+import type { PacienteConDeuda, Turno } from "@/types/domain";
 
 import { BriefPreSesion } from "./brief-pre-sesion";
 import { RiesgoBanner } from "./riesgo-banner";
@@ -20,7 +20,9 @@ import { RiesgoBanner } from "./riesgo-banner";
 type TabKey = "historia" | "progreso" | "turnos" | "datos";
 
 type Props = {
-  paciente: Paciente;
+  // GET /api/pacientes/[id] ya devuelve la ficha con deuda calculada
+  // (toPacienteConDeuda): acá no se recalcula.
+  paciente: PacienteConDeuda;
   turnos: Turno[];
   config: { tarifaDefault: number };
   onEditar: () => void;
@@ -85,15 +87,7 @@ export function ResumenTab({
     [turnos],
   );
 
-  const deudaTotal = React.useMemo(
-    () =>
-      turnos
-        .filter(
-          (t) => t.estado === "realizado" && t.pagoEstado === "pendiente",
-        )
-        .reduce((acc, t) => acc + t.tarifaCobrada, 0),
-    [turnos],
-  );
+  const deudaTotal = paciente.deudaTotal;
 
   const ultimaSesion = React.useMemo(() => {
     const realizadas = turnos

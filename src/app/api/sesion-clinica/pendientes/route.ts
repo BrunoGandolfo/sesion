@@ -12,6 +12,7 @@
 
 import { db } from "@/lib/db";
 
+import { requireM2M } from "../../_lib/auth";
 import { errorResponse } from "../../_lib/responses";
 import { extraerCriptoTemporal } from "../../_lib/sesion-clinica";
 
@@ -30,17 +31,9 @@ function envNumber(name: string, fallback: number): number {
 const LEASE_MINUTES = envNumber("LEASE_MINUTES", 45);
 const MAX_INTENTOS = envNumber("MAX_INTENTOS_PROCESAMIENTO", 3);
 
-function isAuthorized(request: Request): boolean {
-  const secret = process.env.PROCESSING_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("authorization");
-  return header === `Bearer ${secret}`;
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return Response.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const noAutorizado = requireM2M(request);
+  if (noAutorizado) return noAutorizado;
 
   try {
     const leaseVencidoAntesDe = new Date(Date.now() - LEASE_MINUTES * 60000);
@@ -62,7 +55,6 @@ export async function GET(request: Request) {
         datosEstructurados: true,
         createdAt: true,
         intentos: true,
-        updatedAt: true,
         turno: {
           select: {
             paciente: { select: { id: true } },

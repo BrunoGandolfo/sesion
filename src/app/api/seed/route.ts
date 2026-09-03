@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
+import { requireBearer } from "../_lib/auth";
 import { addDays, startOfDay } from "../_lib/domain";
 import { errorResponse } from "../_lib/responses";
 
@@ -81,21 +82,13 @@ function weekdayDates(start: Date, count: number, fromOffset: number) {
   return dates;
 }
 
-function isAuthorized(request: Request) {
-  const secret = process.env.SEED_SECRET;
-  if (!secret) return false;
-
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production") {
     return Response.json({ error: "No encontrado" }, { status: 404 });
   }
 
-  if (!isAuthorized(request)) {
-    return Response.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const denegado = requireBearer(request, process.env.SEED_SECRET);
+  if (denegado) return denegado;
 
   try {
     const seedUserPassword = process.env.SEED_USER_PASSWORD;

@@ -133,6 +133,30 @@ interface PatchBody {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Carga
+// ────────────────────────────────────────────────────────────────────────────
+
+const MENSAJE_ERROR_CARGA = "No pudimos cargar el contexto. Intentá de nuevo.";
+
+async function cargarContexto(
+  pacienteId: string,
+  signal: AbortSignal,
+): Promise<ContextoPayload> {
+  const res = await fetch(`/api/pacientes/${pacienteId}/contexto-clinico`, {
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(
+      res.status === 404 ? "Paciente no encontrado." : MENSAJE_ERROR_CARGA,
+    );
+  }
+  // La ruta responde con ok(payload): { data: ContextoPayload }.
+  const json = (await res.json()) as { data: ContextoPayload };
+  return json.data;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Componente
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -143,6 +167,7 @@ export function ContextoGoldenThreadView({
   const [data, setData] = React.useState<ContextoPayload | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [reloadKey, setReloadKey] = React.useState(0);
   const [editando, setEditando] = React.useState(false);
   const [guardando, setGuardando] = React.useState(false);
   const [errorGuardado, setErrorGuardado] = React.useState<string | null>(null);
@@ -150,37 +175,31 @@ export function ContextoGoldenThreadView({
   // Buffer de edición — se inicializa desde `data` al entrar a edit mode.
   const [draft, setDraft] = React.useState<PatchBody | null>(null);
 
-  const cargar = React.useCallback(async () => {
+  // No resetea loading/error acá: el estado inicial ya es "cargando" y el
+  // reintento lo hace en su propio handler (ver `reintentar`).
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    cargarContexto(pacienteId, controller.signal)
+      .then((payload) => {
+        setData(payload);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : MENSAJE_ERROR_CARGA);
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [pacienteId, reloadKey]);
+
+  const reintentar = () => {
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(
-        `/api/pacientes/${pacienteId}/contexto-clinico`,
-        { cache: "no-store" },
-      );
-      if (!res.ok) {
-        throw new Error(
-          res.status === 404
-            ? "Paciente no encontrado."
-            : "No pudimos cargar el contexto. Intentá de nuevo.",
-        );
-      }
-      const json = (await res.json()) as ContextoPayload;
-      setData(json);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No pudimos cargar el contexto. Intentá de nuevo.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [pacienteId]);
-
-  React.useEffect(() => {
-    void cargar();
-  }, [cargar]);
+    setReloadKey((k) => k + 1);
+  };
 
   const entrarEdicion = () => {
     if (!data) return;
@@ -220,8 +239,9 @@ export function ContextoGoldenThreadView({
           "No pudimos guardar los cambios. Revisá los datos e intentá de nuevo.",
         );
       }
-      const actualizado = (await res.json()) as ContextoPayload;
-      setData(actualizado);
+      // PATCH también responde con ok(payload): { data: ContextoPayload }.
+      const actualizado = (await res.json()) as { data: ContextoPayload };
+      setData(actualizado.data);
       setDraft(null);
       setEditando(false);
       onContextoActualizado?.();
@@ -241,7 +261,7 @@ export function ContextoGoldenThreadView({
   }
 
   if (error) {
-    return <ErrorView mensaje={error} onRetry={cargar} />;
+    return <ErrorView mensaje={error} onRetry={reintentar} />;
   }
 
   if (!data) {
