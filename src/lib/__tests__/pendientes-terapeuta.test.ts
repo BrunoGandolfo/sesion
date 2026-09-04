@@ -15,42 +15,20 @@ import {
   it,
 } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
 import { pendientesTerapeuta } from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
 import { __resetKeyCacheForTests } from "@/lib/encryption";
-import { withEncryption } from "@/lib/prisma-encryption";
 
-function loadEnvTest(): void {
-  if (process.env.DATABASE_URL_TEST) return;
-  try {
-    const content = readFileSync(resolve(process.cwd(), ".env.test"), "utf8");
-    for (const rawLine of content.split("\n")) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith("#")) continue;
-      const m = line.match(/^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/);
-      if (m && !process.env[m[1]]) {
-        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-      }
-    }
-  } catch {
-    /* archivo opcional */
-  }
-}
-
-loadEnvTest();
-
-if (!process.env.DATABASE_URL_TEST) {
-  throw new Error(
-    "DATABASE_URL_TEST es obligatorio para los tests de integración de casos de uso.",
-  );
-}
+import {
+  conectarBaseDeTest,
+  vaciarTablas,
+  type ClienteCifrado,
+} from "./db-test";
 
 let prismaRaw!: PrismaClient;
-let db!: ReturnType<typeof withEncryption<PrismaClient>>;
+let db!: ClienteCifrado;
 
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
@@ -63,23 +41,6 @@ const HOY_TARDE = new Date(2026, 8, 3, 18, 0, 0);
 const SEMANA_PASADA = new Date(2026, 7, 27, 10, 0, 0);
 const ANTEAYER = new Date(2026, 8, 1, 11, 0, 0);
 const MANANA = new Date(2026, 8, 4, 10, 0, 0);
-
-async function truncateAll(): Promise<void> {
-  await prismaRaw.$executeRawUnsafe(
-    `TRUNCATE TABLE
-       "paciente_contexto_clinico",
-       "sesiones_clinicas",
-       "consentimientos_grabacion",
-       "recordatorios",
-       "turnos",
-       "hot_words",
-       "pacientes",
-       "configuraciones",
-       "usuarios",
-       "organizaciones"
-     RESTART IDENTITY CASCADE`,
-  );
-}
 
 async function crearOrg(): Promise<string> {
   const org = await prismaRaw.organization.create({
@@ -167,16 +128,13 @@ function pendientesDe(orgId: string) {
 beforeAll(() => {
   process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
   __resetKeyCacheForTests();
-  prismaRaw = new PrismaClient({
-    datasources: { db: { url: process.env.DATABASE_URL_TEST } },
-  });
-  db = withEncryption(prismaRaw);
+  ({ prisma: prismaRaw, db } = conectarBaseDeTest());
 });
 
 beforeEach(async () => {
   process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
   __resetKeyCacheForTests();
-  await truncateAll();
+  await vaciarTablas(prismaRaw);
 });
 
 afterAll(async () => {

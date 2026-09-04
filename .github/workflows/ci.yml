@@ -5,11 +5,12 @@
 # auto-deploye. Si rompe el build / typecheck / lint / tests, nos enteramos
 # acá y no en producción.
 #
-# Cuatro jobs en paralelo:
+# Cinco jobs en paralelo:
 #   - typecheck: tsc --noEmit
 #   - build:     next build
 #   - lint:      eslint
 #   - test:      vitest run (incluye tests de integración contra la DB de test)
+#   - audit:     npm audit (informativo, no bloquea; ver el job)
 #
 # Notas:
 #   - postinstall del package.json ya corre `prisma generate`, pero igual lo
@@ -123,14 +124,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # src/lib/__tests__/prisma-encryption.test.ts lanza al importarse si
-      # DATABASE_URL_TEST no está definida (líneas 54-58). Debe apuntar a una
-      # rama de Neon dedicada a tests con todas las migraciones aplicadas:
-      # el test hace TRUNCATE ... CASCADE en cada caso. NUNCA la DB de prod.
+      # Rama de Neon dedicada a tests: los tests de integración hacen
+      # TRUNCATE ... CASCADE entre casos. NUNCA la DB de producción.
+      # src/lib/__tests__/db-test.ts valida la URL antes de conectar y aborta
+      # si no es la rama de test (o si es la de producción).
       DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
-      # Mismo dummy que typecheck/build. Los tests de cifrado sobreescriben la
-      # variable con una clave aleatoria propia (líneas 69, 115, 126), pero el
-      # resto de la suite puede importar src/lib/db.ts y necesita el guard.
+      # Mismo dummy que typecheck/build. Cada archivo de integración
+      # sobreescribe la variable con una clave aleatoria propia en beforeAll,
+      # pero el resto de la suite puede importar src/lib/db.ts y necesita el
+      # guard.
       NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     steps:
       - uses: actions/checkout@v5
@@ -147,8 +149,49 @@ jobs:
       - name: Generar Prisma Client
         run: npx prisma generate
 
+      # Las migraciones nuevas se aplican solas a la rama de test antes de
+      # correr nada: si no, un PR que agrega una columna falla acá con un
+      # error de Prisma sobre una columna inexistente y hay que ir a aplicar
+      # la migración a mano. `migrate deploy` solo aplica lo pendiente y no
+      # genera ni resetea nada.
+      #
+      # DATABASE_URL a nivel step pisa el dummy del workflow: es la única
+      # parte del CI que se conecta a una base real, y es la de test.
+      - name: Aplicar migraciones a la rama de test
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+        run: npx prisma migrate deploy
+
       - name: Ejecutar tests
         run: npm test
+
+  # No bloquea todavía, a propósito: hoy no sabemos qué devuelve `npm audit`
+  # en este árbol de dependencias, y un job rojo desde el primer día se
+  # aprende a ignorar — que es peor que no tenerlo. Arranca informativo para
+  # ver el ruido real durante unas semanas; cuando el inventario esté limpio
+  # (o con los avisos que no se pueden arreglar documentados), se saca
+  # `continue-on-error` y pasa a ser obligatorio.
+  #
+  # --audit-level=high: moderate y low en dependencias de desarrollo no
+  # justifican frenar un deploy de una app de una sola usuaria.
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      # Sin `npm ci`: audit resuelve el árbol desde package-lock.json y no
+      # necesita node_modules. Evita correr el postinstall (prisma generate).
+      - name: Auditar dependencias
+        run: npm audit --audit-level=high
 
   worker-tests:
     name: Worker tests

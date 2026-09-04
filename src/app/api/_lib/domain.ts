@@ -17,6 +17,14 @@ import type {
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
 import {
+  agregarDiasMvd,
+  diasEnterosMvd,
+  finDeMesMvd,
+  finDelDiaMvd,
+  inicioDeMesMvd,
+  inicioDelDiaMvd,
+} from "@/lib/fechas-montevideo";
+import {
   normalizarRecordatorioModo,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
@@ -139,51 +147,46 @@ export function minFecha(turnos: TurnoStats[]) {
   }, null);
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Bordes de día y de mes — hora de Montevideo, no la del proceso.
+//
+// Estas cinco funciones son las que contestan "hoy", "este mes" y "hace
+// cuántos días" en toda la API. Usaban setHours/getFullYear, o sea la zona
+// del proceso: en Vercel, que corre en UTC y no deja fijar TZ, una sesión de
+// las 21:30 de Montevideo caía en el día siguiente y desaparecía de la
+// agenda del día. Ahora delegan en fechas-montevideo, única fuente de
+// verdad del tiempo local; se conservan acá con su nombre para no tocar los
+// veinte lugares que ya las importan.
+// ────────────────────────────────────────────────────────────────────────────
+
 /**
- * Días enteros transcurridos desde la fecha del turno hasta hoy, calculados
- * sobre el inicio del día (no fracciones). Devuelve 0 si la fecha es de hoy
- * o futura.
+ * Días enteros transcurridos desde la fecha del turno hasta hoy, contados
+ * por día de calendario de Montevideo (no por períodos de 24 horas).
+ * Devuelve 0 si la fecha es de hoy o futura.
  */
 export function diasDesde(fecha: Date | null, ahora: Date): number {
   if (!fecha) return 0;
-  const todayStart = startOfDay(ahora);
-  const turnoStart = startOfDay(fecha);
-  const diff = todayStart.getTime() - turnoStart.getTime();
-  if (diff <= 0) return 0;
-  return Math.floor(diff / 86_400_000);
+  return Math.max(0, diasEnterosMvd(fecha, ahora));
 }
 
 export function startOfDay(date: Date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
+  return inicioDelDiaMvd(date);
 }
 
 export function endOfDay(date: Date) {
-  const next = new Date(date);
-  next.setHours(23, 59, 59, 999);
-  return next;
+  return finDelDiaMvd(date);
 }
 
 export function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  return inicioDeMesMvd(date);
 }
 
 export function endOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-}
-
-export function startOfWeekMonday(date: Date) {
-  const day = startOfDay(date);
-  const mondayOffset = (day.getDay() + 6) % 7;
-  day.setDate(day.getDate() - mondayOffset);
-  return day;
+  return finDeMesMvd(date);
 }
 
 export function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+  return agregarDiasMvd(date, days);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

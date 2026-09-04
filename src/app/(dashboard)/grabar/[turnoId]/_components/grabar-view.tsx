@@ -23,6 +23,7 @@ import {
   type EstadoGrabador,
 } from "@/components/grabacion/GrabadorSesion";
 import { Button, Confirmar, Toast } from "@/components/ui";
+import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
 import { subirAudioCifrado, volverAGrabando } from "@/hooks/useGrabacionSesion";
 import { apiGet, apiPatch, apiPost } from "@/lib/api-client";
 import { hora } from "@/lib/format";
@@ -30,6 +31,7 @@ import { limpiarGrabacion } from "@/lib/grabacion-storage";
 import {
   ALGO_FALLO,
   AUDIO_NO_GUARDADO,
+  EN_PAUSA,
   FALTA_AUTORIZACION,
   FIRMAR_AUTORIZACION,
   GRABAR_SESION,
@@ -451,16 +453,25 @@ function PantallaGrabando({
 
   return (
     <div className="flex w-full flex-col items-center gap-6">
+      {/* El punto respira solo mientras entra audio. En pausa se queda
+          quieto y atenuado: que deje de moverse ES la confirmación de que
+          la grabación está detenida, sin tener que leer la palabra. */}
       <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className={`h-[10px] w-[10px] rounded-full bg-[color:var(--color-error)] ${
-            estado === "grabando" ? "animate-pulse" : "opacity-40"
-          }`}
-        />
-        <span className="font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-500">
-          {estado === "grabando" ? "REC" : interrumpida ? "Cortado" : "En pausa"}
-        </span>
+        {estado === "grabando" ? (
+          <Latido tamano={10} className="bg-[color:var(--color-error)]" />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="inline-block h-[10px] w-[10px] shrink-0 rounded-full bg-[color:var(--color-error)] opacity-40"
+          />
+        )}
+        <Aparece
+          como="span"
+          key={estado}
+          className="font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-500"
+        >
+          {estado === "grabando" ? "REC" : interrumpida ? "Cortado" : EN_PAUSA}
+        </Aparece>
       </div>
 
       <p
@@ -557,15 +568,13 @@ function PantallaGrabando({
   );
 }
 
+// Entra con un fundido corto en el mismo lugar donde estaba el cronómetro:
+// "Terminar la sesión" no cambia de pantalla, cambia de estado. El salto
+// que había antes hacía dudar de si se había apretado bien.
 function PantallaGuardando({ progreso }: { progreso: number | null }) {
   return (
-    <div className="flex w-full flex-col items-center gap-5">
-      <Loader2
-        size={30}
-        strokeWidth={1.8}
-        aria-hidden="true"
-        className="animate-spin text-sage-500"
-      />
+    <Aparece className="flex w-full flex-col items-center gap-5">
+      <AnilloProgreso tamano={30} className="text-sage-500" etiqueta={GUARDANDO} />
       <p className="font-sans text-[16px] font-semibold text-ink-900">
         {GUARDANDO}
       </p>
@@ -582,7 +591,7 @@ function PantallaGuardando({ progreso }: { progreso: number | null }) {
           style={{ width: `${progreso ?? 6}%` }}
         />
       </div>
-    </div>
+    </Aparece>
   );
 }
 

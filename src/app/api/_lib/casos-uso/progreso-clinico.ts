@@ -21,6 +21,7 @@
 // Módulo puro: recibe las filas ya leídas y devuelve el payload. No toca la
 // base ni conoce Request/Response, así que se testea sin DB.
 
+import { instanteMvd, partesMvd } from "@/lib/fechas-montevideo";
 import {
   flagRiesgoSchema,
   type DatosEstructurados,
@@ -157,8 +158,11 @@ function recortarPorRango(
   if (rango === "todo") return sesiones;
   if (rango === "10s") return sesiones.slice(-ULTIMAS_SESIONES);
 
-  const limite = new Date(ahora);
-  limite.setMonth(limite.getMonth() - (rango === "3m" ? 3 : 6));
+  // El corte se cuenta en meses de calendario de Montevideo, no del proceso:
+  // el servidor va en UTC y "tres meses atrás" tiene que ser el mismo día
+  // para la profesional que para el gráfico.
+  const { anio, mes, dia, hora, minuto } = partesMvd(ahora);
+  const limite = instanteMvd(anio, mes - (rango === "3m" ? 3 : 6), dia, hora, minuto);
   return sesiones.filter((sesion) => sesion.fecha.getTime() >= limite.getTime());
 }
 

@@ -21,6 +21,7 @@ import {
   type UltimaSesionCorta,
 } from "@/components/clinico/brief-corto";
 import { Avatar, Button, Card, Chip } from "@/components/ui";
+import { AnilloProgreso, Latido } from "@/components/ui/movimiento";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
 import {
@@ -173,8 +174,18 @@ export function CardAhora({
           <time className="font-[family-name:var(--font-display)] text-[32px] font-medium leading-none tabular-nums text-ink-900 lg:text-[38px]">
             {hora(turno.fecha)}
           </time>
+          {/* El punto late solo mientras la sesión está abierta: es lo
+              único de la pantalla que se mueve por sí solo, y significa
+              exactamente eso. */}
           <Chip variant={enCurso ? "sage" : "neutral"} size="sm">
-            {enCurso ? EN_CURSO : ENSEGUIDA}
+            {enCurso ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Latido tamano={6} className="bg-sage-600" />
+                {EN_CURSO}
+              </span>
+            ) : (
+              ENSEGUIDA
+            )}
           </Chip>
         </div>
       </div>
@@ -183,7 +194,8 @@ export function CardAhora({
 
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
         {accion.tipo === "escribiendo" ? (
-          <p className="font-sans text-[14px] font-semibold text-gold-500">
+          <p className="flex items-center gap-2 font-sans text-[14px] font-semibold text-gold-500">
+            <AnilloProgreso tamano={16} etiqueta={ESCRIBIENDO_NOTA} />
             {ESCRIBIENDO_NOTA}
           </p>
         ) : null}

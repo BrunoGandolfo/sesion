@@ -1,8 +1,15 @@
 // Texto de los recordatorios por SMS: template, variables y conteo de
 // longitud. Módulo puro (sin Twilio, sin process.env) para que lo pueda
 // importar la UI ("use client") sin arrastrar el cliente de envío.
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+//
+// La fecha y la hora se resuelven SIEMPRE en hora de Montevideo. El cron
+// corre en Vercel, que va en UTC y no deja fijar TZ: el 4/9 un turno de las
+// 15:15 salió anunciado "a las 18:15". La paciente lee la hora de su
+// consultorio, no la del centro de datos.
+import {
+  formatearFechaLargaMvd,
+  formatearHoraMvd,
+} from "@/lib/fechas-montevideo";
 
 /** Línea de contacto OBLIGATORIA por diseño: todo SMS termina indicando a
  *  quién y a qué número escribir para cambios. El cron la agrega si el
@@ -33,8 +40,8 @@ export function buildSmsMessage(
   template: string,
   data: SmsTemplateData,
 ): string {
-  const fechaFmt = format(data.fecha, "EEEE d 'de' MMMM", { locale: es });
-  const horaFmt = format(data.fecha, "HH:mm");
+  const fechaFmt = formatearFechaLargaMvd(data.fecha);
+  const horaFmt = formatearHoraMvd(data.fecha);
 
   return template
     .replaceAll("{{nombre}}", data.nombre)

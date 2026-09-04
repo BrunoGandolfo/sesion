@@ -1,0 +1,42 @@
+# Actualizaciones automáticas de dependencias.
+#
+# Dos ecosistemas: npm en la raíz (la app Next.js) y pip en /processor (el
+# worker Python). Semanal y no diario: con 5 PRs abiertos como tope, diario
+# solo cambia la fecha del mismo trabajo.
+#
+# El límite de 5 es a propósito: Dependabot abre PRs que corren el CI entero,
+# y una cola de 30 PRs no se revisa, se cierra en bloque.
+#
+# Los updates de seguridad NO respetan open-pull-requests-limit: entran
+# igual aunque la cola esté llena.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Un solo PR por semana con todo lo menor y de parche: son los que se
+    # mergean sin leer diff y no vale la pena revisarlos de a uno. Los mayores
+    # quedan sueltos, que son los que rompen.
+    groups:
+      menores:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "pip"
+    directory: "/processor"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      menores:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "deps(processor)"

@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { getCurrentOrganizationId, getServerSession } from "@/lib/auth-utils";
 
 import { ApiError, errorResponse } from "./responses";
@@ -51,19 +53,47 @@ export function requireCron(request: Request): Response | null {
 }
 
 /**
+ * Comparación de dos strings en tiempo constante.
+ *
+ * `===` sobre strings corta en el primer byte distinto: el tiempo de
+ * respuesta filtra cuántos caracteres del secreto acertó quien prueba, y
+ * eso permite adivinarlo byte a byte con suficientes intentos. timingSafeEqual
+ * recorre siempre los dos buffers enteros.
+ *
+ * Lo único que sigue distinguiéndose es el LARGO: buffers de distinto
+ * tamaño hacen lanzar a timingSafeEqual, así que se corta antes. Es
+ * aceptable —el largo de un secreto no es el secreto— y es la práctica
+ * habitual con esta primitiva.
+ */
+function igualEnTiempoConstante(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+/**
  * Comparación exacta del header Authorization contra `Bearer ${secret}`.
  * Cuerpo único de requireM2M, requireCron y del seed (SEED_SECRET).
  * Devuelve null si autoriza; si no, la respuesta 401 de errorResponse.
- * Un secret ausente o vacío nunca autoriza.
+ * Un secret ausente o vacío nunca autoriza, y un request sin header
+ * tampoco: no se compara nada.
+ *
+ * Corre en runtime nodejs (node:crypto y Buffer): las rutas que lo usan lo
+ * declaran, y el middleware —que sí es edge— no pasa por acá.
  */
 export function requireBearer(
   request: Request,
   secret: string | undefined,
 ): Response | null {
-  if (!secret) {
-    return errorResponse(new ApiError("No autorizado", 401));
-  }
+  const noAutorizado = () => errorResponse(new ApiError("No autorizado", 401));
+
+  if (!secret) return noAutorizado();
+
   const header = request.headers.get("authorization");
-  if (header === `Bearer ${secret}`) return null;
-  return errorResponse(new ApiError("No autorizado", 401));
+  if (header === null) return noAutorizado();
+
+  return igualEnTiempoConstante(header, `Bearer ${secret}`)
+    ? null
+    : noAutorizado();
 }

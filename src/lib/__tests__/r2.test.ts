@@ -27,10 +27,6 @@ vi.mock("@aws-sdk/client-s3", () => {
     readonly __cmd = "Put" as const;
     constructor(public input: S3CommandInput) {}
   }
-  class GetObjectCommand {
-    readonly __cmd = "Get" as const;
-    constructor(public input: S3CommandInput) {}
-  }
   class DeleteObjectCommand {
     readonly __cmd = "Delete" as const;
     constructor(public input: S3CommandInput) {}
@@ -42,7 +38,6 @@ vi.mock("@aws-sdk/client-s3", () => {
   return {
     S3Client,
     PutObjectCommand,
-    GetObjectCommand,
     DeleteObjectCommand,
     HeadObjectCommand,
   };
@@ -102,75 +97,11 @@ describe("R2 client", () => {
     });
   });
 
-  describe("subirAudioCifrado", () => {
-    it("retorna la key suministrada (formato audio/{id}.enc)", async () => {
-      setR2Env();
-      const { subirAudioCifrado } = await import("@/lib/r2");
-      const key = "audio/sc-123.enc";
-
-      const result = await subirAudioCifrado(
-        key,
-        Buffer.from("payload"),
-        { iv: "ivb64", claveId: "clave-1" },
-      );
-
-      expect(result).toBe(key);
-      expect(result).toMatch(/^audio\/.+\.enc$/);
-    });
-
-    it("envía el bucket, key y metadata correctos al S3Client", async () => {
-      setR2Env();
-      const { subirAudioCifrado } = await import("@/lib/r2");
-
-      await subirAudioCifrado(
-        "audio/abc.enc",
-        Buffer.from("x"),
-        { iv: "iv-base64", claveId: "clave-42" },
-      );
-
-      expect(sendMock).toHaveBeenCalledTimes(1);
-      const cmd = sendMock.mock.calls[0][0] as {
-        __cmd: "Put";
-        input: S3CommandInput;
-      };
-      expect(cmd.__cmd).toBe("Put");
-      expect(cmd.input.Bucket).toBe("bucket-test");
-      expect(cmd.input.Key).toBe("audio/abc.enc");
-      // S3 normaliza metadata a minúsculas: la implementación las
-      // emite ya en minúsculas para que el round-trip sea estable.
-      expect(cmd.input.Metadata).toEqual({
-        iv: "iv-base64",
-        claveid: "clave-42",
-      });
-    });
-
-    it("lanza error descriptivo cuando R2 no está configurado", async () => {
-      unsetR2Env();
-      const { subirAudioCifrado } = await import("@/lib/r2");
-
-      await expect(
-        subirAudioCifrado(
-          "audio/x.enc",
-          Buffer.from("x"),
-          { iv: "i", claveId: "c" },
-        ),
-      ).rejects.toThrow(/R2 no está configurado/);
-    });
-
-    it("envuelve errores del S3 en un mensaje con la key", async () => {
-      setR2Env();
-      sendMock.mockRejectedValueOnce(new Error("network down"));
-      const { subirAudioCifrado } = await import("@/lib/r2");
-
-      await expect(
-        subirAudioCifrado(
-          "audio/falla.enc",
-          Buffer.from("x"),
-          { iv: "i", claveId: "c" },
-        ),
-      ).rejects.toThrow(/audio\/falla\.enc/);
-    });
-  });
+  // Los tests de subirAudioCifrado y descargarAudioCifrado se fueron con
+  // esas funciones: el audio no viaja por el servidor desde que el
+  // navegador hace PUT a la URL prefirmada. Lo que cubrían —"lanza si R2 no
+  // está configurado" y "el error trae la key"— lo cubren igual los tests
+  // de generarUrlSubida y existeAudio, que sí tienen consumidores.
 
   describe("generarUrlSubida (PUT prefirmado para el navegador)", () => {
     it("firma un PutObject con bucket, key, Content-Type y Content-Length", async () => {

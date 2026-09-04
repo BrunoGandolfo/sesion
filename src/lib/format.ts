@@ -1,5 +1,15 @@
-import { format, isToday, isYesterday, differenceInDays, differenceInWeeks, differenceInMonths } from "date-fns";
-import { es } from "date-fns/locale";
+import {
+  diasEnterosMvd,
+  esMismoDiaMvd,
+  formatearDiaSemanaMvd,
+  formatearFechaCortaMvd,
+  formatearFechaLargaMvd,
+  formatearHoraMvd,
+  horaLocalMvd,
+  mesesEnterosMvd,
+} from "@/lib/fechas-montevideo";
+
+import { pluralizar } from "./glosario";
 
 // ============================================
 // Moneda — UYU sin centavos
@@ -19,54 +29,91 @@ export function moneyShort(n: number): string {
 }
 
 // ============================================
-// Fechas — es-UY, zona Montevideo
+// Fechas — es-UY, hora de Montevideo SIEMPRE.
+//
+// Estas funciones corren en el servidor (UTC en Vercel, que no deja fijar
+// TZ) y en el navegador (la zona de quien mire). Antes usaban date-fns
+// sobre la hora del proceso, así que el mismo turno se leía "15:15" en el
+// teléfono de la profesional y "18:15" en el SMS que salió del servidor.
+//
+// Ahora todo pasa por fechas-montevideo: la app es de un consultorio en
+// Montevideo y la hora que se muestra es la del consultorio, esté quien
+// esté mirando y corra donde corra el proceso.
 // ============================================
 
 /** "lunes 20 de abril" */
 export function fechaLarga(d: Date): string {
-  return format(d, "EEEE d 'de' MMMM", { locale: es });
+  return formatearFechaLargaMvd(d);
 }
 
 /** "20 abr" */
 export function fechaCorta(d: Date): string {
-  return format(d, "d MMM", { locale: es });
+  return formatearFechaCortaMvd(d);
 }
 
 /** "09:00" */
 export function hora(d: Date): string {
-  return format(d, "HH:mm");
+  return formatearHoraMvd(d);
 }
 
-/** "Hoy", "Ayer", "Hace 3 días", "Hace 2 sem", "Hace 3 mes" */
+/**
+ * "Hoy", "Ayer", "Hace 3 días", "Hace 1 semana", "Hace 3 semanas",
+ * "Hace 1 mes", "Hace 2 meses". Más allá del año, la fecha corta.
+ *
+ * Antes decía "Hace 2 sem" y "Hace 3 mes": la abreviatura no ahorraba nada
+ * en una celda que ya entra holgada, y el singular fijo en "mes" hacía que
+ * tres meses se leyeran como tres veces el mismo mes. La palabra entera y
+ * bien concordada se lee sin traducir.
+ *
+ * Los días son días de calendario de Montevideo, no períodos de 24 horas:
+ * de una sesión de las 23:00 a la una de la mañana siguiente hay un día,
+ * que es lo que diría cualquiera. "Hoy" y "Ayer" se miden contra `desde`
+ * (antes se medían siempre contra el reloj real, aunque se pasara otra
+ * referencia: un test lo documentaba como rareza).
+ */
 export function fechaRelativa(d: Date, desde?: Date): string {
   const ref = desde ?? new Date();
-  if (isToday(d)) return "Hoy";
-  if (isYesterday(d)) return "Ayer";
+  if (esMismoDiaMvd(d, ref)) return "Hoy";
 
-  const dias = differenceInDays(ref, d);
-  if (dias > 0 && dias < 7) return `Hace ${dias} días`;
-  
-  const semanas = differenceInWeeks(ref, d);
-  if (semanas > 0 && semanas < 4) return `Hace ${semanas} sem`;
-  
-  const meses = differenceInMonths(ref, d);
-  if (meses > 0) return `Hace ${meses} mes`;
+  const dias = diasEnterosMvd(d, ref);
+  if (dias === 1) return "Ayer";
+  if (dias > 0 && dias < 7) return `Hace ${pluralizar(dias, "día", "días")}`;
+
+  const semanas = Math.floor(dias / 7);
+  if (semanas > 0 && semanas < 4) {
+    return `Hace ${pluralizar(semanas, "semana", "semanas")}`;
+  }
+
+  const meses = mesesEnterosMvd(d, ref);
+  if (meses > 0 && meses < 12) {
+    return `Hace ${pluralizar(meses, "mes", "meses")}`;
+  }
+
+  const anios = Math.floor(meses / 12);
+  if (anios > 0) return `Hace ${pluralizar(anios, "año", "años")}`;
+
+  // 28 a 30 días que todavía no completan un mes de calendario (del 31/1 al
+  // 28/2). Sin esta línea caían a la fecha corta y la columna mezclaba
+  // "Hace 3 semanas" con "28 feb".
+  if (semanas > 0) return `Hace ${pluralizar(semanas, "semana", "semanas")}`;
 
   // Futuro
-  const diasFuturo = differenceInDays(d, ref);
-  if (diasFuturo > 0 && diasFuturo < 7) return `En ${diasFuturo} día${diasFuturo === 1 ? "" : "s"}`;
+  const diasFuturo = -dias;
+  if (diasFuturo > 0 && diasFuturo < 7) {
+    return `En ${pluralizar(diasFuturo, "día", "días")}`;
+  }
 
   return fechaCorta(d);
 }
 
 /** "lunes", "martes", etc. */
 export function diaSemana(d: Date): string {
-  return format(d, "EEEE", { locale: es });
+  return formatearDiaSemanaMvd(d);
 }
 
 /** "Buen día" / "Buenas tardes" / "Buenas noches" */
 export function saludo(d?: Date): string {
-  const h = (d ?? new Date()).getHours();
+  const { hora: h } = horaLocalMvd(d ?? new Date());
   if (h < 12) return "Buen día";
   if (h < 19) return "Buenas tardes";
   return "Buenas noches";

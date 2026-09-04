@@ -100,10 +100,17 @@ describe("calcularDeudores", () => {
 describe("calcularDeudores — diasAtraso", () => {
   const ana = { nombre: "Ana", apellido: "Pérez" };
   const luis = { nombre: "Luis", apellido: "García" };
-  // Mediodía para que el redondeo a inicio de día no dependa del reloj.
-  const hoy = new Date(2026, 8, 3, 12, 0, 0);
-  const diasAntes = (n: number) =>
-    new Date(2026, 8, 3 - n, 15, 30, 0);
+
+  // Los días de atraso se cuentan por día de calendario de MONTEVIDEO
+  // (diasDesde → fechas-montevideo). Por eso los instantes se escriben en
+  // UTC explícito: con `new Date(2026, 8, 3, 12)` el mismo test daba un
+  // resultado en la máquina de desarrollo y otro en CI, que corre en UTC.
+  // 12:00 de Montevideo = 15:00Z del mismo día.
+  const mvd = (dia: number, hora: number, minuto = 0) =>
+    new Date(Date.UTC(2026, 8, dia, hora + 3, minuto, 0, 0));
+
+  const hoy = mvd(3, 12);
+  const diasAntes = (n: number) => mvd(3 - n, 15, 30);
 
   const turnos: TurnoParaDeuda[] = [
     // Ana: impagas hace 10 y hace 3 días → cuenta la más antigua (10)
@@ -131,8 +138,10 @@ describe("calcularDeudores — diasAtraso", () => {
   });
 
   it("cuenta días enteros sobre el inicio del día, no fracciones", () => {
-    const ayerTarde = new Date(2026, 8, 2, 23, 0, 0);
-    const hoyTemprano = new Date(2026, 8, 3, 1, 0, 0);
+    // 23:00 del 2 y 01:00 del 3, hora de Montevideo: dos horas de diferencia
+    // pero un día de atraso, que es lo que diría cualquiera.
+    const ayerTarde = mvd(2, 23);
+    const hoyTemprano = mvd(3, 1);
     const [deudor] = calcularDeudores(
       [{ pacienteId: "x", paciente: ana, estado: "realizado", pagoEstado: "pendiente", tarifaCobrada: 1, fecha: ayerTarde }],
       hoyTemprano,

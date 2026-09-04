@@ -1,7 +1,17 @@
+// Acceso a R2 (Cloudflare) por S3 API. Cuatro operaciones, las que usa el
+// pipeline: saber si está configurado, firmar el PUT del navegador,
+// verificar que el objeto llegó y borrarlo cuando la nota se aprueba.
+//
+// El audio NUNCA sube ni baja por acá: el navegador hace PUT directo a la
+// URL prefirmada (Vercel corta los requests en 4,5 MB) y el worker lo
+// descarga con sus propias credenciales. Las funciones que hacían esos dos
+// viajes desde el servidor —subirAudioCifrado y descargarAudioCifrado—
+// quedaron sin un solo importador cuando el flujo pasó a prefirmado, y se
+// borraron: eran las únicas que movían PHI a través de esta capa.
+
 import {
   S3Client,
   PutObjectCommand,
-  GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -17,11 +27,6 @@ interface R2Config {
 interface R2Cliente {
   cliente: S3Client;
   bucket: string;
-}
-
-interface AudioMetadata {
-  iv: string;
-  claveId: string;
 }
 
 function leerConfig(): R2Config | null {
@@ -68,45 +73,6 @@ function obtenerCliente(): R2Cliente {
  */
 export function r2Configurado(): boolean {
   return leerConfig() !== null;
-}
-
-/**
- * Sube audio cifrado a R2.
- * Sólo el IV y el identificador de la clave (claveId) se guardan como
- * metadata del objeto. La clave de cifrado real vive en la DB.
- *
- * @param key - identificador único (ej: "audio/{sesionClinicaId}.enc")
- * @param data - Buffer con el audio cifrado
- * @param metadata - iv y claveId (referencia a la clave en DB)
- * @returns la key del objeto subido
- */
-export async function subirAudioCifrado(
-  key: string,
-  data: Buffer,
-  metadata: AudioMetadata,
-): Promise<string> {
-  const { cliente, bucket } = obtenerCliente();
-
-  try {
-    await cliente.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: data,
-        ContentType: "application/octet-stream",
-        // S3 normaliza nombres de metadata a minúsculas. Usamos minúsculas
-        // explícitas para evitar sorpresas al leer.
-        Metadata: {
-          iv: metadata.iv,
-          claveid: metadata.claveId,
-        },
-      }),
-    );
-    return key;
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`No se pudo subir el audio a R2 (${key}): ${msg}`);
-  }
 }
 
 export interface UrlSubida {
@@ -183,41 +149,6 @@ export async function existeAudio(
     }
     const msg = error instanceof Error ? error.message : String(error);
     throw new Error(`No se pudo verificar el audio en R2 (${key}): ${msg}`);
-  }
-}
-
-/**
- * Descarga audio cifrado de R2 junto con su metadata (iv, claveId).
- */
-export async function descargarAudioCifrado(
-  key: string,
-): Promise<{ data: Buffer; metadata: AudioMetadata }> {
-  const { cliente, bucket } = obtenerCliente();
-
-  try {
-    const response = await cliente.send(
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-    );
-
-    if (!response.Body) {
-      throw new Error("respuesta vacía de R2");
-    }
-
-    const bytes = await response.Body.transformToByteArray();
-    const data = Buffer.from(bytes);
-
-    const meta = response.Metadata ?? {};
-    const iv = meta.iv;
-    const claveId = meta.claveid ?? meta.claveId;
-
-    if (!iv || !claveId) {
-      throw new Error("metadata incompleta en el objeto R2 (faltan iv o claveId)");
-    }
-
-    return { data, metadata: { iv, claveId } };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`No se pudo descargar el audio de R2 (${key}): ${msg}`);
   }
 }
 

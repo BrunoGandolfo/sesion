@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ChevronLeft, Loader2 } from "lucide-react";
+import { AlertCircle, ChevronLeft } from "lucide-react";
 
 import { Button, Confirmar, Toast } from "@/components/ui";
+import { AnilloProgreso } from "@/components/ui/movimiento";
 import {
   clavesDeRiesgo,
   CLAVE_RIESGO_GRADUADO,
@@ -89,6 +90,10 @@ export function SesionDetailView({ id }: { id: string }) {
   const [enviando, setEnviando] = React.useState(false);
   const [errorAccion, setErrorAccion] = React.useState<string | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = React.useState(false);
+  // La nota ya se guardó: la barra pasa a confirmar mientras la pantalla
+  // vuelve sola. Sin esto, el último segundo mostraba los botones todavía
+  // ofreciendo aprobar algo que ya estaba aprobado.
+  const [guardada, setGuardada] = React.useState(false);
   const [toast, setToast] = React.useState({ open: false, mensaje: "" });
 
   const aplicar = React.useCallback((fila: SesionClinicaResponse) => {
@@ -186,6 +191,7 @@ export function SesionDetailView({ id }: { id: string }) {
           ...(exigeConfirmarRiesgo ? { confirmoRiesgo: true } : {}),
         },
       );
+      setGuardada(true);
       setToast({ open: true, mensaje: NOTA_GUARDADA });
       volverRef.current = setTimeout(() => {
         router.back();
@@ -283,12 +289,7 @@ export function SesionDetailView({ id }: { id: string }) {
 
         {sesion && (sesion.estado === "procesando" || sesion.estado === "subiendo") ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <Loader2
-              size={30}
-              strokeWidth={1.8}
-              aria-hidden="true"
-              className="animate-spin text-gold-500"
-            />
+            <AnilloProgreso tamano={30} className="text-gold-500" />
             <p
               role="status"
               className="font-display text-[18px] font-medium italic text-ink-900"
@@ -369,6 +370,7 @@ export function SesionDetailView({ id }: { id: string }) {
         <BarraAcciones
           puedeAprobar={puedeAprobar}
           enviando={enviando}
+          guardada={guardada}
           onAprobar={() => void aprobar()}
           onDescartar={() => void descartar()}
         />

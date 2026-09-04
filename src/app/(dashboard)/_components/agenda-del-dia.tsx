@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { Button, Card, SessionRow } from "@/components/ui";
+import { ListaEnCascada } from "@/components/ui/movimiento";
 import { AGENDA_DEL_DIA } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
@@ -58,7 +59,9 @@ export function AgendaDelDia({
       </Titulo>
 
       {turnos.length > 0 ? (
-        <div className="space-y-2">
+        // Los turnos del día entran de arriba abajo, en el orden en que van
+        // a ocurrir. Con más de ocho, del noveno en adelante entran quietos.
+        <ListaEnCascada className="space-y-2">
           {turnos.map((turno) => (
             <SessionRow
               key={turno.id}
@@ -74,7 +77,7 @@ export function AgendaDelDia({
               onAutorizar={() => router.push(`/pacientes/${turno.paciente.id}`)}
             />
           ))}
-        </div>
+        </ListaEnCascada>
       ) : (
         <Card className="rounded-[8px] p-6 text-center">
           <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-900">

@@ -9,13 +9,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  CheckCircle2,
-  ChevronRight,
-  MessageCircle,
-  Settings,
-  Wallet,
-} from "lucide-react";
+import { CheckCircle2, ChevronRight, MessageCircle, Wallet } from "lucide-react";
 
 import {
   Avatar,
@@ -24,6 +18,8 @@ import {
   EditorialRule,
   Segmented,
 } from "@/components/ui";
+import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
+import { ListaEnCascada } from "@/components/ui/movimiento";
 import { apiGet, esAbort } from "@/lib/api-client";
 import {
   TEMPLATE_COBRO_DEFAULT,
@@ -34,7 +30,7 @@ import {
   type ZonaDeuda,
 } from "@/lib/deudas";
 import { fechaCorta, fechaLarga, money, moneyShort } from "@/lib/format";
-import { ALGO_FALLO, NAV, TE_DEBEN, TU_CONSULTORIO, pluralizar } from "@/lib/glosario";
+import { ALGO_FALLO, NAV, TE_DEBEN, pluralizar } from "@/lib/glosario";
 import type {
   Configuracion,
   DeudaPaciente,
@@ -146,7 +142,7 @@ export function CobrosView() {
 
   if (carga === "cargando" && !datos) {
     return (
-      <Marco ahora={null}>
+      <Marco ahora={null} nombreProfesional={null}>
         <p className="py-16 text-center text-[14px] text-ink-500">Cargando…</p>
       </Marco>
     );
@@ -154,7 +150,7 @@ export function CobrosView() {
 
   if (carga === "error" && !datos) {
     return (
-      <Marco ahora={null}>
+      <Marco ahora={null} nombreProfesional={null}>
         <EstadoVacio
           icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
           titulo={ALGO_FALLO}
@@ -183,7 +179,7 @@ export function CobrosView() {
   );
 
   return (
-    <Marco ahora={ahora}>
+    <Marco ahora={ahora} nombreProfesional={nombreProfesional}>
       <KpiGrid
         ingresosMes={kpis.ingresosMes}
         deudaTotal={kpis.deudaAcumulada}
@@ -222,9 +218,12 @@ export function CobrosView() {
 // ============================================
 function Marco({
   ahora,
+  nombreProfesional,
   children,
 }: {
   ahora: Date | null;
+  /** null mientras carga: la cabecera muestra "Tu consultorio". */
+  nombreProfesional: string | null;
   children: React.ReactNode;
 }) {
   const mesLargo = ahora
@@ -234,7 +233,16 @@ function Marco({
 
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-7 px-5 py-6 lg:gap-10 lg:px-10 lg:py-10">
-      <header className="flex min-w-0 items-start justify-between gap-4">
+      {/* La misma cabecera que en Hoy, y por el mismo motivo: el menú de
+          abajo no lleva a la configuración, y un engranaje suelto arriba a
+          la derecha era el segundo acceso distinto a un mismo lugar.
+          Sin saludo: Cobros no es la pantalla del día. */}
+      <header className="flex min-w-0 flex-col gap-4">
+        <CabeceraUsuario
+          nombre={nombreProfesional}
+          ahora={ahora}
+          className="self-start lg:hidden"
+        />
         <div className="min-w-0">
           <div className="flex h-5 items-center text-[13px] font-medium text-ink-500">
             <EditorialRule />
@@ -244,14 +252,6 @@ function Marco({
             {NAV.COBROS}
           </h1>
         </div>
-        <Link
-          href="/config"
-          aria-label={TU_CONSULTORIO}
-          title={TU_CONSULTORIO}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-500 transition-colors duration-150 hover:bg-cream-100 hover:text-ink-900 lg:hidden"
-        >
-          <Settings size={20} strokeWidth={1.6} aria-hidden="true" />
-        </Link>
       </header>
       {children}
     </div>
@@ -383,11 +383,15 @@ function TeDeben({
       </Card>
 
       <Card className="overflow-hidden rounded-[8px] p-0">
-        <ul className="divide-y divide-[color:var(--border-subtle)]">
+        <ListaEnCascada
+          contenedor="ul"
+          item="li"
+          className="divide-y divide-[color:var(--border-subtle)]"
+        >
           {deudores.map((d) => {
             const nombreCompleto = `${d.nombre} ${d.apellido}`;
             return (
-              <li
+              <div
                 key={d.pacienteId}
                 className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:gap-4 lg:px-5 lg:py-4"
               >
@@ -435,10 +439,10 @@ function TeDeben({
                     <ChevronRight size={16} strokeWidth={1.6} aria-hidden="true" />
                   </Link>
                 </div>
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </ListaEnCascada>
       </Card>
     </div>
   );

@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check } from "lucide-react";
+
+import { CheckDibujado } from "./movimiento";
 
 // Posición: por encima del botón flotante, nunca sobre él.
 //
@@ -54,12 +55,9 @@ export function Toast({
           }
           className="fixed z-50 bottom-[var(--toast-bottom)] left-1/2 -translate-x-1/2 lg:bottom-[var(--toast-bottom-lg)] lg:right-8 lg:left-auto lg:translate-x-0 inline-flex max-w-[calc(100vw-40px)] items-center gap-2 bg-ink-900 text-cream-50 rounded-md px-4 py-3 shadow-raised"
         >
-          <Check
-            size={16}
-            strokeWidth={1.6}
-            aria-hidden="true"
-            className="shrink-0"
-          />
+          {/* El check se traza al entrar: es la confirmación de que lo que
+              se pidió (cobrar, aprobar, agendar) efectivamente pasó. */}
+          <CheckDibujado tamano={16} className="shrink-0" />
           <span className="font-sans text-[14px] leading-[1.35]">{message}</span>
         </motion.div>
       )}

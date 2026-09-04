@@ -207,6 +207,9 @@ export const NO_VINO = "No vino";
 // ────────────────────────────────────────────────────────────────────────────
 
 export const GRABAR_SESION = "Grabar sesión";
+
+/** Estado de la grabación detenida a propósito, no por un corte. */
+export const EN_PAUSA = "En pausa";
 export const TERMINAR_SESION = "Terminar la sesión";
 export const PAUSAR = "Pausar";
 export const REANUDAR = "Reanudar";

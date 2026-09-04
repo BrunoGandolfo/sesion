@@ -9,6 +9,7 @@
 import * as React from "react";
 
 import { Toast } from "@/components/ui";
+import { ListaEnCascada } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { ALGO_FALLO } from "@/lib/glosario";
@@ -129,36 +130,41 @@ export function Dashboard() {
 
   return (
     <>
+      {/* Los bloques entran escalonados, de arriba abajo: el orden en que
+          se leen es el orden en que aparecen. El saludo va fuera de la
+          cascada porque es lo primero que tiene que estar, sin espera. */}
       <div className="mx-auto flex min-h-full w-full max-w-[1200px] flex-col gap-7 p-5 lg:gap-10 lg:p-14">
         <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
 
-        <Pendientes pendientes={pendientes} />
+        <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
+          <Pendientes pendientes={pendientes} />
 
-        {ahoraTurno ? (
-          <CardAhora
-            turno={ahoraTurno}
-            enCurso={enCurso}
-            sinAutorizacion={sinAutorizacion.has(ahoraTurno.id)}
-            sinCobrar={ahoraSinCobrar}
-            onCobrar={() => setCobrando(ahoraTurno.id)}
-            reloadKey={reloadKey}
-          />
-        ) : null}
+          {ahoraTurno ? (
+            <CardAhora
+              turno={ahoraTurno}
+              enCurso={enCurso}
+              sinAutorizacion={sinAutorizacion.has(ahoraTurno.id)}
+              sinCobrar={ahoraSinCobrar}
+              onCobrar={() => setCobrando(ahoraTurno.id)}
+              reloadKey={reloadKey}
+            />
+          ) : null}
 
-        <Kpis ahora={ahora} data={data} />
+          <Kpis ahora={ahora} data={data} />
 
-        <div className="grid gap-7 lg:grid-cols-[1.5fr_1fr] lg:gap-10">
-          <AgendaDelDia
-            turnos={turnos}
-            ahora={ahora}
-            notaPorTurno={notaPorTurno}
-            sinAutorizacion={sinAutorizacion}
-            onCobrar={setCobrando}
-            onAgendar={abrirTurno}
-          />
+          <div className="grid gap-7 lg:grid-cols-[1.5fr_1fr] lg:gap-10">
+            <AgendaDelDia
+              turnos={turnos}
+              ahora={ahora}
+              notaPorTurno={notaPorTurno}
+              sinAutorizacion={sinAutorizacion}
+              onCobrar={setCobrando}
+              onAgendar={abrirTurno}
+            />
 
-          <TeDeben deudores={data.deudores} />
-        </div>
+            <TeDeben deudores={data.deudores} />
+          </div>
+        </ListaEnCascada>
       </div>
 
       <SheetNuevoTurno

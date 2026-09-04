@@ -11,14 +11,40 @@ import {
 const baseData = {
   nombre: "Ana",
   apellido: "Pérez",
-  // 20 abril 2026, 09:00 — lunes
-  fecha: new Date(2026, 3, 20, 9, 0),
+  // Lunes 20 de abril de 2026, 09:00 de Montevideo = 12:00Z.
+  //
+  // El instante va en UTC explícito: el cron corre en Vercel, que va en UTC
+  // y no deja fijar TZ, así que un `new Date(2026, 3, 20, 9)` haría que este
+  // test dijera "09:00" en la máquina de desarrollo y "06:00" en CI.
+  fecha: new Date("2026-04-20T12:00:00.000Z"),
   direccion: "Bvar. España 2345",
   profesional: "Lic. María García",
   telefonoConsultorio: "+598 99 876 543",
 };
 
 describe("buildSmsMessage", () => {
+  it("dice la hora del consultorio, no la del servidor", () => {
+    // El caso de producción del 4/9: un turno de las 15:15 de Montevideo
+    // (18:15Z) salió anunciado "a las 18:15" porque el formateo usaba la
+    // hora del proceso.
+    const out = buildSmsMessage("Te esperamos a las {{hora}}", {
+      ...baseData,
+      fecha: new Date("2026-09-05T18:15:00.000Z"),
+    });
+
+    expect(out).toBe("Te esperamos a las 15:15");
+  });
+
+  it("una sesión de las 21:30 no se anuncia para el día siguiente", () => {
+    // 21:30 del viernes 4 = 00:30Z del sábado 5.
+    const out = buildSmsMessage("{{fecha}} a las {{hora}}", {
+      ...baseData,
+      fecha: new Date("2026-09-05T00:30:00.000Z"),
+    });
+
+    expect(out).toBe("viernes 4 de septiembre a las 21:30");
+  });
+
   it("reemplaza {{nombre}} y {{apellido}}", () => {
     const out = buildSmsMessage("Hola {{nombre}} {{apellido}}", baseData);
     expect(out).toBe("Hola Ana Pérez");

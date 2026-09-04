@@ -22,79 +22,34 @@ import {
 } from "vitest";
 import { Buffer } from "node:buffer";
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
 import { __resetKeyCacheForTests, decrypt } from "@/lib/encryption";
 import {
   assertConsultaSinCifrados,
   cifrarContexto,
   cifrarSesion,
-  withEncryption,
 } from "@/lib/prisma-encryption";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Carga de .env.test sin agregar dependencias: parser mínimo, solo si la
-// variable no viene ya seteada en el ambiente.
-// ─────────────────────────────────────────────────────────────────────────────
-function loadEnvTest(): void {
-  if (process.env.DATABASE_URL_TEST) return;
-  try {
-    const content = readFileSync(resolve(process.cwd(), ".env.test"), "utf8");
-    for (const rawLine of content.split("\n")) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith("#")) continue;
-      const m = line.match(/^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/);
-      if (m && !process.env[m[1]]) {
-        const value = m[2].replace(/^["']|["']$/g, "");
-        process.env[m[1]] = value;
-      }
-    }
-  } catch {
-    /* archivo opcional */
-  }
-}
-
-loadEnvTest();
-
-if (!process.env.DATABASE_URL_TEST) {
-  throw new Error(
-    "DATABASE_URL_TEST es obligatorio para los tests de integración de prisma-encryption.",
-  );
-}
+import {
+  conectarBaseDeTest,
+  vaciarTablas,
+  type ClienteCifrado,
+} from "./db-test";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cliente Prisma, dedicado a esta DB de test. La extensión exige que
-// NOTES_ENCRYPTION_KEY esté seteada al construirse, por eso lo hacemos en
-// beforeAll (no en el top-level del módulo).
+// Cliente Prisma de la base de test. La conexión (y las guardas sobre
+// DATABASE_URL_TEST) viven en ./db-test; acá se pide en beforeAll porque la
+// extensión exige NOTES_ENCRYPTION_KEY al construirse.
 // ─────────────────────────────────────────────────────────────────────────────
 let prismaRaw!: PrismaClient;
-let db!: ReturnType<typeof withEncryption<PrismaClient>>;
+let db!: ClienteCifrado;
 
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
 const MAGIC_HEX = "454e4331"; // "ENC1"
-
-async function truncateAll(): Promise<void> {
-  // CASCADE limpia todo el grafo en una sola sentencia.
-  await prismaRaw.$executeRawUnsafe(
-    `TRUNCATE TABLE
-       "sesiones_clinicas",
-       "paciente_contexto_clinico",
-       "consentimientos_grabacion",
-       "recordatorios",
-       "turnos",
-       "hot_words",
-       "pacientes",
-       "configuraciones",
-       "usuarios",
-       "organizaciones"
-     RESTART IDENTITY CASCADE`,
-  );
-}
 
 type Deps = { orgId: string; pacienteId: string; turnoId: string };
 
@@ -153,13 +108,10 @@ function esperarFilaExacta(
   expect(Object.keys(fila ?? {}).sort()).toEqual(Object.keys(esperado).sort());
 }
 
-beforeAll(async () => {
+beforeAll(() => {
   process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
   __resetKeyCacheForTests();
-  prismaRaw = new PrismaClient({
-    datasources: { db: { url: process.env.DATABASE_URL_TEST } },
-  });
-  db = withEncryption(prismaRaw);
+  ({ prisma: prismaRaw, db } = conectarBaseDeTest());
 });
 
 beforeEach(async () => {
@@ -167,7 +119,7 @@ beforeEach(async () => {
   // (otros archivos de test pueden mutar la env vía afterEach hooks).
   process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
   __resetKeyCacheForTests();
-  await truncateAll();
+  await vaciarTablas(prismaRaw);
 });
 
 afterAll(async () => {

@@ -9,11 +9,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ChevronDown, LoaderCircle, Mic } from "lucide-react";
+import { ChevronDown, Mic } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { Button, Card, Chip } from "@/components/ui";
+import { AnilloProgreso, ListaEnCascada } from "@/components/ui/movimiento";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaLarga, hora } from "@/lib/format";
@@ -366,11 +367,10 @@ function SesionDeHoy({
   } else if (sesion.estado === "subiendo" || sesion.estado === "procesando") {
     accion = (
       <div className="flex items-center gap-3 rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-3 py-3">
-        <LoaderCircle
-          size={16}
-          strokeWidth={1.8}
-          aria-hidden="true"
-          className="shrink-0 animate-spin text-sage-500"
+        <AnilloProgreso
+          tamano={16}
+          className="shrink-0 text-sage-500"
+          etiqueta={ESCRIBIENDO_NOTA}
         />
         <span className="font-sans text-[13px] text-ink-700">{ESCRIBIENDO_NOTA}</span>
       </div>
@@ -463,13 +463,19 @@ function GrupoDeMes({
       </button>
 
       {abierto ? (
-        <ul id={panelId} className="mt-3 flex flex-col gap-3">
+        // Cascada al abrir el mes: las ocho primeras entran escalonadas y el
+        // resto queda quieto. Con veinte sesiones en un mes, encadenar los
+        // veinte retrasos se sentiría como que la app tarda en responder.
+        <ListaEnCascada
+          id={panelId}
+          contenedor="ul"
+          item="li"
+          className="mt-3 flex flex-col gap-3"
+        >
           {grupo.sesiones.map((sesion) => (
-            <li key={sesion.sesionClinicaId}>
-              <FilaSesion sesion={sesion} />
-            </li>
+            <FilaSesion key={sesion.sesionClinicaId} sesion={sesion} />
           ))}
-        </ul>
+        </ListaEnCascada>
       ) : null}
     </section>
   );
