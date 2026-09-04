@@ -11,7 +11,7 @@ import * as React from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 
 import { Button, Chip, Confirmar, Sheet } from "@/components/ui";
-import { ApiClientError, apiDelete, esAbort } from "@/lib/api-client";
+import { apiDelete, apiGet, esAbort } from "@/lib/api-client";
 import {
   ALGO_FALLO,
   FALTA_AUTORIZACION,
@@ -50,22 +50,16 @@ const fechaFormatter = new Intl.DateTimeFormat("es-UY", {
   year: "numeric",
 });
 
-// GET /consentimiento responde { consentimiento } sin envolver en { data },
-// por eso no pasa por apiGet. El manejo de error es el mismo del cliente.
+// GET /consentimiento responde ok({ consentimiento }): entra por el cliente
+// de API como todo lo demás.
 async function cargarConsentimiento(
   pacienteId: string,
   signal?: AbortSignal,
 ): Promise<Estado> {
-  const res = await fetch(`/api/pacientes/${pacienteId}/consentimiento`, {
-    signal,
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new ApiClientError(ALGO_FALLO, res.status);
-  }
-  const data = (await res.json()) as {
-    consentimiento: ConsentimientoVigente | null;
-  };
+  const data = await apiGet<{ consentimiento: ConsentimientoVigente | null }>(
+    `/api/pacientes/${pacienteId}/consentimiento`,
+    { signal },
+  );
   if (data.consentimiento && data.consentimiento.vigente) {
     return { tipo: "vigente", consentimiento: data.consentimiento };
   }

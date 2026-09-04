@@ -2,9 +2,15 @@
 
 import { CheckCircle2, Lightbulb } from "lucide-react";
 
-import { Plegable } from "@/app/(dashboard)/sesiones/[id]/_components/plegable";
-import { VER_DETALLE } from "@/app/(dashboard)/sesiones/[id]/_components/textos";
-import { CTSR, GTFS, MITI, PARA_VOS, pluralizar } from "@/lib/glosario";
+import { Plegable } from "@/components/ui";
+import {
+  CTSR,
+  GTFS,
+  MITI,
+  PARA_VOS,
+  VER_DETALLE,
+  pluralizar,
+} from "@/lib/glosario";
 import type {
   AreaCrecimientoFeedback,
   EvidenciaFeedback,

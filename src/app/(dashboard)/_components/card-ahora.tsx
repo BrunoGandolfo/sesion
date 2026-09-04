@@ -8,69 +8,43 @@
 // cosas posibles, la que se ofrece es la que no se puede saltear.
 //
 // El brief va en versión corta —última vez y foco— porque acá se lee de
-// pie, con la paciente entrando. La versión completa ("Para retomar",
-// brief-pre-sesion.tsx) sigue viviendo en la ficha; ese componente no
-// expone un modo compacto, así que estas dos líneas se arman con los mismos
-// campos del endpoint /brief, sin generar nada nuevo.
+// pie, con la paciente entrando: el mismo componente que usa el sheet del
+// turno (components/clinico/brief-corto.tsx). La versión completa ("Para
+// retomar", brief-pre-sesion.tsx) sigue viviendo en la ficha.
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, MapPin, Video } from "lucide-react";
+import { MapPin, Video } from "lucide-react";
 
+import {
+  BriefCorto,
+  type UltimaSesionCorta,
+} from "@/components/clinico/brief-corto";
 import { Avatar, Button, Card, Chip } from "@/components/ui";
 import { apiGet } from "@/lib/api-client";
-import { fechaRelativa, hora, money } from "@/lib/format";
+import { hora, money } from "@/lib/format";
 import {
+  COBRAR,
+  EN_CURSO,
+  ENSEGUIDA,
   ESCRIBIENDO_NOTA,
   FIRMAR_AUTORIZACION,
   GRABAR_SESION,
   NOTA_GUARDADA,
-  PARA_LA_PROXIMA,
   REVISAR_NOTA,
-  SENAL_DE_RIESGO,
+  VER_FICHA,
 } from "@/lib/glosario";
-import type {
-  EstadoProcesamiento,
-  NivelRiesgo,
-  TurnoConPaciente,
-} from "@/types/domain";
-
-// Los nombres de las señales, tal como los muestra el brief de la ficha.
-const FLAG_LABELS: Record<string, string> = {
-  ideacionSuicida: "Ideación suicida",
-  autolesion: "Autolesión",
-  violenciaTerceros: "Riesgo a terceros",
-  sintomasPsicoticos: "Síntomas psicóticos",
-  crisisPanico: "Crisis de pánico",
-};
-
-const NIVEL_LABELS: Record<NivelRiesgo, string> = {
-  ninguno: "sin señal",
-  bajo: "nivel bajo",
-  moderado: "nivel moderado",
-  alto: "nivel alto",
-};
+import type { EstadoProcesamiento, TurnoConPaciente } from "@/types/domain";
 
 /** Lo único que esta card necesita de /api/sesion-clinica. */
 type SesionDelTurno = { id: string; estado: EstadoProcesamiento } | null;
 
 /** Lo único que esta card necesita de /api/pacientes/[id]/brief. */
-type BriefCorto = {
-  ultimaSesion: {
-    fecha: string;
-    resumenSesion: string | null;
-    focoProximaSesion: string | null;
-    riesgo: {
-      nivel: NivelRiesgo;
-      flagsActivos: string[];
-      indicadores: string[];
-    };
-  } | null;
-} | null;
+type RespuestaBrief = { ultimaSesion: UltimaSesionCorta | null } | null;
 
 interface Contexto {
   sesion: SesionDelTurno;
-  brief: BriefCorto;
+  brief: RespuestaBrief;
 }
 
 function opcional<T>(promesa: Promise<T>): Promise<T | null> {
@@ -86,7 +60,9 @@ async function leerContexto(
 ): Promise<Contexto> {
   const [sesion, brief] = await Promise.all([
     opcional(apiGet<SesionDelTurno>(`/api/sesion-clinica?turnoId=${turnoId}`, { signal })),
-    opcional(apiGet<BriefCorto>(`/api/pacientes/${pacienteId}/brief`, { signal })),
+    opcional(
+      apiGet<RespuestaBrief>(`/api/pacientes/${pacienteId}/brief`, { signal }),
+    ),
   ]);
   return { sesion, brief };
 }
@@ -169,9 +145,6 @@ export function CardAhora({
 
   const accion = accionDe(contexto.sesion, sinAutorizacion, sinCobrar);
   const ultima = contexto.brief?.ultimaSesion ?? null;
-  const riesgo = ultima?.riesgo;
-  const haySenal =
-    !!riesgo && (riesgo.nivel !== "ninguno" || riesgo.flagsActivos.length > 0);
   const ModalityIcon = turno.modalidad === "online" ? Video : MapPin;
   const nombre = `${turno.paciente.nombre} ${turno.paciente.apellido}`;
 
@@ -201,50 +174,12 @@ export function CardAhora({
             {hora(turno.fecha)}
           </time>
           <Chip variant={enCurso ? "sage" : "neutral"} size="sm">
-            {enCurso ? "En curso" : "Enseguida"}
+            {enCurso ? EN_CURSO : ENSEGUIDA}
           </Chip>
         </div>
       </div>
 
-      {riesgo && haySenal ? (
-        <div
-          role="alert"
-          className="mt-4 flex items-start gap-2.5 rounded-md border border-terracotta-100 bg-terracotta-50 px-3 py-2.5"
-        >
-          <AlertTriangle
-            size={16}
-            strokeWidth={1.9}
-            aria-hidden="true"
-            className="mt-[2px] shrink-0 text-terracotta-500"
-          />
-          <p className="font-sans text-[13px] leading-[1.5] text-ink-900">
-            <span className="font-semibold text-terracotta-600">
-              {SENAL_DE_RIESGO}:
-            </span>{" "}
-            {riesgo.flagsActivos.length > 0
-              ? riesgo.flagsActivos.map((f) => FLAG_LABELS[f] ?? f).join(", ")
-              : riesgo.indicadores.join(", ")}
-            {riesgo.nivel !== "ninguno" ? ` (${NIVEL_LABELS[riesgo.nivel]})` : ""}
-          </p>
-        </div>
-      ) : null}
-
-      {ultima ? (
-        <div className="mt-4 flex flex-col gap-1">
-          <p className="line-clamp-1 font-sans text-[13px] leading-[1.5] text-ink-700">
-            <span className="text-ink-500">
-              Última vez ({fechaRelativa(new Date(ultima.fecha)).toLowerCase()}):
-            </span>{" "}
-            {ultima.resumenSesion ?? "sin resumen todavía"}
-          </p>
-          {ultima.focoProximaSesion ? (
-            <p className="line-clamp-1 font-sans text-[13px] leading-[1.5] text-ink-700">
-              <span className="text-ink-500">{PARA_LA_PROXIMA}:</span>{" "}
-              {ultima.focoProximaSesion}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+      <BriefCorto className="mt-4" ultimaSesion={ultima} />
 
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
         {accion.tipo === "escribiendo" ? (
@@ -268,7 +203,7 @@ export function CardAhora({
           </Button>
         ) : null}
         {accion.tipo === "cobrar" ? (
-          <Button onClick={onCobrar}>Cobrar</Button>
+          <Button onClick={onCobrar}>{COBRAR}</Button>
         ) : null}
         {accion.tipo === "grabar" ? (
           <Button asChild>
@@ -280,7 +215,7 @@ export function CardAhora({
           href={`/pacientes/${turno.paciente.id}`}
           className="font-sans text-[13px] font-semibold text-sage-600 hover:text-sage-700"
         >
-          Ver ficha →
+          {VER_FICHA} →
         </Link>
       </div>
     </Card>

@@ -14,7 +14,7 @@ fallos a PipelineError con el codigo y mensaje que llegan al callback.
 """
 import base64
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import app_client
 import asr_assemblyai
@@ -44,6 +44,13 @@ class Analisis:
     datos_estructurados: dict
     prompt_nota: str
     prompt_feedback: str
+    # Escalas que llegaron fuera de rango y se anularon, en nota y feedback.
+    # La sesion sale igual: solo pierde esos campos.
+    advertencias: list[str] = field(default_factory=list)
+    # Veces que hubo que pedirle al modelo la nota de nuevo por forma
+    # invalida: 0 o 1. Un reintento del feedback queda en `advertencias`,
+    # porque el feedback no bloquea la sesion.
+    reintentos_llm: int = 0
 
 
 def procesar_sesion(
@@ -146,7 +153,7 @@ def analizar(
         logger.info(f"[{etiqueta}] Contexto longitudinal: {len(contexto_llm)} chars")
 
     logger.info(f"[{etiqueta}] Generando nota...")
-    resultado, prompt_nota = clinical_analyzer.analizar(
+    resultado, prompt_nota, diag_nota = clinical_analyzer.analizar(
         transcripcion_fmt,
         contexto_clinico=contexto_llm,
         speech_analytics=speech_metrics,
@@ -155,7 +162,7 @@ def analizar(
     datos_estructurados["speechAnalytics"] = speech_metrics
 
     logger.info(f"[{etiqueta}] Generando feedback terapeuta...")
-    feedback, prompt_feedback = clinical_analyzer.generar_feedback_terapeuta(
+    feedback, prompt_feedback, diag_feedback = clinical_analyzer.generar_feedback_terapeuta(
         transcripcion_fmt,
         speech_analytics=speech_metrics,
         orientacion=orientacion_teorica,
@@ -163,12 +170,20 @@ def analizar(
     if feedback:
         datos_estructurados["feedbackTerapeuta"] = feedback
 
+    advertencias = [*diag_nota.advertencias, *diag_feedback.advertencias]
+    if diag_feedback.reintentos:
+        advertencias.append("feedbackTerapeuta requirio una segunda pasada")
+    if advertencias:
+        logger.info(f"[{etiqueta}] {len(advertencias)} advertencia(s) de forma")
+
     return Analisis(
         transcripcion_fmt=transcripcion_fmt,
         nota=resultado.get("nota"),
         datos_estructurados=datos_estructurados,
         prompt_nota=prompt_nota,
         prompt_feedback=prompt_feedback,
+        advertencias=advertencias,
+        reintentos_llm=diag_nota.reintentos,
     )
 
 
@@ -186,6 +201,11 @@ def armar_resultado(
         "workerVersion": config.WORKER_VERSION,
         "asrId": transcripcion.get("asr_id"),
         "intento": intento,
+        # Escalas anuladas por venir fuera de rango. Lista vacia = la salida
+        # del modelo vino limpia.
+        "advertencias": analisis.advertencias,
+        # 0 o 1: si hizo falta pedirle la nota de nuevo por forma invalida.
+        "reintentosLLM": analisis.reintentos_llm,
     }
     # audio_duration: transcripcion["duration_seconds"] queda disponible pero
     # NO se envia; el contrato del callback (callbackSchema en

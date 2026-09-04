@@ -3,8 +3,12 @@
 import * as React from "react";
 import { AlertTriangle, Plus, Sparkles, X } from "lucide-react";
 
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+
 import { Button, Card, Chip } from "@/components/ui";
 import { apiGet, apiPatch, esAbort } from "@/lib/api-client";
+import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaCorta } from "@/lib/format";
 import {
   ALGO_FALLO,
@@ -100,18 +104,6 @@ const EFICACIA_TONE: Record<Eficacia, "sage" | "gold" | "terracotta"> = {
   baja: "terracotta",
 };
 
-const RIESGO_LABEL: Record<string, string> = {
-  ideacionSuicida: "Ideación suicida",
-  autolesion: "Autolesión",
-  violenciaTerceros: "Violencia hacia terceros",
-  sintomasPsicoticos: "Síntomas psicóticos",
-  crisisPanico: "Crisis de pánico",
-};
-
-function riesgoLabel(flag: string): string {
-  return RIESGO_LABEL[flag] ?? flag;
-}
-
 function parseFechaISO(iso: string): Date | null {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -121,6 +113,14 @@ function formatFechaCorta(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = parseFechaISO(iso);
   return d ? fechaCorta(d) : iso.slice(0, 10);
+}
+
+/** "4 de marzo de 2026". Las señales anteriores pueden ser de hace años: la
+ *  fecha corta ("4 mar") no alcanza para ubicarlas en el proceso. */
+function formatFechaCompleta(iso: string): string {
+  const d = parseFechaISO(iso);
+  if (!d) return iso.slice(0, 10);
+  return format(d, "d 'de' MMMM 'de' yyyy", { locale: es });
 }
 
 function nuevoObjetivoId(): string {
@@ -631,7 +631,7 @@ function SectionIntervenciones({
                 className="flex flex-col gap-2 rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <p className="font-sans text-[14px] leading-[1.5] text-ink-900">
-                  {i.tecnica}
+                  {formatearEtiqueta(i.tecnica)}
                 </p>
                 <div className="flex items-center gap-2">
                   <Chip variant={EFICACIA_TONE[i.eficaciaPercibida]} size="sm">
@@ -695,7 +695,7 @@ function SectionTemas({
                 key={t.tema}
                 className="inline-flex items-center gap-1 rounded-full bg-cream-100 px-[10px] py-[3px] font-sans text-[12px] text-ink-700"
               >
-                <span className="font-semibold">{t.tema}</span>
+                <span className="font-semibold">{formatearEtiqueta(t.tema)}</span>
                 <span className="text-ink-500">· {t.conteo}</span>
                 {editando && (
                   <button
@@ -768,8 +768,14 @@ function SectionResumen({ resumen }: { resumen: string | null }) {
 }
 
 function SectionRiesgos({ riesgos }: { riesgos: RiesgoHistorico[] }) {
+  // Por fecha, de la más reciente a la más vieja, comparando como fecha y no
+  // como texto: los ISO conviven con formatos sin normalizar y el orden
+  // alfabético los mezcla.
   const ordenados = React.useMemo(
-    () => [...riesgos].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)),
+    () =>
+      [...riesgos].sort(
+        (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+      ),
     [riesgos],
   );
 
@@ -795,10 +801,10 @@ function SectionRiesgos({ riesgos }: { riesgos: RiesgoHistorico[] }) {
                 <div className="flex flex-1 flex-col gap-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Chip variant="terracotta" size="sm">
-                      {riesgoLabel(r.flag)}
+                      {formatearEtiqueta(r.flag)}
                     </Chip>
-                    <span className="font-sans text-[12px] text-ink-500">
-                      {formatFechaCorta(r.fecha) ?? r.fecha.slice(0, 10)}
+                    <span className="font-sans text-[12px] tabular-nums text-ink-500">
+                      {formatFechaCompleta(r.fecha)}
                     </span>
                   </div>
                   {r.detalle && (

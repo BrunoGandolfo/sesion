@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
+import type { PausaRegistrada } from "@/components/grabacion/GrabadorSesion";
 import {
   ESTADOS_ACTIVOS,
   normalizarSesionClinica,
@@ -17,6 +18,12 @@ export interface DatosGrabacion {
   claveCifrado: string;
   ivCifrado: string;
   duracionSegundos: number;
+  /**
+   * Tramos en que la grabación estuvo pausada, en ISO. Los produce el
+   * grabador (useGrabador → onListo). Opcional: quien suba un audio sin
+   * haberlas registrado simplemente no las manda.
+   */
+  pausas?: PausaRegistrada[];
 }
 
 interface UseGrabacionSesionOptions {
@@ -151,6 +158,10 @@ export async function subirAudioCifrado(
   await putConProgreso(subida.url, datos.audioBlob, subida.headers, onProgreso);
   onProgreso?.(100);
 
+  // Solo las pausas cerradas. Una pausa sin `fin` es una grabación todavía
+  // detenida: no describe ningún tramo y el schema del backend la rechaza.
+  const pausas = (datos.pausas ?? []).filter((pausa) => pausa.inicio && pausa.fin);
+
   // 3. Confirmación (HeadObject en el servidor).
   const resConfirmar = await fetch(
     `/api/sesion-clinica/${sesionClinicaId}/upload-confirmar`,
@@ -160,6 +171,9 @@ export async function subirAudioCifrado(
       body: JSON.stringify({
         key: subida.key,
         duracionAudioSeg: datos.duracionSegundos,
+        // Sin pausas el campo se omite: el backend deja la columna como
+        // estaba, así un reintento de la misma subida no borra lo anterior.
+        ...(pausas.length > 0 ? { pausas } : {}),
       }),
     },
   );

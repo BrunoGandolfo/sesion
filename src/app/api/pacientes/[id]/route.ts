@@ -32,8 +32,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
       throw new ApiError("Paciente no encontrado", 404);
     }
 
-    return Response.json({
-      data: toPacienteConDeuda(paciente),
+    // Un solo envoltorio para toda la API: { data: { paciente, turnos } }.
+    // Antes esta ruta devolvía `data` y `turnos` sueltos en la raíz, y era
+    // la razón por la que la ficha no podía usar el cliente de API común.
+    return ok({
+      paciente: toPacienteConDeuda(paciente),
       turnos: paciente.turnos.map(toTurno),
     });
   } catch (error) {

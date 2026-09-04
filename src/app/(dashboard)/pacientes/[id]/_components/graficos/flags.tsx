@@ -1,110 +1,128 @@
 "use client";
 
-import { SENAL_DE_RIESGO } from "@/lib/glosario";
+import * as React from "react";
+import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 
-import { COLOR, type SesionProgreso } from "./base";
+import { Chip } from "@/components/ui";
+import { formatearEtiqueta } from "@/lib/etiquetas";
+import { LO_QUE_DIJO, SENAL_DE_RIESGO, pluralizar } from "@/lib/glosario";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
-// ============================================
-// 0. Señales de riesgo (timeline por sesión)
-// ============================================
-const FLAG_KEYS = [
-  "ideacionSuicida",
-  "autolesion",
-  "violenciaTerceros",
-  "sintomasPsicoticos",
-  "crisisPanico",
-] as const;
+import type { RiesgoProgreso } from "./base";
+import { SUBTITULO_SENALES, VER_LA_SESION } from "./textos";
 
-const FLAG_LABELS: Record<(typeof FLAG_KEYS)[number], string> = {
-  ideacionSuicida: "Ideación suicida",
-  autolesion: "Autolesión",
-  violenciaTerceros: "Riesgo a terceros",
-  sintomasPsicoticos: "Síntomas psicóticos",
-  crisisPanico: "Crisis de pánico",
-};
+// Línea de tiempo de señales de riesgo.
+//
+// Antes era una matriz señal × sesión con banderitas y círculos vacíos: con
+// 40 columnas, una señal de la sesión 9 quedaba fuera de la pantalla, sin
+// fecha y sin la cita que la sostiene. Ahora cada señal es una fila con su
+// fecha completa, su nivel y la cita literal a un toque.
+//
+// La sección NUNCA se pliega y la lista NUNCA se recorta: se muestran todas
+// las señales del período, más reciente primero.
 
-export function FlagsRiesgoTimeline({ sesiones }: { sesiones: SesionProgreso[] }) {
-  const activeFlags = FLAG_KEYS.filter((key) =>
-    sesiones.some((s) => s.flagsRiesgo?.[key] === true),
+/** "4 de marzo de 2026". Con años de proceso, el año no es opcional. */
+function fechaCompleta(fecha: Date): string {
+  return format(fecha, "d 'de' MMMM 'de' yyyy", { locale: es });
+}
+
+export function FlagsRiesgoTimeline({ riesgos }: { riesgos: RiesgoProgreso[] }) {
+  const ordenados = React.useMemo(
+    () =>
+      [...riesgos].sort(
+        (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+      ),
+    [riesgos],
   );
-  if (activeFlags.length === 0) return null;
+
+  if (ordenados.length === 0) return null;
 
   return (
     <section className="rounded-lg border border-terracotta-100 bg-terracotta-50/40 p-4 lg:p-5">
       <header className="mb-4 flex items-start gap-2">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <AlertTriangle
+          size={18}
+          strokeWidth={1.9}
           aria-hidden="true"
           className="mt-[3px] shrink-0 text-terracotta-500"
-        >
-          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-          <path d="M12 9v4" />
-          <path d="M12 17h.01" />
-        </svg>
+        />
         <div>
           <h3 className="font-[family-name:var(--font-display)] text-[18px] font-medium leading-tight tracking-[-0.01em] text-ink-900">
-            {SENAL_DE_RIESGO}
+            {SENAL_DE_RIESGO} ·{" "}
+            {pluralizar(ordenados.length, "señal", "señales")}
           </h3>
           <p className="mt-1 text-[12px] leading-[1.4] text-ink-500">
-            Sesiones donde la IA detectó señales de riesgo clínico. Permanecen
-            visibles y nunca se ocultan silenciosamente.
+            {SUBTITULO_SENALES}
           </p>
         </div>
       </header>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[320px] border-collapse text-[12px]">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-[1] bg-terracotta-50/40 py-2 pr-3 text-left font-semibold uppercase tracking-[0.06em] text-[10px] text-ink-500">
-                Señal
-              </th>
-              {sesiones.map((s) => (
-                <th
-                  key={s.numero}
-                  className="px-1 py-2 text-center font-semibold uppercase tracking-[0.06em] text-[10px] text-ink-500"
-                >
-                  S{s.numero}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {activeFlags.map((flag) => (
-              <tr key={flag} className="border-t border-[color:var(--border-subtle)]">
-                <td className="sticky left-0 z-[1] bg-terracotta-50/40 py-2 pr-3 text-ink-900">
-                  {FLAG_LABELS[flag]}
-                </td>
-                {sesiones.map((s) => {
-                  const present = s.flagsRiesgo?.[flag] === true;
-                  return (
-                    <td
-                      key={s.numero}
-                      className="px-1 py-2 text-center text-[16px] leading-none tabular-nums"
-                      aria-label={
-                        present
-                          ? `${FLAG_LABELS[flag]} detectada en S${s.numero}`
-                          : `Sin ${FLAG_LABELS[flag].toLowerCase()} en S${s.numero}`
-                      }
-                    >
-                      <span style={{ color: present ? COLOR.terracotta : COLOR.inkSoft }}>
-                        {present ? "🚩" : "○"}
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ol className="flex flex-col gap-2">
+        {ordenados.map((riesgo, indice) => (
+          <FilaSenal
+            key={`${riesgo.sesionId}-${riesgo.flag}-${indice}`}
+            riesgo={riesgo}
+          />
+        ))}
+      </ol>
     </section>
+  );
+}
+
+function FilaSenal({ riesgo }: { riesgo: RiesgoProgreso }) {
+  const [citaAbierta, setCitaAbierta] = React.useState(false);
+  const citaId = React.useId();
+  const fecha = new Date(riesgo.fecha);
+  const cita = riesgo.cita?.trim();
+
+  return (
+    <li className="rounded-md border border-terracotta-100 bg-white/70 px-3 py-3">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-sans text-[13px] font-semibold tabular-nums text-ink-900">
+          {Number.isNaN(fecha.getTime())
+            ? riesgo.fecha.slice(0, 10)
+            : fechaCompleta(fecha)}
+        </span>
+        <Chip variant="terracotta" size="sm">
+          {formatearEtiqueta(riesgo.flag)}
+        </Chip>
+        {riesgo.nivel && riesgo.nivel !== "ninguno" ? (
+          <span className="font-sans text-[12px] text-terracotta-600">
+            nivel {riesgo.nivel}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+        {cita ? (
+          <button
+            type="button"
+            aria-expanded={citaAbierta}
+            aria-controls={citaId}
+            onClick={() => setCitaAbierta((abierta) => !abierta)}
+            className="font-sans text-[12px] font-semibold text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline"
+          >
+            {LO_QUE_DIJO}
+          </button>
+        ) : null}
+        <Link
+          href={`/sesiones/${riesgo.sesionId}`}
+          className="font-sans text-[12px] text-sage-600 underline-offset-2 hover:underline"
+        >
+          {VER_LA_SESION}
+        </Link>
+      </div>
+
+      {cita && citaAbierta ? (
+        <p
+          id={citaId}
+          className="mt-2 border-l-2 border-terracotta-100 pl-3 font-sans text-[13px] italic leading-[1.6] text-ink-900"
+        >
+          “{cita}”
+        </p>
+      ) : null}
+    </li>
   );
 }

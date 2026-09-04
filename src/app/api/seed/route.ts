@@ -1,5 +1,9 @@
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import {
+  calcularProgramadoEn,
+  normalizarRecordatorioModo,
+} from "@/lib/recordatorios-programacion";
 
 import { requireBearer } from "../_lib/auth";
 import { addDays, startOfDay } from "../_lib/domain";
@@ -163,6 +167,7 @@ export async function POST(request: Request) {
           whatsappOrigen: "+598 99 876 543",
           tarifaDefault: 2200,
           horasAnticipacion: 24,
+          recordatorioModo: "dia_anterior",
           templateRecordatorio: DEFAULT_TEMPLATE,
         },
       });
@@ -216,9 +221,9 @@ export async function POST(request: Request) {
             data: {
               turnoId: turno.id,
               estado: "pendiente",
-              programadoEn: new Date(
-                fecha.getTime() -
-                  configuracion.horasAnticipacion * 60 * 60 * 1000,
+              programadoEn: calcularProgramadoEn(
+                fecha,
+                normalizarRecordatorioModo(configuracion.recordatorioModo),
               ),
             },
           });

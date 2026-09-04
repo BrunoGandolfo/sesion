@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import {
+  calcularProgramadoEn,
+  normalizarRecordatorioModo,
+} from "@/lib/recordatorios-programacion";
 
 import { getOrganizationId } from "../../_lib/auth";
 import {
@@ -104,12 +108,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
       const configuracion = await tx.configuracion.findUnique({
         where: { organizationId },
-        select: { horasAnticipacion: true },
+        select: { recordatorioModo: true },
       });
 
-      const horasAnticipacion = configuracion?.horasAnticipacion ?? 24;
-      const programadoEn = new Date(
-        updated.fecha.getTime() - horasAnticipacion * 60 * 60 * 1000,
+      const programadoEn = calcularProgramadoEn(
+        updated.fecha,
+        normalizarRecordatorioModo(configuracion?.recordatorioModo),
       );
 
       // La reprogramación genera un recordatorio nuevo alineado a la nueva fecha.

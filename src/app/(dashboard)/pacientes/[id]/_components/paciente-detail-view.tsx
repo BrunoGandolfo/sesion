@@ -17,15 +17,16 @@ import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { ALGO_FALLO, FICHA, RECORRIDO, SESIONES } from "@/lib/glosario";
-import type { Configuracion, Turno } from "@/types/domain";
+import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
-import {
-  fetchConsentimiento,
-  fetchFichaPaciente,
-  type FichaPaciente,
-} from "./api-ficha";
 import { CabeceraFicha } from "./cabecera-ficha";
 import { EditarPacienteForm } from "./editar-paciente-form";
+import {
+  parsePaciente,
+  parseTurno,
+  type PacienteJson,
+  type TurnoJson,
+} from "./json-ficha";
 import { FichaTab } from "./ficha-tab";
 import { RecorridoTab } from "./recorrido-tab";
 import { SesionesTab } from "./sesiones-tab";
@@ -39,6 +40,9 @@ const TAB_OPTIONS: { value: TabKey; label: string }[] = [
 ];
 
 type ToastState = { open: boolean; message: string };
+
+/** Ficha ya con las fechas parseadas: es lo que consumen las tres pestañas. */
+type FichaPaciente = { paciente: PacienteConDeuda; turnos: Turno[] };
 
 // Ficha atada al id que la cargó: al cambiar de paciente la anterior deja de
 // aplicar por derivación, sin resetear estado en un efecto.
@@ -70,8 +74,20 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   React.useEffect(() => {
     const controller = new AbortController();
-    fetchFichaPaciente(id, { signal: controller.signal })
-      .then((data) => setFicha({ tipo: "lista", id, ficha: data }))
+    apiGet<{ paciente: PacienteJson; turnos: TurnoJson[] }>(
+      `/api/pacientes/${id}`,
+      { signal: controller.signal },
+    )
+      .then((data) =>
+        setFicha({
+          tipo: "lista",
+          id,
+          ficha: {
+            paciente: parsePaciente(data.paciente),
+            turnos: (data.turnos ?? []).map(parseTurno),
+          },
+        }),
+      )
       .catch((err: unknown) => {
         if (esAbort(err)) return;
         setFicha({
@@ -96,8 +112,16 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   React.useEffect(() => {
     const controller = new AbortController();
-    fetchConsentimiento(id, { signal: controller.signal })
-      .then((vigente) => setConsentimiento({ id, vigente: vigente !== null }))
+    apiGet<{ consentimiento: { vigente: boolean } | null }>(
+      `/api/pacientes/${id}/consentimiento`,
+      { signal: controller.signal },
+    )
+      .then((data) =>
+        setConsentimiento({
+          id,
+          vigente: data.consentimiento?.vigente === true,
+        }),
+      )
       .catch(() => {
         // Se vuelve a intentar en la próxima recarga.
       });

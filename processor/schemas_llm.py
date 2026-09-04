@@ -41,6 +41,15 @@ def _enum(*valores: str) -> dict:
     return {"type": "string", "enum": list(valores)}
 
 
+def _enum_null(*valores: str) -> dict:
+    """
+    Enum que admite null. Structured outputs exige que TODA propiedad este en
+    `required`, asi que un campo "sin dato" no se puede omitir: se declara
+    nullable y el modelo dice null en vez de inventar un valor de la escala.
+    """
+    return {"type": ["string", "null"], "enum": [*valores, None]}
+
+
 # Fragmentos compartidos ────────────────────────────────────────────────────
 
 TIPOS_INTERVENCION = (
@@ -97,8 +106,11 @@ SCHEMA_NOTA = _obj({
         "estadoEmocionalObservado": _STR,
         "temas": _arr(_STR),
         "emocionesPaciente": _arr(_STR),
-        "intensidadEmocional": _INT,
-        "alianzaTerapeutica": _enum("fragil", "inestable", "estable", "fuerte"),
+        # Nullables a proposito (ver sanear_datos_nota): son escalas de
+        # valoracion, no hechos. Sin material para evaluarlas el modelo dice
+        # null en vez de inventar un 0 que despues se grafica como medicion.
+        "intensidadEmocional": _INT_NULL,
+        "alianzaTerapeutica": _enum_null("fragil", "inestable", "estable", "fuerte"),
         "intervenciones": _arr(_obj({
             "tipo": _enum(*TIPOS_INTERVENCION),
             "descripcion": _STR,
@@ -124,7 +136,7 @@ SCHEMA_NOTA = _obj({
             "notaParaTerapeuta": _STR_NULL,
         }),
         "confianzaModelo": _enum("alta", "media", "baja"),
-        "duracionRealMin": _INT,
+        "duracionRealMin": _INT_NULL,
         "observacionIA": _STR,
     }),
 })
@@ -236,25 +248,278 @@ SCHEMA_FEEDBACK_GESTALT = _obj({
 })
 
 
-# Validaciones de rango (no expresables en el schema) ───────────────────────
+# ────────────────────────────────────────────────────────────────────────────
+# Dos niveles de control sobre la salida del LLM, con consecuencias distintas.
+#
+#   validar_estructura_*  BLOQUEANTE. Lo que hace que la sesion sea una sesion:
+#                         JSON parseable, las cuatro secciones SOAP con texto,
+#                         y la señal de riesgo bien formada si viene. Lanza
+#                         ValueError; clinical_analyzer lo usa para pedirle al
+#                         modelo una segunda pasada, y si tampoco valida,
+#                         recien ahi falla la sesion.
+#
+#   sanear_*              NO BLOQUEANTE. Escalas de valoracion secundarias
+#                         (intensidad, alianza, duracion, puntajes de items).
+#                         Un valor fuera de rango se descarta y queda una
+#                         advertencia; la sesion sigue.
+#
+# El porque de la asimetria: el 4/9 una sesion breve volvio con
+# intensidadEmocional=0 y el validador tiro abajo la nota entera. La terapeuta
+# perdio la nota de una sesion que ya habia ocurrido y tuvo que apretar
+# Reintentar. Ningun campo numerico secundario justifica eso.
+#
+# Por que se DESCARTA la clave en vez de mandarla en null: el contrato de la
+# app (src/lib/sesion-clinica/schema.ts:125,126,143) declara estos tres campos
+# como `.optional()`, no `.nullable()`. Un null explicito hace fallar la
+# validacion Zod del callback y devuelve 400, que para el worker es terminal
+# (processor/callback.py no reintenta ante 4xx). Omitir la clave es lo unico
+# que la app acepta como "este dato no esta".
+# ────────────────────────────────────────────────────────────────────────────
 
-def validar_rangos_nota(resultado: dict) -> None:
+SECCIONES_SOAP = ("subjetivo", "objetivo", "analisis", "plan")
+NIVELES_RIESGO = ("ninguno", "bajo", "moderado", "alto")
+ALIANZAS = ("fragil", "inestable", "estable", "fuerte")
+
+RANGO_INTENSIDAD = (1, 10)
+# Escalas de los puntajes por item de cada instrumento de feedback.
+RANGO_MITI_GLOBAL = (1, 5)
+RANGO_CTSR = (0, 6)
+RANGO_GTFS = (0, 1)
+
+
+def _es_entero(valor: object) -> bool:
+    """bool es subclase de int en Python; un True no es un puntaje."""
+    return isinstance(valor, int) and not isinstance(valor, bool)
+
+
+def _para_advertencia(valor: object) -> str:
     """
-    Verifica en código los rangos que el schema no puede expresar:
-    intensidadEmocional en 1..10 y duracionRealMin >= 0. Lanza ValueError.
+    Representacion segura del valor rechazado. Numeros y booleanos se muestran
+    tal cual; cualquier otra cosa se reduce al tipo. Las advertencias se
+    persisten en la base y no tienen por que arrastrar texto del modelo.
     """
+    if valor is None or isinstance(valor, (int, float, bool)):
+        return repr(valor)
+    return f"<{type(valor).__name__}>"
+
+
+# Estructura — bloqueante ───────────────────────────────────────────────────
+
+def _exigir_claves(objeto: object, claves: tuple[str, ...], que: str) -> dict:
+    if not isinstance(objeto, dict):
+        raise ValueError(f"{que}: la respuesta no es un objeto JSON")
+    faltantes = [c for c in claves if c not in objeto]
+    if faltantes:
+        raise ValueError(f"{que}: faltan las claves {', '.join(faltantes)}")
+    return objeto
+
+
+def _validar_riesgo_detectado(riesgo: object) -> None:
+    """
+    La señal de riesgo es bloqueante por decision clinica: una señal mal
+    formada que se descarta en silencio es exactamente el fallo que no
+    queremos. Si viene, viene bien; si no hay señal, viene con nivel
+    "ninguno", que es informacion afirmativa.
+    """
+    if not isinstance(riesgo, dict):
+        raise ValueError("riesgoDetectado no es un objeto")
+    if riesgo.get("nivel") not in NIVELES_RIESGO:
+        raise ValueError(
+            "riesgoDetectado.nivel debe ser uno de: " + ", ".join(NIVELES_RIESGO)
+        )
+    if not isinstance(riesgo.get("indicadores"), list):
+        raise ValueError("riesgoDetectado.indicadores no es una lista")
+
+    evidencia = riesgo.get("evidencia")
+    if not isinstance(evidencia, list):
+        raise ValueError("riesgoDetectado.evidencia no es una lista")
+    for i, entrada in enumerate(evidencia):
+        if (
+            not isinstance(entrada, dict)
+            or not isinstance(entrada.get("timestamp"), str)
+            or not isinstance(entrada.get("quote"), str)
+        ):
+            raise ValueError(
+                f"riesgoDetectado.evidencia[{i}] debe tener timestamp y quote de texto"
+            )
+
+    nota_terapeuta = riesgo.get("notaParaTerapeuta")
+    if nota_terapeuta is not None and not isinstance(nota_terapeuta, str):
+        raise ValueError("riesgoDetectado.notaParaTerapeuta debe ser texto o null")
+
+
+def validar_estructura_nota(resultado: object) -> None:
+    """
+    Bloqueante. Los mensajes son de forma (nombres de campo y tipos), nunca
+    contenido: se le citan al modelo en el reintento y quedan en los logs.
+    """
+    datos_y_nota = _exigir_claves(resultado, ("nota", "datosEstructurados"), "nota clinica")
+
+    nota = datos_y_nota["nota"]
+    if not isinstance(nota, dict):
+        raise ValueError("nota clinica: 'nota' no es un objeto")
+    vacias = [
+        seccion
+        for seccion in SECCIONES_SOAP
+        if not isinstance(nota.get(seccion), str) or not nota[seccion].strip()
+    ]
+    if vacias:
+        raise ValueError(
+            "nota clinica: las secciones SOAP " + ", ".join(vacias) + " estan vacias o ausentes"
+        )
+
+    datos = datos_y_nota["datosEstructurados"]
+    if not isinstance(datos, dict):
+        raise ValueError("nota clinica: 'datosEstructurados' no es un objeto")
+
+    if "riesgoDetectado" in datos and datos["riesgoDetectado"] is not None:
+        _validar_riesgo_detectado(datos["riesgoDetectado"])
+
+
+def validar_estructura_feedback_cbt_mi(feedback: object) -> None:
+    _exigir_claves(
+        feedback,
+        ("mitiGlobales", "mitiCounts", "ctsrSubset", "fortalezas", "areasCrecimiento"),
+        "feedback CBT/MI",
+    )
+
+
+def validar_estructura_feedback_gestalt(feedback: object) -> None:
+    datos = _exigir_claves(
+        feedback,
+        ("instrumento", "itemsGTFS", "fortalezas", "areasCrecimiento"),
+        "feedback Gestalt",
+    )
+    items = datos["itemsGTFS"]
+    if not isinstance(items, list) or not items:
+        raise ValueError("feedback Gestalt: itemsGTFS esta vacio o no es una lista")
+
+
+def validar_estructura_contexto(contexto: object) -> None:
+    _exigir_claves(
+        contexto,
+        (
+            "hipotesisDiagnostica",
+            "resumenAcumulativo",
+            "objetivosTerapeuticos",
+            "intervencionesProbadas",
+            "temasRecurrentes",
+            "riesgosHistoricos",
+        ),
+        "contexto clinico",
+    )
+
+
+# Saneo de escalas — no bloqueante ──────────────────────────────────────────
+
+def _sanear_entero_en_rango(
+    contenedor: dict,
+    clave: str,
+    rango: tuple[int, int],
+    advertencias: list[str],
+    *,
+    quitar: bool,
+) -> None:
+    """
+    Deja `clave` con un entero dentro de `rango`, o sin valor. `quitar=True`
+    elimina la clave (contrato de la nota, que la app valida como opcional);
+    `quitar=False` la deja en None (feedback, que la app pasa opaco y la UI
+    ya renderiza como "No determinable").
+    """
+    if clave not in contenedor:
+        return
+
+    valor = contenedor[clave]
+    if valor is None:
+        if quitar:
+            contenedor.pop(clave, None)
+        return
+
+    minimo, maximo = rango
+    if _es_entero(valor) and minimo <= valor <= maximo:
+        return
+
+    advertencias.append(
+        f"{clave}={_para_advertencia(valor)} fuera de rango {minimo}..{maximo}, anulado"
+    )
+    if quitar:
+        contenedor.pop(clave, None)
+    else:
+        contenedor[clave] = None
+
+
+def sanear_datos_nota(resultado: dict) -> list[str]:
+    """
+    Normaliza las tres escalas de valoracion de la nota. Nunca lanza: devuelve
+    la lista de advertencias que el pipeline guarda en
+    datosEstructurados._pipeline.advertencias.
+    """
+    advertencias: list[str] = []
     datos = resultado.get("datosEstructurados")
     if not isinstance(datos, dict):
-        raise ValueError("datosEstructurados ausente o no es objeto")
+        # Caso ya cubierto por validar_estructura_nota; aca no hay nada que sanear.
+        return advertencias
 
-    intensidad = datos.get("intensidadEmocional")
-    if not isinstance(intensidad, int) or isinstance(intensidad, bool):
-        raise ValueError("intensidadEmocional no es entero")
-    if not 1 <= intensidad <= 10:
-        raise ValueError(f"intensidadEmocional fuera de rango 1..10: {intensidad}")
+    _sanear_entero_en_rango(
+        datos, "intensidadEmocional", RANGO_INTENSIDAD, advertencias, quitar=True
+    )
 
-    duracion = datos.get("duracionRealMin")
-    if not isinstance(duracion, int) or isinstance(duracion, bool):
-        raise ValueError("duracionRealMin no es entero")
-    if duracion < 0:
-        raise ValueError(f"duracionRealMin negativo: {duracion}")
+    if "duracionRealMin" in datos:
+        duracion = datos["duracionRealMin"]
+        if duracion is None:
+            datos.pop("duracionRealMin", None)
+        elif not _es_entero(duracion) or duracion < 0:
+            advertencias.append(
+                f"duracionRealMin={_para_advertencia(duracion)} invalido, anulado"
+            )
+            datos.pop("duracionRealMin", None)
+
+    if "alianzaTerapeutica" in datos:
+        alianza = datos["alianzaTerapeutica"]
+        if alianza is None:
+            datos.pop("alianzaTerapeutica", None)
+        elif alianza not in ALIANZAS:
+            # Sin eco del valor: el enum es cerrado y lo que venga fuera de el
+            # es texto del modelo.
+            advertencias.append("alianzaTerapeutica fuera del enum, anulado")
+            datos.pop("alianzaTerapeutica", None)
+
+    return advertencias
+
+
+def sanear_feedback(feedback: dict, orientacion: str) -> list[str]:
+    """
+    Normaliza los puntajes por item del reporte de auto-supervision. Un
+    puntaje fuera de escala se pone en None (la UI lo muestra como "No
+    determinable") en vez de dibujar una barra imposible.
+    """
+    advertencias: list[str] = []
+    if not isinstance(feedback, dict):
+        return advertencias
+
+    if orientacion == "gestalt":
+        items = feedback.get("itemsGTFS")
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                _sanear_entero_en_rango(
+                    item, "score", RANGO_GTFS, advertencias, quitar=False
+                )
+        return advertencias
+
+    for bloque, rango in (("mitiGlobales", RANGO_MITI_GLOBAL), ("ctsrSubset", RANGO_CTSR)):
+        contenido = feedback.get(bloque)
+        if not isinstance(contenido, dict):
+            continue
+        for nombre, item in contenido.items():
+            if not isinstance(item, dict):
+                continue
+            antes = len(advertencias)
+            _sanear_entero_en_rango(item, "score", rango, advertencias, quitar=False)
+            # El campo se llama "score" en los cuatro items de cada bloque:
+            # sin el prefijo la advertencia no dice cual fue.
+            for i in range(antes, len(advertencias)):
+                advertencias[i] = f"{bloque}.{nombre}.{advertencias[i]}"
+
+    return advertencias

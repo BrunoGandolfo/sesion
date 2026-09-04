@@ -1,12 +1,22 @@
+// GET /api/pacientes/[id]/progreso?rango=10s|3m|6m|todo
+//
+// El recorrido clínico de una paciente: la serie de sesiones del rango, los
+// temas de toda su historia y la línea de tiempo de señales de riesgo. El
+// armado vive en casos-uso/progreso-clinico.ts; acá solo se lee la base y se
+// responde.
+//
+// Solo entran las sesiones que ya tienen nota (revision o aprobado): una
+// sesión que todavía se está procesando no tiene nada que graficar.
+
 import { db } from "@/lib/db";
-import {
-  parseDatosEstructurados,
-  type AlianzaTerapeutica,
-  type DatosEstructurados,
-} from "@/lib/sesion-clinica/schema";
+import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
 
 import { getOrganizationId } from "../../../_lib/auth";
-import { ApiError, errorResponse } from "../../../_lib/responses";
+import {
+  armarProgresoClinico,
+  parseRangoProgreso,
+} from "../../../_lib/casos-uso/progreso-clinico";
+import { ApiError, errorResponse, ok } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,41 +25,23 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-const ALIANZA_MAP: Record<AlianzaTerapeutica, number> = {
-  fragil: 1,
-  inestable: 2,
-  estable: 3,
-  fuerte: 4,
-};
-
-function countIntervenciones(
-  intervenciones: DatosEstructurados["intervenciones"],
-): Record<string, number> {
-  const acc: Record<string, number> = {};
-  if (!intervenciones) return acc;
-  for (const i of intervenciones) {
-    acc[i.tipo] = (acc[i.tipo] ?? 0) + 1;
-  }
-  return acc;
-}
-
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();
     const { id } = await params;
+    const rango = parseRangoProgreso(
+      new URL(request.url).searchParams.get("rango"),
+    );
 
-    // Esta ruta necesita nombre y apellido, así que hace su propio select en
-    // vez de requirePaciente (que solo devuelve el id) para no consultar dos
-    // veces. 404 como el resto de /api/pacientes/[id]/** (antes 200 vacío).
     const paciente = await db.paciente.findFirst({
       where: { id, organizationId },
-      select: { id: true, nombre: true, apellido: true },
+      select: { id: true },
     });
     if (!paciente) {
       throw new ApiError("Paciente no encontrado", 404);
     }
 
-    const sesiones = await db.sesionClinica.findMany({
+    const filas = await db.sesionClinica.findMany({
       where: {
         organizationId,
         estado: { in: ["revision", "aprobado"] },
@@ -63,33 +55,20 @@ export async function GET(_request: Request, { params }: RouteParams) {
       },
     });
 
-    const payload = sesiones.map((s, idx) => {
-      // Parseo del tablero (valida el shape; fila corrupta → null).
-      const datos = parseDatosEstructurados(s.datosEstructurados);
-      const alianzaLabel = datos?.alianzaTerapeutica ?? null;
-
-      return {
-        fecha: s.turno.fecha.toISOString(),
-        numero: idx + 1,
-        intensidadEmocional: datos?.intensidadEmocional ?? null,
-        alianzaTerapeutica: alianzaLabel ? ALIANZA_MAP[alianzaLabel] : null,
-        alianzaLabel,
-        temas: datos?.temas ?? [],
-        intervenciones: countIntervenciones(datos?.intervenciones),
-        flagsRiesgo: datos?.flagsRiesgo ?? null,
-        speechAnalytics: datos?.speechAnalytics ?? null,
-        observacionIA: datos?.observacionIA ?? null,
-        progresoPercibido: datos?.progresoPercibido ?? null,
-      };
-    });
-
-    return Response.json({
+    const progreso = armarProgresoClinico({
       pacienteId: paciente.id,
-      nombre: paciente.nombre,
-      apellido: paciente.apellido,
-      totalSesiones: payload.length,
-      sesiones: payload,
+      // El parseo del tablero valida el shape; una fila corrupta entra como
+      // sesión sin datos en vez de tirar abajo todo el recorrido.
+      sesiones: filas.map((fila) => ({
+        sesionId: fila.id,
+        fecha: fila.turno.fecha,
+        datos: parseDatosEstructurados(fila.datosEstructurados),
+      })),
+      rango,
+      ahora: new Date(),
     });
+
+    return ok(progreso);
   } catch (error) {
     return errorResponse(error);
   }

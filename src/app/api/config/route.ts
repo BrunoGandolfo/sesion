@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
 
 import { getOrganizationId } from "../_lib/auth";
 import { toConfiguracion } from "../_lib/domain";
@@ -17,11 +18,16 @@ const updateConfigSchema = z.object({
     .int()
     .min(0, "La tarifa no puede ser negativa")
     .optional(),
+  // Se conserva por compatibilidad: ya no decide cuándo sale el
+  // recordatorio (eso es recordatorioModo), pero se sigue pudiendo leer y
+  // escribir mientras haya quien la use.
   horasAnticipacion: z
     .number()
     .int()
     .min(1, "La anticipación mínima es 1 hora")
     .optional(),
+  /** Cuándo sale el recordatorio. Ver src/lib/recordatorios-programacion.ts. */
+  recordatorioModo: z.enum(RECORDATORIO_MODOS).optional(),
   templateRecordatorio: z
     .string()
     .trim()

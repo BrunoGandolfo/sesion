@@ -174,6 +174,43 @@ export function parseDatosEstructurados(raw: unknown): DatosEstructurados | null
 
 const fechaIso = z.string().datetime();
 
+// ────────────────────────────────────────────────────────────────────────────
+// Pausas de la grabación
+//
+// Los tramos en que la profesional pausó mientras grababa, tal como los
+// reporta el navegador al confirmar la subida. No son PHI —son marcas de
+// tiempo del dispositivo— y por eso viven en una columna Json sin cifrar.
+// Sirven para leer la duración real de la sesión: 50 minutos de audio con
+// tres pausas no son 50 minutos de trabajo.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const pausaGrabacionSchema = z.object({
+  inicio: fechaIso,
+  fin: fechaIso,
+});
+export type PausaGrabacion = z.infer<typeof pausaGrabacionSchema>;
+
+export const pausasGrabacionSchema = z.array(pausaGrabacionSchema);
+
+/**
+ * Parseo tolerante de la columna `pausas`: acepta el array ya deserializado
+ * o el string JSON; devuelve null si está ausente o no valida. Nunca lanza:
+ * una pausa mal escrita no puede impedir leer la nota.
+ */
+export function parsePausas(raw: unknown): PausaGrabacion[] | null {
+  if (raw == null) return null;
+  let candidato: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      candidato = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  const resultado = pausasGrabacionSchema.safeParse(candidato);
+  return resultado.success ? resultado.data : null;
+}
+
 // La extensión de cifrado reconstruye notaSoapOriginal con `?? null` por
 // campo (src/lib/prisma-encryption.ts), por eso acá cada sección es nullable.
 export const notaSoapOriginalSchema = z.object({
@@ -203,6 +240,9 @@ export const sesionClinicaResponseSchema = z.object({
   duracionAudioSeg: z.number().int().nullable(),
   audioR2Key: z.string().nullable(),
   audioBorradoEn: fechaIso.nullable(),
+  // Opcional: solo los selects que la piden la traen; null si la grabación
+  // no reportó pausas.
+  pausas: pausasGrabacionSchema.nullable().optional(),
   notaSubjetivo: z.string().nullable(),
   notaObjetivo: z.string().nullable(),
   notaAnalisis: z.string().nullable(),

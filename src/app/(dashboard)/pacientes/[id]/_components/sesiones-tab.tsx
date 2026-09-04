@@ -9,10 +9,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LoaderCircle, Mic } from "lucide-react";
+import { ChevronDown, LoaderCircle, Mic } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
 import { Button, Card, Chip } from "@/components/ui";
 import { apiGet, esAbort } from "@/lib/api-client";
+import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaLarga, hora } from "@/lib/format";
 import {
   ALGO_FALLO,
@@ -124,6 +127,47 @@ function resumenCorto(datos: DatosEstructurados | null): string {
   return datos?.resumenSesion?.trim() ?? "";
 }
 
+/** Segunda línea de la fila cuando la nota no dejó resumen: los temas, con
+ *  su nombre legible. Es lo que hay; no se rellena con texto inventado. */
+function temasDeLaSesion(datos: DatosEstructurados | null): string {
+  const temas = datos?.temas ?? [];
+  if (temas.length === 0) return "";
+  return temas.map(formatearEtiqueta).filter(Boolean).join(" · ");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Agrupación por mes
+//
+// Con 40 sesiones la lista plana es un scroll sin referencias: cada fila dice
+// "lunes 4 de marzo" y no hay forma de saltar a un período. Agrupada por mes,
+// el mes corriente queda abierto y los anteriores plegados, con su cuenta a
+// la vista.
+// ────────────────────────────────────────────────────────────────────────────
+
+type GrupoMes = { clave: string; titulo: string; sesiones: DocSesion[] };
+
+function tituloDeMes(fecha: Date): string {
+  const texto = format(fecha, "LLLL yyyy", { locale: es });
+  return texto.charAt(0).toLocaleUpperCase("es") + texto.slice(1);
+}
+
+/** Agrupa por mes conservando el orden en que vino la lista (la API la manda
+ *  de la más reciente a la más vieja). */
+function agruparPorMes(sesiones: DocSesion[]): GrupoMes[] {
+  const grupos: GrupoMes[] = [];
+  for (const sesion of sesiones) {
+    const fecha = new Date(sesion.fecha);
+    const clave = format(fecha, "yyyy-MM");
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.clave === clave) {
+      ultimo.sesiones.push(sesion);
+      continue;
+    }
+    grupos.push({ clave, titulo: tituloDeMes(fecha), sesiones: [sesion] });
+  }
+  return grupos;
+}
+
 const ENLACE_PRIMARIO =
   "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-sage-500 px-5 font-sans text-[14px] font-semibold text-white transition-colors duration-150 hover:bg-sage-600 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30";
 const ENLACE_SECUNDARIO =
@@ -178,6 +222,11 @@ export function SesionesTab({
         ? listaActual.docs.filter((d) => d.sesionClinicaId !== sesionHoy.id)
         : listaActual.docs,
     [listaActual.docs, sesionHoy],
+  );
+
+  const grupos = React.useMemo(
+    () => agruparPorMes(sesionesListadas),
+    [sesionesListadas],
   );
 
   async function cargarMas() {
@@ -252,14 +301,16 @@ export function SesionesTab({
           </Card>
         ) : null}
 
-        {sesionesListadas.length > 0 ? (
-          <ul className="flex flex-col gap-3">
-            {sesionesListadas.map((sesion) => (
-              <li key={sesion.sesionClinicaId}>
-                <FilaSesion sesion={sesion} />
-              </li>
+        {grupos.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            {grupos.map((grupo, indice) => (
+              <GrupoDeMes
+                key={grupo.clave}
+                grupo={grupo}
+                abiertoPorDefecto={indice === 0}
+              />
             ))}
-          </ul>
+          </div>
         ) : null}
 
         {listaActual.page < listaActual.totalPages ? (
@@ -373,9 +424,62 @@ function SesionDeHoy({
   );
 }
 
+/** Un mes de la lista. El más reciente arranca abierto; los anteriores,
+ *  plegados, con la cuenta del mes a la vista para no tener que abrirlos. */
+function GrupoDeMes({
+  grupo,
+  abiertoPorDefecto,
+}: {
+  grupo: GrupoMes;
+  abiertoPorDefecto: boolean;
+}) {
+  const [abierto, setAbierto] = React.useState(abiertoPorDefecto);
+  const panelId = React.useId();
+
+  return (
+    <section>
+      <button
+        type="button"
+        aria-expanded={abierto}
+        aria-controls={panelId}
+        onClick={() => setAbierto((previo) => !previo)}
+        className="flex min-h-[44px] w-full items-baseline justify-between gap-3 border-b border-[color:var(--border-subtle)] pb-2 text-left"
+      >
+        <span className="font-sans text-[13px] font-semibold text-ink-900">
+          {grupo.titulo}
+          <span className="font-normal text-ink-500">
+            {" "}
+            · {pluralizar(grupo.sesiones.length, "sesión", "sesiones")}
+          </span>
+        </span>
+        <ChevronDown
+          size={16}
+          strokeWidth={1.8}
+          aria-hidden="true"
+          className={`shrink-0 text-ink-500 transition-transform duration-150 ${
+            abierto ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {abierto ? (
+        <ul id={panelId} className="mt-3 flex flex-col gap-3">
+          {grupo.sesiones.map((sesion) => (
+            <li key={sesion.sesionClinicaId}>
+              <FilaSesion sesion={sesion} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
 function FilaSesion({ sesion }: { sesion: DocSesion }) {
   const fecha = new Date(sesion.fecha);
-  const resumen = resumenCorto(sesion.datosEstructurados);
+  const resumen =
+    resumenCorto(sesion.datosEstructurados) ||
+    temasDeLaSesion(sesion.datosEstructurados);
   const esRevision = sesion.estado === "revision";
 
   return (

@@ -3,7 +3,12 @@ import { db } from "@/lib/db";
 import { generarTextoConsentimiento } from "@/lib/consentimiento";
 
 import { getOrganizationId } from "../../../_lib/auth";
-import { ApiError, errorResponse, validationError } from "../../../_lib/responses";
+import {
+  ApiError,
+  errorResponse,
+  ok,
+  validationError,
+} from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,11 +99,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       select: consentimientoSelect,
     });
 
+    // Envoltorio único de la API: { data: { consentimiento } }. `null` es
+    // una respuesta legítima —la paciente no firmó—, no un 404.
     if (!consentimiento) {
-      return Response.json({ consentimiento: null });
+      return ok({ consentimiento: null });
     }
 
-    return Response.json({
+    return ok({
       consentimiento: toConsentimientoResponse(consentimiento),
     });
   } catch (error) {

@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import {
+  calcularProgramadoEn,
+  normalizarRecordatorioModo,
+} from "@/lib/recordatorios-programacion";
 
 import { getOrganizationId } from "../_lib/auth";
 import {
@@ -107,13 +111,13 @@ export async function POST(request: Request) {
 
       const configuracion = await tx.configuracion.findUnique({
         where: { organizationId },
-        select: { horasAnticipacion: true },
+        select: { recordatorioModo: true },
       });
 
       const fecha = new Date(parsed.data.fecha);
-      const horasAnticipacion = configuracion?.horasAnticipacion ?? 24;
-      const programadoEn = new Date(
-        fecha.getTime() - horasAnticipacion * 60 * 60 * 1000,
+      const programadoEn = calcularProgramadoEn(
+        fecha,
+        normalizarRecordatorioModo(configuracion?.recordatorioModo),
       );
 
       const turno = await tx.turno.create({

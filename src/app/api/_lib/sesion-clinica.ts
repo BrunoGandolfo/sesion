@@ -14,6 +14,7 @@ import type { db } from "@/lib/db";
 import {
   notaSoapOriginalSchema,
   parseDatosEstructurados,
+  parsePausas,
   sesionClinicaResponseSchema,
   type SesionClinicaResponse,
 } from "@/lib/sesion-clinica/schema";
@@ -136,6 +137,7 @@ export const SESION_SELECT = {
   duracionAudioSeg: true,
   audioR2Key: true,
   audioBorradoEn: true,
+  pausas: true,
   notaSubjetivo: true,
   notaObjetivo: true,
   notaAnalisis: true,
@@ -180,16 +182,17 @@ type TurnoDeFila = FilaSesionSelect["turno"];
 /**
  * Fila leída con SESION_SELECT o un subconjunto: sin `turno` (selects sin
  * relación) o con paciente sin `telefono` (GET ?turnoId). Además,
- * toSesionClinicaResponse tolera `datosEstructurados` como string JSON y
- * `notaSoapOriginal` con forma inesperada (sale null), por eso esos dos
- * quedan abiertos.
+ * toSesionClinicaResponse tolera `datosEstructurados` como string JSON,
+ * `pausas` como JSON crudo y `notaSoapOriginal` con forma inesperada (salen
+ * null), por eso esos tres quedan abiertos.
  */
 export type FilaSesionClinica = Omit<
   FilaSesionSelect,
-  "turno" | "notaSoapOriginal" | "datosEstructurados"
+  "turno" | "notaSoapOriginal" | "datosEstructurados" | "pausas"
 > & {
   notaSoapOriginal?: unknown;
   datosEstructurados?: unknown;
+  pausas?: unknown;
   turno?:
     | (Omit<TurnoDeFila, "paciente"> & {
         paciente: Omit<TurnoDeFila["paciente"], "telefono"> & {
@@ -225,6 +228,7 @@ export function toSesionClinicaResponse(
     duracionAudioSeg: limpia.duracionAudioSeg,
     audioR2Key: limpia.audioR2Key,
     audioBorradoEn: aIso(limpia.audioBorradoEn),
+    pausas: parsePausas(limpia.pausas),
     notaSubjetivo: limpia.notaSubjetivo,
     notaObjetivo: limpia.notaObjetivo,
     notaAnalisis: limpia.notaAnalisis,

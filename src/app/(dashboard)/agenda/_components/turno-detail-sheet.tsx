@@ -42,7 +42,7 @@ import type {
   TurnoConPaciente,
 } from "@/types/domain";
 
-import { BriefCorto } from "./brief-corto";
+import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 
 const DURACIONES: Duracion[] = [30, 45, 50, 60, 90];
 

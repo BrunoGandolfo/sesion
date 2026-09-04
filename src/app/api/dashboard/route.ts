@@ -1,18 +1,17 @@
 import { db } from "@/lib/db";
-import type { DeudaPaciente, KPIsDashboard } from "@/types/domain";
+import type { DeudaPaciente } from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
 import { pendientesTerapeuta } from "../_lib/casos-uso/pendientes-terapeuta";
 import {
-  addDays,
   buscarTurnosConDeuda,
   calcularDeudores,
   DashboardData,
   endOfDay,
   endOfMonth,
+  type KpisDashboard,
   startOfDay,
   startOfMonth,
-  startOfWeekMonday,
   sumTarifas,
   toTurnoConPaciente,
 } from "../_lib/domain";
@@ -31,21 +30,14 @@ export async function GET() {
     const todayEnd = endOfDay(now);
     const monthStart = startOfMonth(now);
     const monthEnd = endOfMonth(now);
-    const weekStart = startOfWeekMonday(now);
-    const weekEnd = endOfDay(addDays(weekStart, 6));
 
     const [
-      pacientesActivos,
       sesionesHoyCount,
       turnosConDeuda,
       ingresosMes,
       sesionesHoyRows,
-      sesionesSemanaRows,
       pendientes,
     ] = await Promise.all([
-      db.paciente.count({
-        where: { organizationId, activo: true },
-      }),
       db.turno.count({
         where: {
           organizationId,
@@ -81,14 +73,6 @@ export async function GET() {
         },
         orderBy: { fecha: "asc" },
       }),
-      db.turno.findMany({
-        where: {
-          organizationId,
-          fecha: { gte: weekStart, lte: weekEnd },
-          estado: { not: "cancelado" },
-        },
-        select: { fecha: true },
-      }),
       // Notas sin aprobar, sesiones sin cobrar y turnos de hoy sin
       // autorización: lo único de esta respuesta que pide una acción.
       pendientesTerapeuta({ prisma: db, organizationId, ahora: now }),
@@ -114,14 +98,7 @@ export async function GET() {
       )
       .slice(0, TOPE_DEUDORES);
 
-    const sesionesSemana = Array.from({ length: 7 }, () => 0);
-    for (const turno of sesionesSemanaRows) {
-      const dayIndex = (turno.fecha.getDay() + 6) % 7;
-      sesionesSemana[dayIndex] += 1;
-    }
-
-    const kpis: KPIsDashboard = {
-      pacientesActivos,
+    const kpis: KpisDashboard = {
       sesionesHoy: sesionesHoyCount,
       deudaAcumulada: sumTarifas(turnosConDeuda),
       ingresosMes: ingresosMes._sum.tarifaCobrada ?? 0,
@@ -134,7 +111,6 @@ export async function GET() {
       proximaSesion:
         sesionesHoy.find((turno) => turno.fecha.getTime() >= now.getTime()) ??
         null,
-      sesionesSemana,
       pendientes,
     };
 

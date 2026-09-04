@@ -58,6 +58,16 @@ model Configuracion {
   whatsappOrigen       String @default("") @map("whatsapp_origen")
   tarifaDefault        Int    @map("tarifa_default")
   horasAnticipacion    Int    @default(24) @map("horas_anticipacion")
+
+  // Cuándo sale el recordatorio de WhatsApp, dicho como lo piensa ella y no
+  // en horas: "dia_anterior" | "dos_dias_antes" | "misma_manana". La cuenta
+  // vive en src/lib/recordatorios-programacion.ts (calcularProgramadoEn),
+  // única para crear y para reprogramar turnos.
+  //
+  // horasAnticipacion se conserva por compatibilidad: ya no decide nada de
+  // la programación, pero sigue en la fila y en la API para no romper a
+  // quien todavía la lea.
+  recordatorioModo     String @default("dia_anterior") @map("recordatorio_modo")
   templateRecordatorio String @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
 
   // Orientación teórica de la profesional. Determina el instrumento de
@@ -198,6 +208,12 @@ model SesionClinica {
   duracionAudioSeg Int? // Duración del audio en segundos
   audioR2Key       String? // Key del audio cifrado en R2 (null después de borrar)
   audioBorradoEn   DateTime? // Cuándo se borró el audio
+
+  // Tramos en que la grabación estuvo en pausa, tal como los reporta el
+  // navegador al confirmar la subida: [{ inicio: ISO, fin: ISO }].
+  // Sin cifrar a propósito: son marcas de tiempo del dispositivo, no
+  // contenido clínico, y sirven para leer la duración real de la sesión.
+  pausas           Json?
 
   // ──────────────────────────────────────────────────────────────────────
   // Notas clínicas — cifrado en reposo (AES-256-GCM)

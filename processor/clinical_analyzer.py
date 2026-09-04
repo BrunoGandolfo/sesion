@@ -9,6 +9,8 @@ pipeline reporte la version de prompt usada.
 import json
 import logging
 import os
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import date
 
 import anthropic
@@ -20,23 +22,41 @@ from schemas_llm import (
     SCHEMA_FEEDBACK_CBT_MI,
     SCHEMA_FEEDBACK_GESTALT,
     SCHEMA_NOTA,
-    validar_rangos_nota,
+    sanear_datos_nota,
+    sanear_feedback,
+    validar_estructura_contexto,
+    validar_estructura_feedback_cbt_mi,
+    validar_estructura_feedback_gestalt,
+    validar_estructura_nota,
 )
 
 logger = logging.getLogger(__name__)
 
 PROMPTS = {
-    "nota": "clinical_note_v3.1.md",
+    "nota": "clinical_note_v3.1.1.md",
     "contexto": "update_context_v2.0.md",
-    "feedback_cbt_mi": "therapist_feedback_v1.0.md",
-    "feedback_gestalt": "therapist_feedback_gestalt_v1.0.md",
+    "feedback_cbt_mi": "therapist_feedback_v1.1.md",
+    "feedback_gestalt": "therapist_feedback_gestalt_v1.1.md",
 }
 
-# Orientacion teorica -> (clave en PROMPTS, schema). Desconocida cae a cbt_mi.
+# Orientacion teorica -> (clave en PROMPTS, schema, validador estructural).
+# Desconocida cae a cbt_mi.
 _FEEDBACK_POR_ORIENTACION = {
-    "cbt_mi": ("feedback_cbt_mi", SCHEMA_FEEDBACK_CBT_MI),
-    "gestalt": ("feedback_gestalt", SCHEMA_FEEDBACK_GESTALT),
+    "cbt_mi": ("feedback_cbt_mi", SCHEMA_FEEDBACK_CBT_MI, validar_estructura_feedback_cbt_mi),
+    "gestalt": ("feedback_gestalt", SCHEMA_FEEDBACK_GESTALT, validar_estructura_feedback_gestalt),
 }
+
+# Una sola segunda pasada. Si el modelo no acierta la forma dos veces
+# seguidas con el error citado, el problema no lo arregla insistir.
+MAX_REINTENTOS_ESTRUCTURA = 1
+
+
+@dataclass
+class DiagnosticoLLM:
+    """Lo que el pipeline reporta de la llamada, mas alla del resultado."""
+
+    reintentos: int = 0
+    advertencias: list[str] = field(default_factory=list)
 
 
 def _cargar_prompt(nombre: str) -> str:
@@ -177,17 +197,96 @@ def _llamar_llm(system_prompt: str, user_content: str, schema: dict) -> dict:
     raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
 
 
+# Reintento por forma ───────────────────────────────────────────────────────
+
+def _bloque_correccion(motivo: str) -> str:
+    """
+    Mensaje de la segunda pasada. Le cita al modelo el error de validacion y
+    le pide el JSON completo de nuevo.
+
+    No se le devuelve su propia salida anterior: contendria la nota clinica
+    entera y duplicaria material del paciente en el input. Con el nombre del
+    campo y el tipo esperado alcanza, y es lo unico que los validadores
+    producen (ver schemas_llm.validar_estructura_*).
+    """
+    return (
+        "<correccion>\n"
+        "Tu respuesta anterior no se pudo usar porque no cumple el schema.\n"
+        f"Error de validacion: {motivo}\n"
+        "Devolve de nuevo el JSON COMPLETO, corrigiendo exactamente ese punto y "
+        "respetando el resto del schema. Sin texto fuera del JSON.\n"
+        "</correccion>"
+    )
+
+
+def _llamar_validando(
+    system_prompt: str,
+    user_content: str,
+    schema: dict,
+    validar: Callable[[object], None] | None = None,
+) -> tuple[dict, int]:
+    """
+    Llama al LLM y verifica la estructura del resultado.
+
+    Ante un fallo de FORMA —JSON no parseable, seccion SOAP faltante, enum
+    invalido— repite la llamada una sola vez citandole el error. Los fallos de
+    transporte (timeout, HTTP, conexion) no se reintentan aca: de eso ya se
+    ocupa `max_retries` del SDK, y repetir una llamada de 8k tokens porque la
+    red se cayo no arregla nada.
+
+    Devuelve (resultado, reintentos), con reintentos en 0 o 1.
+    """
+    motivo: str | None = None
+
+    for intento in range(MAX_REINTENTOS_ESTRUCTURA + 1):
+        contenido = (
+            user_content
+            if motivo is None
+            else f"{user_content}\n\n{_bloque_correccion(motivo)}"
+        )
+
+        # Los dos try van separados a proposito: `_llamar_llm` tambien lanza
+        # ValueError (backend no soportado), y eso es un error de
+        # configuracion, no una salida mal formada del modelo.
+        try:
+            resultado = _llamar_llm(system_prompt, contenido, schema)
+        except PipelineError as e:
+            if e.codigo != "llm_json_invalido" or intento == MAX_REINTENTOS_ESTRUCTURA:
+                raise
+            motivo = "la respuesta anterior no era JSON parseable"
+        else:
+            if validar is None:
+                return resultado, intento
+            try:
+                validar(resultado)
+            except ValueError as e:
+                if intento == MAX_REINTENTOS_ESTRUCTURA:
+                    raise PipelineError("llm_estructura_invalida", str(e)) from e
+                motivo = str(e)
+            else:
+                return resultado, intento
+
+        logger.warning(f"Salida del LLM invalida ({motivo}); se pide correccion (1 intento)")
+
+    # Inalcanzable: el bucle sale por return o por raise.
+    raise PipelineError("llm_estructura_invalida", "No se obtuvo una salida valida")
+
+
 # Llamada A — nota SOAP ─────────────────────────────────────────────────────
 
 def analizar(
     transcripcion_formateada: str,
     contexto_clinico: str | None = None,
     speech_analytics: dict | None = None,
-) -> tuple[dict, str]:
+) -> tuple[dict, str, DiagnosticoLLM]:
     """
     Genera la nota SOAP usando el prompt de PROMPTS["nota"]. Arma el user
     message con los tags XML que el prompt espera: <transcripcion>,
-    <speech_analytics>, <contexto_previo>. Devuelve (resultado, nombre_prompt).
+    <speech_analytics>, <contexto_previo>.
+
+    Devuelve (resultado, nombre_prompt, diagnostico). Falla solo por forma:
+    las escalas de valoracion fuera de rango se anulan y quedan como
+    advertencia en el diagnostico.
     """
     nombre_prompt = PROMPTS["nota"]
     system_prompt = _cargar_prompt(nombre_prompt)
@@ -211,14 +310,15 @@ def analizar(
         )
     user_content = "\n\n".join(bloques)
 
-    resultado = _llamar_llm(system_prompt, user_content, SCHEMA_NOTA)
-    try:
-        validar_rangos_nota(resultado)
-    except ValueError as e:
-        raise PipelineError("llm_rango_invalido", str(e)) from e
+    resultado, reintentos = _llamar_validando(
+        system_prompt, user_content, SCHEMA_NOTA, validar_estructura_nota
+    )
+    advertencias = sanear_datos_nota(resultado)
+    for advertencia in advertencias:
+        logger.warning(f"Nota clinica: {advertencia}")
 
-    logger.info(f"Nota clinica generada ({nombre_prompt})")
-    return resultado, nombre_prompt
+    logger.info(f"Nota clinica generada ({nombre_prompt}, reintentos={reintentos})")
+    return resultado, nombre_prompt, DiagnosticoLLM(reintentos, advertencias)
 
 
 # Llamada B — contexto longitudinal ─────────────────────────────────────────
@@ -256,8 +356,10 @@ def actualizar_contexto_clinico(
         "</nota_soap_aprobada>"
     )
 
-    actualizado = _llamar_llm(system_prompt, user_content, SCHEMA_CONTEXTO)
-    logger.info(f"Contexto clinico actualizado ({nombre_prompt})")
+    actualizado, reintentos = _llamar_validando(
+        system_prompt, user_content, SCHEMA_CONTEXTO, validar_estructura_contexto
+    )
+    logger.info(f"Contexto clinico actualizado ({nombre_prompt}, reintentos={reintentos})")
     return actualizado, nombre_prompt
 
 
@@ -267,14 +369,17 @@ def generar_feedback_terapeuta(
     transcripcion_formateada: str,
     speech_analytics: dict | None = None,
     orientacion: str = "cbt_mi",
-) -> tuple[dict | None, str]:
+) -> tuple[dict | None, str, DiagnosticoLLM]:
     """
     Reporte de auto-supervision segun orientacion teorica (MITI/CTS-R para
     cbt_mi, GTFS para gestalt). Orientacion desconocida cae a cbt_mi.
-    Best-effort: si falla el LLM devuelve (None, nombre_prompt) y deja
-    warning en log. Se embebe en datosEstructurados.feedbackTerapeuta.
+
+    Best-effort de punta a punta: si falla el LLM devuelve
+    (None, nombre_prompt, diagnostico) con el motivo como advertencia. La nota
+    clinica ya esta generada a esta altura y una sesion no se pierde porque el
+    reporte de auto-supervision no salio.
     """
-    clave, schema = _FEEDBACK_POR_ORIENTACION.get(
+    clave, schema, validar = _FEEDBACK_POR_ORIENTACION.get(
         orientacion, _FEEDBACK_POR_ORIENTACION["cbt_mi"]
     )
     nombre_prompt = PROMPTS[clave]
@@ -294,12 +399,22 @@ def generar_feedback_terapeuta(
             )
         user_content = "\n\n".join(bloques)
 
-        feedback = _llamar_llm(system_prompt, user_content, schema)
-        logger.info(f"Feedback terapeuta generado ({nombre_prompt})")
-        return feedback, nombre_prompt
+        feedback, reintentos = _llamar_validando(
+            system_prompt, user_content, schema, validar
+        )
+        advertencias = sanear_feedback(feedback, orientacion)
+        for advertencia in advertencias:
+            logger.warning(f"Feedback terapeuta: {advertencia}")
+
+        logger.info(f"Feedback terapeuta generado ({nombre_prompt}, reintentos={reintentos})")
+        return feedback, nombre_prompt, DiagnosticoLLM(reintentos, advertencias)
     except PipelineError as e:
         logger.warning(f"Feedback terapeuta fallo: {e.codigo}: {e.mensaje_publico}")
-        return None, nombre_prompt
+        return None, nombre_prompt, DiagnosticoLLM(
+            advertencias=[f"feedbackTerapeuta no disponible: {e.codigo}"]
+        )
     except Exception as e:
         logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}: {str(e)[:200]}")
-        return None, nombre_prompt
+        return None, nombre_prompt, DiagnosticoLLM(
+            advertencias=[f"feedbackTerapeuta no disponible: {type(e).__name__}"]
+        )

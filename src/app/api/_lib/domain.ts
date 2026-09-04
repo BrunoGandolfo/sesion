@@ -16,6 +16,10 @@ import type {
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
+import {
+  normalizarRecordatorioModo,
+  type RecordatorioModo,
+} from "@/lib/recordatorios-programacion";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -26,22 +30,25 @@ export type PacienteWithStats = PrismaPaciente & {
   turnos: TurnoStats[];
 };
 
+/**
+ * KPIs de la pantalla de Hoy. Los tres que se muestran, ni uno más:
+ * "Pacientes activos" salió del tablero y con él la cuenta que lo alimentaba
+ * (ver GET /api/dashboard).
+ */
+export type KpisDashboard = Omit<KPIsDashboard, "pacientesActivos">;
+
 export type DashboardData = {
-  kpis: KPIsDashboard;
+  kpis: KpisDashboard;
   sesionesHoy: TurnoConPaciente[];
   deudores: DeudaPaciente[];
   proximaSesion: TurnoConPaciente | null;
-  sesionesSemana: number[];
   /**
    * Lo que espera a la terapeuta: notas sin aprobar, sesiones sin cobrar y
    * turnos de hoy sin autorización de grabación (ver
-   * casos-uso/pendientes-terapeuta.ts).
-   *
-   * Opcional en el tipo, siempre presente en la respuesta: el parser del
-   * cliente arma el objeto campo por campo y todavía no lo copia. Cuando la
-   * pantalla de Hoy lo consuma, pasa a obligatorio.
+   * casos-uso/pendientes-terapeuta.ts). Obligatorio: la pantalla de Hoy lo
+   * consume desde que existe el bloque PENDIENTES.
    */
-  pendientes?: PendientesTerapeuta;
+  pendientes: PendientesTerapeuta;
 };
 
 export function toPacienteConDeuda(
@@ -86,16 +93,29 @@ export function toRecordatorio(recordatorio: PrismaRecordatorio): Recordatorio {
   return recordatorio as Recordatorio;
 }
 
+/**
+ * La configuración tal como sale por la API: la del dominio más
+ * `recordatorioModo`, que todavía no existe en src/types/domain.ts (fuera
+ * del alcance de esta capa). Cuando la UI lo agregue ahí, este alias se
+ * puede colapsar en `Configuracion`.
+ */
+export type ConfiguracionApi = Configuracion & {
+  recordatorioModo: RecordatorioModo;
+};
+
 export function toConfiguracion(
   configuracion: PrismaConfiguracion,
-): Configuracion {
-  // En DB orientacionTeorica es String (sin migración por orientación nueva);
-  // acá se narrowea a la unión, con fallback "cbt_mi" ante valores desconocidos
-  // (misma regla que el contrato multi-orientación).
+): ConfiguracionApi {
+  // En DB orientacionTeorica y recordatorioModo son String (sin enum en la
+  // migración); acá se narrowean a su unión, con fallback al default ante
+  // valores desconocidos — misma regla que el contrato multi-orientación.
   return {
     ...configuracion,
     orientacionTeorica:
       configuracion.orientacionTeorica === "gestalt" ? "gestalt" : "cbt_mi",
+    recordatorioModo: normalizarRecordatorioModo(
+      configuracion.recordatorioModo,
+    ),
   };
 }
 
@@ -270,14 +290,29 @@ export interface NotaParaRevisar {
   fecha: string;
 }
 
-/** Sesión realizada con el pago pendiente y la hora ya pasada. */
-export interface SesionSinCobrar {
-  turnoId: string;
+/**
+ * Deuda de una paciente, no de un turno.
+ *
+ * Se cobra por persona, no por sesión: quien debe tres sesiones recibe un
+ * mensaje, no tres. Por eso la lista llega agrupada y con el monto sumado,
+ * y `masAntiguo` al lado, que es lo que dice cuán vieja es la deuda.
+ */
+export interface PacienteSinCobrar {
   pacienteId: string;
   pacienteNombre: string;
-  fecha: string;
-  /** Tarifa efectivamente pactada para ese turno (tarifaCobrada). */
-  tarifa: number;
+  /** Cuántas sesiones realizadas e impagas tiene. Siempre ≥ 1. */
+  sesiones: number;
+  /** Suma de las tarifas de esas sesiones. */
+  monto: number;
+  /** Fecha del turno impago más viejo, ISO. */
+  masAntiguo: string;
+}
+
+/** El pie del bloque: cuánto es todo junto. */
+export interface TotalSinCobrar {
+  sesiones: number;
+  monto: number;
+  pacientes: number;
 }
 
 /** Turno de hoy cuya paciente no firmó la autorización de grabación. */
@@ -290,7 +325,9 @@ export interface TurnoSinAutorizacion {
 
 export interface PendientesTerapeuta {
   notasParaRevisar: NotaParaRevisar[];
-  sinCobrar: SesionSinCobrar[];
+  /** Agrupado por paciente, de la deuda más grande a la más chica. */
+  sinCobrar: PacienteSinCobrar[];
+  totalSinCobrar: TotalSinCobrar;
   sinAutorizacion: TurnoSinAutorizacion[];
 }
 

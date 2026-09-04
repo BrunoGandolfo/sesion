@@ -1,80 +1,128 @@
 "use client";
 
+import { formatearEtiqueta, mapaDeEtiquetas } from "@/lib/etiquetas";
+import { fechaCorta } from "@/lib/format";
+import { INTERVENCIONES } from "@/lib/glosario";
+
 import { lecturaIntervenciones } from "../progreso-lecturas";
 import {
   COLOR,
+  BarrasPorFecha,
   ChartCard,
-  StackedBarChart,
-  sessionLabels,
+  fechaDe,
   type SesionProgreso,
 } from "./base";
+import { SUBTITULO_INTERVENCIONES } from "./textos";
 
-// ============================================
-// 4. Intervenciones (StackedBarChart)
-// ============================================
-const INTERVENCION_COLORS: Record<string, string> = {
+// Intervenciones por sesión dentro del período.
+//
+// Antes había cinco cubetas fijas (validación, reformulación, señalamiento,
+// confrontación y "Otros") y todo lo demás —interpretación, pregunta
+// circular, silencio terapéutico— se sumaba a "Otros" y desaparecía. Una
+// intervención tiene nombre técnico y se muestra con su nombre: acá las
+// claves son las que vino a decir la API, ordenadas por frecuencia.
+
+/** Color propio para los ocho tipos del contrato; el resto cicla la paleta.
+ *  Que una clave desconocida aparezca con color prestado es preferible a
+ *  meterla en una cubeta "Otros" que le borra el nombre. */
+const COLOR_POR_TIPO: Record<string, string> = {
   validacion: COLOR.sage,
   reformulacion: COLOR.gold,
   senalamiento: COLOR.mint,
   confrontacion: COLOR.terracotta,
-  otros: COLOR.gray,
+  interpretacion: COLOR.violeta,
+  pregunta_circular: COLOR.sageSoft,
+  silencio_terapeutico: COLOR.arena,
+  otra: COLOR.gray,
 };
 
-const INTERVENCION_LABELS: Record<string, string> = {
-  validacion: "Validación",
-  reformulacion: "Reformulación",
-  senalamiento: "Señalamiento",
-  confrontacion: "Confrontación",
-  otros: "Otros",
-};
-
-function normalizeKey(k: string): string {
-  const lower = k.toLowerCase();
-  if (lower in INTERVENCION_COLORS) return lower;
-  return "otros";
-}
+const PALETA_EXTRA = [
+  COLOR.violeta,
+  COLOR.arena,
+  COLOR.mint,
+  COLOR.gold,
+  COLOR.sageSoft,
+  COLOR.gray,
+];
 
 export function IntervencionesChart({ sesiones }: { sesiones: SesionProgreso[] }) {
-  const aggregated = sesiones.map((s) => {
-    const buckets: Record<string, number> = {
-      validacion: 0,
-      reformulacion: 0,
-      senalamiento: 0,
-      confrontacion: 0,
-      otros: 0,
-    };
-    for (const [k, v] of Object.entries(s.intervenciones ?? {})) {
-      buckets[normalizeKey(k)] += v;
+  // Claves presentes en el período, ordenadas por total descendente: la
+  // intervención más usada queda abajo de la pila y primera en la leyenda.
+  const totalPorClave = new Map<string, number>();
+  for (const sesion of sesiones) {
+    for (const [clave, cantidad] of Object.entries(sesion.intervenciones ?? {})) {
+      if (!Number.isFinite(cantidad) || cantidad <= 0) continue;
+      totalPorClave.set(clave, (totalPorClave.get(clave) ?? 0) + cantidad);
     }
-    return buckets;
+  }
+
+  const claves = [...totalPorClave.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([clave]) => clave);
+
+  if (claves.length === 0) {
+    return (
+      <ChartCard title={INTERVENCIONES} subtitle={SUBTITULO_INTERVENCIONES}>
+        <p className="py-6 text-center text-[13px] text-ink-500">
+          No hay intervenciones registradas en este período.
+        </p>
+      </ChartCard>
+    );
+  }
+
+  const etiquetas = mapaDeEtiquetas(claves);
+  const colores: Record<string, string> = {};
+  let extra = 0;
+  for (const clave of claves) {
+    const propio = COLOR_POR_TIPO[clave.toLowerCase()];
+    colores[clave] = propio ?? PALETA_EXTRA[extra++ % PALETA_EXTRA.length];
+  }
+
+  const porSesion = sesiones.map((sesion) => {
+    const valores: Record<string, number> = {};
+    for (const clave of claves) {
+      valores[clave] = sesion.intervenciones?.[clave] ?? 0;
+    }
+    return valores;
   });
 
-  const totals = aggregated.map((b) => Object.values(b).reduce((a, b) => a + b, 0));
-  const maxTotal = Math.max(...totals, 1);
-  const tickStep = Math.max(1, Math.ceil(maxTotal / 4));
-  const yTop = Math.ceil(maxTotal / tickStep) * tickStep;
+  const totales = porSesion.map((v) =>
+    Object.values(v).reduce((a, b) => a + b, 0),
+  );
+  const maxTotal = Math.max(...totales, 1);
+  const paso = Math.max(1, Math.ceil(maxTotal / 4));
+  const yTop = Math.ceil(maxTotal / paso) * paso;
   const yTicks: number[] = [];
-  for (let v = 0; v <= yTop; v += tickStep) yTicks.push(v);
+  for (let v = 0; v <= yTop; v += paso) yTicks.push(v);
 
-  const keys = ["validacion", "reformulacion", "senalamiento", "confrontacion", "otros"];
-  const labels = sessionLabels(sesiones);
-  const lectura = lecturaIntervenciones(aggregated, INTERVENCION_LABELS);
+  const barras = sesiones.map((sesion, i) => {
+    const total = totales[i];
+    const detalle =
+      total === 0
+        ? `${fechaCorta(fechaDe(sesion))} · sin intervenciones registradas`
+        : `${fechaCorta(fechaDe(sesion))} · ${claves
+            .filter((c) => porSesion[i][c] > 0)
+            .map((c) => `${formatearEtiqueta(c)} ${porSesion[i][c]}`)
+            .join(", ")}`;
+    return { fecha: fechaDe(sesion), valores: porSesion[i], detalle };
+  });
+
+  const lectura = lecturaIntervenciones(porSesion, etiquetas);
 
   return (
     <ChartCard
-      title="Intervenciones del terapeuta"
-      subtitle="Cantidad y tipo de intervenciones por sesión."
+      title={INTERVENCIONES}
+      subtitle={SUBTITULO_INTERVENCIONES}
       lectura={lectura}
     >
-      <StackedBarChart
-        labels={labels}
-        keys={keys}
-        keyLabels={INTERVENCION_LABELS}
-        keyColors={INTERVENCION_COLORS}
-        data={aggregated}
+      <BarrasPorFecha
+        barras={barras}
+        claves={claves}
+        etiquetas={etiquetas}
+        colores={colores}
         yTicks={yTicks}
         yMax={yTop}
-        ariaLabel="Intervenciones por sesión"
+        ariaLabel={`${INTERVENCIONES} por sesión`}
       />
     </ChartCard>
   );

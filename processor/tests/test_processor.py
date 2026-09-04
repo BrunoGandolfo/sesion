@@ -22,8 +22,8 @@ ANALISIS = processor.Analisis(
     transcripcion_fmt="[00:00] Terapeuta: hola",
     nota={"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"},
     datos_estructurados={"temas": ["x"]},
-    prompt_nota="clinical_note_v3.1.md",
-    prompt_feedback="therapist_feedback_v1.0.md",
+    prompt_nota="clinical_note_v3.1.1.md",
+    prompt_feedback="therapist_feedback_v1.1.md",
 )
 
 ASR_PROVISIONAL = f"assemblyai:{config.ASR_MODEL_ID}"
@@ -68,12 +68,42 @@ def test_exito_reporta_revision_con_el_modelo_asr_real(pasos):
     assert kw["modelo_llm"] == LLM
     assert kw["nota"] == ANALISIS.nota
     assert kw["transcripcion"] == ANALISIS.transcripcion_fmt
-    assert kw["prompt_version"] == "clinical_note_v3.1.md+therapist_feedback_v1.0.md"
+    assert kw["prompt_version"] == "clinical_note_v3.1.1.md+therapist_feedback_v1.1.md"
     pipeline = kw["datos_estructurados"]["_pipeline"]
     assert pipeline["intento"] == 2
     assert pipeline["asrId"] == "tr1"
     assert pipeline["modeloASR"] == "assemblyai:universal-2"
     assert "duracionAudioSeg" not in kw["datos_estructurados"]
+    # Los dos campos nuevos viajan siempre, aunque no haya nada que reportar.
+    assert pipeline["advertencias"] == []
+    assert pipeline["reintentosLLM"] == 0
+
+
+def test_las_advertencias_y_el_reintento_viajan_en_pipeline(pasos):
+    mocker, callback = pasos
+    mocker.patch(
+        "processor.analizar",
+        return_value=processor.Analisis(
+            transcripcion_fmt=ANALISIS.transcripcion_fmt,
+            nota=ANALISIS.nota,
+            datos_estructurados={"temas": ["x"]},
+            prompt_nota=ANALISIS.prompt_nota,
+            prompt_feedback=ANALISIS.prompt_feedback,
+            advertencias=["intensidadEmocional=0 fuera de rango 1..10, anulado"],
+            reintentos_llm=1,
+        ),
+    )
+
+    _correr()
+
+    kw = callback.call_args.kwargs
+    # Lo importante: la sesion llega a revision igual.
+    assert kw["estado"] == "revision"
+    pipeline = kw["datos_estructurados"]["_pipeline"]
+    assert pipeline["advertencias"] == [
+        "intensidadEmocional=0 fuera de rango 1..10, anulado"
+    ]
+    assert pipeline["reintentosLLM"] == 1
 
 
 def test_fallo_en_asr_reporta_error_con_el_modelo_provisional(pasos):
@@ -161,3 +191,45 @@ def test_transcribir_sin_segmentos_es_asr_vacio(mocker):
     with pytest.raises(PipelineError) as exc:
         processor.transcribir("s1", b"audio")
     assert exc.value.codigo == "asr_vacio"
+
+
+def test_analizar_junta_las_advertencias_de_nota_y_feedback(mocker):
+    """
+    Cableado real del paso `analizar`: verifica que consume las tres piezas
+    que devuelven clinical_analyzer.analizar y generar_feedback_terapeuta.
+    """
+    from clinical_analyzer import DiagnosticoLLM
+
+    mocker.patch("processor.formatear_para_llm", return_value="[00:00] T: hola")
+    mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
+    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
+    mocker.patch(
+        "processor.clinical_analyzer.analizar",
+        return_value=(
+            {"nota": ANALISIS.nota, "datosEstructurados": {"temas": ["x"]}},
+            "clinical_note_v3.1.1.md",
+            DiagnosticoLLM(reintentos=1, advertencias=["duracionRealMin=-1 invalido, anulado"]),
+        ),
+    )
+    mocker.patch(
+        "processor.clinical_analyzer.generar_feedback_terapeuta",
+        return_value=(
+            {"mitiCounts": {}},
+            "therapist_feedback_v1.1.md",
+            DiagnosticoLLM(reintentos=1, advertencias=["feedback advertido"]),
+        ),
+    )
+
+    analisis = processor.analizar("s1", TRANSCRIPCION, "p1", "cbt_mi")
+
+    assert analisis.reintentos_llm == 1
+    assert analisis.advertencias == [
+        "duracionRealMin=-1 invalido, anulado",
+        "feedback advertido",
+        "feedbackTerapeuta requirio una segunda pasada",
+    ]
+    assert analisis.datos_estructurados["feedbackTerapeuta"] == {"mitiCounts": {}}
+    assert analisis.datos_estructurados["speechAnalytics"] == {
+        "ratio": 1,
+        "rolesOrigen": "asr_role",
+    }

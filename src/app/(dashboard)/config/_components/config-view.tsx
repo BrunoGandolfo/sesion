@@ -16,8 +16,16 @@ import { getSession, signOut } from "next-auth/react";
 import { Button, Card, EditorialRule, Input } from "@/components/ui";
 import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
 import { ALGO_FALLO, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
+import {
+  RECORDATORIO_MODOS,
+  RECORDATORIO_MODO_DEFAULT,
+  type RecordatorioModo,
+} from "@/lib/recordatorios-programacion";
 import { buildSmsMessage, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
-import type { Configuracion, OrientacionTeorica } from "@/types/domain";
+// Solo el tipo (se borra al compilar): es la configuración tal como sale de
+// GET /api/config, que suma `recordatorioModo` a la del dominio.
+import type { ConfiguracionApi } from "@/app/api/_lib/domain";
+import type { OrientacionTeorica } from "@/types/domain";
 
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
 
@@ -29,7 +37,7 @@ type CampoConfig =
   | "direccion"
   | "whatsappOrigen"
   | "tarifaDefault"
-  | "horasAnticipacion"
+  | "recordatorioModo"
   | "templateRecordatorio"
   | "orientacionTeorica";
 
@@ -38,7 +46,7 @@ type FormConfig = {
   direccion: string;
   whatsappOrigen: string;
   tarifaDefault: string;
-  horasAnticipacion: number;
+  recordatorioModo: RecordatorioModo;
   templateRecordatorio: string;
   orientacionTeorica: OrientacionTeorica;
 };
@@ -48,7 +56,7 @@ type PatchConfig = Partial<{
   direccion: string;
   whatsappOrigen: string;
   tarifaDefault: number;
-  horasAnticipacion: number;
+  recordatorioModo: RecordatorioModo;
   templateRecordatorio: string;
   orientacionTeorica: OrientacionTeorica;
 }>;
@@ -57,24 +65,24 @@ type EstadoGuardado = "idle" | "guardando" | "guardado" | "error";
 
 // Sin datos inventados: los campos de "Vos" arrancan vacíos hasta que llega
 // la configuración real. Lo único con valor propio es lo que también tiene
-// default en la base (24 h) y el template sugerido.
+// default en la base (el momento del aviso) y el template sugerido.
 const FORM_VACIO: FormConfig = {
   nombreProfesional: "",
   direccion: "",
   whatsappOrigen: "",
   tarifaDefault: "",
-  horasAnticipacion: 24,
+  recordatorioModo: RECORDATORIO_MODO_DEFAULT,
   templateRecordatorio: TEMPLATE_SMS_SUGERIDO,
   orientacionTeorica: "cbt_mi",
 };
 
-function formDesdeConfig(config: Configuracion): FormConfig {
+function formDesdeConfig(config: ConfiguracionApi): FormConfig {
   return {
     nombreProfesional: config.nombreProfesional,
     direccion: config.direccion,
     whatsappOrigen: config.whatsappOrigen,
     tarifaDefault: String(config.tarifaDefault),
-    horasAnticipacion: config.horasAnticipacion,
+    recordatorioModo: config.recordatorioModo,
     templateRecordatorio: config.templateRecordatorio,
     orientacionTeorica: config.orientacionTeorica,
   };
@@ -124,8 +132,8 @@ function patchDesdeCampos(
       continue;
     }
 
-    if (campo === "horasAnticipacion") {
-      patch.horasAnticipacion = form.horasAnticipacion;
+    if (campo === "recordatorioModo") {
+      patch.recordatorioModo = form.recordatorioModo;
       incluidos.push(campo);
       continue;
     }
@@ -217,7 +225,7 @@ export function ConfigView() {
 
     let guardado = false;
     try {
-      await apiPatch<Configuracion>("/api/config", patch);
+      await apiPatch<ConfiguracionApi>("/api/config", patch);
       guardado = true;
     } catch {
       for (const campo of enviados) camposSuciosRef.current.add(campo);
@@ -247,7 +255,7 @@ export function ConfigView() {
     const controller = new AbortController();
 
     Promise.all([
-      apiGet<Configuracion>("/api/config", { signal: controller.signal }),
+      apiGet<ConfiguracionApi>("/api/config", { signal: controller.signal }),
       getSession().catch(() => null),
     ])
       .then(([config, session]) => {
@@ -454,9 +462,9 @@ export function ConfigView() {
           <TituloSeccion>Recordatorio</TituloSeccion>
           <Card>
             <div className="flex flex-col gap-6">
-              <Anticipacion
-                value={form.horasAnticipacion}
-                onChange={(valor) => actualizarCampo("horasAnticipacion", valor)}
+              <CuandoAvisar
+                value={form.recordatorioModo}
+                onChange={(valor) => actualizarCampo("recordatorioModo", valor)}
               />
 
               <div>
@@ -671,64 +679,65 @@ function SelectorEnfoque({
   );
 }
 
-// ─── Anticipación ───────────────────────────────────────────────────────────
-// Tres momentos dichos como los diría ella. Se guardan como horas antes del
-// turno, que es lo único que el envío sabe calcular hoy.
+// ─── Cuándo se avisa ────────────────────────────────────────────────────────
+// Tres momentos, dichos como los diría ella, y los tres disponibles. Ya no se
+// guarda un número de horas: se guarda el momento (recordatorioModo) y la
+// hora exacta la calcula calcularProgramadoEn, una sola vez para toda la app.
+//
+// El detalle de cada opción dice la hora real a la que sale el mensaje, no
+// una aproximación: es lo que la paciente va a ver en el teléfono.
 
-const ANTICIPACIONES: Array<{
-  label: string;
-  detalle: string;
-  horas: number | null;
-}> = [
-  { label: "El día anterior", detalle: "24 horas antes", horas: 24 },
-  { label: "Dos días antes", detalle: "48 horas antes", horas: 48 },
-  {
-    label: "La misma mañana",
-    detalle: "A las 8:00 del día del turno · próximamente",
-    horas: null,
+const MOMENTOS: Record<
+  RecordatorioModo,
+  { label: string; detalle: string }
+> = {
+  dia_anterior: {
+    label: "El día anterior",
+    detalle: "A las 20:00 del día antes",
   },
-];
+  dos_dias_antes: {
+    label: "Dos días antes",
+    detalle: "A las 20:00 de dos días antes",
+  },
+  misma_manana: {
+    label: "La misma mañana",
+    detalle: "A las 8:00 del día del turno",
+  },
+};
 
-function Anticipacion({
+function CuandoAvisar({
   value,
   onChange,
 }: {
-  value: number;
-  onChange: (horas: number) => void;
+  value: RecordatorioModo;
+  onChange: (modo: RecordatorioModo) => void;
 }) {
   const nombreGrupo = React.useId();
-  const coincideAlguna = ANTICIPACIONES.some((a) => a.horas === value);
 
   return (
     <fieldset>
       <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-        Cuándo se envía
+        Cuándo se avisa
       </legend>
       <div className="flex flex-col gap-2 sm:flex-row">
-        {ANTICIPACIONES.map((opcion) => {
-          const disponible = opcion.horas !== null;
-          const activo = disponible && opcion.horas === value;
+        {RECORDATORIO_MODOS.map((modo) => {
+          const opcion = MOMENTOS[modo];
+          const activo = modo === value;
           return (
             <label
-              key={opcion.label}
-              className={`flex flex-1 items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-150 ${
+              key={modo}
+              className={`flex flex-1 cursor-pointer items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-150 ${
                 activo
                   ? "border-sage-500 bg-sage-50"
-                  : "border-[color:var(--border-subtle)] bg-cream-50"
-              } ${
-                disponible
-                  ? "cursor-pointer hover:bg-cream-100"
-                  : "cursor-not-allowed opacity-60"
+                  : "border-[color:var(--border-subtle)] bg-cream-50 hover:bg-cream-100"
               }`}
             >
               <input
                 type="radio"
                 name={nombreGrupo}
+                value={modo}
                 checked={activo}
-                disabled={!disponible}
-                onChange={() => {
-                  if (opcion.horas !== null) onChange(opcion.horas);
-                }}
+                onChange={() => onChange(modo)}
                 className="mt-[3px] h-4 w-4 accent-[var(--color-sage-500)]"
               />
               <span className="flex min-w-0 flex-col gap-0.5">
@@ -743,10 +752,10 @@ function Anticipacion({
           );
         })}
       </div>
-      {!coincideAlguna ? (
-        <p className="mt-2 text-[12px] text-ink-500">
-          Hoy está configurado {value} {value === 1 ? "hora" : "horas"} antes
-          del turno. Elegí una opción para cambiarlo.
+      {value === "misma_manana" ? (
+        <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
+          Si el turno es antes de las 8:00, el aviso sale la tarde anterior a
+          las 20:00: a esa hora la paciente ya estaría viniendo.
         </p>
       ) : null}
     </fieldset>

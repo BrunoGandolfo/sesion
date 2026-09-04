@@ -13,6 +13,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { existeAudio, r2Configurado } from "@/lib/r2";
 import { esKeyAudioDeSesion } from "@/lib/sesion-clinica-utils";
+import { pausasGrabacionSchema } from "@/lib/sesion-clinica/schema";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
@@ -44,6 +45,9 @@ const bodySchema = z.object({
     .number()
     .int("La duración debe ser un número entero")
     .nonnegative("La duración no puede ser negativa"),
+  // Tramos en que la grabación estuvo pausada. Opcional: una grabación sin
+  // pausas no manda el campo y la columna queda como está.
+  pausas: pausasGrabacionSchema.optional(),
 });
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -119,6 +123,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         estado: "procesando",
         audioR2Key: key,
         duracionAudioSeg: parsed.data.duracionAudioSeg,
+        // Sin pausas en el body la columna no se toca (undefined), para no
+        // borrar lo que haya escrito un intento anterior de la misma subida.
+        pausas: parsed.data.pausas ?? undefined,
         error: null,
         // Sesión nueva para el lease de /pendientes.
         intentos: 0,

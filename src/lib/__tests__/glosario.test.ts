@@ -40,6 +40,51 @@ const CONSTANTES_REQUERIDAS = [
   "AUDIO_NO_GUARDADO",
   "NOTA_NO_ESCRITA",
   "ALGO_FALLO",
+  // Pantalla de Hoy
+  "AGENDA_DEL_DIA",
+  "SESIONES_HOY",
+  "POR_COBRAR",
+  "ESTE_MES",
+  "COBRAR",
+  "VER_FICHA",
+  "EN_CURSO",
+  "ENSEGUIDA",
+  "METODO_DE_PAGO",
+  "PAGADO",
+  "PENDIENTE",
+  "CANCELADO",
+  // Chips de la nota
+  "BORRADOR",
+  "APROBADA",
+  // Pantalla de la nota (venían de sesiones/[id]/_components/textos.ts)
+  "VER_BORRADOR_ORIGINAL",
+  "RESUMEN",
+  "ESTADO_EMOCIONAL_OBSERVADO",
+  "EDITAR",
+  "VER_DETALLE",
+  "DESCARTAR",
+  "APROBAR_NOTA",
+  "APROBANDO",
+  "REINTENTAR",
+  "REINTENTANDO",
+  "ELIMINAR",
+  "ELIMINANDO",
+  "VOLVER",
+  "DESCARTAR_TITULO",
+  "DESCARTAR_MENSAJE",
+  "DESCARTANDO",
+  "APROBAR_TITULO",
+  "APROBAR_MENSAJE",
+  "ELIMINAR_TITULO",
+  "ELIMINAR_MENSAJE",
+  "FALTA_REVISAR_RIESGO",
+  "SIN_NOTA_TODAVIA",
+  "ABRIENDO_NOTA",
+  "TEMAS",
+  "EMOCIONES",
+  "INTERVENCIONES",
+  "INTENSIDAD_EMOCIONAL",
+  "ALIANZA_TERAPEUTICA",
 ] as const;
 
 describe("glosario — constantes de texto", () => {
@@ -62,6 +107,13 @@ describe("glosario — constantes de texto", () => {
     expect(glosario.AUTORIZACION_GRABACION).toBe(
       "Autorización para grabar las sesiones",
     );
+  });
+
+  it("los chips de la nota no inventan un nombre nuevo para el estado", () => {
+    // "Borrador" y "Aprobada" son la misma cosa que "Para revisar" y "Nota
+    // guardada": el chip es otra tipografía, no otro concepto.
+    expect(glosario.BORRADOR).toBe(glosario.PARA_REVISAR);
+    expect(glosario.APROBADA).toBe(glosario.NOTA_GUARDADA);
   });
 
   it("ningún texto de interfaz quedó vacío", () => {
@@ -149,5 +201,23 @@ describe("pluralizar", () => {
       "1 nota para revisar",
     );
     expect(pluralizar(3, "paciente", "pacientes")).toBe("3 pacientes");
+  });
+
+  it("el encabezado de Hoy dice '1 sesión en el día', no '1 sesiones'", () => {
+    expect(pluralizar(1, "sesión en el día", "sesiones en el día")).toBe(
+      "1 sesión en el día",
+    );
+    expect(pluralizar(4, "sesión en el día", "sesiones en el día")).toBe(
+      "4 sesiones en el día",
+    );
+  });
+
+  it("la fila de cobros dice '1 paciente te debe' en singular", () => {
+    expect(pluralizar(1, "paciente te debe", "pacientes te deben")).toBe(
+      "1 paciente te debe",
+    );
+    expect(pluralizar(16, "paciente te debe", "pacientes te deben")).toBe(
+      "16 pacientes te deben",
+    );
   });
 });

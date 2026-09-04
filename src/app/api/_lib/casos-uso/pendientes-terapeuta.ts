@@ -14,6 +14,10 @@
 // reescriben acá: `esDeudaPendiente` decide qué es una sesión sin cobrar y
 // `esConsentimientoVigente` decide qué es una autorización vigente.
 //
+// Lo que no se cobra va agrupado por paciente (con el total al lado): se le
+// cobra a una persona, aunque deba tres sesiones. Una lista de turnos
+// sueltos hacía escribir tres veces al mismo paciente.
+//
 // Sin request ni Response: recibe prisma y `ahora` como parámetros.
 
 import type { db } from "@/lib/db";
@@ -24,8 +28,9 @@ import {
   esDeudaPendiente,
   startOfDay,
   type NotaParaRevisar,
+  type PacienteSinCobrar,
   type PendientesTerapeuta,
-  type SesionSinCobrar,
+  type TotalSinCobrar,
   type TurnoSinAutorizacion,
 } from "../domain";
 
@@ -54,6 +59,59 @@ function nombreCompleto(paciente: {
 
 function porFechaAscendente(a: { fecha: string }, b: { fecha: string }): number {
   return a.fecha.localeCompare(b.fecha);
+}
+
+/** Turno impago tal como lo lee la consulta 2. */
+type TurnoImpago = {
+  id: string;
+  fecha: Date;
+  estado: string;
+  pagoEstado: string;
+  tarifaCobrada: number;
+  paciente: { id: string; nombre: string; apellido: string };
+};
+
+/**
+ * Deuda por paciente, no por sesión: se cobra a una persona, aunque deba
+ * tres sesiones. Orden por monto descendente —lo que más pesa arriba— y, a
+ * igual monto, primero la deuda más vieja.
+ */
+function agruparSinCobrar(turnos: TurnoImpago[]): PacienteSinCobrar[] {
+  const porPaciente = new Map<string, PacienteSinCobrar>();
+
+  for (const turno of turnos) {
+    const fecha = turno.fecha.toISOString();
+    const actual = porPaciente.get(turno.paciente.id);
+
+    if (!actual) {
+      porPaciente.set(turno.paciente.id, {
+        pacienteId: turno.paciente.id,
+        pacienteNombre: nombreCompleto(turno.paciente),
+        sesiones: 1,
+        monto: turno.tarifaCobrada,
+        masAntiguo: fecha,
+      });
+      continue;
+    }
+
+    actual.sesiones += 1;
+    actual.monto += turno.tarifaCobrada;
+    if (fecha < actual.masAntiguo) actual.masAntiguo = fecha;
+  }
+
+  return [...porPaciente.values()].sort((a, b) =>
+    b.monto !== a.monto
+      ? b.monto - a.monto
+      : a.masAntiguo.localeCompare(b.masAntiguo),
+  );
+}
+
+function totalizar(sinCobrar: PacienteSinCobrar[]): TotalSinCobrar {
+  return {
+    sesiones: sinCobrar.reduce((total, p) => total + p.sesiones, 0),
+    monto: sinCobrar.reduce((total, p) => total + p.monto, 0),
+    pacientes: sinCobrar.length,
+  };
 }
 
 export async function pendientesTerapeuta({
@@ -127,16 +185,8 @@ export async function pendientesTerapeuta({
     }))
     .sort(porFechaAscendente);
 
-  const sinCobrar: SesionSinCobrar[] = turnosImpagos
-    .filter(esDeudaPendiente)
-    .map((turno) => ({
-      turnoId: turno.id,
-      pacienteId: turno.paciente.id,
-      pacienteNombre: nombreCompleto(turno.paciente),
-      fecha: turno.fecha.toISOString(),
-      tarifa: turno.tarifaCobrada,
-    }))
-    .sort(porFechaAscendente);
+  const sinCobrar = agruparSinCobrar(turnosImpagos.filter(esDeudaPendiente));
+  const totalSinCobrar = totalizar(sinCobrar);
 
   // Una sola consulta de consentimientos para todas las pacientes del día.
   const pacientesDeHoy = [...new Set(turnosDeHoy.map((t) => t.paciente.id))];
@@ -163,5 +213,5 @@ export async function pendientesTerapeuta({
     }))
     .sort(porFechaAscendente);
 
-  return { notasParaRevisar, sinCobrar, sinAutorizacion };
+  return { notasParaRevisar, sinCobrar, totalSinCobrar, sinAutorizacion };
 }

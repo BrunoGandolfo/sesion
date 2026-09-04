@@ -18,7 +18,7 @@ import type {
   TurnoEstado,
 } from "@/types/domain";
 
-import { parseTurno, type TurnoJson } from "./api-ficha";
+import { parseTurno, type TurnoJson } from "./json-ficha";
 
 interface TurnosPagosTabProps {
   turnos: Turno[];

@@ -198,6 +198,7 @@ describe("pendientesTerapeuta — sin nada pendiente", () => {
     expect(pendientes).toEqual({
       notasParaRevisar: [],
       sinCobrar: [],
+      totalSinCobrar: { sesiones: 0, monto: 0, pacientes: 0 },
       sinAutorizacion: [],
     });
   });
@@ -296,10 +297,10 @@ describe("pendientesTerapeuta — notasParaRevisar", () => {
 });
 
 describe("pendientesTerapeuta — sinCobrar", () => {
-  it("trae la sesión realizada e impaga con su tarifa", async () => {
+  it("trae la deuda de la paciente, no el turno suelto", async () => {
     const orgId = await crearOrg();
     const pacienteId = await crearPaciente(orgId, "Pedro", "Ruiz");
-    const turnoId = await crearTurno({
+    await crearTurno({
       orgId,
       pacienteId,
       fecha: ANTEAYER,
@@ -308,17 +309,52 @@ describe("pendientesTerapeuta — sinCobrar", () => {
       tarifaCobrada: 3000,
     });
 
-    const { sinCobrar } = await pendientesDe(orgId);
+    const { sinCobrar, totalSinCobrar } = await pendientesDe(orgId);
 
     expect(sinCobrar).toEqual([
       {
-        turnoId,
         pacienteId,
         pacienteNombre: "Pedro Ruiz",
-        fecha: ANTEAYER.toISOString(),
-        tarifa: 3000,
+        sesiones: 1,
+        monto: 3000,
+        masAntiguo: ANTEAYER.toISOString(),
       },
     ]);
+    expect(totalSinCobrar).toEqual({ sesiones: 1, monto: 3000, pacientes: 1 });
+  });
+
+  it("suma las sesiones de una misma paciente en una sola fila", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId, "Pedro", "Ruiz");
+
+    await crearTurno({
+      orgId,
+      pacienteId,
+      fecha: ANTEAYER,
+      estado: "realizado",
+      tarifaCobrada: 2200,
+    });
+    await crearTurno({
+      orgId,
+      pacienteId,
+      fecha: SEMANA_PASADA,
+      estado: "realizado",
+      tarifaCobrada: 2000,
+    });
+
+    const { sinCobrar, totalSinCobrar } = await pendientesDe(orgId);
+
+    expect(sinCobrar).toEqual([
+      {
+        pacienteId,
+        pacienteNombre: "Pedro Ruiz",
+        sesiones: 2,
+        monto: 4200,
+        // La más vieja de las dos, que es la que dice cuánto hace que debe.
+        masAntiguo: SEMANA_PASADA.toISOString(),
+      },
+    ]);
+    expect(totalSinCobrar).toEqual({ sesiones: 2, monto: 4200, pacientes: 1 });
   });
 
   it("deja fuera lo pagado, lo cancelado, lo ausente y lo que todavía no pasó", async () => {
@@ -363,31 +399,57 @@ describe("pendientesTerapeuta — sinCobrar", () => {
       pagoEstado: "pendiente",
     });
 
-    const { sinCobrar } = await pendientesDe(orgId);
+    const { sinCobrar, totalSinCobrar } = await pendientesDe(orgId);
 
     expect(sinCobrar).toEqual([]);
+    expect(totalSinCobrar).toEqual({ sesiones: 0, monto: 0, pacientes: 0 });
   });
 
-  it("ordena de la más vieja a la más nueva", async () => {
+  it("ordena por monto descendente y, a igual monto, la deuda más vieja primero", async () => {
     const orgId = await crearOrg();
-    const pacienteId = await crearPaciente(orgId);
+    const grande = await crearPaciente(orgId, "Pedro", "Ruiz");
+    const viejaChica = await crearPaciente(orgId, "Ana", "López");
+    const nuevaChica = await crearPaciente(orgId, "Julián", "Paz");
 
-    const reciente = await crearTurno({
+    // 4400 en dos sesiones.
+    await crearTurno({
       orgId,
-      pacienteId,
+      pacienteId: grande,
       fecha: ANTEAYER,
       estado: "realizado",
+      tarifaCobrada: 2200,
     });
-    const vieja = await crearTurno({
+    await crearTurno({
       orgId,
-      pacienteId,
+      pacienteId: grande,
+      fecha: ANTEAYER,
+      estado: "realizado",
+      tarifaCobrada: 2200,
+    });
+    // 2200 cada una: desempata la fecha del impago más viejo.
+    await crearTurno({
+      orgId,
+      pacienteId: nuevaChica,
+      fecha: ANTEAYER,
+      estado: "realizado",
+      tarifaCobrada: 2200,
+    });
+    await crearTurno({
+      orgId,
+      pacienteId: viejaChica,
       fecha: SEMANA_PASADA,
       estado: "realizado",
+      tarifaCobrada: 2200,
     });
 
-    const { sinCobrar } = await pendientesDe(orgId);
+    const { sinCobrar, totalSinCobrar } = await pendientesDe(orgId);
 
-    expect(sinCobrar.map((s) => s.turnoId)).toEqual([vieja, reciente]);
+    expect(sinCobrar.map((p) => p.pacienteId)).toEqual([
+      grande,
+      viejaChica,
+      nuevaChica,
+    ]);
+    expect(totalSinCobrar).toEqual({ sesiones: 4, monto: 8800, pacientes: 3 });
   });
 });
 
@@ -538,7 +600,7 @@ describe("pendientesTerapeuta — las tres listas juntas", () => {
     });
 
     // Sesión de anteayer sin cobrar.
-    const turnoImpago = await crearTurno({
+    await crearTurno({
       orgId,
       pacienteId: pedro,
       fecha: ANTEAYER,
@@ -557,8 +619,14 @@ describe("pendientesTerapeuta — las tres listas juntas", () => {
     const pendientes = await pendientesDe(orgId);
 
     expect(pendientes.notasParaRevisar.map((n) => n.sesionId)).toEqual([sesionId]);
-    expect(pendientes.sinCobrar.map((s) => s.turnoId)).toEqual([turnoImpago]);
-    expect(pendientes.sinCobrar[0].tarifa).toBe(2200);
+    expect(pendientes.sinCobrar.map((p) => p.pacienteId)).toEqual([pedro]);
+    expect(pendientes.sinCobrar[0].monto).toBe(2200);
+    expect(pendientes.sinCobrar[0].sesiones).toBe(1);
+    expect(pendientes.totalSinCobrar).toEqual({
+      sesiones: 1,
+      monto: 2200,
+      pacientes: 1,
+    });
     expect(pendientes.sinAutorizacion.map((t) => t.turnoId)).toEqual([turnoDeHoy]);
   });
 });

@@ -73,6 +73,14 @@ export const MAS_DE_ESTA_SESION = "Más de esta sesión";
  *  de la sesión": el feedback es para ella, no sobre la paciente. */
 export const PARA_VOS = "Para vos";
 
+/** Chip de la cabecera de la nota mientras no está aprobada. Es el mismo
+ *  concepto que PARA_REVISAR: no se agrega un cuarto nombre para el estado
+ *  que ya tenía tres en el código viejo. */
+export const BORRADOR = PARA_REVISAR;
+
+/** Chip de la cabecera de la nota una vez aprobada (= NOTA_GUARDADA). */
+export const APROBADA = NOTA_GUARDADA;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Nota clínica SOAP — el formato NO cambia, solo se explica.
 // Cada sección conserva su nombre y su letra; `ayuda` es la línea de apoyo
@@ -220,6 +228,110 @@ export const FALTA_AUTORIZACION = "Falta la autorización";
 
 /** Acción que abre el documento para firmar. */
 export const FIRMAR_AUTORIZACION = "Firmar autorización";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pantalla de Hoy
+// Los rótulos que estaban sueltos en dashboard.tsx y card-ahora.tsx. Son las
+// mismas palabras que usan la agenda y Cobros: se dicen una sola vez.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const AGENDA_DEL_DIA = "Agenda del día";
+
+/** KPI: cuántas sesiones tiene el día. */
+export const SESIONES_HOY = "Sesiones hoy";
+
+/** KPI: deuda acumulada. Es el mismo concepto que TE_DEBEN, dicho como
+ *  número: el bloque se llama "Te deben" y el KPI "Por cobrar". */
+export const POR_COBRAR = "Por cobrar";
+
+/** KPI: lo cobrado en el mes corriente. */
+export const ESTE_MES = "Este mes";
+
+/** Acción de registrar el pago de una sesión. */
+export const COBRAR = "Cobrar";
+
+/** Enlace a la ficha de la paciente desde cualquier tarjeta. */
+export const VER_FICHA = "Ver ficha";
+
+/** La hora del turno ya empezó y todavía no terminó. */
+export const EN_CURSO = "En curso";
+
+/** El turno es el próximo del día y todavía no empezó. */
+export const ENSEGUIDA = "Enseguida";
+
+/** Título del sheet que pregunta cómo pagó. */
+export const METODO_DE_PAGO = "Método de pago";
+
+// Estados de pago y de turno, tal como se muestran en chips y listas.
+export const PAGADO = "Pagado";
+export const PENDIENTE = "Pendiente";
+export const CANCELADO = "Cancelado";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pantalla de la nota (sesiones/[id])
+// Vivían en sesiones/[id]/_components/textos.ts porque ese agente no podía
+// editar este archivo. Ese módulo ahora los re-exporta desde acá.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Plegado con notaSoapOriginal: la nota tal como la escribió el modelo,
+ *  antes de que ella la tocara. */
+export const VER_BORRADOR_ORIGINAL = "Ver el borrador original";
+
+/** Resumen de la sesión, arriba de la nota. */
+export const RESUMEN = "Resumen";
+
+/** Cómo se llamaba antes el estado emocional que observó la terapeuta. */
+export const ESTADO_EMOCIONAL_OBSERVADO = "Estado emocional observado";
+
+/** Abre la edición de una sección SOAP. Visible siempre, además del toque
+ *  sobre el texto: el toque no existe para quien navega con teclado. */
+export const EDITAR = "Editar";
+
+/** Abre los ítems de un instrumento de auto-supervisión. */
+export const VER_DETALLE = "Ver detalle";
+
+export const DESCARTAR = "Descartar";
+export const APROBAR_NOTA = "✓ Aprobar nota";
+export const APROBANDO = "Aprobando…";
+export const REINTENTAR = "Reintentar";
+export const REINTENTANDO = "Reintentando…";
+export const ELIMINAR = "Eliminar";
+export const ELIMINANDO = "Eliminando…";
+export const VOLVER = "Volver";
+
+/** Confirmación de descarte: dice qué se pierde y qué se conserva. */
+export const DESCARTAR_TITULO = "¿Descartar esta nota?";
+export const DESCARTAR_MENSAJE =
+  "Se puede deshacer: la sesión vuelve a error y la podés volver a escribir. Se descarta la nota generada; la transcripción y el audio se conservan.";
+export const DESCARTANDO = "Descartando…";
+
+/** Confirmación de aprobación: el audio se va para siempre. */
+export const APROBAR_TITULO = "¿Aprobar esta nota?";
+export const APROBAR_MENSAJE =
+  "El audio de la sesión se borra definitivamente y la nota queda como registro. Esto no se puede deshacer.";
+
+/** Confirmación de borrado definitivo desde el estado de error. */
+export const ELIMINAR_TITULO = "¿Eliminar esta sesión?";
+export const ELIMINAR_MENSAJE =
+  "Se borran la sesión y su audio. No queda registro y no se puede deshacer.";
+
+/** Por qué "Aprobar nota" está deshabilitado. */
+export const FALTA_REVISAR_RIESGO =
+  "Marcá cada señal de riesgo antes de aprobar la nota.";
+
+/** La sesión existe pero todavía no llegó a tener nota (pendiente, grabando). */
+export const SIN_NOTA_TODAVIA = "Esta sesión todavía no tiene nota.";
+
+/** Carga de la pantalla. */
+export const ABRIENDO_NOTA = "Abriendo la nota…";
+
+// Rótulos de "Más de esta sesión". Son vocabulario del oficio y se dicen
+// completos.
+export const TEMAS = "Temas";
+export const EMOCIONES = "Emociones";
+export const INTERVENCIONES = "Intervenciones";
+export const INTENSIDAD_EMOCIONAL = "Intensidad emocional";
+export const ALIANZA_TERAPEUTICA = "Alianza terapéutica";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Errores — en castellano, sin HTTP, sin R2, sin CORS.
