@@ -9,15 +9,24 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { Button, Fab, Sheet, Toast } from "@/components/ui";
-import { NuevoTurnoForm } from "@/components/forms";
-import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
-import type { PacienteConDeuda, TurnoConPaciente } from "@/types/domain";
+import { CalendarX2 } from "lucide-react";
+
+import { Fab, Sheet, Toast } from "@/components/ui";
+import { useHoy } from "@/hooks/useHoy";
+import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { ALGO_FALLO } from "@/lib/glosario";
+import type {
+  Configuracion,
+  PacienteConDeuda,
+  Turno,
+  TurnoConPaciente,
+} from "@/types/domain";
 
 import { AgendaHeader } from "./agenda-header";
-import { DayView } from "./day-view";
+import { DayView, EstadoVacio } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
+import { NuevoTurnoForm, type NuevoTurnoData } from "./nuevo-turno-form";
 import { TurnoDetailSheet } from "./turno-detail-sheet";
 
 export type AgendaViewMode = "día" | "semana" | "mes";
@@ -35,19 +44,6 @@ function getMobileSnapshot() {
 }
 function getMobileServerSnapshot() {
   return false;
-}
-
-// useSyncExternalStore con snapshot de servidor null: el servidor (UTC) y el
-// cliente (Montevideo) renderizan lo mismo (sin fecha) y no hay mismatch #418.
-function suscribirNoop() {
-  return () => {};
-}
-function obtenerHoyCliente(): string {
-  // Clave estable del día: mismo string en llamadas consecutivas del render.
-  return new Date().toDateString();
-}
-function obtenerHoyServidor(): null {
-  return null;
 }
 
 type RawTurno = Omit<
@@ -98,6 +94,13 @@ function computeRange(
 
 type LoadState = "idle" | "loading" | "error";
 
+/** Un solo copy de carga para toda la agenda. */
+function Cargando() {
+  return (
+    <p className="py-16 text-center text-[14px] text-ink-500">Cargando…</p>
+  );
+}
+
 export function AgendaView() {
   const isMobile = React.useSyncExternalStore(
     subscribeMedia,
@@ -109,30 +112,28 @@ export function AgendaView() {
   // idéntico en server (UTC) y client (Montevideo). Renderizar
   // `fechaLarga(anchor)` con un `new Date()` distinto en cada entorno
   // disparaba React #418 y rompía todos los event handlers en producción.
-  // `today` se construye una vez por clave de día; `anchor` es lo que eligió
-  // la usuaria (prev/next/hoy/día del mes) o, hasta entonces, `today`.
-  const claveHoy = React.useSyncExternalStore(
-    suscribirNoop,
-    obtenerHoyCliente,
-    obtenerHoyServidor,
-  );
-  const today = React.useMemo(
-    () => (claveHoy === null ? null : new Date()),
-    [claveHoy],
-  );
+  const today = useHoy();
   const [anchorUsuario, setAnchorUsuario] = React.useState<Date | null>(null);
   const anchor = anchorUsuario ?? today;
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [detalleId, setDetalleId] = React.useState<string | null>(null);
+  // Mobile: el mes se despliega detrás del título de la fecha.
+  const [mesAbierto, setMesAbierto] = React.useState(false);
   const [toast, setToast] = React.useState<{ open: boolean; message: string }>(
     { open: false, message: "" },
   );
 
-  const view: AgendaViewMode = userView ?? (isMobile ? "día" : "semana");
+  // En mobile siempre se mira un día (la semana se dibuja como día). "mes"
+  // en mobile vive en el desplegable, no como vista.
+  const view: AgendaViewMode = isMobile ? "día" : (userView ?? "semana");
+
+  // En mobile, con el mes abierto, hacen falta los turnos de todo el mes
+  // para pintar los puntos de cada día.
+  const rangeView: AgendaViewMode = isMobile && mesAbierto ? "mes" : view;
 
   const range = React.useMemo(
-    () => (anchor ? computeRange(view, anchor) : null),
-    [view, anchor],
+    () => (anchor ? computeRange(rangeView, anchor) : null),
+    [rangeView, anchor],
   );
   const rangeKey = range
     ? `${range.desde.toISOString()}|${range.hasta.toISOString()}`
@@ -143,61 +144,66 @@ export function AgendaView() {
   const [turnosStatus, setTurnosStatus] = React.useState<LoadState>("idle");
   const [refreshKey, setRefreshKey] = React.useState(0);
 
+  // El estado de carga se resuelve en los callbacks de la red; lo único
+  // sincrónico es servir la caché, que no dispara ninguna carga.
   React.useEffect(() => {
     if (!rangeKey || !range) return;
     const cached = cacheRef.current.get(rangeKey);
     if (cached) {
-      setTurnos(cached);
-      setTurnosStatus("idle");
-      return;
+      // Servir caché es un cambio de datos, no de estado de carga: se hace
+      // en un microtask para no encadenar renders desde el efecto.
+      const id = window.setTimeout(() => {
+        setTurnos(cached);
+        setTurnosStatus("idle");
+      }, 0);
+      return () => window.clearTimeout(id);
     }
 
     const controller = new AbortController();
-    setTurnosStatus("loading");
-
     const url =
       `/api/turnos?desde=${encodeURIComponent(range.desde.toISOString())}` +
       `&hasta=${encodeURIComponent(range.hasta.toISOString())}`;
 
-    fetch(url, { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as { data: RawTurno[] };
-      })
-      .then((json) => {
-        const parsed = json.data.map(parseTurno);
+    const marcando = window.setTimeout(() => setTurnosStatus("loading"), 0);
+
+    apiGet<RawTurno[]>(url, { signal: controller.signal })
+      .then((data) => {
+        const parsed = data.map(parseTurno);
         cacheRef.current.set(rangeKey, parsed);
         setTurnos(parsed);
         setTurnosStatus("idle");
       })
       .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        console.error("Error cargando agenda", err);
+        if (controller.signal.aborted || esAbort(err)) return;
         setTurnosStatus("error");
       });
 
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(marcando);
+      controller.abort();
+    };
   }, [rangeKey, range, refreshKey]);
 
+  // Pacientes y configuración: se piden al abrir el sheet de agendar.
   const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
     null,
   );
   const [pacientesStatus, setPacientesStatus] =
     React.useState<LoadState>("idle");
+  const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
 
   const fetchPacientes = React.useCallback(() => {
     setPacientesStatus("loading");
-    fetch("/api/pacientes")
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as { data: PacienteConDeuda[] };
-      })
-      .then((json) => {
-        setPacientes(json.data);
+    Promise.all([
+      apiGet<PacienteConDeuda[]>("/api/pacientes"),
+      apiGet<Configuracion>("/api/config").catch(() => null),
+    ])
+      .then(([lista, config]) => {
+        setPacientes(lista);
+        setTarifaDefault(config ? config.tarifaDefault : null);
         setPacientesStatus("idle");
       })
-      .catch((err: unknown) => {
-        console.error("Error cargando pacientes", err);
+      .catch(() => {
         setPacientesStatus("error");
       });
   }, []);
@@ -206,6 +212,7 @@ export function AgendaView() {
     setAnchorUsuario((elegido) => {
       const d = elegido ?? today;
       if (!d) return elegido;
+      if (isMobile && mesAbierto) return addMonths(d, -1);
       if (view === "día") return addDays(d, -1);
       if (view === "semana") return addWeeks(d, -1);
       return addMonths(d, -1);
@@ -215,22 +222,30 @@ export function AgendaView() {
     setAnchorUsuario((elegido) => {
       const d = elegido ?? today;
       if (!d) return elegido;
+      if (isMobile && mesAbierto) return addMonths(d, 1);
       if (view === "día") return addDays(d, 1);
       if (view === "semana") return addWeeks(d, 1);
       return addMonths(d, 1);
     });
   };
-  const handleToday = () => setAnchorUsuario(new Date());
+  const handleToday = () => {
+    setAnchorUsuario(new Date());
+    setMesAbierto(false);
+  };
   const handleDayClick = (day: Date) => {
     setAnchorUsuario(day);
     setUserView("día");
+    setMesAbierto(false);
   };
   const handleEventClick = (turno: TurnoConPaciente) => {
     setDetalleId(turno.id);
   };
 
   const selectedTurno = React.useMemo(
-    () => (detalleId ? (turnos ?? []).find((t) => t.id === detalleId) ?? null : null),
+    () =>
+      detalleId
+        ? ((turnos ?? []).find((t) => t.id === detalleId) ?? null)
+        : null,
     [detalleId, turnos],
   );
 
@@ -259,34 +274,26 @@ export function AgendaView() {
   };
   const closeSheet = () => setSheetOpen(false);
 
+  // Lanza ApiClientError si la API rechaza: el formulario lo muestra.
   const handleCreateTurno = async (data: NuevoTurnoData) => {
+    const fechaISO = new Date(`${data.fecha}T${data.hora}:00`).toISOString();
     try {
-      const fechaISO = new Date(`${data.fecha}T${data.hora}:00`).toISOString();
-      const res = await fetch("/api/turnos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pacienteId: data.pacienteId,
-          fecha: fechaISO,
-          duracion: data.duracion,
-          modalidad: data.modalidad,
-          notas: data.notas ? data.notas : null,
-        }),
+      await apiPost<Turno>("/api/turnos", {
+        pacienteId: data.pacienteId,
+        fecha: fechaISO,
+        duracion: data.duracion,
+        modalidad: data.modalidad,
+        notas: data.notas ? data.notas : null,
       });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(body?.error ?? `HTTP ${res.status}`);
-      }
-      setSheetOpen(false);
-      setToast({ open: true, message: "Turno agendado" });
-      cacheRef.current.clear();
-      setRefreshKey((k) => k + 1);
     } catch (err) {
-      console.error("Error creando turno", err);
-      setToast({ open: true, message: "No se pudo agendar el turno" });
+      if (err instanceof ApiClientError) throw err;
+      throw new ApiClientError(ALGO_FALLO, 0);
     }
+    setSheetOpen(false);
+    setToast({ open: true, message: "Turno agendado" });
+    // Si se creó un paciente en el camino, la lista tiene que reflejarlo.
+    setPacientes(null);
+    refetchTurnos();
   };
 
   const retryTurnos = () => {
@@ -295,7 +302,7 @@ export function AgendaView() {
   };
 
   const showFullError = turnos === null && turnosStatus === "error";
-  const showFullLoading = turnos === null && turnosStatus === "loading";
+  const showFullLoading = turnos === null && turnosStatus !== "error";
   const showUpdateHint = turnos !== null && turnosStatus === "loading";
 
   // Hasta tener `anchor`/`today` (post-mount) renderizamos un placeholder neutro
@@ -316,55 +323,58 @@ export function AgendaView() {
             onNext={handleNext}
             onToday={handleToday}
             onNewTurno={openSheet}
+            mesAbierto={mesAbierto}
+            onToggleMes={() => setMesAbierto((v) => !v)}
           />
         ) : (
           <header className="h-[44px] lg:h-[40px]" aria-hidden="true" />
         )}
-        <div
-          aria-live="polite"
-          className="mt-3 h-4 text-[11px] text-ink-300"
-        >
+
+        {/* Mobile: el mes, detrás del título de la fecha */}
+        {isReady && isMobile && mesAbierto ? (
+          <div id="agenda-mes-mobile" className="mt-3 lg:hidden">
+            <MonthView
+              anchor={anchor}
+              today={today}
+              turnos={turnos ?? []}
+              onDayClick={handleDayClick}
+            />
+          </div>
+        ) : null}
+
+        <div aria-live="polite" className="mt-3 h-4 text-[11px] text-ink-300">
           {showUpdateHint ? "Actualizando…" : null}
         </div>
+
         <div className="mt-3 lg:mt-4">
           {!isReady || showFullLoading ? (
-            <div className="py-16 text-center text-[14px] text-ink-500">
-              Cargando agenda…
-            </div>
+            <Cargando />
           ) : showFullError ? (
-            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-[color:var(--border-strong)] bg-white px-6 py-10 text-center">
-              <p className="text-[14px] text-ink-500">
-                No pudimos cargar la agenda.
-              </p>
-              <Button variant="secondary" size="sm" onClick={retryTurnos}>
-                Reintentar
-              </Button>
-            </div>
+            <EstadoVacio
+              icono={<CalendarX2 size={28} strokeWidth={1.6} aria-hidden="true" />}
+              titulo={ALGO_FALLO}
+              lineas={[
+                "No pudimos traer la agenda.",
+                "Puede ser la conexión.",
+                "Tus turnos no se perdieron.",
+              ]}
+              accion={{ label: "Reintentar", onClick: retryTurnos }}
+            />
           ) : turnos !== null ? (
             view === "día" ? (
               <DayView
                 date={anchor}
                 turnos={turnos}
                 onOpenTurno={handleEventClick}
+                onNuevoTurno={openSheet}
               />
             ) : view === "semana" ? (
-              <>
-                <div className="hidden lg:block">
-                  <WeekView
-                    anchor={anchor}
-                    turnos={turnos}
-                    today={today}
-                    onEventClick={handleEventClick}
-                  />
-                </div>
-                <div className="lg:hidden">
-                  <DayView
-                    date={anchor}
-                    turnos={turnos}
-                    onOpenTurno={handleEventClick}
-                  />
-                </div>
-              </>
+              <WeekView
+                anchor={anchor}
+                turnos={turnos}
+                today={today}
+                onEventClick={handleEventClick}
+              />
             ) : (
               <MonthView
                 anchor={anchor}
@@ -376,29 +386,34 @@ export function AgendaView() {
           ) : null}
         </div>
       </div>
-      <Fab label="Agendar turno" onClick={openSheet} />
-      <Sheet open={sheetOpen} onClose={closeSheet} ariaLabel="Agendar turno">
-        {pacientesStatus === "loading" && pacientes === null ? (
-          <div className="py-10 text-center text-[14px] text-ink-500">
-            Cargando pacientes…
-          </div>
-        ) : pacientesStatus === "error" && pacientes === null ? (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <p className="text-[14px] text-ink-500">
-              No pudimos cargar los pacientes.
-            </p>
-            <Button variant="secondary" size="sm" onClick={fetchPacientes}>
-              Reintentar
-            </Button>
-          </div>
-        ) : pacientes !== null ? (
+
+      <Fab label="Agendar" onClick={openSheet} />
+
+      <Sheet open={sheetOpen} onClose={closeSheet} ariaLabel="Agendar">
+        {pacientes === null && pacientesStatus === "error" ? (
+          <EstadoVacio
+            icono={<CalendarX2 size={28} strokeWidth={1.6} aria-hidden="true" />}
+            titulo={ALGO_FALLO}
+            lineas={[
+              "No pudimos traer tus pacientes.",
+              "Sin la lista no se puede agendar.",
+              "Probá de nuevo en un momento.",
+            ]}
+            accion={{ label: "Reintentar", onClick: fetchPacientes }}
+          />
+        ) : pacientes === null ? (
+          <Cargando />
+        ) : (
           <NuevoTurnoForm
             pacientes={pacientes}
+            tarifaDefault={tarifaDefault}
+            fechaInicial={anchor}
             onSubmit={handleCreateTurno}
             onCancel={closeSheet}
           />
-        ) : null}
+        )}
       </Sheet>
+
       <TurnoDetailSheet
         key={detalleId ?? "closed"}
         open={detalleId !== null}
@@ -407,6 +422,7 @@ export function AgendaView() {
         onUpdated={handleTurnoUpdated}
         onError={handleTurnoError}
       />
+
       <Toast
         open={toast.open}
         message={toast.message}

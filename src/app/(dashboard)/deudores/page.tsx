@@ -1,7 +1,6 @@
-import { DeudoresView } from "./_components/deudores-view";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
+// Deudores ya no es una pantalla: "Te deben" vive en /cobros.
 export default function DeudoresPage() {
-  return <DeudoresView />;
+  redirect("/cobros");
 }

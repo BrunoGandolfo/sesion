@@ -2,13 +2,21 @@
 
 // Card "Para retomar": brief pre-sesión que la psicóloga lee 1 minuto antes
 // de que entre el paciente. Datos del endpoint /brief (composición
-// determinística de notas aprobadas + Golden Thread) — nada se genera acá.
+// determinística de notas aprobadas + el hilo) — nada se genera acá.
 
 import * as React from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 
 import { Chip, EditorialRule } from "@/components/ui";
+import { apiGet, esAbort } from "@/lib/api-client";
 import { fechaCorta, fechaRelativa, hora } from "@/lib/format";
+import {
+  EL_HILO,
+  PARA_LA_PROXIMA,
+  PARA_RETOMAR,
+  SENAL_DE_RIESGO,
+  pluralizar,
+} from "@/lib/glosario";
 import type { NivelRiesgo } from "@/types/domain";
 
 type UltimaSesionBrief = {
@@ -61,24 +69,28 @@ const NIVEL_LABELS: Record<NivelRiesgo, string> = {
   alto: "nivel alto",
 };
 
+// Brief atado al paciente que lo cargó: si cambia el id, el anterior deja de
+// aplicar por derivación, sin resetear estado en un efecto.
+type BriefCargado = { pacienteId: string; brief: BriefResponse };
+
 export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
-  const [brief, setBrief] = React.useState<BriefResponse | null>(null);
+  const [cargado, setCargado] = React.useState<BriefCargado | null>(null);
   const [open, setOpen] = React.useState(true);
 
   React.useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/pacientes/${pacienteId}/brief`, {
+    apiGet<BriefResponse>(`/api/pacientes/${pacienteId}/brief`, {
       signal: controller.signal,
-      cache: "no-store",
     })
-      .then((r) => (r.ok ? (r.json() as Promise<{ data: BriefResponse }>) : null))
-      .then((body) => {
-        if (body) setBrief(body.data);
-      })
-      .catch(() => {});
+      .then((brief) => setCargado({ pacienteId, brief }))
+      .catch((err: unknown) => {
+        if (esAbort(err)) return;
+        // Sin brief no hay card: la pestaña sigue funcionando sin él.
+      });
     return () => controller.abort();
   }, [pacienteId]);
 
+  const brief = cargado?.pacienteId === pacienteId ? cargado.brief : null;
   if (!brief) return null;
 
   const { ultimaSesion, hiloLongitudinal, proximoTurno } = brief;
@@ -89,7 +101,7 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
         <h2 className="flex items-center">
           <EditorialRule />
           <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-            Para retomar
+            {PARA_RETOMAR}
           </span>
         </h2>
         <p className="mt-3 font-display italic text-[16px] leading-[1.5] text-ink-700">
@@ -103,11 +115,12 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
     );
   }
 
-  const hayRiesgo =
-    (ultimaSesion &&
-      (ultimaSesion.riesgo.nivel !== "ninguno" ||
-        ultimaSesion.riesgo.flagsActivos.length > 0)) ||
-    (hiloLongitudinal?.riesgosHistoricos.length ?? 0) > 0;
+  const registrosRiesgo = hiloLongitudinal?.riesgosHistoricos.length ?? 0;
+  const riesgoUltima =
+    ultimaSesion !== null &&
+    (ultimaSesion.riesgo.nivel !== "ninguno" ||
+      ultimaSesion.riesgo.flagsActivos.length > 0);
+  const hayRiesgo = riesgoUltima || registrosRiesgo > 0;
 
   return (
     <section className="rounded-lg border border-[color:var(--border-subtle)] bg-white p-5 lg:p-6">
@@ -120,13 +133,13 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
         <h2 className="flex min-w-0 items-center">
           <EditorialRule />
           <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-            Para retomar
+            {PARA_RETOMAR}
           </span>
         </h2>
         <span className="flex shrink-0 items-center gap-3">
           {proximoTurno ? (
             <span className="hidden font-sans text-[12px] text-ink-500 tabular-nums sm:inline">
-              Próximo turno: {fechaCorta(new Date(proximoTurno.fecha))} ·{" "}
+              Próxima: {fechaCorta(new Date(proximoTurno.fecha))} ·{" "}
               {hora(new Date(proximoTurno.fecha))}
             </span>
           ) : null}
@@ -156,11 +169,9 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
               />
               <div className="flex min-w-0 flex-col gap-1">
                 <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-terracotta-500">
-                  Riesgo a la vista
+                  {SENAL_DE_RIESGO}
                 </p>
-                {ultimaSesion &&
-                (ultimaSesion.riesgo.flagsActivos.length > 0 ||
-                  ultimaSesion.riesgo.nivel !== "ninguno") ? (
+                {ultimaSesion && riesgoUltima ? (
                   <p className="font-sans text-[13px] leading-[1.55] text-ink-900">
                     Última sesión:{" "}
                     {ultimaSesion.riesgo.flagsActivos.length > 0
@@ -176,13 +187,10 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
                       : ""}
                   </p>
                 ) : null}
-                {(hiloLongitudinal?.riesgosHistoricos.length ?? 0) > 0 ? (
+                {registrosRiesgo > 0 ? (
                   <p className="font-sans text-[12px] leading-[1.5] text-ink-700">
-                    Histórico:{" "}
-                    {hiloLongitudinal!.riesgosHistoricos.length}{" "}
-                    {hiloLongitudinal!.riesgosHistoricos.length === 1
-                      ? "registro de riesgo"
-                      : "registros de riesgo"}{" "}
+                    Antes:{" "}
+                    {pluralizar(registrosRiesgo, "señal registrada", "señales registradas")}{" "}
                     en el proceso.
                   </p>
                 ) : null}
@@ -209,7 +217,7 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
               {ultimaSesion.focoProximaSesion ? (
                 <div className="rounded-md border-l-2 border-l-gold-500 bg-cream-100 px-4 py-3">
                   <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-gold-500">
-                    Foco sugerido
+                    {PARA_LA_PROXIMA}
                   </p>
                   <p className="mt-1 font-display italic text-[16px] leading-[1.5] text-ink-900">
                     {ultimaSesion.focoProximaSesion}
@@ -225,9 +233,9 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
             hiloLongitudinal.objetivosActivos.length > 0) ? (
             <div className="flex flex-col gap-3 border-t border-[color:var(--border-subtle)] pt-4">
               <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                El hilo
+                {EL_HILO}
                 {!hiloLongitudinal.revisadoPorTerapeuta
-                  ? " · sugerencia pendiente de revisión"
+                  ? " · actualizado tras la última sesión, revisalo"
                   : ""}
               </p>
               {hiloLongitudinal.resumenAcumulativo ? (
@@ -238,10 +246,7 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
               {hiloLongitudinal.objetivosActivos.length > 0 ? (
                 <ul className="flex flex-col gap-1">
                   {hiloLongitudinal.objetivosActivos.slice(0, 3).map((o) => (
-                    <li
-                      key={o}
-                      className="font-sans text-[13px] leading-[1.5] text-ink-900"
-                    >
+                    <li key={o} className="font-sans text-[13px] leading-[1.5] text-ink-900">
                       · {o}
                     </li>
                   ))}
@@ -261,8 +266,8 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
 
           {ultimaSesion?.pendienteAprobacion ? (
             <p className="font-sans text-[12px] leading-[1.5] text-gold-500">
-              La última nota está pendiente de aprobación: lo de arriba puede
-              cambiar cuando la revises.
+              La última nota está para revisar: lo de arriba puede cambiar
+              cuando la apruebes.
             </p>
           ) : null}
         </div>

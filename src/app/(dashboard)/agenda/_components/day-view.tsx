@@ -2,16 +2,19 @@
 
 import * as React from "react";
 import { isSameDay } from "date-fns";
-import { SessionRow } from "@/components/ui";
+import { CalendarDays } from "lucide-react";
+
+import { Button, SessionRow } from "@/components/ui";
 import type { TurnoConPaciente } from "@/types/domain";
 
 interface Props {
   date: Date;
   turnos: TurnoConPaciente[];
   onOpenTurno: (turno: TurnoConPaciente) => void;
+  onNuevoTurno: () => void;
 }
 
-export function DayView({ date, turnos, onOpenTurno }: Props) {
+export function DayView({ date, turnos, onOpenTurno, onNuevoTurno }: Props) {
   const delDia = React.useMemo(
     () =>
       turnos
@@ -22,9 +25,16 @@ export function DayView({ date, turnos, onOpenTurno }: Props) {
 
   if (delDia.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-[color:var(--border-strong)] bg-white px-6 py-10 text-center text-[14px] text-ink-500">
-        Nada agendado este día.
-      </div>
+      <EstadoVacio
+        icono={<CalendarDays size={28} strokeWidth={1.6} aria-hidden="true" />}
+        titulo="Nada agendado este día"
+        lineas={[
+          "Podés usarlo para vos o agendar un turno.",
+          "Si el paciente ya vino, la app propone el mismo día y hora de la última vez.",
+          "El recordatorio se programa solo al agendar.",
+        ]}
+        accion={{ label: "Agendar", onClick: onNuevoTurno }}
+      />
     );
   }
 
@@ -37,6 +47,42 @@ export function DayView({ date, turnos, onOpenTurno }: Props) {
           onClick={() => onOpenTurno(turno)}
         />
       ))}
+    </div>
+  );
+}
+
+/** Estado vacío de la agenda: ícono, titular, tres líneas, un botón. */
+export function EstadoVacio({
+  icono,
+  titulo,
+  lineas,
+  accion,
+}: {
+  icono: React.ReactNode;
+  titulo: string;
+  lineas: [string, string, string];
+  accion: { label: string; onClick: () => void };
+}) {
+  return (
+    <div className="flex flex-col items-center rounded-lg border border-dashed border-[color:var(--border-strong)] bg-white px-6 py-12 text-center">
+      <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-cream-100 text-sage-600">
+        {icono}
+      </span>
+      <p className="mt-4 font-[family-name:var(--font-display)] text-[22px] font-medium italic leading-tight text-ink-900">
+        {titulo}
+      </p>
+      <div className="mt-3 flex max-w-[420px] flex-col gap-1">
+        {lineas.map((linea) => (
+          <p key={linea} className="text-[13px] leading-[1.5] text-ink-500">
+            {linea}
+          </p>
+        ))}
+      </div>
+      <div className="mt-6">
+        <Button variant="secondary" onClick={accion.onClick}>
+          {accion.label}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -4,11 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Calendar, Users, Wallet } from "lucide-react";
 
+import { NAV } from "@/lib/glosario";
+
+// Los cuatro destinos, con el nombre que usa toda la app (glosario NAV).
+// "Finanzas" pasó a ser Cobros: el menú nombra lo que se hace ahí, cobrar,
+// y la ruta de deudores dejó de tener entrada propia — se llega desde
+// Cobros y desde el bloque "Te deben" de la pantalla de Hoy.
 const NAV_ITEMS = [
-  { href: "/", label: "Hoy", icon: Home },
-  { href: "/agenda", label: "Agenda", icon: Calendar },
-  { href: "/pacientes", label: "Pacientes", icon: Users },
-  { href: "/finanzas", label: "Finanzas", icon: Wallet },
+  { href: "/", label: NAV.HOY, icon: Home },
+  { href: "/agenda", label: NAV.AGENDA, icon: Calendar },
+  { href: "/pacientes", label: NAV.PACIENTES, icon: Users },
+  { href: "/cobros", label: NAV.COBROS, icon: Wallet },
 ] as const;
 
 export function BottomNav() {

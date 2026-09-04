@@ -1,11 +1,15 @@
 "use client";
 
 import * as React from "react";
+
 import { Button } from "@/components/ui";
+import { apiPost } from "@/lib/api-client";
 import {
   CONSENTIMIENTO_VERSION,
   generarTextoConsentimiento,
 } from "@/lib/consentimiento";
+import { ALGO_FALLO, AUTORIZACION_GRABACION } from "@/lib/glosario";
+
 import { FirmaCanvas } from "./FirmaCanvas";
 
 interface ConsentimientoFormProps {
@@ -52,29 +56,15 @@ export function ConsentimientoForm({
     setError(null);
 
     try {
-      const res = await fetch(
-        `/api/pacientes/${pacienteId}/consentimiento`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            firmaDigital: firma,
-            textoVersion: CONSENTIMIENTO_VERSION,
-          }),
-        },
-      );
-
-      if (!res.ok) {
-        throw new Error("No pudimos guardar el consentimiento. Intentá de nuevo.");
-      }
-
+      // La ruta responde { consentimiento } sin { data }; el resultado no se
+      // usa, alcanza con que no falle.
+      await apiPost(`/api/pacientes/${pacienteId}/consentimiento`, {
+        firmaDigital: firma,
+        textoVersion: CONSENTIMIENTO_VERSION,
+      });
       onConsentimientoFirmado();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No pudimos guardar el consentimiento. Intentá de nuevo.",
-      );
+      setError(err instanceof Error ? err.message : ALGO_FALLO);
     } finally {
       setEnviando(false);
     }
@@ -83,23 +73,20 @@ export function ConsentimientoForm({
   return (
     <div className="flex flex-col gap-6">
       <h2 className="font-display text-[22px] md:text-[28px] font-medium tracking-[-0.01em] text-ink-900">
-        Consentimiento para grabación
+        {AUTORIZACION_GRABACION}
       </h2>
 
       <div
         id={textoId}
         role="region"
-        aria-label="Texto del consentimiento"
+        aria-label="Texto de la autorización"
         tabIndex={0}
         className="bg-cream-100 rounded-lg p-5 md:p-6 max-h-[420px] overflow-y-auto whitespace-pre-wrap font-sans text-[16px] leading-[1.6] text-ink-900"
       >
         {texto}
       </div>
 
-      <label
-        htmlFor={checkboxId}
-        className="flex items-start gap-3 cursor-pointer"
-      >
+      <label htmlFor={checkboxId} className="flex items-start gap-3 cursor-pointer">
         <input
           id={checkboxId}
           type="checkbox"
@@ -121,21 +108,13 @@ export function ConsentimientoForm({
       </div>
 
       {error && (
-        <p
-          role="alert"
-          className="font-sans text-[14px] text-[color:var(--color-error)]"
-        >
+        <p role="alert" className="font-sans text-[14px] text-[color:var(--color-error)]">
           {error}
         </p>
       )}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onCancelar}
-          disabled={enviando}
-        >
+        <Button type="button" variant="secondary" onClick={onCancelar} disabled={enviando}>
           Cancelar
         </Button>
         <Button
@@ -145,7 +124,7 @@ export function ConsentimientoForm({
           disabled={!puedeFirmar}
           aria-disabled={!puedeFirmar}
         >
-          {enviando ? "Firmando…" : "Firmar consentimiento"}
+          {enviando ? "Firmando…" : "Firmar"}
         </Button>
       </div>
     </div>

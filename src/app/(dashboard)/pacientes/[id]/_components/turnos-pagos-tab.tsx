@@ -1,11 +1,16 @@
 "use client";
 
+// Turnos y pagos del paciente (sección plegada de la pestaña Ficha) y el
+// sheet de cobro, que también usa la card de la sesión de hoy en Sesiones.
+
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 
 import { Button, Chip, Sheet, Toast } from "@/components/ui";
+import { apiPost } from "@/lib/api-client";
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
+import { AGENDADO, ALGO_FALLO, NO_VINO, pluralizar } from "@/lib/glosario";
 import type {
   MetodoPago,
   Modalidad,
@@ -13,25 +18,12 @@ import type {
   TurnoEstado,
 } from "@/types/domain";
 
+import { parseTurno, type TurnoJson } from "./api-ficha";
+
 interface TurnosPagosTabProps {
-  // Lo pasa paciente-detail-view; esta pestaña no lo usa. Se conserva en el
-  // tipo para no romper al padre (fuera de este cambio).
-  pacienteId: string;
   turnos: Turno[];
   onTurnoActualizado?: () => void;
 }
-
-type TurnoJson = Omit<
-  Turno,
-  "fecha" | "pagoFecha" | "creadoEn" | "actualizadoEn"
-> & {
-  fecha: string;
-  pagoFecha: string | null;
-  creadoEn: string;
-  actualizadoEn: string;
-};
-
-type TurnoResponse = { data: TurnoJson };
 
 type ToastState = { open: boolean; message: string };
 
@@ -41,10 +33,10 @@ const MODALIDAD_LABEL: Record<Modalidad, string> = {
 };
 
 const ESTADO_LABEL: Record<TurnoEstado, string> = {
-  programado: "Agendado",
+  programado: AGENDADO,
   realizado: "Realizado",
   cancelado: "Cancelado",
-  ausente: "Ausente",
+  ausente: NO_VINO,
 };
 
 const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
@@ -65,16 +57,6 @@ const METODOS_PAGO: { value: MetodoPago; label: string }[] = [
   { value: "otro", label: "Otro" },
 ];
 
-function parseTurno(turno: TurnoJson): Turno {
-  return {
-    ...turno,
-    fecha: new Date(turno.fecha),
-    pagoFecha: turno.pagoFecha ? new Date(turno.pagoFecha) : null,
-    creadoEn: new Date(turno.creadoEn),
-    actualizadoEn: new Date(turno.actualizadoEn),
-  };
-}
-
 function estadoChipVariant(
   estado: TurnoEstado,
 ): "sage" | "gold" | "terracotta" | "neutral" {
@@ -82,6 +64,17 @@ function estadoChipVariant(
   if (estado === "cancelado") return "terracotta";
   if (estado === "ausente") return "gold";
   return "neutral";
+}
+
+/** POST /api/turnos/[id]/cobrar → turno actualizado. */
+export async function cobrarTurno(
+  turnoId: string,
+  metodo: MetodoPago,
+): Promise<Turno> {
+  const json = await apiPost<TurnoJson>(`/api/turnos/${turnoId}/cobrar`, {
+    metodo,
+  });
+  return parseTurno(json);
 }
 
 // Cobros optimistas sobre la lista recibida por props. Van atados a la
@@ -93,19 +86,12 @@ type AjustesCobro = {
   porId: Record<string, Turno>;
 };
 
-export function TurnosPagosTab({
-  turnos,
-  onTurnoActualizado,
-}: TurnosPagosTabProps) {
+export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabProps) {
   const [ajustes, setAjustes] = React.useState<AjustesCobro | null>(null);
   const [cobroTarget, setCobroTarget] = React.useState<Turno | null>(null);
-  const [toast, setToast] = React.useState<ToastState>({
-    open: false,
-    message: "",
-  });
+  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "" });
 
-  const ajustesVigentes =
-    ajustes && ajustes.base === turnos ? ajustes.porId : null;
+  const ajustesVigentes = ajustes && ajustes.base === turnos ? ajustes.porId : null;
   const localTurnos = React.useMemo(
     () =>
       ajustesVigentes
@@ -126,118 +112,102 @@ export function TurnosPagosTab({
   }
 
   const turnosOrdenados = React.useMemo(
-    () =>
-      [...localTurnos].sort(
-        (a, b) => b.fecha.getTime() - a.fecha.getTime(),
-      ),
+    () => [...localTurnos].sort((a, b) => b.fecha.getTime() - a.fecha.getTime()),
     [localTurnos],
   );
 
-  const sesionesRealizadas = React.useMemo(
-    () => localTurnos.filter((turno) => turno.estado === "realizado"),
-    [localTurnos],
-  );
   const sesionesImpagas = React.useMemo(
     () =>
-      sesionesRealizadas.filter((turno) => turno.pagoEstado === "pendiente"),
-    [sesionesRealizadas],
+      localTurnos.filter(
+        (turno) => turno.estado === "realizado" && turno.pagoEstado === "pendiente",
+      ),
+    [localTurnos],
   );
   const deudaTotal = React.useMemo(
     () => sesionesImpagas.reduce((acc, t) => acc + t.tarifaCobrada, 0),
     [sesionesImpagas],
   );
 
-  async function cobrar(turnoId: string, metodo: MetodoPago) {
-    const previous = ajustes;
-    const target = localTurnos.find((t) => t.id === turnoId);
-    if (!target || target.pagoEstado === "pagado") return;
-
-    ajustarTurno(turnoId, {
-      ...target,
-      pagoEstado: "pagado",
-      pagoFecha: new Date(),
-      pagoMetodo: metodo,
-    });
-    setToast({ open: true, message: "Cobrado" });
-
-    try {
-      const response = await fetch(`/api/turnos/${turnoId}/cobrar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metodo }),
-      });
-
-      if (!response.ok) {
-        throw new Error("No se pudo cobrar la sesión.");
-      }
-
-      const json = (await response.json()) as TurnoResponse;
-      ajustarTurno(turnoId, parseTurno(json.data));
-      onTurnoActualizado?.();
-    } catch {
-      setAjustes(previous);
-      setToast({ open: true, message: "No se pudo cobrar" });
-    }
-  }
-
-  function handleMetodoCobro(metodo: MetodoPago) {
-    if (!cobroTarget) return;
-    const turnoId = cobroTarget.id;
-    setCobroTarget(null);
-    void cobrar(turnoId, metodo);
-  }
-
   return (
     <div className="flex flex-col gap-6">
       {sesionesImpagas.length > 0 && (
-        <DeudaBanner
-          monto={deudaTotal}
-          cantidad={sesionesImpagas.length}
-        />
+        <DeudaBanner monto={deudaTotal} cantidad={sesionesImpagas.length} />
       )}
 
-      <HistorialList
-        turnos={turnosOrdenados}
-        onCobrar={(turno) => setCobroTarget(turno)}
-      />
+      <HistorialList turnos={turnosOrdenados} onCobrar={(turno) => setCobroTarget(turno)} />
 
       <Toast
         open={toast.open}
         message={toast.message}
-        onClose={() =>
-          setToast((current) => ({ ...current, open: false }))
-        }
+        onClose={() => setToast((current) => ({ ...current, open: false }))}
       />
 
-      <Sheet
-        open={cobroTarget !== null}
+      <CobrarSheet
+        turno={cobroTarget}
         onClose={() => setCobroTarget(null)}
-        maxWidth={360}
-        ariaLabel="Elegir método de pago"
-        className="!h-auto"
-      >
-        {cobroTarget && (
-          <MetodoPagoSelector
-            monto={cobroTarget.tarifaCobrada}
-            onSelect={handleMetodoCobro}
-            onCancel={() => setCobroTarget(null)}
-          />
-        )}
-      </Sheet>
+        onCobrado={(turno) => {
+          ajustarTurno(turno.id, turno);
+          setToast({ open: true, message: "Cobrado" });
+          onTurnoActualizado?.();
+        }}
+        onError={(mensaje) => setToast({ open: true, message: mensaje })}
+      />
     </div>
   );
 }
 
-function DeudaBanner({
-  monto,
-  cantidad,
+/**
+ * Sheet de cobro: elige el método y hace el POST. Al confirmar avisa con el
+ * turno actualizado; al fallar avisa con el mensaje. Cierra solo al terminar.
+ */
+export function CobrarSheet({
+  turno,
+  onClose,
+  onCobrado,
+  onError,
 }: {
-  monto: number;
-  cantidad: number;
+  turno: Turno | null;
+  onClose: () => void;
+  onCobrado: (turno: Turno) => void;
+  onError: (mensaje: string) => void;
 }) {
-  const cantidadLabel =
-    cantidad === 1 ? "1 sesión sin cobrar" : `${cantidad} sesiones sin cobrar`;
+  const [cobrando, setCobrando] = React.useState(false);
 
+  async function elegir(metodo: MetodoPago) {
+    if (!turno || cobrando) return;
+    setCobrando(true);
+    try {
+      const actualizado = await cobrarTurno(turno.id, metodo);
+      onClose();
+      onCobrado(actualizado);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : ALGO_FALLO);
+    } finally {
+      setCobrando(false);
+    }
+  }
+
+  return (
+    <Sheet
+      open={turno !== null}
+      onClose={onClose}
+      maxWidth={360}
+      ariaLabel="Elegir método de pago"
+      className="!h-auto"
+    >
+      {turno && (
+        <MetodoPagoSelector
+          monto={turno.tarifaCobrada}
+          deshabilitado={cobrando}
+          onSelect={(metodo) => void elegir(metodo)}
+          onCancel={onClose}
+        />
+      )}
+    </Sheet>
+  );
+}
+
+function DeudaBanner({ monto, cantidad }: { monto: number; cantidad: number }) {
   return (
     <div
       role="status"
@@ -251,7 +221,9 @@ function DeudaBanner({
       />
       <div className="flex flex-1 flex-col gap-0.5">
         <p className="font-sans text-[13px] leading-[1.45] text-ink-700">
-          <span className="font-semibold text-ink-900">{cantidadLabel}</span>
+          <span className="font-semibold text-ink-900">
+            {pluralizar(cantidad, "sesión sin cobrar", "sesiones sin cobrar")}
+          </span>
           <span className="text-ink-500"> · </span>
           <span className="tabular-nums text-terracotta-500 font-display font-medium">
             {money(monto)}
@@ -278,9 +250,7 @@ function HistorialList({
   if (turnos.length === 0) {
     return (
       <div className="rounded-lg border border-[color:var(--border-subtle)] bg-white px-6 py-10 text-center">
-        <p className="text-[13px] text-ink-500">
-          Todavía no hay turnos registrados.
-        </p>
+        <p className="text-[13px] text-ink-500">Todavía no hay turnos registrados.</p>
       </div>
     );
   }
@@ -289,28 +259,16 @@ function HistorialList({
     <div className="overflow-hidden rounded-lg border border-[color:var(--border-subtle)] bg-white">
       <ul className="divide-y divide-[color:var(--border-subtle)]">
         {turnos.map((turno) => (
-          <TurnoRow
-            key={turno.id}
-            turno={turno}
-            onCobrar={() => onCobrar(turno)}
-          />
+          <TurnoRow key={turno.id} turno={turno} onCobrar={() => onCobrar(turno)} />
         ))}
       </ul>
     </div>
   );
 }
 
-function TurnoRow({
-  turno,
-  onCobrar,
-}: {
-  turno: Turno;
-  onCobrar: () => void;
-}) {
-  const mostrarCobrar =
-    turno.estado === "realizado" && turno.pagoEstado === "pendiente";
-  const mostrarPagado =
-    turno.estado === "realizado" && turno.pagoEstado === "pagado";
+function TurnoRow({ turno, onCobrar }: { turno: Turno; onCobrar: () => void }) {
+  const mostrarCobrar = turno.estado === "realizado" && turno.pagoEstado === "pendiente";
+  const mostrarPagado = turno.estado === "realizado" && turno.pagoEstado === "pagado";
 
   return (
     <li>
@@ -325,9 +283,7 @@ function TurnoRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-sans text-[12px] text-ink-500">
-            {turno.duracion} min
-          </span>
+          <span className="font-sans text-[12px] text-ink-500">{turno.duracion} min</span>
           <Chip variant="neutral" size="sm">
             {MODALIDAD_LABEL[turno.modalidad]}
           </Chip>
@@ -386,10 +342,12 @@ function TurnoRow({
 
 function MetodoPagoSelector({
   monto,
+  deshabilitado,
   onSelect,
   onCancel,
 }: {
   monto: number;
+  deshabilitado: boolean;
   onSelect: (metodo: MetodoPago) => void;
   onCancel: () => void;
 }) {
@@ -402,9 +360,7 @@ function MetodoPagoSelector({
         <h2 className="mt-1 font-display text-[22px] font-medium tracking-[-0.01em] text-ink-900">
           Elegí el método
         </h2>
-        <p className="mt-1 font-sans text-[13px] text-ink-500">
-          {money(monto)}
-        </p>
+        <p className="mt-1 font-sans text-[13px] text-ink-500">{money(monto)}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -412,8 +368,9 @@ function MetodoPagoSelector({
           <button
             key={metodo.value}
             type="button"
+            disabled={deshabilitado}
             onClick={() => onSelect(metodo.value)}
-            className="min-h-[44px] rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20"
+            className="min-h-[44px] rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:opacity-60"
           >
             {metodo.label}
           </button>
@@ -421,7 +378,7 @@ function MetodoPagoSelector({
       </div>
 
       <div className="mt-5 flex justify-end">
-        <Button type="button" variant="ghost" onClick={onCancel}>
+        <Button type="button" variant="ghost" onClick={onCancel} disabled={deshabilitado}>
           Cancelar
         </Button>
       </div>

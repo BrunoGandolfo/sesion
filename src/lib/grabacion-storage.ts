@@ -24,12 +24,31 @@ const DB_VERSION = 1;
 const STORE_CHUNKS = "chunks";
 const STORE_META = "meta";
 
-/** Duración del timeslice del MediaRecorder (ms). Cada chunk ≈ 1 segundo. */
+/** Duración del timeslice del MediaRecorder (ms). Cada chunk ≈ 1 segundo.
+ *  Durante una pausa el MediaRecorder no emite chunks, así que contar chunks
+ *  ya descuenta las pausas: la duración aproximada de una grabación
+ *  recuperada no necesita corregirse con `pausas`. */
 const SEGUNDOS_POR_CHUNK = 1;
+
+/**
+ * Tramo en el que la grabación estuvo detenida sin cerrarse: la terapeuta
+ * tocó "Pausar" (MediaRecorder.pause()) o el micrófono se interrumpió.
+ * Epoch en milisegundos. `fin` es null mientras la pausa sigue abierta.
+ *
+ * Vive acá y no en el componente porque es dato de la grabación, no de la
+ * pantalla: si el navegador mata el proceso, las pausas se recuperan junto
+ * con los chunks.
+ */
+export interface Pausa {
+  inicio: number;
+  fin: number | null;
+}
 
 interface MetaGrabacion {
   sesionClinicaId: string;
   iniciadaEn: number; // Date.now() al iniciar
+  /** Ausente en grabaciones persistidas antes de que existiera la pausa. */
+  pausas?: Pausa[];
 }
 
 interface ChunkGrabacion {
@@ -42,6 +61,7 @@ export interface GrabacionPendiente {
   sesionClinicaId: string;
   chunks: Blob[];
   duracionAproxSeg: number;
+  pausas: Pausa[];
 }
 
 function indexedDBDisponible(): boolean {
@@ -153,12 +173,51 @@ export async function iniciarSesionGrabacion(
     const meta: MetaGrabacion = {
       sesionClinicaId,
       iniciadaEn: Date.now(),
+      pausas: [],
     };
     tx.objectStore(STORE_META).put(meta);
 
     await esperarTransaccion(tx);
   } catch (error) {
     avisar("iniciarSesionGrabacion", error);
+  }
+}
+
+/**
+ * Reemplaza la lista de pausas de una grabación en curso. Se llama al
+ * pausar y al reanudar, fire-and-forget: igual que `guardarChunk`, nunca
+ * lanza y jamás bloquea la grabación.
+ *
+ * Si la meta no existe (IndexedDB se vació entre medio) se recrea con
+ * `iniciadaEn` de ahora: es preferible una meta con timestamp aproximado a
+ * perder el registro de las pausas.
+ */
+export async function guardarPausas(
+  sesionClinicaId: string,
+  pausas: readonly Pausa[],
+): Promise<void> {
+  if (!indexedDBDisponible()) {
+    return;
+  }
+
+  try {
+    const db = await abrirDB();
+    const tx = db.transaction(STORE_META, "readwrite");
+    const store = tx.objectStore(STORE_META);
+    const actual = await esperarRequest(
+      store.get(sesionClinicaId) as IDBRequest<MetaGrabacion | undefined>,
+    );
+
+    const meta: MetaGrabacion = {
+      sesionClinicaId,
+      iniciadaEn: actual?.iniciadaEn ?? Date.now(),
+      pausas: pausas.map((p) => ({ inicio: p.inicio, fin: p.fin })),
+    };
+    store.put(meta);
+
+    await esperarTransaccion(tx);
+  } catch (error) {
+    avisar("guardarPausas", error);
   }
 }
 
@@ -236,6 +295,7 @@ export async function recuperarGrabacionPendiente(): Promise<GrabacionPendiente 
         sesionClinicaId: meta.sesionClinicaId,
         chunks: registros.map((r) => r.chunk),
         duracionAproxSeg: registros.length * SEGUNDOS_POR_CHUNK,
+        pausas: meta.pausas ?? [],
       };
     }
 

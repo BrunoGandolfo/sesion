@@ -1,7 +1,7 @@
-import { FinanzasView } from "./_components/finanzas-view";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
+// Finanzas y Deudores se unieron en /cobros. La ruta vieja queda solo para
+// que el menú y los links guardados sigan llegando.
 export default function FinanzasPage() {
-  return <FinanzasView />;
+  redirect("/cobros");
 }

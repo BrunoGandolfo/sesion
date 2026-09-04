@@ -181,7 +181,7 @@ export async function subirAudioCifrado(
  * desde upload-url. Best-effort: si esto falla, el próximo intento de
  * upload-url responde 409 con la instrucción.
  */
-async function volverAGrabando(sesionClinicaId: string): Promise<void> {
+export async function volverAGrabando(sesionClinicaId: string): Promise<void> {
   try {
     const res = await fetch(`/api/sesion-clinica/${sesionClinicaId}`, {
       cache: "no-store",

@@ -4,7 +4,15 @@ import * as React from "react";
 import { AlertTriangle, Plus, Sparkles, X } from "lucide-react";
 
 import { Button, Card, Chip } from "@/components/ui";
+import { apiGet, apiPatch, esAbort } from "@/lib/api-client";
 import { fechaCorta } from "@/lib/format";
+import {
+  ALGO_FALLO,
+  EL_HILO,
+  EL_RECORRIDO_HASTA_HOY,
+  SENALES_ANTERIORES,
+  pluralizar,
+} from "@/lib/glosario";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tipos del payload — espejan exactamente la response de
@@ -136,24 +144,15 @@ interface PatchBody {
 // Carga
 // ────────────────────────────────────────────────────────────────────────────
 
-const MENSAJE_ERROR_CARGA = "No pudimos cargar el contexto. Intentá de nuevo.";
+const MENSAJE_ERROR_CARGA = "No pudimos cargar el hilo. Intentá de nuevo.";
 
-async function cargarContexto(
+function cargarContexto(
   pacienteId: string,
   signal: AbortSignal,
 ): Promise<ContextoPayload> {
-  const res = await fetch(`/api/pacientes/${pacienteId}/contexto-clinico`, {
-    cache: "no-store",
+  return apiGet<ContextoPayload>(`/api/pacientes/${pacienteId}/contexto-clinico`, {
     signal,
   });
-  if (!res.ok) {
-    throw new Error(
-      res.status === 404 ? "Paciente no encontrado." : MENSAJE_ERROR_CARGA,
-    );
-  }
-  // La ruta responde con ok(payload): { data: ContextoPayload }.
-  const json = (await res.json()) as { data: ContextoPayload };
-  return json.data;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -186,8 +185,7 @@ export function ContextoGoldenThreadView({
         setLoading(false);
       })
       .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (controller.signal.aborted || esAbort(err)) return;
         setError(err instanceof Error ? err.message : MENSAJE_ERROR_CARGA);
         setLoading(false);
       });
@@ -226,31 +224,16 @@ export function ContextoGoldenThreadView({
     setGuardando(true);
     setErrorGuardado(null);
     try {
-      const res = await fetch(
+      const actualizado = await apiPatch<ContextoPayload>(
         `/api/pacientes/${pacienteId}/contexto-clinico`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draft),
-        },
+        draft,
       );
-      if (!res.ok) {
-        throw new Error(
-          "No pudimos guardar los cambios. Revisá los datos e intentá de nuevo.",
-        );
-      }
-      // PATCH también responde con ok(payload): { data: ContextoPayload }.
-      const actualizado = (await res.json()) as { data: ContextoPayload };
-      setData(actualizado.data);
+      setData(actualizado);
       setDraft(null);
       setEditando(false);
       onContextoActualizado?.();
     } catch (err) {
-      setErrorGuardado(
-        err instanceof Error
-          ? err.message
-          : "No pudimos guardar los cambios. Intentá de nuevo.",
-      );
+      setErrorGuardado(err instanceof Error ? err.message : ALGO_FALLO);
     } finally {
       setGuardando(false);
     }
@@ -322,27 +305,22 @@ function ContextoBody({
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-2">
           <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-            Contexto longitudinal
+            {EL_HILO}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {aprobado ? (
-              <Chip variant="sage">Aprobado por terapeuta</Chip>
+              <Chip variant="sage">Revisado</Chip>
             ) : (
-              <Chip variant="gold">Sugerencia IA pendiente de revisión</Chip>
-            )}
-            {data.version > 0 && (
-              <span className="font-sans text-[12px] text-ink-500">
-                v{data.version}
-                {data.actualizadoEn && (
-                  <> · actualizado {formatFechaCorta(data.actualizadoEn)}</>
-                )}
-              </span>
+              <Chip variant="gold">Actualizado tras la última sesión · revisalo</Chip>
             )}
           </div>
           <p className="font-sans text-[13px] text-ink-500">
-            {data.totalSesionesAprobadas} sesión
-            {data.totalSesionesAprobadas === 1 ? "" : "es"} aprobada
-            {data.totalSesionesAprobadas === 1 ? "" : "s"} hasta hoy.
+            {pluralizar(
+              data.totalSesionesAprobadas,
+              "sesión aprobada",
+              "sesiones aprobadas",
+            )}{" "}
+            hasta hoy.
           </p>
         </div>
 
@@ -367,8 +345,8 @@ function ContextoBody({
             className="mt-[2px] shrink-0 text-gold-500"
           />
           <p className="font-sans text-[13px] leading-[1.5] text-gold-500">
-            Esta versión la generó la IA después de la última sesión. Revisá y
-            aprobá para que quede como contexto canónico del paciente.
+            Lo escribió la IA después de la última sesión. Revisalo y guardalo
+            para que quede como el hilo del proceso.
           </p>
         </div>
       )}
@@ -445,7 +423,7 @@ function ContextoBody({
             disabled={guardando}
             className="w-full sm:w-auto"
           >
-            {guardando ? "Guardando…" : "Aprobar contexto"}
+            {guardando ? "Guardando…" : "Guardar"}
           </Button>
         </div>
       )}
@@ -770,7 +748,7 @@ function SectionResumen({ resumen }: { resumen: string | null }) {
     <Card>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
-          <SectionTitulo>Resumen acumulativo</SectionTitulo>
+          <SectionTitulo>{EL_RECORRIDO_HASTA_HOY}</SectionTitulo>
           <Chip variant="gold" size="sm">
             Generado por IA
           </Chip>
@@ -798,7 +776,7 @@ function SectionRiesgos({ riesgos }: { riesgos: RiesgoHistorico[] }) {
   return (
     <Card>
       <div className="flex flex-col gap-3">
-        <SectionTitulo>Riesgos históricos</SectionTitulo>
+        <SectionTitulo>{SENALES_ANTERIORES}</SectionTitulo>
         {ordenados.length === 0 ? (
           <SectionEmpty>Sin riesgos registrados en sesiones previas.</SectionEmpty>
         ) : (
@@ -908,7 +886,7 @@ function EmptyView() {
           className="text-sage-500"
         />
         <h2 className="font-display text-[20px] italic font-medium text-ink-900">
-          Todavía no hay contexto clínico para este paciente.
+          Todavía no hay hilo para este paciente.
         </h2>
         <p className="max-w-[420px] font-sans text-[14px] leading-[1.6] text-ink-500">
           Se generará automáticamente después de la primera sesión grabada y

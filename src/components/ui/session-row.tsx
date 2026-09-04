@@ -3,6 +3,13 @@
 import * as React from "react";
 import type { TurnoConPaciente } from "@/types/domain";
 import { hora, money } from "@/lib/format";
+import {
+  AGENDADO,
+  FALTA_AUTORIZACION,
+  GRABAR_SESION,
+  NO_VINO,
+  REVISAR_NOTA,
+} from "@/lib/glosario";
 import { Avatar } from "./avatar";
 import { Chip } from "./chip";
 
@@ -10,6 +17,16 @@ interface SessionRowProps {
   turno: TurnoConPaciente;
   onClick?: () => void;
   onCobrar?: () => void;
+  /** Momento actual. Con él la fila sabe si la hora del turno ya pasó; sin
+   *  él cae en la regla vieja (cobrable solo si el turno está "realizado"). */
+  ahora?: Date;
+  /** El turno tiene una nota generada esperando aprobación. */
+  notaParaRevisar?: boolean;
+  /** La paciente no firmó la autorización para grabar. */
+  sinAutorizacion?: boolean;
+  onRevisarNota?: () => void;
+  onGrabar?: () => void;
+  onAutorizar?: () => void;
   className?: string;
 }
 
@@ -18,11 +35,19 @@ type Status = {
   label: string;
 };
 
+/** Acción única de la fila. La decide el estado del turno, no la pantalla:
+ *  la misma fila en la agenda y en Hoy ofrece lo mismo. */
+type Accion = {
+  label: string;
+  tono: "gold" | "terracotta";
+  onClick: () => void;
+};
+
 function statusFor(turno: TurnoConPaciente): Status {
   if (turno.estado === "cancelado") return { variant: "neutral", label: "Cancelado" };
-  if (turno.estado === "ausente") return { variant: "neutral", label: "Ausente" };
+  if (turno.estado === "ausente") return { variant: "neutral", label: NO_VINO };
   if (turno.pagoEstado === "pagado") return { variant: "sage", label: "Pagado" };
-  if (turno.estado === "programado") return { variant: "gold", label: "Programado" };
+  if (turno.estado === "programado") return { variant: "gold", label: AGENDADO };
   return { variant: "terracotta", label: "Pendiente" };
 }
 
@@ -34,16 +59,63 @@ function borderLeftClass(turno: TurnoConPaciente): string {
   return "border-l-ink-300";
 }
 
-export function SessionRow({
+/**
+ * Orden de precedencia, el mismo que la card de Ahora: sin autorización no
+ * se graba; una nota escrita se revisa antes que nada; una sesión cuya hora
+ * ya pasó y sigue impaga se cobra —aunque el turno todavía figure como
+ * programado, porque el caso de uso de cobrar lo marca realizado—; y si la
+ * hora no llegó, se graba. Sin handler, la fila muestra el chip de estado.
+ */
+function accionDe({
   turno,
-  onClick,
+  ahora,
+  notaParaRevisar,
+  sinAutorizacion,
   onCobrar,
-  className = "",
-}: SessionRowProps) {
+  onRevisarNota,
+  onGrabar,
+  onAutorizar,
+}: SessionRowProps): Accion | null {
+  if (turno.estado === "cancelado" || turno.estado === "ausente") return null;
+
+  if (sinAutorizacion && onAutorizar) {
+    return {
+      label: `${FALTA_AUTORIZACION} →`,
+      tono: "terracotta",
+      onClick: onAutorizar,
+    };
+  }
+
+  if (notaParaRevisar && onRevisarNota) {
+    return { label: REVISAR_NOTA, tono: "gold", onClick: onRevisarNota };
+  }
+
+  const horaPasada = ahora
+    ? turno.fecha.getTime() <= ahora.getTime()
+    : turno.estado === "realizado";
+
+  if (horaPasada && turno.pagoEstado === "pendiente" && onCobrar) {
+    return { label: "Cobrar", tono: "gold", onClick: onCobrar };
+  }
+
+  if (!horaPasada && onGrabar) {
+    return { label: GRABAR_SESION, tono: "gold", onClick: onGrabar };
+  }
+
+  return null;
+}
+
+const TONO: Record<Accion["tono"], string> = {
+  gold: "bg-gold-50 text-gold-500 group-hover:bg-gold-500/10",
+  terracotta:
+    "bg-terracotta-50 text-terracotta-600 group-hover:bg-terracotta-500/10",
+};
+
+export function SessionRow(props: SessionRowProps) {
+  const { turno, onClick, className = "" } = props;
   const status = statusFor(turno);
   const leftClass = borderLeftClass(turno);
-  const cobrable =
-    turno.estado === "realizado" && turno.pagoEstado === "pendiente";
+  const accion = accionDe(props);
 
   const base = `w-full flex items-center gap-4 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-150 border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
 
@@ -76,17 +148,19 @@ export function SessionRow({
       </div>
 
       <div className="flex items-center shrink-0">
-        {cobrable && onCobrar ? (
+        {accion ? (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onCobrar();
+              accion.onClick();
             }}
             className="group inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-1"
           >
-            <span className="bg-gold-50 text-gold-500 rounded-full px-[10px] py-[3px] text-[10px] font-semibold uppercase tracking-[0.08em] group-hover:bg-gold-500/10 transition-colors duration-150">
-              Cobrar
+            <span
+              className={`rounded-full px-[10px] py-[3px] text-[12px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap transition-colors duration-150 ${TONO[accion.tono]}`}
+            >
+              {accion.label}
             </span>
           </button>
         ) : (

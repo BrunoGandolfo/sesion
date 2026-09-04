@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { format, endOfWeek, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
+
 import { Button, Segmented } from "@/components/ui";
 import { fechaCorta, fechaLarga } from "@/lib/format";
+import { NAV } from "@/lib/glosario";
 import type { AgendaViewMode } from "./agenda-view";
 
 interface Props {
@@ -16,6 +18,9 @@ interface Props {
   onNext: () => void;
   onToday: () => void;
   onNewTurno: () => void;
+  /** Mobile: el mes vive detrás del título de la fecha. */
+  mesAbierto: boolean;
+  onToggleMes: () => void;
 }
 
 const VIEW_OPTIONS: { value: AgendaViewMode; label: string }[] = [
@@ -42,13 +47,18 @@ export function AgendaHeader({
   onNext,
   onToday,
   onNewTurno,
+  mesAbierto,
+  onToggleMes,
 }: Props) {
-  const label = rangeLabelFor(view, anchor);
+  const labelDesktop = rangeLabelFor(view, anchor);
+  // En mobile siempre se ve un día (la semana se dibuja como día), así que
+  // el título es la fecha larga y abre o cierra el mes.
+  const labelMobile = fechaLarga(anchor);
 
   return (
     <header>
-      <h1 className="lg:hidden mb-4 font-[family-name:var(--font-display)] text-[30px] font-medium leading-none text-ink-900">
-        Agenda
+      <h1 className="mb-4 font-[family-name:var(--font-display)] text-[30px] font-medium leading-none text-ink-900 lg:hidden">
+        {NAV.AGENDA}
       </h1>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
         <div className="flex items-center gap-3">
@@ -71,11 +81,34 @@ export function AgendaHeader({
               icon={<ChevronRight size={18} strokeWidth={1.8} aria-hidden="true" />}
             />
           </div>
-          <span className="min-w-0 flex-1 truncate font-[family-name:var(--font-display)] text-[16px] font-medium leading-tight text-ink-900 lg:flex-none lg:whitespace-nowrap lg:text-[20px] lg:leading-none">
-            {label}
+
+          {/* Mobile: la fecha es un botón que despliega el mes debajo. */}
+          <button
+            type="button"
+            onClick={onToggleMes}
+            aria-expanded={mesAbierto}
+            aria-controls="agenda-mes-mobile"
+            className="flex min-h-[44px] min-w-0 flex-1 items-center gap-1 text-left lg:hidden"
+          >
+            <span className="min-w-0 truncate font-[family-name:var(--font-display)] text-[16px] font-medium leading-tight text-ink-900">
+              {labelMobile}
+            </span>
+            <ChevronDown
+              size={16}
+              strokeWidth={1.8}
+              aria-hidden="true"
+              className={`shrink-0 text-ink-500 transition-transform duration-150 ${
+                mesAbierto ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          <span className="hidden whitespace-nowrap font-[family-name:var(--font-display)] text-[20px] font-medium leading-none text-ink-900 lg:inline">
+            {labelDesktop}
           </span>
         </div>
-        <div className="flex items-center gap-2 lg:ml-auto">
+
+        <div className="hidden items-center gap-2 lg:ml-auto lg:flex">
           <Segmented
             options={VIEW_OPTIONS}
             value={view}
@@ -87,9 +120,8 @@ export function AgendaHeader({
             size="sm"
             icon={<Plus size={14} strokeWidth={2} aria-hidden="true" />}
             onClick={onNewTurno}
-            className="hidden lg:inline-flex"
           >
-            Nuevo turno
+            Agendar
           </Button>
         </div>
       </div>

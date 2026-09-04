@@ -4,7 +4,10 @@ import * as React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+
 import { Button, Card, Input } from "@/components/ui";
+import { apiPatch } from "@/lib/api-client";
+import { ALGO_FALLO } from "@/lib/glosario";
 
 const emailSchema = z.email("Ingresá un email válido");
 
@@ -66,25 +69,16 @@ export function EditarPacienteForm({
     setApiError(null);
 
     try {
-      const response = await fetch(`/api/pacientes/${paciente.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nombre: values.nombre.trim(),
-          apellido: values.apellido.trim(),
-          telefono: values.telefono.trim(),
-          email: values.email.trim() || null,
-          tarifa: values.tarifa,
-        }),
+      await apiPatch(`/api/pacientes/${paciente.id}`, {
+        nombre: values.nombre.trim(),
+        apellido: values.apellido.trim(),
+        telefono: values.telefono.trim(),
+        email: values.email.trim() || null,
+        tarifa: values.tarifa,
       });
-
-      if (!response.ok) {
-        throw new Error("No se pudieron guardar los cambios.");
-      }
-
       onSuccess();
-    } catch {
-      setApiError("No se pudieron guardar los cambios.");
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : ALGO_FALLO);
     }
   }
 
@@ -97,10 +91,7 @@ export function EditarPacienteForm({
       </div>
 
       <Card className="m-0 flex-1 overflow-y-auto !rounded-none !border-0 !p-0 !shadow-none">
-        <form
-          className="flex min-h-full flex-col"
-          onSubmit={handleSubmit(submit)}
-        >
+        <form className="flex min-h-full flex-col" onSubmit={handleSubmit(submit)}>
           <div className="flex-1 overflow-y-auto px-6 py-5 md:px-8 md:py-6">
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -145,9 +136,7 @@ export function EditarPacienteForm({
               />
 
               {apiError && (
-                <p className="text-[12px] text-[color:var(--color-error)]">
-                  {apiError}
-                </p>
+                <p className="text-[12px] text-[color:var(--color-error)]">{apiError}</p>
               )}
             </div>
           </div>
@@ -163,7 +152,7 @@ export function EditarPacienteForm({
                 Cancelar
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Guardando..." : "Guardar cambios"}
+                {isSubmitting ? "Guardando…" : "Guardar cambios"}
               </Button>
             </div>
           </div>

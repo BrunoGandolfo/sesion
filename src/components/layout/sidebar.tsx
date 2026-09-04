@@ -13,14 +13,19 @@ import {
   Wallet,
 } from "lucide-react";
 import type { DeudaPaciente } from "@/types/domain";
+import { apiGet } from "@/lib/api-client";
 import { zonaDeuda } from "@/lib/deudas";
+import { NAV, TU_CONSULTORIO } from "@/lib/glosario";
 
+// Mismos destinos que el menú de mobile, más la configuración, que en
+// desktop se dice como la diría ella: "Tu consultorio". "Finanzas" pasó a
+// ser Cobros y la ruta de deudores salió de la navegación.
 const NAV_ITEMS = [
-  { href: "/", label: "Hoy", icon: Home },
-  { href: "/agenda", label: "Agenda", icon: Calendar },
-  { href: "/pacientes", label: "Pacientes", icon: Users },
-  { href: "/finanzas", label: "Finanzas", icon: Wallet },
-  { href: "/config", label: "Configuración", icon: Settings },
+  { href: "/", label: NAV.HOY, icon: Home },
+  { href: "/agenda", label: NAV.AGENDA, icon: Calendar },
+  { href: "/pacientes", label: NAV.PACIENTES, icon: Users },
+  { href: "/cobros", label: NAV.COBROS, icon: Wallet },
+  { href: "/config", label: TU_CONSULTORIO, icon: Settings },
 ] as const;
 
 function getInitials(name: string): string {
@@ -49,20 +54,17 @@ export function Sidebar() {
   // (el sidebar vive en el layout y no se desmonta entre páginas).
   React.useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/deudores", { cache: "no-store" });
-        if (!res.ok) return;
-        const json = (await res.json()) as { data: DeudaPaciente[] };
+    apiGet<DeudaPaciente[]>("/api/deudores")
+      .then((deudores) => {
         if (cancelled) return;
-        const rojos = json.data.filter(
-          (d) => zonaDeuda(d.diasAtraso) === "terracotta",
-        ).length;
-        setRedCount(rojos);
-      } catch {
+        setRedCount(
+          deudores.filter((d) => zonaDeuda(d.diasAtraso) === "terracotta")
+            .length,
+        );
+      })
+      .catch(() => {
         /* silencioso: el badge es informativo, no crítico */
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
@@ -89,7 +91,7 @@ export function Sidebar() {
       <nav className="flex flex-col gap-0.5 px-3">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
-          const showBadge = href === "/finanzas" && redCount > 0;
+          const showBadge = href === "/cobros" && redCount > 0;
           return (
             <Link
               key={href}

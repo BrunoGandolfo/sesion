@@ -1,7 +1,10 @@
 "use client";
 
-import { CheckCircle2, Lightbulb, Sparkles } from "lucide-react";
+import { CheckCircle2, Lightbulb } from "lucide-react";
 
+import { Plegable } from "@/app/(dashboard)/sesiones/[id]/_components/plegable";
+import { VER_DETALLE } from "@/app/(dashboard)/sesiones/[id]/_components/textos";
+import { CTSR, GTFS, MITI, PARA_VOS, pluralizar } from "@/lib/glosario";
 import type {
   AreaCrecimientoFeedback,
   EvidenciaFeedback,
@@ -151,6 +154,40 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Cabecera de un instrumento de auto-supervisión: sigla, nombre completo y
+ *  la línea de ayuda del glosario. La sigla NUNCA se reemplaza — es lo que
+ *  le permite a la profesional rastrear qué se le está midiendo. */
+function TituloInstrumento({
+  instrumento,
+}: {
+  instrumento: { sigla: string; nombre: string; ayuda: string };
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <SectionTitle>{instrumento.sigla}</SectionTitle>
+      <p className="font-sans text-[13px] leading-[1.5] text-ink-500">
+        {instrumento.nombre} — {instrumento.ayuda}
+      </p>
+    </div>
+  );
+}
+
+/** "Ver detalle · N ítems": los ítems del instrumento, plegados. Los nombres
+ *  de dimensiones e ítems no se tocan. */
+function DetalleDeItems({
+  cantidad,
+  children,
+}: {
+  cantidad: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <Plegable titulo={`${VER_DETALLE} · ${pluralizar(cantidad, "ítem", "ítems")}`}>
+      {children}
+    </Plegable>
+  );
+}
+
 function FortalezaItem({ fortaleza }: { fortaleza: FortalezaFeedback }) {
   return (
     <li className="flex min-h-[44px] gap-3 py-1">
@@ -216,18 +253,10 @@ export function FeedbackTerapeutaView({
   // al leer (nunca se migran).
   const feedback = normalizarFeedback(feedbackTerapeuta);
 
+  // "Para vos", plegado: el feedback es sobre su trabajo, no sobre la
+  // paciente, y no es lo que vino a leer cuando abre la nota.
   return (
-    <section
-      aria-label="Auto-supervisión de la sesión"
-      className="flex flex-col gap-6 rounded-lg border border-[color:var(--border-subtle)] bg-white p-5 shadow-subtle sm:p-6"
-    >
-      <header className="flex items-center gap-2">
-        <Sparkles aria-hidden="true" className="h-5 w-5 text-sage-500" />
-        <h2 className="font-display text-[18px] font-medium text-ink-900">
-          Auto-supervisión de la sesión
-        </h2>
-      </header>
-
+    <Plegable titulo={PARA_VOS}>
       {feedback.instrumento === "cbt_mi" ? (
         <BloqueMitiCtsr feedback={feedback} />
       ) : (
@@ -239,7 +268,7 @@ export function FeedbackTerapeutaView({
       <p className="border-t border-cream-200 pt-4 font-sans text-[12px] leading-[1.55] italic text-ink-500">
         {DISCLAIMER_TEXT}
       </p>
-    </section>
+    </Plegable>
   );
 }
 
@@ -313,8 +342,8 @@ function BloqueMitiCtsr({ feedback }: { feedback: FeedbackMitiCtsr }) {
   return (
     <>
       <div className="flex flex-col gap-3">
-        <SectionTitle>MITI 4.2.1 · Globales</SectionTitle>
-        <div className="flex flex-col gap-4">
+        <TituloInstrumento instrumento={MITI} />
+        <DetalleDeItems cantidad={2}>
           <ScoreBar
             label="Empatía"
             score={empathy.score}
@@ -331,12 +360,12 @@ function BloqueMitiCtsr({ feedback }: { feedback: FeedbackMitiCtsr }) {
             razon={partnership.razon}
             evidence={partnership.evidence}
           />
-        </div>
+        </DetalleDeItems>
       </div>
 
       <div className="flex flex-col gap-3">
-        <SectionTitle>CTS-R · Subset</SectionTitle>
-        <div className="flex flex-col gap-4">
+        <TituloInstrumento instrumento={CTSR} />
+        <DetalleDeItems cantidad={ctsrItems.length}>
           {ctsrItems.map((item) => (
             <ScoreBar
               key={item.key}
@@ -348,7 +377,7 @@ function BloqueMitiCtsr({ feedback }: { feedback: FeedbackMitiCtsr }) {
               evidence={item.score.evidence}
             />
           ))}
-        </div>
+        </DetalleDeItems>
       </div>
     </>
   );
@@ -393,9 +422,11 @@ function BloqueGestalt({ feedback }: { feedback: FeedbackGestalt }) {
 
   return (
     <>
+      <TituloInstrumento instrumento={GTFS} />
+
       <div className="flex flex-col gap-2 rounded-lg bg-cream-100 p-4 sm:p-5">
         <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-          Adherencia global · GTFS
+          Adherencia global · {GTFS.sigla}
         </span>
         {evaluables.length === 0 ? (
           <p className="font-sans text-[14px] leading-[1.6] text-ink-700">
@@ -418,8 +449,7 @@ function BloqueGestalt({ feedback }: { feedback: FeedbackGestalt }) {
         </p>
       </div>
 
-      <div className="flex flex-col gap-5">
-        <SectionTitle>GTFS · Ítems por dimensión</SectionTitle>
+      <DetalleDeItems cantidad={items.length}>
         {dimensiones.map((dimension) => (
           <div key={dimension.titulo} className="flex flex-col gap-3">
             <h4 className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
@@ -444,7 +474,7 @@ function BloqueGestalt({ feedback }: { feedback: FeedbackGestalt }) {
             </ul>
           </div>
         )}
-      </div>
+      </DetalleDeItems>
     </>
   );
 }

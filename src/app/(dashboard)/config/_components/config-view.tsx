@@ -1,40 +1,30 @@
 "use client";
 
+// Tu consultorio: lo que la app necesita saber de ella y de cómo trabaja.
+//
+// Cinco secciones, en el orden en que las piensa: quién es (Vos), cuánto
+// cobra, con qué enfoque trabaja, qué recordatorio reciben los pacientes y
+// la cuenta. Todo se guarda solo, con un aviso discreto.
+//
+// El enfoque teórico es una decisión clínica y se dice completa: cada
+// orientación nombra el instrumento con el que se evalúa su práctica.
+
 import * as React from "react";
-import { ChevronDown, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { getSession, signOut } from "next-auth/react";
-import {
-  Button,
-  Card,
-  EditorialRule,
-  Input,
-  Textarea,
-} from "@/components/ui";
-import {
-  buildSmsMessage,
-  contarLongitudSms,
-  TEMPLATE_SMS_SUGERIDO,
-} from "@/lib/sms-texto";
+
+import { Button, Card, EditorialRule, Input } from "@/components/ui";
+import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
+import { ALGO_FALLO, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
+import { buildSmsMessage, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
-const PLACEHOLDERS = [
-  { label: "nombre", key: "nombre" },
-  { label: "apellido", key: "apellido" },
-  { label: "fecha", key: "fecha" },
-  { label: "hora", key: "hora" },
-  { label: "dirección", key: "direccion" },
-  { label: "profesional", key: "profesional" },
-  { label: "teléfono", key: "telefonoConsultorio" },
-] as const;
+import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
 
-// Mismo texto que TEMPLATE_SMS_SUGERIDO; la línea final de contacto es
-// obligatoria (el cron la agrega si la usuaria la borra).
-const DEFAULT_TEMPLATE = TEMPLATE_SMS_SUGERIDO;
-
-// Datos de ejemplo de la previsualización: martes 21 de abril, 10:00.
+// Datos de ejemplo de la vista previa: martes 21 de abril, 10:00.
 const FECHA_PREVIEW = new Date(2026, 3, 21, 10, 0);
 
-type ConfigField =
+type CampoConfig =
   | "nombreProfesional"
   | "direccion"
   | "whatsappOrigen"
@@ -43,7 +33,7 @@ type ConfigField =
   | "templateRecordatorio"
   | "orientacionTeorica";
 
-type ConfigForm = {
+type FormConfig = {
   nombreProfesional: string;
   direccion: string;
   whatsappOrigen: string;
@@ -53,7 +43,7 @@ type ConfigForm = {
   orientacionTeorica: OrientacionTeorica;
 };
 
-type ConfigPatch = Partial<{
+type PatchConfig = Partial<{
   nombreProfesional: string;
   direccion: string;
   whatsappOrigen: string;
@@ -63,19 +53,22 @@ type ConfigPatch = Partial<{
   orientacionTeorica: OrientacionTeorica;
 }>;
 
-type SaveStatus = "idle" | "saving" | "saved" | "error";
+type EstadoGuardado = "idle" | "guardando" | "guardado" | "error";
 
-const DEFAULT_FORM: ConfigForm = {
+// Sin datos inventados: los campos de "Vos" arrancan vacíos hasta que llega
+// la configuración real. Lo único con valor propio es lo que también tiene
+// default en la base (24 h) y el template sugerido.
+const FORM_VACIO: FormConfig = {
   nombreProfesional: "",
-  direccion: "Rivera 2540, Montevideo",
-  whatsappOrigen: "+598 99 876 543",
-  tarifaDefault: "2200",
+  direccion: "",
+  whatsappOrigen: "",
+  tarifaDefault: "",
   horasAnticipacion: 24,
-  templateRecordatorio: DEFAULT_TEMPLATE,
+  templateRecordatorio: TEMPLATE_SMS_SUGERIDO,
   orientacionTeorica: "cbt_mi",
 };
 
-function formFromConfig(config: Configuracion): ConfigForm {
+function formDesdeConfig(config: Configuracion): FormConfig {
   return {
     nombreProfesional: config.nombreProfesional,
     direccion: config.direccion,
@@ -87,261 +80,233 @@ function formFromConfig(config: Configuracion): ConfigForm {
   };
 }
 
-function patchFromFields(
-  form: ConfigForm,
-  fields: ConfigField[],
-): { patch: ConfigPatch; fields: ConfigField[]; invalid: boolean } {
-  const patch: ConfigPatch = {};
-  const included: ConfigField[] = [];
-  let invalid = false;
+function patchDesdeCampos(
+  form: FormConfig,
+  campos: CampoConfig[],
+): { patch: PatchConfig; campos: CampoConfig[]; invalido: boolean } {
+  const patch: PatchConfig = {};
+  const incluidos: CampoConfig[] = [];
+  let invalido = false;
 
-  for (const field of fields) {
-    if (field === "tarifaDefault") {
-      const value = Number(form.tarifaDefault);
-      if (!form.tarifaDefault.trim() || !Number.isFinite(value) || value < 0) {
-        invalid = true;
+  for (const campo of campos) {
+    if (campo === "tarifaDefault") {
+      const valor = Number(form.tarifaDefault);
+      if (
+        !form.tarifaDefault.trim() ||
+        !Number.isInteger(valor) ||
+        valor < 0
+      ) {
+        invalido = true;
         continue;
       }
-      patch.tarifaDefault = value;
-      included.push(field);
+      patch.tarifaDefault = valor;
+      incluidos.push(campo);
       continue;
     }
 
-    if (field === "horasAnticipacion") {
+    if (campo === "templateRecordatorio") {
+      if (!form.templateRecordatorio.trim()) {
+        invalido = true;
+        continue;
+      }
+      patch.templateRecordatorio = form.templateRecordatorio;
+      incluidos.push(campo);
+      continue;
+    }
+
+    if (campo === "nombreProfesional") {
+      if (!form.nombreProfesional.trim()) {
+        invalido = true;
+        continue;
+      }
+      patch.nombreProfesional = form.nombreProfesional;
+      incluidos.push(campo);
+      continue;
+    }
+
+    if (campo === "horasAnticipacion") {
       patch.horasAnticipacion = form.horasAnticipacion;
-      included.push(field);
+      incluidos.push(campo);
       continue;
     }
 
-    if (field === "orientacionTeorica") {
+    if (campo === "orientacionTeorica") {
       patch.orientacionTeorica = form.orientacionTeorica;
-      included.push(field);
+      incluidos.push(campo);
       continue;
     }
 
-    patch[field] = form[field];
-    included.push(field);
+    patch[campo] = form[campo];
+    incluidos.push(campo);
   }
 
-  return { patch, fields: included, invalid };
+  return { patch, campos: incluidos, invalido };
 }
 
 export function ConfigView() {
-  const [form, setForm] = React.useState<ConfigForm>(DEFAULT_FORM);
-  const [loading, setLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState(false);
-  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
-  const [sessionEmail, setSessionEmail] = React.useState<string | null>(null);
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const [form, setForm] = React.useState<FormConfig>(FORM_VACIO);
+  const [cargando, setCargando] = React.useState(true);
+  const [errorCarga, setErrorCarga] = React.useState<string | null>(null);
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const [estadoGuardado, setEstadoGuardado] =
+    React.useState<EstadoGuardado>("idle");
+  const [emailSesion, setEmailSesion] = React.useState<string | null>(null);
+
   const formRef = React.useRef(form);
-  const debounceTimerRef = React.useRef<number | null>(null);
-  const savedTimerRef = React.useRef<number | null>(null);
-  const savePendingChangesRef = React.useRef<() => Promise<void>>(async () => {});
-  const dirtyFieldsRef = React.useRef<Set<ConfigField>>(new Set());
-  const inFlightRef = React.useRef(false);
-  const flushAfterFlightRef = React.useRef(false);
-  const mountedRef = React.useRef(true);
+  const debounceRef = React.useRef<number | null>(null);
+  const avisoRef = React.useRef<number | null>(null);
+  const guardarPendientesRef = React.useRef<() => Promise<void>>(
+    async () => {},
+  );
+  const camposSuciosRef = React.useRef<Set<CampoConfig>>(new Set());
+  const enVueloRef = React.useRef(false);
+  const volverAGuardarRef = React.useRef(false);
+  const montadoRef = React.useRef(true);
 
-  const clearSavedTimer = React.useCallback(() => {
-    if (savedTimerRef.current !== null) {
-      window.clearTimeout(savedTimerRef.current);
-      savedTimerRef.current = null;
+  const limpiarAviso = React.useCallback(() => {
+    if (avisoRef.current !== null) {
+      window.clearTimeout(avisoRef.current);
+      avisoRef.current = null;
     }
   }, []);
 
-  const showSavedTemporarily = React.useCallback(() => {
-    clearSavedTimer();
-    setSaveStatus("saved");
-    savedTimerRef.current = window.setTimeout(() => {
-      if (mountedRef.current) {
-        setSaveStatus("idle");
-      }
-      savedTimerRef.current = null;
+  const mostrarGuardado = React.useCallback(() => {
+    limpiarAviso();
+    setEstadoGuardado("guardado");
+    avisoRef.current = window.setTimeout(() => {
+      if (montadoRef.current) setEstadoGuardado("idle");
+      avisoRef.current = null;
     }, 2000);
-  }, [clearSavedTimer]);
+  }, [limpiarAviso]);
 
-  const scheduleSave = React.useCallback(() => {
-    if (debounceTimerRef.current !== null) {
-      window.clearTimeout(debounceTimerRef.current);
+  const programarGuardado = React.useCallback(() => {
+    if (debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current);
     }
-
-    debounceTimerRef.current = window.setTimeout(() => {
-      debounceTimerRef.current = null;
-      void savePendingChangesRef.current();
-    }, 2000);
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null;
+      void guardarPendientesRef.current();
+    }, 1500);
   }, []);
 
-  const savePendingChanges = React.useCallback(async () => {
-    if (inFlightRef.current) {
-      flushAfterFlightRef.current = true;
+  const guardarPendientes = React.useCallback(async () => {
+    if (enVueloRef.current) {
+      volverAGuardarRef.current = true;
       return;
     }
 
-    const fields = Array.from(dirtyFieldsRef.current);
-    if (fields.length === 0) return;
+    const campos = Array.from(camposSuciosRef.current);
+    if (campos.length === 0) return;
 
-    const { patch, fields: sentFields, invalid } = patchFromFields(
+    const { patch, campos: enviados, invalido } = patchDesdeCampos(
       formRef.current,
-      fields,
+      campos,
     );
 
-    if (invalid) {
-      setSaveStatus("error");
+    if (invalido) {
+      setEstadoGuardado("error");
       return;
     }
+    if (enviados.length === 0) return;
 
-    if (sentFields.length === 0) return;
+    for (const campo of enviados) camposSuciosRef.current.delete(campo);
 
-    for (const field of sentFields) {
-      dirtyFieldsRef.current.delete(field);
-    }
+    enVueloRef.current = true;
+    limpiarAviso();
+    setEstadoGuardado("guardando");
 
-    inFlightRef.current = true;
-    clearSavedTimer();
-    setSaveStatus("saving");
-
-    let saved = false;
-
+    let guardado = false;
     try {
-      const response = await fetch("/api/config", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
+      await apiPatch<Configuracion>("/api/config", patch);
+      guardado = true;
+    } catch {
+      for (const campo of enviados) camposSuciosRef.current.add(campo);
+      if (montadoRef.current) setEstadoGuardado("error");
+    } finally {
+      enVueloRef.current = false;
+      const volver = volverAGuardarRef.current;
+      volverAGuardarRef.current = false;
+
+      if (montadoRef.current) {
+        if (guardado && camposSuciosRef.current.size === 0) mostrarGuardado();
+        if (camposSuciosRef.current.size > 0 && (guardado || volver)) {
+          programarGuardado();
+        }
+      }
+    }
+  }, [limpiarAviso, mostrarGuardado, programarGuardado]);
+
+  React.useEffect(() => {
+    guardarPendientesRef.current = guardarPendientes;
+  }, [guardarPendientes]);
+
+  // Carga inicial. El estado "cargando" es el inicial y el reintento lo
+  // vuelve a poner desde su handler; acá solo se setea cuando responde la red.
+  React.useEffect(() => {
+    montadoRef.current = true;
+    const controller = new AbortController();
+
+    Promise.all([
+      apiGet<Configuracion>("/api/config", { signal: controller.signal }),
+      getSession().catch(() => null),
+    ])
+      .then(([config, session]) => {
+        const siguiente = formDesdeConfig(config);
+        formRef.current = siguiente;
+        camposSuciosRef.current.clear();
+        setForm(siguiente);
+        setEmailSesion(session?.user?.email ?? null);
+        setEstadoGuardado("idle");
+        setCargando(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || esAbort(err)) return;
+        setErrorCarga(
+          err instanceof ApiClientError ? err.mensaje : ALGO_FALLO,
+        );
+        setCargando(false);
       });
-
-      if (!response.ok) {
-        throw new Error("No se pudo guardar la configuración");
-      }
-
-      saved = true;
-    } catch {
-      for (const field of sentFields) {
-        dirtyFieldsRef.current.add(field);
-      }
-      if (mountedRef.current) {
-        setSaveStatus("error");
-      }
-    } finally {
-      inFlightRef.current = false;
-      const shouldFlush = flushAfterFlightRef.current;
-      flushAfterFlightRef.current = false;
-
-      if (!mountedRef.current) return;
-
-      if (saved && dirtyFieldsRef.current.size === 0) {
-        showSavedTemporarily();
-      }
-
-      if (dirtyFieldsRef.current.size > 0 && (saved || shouldFlush)) {
-        scheduleSave();
-      }
-    }
-  }, [clearSavedTimer, scheduleSave, showSavedTemporarily]);
-
-  React.useEffect(() => {
-    savePendingChangesRef.current = savePendingChanges;
-  }, [savePendingChanges]);
-
-  const loadConfig = React.useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
-
-    try {
-      const [payload, session] = await Promise.all([
-        fetch("/api/config").then(async (response) => {
-          if (!response.ok) {
-            throw new Error("No se pudo cargar la configuración");
-          }
-
-          return (await response.json()) as { data: Configuracion };
-        }),
-        getSession().catch(() => null),
-      ]);
-      const nextForm = formFromConfig(payload.data);
-
-      formRef.current = nextForm;
-      dirtyFieldsRef.current.clear();
-      setForm(nextForm);
-      setSessionEmail(session?.user?.email ?? null);
-      setSaveStatus("idle");
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    mountedRef.current = true;
-    const loadTimer = window.setTimeout(() => {
-      void loadConfig();
-    }, 0);
 
     return () => {
-      mountedRef.current = false;
-      window.clearTimeout(loadTimer);
-      if (debounceTimerRef.current !== null) {
-        window.clearTimeout(debounceTimerRef.current);
-      }
-      if (savedTimerRef.current !== null) {
-        window.clearTimeout(savedTimerRef.current);
-      }
+      montadoRef.current = false;
+      controller.abort();
+      if (debounceRef.current !== null) window.clearTimeout(debounceRef.current);
+      if (avisoRef.current !== null) window.clearTimeout(avisoRef.current);
     };
-  }, [loadConfig]);
+  }, [reloadKey]);
 
-  const updateField = React.useCallback(
-    <T extends ConfigField>(field: T, value: ConfigForm[T]) => {
-      setForm((current) => {
-        const next = { ...current, [field]: value };
-        formRef.current = next;
-        return next;
-      });
-
-      dirtyFieldsRef.current.add(field);
-      clearSavedTimer();
-      if (saveStatus === "saved" || saveStatus === "error") {
-        setSaveStatus("idle");
-      }
-      scheduleSave();
-    },
-    [clearSavedTimer, saveStatus, scheduleSave],
-  );
-
-  const retrySave = React.useCallback(() => {
-    if (debounceTimerRef.current !== null) {
-      window.clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-    void savePendingChanges();
-  }, [savePendingChanges]);
-
-  const insertPlaceholder = (key: string) => {
-    const token = `{{${key}}}`;
-    const el = textareaRef.current;
-    if (!el) {
-      updateField(
-        "templateRecordatorio",
-        form.templateRecordatorio + token,
-      );
-      return;
-    }
-    const start = el.selectionStart ?? form.templateRecordatorio.length;
-    const end = el.selectionEnd ?? form.templateRecordatorio.length;
-    const next =
-      form.templateRecordatorio.slice(0, start) +
-      token +
-      form.templateRecordatorio.slice(end);
-    updateField("templateRecordatorio", next);
-    queueMicrotask(() => {
-      const node = textareaRef.current;
-      if (!node) return;
-      node.focus();
-      const pos = start + token.length;
-      node.setSelectionRange(pos, pos);
-    });
+  const reintentarCarga = () => {
+    setCargando(true);
+    setErrorCarga(null);
+    setReloadKey((k) => k + 1);
   };
 
-  const preview = React.useMemo(
+  const actualizarCampo = React.useCallback(
+    <T extends CampoConfig>(campo: T, valor: FormConfig[T]) => {
+      setForm((actual) => {
+        const siguiente = { ...actual, [campo]: valor };
+        formRef.current = siguiente;
+        return siguiente;
+      });
+      camposSuciosRef.current.add(campo);
+      limpiarAviso();
+      setEstadoGuardado((estado) =>
+        estado === "guardado" || estado === "error" ? "idle" : estado,
+      );
+      programarGuardado();
+    },
+    [limpiarAviso, programarGuardado],
+  );
+
+  const reintentarGuardado = React.useCallback(() => {
+    if (debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    void guardarPendientes();
+  }, [guardarPendientes]);
+
+  const vistaPrevia = React.useMemo(
     () =>
       buildSmsMessage(form.templateRecordatorio, {
         nombre: "Lucía",
@@ -354,102 +319,93 @@ export function ConfigView() {
     [form],
   );
 
-  const longitudSms = React.useMemo(
-    () => contarLongitudSms(preview),
-    [preview],
-  );
-
-  if (loading) {
+  if (cargando) {
     return (
-      <div className="px-5 lg:px-12 py-6 lg:py-10 max-w-[800px] mx-auto">
-        <h1 className="lg:hidden font-display text-[30px] font-medium text-ink-900 mb-6 leading-tight tracking-tight">
-          Configuración
-        </h1>
-        <Card>
-          <p className="text-[14px] text-ink-500">Cargando configuración…</p>
-        </Card>
-      </div>
+      <Marco>
+        <p className="py-16 text-center text-[14px] text-ink-500">Cargando…</p>
+      </Marco>
     );
   }
 
-  if (loadError) {
+  if (errorCarga) {
     return (
-      <div className="px-5 lg:px-12 py-6 lg:py-10 max-w-[800px] mx-auto">
-        <h1 className="lg:hidden font-display text-[30px] font-medium text-ink-900 mb-6 leading-tight tracking-tight">
-          Configuración
-        </h1>
+      <Marco>
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[14px] text-ink-700">
-              No se pudo cargar la configuración.
-            </p>
-            <Button type="button" variant="secondary" size="sm" onClick={loadConfig}>
+            <p className="text-[14px] text-ink-700">{errorCarga}</p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={reintentarCarga}
+            >
               Reintentar
             </Button>
           </div>
         </Card>
-      </div>
+      </Marco>
     );
   }
 
   return (
-    <div className="px-5 lg:px-12 py-6 lg:py-10 max-w-[800px] mx-auto">
-      <h1 className="lg:hidden font-display text-[30px] font-medium text-ink-900 mb-6 leading-tight tracking-tight">
-        Configuración
-      </h1>
-      <SaveIndicator status={saveStatus} onRetry={retrySave} />
+    <Marco>
+      <IndicadorGuardado estado={estadoGuardado} onRetry={reintentarGuardado} />
 
       <div className="flex flex-col gap-9">
+        {/* ─── Vos ─────────────────────────────────────────────── */}
         <section>
-          <SectionHeading>Datos profesionales</SectionHeading>
+          <TituloSeccion>Vos</TituloSeccion>
           <Card>
             <div className="flex flex-col gap-4">
               <Input
                 label="Nombre"
+                autoComplete="name"
+                placeholder="Como querés que te nombren los pacientes"
                 value={form.nombreProfesional}
+                error={
+                  form.nombreProfesional.trim() === ""
+                    ? "Falta tu nombre"
+                    : undefined
+                }
                 onChange={(e) =>
-                  updateField("nombreProfesional", e.target.value)
+                  actualizarCampo("nombreProfesional", e.target.value)
                 }
               />
               <Input
-                label="Consultorio"
+                label="Dirección del consultorio"
+                autoComplete="street-address"
+                placeholder="Calle y número, ciudad"
                 value={form.direccion}
-                onChange={(e) => updateField("direccion", e.target.value)}
+                onChange={(e) => actualizarCampo("direccion", e.target.value)}
               />
               {/* La columna conserva el nombre whatsappOrigen hasta la próxima migración. */}
               <Input
-                label="Teléfono del consultorio (va en los SMS)"
+                label="Teléfono"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="+598 99 123 456"
                 value={form.whatsappOrigen}
                 onChange={(e) =>
-                  updateField("whatsappOrigen", e.target.value)
+                  actualizarCampo("whatsappOrigen", e.target.value)
                 }
               />
+              <p className="text-[12px] leading-[1.5] text-ink-500">
+                Tu nombre y tu teléfono van al final de cada recordatorio,
+                para que la paciente sepa a quién escribirle.
+              </p>
             </div>
           </Card>
         </section>
 
+        {/* ─── Lo que cobrás ───────────────────────────────────── */}
         <section>
-          <SectionHeading>Orientación teórica</SectionHeading>
-          <Card>
-            <OrientacionSelect
-              value={form.orientacionTeorica}
-              onChange={(value) => updateField("orientacionTeorica", value)}
-            />
-            <p className="mt-2 text-[12px] text-ink-500">
-              Define el instrumento con el que se evalúa el feedback de tus
-              sesiones. Cognitivo-conductual usa CTS-R + MITI; Gestalt usa la
-              GTFS.
-            </p>
-          </Card>
-        </section>
-
-        <section>
-          <SectionHeading>Tarifa por defecto</SectionHeading>
+          <TituloSeccion>Lo que cobrás por sesión</TituloSeccion>
           <Card>
             <div className="relative">
               <span
                 aria-hidden="true"
-                className="absolute left-[14px] top-1/2 -translate-y-1/2 text-[14px] font-semibold text-ink-500 pointer-events-none z-10"
+                className="pointer-events-none absolute left-[14px] top-1/2 z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
               >
                 $UYU
               </span>
@@ -457,321 +413,342 @@ export function ConfigView() {
                 type="number"
                 inputMode="numeric"
                 min={0}
+                step={1}
                 value={form.tarifaDefault}
-                onChange={(e) => updateField("tarifaDefault", e.target.value)}
-                aria-label="Tarifa por defecto"
+                onChange={(e) => actualizarCampo("tarifaDefault", e.target.value)}
+                aria-label="Lo que cobrás por sesión"
                 className="pl-[56px] tabular-nums"
+                error={
+                  form.tarifaDefault.trim() === ""
+                    ? "Falta la tarifa"
+                    : undefined
+                }
               />
             </div>
-            <p className="mt-2 text-[12px] text-ink-500">
-              Se aplica a pacientes nuevos. Cada paciente puede tener tarifa
-              propia.
+            <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
+              Es la tarifa que se propone al crear un paciente. Cada paciente
+              puede tener la suya.
             </p>
           </Card>
         </section>
 
+        {/* ─── Tu enfoque ──────────────────────────────────────── */}
         <section>
-          <SectionHeading>Recordatorios por SMS</SectionHeading>
+          <TituloSeccion>Tu enfoque</TituloSeccion>
           <Card>
-            <div className="flex flex-col gap-5">
-              <AntelacionSlider
+            <SelectorEnfoque
+              value={form.orientacionTeorica}
+              onChange={(valor) => actualizarCampo("orientacionTeorica", valor)}
+            />
+            <p className="mt-3 text-[12px] leading-[1.5] text-ink-500">
+              Es una decisión clínica: define con qué instrumento se lee tu
+              práctica en cada sesión. Podés cambiarla cuando quieras; las
+              sesiones ya analizadas conservan el instrumento con que se
+              generaron.
+            </p>
+          </Card>
+        </section>
+
+        {/* ─── Recordatorio ────────────────────────────────────── */}
+        <section>
+          <TituloSeccion>Recordatorio</TituloSeccion>
+          <Card>
+            <div className="flex flex-col gap-6">
+              <Anticipacion
                 value={form.horasAnticipacion}
-                onChange={(value) =>
-                  updateField("horasAnticipacion", value)
-                }
+                onChange={(valor) => actualizarCampo("horasAnticipacion", valor)}
               />
 
-              <TemplateEditor
-                template={form.templateRecordatorio}
-                onChange={(value) =>
-                  updateField("templateRecordatorio", value)
-                }
-                textareaRef={textareaRef}
-                onInsert={insertPlaceholder}
-              />
+              <div>
+                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                  Mensaje
+                </span>
+                <EditorRecordatorio
+                  template={form.templateRecordatorio}
+                  onChange={(valor) =>
+                    actualizarCampo("templateRecordatorio", valor)
+                  }
+                  fichas={FICHAS_INSERTABLES}
+                />
+                {form.templateRecordatorio.trim() === "" ? (
+                  <p
+                    role="alert"
+                    className="mt-2 text-[12px] text-[color:var(--color-error)]"
+                  >
+                    El recordatorio no puede quedar vacío.
+                  </p>
+                ) : null}
+                <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
+                  Tocá una ficha para agregarla donde está el cursor. La línea
+                  de contacto con tu nombre y tu teléfono se agrega sola si la
+                  borrás.
+                </p>
+              </div>
 
-              <Preview text={preview} longitud={longitudSms} />
+              <div>
+                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                  Así lo recibe la paciente
+                </span>
+                <div className="whitespace-pre-wrap rounded-[10px] border-l-[3px] border-l-sage-500 bg-cream-100 px-4 py-[14px] text-[14px] italic leading-[1.5] text-ink-900">
+                  {vistaPrevia}
+                </div>
+              </div>
             </div>
           </Card>
         </section>
 
+        {/* ─── Cuenta ──────────────────────────────────────────── */}
         <section className="pt-2">
-          <SectionHeading>Cuenta</SectionHeading>
+          <TituloSeccion>Cuenta</TituloSeccion>
           <Card className="!p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-5">
               <div className="min-w-0">
                 <p className="truncate font-display text-[20px] font-medium leading-tight text-ink-900">
-                  {form.nombreProfesional}
+                  {form.nombreProfesional || "Tu cuenta"}
                 </p>
-                {sessionEmail ? (
+                {emailSesion ? (
                   <p className="mt-1 truncate text-[13px] text-ink-500">
-                    {sessionEmail}
+                    {emailSesion}
                   </p>
                 ) : null}
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                icon={<LogOut size={16} strokeWidth={2} />}
-                className="w-full sm:w-auto"
-                onClick={() => {
-                  void signOut({ callbackUrl: "/login" });
-                }}
-              >
-                Cerrar sesión
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled
+                  title="Próximamente"
+                  className="w-full sm:w-auto"
+                >
+                  Cambiar contraseña · próximamente
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon={<LogOut size={16} strokeWidth={2} aria-hidden="true" />}
+                  className="w-full sm:w-auto"
+                  onClick={() => {
+                    void signOut({ callbackUrl: "/login" });
+                  }}
+                >
+                  Cerrar sesión
+                </Button>
+              </div>
             </div>
           </Card>
-          <p className="mt-6 text-center text-[11px] text-ink-300">
-            v1.0 · hecho con cuidado
-          </p>
         </section>
       </div>
+    </Marco>
+  );
+}
 
-      <style>{SLIDER_CSS}</style>
+// ────────────────────────────────────────────────────────────────────────────
+
+function Marco({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mx-auto max-w-[800px] px-5 py-6 lg:px-12 lg:py-10">
+      <h1 className="mb-6 font-display text-[30px] font-medium leading-tight tracking-tight text-ink-900 lg:text-[36px]">
+        {TU_CONSULTORIO}
+      </h1>
+      {children}
     </div>
   );
 }
 
-function SaveIndicator({
-  status,
+function IndicadorGuardado({
+  estado,
   onRetry,
 }: {
-  status: SaveStatus;
+  estado: EstadoGuardado;
   onRetry: () => void;
 }) {
-  if (status === "idle") return null;
+  if (estado === "idle") return null;
 
   return (
-    <div className="mb-5 flex min-h-8 items-center justify-end">
-      {status === "saving" && (
+    <div
+      aria-live="polite"
+      className="mb-5 flex min-h-8 items-center justify-end"
+    >
+      {estado === "guardando" ? (
         <span className="text-[12px] font-semibold text-ink-500">
           Guardando…
         </span>
-      )}
-      {status === "saved" && (
+      ) : null}
+      {estado === "guardado" ? (
         <span className="text-[12px] font-semibold text-sage-600">
           Guardado.
         </span>
-      )}
-      {status === "error" && (
+      ) : null}
+      {estado === "error" ? (
         <div className="flex items-center gap-2">
           <span className="text-[12px] font-semibold text-[color:var(--color-error)]">
-            Error al guardar
+            No se pudo guardar. Revisá los campos marcados.
           </span>
           <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
             Reintentar
           </Button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
+function TituloSeccion({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="flex items-center text-[10px] uppercase tracking-[0.08em] font-semibold text-ink-500 mb-3">
+    <h2 className="mb-3 flex items-center text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
       <EditorialRule />
       <span>{children}</span>
     </h2>
   );
 }
 
-const ORIENTACIONES: Array<{ value: OrientacionTeorica; label: string }> = [
+// ─── Enfoque ────────────────────────────────────────────────────────────────
+// Cada opción dice qué instrumento de feedback usa. Las siglas no se
+// traducen: son instrumentos publicados y ella tiene que poder rastrearlos.
+
+const ENFOQUES: Array<{
+  value: OrientacionTeorica;
+  label: string;
+  instrumentos: string;
+}> = [
+  {
+    value: "gestalt",
+    label: "Gestalt",
+    instrumentos: `Feedback con ${GTFS.sigla} (${GTFS.nombre})`,
+  },
   {
     value: "cbt_mi",
-    label: "Cognitivo-conductual / Entrevista Motivacional",
+    label: "Cognitivo-conductual",
+    instrumentos: `Feedback con ${CTSR.sigla} (${CTSR.nombre}) + ${MITI.sigla} (${MITI.nombre})`,
   },
-  { value: "gestalt", label: "Terapia Gestalt" },
 ];
 
-function OrientacionSelect({
+function SelectorEnfoque({
   value,
   onChange,
 }: {
   value: OrientacionTeorica;
   onChange: (v: OrientacionTeorica) => void;
 }) {
-  const selectId = React.useId();
+  const nombreGrupo = React.useId();
 
   return (
-    <div className="flex flex-col gap-2">
-      <label
-        htmlFor={selectId}
-        className="font-sans font-semibold text-[11px] uppercase tracking-[0.08em] text-ink-500"
-      >
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
         Orientación teórica
-      </label>
-      <div className="relative flex items-center bg-cream-50 border border-[color:var(--border-subtle)] rounded-sm transition-colors duration-150 focus-within:bg-white focus-within:border-sage-500 focus-within:ring-[3px] focus-within:ring-sage-500/20">
-        <select
-          id={selectId}
-          value={value}
-          onChange={(e) => onChange(e.target.value as OrientacionTeorica)}
-          className="flex-1 min-w-0 appearance-none bg-transparent px-[14px] py-[10px] pr-10 text-[15px] text-ink-900 outline-none cursor-pointer"
-        >
-          {ORIENTACIONES.map((opcion) => (
-            <option key={opcion.value} value={opcion.value}>
-              {opcion.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          aria-hidden="true"
-          className="pointer-events-none absolute right-[14px] h-4 w-4 text-ink-500"
-        />
-      </div>
-    </div>
+      </legend>
+      {ENFOQUES.map((opcion) => {
+        const activo = opcion.value === value;
+        return (
+          <label
+            key={opcion.value}
+            className={`flex cursor-pointer items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-150 ${
+              activo
+                ? "border-sage-500 bg-sage-50"
+                : "border-[color:var(--border-subtle)] bg-cream-50 hover:bg-cream-100"
+            }`}
+          >
+            <input
+              type="radio"
+              name={nombreGrupo}
+              value={opcion.value}
+              checked={activo}
+              onChange={() => onChange(opcion.value)}
+              className="mt-[3px] h-4 w-4 accent-[var(--color-sage-500)]"
+            />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-[15px] font-semibold text-ink-900">
+                {opcion.label}
+              </span>
+              <span className="text-[12px] leading-[1.5] text-ink-500">
+                {opcion.instrumentos}
+              </span>
+            </span>
+          </label>
+        );
+      })}
+    </fieldset>
   );
 }
 
-function AntelacionSlider({
+// ─── Anticipación ───────────────────────────────────────────────────────────
+// Tres momentos dichos como los diría ella. Se guardan como horas antes del
+// turno, que es lo único que el envío sabe calcular hoy.
+
+const ANTICIPACIONES: Array<{
+  label: string;
+  detalle: string;
+  horas: number | null;
+}> = [
+  { label: "El día anterior", detalle: "24 horas antes", horas: 24 },
+  { label: "Dos días antes", detalle: "48 horas antes", horas: 48 },
+  {
+    label: "La misma mañana",
+    detalle: "A las 8:00 del día del turno · próximamente",
+    horas: null,
+  },
+];
+
+function Anticipacion({
   value,
   onChange,
 }: {
   value: number;
-  onChange: (n: number) => void;
+  onChange: (horas: number) => void;
 }) {
+  const nombreGrupo = React.useId();
+  const coincideAlguna = ANTICIPACIONES.some((a) => a.horas === value);
+
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-500">
-          Enviar con anticipación
-        </span>
-        <span className="font-display text-[20px] font-medium text-sage-600 tabular-nums leading-none">
-          {value}h
-        </span>
+    <fieldset>
+      <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+        Cuándo se envía
+      </legend>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {ANTICIPACIONES.map((opcion) => {
+          const disponible = opcion.horas !== null;
+          const activo = disponible && opcion.horas === value;
+          return (
+            <label
+              key={opcion.label}
+              className={`flex flex-1 items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-150 ${
+                activo
+                  ? "border-sage-500 bg-sage-50"
+                  : "border-[color:var(--border-subtle)] bg-cream-50"
+              } ${
+                disponible
+                  ? "cursor-pointer hover:bg-cream-100"
+                  : "cursor-not-allowed opacity-60"
+              }`}
+            >
+              <input
+                type="radio"
+                name={nombreGrupo}
+                checked={activo}
+                disabled={!disponible}
+                onChange={() => {
+                  if (opcion.horas !== null) onChange(opcion.horas);
+                }}
+                className="mt-[3px] h-4 w-4 accent-[var(--color-sage-500)]"
+              />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-[14px] font-semibold text-ink-900">
+                  {opcion.label}
+                </span>
+                <span className="text-[12px] leading-[1.4] text-ink-500">
+                  {opcion.detalle}
+                </span>
+              </span>
+            </label>
+          );
+        })}
       </div>
-      <input
-        type="range"
-        min={1}
-        max={72}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        aria-label="Horas de anticipación"
-        className="sesion-slider block w-full"
-      />
-      <div className="flex items-center justify-between mt-2 text-[11px] text-ink-300 tabular-nums">
-        <span>1h</span>
-        <span>24h</span>
-        <span>48h</span>
-        <span>72h</span>
-      </div>
-    </div>
+      {!coincideAlguna ? (
+        <p className="mt-2 text-[12px] text-ink-500">
+          Hoy está configurado {value} {value === 1 ? "hora" : "horas"} antes
+          del turno. Elegí una opción para cambiarlo.
+        </p>
+      ) : null}
+    </fieldset>
   );
 }
-
-function TemplateEditor({
-  template,
-  onChange,
-  textareaRef,
-  onInsert,
-}: {
-  template: string;
-  onChange: (s: string) => void;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  onInsert: (key: string) => void;
-}) {
-  return (
-    <div>
-      <span className="block text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-500 mb-2">
-        Template
-      </span>
-      <div className="flex flex-wrap gap-2 mb-3">
-        {PLACEHOLDERS.map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => onInsert(p.key)}
-            className="inline-flex min-h-[44px] items-center rounded-full font-sans font-semibold uppercase tracking-[0.08em] whitespace-nowrap text-[10px] px-3 py-2 bg-cream-100 text-ink-700 hover:bg-cream-200 transition-colors duration-150 cursor-pointer"
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-      <Textarea
-        ref={textareaRef}
-        value={template}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label="Template del recordatorio"
-      />
-    </div>
-  );
-}
-
-function Preview({
-  text,
-  longitud,
-}: {
-  text: string;
-  longitud: ReturnType<typeof contarLongitudSms>;
-}) {
-  const excede = longitud.segmentos > 1;
-  return (
-    <div>
-      <span className="block text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-500 mb-2">
-        Preview
-      </span>
-      <div className="bg-cream-100 rounded-[10px] px-4 py-[14px] italic text-[14px] text-ink-900 leading-[1.5] border-l-[3px] border-l-sage-500 whitespace-pre-wrap">
-        {text}
-      </div>
-      <p
-        className={`mt-2 text-[12px] tabular-nums ${
-          excede ? "text-[color:var(--color-error)]" : "text-ink-500"
-        }`}
-      >
-        {longitud.caracteres} caracteres · {longitud.segmentos}{" "}
-        {longitud.segmentos === 1 ? "segmento" : "segmentos"} SMS
-        {longitud.gsm7 ? "" : " (con tildes o símbolos: límite 70 por segmento)"}
-        {excede ? " · Se cobra como más de un SMS." : ""}
-      </p>
-    </div>
-  );
-}
-
-const SLIDER_CSS = `
-.sesion-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: var(--color-cream-200);
-  border-radius: 9999px;
-  outline: none;
-  cursor: pointer;
-}
-.sesion-slider:focus-visible {
-  outline: 2px solid var(--color-sage-500);
-  outline-offset: 4px;
-}
-.sesion-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  background: var(--color-cream-200);
-  border-radius: 9999px;
-}
-.sesion-slider::-moz-range-track {
-  height: 4px;
-  background: var(--color-cream-200);
-  border-radius: 9999px;
-}
-.sesion-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  margin-top: -8px;
-  background: var(--color-sage-500);
-  border-radius: 9999px;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 2px rgba(26,38,40,.04), 0 1px 3px rgba(26,38,40,.06);
-  cursor: pointer;
-}
-.sesion-slider::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  background: var(--color-sage-500);
-  border-radius: 9999px;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 2px rgba(26,38,40,.04), 0 1px 3px rgba(26,38,40,.06);
-  cursor: pointer;
-}
-`;

@@ -4,7 +4,10 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+
 import { Button, Input, Textarea } from "@/components/ui";
+import { ApiClientError, apiPost } from "@/lib/api-client";
+import { ALGO_FALLO } from "@/lib/glosario";
 import type { Paciente } from "@/types/domain";
 
 const schema = z.object({
@@ -31,13 +34,15 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export interface NuevoPacienteFormProps {
-  tarifaDefault?: number;
+  /** Tarifa por sesión de Tu consultorio. Sin ella el campo arranca vacío:
+   *  no hay un número inventado. */
+  tarifaDefault: number | null;
   onSuccess: (paciente: Paciente) => void;
   onCancel: () => void;
 }
 
 export function NuevoPacienteForm({
-  tarifaDefault = 2200,
+  tarifaDefault,
   onSuccess,
   onCancel,
 }: NuevoPacienteFormProps) {
@@ -56,7 +61,7 @@ export function NuevoPacienteForm({
       apellido: "",
       telefono: "",
       email: "",
-      tarifa: tarifaDefault,
+      tarifa: tarifaDefault ?? undefined,
       notas: "",
     },
     mode: "onSubmit",
@@ -65,39 +70,24 @@ export function NuevoPacienteForm({
   async function submit(values: FormValues) {
     setSubmitError(null);
     try {
-      const response = await fetch("/api/pacientes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nombre: values.nombre.trim(),
-          apellido: values.apellido.trim(),
-          telefono: values.telefono.trim(),
-          email:
-            values.email && values.email.trim().length > 0
-              ? values.email.trim()
-              : null,
-          tarifa: values.tarifa,
-          notas:
-            values.notas && values.notas.trim().length > 0
-              ? values.notas.trim()
-              : null,
-        }),
+      const paciente = await apiPost<Paciente>("/api/pacientes", {
+        nombre: values.nombre.trim(),
+        apellido: values.apellido.trim(),
+        telefono: values.telefono.trim(),
+        email:
+          values.email && values.email.trim().length > 0
+            ? values.email.trim()
+            : null,
+        tarifa: values.tarifa,
+        notas:
+          values.notas && values.notas.trim().length > 0
+            ? values.notas.trim()
+            : null,
       });
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(body?.error ?? "No se pudo crear el paciente");
-      }
-
-      const json = (await response.json()) as { data: Paciente };
       reset();
-      onSuccess(json.data);
+      onSuccess(paciente);
     } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : "No se pudo crear el paciente",
-      );
+      setSubmitError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
     }
   }
 
@@ -152,14 +142,14 @@ export function NuevoPacienteForm({
             <div>
               <label
                 htmlFor={tarifaId}
-                className="block font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-2"
+                className="mb-2 block font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500"
               >
                 Tarifa por sesión
               </label>
               <div className="relative">
                 <span
                   aria-hidden="true"
-                  className="absolute left-[14px] top-1/2 -translate-y-1/2 text-[14px] font-semibold text-ink-500 pointer-events-none z-10"
+                  className="pointer-events-none absolute left-[14px] top-1/2 z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
                 >
                   $UYU
                 </span>
@@ -174,10 +164,15 @@ export function NuevoPacienteForm({
                   {...register("tarifa", { valueAsNumber: true })}
                 />
               </div>
+              {tarifaDefault === null && !errors.tarifa ? (
+                <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
+                  Podés fijar una tarifa por defecto en Tu consultorio.
+                </p>
+              ) : null}
               {errors.tarifa?.message && (
                 <p
                   role="alert"
-                  className="mt-2 text-[12px] font-sans text-[color:var(--color-error)]"
+                  className="mt-2 font-sans text-[12px] text-[color:var(--color-error)]"
                 >
                   {errors.tarifa.message}
                 </p>
@@ -194,7 +189,7 @@ export function NuevoPacienteForm({
             {submitError && (
               <p
                 role="alert"
-                className="text-[12px] font-sans text-[color:var(--color-error)]"
+                className="font-sans text-[12px] text-[color:var(--color-error)]"
               >
                 {submitError}
               </p>

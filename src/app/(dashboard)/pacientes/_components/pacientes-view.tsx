@@ -13,8 +13,10 @@ import {
   Sheet,
   Toast,
 } from "@/components/ui";
+import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
 import { fechaRelativa, money } from "@/lib/format";
-import type { PacienteConDeuda } from "@/types/domain";
+import { ALGO_FALLO } from "@/lib/glosario";
+import type { Configuracion, PacienteConDeuda } from "@/types/domain";
 import { NuevoPacienteForm } from "./nuevo-paciente-form";
 
 type Segment = "activos" | "archivados";
@@ -26,10 +28,6 @@ type PacienteJson = Omit<
   creadoEn: string;
   actualizadoEn: string;
   ultimaSesion: string | null;
-};
-
-type PacientesResponse = {
-  data: PacienteJson[];
 };
 
 type ToastState = {
@@ -64,16 +62,11 @@ async function fetchPacientes({
     params.set("q", cleanQuery);
   }
 
-  const response = await fetch(`/api/pacientes?${params.toString()}`, {
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error("No se pudieron cargar los pacientes.");
-  }
-
-  const json = (await response.json()) as PacientesResponse;
-  return json.data.map(parsePaciente);
+  const lista = await apiGet<PacienteJson[]>(
+    `/api/pacientes?${params.toString()}`,
+    { signal },
+  );
+  return lista.map(parsePaciente);
 }
 
 export function PacientesView({
@@ -90,15 +83,28 @@ export function PacientesView({
   const [reactivatingId, setReactivatingId] = React.useState<string | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [showNuevoPaciente, setShowNuevoPaciente] = React.useState(false);
+  // Tarifa por sesión de Tu consultorio, para el paciente nuevo. Se pide al
+  // abrir el sheet; hasta que llega (o si falla) el campo arranca vacío.
+  const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
+  const [tarifaCargada, setTarifaCargada] = React.useState(false);
   const [toast, setToast] = React.useState<ToastState>(() => ({
     open: archivedToast,
     message: archivedToast ? "Paciente archivado" : "",
   }));
 
-  const openNuevoPaciente = React.useCallback(
-    () => setShowNuevoPaciente(true),
-    [],
-  );
+  const openNuevoPaciente = React.useCallback(() => {
+    setShowNuevoPaciente(true);
+    if (tarifaCargada) return;
+    apiGet<Configuracion>("/api/config")
+      .then((config) => {
+        setTarifaDefault(config.tarifaDefault);
+        setTarifaCargada(true);
+      })
+      .catch(() => {
+        // Sin configuración no hay tarifa sugerida: el campo queda vacío.
+        setTarifaCargada(true);
+      });
+  }, [tarifaCargada]);
   const closeNuevoPaciente = React.useCallback(
     () => setShowNuevoPaciente(false),
     [],
@@ -135,12 +141,8 @@ export function PacientesView({
         setLoading(false);
       })
       .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(
-          err instanceof Error
-            ? err.message
-            : "No se pudieron cargar los pacientes.",
-        );
+        if (controller.signal.aborted || esAbort(err)) return;
+        setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
         setLoading(false);
       });
 
@@ -152,24 +154,18 @@ export function PacientesView({
     setPacientes((current) => current.filter((item) => item.id !== paciente.id));
 
     try {
-      const response = await fetch(`/api/pacientes/${paciente.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activo: true }),
-      });
-
-      if (!response.ok) {
-        throw new Error("No se pudo reactivar el paciente.");
-      }
-
+      await apiPatch(`/api/pacientes/${paciente.id}`, { activo: true });
       setToast({ open: true, message: "Paciente reactivado" });
-    } catch {
+    } catch (err) {
       setPacientes((current) =>
         [...current, paciente].sort((a, b) =>
           `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`),
         ),
       );
-      setToast({ open: true, message: "No se pudo reactivar" });
+      setToast({
+        open: true,
+        message: err instanceof ApiClientError ? err.mensaje : ALGO_FALLO,
+      });
     } finally {
       setReactivatingId(null);
     }
@@ -275,10 +271,17 @@ export function PacientesView({
         ariaLabel="Nuevo paciente"
       >
         <div className="-mx-6 -mb-6 lg:-m-7">
-          <NuevoPacienteForm
-            onSuccess={handleNuevoPacienteSuccess}
-            onCancel={closeNuevoPaciente}
-          />
+          {tarifaCargada ? (
+            <NuevoPacienteForm
+              tarifaDefault={tarifaDefault}
+              onSuccess={handleNuevoPacienteSuccess}
+              onCancel={closeNuevoPaciente}
+            />
+          ) : (
+            <p className="py-16 text-center text-[14px] text-ink-500">
+              Cargando…
+            </p>
+          )}
         </div>
       </Sheet>
 
