@@ -95,7 +95,7 @@ def descargar_y_descifrar(
     try:
         audio_cifrado, _ = r2_client.descargar_audio(audio_r2_key)
     except Exception as e:
-        logger.error(f"[{etiqueta}] R2 fallo ({type(e).__name__})")
+        logger.error(f"[{etiqueta}] R2 fallo ({type(e).__name__}): {str(e)[:300]}")
         raise PipelineError("r2_error", "No se pudo descargar el audio de R2") from e
     logger.info(f"[{etiqueta}] Descargado: {len(audio_cifrado)} bytes")
 
