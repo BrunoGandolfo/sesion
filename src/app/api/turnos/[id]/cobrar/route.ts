@@ -3,8 +3,8 @@ import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../../../_lib/auth";
 import { metodoPagoSchema } from "../../../_lib/schemas";
-import { ApiError, errorResponse, ok, validationError } from "../../../_lib/responses";
-import { toTurno } from "../../../_lib/domain";
+import { cobrarTurno, descobrarTurno } from "../../../_lib/casos-uso/cobrar-turno";
+import { errorResponse, ok, validationError } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,28 +28,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       return validationError(parsed.error);
     }
 
-    const existing = await db.turno.findFirst({
-      where: { id, organizationId },
+    const turno = await cobrarTurno({
+      prisma: db,
+      turnoId: id,
+      organizationId,
+      metodo: parsed.data.metodo,
+      fecha: new Date(),
     });
 
-    if (!existing) {
-      throw new ApiError("Turno no encontrado", 404);
-    }
-
-    if (existing.estado !== "realizado" || existing.pagoEstado !== "pendiente") {
-      throw new ApiError("El turno no está pendiente de cobro", 400);
-    }
-
-    const turno = await db.turno.update({
-      where: { id },
-      data: {
-        pagoEstado: "pagado",
-        pagoFecha: new Date(),
-        pagoMetodo: parsed.data.metodo,
-      },
-    });
-
-    return ok(toTurno(turno));
+    return ok(turno);
   } catch (error) {
     return errorResponse(error);
   }
@@ -60,28 +47,13 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const organizationId = await getOrganizationId();
     const { id } = await params;
 
-    const existing = await db.turno.findFirst({
-      where: { id, organizationId },
+    const turno = await descobrarTurno({
+      prisma: db,
+      turnoId: id,
+      organizationId,
     });
 
-    if (!existing) {
-      throw new ApiError("Turno no encontrado", 404);
-    }
-
-    if (existing.pagoEstado !== "pagado") {
-      throw new ApiError("El turno no está cobrado", 400);
-    }
-
-    const turno = await db.turno.update({
-      where: { id },
-      data: {
-        pagoEstado: "pendiente",
-        pagoFecha: null,
-        pagoMetodo: null,
-      },
-    });
-
-    return ok(toTurno(turno));
+    return ok(turno);
   } catch (error) {
     return errorResponse(error);
   }

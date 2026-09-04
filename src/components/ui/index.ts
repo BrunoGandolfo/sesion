@@ -2,6 +2,7 @@ export { Avatar } from "./avatar";
 export { Button } from "./button";
 export { Card } from "./card";
 export { Chip } from "./chip";
+export { Confirmar } from "./confirmar";
 export { EditorialRule } from "./editorial-rule";
 export { Fab } from "./fab";
 export { Input } from "./input";

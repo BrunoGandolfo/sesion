@@ -32,6 +32,16 @@ export type DashboardData = {
   deudores: DeudaPaciente[];
   proximaSesion: TurnoConPaciente | null;
   sesionesSemana: number[];
+  /**
+   * Lo que espera a la terapeuta: notas sin aprobar, sesiones sin cobrar y
+   * turnos de hoy sin autorización de grabación (ver
+   * casos-uso/pendientes-terapeuta.ts).
+   *
+   * Opcional en el tipo, siempre presente en la respuesta: el parser del
+   * cliente arma el objeto campo por campo y todavía no lo copia. Cuando la
+   * pantalla de Hoy lo consuma, pasa a obligatorio.
+   */
+  pendientes?: PendientesTerapeuta;
 };
 
 export function toPacienteConDeuda(
@@ -238,6 +248,50 @@ export function calcularDeudores(
   }
 
   return [...porPaciente.values()].sort((a, b) => b.montoTotal - a.montoTotal);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pendientes de la terapeuta — forma de las tres listas que devuelve
+// casos-uso/pendientes-terapeuta.ts y que viajan dentro de /api/dashboard.
+//
+// Las fechas van como string ISO, no como Date: son datos de sólo lectura
+// que la pantalla formatea, y así el tipo dice la verdad sobre lo que
+// llega por la red (Response.json ya serializa toda Date a ISO).
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Nota generada por el pipeline que todavía nadie aprobó. */
+export interface NotaParaRevisar {
+  sesionId: string;
+  turnoId: string;
+  pacienteId: string;
+  /** "Ana López" — nombre y apellido ya unidos. */
+  pacienteNombre: string;
+  /** Fecha y hora del turno, ISO. */
+  fecha: string;
+}
+
+/** Sesión realizada con el pago pendiente y la hora ya pasada. */
+export interface SesionSinCobrar {
+  turnoId: string;
+  pacienteId: string;
+  pacienteNombre: string;
+  fecha: string;
+  /** Tarifa efectivamente pactada para ese turno (tarifaCobrada). */
+  tarifa: number;
+}
+
+/** Turno de hoy cuya paciente no firmó la autorización de grabación. */
+export interface TurnoSinAutorizacion {
+  turnoId: string;
+  pacienteId: string;
+  pacienteNombre: string;
+  fecha: string;
+}
+
+export interface PendientesTerapeuta {
+  notasParaRevisar: NotaParaRevisar[];
+  sinCobrar: SesionSinCobrar[];
+  sinAutorizacion: TurnoSinAutorizacion[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

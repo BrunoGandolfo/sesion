@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import type { DeudaPaciente, KPIsDashboard } from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
+import { pendientesTerapeuta } from "../_lib/casos-uso/pendientes-terapeuta";
 import {
   addDays,
   buscarTurnosConDeuda,
@@ -40,6 +41,7 @@ export async function GET() {
       ingresosMes,
       sesionesHoyRows,
       sesionesSemanaRows,
+      pendientes,
     ] = await Promise.all([
       db.paciente.count({
         where: { organizationId, activo: true },
@@ -87,6 +89,9 @@ export async function GET() {
         },
         select: { fecha: true },
       }),
+      // Notas sin aprobar, sesiones sin cobrar y turnos de hoy sin
+      // autorización: lo único de esta respuesta que pide una acción.
+      pendientesTerapeuta({ prisma: db, organizationId, ahora: now }),
     ]);
 
     const sesionesHoy = sesionesHoyRows.map(toTurnoConPaciente);
@@ -130,6 +135,7 @@ export async function GET() {
         sesionesHoy.find((turno) => turno.fecha.getTime() >= now.getTime()) ??
         null,
       sesionesSemana,
+      pendientes,
     };
 
     return ok(data);
