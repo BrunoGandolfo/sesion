@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
+    "test": "TZ=UTC vitest run",
     "test:unit": "VITEST_SUITE=unit vitest run",
     "test:integration": "VITEST_SUITE=integration vitest run",
     "test:watch": "vitest",

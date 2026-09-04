@@ -131,7 +131,7 @@ describe("TEMPLATE_SMS_SUGERIDO y línea de contacto", () => {
     const out = buildSmsMessage(TEMPLATE_SMS_SUGERIDO, {
       nombre: "Lucía",
       apellido: "Fernández",
-      fecha: new Date(2026, 3, 21, 10, 0), // martes 21 de abril, 10:00
+      fecha: new Date("2026-04-21T13:00:00.000Z"), // martes 21 de abril, 10:00 Montevideo
       direccion: "",
       profesional: "Mariana Roldán",
       telefonoConsultorio: "+598 99 876 543",
