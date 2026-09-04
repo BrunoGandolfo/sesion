@@ -373,21 +373,24 @@ def test_las_tres_escalas_admiten_null_en_el_schema():
     # modelo no tiene forma de decir "no lo pude evaluar" salvo inventando.
     assert _props_datos()["intensidadEmocional"]["type"] == ["integer", "null"]
     assert _props_datos()["duracionRealMin"]["type"] == ["integer", "null"]
+    # Anthropic rechaza `{"type": ["string","null"], "enum": [..., null]}`
+    # (verificado en produccion el 4/9/2026); la forma aceptada es anyOf.
     alianza = _props_datos()["alianzaTerapeutica"]
-    assert alianza["type"] == ["string", "null"]
-    assert alianza["enum"] == [*ALIANZAS, None]
+    assert alianza["anyOf"] == [
+        {"type": "string", "enum": list(ALIANZAS)},
+        {"type": "null"},
+    ]
 
 
 def test_enum_alianza_y_riesgo_siguen_cerrados():
-    assert [v for v in _props_datos()["alianzaTerapeutica"]["enum"] if v is not None] == [
-        "fragil", "inestable", "estable", "fuerte",
-    ]
+    enum_alianza = _props_datos()["alianzaTerapeutica"]["anyOf"][0]["enum"]
+    assert enum_alianza == ["fragil", "inestable", "estable", "fuerte"]
     # El nivel de riesgo NO admite null: la ausencia de señal se dice
     # con "ninguno", que es informacion clinica afirmativa.
     nivel = _props_datos()["riesgoDetectado"]["properties"]["nivel"]
     assert nivel["type"] == "string"
     assert nivel["enum"] == ["ninguno", "bajo", "moderado", "alto"]
-    assert "rota" not in _props_datos()["alianzaTerapeutica"]["enum"]
+    assert "rota" not in enum_alianza
 
 
 def test_todo_objeto_prohibe_propiedades_extra():

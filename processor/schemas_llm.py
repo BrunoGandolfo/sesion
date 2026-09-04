@@ -47,7 +47,7 @@ def _enum_null(*valores: str) -> dict:
     `required`, asi que un campo "sin dato" no se puede omitir: se declara
     nullable y el modelo dice null en vez de inventar un valor de la escala.
     """
-    return {"type": ["string", "null"], "enum": [*valores, None]}
+    return {"anyOf": [{"type": "string", "enum": [*valores]}, {"type": "null"}]}
 
 
 # Fragmentos compartidos ────────────────────────────────────────────────────
