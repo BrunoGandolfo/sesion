@@ -18,22 +18,22 @@
   },
   "dependencies": {
     "@auth/core": "^0.41.3",
-    "@aws-sdk/client-s3": "^3.1038.0",
-    "@aws-sdk/s3-request-presigner": "3.1038.0",
-    "@hookform/resolvers": "^5.2.2",
+    "@aws-sdk/client-s3": "^3.1124.0",
+    "@aws-sdk/s3-request-presigner": "3.1124.0",
+    "@hookform/resolvers": "^5.9.1",
     "@prisma/client": "^5.22.0",
-    "@sentry/nextjs": "^10.50.0",
+    "@sentry/nextjs": "^10.73.0",
     "bcryptjs": "^3.0.3",
-    "date-fns": "^4.1.0",
+    "date-fns": "^4.4.0",
     "framer-motion": "^12.38.0",
-    "lucide-react": "^1.8.0",
-    "next": "16.3.3",
+    "lucide-react": "^1.39.0",
+    "next": "16.3.4",
     "next-auth": "^5.0.0-beta.32",
     "prisma": "^5.22.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "react-hook-form": "^7.72.1",
-    "zod": "^4.3.6"
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-hook-form": "^7.87.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -42,9 +42,9 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.3",
+    "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.11"
   }
 }
