@@ -39,13 +39,6 @@ _FEEDBACK_POR_ORIENTACION = {
 }
 
 
-def version_de(nombre_archivo: str) -> str:
-    """'clinical_note_v3.1.md' -> 'v3.1'. Si no hay sufijo _vX.Y devuelve el nombre base."""
-    base = nombre_archivo.rsplit(".", 1)[0] if "." in nombre_archivo else nombre_archivo
-    idx = base.rfind("_v")
-    return base[idx + 1:] if idx >= 0 else base
-
-
 def _cargar_prompt(nombre: str) -> str:
     prompt_path = os.path.join(config.PROMPTS_DIR, nombre)
     if not os.path.exists(prompt_path):
@@ -78,11 +71,14 @@ def _cliente() -> anthropic.Anthropic:
     return _cliente_anthropic
 
 
-def _mensaje_error_api(e: anthropic.APIStatusError) -> str:
+def mensaje_error_api(e: Exception) -> str:
     """
     Texto de validacion que devuelve la API en el cuerpo del error
     ({"error": {"type", "message"}}). Es diagnostico de la API, no contenido
     clinico; se trunca a 300 chars por si algun dia incluyera eco del input.
+    Para excepciones que no son de la API (sin `body` ni `message`) devuelve
+    "": es el mensaje acotado que usan processor y contexto_worker en vez de
+    volcar trazas con cuerpos de respuesta.
     """
     mensaje = ""
     body = getattr(e, "body", None)
@@ -133,7 +129,7 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
     except anthropic.APIStatusError as e:
         logger.error(
             f"Anthropic HTTP {e.status_code} (request_id={getattr(e, 'request_id', None)}): "
-            f"{_mensaje_error_api(e) or 'sin mensaje en el cuerpo'}"
+            f"{mensaje_error_api(e) or 'sin mensaje en el cuerpo'}"
         )
         raise PipelineError("llm_error", f"Anthropic respondio {e.status_code}") from e
     except anthropic.APIConnectionError as e:

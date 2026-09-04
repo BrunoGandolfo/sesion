@@ -376,13 +376,13 @@ def _normalizar(data: dict, transcript_id: str, modelo_solicitado: str) -> dict:
 
 # API publica ───────────────────────────────────────────────────────────────
 
-def transcribir(audio_bytes: bytes, content_type: str = "audio/webm") -> dict:
+def transcribir(audio_bytes: bytes) -> dict:
     """
     Transcribe y diariza el audio (bytes ya descifrados) via AssemblyAI.
-    `content_type` se acepta por contrato; el endpoint de upload recibe el
-    audio como application/octet-stream y detecta el formato solo.
+    El endpoint de upload recibe el audio como application/octet-stream y
+    detecta el formato solo: no hace falta declarar el content-type.
     """
-    logger.info(f"AssemblyAI: subiendo {len(audio_bytes)} bytes ({content_type})")
+    logger.info(f"AssemblyAI: subiendo {len(audio_bytes)} bytes")
     upload_url = _subir(audio_bytes)
     transcript_id = _crear_transcript(upload_url)
     logger.info(f"AssemblyAI: transcript {transcript_id} creado, esperando...")

@@ -14,10 +14,8 @@ import logging
 import math
 import time
 
-import requests
-
-import config
-from clinical_analyzer import actualizar_contexto_clinico
+import app_client
+from clinical_analyzer import actualizar_contexto_clinico, mensaje_error_api
 from errores import PipelineError
 
 logger = logging.getLogger(__name__)
@@ -40,17 +38,6 @@ _MAX_FALLOS = 3
 _backoff: dict[str, tuple[int, float]] = {}
 
 
-def _headers() -> dict:
-    return {"Authorization": f"Bearer {config.PROCESSING_SECRET}"}
-
-
-def _consultar_aprobadas() -> list[dict]:
-    response = requests.get(config.APROBADAS_URL, headers=_headers(), timeout=15)
-    response.raise_for_status()
-    body = response.json()
-    return body if isinstance(body, list) else []
-
-
 def _puede_intentar(sesion_id: str) -> bool:
     entrada = _backoff.get(sesion_id)
     if entrada is None:
@@ -63,7 +50,8 @@ def _registrar_fallo(sesion_id: str, e: Exception) -> None:
     if isinstance(e, PipelineError):
         motivo = f"{e.codigo}: {e.mensaje_publico}"
     else:
-        motivo = f"{type(e).__name__}: {str(e)[:200]}"
+        # Mensaje acotado: nunca el cuerpo de una respuesta de proveedor.
+        motivo = f"{type(e).__name__}: {mensaje_error_api(e) or str(e)[:200]}"
 
     fallos = _backoff.get(sesion_id, (0, 0.0))[0] + 1
     if fallos >= _MAX_FALLOS:
@@ -102,20 +90,13 @@ def _procesar_item(item: dict) -> None:
     actualizado["ultimaSesionId"] = sesion_id
     body = {k: actualizado[k] for k in CLAVES_PATCH if k in actualizado}
 
-    response = requests.patch(
-        config.contexto_clinico_url(paciente_id),
-        json=body,
-        headers=_headers(),
-        timeout=30,
-    )
-    if not response.ok:
-        raise RuntimeError(f"PATCH contexto-clinico respondio HTTP {response.status_code}")
-    logger.info(f"Contexto {sesion_id}: actualizado ({prompt}, HTTP {response.status_code})")
+    status = app_client.actualizar_contexto(paciente_id, body)
+    logger.info(f"Contexto {sesion_id}: actualizado ({prompt}, HTTP {status})")
 
 
 def procesar_aprobadas() -> None:
     try:
-        items = _consultar_aprobadas()
+        items = app_client.obtener_aprobadas_sin_contexto()
     except Exception as e:
         logger.warning(f"Contexto: no se pudo consultar aprobadas ({type(e).__name__})")
         return

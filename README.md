@@ -1,112 +1,144 @@
 # Sesión
 
-App web para gestionar una consulta de salud mental: pacientes, turnos, cobros y recordatorios.
+App web para una consulta de psicoterapia: agenda, pacientes, cobros,
+recordatorios por SMS y documentación clínica asistida por IA a partir de la
+grabación de cada sesión.
 
-## Qué es
+## Para quién
 
-Sesión es una herramienta de gestión para profesionales de salud mental. Centraliza agenda, fichas de pacientes, seguimiento de pagos y recordatorios por WhatsApp en una interfaz simple. El MVP usa un único usuario autenticado y está preparado para evolucionar a multi-tenant.
+Una psicóloga clínica que atiende adultos en consulta privada en Uruguay.
+Un solo usuario por organización hoy; el modelo de datos ya separa por
+organización para crecer a varias.
 
-## Stack
+## Qué hace
 
-| Tecnología | Versión | Rol |
-| --- | --- | --- |
-| Next.js | 16.2.4 | App Router, frontend y API routes |
-| React | 19.2.4 | UI |
-| TypeScript | strict | Tipado de aplicación |
-| Tailwind CSS | 4 | Estilos |
-| Prisma | 5.22 | ORM |
-| PostgreSQL | 17 | Base de datos |
-| Auth.js / next-auth | 5.0.0-beta.31 | Login con credenciales y JWT |
-| Vercel | Hobby | Hosting y API |
-| Neon | Free | PostgreSQL administrado |
-| Twilio SMS | — | Recordatorios por SMS |
+- **Hoy:** agenda del día, próxima sesión, KPIs (pacientes activos, sesiones,
+  por cobrar, cobrado en el mes), deudores.
+- **Agenda:** turnos por semana; alta, edición, cancelación, ausencias.
+- **Pacientes:** ficha con pestañas Resumen, Historia (grabación y notas),
+  Progreso (contexto longitudinal), Turnos y Datos (consentimiento de
+  grabación).
+- **Finanzas:** cobros por sesión con método de pago, deuda por paciente.
+- **Configuración:** datos de la profesional, tarifa, plantilla del
+  recordatorio, orientación teórica (CBT/MI o Gestalt).
+- **Recordatorios por SMS (Twilio):** un cron cada 5 minutos envía el
+  recordatorio de cada turno con la anticipación configurada. No hay canal
+  de WhatsApp.
+- **Sesión grabada → nota clínica:** el navegador graba y cifra el audio, lo
+  sube directo a R2, un worker lo transcribe con AssemblyAI, genera la nota
+  SOAP y un feedback de auto-supervisión con Anthropic, y la profesional
+  revisa, edita y aprueba. Al aprobar, el audio se borra y su clave se
+  destruye. Cada sesión aprobada actualiza el contexto longitudinal del
+  paciente. Detalle en `docs/pipeline.md`.
+- **Cifrado en reposo** de transcripciones, notas y contexto clínico en la
+  base (`docs/encryption.md`). **Auditoría** append-only de acciones sobre
+  datos clínicos, sin texto clínico.
 
-## Requisitos
+## Arquitectura y stack
 
-- Node.js 18+
-- npm
-- PostgreSQL 17 compatible
-- Cuenta Neon para base de datos remota
+```
+Navegador (PWA) ──► Vercel: Next.js 16 (App Router, API routes, crons)
+                        │            │
+                        ▼            ▼
+                   Neon Postgres 17   Cloudflare R2 (audio cifrado, backups)
+                        ▲            ▲
+                        │            │
+                   Railway: worker Python ──► AssemblyAI (ASR) / Anthropic (LLM)
+GitHub Actions: CI (typecheck, build, lint, tests) y backup nocturno cifrado
+```
 
-## Setup local
+| Pieza | Tecnología |
+| --- | --- |
+| Frontend y API | Next.js 16 (App Router), React 19, TypeScript strict, Tailwind 4 |
+| Auth | Auth.js v5 (credenciales, JWT) |
+| ORM y base | Prisma 5.22, PostgreSQL 17 en Neon (ramas `production` y `test`) |
+| Almacenamiento de audio | Cloudflare R2, bucket `sesion-audio`, subida con URL prefirmada |
+| Worker | Python 3 en Railway (`processor/`), sin SDKs de ASR: cliente REST |
+| Transcripción | AssemblyAI `universal-3-5-pro`, fallback `universal-2`, diarización con roles; transcript borrado por API al terminar |
+| Notas y feedback | Anthropic `claude-sonnet-5` con structured outputs, workspace dedicado con retención deshabilitada |
+| SMS | Twilio |
+| Cifrado en reposo | AES-256-GCM en una extensión de Prisma Client |
+| Backups | `pg_dump` 17 → gpg AES-256 → R2, diario, retención 30 días (GitHub Actions) |
+| CI | GitHub Actions: `tsc --noEmit`, `next build`, ESLint, Vitest secuencial contra la rama `test` |
+| Errores | Sentry (opcional) |
 
-1. Clonar el repo:
+Operación, secretos y restauración: `docs/operaciones.md`.
+
+## Cómo correr en local
+
+Requisitos: Node 22, npm, una base Postgres 17 (una rama propia de Neon es lo
+más simple).
 
 ```bash
 git clone https://github.com/BrunoGandolfo/sesion.git
 cd sesion
-```
-
-2. Instalar dependencias:
-
-```bash
 npm install
-```
-
-3. Crear variables locales:
-
-```bash
 cp .env.example .env
 ```
 
-4. Completar `.env` con valores locales o de desarrollo.
+Completar en `.env` como mínimo:
 
-5. Generar Prisma Client:
+- `DATABASE_URL` (con `sslmode=require` si es Neon).
+- `AUTH_SECRET` y `NEXTAUTH_URL=http://localhost:3001`.
+- `NOTES_ENCRYPTION_KEY` (`openssl rand -base64 32`); sin ella la app no arranca.
+- `PROCESSING_SECRET` y `CRON_SECRET` (cualquier valor largo en local).
+- `SEED_SECRET` y `SEED_USER_PASSWORD` para crear el usuario inicial.
+
+Opcionales: Twilio (sin `TWILIO_SMS_FROM` el cron no envía nada), Sentry,
+`ALERTA_WEBHOOK_URL`. Para grabar y procesar sesiones hacen falta además las
+variables de R2 (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+`R2_BUCKET_NAME`; no están en `.env.example`) y el worker corriendo con su
+propio `processor/.env` (ver `processor/.env.example`).
 
 ```bash
 npx prisma generate
-```
-
-6. Sincronizar la base:
-
-```bash
-npx prisma db push
-```
-
-7. Levantar desarrollo:
-
-```bash
+npx prisma migrate deploy     # nunca `migrate dev` contra una base compartida
 npm run dev -- -p 3001
 ```
 
-## Puerto
+Tests: `npm test`. Los de integración necesitan `DATABASE_URL_TEST` apuntando
+a una rama de Neon dedicada (la vacían en cada corrida).
 
-El entorno local corre en `http://localhost:3001`.
+Worker en local:
 
-## Estructura del proyecto
-
-```text
-src/
-  app/                 Rutas App Router, pantallas y API routes
-  components/          Componentes UI, layout y formularios
-  lib/                 Auth, Prisma, formato y servicios externos
-  types/               Tipos de dominio compartidos
-prisma/
-  schema.prisma        Modelo de datos
-public/                Assets estáticos
+```bash
+cd processor
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # completar
+python worker.py
 ```
 
-## Scripts
+## Estructura
 
-| Script | Uso |
-| --- | --- |
-| `npm run dev -- -p 3001` | Levanta Next.js en desarrollo |
-| `npm run build` | Compila producción |
-| `npm run lint` | Ejecuta ESLint |
-| `npx prisma generate` | Genera Prisma Client |
-| `npx prisma studio` | Abre Prisma Studio |
+```text
+src/app/(dashboard)/     Pantallas: hoy, agenda, pacientes, finanzas, config
+src/app/api/             API routes; reglas en src/app/api/_lib/casos-uso/
+src/components/          UI, grabación, formularios
+src/hooks/               Grabación y polling de sesión clínica
+src/lib/                 Auth, Prisma + cifrado, R2, SMS, contrato de sesión
+src/types/domain.ts      Tipos de dominio
+prisma/                  Schema y migraciones
+processor/               Worker Python (ASR, LLM, callback, contexto)
+docs/                    Documentación; docs/historico/ para lo que ya no existe
+```
 
-## Variables de entorno
+## Documentación
 
-Las variables necesarias están documentadas en `.env.example`. No commitear `.env` ni secretos reales.
+- `docs/pipeline.md` — flujo de una sesión de punta a punta.
+- `docs/encryption.md` — cifrado en reposo.
+- `docs/operaciones.md` — infraestructura, secretos, backup y restauración.
+- `docs/contrato-multi-orientacion.md` — feedback por orientación teórica.
+- `docs/contrato-riesgo-clinico.md` — señal graduada de riesgo.
 
-## Operación
+## Glosario
 
-- [Cifrado de notas clínicas](docs/operations/encryption.md) — cómo generar la clave, migrar datos, rotar y recuperar.
-
-## Deploy
-
-Push a `main` auto-deploya en Vercel.
+- **Sesión clínica:** la fila que une un turno con su grabación, transcripción y nota.
+- **Nota SOAP:** subjetivo, objetivo, análisis, plan.
+- **Golden Thread / contexto longitudinal:** resumen acumulado por paciente que se inyecta al generar cada nota.
+- **Llamada A / B / C:** nota SOAP / actualización del contexto / feedback de auto-supervisión.
+- **Lease:** reserva temporal de una sesión para el worker (45 min, 3 intentos).
+- **Crypto-shredding:** destruir la clave del audio para que el blob quede inaccesible aunque no se haya borrado.
 
 ## Licencia
 

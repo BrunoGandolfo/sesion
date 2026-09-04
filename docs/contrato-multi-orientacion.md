@@ -1,135 +1,81 @@
-# Contrato multi-orientación — Feedback del terapeuta (Llamada C)
+# Contrato multi-orientación — Feedback de la terapeuta (Llamada C)
 
-**Estado:** Wave 1 completada (tipos + schema + este contrato). Wave 2 implementa prompts, processor y UI.
-**Fuente de verdad de tipos:** `src/types/domain.ts`
-**Fuente de verdad de configuración:** modelo `Configuracion` en `prisma/schema.prisma`, campo `orientacionTeorica`.
+**Estado:** implementado de punta a punta (tipos, endpoint, processor, prompts, UI).
+**Fuente de verdad de tipos:** `src/types/domain.ts`.
+**Fuente de verdad de configuración:** `Configuracion.orientacionTeorica` en
+`prisma/schema.prisma` (String, default `"cbt_mi"`), editable desde la
+pantalla Configuración.
 
----
+Verificado contra `processor/clinical_analyzer.py`, `processor/schemas_llm.py`,
+`processor/prompts/` y `src/app/api/_lib/casos-uso/reclamar-pendientes.ts`.
 
-## 1. El problema y la forma de la solución
+## 1. Orientaciones que existen
 
-Sesión evalúa la performance de la terapeuta con instrumentos validados derivados de la
-transcripción. Hasta ahora el instrumento estaba hardcodeado (MITI 4.2.1 + CTS-R subset),
-pero el instrumento correcto depende de la orientación teórica de la profesional:
+Son exactamente dos. Están en `_FEEDBACK_POR_ORIENTACION`
+(`processor/clinical_analyzer.py`) y en `OrientacionTeorica` (`src/types/domain.ts`).
 
-| `orientacionTeorica` | Instrumento | Referencia |
-|---|---|---|
-| `"cbt_mi"` (default) | MITI 4.2.1 + CTS-R subset (4 ítems) | Moyers et al.; Blackburn et al. |
-| `"gestalt"` | GTFS — Gestalt Therapy Fidelity Scale, 21 ítems | Fogarty et al. 2019 |
+| `orientacionTeorica` | Instrumento | Prompt | Schema (processor) |
+| --- | --- | --- | --- |
+| `"cbt_mi"` (default) | MITI 4.2.1 (4 globales + 10 conteos) + subset CTS-R de 4 ítems | `prompts/therapist_feedback_v1.0.md` | `SCHEMA_FEEDBACK_CBT_MI` |
+| `"gestalt"` | GTFS (Gestalt Therapy Fidelity Scale) | `prompts/therapist_feedback_gestalt_v1.0.md` | `SCHEMA_FEEDBACK_GESTALT` |
 
-### La unión discriminada
+## 2. Cómo se elige
 
-`FeedbackTerapeuta` es una **unión discriminada por el campo `instrumento`**:
+1. `GET /api/sesion-clinica/pendientes` → `reclamarPendientes` lee
+   `Configuracion.orientacionTeorica` de la organización de cada sesión y la
+   incluye en el payload. Si la organización no tiene configuración, manda
+   `"cbt_mi"`.
+2. El worker la pasa a `generar_feedback_terapeuta(orientacion=...)`. Un valor
+   desconocido cae a `"cbt_mi"`. El processor no decide orientación por su
+   cuenta.
+3. La Llamada C es best-effort: si falla, `datosEstructurados` sale sin
+   `feedbackTerapeuta` y la nota igual llega a revisión.
+4. Al leer, la UI pasa el feedback por `normalizarFeedback()` y hace
+   narrowing por `instrumento` (`FeedbackTerapeutaView.tsx`). El mapper
+   `toConfiguracion` (`src/app/api/_lib/domain.ts`) también estrecha a la
+   unión con fallback `"cbt_mi"`.
+
+## 3. La unión discriminada
 
 ```typescript
 export type OrientacionTeorica = "cbt_mi" | "gestalt";
-
 export type FeedbackTerapeuta = FeedbackMitiCtsr | FeedbackGestalt;
-// FeedbackMitiCtsr  → instrumento: "cbt_mi"  + mitiGlobales, mitiCounts, ratiosDerivados, ctsrSubset
-// FeedbackGestalt   → instrumento: "gestalt" + itemsGTFS, adherenciaGlobal
 ```
 
-### Por qué existe un núcleo panteórico
+Ambas variantes extienden `FeedbackNucleoPanteorico`: `fortalezas`,
+`areasCrecimiento`, `sugerenciaProximaSesion`, `speechAnalyticsInferido`,
+`disclaimer`. El núcleo es lo comparable entre orientaciones. Los scores
+específicos no lo son y viven detrás del discriminador.
 
-Ambas variantes extienden `FeedbackNucleoPanteorico`:
+### Datos persistidos antes del contrato
 
-```typescript
-export interface FeedbackNucleoPanteorico {
-  fortalezas: FortalezaFeedback[];
-  areasCrecimiento: AreaCrecimientoFeedback[];
-  sugerenciaProximaSesion: string;
-  speechAnalyticsInferido?: SpeechAnalyticsInferido;
-  disclaimer: string;
-}
-```
+Las sesiones aprobadas antes del contrato guardaron el feedback sin
+`instrumento` (`FeedbackTerapeutaLegacy`). No se migran: `normalizarFeedback`
+les agrega `instrumento: "cbt_mi"` al leer.
 
-El núcleo es lo que **"Mi Práctica" cruza longitudinalmente**: fortalezas, áreas de
-crecimiento, sugerencias y speech analytics existen en toda orientación y tienen la misma
-semántica. Cualquier vista o análisis longitudinal que consuma SOLO el núcleo funciona sin
-importar con qué instrumento se generó cada sesión — incluso si la profesional cambia de
-orientación a mitad de su historia. Los scores específicos de instrumento (MITI globales,
-ítems GTFS) NO son comparables entre orientaciones y por eso viven en el bloque específico,
-detrás del discriminador.
+### Discrepancias entre prompt, schema y tipos
 
-### Compatibilidad con datos persistidos (legacy)
+- El prompt GTFS y `IDS_GTFS` en `schemas_llm.py` definen **20 ítems**
+  (`gtfs_01` a `gtfs_20`). El "ítem 21" de la escala original (factores
+  inusuales) no es un ítem del JSON: es una regla del prompt que manda los
+  ítems afectados a `null`. `src/types/domain.ts` menciona "21 ítems" en un
+  comentario; el contrato real es 20.
+- `adherenciaGlobal`: el schema del processor lo exige entero
+  (`_INT`), el tipo TS admite `number | null`. En la práctica nunca llega
+  `null`.
+- El prompt cbt_mi documenta `speech_analytics` con ratios 0-1; el worker manda
+  porcentajes 0-100 (`processor/speech_analytics.py`). Pendiente de alinear
+  en el prompt.
 
-Las sesiones aprobadas antes de este contrato guardaron el feedback **sin** el campo
-`instrumento` (shape `FeedbackTerapeutaLegacy`). Regla: **los datos viejos NO se migran —
-se normalizan al leer**:
+## 4. Regla de extensión (orientación N+1)
 
-```typescript
-esFeedbackLegacy(raw)      // type guard: no tiene "instrumento"
-normalizarFeedback(raw)    // legacy → { ...raw, instrumento: "cbt_mi" }
-```
+1. **Tipo:** agregar el valor a `OrientacionTeorica`, definir
+   `Feedback<Nueva> extends FeedbackNucleoPanteorico` con su `instrumento`
+   literal, sumarla a `FeedbackTerapeuta`.
+2. **Processor:** crear `prompts/therapist_feedback_<nueva>_v1.0.md`, su schema
+   en `schemas_llm.py` y la entrada en `PROMPTS` y `_FEEDBACK_POR_ORIENTACION`.
+3. **UI:** el bloque de render para el nuevo discriminador en
+   `FeedbackTerapeutaView`, y la opción en la pantalla Configuración.
 
-Todo punto de lectura de `datosEstructurados.feedbackTerapeuta` DEBE pasar por
-`normalizarFeedback()` antes de hacer narrowing por discriminador.
-
----
-
-## 2. Obligaciones de Wave 2
-
-### 2.a Endpoint `/api/sesion-clinica/pendientes`
-
-El payload de cada sesión pendiente DEBE incluir `orientacionTeorica`, leída de la
-`Configuracion` de la organización (campo `orientacionTeorica`, String, default `"cbt_mi"`).
-Es la única fuente de verdad — el processor no decide orientación por su cuenta.
-
-### 2.b Processor (worker Python)
-
-El processor lee `orientacionTeorica` del payload de `/pendientes` y selecciona el prompt
-de la Llamada C con este mapa (fallback a `"cbt_mi"` si el campo falta o trae un valor
-desconocido):
-
-```python
-PROMPT_FEEDBACK_POR_ORIENTACION = {
-    "cbt_mi":  "therapist_feedback_v1.0.md",
-    "gestalt": "therapist_feedback_gestalt_v1.0.md",
-}
-```
-
-### 2.c Prompt GTFS (`processor/prompts/therapist_feedback_gestalt_v1.0.md`)
-
-Su `<output_schema>` DEBE producir JSON que cumpla **exactamente** la interfaz
-`FeedbackGestalt` de `src/types/domain.ts`:
-
-- `instrumento: "gestalt"` — literal, obligatorio (es el discriminador).
-- `itemsGTFS: ItemGTFS[]` — cada ítem con `id` (ej. `"gtfs_04"`), `nombre` (español),
-  `score` (escala GTFS; `null` si no inferible desde transcripción, con `razon`),
-  y `evidence: [{timestamp, quote}]` (≥1 si score no es null — misma regla de evidencia
-  obligatoria que el prompt MITI).
-- `adherenciaGlobal: number | null` — suma GTFS de los ítems evaluables; `null` si no hay
-  ítems evaluables.
-- TODO el núcleo panteórico: `fortalezas`, `areasCrecimiento`, `sugerenciaProximaSesion`,
-  `speechAnalyticsInferido` (opcional), `disclaimer`.
-
-La definición de los 21 ítems (ids, nombres, escala, criterios de scoring) se fija en
-Wave 2 tras el análisis del PDF de Fogarty et al. 2019.
-
-### 2.d UI (`src/components/grabacion/FeedbackTerapeutaView.tsx`)
-
-El componente renderiza **por discriminador**: normaliza la entrada con
-`normalizarFeedback()` y luego hace switch/narrowing sobre `feedback.instrumento`.
-Estado actual (Wave 1): el bloque `"cbt_mi"` renderiza MITI/CTS-R como siempre; el bloque
-`"gestalt"` devuelve `null` (placeholder). Wave 2 agrega el render GTFS. El núcleo
-panteórico (fortalezas, áreas, sugerencia, disclaimer) debe renderizarse igual para toda
-orientación.
-
----
-
-## 3. Regla de extensión (agregar una orientación N+1)
-
-Agregar una orientación nueva es exactamente esto — y nada más:
-
-1. **Tipo:** agregar el valor a `OrientacionTeorica`, definir `Feedback<Nueva> extends
-   FeedbackNucleoPanteorico` con su `instrumento` literal y su bloque específico, y sumarla
-   a la unión `FeedbackTerapeuta`.
-2. **Prompt:** crear `processor/prompts/therapist_feedback_<nueva>_v1.0.md` cuyo output
-   cumpla la interfaz nueva, y agregar la entrada al dict del processor.
-3. **Render:** agregar el bloque de render para el nuevo discriminador en
-   `FeedbackTerapeutaView`.
-
-No se toca: el núcleo panteórico, la normalización legacy, el endpoint `/pendientes`
-(ya envía `orientacionTeorica`), ni el schema de DB (el campo es String justamente para
-no requerir migración por orientación nueva). Si una extensión "necesita" tocar algo más,
-el diseño de esa extensión está mal — volver a discutir antes de implementar.
+No se toca el núcleo, la normalización legacy, el endpoint `/pendientes` ni el
+schema de base (el campo es String para no requerir migración).

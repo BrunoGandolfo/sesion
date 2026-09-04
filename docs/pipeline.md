@@ -1,153 +1,212 @@
-# Pipeline de audio — arquitectura y decisiones
+# Pipeline de una sesión — de la grabación al contexto longitudinal
 
-Este documento describe el pipeline completo de procesamiento de audio clínico: desde que la profesional aprieta "grabar" en el navegador hasta que la nota SOAP queda persistida y cifrada en la DB. Incluye la decisión de motor de ASR (WhisperX), la infraestructura en Atlas, tiempos esperados y límites conocidos.
+Cómo viaja una sesión hoy, con los nombres reales de rutas, casos de uso y
+módulos. Verificado contra el código el 2026-09-04. La versión anterior
+(WhisperX + Ollama en Atlas) está en `docs/historico/pipeline-whisperx-atlas.md`.
 
-Pensado para un dev nuevo que necesita entender el flujo en 5 minutos antes de tocar `processor/` o el flujo de upload del navegador.
+## 1. Piezas
 
----
-
-## 1. Vista general del pipeline
-
-```
-[Browser]                                       [App Next.js / Vercel]      [Atlas — GPU box]
-                                                                            ┌─ WhisperX  (GPU 1, :8090)
-MediaRecorder (WebM/Opus)  ──► cifrado AES-256-GCM ──► PUT R2 ──► DB ──► Worker Python ─┤
-                                                                            └─ Ollama    (GPU 0, :11434)
-                                                            ▲                       │
-                                                            └── callback ◄──────────┘
-```
-
-**Pasos:**
-
-1. **Captura** — `MediaRecorder` graba audio en `audio/webm;codecs=opus` directamente desde `getUserMedia`. La sesión se mantiene en memoria del browser hasta que la profesional la cierra.
-2. **Cifrado en cliente** — el blob WebM se cifra con AES-256-GCM antes de salir del browser. La clave (random 256-bit) y el IV se generan por sesión. Ver `docs/operations/encryption.md` para el detalle del esquema; **importante**: la clave que cifra el audio en R2 es distinta de `NOTES_ENCRYPTION_KEY` (esa cifra los campos de DB).
-3. **Upload a R2** — el ciphertext sube a Cloudflare R2 con un `audioR2Key` único. La app persiste en `SesionClinica` el `audioR2Key`, `claveCifrado` y `iv` para que el worker pueda descifrar después.
-4. **Worker Python poll** — `processor/worker.py` hace polling cada 30s a `/api/sesion-clinica/pendientes`. La app devuelve las sesiones con estado `pendiente` junto con sus credenciales de descifrado.
-5. **Descifrado** — el worker baja el blob de R2 y lo descifra a un `.wav` temporal en `AUDIO_TEMP_DIR` (default `/tmp/sesion-audio`).
-6. **Hot words** — opcional: GET `/api/hot-words/paciente/:id`. **Actualmente no se usan** (WhisperX no soporta hot-words por endpoint; ver §5).
-7. **Transcripción + diarización** — POST multipart al servicio WhisperX en Atlas (`ASR_URL`, default `http://100.71.155.25:8090/transcribe`). Devuelve JSON con `segments: [{speaker: "S0"|"S1", start, end, text}]`.
-8. **Speech analytics** — `processor/speech_analytics.py` calcula ratios de habla por speaker, cantidad de silencios > 3s y duración total a partir de los segments.
-9. **Nota SOAP** — `clinical_analyzer.py` formatea la transcripción con timestamps y la manda al LLM (Ollama `qwen3.6:27b` por defecto) con el prompt de SOAP.
-10. **Callback** — POST a `/api/sesion-clinica/callback` con `{transcripcion, nota, datosEstructurados, modelo_asr, modelo_llm}`. La app cifra los campos sensibles vía la extensión de Prisma y persiste.
-11. **Cleanup** — si el callback fue OK, el worker borra el audio de R2 y el `.wav` temporal. Si falla, el audio queda en R2 para reintentos.
-
----
-
-## 2. Decisión: VibeVoice → WhisperX
-
-### 2.1 Por qué se cambió
-
-VibeVoice-ASR era la primera implementación y funcionaba para sesiones cortas. Dos problemas obligaron al cambio:
-
-- **Límite duro de ~60 minutos por archivo**. El modelo cortaba o degradaba severamente en sesiones largas. Las sesiones de la práctica reales son frecuentemente de 50–60min, y aparecieron casos de 90min (sesiones de pareja, primeras consultas extendidas).
-- **Parsing frágil del output**. VibeVoice devolvía la transcripción como string crudo embebido detrás de un marker `"assistant\n"` que había que parsear con `rfind`. Sensible a cambios del prompt o de la versión del modelo.
-
-### 2.2 Opciones evaluadas
-
-| Opción | Resultado |
-| --- | --- |
-| **WhisperX** (Whisper large-v3 + pyannote Community-1) | Elegido. |
-| Canary-1B-v2 (NVIDIA NeMo) | Excelente WER pero corpus de entrenamiento sesgado al inglés/europeo; rioplatense sin validar. |
-| Parakeet-TDT | Rápido pero soporte de español débil al momento de la evaluación. |
-| Qwen3-ASR | Inmaduro; documentación escasa, sin diarización integrada estable. |
-| Sortformer (diarización standalone) | Solo diarización — habría requerido pipeline a dos cabezas (ASR + diarización separadas) con sincronización manual de timestamps. |
-| Híbrido Whisper + diarización ad-hoc | Más piezas móviles que WhisperX, sin ventaja medible. |
-
-### 2.3 Por qué WhisperX
-
-- **Corpus diverso en español**, incluyendo material rioplatense — WER aceptable en pruebas con audio real de 30 y 60 min.
-- **Sin límite de duración** por archivo. WhisperX usa VAD + batched inference; lo único que crece es el tiempo de procesamiento.
-- **Madurez del stack**: Whisper es referencia de la industria, pyannote es referencia de diarización open-source, y la integración WhisperX está estable hace tiempo.
-- **VRAM mínima**: ~7–9 GB en una GPU, permite compartir el box con Ollama.
-- **Output limpio**: JSON estructurado con `segments`, sin parsing de strings crudos.
-
----
-
-## 3. Infraestructura Atlas
-
-Box GPU dedicado, dos GPUs separadas para evitar contención de VRAM:
-
-| Servicio | GPU | Puerto | Modelo | VRAM aprox |
-| --- | --- | --- | --- | --- |
-| WhisperX (FastAPI wrapper) | GPU 1 | 8090 | Whisper large-v3 + pyannote Community-1 | 7–9 GB |
-| Ollama | GPU 0 | 11434 | `qwen3.6:27b` | ~17 GB |
-
-**Endpoints:**
-
-- `POST http://100.71.155.25:8090/transcribe` — multipart `file=<audio>`. Devuelve `{duration_seconds, language, segments}`.
-- `GET  http://100.71.155.25:8090/health` — readiness probe (no se invoca aún desde el worker; ver §5).
-- `POST http://100.71.155.25:11434/api/generate` — endpoint estándar Ollama.
-
-El wrapper FastAPI de WhisperX normaliza los IDs de speaker antes de responder: `SPEAKER_00 → S0`, `SPEAKER_01 → S1`, etc. El `processor/transcriber.py` confía en esa normalización y no la repite.
-
----
-
-## 4. Tiempos esperados
-
-Medidos con audio real de sesión clínica en español rioplatense, GPU compartida sin otra carga:
-
-| Duración audio | ASR (WhisperX) | SOAP (Ollama) | Total end-to-end |
-| --- | --- | --- | --- |
-| 30 min | ~1 min | ~1.5 min | ~2.5 min |
-| 60 min | ~2 min | ~2 min | ~4 min |
-| 90 min | ~3 min | ~2 min | ~5 min |
-
-El timeout del cliente HTTP del worker está en **600s** (`ASR_TIMEOUT_SECONDS`). Cubre con margen sesiones de 90min; si aparece audio de 120min+ revisar este límite antes que cualquier otra cosa.
-
----
-
-## 5. Límites conocidos
-
-- **WER en rioplatense**. Los benchmarks públicos de Whisper large-v3 reportan WER bajo en español peninsular. El rioplatense (voseo, fonética, léxico clínico local: "psicofármaco", apellidos italianos/criollos, etc.) puede tener WER notoriamente más alto que esos benchmarks. El LLM downstream compensa errores de transcripción al armar la SOAP, pero no es una garantía: si una palabra crítica sale mal escrita, la nota puede arrastrar el error.
-- **Hot-words no soportadas nativamente**. El endpoint POST no acepta vocabulario sesgo. El worker hace GET a `/api/hot-words/paciente/:id` pero **descarta** la respuesta con un warning. La mitigación actual es que el LLM, al generar la nota, interpreta y corrige términos clínicos por contexto. Mejora pendiente: extender el wrapper FastAPI para aceptar `initial_prompt` y pasarle hot-words como prompt sesgo de Whisper.
-- **`S0 = Terapeuta` es heurística, no garantía**. `formatear_para_llm()` mapea `S0 → Terapeuta` y `S1+ → Paciente`. Pyannote asigna IDs por orden de aparición, no por rol. En la mayoría de las sesiones el terapeuta habla primero (saludo, encuadre), pero si la paciente arranca hablando antes que el terapeuta los roles quedan invertidos. No hay detección automática; mitigación futura: chequear quién habla más o usar embeddings de voz registrados por profesional.
-- **Single-tenant en Atlas**. Si dos sesiones llegan al worker al mismo tiempo, se procesan en serie (el worker es single-threaded por diseño). El throughput máximo actual ronda 12 sesiones/hora asumiendo 50 min promedio.
-- **Health check no se invoca**. `ASR_HEALTH_URL` está en config pero ningún componente lo consulta antes de procesar. Si WhisperX está caído, recién falla en el paso 7, después de descargar y descifrar el audio. Mejora barata pendiente.
-
----
-
-## 6. Variables de entorno
-
-### 6.1 Processor (`processor/.env`)
-
-| Variable | Default | Notas |
+| Pieza | Dónde corre | Qué hace |
 | --- | --- | --- |
-| `APP_BASE_URL` | `http://localhost:3001` | URL de la app Next.js (Vercel en prod). |
-| `PROCESSING_SECRET` | — (requerida) | Bearer M2M para los endpoints `/api/sesion-clinica/*`. |
-| `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` | — | Credenciales R2. |
-| `ASR_URL` | `http://100.71.155.25:8090/transcribe` | Endpoint WhisperX. |
-| `ASR_HEALTH_URL` | `http://100.71.155.25:8090/health` | Reservado (ver §5). |
-| `ASR_MODEL_ID` | `whisperx-large-v3` | Reportado en el callback como `modelo_asr`. |
-| `ASR_TIMEOUT_SECONDS` | `600` | Timeout HTTP del POST a WhisperX. |
-| `OLLAMA_BASE_URL` | `http://100.71.155.25:11434` | Endpoint Ollama. |
-| `LLM_MODEL_ID` | `qwen3.6:27b` | Modelo SOAP. |
-| `LLM_BACKEND` | `ollama` | `ollama` o `vllm`. |
-| `POLL_INTERVAL_SECONDS` | `30` | Frecuencia de polling de pendientes. |
-| `AUDIO_TEMP_DIR` | `/tmp/sesion-audio` | Directorio para los `.wav` desencriptados. Se vacía después de cada sesión. |
+| App Next.js 16 | Vercel | UI, API, cifrado en reposo, crons. |
+| Postgres 17 | Neon | Base. Ramas `production` y `test`. |
+| Audio cifrado | Cloudflare R2, bucket `sesion-audio` | Objetos `audio/{org}/{sesion}/{turno}.enc`. |
+| Worker Python (`processor/`) | Railway (`python worker.py`) | Descarga, descifra, transcribe, genera nota y feedback, devuelve por callback. Integra el contexto longitudinal. |
+| ASR | AssemblyAI | `universal-3-5-pro` con fallback `universal-2`, diarización con roles. |
+| LLM | Anthropic | `claude-sonnet-5`, structured outputs. |
 
-### 6.2 Atlas (server-side, fuera de este repo)
+## 2. Estados de `SesionClinica`
 
-- WhisperX se levanta como servicio systemd con la GPU 1 pinneada vía `CUDA_VISIBLE_DEVICES=1` y el wrapper FastAPI escuchando en `0.0.0.0:8090`. Los pesos de Whisper large-v3 y pyannote Community-1 se cachean localmente; pyannote requiere `HF_TOKEN` con licencia aceptada para la community-1.
-- Ollama se levanta con `CUDA_VISIBLE_DEVICES=0` y el modelo `qwen3.6:27b` precargado (`ollama pull qwen3.6:27b`).
-- Acceso al box via Tailscale; la IP `100.71.155.25` es la IP Tailscale interna del nodo Atlas, no es ruteable desde Internet.
+`pendiente → grabando → subiendo → procesando → revision → aprobado`, más
+`error`. La tabla de transiciones válidas es única y vive en
+`src/lib/sesion-clinica-utils.ts` (`TRANSICIONES_PERMITIDAS`). El navegador
+solo puede pedir por PATCH `pendiente→grabando`, `grabando→error`,
+`subiendo→grabando` y `error→procesando` (`TRANSICIONES_CLIENTE`); el resto
+lo hacen rutas con efectos propios.
 
-### 6.3 App Next.js (no listadas exhaustivamente aquí)
+## 3. Flujo paso a paso
 
-Las variables del lado app que tocan el pipeline son `NOTES_ENCRYPTION_KEY` (cifrado de campos clínicos en DB, ver `docs/operations/encryption.md`) y `PROCESSING_SECRET` (mismo valor que en el processor, para autenticar los endpoints M2M).
+### 3.1 Grabación en el navegador
 
----
+- Pantalla: ficha del paciente, pestaña Historia (`historia-tab.tsx`) o el
+  botón flotante de grabación (`paciente-detail-view.tsx`, hook
+  `useGrabacionSesion`). Hace falta un turno de hoy y consentimiento vigente.
+- `POST /api/sesion-clinica { turnoId }` crea la fila en `pendiente` (exige
+  turno programado o realizado y consentimiento sin revocar). Después
+  `PATCH /api/sesion-clinica/[id] { estado: "grabando" }`.
+- `GrabadorSesion` graba con `MediaRecorder`. Los chunks se respaldan en
+  IndexedDB (`src/lib/grabacion-storage.ts`) hasta que la subida confirma.
 
-## 7. Archivos clave del repo
+### 3.2 Cifrado en el cliente
+
+- Al terminar, el navegador genera una clave AES-256-GCM y un IV por sesión y
+  cifra el blob (`src/lib/crypto.ts`). El audio en claro nunca sale del
+  dispositivo.
+- Esta clave es distinta de `NOTES_ENCRYPTION_KEY` (que cifra columnas en la
+  base, ver `docs/encryption.md`).
+
+### 3.3 Subida directa a R2 (tres pasos, `subirAudioCifrado` en `useGrabacionSesion.ts`)
+
+1. `POST /api/sesion-clinica/[id]/upload-url` con `claveCifrado`, `iv`,
+   `tamanoBytes`, `mime`. La ruta guarda clave e IV en
+   `datosEstructurados._audioCifradoTemporal` (cifrado en reposo por la
+   extensión Prisma), emite una URL prefirmada PUT de R2 válida 60 minutos
+   con `Content-Type` y `Content-Length` firmados, y pasa la sesión a
+   `subiendo`. La key es determinística (`keyAudioEsperada`).
+2. El navegador hace `PUT` directo a R2 (XHR con progreso). El audio no pasa
+   por Vercel.
+3. `POST /api/sesion-clinica/[id]/upload-confirmar { key, duracionAudioSeg }`.
+   La ruta recalcula la key, verifica con `HeadObject` que el objeto existe y
+   pasa a `procesando` con `intentos = 0`. Si el objeto no está, vuelve a
+   `grabando` y responde 409.
+
+Si fallan el PUT o la confirmación, el cliente vuelve la sesión a `grabando`
+y repite desde el paso 1 con el mismo blob.
+
+### 3.4 Entrega al worker con lease
+
+- El worker hace `GET /api/sesion-clinica/pendientes` cada
+  `POLL_INTERVAL_SECONDS` (30 s) con `Authorization: Bearer PROCESSING_SECRET`
+  (`requireM2M`).
+- Caso de uso `reclamarPendientes` (`src/app/api/_lib/casos-uso/reclamar-pendientes.ts`):
+  toma hasta 5 sesiones en `procesando` con `intentos = 0` o `updatedAt`
+  anterior a `LEASE_MINUTES` (45). Cada entrega incrementa `intentos` con un
+  `updateMany` condicionado (claim atómico). Al superar
+  `MAX_INTENTOS_PROCESAMIENTO` (3) la sesión pasa a `error`.
+- Payload por sesión: `sesionClinicaId`, `turnoId`, `audioR2Key`,
+  `duracionAudioSeg`, `pacienteId`, `claveCifrado`, `iv`, `createdAt`,
+  `orientacionTeorica` (de `Configuracion`, default `cbt_mi`), `intento`.
+
+### 3.5 Worker: descarga, descifrado, ASR (`processor/processor.py`)
+
+1. `r2_client.descargar_audio` baja el objeto.
+2. `crypto.descifrar` lo descifra en memoria (AES-256-GCM, tag de 16 bytes al
+   final). Nada se escribe a disco.
+3. `asr_assemblyai.transcribir` (`processor/asr_assemblyai.py`, REST sin SDK):
+   - `POST /v2/upload` con el audio crudo.
+   - `POST /v2/transcript` con `speech_models: [ASR_MODEL_ID, ASR_MODEL_FALLBACK]`
+     (`universal-3-5-pro`, `universal-2`), `language_code: "es"`,
+     `speaker_labels: true`, `speaker_options` min=max=2, identificación de
+     hablantes por rol (`Terapeuta` / `Paciente`) y `prompt` de escenario
+     (`ASR_PROMPT_ESCENARIO`).
+   - Polling cada `ASR_POLL_SECONDS` (10 s) hasta `ASR_TIMEOUT_SECONDS` (1800 s).
+   - `DELETE /v2/transcript/{id}` siempre, en `finally`: el transcript y el
+     archivo subido no quedan en AssemblyAI.
+   - Normaliza a segmentos `S0` (terapeuta) / `S1` (paciente). Si AssemblyAI
+     devolvió roles, `roles_origen = "asr_role"`; si no, `posicional` (el
+     primer hablante se asume terapeuta). `speech_model` es el modelo que
+     efectivamente procesó el audio y se reporta como `modeloASR`.
+4. `speech_analytics.compute`: ratios de habla, silencios > 3 s, duración.
+
+### 3.6 Worker: nota y feedback (`processor/clinical_analyzer.py`)
+
+- Contexto longitudinal: `GET /api/pacientes/{id}/contexto-clinico?format=llm`
+  (Bearer M2M) devuelve Markdown con hipótesis, objetivos, temas, riesgos y
+  análisis + plan de las últimas 3 sesiones aprobadas. Best-effort.
+- Llamada A (nota SOAP): prompt `prompts/clinical_note_v3.1.md`, schema
+  `SCHEMA_NOTA`, modelo `LLM_MODEL_ID` (`claude-sonnet-5`), `max_tokens`
+  8192, `effort` `medium`, timeout 300 s, 3 reintentos del SDK. Cabecera
+  `anthropic-workspace-id` si `ANTHROPIC_WORKSPACE_ID` está seteada. Se validan
+  rangos (`intensidadEmocional` 1..10, `duracionRealMin` >= 0).
+- Llamada C (feedback de auto-supervisión): prompt según `orientacionTeorica`
+  (ver `docs/contrato-multi-orientacion.md`). Best-effort: si falla, la nota
+  sale sin feedback.
+- `datosEstructurados` se completa con `speechAnalytics` (incluye
+  `rolesOrigen`), `feedbackTerapeuta` y `_pipeline` (prompts, modelos,
+  `asrId`, `intento`, `workerVersion`).
+
+### 3.7 Callback
+
+- `POST /api/sesion-clinica/callback` (Bearer M2M) con `sesionClinicaId`,
+  `estado` (`revision` | `error`), `transcripcion`, `nota`,
+  `datosEstructurados`, `modeloASR`, `modeloLLM`, `promptVersion`, `error`.
+  La ruta valida con `notaSoapSchema` y `datosEstructuradosSchema`
+  (`src/lib/sesion-clinica/schema.ts`, única definición del contrato).
+- Caso de uso `procesarCallback`: escribe solo si la sesión sigue en
+  `procesando` (409 si no). Guarda `notaSoapOriginal` una sola vez (la primera
+  nota que llega), re-adjunta `_audioCifradoTemporal` desde la fila previa,
+  fija `hablanteTerapeuta = "S0"`. Un callback de error incrementa `intentos`.
+- Semántica para el worker (`processor/callback.py`): 2xx ok; 409 y otros
+  4xx terminan el ciclo sin reintento; 5xx o sin respuesta dejan que el lease
+  reintente.
+
+### 3.8 Revisión
+
+- La nota queda en `revision`. La UI (`NotaClinicaView`) muestra la nota,
+  los flags de riesgo, la señal graduada `riesgoDetectado`
+  (`docs/contrato-riesgo-clinico.md`) y el feedback. La terapeuta puede
+  editar el texto.
+- Descartar: `DELETE /api/sesion-clinica/[id]` → caso de uso `eliminarSesion`,
+  rama `descartarNotaEnRevision`: borra nota y datos generados, conserva
+  transcripción, audio y clave temporal, deja la sesión en `error`
+  (reprocesable).
+- Reintentar: `PATCH { estado: "procesando" }` → caso de uso
+  `reintentarSesion`: exige audio en R2, limpia `error`, `intentos = 0`.
+
+### 3.9 Aprobación
+
+- `POST /api/sesion-clinica/[id]/aprobar` → caso de uso `aprobarSesion`
+  (`src/app/api/_lib/casos-uso/aprobar-sesion.ts`):
+  1. Solo desde `revision`.
+  2. Si `riesgoDetectado.nivel` es `alto` o `moderado`, exige
+     `confirmoRiesgo: true`.
+  3. Borra el audio de R2 (`borrarAudioBestEffort`). Si el borrado funciona,
+     `audioR2Key = null` y `audioBorradoEn = ahora`. Si falla, la key se
+     conserva para reintentar el borrado.
+  4. Elimina `_audioCifradoTemporal` de `datosEstructurados` **siempre**: sin
+     la clave, un blob remanente es inaccesible (crypto-shredding).
+  5. Guarda la nota editada y `notasEdicion`, pasa a `aprobado`, audita con
+     el hash de la nota final (sin texto clínico).
+- Después de aprobar, la transcripción y la nota siguen en la base, cifradas.
+
+### 3.10 Contexto longitudinal (Golden Thread, Llamada B)
+
+- En cada ciclo del worker, `processor/contexto_worker.py` hace
+  `GET /api/sesion-clinica/aprobadas-sin-contexto` (Bearer M2M). Caso de uso
+  `sesionesSinContexto`: sesiones aprobadas desde `CONTEXTO_DESDE` (si falta,
+  desde hoy), máximo 5, una por paciente, que el contexto todavía no integró
+  (`ultimaSesionId`).
+- Prompt `prompts/update_context_v2.0.md`, schema `SCHEMA_CONTEXTO`. El
+  resultado va por `PATCH /api/pacientes/{id}/contexto-clinico`. Como el
+  caller es M2M, la fila queda con `aprobadoPorTerapeutaEn = null`: es una
+  sugerencia hasta que la terapeuta la revisa en la pestaña Progreso.
+- Backoff en memoria del worker: 5 min, 30 min, y al tercer fallo no
+  reintenta hasta reiniciar el proceso.
+
+## 4. Vigilancia
+
+- `GET /api/cron/salud` (cada hora, `vercel.json`, Bearer `CRON_SECRET`):
+  cuenta sesiones en `procesando` con más de 2 h sin cambios y recordatorios
+  fallidos en 24 h; avisa por `ALERTA_WEBHOOK_URL` o `console.warn`.
+- Sesión huérfana (`esSesionHuerfana`): en `error`, o en `grabando` más de 4 h
+  sin cambios. La UI ofrece descartar o reintentar.
+
+## 5. Variables que tocan el pipeline
+
+App (Vercel): `PROCESSING_SECRET`, `NOTES_ENCRYPTION_KEY`, `R2_ACCOUNT_ID`,
+`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, opcionales
+`LEASE_MINUTES`, `MAX_INTENTOS_PROCESAMIENTO`, `CONTEXTO_DESDE`.
+
+Worker (Railway, ver `processor/.env.example`): `APP_BASE_URL`,
+`PROCESSING_SECRET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+`R2_BUCKET_NAME`, `ASSEMBLYAI_API_KEY`, `ASR_MODEL_ID`, `ASR_MODEL_FALLBACK`,
+`ASR_PROMPT_ESCENARIO`, `ASR_POLL_SECONDS`, `ASR_TIMEOUT_SECONDS`,
+`ANTHROPIC_API_KEY`, `ANTHROPIC_WORKSPACE_ID`, `LLM_BACKEND`, `LLM_MODEL_ID`,
+`LLM_EFFORT`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SECONDS`, `POLL_INTERVAL_SECONDS`,
+`WORKER_VERSION`.
+
+## 6. Archivos clave
 
 | Path | Rol |
 | --- | --- |
+| `src/hooks/useGrabacionSesion.ts` | Subida en tres pasos y estado de la sesión de hoy. |
+| `src/app/api/sesion-clinica/**/route.ts` | Rutas: auth, validación, respuesta. |
+| `src/app/api/_lib/casos-uso/*.ts` | Reglas: reclamar-pendientes, procesar-callback, aprobar-sesion, eliminar-sesion, reintentar-sesion, sesiones-sin-contexto. |
+| `src/lib/sesion-clinica/schema.ts` | Contrato Zod de sesión y datos estructurados. |
+| `src/lib/sesion-clinica-utils.ts` | Máquina de estados, key de audio, sesión huérfana. |
 | `processor/worker.py` | Loop de polling y modo manual. |
-| `processor/processor.py` | Orquesta el pipeline end-to-end por sesión. |
-| `processor/transcriber.py` | Cliente HTTP de WhisperX. |
-| `processor/clinical_analyzer.py` | Cliente del LLM, armado del prompt SOAP. |
-| `processor/speech_analytics.py` | Métricas de ratios y silencios desde los segments. |
-| `processor/r2_client.py` | Descarga y borrado en R2. |
-| `processor/crypto.py` | AES-256-GCM para el audio (no para los campos de DB). |
-| `processor/callback.py` | POST al endpoint `/api/sesion-clinica/callback`. |
-| `processor/config.py` | Configuración leída de env vars. |
-| `processor/.env.example` | Plantilla de variables. |
+| `processor/processor.py` | Orquestación por sesión. |
+| `processor/asr_assemblyai.py` | Cliente AssemblyAI y normalización de hablantes. |
+| `processor/clinical_analyzer.py` | Llamadas A, B y C a Anthropic. |
+| `processor/contexto_worker.py` | Integración del contexto longitudinal. |
+| `processor/prompts/*.md` | Prompts versionados. |

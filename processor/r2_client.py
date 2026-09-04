@@ -1,5 +1,8 @@
 """
-Cliente R2 (Cloudflare) para descargar y borrar audio cifrado.
+Cliente R2 (Cloudflare) para descargar audio cifrado.
+
+El borrado NO vive aca: el audio se elimina desde la app (crypto-shredding
+en /aprobar o DELETE de la sesion), nunca desde el worker.
 """
 import boto3
 from botocore.config import Config as BotoConfig
@@ -30,9 +33,3 @@ def descargar_audio(key: str) -> tuple[bytes, dict]:
         return datos, metadata
     except Exception as e:
         raise RuntimeError(f"Error descargando {key} de R2: {e}")
-
-def borrar_audio(key: str) -> None:
-    try:
-        _get_client().delete_object(Bucket=config.R2_BUCKET_NAME, Key=key)
-    except Exception as e:
-        raise RuntimeError(f"Error borrando {key} de R2: {e}")

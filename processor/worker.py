@@ -20,6 +20,7 @@ import time
 
 import requests
 
+import app_client
 import config
 import contexto_worker
 from processor import procesar_sesion
@@ -52,37 +53,30 @@ def _dormir_interrumpible(segundos: int) -> None:
         time.sleep(1)
 
 
-def _consultar_pendientes() -> list[dict]:
-    headers = {"Authorization": f"Bearer {config.PROCESSING_SECRET}"}
-    response = requests.get(config.PENDIENTES_URL, headers=headers, timeout=15)
-    response.raise_for_status()
-    body = response.json()
-    if isinstance(body, list):
-        return body
-    if isinstance(body, dict):
-        for key in ("data", "pendientes", "sesiones"):
-            valor = body.get(key)
-            if isinstance(valor, list):
-                return valor
-    return []
+# Campos obligatorios de cada item de /pendientes (SesionReclamada en
+# src/app/api/_lib/casos-uso/reclamar-pendientes.ts). audioR2Key, claveCifrado
+# e iv pueden venir null: en ese caso el item se ignora.
+_CAMPOS_OBLIGATORIOS = ("sesionClinicaId", "audioR2Key", "claveCifrado", "iv")
 
 
 def _extraer_args(
     item: dict,
 ) -> tuple[str, str, str, str, str | None, str, int] | None:
-    sesion_id = item.get("sesionClinicaId") or item.get("id")
-    audio_key = item.get("audioR2Key") or item.get("audio_r2_key")
-    clave = item.get("claveCifrado") or item.get("clave_cifrado")
-    iv = item.get("iv") or item.get("ivCifrado") or item.get("iv_cifrado")
-    paciente_id = item.get("pacienteId") or item.get("paciente_id") or None
-    orientacion = item.get("orientacionTeorica") or "cbt_mi"
+    if any(not item.get(campo) for campo in _CAMPOS_OBLIGATORIOS):
+        return None
     try:
         intento = int(item.get("intento") or 1)
     except (TypeError, ValueError):
         intento = 1
-    if not sesion_id or not audio_key or not clave or not iv:
-        return None
-    return sesion_id, audio_key, clave, iv, paciente_id, orientacion, intento
+    return (
+        item["sesionClinicaId"],
+        item["audioR2Key"],
+        item["claveCifrado"],
+        item["iv"],
+        item.get("pacienteId") or None,
+        item.get("orientacionTeorica") or "cbt_mi",
+        intento,
+    )
 
 
 def _procesar_pendientes(items: list[dict]) -> None:
@@ -94,19 +88,9 @@ def _procesar_pendientes(items: list[dict]) -> None:
         if not args:
             # Nunca loguear el item completo: trae claveCifrado e iv.
             # Solo el id y que campos faltan.
-            sesion_id_log = item.get("sesionClinicaId") or item.get("id") or "?"
-            faltan = [
-                nombre
-                for nombre, presente in (
-                    ("sesionClinicaId", bool(item.get("sesionClinicaId") or item.get("id"))),
-                    ("audioR2Key", bool(item.get("audioR2Key") or item.get("audio_r2_key"))),
-                    ("claveCifrado", bool(item.get("claveCifrado") or item.get("clave_cifrado"))),
-                    ("iv", bool(item.get("iv") or item.get("ivCifrado") or item.get("iv_cifrado"))),
-                )
-                if not presente
-            ]
+            faltan = [campo for campo in _CAMPOS_OBLIGATORIOS if not item.get(campo)]
             logger.warning(
-                f"Item ignorado por falta de campos: sesion={sesion_id_log} "
+                f"Item ignorado por falta de campos: sesion={item.get('sesionClinicaId') or '?'} "
                 f"faltan={','.join(faltan) or '?'}"
             )
             continue
@@ -142,7 +126,7 @@ def loop_principal() -> None:
 
     while _running:
         try:
-            pendientes = _consultar_pendientes()
+            pendientes = app_client.obtener_pendientes()
         except requests.RequestException as e:
             logger.error(f"Error consultando pendientes ({type(e).__name__})")
             _dormir_interrumpible(config.POLL_INTERVAL_SECONDS)
