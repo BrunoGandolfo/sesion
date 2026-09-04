@@ -17,6 +17,7 @@
 
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 import { generarUrlSubida, r2Configurado } from "@/lib/r2";
 import { keyAudioEsperada } from "@/lib/sesion-clinica-utils";
 
@@ -116,11 +117,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       data: {
         estado: "subiendo",
         error: null,
-        datosEstructurados: conClaveTemporal(
-          sesion.datosEstructurados,
-          parsed.data.claveCifrado,
-          parsed.data.iv,
-        ),
+        ...cifrarSesion({
+          datosEstructurados: conClaveTemporal(
+            sesion.datosEstructurados,
+            parsed.data.claveCifrado,
+            parsed.data.iv,
+          ),
+        }),
       },
       select: { id: true },
     });

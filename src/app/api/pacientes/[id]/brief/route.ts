@@ -58,16 +58,9 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
-// riesgosHistoricos: la extensión lo re-parsea a array al leer, pero una fila
-// legacy (columna en texto plano) puede llegar como string JSON.
+// riesgosHistoricos llega ya parseado a array (o null) por la extensión de
+// cifrado; acá solo se valida la forma de cada elemento por tipo nominal.
 function parseRiesgosHistoricos(raw: unknown): RiesgoHistorico[] {
-  if (typeof raw === "string") {
-    try {
-      return asArray<RiesgoHistorico>(JSON.parse(raw));
-    } catch {
-      return [];
-    }
-  }
   return asArray<RiesgoHistorico>(raw);
 }
 

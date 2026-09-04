@@ -5,9 +5,12 @@
 // - extraerClaveTemporal / extraerCriptoTemporal / sinClaveTemporal: manejo
 //   del stash `_audioCifradoTemporal` dentro de datosEstructurados (escrito
 //   por upload, leído por pendientes, re-adjuntado por callback, borrado por
-//   aprobar). Todos toleran el campo como objeto (descifrado por la
-//   extensión Prisma) o como string JSON (filas legacy).
+//   aprobar). Toleran el campo como objeto (descifrado por la extensión
+//   Prisma) o como string JSON.
 
+import type { Prisma } from "@prisma/client";
+
+import type { db } from "@/lib/db";
 import {
   notaSoapOriginalSchema,
   parseDatosEstructurados,
@@ -76,7 +79,7 @@ export function extraerCriptoTemporal(raw: unknown): {
  * que ya hubiera. Lo escribe upload-url (antes lo hacía el /upload
  * monolítico); lo leen pendientes y callback; lo borra aprobar. El contrato
  * con el worker (claveCifrado + ivCifrado dentro de _audioCifradoTemporal)
- * no cambia.
+ * no cambia. Devuelve el string JSON listo para cifrarSesion.
  */
 export function conClaveTemporal(
   datosActuales: unknown,
@@ -87,8 +90,8 @@ export function conClaveTemporal(
   return JSON.stringify({
     ...actual,
     // TODO: mover clave + IV a una columna propia cifrada por la extensión
-    // (migración humana). Mientras tanto vive acá, cifrada en reposo por la
-    // extensión Prisma como parte de datosEstructurados.
+    // (migración humana). Mientras tanto vive acá, cifrada en reposo como
+    // parte de datosEstructurados.
     _audioCifradoTemporal: {
       claveCifrado,
       ivCifrado: iv,
@@ -119,12 +122,11 @@ export function sinClaveTemporal<T extends { datosEstructurados?: unknown }>(
 // ────────────────────────────────────────────────────────────────────────────
 // Select único de sesión clínica para la UI y mapper a la respuesta.
 //
-// SESION_SELECT es el superset de los selects que hoy repiten GET/PATCH [id],
+// SESION_SELECT es el superset de los selects de GET/PATCH [id],
 // upload-confirmar, aprobar y GET ?turnoId. NUNCA transcripcion (PHI que la
-// UI no necesita). `notaSoapOriginal` es un campo lógico de la extensión de
-// cifrado sin columna propia en el tipo generado: por eso no se puede usar
-// `satisfies Prisma.SesionClinicaSelect` y el objeto vive en una const (TS
-// no chequea propiedades sobrantes en no-literales).
+// UI no necesita). Los campos lógicos cifrados (notaSubjetivo, …,
+// notaSoapOriginal, datosEstructurados) son campos calculados de la
+// extensión de cifrado, así que el cliente extendido los conoce y los tipa.
 // ────────────────────────────────────────────────────────────────────────────
 
 export const SESION_SELECT = {
@@ -164,45 +166,38 @@ export const SESION_SELECT = {
       },
     },
   },
-} as const;
+} satisfies Prisma.Args<typeof db.sesionClinica, "findFirst">["select"];
 
-/** Fila de Prisma leída con SESION_SELECT (o un subconjunto sin `turno`). */
-export interface FilaSesionClinica {
-  id: string;
-  turnoId: string;
-  estado: string;
-  duracionAudioSeg: number | null;
-  audioR2Key: string | null;
-  audioBorradoEn: Date | null;
-  notaSubjetivo: string | null;
-  notaObjetivo: string | null;
-  notaAnalisis: string | null;
-  notaPlan: string | null;
-  /** Campo lógico de la extensión: objeto SOAP con secciones nullable, o null. */
+/** Fila exacta que devuelve Prisma para SESION_SELECT. */
+type FilaSesionSelect = Prisma.Result<
+  typeof db.sesionClinica,
+  { select: typeof SESION_SELECT },
+  "findFirstOrThrow"
+>;
+
+type TurnoDeFila = FilaSesionSelect["turno"];
+
+/**
+ * Fila leída con SESION_SELECT o un subconjunto: sin `turno` (selects sin
+ * relación) o con paciente sin `telefono` (GET ?turnoId). Además,
+ * toSesionClinicaResponse tolera `datosEstructurados` como string JSON y
+ * `notaSoapOriginal` con forma inesperada (sale null), por eso esos dos
+ * quedan abiertos.
+ */
+export type FilaSesionClinica = Omit<
+  FilaSesionSelect,
+  "turno" | "notaSoapOriginal" | "datosEstructurados"
+> & {
   notaSoapOriginal?: unknown;
-  /** Objeto (extensión) o string JSON (fila legacy). */
   datosEstructurados?: unknown;
-  modeloASR: string | null;
-  modeloLLM: string | null;
-  promptVersion: string | null;
-  hablanteTerapeuta: string | null;
-  procesadoEn: Date | null;
-  aprobadoEn: Date | null;
-  error: string | null;
-  intentos: number;
-  createdAt: Date;
-  updatedAt: Date;
-  turno?: {
-    id: string;
-    fecha: Date;
-    paciente: {
-      id: string;
-      nombre: string;
-      apellido: string;
-      telefono?: string;
-    };
-  } | null;
-}
+  turno?:
+    | (Omit<TurnoDeFila, "paciente"> & {
+        paciente: Omit<TurnoDeFila["paciente"], "telefono"> & {
+          telefono?: string;
+        };
+      })
+    | null;
+};
 
 function aIso(fecha: Date | null | undefined): string | null {
   return fecha ? fecha.toISOString() : null;

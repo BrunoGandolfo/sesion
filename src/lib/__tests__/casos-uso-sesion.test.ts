@@ -37,7 +37,7 @@ import { reintentarSesion } from "@/app/api/_lib/casos-uso/reintentar-sesion";
 import { ApiError } from "@/app/api/_lib/responses";
 import { parseDatosEstructuradosRaw } from "@/app/api/_lib/sesion-clinica";
 import { __resetKeyCacheForTests } from "@/lib/encryption";
-import { withEncryption } from "@/lib/prisma-encryption";
+import { cifrarSesion, withEncryption } from "@/lib/prisma-encryption";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Carga de .env.test sin agregar dependencias (igual que prisma-encryption).
@@ -173,30 +173,6 @@ async function esperarApiError(
   throw new Error(`Se esperaba ApiError ${status} y la promesa resolvió`);
 }
 
-function leerNotaOriginal(fila: object): unknown {
-  return "notaSoapOriginal" in fila ? fila.notaSoapOriginal : null;
-}
-
-// `notaSoapOriginal` es un campo lógico de la extensión de cifrado, no una
-// columna del tipo generado por Prisma. TS solo rechaza propiedades
-// desconocidas en literales en línea: por eso estos selects viven en
-// constantes, con el mismo patrón que SESION_SELECT en _lib/sesion-clinica.ts.
-const SELECT_TRAS_CALLBACK = {
-  estado: true,
-  notaSubjetivo: true,
-  notaPlan: true,
-  notaSoapOriginal: true,
-  datosEstructurados: true,
-  hablanteTerapeuta: true,
-  promptVersion: true,
-  transcripcion: true,
-} as const;
-
-const SELECT_NOTA_Y_ORIGINAL = {
-  notaSubjetivo: true,
-  notaSoapOriginal: true,
-} as const;
-
 beforeAll(async () => {
   process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
   __resetKeyCacheForTests();
@@ -250,11 +226,13 @@ describe("aprobarSesion", () => {
           opciones.audioR2Key === undefined
             ? "audio/org/ses/tur.enc"
             : opciones.audioR2Key,
-        notaSubjetivo: NOTA_A.subjetivo,
-        notaObjetivo: NOTA_A.objetivo,
-        notaAnalisis: NOTA_A.analisis,
-        notaPlan: NOTA_A.plan,
-        datosEstructurados: JSON.stringify(datos),
+        ...cifrarSesion({
+          notaSubjetivo: NOTA_A.subjetivo,
+          notaObjetivo: NOTA_A.objetivo,
+          notaAnalisis: NOTA_A.analisis,
+          notaPlan: NOTA_A.plan,
+          datosEstructurados: JSON.stringify(datos),
+        }),
       },
     });
     return { ...deps, sesionId: sesion.id };
@@ -409,8 +387,10 @@ describe("procesarCallback", () => {
         organizationId: deps.orgId,
         estado: "procesando",
         intentos: 1,
-        datosEstructurados: JSON.stringify({
-          _audioCifradoTemporal: CLAVE_TEMPORAL,
+        ...cifrarSesion({
+          datosEstructurados: JSON.stringify({
+            _audioCifradoTemporal: CLAVE_TEMPORAL,
+          }),
         }),
       },
     });
@@ -437,7 +417,7 @@ describe("procesarCallback", () => {
         turnoId: deps.turnoId,
         organizationId: deps.orgId,
         estado: "revision",
-        notaSubjetivo: "original",
+        ...cifrarSesion({ notaSubjetivo: "original" }),
       },
     });
     const stubs = crearStubs();
@@ -472,7 +452,16 @@ describe("procesarCallback", () => {
 
     const fila = await db.sesionClinica.findUnique({
       where: { id: sesionId },
-      select: SELECT_TRAS_CALLBACK,
+      select: {
+        estado: true,
+        notaSubjetivo: true,
+        notaPlan: true,
+        notaSoapOriginal: true,
+        datosEstructurados: true,
+        hablanteTerapeuta: true,
+        promptVersion: true,
+        transcripcion: true,
+      },
     });
     expect(fila?.estado).toBe("revision");
     expect(fila?.notaSubjetivo).toBe(NOTA_A.subjetivo);
@@ -480,7 +469,7 @@ describe("procesarCallback", () => {
     expect(fila?.hablanteTerapeuta).toBe("S0");
     expect(fila?.promptVersion).toBe("v2.1");
     expect(fila?.transcripcion).toBe("S0: hola. S1: hola.");
-    expect(fila ? leerNotaOriginal(fila) : null).toEqual(NOTA_A);
+    expect(fila?.notaSoapOriginal).toEqual(NOTA_A);
 
     const datos = parseDatosEstructuradosRaw(fila?.datosEstructurados);
     expect(datos?.temas).toEqual(["trabajo"]);
@@ -520,10 +509,10 @@ describe("procesarCallback", () => {
 
     const fila = await db.sesionClinica.findUnique({
       where: { id: sesionId },
-      select: SELECT_NOTA_Y_ORIGINAL,
+      select: { notaSubjetivo: true, notaSoapOriginal: true },
     });
     expect(fila?.notaSubjetivo).toBe(NOTA_B.subjetivo);
-    expect(fila ? leerNotaOriginal(fila) : null).toEqual(NOTA_A);
+    expect(fila?.notaSoapOriginal).toEqual(NOTA_A);
     expect(stubs.eventos).toHaveLength(2);
   });
 
@@ -570,7 +559,7 @@ describe("procesarCallback", () => {
 // eliminarSesion
 // ─────────────────────────────────────────────────────────────────────────────
 describe("eliminarSesion", () => {
-  async function crearSesion(data: {
+  async function crearSesion(opciones: {
     estado: string;
     audioR2Key?: string | null;
     datosEstructurados?: string;
@@ -581,7 +570,12 @@ describe("eliminarSesion", () => {
       data: {
         turnoId: deps.turnoId,
         organizationId: deps.orgId,
-        ...data,
+        estado: opciones.estado,
+        audioR2Key: opciones.audioR2Key,
+        ...cifrarSesion({
+          datosEstructurados: opciones.datosEstructurados,
+          notaSubjetivo: opciones.notaSubjetivo,
+        }),
       },
     });
     return { ...deps, sesionId: sesion.id };

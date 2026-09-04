@@ -11,6 +11,8 @@
 
 import type { Prisma } from "@prisma/client";
 
+import { cifrarContexto } from "@/lib/prisma-encryption";
+
 import { cargarContexto } from "./cargar";
 import type {
   ActorContexto,
@@ -48,16 +50,18 @@ export async function actualizarContexto({
   });
   const version = (existente?.version ?? 0) + 1;
 
+  // Los tres campos PHI van cifrados vía cifrarContexto: lo que viene
+  // undefined no toca su columna (merge parcial). riesgosHistoricos se
+  // serializa a JSON dentro de cifrarContexto.
   const update: Prisma.PacienteContextoClinicoUpdateInput = {
     aprobadoPorTerapeutaEn,
     version,
+    ...cifrarContexto({
+      hipotesisDiagnostica: cambios.hipotesisDiagnostica,
+      resumenAcumulativo: cambios.resumenAcumulativo,
+      riesgosHistoricos: cambios.riesgosHistoricos,
+    }),
   };
-  if (cambios.hipotesisDiagnostica !== undefined) {
-    update.hipotesisDiagnostica = cambios.hipotesisDiagnostica;
-  }
-  if (cambios.resumenAcumulativo !== undefined) {
-    update.resumenAcumulativo = cambios.resumenAcumulativo;
-  }
   if (cambios.objetivosTerapeuticos !== undefined) {
     update.objetivosTerapeuticos = cambios.objetivosTerapeuticos;
   }
@@ -66,12 +70,6 @@ export async function actualizarContexto({
   }
   if (cambios.temasRecurrentes !== undefined) {
     update.temasRecurrentes = cambios.temasRecurrentes;
-  }
-  if (cambios.riesgosHistoricos !== undefined) {
-    // La columna es String? @db.Text: se stringifica antes de Prisma. La
-    // extensión de cifrado acepta strings y los cifra tal cual; al leer
-    // reparsea a array. Mismo patrón que callback/route.ts.
-    update.riesgosHistoricos = JSON.stringify(cambios.riesgosHistoricos);
   }
   if (cambios.ultimaSesionId !== undefined) {
     update.ultimaSesionId = cambios.ultimaSesionId;
@@ -83,17 +81,17 @@ export async function actualizarContexto({
     create: {
       paciente: { connect: { id: pacienteId } },
       organization: { connect: { id: organizationId } },
-      hipotesisDiagnostica: cambios.hipotesisDiagnostica ?? null,
-      resumenAcumulativo: cambios.resumenAcumulativo ?? null,
       objetivosTerapeuticos: cambios.objetivosTerapeuticos ?? [],
       intervencionesProbadas: cambios.intervencionesProbadas ?? [],
       temasRecurrentes: cambios.temasRecurrentes ?? [],
-      riesgosHistoricos: cambios.riesgosHistoricos
-        ? JSON.stringify(cambios.riesgosHistoricos)
-        : null,
       ultimaSesionId: cambios.ultimaSesionId ?? null,
       version: 1,
       aprobadoPorTerapeutaEn,
+      ...cifrarContexto({
+        hipotesisDiagnostica: cambios.hipotesisDiagnostica ?? null,
+        resumenAcumulativo: cambios.resumenAcumulativo ?? null,
+        riesgosHistoricos: cambios.riesgosHistoricos ?? null,
+      }),
     },
   });
 

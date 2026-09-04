@@ -5,6 +5,7 @@
 // el handler original (404 sesión inexistente, 409 callback tardío).
 
 import type { db } from "@/lib/db";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 import type { DatosEstructurados, NotaSoap } from "@/lib/sesion-clinica/schema";
 
 import type { EventoAuditoriaInput } from "../auditoria-pura";
@@ -32,19 +33,6 @@ export interface ProcesarCallbackInput {
   registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
 }
 
-// Fila previa que necesita el callback. `notaSoapOriginal` es un campo
-// lógico de la extensión de cifrado (sin columna legacy): vive en una const
-// y no en un literal inline para que TS no lo rechace como propiedad
-// sobrante del tipo generado; la extensión lo traduce a la columna cifrada.
-const SESION_PREVIA_SELECT = {
-  id: true,
-  estado: true,
-  intentos: true,
-  organizationId: true,
-  datosEstructurados: true,
-  notaSoapOriginal: true,
-} as const;
-
 export async function procesarCallback({
   prisma,
   payload,
@@ -52,7 +40,14 @@ export async function procesarCallback({
 }: ProcesarCallbackInput): Promise<void> {
   const sesion = await prisma.sesionClinica.findUnique({
     where: { id: payload.sesionClinicaId },
-    select: SESION_PREVIA_SELECT,
+    select: {
+      id: true,
+      estado: true,
+      intentos: true,
+      organizationId: true,
+      datosEstructurados: true,
+      notaSoapOriginal: true,
+    },
   });
 
   if (!sesion) {
@@ -78,51 +73,48 @@ export async function procesarCallback({
   // notaSoapOriginal se escribe UNA sola vez: la primera nota que llega del
   // worker. En un reproceso (descarte → error → procesando → callback) la
   // fila ya la tiene y NO se pisa: es el registro de "qué generó la IA"
-  // antes de cualquier intervención humana. El tipo generado por Prisma no
-  // conoce el campo lógico; el narrowing con `in` lo expone sin cast.
-  const notaOriginalPrevia =
-    "notaSoapOriginal" in sesion ? sesion.notaSoapOriginal : null;
+  // antes de cualquier intervención humana.
   const escribirNotaOriginal =
-    notaOriginalPrevia == null && payload.nota !== undefined;
+    sesion.notaSoapOriginal === null && payload.nota !== undefined;
 
-  // Objeto NO literal en la llamada: TS solo aplica el chequeo de
-  // propiedades sobrantes a literales frescos, y notaSoapOriginal no existe
-  // en el tipo generado (la extensión la consume antes de llegar a Prisma).
-  const data = {
-    estado: payload.estado,
-    transcripcion: payload.transcripcion,
-    notaSubjetivo: payload.nota?.subjetivo,
-    notaObjetivo: payload.nota?.objetivo,
-    notaAnalisis: payload.nota?.analisis,
-    notaPlan: payload.nota?.plan,
-    ...(escribirNotaOriginal ? { notaSoapOriginal: payload.nota } : {}),
-    // Convención del worker: la terapeuta es siempre el hablante S0.
-    ...(payload.nota ? { hablanteTerapeuta: "S0" } : {}),
-    datosEstructurados: payload.datosEstructurados
-      ? JSON.stringify(
-          claveTemporal
-            ? {
-                ...payload.datosEstructurados,
-                _audioCifradoTemporal: claveTemporal,
-              }
-            : payload.datosEstructurados,
-        )
-      : undefined,
-    modeloASR: payload.modeloASR,
-    modeloLLM: payload.modeloLLM,
-    promptVersion: payload.promptVersion,
-    procesadoEn: ahora,
-    error: esError ? payload.error ?? null : null,
-    intentos: esError ? sesion.intentos + 1 : undefined,
-  };
+  const datosEstructurados = payload.datosEstructurados
+    ? JSON.stringify(
+        claveTemporal
+          ? {
+              ...payload.datosEstructurados,
+              _audioCifradoTemporal: claveTemporal,
+            }
+          : payload.datosEstructurados,
+      )
+    : undefined;
 
   // Escritura condicionada al estado: solo se acepta el resultado si la
   // sesión sigue en "procesando". Un callback tardío (lease vencido y
   // re-entregado, sesión descartada/reintentada mientras tanto) no pisa
-  // nada. updateMany pasa por la extensión de cifrado igual que update.
+  // nada. Los campos clínicos van cifrados vía cifrarSesion; los que vienen
+  // undefined no tocan su columna.
   const { count } = await prisma.sesionClinica.updateMany({
     where: { id: sesion.id, estado: "procesando" },
-    data,
+    data: {
+      estado: payload.estado,
+      // Convención del worker: la terapeuta es siempre el hablante S0.
+      ...(payload.nota ? { hablanteTerapeuta: "S0" } : {}),
+      modeloASR: payload.modeloASR,
+      modeloLLM: payload.modeloLLM,
+      promptVersion: payload.promptVersion,
+      procesadoEn: ahora,
+      error: esError ? payload.error ?? null : null,
+      intentos: esError ? sesion.intentos + 1 : undefined,
+      ...cifrarSesion({
+        transcripcion: payload.transcripcion,
+        notaSubjetivo: payload.nota?.subjetivo,
+        notaObjetivo: payload.nota?.objetivo,
+        notaAnalisis: payload.nota?.analisis,
+        notaPlan: payload.nota?.plan,
+        notaSoapOriginal: escribirNotaOriginal ? payload.nota : undefined,
+        datosEstructurados,
+      }),
+    },
   });
 
   if (count === 0) {

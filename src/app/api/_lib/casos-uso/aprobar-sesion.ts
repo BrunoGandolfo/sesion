@@ -5,6 +5,7 @@
 // los mismos códigos y mensajes que el handler original.
 
 import type { db } from "@/lib/db";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 import type { NotaSoap } from "@/lib/sesion-clinica/schema";
 import { normalizarRiesgo } from "@/types/domain";
 
@@ -110,23 +111,24 @@ export async function aprobarSesion({
 
   // Escritura condicionada al estado: si la sesión dejó de estar en
   // revisión entre la lectura y acá (descarte concurrente), no se pisa.
-  // updateMany pasa por la extensión de cifrado igual que update.
+  // Nota, comentarios y datos van cifrados vía cifrarSesion; los undefined
+  // (sin nota editada, sin clave que limpiar) no tocan su columna.
   const { count } = await prisma.sesionClinica.updateMany({
     where: { id: sesionId, estado: "revision" },
     data: {
       estado: "aprobado",
       aprobadoEn: new Date(),
-      notasEdicion,
-      notaSubjetivo: notaEditada?.subjetivo,
-      notaObjetivo: notaEditada?.objetivo,
-      notaAnalisis: notaEditada?.analisis,
-      notaPlan: notaEditada?.plan,
-      ...(datosSinClave !== undefined
-        ? { datosEstructurados: datosSinClave }
-        : {}),
       ...(habiaAudio && audioBorrado
         ? { audioR2Key: null, audioBorradoEn: new Date() }
         : {}),
+      ...cifrarSesion({
+        notasEdicion,
+        notaSubjetivo: notaEditada?.subjetivo,
+        notaObjetivo: notaEditada?.objetivo,
+        notaAnalisis: notaEditada?.analisis,
+        notaPlan: notaEditada?.plan,
+        datosEstructurados: datosSinClave,
+      }),
     },
   });
 

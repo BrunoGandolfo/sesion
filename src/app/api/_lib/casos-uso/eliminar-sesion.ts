@@ -9,6 +9,7 @@
 // Cualquier otro estado → ApiError 409.
 
 import type { db } from "@/lib/db";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 import { esSesionHuerfana } from "@/lib/sesion-clinica-utils";
 
 import type { EventoAuditoriaInput } from "../auditoria-pura";
@@ -78,23 +79,26 @@ async function descartarNotaEnRevision(
   const { prisma, existente } = ctx;
   assertTransicionValida(existente.estado, "error");
   const audioConservado = tieneAudioReal(existente.audioR2Key);
-  // Se limpia todo lo generado, pero el stash de la clave temporal se
-  // preserva (es lo único necesario para reprocesar). Escrito por el campo
-  // LÓGICO datosEstructurados para que la extensión lo cifre — escribir el
-  // *Encrypted directo saltea la extensión (anti-patrón); con null el
-  // resultado es idéntico al comportamiento previo.
+  // Se limpia todo lo generado (las 4 secciones en null dejan la nota SOAP
+  // en NULL), pero el stash de la clave temporal se preserva: es lo único
+  // necesario para reprocesar.
   const claveTemporal = extraerClaveTemporal(existente.datosEstructurados);
   await prisma.sesionClinica.update({
     where: { id: existente.id },
     data: {
       estado: "error",
-      notaSoapEncrypted: null,
-      datosEstructurados: claveTemporal
-        ? JSON.stringify({ _audioCifradoTemporal: claveTemporal })
-        : null,
       error: audioConservado
         ? "Nota descartada por la usuaria. La transcripción y el audio se conservan: podés reprocesar o eliminar definitivamente."
         : "Nota descartada por la usuaria. La transcripción se conserva; no hay audio para reprocesar.",
+      ...cifrarSesion({
+        notaSubjetivo: null,
+        notaObjetivo: null,
+        notaAnalisis: null,
+        notaPlan: null,
+        datosEstructurados: claveTemporal
+          ? JSON.stringify({ _audioCifradoTemporal: claveTemporal })
+          : null,
+      }),
     },
   });
 

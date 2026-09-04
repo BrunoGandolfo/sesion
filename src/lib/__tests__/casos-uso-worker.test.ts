@@ -24,7 +24,7 @@ import { PrismaClient } from "@prisma/client";
 import { reclamarPendientes } from "@/app/api/_lib/casos-uso/reclamar-pendientes";
 import { sesionesSinContexto } from "@/app/api/_lib/casos-uso/sesiones-sin-contexto";
 import { __resetKeyCacheForTests } from "@/lib/encryption";
-import { withEncryption } from "@/lib/prisma-encryption";
+import { cifrarSesion, withEncryption } from "@/lib/prisma-encryption";
 
 function loadEnvTest(): void {
   if (process.env.DATABASE_URL_TEST) return;
@@ -123,7 +123,7 @@ async function crearProcesando(
       intentos: opciones.intentos,
       audioR2Key: `audio/${base.orgId}/x/${turnoId}.enc`,
       duracionAudioSeg: 1800,
-      datosEstructurados: opciones.datosEstructurados,
+      ...cifrarSesion({ datosEstructurados: opciones.datosEstructurados }),
     },
     select: { id: true },
   });
@@ -284,10 +284,12 @@ describe("sesionesSinContexto", () => {
         organizationId: base.orgId,
         estado: "aprobado",
         aprobadoEn,
-        notaSubjetivo: "S",
-        notaObjetivo: "O",
-        notaAnalisis: "A",
-        notaPlan: "P",
+        ...cifrarSesion({
+          notaSubjetivo: "S",
+          notaObjetivo: "O",
+          notaAnalisis: "A",
+          notaPlan: "P",
+        }),
       },
       select: { id: true },
     });

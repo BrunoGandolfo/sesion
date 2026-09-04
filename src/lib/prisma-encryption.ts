@@ -1,713 +1,398 @@
 import { Buffer } from "node:buffer";
 
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { decrypt, encrypt, isEncrypted, validateKey } from "./encryption";
+import type { NotaSoapOriginal } from "@/lib/sesion-clinica/schema";
 
-const LOGICAL_FIELDS = [
+import { decrypt, encrypt, validateKey } from "./encryption";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cifrado en reposo (AES-256-GCM) de los campos clínicos.
+//
+// En la base solo existen las columnas `*Encrypted` (Bytes?). Los campos
+// lógicos en claro (transcripcion, notaSubjetivo, hipotesisDiagnostica, …)
+// existen en tres lugares:
+//
+//   LECTURA, implícita y tipada: extensión `result` de Prisma Client. Cada
+//   campo lógico es un campo calculado con `needs` sobre su columna cifrada
+//   y `compute` que descifra. `select: { notaSubjetivo: true }` compila,
+//   trae solo la columna cifrada y devuelve `string | null`. Vale también en
+//   relaciones anidadas.
+//
+//   ESCRITURA, explícita y tipada: `cifrarSesion` / `cifrarContexto` toman
+//   campos lógicos y devuelven las columnas cifradas listas para `data`:
+//     data: { estado: "revision", ...cifrarSesion({ notaSubjetivo, datosEstructurados }) }
+//   `null` cifra como null (borra la columna); `undefined` no la toca.
+//
+//   GUARDA: extensión `query` que rechaza `where` / `orderBy` sobre campos
+//   lógicos o columnas cifradas. No son consultables.
+//
+// Formato del blob: "ENC1" (4B) || IV (12B) || authTag (16B) || ciphertext.
+// Un blob no nulo que no descifra es un dato corrupto: la lectura falla.
+// ────────────────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────────────────
+// Contrato hacia afuera
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Campos lógicos de SesionClinica: así se leen y así los acepta cifrarSesion. */
+export interface CamposSesionClinica {
+  transcripcion: string | null;
+  notaSubjetivo: string | null;
+  notaObjetivo: string | null;
+  notaAnalisis: string | null;
+  notaPlan: string | null;
+  /** Nota tal como la generó la IA. Se escribe una sola vez. */
+  notaSoapOriginal: NotaSoapOriginal | null;
+  /**
+   * Al leer: JSON parseado (objeto del tablero), o null. Al escribir acepta
+   * el objeto o el string JSON ya serializado; el string se cifra tal cual.
+   */
+  datosEstructurados: unknown;
+  notasEdicion: string | null;
+}
+
+/** Campos lógicos de PacienteContextoClinico (Golden Thread). */
+export interface CamposContextoClinico {
+  hipotesisDiagnostica: string | null;
+  resumenAcumulativo: string | null;
+  /** Timeline de flags, ya parseada; se guarda como JSON. */
+  riesgosHistoricos: unknown[] | null;
+}
+
+const CAMPOS_LOGICOS_SESION = [
   "transcripcion",
   "notaSubjetivo",
   "notaObjetivo",
   "notaAnalisis",
   "notaPlan",
+  "notaSoapOriginal",
   "datosEstructurados",
   "notasEdicion",
-  // Objeto {subjetivo, objetivo, analisis, plan} | null ↔ notaSoapOriginalEncrypted
-  // (mismo bundle JSON que notaSoapEncrypted, pero sin desarmar en 4 campos).
-  "notaSoapOriginal",
-] as const;
-type LogicalField = (typeof LOGICAL_FIELDS)[number];
-const LOGICAL_FIELD_SET = new Set<string>(LOGICAL_FIELDS);
+] as const satisfies readonly (keyof CamposSesionClinica)[];
 
-// Mismos invariantes que SesionClinica pero para el contexto longitudinal del
-// paciente (Golden Thread). Tres campos PHI separados, sin bundling: cada uno
-// se consume independientemente (el resumen va al prompt del LLM, la hipótesis
-// va al panel de la terapeuta, riesgos al banner de alerta), así que no
-// conviene meterlos en un JSON único como notaSoap.
-const CONTEXTO_LOGICAL_FIELDS = [
+const COLUMNAS_SESION = [
+  "transcripcionEncrypted",
+  "notaSoapEncrypted",
+  "notaSoapOriginalEncrypted",
+  "datosEstructuradosEncrypted",
+  "notasEdicionEncrypted",
+] as const;
+
+const CAMPOS_LOGICOS_CONTEXTO = [
   "hipotesisDiagnostica",
   "resumenAcumulativo",
   "riesgosHistoricos",
-] as const;
-const CONTEXTO_LOGICAL_FIELD_SET = new Set<string>(CONTEXTO_LOGICAL_FIELDS);
+] as const satisfies readonly (keyof CamposContextoClinico)[];
 
-const SOAP_LOGICAL = [
-  "notaSubjetivo",
-  "notaObjetivo",
-  "notaAnalisis",
-  "notaPlan",
+const COLUMNAS_CONTEXTO = [
+  "hipotesisDiagnosticaEncrypted",
+  "resumenAcumulativoEncrypted",
+  "riesgosHistoricosEncrypted",
 ] as const;
-type SoapLogical = (typeof SOAP_LOGICAL)[number];
-type SoapKey = "subjetivo" | "objetivo" | "analisis" | "plan";
 
-function soapKeyOf(field: SoapLogical): SoapKey {
-  switch (field) {
-    case "notaSubjetivo":
-      return "subjetivo";
-    case "notaObjetivo":
-      return "objetivo";
-    case "notaAnalisis":
-      return "analisis";
-    case "notaPlan":
-      return "plan";
-  }
-}
+/** Columnas cifradas de SesionClinica, con el tipo que Prisma acepta en `data` (create y update). */
+export type ColumnasCifradasSesion = Pick<
+  Prisma.SesionClinicaUncheckedCreateInput,
+  (typeof COLUMNAS_SESION)[number]
+>;
+
+/** Ídem para PacienteContextoClinico. */
+export type ColumnasCifradasContexto = Pick<
+  Prisma.PacienteContextoClinicoUncheckedCreateInput,
+  (typeof COLUMNAS_CONTEXTO)[number]
+>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Utilidades
+// ────────────────────────────────────────────────────────────────────────────
 
 type Raw = Record<string, unknown>;
 
-function isPlainObject(value: unknown): value is Raw {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function esObjetoPlano(valor: unknown): valor is Raw {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+}
+
+function textoONull(valor: unknown): string | null {
+  return typeof valor === "string" ? valor : null;
 }
 
 /**
- * Normaliza el blob crudo que devuelve Prisma para columnas Bytes? a Buffer.
- * Prisma 5 documenta `Uint8Array` como tipo de salida pero en la práctica
- * devuelve Buffer en la mayoría de los entornos (postgres-js sobre Node).
- * Algunos entornos (edge runtime, ciertas builds) devuelven Uint8Array
- * "puro": esos no pasan Buffer.isBuffer y haríamos un fallback legacy
- * incorrecto. Buffer.from(uint8.buffer, byteOffset, byteLength) crea un
- * Buffer view sobre la misma memoria, sin copiar.
+ * Normaliza el blob que devuelve Prisma para Bytes? a Buffer. Prisma 5
+ * entrega Buffer en Node; algunos entornos entregan Uint8Array "puro".
  */
-function toBuffer(value: unknown): Buffer | null {
-  if (value == null) return null;
-  if (Buffer.isBuffer(value)) return value;
-  if (value instanceof Uint8Array) {
-    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+function aBuffer(valor: unknown): Buffer | null {
+  if (valor == null) return null;
+  if (Buffer.isBuffer(valor)) return valor;
+  if (valor instanceof Uint8Array) {
+    return Buffer.from(valor.buffer, valor.byteOffset, valor.byteLength);
   }
   return null;
 }
 
-function rejectEncryptedField(
-  model: string,
-  field: string,
-  kind: "filter" | "order",
-): never {
+/** Cualquier objeto → las 4 claves SOAP (extras se descartan, faltantes → null). */
+function normalizarNotaSoap(valor: unknown): NotaSoapOriginal | null {
+  if (!esObjetoPlano(valor)) return null;
+  return {
+    subjetivo: textoONull(valor.subjetivo),
+    objetivo: textoONull(valor.objetivo),
+    analisis: textoONull(valor.analisis),
+    plan: textoONull(valor.plan),
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Lectura (usada por los campos calculados)
+// ────────────────────────────────────────────────────────────────────────────
+
+function descifrarTexto(blob: unknown): string | null {
+  const buffer = aBuffer(blob);
+  return buffer === null ? null : decrypt(buffer);
+}
+
+function descifrarJson(blob: unknown): unknown {
+  const texto = descifrarTexto(blob);
+  return texto === null ? null : JSON.parse(texto);
+}
+
+/** Una sección del JSON {subjetivo, objetivo, analisis, plan} de nota_soap_encrypted. */
+function seccionSoap(blob: unknown, clave: keyof NotaSoapOriginal): string | null {
+  return normalizarNotaSoap(descifrarJson(blob))?.[clave] ?? null;
+}
+
+function descifrarRiesgos(blob: unknown): unknown[] | null {
+  const valor = descifrarJson(blob);
+  return Array.isArray(valor) ? valor : null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Escritura
+// ────────────────────────────────────────────────────────────────────────────
+
+function cifrarTexto(texto: string | null): Buffer | null {
+  return texto === null ? null : encrypt(texto);
+}
+
+/** String JSON tal cual; objeto o array serializado; null se mantiene. */
+function serializarJson(valor: unknown): string | null {
+  if (valor === null) return null;
+  return typeof valor === "string" ? valor : JSON.stringify(valor);
+}
+
+const SECCIONES_SOAP = [
+  ["notaSubjetivo", "subjetivo"],
+  ["notaObjetivo", "objetivo"],
+  ["notaAnalisis", "analisis"],
+  ["notaPlan", "plan"],
+] as const;
+
+/**
+ * Las 4 secciones SOAP van juntas en un único JSON. Una escritura reemplaza
+ * el JSON completo: las secciones no enviadas quedan en null. Si ninguna
+ * sección viene, la columna no se toca; si todas vienen null, queda NULL.
+ */
+function empaquetarSoap(
+  campos: Partial<CamposSesionClinica>,
+): string | null | undefined {
+  const nota: NotaSoapOriginal = {
+    subjetivo: null,
+    objetivo: null,
+    analisis: null,
+    plan: null,
+  };
+  let alguna = false;
+  let conTexto = false;
+  for (const [campo, clave] of SECCIONES_SOAP) {
+    const valor = campos[campo];
+    if (valor === undefined) continue;
+    alguna = true;
+    nota[clave] = valor;
+    if (valor !== null) conTexto = true;
+  }
+  if (!alguna) return undefined;
+  return conTexto ? JSON.stringify(nota) : null;
+}
+
+/**
+ * Campos lógicos de SesionClinica → columnas cifradas para `data`.
+ * `null` deja la columna en NULL; `undefined` (o ausente) no la toca.
+ */
+export function cifrarSesion(
+  campos: Partial<CamposSesionClinica>,
+): ColumnasCifradasSesion {
+  const columnas: ColumnasCifradasSesion = {};
+  if (campos.transcripcion !== undefined) {
+    columnas.transcripcionEncrypted = cifrarTexto(campos.transcripcion);
+  }
+  const soap = empaquetarSoap(campos);
+  if (soap !== undefined) {
+    columnas.notaSoapEncrypted = cifrarTexto(soap);
+  }
+  if (campos.notaSoapOriginal !== undefined) {
+    const nota = normalizarNotaSoap(campos.notaSoapOriginal);
+    columnas.notaSoapOriginalEncrypted = cifrarTexto(
+      nota === null ? null : JSON.stringify(nota),
+    );
+  }
+  if (campos.datosEstructurados !== undefined) {
+    columnas.datosEstructuradosEncrypted = cifrarTexto(
+      serializarJson(campos.datosEstructurados),
+    );
+  }
+  if (campos.notasEdicion !== undefined) {
+    columnas.notasEdicionEncrypted = cifrarTexto(campos.notasEdicion);
+  }
+  return columnas;
+}
+
+/** Campos lógicos de PacienteContextoClinico → columnas cifradas para `data`. */
+export function cifrarContexto(
+  campos: Partial<CamposContextoClinico>,
+): ColumnasCifradasContexto {
+  const columnas: ColumnasCifradasContexto = {};
+  if (campos.hipotesisDiagnostica !== undefined) {
+    columnas.hipotesisDiagnosticaEncrypted = cifrarTexto(
+      campos.hipotesisDiagnostica,
+    );
+  }
+  if (campos.resumenAcumulativo !== undefined) {
+    columnas.resumenAcumulativoEncrypted = cifrarTexto(campos.resumenAcumulativo);
+  }
+  if (campos.riesgosHistoricos !== undefined) {
+    columnas.riesgosHistoricosEncrypted = cifrarTexto(
+      serializarJson(campos.riesgosHistoricos),
+    );
+  }
+  return columnas;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Guarda: nada cifrado en where / orderBy
+// ────────────────────────────────────────────────────────────────────────────
+
+const NO_CONSULTABLES: Record<ModeloCifrado, ReadonlySet<string>> = {
+  SesionClinica: new Set<string>([...CAMPOS_LOGICOS_SESION, ...COLUMNAS_SESION]),
+  PacienteContextoClinico: new Set<string>([
+    ...CAMPOS_LOGICOS_CONTEXTO,
+    ...COLUMNAS_CONTEXTO,
+  ]),
+};
+
+export type ModeloCifrado = "SesionClinica" | "PacienteContextoClinico";
+
+function rechazar(modelo: string, campo: string, uso: "filter" | "order"): never {
   throw new Error(
-    `Cannot ${kind} ${model} by encrypted field ${field}. ` +
+    `Cannot ${uso} ${modelo} by encrypted field ${campo}. ` +
       `Use a non-encrypted column instead.`,
   );
 }
 
-function makeAssertNoEncryptedInWhere(
-  model: string,
-  fieldSet: ReadonlySet<string>,
-) {
-  const fn = (where: unknown): void => {
-    if (!isPlainObject(where)) return;
-    for (const [k, v] of Object.entries(where)) {
-      if (fieldSet.has(k)) rejectEncryptedField(model, k, "filter");
-      if (k === "AND" || k === "OR" || k === "NOT") {
-        if (Array.isArray(v)) {
-          for (const sub of v) fn(sub);
-        } else {
-          fn(v);
-        }
+function validarWhere(modelo: ModeloCifrado, where: unknown): void {
+  if (!esObjetoPlano(where)) return;
+  for (const [clave, valor] of Object.entries(where)) {
+    if (NO_CONSULTABLES[modelo].has(clave)) rechazar(modelo, clave, "filter");
+    if (clave === "AND" || clave === "OR" || clave === "NOT") {
+      for (const sub of Array.isArray(valor) ? valor : [valor]) {
+        validarWhere(modelo, sub);
       }
     }
-  };
-  return fn;
+  }
 }
 
-function makeAssertNoEncryptedInOrderBy(
-  model: string,
-  fieldSet: ReadonlySet<string>,
-) {
-  const fn = (orderBy: unknown): void => {
-    if (orderBy === undefined || orderBy === null) return;
-    if (Array.isArray(orderBy)) {
-      for (const o of orderBy) fn(o);
-      return;
-    }
-    if (!isPlainObject(orderBy)) return;
-    for (const k of Object.keys(orderBy)) {
-      if (fieldSet.has(k)) rejectEncryptedField(model, k, "order");
-    }
-  };
-  return fn;
+function validarOrderBy(modelo: ModeloCifrado, orderBy: unknown): void {
+  if (Array.isArray(orderBy)) {
+    for (const o of orderBy) validarOrderBy(modelo, o);
+    return;
+  }
+  if (!esObjetoPlano(orderBy)) return;
+  for (const clave of Object.keys(orderBy)) {
+    if (NO_CONSULTABLES[modelo].has(clave)) rechazar(modelo, clave, "order");
+  }
 }
 
-const assertNoEncryptedInWhere = makeAssertNoEncryptedInWhere(
-  "SesionClinica",
-  LOGICAL_FIELD_SET,
-);
-const assertNoEncryptedInOrderBy = makeAssertNoEncryptedInOrderBy(
-  "SesionClinica",
-  LOGICAL_FIELD_SET,
-);
-const assertNoContextoEncryptedInWhere = makeAssertNoEncryptedInWhere(
-  "PacienteContextoClinico",
-  CONTEXTO_LOGICAL_FIELD_SET,
-);
-const assertNoContextoEncryptedInOrderBy = makeAssertNoEncryptedInOrderBy(
-  "PacienteContextoClinico",
-  CONTEXTO_LOGICAL_FIELD_SET,
-);
-
-function transformWriteData(data: Raw): Raw {
-  const out: Raw = { ...data };
-
-  if ("transcripcion" in out) {
-    const v = out.transcripcion;
-    delete out.transcripcion;
-    if (v === null) {
-      out.transcripcionEncrypted = null;
-    } else if (typeof v === "string") {
-      out.transcripcionEncrypted = encrypt(v);
-    }
-  }
-
-  const hasAnySoap = SOAP_LOGICAL.some((f) => f in out);
-  if (hasAnySoap) {
-    const soap: Record<SoapKey, string | null> = {
-      subjetivo: null,
-      objetivo: null,
-      analisis: null,
-      plan: null,
-    };
-    let anyDefined = false;
-    let anyNonNull = false;
-    for (const f of SOAP_LOGICAL) {
-      if (f in out) {
-        const v = out[f];
-        delete out[f];
-        if (v !== undefined) {
-          anyDefined = true;
-          if (v === null) {
-            soap[soapKeyOf(f)] = null;
-          } else if (typeof v === "string") {
-            soap[soapKeyOf(f)] = v;
-            anyNonNull = true;
-          }
-        }
-      }
-    }
-    if (anyNonNull) {
-      out.notaSoapEncrypted = encrypt(JSON.stringify(soap));
-    } else if (anyDefined) {
-      out.notaSoapEncrypted = null;
-    }
-  }
-
-  if ("datosEstructurados" in out) {
-    const v = out.datosEstructurados;
-    delete out.datosEstructurados;
-    if (v === null) {
-      out.datosEstructuradosEncrypted = null;
-    } else if (typeof v === "string") {
-      out.datosEstructuradosEncrypted = encrypt(v);
-    } else if (isPlainObject(v) || Array.isArray(v)) {
-      out.datosEstructuradosEncrypted = encrypt(JSON.stringify(v));
-    }
-  }
-
-  if ("notasEdicion" in out) {
-    const v = out.notasEdicion;
-    delete out.notasEdicion;
-    if (v === null) {
-      out.notasEdicionEncrypted = null;
-    } else if (typeof v === "string") {
-      out.notasEdicionEncrypted = encrypt(v);
-    }
-  }
-
-  if ("notaSoapOriginal" in out) {
-    const v = out.notaSoapOriginal;
-    delete out.notaSoapOriginal;
-    if (v === null) {
-      out.notaSoapOriginalEncrypted = null;
-    } else if (isPlainObject(v)) {
-      // Solo las 4 claves SOAP: cualquier extra del caller se descarta para
-      // que el blob tenga exactamente la misma forma que notaSoapEncrypted.
-      const soap: Record<SoapKey, unknown> = {
-        subjetivo: v.subjetivo ?? null,
-        objetivo: v.objetivo ?? null,
-        analisis: v.analisis ?? null,
-        plan: v.plan ?? null,
-      };
-      out.notaSoapOriginalEncrypted = encrypt(JSON.stringify(soap));
-    }
-  }
-
-  return out;
-}
-
-function injectEncryptedSelect(args: Raw): Raw {
-  if (!isPlainObject(args.select)) return args;
-  const select: Raw = { ...args.select };
-  if (select.transcripcion === true) select.transcripcionEncrypted = true;
-  if (SOAP_LOGICAL.some((f) => select[f] === true)) {
-    select.notaSoapEncrypted = true;
-  }
-  if (select.datosEstructurados === true) {
-    select.datosEstructuradosEncrypted = true;
-  }
-  if (select.notasEdicion === true) select.notasEdicionEncrypted = true;
-  if (select.notaSoapOriginal === true) {
-    // A diferencia del resto, este campo lógico NO tiene columna legacy en el
-    // schema: hay que quitarlo del select o Prisma lo rechaza como campo
-    // desconocido. transformRow lo repone a partir de la columna cifrada.
-    select.notaSoapOriginalEncrypted = true;
-    delete select.notaSoapOriginal;
-  }
-  return { ...args, select };
-}
-
-function wasFieldRequested(
-  originalSelect: Raw | undefined,
-  field: LogicalField,
-): boolean {
-  if (!originalSelect) return true;
-  return originalSelect[field] === true;
-}
-
-function transformRow(row: unknown, originalSelect: Raw | undefined): unknown {
-  if (!isPlainObject(row)) return row;
-
-  if ("transcripcionEncrypted" in row) {
-    const blob = toBuffer(row.transcripcionEncrypted);
-    if (blob && isEncrypted(blob)) {
-      row.transcripcion = decrypt(blob);
-    } else if (blob) {
-      console.warn(
-        "[prisma-encryption] transcripcionEncrypted lacks magic prefix; falling back to legacy column",
-      );
-    }
-    delete row.transcripcionEncrypted;
-  }
-
-  if ("notaSoapEncrypted" in row) {
-    const blob = toBuffer(row.notaSoapEncrypted);
-    if (blob && isEncrypted(blob)) {
-      let parsed: Partial<Record<SoapKey, string | null>>;
-      try {
-        const json = decrypt(blob);
-        parsed = JSON.parse(json) as Partial<Record<SoapKey, string | null>>;
-      } catch (err) {
-        throw new Error(
-          `Failed to decrypt or parse notaSoapEncrypted: ${(err as Error).message}`,
-        );
-      }
-      if (wasFieldRequested(originalSelect, "notaSubjetivo")) {
-        row.notaSubjetivo = parsed.subjetivo ?? null;
-      }
-      if (wasFieldRequested(originalSelect, "notaObjetivo")) {
-        row.notaObjetivo = parsed.objetivo ?? null;
-      }
-      if (wasFieldRequested(originalSelect, "notaAnalisis")) {
-        row.notaAnalisis = parsed.analisis ?? null;
-      }
-      if (wasFieldRequested(originalSelect, "notaPlan")) {
-        row.notaPlan = parsed.plan ?? null;
-      }
-    } else if (blob) {
-      console.warn(
-        "[prisma-encryption] notaSoapEncrypted lacks magic prefix; falling back to legacy columns",
-      );
-    }
-    delete row.notaSoapEncrypted;
-  }
-
-  if ("datosEstructuradosEncrypted" in row) {
-    const blob = toBuffer(row.datosEstructuradosEncrypted);
-    if (blob && isEncrypted(blob)) {
-      row.datosEstructurados = JSON.parse(decrypt(blob));
-    } else if (blob) {
-      console.warn(
-        "[prisma-encryption] datosEstructuradosEncrypted lacks magic prefix; falling back to legacy column",
-      );
-    }
-    delete row.datosEstructuradosEncrypted;
-  }
-
-  if ("notasEdicionEncrypted" in row) {
-    const blob = toBuffer(row.notasEdicionEncrypted);
-    if (blob && isEncrypted(blob)) {
-      row.notasEdicion = decrypt(blob);
-    } else if (blob) {
-      console.warn(
-        "[prisma-encryption] notasEdicionEncrypted lacks magic prefix; falling back to legacy column",
-      );
-    }
-    delete row.notasEdicionEncrypted;
-  }
-
-  if ("notaSoapOriginalEncrypted" in row) {
-    const blob = toBuffer(row.notaSoapOriginalEncrypted);
-    row.notaSoapOriginal = null;
-    if (blob && isEncrypted(blob)) {
-      try {
-        const parsed: unknown = JSON.parse(decrypt(blob));
-        row.notaSoapOriginal = isPlainObject(parsed)
-          ? {
-              subjetivo: parsed.subjetivo ?? null,
-              objetivo: parsed.objetivo ?? null,
-              analisis: parsed.analisis ?? null,
-              plan: parsed.plan ?? null,
-            }
-          : null;
-      } catch (err) {
-        throw new Error(
-          `Failed to decrypt or parse notaSoapOriginalEncrypted: ${(err as Error).message}`,
-        );
-      }
-    } else if (blob) {
-      // No hay columna legacy para este campo: un blob sin magic es
-      // inservible, se devuelve null.
-      console.warn(
-        "[prisma-encryption] notaSoapOriginalEncrypted lacks magic prefix; returning null",
-      );
-    }
-    delete row.notaSoapOriginalEncrypted;
-  }
-
-  return row;
-}
-
-function originalSelectOf(args: Raw): Raw | undefined {
-  return isPlainObject(args.select) ? args.select : undefined;
+/**
+ * Lanza si los args de una operación filtran u ordenan por un campo lógico o
+ * una columna cifrada. Exportada para testearla sin pasar por Prisma.
+ */
+export function assertConsultaSinCifrados(
+  modelo: ModeloCifrado,
+  args: unknown,
+): void {
+  if (!esObjetoPlano(args)) return;
+  validarWhere(modelo, args.where);
+  validarOrderBy(modelo, args.orderBy);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// PacienteContextoClinico — Golden Thread.
-//
-// Simétrico al pipeline de SesionClinica pero sin bundling: cada campo PHI
-// va a su propia columna `*_encrypted`. `hipotesisDiagnostica` y
-// `resumenAcumulativo` son strings de prosa clínica; `riesgosHistoricos` es
-// un array de objetos (timeline de flags), que se serializa a JSON antes de
-// cifrar y se re-parsea al leer.
+// Extensión
 // ────────────────────────────────────────────────────────────────────────────
-
-function transformContextoWriteData(data: Raw): Raw {
-  const out: Raw = { ...data };
-
-  if ("hipotesisDiagnostica" in out) {
-    const v = out.hipotesisDiagnostica;
-    delete out.hipotesisDiagnostica;
-    if (v === null) {
-      out.hipotesisDiagnosticaEncrypted = null;
-    } else if (typeof v === "string") {
-      out.hipotesisDiagnosticaEncrypted = encrypt(v);
-    }
-  }
-
-  if ("resumenAcumulativo" in out) {
-    const v = out.resumenAcumulativo;
-    delete out.resumenAcumulativo;
-    if (v === null) {
-      out.resumenAcumulativoEncrypted = null;
-    } else if (typeof v === "string") {
-      out.resumenAcumulativoEncrypted = encrypt(v);
-    }
-  }
-
-  if ("riesgosHistoricos" in out) {
-    const v = out.riesgosHistoricos;
-    delete out.riesgosHistoricos;
-    if (v === null) {
-      out.riesgosHistoricosEncrypted = null;
-    } else if (typeof v === "string") {
-      // Si ya viene serializado lo cifrámos tal cual; el lado de lectura
-      // siempre JSON.parse para devolver objeto.
-      out.riesgosHistoricosEncrypted = encrypt(v);
-    } else if (isPlainObject(v) || Array.isArray(v)) {
-      out.riesgosHistoricosEncrypted = encrypt(JSON.stringify(v));
-    }
-  }
-
-  return out;
-}
-
-function injectContextoEncryptedSelect(args: Raw): Raw {
-  if (!isPlainObject(args.select)) return args;
-  const select: Raw = { ...args.select };
-  if (select.hipotesisDiagnostica === true) {
-    select.hipotesisDiagnosticaEncrypted = true;
-  }
-  if (select.resumenAcumulativo === true) {
-    select.resumenAcumulativoEncrypted = true;
-  }
-  if (select.riesgosHistoricos === true) {
-    select.riesgosHistoricosEncrypted = true;
-  }
-  return { ...args, select };
-}
-
-function transformContextoRow(row: unknown): unknown {
-  if (!isPlainObject(row)) return row;
-
-  if ("hipotesisDiagnosticaEncrypted" in row) {
-    const blob = toBuffer(row.hipotesisDiagnosticaEncrypted);
-    if (blob && isEncrypted(blob)) {
-      row.hipotesisDiagnostica = decrypt(blob);
-    } else if (blob) {
-      console.warn(
-        "[prisma-encryption] hipotesisDiagnosticaEncrypted lacks magic prefix; falling back to legacy column",
-      );
-    }
-    delete row.hipotesisDiagnosticaEncrypted;
-  }
-
-  if ("resumenAcumulativoEncrypted" in row) {
-    const blob = toBuffer(row.resumenAcumulativoEncrypted);
-    if (blob && isEncrypted(blob)) {
-      row.resumenAcumulativo = decrypt(blob);
-    } else if (blob) {
-      console.warn(
-        "[prisma-encryption] resumenAcumulativoEncrypted lacks magic prefix; falling back to legacy column",
-      );
-    }
-    delete row.resumenAcumulativoEncrypted;
-  }
-
-  if ("riesgosHistoricosEncrypted" in row) {
-    const blob = toBuffer(row.riesgosHistoricosEncrypted);
-    if (blob && isEncrypted(blob)) {
-      try {
-        row.riesgosHistoricos = JSON.parse(decrypt(blob));
-      } catch (err) {
-        throw new Error(
-          `Failed to decrypt or parse riesgosHistoricosEncrypted: ${(err as Error).message}`,
-        );
-      }
-    } else if (blob) {
-      console.warn(
-        "[prisma-encryption] riesgosHistoricosEncrypted lacks magic prefix; falling back to legacy column",
-      );
-    }
-    delete row.riesgosHistoricosEncrypted;
-  }
-
-  return row;
-}
 
 export function withEncryption<C extends PrismaClient>(client: C) {
   validateKey();
 
   return client.$extends({
     name: "sesion-clinica-encryption",
+    result: {
+      sesionClinica: {
+        transcripcion: {
+          needs: { transcripcionEncrypted: true },
+          compute: (fila) => descifrarTexto(fila.transcripcionEncrypted),
+        },
+        notaSubjetivo: {
+          needs: { notaSoapEncrypted: true },
+          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "subjetivo"),
+        },
+        notaObjetivo: {
+          needs: { notaSoapEncrypted: true },
+          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "objetivo"),
+        },
+        notaAnalisis: {
+          needs: { notaSoapEncrypted: true },
+          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "analisis"),
+        },
+        notaPlan: {
+          needs: { notaSoapEncrypted: true },
+          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "plan"),
+        },
+        notaSoapOriginal: {
+          needs: { notaSoapOriginalEncrypted: true },
+          compute: (fila) =>
+            normalizarNotaSoap(descifrarJson(fila.notaSoapOriginalEncrypted)),
+        },
+        datosEstructurados: {
+          needs: { datosEstructuradosEncrypted: true },
+          compute: (fila) => descifrarJson(fila.datosEstructuradosEncrypted),
+        },
+        notasEdicion: {
+          needs: { notasEdicionEncrypted: true },
+          compute: (fila) => descifrarTexto(fila.notasEdicionEncrypted),
+        },
+      },
+      pacienteContextoClinico: {
+        hipotesisDiagnostica: {
+          needs: { hipotesisDiagnosticaEncrypted: true },
+          compute: (fila) => descifrarTexto(fila.hipotesisDiagnosticaEncrypted),
+        },
+        resumenAcumulativo: {
+          needs: { resumenAcumulativoEncrypted: true },
+          compute: (fila) => descifrarTexto(fila.resumenAcumulativoEncrypted),
+        },
+        riesgosHistoricos: {
+          needs: { riesgosHistoricosEncrypted: true },
+          compute: (fila) => descifrarRiesgos(fila.riesgosHistoricosEncrypted),
+        },
+      },
+    },
     query: {
       sesionClinica: {
-        async create({ args, query }) {
-          const a = args as unknown as Raw;
-          if (isPlainObject(a.data)) {
-            a.data = transformWriteData(a.data);
-          }
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async createMany({ args, query }) {
-          const a = args as unknown as Raw;
-          if (Array.isArray(a.data)) {
-            a.data = a.data.map((d) =>
-              isPlainObject(d) ? transformWriteData(d) : d,
-            );
-          } else if (isPlainObject(a.data)) {
-            a.data = transformWriteData(a.data);
-          }
-          return query(args);
-        },
-        async update({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          if (isPlainObject(a.data)) {
-            a.data = transformWriteData(a.data);
-          }
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async updateMany({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          if (isPlainObject(a.data)) {
-            a.data = transformWriteData(a.data);
-          }
-          return query(args);
-        },
-        async upsert({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          if (isPlainObject(a.create)) {
-            a.create = transformWriteData(a.create);
-          }
-          if (isPlainObject(a.update)) {
-            a.update = transformWriteData(a.update);
-          }
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async findUnique({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async findUniqueOrThrow({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async findFirst({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          assertNoEncryptedInOrderBy(a.orderBy);
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async findFirstOrThrow({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          assertNoEncryptedInOrderBy(a.orderBy);
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async findMany({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          assertNoEncryptedInOrderBy(a.orderBy);
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          if (Array.isArray(result)) {
-            return result.map((row) =>
-              transformRow(row, original),
-            ) as typeof result;
-          }
-          return result;
-        },
-        async delete({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
-          const original = originalSelectOf(a);
-          const modified = injectEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformRow(result, original) as typeof result;
-        },
-        async deleteMany({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoEncryptedInWhere(a.where);
+        $allOperations({ args, query }) {
+          assertConsultaSinCifrados("SesionClinica", args);
           return query(args);
         },
       },
       pacienteContextoClinico: {
-        async create({ args, query }) {
-          const a = args as unknown as Raw;
-          if (isPlainObject(a.data)) {
-            a.data = transformContextoWriteData(a.data);
-          }
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async createMany({ args, query }) {
-          const a = args as unknown as Raw;
-          if (Array.isArray(a.data)) {
-            a.data = a.data.map((d) =>
-              isPlainObject(d) ? transformContextoWriteData(d) : d,
-            );
-          } else if (isPlainObject(a.data)) {
-            a.data = transformContextoWriteData(a.data);
-          }
-          return query(args);
-        },
-        async update({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          if (isPlainObject(a.data)) {
-            a.data = transformContextoWriteData(a.data);
-          }
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async updateMany({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          if (isPlainObject(a.data)) {
-            a.data = transformContextoWriteData(a.data);
-          }
-          return query(args);
-        },
-        async upsert({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          if (isPlainObject(a.create)) {
-            a.create = transformContextoWriteData(a.create);
-          }
-          if (isPlainObject(a.update)) {
-            a.update = transformContextoWriteData(a.update);
-          }
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async findUnique({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async findUniqueOrThrow({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async findFirst({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          assertNoContextoEncryptedInOrderBy(a.orderBy);
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async findFirstOrThrow({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          assertNoContextoEncryptedInOrderBy(a.orderBy);
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async findMany({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          assertNoContextoEncryptedInOrderBy(a.orderBy);
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          if (Array.isArray(result)) {
-            return result.map((row) =>
-              transformContextoRow(row),
-            ) as typeof result;
-          }
-          return result;
-        },
-        async delete({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
-          const modified = injectContextoEncryptedSelect(a) as typeof args;
-          const result = await query(modified);
-          return transformContextoRow(result) as typeof result;
-        },
-        async deleteMany({ args, query }) {
-          const a = args as unknown as Raw;
-          assertNoContextoEncryptedInWhere(a.where);
+        $allOperations({ args, query }) {
+          assertConsultaSinCifrados("PacienteContextoClinico", args);
           return query(args);
         },
       },

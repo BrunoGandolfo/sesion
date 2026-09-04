@@ -202,25 +202,15 @@ model SesionClinica {
   // ──────────────────────────────────────────────────────────────────────
   // Notas clínicas — cifrado en reposo (AES-256-GCM)
   //
-  // Estas columnas en texto plano (transcripcion, 4 columnas SOAP,
-  // datosEstructurados acá, y notasEdicion abajo) se MANTIENEN durante la
-  // fase 1 del rollout para que scripts/migrate-encrypt-existing-notas.ts
-  // pueda leer los datos originales y poblar las *_encrypted.
-  // Una migración posterior (fase 2) eliminará las 7 columnas legacy y
-  // renombrará nota_soap_encrypted → nota_soap, etc.
-  // ──────────────────────────────────────────────────────────────────────
-  transcripcion      String? @db.Text // Transcripción diarizada completa (legacy, se borra en fase 2)
-  notaSubjetivo      String? @db.Text // S: lo que expresó el paciente (legacy)
-  notaObjetivo       String? @db.Text // O: lo que observó la terapeuta (legacy)
-  notaAnalisis       String? @db.Text // A: progreso, alianza, alertas (legacy)
-  notaPlan           String? @db.Text // P: compromisos, temas a retomar (legacy)
-  datosEstructurados String? @db.Text // JSON: temas, emociones, alianza, alertas, etc. (legacy)
-
-  // Versiones cifradas (AES-256-GCM). Formato del blob:
+  // Solo existen las columnas cifradas. Los campos lógicos en claro
+  // (transcripcion, notaSubjetivo/Objetivo/Analisis/Plan, datosEstructurados,
+  // notasEdicion, notaSoapOriginal) NO están en este schema: los expone la
+  // extensión de Prisma Client (src/lib/prisma-encryption.ts), que cifra al
+  // escribir y descifra al leer. Formato del blob:
   //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
   // Clave maestra en NOTES_ENCRYPTION_KEY (32 bytes en base64).
-  // El cifrado/descifrado es a nivel aplicación (Prisma Client extension).
   // Estos campos NO deben usarse en WHERE / ORDER BY / índices.
+  // ──────────────────────────────────────────────────────────────────────
   transcripcionEncrypted      Bytes? @map("transcripcion_encrypted") // texto plano: transcripcion
   notaSoapEncrypted           Bytes? @map("nota_soap_encrypted") // texto plano: JSON.stringify({subjetivo, objetivo, analisis, plan})
   datosEstructuradosEncrypted Bytes? @map("datos_estructurados_encrypted") // texto plano: JSON.stringify(datosEstructurados ya parseado)
@@ -245,9 +235,7 @@ model SesionClinica {
 
   // Aprobación por la profesional
   aprobadoEn            DateTime? // Cuándo Mariana aprobó la nota
-  notasEdicion          String?   @db.Text // Ediciones manuales de Mariana (legacy, se borra en fase 2)
-  // Versión cifrada de notasEdicion. Mismo formato que el resto:
-  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
+  // Ediciones manuales de Mariana, cifradas. Campo lógico: notasEdicion.
   notasEdicionEncrypted Bytes?    @map("notas_edicion_encrypted")
 
   createdAt DateTime @default(now())
@@ -327,26 +315,18 @@ model PacienteContextoClinico {
   // ──────────────────────────────────────────────────────────────────────
   // PHI sensible — cifrado en reposo (AES-256-GCM)
   //
-  // Mismo patrón que SesionClinica: cada campo tiene su columna legacy en
-  // texto plano (queda siempre NULL — la extensión Prisma intercepta los
-  // writes y los manda a la columna *_encrypted) más una columna Bytes? que
-  // guarda el blob cifrado en formato:
+  // Mismo patrón que SesionClinica: solo existe la columna Bytes? con el
+  // blob cifrado; el campo lógico en claro (hipotesisDiagnostica,
+  // resumenAcumulativo, riesgosHistoricos) lo expone la extensión de Prisma
+  // Client (src/lib/prisma-encryption.ts). Formato del blob:
   //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
   //
-  // Las columnas legacy se mantienen acá por consistencia con el resto del
-  // schema y con la lógica actual de prisma-encryption.ts. La fase 2 de
-  // limpieza (la misma que va a borrar las legacy de SesionClinica) va a
-  // dropearlas y renombrar *_encrypted → nombre lógico.
+  // riesgosHistoricos se guarda como JSON serializado (timeline de flags):
+  //   [{ sesionId, fecha, flag: "ideacionSuicida"|..., detalle }]
   //
   // Estos campos NO pueden usarse en WHERE / ORDER BY / índices — la
   // extensión Prisma lo enforza en runtime.
   // ──────────────────────────────────────────────────────────────────────
-  hipotesisDiagnostica          String? @map("hipotesis_diagnostica") @db.Text
-  resumenAcumulativo            String? @map("resumen_acumulativo") @db.Text
-  // riesgosHistoricos se guarda como JSON serializado (timeline de flags):
-  // [{ sesionId, fecha, flag: "ideacionSuicida"|..., detalle }]
-  riesgosHistoricos             String? @map("riesgos_historicos") @db.Text
-
   hipotesisDiagnosticaEncrypted Bytes?  @map("hipotesis_diagnostica_encrypted")
   resumenAcumulativoEncrypted   Bytes?  @map("resumen_acumulativo_encrypted")
   riesgosHistoricosEncrypted    Bytes?  @map("riesgos_historicos_encrypted")
