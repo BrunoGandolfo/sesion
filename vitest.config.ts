@@ -26,6 +26,7 @@ const INTEGRACION = [
   'src/lib/__tests__/multi-tenant.test.ts',
   'src/lib/__tests__/login-atomico.test.ts',
   'src/lib/__tests__/turno-recordatorios.test.ts',
+  'src/lib/__tests__/password-atomico.test.ts',
 ]
 
 // Repetidos a mano en vez de importar `defaultExclude`: al pasar `exclude`

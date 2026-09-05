@@ -57,6 +57,8 @@ export async function GET(request: Request) {
     recordatoriosTrabados,
     sesionesSinContexto,
     sesionesSinContextoSaturado,
+    minutosAudioDelMes,
+    topeMinutosAudioMes,
   } = await revisarSalud({ prisma: db, ahora: new Date() });
 
   const alertaEnviada = alerta ? await enviarAlerta(alerta) : false;
@@ -69,6 +71,12 @@ export async function GET(request: Request) {
     sesionesSinContexto,
     /** true si se llegó al tope: sesionesSinContexto es un piso. */
     sesionesSinContextoSaturado,
+    /** Control de gasto: minutos de audio transcriptos en el mes de
+     *  Montevideo, y el techo con el que se comparan. Van siempre, se cruce o
+     *  no el umbral: la idea es poder mirar la curva, no enterarse recién
+     *  cuando explota. */
+    minutosAudioDelMes,
+    topeMinutosAudioMes,
     alertaEnviada,
   });
 }

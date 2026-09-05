@@ -1,12 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import {
-  calcularProgramadoEn,
-  normalizarRecordatorioModo,
-} from "@/lib/recordatorios-programacion";
 
 import { getOrganizationId } from "../_lib/auth";
+import { programarRecordatorio } from "../_lib/casos-uso/recordatorios-del-turno";
 import {
   duracionSchema,
   isoDateTimeSchema,
@@ -99,6 +96,8 @@ export async function POST(request: Request) {
       return validationError(parsed.error);
     }
 
+    const ahora = new Date();
+
     const result = await db.$transaction(async (tx) => {
       const paciente = await tx.paciente.findFirst({
         where: { id: parsed.data.pacienteId, organizationId },
@@ -109,16 +108,7 @@ export async function POST(request: Request) {
         throw new ApiError("Paciente no encontrado", 404);
       }
 
-      const configuracion = await tx.configuracion.findUnique({
-        where: { organizationId },
-        select: { recordatorioModo: true },
-      });
-
       const fecha = new Date(parsed.data.fecha);
-      const programadoEn = calcularProgramadoEn(
-        fecha,
-        normalizarRecordatorioModo(configuracion?.recordatorioModo),
-      );
 
       const turno = await tx.turno.create({
         data: {
@@ -134,12 +124,19 @@ export async function POST(request: Request) {
         },
       });
 
-      const recordatorio = await tx.recordatorio.create({
-        data: {
-          turnoId: turno.id,
-          programadoEn,
-          estado: "pendiente",
-        },
+      // Un turno con fecha pasada no lleva recordatorio: es el caso de
+      // /grabar/nuevo, que crea el turno con la hora de este instante porque
+      // la sesión está empezando. Sin esta guarda se creaba igual, con
+      // `programadoEn` calculado hacia atrás (las 20:00 de ayer), y el cron
+      // le mandaba a la paciente un SMS recordándole la sesión que estaba
+      // teniendo en ese momento. La regla vive en
+      // casos-uso/recordatorios-del-turno.ts.
+      const recordatorio = await programarRecordatorio({
+        prisma: tx,
+        turnoId: turno.id,
+        organizationId,
+        fechaTurno: fecha,
+        ahora,
       });
 
       return { turno, recordatorio };
@@ -148,7 +145,12 @@ export async function POST(request: Request) {
     return Response.json(
       {
         data: toTurno(result.turno),
-        recordatorio: toRecordatorio(result.recordatorio),
+        // null cuando el turno ya había empezado. Nadie lo lee hoy (los
+        // formularios usan sólo `data`), pero el campo no se saca: es la
+        // forma de la respuesta desde que existe la ruta.
+        recordatorio: result.recordatorio
+          ? toRecordatorio(result.recordatorio)
+          : null,
       },
       { status: 201 },
     );

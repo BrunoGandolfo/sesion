@@ -28,10 +28,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { BCRYPT_RONDAS, validarPasswordNueva } from "@/lib/password";
 import {
-  ACCION_PASSWORD_FALLIDO,
-  ENTIDAD_CUENTA,
-  evaluarCambioPassword,
   MENSAJE_DEMASIADOS_INTENTOS,
+  procesarCambioPassword,
 } from "@/lib/password-eventos";
 import { huellaDeRequest } from "@/lib/request-huella";
 
@@ -69,49 +67,48 @@ export async function POST(request: Request) {
     const ahora = new Date();
     const { ip, userAgent } = huellaDeRequest(request);
 
-    // Misma política que el login (src/lib/login-intentos.ts), con el userId
-    // como clave. Sin esto, una sesión robada puede probar contraseñas contra
-    // este endpoint hasta acertar la actual. Se evalúa ANTES del bcrypt: un
-    // intento bloqueado no cuesta ni CPU ni fila nueva.
-    const bloqueo = await evaluarCambioPassword({ prisma: db, userId, ahora });
-    if (bloqueo.bloqueado) {
+    // Evaluar el contador, comparar la contraseña actual y registrar el fallo
+    // son UN acto, serializado por usuario con un lock de transacción. En
+    // tres pasos sueltos, N requests en paralelo con una sesión robada leían
+    // todos "0 fallos" y llegaban todos al bcrypt: el umbral existía y no
+    // frenaba nada (Codex P1 de #13). La maquinaria es la misma del login.
+    const resultado = await procesarCambioPassword({
+      prisma: db,
+      organizationId,
+      userId,
+      ahora,
+      huella: { ip, userAgent },
+      verificar: (hashGuardado) => bcrypt.compare(actual, hashGuardado),
+    });
+
+    if (resultado.estado === "bloqueado") {
       throw new ApiError(MENSAJE_DEMASIADOS_INTENTOS, 429);
     }
 
-    const usuario = await db.user.findFirst({
-      where: { id: userId, organizationId },
-      select: { id: true, hashedPassword: true },
-    });
-
-    if (!usuario) {
+    if (resultado.estado === "sin-usuario") {
       throw new ApiError("No autorizado", 401);
     }
 
-    const actualOk = await bcrypt.compare(actual, usuario.hashedPassword);
-    if (!actualOk) {
-      // El fallo se registra ANTES de contestar: esa fila ES el contador que
-      // lee evaluarCambioPassword en el intento siguiente.
-      await registrarAuditoria({
-        organizationId,
-        actorTipo: "usuario",
-        actorId: userId,
-        accion: ACCION_PASSWORD_FALLIDO,
-        entidad: ENTIDAD_CUENTA,
-        entidadId: userId,
-        detalle: {
-          ip,
-          userAgent,
-          nivelBloqueoPrevio: bloqueo.nivel,
-          fallosPrevios: bloqueo.fallos,
-        },
-      });
+    if (resultado.estado === "indisponible") {
+      // La transacción no se pudo completar y el intento se rechaza sin
+      // verificar nada (ver rechazarSiFalla). No es culpa de quien pide:
+      // 503 y que reintente.
+      throw new ApiError(
+        "No se pudo procesar el cambio de contraseña en este momento. Probá de nuevo.",
+        503,
+      );
+    }
 
+    if (resultado.estado === "credencial-incorrecta") {
       // Acá sí se puede ser específico: es su propia cuenta y ya está
       // autenticada. El mensaje genérico del login existe para no revelar qué
       // emails están dados de alta; este dato no revela nada nuevo.
       throw new ApiError("La contraseña actual no es correcta", 400);
     }
 
+    // Validar y hashear quedan AFUERA del lock: son CPU pura, y rechazar una
+    // contraseña nueva mal formada no es un intento fallido contra el
+    // contador (la actual estaba bien).
     const validacion = validarPasswordNueva(nueva, actual);
     if (!validacion.ok) {
       throw new ApiError(validacion.motivo, 400);

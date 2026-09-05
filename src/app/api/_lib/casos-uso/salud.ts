@@ -15,7 +15,9 @@
 //   3. recordatorios trabados en "enviando" (una corrida del cron de envío
 //      que se murió con la reserva tomada y que el rescate no está sacando);
 //   4. sesiones aprobadas hace rato que el Golden Thread no integró (la
-//      Llamada B del worker dejó de correr).
+//      Llamada B del worker dejó de correr);
+//   5. minutos de audio transcriptos en el mes corriente, contra un techo
+//      explícito (control de gasto).
 //
 // La 4 es la más silenciosa: la nota está aprobada, el audio ya se borró y la
 // app se ve perfecta; lo único que pasa es que el hilo del proceso —lo que
@@ -30,6 +32,7 @@
 // esas N sesiones", es "esta métrica dejó de servir, mirá la base a mano".
 
 import type { db } from "@/lib/db";
+import { finDeMesMvd, inicioDeMesMvd } from "@/lib/fechas-montevideo";
 
 import { RESCATE_MS } from "./enviar-recordatorios";
 import {
@@ -77,6 +80,52 @@ export const UMBRAL_RECORDATORIOS_FALLIDOS = 1;
 export const UMBRAL_RECORDATORIOS_TRABADOS = 1;
 export const UMBRAL_SIN_CONTEXTO = 1;
 
+// ────────────────────────────────────────────────────────────────────────────
+// Control de gasto
+//
+// El pipeline cobra por minuto de audio transcripto (ASR) y por token de
+// entrada/salida (LLM). Nada de eso se estaba mirando: una sesión que se
+// reprocesa en bucle, un audio de tres horas subido por error o un worker
+// atascado reintentando gastan plata en silencio hasta que llega la factura.
+//
+// LO QUE SE PUEDE MEDIR HOY Y LO QUE NO
+//
+// Los minutos de audio SÍ: `SesionClinica.duracionAudioSeg` existe y lo
+// escribe upload-confirmar. Los tokens NO: no hay columna donde guardarlos y
+// el worker tampoco los manda (el payload de /api/sesion-clinica/callback
+// acepta modeloASR, modeloLLM y promptVersion, y nada más). Las dos cosas
+// están BLOQUEADAS en el reporte del PR con el SQL propuesto; hasta que
+// existan, esta métrica cubre la mitad que se puede cubrir, que además es la
+// que crece más rápido con un bucle de reprocesamiento.
+//
+// QUÉ SE CUENTA
+//
+// La suma de `duracionAudioSeg` de las sesiones con `procesadoEn` dentro del
+// mes corriente de Montevideo. `procesadoEn` es cuando el worker terminó, o
+// sea cuando el proveedor efectivamente cobró.
+//
+// SUBESTIMA, y hay que decirlo: una sesión que el worker empezó a transcribir
+// y murió antes de contestar ya se pagó y no tiene `procesadoEn`, así que no
+// entra. Contar eso exacto necesita las columnas de la BLOQUEADA. Para lo que
+// esta métrica existe —darse cuenta de que el gasto se disparó— alcanza: un
+// bucle de reprocesamiento sí deja `procesadoEn` en cada vuelta.
+// ────────────────────────────────────────────────────────────────────────────
+
+const SEGUNDOS_POR_MINUTO = 60;
+
+/**
+ * Techo mensual de minutos de audio transcriptos, explícito.
+ *
+ * De dónde sale el número: el consultorio es de una profesional. Un mes
+ * cargado son ~40 sesiones de 50 minutos, unos 2.000 minutos. 3.000 (50
+ * horas) deja holgura para un mes excepcional y sigue siendo inequívoco: si
+ * se cruza, o el consultorio cambió de tamaño o algo está reprocesando.
+ *
+ * Es un umbral de AVISO, no un corte: nada se bloquea al pasarlo. Cortar el
+ * pipeline por gasto en una app clínica es peor que la factura.
+ */
+export const TOPE_MINUTOS_AUDIO_MES = 3_000;
+
 export interface RevisarSaludParams {
   prisma: ClientePrisma;
   /** Momento de la corrida. Se inyecta para que el caso de uso sea
@@ -92,6 +141,12 @@ export interface Salud {
   sesionesSinContexto: number;
   /** true si la métrica anterior llegó al tope: es un piso, no el total. */
   sesionesSinContextoSaturado: boolean;
+  /** Minutos de audio transcriptos en el mes corriente de Montevideo.
+   *  Redondeado hacia arriba: medio minuto de audio se paga entero. */
+  minutosAudioDelMes: number;
+  /** Techo con el que se compara, para que quien lea la respuesta no tenga
+   *  que ir a buscar la constante. */
+  topeMinutosAudioMes: number;
   /** Texto a mandar, o null si no hay nada que avisar. */
   alerta: string | null;
 }
@@ -107,6 +162,7 @@ export async function revisarSalud({
     recordatoriosFallidos,
     recordatoriosTrabados,
     sinContexto,
+    audioDelMes,
   ] = await Promise.all([
     prisma.sesionClinica.count({
       where: {
@@ -130,7 +186,23 @@ export async function revisarSalud({
       prisma,
       hasta: new Date(t - RETRASO_CONTEXTO_MS),
     }),
+    // Mes de MONTEVIDEO, no del servidor (que corre en UTC): la factura del
+    // consultorio se cierra en el calendario de acá. Los bordes salen de
+    // fechas-montevideo.ts, la única fuente de verdad del huso.
+    prisma.sesionClinica.aggregate({
+      _sum: { duracionAudioSeg: true },
+      where: {
+        procesadoEn: {
+          gte: inicioDeMesMvd(ahora),
+          lte: finDeMesMvd(ahora),
+        },
+      },
+    }),
   ]);
+
+  const minutosAudioDelMes = Math.ceil(
+    (audioDelMes._sum.duracionAudioSeg ?? 0) / SEGUNDOS_POR_MINUTO,
+  );
 
   const motivos: string[] = [];
 
@@ -168,12 +240,21 @@ export async function revisarSalud({
     );
   }
 
+  if (minutosAudioDelMes > TOPE_MINUTOS_AUDIO_MES) {
+    motivos.push(
+      `${minutosAudioDelMes} minutos de audio transcriptos en el mes, por encima del tope de ` +
+        `${TOPE_MINUTOS_AUDIO_MES}: revisá si hay sesiones reprocesándose`,
+    );
+  }
+
   return {
     sesionesTrabadas,
     recordatoriosFallidos,
     recordatoriosTrabados,
     sesionesSinContexto: sinContexto.cantidad,
     sesionesSinContextoSaturado: sinContexto.saturado,
+    minutosAudioDelMes,
+    topeMinutosAudioMes: TOPE_MINUTOS_AUDIO_MES,
     alerta: motivos.length > 0 ? `Sesión: ${motivos.join("; ")}` : null,
   };
 }

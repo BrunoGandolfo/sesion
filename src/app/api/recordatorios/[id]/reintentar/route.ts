@@ -65,8 +65,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // updateMany condicionado al estado: si otra pestaña reintentó primero,
     // o el cron lo movió entre la lectura y esta escritura, count es 0 y no
     // se pisa nada.
+    //
+    // Y la organización va en el WHERE de la ESCRITURA, no sólo en el
+    // findFirst de arriba: `updateMany({ where: { id } })` revive el
+    // recordatorio aunque sea de otra organización, y entre la lectura y la
+    // escritura hay una ventana. El recordatorio no tiene columna propia de
+    // organización: se filtra por la del turno, igual que la lectura.
     const { count } = await db.recordatorio.updateMany({
-      where: { id, estado: "fallido" },
+      where: { id, estado: "fallido", turno: { organizationId } },
       data: {
         estado: "pendiente",
         intentos: 0,

@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import {
-  calcularProgramadoEn,
-  normalizarRecordatorioModo,
-} from "@/lib/recordatorios-programacion";
 
 import { getOrganizationId } from "../../_lib/auth";
-import { ESTADOS_CON_ENVIO_PENDIENTE } from "../../_lib/casos-uso/enviar-recordatorios";
+import {
+  cerrarRecordatoriosDelTurno,
+  programarRecordatorio,
+  turnoSigueProgramado,
+} from "../../_lib/casos-uso/recordatorios-del-turno";
 import {
   duracionSchema,
   isoDateTimeSchema,
@@ -35,6 +35,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();
     const { id } = await params;
+    const ahora = new Date();
     const body = await request.json();
     const parsed = updateTurnoSchema.safeParse(body);
 
@@ -95,22 +96,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
       const updated = await tx.turno.findUniqueOrThrow({ where: { id } });
 
-      // Apaga TODO recordatorio que todavía pueda mandar un SMS de este
-      // turno: los que esperan su hora y también los que quedaron reservados
-      // ("enviando") por una corrida del cron que se murió. Si la reserva
-      // huérfana sobrevive, el rescate la levanta y manda un mensaje de un
-      // turno que ya no existe o que se movió de fecha.
-      const apagarRecordatorios = () =>
-        tx.recordatorio.updateMany({
-          where: {
-            turnoId: id,
-            estado: { in: [...ESTADOS_CON_ENVIO_PENDIENTE] },
-          },
-          data: { estado: "cancelado" },
-        });
-
-      if (updated.estado === "cancelado") {
-        await apagarRecordatorios();
+      // Un turno que dejó de estar programado —realizado, ausente o
+      // cancelado— no avisa nada. Antes esto sólo pasaba al cancelar; marcar
+      // "realizado" (lo hace la pantalla de grabar al terminar la sesión) o
+      // "ausente" dejaba el recordatorio vivo. La regla vive en
+      // casos-uso/recordatorios-del-turno.ts, no acá.
+      if (!turnoSigueProgramado(updated.estado)) {
+        await cerrarRecordatoriosDelTurno(tx, id);
 
         return updated;
       }
@@ -124,25 +116,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         return updated;
       }
 
-      await apagarRecordatorios();
-
-      const configuracion = await tx.configuracion.findUnique({
-        where: { organizationId },
-        select: { recordatorioModo: true },
-      });
-
-      const programadoEn = calcularProgramadoEn(
-        updated.fecha,
-        normalizarRecordatorioModo(configuracion?.recordatorioModo),
-      );
-
-      // La reprogramación genera un recordatorio nuevo alineado a la nueva fecha.
-      await tx.recordatorio.create({
-        data: {
-          turnoId: updated.id,
-          programadoEn,
-          estado: "pendiente",
-        },
+      // Reprogramación: se apaga lo viejo y se programa lo nuevo. Si la
+      // fecha nueva ya pasó, programarRecordatorio no crea nada.
+      await cerrarRecordatoriosDelTurno(tx, id);
+      await programarRecordatorio({
+        prisma: tx,
+        turnoId: updated.id,
+        organizationId,
+        fechaTurno: updated.fecha,
+        ahora,
       });
 
       return updated;

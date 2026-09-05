@@ -75,6 +75,7 @@ let patchSesion!: Handler;
 let deleteSesion!: Handler;
 let uploadUrl!: Handler;
 let descobrarTurno!: Handler;
+let reintentarRecordatorio!: Handler;
 
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
@@ -194,20 +195,28 @@ beforeAll(async () => {
   // que pasar ANTES del import de las rutas.
   (globalThis as unknown as { prisma: unknown }).prisma = db;
 
-  const [rutaPaciente, rutaTurno, rutaSesion, rutaUpload, rutaCobrar] =
-    await Promise.all([
-      import("@/app/api/pacientes/[id]/route"),
-      import("@/app/api/turnos/[id]/route"),
-      import("@/app/api/sesion-clinica/[id]/route"),
-      import("@/app/api/sesion-clinica/[id]/upload-url/route"),
-      import("@/app/api/turnos/[id]/cobrar/route"),
-    ]);
+  const [
+    rutaPaciente,
+    rutaTurno,
+    rutaSesion,
+    rutaUpload,
+    rutaCobrar,
+    rutaReintentar,
+  ] = await Promise.all([
+    import("@/app/api/pacientes/[id]/route"),
+    import("@/app/api/turnos/[id]/route"),
+    import("@/app/api/sesion-clinica/[id]/route"),
+    import("@/app/api/sesion-clinica/[id]/upload-url/route"),
+    import("@/app/api/turnos/[id]/cobrar/route"),
+    import("@/app/api/recordatorios/[id]/reintentar/route"),
+  ]);
   patchPaciente = rutaPaciente.PATCH as Handler;
   patchTurno = rutaTurno.PATCH as Handler;
   patchSesion = rutaSesion.PATCH as Handler;
   deleteSesion = rutaSesion.DELETE as Handler;
   uploadUrl = rutaUpload.POST as Handler;
   descobrarTurno = rutaCobrar.DELETE as Handler;
+  reintentarRecordatorio = rutaReintentar.POST as Handler;
 });
 
 beforeEach(async () => {
@@ -518,5 +527,77 @@ describe("DELETE /api/turnos/[id]/cobrar — aislamiento entre organizaciones", 
     });
     expect(fila.pagoEstado).toBe("pagado");
     expect(fila.pagoMetodo).toBe("efectivo");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/recordatorios/[id]/reintentar
+//
+// El recordatorio no tiene columna propia de organización: se filtra por la
+// del turno. La LECTURA ya lo hacía; la escritura no, y `updateMany` por id
+// revive el recordatorio de cualquier organización — con `programadoEn` en
+// ahora, así que el próximo tick del cron le manda el SMS a una paciente que
+// no es de quien pidió.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("POST /api/recordatorios/[id]/reintentar — aislamiento", () => {
+  const MANANA_MAS = new Date("2026-12-02T15:00:00.000Z");
+
+  /** Turno futuro y programado, con un recordatorio que ya agotó intentos. */
+  async function crearRecordatorioFallido(org: Org): Promise<string> {
+    const turno = await prismaRaw.turno.create({
+      data: {
+        fecha: MANANA_MAS,
+        tarifaCobrada: 1000,
+        pacienteId: org.pacienteId,
+        organizationId: org.orgId,
+      },
+    });
+    const recordatorio = await prismaRaw.recordatorio.create({
+      data: {
+        turnoId: turno.id,
+        estado: "fallido",
+        intentos: 3,
+        error: "Twilio caído",
+        programadoEn: new Date("2026-12-01T23:00:00.000Z"),
+      },
+    });
+    return recordatorio.id;
+  }
+
+  it("la organización dueña puede reintentar", async () => {
+    const a = await crearOrg();
+    const recordatorioId = await crearRecordatorioFallido(a);
+    como(a);
+
+    const res = await reintentarRecordatorio(pedidoSinCuerpo("POST"), {
+      params: Promise.resolve({ id: recordatorioId }),
+    });
+
+    expect(res.status).toBe(200);
+    const fila = await prismaRaw.recordatorio.findUniqueOrThrow({
+      where: { id: recordatorioId },
+    });
+    expect(fila.estado).toBe("pendiente");
+    expect(fila.intentos).toBe(0);
+    expect(fila.error).toBeNull();
+  });
+
+  it("otra organización recibe 404 y el recordatorio sigue fallido", async () => {
+    const a = await crearOrg();
+    const recordatorioId = await crearRecordatorioFallido(a);
+    const b = await crearOrg();
+    como(b);
+
+    const res = await reintentarRecordatorio(pedidoSinCuerpo("POST"), {
+      params: Promise.resolve({ id: recordatorioId }),
+    });
+
+    expect(res.status).toBe(404);
+    const fila = await prismaRaw.recordatorio.findUniqueOrThrow({
+      where: { id: recordatorioId },
+    });
+    expect(fila.estado).toBe("fallido");
+    expect(fila.intentos).toBe(3);
   });
 });

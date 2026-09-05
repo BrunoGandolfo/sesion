@@ -84,6 +84,30 @@ export const MENSAJE_INTENTOS_AGOTADOS =
  */
 export const ESTADOS_CON_ENVIO_PENDIENTE = ["pendiente", "enviando"] as const;
 
+/**
+ * Qué dice la fila cuando el SMS SALIÓ pero el turno se cerró mientras
+ * Twilio contestaba.
+ *
+ * La decisión, porque no es obvia y conviene que esté escrita:
+ *
+ *   - El estado se queda en "cancelado", no pasa a "enviado". "Enviado"
+ *     significa "el recordatorio hizo su trabajo", y este no lo hizo: avisó
+ *     de una sesión que ya no existe. Además "cancelado" es terminal — nadie
+ *     lo vuelve a tomar — mientras que cualquier otro estado reabre la
+ *     puerta a un segundo mensaje.
+ *   - Pero `enviadoEn` y `textoEnviado` SÍ se llenan, y `error` guarda este
+ *     texto. Porque el hecho ocurrió: la paciente tiene un SMS en el
+ *     teléfono diciéndole que venga. Borrar esa evidencia para que la fila
+ *     quede prolija sería mentirle a la única persona que puede arreglarlo,
+ *     que es la terapeuta llamándola.
+ *
+ * La carrera es estrecha (hay que cancelar el turno exactamente mientras
+ * Twilio responde) pero real, y con datos clínicos la respuesta a "es
+ * improbable" es dejarlo registrado, no ignorarlo.
+ */
+export const MENSAJE_ENVIADO_TRAS_CANCELACION =
+  "El SMS salió, pero el turno se cerró mientras se enviaba: la paciente recibió un aviso de una sesión que ya no está programada";
+
 export interface EnviarRecordatoriosParams {
   prisma: ClientePrisma;
   ahora: Date;
@@ -98,7 +122,12 @@ export interface EnviarRecordatoriosParams {
 
 export interface ResumenRecordatorios {
   procesados: number;
+  /** SMS que salieron. Incluye los de `enviadosTrasCancelacion`. */
   enviados: number;
+  /** SMS que salieron con el turno ya cerrado (ver
+   *  MENSAJE_ENVIADO_TRAS_CANCELACION). Cualquier número mayor que 0 es algo
+   *  que la terapeuta tiene que saber: hay una paciente con un aviso falso. */
+  enviadosTrasCancelacion: number;
   fallidos: number;
   saltados: number;
   vencidos: number;
@@ -153,6 +182,7 @@ export async function enviarRecordatoriosVencidos({
   const resumen: ResumenRecordatorios = {
     procesados: recordatorios.length,
     enviados: 0,
+    enviadosTrasCancelacion: 0,
     fallidos: 0,
     saltados: 0,
     vencidos: 0,
@@ -286,8 +316,12 @@ export async function enviarRecordatoriosVencidos({
         throw new Error(resultado.error ?? "Error desconocido");
       }
 
-      await prisma.recordatorio.update({
-        where: { id: recordatorio.id },
+      // El cierre condiciona a "enviando": mientras Twilio contestaba, la
+      // terapeuta puede haber cancelado o reprogramado el turno, y eso
+      // escribió "cancelado" en esta misma fila. Un `update` por id la
+      // pisaba y perdía la cancelación.
+      const cerrado = await prisma.recordatorio.updateMany({
+        where: { id: recordatorio.id, estado: "enviando" },
         data: {
           estado: "enviado",
           enviadoEn: ahora,
@@ -295,10 +329,32 @@ export async function enviarRecordatoriosVencidos({
           error: null,
         },
       });
+
       resumen.enviados += 1;
-      resumen.eventos.push(
-        `[cron][ok] turno=${turno.id} id=${recordatorio.id} resultado=enviado intentos=${intentosActual} ts=${ts}`,
-      );
+
+      if (cerrado.count === 0) {
+        // El SMS SALIÓ y el turno se canceló en el medio. Ver
+        // MENSAJE_ENVIADO_TRAS_CANCELACION: la fila se queda en "cancelado"
+        // (estado terminal, nadie la reenvía) pero guarda la evidencia de
+        // que el mensaje se mandó, que es lo que la terapeuta necesita para
+        // llamar a la paciente y desmentirlo.
+        await prisma.recordatorio.updateMany({
+          where: { id: recordatorio.id, estado: "cancelado" },
+          data: {
+            enviadoEn: ahora,
+            textoEnviado: texto,
+            error: MENSAJE_ENVIADO_TRAS_CANCELACION,
+          },
+        });
+        resumen.enviadosTrasCancelacion += 1;
+        resumen.eventos.push(
+          `[cron][enviado-tras-cancelacion] turno=${turno.id} id=${recordatorio.id} resultado=sms-salido-turno-cancelado intentos=${intentosActual} ts=${ts}`,
+        );
+      } else {
+        resumen.eventos.push(
+          `[cron][ok] turno=${turno.id} id=${recordatorio.id} resultado=enviado intentos=${intentosActual} ts=${ts}`,
+        );
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       resumen.fallidos += 1;
@@ -313,14 +369,28 @@ export async function enviarRecordatoriosVencidos({
       // updateMany, la fila sigue intacta y la retoma el próximo tick.
       if (reclamado) {
         try {
-          await prisma.recordatorio.update({
-            where: { id: recordatorio.id },
+          // Condicionado a "enviando", igual que el cierre feliz. Sin eso,
+          // devolver la fila a "pendiente" REVIVÍA un recordatorio que la
+          // terapeuta acababa de cancelar: quedaba vivo, con `programadoEn`
+          // viejo, y el próximo tick lo mandaba en el acto. Era el agujero
+          // por el que se escapaba el arreglo del PR #13 (cancelar/reprogramar
+          // apaga pendiente y enviando) cada vez que Twilio fallaba.
+          const cerrado = await prisma.recordatorio.updateMany({
+            where: { id: recordatorio.id, estado: "enviando" },
             data: {
               ...(intentoConsumido ? {} : { intentos: { increment: 1 } }),
               error: msg,
               estado: intentosFinal >= maxIntentos ? "fallido" : "pendiente",
             },
           });
+
+          if (cerrado.count === 0) {
+            // El turno se cerró mientras el envío fallaba. No hay nada que
+            // salvar —el SMS no salió— y la fila ya está en su estado final.
+            resumen.eventos.push(
+              `[cron][fallo-descartado] turno=${recordatorio.turnoId} id=${recordatorio.id} resultado=turno-cerrado-durante-el-envio error="${msg}" ts=${ts}`,
+            );
+          }
         } catch (persistErr) {
           const persistMsg =
             persistErr instanceof Error ? persistErr.message : String(persistErr);

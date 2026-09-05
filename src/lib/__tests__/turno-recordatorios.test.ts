@@ -1,7 +1,12 @@
 /**
- * Integración — cancelar o reprogramar un turno apaga TODOS sus
- * recordatorios vivos, incluidos los que quedaron reservados ("enviando")
- * por una corrida del cron que se murió. Contra la DB real de test.
+ * Integración — la relación entre el estado de un turno y sus recordatorios,
+ * contra la DB real de test. Tres bloques:
+ *
+ *   1. Cancelar o reprogramar apaga TODOS los recordatorios vivos, incluidos
+ *      los reservados ("enviando") por una corrida del cron que se murió.
+ *   2. CUALQUIER vía que saque al turno de "programado" —realizado, ausente,
+ *      cancelado, reprogramado, cobrado— hace lo mismo.
+ *   3. Un turno con fecha pasada no lleva recordatorio.
  *
  * Ejecutar:
  *   DATABASE_URL_TEST="postgres://..." \
@@ -76,6 +81,8 @@ type Handler = (
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
 let patchTurno!: Handler;
+let cobrarTurnoHandler!: Handler;
+let crearTurno!: (request: Request) => Promise<Response>;
 
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
@@ -90,19 +97,35 @@ const TEMPLATE = "Hola {{nombre}}, tu sesión es el {{fecha}} a las {{hora}}.";
 
 const enviaOk: EnviarSms = async () => ({ success: true, sid: "SM1" });
 
+/** Un turno que ya pasó, para el caso de cobrar. */
+const TURNO_PASADO = new Date("2026-09-03T14:00:00.000Z");
+
 interface Escenario {
   turnoId: string;
   recordatorioId: string;
 }
 
+interface OpcionesEscenario {
+  /** "enviando" (reserva huérfana) o "pendiente" (el caso normal). */
+  estadoRecordatorio?: string;
+  fechaTurno?: Date;
+}
+
 /**
- * Org completa con un turno futuro y un recordatorio que quedó RESERVADO por
- * una corrida que se murió: estado "enviando", intentos en 0, y el
- * actualizado_en corrido hacia atrás para que el lease esté vencido.
+ * Org completa con un turno y un recordatorio.
+ *
+ * Por defecto el recordatorio quedó RESERVADO por una corrida que se murió:
+ * estado "enviando", intentos en 0, y el actualizado_en corrido hacia atrás
+ * para que el lease esté vencido. Con `estadoRecordatorio: "pendiente"` es el
+ * caso normal, el que cubre la regla "un turno cerrado no avisa nada".
  *
  * `actualizado_en` es @updatedAt: Prisma la maneja, así que se toca por SQL.
  */
-async function escenarioConReservaHuerfana(): Promise<Escenario> {
+async function escenarioConReservaHuerfana(
+  opciones: OpcionesEscenario = {},
+): Promise<Escenario> {
+  const estadoRecordatorio = opciones.estadoRecordatorio ?? "enviando";
+  const fechaTurno = opciones.fechaTurno ?? TURNO_ORIGINAL;
   const org = await prismaRaw.organization.create({
     data: { nombre: `Org ${randomUUID()}` },
   });
@@ -135,7 +158,7 @@ async function escenarioConReservaHuerfana(): Promise<Escenario> {
   });
   const turno = await prismaRaw.turno.create({
     data: {
-      fecha: TURNO_ORIGINAL,
+      fecha: fechaTurno,
       tarifaCobrada: 1000,
       pacienteId: paciente.id,
       organizationId: org.id,
@@ -144,16 +167,18 @@ async function escenarioConReservaHuerfana(): Promise<Escenario> {
   const recordatorio = await prismaRaw.recordatorio.create({
     data: {
       turnoId: turno.id,
-      estado: "enviando",
+      estado: estadoRecordatorio,
       intentos: 0,
       programadoEn: new Date(AHORA.getTime() - 60_000),
     },
   });
-  await prismaRaw.$executeRaw`
-    UPDATE recordatorios SET actualizado_en = ${new Date(
-      AHORA.getTime() - 10 * 60_000,
-    )} WHERE id = ${recordatorio.id}
-  `;
+  if (estadoRecordatorio === "enviando") {
+    await prismaRaw.$executeRaw`
+      UPDATE recordatorios SET actualizado_en = ${new Date(
+        AHORA.getTime() - 10 * 60_000,
+      )} WHERE id = ${recordatorio.id}
+    `;
+  }
 
   sesionActual.organizationId = org.id;
   sesionActual.userId = user.id;
@@ -167,6 +192,22 @@ function pedido(body: unknown): Request {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function pedidoPost(body: unknown): Request {
+  return new Request("http://localhost/api", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** El estado en que quedó el recordatorio. */
+async function estadoDe(recordatorioId: string): Promise<string> {
+  const fila = await prismaRaw.recordatorio.findUniqueOrThrow({
+    where: { id: recordatorioId },
+  });
+  return fila.estado;
 }
 
 function correrDespachador(enviarSms: EnviarSms) {
@@ -184,8 +225,14 @@ beforeAll(async () => {
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
   (globalThis as unknown as { prisma: unknown }).prisma = db;
 
-  const ruta = await import("@/app/api/turnos/[id]/route");
+  const [ruta, rutaCobrar, rutaTurnos] = await Promise.all([
+    import("@/app/api/turnos/[id]/route"),
+    import("@/app/api/turnos/[id]/cobrar/route"),
+    import("@/app/api/turnos/route"),
+  ]);
   patchTurno = ruta.PATCH as Handler;
+  cobrarTurnoHandler = rutaCobrar.POST as Handler;
+  crearTurno = rutaTurnos.POST as (request: Request) => Promise<Response>;
 });
 
 beforeEach(async () => {
@@ -267,5 +314,186 @@ describe("PATCH /api/turnos/[id] y las reservas huérfanas de recordatorio", () 
     const stub = vi.fn(enviaOk);
     await correrDespachador(stub);
     expect(stub).not.toHaveBeenCalled();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// A1 — un turno que deja de estar programado cierra sus recordatorios,
+// por CUALQUIER vía.
+//
+// Antes esto sólo pasaba al cancelar. Marcar "realizado" —lo hace la pantalla
+// de grabar cuando termina la sesión— o "ausente" dejaba el recordatorio
+// vivo. Se salvaba de casualidad, porque `estaVencido` del despachador
+// descarta turnos cerrados y pasados; pero eso es una red, no la regla, y una
+// fila viva es una fila que el rescate puede levantar.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("un turno que deja de estar programado cierra sus recordatorios", () => {
+  for (const estado of ["realizado", "ausente", "cancelado"] as const) {
+    it(`vía PATCH con estado "${estado}"`, async () => {
+      const { turnoId, recordatorioId } = await escenarioConReservaHuerfana({
+        estadoRecordatorio: "pendiente",
+      });
+
+      const res = await patchTurno(pedido({ estado }), {
+        params: Promise.resolve({ id: turnoId }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await estadoDe(recordatorioId)).toBe("cancelado");
+    });
+
+    it(`vía PATCH con estado "${estado}" también apaga la reserva huérfana`, async () => {
+      const { turnoId, recordatorioId } = await escenarioConReservaHuerfana();
+
+      await patchTurno(pedido({ estado }), {
+        params: Promise.resolve({ id: turnoId }),
+      });
+
+      expect(await estadoDe(recordatorioId)).toBe("cancelado");
+    });
+  }
+
+  it("vía cobrar: registrar el pago de un turno programado lo cierra", async () => {
+    // cobrarTurno sólo deja cobrar un turno programado cuya hora ya pasó, así
+    // que el turno del escenario es de hace una hora y el recordatorio quedó
+    // pendiente (el cron no llegó a levantarlo).
+    const { turnoId, recordatorioId } = await escenarioConReservaHuerfana({
+      estadoRecordatorio: "pendiente",
+      fechaTurno: TURNO_PASADO,
+    });
+
+    const res = await cobrarTurnoHandler(pedidoPost({ metodo: "efectivo" }), {
+      params: Promise.resolve({ id: turnoId }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(
+      (await prismaRaw.turno.findUniqueOrThrow({ where: { id: turnoId } }))
+        .estado,
+    ).toBe("realizado");
+    expect(await estadoDe(recordatorioId)).toBe("cancelado");
+  });
+
+  it("vía reprogramación: se apaga el viejo y se crea uno nuevo", async () => {
+    const { turnoId, recordatorioId } = await escenarioConReservaHuerfana({
+      estadoRecordatorio: "pendiente",
+    });
+
+    await patchTurno(pedido({ fecha: TURNO_REPROGRAMADO.toISOString() }), {
+      params: Promise.resolve({ id: turnoId }),
+    });
+
+    expect(await estadoDe(recordatorioId)).toBe("cancelado");
+    const vivos = await prismaRaw.recordatorio.findMany({
+      where: { turnoId, estado: { in: ["pendiente", "enviando"] } },
+    });
+    expect(vivos).toHaveLength(1);
+    expect(vivos[0].id).not.toBe(recordatorioId);
+  });
+
+  it("editar un turno sin tocar estado ni fecha NO apaga nada", async () => {
+    // La regla es "dejó de estar programado", no "lo tocaron".
+    const { turnoId, recordatorioId } = await escenarioConReservaHuerfana({
+      estadoRecordatorio: "pendiente",
+    });
+
+    const res = await patchTurno(pedido({ notas: "Trajo el informe" }), {
+      params: Promise.resolve({ id: turnoId }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await estadoDe(recordatorioId)).toBe("pendiente");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// A2 — un turno que ya empezó no lleva recordatorio.
+//
+// /grabar/nuevo crea el turno con `fecha: new Date()` porque la sesión está
+// empezando. Antes eso creaba igual un recordatorio, con `programadoEn`
+// calculado hacia atrás (las 20:00 de ayer), y el cron le mandaba a la
+// paciente un SMS recordándole la sesión que estaba teniendo en ese momento.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("POST /api/turnos y los turnos que ya empezaron", () => {
+  let pacienteId = "";
+
+  /** Devuelve el id del turno creado y cuántos recordatorios tiene. */
+  async function crear(fecha: Date) {
+    const res = await crearTurno(
+      pedidoPost({
+        pacienteId,
+        fecha: fecha.toISOString(),
+        duracion: 50,
+        modalidad: "presencial",
+      }),
+    );
+    const cuerpo = (await res.json()) as {
+      data: { id: string };
+      recordatorio: unknown;
+    };
+    const recordatorios = await prismaRaw.recordatorio.findMany({
+      where: { turnoId: cuerpo.data.id },
+    });
+    return { status: res.status, cuerpo, recordatorios };
+  }
+
+  beforeEach(async () => {
+    const org = await prismaRaw.organization.create({
+      data: { nombre: `Org ${randomUUID()}` },
+    });
+    const user = await prismaRaw.user.create({
+      data: {
+        email: `${randomUUID()}@test.uy`,
+        hashedPassword: "no-importa",
+        nombre: "Mariana",
+        organizationId: org.id,
+      },
+    });
+    const paciente = await prismaRaw.paciente.create({
+      data: {
+        nombre: "Lucía",
+        apellido: "Gómez",
+        telefono: "+59899123456",
+        tarifa: 1000,
+        organizationId: org.id,
+      },
+    });
+    pacienteId = paciente.id;
+    sesionActual.organizationId = org.id;
+    sesionActual.userId = user.id;
+  });
+
+  it("un turno futuro sí lleva recordatorio", async () => {
+    const { status, cuerpo, recordatorios } = await crear(
+      new Date(Date.now() + 3 * 24 * 60 * 60_000),
+    );
+
+    expect(status).toBe(201);
+    expect(recordatorios).toHaveLength(1);
+    expect(recordatorios[0].estado).toBe("pendiente");
+    expect(cuerpo.recordatorio).not.toBeNull();
+  });
+
+  it("un turno con fecha pasada no lleva recordatorio", async () => {
+    const { status, cuerpo, recordatorios } = await crear(
+      new Date(Date.now() - 60 * 60_000),
+    );
+
+    expect(status).toBe(201);
+    expect(recordatorios).toEqual([]);
+    expect(cuerpo.recordatorio).toBeNull();
+  });
+
+  it("el turno creado al vuelo por /grabar/nuevo (fecha = ahora) tampoco", async () => {
+    // Es literalmente lo que manda grabar-view: `new Date().toISOString()`.
+    // Entre que el cliente arma la fecha y el servidor la evalúa pasan
+    // milisegundos, así que el instante de creación siempre queda en el
+    // pasado. El borde exacto (fecha === ahora) cuenta como pasado.
+    const { status, recordatorios } = await crear(new Date());
+
+    expect(status).toBe(201);
+    expect(recordatorios).toEqual([]);
   });
 });
