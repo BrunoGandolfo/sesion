@@ -1,5 +1,8 @@
 // Tests del seguro de la grabación: lo que persiste en IndexedDB (chunks y
-// pausas) y la aritmética del cronómetro con pausas.
+// pausas) para sobrevivir a que el navegador mate el proceso.
+//
+// La aritmética del cronómetro se mudó con su módulo:
+// src/lib/__tests__/grabacion-cronometro.test.ts.
 //
 // El entorno de vitest es `node`, que no trae IndexedDB, y el proyecto no
 // suma dependencias para esto: abajo hay un IndexedDB mínimo, suficiente
@@ -8,8 +11,6 @@
 // módulo bajo prueba realmente llama.
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { segundosGrabados } from "@/components/grabacion/GrabadorSesion";
 
 // ────────────────────────────────────────────────────────────────────────────
 // IndexedDB de juguete
@@ -356,73 +357,5 @@ describe("grabacion-storage — degradación", () => {
     await expect(storage.guardarPausas(TURNO, [])).resolves.toBeUndefined();
     await expect(storage.limpiarGrabacion(TURNO)).resolves.toBeUndefined();
     await expect(storage.recuperarGrabacionPendiente()).resolves.toBeNull();
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Cronómetro con pausas — lógica pura, sin React ni MediaRecorder.
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("segundosGrabados", () => {
-  const T0 = 1_700_000_000_000;
-
-  it("sin pausas cuenta todo el tiempo transcurrido", () => {
-    expect(segundosGrabados(T0, T0 + 90_000)).toBe(90);
-  });
-
-  it("descuenta una pausa cerrada", () => {
-    expect(
-      segundosGrabados(T0, T0 + 90_000, [
-        { inicio: T0 + 10_000, fin: T0 + 40_000 },
-      ]),
-    ).toBe(60);
-  });
-
-  it("descuenta varias pausas", () => {
-    expect(
-      segundosGrabados(T0, T0 + 100_000, [
-        { inicio: T0 + 10_000, fin: T0 + 20_000 },
-        { inicio: T0 + 50_000, fin: T0 + 65_000 },
-      ]),
-    ).toBe(75);
-  });
-
-  it("con una pausa abierta el cronómetro se detiene", () => {
-    const pausas = [{ inicio: T0 + 30_000, fin: null }];
-
-    expect(segundosGrabados(T0, T0 + 30_000, pausas)).toBe(30);
-    expect(segundosGrabados(T0, T0 + 120_000, pausas)).toBe(30);
-    expect(segundosGrabados(T0, T0 + 600_000, pausas)).toBe(30);
-  });
-
-  it("al reanudar vuelve a correr desde lo acumulado", () => {
-    const pausada = [{ inicio: T0 + 30_000, fin: null }];
-    expect(segundosGrabados(T0, T0 + 120_000, pausada)).toBe(30);
-
-    const reanudada = [{ inicio: T0 + 30_000, fin: T0 + 120_000 }];
-    expect(segundosGrabados(T0, T0 + 135_000, reanudada)).toBe(45);
-  });
-
-  it("recorta los tramos de pausa que caen fuera de la ventana", () => {
-    expect(
-      segundosGrabados(T0, T0 + 60_000, [
-        { inicio: T0 - 20_000, fin: T0 + 10_000 },
-        { inicio: T0 + 50_000, fin: T0 + 90_000 },
-      ]),
-    ).toBe(40);
-  });
-
-  it("suma lo que ya venía grabado de una recuperación", () => {
-    expect(segundosGrabados(null, T0, [], 42)).toBe(42);
-    expect(
-      segundosGrabados(T0, T0 + 30_000, [{ inicio: T0, fin: T0 + 10_000 }], 42),
-    ).toBe(62);
-  });
-
-  it("nunca devuelve un negativo", () => {
-    expect(segundosGrabados(T0, T0 - 5_000)).toBe(0);
-    expect(
-      segundosGrabados(T0, T0 + 10_000, [{ inicio: T0, fin: T0 + 60_000 }]),
-    ).toBe(0);
   });
 });

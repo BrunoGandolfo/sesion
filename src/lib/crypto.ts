@@ -15,7 +15,12 @@ function bytesABase64(bytes: Uint8Array): string {
   return btoa(binario);
 }
 
-function base64ABytes(b64: string): Uint8Array<ArrayBuffer> {
+/**
+ * base64 → bytes. Exportada porque el grabador la necesita para volver a
+ * armar el blob cifrado, y hasta ahora tenía su propia copia con `atob`:
+ * dos implementaciones de lo mismo, una de ellas sin el atajo por Buffer.
+ */
+export function base64ABytes(b64: string): Uint8Array<ArrayBuffer> {
   if (tieneBuffer) {
     const buf = Buffer.from(b64, "base64");
     const out = new Uint8Array(buf.byteLength);
