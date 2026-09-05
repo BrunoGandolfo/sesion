@@ -49,9 +49,23 @@ export interface Violacion {
   disposicion: string;
 }
 
+/**
+ * Caracteres que no pueden llegar al log tal cual: los de control C0/C1 y
+ * los separadores de línea de Unicode. Un salto de línea adentro de un campo
+ * parte la línea en dos y, como el formato es una línea por violación,
+ * cualquiera podría postear un reporte falso ADENTRO de otro.
+ */
+const CONTROLES = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/g;
+
+/** Recortado y sin caracteres de control. El endpoint es público: todo lo
+ *  que sale de acá lo escribió alguien de afuera. */
 function texto(valor: unknown): string {
   if (typeof valor === "string") {
-    return valor.length > MAX_CAMPO ? `${valor.slice(0, MAX_CAMPO)}…` : valor;
+    const recortado =
+      valor.length > MAX_CAMPO ? `${valor.slice(0, MAX_CAMPO)}…` : valor;
+    // Espacio y no vacío: recortar cambiaría la longitud y taparía que el
+    // campo venía con basura.
+    return recortado.replace(CONTROLES, " ");
   }
   if (typeof valor === "number" || typeof valor === "boolean") {
     return String(valor);
@@ -108,11 +122,21 @@ export function normalizarReportes(cuerpo: unknown): Violacion[] {
   });
 }
 
+/**
+ * Escapa lo que rompería el formato `clave="valor"`. Los caracteres de
+ * control ya los sacó `texto()` al normalizar; acá se cierran las comillas y
+ * la barra, que son cosa del formateo y no del dato.
+ */
+function entreComillas(valor: string): string {
+  return valor.replace(/[\\"]/g, "\\$&");
+}
+
 /** Una línea por violación, greppable. */
 export function formatearViolacion(v: Violacion): string {
+  const c = entreComillas;
   return (
-    `[csp] directiva="${v.directiva}" bloqueado="${v.bloqueado}" ` +
-    `documento="${v.documento}" archivo="${v.archivo}:${v.linea}" ` +
-    `disposicion="${v.disposicion}"`
+    `[csp] directiva="${c(v.directiva)}" bloqueado="${c(v.bloqueado)}" ` +
+    `documento="${c(v.documento)}" archivo="${c(v.archivo)}:${c(v.linea)}" ` +
+    `disposicion="${c(v.disposicion)}"`
   );
 }

@@ -176,3 +176,63 @@ describe("formatearViolacion", () => {
     expect(formatearViolacion(normalizarReportes({})[0])).toMatch(/^\[csp\] /);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Inyeccion en el log (Codex, P2 sobre el PR #16).
+//
+// El endpoint es publico y sin sesion: cualquiera puede postearle lo que
+// quiera. Como el formato es UNA LINEA por violacion y los campos van entre
+// comillas, un salto de linea o una comilla adentro de un campo alcanzaban
+// para escribir lineas enteras inventadas en el log -- justo el log que hay
+// que leer durante cuatro semanas para decidir si la CSP pasa a enforce.
+// ---------------------------------------------------------------------------
+
+describe("nadie puede escribir lineas propias en el log", () => {
+  /** Un reporte con `blocked-uri` envenenado, ya formateado. */
+  function conBloqueado(valor: string): string {
+    return formatearViolacion(
+      normalizarReportes({ "csp-report": { "blocked-uri": valor } })[0],
+    );
+  }
+
+  it("un salto de linea no parte la linea en dos", () => {
+    const linea = conBloqueado(
+      'inline\n[csp] directiva="script-src" bloqueado="todo-bien"',
+    );
+
+    expect(linea.split("\n")).toHaveLength(1);
+  });
+
+  // Cada caso en su propio array, como los de mas arriba: `it.each` trata
+  // los arrays como tuplas de argumentos.
+  it.each([
+    ["\n"], // salto de linea
+    ["\r"], // retorno de carro
+    [String.fromCharCode(0)], // nulo
+    [String.fromCharCode(27)], // escape, el de los colores de terminal
+    [String.fromCharCode(127)], // delete
+    [String.fromCharCode(0x2028)], // separador de linea de Unicode
+  ])("el control %j se reemplaza por un espacio", (control: string) => {
+    expect(conBloqueado(`a${control}b`)).toContain('bloqueado="a b"');
+  });
+
+  it("una comilla no cierra el campo antes de tiempo", () => {
+    // Sin escapar, esto terminaba el valor de `bloqueado` y todo lo que
+    // seguia parecia un campo mas, puesto por el servidor.
+    const linea = conBloqueado('inline" directiva="script-src');
+
+    expect(linea).toContain('bloqueado="inline\\" directiva=\\"script-src"');
+  });
+
+  it("la barra se escapa a si misma, asi una comilla no se cuela detras", () => {
+    expect(conBloqueado("a\\b")).toContain('bloqueado="a\\\\b"');
+  });
+
+  it("un campo limpio queda exactamente igual que antes", () => {
+    // El escapado no puede ensuciar el 99% de los reportes, que son URLs
+    // normales sin nada raro.
+    expect(conBloqueado("https://sesion.uy/x.js")).toContain(
+      'bloqueado="https://sesion.uy/x.js"',
+    );
+  });
+});
