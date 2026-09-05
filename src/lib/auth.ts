@@ -55,10 +55,15 @@ export const authConfig = {
       // `request` viene del provider de credenciales: de ahí salen la IP y el
       // user-agent que van al registro y que alimentan el límite por IP.
       //
-      // Todo lo pesado (Prisma, bcrypt, node:crypto) entra por import
-      // dinámico, como ya hacía bcryptjs: este archivo lo importa el
-      // middleware, que corre en el runtime edge, y ahí esos módulos no
-      // existen. authorize() nunca se ejecuta en el middleware.
+      // Todo lo pesado (Prisma, bcrypt) entra por import dinámico: este
+      // archivo lo importa el middleware, y así no se evalúa al arrancar.
+      //
+      // OJO, y esto costó un deploy: el import dinámico NO saca el módulo del
+      // bundle edge. El empaquetador lo sigue igual, y `node:*` ahí no existe
+      // aunque authorize() nunca corra en el middleware. Por eso
+      // login-eventos.ts hashea con Web Crypto y no con node:crypto. La regla
+      // está en AGENTS.md (9) y la vigila
+      // src/lib/__tests__/middleware-edge.test.ts.
       async authorize(credentials, request) {
         const email =
           typeof credentials.email === "string"
