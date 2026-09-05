@@ -21,6 +21,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import {
   enviarRecordatoriosVencidos,
+  MENSAJE_INTENTOS_AGOTADOS,
   type EnviarSms,
 } from "@/app/api/_lib/casos-uso/enviar-recordatorios";
 import { __resetKeyCacheForTests } from "@/lib/encryption";
@@ -353,6 +354,73 @@ describe("enviarRecordatoriosVencidos", () => {
     const fila = await leer(recordatorioId);
     expect(fila.intentos).toBe(MAX_INTENTOS);
     expect(fila.estado).toBe("fallido");
+  });
+
+  // ─── Reserva huérfana con los intentos agotados ─────────────────────────
+  // El borde exacto es `intentos === maxIntentos`. Así queda la fila cuando
+  // la corrida se muere DESPUÉS de gastar el último intento y ANTES de
+  // cerrarla: sin la guarda, el rescate le sumaba uno más y mandaba el
+  // cuarto SMS de tres — y si el corte se repite, sigue mandando para
+  // siempre.
+
+  it("con intentos === maxIntentos la reserva huérfana se cierra fallida sin llamar a Twilio", async () => {
+    const { recordatorioId } = await crearRecordatorio({
+      estado: "enviando",
+      intentos: MAX_INTENTOS,
+    });
+    await envejecerReserva(recordatorioId, new Date(AHORA.getTime() - 10 * 60_000));
+    const stub = vi.fn(enviaOk);
+
+    const resumen = await correr(stub);
+
+    expect(stub).not.toHaveBeenCalled();
+    expect(resumen.rescatados).toBe(1);
+    expect(resumen.fallidos).toBe(1);
+    expect(resumen.enviados).toBe(0);
+    expect(resumen.errores).toEqual([
+      `Recordatorio ${recordatorioId}: ${MENSAJE_INTENTOS_AGOTADOS}`,
+    ]);
+
+    const fila = await leer(recordatorioId);
+    expect(fila.estado).toBe("fallido");
+    // Ni uno más: no hubo llamada, así que no hay intento que contar.
+    expect(fila.intentos).toBe(MAX_INTENTOS);
+    expect(fila.error).toBe(MENSAJE_INTENTOS_AGOTADOS);
+  });
+
+  it("con un intento todavía disponible el rescate sí envía", async () => {
+    // El otro lado del borde: maxIntentos - 1 no está agotado.
+    const { recordatorioId } = await crearRecordatorio({
+      estado: "enviando",
+      intentos: MAX_INTENTOS - 1,
+    });
+    await envejecerReserva(recordatorioId, new Date(AHORA.getTime() - 10 * 60_000));
+    const stub = vi.fn(enviaOk);
+
+    const resumen = await correr(stub);
+
+    expect(stub).toHaveBeenCalledTimes(1);
+    expect(resumen.enviados).toBe(1);
+    const fila = await leer(recordatorioId);
+    expect(fila.estado).toBe("enviado");
+    expect(fila.intentos).toBe(MAX_INTENTOS);
+  });
+
+  it("por más corridas que pasen, un recordatorio agotado no manda otro SMS", async () => {
+    const { recordatorioId } = await crearRecordatorio({
+      estado: "enviando",
+      intentos: MAX_INTENTOS,
+    });
+    await envejecerReserva(recordatorioId, new Date(AHORA.getTime() - 10 * 60_000));
+    const stub = vi.fn(enviaOk);
+
+    await correr(stub);
+    // La fila quedó en "fallido": la segunda corrida ni siquiera la levanta.
+    const segunda = await correr(stub);
+
+    expect(stub).not.toHaveBeenCalled();
+    expect(segunda.procesados).toBe(0);
+    expect((await leer(recordatorioId)).estado).toBe("fallido");
   });
 
   it("una reserva reciente no se toca: la otra corrida sigue viva", async () => {

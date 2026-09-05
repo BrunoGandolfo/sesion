@@ -59,6 +59,31 @@ export const TOPE_POR_CORRIDA = 20;
  */
 export const RESCATE_MS = 5 * 60_000;
 
+/**
+ * Motivo con que se cierra una reserva huérfana que ya no tiene intentos.
+ * Queda en la columna `error` del recordatorio: si aparece, lo que hay que
+ * mirar es por qué se corta la corrida siempre en el mismo punto.
+ */
+export const MENSAJE_INTENTOS_AGOTADOS =
+  "Reserva huérfana sin intentos disponibles: no se reintenta el envío";
+
+/**
+ * Estados desde los que un recordatorio TODAVÍA puede terminar mandando un
+ * SMS: "pendiente" (espera su hora) y "enviando" (reservado por una corrida,
+ * esté viva o muerta).
+ *
+ * Quien cancela o reprograma un turno tiene que apagar los dos. Apagar sólo
+ * "pendiente" —lo que se hacía— deja viva la reserva de una corrida que se
+ * murió: el rescate la levanta, lee la fecha NUEVA del turno y manda el
+ * recordatorio en el acto, días antes de tiempo; y el recordatorio de
+ * reemplazo manda otro a su hora. Dos mensajes, uno de ellos a destiempo.
+ *
+ * Vive acá, al lado del rescate, porque es el rescate el que le da sentido a
+ * "enviando": si mañana aparece otro estado que pueda derivar en un envío,
+ * este arreglo se hace en un solo lugar.
+ */
+export const ESTADOS_CON_ENVIO_PENDIENTE = ["pendiente", "enviando"] as const;
+
 export interface EnviarRecordatoriosParams {
   prisma: ClientePrisma;
   ahora: Date;
@@ -171,6 +196,35 @@ export async function enviarRecordatoriosVencidos({
         resumen.eventos.push(
           `[cron][rescate] turno=${recordatorio.turnoId} id=${recordatorio.id} resultado=reserva-huerfana intentos=${intentosActual} ts=${ts}`,
         );
+      }
+
+      // Sin intentos disponibles no se llama a Twilio: se cierra como fallido.
+      //
+      // El caso es el de una corrida que murió DESPUÉS de gastar el último
+      // intento y ANTES de cerrar la fila. Queda en "enviando" con
+      // intentos === maxIntentos, y sin esta guarda el rescate le sumaría uno
+      // más y mandaría el cuarto SMS de tres. Peor: si la corrida se muere
+      // siempre en el mismo lugar, el ciclo no se corta nunca — cada rescate
+      // manda otro mensaje. El tope de intentos sólo se respetaba en la rama
+      // de error, y un corte no lanza ningún error.
+      //
+      // La guarda no distingue rescate de pendiente a propósito: un
+      // "pendiente" con los intentos agotados no debería existir (la rama de
+      // error lo habría pasado a "fallido"), y si existe igual la respuesta
+      // correcta es la misma.
+      if (intentosActual >= maxIntentos) {
+        await prisma.recordatorio.updateMany({
+          where: { id: recordatorio.id, estado: "enviando" },
+          data: { estado: "fallido", error: MENSAJE_INTENTOS_AGOTADOS },
+        });
+        resumen.fallidos += 1;
+        resumen.errores.push(
+          `Recordatorio ${recordatorio.id}: ${MENSAJE_INTENTOS_AGOTADOS}`,
+        );
+        resumen.eventos.push(
+          `[cron][agotado] turno=${recordatorio.turnoId} id=${recordatorio.id} resultado=fallido intentos=${intentosActual} ts=${ts}`,
+        );
+        continue;
       }
 
       const { turno } = recordatorio;

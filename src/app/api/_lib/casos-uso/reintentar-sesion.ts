@@ -59,8 +59,12 @@ export async function reintentarSesion({
     );
   }
 
-  const sesion = await prisma.sesionClinica.update({
-    where: { id: sesionId },
+  // La organización va en el WHERE de la ESCRITURA, no sólo en el findFirst
+  // de arriba: `update({ where: { id } })` escribe la fila aunque sea de otra
+  // organización, y entre la lectura y la escritura hay una ventana. Con
+  // updateMany la pertenencia es parte de la operación.
+  const { count } = await prisma.sesionClinica.updateMany({
+    where: { id: sesionId, organizationId },
     data: {
       estado: "procesando",
       duracionAudioSeg,
@@ -68,6 +72,14 @@ export async function reintentarSesion({
       error: null,
       intentos: 0,
     },
+  });
+
+  if (count === 0) {
+    throw new ApiError("Sesión clínica no encontrada", 404);
+  }
+
+  const sesion = await prisma.sesionClinica.findFirstOrThrow({
+    where: { id: sesionId, organizationId },
     select: SESION_SELECT,
   });
 

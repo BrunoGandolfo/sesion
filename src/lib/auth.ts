@@ -45,6 +45,14 @@ function hashSenuelo(crear: () => Promise<string>): Promise<string> {
   return senueloPendiente;
 }
 
+/** Lo que authorize() le devuelve a Auth.js cuando la credencial es buena. */
+interface UsuarioAutenticado {
+  id: string;
+  email: string;
+  name: string;
+  organizationId: string;
+}
+
 export const authConfig = {
   providers: [
     Credentials({
@@ -74,68 +82,65 @@ export const authConfig = {
 
         if (!email || !password) return null;
 
-        const [{ dbAuth: db }, { compare, hash }, login] = await Promise.all([
-          import("@/lib/db-auth"),
+        const [{ compare, hash }, login] = await Promise.all([
           import("bcryptjs"),
           import("@/lib/login-eventos"),
         ]);
 
         const ahora = new Date();
         const { ip, userAgent } = login.huellaDeRequest(request);
-        const intento = { email, ip, userAgent, ahora };
 
-        // Demasiados fallos recientes: se corta acá y NO se registra nada.
-        // Si cada intento bloqueado contara como fallo, quien golpea la
-        // puerta podría dejar afuera a la profesional para siempre, y la
-        // tabla crecería sin techo.
-        const bloqueo = await login.evaluarIntento(intento);
-        if (bloqueo.bloqueado) return null;
+        // Evaluar el contador, verificar la contraseña y registrar el
+        // resultado son UN acto, serializado por email y por IP dentro de
+        // una transacción con lock (ver login-eventos.ts). En dos pasos
+        // sueltos, 50 requests en paralelo leían todos "0 fallos" y el
+        // umbral de 5 no frenaba nada.
+        return login.procesarIntento<UsuarioAutenticado>({
+          intento: { email, ip, userAgent, ahora },
+          verificar: async (tx) => {
+            const user = await tx.user.findUnique({
+              where: { email },
+              select: {
+                id: true,
+                email: true,
+                hashedPassword: true,
+                nombre: true,
+                organizationId: true,
+              },
+            });
 
-        const user = await db.user.findUnique({
-          where: { email },
-          select: {
-            id: true,
-            email: true,
-            hashedPassword: true,
-            nombre: true,
-            organizationId: true,
+            // El compare se hace exista o no el usuario. Con un `return null`
+            // temprano, un email inexistente contestaba en un milisegundo y
+            // uno real tardaba lo que tarda bcrypt: el reloj decía qué emails
+            // están dados de alta aunque el mensaje no lo dijera.
+            const contra = user
+              ? user.hashedPassword
+              : await hashSenuelo(() =>
+                  hash("señuelo-de-tiempo-constante", BCRYPT_RONDAS),
+                );
+            const passwordOk = await compare(password, contra);
+
+            if (!user || !passwordOk) {
+              return {
+                ok: false,
+                motivo: user ? "password" : "email",
+                organizationId: user?.organizationId ?? null,
+              };
+            }
+
+            return {
+              ok: true,
+              userId: user.id,
+              organizationId: user.organizationId,
+              sesion: {
+                id: user.id,
+                email: user.email,
+                name: user.nombre,
+                organizationId: user.organizationId,
+              },
+            };
           },
         });
-
-        // El compare se hace exista o no el usuario. Con el `return null`
-        // temprano de antes, un email inexistente contestaba en un
-        // milisegundo y uno real tardaba lo que tarda bcrypt: el reloj
-        // decía qué emails están dados de alta aunque el mensaje no lo
-        // dijera.
-        const contra = user
-          ? user.hashedPassword
-          : await hashSenuelo(() =>
-              hash("señuelo-de-tiempo-constante", BCRYPT_RONDAS),
-            );
-        const passwordOk = await compare(password, contra);
-
-        if (!user || !passwordOk) {
-          await login.registrarLoginFallido({
-            ...intento,
-            organizationId: user?.organizationId ?? null,
-            motivo: user ? "password" : "email",
-            bloqueoPrevio: bloqueo,
-          });
-          return null;
-        }
-
-        await login.registrarLoginOk({
-          ...intento,
-          userId: user.id,
-          organizationId: user.organizationId,
-        });
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.nombre,
-          organizationId: user.organizationId,
-        };
       },
     }),
   ],

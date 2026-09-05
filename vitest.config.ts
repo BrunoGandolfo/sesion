@@ -24,6 +24,8 @@ const INTEGRACION = [
   'src/lib/__tests__/cobrar-turno.test.ts',
   'src/lib/__tests__/contexto-clinico.test.ts',
   'src/lib/__tests__/multi-tenant.test.ts',
+  'src/lib/__tests__/login-atomico.test.ts',
+  'src/lib/__tests__/turno-recordatorios.test.ts',
 ]
 
 // Repetidos a mano en vez de importar `defaultExclude`: al pasar `exclude`

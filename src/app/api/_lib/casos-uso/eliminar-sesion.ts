@@ -53,6 +53,23 @@ function tieneAudioReal(audioR2Key: string | null): boolean {
   return Boolean(audioR2Key && audioR2Key !== "dev-no-r2");
 }
 
+/**
+ * El WHERE de toda escritura de esta sesión: id MÁS organización.
+ *
+ * `update({ where: { id } })` y `delete({ where: { id } })` escriben la fila
+ * aunque sea de otra organización; el findFirst de más arriba comprueba la
+ * pertenencia, pero entre esa lectura y la escritura hay una ventana. Con
+ * updateMany / deleteMany la pertenencia es parte de la propia operación.
+ *
+ * No se mira el `count` que devuelven: 0 sólo puede pasar si la fila cambió
+ * de organización o desapareció entre la lectura y la escritura, y en esta
+ * app nada hace eso. Lo que importa es que una fila ajena NO se toque, y eso
+ * lo garantiza el where, no el count.
+ */
+function suya(ctx: Contexto): { id: string; organizationId: string } {
+  return { id: ctx.existente.id, organizationId: ctx.organizationId };
+}
+
 function auditar(
   ctx: Contexto,
   accion: "sesion.descartar" | "sesion.eliminar",
@@ -83,8 +100,8 @@ async function descartarNotaEnRevision(
   // en NULL), pero el stash de la clave temporal se preserva: es lo único
   // necesario para reprocesar.
   const claveTemporal = extraerClaveTemporal(existente.datosEstructurados);
-  await prisma.sesionClinica.update({
-    where: { id: existente.id },
+  await prisma.sesionClinica.updateMany({
+    where: suya(ctx),
     data: {
       estado: "error",
       error: audioConservado
@@ -118,13 +135,13 @@ async function eliminarSesionConError(
   const { prisma, existente, borrarAudio } = ctx;
   const audioBorrado = await borrarAudio(existente.audioR2Key);
   if (!audioBorrado && tieneAudioReal(existente.audioR2Key)) {
-    await prisma.sesionClinica.update({
-      where: { id: existente.id },
+    await prisma.sesionClinica.updateMany({
+      where: suya(ctx),
       data: { error: MENSAJE_AUDIO_NO_BORRADO },
     });
     throw new ApiError(MENSAJE_AUDIO_NO_BORRADO, 409);
   }
-  await prisma.sesionClinica.delete({ where: { id: existente.id } });
+  await prisma.sesionClinica.deleteMany({ where: suya(ctx) });
 
   await auditar(ctx, "sesion.eliminar", false);
 
@@ -142,8 +159,8 @@ async function resolverGrabacionAbandonada(
   const { prisma, existente } = ctx;
   if (existente.audioR2Key) {
     assertTransicionValida(existente.estado, "error");
-    await prisma.sesionClinica.update({
-      where: { id: existente.id },
+    await prisma.sesionClinica.updateMany({
+      where: suya(ctx),
       data: {
         estado: "error",
         error: "Grabación abandonada — descartada por la usuaria",
@@ -155,7 +172,7 @@ async function resolverGrabacionAbandonada(
     return { tipo: "grabacion_abandonada_a_error" };
   }
 
-  await prisma.sesionClinica.delete({ where: { id: existente.id } });
+  await prisma.sesionClinica.deleteMany({ where: suya(ctx) });
 
   await auditar(ctx, "sesion.eliminar", false);
 

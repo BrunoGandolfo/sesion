@@ -17,8 +17,13 @@
 //
 // Todo se calcula en hora de Montevideo, no en la hora del servidor: el
 // recordatorio es un mensaje que una persona lee en su teléfono, en su día.
-// Uruguay no cambia de huso desde 2015 (UTC-3 todo el año), así que alcanza
-// con el desplazamiento fijo y el resultado no depende de dónde corra esto.
+// La conversión no vive acá: la hace src/lib/fechas-montevideo.ts, que es la
+// única fuente de verdad del huso en toda la app. Este módulo tenía su propia
+// copia del offset y de las dos conversiones —idénticas, pero copias— y
+// alcanzaba con que alguien tocara una para que el recordatorio y la agenda
+// dejaran de hablar del mismo día.
+
+import { instanteMvd, partesMvd } from "@/lib/fechas-montevideo";
 
 /** Los tres momentos posibles. Espejo de Configuracion.recordatorioModo. */
 export const RECORDATORIO_MODOS = [
@@ -38,9 +43,6 @@ export const HORA_TARDE = 20;
 /** Hora de la mañana del propio día del turno. */
 export const HORA_MANANA = 8;
 
-/** Uruguay: UTC-3 todo el año desde 2015 (sin horario de verano). */
-const OFFSET_MONTEVIDEO_MIN = -180;
-
 /** True si el string es uno de los tres modos. Para narrowear lo que viene
  *  de la base (columna String) o del body de PATCH /api/config. */
 export function esRecordatorioModo(valor: unknown): valor is RecordatorioModo {
@@ -55,35 +57,6 @@ export function normalizarRecordatorioModo(valor: unknown): RecordatorioModo {
   return esRecordatorioModo(valor) ? valor : RECORDATORIO_MODO_DEFAULT;
 }
 
-/** El instante, leído como reloj de pared de Montevideo. */
-function partesMontevideo(instante: Date): {
-  anio: number;
-  mes: number;
-  dia: number;
-  hora: number;
-} {
-  const pared = new Date(instante.getTime() + OFFSET_MONTEVIDEO_MIN * 60_000);
-  return {
-    anio: pared.getUTCFullYear(),
-    mes: pared.getUTCMonth(),
-    dia: pared.getUTCDate(),
-    hora: pared.getUTCHours(),
-  };
-}
-
-/** Reloj de pared de Montevideo → instante. `dia` puede desbordar el mes
- *  (0, -1, 32…): Date.UTC normaliza y el cambio de mes o de año sale solo. */
-function instanteMontevideo(
-  anio: number,
-  mes: number,
-  dia: number,
-  hora: number,
-): Date {
-  return new Date(
-    Date.UTC(anio, mes, dia, hora, 0, 0, 0) - OFFSET_MONTEVIDEO_MIN * 60_000,
-  );
-}
-
 /**
  * Cuándo mandar el recordatorio de un turno.
  *
@@ -95,16 +68,16 @@ export function calcularProgramadoEn(
   fechaTurno: Date,
   modo: RecordatorioModo = RECORDATORIO_MODO_DEFAULT,
 ): Date {
-  const { anio, mes, dia, hora } = partesMontevideo(fechaTurno);
+  const { anio, mes, dia, hora } = partesMvd(fechaTurno);
 
   if (modo === "misma_manana") {
     // Un turno antes de las 8 no tiene mañana propia útil: se avisa la
     // tarde anterior, como en dia_anterior.
     return hora < HORA_MANANA
-      ? instanteMontevideo(anio, mes, dia - 1, HORA_TARDE)
-      : instanteMontevideo(anio, mes, dia, HORA_MANANA);
+      ? instanteMvd(anio, mes, dia - 1, HORA_TARDE)
+      : instanteMvd(anio, mes, dia, HORA_MANANA);
   }
 
   const diasAntes = modo === "dos_dias_antes" ? 2 : 1;
-  return instanteMontevideo(anio, mes, dia - diasAntes, HORA_TARDE);
+  return instanteMvd(anio, mes, dia - diasAntes, HORA_TARDE);
 }
