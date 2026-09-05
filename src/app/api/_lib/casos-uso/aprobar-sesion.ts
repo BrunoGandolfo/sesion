@@ -109,12 +109,13 @@ export async function aprobarSesion({
   // en un intento posterior.
   const datosSinClave = quitarClaveTemporal(datos);
 
-  // Escritura condicionada al estado: si la sesión dejó de estar en
-  // revisión entre la lectura y acá (descarte concurrente), no se pisa.
+  // Escritura condicionada al estado Y a la organización: si la sesión dejó
+  // de estar en revisión entre la lectura y acá (descarte concurrente), no se
+  // pisa; y la pertenencia es parte de la operación, no un chequeo anterior.
   // Nota, comentarios y datos van cifrados vía cifrarSesion; los undefined
   // (sin nota editada, sin clave que limpiar) no tocan su columna.
   const { count } = await prisma.sesionClinica.updateMany({
-    where: { id: sesionId, estado: "revision" },
+    where: { id: sesionId, organizationId, estado: "revision" },
     data: {
       estado: "aprobado",
       aprobadoEn: new Date(),

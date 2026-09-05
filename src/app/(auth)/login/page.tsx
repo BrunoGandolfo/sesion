@@ -80,13 +80,21 @@ export default function LoginPage() {
               {loading ? "Entrando…" : "Entrar"}
             </Button>
 
+            {/* Un solo mensaje para todos los casos: contraseña equivocada,
+                email que no existe y acceso bloqueado por intentos. Decir
+                cuál de los tres fue es decirle a quien prueba si ese email
+                está dado de alta. La segunda línea explica el bloqueo sin
+                afirmar que sea lo que pasó ahora. */}
             {error ? (
-              <p
-                role="alert"
-                className="mt-2 text-[12px] text-[color:var(--color-error)]"
-              >
-                Email o contraseña incorrectos
-              </p>
+              <div role="alert" className="mt-2 flex flex-col gap-1">
+                <p className="text-[12px] text-[color:var(--color-error)]">
+                  Email o contraseña incorrectos
+                </p>
+                <p className="text-[11px] leading-[1.45] text-ink-500">
+                  Después de varios intentos seguidos el acceso queda
+                  bloqueado unos minutos.
+                </p>
+              </div>
             ) : null}
           </form>
         </Card>

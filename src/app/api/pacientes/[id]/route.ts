@@ -3,7 +3,6 @@ import type { Paciente } from "@/types/domain";
 
 import { getOrganizationId } from "../../_lib/auth";
 import { toPacienteConDeuda, toTurno } from "../../_lib/domain";
-import { requirePaciente } from "../../_lib/pacientes";
 import { ApiError, errorResponse, ok, validationError } from "../../_lib/responses";
 import { pacienteUpdateSchema } from "../../_lib/schemas";
 
@@ -55,14 +54,23 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return validationError(parsed.error);
     }
 
-    await requirePaciente(db, id, organizationId);
-
+    // La organización va en el WHERE de la escritura, no sólo en un chequeo
+    // previo: `update({ where: { id } })` escribe la fila aunque sea de otra
+    // organización, y entre el chequeo y la escritura hay una ventana. Con
+    // updateMany + count la pertenencia es parte de la operación.
+    //
     // Los campos ausentes quedan undefined y Prisma no los toca; telefono, si
     // vino, ya está normalizado a E.164 por el esquema.
-    const paciente = await db.paciente.update({
-      where: { id },
+    const { count } = await db.paciente.updateMany({
+      where: { id, organizationId },
       data: parsed.data,
     });
+
+    if (count === 0) {
+      throw new ApiError("Paciente no encontrado", 404);
+    }
+
+    const paciente = await db.paciente.findUniqueOrThrow({ where: { id } });
 
     return ok<Paciente>(paciente);
   } catch (error) {

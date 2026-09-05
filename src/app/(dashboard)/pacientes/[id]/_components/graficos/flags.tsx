@@ -6,9 +6,8 @@ import { AlertTriangle } from "lucide-react";
 
 import { Chip } from "@/components/ui";
 import { formatearEtiqueta } from "@/lib/etiquetas";
+import { fechaCompleta } from "@/lib/format";
 import { LO_QUE_DIJO, SENAL_DE_RIESGO, pluralizar } from "@/lib/glosario";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 
 import type { RiesgoProgreso } from "./base";
 import { SUBTITULO_SENALES, VER_LA_SESION } from "./textos";
@@ -22,11 +21,6 @@ import { SUBTITULO_SENALES, VER_LA_SESION } from "./textos";
 //
 // La sección NUNCA se pliega y la lista NUNCA se recorta: se muestran todas
 // las señales del período, más reciente primero.
-
-/** "4 de marzo de 2026". Con años de proceso, el año no es opcional. */
-function fechaCompleta(fecha: Date): string {
-  return format(fecha, "d 'de' MMMM 'de' yyyy", { locale: es });
-}
 
 export function FlagsRiesgoTimeline({ riesgos }: { riesgos: RiesgoProgreso[] }) {
   const ordenados = React.useMemo(

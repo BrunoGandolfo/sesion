@@ -140,13 +140,25 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
     }
 
-    const sesion = await db.sesionClinica.update({
-      where: { id },
+    // La organización va en el WHERE de la escritura y no sólo en el
+    // findFirst de arriba: `update({ where: { id } })` escribe la fila aunque
+    // sea de otra organización, y entre la lectura y la escritura hay una
+    // ventana. Con updateMany + count la pertenencia es parte de la operación.
+    const { count } = await db.sesionClinica.updateMany({
+      where: { id, organizationId },
       data: {
         estado: parsed.data.estado,
         duracionAudioSeg: parsed.data.duracionAudioSeg,
         audioR2Key: parsed.data.audioR2Key,
       },
+    });
+
+    if (count === 0) {
+      throw new ApiError("Sesión clínica no encontrada", 404);
+    }
+
+    const sesion = await db.sesionClinica.findUniqueOrThrow({
+      where: { id },
       select: SESION_SELECT,
     });
 

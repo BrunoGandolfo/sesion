@@ -10,10 +10,22 @@ import { db } from "@/lib/db";
 import { sendSms, smsConfigurado } from "@/lib/recordatorios-sms";
 
 import { requireCron } from "../../_lib/auth";
-import { enviarRecordatoriosVencidos } from "../../_lib/casos-uso/enviar-recordatorios";
+import {
+  enviarRecordatoriosVencidos,
+  TOPE_POR_CORRIDA,
+} from "../../_lib/casos-uso/enviar-recordatorios";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * Techo de tiempo de la función, explícito. Sin esto rige el default del plan
+ * (10 s en Hobby): con veinte recordatorios y Twilio lento, la corrida se
+ * cortaba a la mitad. El caso de uso ya sabe rescatar lo que quedó reservado
+ * por un corte, pero es mejor no cortarse. 60 s entra en el plan Pro y deja
+ * 3 s por recordatorio, que es de sobra.
+ */
+export const maxDuration = 60;
 
 const MAX_INTENTOS = 3;
 
@@ -33,6 +45,8 @@ export async function GET(request: Request) {
       fallidos: 0,
       saltados: 0,
       vencidos: 0,
+      rescatados: 0,
+      hayMas: false,
       desactivado: cfg.motivo,
       eventos: [
         `[cron] SMS desactivado: ${
@@ -49,6 +63,7 @@ export async function GET(request: Request) {
     ahora,
     enviarSms: sendSms,
     maxIntentos: MAX_INTENTOS,
+    tope: TOPE_POR_CORRIDA,
   });
 
   for (const fallo of resumen.fallosPersistencia) {

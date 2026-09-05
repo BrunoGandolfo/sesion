@@ -38,7 +38,9 @@ let db!: ClienteCifrado;
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
-const AHORA = new Date(2026, 8, 3, 12, 0, 0);
+// Instante UTC explícito (12:00 de Montevideo del 3/9/2026). Con
+// `new Date(2026, 8, 3, 12)` la referencia cambiaba con la zona del proceso.
+const AHORA = new Date("2026-09-03T15:00:00.000Z");
 const MAX_INTENTOS = 3;
 const TEMPLATE = "Hola {{nombre}}, te recordamos tu sesión el {{fecha}} a las {{hora}}.";
 const CONFIG = {
@@ -114,13 +116,26 @@ function textoEsperado(fechaTurno: Date): string {
   });
 }
 
-function correr(enviarSms: EnviarSms, ahora: Date = AHORA) {
+function correr(
+  enviarSms: EnviarSms,
+  ahora: Date = AHORA,
+  extra: { tope?: number; rescateMs?: number } = {},
+) {
   return enviarRecordatoriosVencidos({
     prisma: db,
     ahora,
     enviarSms,
     maxIntentos: MAX_INTENTOS,
+    ...extra,
   });
+}
+
+/** Retrasa `actualizado_en` para simular una reserva que quedó huérfana.
+ *  La columna es @updatedAt: Prisma la maneja, así que se toca por SQL. */
+async function envejecerReserva(id: string, cuando: Date) {
+  await prismaRaw.$executeRaw`
+    UPDATE recordatorios SET actualizado_en = ${cuando} WHERE id = ${id}
+  `;
 }
 
 const enviaOk: EnviarSms = async () => ({ success: true, sid: "SM1" });
@@ -273,6 +288,123 @@ describe("enviarRecordatoriosVencidos", () => {
     expect(segunda.procesados).toBe(0);
     expect(stub).toHaveBeenCalledTimes(1);
     expect((await leer(recordatorioId)).intentos).toBe(1);
+  });
+
+  // ─── Reservar no es intentar ────────────────────────────────────────────
+  // Lo que protege este bloque: un corte de la función serverless entre la
+  // reserva y la llamada a Twilio no puede gastar un intento.
+
+  it("cuando Twilio recibe la llamada la fila ya está reservada y el intento contado", async () => {
+    const { recordatorioId } = await crearRecordatorio();
+    const vistas: { estado: string; intentos: number }[] = [];
+
+    // El stub mira la fila desde adentro del envío: ese es el único momento
+    // en que se puede comprobar el orden reserva → intento → llamada.
+    await correr(async () => {
+      const fila = await leer(recordatorioId);
+      vistas.push({ estado: fila.estado, intentos: fila.intentos });
+      return { success: true, sid: "SM1" };
+    });
+
+    expect(vistas).toEqual([{ estado: "enviando", intentos: 1 }]);
+  });
+
+  it("una reserva huérfana se rescata sin gastar un intento", async () => {
+    // Así queda la fila cuando la función se corta después de reservar:
+    // "enviando", intentos en 0, y sin nadie trabajándola.
+    const { recordatorioId } = await crearRecordatorio({ estado: "enviando" });
+    await envejecerReserva(recordatorioId, new Date(AHORA.getTime() - 10 * 60_000));
+    const stub = vi.fn(enviaOk);
+
+    const resumen = await correr(stub);
+
+    expect(resumen.rescatados).toBe(1);
+    expect(resumen.enviados).toBe(1);
+    expect(stub).toHaveBeenCalledTimes(1);
+
+    const fila = await leer(recordatorioId);
+    expect(fila.estado).toBe("enviado");
+    // Uno solo: el del envío que sí ocurrió. El corte no gastó nada.
+    expect(fila.intentos).toBe(1);
+  });
+
+  it("el rescate no suma un intento propio: el que cuenta es el de Twilio", async () => {
+    const { recordatorioId } = await crearRecordatorio({ estado: "enviando" });
+    await envejecerReserva(recordatorioId, new Date(AHORA.getTime() - 10 * 60_000));
+
+    // Rescate + envío que falla: un solo intento gastado, el de la llamada.
+    await correr(lanza);
+
+    const fila = await leer(recordatorioId);
+    expect(fila.intentos).toBe(1);
+    expect(fila.estado).toBe("pendiente");
+    expect(fila.error).toBe("Twilio caído");
+  });
+
+  it("la reserva huérfana de un recordatorio ya agotado no revive el envío", async () => {
+    const { recordatorioId } = await crearRecordatorio({
+      estado: "enviando",
+      intentos: MAX_INTENTOS - 1,
+    });
+    await envejecerReserva(recordatorioId, new Date(AHORA.getTime() - 10 * 60_000));
+
+    await correr(lanza);
+
+    const fila = await leer(recordatorioId);
+    expect(fila.intentos).toBe(MAX_INTENTOS);
+    expect(fila.estado).toBe("fallido");
+  });
+
+  it("una reserva reciente no se toca: la otra corrida sigue viva", async () => {
+    const { recordatorioId } = await crearRecordatorio({ estado: "enviando" });
+    await envejecerReserva(recordatorioId, new Date(AHORA.getTime() - 30_000));
+    const stub = vi.fn(enviaOk);
+
+    const resumen = await correr(stub);
+
+    expect(resumen.procesados).toBe(0);
+    expect(resumen.rescatados).toBe(0);
+    expect(stub).not.toHaveBeenCalled();
+    expect((await leer(recordatorioId)).estado).toBe("enviando");
+  });
+
+  it("un error anterior a Twilio sí gasta el intento", async () => {
+    // Organización sin configuración: falla determinista, no corte.
+    const { recordatorioId } = await crearRecordatorio();
+    const fila = await leer(recordatorioId);
+    const turno = await prismaRaw.turno.findUniqueOrThrow({
+      where: { id: fila.turnoId },
+    });
+    await prismaRaw.configuracion.delete({
+      where: { organizationId: turno.organizationId },
+    });
+    const stub = vi.fn(enviaOk);
+
+    await correr(stub);
+
+    expect(stub).not.toHaveBeenCalled();
+    const despues = await leer(recordatorioId);
+    expect(despues.intentos).toBe(1);
+    expect(despues.estado).toBe("pendiente");
+    expect(despues.error).toContain("sin configuración");
+  });
+
+  // ─── Tope por corrida ───────────────────────────────────────────────────
+
+  it("el tope acota la corrida y avisa que quedaron recordatorios", async () => {
+    await crearRecordatorio();
+    await crearRecordatorio();
+    const stub = vi.fn(enviaOk);
+
+    const primera = await correr(stub, AHORA, { tope: 1 });
+
+    expect(primera.procesados).toBe(1);
+    expect(primera.enviados).toBe(1);
+    expect(primera.hayMas).toBe(true);
+
+    const segunda = await correr(stub, AHORA, { tope: 1 });
+    expect(segunda.enviados).toBe(1);
+    expect(stub).toHaveBeenCalledTimes(2);
   });
 
   it("un recordatorio programado para más adelante no se toca", async () => {

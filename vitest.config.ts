@@ -4,8 +4,8 @@ import path from 'path'
 // Los tests se dividen en dos suites:
 //
 //   - unitarios: puros, sin red ni base. Corren en cualquier lado.
-//   - integración: los siete archivos de INTEGRACION, que se conectan a la
-//     rama de test de Neon (DATABASE_URL_TEST) y la vacían entre casos.
+//   - integración: los archivos de INTEGRACION, que se conectan a la rama de
+//     test de Neon (DATABASE_URL_TEST) y la vacían entre casos.
 //
 // `npm test` corre las dos (es lo que corre CI). `npm run test:unit` y
 // `npm run test:integration` eligen una, vía VITEST_SUITE. La lista vive acá
@@ -13,7 +13,7 @@ import path from 'path'
 // un solo lugar.
 //
 // Cuando el proyecto crezca conviene renombrarlos a *.integration.test.ts y
-// reemplazar la lista por un glob; hoy son siete y una lista explícita se
+// reemplazar la lista por un glob; hoy son pocos y una lista explícita se
 // lee mejor que una convención que hay que recordar.
 const INTEGRACION = [
   'src/lib/__tests__/prisma-encryption.test.ts',
@@ -23,6 +23,7 @@ const INTEGRACION = [
   'src/lib/__tests__/pendientes-terapeuta.test.ts',
   'src/lib/__tests__/cobrar-turno.test.ts',
   'src/lib/__tests__/contexto-clinico.test.ts',
+  'src/lib/__tests__/multi-tenant.test.ts',
 ]
 
 // Repetidos a mano en vez de importar `defaultExclude`: al pasar `exclude`

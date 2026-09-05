@@ -203,6 +203,33 @@ export const AGENDADO = "Agendado";
 export const NO_VINO = "No vino";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Recordatorio de la sesión (el SMS)
+// Se llama igual que en "Tu consultorio": Recordatorio. No "aviso", no
+// "notificación", no "SMS" — la profesional configura un recordatorio y en el
+// turno ve ese mismo recordatorio.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const RECORDATORIO = "Recordatorio";
+
+/** Cómo se dice cada estado del recordatorio en la pantalla del turno.
+ *  "enviando" es la reserva interna del cron: para ella es "saliendo". */
+export const RECORDATORIO_ESTADO: Readonly<Record<string, string>> = {
+  pendiente: "Todavía no salió",
+  enviando: "Saliendo",
+  enviado: "Enviado",
+  fallido: "No se pudo enviar",
+  cancelado: "Cancelado",
+};
+
+/** Acción de volver a poner en cola un recordatorio que falló. */
+export const REINTENTAR_RECORDATORIO = "Volver a intentarlo";
+export const REINTENTANDO_RECORDATORIO = "Poniéndolo en cola…";
+
+export const REINTENTAR_RECORDATORIO_TITULO = "¿Volver a mandar el recordatorio?";
+export const REINTENTAR_RECORDATORIO_MENSAJE =
+  "Se pone otra vez en la cola y sale en la próxima pasada, en unos minutos. Si vuelve a fallar, lo vas a ver acá.";
+
+// ────────────────────────────────────────────────────────────────────────────
 // Grabación
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -335,6 +362,78 @@ export const EMOCIONES = "Emociones";
 export const INTERVENCIONES = "Intervenciones";
 export const INTENSIDAD_EMOCIONAL = "Intensidad emocional";
 export const ALIANZA_TERAPEUTICA = "Alianza terapéutica";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pantalla del Recorrido (pacientes/[id] · gráficos)
+// Vivían en pacientes/[id]/_components/graficos/textos.ts porque ese agente
+// no podía editar este archivo. Ese módulo ahora los re-exporta desde acá.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Rótulo del selector de rango. */
+export const PERIODO = "Período";
+
+/** Las cuatro opciones del selector, en el orden en que se muestran. */
+export const RANGO_LABEL = {
+  "10s": "Últimas 10",
+  "3m": "3 meses",
+  "6m": "6 meses",
+  todo: "Todo",
+} as const;
+
+/** Card de la observación longitudinal generada por IA. */
+export const OBSERVACION_IA = "Observación IA";
+
+/** Card del progreso percibido de la última sesión del rango. */
+export const PROGRESO_PERCIBIDO = "Progreso percibido";
+
+/** Enlace desde una card o una señal a la nota de esa sesión. */
+export const VER_LA_SESION = "Ver la sesión";
+
+/** Tendencia de un tema dentro del rango. La flecha va con la palabra: sola
+ *  no se entiende, y la palabra sola se pierde en la lista. */
+export const TENDENCIA_LABEL = {
+  nuevo: "nuevo",
+  sube: "↑ sube",
+  baja: "↓ baja",
+  estable: "= estable",
+} as const;
+
+/** Prefijo de la primera aparición de un tema: "desde 4 mar". */
+export const DESDE = "desde";
+
+/** Subtítulos de cada gráfico. Explican qué se está mirando sin interpretar
+ *  por ella. */
+export const SUBTITULO_INTENSIDAD =
+  "Cómo llegó a cada sesión, del 1 al 10. Los puntos en terracotta son sesiones con señal de riesgo.";
+export const SUBTITULO_ALIANZA =
+  "Calidad del vínculo en cada sesión. Las caídas en terracotta son posibles rupturas.";
+export const SUBTITULO_TEMAS = "Qué se repite en el período elegido.";
+export const SUBTITULO_INTERVENCIONES =
+  "Cantidad y tipo de intervenciones en cada sesión del período.";
+export const SUBTITULO_SENALES =
+  "Todas las señales del período, por fecha. No se agrupan ni se ocultan.";
+
+/** Estados vacíos del Recorrido. */
+export const SIN_SESIONES_TITULO =
+  "Todavía no hay sesiones para mirar en perspectiva.";
+export const SIN_SESIONES_DETALLE =
+  "Cuando grabes y apruebes las primeras sesiones, acá vas a ver cómo evoluciona el recorrido.";
+export const POCO_RECORRIDO_TITULO = "Todavía no hay suficiente recorrido.";
+export const POCO_RECORRIDO_DETALLE =
+  "Los gráficos aparecen a partir de la tercera sesión grabada.";
+export const DESDE_LA_TERCERA = "A partir de la tercera sesión";
+
+/** El rango elegido no tiene ninguna sesión (pasa con "3 meses" en un
+ *  proceso que estuvo en pausa). No es un error: es un período vacío. */
+export const RANGO_SIN_SESIONES =
+  "No hay sesiones en este período. Probá con uno más amplio.";
+
+/** Dato ausente en una sesión: no se interpola ni se rellena con cero. */
+export const SIN_DATO = "Sin dato";
+
+/** Nota al pie de los gráficos con hueco. */
+export const HUECOS_EXPLICADOS =
+  "La línea se corta donde la sesión no registró el dato: no se completa por interpolación.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Errores — en castellano, sin HTTP, sin R2, sin CORS.

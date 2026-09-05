@@ -7,8 +7,10 @@
 import * as React from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 
+import { ETIQUETA_NIVEL } from "@/components/clinico/brief-corto";
 import { Chip, EditorialRule } from "@/components/ui";
 import { apiGet, esAbort } from "@/lib/api-client";
+import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaCorta, fechaRelativa, hora } from "@/lib/format";
 import {
   EL_HILO,
@@ -54,20 +56,10 @@ type BriefResponse = {
   } | null;
 };
 
-const FLAG_LABELS: Record<string, string> = {
-  ideacionSuicida: "Ideación suicida",
-  autolesion: "Autolesión",
-  violenciaTerceros: "Riesgo a terceros",
-  sintomasPsicoticos: "Síntomas psicóticos",
-  crisisPanico: "Crisis de pánico",
-};
-
-const NIVEL_LABELS: Record<NivelRiesgo, string> = {
-  ninguno: "sin señal",
-  bajo: "nivel bajo",
-  moderado: "nivel moderado",
-  alto: "nivel alto",
-};
+// Los nombres de los flags salen de formatearEtiqueta y los del nivel de
+// ETIQUETA_NIVEL (brief-corto): acá había una tercera copia de las dos
+// tablas, con "Riesgo a terceros" donde el resto de la app dice "Violencia
+// hacia terceros".
 
 // Brief atado al paciente que lo cargó: si cambia el id, el anterior deja de
 // aplicar por derivación, sin resetear estado en un efecto.
@@ -176,11 +168,11 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
                     Última sesión:{" "}
                     {ultimaSesion.riesgo.flagsActivos.length > 0
                       ? ultimaSesion.riesgo.flagsActivos
-                          .map((f) => FLAG_LABELS[f] ?? f)
+                          .map(formatearEtiqueta)
                           .join(", ")
                       : ultimaSesion.riesgo.indicadores.join(", ")}
                     {ultimaSesion.riesgo.nivel !== "ninguno"
-                      ? ` (${NIVEL_LABELS[ultimaSesion.riesgo.nivel]})`
+                      ? ` (${ETIQUETA_NIVEL[ultimaSesion.riesgo.nivel]})`
                       : ""}
                     {ultimaSesion.riesgo.notaParaTerapeuta
                       ? ` — ${ultimaSesion.riesgo.notaParaTerapeuta}`

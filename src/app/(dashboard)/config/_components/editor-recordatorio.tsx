@@ -55,8 +55,13 @@ function esClaveFicha(valor: string): valor is ClaveFicha {
   return Object.prototype.hasOwnProperty.call(FICHAS, valor);
 }
 
+// La ficha es una píldora con fondo: necesita aire propio a los costados, no
+// sólo el espacio literal del template. Con `mx-[2px]` la línea de contacto
+// —"comunicate con [Tu nombre] al [Tu teléfono]"— quedaba pegada: el "al" de
+// dos letras se leía como parte de la píldora. Con 4 px por lado se separa
+// también cuando la ficha cierra una línea y no hay ningún espacio después.
 const CLASE_FICHA =
-  "inline-flex select-none items-center rounded-full bg-sage-100 px-2 py-[1px] mx-[2px] align-baseline font-sans text-[12px] font-semibold not-italic text-sage-700";
+  "inline-flex select-none items-center rounded-full bg-sage-100 px-2 py-[1px] mx-1 align-baseline font-sans text-[12px] font-semibold not-italic text-sage-700";
 
 // Espacio duro (U+00A0) que los navegadores insertan al escribir dos
 // espacios seguidos en un contentEditable. El SMS quiere espacios comunes.

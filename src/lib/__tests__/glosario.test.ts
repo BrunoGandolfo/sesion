@@ -86,6 +86,25 @@ const CONSTANTES_REQUERIDAS = [
   "INTERVENCIONES",
   "INTENSIDAD_EMOCIONAL",
   "ALIANZA_TERAPEUTICA",
+  // Recorrido (venían de pacientes/[id]/_components/graficos/textos.ts)
+  "PERIODO",
+  "OBSERVACION_IA",
+  "PROGRESO_PERCIBIDO",
+  "VER_LA_SESION",
+  "DESDE",
+  "SUBTITULO_INTENSIDAD",
+  "SUBTITULO_ALIANZA",
+  "SUBTITULO_TEMAS",
+  "SUBTITULO_INTERVENCIONES",
+  "SUBTITULO_SENALES",
+  "SIN_SESIONES_TITULO",
+  "SIN_SESIONES_DETALLE",
+  "POCO_RECORRIDO_TITULO",
+  "POCO_RECORRIDO_DETALLE",
+  "DESDE_LA_TERCERA",
+  "RANGO_SIN_SESIONES",
+  "SIN_DATO",
+  "HUECOS_EXPLICADOS",
 ] as const;
 
 describe("glosario — constantes de texto", () => {
@@ -115,6 +134,21 @@ describe("glosario — constantes de texto", () => {
     // guardada": el chip es otra tipografía, no otro concepto.
     expect(glosario.BORRADOR).toBe(glosario.PARA_REVISAR);
     expect(glosario.APROBADA).toBe(glosario.NOTA_GUARDADA);
+  });
+
+  it("el selector de rango del Recorrido nombra sus cuatro opciones", () => {
+    expect(glosario.RANGO_LABEL).toEqual({
+      "10s": "Últimas 10",
+      "3m": "3 meses",
+      "6m": "6 meses",
+      todo: "Todo",
+    });
+  });
+
+  it("la tendencia de un tema lleva flecha y palabra, nunca la flecha sola", () => {
+    for (const valor of Object.values(glosario.TENDENCIA_LABEL)) {
+      expect(valor.replace(/[↑↓=\s]/g, "").length).toBeGreaterThan(0);
+    }
   });
 
   it("ningún texto de interfaz quedó vacío", () => {

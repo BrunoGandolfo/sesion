@@ -9,6 +9,7 @@
 // re-exporta para que los importadores existentes sigan compilando.
 // ============================================
 
+import type { RecordatorioModo } from "@/lib/recordatorios-programacion";
 import type {
   AlianzaTerapeutica,
   ConfianzaModelo,
@@ -39,8 +40,21 @@ export type Modalidad = "presencial" | "online";
 /** Duraciones permitidas en minutos */
 export type Duracion = 30 | 45 | 50 | 60 | 90;
 
-/** Estados del recordatorio por SMS */
-export type RecordatorioEstado = "pendiente" | "enviado" | "fallido" | "cancelado";
+/**
+ * Estados del recordatorio por SMS.
+ *
+ * "enviando" es la RESERVA del cron: una corrida lo tomó y lo está
+ * trabajando. No dice que se haya llamado a Twilio — eso lo dice `intentos`.
+ * Si la corrida se corta, la fila queda ahí y la siguiente la rescata (ver
+ * src/app/api/_lib/casos-uso/enviar-recordatorios.ts). En la base `estado` es
+ * un String sin enum, así que este valor no necesita migración.
+ */
+export type RecordatorioEstado =
+  | "pendiente"
+  | "enviando"
+  | "enviado"
+  | "fallido"
+  | "cancelado";
 
 // ============================================
 // Entidades
@@ -96,7 +110,16 @@ export interface Configuracion {
   direccion: string;
   whatsappOrigen: string;
   tarifaDefault: number;    // en UYU
+  /** @deprecated Ya no decide cuándo sale el recordatorio: eso es
+   *  `recordatorioModo`. Se conserva en la fila y en la API mientras haya
+   *  quien la lea. */
   horasAnticipacion: number; // default 24
+  /** Cuándo sale el recordatorio, dicho como momento y no como número de
+   *  horas. La cuenta vive en src/lib/recordatorios-programacion.ts
+   *  (calcularProgramadoEn), única para crear y para reprogramar turnos.
+   *  Siempre presente: en DB tiene default "dia_anterior" y el mapper
+   *  toConfiguracion() narrowea con normalizarRecordatorioModo(). */
+  recordatorioModo: RecordatorioModo;
   templateRecordatorio: string;
   /** Orientación teórica de la profesional. Determina el instrumento de
    *  auto-supervisión (ver contrato multi-orientación). Siempre presente:
@@ -132,8 +155,13 @@ export interface DeudaPaciente {
   diasAtraso: number;
 }
 
+/**
+ * Los tres números de la pantalla de Hoy, ni uno más. "Pacientes activos"
+ * salió del tablero y con él la cuenta que lo alimentaba (ver
+ * GET /api/dashboard): declararlo acá obligaba a la capa API a restarlo con
+ * un Omit y dejaba a la UI creyendo que existía.
+ */
 export interface KPIsDashboard {
-  pacientesActivos: number;
   sesionesHoy: number;
   deudaAcumulada: number;
   ingresosMes: number;
