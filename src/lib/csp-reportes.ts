@@ -18,6 +18,61 @@ export const MAX_CAMPO = 300;
 /** Cuántos reportes se loguean de un mismo POST (la Reporting API agrupa). */
 export const MAX_POR_POST = 10;
 
+/** Tope del cuerpo del POST, en bytes. Un reporte real son unos cientos. */
+export const MAX_BYTES = 16 * 1024;
+
+/**
+ * El cuerpo del pedido, leído con el tope puesto ANTES de tenerlo entero.
+ *
+ * `request.text()` no sirve para esto: junta el cuerpo completo en memoria y
+ * recién ahí se lo puede medir, así que un POST sin `content-length` (o con
+ * uno que miente) hacía que el endpoint —público, sin sesión— cargara lo que
+ * el que postea quisiera. Acá se lee de a pedazos y se corta apenas se pasa:
+ * lo que entra en memoria nunca supera el tope.
+ *
+ * Devuelve `null` si se pasó del tope o si el stream falló; `""` si no hay
+ * cuerpo. Quien llama contesta 204 igual en los tres casos.
+ */
+export async function leerCuerpoConTope(
+  pedido: Request,
+  maxBytes: number = MAX_BYTES,
+): Promise<string | null> {
+  const cuerpo = pedido.body;
+  if (!cuerpo) return "";
+
+  const lector = cuerpo.getReader();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      if (!value) continue;
+
+      total += value.byteLength;
+      if (total > maxBytes) {
+        // Cortar el stream: sin esto la conexión sigue viva del otro lado.
+        await lector.cancel();
+        return null;
+      }
+      partes.push(value);
+    }
+  } catch {
+    return null;
+  }
+
+  const juntas = new Uint8Array(total);
+  let desde = 0;
+  for (const parte of partes) {
+    juntas.set(parte, desde);
+    desde += parte.byteLength;
+  }
+  // Una sola pasada al final: decodificar de a pedazos puede partir un
+  // carácter multibyte al medio.
+  return new TextDecoder().decode(juntas);
+}
+
 /** La forma vieja: Content-Type application/csp-report. */
 interface ReporteClasico {
   "document-uri"?: unknown;

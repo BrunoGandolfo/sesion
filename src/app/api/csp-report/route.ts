@@ -20,42 +20,43 @@
 // Tiene que serlo: el navegador postea sin sesión (y con la Reporting API,
 // sin cookies). Está fuera del matcher del middleware. De ahí las tres
 // defensas:
-//   - se lee el cuerpo con un tope de tamaño;
+//   - se lee el cuerpo de a pedazos, con el tope puesto antes de tenerlo
+//     entero en memoria;
 //   - no se refleja NADA de lo recibido en la respuesta;
 //   - se contesta siempre 204, así no hay diferencia observable entre un
 //     reporte aceptado y uno descartado.
 
 import { NextResponse } from "next/server";
 
-import { formatearViolacion, normalizarReportes } from "@/lib/csp-reportes";
+import {
+  formatearViolacion,
+  leerCuerpoConTope,
+  MAX_BYTES,
+  normalizarReportes,
+} from "@/lib/csp-reportes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/** Tope del cuerpo. Un reporte real son unos cientos de bytes. */
-const MAX_BYTES = 16 * 1024;
 
 export async function POST(request: Request) {
   // Siempre 204, pase lo que pase: el navegador no tiene nada que hacer con
   // la respuesta, y un endpoint público no debería contar nada de sí mismo.
   const sinContenido = new NextResponse(null, { status: 204 });
 
+  // Atajo barato cuando el que postea dice la verdad: ni se abre el stream.
   const largo = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(largo) && largo > MAX_BYTES) {
     console.warn(`[csp] reporte descartado por tamaño (${largo} bytes)`);
     return sinContenido;
   }
 
-  let crudo: string;
-  try {
-    crudo = await request.text();
-  } catch {
-    return sinContenido;
-  }
-
-  // Segunda guarda: content-length puede faltar o mentir.
-  if (crudo.length > MAX_BYTES) {
-    console.warn(`[csp] reporte descartado por tamaño (${crudo.length} bytes)`);
+  // Y la guarda de verdad, para cuando falta o miente: el tope se aplica
+  // MIENTRAS se lee, no después. Ver leerCuerpoConTope.
+  const crudo = await leerCuerpoConTope(request, MAX_BYTES);
+  if (crudo === null) {
+    console.warn(
+      `[csp] reporte descartado por tamaño (más de ${MAX_BYTES} bytes)`,
+    );
     return sinContenido;
   }
 

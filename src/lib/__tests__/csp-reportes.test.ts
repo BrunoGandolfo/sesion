@@ -13,6 +13,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatearViolacion,
+  leerCuerpoConTope,
+  MAX_BYTES,
   MAX_CAMPO,
   MAX_POR_POST,
   normalizarReportes,
@@ -234,5 +236,57 @@ describe("nadie puede escribir lineas propias en el log", () => {
     expect(conBloqueado("https://sesion.uy/x.js")).toContain(
       'bloqueado="https://sesion.uy/x.js"',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// El tope de tamano del cuerpo (Codex, P2 sobre el PR #16).
+//
+// El endpoint es publico: lo postea el navegador de cualquiera, sin sesion.
+// Antes el cuerpo se leia entero con request.text() y recien despues se lo
+// media, asi que un POST sin `content-length` (o con uno que miente) hacia
+// que el servidor cargara en memoria lo que el que postea quisiera. Ahora el
+// tope se aplica MIENTRAS se lee.
+// ---------------------------------------------------------------------------
+
+describe("leerCuerpoConTope", () => {
+  function postear(cuerpo: string): Request {
+    return new Request("https://sesion.uy/api/csp-report", {
+      method: "POST",
+      body: cuerpo,
+    });
+  }
+
+  it("devuelve el cuerpo entero cuando entra en el tope", async () => {
+    const cuerpo = JSON.stringify(CLASICO);
+    expect(await leerCuerpoConTope(postear(cuerpo))).toBe(cuerpo);
+  });
+
+  it("devuelve null cuando se pasa, sin juntarlo entero", async () => {
+    const enorme = "x".repeat(MAX_BYTES + 1);
+    expect(await leerCuerpoConTope(postear(enorme))).toBeNull();
+  });
+
+  it("sin cuerpo devuelve la cadena vacia, no null", async () => {
+    // null es "se paso del tope"; un GET sin cuerpo no es eso.
+    const sinCuerpo = new Request("https://sesion.uy/api/csp-report");
+    expect(await leerCuerpoConTope(sinCuerpo)).toBe("");
+  });
+
+  it("el tope se mide en bytes, no en caracteres", async () => {
+    // Un caracter acentuado ocupa dos bytes en UTF-8. Con la medida vieja
+    // (crudo.length, que cuenta caracteres) esto pasaba el control.
+    const seisAcentos = "á".repeat(6); // 6 caracteres, 12 bytes
+    expect(await leerCuerpoConTope(postear(seisAcentos), 10)).toBeNull();
+  });
+
+  it("no parte un caracter multibyte al decodificar", async () => {
+    const conAcentos = '{"paciente":"Lucía Gómez"}';
+    expect(await leerCuerpoConTope(postear(conAcentos))).toBe(conAcentos);
+  });
+
+  it("justo en el tope todavia entra", async () => {
+    const justo = "x".repeat(16);
+    expect(await leerCuerpoConTope(postear(justo), 16)).toBe(justo);
   });
 });
