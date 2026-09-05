@@ -24,10 +24,7 @@ import {
   inicioDeMesMvd,
   inicioDelDiaMvd,
 } from "@/lib/fechas-montevideo";
-import {
-  normalizarRecordatorioModo,
-  type RecordatorioModo,
-} from "@/lib/recordatorios-programacion";
+import { normalizarRecordatorioModo } from "@/lib/recordatorios-programacion";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -38,15 +35,8 @@ export type PacienteWithStats = PrismaPaciente & {
   turnos: TurnoStats[];
 };
 
-/**
- * KPIs de la pantalla de Hoy. Los tres que se muestran, ni uno más:
- * "Pacientes activos" salió del tablero y con él la cuenta que lo alimentaba
- * (ver GET /api/dashboard).
- */
-export type KpisDashboard = Omit<KPIsDashboard, "pacientesActivos">;
-
 export type DashboardData = {
-  kpis: KpisDashboard;
+  kpis: KPIsDashboard;
   sesionesHoy: TurnoConPaciente[];
   deudores: DeudaPaciente[];
   proximaSesion: TurnoConPaciente | null;
@@ -102,18 +92,13 @@ export function toRecordatorio(recordatorio: PrismaRecordatorio): Recordatorio {
 }
 
 /**
- * La configuración tal como sale por la API: la del dominio más
- * `recordatorioModo`, que todavía no existe en src/types/domain.ts (fuera
- * del alcance de esta capa). Cuando la UI lo agregue ahí, este alias se
- * puede colapsar en `Configuracion`.
+ * Fila de configuración → tipo del dominio. `Configuracion` ya declara
+ * `recordatorioModo`, así que la API no tiene una forma propia: el alias
+ * `ConfiguracionApi` que existía acá era el mismo tipo con otro nombre.
  */
-export type ConfiguracionApi = Configuracion & {
-  recordatorioModo: RecordatorioModo;
-};
-
 export function toConfiguracion(
   configuracion: PrismaConfiguracion,
-): ConfiguracionApi {
+): Configuracion {
   // En DB orientacionTeorica y recordatorioModo son String (sin enum en la
   // migración); acá se narrowean a su unión, con fallback al default ante
   // valores desconocidos — misma regla que el contrato multi-orientación.

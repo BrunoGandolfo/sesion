@@ -78,10 +78,21 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     };
 
     const turno = await db.$transaction(async (tx) => {
-      const updated = await tx.turno.update({
-        where: { id },
+      // La organización va en el WHERE de la escritura y no sólo en el
+      // findFirst de arriba: `update({ where: { id } })` escribe la fila
+      // aunque sea de otra organización, y entre la lectura y la escritura
+      // hay una ventana. Con updateMany + count la pertenencia es parte de la
+      // operación.
+      const { count } = await tx.turno.updateMany({
+        where: { id, organizationId },
         data,
       });
+
+      if (count === 0) {
+        throw new ApiError("Turno no encontrado", 404);
+      }
+
+      const updated = await tx.turno.findUniqueOrThrow({ where: { id } });
 
       if (updated.estado === "cancelado") {
         await tx.recordatorio.updateMany({

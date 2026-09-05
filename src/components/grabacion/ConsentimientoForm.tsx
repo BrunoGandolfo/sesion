@@ -56,8 +56,8 @@ export function ConsentimientoForm({
     setError(null);
 
     try {
-      // La ruta responde { consentimiento } sin { data }; el resultado no se
-      // usa, alcanza con que no falle.
+      // La ruta responde ok({ consentimiento }); el resultado no se usa,
+      // alcanza con que no falle.
       await apiPost(`/api/pacientes/${pacienteId}/consentimiento`, {
         firmaDigital: firma,
         textoVersion: CONSENTIMIENTO_VERSION,

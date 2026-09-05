@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  AnimatePresence,
   animate,
   motion,
   useMotionValue,
@@ -9,10 +10,11 @@ import {
   useTransform,
 } from "framer-motion";
 
-// Primitivos de movimiento de la app. Seis, y ninguno decorativo:
+// Primitivos de movimiento de la app. Siete, y ninguno decorativo:
 //
 //   Aparece         algo entró a la pantalla
 //   ListaEnCascada  entró una lista, y se lee de arriba abajo
+//   AlturaAnimada   esto se abrió (o se cerró) acá mismo
 //   Contador        este número se acaba de calcular
 //   Latido          esto está pasando ahora
 //   CheckDibujado   lo que pediste se hizo
@@ -156,6 +158,73 @@ export function ListaEnCascada({
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// AlturaAnimada
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Segundos que tarda un bloque en abrirse o cerrarse. */
+const DURACION_PLIEGUE = 0.22;
+
+export interface AlturaAnimadaProps {
+  /** Estado del bloque. El componente anima la transición entre los dos. */
+  abierto: boolean;
+  children: React.ReactNode;
+  /** Para que el `aria-controls` del disparador pueda apuntar al panel. */
+  id?: string;
+  /** Clases del contenido. Van adentro del recorte, no en el que anima: la
+   *  altura se mide sobre el contenido con su padding real. */
+  className?: string;
+}
+
+/**
+ * Un bloque que se pliega y se despliega con su altura, en vez de aparecer y
+ * desaparecer de golpe. Es lo que hace que la nota no "salte" cuando se abre
+ * "Más de esta sesión": el ojo ve de dónde salió el bloque y qué se corrió
+ * para abajo.
+ *
+ * `height: auto` es el único caso en que animar una propiedad de layout vale
+ * la pena: no hay número que poner —el contenido mide lo que mide— y
+ * framer-motion lo resuelve midiendo, no forzando un alto fijo que después
+ * recorte el texto.
+ *
+ * Con la preferencia de movimiento reducido no hay transición ni recorte: el
+ * bloque está o no está, que es exactamente lo que hacía antes.
+ */
+export function AlturaAnimada({
+  abierto,
+  children,
+  id,
+  className,
+}: AlturaAnimadaProps) {
+  const reducido = useReducedMotion();
+
+  if (reducido) {
+    return abierto ? (
+      <div id={id} className={className}>
+        {children}
+      </div>
+    ) : null;
+  }
+
+  return (
+    <AnimatePresence initial={false}>
+      {abierto ? (
+        <motion.div
+          id={id}
+          key="panel"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: DURACION_PLIEGUE, ease: SUAVE }}
+          style={{ overflow: "hidden" }}
+        >
+          <div className={className}>{children}</div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Contador
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -293,6 +362,55 @@ export function CheckDibujado({ tamano = 16, className }: CheckDibujadoProps) {
       />
     </svg>
   );
+}
+
+/** Lo que tarda el trazo del check, en milisegundos. */
+export const MS_CHECK_DIBUJADO = 300;
+
+/** Un respiro después del trazo, para que el ojo lo termine de leer. */
+const MS_RESPIRO = 120;
+
+/**
+ * "Lo que pediste se hizo, acá donde lo pediste."
+ *
+ * Sostiene abierto un panel el tiempo justo para que el check se trace y
+ * después llama a `alTerminar` (que en la práctica es cerrar el sheet). Sin
+ * esto, el sheet del cobro se cierra apenas responde la API —a veces en 150
+ * ms— y el trazo se corta por la mitad: la confirmación queda solo en el
+ * toast, abajo de todo, lejos del dedo que acaba de tocar el método.
+ *
+ * Con prefers-reduced-motion no hay trazo que esperar: cierra en el acto,
+ * exactamente como antes.
+ *
+ * Devuelve el par [valor confirmado, confirmar] al estilo useState: `null`
+ * mientras no hay confirmación, y el valor confirmado mientras se dibuja.
+ */
+export function useConfirmacionDibujada<T>(
+  alTerminar: () => void,
+): readonly [T | null, (valor: T) => void] {
+  const [confirmado, setConfirmado] = React.useState<T | null>(null);
+  const reducido = useReducedMotion();
+
+  // El callback se guarda en un ref y no en las dependencias del efecto:
+  // los consumidores lo pasan inline (`() => setCobroTarget(null)`), así que
+  // cambia de identidad en cada render y reiniciaría el temporizador para
+  // siempre.
+  const alTerminarRef = React.useRef(alTerminar);
+  React.useEffect(() => {
+    alTerminarRef.current = alTerminar;
+  }, [alTerminar]);
+
+  React.useEffect(() => {
+    if (confirmado === null) return;
+    const espera = reducido ? 0 : MS_CHECK_DIBUJADO + MS_RESPIRO;
+    const timer = window.setTimeout(() => {
+      setConfirmado(null);
+      alTerminarRef.current();
+    }, espera);
+    return () => window.clearTimeout(timer);
+  }, [confirmado, reducido]);
+
+  return [confirmado, setConfirmado] as const;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -36,21 +36,23 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return validationError(parsed.error);
     }
 
-    const existente = await db.hotWord.findFirst({
+    // La organización va en el WHERE de la escritura, no en un chequeo
+    // previo: `update({ where: { id } })` escribe la fila aunque sea de otra
+    // organización. Mismo patrón que los PATCH de paciente, turno y sesión.
+    const { count } = await db.hotWord.updateMany({
       where: { id, organizationId },
-      select: { id: true },
-    });
-
-    if (!existente) {
-      throw new ApiError("Hot word no encontrado", 404);
-    }
-
-    const hotWord = await db.hotWord.update({
-      where: { id },
       data: {
         activo: parsed.data.activo,
         categoria: parsed.data.categoria,
       },
+    });
+
+    if (count === 0) {
+      throw new ApiError("Hot word no encontrado", 404);
+    }
+
+    const hotWord = await db.hotWord.findUniqueOrThrow({
+      where: { id },
       select: {
         id: true,
         termino: true,
@@ -71,16 +73,13 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const organizationId = await getOrganizationId();
     const { id } = await params;
 
-    const existente = await db.hotWord.findFirst({
+    const { count } = await db.hotWord.deleteMany({
       where: { id, organizationId },
-      select: { id: true },
     });
 
-    if (!existente) {
+    if (count === 0) {
       throw new ApiError("Hot word no encontrado", 404);
     }
-
-    await db.hotWord.delete({ where: { id } });
 
     return ok({ id });
   } catch (error) {

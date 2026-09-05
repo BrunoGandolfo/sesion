@@ -60,6 +60,30 @@ const TOMAR_CANDIDATAS = 20;
 
 const NOTA_VACIA = { subjetivo: "", objetivo: "", analisis: "", plan: "" };
 
+/**
+ * Regla ÚNICA de "esta sesión ya está integrada al hilo".
+ *
+ * Está acá y no repetida en cada consumidor porque la usan dos cosas que
+ * tienen que contestar lo mismo: el batch que el worker pide para integrar y
+ * la métrica de salud que cuenta las que quedaron atrás. Si una dijera que
+ * una sesión está integrada y la otra que no, el monitoreo alertaría para
+ * siempre por algo que el worker nunca va a tomar.
+ *
+ * `aprobadoEnUltima` es el aprobadoEn de la sesión a la que apunta
+ * `ultimaSesionId`, o null si esa sesión ya no existe. En ese caso no se
+ * excluye nada: en el peor caso se re-integra una vez.
+ */
+export function estaIntegrada(
+  sesion: { id: string; aprobadoEn: Date | null },
+  contexto: { ultimaSesionId: string | null } | null,
+  aprobadoEnUltima: Date | null,
+): boolean {
+  if (!contexto?.ultimaSesionId) return false;
+  if (contexto.ultimaSesionId === sesion.id) return true;
+  if (!aprobadoEnUltima || !sesion.aprobadoEn) return false;
+  return sesion.aprobadoEn.getTime() <= aprobadoEnUltima.getTime();
+}
+
 function parseRiesgosHistoricos(raw: unknown): unknown[] {
   if (raw == null) return [];
   if (Array.isArray(raw)) return raw;
@@ -162,21 +186,10 @@ export async function sesionesSinContexto({
 
     const contexto = contextoPorPaciente.get(pacienteId) ?? null;
 
-    // Ya integrada: el contexto apunta a esta sesión, o esta sesión se
-    // aprobó antes que la última integrada. Si ultimaSesionId apunta a una
-    // sesión que ya no existe, no se excluye nada: en el peor caso se
-    // re-integra una vez desde `desde`.
-    if (contexto?.ultimaSesionId === s.id) continue;
     const integradaHasta = contexto?.ultimaSesionId
       ? (aprobadoEnPorSesion.get(contexto.ultimaSesionId) ?? null)
       : null;
-    if (
-      integradaHasta &&
-      s.aprobadoEn &&
-      s.aprobadoEn.getTime() <= integradaHasta.getTime()
-    ) {
-      continue;
-    }
+    if (estaIntegrada(s, contexto, integradaHasta)) continue;
 
     // Numeración: aprobadas de la misma organización y paciente con fecha de
     // turno hasta la de esta sesión (inclusive).
@@ -219,4 +232,87 @@ export async function sesionesSinContexto({
   }
 
   return resultado;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Métrica de salud: lo que quedó atrás
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Tope de filas que mira la métrica. Pasado ese número el número deja de
+ *  ser exacto y lo que importa es que hay un problema, no cuán grande. */
+export const TOPE_ATRASADAS = 200;
+
+export interface SesionesAtrasadasParams {
+  prisma: ClientePrisma;
+  /** Se cuentan las sesiones aprobadas ANTES de este instante. */
+  hasta: Date;
+  tope?: number;
+}
+
+export interface SesionesAtrasadas {
+  /** Cuántas sesiones aprobadas antes de `hasta` siguen sin integrarse. */
+  cantidad: number;
+  /** true si se llegó al tope: `cantidad` es un piso, no el total. */
+  saturado: boolean;
+}
+
+/**
+ * Sesiones aprobadas hace rato que el Golden Thread todavía no integró.
+ *
+ * Es la señal de que la Llamada B del worker dejó de correr: la nota se
+ * aprobó, el audio se borró, y el hilo del proceso —lo que la profesional lee
+ * antes de la próxima sesión— se quedó en la sesión anterior sin que nada lo
+ * avise. Hasta ahora el cron de salud miraba el pipeline hasta "procesando" y
+ * los recordatorios, pero no este tramo.
+ *
+ * Misma regla de "integrada" que el batch que consume el worker
+ * (estaIntegrada), para que las dos cosas no puedan discrepar.
+ */
+export async function contarSesionesSinContextoAtrasadas({
+  prisma,
+  hasta,
+  tope = TOPE_ATRASADAS,
+}: SesionesAtrasadasParams): Promise<SesionesAtrasadas> {
+  const candidatas = await prisma.sesionClinica.findMany({
+    where: { estado: "aprobado", aprobadoEn: { lt: hasta } },
+    orderBy: { aprobadoEn: "asc" },
+    take: tope,
+    select: {
+      id: true,
+      aprobadoEn: true,
+      turno: { select: { pacienteId: true } },
+    },
+  });
+
+  if (candidatas.length === 0) return { cantidad: 0, saturado: false };
+
+  const pacienteIds = [...new Set(candidatas.map((s) => s.turno.pacienteId))];
+
+  const contextos = await prisma.pacienteContextoClinico.findMany({
+    where: { pacienteId: { in: pacienteIds } },
+    select: { pacienteId: true, ultimaSesionId: true },
+  });
+  const contextoPorPaciente = new Map(contextos.map((c) => [c.pacienteId, c]));
+
+  const ultimaIds = contextos
+    .map((c) => c.ultimaSesionId)
+    .filter((id): id is string => id !== null);
+  const ultimas = ultimaIds.length
+    ? await prisma.sesionClinica.findMany({
+        where: { id: { in: ultimaIds } },
+        select: { id: true, aprobadoEn: true },
+      })
+    : [];
+  const aprobadoEnPorSesion = new Map(ultimas.map((u) => [u.id, u.aprobadoEn]));
+
+  let cantidad = 0;
+  for (const s of candidatas) {
+    const contexto = contextoPorPaciente.get(s.turno.pacienteId) ?? null;
+    const integradaHasta = contexto?.ultimaSesionId
+      ? (aprobadoEnPorSesion.get(contexto.ultimaSesionId) ?? null)
+      : null;
+    if (!estaIntegrada(s, contexto, integradaHasta)) cantidad += 1;
+  }
+
+  return { cantidad, saturado: candidatas.length === tope };
 }

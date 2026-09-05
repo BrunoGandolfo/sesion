@@ -3,13 +3,10 @@
 import * as React from "react";
 import { AlertTriangle, Plus, Sparkles, X } from "lucide-react";
 
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-
 import { Button, Card, Chip } from "@/components/ui";
 import { apiGet, apiPatch, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
-import { fechaCorta } from "@/lib/format";
+import { fechaCompleta, fechaCorta } from "@/lib/format";
 import {
   ALGO_FALLO,
   EL_HILO,
@@ -116,11 +113,12 @@ function formatFechaCorta(iso: string | null | undefined): string | null {
 }
 
 /** "4 de marzo de 2026". Las señales anteriores pueden ser de hace años: la
- *  fecha corta ("4 mar") no alcanza para ubicarlas en el proceso. */
+ *  fecha corta ("4 mar") no alcanza para ubicarlas en el proceso. El formato
+ *  vive en @/lib/format (fechaCompleta); acá solo se resuelve el ISO. */
 function formatFechaCompleta(iso: string): string {
   const d = parseFechaISO(iso);
   if (!d) return iso.slice(0, 10);
-  return format(d, "d 'de' MMMM 'de' yyyy", { locale: es });
+  return fechaCompleta(d);
 }
 
 function nuevoObjetivoId(): string {

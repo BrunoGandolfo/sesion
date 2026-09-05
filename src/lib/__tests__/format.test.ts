@@ -5,6 +5,7 @@ import {
   moneyShort,
   fechaLarga,
   fechaCorta,
+  fechaCompleta,
   hora,
   fechaRelativa,
   diaSemana,
@@ -88,6 +89,20 @@ describe("fechas", () => {
     const sesion = new Date("2026-09-05T00:30:00.000Z");
     expect(fechaLarga(sesion)).toBe("viernes 4 de septiembre");
     expect(hora(sesion)).toBe("21:30");
+  });
+
+  // fechaCompleta es la que ubica una señal de riesgo vieja dentro del
+  // proceso: sin el año, "4 mar" no dice de qué año es.
+  it("fechaCompleta lleva el año, que es lo que la distingue de fechaCorta", () => {
+    expect(fechaCompleta(mvd(2026, 3, 4, 15))).toBe("4 de marzo de 2026");
+  });
+
+  it("fechaCompleta usa el día de Montevideo, no el del proceso en UTC", () => {
+    // 22:00 del 31 de diciembre de 2025 en Montevideo = 01:00Z del 1 de enero.
+    // Con date-fns sobre la zona del proceso esto se leía "1 de enero de 2026".
+    expect(fechaCompleta(new Date("2026-01-01T01:00:00.000Z"))).toBe(
+      "31 de diciembre de 2025",
+    );
   });
 });
 

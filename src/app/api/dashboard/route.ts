@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import type { DeudaPaciente } from "@/types/domain";
+import type { DeudaPaciente, KPIsDashboard } from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
 import { pendientesTerapeuta } from "../_lib/casos-uso/pendientes-terapeuta";
@@ -9,7 +9,6 @@ import {
   DashboardData,
   endOfDay,
   endOfMonth,
-  type KpisDashboard,
   startOfDay,
   startOfMonth,
   sumTarifas,
@@ -98,7 +97,7 @@ export async function GET() {
       )
       .slice(0, TOPE_DEUDORES);
 
-    const kpis: KpisDashboard = {
+    const kpis: KPIsDashboard = {
       sesionesHoy: sesionesHoyCount,
       deudaAcumulada: sumTarifas(turnosConDeuda),
       ingresosMes: ingresosMes._sum.tarifaCobrada ?? 0,

@@ -1,3 +1,6 @@
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+
 import {
   diasEnterosMvd,
   esMismoDiaMvd,
@@ -7,6 +10,7 @@ import {
   formatearHoraMvd,
   horaLocalMvd,
   mesesEnterosMvd,
+  partesMvd,
 } from "@/lib/fechas-montevideo";
 
 import { pluralizar } from "./glosario";
@@ -54,6 +58,24 @@ export function fechaCorta(d: Date): string {
 /** "09:00" */
 export function hora(d: Date): string {
   return formatearHoraMvd(d);
+}
+
+/**
+ * "4 de marzo de 2026". Con años de proceso, el año no es opcional: es la
+ * fecha con la que se ubica una señal de riesgo vieja dentro del recorrido.
+ *
+ * Estaba escrita dos veces —graficos/flags.tsx y ContextoGoldenThreadView—,
+ * las dos con `format(fecha, …)` sobre la zona del proceso: una señal de las
+ * 22:00 de Montevideo se leía con la fecha del día siguiente en el servidor.
+ * Acá el día lo decide partesMvd (fechas-montevideo, única fuente del tiempo
+ * local) y date-fns sólo pone los nombres en castellano, sobre un Date de
+ * mediodía cuyos campos LOCALES ya son los de Montevideo.
+ */
+export function fechaCompleta(d: Date): string {
+  const { anio, mes, dia } = partesMvd(d);
+  return format(new Date(anio, mes, dia, 12, 0, 0, 0), "d 'de' MMMM 'de' yyyy", {
+    locale: es,
+  });
 }
 
 /**

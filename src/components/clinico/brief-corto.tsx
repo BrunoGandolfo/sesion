@@ -20,6 +20,7 @@ import { AlertTriangle } from "lucide-react";
 
 import { EditorialRule } from "@/components/ui";
 import { apiGet, esAbort } from "@/lib/api-client";
+import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaRelativa } from "@/lib/format";
 import {
   PARA_LA_PROXIMA,
@@ -30,16 +31,14 @@ import {
 } from "@/lib/glosario";
 import type { NivelRiesgo } from "@/types/domain";
 
-/** Nombres de las señales de riesgo, en el orden en que las nombra la nota. */
-export const ETIQUETA_FLAG: Record<string, string> = {
-  ideacionSuicida: "Ideación suicida",
-  autolesion: "Autolesión",
-  violenciaTerceros: "Riesgo a terceros",
-  sintomasPsicoticos: "Síntomas psicóticos",
-  crisisPanico: "Crisis de pánico",
-};
-
-/** Cómo se dice cada nivel de la señal graduada. */
+/**
+ * Cómo se dice cada nivel de la señal graduada.
+ *
+ * Los NOMBRES de los flags no están acá: salen de formatearEtiqueta
+ * (src/lib/etiquetas.ts), que es donde ya viven para la nota, el Recorrido y
+ * el hilo. El nivel sí, porque acá se dice como frase ("nivel moderado")
+ * dentro de un paréntesis, y no como rótulo suelto ("Moderado").
+ */
 export const ETIQUETA_NIVEL: Record<NivelRiesgo, string> = {
   ninguno: "sin señal",
   bajo: "nivel bajo",
@@ -87,7 +86,7 @@ export function textoRiesgo(
   if (hayRiesgo(riesgo) && riesgo) {
     const que =
       riesgo.flagsActivos.length > 0
-        ? riesgo.flagsActivos.map((f) => ETIQUETA_FLAG[f] ?? f).join(", ")
+        ? riesgo.flagsActivos.map(formatearEtiqueta).join(", ")
         : riesgo.indicadores.join(", ");
     const nivel =
       riesgo.nivel !== "ninguno" ? ` (${ETIQUETA_NIVEL[riesgo.nivel]})` : "";

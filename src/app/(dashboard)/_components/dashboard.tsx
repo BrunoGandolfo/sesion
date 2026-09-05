@@ -72,19 +72,22 @@ export function Dashboard() {
       });
   }, [pacientes]);
 
+  // El sheet ya no se cierra acá: se cierra solo cuando terminó de dibujar
+  // el check sobre el método elegido (ver SheetMetodoPago). Por eso `cobrar`
+  // devuelve la promesa y vuelve a lanzar el error: el sheet necesita saber
+  // si el cobro entró antes de confirmar nada.
   const cobrar = React.useCallback(
-    (metodo: MetodoPago) => {
+    async (metodo: MetodoPago) => {
       const turnoId = cobrando;
-      setCobrando(null);
       if (!turnoId) return;
-      apiPost(`/api/turnos/${turnoId}/cobrar`, { metodo })
-        .then(() => {
-          setToast({ open: true, message: "Cobrado" });
-          recargar();
-        })
-        .catch(() =>
-          setToast({ open: true, message: "No se pudo cobrar. Probá de nuevo." }),
-        );
+      try {
+        await apiPost(`/api/turnos/${turnoId}/cobrar`, { metodo });
+      } catch (error) {
+        setToast({ open: true, message: "No se pudo cobrar. Probá de nuevo." });
+        throw error;
+      }
+      setToast({ open: true, message: "Cobrado" });
+      recargar();
     },
     [cobrando, recargar],
   );

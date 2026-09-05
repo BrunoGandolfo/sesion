@@ -14,18 +14,17 @@ import { LogOut } from "lucide-react";
 import { getSession, signOut } from "next-auth/react";
 
 import { Button, Card, EditorialRule, Input } from "@/components/ui";
-import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
+import { CheckDibujado } from "@/components/ui/movimiento";
+import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
 import { ALGO_FALLO, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
+import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
 import {
   RECORDATORIO_MODOS,
   RECORDATORIO_MODO_DEFAULT,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
 import { buildSmsMessage, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
-// Solo el tipo (se borra al compilar): es la configuración tal como sale de
-// GET /api/config, que suma `recordatorioModo` a la del dominio.
-import type { ConfiguracionApi } from "@/app/api/_lib/domain";
-import type { OrientacionTeorica } from "@/types/domain";
+import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
 
@@ -76,7 +75,7 @@ const FORM_VACIO: FormConfig = {
   orientacionTeorica: "cbt_mi",
 };
 
-function formDesdeConfig(config: ConfiguracionApi): FormConfig {
+function formDesdeConfig(config: Configuracion): FormConfig {
   return {
     nombreProfesional: config.nombreProfesional,
     direccion: config.direccion,
@@ -225,7 +224,7 @@ export function ConfigView() {
 
     let guardado = false;
     try {
-      await apiPatch<ConfiguracionApi>("/api/config", patch);
+      await apiPatch<Configuracion>("/api/config", patch);
       guardado = true;
     } catch {
       for (const campo of enviados) camposSuciosRef.current.add(campo);
@@ -255,7 +254,7 @@ export function ConfigView() {
     const controller = new AbortController();
 
     Promise.all([
-      apiGet<ConfiguracionApi>("/api/config", { signal: controller.signal }),
+      apiGet<Configuracion>("/api/config", { signal: controller.signal }),
       getSession().catch(() => null),
     ])
       .then(([config, session]) => {
@@ -520,16 +519,9 @@ export function ConfigView() {
                   </p>
                 ) : null}
               </div>
+              <CambiarPassword />
+
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled
-                  title="Próximamente"
-                  className="w-full sm:w-auto"
-                >
-                  Cambiar contraseña · próximamente
-                </Button>
                 <Button
                   type="button"
                   variant="secondary"
@@ -560,6 +552,156 @@ function Marco({ children }: { children: React.ReactNode }) {
       </h1>
       {children}
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cambiar la contraseña
+//
+// Reemplaza al botón "Cambiar contraseña · próximamente", que era un botón
+// deshabilitado con una promesa. Va inline en la card de Cuenta y no en un
+// sheet: son tres campos y no hay nada que se pierda de vista detrás.
+//
+// La regla del largo sale de @/lib/password (validarPasswordNueva), la misma
+// que aplica la ruta: acá se valida para no hacer un viaje de red por un
+// error que ya se puede ver, no para reemplazar la validación del servidor.
+// ────────────────────────────────────────────────────────────────────────────
+
+function CambiarPassword() {
+  const [abierto, setAbierto] = React.useState(false);
+  const [actual, setActual] = React.useState("");
+  const [nueva, setNueva] = React.useState("");
+  const [repetir, setRepetir] = React.useState("");
+  const [enviando, setEnviando] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [listo, setListo] = React.useState(false);
+
+  const limpiar = () => {
+    setActual("");
+    setNueva("");
+    setRepetir("");
+    setError(null);
+  };
+
+  const cerrar = () => {
+    limpiar();
+    setAbierto(false);
+  };
+
+  async function enviar(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (enviando) return;
+
+    if (nueva !== repetir) {
+      setError("Las dos contraseñas nuevas no coinciden.");
+      return;
+    }
+
+    const validacion = validarPasswordNueva(nueva, actual);
+    if (!validacion.ok) {
+      setError(validacion.motivo);
+      return;
+    }
+
+    setEnviando(true);
+    setError(null);
+    try {
+      await apiPost("/api/cuenta/password", { actual, nueva });
+      limpiar();
+      setAbierto(false);
+      setListo(true);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full sm:w-auto"
+          onClick={() => {
+            setListo(false);
+            setAbierto(true);
+          }}
+        >
+          Cambiar contraseña
+        </Button>
+        {listo ? (
+          <p
+            role="status"
+            className="flex items-center gap-2 text-[13px] text-sage-600"
+          >
+            <CheckDibujado tamano={16} className="shrink-0" />
+            Contraseña cambiada. Seguís con la sesión abierta acá.
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(event) => void enviar(event)}
+      className="flex flex-col gap-4 rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-4"
+    >
+      <Input
+        label="Contraseña actual"
+        type="password"
+        autoComplete="current-password"
+        value={actual}
+        onChange={(e) => setActual(e.target.value)}
+        disabled={enviando}
+        required
+      />
+      <Input
+        label="Contraseña nueva"
+        type="password"
+        autoComplete="new-password"
+        value={nueva}
+        onChange={(e) => setNueva(e.target.value)}
+        disabled={enviando}
+        required
+      />
+      <Input
+        label="Repetila"
+        type="password"
+        autoComplete="new-password"
+        value={repetir}
+        onChange={(e) => setRepetir(e.target.value)}
+        disabled={enviando}
+        required
+      />
+
+      <p className="text-[12px] leading-[1.5] text-ink-500">
+        Al menos {PASSWORD_MIN} caracteres. No te vamos a cerrar la sesión en
+        este dispositivo.
+      </p>
+
+      {error ? (
+        <p role="alert" className="text-[12px] text-[color:var(--color-error)]">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={cerrar}
+          disabled={enviando}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={enviando}>
+          {enviando ? "Cambiando…" : "Cambiar contraseña"}
+        </Button>
+      </div>
+    </form>
   );
 }
 

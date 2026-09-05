@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { generarTextoConsentimiento } from "@/lib/consentimiento";
+import { ipDeRequest } from "@/lib/request-huella";
 
 import { getOrganizationId } from "../../../_lib/auth";
 import {
@@ -46,21 +47,6 @@ function toConsentimientoResponse(consentimiento: ConsentimientoResponseInput) {
     textoVersion: consentimiento.textoVersion,
     vigente: consentimiento.revocadoEn === null,
   };
-}
-
-function getIpOrigen(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const [firstIp] = forwardedFor.split(",");
-    const ip = firstIp?.trim();
-
-    if (ip) {
-      return ip;
-    }
-  }
-
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return realIp || null;
 }
 
 async function parseJsonBody(request: Request) {
@@ -150,7 +136,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       direccionConsultorio: configuracion.direccion,
     });
 
-    const ipOrigen = getIpOrigen(request);
+    const ipOrigen = ipDeRequest(request);
     const now = new Date();
 
     const consentimiento = await db.$transaction(async (tx) => {
@@ -177,10 +163,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
     });
 
-    return Response.json(
-      { consentimiento: toConsentimientoResponse(consentimiento) },
-      { status: 201 },
-    );
+    // Mismo envoltorio que el GET: { data: { consentimiento } }. Antes salía
+    // sin `data` y el cliente de API, que desenvuelve siempre, entregaba
+    // undefined; ninguno de los dos consumidores lee el cuerpo, así que el
+    // contrato roto no se notaba.
+    return ok({ consentimiento: toConsentimientoResponse(consentimiento) }, 201);
   } catch (error) {
     return errorResponse(error);
   }
@@ -206,7 +193,8 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       throw new ApiError("Consentimiento vigente no encontrado", 404);
     }
 
-    return Response.json({ success: true });
+    // { data: { revocados } }: el mismo envoltorio que el GET y el POST.
+    return ok({ revocados: count });
   } catch (error) {
     return errorResponse(error);
   }

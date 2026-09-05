@@ -20,7 +20,11 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 
 import { reclamarPendientes } from "@/app/api/_lib/casos-uso/reclamar-pendientes";
-import { sesionesSinContexto } from "@/app/api/_lib/casos-uso/sesiones-sin-contexto";
+import {
+  contarSesionesSinContextoAtrasadas,
+  estaIntegrada,
+  sesionesSinContexto,
+} from "@/app/api/_lib/casos-uso/sesiones-sin-contexto";
 import { __resetKeyCacheForTests } from "@/lib/encryption";
 import { cifrarSesion } from "@/lib/prisma-encryption";
 
@@ -334,5 +338,145 @@ describe("sesionesSinContexto", () => {
     });
 
     expect(resultado.map((r) => r.sesionClinicaId)).toEqual([primera]);
+  });
+
+  // ─── La regla "está integrada", sola ──────────────────────────────────
+  // Es pura y la comparten el batch del worker y la métrica de salud: si las
+  // dos no contestaran lo mismo, el monitoreo alertaría para siempre por algo
+  // que el worker nunca va a tomar.
+
+  describe("estaIntegrada", () => {
+    const enero = (n: number) => new Date(`2026-01-0${n}T12:00:00.000Z`);
+    const sesion = { id: "s2", aprobadoEn: enero(2) };
+
+    it("sin contexto, nada está integrado", () => {
+      expect(estaIntegrada(sesion, null, null)).toBe(false);
+    });
+
+    it("sin ultimaSesionId, nada está integrado", () => {
+      expect(estaIntegrada(sesion, { ultimaSesionId: null }, null)).toBe(false);
+    });
+
+    it("el contexto que apunta a esta sesión la da por integrada", () => {
+      expect(estaIntegrada(sesion, { ultimaSesionId: "s2" }, null)).toBe(true);
+    });
+
+    it("una sesión aprobada antes que la última integrada ya está cubierta", () => {
+      expect(estaIntegrada(sesion, { ultimaSesionId: "s3" }, enero(3))).toBe(
+        true,
+      );
+    });
+
+    it("una sesión aprobada después que la última integrada falta", () => {
+      expect(estaIntegrada(sesion, { ultimaSesionId: "s1" }, enero(1))).toBe(
+        false,
+      );
+    });
+
+    it("si la sesión apuntada ya no existe, no se excluye nada", () => {
+      expect(estaIntegrada(sesion, { ultimaSesionId: "borrada" }, null)).toBe(
+        false,
+      );
+    });
+  });
+});
+
+describe("contarSesionesSinContextoAtrasadas", () => {
+  const dia = (n: number, h: number) =>
+    new Date(Date.UTC(2026, 0, n, h, 0, 0, 0));
+  const CORTE = dia(10, 0);
+
+  async function crearAprobada(base: Base, aprobadoEn: Date) {
+    const turnoId = await crearTurno(base, aprobadoEn);
+    const sesion = await db.sesionClinica.create({
+      data: {
+        turnoId,
+        organizationId: base.orgId,
+        estado: "aprobado",
+        aprobadoEn,
+        ...cifrarSesion({ notaSubjetivo: "S" }),
+      },
+      select: { id: true },
+    });
+    return sesion.id;
+  }
+
+  it("sin sesiones aprobadas no hay nada atrasado", async () => {
+    expect(
+      await contarSesionesSinContextoAtrasadas({ prisma: db, hasta: CORTE }),
+    ).toEqual({ cantidad: 0, saturado: false });
+  });
+
+  it("cuenta la aprobada vieja que el hilo nunca integró", async () => {
+    const base = await crearBase();
+    await crearAprobada(base, dia(1, 10));
+
+    const resultado = await contarSesionesSinContextoAtrasadas({
+      prisma: db,
+      hasta: CORTE,
+    });
+
+    expect(resultado.cantidad).toBe(1);
+    expect(resultado.saturado).toBe(false);
+  });
+
+  it("no cuenta una aprobada recién aprobada: el worker todavía tiene tiempo", async () => {
+    const base = await crearBase();
+    await crearAprobada(base, dia(11, 10)); // posterior al corte
+
+    expect(
+      (await contarSesionesSinContextoAtrasadas({ prisma: db, hasta: CORTE }))
+        .cantidad,
+    ).toBe(0);
+  });
+
+  it("no cuenta la que el hilo ya integró", async () => {
+    const base = await crearBase();
+    const id = await crearAprobada(base, dia(1, 10));
+    await prismaRaw.pacienteContextoClinico.create({
+      data: {
+        pacienteId: base.pacienteId,
+        organizationId: base.orgId,
+        ultimaSesionId: id,
+      },
+    });
+
+    expect(
+      (await contarSesionesSinContextoAtrasadas({ prisma: db, hasta: CORTE }))
+        .cantidad,
+    ).toBe(0);
+  });
+
+  it("cuenta sólo la posterior cuando el hilo quedó a mitad de camino", async () => {
+    const base = await crearBase();
+    await crearAprobada(base, dia(1, 10));
+    const integrada = await crearAprobada(base, dia(2, 10));
+    await crearAprobada(base, dia(3, 10));
+    await prismaRaw.pacienteContextoClinico.create({
+      data: {
+        pacienteId: base.pacienteId,
+        organizationId: base.orgId,
+        ultimaSesionId: integrada,
+      },
+    });
+
+    expect(
+      (await contarSesionesSinContextoAtrasadas({ prisma: db, hasta: CORTE }))
+        .cantidad,
+    ).toBe(1);
+  });
+
+  it("avisa cuando llegó al tope: el número es un piso, no el total", async () => {
+    const base = await crearBase();
+    await crearAprobada(base, dia(1, 10));
+    await crearAprobada(base, dia(2, 10));
+
+    const resultado = await contarSesionesSinContextoAtrasadas({
+      prisma: db,
+      hasta: CORTE,
+      tope: 2,
+    });
+
+    expect(resultado).toEqual({ cantidad: 2, saturado: true });
   });
 });

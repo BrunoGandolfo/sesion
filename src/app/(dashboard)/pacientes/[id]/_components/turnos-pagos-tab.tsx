@@ -8,6 +8,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 
 import { Button, Chip, Sheet, Toast } from "@/components/ui";
+import {
+  CheckDibujado,
+  useConfirmacionDibujada,
+} from "@/components/ui/movimiento";
 import { apiPost } from "@/lib/api-client";
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
 import { AGENDADO, ALGO_FALLO, NO_VINO, pluralizar } from "@/lib/glosario";
@@ -158,7 +162,12 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
 
 /**
  * Sheet de cobro: elige el método y hace el POST. Al confirmar avisa con el
- * turno actualizado; al fallar avisa con el mensaje. Cierra solo al terminar.
+ * turno actualizado; al fallar avisa con el mensaje y se queda abierto para
+ * reintentar.
+ *
+ * El cierre ya no es inmediato: el check se traza sobre el método que ella
+ * tocó y recién ahí el sheet se va (useConfirmacionDibujada). Antes la única
+ * confirmación era el toast, abajo de todo y lejos del renglón.
  */
 export function CobrarSheet({
   turno,
@@ -172,13 +181,14 @@ export function CobrarSheet({
   onError: (mensaje: string) => void;
 }) {
   const [cobrando, setCobrando] = React.useState(false);
+  const [confirmado, confirmar] = useConfirmacionDibujada<MetodoPago>(onClose);
 
   async function elegir(metodo: MetodoPago) {
-    if (!turno || cobrando) return;
+    if (!turno || cobrando || confirmado) return;
     setCobrando(true);
     try {
       const actualizado = await cobrarTurno(turno.id, metodo);
-      onClose();
+      confirmar(metodo);
       onCobrado(actualizado);
     } catch (err) {
       onError(err instanceof Error ? err.message : ALGO_FALLO);
@@ -198,7 +208,8 @@ export function CobrarSheet({
       {turno && (
         <MetodoPagoSelector
           monto={turno.tarifaCobrada}
-          deshabilitado={cobrando}
+          deshabilitado={cobrando || confirmado !== null}
+          confirmado={confirmado}
           onSelect={(metodo) => void elegir(metodo)}
           onCancel={onClose}
         />
@@ -343,11 +354,14 @@ function TurnoRow({ turno, onCobrar }: { turno: Turno; onCobrar: () => void }) {
 function MetodoPagoSelector({
   monto,
   deshabilitado,
+  confirmado,
   onSelect,
   onCancel,
 }: {
   monto: number;
   deshabilitado: boolean;
+  /** Método ya cobrado, mientras se dibuja el check sobre su botón. */
+  confirmado: MetodoPago | null;
   onSelect: (metodo: MetodoPago) => void;
   onCancel: () => void;
 }) {
@@ -370,9 +384,16 @@ function MetodoPagoSelector({
             type="button"
             disabled={deshabilitado}
             onClick={() => onSelect(metodo.value)}
-            className="min-h-[44px] rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:opacity-60"
+            className={`flex min-h-[44px] items-center justify-between gap-3 rounded-md border bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:opacity-60 ${
+              confirmado === metodo.value
+                ? "border-sage-500 bg-white !opacity-100"
+                : "border-[color:var(--border-subtle)]"
+            }`}
           >
-            {metodo.label}
+            <span>{metodo.label}</span>
+            {confirmado === metodo.value ? (
+              <CheckDibujado tamano={18} className="shrink-0 text-sage-600" />
+            ) : null}
           </button>
         ))}
       </div>

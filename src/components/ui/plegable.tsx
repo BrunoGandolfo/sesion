@@ -3,6 +3,8 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 
+import { AlturaAnimada } from "./movimiento";
+
 // Bloque plegado, un solo patrón para toda la app.
 //
 // Por qué existe: la nota tiene tres bloques que se pliegan ("Más de esta
@@ -13,6 +15,12 @@ import { ChevronDown } from "lucide-react";
 // Nació en sesiones/[id]/_components/plegable.tsx porque ese agente no podía
 // editar este directorio. Vive acá desde que lo consumen dos rutas y
 // FeedbackTerapeutaView.
+//
+// El panel abre y cierra con su altura (AlturaAnimada, en movimiento.tsx):
+// antes aparecía de golpe y la nota entera saltaba hacia abajo. La animación
+// vive acá y no en cada pantalla, así los tres plegables de la nota, el de
+// "Ver detalle" del instrumento y el de los temas del Recorrido se abren
+// todos igual. Con prefers-reduced-motion no hay transición: está o no está.
 
 interface PlegableProps {
   /** Rótulo del bloque. Se dice como se llama: no se resume. */
@@ -75,14 +83,13 @@ export function Plegable({
         </span>
       </button>
 
-      {abierto ? (
-        <div
-          id={panelId}
-          className="flex flex-col gap-5 border-t border-[color:var(--border-subtle)] px-5 py-5"
-        >
-          {children}
-        </div>
-      ) : null}
+      <AlturaAnimada
+        abierto={abierto}
+        id={panelId}
+        className="flex flex-col gap-5 border-t border-[color:var(--border-subtle)] px-5 py-5"
+      >
+        {children}
+      </AlturaAnimada>
     </section>
   );
 }
