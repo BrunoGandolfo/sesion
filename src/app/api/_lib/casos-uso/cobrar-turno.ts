@@ -150,13 +150,29 @@ export async function descobrarTurno({
     throw new ApiError(MENSAJE_NO_COBRADO, 400);
   }
 
-  const turno = await prisma.turno.update({
-    where: { id: turnoId },
+  // La organización va en el WHERE de la escritura, igual que en cobrarTurno:
+  // `update({ where: { id } })` deshace el cobro aunque el turno sea de otra
+  // organización, y entre el findFirst de arriba y esta línea hay una
+  // ventana. Con updateMany la pertenencia es parte de la operación.
+  //
+  // No se le agrega `pagoEstado: "pagado"` como hace cobrarTurno: descobrar
+  // dos veces deja el mismo resultado, así que convertir un doble clic en un
+  // 409 sería cambiar el comportamiento sin ganar nada.
+  const { count } = await prisma.turno.updateMany({
+    where: { id: turnoId, organizationId },
     data: {
       pagoEstado: "pendiente",
       pagoFecha: null,
       pagoMetodo: null,
     },
+  });
+
+  if (count === 0) {
+    throw new ApiError("Turno no encontrado", 404);
+  }
+
+  const turno = await prisma.turno.findFirstOrThrow({
+    where: { id: turnoId, organizationId },
   });
 
   return toTurno(turno);

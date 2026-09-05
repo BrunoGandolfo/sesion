@@ -7,6 +7,11 @@
 // el seed que creó el usuario—, así que la contraseña nueva entra por el
 // mismo camino que la vieja y no hay dos formatos conviviendo.
 //
+// Y el LÍMITE también es el mismo que el del login: exigir la contraseña
+// actual sin límite de intentos convierte este endpoint en un oráculo para
+// quien se lleve una sesión. La política vive en src/lib/login-intentos.ts y
+// el contador en src/lib/password-eventos.ts, con el userId como clave.
+//
 // QUÉ NO INVALIDA
 //
 // Nada. La sesión es un JWT firmado (session.strategy = "jwt" en
@@ -22,6 +27,12 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { BCRYPT_RONDAS, validarPasswordNueva } from "@/lib/password";
+import {
+  ACCION_PASSWORD_FALLIDO,
+  ENTIDAD_CUENTA,
+  evaluarCambioPassword,
+  MENSAJE_DEMASIADOS_INTENTOS,
+} from "@/lib/password-eventos";
 import { huellaDeRequest } from "@/lib/request-huella";
 
 import { registrarAuditoria } from "../../_lib/auditoria";
@@ -55,6 +66,17 @@ export async function POST(request: Request) {
     }
 
     const { actual, nueva } = parsed.data;
+    const ahora = new Date();
+    const { ip, userAgent } = huellaDeRequest(request);
+
+    // Misma política que el login (src/lib/login-intentos.ts), con el userId
+    // como clave. Sin esto, una sesión robada puede probar contraseñas contra
+    // este endpoint hasta acertar la actual. Se evalúa ANTES del bcrypt: un
+    // intento bloqueado no cuesta ni CPU ni fila nueva.
+    const bloqueo = await evaluarCambioPassword({ prisma: db, userId, ahora });
+    if (bloqueo.bloqueado) {
+      throw new ApiError(MENSAJE_DEMASIADOS_INTENTOS, 429);
+    }
 
     const usuario = await db.user.findFirst({
       where: { id: userId, organizationId },
@@ -67,6 +89,23 @@ export async function POST(request: Request) {
 
     const actualOk = await bcrypt.compare(actual, usuario.hashedPassword);
     if (!actualOk) {
+      // El fallo se registra ANTES de contestar: esa fila ES el contador que
+      // lee evaluarCambioPassword en el intento siguiente.
+      await registrarAuditoria({
+        organizationId,
+        actorTipo: "usuario",
+        actorId: userId,
+        accion: ACCION_PASSWORD_FALLIDO,
+        entidad: ENTIDAD_CUENTA,
+        entidadId: userId,
+        detalle: {
+          ip,
+          userAgent,
+          nivelBloqueoPrevio: bloqueo.nivel,
+          fallosPrevios: bloqueo.fallos,
+        },
+      });
+
       // Acá sí se puede ser específico: es su propia cuenta y ya está
       // autenticada. El mensaje genérico del login existe para no revelar qué
       // emails están dados de alta; este dato no revela nada nuevo.
@@ -90,8 +129,6 @@ export async function POST(request: Request) {
     if (count === 0) {
       throw new ApiError("No autorizado", 401);
     }
-
-    const { ip, userAgent } = huellaDeRequest(request);
 
     // Ni la contraseña ni su hash van al registro: sólo que pasó, cuándo y
     // desde dónde. (detalleSeguro descartaría igual cualquier objeto anidado,

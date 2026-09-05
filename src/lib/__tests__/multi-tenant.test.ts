@@ -72,6 +72,9 @@ let db!: ClienteCifrado;
 let patchPaciente!: Handler;
 let patchTurno!: Handler;
 let patchSesion!: Handler;
+let deleteSesion!: Handler;
+let uploadUrl!: Handler;
+let descobrarTurno!: Handler;
 
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
@@ -130,12 +133,51 @@ async function crearSesionPendiente(org: Org): Promise<string> {
   return sesion.id;
 }
 
-function pedido(body: unknown): Request {
+async function crearSesionEnEstado(
+  org: Org,
+  estado: string,
+  extra: Record<string, unknown> = {},
+): Promise<string> {
+  const turnoId = await crearTurno(org);
+  const sesion = await db.sesionClinica.create({
+    data: {
+      turnoId,
+      organizationId: org.orgId,
+      estado,
+      ...extra,
+      ...cifrarSesion({ notaSubjetivo: "S" }),
+    },
+    select: { id: true },
+  });
+  return sesion.id;
+}
+
+async function crearTurnoCobrado(org: Org): Promise<string> {
+  const turno = await prismaRaw.turno.create({
+    data: {
+      fecha: MANANA,
+      estado: "realizado",
+      tarifaCobrada: 1000,
+      pagoEstado: "pagado",
+      pagoFecha: MANANA,
+      pagoMetodo: "efectivo",
+      pacienteId: org.pacienteId,
+      organizationId: org.orgId,
+    },
+  });
+  return turno.id;
+}
+
+function pedido(body: unknown, method = "PATCH"): Request {
   return new Request("http://localhost/api", {
-    method: "PATCH",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function pedidoSinCuerpo(method: string): Request {
+  return new Request("http://localhost/api", { method });
 }
 
 function como(org: Org) {
@@ -152,14 +194,20 @@ beforeAll(async () => {
   // que pasar ANTES del import de las rutas.
   (globalThis as unknown as { prisma: unknown }).prisma = db;
 
-  const [rutaPaciente, rutaTurno, rutaSesion] = await Promise.all([
-    import("@/app/api/pacientes/[id]/route"),
-    import("@/app/api/turnos/[id]/route"),
-    import("@/app/api/sesion-clinica/[id]/route"),
-  ]);
+  const [rutaPaciente, rutaTurno, rutaSesion, rutaUpload, rutaCobrar] =
+    await Promise.all([
+      import("@/app/api/pacientes/[id]/route"),
+      import("@/app/api/turnos/[id]/route"),
+      import("@/app/api/sesion-clinica/[id]/route"),
+      import("@/app/api/sesion-clinica/[id]/upload-url/route"),
+      import("@/app/api/turnos/[id]/cobrar/route"),
+    ]);
   patchPaciente = rutaPaciente.PATCH as Handler;
   patchTurno = rutaTurno.PATCH as Handler;
   patchSesion = rutaSesion.PATCH as Handler;
+  deleteSesion = rutaSesion.DELETE as Handler;
+  uploadUrl = rutaUpload.POST as Handler;
+  descobrarTurno = rutaCobrar.DELETE as Handler;
 });
 
 beforeEach(async () => {
@@ -286,5 +334,189 @@ describe("PATCH /api/sesion-clinica/[id] — aislamiento entre organizaciones", 
         })
       ).estado,
     ).toBe("pendiente");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Escrituras por id que hasta ahora no llevaban la organización en el WHERE
+//
+// Las cuatro hacían `update`/`delete` por id después de comprobar la
+// pertenencia con un findFirst. Entre esa lectura y la escritura hay una
+// ventana; ahora la pertenencia viaja adentro de la propia sentencia
+// (updateMany / deleteMany).
+//
+// Un test de ruta NO puede provocar esa ventana —el findFirst contesta 404
+// antes—, así que lo que fijan estos casos es el contrato observable: con la
+// sesión de otra organización, 404 y la fila INTACTA. Si mañana alguien saca
+// el findFirst por considerarlo redundante, estos tests siguen en verde
+// gracias al where de la escritura; si sacara los dos, se ponen rojos.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("PATCH /api/sesion-clinica/[id] — reintento (error → procesando)", () => {
+  it("la organización dueña puede reintentar su sesión con error", async () => {
+    const a = await crearOrg();
+    const sesionId = await crearSesionEnEstado(a, "error", {
+      audioR2Key: "audios/a.enc",
+      error: "algo salió mal",
+      intentos: 3,
+    });
+    como(a);
+
+    const res = await patchSesion(pedido({ estado: "procesando" }), {
+      params: Promise.resolve({ id: sesionId }),
+    });
+
+    expect(res.status).toBe(200);
+    const fila = await prismaRaw.sesionClinica.findUniqueOrThrow({
+      where: { id: sesionId },
+    });
+    expect(fila.estado).toBe("procesando");
+    expect(fila.error).toBeNull();
+    expect(fila.intentos).toBe(0);
+  });
+
+  it("otra organización recibe 404 y la sesión sigue en error", async () => {
+    const a = await crearOrg();
+    const sesionId = await crearSesionEnEstado(a, "error", {
+      audioR2Key: "audios/a.enc",
+      error: "algo salió mal",
+      intentos: 3,
+    });
+    const b = await crearOrg();
+    como(b);
+
+    const res = await patchSesion(pedido({ estado: "procesando" }), {
+      params: Promise.resolve({ id: sesionId }),
+    });
+
+    expect(res.status).toBe(404);
+    const fila = await prismaRaw.sesionClinica.findUniqueOrThrow({
+      where: { id: sesionId },
+    });
+    expect(fila.estado).toBe("error");
+    expect(fila.intentos).toBe(3);
+  });
+});
+
+describe("DELETE /api/sesion-clinica/[id] — aislamiento entre organizaciones", () => {
+  it("la organización dueña descarta su nota en revisión", async () => {
+    const a = await crearOrg();
+    const sesionId = await crearSesionEnEstado(a, "revision");
+    como(a);
+
+    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
+      params: Promise.resolve({ id: sesionId }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(
+      (
+        await prismaRaw.sesionClinica.findUniqueOrThrow({
+          where: { id: sesionId },
+        })
+      ).estado,
+    ).toBe("error");
+  });
+
+  it("otra organización recibe 404 y la nota sigue en revisión", async () => {
+    const a = await crearOrg();
+    const sesionId = await crearSesionEnEstado(a, "revision");
+    const b = await crearOrg();
+    como(b);
+
+    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
+      params: Promise.resolve({ id: sesionId }),
+    });
+
+    expect(res.status).toBe(404);
+    expect(
+      (
+        await prismaRaw.sesionClinica.findUniqueOrThrow({
+          where: { id: sesionId },
+        })
+      ).estado,
+    ).toBe("revision");
+  });
+
+  it("otra organización no puede eliminar una sesión con error", async () => {
+    // Rama de borrado definitivo: sin audio real no hay nada que borrar en
+    // R2, así que sin el aislamiento la fila desaparecería.
+    const a = await crearOrg();
+    const sesionId = await crearSesionEnEstado(a, "error");
+    const b = await crearOrg();
+    como(b);
+
+    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
+      params: Promise.resolve({ id: sesionId }),
+    });
+
+    expect(res.status).toBe(404);
+    expect(
+      await prismaRaw.sesionClinica.count({ where: { id: sesionId } }),
+    ).toBe(1);
+  });
+});
+
+describe("POST /api/sesion-clinica/[id]/upload-url — aislamiento entre organizaciones", () => {
+  it("otra organización recibe 404 y la sesión sigue grabando", async () => {
+    const a = await crearOrg();
+    const sesionId = await crearSesionEnEstado(a, "grabando");
+    const b = await crearOrg();
+    como(b);
+
+    const res = await uploadUrl(
+      pedido(
+        { claveCifrado: "k", iv: "iv", tamanoBytes: 1024, mime: "audio/webm" },
+        "POST",
+      ),
+      { params: Promise.resolve({ id: sesionId }) },
+    );
+
+    expect(res.status).toBe(404);
+    expect(
+      (
+        await prismaRaw.sesionClinica.findUniqueOrThrow({
+          where: { id: sesionId },
+        })
+      ).estado,
+    ).toBe("grabando");
+  });
+});
+
+describe("DELETE /api/turnos/[id]/cobrar — aislamiento entre organizaciones", () => {
+  it("la organización dueña puede descobrar su turno", async () => {
+    const a = await crearOrg();
+    const turnoId = await crearTurnoCobrado(a);
+    como(a);
+
+    const res = await descobrarTurno(pedidoSinCuerpo("DELETE"), {
+      params: Promise.resolve({ id: turnoId }),
+    });
+
+    expect(res.status).toBe(200);
+    const fila = await prismaRaw.turno.findUniqueOrThrow({
+      where: { id: turnoId },
+    });
+    expect(fila.pagoEstado).toBe("pendiente");
+    expect(fila.pagoFecha).toBeNull();
+    expect(fila.pagoMetodo).toBeNull();
+  });
+
+  it("otra organización recibe 404 y el turno sigue cobrado", async () => {
+    const a = await crearOrg();
+    const turnoId = await crearTurnoCobrado(a);
+    const b = await crearOrg();
+    como(b);
+
+    const res = await descobrarTurno(pedidoSinCuerpo("DELETE"), {
+      params: Promise.resolve({ id: turnoId }),
+    });
+
+    expect(res.status).toBe(404);
+    const fila = await prismaRaw.turno.findUniqueOrThrow({
+      where: { id: turnoId },
+    });
+    expect(fila.pagoEstado).toBe("pagado");
+    expect(fila.pagoMetodo).toBe("efectivo");
   });
 });

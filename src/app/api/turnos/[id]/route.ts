@@ -6,6 +6,7 @@ import {
 } from "@/lib/recordatorios-programacion";
 
 import { getOrganizationId } from "../../_lib/auth";
+import { ESTADOS_CON_ENVIO_PENDIENTE } from "../../_lib/casos-uso/enviar-recordatorios";
 import {
   duracionSchema,
   isoDateTimeSchema,
@@ -94,11 +95,22 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
       const updated = await tx.turno.findUniqueOrThrow({ where: { id } });
 
-      if (updated.estado === "cancelado") {
-        await tx.recordatorio.updateMany({
-          where: { turnoId: id, estado: "pendiente" },
+      // Apaga TODO recordatorio que todavía pueda mandar un SMS de este
+      // turno: los que esperan su hora y también los que quedaron reservados
+      // ("enviando") por una corrida del cron que se murió. Si la reserva
+      // huérfana sobrevive, el rescate la levanta y manda un mensaje de un
+      // turno que ya no existe o que se movió de fecha.
+      const apagarRecordatorios = () =>
+        tx.recordatorio.updateMany({
+          where: {
+            turnoId: id,
+            estado: { in: [...ESTADOS_CON_ENVIO_PENDIENTE] },
+          },
           data: { estado: "cancelado" },
         });
+
+      if (updated.estado === "cancelado") {
+        await apagarRecordatorios();
 
         return updated;
       }
@@ -112,10 +124,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         return updated;
       }
 
-      await tx.recordatorio.updateMany({
-        where: { turnoId: id, estado: "pendiente" },
-        data: { estado: "cancelado" },
-      });
+      await apagarRecordatorios();
 
       const configuracion = await tx.configuracion.findUnique({
         where: { organizationId },

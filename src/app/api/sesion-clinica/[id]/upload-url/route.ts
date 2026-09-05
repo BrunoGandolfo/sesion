@@ -112,8 +112,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       expiraEnSegundos: EXPIRA_EN_SEGUNDOS,
     });
 
-    await db.sesionClinica.update({
-      where: { id: sesion.id },
+    // updateMany con la organización y el estado leído en el WHERE.
+    // `update({ where: { id } })` escribe la fila aunque sea de otra
+    // organización, y entre el findFirst de arriba y esta línea hay una
+    // ventana: acá encima esa ventana la abre una llamada a R2, que puede
+    // tardar. El estado se conserva como condición para que dos pestañas
+    // pidiendo URL a la vez no se pisen la clave de cifrado.
+    const { count } = await db.sesionClinica.updateMany({
+      where: { id: sesion.id, organizationId, estado: "grabando" },
       data: {
         estado: "subiendo",
         error: null,
@@ -125,8 +131,14 @@ export async function POST(request: Request, { params }: RouteParams) {
           ),
         }),
       },
-      select: { id: true },
     });
+
+    if (count === 0) {
+      throw new ApiError(
+        "La sesión cambió mientras se preparaba la subida. Probá de nuevo.",
+        409,
+      );
+    }
 
     await registrarAuditoria({
       organizationId,
