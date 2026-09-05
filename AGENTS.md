@@ -3,3 +3,18 @@
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
+
+# Reglas del repositorio
+
+9. NUNCA importar `node:*` (crypto, fs, path, etc.) en ningún archivo
+   alcanzable desde el middleware/proxy. Web Crypto (`globalThis.crypto`) sí.
+   Alcanzable incluye los `await import()` dinámicos: el empaquetador los
+   sigue igual aunque el código nunca corra en el edge.
+   Ejemplo de hoy: `src/lib/login-eventos.ts` importaba `node:crypto` para
+   hashear el email, entraba al bundle por el import dinámico de
+   `authorize()` en `src/lib/auth.ts`, pasó CI entero y reventó recién en el
+   deploy de Vercel con `The Edge Function "_middleware" is referencing
+   unsupported modules: node:crypto`.
+   El guardián que lo atrapa antes del merge es
+   `src/lib/__tests__/middleware-edge.test.ts`: camina el grafo de imports
+   desde `src/middleware.ts` y falla ante cualquier `node:*`.

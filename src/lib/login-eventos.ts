@@ -25,10 +25,9 @@
 // por IP— peguen contra el índice (entidad, entidadId) que la tabla ya
 // tiene. Sin filtros JSON, sin índice nuevo, sin migración.
 
-import { createHash } from "node:crypto";
-
 import type { Prisma } from "@prisma/client";
 
+import { sha256Hex } from "@/lib/crypto";
 import { dbAuth } from "@/lib/db-auth";
 import {
   elMasRestrictivo,
@@ -53,13 +52,17 @@ export const ORG_DESCONOCIDA = "desconocida";
 
 const MS_POR_HORA = 3_600_000;
 
-/** sha256 hex. El email nunca se guarda en claro en el registro. */
-function hashEmail(email: string): string {
-  return createHash("sha256").update(email, "utf8").digest("hex");
-}
-
-export function claveEmail(email: string): string {
-  return `email:${hashEmail(email)}`;
+/**
+ * Clave del contador por email: `email:<sha256 hex>`.
+ *
+ * Es async porque el sha256 sale de Web Crypto (`crypto.subtle.digest`) y no
+ * de `node:crypto`: este módulo entra —por el import dinámico de authorize()—
+ * en el bundle del middleware, que Vercel empaqueta para el runtime edge,
+ * donde `node:*` no existe. El hash es byte a byte el mismo de antes, así que
+ * las filas ya escritas en `eventos_auditoria` siguen contando.
+ */
+export async function claveEmail(email: string): Promise<string> {
+  return `email:${await sha256Hex(email)}`;
 }
 
 export function claveIp(ip: string): string {
@@ -85,7 +88,10 @@ export interface IntentoLogin {
 export async function evaluarIntento(
   intento: IntentoLogin,
 ): Promise<EstadoBloqueo> {
-  const claves = [claveEmail(intento.email)];
+  // Una sola vez: antes se hasheaba el email dos veces (acá y al repartir las
+  // filas más abajo). Con el hash async el desperdicio se veía.
+  const kEmail = await claveEmail(intento.email);
+  const claves = [kEmail];
   if (intento.ip) claves.push(claveIp(intento.ip));
 
   const desde = new Date(intento.ahora.getTime() - MEMORIA_HORAS * MS_POR_HORA);
@@ -108,7 +114,6 @@ export async function evaluarIntento(
 
   const porEmail: Date[] = [];
   const porIp: Date[] = [];
-  const kEmail = claveEmail(intento.email);
   for (const fila of filas) {
     (fila.entidadId === kEmail ? porEmail : porIp).push(fila.createdAt);
   }
@@ -148,10 +153,13 @@ export async function registrarLoginFallido(fallo: FalloLogin): Promise<void> {
   } satisfies Prisma.InputJsonObject;
 
   const organizationId = fallo.organizationId ?? ORG_DESCONOCIDA;
-  const claves = [claveEmail(fallo.email)];
-  if (fallo.ip) claves.push(claveIp(fallo.ip));
 
+  // El hash entró adentro del try junto con la escritura: ahora es async y
+  // "nunca lanza" tiene que seguir siendo cierto para toda la función.
   try {
+    const claves = [await claveEmail(fallo.email)];
+    if (fallo.ip) claves.push(claveIp(fallo.ip));
+
     await dbAuth.eventoAuditoria.createMany({
       data: claves.map((entidadId) => ({
         organizationId,
