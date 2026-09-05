@@ -32,6 +32,7 @@ import {
   ENTIDAD_CUENTA,
   evaluarCambioPassword,
   procesarCambioPassword,
+  type ProcesarCambioPasswordParams,
 } from "@/lib/password-eventos";
 
 import { conectarBaseDeTest, vaciarTablas } from "./db-test";
@@ -80,16 +81,27 @@ function fallosDe(userId: string): Promise<number> {
   });
 }
 
-/** Un intento con la contraseña equivocada. `verificar` cuenta las veces que
- *  se lo llamó: es el bcrypt que el atacante quiere alcanzar. */
+/**
+ * El cliente crudo de la base de test, visto como el cliente de la app.
+ *
+ * `conectarBaseDeTest` devuelve el PrismaClient pelado; los módulos piden el
+ * cliente EXTENDIDO con la extensión de cifrado, que es otro tipo aunque sea
+ * el mismo objeto. Para las dos tablas que este archivo toca —`user` y
+ * `eventoAuditoria`— la extensión no cambia nada: no tienen columnas
+ * cifradas. El cast es sobre el tipo, no sobre el comportamiento.
+ */
+function comoClienteDeLaApp(): ProcesarCambioPasswordParams["prisma"] {
+  return prismaRaw as unknown as ProcesarCambioPasswordParams["prisma"];
+}
+
+/** Un intento de cambio. `verificar` recibe el hash guardado y cuenta las
+ *  veces que se lo llamó: es el bcrypt que el atacante quiere alcanzar. */
 function intentar(
   cuenta: Cuenta,
-  verificar: () => Promise<boolean>,
+  verificar: (hashGuardado: string) => Promise<boolean>,
 ) {
   return procesarCambioPassword({
-    prisma: prismaRaw as unknown as Parameters<
-      typeof procesarCambioPassword
-    >[0]["prisma"],
+    prisma: comoClienteDeLaApp(),
     organizationId: cuenta.organizationId,
     userId: cuenta.userId,
     ahora: AHORA,
@@ -157,7 +169,7 @@ describe("procesarCambioPassword", () => {
     );
 
     const estado = await evaluarCambioPassword({
-      prisma: prismaRaw,
+      prisma: comoClienteDeLaApp(),
       userId: cuenta.userId,
       ahora: AHORA,
     });
@@ -216,9 +228,7 @@ describe("procesarCambioPassword", () => {
     const otra = await crearCuenta();
 
     const resultado = await procesarCambioPassword({
-      prisma: prismaRaw as unknown as Parameters<
-        typeof procesarCambioPassword
-      >[0]["prisma"],
+      prisma: comoClienteDeLaApp(),
       organizationId: otra.organizationId,
       userId: cuenta.userId,
       ahora: AHORA,
