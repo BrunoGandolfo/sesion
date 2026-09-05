@@ -21,6 +21,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import {
   enviarRecordatoriosVencidos,
+  MENSAJE_ENVIADO_TRAS_CANCELACION,
   MENSAJE_INTENTOS_AGOTADOS,
   type EnviarSms,
 } from "@/app/api/_lib/casos-uso/enviar-recordatorios";
@@ -488,5 +489,100 @@ describe("enviarRecordatoriosVencidos", () => {
     expect(resumen.procesados).toBe(0);
     expect(stub).not.toHaveBeenCalled();
     expect((await leer(recordatorioId)).estado).toBe("pendiente");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// A4 — los cierres del envío no pisan una cancelación escrita en el medio.
+//
+// La carrera: la corrida reserva el recordatorio ("enviando"), llama a
+// Twilio, y MIENTRAS Twilio contesta la terapeuta cancela o reprograma el
+// turno. Ese PATCH escribe "cancelado" en esta misma fila. Los cierres
+// hacían `update` por id, sin mirar el estado, así que la pisaban:
+//
+//   - el cierre feliz la dejaba en "enviado" y la cancelación se perdía;
+//   - el cierre por error la devolvía a "pendiente", o sea REVIVÍA un
+//     recordatorio recién cancelado, con `programadoEn` viejo, para que el
+//     próximo tick lo mandara en el acto. Era el agujero por el que se
+//     escapaba el arreglo del PR #13 cada vez que Twilio fallaba.
+//
+// El stub de Twilio es el único lugar donde se puede meter la cancelación:
+// es el instante en que la fila está reservada y la llamada en vuelo.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("cancelación del turno durante el envío", () => {
+  /** Deja la fila como la dejaría el PATCH del turno: apagada. */
+  async function cancelarDesdeAfuera(id: string) {
+    await prismaRaw.recordatorio.updateMany({
+      where: { id, estado: { in: ["pendiente", "enviando"] } },
+      data: { estado: "cancelado" },
+    });
+  }
+
+  it("si el SMS salió, la fila queda cancelada pero guarda la evidencia", async () => {
+    const { recordatorioId, fechaTurno } = await crearRecordatorio();
+
+    const resumen = await correr(async () => {
+      await cancelarDesdeAfuera(recordatorioId);
+      return { success: true, sid: "SM1" };
+    });
+
+    // El SMS salió: eso se cuenta.
+    expect(resumen.enviados).toBe(1);
+    expect(resumen.enviadosTrasCancelacion).toBe(1);
+
+    const fila = await leer(recordatorioId);
+    // Estado terminal: nadie lo vuelve a tomar, y "enviado" sería mentira
+    // (el recordatorio no hizo su trabajo, avisó de algo que ya no existe).
+    expect(fila.estado).toBe("cancelado");
+    // Pero la evidencia queda: la paciente TIENE el mensaje en el teléfono.
+    expect(fila.enviadoEn?.getTime()).toBe(AHORA.getTime());
+    expect(fila.textoEnviado).toBe(textoEsperado(fechaTurno));
+    expect(fila.error).toBe(MENSAJE_ENVIADO_TRAS_CANCELACION);
+  });
+
+  it("si el envío falló, el recordatorio NO revive", async () => {
+    const { recordatorioId } = await crearRecordatorio();
+
+    const resumen = await correr(async () => {
+      await cancelarDesdeAfuera(recordatorioId);
+      throw new Error("Twilio caído");
+    });
+
+    expect(resumen.fallidos).toBe(1);
+    expect(resumen.enviados).toBe(0);
+
+    const fila = await leer(recordatorioId);
+    expect(fila.estado).toBe("cancelado");
+    // Sin la guarda quedaba en "pendiente" y el tick siguiente lo mandaba.
+    expect(fila.estado).not.toBe("pendiente");
+  });
+
+  it("y una corrida posterior no lo levanta", async () => {
+    const { recordatorioId } = await crearRecordatorio();
+
+    await correr(async () => {
+      await cancelarDesdeAfuera(recordatorioId);
+      throw new Error("Twilio caído");
+    });
+
+    const stub = vi.fn(enviaOk);
+    const segunda = await correr(stub);
+
+    expect(segunda.procesados).toBe(0);
+    expect(stub).not.toHaveBeenCalled();
+    expect((await leer(recordatorioId)).estado).toBe("cancelado");
+  });
+
+  it("sin cancelación en el medio, el cierre feliz sigue siendo 'enviado'", async () => {
+    // El camino normal no cambió: la guarda sólo actúa cuando alguien más
+    // tocó la fila.
+    const { recordatorioId } = await crearRecordatorio();
+
+    const resumen = await correr(vi.fn(enviaOk));
+
+    expect(resumen.enviados).toBe(1);
+    expect(resumen.enviadosTrasCancelacion).toBe(0);
+    expect((await leer(recordatorioId)).estado).toBe("enviado");
   });
 });

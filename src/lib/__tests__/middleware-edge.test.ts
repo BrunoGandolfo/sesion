@@ -29,6 +29,20 @@
 // de declararla: sale de `src/middleware.ts` y sigue todo import local,
 // estático o dinámico. Un archivo nuevo queda cubierto solo.
 //
+// EL PREFIJO `node:` NO ALCANZA (Codex P2 sobre el PR #12)
+//
+// `import { createHash } from "crypto"` es tan válido como
+// `from "node:crypto"` y rompe el Edge exactamente igual. La primera versión
+// de este guardián sólo miraba el prefijo: un especificador pelado como
+// "crypto", "fs" o "path" no era "node:*", `resolverLocal()` lo trataba como
+// un paquete de node_modules y lo descartaba en silencio. Pasaba en verde y
+// el deploy volvía a reventar.
+//
+// La lista de built-ins no se escribe a mano: sale de `builtinModules` de
+// `node:module`, que es la lista real del runtime que corre el test. Incluye
+// los sub-paths ("fs/promises", "stream/web", "timers/promises"), así que un
+// `import { readFile } from "fs/promises"` también se atrapa.
+//
 // LÍMITES (dichos a propósito)
 //
 //   - Sigue únicamente imports de primera mano (`@/…`, `./…`, `../…`). Un
@@ -38,8 +52,13 @@
 //     formas que el repositorio usa (import, import type, export … from,
 //     import() dinámico, import de solo efecto). Un `require()` o un
 //     especificador armado en una variable se le escapan.
+//   - Un paquete de npm que se llame igual que un built-in ("crypto",
+//     "punycode", "querystring" existen en el registro como polyfills) daría
+//     un falso positivo. Es el intercambio correcto: un falso positivo se
+//     discute en el PR, un falso negativo se descubre en producción.
 
 import { readFileSync, statSync } from "node:fs";
+import { builtinModules } from "node:module";
 import { dirname, join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -51,6 +70,31 @@ const RAIZ = process.cwd();
 const SRC = resolve(RAIZ, "src");
 
 const EXTENSIONES = [".ts", ".tsx", ".mts", ".js", ".jsx"];
+
+/**
+ * Todos los módulos built-in del runtime, con y sin prefijo. `builtinModules`
+ * los devuelve mayormente pelados ("fs", "fs/promises") y algunos sólo con
+ * prefijo ("node:test", "node:sqlite"); se normaliza para poder consultar por
+ * cualquiera de las dos formas.
+ */
+const BUILT_INS: ReadonlySet<string> = new Set(
+  builtinModules.map((nombre) =>
+    nombre.startsWith("node:") ? nombre.slice(5) : nombre,
+  ),
+);
+
+/**
+ * ¿Este especificador es un módulo de Node? Cubre las dos formas —"node:fs"
+ * y "fs"— y los sub-paths ("fs/promises").
+ *
+ * Cualquier cosa con prefijo `node:` cuenta aunque no esté en la lista: si
+ * mañana Node agrega `node:loquesea`, el Edge tampoco lo va a tener, y quien
+ * escribió el prefijo declaró su intención de usar Node.
+ */
+export function esModuloDeNode(especificador: string): boolean {
+  if (especificador.startsWith("node:")) return true;
+  return BUILT_INS.has(especificador);
+}
 
 /**
  * Quita las líneas que son solo comentario. Alcanza para que un import
@@ -72,7 +116,7 @@ const ESTATICO =
 const DINAMICO = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const SOLO_EFECTO = /(?:^|[\s;])import\s*['"]([^'"]+)['"]/g;
 
-function especificadores(fuente: string): string[] {
+export function especificadores(fuente: string): string[] {
   const limpia = sinComentarios(fuente);
   const out: string[] = [];
   for (const regex of [ESTATICO, DINAMICO, SOLO_EFECTO]) {
@@ -136,7 +180,7 @@ function recorrerCadena(): { archivos: string[]; hallazgos: Hallazgo[] } {
 
     const fuente = readFileSync(actual.archivo, "utf8");
     for (const especificador of especificadores(fuente)) {
-      if (especificador.startsWith("node:")) {
+      if (esModuloDeNode(especificador)) {
         hallazgos.push({
           archivo: actual.archivo.slice(RAIZ.length + 1),
           modulo: especificador,
@@ -180,5 +224,109 @@ describe("cadena de imports del middleware", () => {
     expect(relativos).toContain("src/lib/auth.ts");
     expect(relativos).toContain("src/lib/login-eventos.ts");
     expect(relativos).toContain("src/lib/crypto.ts");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// El detector, a solas
+//
+// Los tests de arriba pasan en verde también si el detector no detecta nada
+// (hoy la cadena está limpia, así que "cero hallazgos" es el resultado
+// correcto y el esperado). Sin estos casos, un guardián roto se ve idéntico a
+// un guardián que funciona. Acá se le dan fuentes sintéticas con la respuesta
+// conocida.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Los especificadores de una fuente que el guardián marcaría como Node. */
+function deteccionesEn(fuente: string): string[] {
+  return especificadores(fuente).filter(esModuloDeNode);
+}
+
+describe("esModuloDeNode", () => {
+  it("reconoce las dos formas del mismo módulo", () => {
+    expect(esModuloDeNode("node:crypto")).toBe(true);
+    expect(esModuloDeNode("crypto")).toBe(true);
+  });
+
+  it("reconoce los sub-paths de los built-in", () => {
+    expect(esModuloDeNode("fs/promises")).toBe(true);
+    expect(esModuloDeNode("node:fs/promises")).toBe(true);
+  });
+
+  it("acepta cualquier cosa con prefijo node:, aunque no exista todavía", () => {
+    expect(esModuloDeNode("node:modulo-que-node-agregue-manana")).toBe(true);
+  });
+
+  it("no marca paquetes ni rutas de la app", () => {
+    for (const especificador of [
+      "bcryptjs",
+      "next/server",
+      "next-auth/providers/credentials",
+      "@prisma/client",
+      "@/lib/crypto",
+      "./responses",
+      "../../_lib/auth",
+    ]) {
+      expect(esModuloDeNode(especificador)).toBe(false);
+    }
+  });
+
+  it("la lista de built-in salió del runtime y tiene lo que tiene que tener", () => {
+    // Si `builtinModules` se leyera mal, BUILT_INS quedaría vacío y todo el
+    // guardián pasaría en verde sin mirar nada.
+    for (const nombre of ["crypto", "fs", "path", "buffer", "os", "stream"]) {
+      expect(esModuloDeNode(nombre)).toBe(true);
+    }
+  });
+});
+
+describe("el guardián detecta las cuatro formas de import", () => {
+  // Un caso positivo (built-in sin prefijo, que es el que se escapaba) y uno
+  // negativo (un paquete de npm) por cada forma que el repositorio usa.
+
+  it("import estático", () => {
+    expect(deteccionesEn(`import { createHash } from "crypto";`)).toEqual([
+      "crypto",
+    ]);
+    expect(deteccionesEn(`import bcrypt from "bcryptjs";`)).toEqual([]);
+  });
+
+  it("import de tipo y multilínea", () => {
+    expect(
+      deteccionesEn(`import type {\n  Stats,\n} from "fs";`),
+    ).toEqual(["fs"]);
+    expect(
+      deteccionesEn(`import type {\n  Prisma,\n} from "@prisma/client";`),
+    ).toEqual([]);
+  });
+
+  it("export … from", () => {
+    expect(deteccionesEn(`export { join } from "path";`)).toEqual(["path"]);
+    expect(deteccionesEn(`export { hora } from "@/lib/format";`)).toEqual([]);
+  });
+
+  it("import() dinámico", () => {
+    expect(deteccionesEn(`const c = await import("crypto");`)).toEqual([
+      "crypto",
+    ]);
+    expect(deteccionesEn(`const b = await import("bcryptjs");`)).toEqual([]);
+  });
+
+  it("import de solo efecto", () => {
+    expect(deteccionesEn(`import "os";`)).toEqual(["os"]);
+    expect(deteccionesEn(`import "./estilos.css";`)).toEqual([]);
+  });
+
+  it("un import comentado no cuenta", () => {
+    expect(deteccionesEn(`// import { createHash } from "crypto";`)).toEqual(
+      [],
+    );
+  });
+
+  it("un módulo nombrado en prosa no cuenta", () => {
+    // El propio auth.ts tiene un comentario que dice "node:crypto".
+    expect(
+      deteccionesEn(`// OJO: no importar node:crypto acá, revienta el edge.`),
+    ).toEqual([]);
   });
 });

@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   RECORDATORIO_TRABADO_MS,
   revisarSalud,
+  TOPE_MINUTOS_AUDIO_MES,
   type RevisarSaludParams,
 } from "@/app/api/_lib/casos-uso/salud";
 import { TOPE_ATRASADAS } from "@/app/api/_lib/casos-uso/sesiones-sin-contexto";
@@ -32,6 +33,8 @@ interface Escenario {
   candidatas?: number;
   /** Si true, todas las candidatas figuran ya integradas al hilo. */
   integradas?: boolean;
+  /** Segundos de audio transcriptos en el mes (lo que suma el aggregate). */
+  segundosAudioDelMes?: number | null;
 }
 
 /** Doble mínimo del cliente Prisma: solo lo que toca revisarSalud. */
@@ -54,6 +57,11 @@ function prismaFalso(escenario: Escenario) {
         }
         return candidatas;
       },
+      aggregate: async () => ({
+        _sum: {
+          duracionAudioSeg: escenario.segundosAudioDelMes ?? null,
+        },
+      }),
     },
     recordatorio: {
       count: async (args: { where: { estado: string } }) =>
@@ -89,6 +97,7 @@ describe("revisarSalud", () => {
       recordatoriosTrabados: 0,
       sesionesSinContexto: 0,
       sesionesSinContextoSaturado: false,
+      minutosAudioDelMes: 0,
     });
   });
 
@@ -151,5 +160,66 @@ describe("revisarSalud", () => {
     expect(salud.alerta).toBe(
       "Sesión: 3 sesiones aprobadas hace más de 24 h sin integrar al hilo",
     );
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// A7 — control de gasto.
+//
+// El pipeline cobra por minuto de audio transcripto. Un bucle de
+// reprocesamiento o un audio de tres horas subido por error gastan plata en
+// silencio hasta que llega la factura. Los tokens del LLM no se pueden medir
+// todavía (no hay columna ni el worker los manda): está BLOQUEADA en el
+// reporte del PR con el SQL propuesto.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("minutos de audio del mes", () => {
+  it("sin sesiones procesadas el aggregate devuelve null y la cuenta es 0", async () => {
+    // `_sum` de una consulta sin filas es null, no 0: si no se contemplara,
+    // la métrica saldría NaN y la comparación con el tope sería siempre
+    // falsa — el control de gasto quedaría apagado sin que nadie lo note.
+    const salud = await correr({ segundosAudioDelMes: null });
+
+    expect(salud.minutosAudioDelMes).toBe(0);
+    expect(salud.alerta).toBeNull();
+  });
+
+  it("redondea hacia arriba: medio minuto de audio se paga entero", async () => {
+    const salud = await correr({ segundosAudioDelMes: 90 });
+
+    expect(salud.minutosAudioDelMes).toBe(2);
+  });
+
+  it("por debajo del tope informa pero no avisa", async () => {
+    const salud = await correr({
+      segundosAudioDelMes: TOPE_MINUTOS_AUDIO_MES * 60,
+    });
+
+    expect(salud.minutosAudioDelMes).toBe(TOPE_MINUTOS_AUDIO_MES);
+    expect(salud.topeMinutosAudioMes).toBe(TOPE_MINUTOS_AUDIO_MES);
+    // El borde exacto NO alerta: se avisa al pasarse, no al llegar.
+    expect(salud.alerta).toBeNull();
+  });
+
+  it("pasado el tope avisa y dice qué mirar", async () => {
+    const salud = await correr({
+      segundosAudioDelMes: (TOPE_MINUTOS_AUDIO_MES + 1) * 60,
+    });
+
+    expect(salud.minutosAudioDelMes).toBe(TOPE_MINUTOS_AUDIO_MES + 1);
+    expect(salud.alerta).toContain(
+      `${TOPE_MINUTOS_AUDIO_MES + 1} minutos de audio transcriptos en el mes`,
+    );
+    expect(salud.alerta).toContain("reprocesándose");
+  });
+
+  it("el gasto convive con las otras métricas en un solo aviso", async () => {
+    const salud = await correr({
+      sesionesTrabadas: 1,
+      segundosAudioDelMes: (TOPE_MINUTOS_AUDIO_MES + 10) * 60,
+    });
+
+    expect(salud.alerta).toContain("1 sesiones en procesando");
+    expect(salud.alerta).toContain("minutos de audio transcriptos en el mes");
   });
 });

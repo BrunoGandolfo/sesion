@@ -42,6 +42,7 @@ export async function GET(request: Request) {
     return Response.json({
       procesados: 0,
       enviados: 0,
+      enviadosTrasCancelacion: 0,
       fallidos: 0,
       saltados: 0,
       vencidos: 0,

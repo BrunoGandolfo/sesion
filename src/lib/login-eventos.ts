@@ -40,15 +40,20 @@
 // contra la misma clave espera a que este commitee, así que lee el contador
 // ya actualizado.
 //
-// Es *xact* y no `pg_advisory_lock` a propósito: el lock de transacción se
-// suelta solo al commit o al rollback, así que no puede quedar colgado si la
-// función serverless se muere, y sobrevive a un pooler en modo transacción
-// (Neon), donde un lock de sesión sería un bug esperando.
+// La disciplina del lock —qué función de Postgres, en qué orden, con qué
+// timeouts, y qué pasa si la transacción no se puede completar— NO vive acá:
+// vive en src/lib/intentos-serializados.ts, compartida con el cambio de
+// contraseña, que tiene el mismo problema y tenía el mismo agujero.
 
 import type { Prisma } from "@prisma/client";
 
 import { sha256Hex } from "@/lib/crypto";
 import { dbAuth } from "@/lib/db-auth";
+import {
+  OPCIONES_TRANSACCION,
+  rechazarSiFalla,
+  tomarLocks,
+} from "@/lib/intentos-serializados";
 import {
   elMasRestrictivo,
   evaluarBloqueo,
@@ -71,16 +76,6 @@ export const ACCION_LOGIN_FALLIDO = "login.fallido";
 export const ORG_DESCONOCIDA = "desconocida";
 
 const MS_POR_HORA = 3_600_000;
-
-/**
- * Cuánto espera un intento a que se libere una conexión del pool antes de
- * darse por vencido, y cuánto puede durar la transacción entera (esperar el
- * lock + un bcrypt). Explícitos porque los defaults de Prisma (2 s y 5 s) se
- * quedan cortos apenas hay unos pocos intentos encolados, y porque el efecto
- * de que se agoten no es "pasa igual" sino "se rechaza": ver procesarIntento.
- */
-export const LOCK_MAX_WAIT_MS = 10_000;
-export const LOCK_TIMEOUT_MS = 10_000;
 
 /** El cliente de una transacción interactiva, o `dbAuth` entero. */
 type ClienteLogin = Prisma.TransactionClient;
@@ -340,18 +335,18 @@ export async function procesarIntento<T>({
   verificar,
   prisma = dbAuth,
 }: ProcesarIntentoParams<T>): Promise<T | null> {
-  let resultado: { sesion: T; userId: string; organizationId: string } | null;
+  type Resultado = { sesion: T; userId: string; organizationId: string } | null;
 
-  try {
-    resultado = await prisma.$transaction(
-      async (tx) => {
+  const resultado = await rechazarSiFalla<Resultado>(
+    "login",
+    () =>
+      prisma.$transaction(async (tx): Promise<Resultado> => {
         const claves = await clavesDe(intento);
 
-        // Orden fijo: primero el email, después la IP. Dos transacciones
-        // nunca piden los locks al revés, así que no hay ciclo de espera y
-        // no hay deadlock posible.
-        await tomarLock(tx, claves.email);
-        if (claves.ip) await tomarLock(tx, claves.ip);
+        // Orden fijo: primero el email, después la IP. Todos los intentos
+        // arman la lista igual, así que dos transacciones nunca piden los
+        // locks al revés: no hay ciclo de espera y no hay deadlock.
+        await tomarLocks(tx, listaDe(claves));
 
         const bloqueo = await evaluarConClaves(tx, claves, intento.ahora);
         if (bloqueo.bloqueado) return null;
@@ -377,13 +372,9 @@ export async function procesarIntento<T>({
           userId: verificacion.userId,
           organizationId: verificacion.organizationId,
         };
-      },
-      { maxWait: LOCK_MAX_WAIT_MS, timeout: LOCK_TIMEOUT_MS },
-    );
-  } catch (error) {
-    console.error("[login] el intento no se pudo serializar: se rechaza", error);
-    return null;
-  }
+      }, OPCIONES_TRANSACCION),
+    null,
+  );
 
   if (!resultado) return null;
 
@@ -401,14 +392,4 @@ export async function procesarIntento<T>({
   );
 
   return resultado.sesion;
-}
-
-/**
- * Lock de transacción sobre una clave del contador. `hashtext` la lleva a los
- * 32 bits que pide la función de Postgres; dos claves distintas pueden caer
- * en el mismo número y serializarse de más, que es inofensivo — nunca de
- * menos.
- */
-function tomarLock(prisma: ClienteLogin, clave: string): Promise<number> {
-  return prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clave}))`;
 }
