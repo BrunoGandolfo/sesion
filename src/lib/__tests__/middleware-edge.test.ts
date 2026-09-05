@@ -225,6 +225,17 @@ describe("cadena de imports del middleware", () => {
     expect(relativos).toContain("src/lib/login-eventos.ts");
     expect(relativos).toContain("src/lib/crypto.ts");
   });
+
+  it("cubre la Content-Security-Policy, que el middleware arma por request", () => {
+    // El nonce sale de Web Crypto (globalThis.crypto.getRandomValues) y no
+    // de node:crypto justamente por esto. Si mañana alguien lo "arregla" con
+    // randomBytes, el primer test de este archivo se pone rojo — pero sólo
+    // si el guardián llega hasta acá, que es lo que fija este caso.
+    const { archivos } = recorrerCadena();
+    const relativos = archivos.map((a) => a.slice(RAIZ.length + 1));
+
+    expect(relativos).toContain("src/lib/csp.ts");
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
