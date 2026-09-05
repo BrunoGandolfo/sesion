@@ -24,6 +24,16 @@
 // `Content-Security-Policy-Report-Only` (para que el navegador no bloquee
 // nada todavía). El navegador nunca ve la versión enforzada.
 //
+// LAS PÁGINAS TIENEN QUE SER DINÁMICAS
+//
+// Corolario de lo anterior: una página prerenderizada en el build no tiene
+// request, así que Next no le puede poner el nonce a sus scripts. Queda
+// emitiendo violaciones de script-src en cada carga, y el día que la
+// política se enforce esa página no hidrata. Por eso (dashboard)/layout.tsx
+// y (auth)/layout.tsx declaran `dynamic = "force-dynamic"`: hoy cubren toda
+// la app. Una página nueva fuera de esos dos grupos tiene que declararlo
+// también.
+//
 // AGENTS.md tiene el plan para pasar a enforce y qué mirar antes.
 //
 // Sin `node:*`: esto lo importa el middleware, que corre en el runtime edge

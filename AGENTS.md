@@ -49,6 +49,12 @@ Se clasifican en tres montones, y cada uno se resuelve distinto:
    — un `<script>` sin nonce. Es el montón que decide todo. Si aparece con
    `documento` de una página de la app, hay un script que Next no está
    nonciando y **no se puede enforzar**: hay que averiguar cuál y por qué.
+   La causa más probable es una página que quedó **prerenderizada en el
+   build**: sin request no hay nonce que ponerle a los scripts. Hoy
+   `src/app/(dashboard)/layout.tsx` y `src/app/(auth)/layout.tsx` declaran
+   `dynamic = "force-dynamic"` y entre los dos cubren todas las páginas; una
+   página nueva fuera de esos dos grupos tiene que declararlo también, o
+   aparece en este montón para siempre.
    Si el `documento` es de una extensión (`chrome-extension://`, `moz-…`) o
    el `archivo` no es del dominio, es ruido del navegador de quien mira y no
    cuenta.
