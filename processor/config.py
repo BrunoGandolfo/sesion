@@ -48,19 +48,6 @@ LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "claude-sonnet-5")
 # Nivel de esfuerzo (low|medium|high|xhigh|max). Vacío = no enviar el parámetro.
 LLM_EFFORT = os.getenv("LLM_EFFORT", "medium")
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "8192"))
-# Techo propio para la Llamada C (feedback de auto-supervision).
-#
-# 2026-09-07: el fin de semana, 5 de 8 sesiones terminaron con
-# "llm_truncado: Respuesta truncada en 8192 tokens" y quedaron sin "Para vos".
-# El feedback gestalt (GTFS, therapist_feedback_gestalt_v1.1.md) es el mas
-# largo de los tres tipos de llamada y no entra en 8192. El prompt no se toca:
-# cuanto dura el feedback lo decide Mariana, asi que lo que sube es el techo.
-#
-# 16384 es holgado y sigue siendo seguro sin streaming: claude-sonnet-5 admite
-# hasta 128K tokens de salida, y la guia del SDK recomienda ~16000 como maximo
-# para peticiones NO streaming (por encima de eso hay que usar .stream() para
-# no chocar con el timeout HTTP del cliente). Este worker no usa streaming.
-LLM_MAX_TOKENS_FEEDBACK = int(os.getenv("LLM_MAX_TOKENS_FEEDBACK", "16384"))
 LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "300"))
 
 # Worker ────────────────────────────────────────────────────────────────────
