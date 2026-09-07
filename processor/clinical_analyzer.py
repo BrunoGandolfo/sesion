@@ -50,6 +50,12 @@ _FEEDBACK_POR_ORIENTACION = {
 # seguidas con el error citado, el problema no lo arregla insistir.
 MAX_REINTENTOS_ESTRUCTURA = 1
 
+# Fallos que merecen esa segunda pasada. Son de FORMA: la respuesta llego pero
+# no se puede usar. `llm_truncado` entro el 2026-09-07, con el techo de tokens
+# del feedback: hasta entonces una respuesta cortada se descartaba de una y la
+# sesion quedaba sin "Para vos" sin volver a intentarlo.
+CODIGOS_QUE_REINTENTAN = ("llm_json_invalido", "llm_truncado")
+
 
 @dataclass
 class DiagnosticoLLM:
@@ -116,11 +122,17 @@ def mensaje_error_api(e: Exception) -> str:
     return mensaje[:300]
 
 
-def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> dict:
+def _llamar_anthropic(
+    system_prompt: str, user_content: str, schema: dict, max_tokens: int
+) -> dict:
     """
     Una llamada a la Messages API con structured output (json_schema).
     El system prompt lleva cache_control: es identico entre sesiones y
     representa la mayor parte del input.
+
+    `max_tokens` es por llamada: la nota y el contexto usan
+    config.LLM_MAX_TOKENS y el feedback config.LLM_MAX_TOKENS_FEEDBACK, que es
+    mas alto porque el reporte gestalt no entraba en el techo comun.
     """
     output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
     # `effort` vive dentro de output_config en la API actual. Los niveles
@@ -132,7 +144,7 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
     try:
         response = _cliente().messages.create(
             model=config.LLM_MODEL_ID,
-            max_tokens=config.LLM_MAX_TOKENS,
+            max_tokens=max_tokens,
             system=[
                 {
                     "type": "text",
@@ -157,9 +169,13 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
         raise PipelineError("llm_error", "Anthropic no responde") from e
 
     usage = response.usage
+    # `tope` es lo unico que distingue las tres llamadas en el log: la nota y
+    # el contexto van con LLM_MAX_TOKENS y el feedback con
+    # LLM_MAX_TOKENS_FEEDBACK. Sin el, todas las lineas se ven iguales y no
+    # habia forma de saber cuantos tokens de salida gasta un feedback.
     logger.info(
         f"Anthropic OK (request_id={getattr(response, '_request_id', None)}): "
-        f"input={usage.input_tokens} output={usage.output_tokens} "
+        f"input={usage.input_tokens} output={usage.output_tokens}/{max_tokens} "
         f"cache_read={getattr(usage, 'cache_read_input_tokens', None)} "
         f"cache_write={getattr(usage, 'cache_creation_input_tokens', None)} "
         f"stop={response.stop_reason}"
@@ -167,7 +183,7 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
 
     if response.stop_reason == "max_tokens":
         raise PipelineError(
-            "llm_truncado", f"Respuesta truncada en {config.LLM_MAX_TOKENS} tokens"
+            "llm_truncado", f"Respuesta truncada en {max_tokens} tokens"
         )
     if response.stop_reason == "refusal":
         raise PipelineError("llm_rechazo", "El modelo rechazo la solicitud")
@@ -191,9 +207,11 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
         raise PipelineError("llm_json_invalido", "El LLM no devolvio JSON valido") from e
 
 
-def _llamar_llm(system_prompt: str, user_content: str, schema: dict) -> dict:
+def _llamar_llm(
+    system_prompt: str, user_content: str, schema: dict, max_tokens: int
+) -> dict:
     if config.LLM_BACKEND == "anthropic":
-        return _llamar_anthropic(system_prompt, user_content, schema)
+        return _llamar_anthropic(system_prompt, user_content, schema, max_tokens)
     raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
 
 
@@ -224,36 +242,56 @@ def _llamar_validando(
     user_content: str,
     schema: dict,
     validar: Callable[[object], None] | None = None,
+    max_tokens: int | None = None,
 ) -> tuple[dict, int]:
     """
     Llama al LLM y verifica la estructura del resultado.
 
     Ante un fallo de FORMA —JSON no parseable, seccion SOAP faltante, enum
-    invalido— repite la llamada una sola vez citandole el error. Los fallos de
+    invalido, respuesta truncada— repite la llamada una sola vez. Los fallos de
     transporte (timeout, HTTP, conexion) no se reintentan aca: de eso ya se
     ocupa `max_retries` del SDK, y repetir una llamada de 8k tokens porque la
     red se cayo no arregla nada.
 
+    `max_tokens` None = el techo comun (config.LLM_MAX_TOKENS). El feedback
+    pasa el suyo.
+
     Devuelve (resultado, reintentos), con reintentos en 0 o 1.
     """
-    motivo: str | None = None
+    tope = config.LLM_MAX_TOKENS if max_tokens is None else max_tokens
+    # Que se le cita al modelo en la segunda pasada. None = se repite el
+    # pedido tal cual (ver el caso de llm_truncado abajo).
+    correccion: str | None = None
+    motivo_log: str = ""
 
     for intento in range(MAX_REINTENTOS_ESTRUCTURA + 1):
         contenido = (
             user_content
-            if motivo is None
-            else f"{user_content}\n\n{_bloque_correccion(motivo)}"
+            if correccion is None
+            else f"{user_content}\n\n{_bloque_correccion(correccion)}"
         )
 
         # Los dos try van separados a proposito: `_llamar_llm` tambien lanza
         # ValueError (backend no soportado), y eso es un error de
         # configuracion, no una salida mal formada del modelo.
         try:
-            resultado = _llamar_llm(system_prompt, contenido, schema)
+            resultado = _llamar_llm(system_prompt, contenido, schema, tope)
         except PipelineError as e:
-            if e.codigo != "llm_json_invalido" or intento == MAX_REINTENTOS_ESTRUCTURA:
+            if (
+                e.codigo not in CODIGOS_QUE_REINTENTAN
+                or intento == MAX_REINTENTOS_ESTRUCTURA
+            ):
                 raise
-            motivo = "la respuesta anterior no era JSON parseable"
+            if e.codigo == "llm_truncado":
+                # Se repite el pedido IGUAL, sin bloque de correccion: pedirle
+                # al modelo que se extienda menos seria decidir por Mariana
+                # cuanto dura el feedback, y los prompts no se tocan. Lo que
+                # arregla el truncado es el techo de tokens; este reintento es
+                # la red por si aun asi se pasa.
+                correccion = None
+            else:
+                correccion = "la respuesta anterior no era JSON parseable"
+            motivo_log = f"{e.codigo}: {e.mensaje_publico}"
         else:
             if validar is None:
                 return resultado, intento
@@ -262,11 +300,12 @@ def _llamar_validando(
             except ValueError as e:
                 if intento == MAX_REINTENTOS_ESTRUCTURA:
                     raise PipelineError("llm_estructura_invalida", str(e)) from e
-                motivo = str(e)
+                correccion = str(e)
+                motivo_log = correccion
             else:
                 return resultado, intento
 
-        logger.warning(f"Salida del LLM invalida ({motivo}); se pide correccion (1 intento)")
+        logger.warning(f"Salida del LLM invalida ({motivo_log}); se repite la llamada (1 intento)")
 
     # Inalcanzable: el bucle sale por return o por raise.
     raise PipelineError("llm_estructura_invalida", "No se obtuvo una salida valida")
@@ -365,6 +404,14 @@ def actualizar_contexto_clinico(
 
 # Llamada C — feedback terapeuta ────────────────────────────────────────────
 
+# Clave estable de la advertencia cuando la sesion se queda sin "Para vos".
+# Se lee sola en `_pipeline.advertencias` y se puede grepear en los logs de
+# Railway: `feedback_no_generado: llm_truncado`. Reemplaza al texto anterior
+# ("feedbackTerapeuta no disponible: ..."), que decia lo mismo sin ser una
+# clave. Lo que sigue a los dos puntos es el codigo de PipelineError o, si el
+# fallo no vino del pipeline, el nombre de la excepcion.
+ADVERTENCIA_FEEDBACK = "feedback_no_generado"
+
 def generar_feedback_terapeuta(
     transcripcion_formateada: str,
     speech_analytics: dict | None = None,
@@ -400,7 +447,11 @@ def generar_feedback_terapeuta(
         user_content = "\n\n".join(bloques)
 
         feedback, reintentos = _llamar_validando(
-            system_prompt, user_content, schema, validar
+            system_prompt,
+            user_content,
+            schema,
+            validar,
+            max_tokens=config.LLM_MAX_TOKENS_FEEDBACK,
         )
         advertencias = sanear_feedback(feedback, orientacion)
         for advertencia in advertencias:
@@ -411,10 +462,10 @@ def generar_feedback_terapeuta(
     except PipelineError as e:
         logger.warning(f"Feedback terapeuta fallo: {e.codigo}: {e.mensaje_publico}")
         return None, nombre_prompt, DiagnosticoLLM(
-            advertencias=[f"feedbackTerapeuta no disponible: {e.codigo}"]
+            advertencias=[f"{ADVERTENCIA_FEEDBACK}: {e.codigo}"]
         )
     except Exception as e:
         logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}: {str(e)[:200]}")
         return None, nombre_prompt, DiagnosticoLLM(
-            advertencias=[f"feedbackTerapeuta no disponible: {type(e).__name__}"]
+            advertencias=[f"{ADVERTENCIA_FEEDBACK}: {type(e).__name__}"]
         )

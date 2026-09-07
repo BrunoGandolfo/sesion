@@ -193,6 +193,71 @@ def test_transcribir_sin_segmentos_es_asr_vacio(mocker):
     assert exc.value.codigo == "asr_vacio"
 
 
+def test_el_feedback_no_generado_viaja_en_el_payload_y_la_sesion_sigue(pasos):
+    """
+    El caso del fin de semana del 6-7/9/2026 despues del arreglo: el feedback
+    se trunco las dos veces y no salio. La sesion tiene que llegar igual a
+    revision, sin feedback inventado, y con la advertencia de clave estable
+    dentro de _pipeline.advertencias, que es lo que la app guarda.
+    """
+    mocker, callback = pasos
+    mocker.patch(
+        "processor.analizar",
+        return_value=processor.Analisis(
+            transcripcion_fmt=ANALISIS.transcripcion_fmt,
+            nota=ANALISIS.nota,
+            datos_estructurados={"temas": ["x"]},
+            prompt_nota=ANALISIS.prompt_nota,
+            prompt_feedback="therapist_feedback_gestalt_v1.1.md",
+            advertencias=["feedback_no_generado: llm_truncado"],
+        ),
+    )
+
+    _correr()
+
+    kw = callback.call_args.kwargs
+    assert kw["estado"] == "revision"
+    assert kw["nota"] == ANALISIS.nota
+    datos = kw["datos_estructurados"]
+    assert "feedbackTerapeuta" not in datos
+    assert datos["_pipeline"]["advertencias"] == ["feedback_no_generado: llm_truncado"]
+
+
+def test_analizar_no_pone_feedback_cuando_el_llm_lo_trunco_dos_veces(mocker):
+    """
+    Cableado real del paso `analizar` con la Llamada C fallando: la clave
+    feedbackTerapeuta no se crea (null antes que inventar) y la advertencia
+    del analizador se propaga tal cual.
+    """
+    from clinical_analyzer import DiagnosticoLLM
+
+    mocker.patch("processor.formatear_para_llm", return_value="[00:00] T: hola")
+    mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
+    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
+    mocker.patch(
+        "processor.clinical_analyzer.analizar",
+        return_value=(
+            {"nota": ANALISIS.nota, "datosEstructurados": {"temas": ["x"]}},
+            "clinical_note_v3.1.1.md",
+            DiagnosticoLLM(reintentos=0, advertencias=[]),
+        ),
+    )
+    mocker.patch(
+        "processor.clinical_analyzer.generar_feedback_terapeuta",
+        return_value=(
+            None,
+            "therapist_feedback_gestalt_v1.1.md",
+            DiagnosticoLLM(advertencias=["feedback_no_generado: llm_truncado"]),
+        ),
+    )
+
+    analisis = processor.analizar("s1", TRANSCRIPCION, "p1", "gestalt")
+
+    assert "feedbackTerapeuta" not in analisis.datos_estructurados
+    assert analisis.advertencias == ["feedback_no_generado: llm_truncado"]
+    assert analisis.nota == ANALISIS.nota
+
+
 def test_analizar_junta_las_advertencias_de_nota_y_feedback(mocker):
     """
     Cableado real del paso `analizar`: verifica que consume las tres piezas
