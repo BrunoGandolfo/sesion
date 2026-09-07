@@ -5,14 +5,31 @@
 // Antes este archivo era 1.249 líneas: la lógica de captura convivía con una
 // tarjeta que explicaba el cifrado, mostraba el id del turno y pedía dos
 // toques ("Detener" y después "Enviar") para mandar el audio. La capa visual
-// se mudó a la ruta /grabar/[turnoId]; acá queda solo lo que no se relaja:
+// se mudó a la ruta /grabar/[turnoId].
+//
+// QUÉ QUEDA ACÁ Y QUÉ SE FUE
+//
+// Acá queda la máquina de estados: los refs, los efectos, el wake lock, el
+// medidor de nivel y el orden en que se detiene, se mide y se limpia. Es la
+// parte que no se puede probar sin renderizar un hook, y el proyecto no tiene
+// (ni puede sumar en esta tanda) jsdom ni @testing-library.
+//
+// Lo que sí se puede probar solo se mudó a módulos propios, con sus tests:
+//
+//   - src/lib/grabacion-cronometro.ts  cuánto se grabó y cómo se muestra
+//   - src/lib/grabacion-microfono.ts   MediaRecorder y errores de permiso
+//   - src/lib/grabacion-cifrado.ts     chunks → paquete cifrado
+//   - src/lib/grabacion-storage.ts     backup en IndexedDB (ya estaba)
+//
+// Se re-exportan desde acá para no tocar a los consumidores: `grabar-view`
+// importa `formatearDuracion` y `DatosGrabacion` de este módulo.
+//
+// Lo que la máquina sigue garantizando:
 //
 //   - captura por chunks de 1 s que forman UN único archivo (la pausa usa
 //     MediaRecorder.pause(), no un recorder nuevo);
-//   - backup incremental en IndexedDB (grabacion-storage) desde el primer
-//     chunk, para sobrevivir a que el navegador mate el proceso;
-//   - cifrado AES-GCM con clave generada en el dispositivo ANTES de que el
-//     audio salga del navegador;
+//   - backup incremental en IndexedDB desde el primer chunk, para sobrevivir
+//     a que el navegador mate el proceso;
 //   - recuperación de una grabación huérfana del mismo turno;
 //   - wake lock mientras se graba y corte por LIMITE_SEGUNDOS.
 //
@@ -21,7 +38,21 @@
 
 import * as React from "react";
 
-import { cifrar, generarClave } from "@/lib/crypto";
+import {
+  aRegistradas,
+  formatearDuracion,
+  segundosGrabados,
+  type PausaRegistrada,
+} from "@/lib/grabacion-cronometro";
+import {
+  cifrarGrabacion,
+  GrabacionVaciaError,
+  type DatosGrabacion,
+} from "@/lib/grabacion-cifrado";
+import {
+  crearMediaRecorder,
+  mensajeErrorGrabacion,
+} from "@/lib/grabacion-microfono";
 import {
   guardarChunk,
   guardarPausas,
@@ -31,7 +62,8 @@ import {
   type Pausa,
 } from "@/lib/grabacion-storage";
 
-export type { Pausa };
+export type { Pausa, PausaRegistrada, DatosGrabacion };
+export { formatearDuracion, segundosGrabados };
 
 /**
  * Estados y transiciones:
@@ -60,21 +92,6 @@ export type EstadoGrabador =
   | "entregada"
   | "error";
 
-/** Pausa cerrada, en ISO, tal como viaja con la sesión. */
-export interface PausaRegistrada {
-  inicio: string;
-  fin: string;
-}
-
-export interface DatosGrabacion {
-  audioBlob: Blob;
-  claveCifrado: string;
-  ivCifrado: string;
-  duracionSegundos: number;
-  /** Tramos en los que la grabación estuvo pausada. */
-  pausas: PausaRegistrada[];
-}
-
 export interface GrabacionPendienteUI {
   chunks: Blob[];
   duracionAproxSeg: number;
@@ -101,128 +118,6 @@ const UMBRAL_SILENCIO = 0.012;
 
 // Silencio continuo a partir del cual se avisa "no se detecta audio".
 const SILENCIO_AVISO_MS = 5000;
-
-/** "07:32". Exportada porque la pantalla muestra el mismo formato. */
-export function formatearDuracion(totalSegundos: number) {
-  const minutos = Math.floor(totalSegundos / 60)
-    .toString()
-    .padStart(2, "0");
-  const segundos = (totalSegundos % 60).toString().padStart(2, "0");
-  return `${minutos}:${segundos}`;
-}
-
-/**
- * Segundos efectivamente grabados. Función pura: es la única fuente de
- * verdad del cronómetro y lo que se testea.
- *
- * `inicio` es el epoch del arranque de la grabación; `pausas` son los tramos
- * detenidos (una pausa con `fin` en null se considera abierta hasta `ahora`).
- * `baseSegundos` suma lo que ya venía grabado de una recuperación.
- *
- * Las pausas se asumen disjuntas y dentro de [inicio, ahora]; así las produce
- * el grabador (nunca hay dos abiertas a la vez). Los tramos que caen fuera de
- * la ventana se recortan.
- */
-export function segundosGrabados(
-  inicio: number | null,
-  ahora: number,
-  pausas: readonly Pausa[] = [],
-  baseSegundos = 0,
-): number {
-  const base = Math.max(0, Math.floor(baseSegundos));
-
-  if (inicio === null) {
-    return base;
-  }
-
-  const fin = Math.max(inicio, ahora);
-  let pausadoMs = 0;
-
-  for (const pausa of pausas) {
-    const desde = Math.max(pausa.inicio, inicio);
-    const hasta = Math.min(pausa.fin ?? fin, fin);
-
-    if (hasta > desde) {
-      pausadoMs += hasta - desde;
-    }
-  }
-
-  const activoMs = Math.max(0, fin - inicio - pausadoMs);
-
-  return base + Math.floor(activoMs / 1000);
-}
-
-function base64ABytes(base64: string) {
-  const binario = globalThis.atob(base64);
-  const bytes = new Uint8Array(binario.length);
-
-  for (let i = 0; i < binario.length; i += 1) {
-    bytes[i] = binario.charCodeAt(i);
-  }
-
-  return bytes;
-}
-
-function mensajeErrorGrabacion(error: unknown) {
-  if (error instanceof DOMException) {
-    switch (error.name) {
-      case "NotAllowedError":
-      case "PermissionDeniedError":
-        return "No diste permiso para usar el micrófono. Habilitalo y probá de nuevo.";
-      case "NotFoundError":
-      case "DevicesNotFoundError":
-        return "No encontramos un micrófono disponible en este dispositivo.";
-      case "NotReadableError":
-      case "TrackStartError":
-        return "No pudimos acceder al micrófono. Cerrá otras apps que lo estén usando y probá de nuevo.";
-      case "SecurityError":
-        return "Tu navegador bloqueó la grabación de audio en este contexto.";
-      default:
-        return "No se pudo iniciar la grabación de audio.";
-    }
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return "No se pudo iniciar la grabación de audio.";
-}
-
-function crearMediaRecorder(stream: MediaStream) {
-  const mimeTypes = ["audio/webm;codecs=opus", "audio/webm"];
-
-  for (const mimeType of mimeTypes) {
-    try {
-      if (
-        typeof MediaRecorder.isTypeSupported === "function" &&
-        !MediaRecorder.isTypeSupported(mimeType)
-      ) {
-        continue;
-      }
-
-      return new MediaRecorder(stream, { mimeType });
-    } catch {
-      continue;
-    }
-  }
-
-  return new MediaRecorder(stream);
-}
-
-function aRegistradas(pausas: readonly Pausa[]): PausaRegistrada[] {
-  const cerradas: PausaRegistrada[] = [];
-
-  for (const pausa of pausas) {
-    if (pausa.fin === null) continue;
-    cerradas.push({
-      inicio: new Date(pausa.inicio).toISOString(),
-      fin: new Date(pausa.fin).toISOString(),
-    });
-  }
-
-  return cerradas;
-}
 
 export interface UseGrabadorOpciones {
   /** Clave con la que se persisten los chunks: el turnoId (turno ↔ sesión
@@ -570,7 +465,7 @@ export function useGrabador({
     modoDetencionRef.current = "descartar";
 
     if (chunks.length === 0) {
-      irAError("No se pudo capturar audio de la sesión.");
+      irAError(new GrabacionVaciaError().message);
       return;
     }
 
@@ -582,25 +477,12 @@ export function useGrabador({
       setAudioSilencioso(false);
     }
 
-    let audioSinCifrar: Blob | null = new Blob(chunks, {
-      type: mimeType || "audio/webm",
-    });
-
-    if (audioSinCifrar.size === 0) {
-      audioSinCifrar = null;
-      irAError("No se pudo capturar audio de la sesión.");
-      return;
-    }
-
     try {
-      const claveCifrado = await generarClave();
-      const bufferAudio = await audioSinCifrar.arrayBuffer();
-      const { iv, datosCifrados } = await cifrar(bufferAudio, claveCifrado);
-
-      audioSinCifrar = null;
-
-      const audioBlob = new Blob([base64ABytes(datosCifrados)], {
-        type: "application/octet-stream",
+      const datos = await cifrarGrabacion({
+        chunks,
+        mimeType,
+        duracionSegundos,
+        pausas: pausasFinales,
       });
 
       if (componenteMontadoRef.current) {
@@ -610,15 +492,15 @@ export function useGrabador({
       cambiarEstado("entregada");
       // Los chunks persistidos se limpian recién tras la confirmación de la
       // subida (lo hace la pantalla): si falla, siguen siendo recuperables.
-      onListoRef.current({
-        audioBlob,
-        claveCifrado,
-        ivCifrado: iv,
-        duracionSegundos,
-        pausas: pausasFinales,
-      });
-    } catch {
-      irAError("No se pudo cifrar el audio. Probá de nuevo.");
+      onListoRef.current(datos);
+    } catch (error) {
+      // Dos mensajes distintos porque son dos problemas distintos: sin audio
+      // no hay nada que reintentar; un fallo de cifrado sí se reintenta.
+      irAError(
+        error instanceof GrabacionVaciaError
+          ? error.message
+          : "No se pudo cifrar el audio. Probá de nuevo.",
+      );
     }
   }
 
