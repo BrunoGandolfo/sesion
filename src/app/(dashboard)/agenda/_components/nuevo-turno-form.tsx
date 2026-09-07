@@ -18,6 +18,16 @@ import { Plus } from "lucide-react";
 
 import { Avatar, Button, Input, Segmented, Textarea } from "@/components/ui";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+// Los inputs se llenan con el reloj de Montevideo porque así los lee después
+// instanteDesdeFechaHoraMvd al enviar. Con getFullYear/getHours el par no
+// cerraba: desde Madrid, la propuesta "el mismo día y hora que la última vez"
+// mostraba las 20:15 de un turno de las 15:15 y lo agendaba a las 20:15 de
+// Montevideo, cinco horas tarde.
+import {
+  agregarDiasMvd,
+  fechaInputMvd,
+  horaInputMvd,
+} from "@/lib/fechas-montevideo";
 import { fechaLarga, hora as formatHora, money } from "@/lib/format";
 import { ALGO_FALLO } from "@/lib/glosario";
 import type { Duracion, Modalidad, Paciente } from "@/types/domain";
@@ -64,19 +74,6 @@ export interface NuevoTurnoFormProps {
 }
 
 type JsonTurno = { fecha: string };
-
-function aFechaInput(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function aHoraInput(date: Date) {
-  const h = String(date.getHours()).padStart(2, "0");
-  const m = String(date.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
-}
 
 function nombreCompleto(p: Pick<Paciente, "nombre" | "apellido">) {
   return `${p.nombre} ${p.apellido}`.trim();
@@ -131,7 +128,7 @@ export function NuevoTurnoForm({
     resolver: zodResolver(schema),
     defaultValues: {
       pacienteId: "",
-      fecha: aFechaInput(fechaInicial ?? addDays(new Date(), 1)),
+      fecha: fechaInputMvd(fechaInicial ?? agregarDiasMvd(new Date(), 1)),
       hora: "10:00",
       duracion: 50,
       modalidad: "presencial",
@@ -204,8 +201,8 @@ export function NuevoTurnoForm({
           .sort((a, b) => b.getTime() - a.getTime())[0];
         const sugerida = proponerDesdeUltimoTurno(ultimo, new Date());
         setPropuesta(sugerida);
-        setValue("fecha", aFechaInput(sugerida), { shouldDirty: true });
-        setValue("hora", aHoraInput(sugerida), { shouldDirty: true });
+        setValue("fecha", fechaInputMvd(sugerida), { shouldDirty: true });
+        setValue("hora", horaInputMvd(sugerida), { shouldDirty: true });
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;

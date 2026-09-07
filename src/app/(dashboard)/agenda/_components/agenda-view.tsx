@@ -14,6 +14,7 @@ import {
   inicioDeSemanaMvd,
   inicioFinDiaMvd,
   instanteDesdeFechaHoraMvd,
+  instanteMvd,
 } from "@/lib/fechas-montevideo";
 import { ALGO_FALLO } from "@/lib/glosario";
 import type {
@@ -86,6 +87,24 @@ function computeRange(
   // la grilla del mes siempre dibuja 42 celdas.
   const desde = inicioDeSemanaMvd(inicioDeMesMvd(anchor));
   return { desde, hasta: finDelDiaMvd(agregarDiasMvd(desde, 41)) };
+}
+
+/**
+ * El día que se tocó en la grilla del mes, re-anclado al mediodía de
+ * Montevideo de esa misma fecha de calendario.
+ *
+ * MonthView arma sus 42 celdas con date-fns, o sea medianoches de la zona del
+ * dispositivo. Desde Madrid, tocar el 5 de septiembre entrega
+ * 2026-09-04T22:00Z, que en Montevideo todavía es el 4: computeRange, que
+ * ahora razona en Montevideo, pediría el día anterior al que ella tocó.
+ *
+ * Se leen a propósito los campos LOCALES del Date (getFullYear/getMonth/
+ * getDate): son exactamente el número de día que MonthView dibujó en la
+ * celda. Lo que se corrige no es ese número sino el instante que lo
+ * representa. El mediodía evita los dos bordes del día.
+ */
+export function anclaDelDiaTocado(day: Date): Date {
+  return instanteMvd(day.getFullYear(), day.getMonth(), day.getDate(), 12);
 }
 
 type LoadState = "idle" | "loading" | "error";
@@ -229,7 +248,7 @@ export function AgendaView() {
     setMesAbierto(false);
   };
   const handleDayClick = (day: Date) => {
-    setAnchorUsuario(day);
+    setAnchorUsuario(anclaDelDiaTocado(day));
     setUserView("día");
     setMesAbierto(false);
   };
