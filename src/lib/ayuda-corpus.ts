@@ -28,12 +28,14 @@
 // uso de /api/ayuda, que declara runtime nodejs.
 //
 // OJO CON EL DEPLOY: Next traza los imports, no las lecturas de disco, así
-// que docs/ayuda/ no entra solo en el bundle de la función. Hace falta
-// declararlo en next.config.ts —archivo fuera del alcance de esta tanda—:
+// que docs/ayuda/ no entra solo en el bundle de la función. Por eso
+// next.config.ts declara:
 //
 //   outputFileTracingIncludes: { "/api/ayuda": ["./docs/ayuda/**"] }
 //
-// Sin eso anda en local y en Vercel tira ERROR_CORPUS_AUSENTE.
+// Si esa línea se cae, en local no se nota y en Vercel /api/ayuda contesta
+// ERROR_CORPUS_AUSENTE. Y si algún día el corpus lo usa otra ruta, esa ruta
+// necesita su propia entrada: la clave es la ruta, no el módulo.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

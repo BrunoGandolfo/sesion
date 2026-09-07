@@ -57,6 +57,18 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // El asistente de ayuda lee docs/ayuda/*.md del disco en tiempo de
+  // ejecución (src/lib/ayuda-corpus.ts): el corpus entero va al system
+  // prompt, sin base vectorial.
+  //
+  // Next arma el bundle de cada función siguiendo los IMPORTS, y una lectura
+  // con readFileSync no es un import: sin esta línea los documentos no viajan
+  // y /api/ayuda contesta ERROR_CORPUS_AUSENTE en Vercel. En local no se nota
+  // —ahí el archivo está donde siempre—, así que el agujero solo aparece
+  // deployado. La clave es la ruta de la ruta; el valor, relativo a la raíz.
+  outputFileTracingIncludes: {
+    "/api/ayuda": ["./docs/ayuda/**"],
+  },
 };
 
 export default withSentryConfig(nextConfig, {
