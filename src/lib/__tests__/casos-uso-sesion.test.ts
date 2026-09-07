@@ -25,8 +25,8 @@ import type { EventoAuditoriaInput } from "@/app/api/_lib/auditoria-pura";
 import { aprobarSesion } from "@/app/api/_lib/casos-uso/aprobar-sesion";
 import {
   eliminarSesion,
-  MENSAJE_ELIMINACION_EN_CURSO,
   MENSAJE_AUDIO_NO_BORRADO,
+  PREFIJO_ELIMINACION_EN_CURSO,
 } from "@/app/api/_lib/casos-uso/eliminar-sesion";
 import {
   procesarCallback,
@@ -925,6 +925,61 @@ describe("eliminarSesion", () => {
       ).toBeNull();
     });
 
+    it("dos eliminaciones simultáneas: reserva una sola, y R2 se toca una sola vez", async () => {
+      // Codex P2 (tercera pasada): con un token constante los dos pedidos
+      // escribían la MISMA marca y los dos se creían dueños de la reserva. Si
+      // el borrado en R2 de uno funcionaba y el del otro fallaba, el que
+      // falló reemplazaba la marca compartida por MENSAJE_AUDIO_NO_BORRADO y
+      // el DELETE del que sí borró el blob dejaba de matchear: quedaba una
+      // sesión viva, reintentable, con audioR2Key apuntando a un objeto que
+      // ya no existe.
+      //
+      // Con el identificador propio por reserva, el compare-and-set deja
+      // pasar a uno solo: el segundo corta ANTES de tocar R2.
+      const { sesionId, orgId } = await crearSesion({
+        estado: "error",
+        audioR2Key: "audio/n.enc",
+      });
+
+      const borrados: Array<string | null> = [];
+      const llamar = () =>
+        eliminarSesion({
+          prisma: db,
+          sesionId,
+          organizationId: orgId,
+          usuarioId: "u1",
+          accion: "eliminar",
+          borrarAudio: async (key) => {
+            borrados.push(key);
+            return true;
+          },
+          registrarAuditoria: async () => {},
+        }).then(
+          () => "ok" as const,
+          (error: unknown) => error,
+        );
+
+      const [a, b] = await Promise.all([llamar(), llamar()]);
+      const resultados = [a, b];
+
+      // Uno solo llegó a R2: el otro no pasó la reserva.
+      expect(borrados).toEqual(["audio/n.enc"]);
+      expect(resultados.filter((r) => r === "ok")).toHaveLength(1);
+
+      // El que perdió falla, y los dos códigos posibles son correctos según
+      // dónde caiga su lectura: 409 si leyó antes de la reserva del otro (el
+      // compare-and-set no matchea), 404 si leyó después del DELETE. Lo que
+      // no puede es tener éxito ni tocar R2.
+      const fallado = resultados.find((r) => r !== "ok");
+      expect(fallado).toBeInstanceOf(ApiError);
+      expect([404, 409]).toContain((fallado as ApiError).status);
+
+      // Y la fila se fue: nunca queda viva con el blob borrado.
+      expect(
+        await db.sesionClinica.findUnique({ where: { id: sesionId } }),
+      ).toBeNull();
+    });
+
     it("descartar mientras la nota se aprueba en otra pestaña: 409 y no se pisa", async () => {
       const { sesionId, orgId } = await crearSesion({
         estado: "revision",
@@ -1064,7 +1119,7 @@ describe("reintentarSesion", () => {
         turnoId: deps.turnoId,
         organizationId: deps.orgId,
         estado: "error",
-        error: MENSAJE_ELIMINACION_EN_CURSO,
+        error: `${PREFIJO_ELIMINACION_EN_CURSO} [abc-123]`,
         intentos: 3,
         audioR2Key: "audio/m.enc",
       },

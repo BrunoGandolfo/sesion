@@ -33,6 +33,8 @@
 // sola vez, y validar en la ruta obligaría a leerlo dos veces con una ventana
 // en el medio, que es justamente lo que se está cerrando.
 
+import { randomUUID } from "node:crypto";
+
 import type { db } from "@/lib/db";
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { esSesionHuerfana } from "@/lib/sesion-clinica-utils";
@@ -78,19 +80,45 @@ export const MENSAJE_AUDIO_NO_BORRADO =
   "No se pudo borrar el audio en R2; la sesión se conserva para reintentar la eliminación";
 
 /**
- * Token de la reserva del borrado definitivo. Se escribe en `error` antes de
- * tocar R2 y es lo que impide que un reintento concurrente re-encole la
- * sesión mientras el audio se está borrando: `reintentarSesion` lo rechaza.
+ * Prefijo del token de la reserva del borrado definitivo. Se escribe en
+ * `error` antes de tocar R2 y es lo que impide que un reintento concurrente
+ * re-encole la sesión mientras el audio se está borrando: `reintentarSesion`
+ * lo rechaza (ver esEliminacionEnCurso).
  *
  * Si aparece en una fila viva, la eliminación se cortó entre el borrado del
  * blob y el DELETE: el audio puede no estar aunque la sesión sí.
  */
-export const MENSAJE_ELIMINACION_EN_CURSO =
+export const PREFIJO_ELIMINACION_EN_CURSO =
   "Eliminación en curso: se está borrando el audio antes de eliminar la sesión";
+
+/**
+ * El token lleva un identificador ÚNICO por pedido, y no es decoración
+ * (Codex P2, tercera pasada).
+ *
+ * Con un token constante, dos pedidos simultáneos de eliminación escribían la
+ * misma marca y los dos se creían dueños de la reserva. Si el borrado en R2
+ * de uno funcionaba y el del otro fallaba —un timeout transitorio alcanza—,
+ * el que falló reemplazaba la marca compartida por MENSAJE_AUDIO_NO_BORRADO;
+ * el DELETE del que sí borró el blob dejaba de matchear y contestaba 409. La
+ * fila quedaba viva, sin token, reintentable, y con `audioR2Key` apuntando a
+ * un objeto que ya no existe: el worker la levantaba para no poder bajar nada.
+ *
+ * Con el identificador propio, cada escritura de la reserva se compara contra
+ * la suya y sólo la toca su dueño.
+ */
+function marcaDeEliminacion(idReserva: string): string {
+  return `${PREFIJO_ELIMINACION_EN_CURSO} [${idReserva}]`;
+}
+
+/** True si `error` es una reserva de eliminación, de quien sea. */
+export function esEliminacionEnCurso(error: string | null): boolean {
+  return error !== null && error.startsWith(PREFIJO_ELIMINACION_EN_CURSO);
+}
 
 type SesionExistente = {
   id: string;
   estado: string;
+  error: string | null;
   audioR2Key: string | null;
   datosEstructurados: unknown;
   createdAt: Date;
@@ -243,9 +271,16 @@ async function eliminarSesionConError(
   // queda con el token: dice lo que pasó, el reintento la rechaza —así que el
   // worker nunca recibe una sesión sin audio— y lo único que se puede hacer
   // con ella, eliminarla, es lo que se estaba pidiendo.
+  const marca = marcaDeEliminacion(randomUUID());
+
+  // La reserva es un compare-and-set: se condiciona al `error` que se LEYÓ,
+  // así que de dos pedidos simultáneos gana exactamente uno — el segundo ya
+  // no encuentra ese valor y corta antes de tocar R2. (Y sirve para el caso
+  // nulo: Prisma traduce `error: null` a `error IS NULL`, mientras que un
+  // `NOT (error = …)` sería NULL y no matchearía nunca.)
   const reserva = await prisma.sesionClinica.updateMany({
-    where: suya(ctx),
-    data: { error: MENSAJE_ELIMINACION_EN_CURSO },
+    where: { ...suya(ctx), error: existente.error },
+    data: { error: marca },
   });
 
   if (reserva.count === 0) {
@@ -255,18 +290,18 @@ async function eliminarSesionConError(
   const audioBorrado = await borrarAudio(existente.audioR2Key);
 
   if (!audioBorrado && tieneAudioReal(existente.audioR2Key)) {
-    // El token se reemplaza por el motivo real: el audio sigue estando, así
-    // que la sesión vuelve a ser reintentable y eliminable.
+    // La marca propia se reemplaza por el motivo real: el audio sigue
+    // estando, así que la sesión vuelve a ser reintentable y eliminable.
     await prisma.sesionClinica.updateMany({
-      where: { ...suya(ctx), error: MENSAJE_ELIMINACION_EN_CURSO },
+      where: { ...suya(ctx), error: marca },
       data: { error: MENSAJE_AUDIO_NO_BORRADO },
     });
     throw new ApiError(MENSAJE_AUDIO_NO_BORRADO, 409);
   }
 
-  // El token va en el WHERE junto con el estado: sólo borra quien reservó.
+  // La marca propia va en el WHERE junto con el estado: sólo borra su dueño.
   const borrada = await prisma.sesionClinica.deleteMany({
-    where: { ...suya(ctx), error: MENSAJE_ELIMINACION_EN_CURSO },
+    where: { ...suya(ctx), error: marca },
   });
 
   if (borrada.count === 0) {
@@ -358,6 +393,7 @@ export async function eliminarSesion(
     select: {
       id: true,
       estado: true,
+      error: true,
       audioR2Key: true,
       datosEstructurados: true,
       createdAt: true,

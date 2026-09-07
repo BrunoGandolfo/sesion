@@ -11,13 +11,14 @@
 import type { db } from "@/lib/db";
 
 import type { EventoAuditoriaInput } from "../auditoria-pura";
-import { MENSAJE_ELIMINACION_EN_CURSO } from "./eliminar-sesion";
 import { ApiError } from "../responses";
 import {
   assertTransicionValida,
   SESION_SELECT,
   type FilaSesionClinica,
 } from "../sesion-clinica";
+
+import { esEliminacionEnCurso } from "./eliminar-sesion";
 
 type ClientePrisma = typeof db;
 
@@ -61,11 +62,12 @@ export async function reintentarSesion({
   }
 
   // La otra mitad de la reserva del borrado definitivo (ver
-  // MENSAJE_ELIMINACION_EN_CURSO en eliminar-sesion.ts): mientras esa marca
+  // PREFIJO_ELIMINACION_EN_CURSO en eliminar-sesion.ts): mientras esa marca
   // esté puesta, el audio se está borrando en R2 y re-encolar la sesión
   // dejaría al worker con una sesión sin blob. Es un token, no un lock, justo
-  // porque sobrevive al autocommit de quien lo escribió.
-  if (existente.error === MENSAJE_ELIMINACION_EN_CURSO) {
+  // porque sobrevive al autocommit de quien lo escribió. Se pregunta por el
+  // prefijo porque cada reserva lleva su identificador propio.
+  if (esEliminacionEnCurso(existente.error)) {
     throw new ApiError(
       "Esta sesión se está eliminando: no se puede reintentar.",
       409,
@@ -83,7 +85,7 @@ export async function reintentarSesion({
   // UPDATE condicionado toma el lock de la fila y reevalúa el predicado: o
   // gana el reintento, o no escribe nada.
   //
-  // Se compara contra el VALOR LEÍDO y no con `NOT: { error: token }`, que
+  // Se compara contra el VALOR LEÍDO y no con `NOT: { error: marca }`, que
   // fue el primer intento y estaba mal (Codex P2): Prisma lo traduce a
   // `NOT (error = token)`, que en SQL es NULL —no true— cuando la columna es
   // NULL. Una sesión en "error" con `error` nulo, que es un estado alcanzable

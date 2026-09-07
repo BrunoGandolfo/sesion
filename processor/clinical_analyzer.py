@@ -116,11 +116,17 @@ def mensaje_error_api(e: Exception) -> str:
     return mensaje[:300]
 
 
-def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> dict:
+def _llamar_anthropic(
+    system_prompt: str, user_content: str, schema: dict, max_tokens: int
+) -> dict:
     """
     Una llamada a la Messages API con structured output (json_schema).
     El system prompt lleva cache_control: es identico entre sesiones y
     representa la mayor parte del input.
+
+    `max_tokens` es por llamada: la nota y el contexto usan
+    config.LLM_MAX_TOKENS y el feedback config.LLM_MAX_TOKENS_FEEDBACK, que es
+    mas alto porque el reporte gestalt no entraba en el techo comun.
     """
     output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
     # `effort` vive dentro de output_config en la API actual. Los niveles
@@ -132,7 +138,7 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
     try:
         response = _cliente().messages.create(
             model=config.LLM_MODEL_ID,
-            max_tokens=config.LLM_MAX_TOKENS,
+            max_tokens=max_tokens,
             system=[
                 {
                     "type": "text",
@@ -167,7 +173,7 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
 
     if response.stop_reason == "max_tokens":
         raise PipelineError(
-            "llm_truncado", f"Respuesta truncada en {config.LLM_MAX_TOKENS} tokens"
+            "llm_truncado", f"Respuesta truncada en {max_tokens} tokens"
         )
     if response.stop_reason == "refusal":
         raise PipelineError("llm_rechazo", "El modelo rechazo la solicitud")
@@ -191,9 +197,11 @@ def _llamar_anthropic(system_prompt: str, user_content: str, schema: dict) -> di
         raise PipelineError("llm_json_invalido", "El LLM no devolvio JSON valido") from e
 
 
-def _llamar_llm(system_prompt: str, user_content: str, schema: dict) -> dict:
+def _llamar_llm(
+    system_prompt: str, user_content: str, schema: dict, max_tokens: int
+) -> dict:
     if config.LLM_BACKEND == "anthropic":
-        return _llamar_anthropic(system_prompt, user_content, schema)
+        return _llamar_anthropic(system_prompt, user_content, schema, max_tokens)
     raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
 
 
