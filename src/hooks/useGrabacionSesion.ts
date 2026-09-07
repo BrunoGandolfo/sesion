@@ -215,6 +215,30 @@ export async function volverAGrabando(sesionClinicaId: string): Promise<void> {
   }
 }
 
+/**
+ * El turno pasa a "realizado" una vez que el audio ya está a salvo en R2.
+ *
+ * NO es best-effort: si esto falla, el turno queda como "Agendado" y la
+ * pantalla de grabar tiene que decirlo y ofrecer reintentar. Antes el error
+ * se tragaba con un `catch {}` vacío y el turno se quedaba mal para siempre
+ * sin que nadie se enterara — la nota llegaba igual, así que no había ni un
+ * síntoma que hiciera sospechar.
+ *
+ * Lanza Error con el mensaje de la API (o `HTTP <status>`) si la respuesta no
+ * es 2xx; el error de red de `fetch` se propaga tal cual.
+ */
+export async function marcarTurnoRealizado(turnoId: string): Promise<void> {
+  const res = await fetch(`/api/turnos/${turnoId}`, {
+    method: "PATCH",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estado: "realizado" }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseError(res));
+  }
+}
+
 // Sesión atada al turno que la cargó: si cambia el turno, la sesión anterior
 // deja de ser visible (y `loading` vuelve a true) sin resetear estado dentro
 // de un efecto.
