@@ -980,6 +980,76 @@ describe("eliminarSesion", () => {
       ).toBeNull();
     });
 
+    it("una eliminación que llega con otra en curso corta antes de tocar R2", async () => {
+      // Codex P1 (cuarta pasada): el compare-and-set solo no alcanzaba. Un
+      // segundo DELETE que arranca mientras el primero espera a R2 lee su
+      // token y, como el CAS se condiciona al valor leído, lo matchea y lo
+      // reemplaza por el propio. Los dos terminan tocando R2.
+      const { sesionId, orgId } = await crearSesion({
+        estado: "error",
+        audioR2Key: "audio/o.enc",
+      });
+      // La fila ya tiene una reserva fresca de otro pedido.
+      await db.sesionClinica.updateMany({
+        where: { id: sesionId },
+        data: { error: `${PREFIJO_ELIMINACION_EN_CURSO} [otro-pedido]` },
+      });
+      const stubs = crearStubs(true);
+
+      const error = await esperarApiError(
+        eliminarSesion({
+          prisma: db,
+          sesionId,
+          organizationId: orgId,
+          usuarioId: "u1",
+          accion: "eliminar",
+          ...stubs,
+        }),
+        409,
+      );
+      expect(error.message).toMatch(/ya se está eliminando/);
+
+      // Lo que importa: no se llamó a R2, así que el otro pedido puede
+      // terminar su borrado sin que nadie le haya movido el token.
+      expect(stubs.borrados).toHaveLength(0);
+      expect(
+        (await db.sesionClinica.findUnique({ where: { id: sesionId } }))?.error,
+      ).toBe(`${PREFIJO_ELIMINACION_EN_CURSO} [otro-pedido]`);
+    });
+
+    it("una reserva abandonada se puede tomar pasado el lease", async () => {
+      // La contracara: si el proceso que reservó se murió, la fila no puede
+      // quedar imborrable para siempre.
+      const { sesionId, orgId } = await crearSesion({
+        estado: "error",
+        audioR2Key: "audio/p.enc",
+      });
+      await db.sesionClinica.updateMany({
+        where: { id: sesionId },
+        data: { error: `${PREFIJO_ELIMINACION_EN_CURSO} [muerto]` },
+      });
+      // `updatedAt` es @updatedAt: se mueve por SQL, como en el test de las
+      // grabaciones huérfanas.
+      await prismaRaw.$executeRawUnsafe(
+        `UPDATE sesiones_clinicas SET "updatedAt" = NOW() - interval '1 hour'
+         WHERE id = $1`,
+        sesionId,
+      );
+      const stubs = crearStubs(true);
+
+      const resultado = await eliminarSesion({
+        prisma: db,
+        sesionId,
+        organizationId: orgId,
+        usuarioId: "u1",
+        accion: "eliminar",
+        ...stubs,
+      });
+
+      expect(resultado).toEqual({ tipo: "eliminada" });
+      expect(stubs.borrados).toEqual(["audio/p.enc"]);
+    });
+
     it("descartar mientras la nota se aprueba en otra pestaña: 409 y no se pisa", async () => {
       const { sesionId, orgId } = await crearSesion({
         estado: "revision",

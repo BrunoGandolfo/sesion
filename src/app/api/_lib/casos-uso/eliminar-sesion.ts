@@ -115,6 +115,18 @@ export function esEliminacionEnCurso(error: string | null): boolean {
   return error !== null && error.startsWith(PREFIJO_ELIMINACION_EN_CURSO);
 }
 
+/**
+ * Cuánto vale una reserva de eliminación antes de poder tomarse por
+ * abandonada.
+ *
+ * Tiene que ser holgadamente mayor que lo que tarda un borrado en R2 —lo que
+ * la reserva cubre es esa llamada— y chico frente a la paciencia de quien
+ * está esperando que la sesión desaparezca. Cinco minutos es el mismo número
+ * que usa el rescate de recordatorios (RESCATE_MS) y por la misma razón: si
+ * el proceso que reservó se murió, nadie más va a escribir con ese token.
+ */
+export const LEASE_ELIMINACION_MS = 5 * 60_000;
+
 type SesionExistente = {
   id: string;
   estado: string;
@@ -271,6 +283,31 @@ async function eliminarSesionConError(
   // queda con el token: dice lo que pasó, el reintento la rechaza —así que el
   // worker nunca recibe una sesión sin audio— y lo único que se puede hacer
   // con ella, eliminarla, es lo que se estaba pidiendo.
+  // Una reserva VIGENTE de otro pedido corta acá (Codex P1, cuarta pasada).
+  //
+  // El compare-and-set por sí solo no alcanzaba: un segundo DELETE que
+  // arranca mientras el primero espera a R2 lee su token, y como el CAS se
+  // condiciona al valor leído, lo matchea y lo reemplaza por el propio. Los
+  // dos quedan tocando R2, y si el primero borra el blob y el segundo falla
+  // —un timeout después de que el objeto ya no está—, el segundo restaura un
+  // error normal y el DELETE del primero no matchea: sesión viva,
+  // reintentable, con el audio borrado. El mismo agujero por otra puerta.
+  //
+  // El lease existe para que la reserva no sea eterna: si el proceso que
+  // reservó se murió, la fila quedaría imborrable para siempre. Pasado el
+  // lease, el CAS toma la reserva abandonada — que es seguro, porque quien la
+  // dejó ya no va a poder escribir (su propio token dejó de estar).
+  const reservaAjena =
+    esEliminacionEnCurso(existente.error) &&
+    Date.now() - existente.updatedAt.getTime() < LEASE_ELIMINACION_MS;
+
+  if (reservaAjena) {
+    throw new ApiError(
+      "Esta sesión ya se está eliminando. Esperá unos segundos y volvé a mirarla.",
+      409,
+    );
+  }
+
   const marca = marcaDeEliminacion(randomUUID());
 
   // La reserva es un compare-and-set: se condiciona al `error` que se LEYÓ,
