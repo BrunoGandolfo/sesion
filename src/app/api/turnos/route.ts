@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../_lib/auth";
 import { programarRecordatorio } from "../_lib/casos-uso/recordatorios-del-turno";
+import { assertSinSolapamiento } from "../_lib/casos-uso/solapamiento-turnos";
 import {
   duracionSchema,
   isoDateTimeSchema,
@@ -109,6 +110,17 @@ export async function POST(request: Request) {
       }
 
       const fecha = new Date(parsed.data.fecha);
+
+      // Dentro de la transacción: la comprobación toma un lock de asesoría
+      // por organización que se libera al terminarla, así que dos altas
+      // simultáneas para el mismo horario se ordenan y la segunda ve el turno
+      // de la primera. La transacción sola NO alcanzaría —READ COMMITTED no
+      // bloquea la ausencia de filas—; el porqué está en el caso de uso.
+      await assertSinSolapamiento({
+        prisma: tx,
+        organizationId,
+        intervalo: { inicio: fecha, duracionMin: parsed.data.duracion },
+      });
 
       const turno = await tx.turno.create({
         data: {

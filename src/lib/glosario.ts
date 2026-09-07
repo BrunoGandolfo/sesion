@@ -202,6 +202,12 @@ export const AGENDADO = "Agendado";
 /** Reemplaza a "Marcar como ausente" / "Ausente". */
 export const NO_VINO = "No vino";
 
+/** El horario ya está ocupado por otro turno que no está cancelado ni
+ *  marcado "No vino". Lo devuelve la API (409) y el formulario lo muestra
+ *  tal cual, así que dice qué hacer y no sólo qué pasó. */
+export const TURNO_SOLAPADO =
+  "Ya tenés un turno a esa hora. Elegí otro horario, o cancelá el que está.";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Recordatorio de la sesión (el SMS)
 // Se llama igual que en "Tu consultorio": Recordatorio. No "aviso", no

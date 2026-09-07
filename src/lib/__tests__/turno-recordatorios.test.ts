@@ -100,6 +100,14 @@ const enviaOk: EnviarSms = async () => ({ success: true, sid: "SM1" });
 /** Un turno que ya pasó, para el caso de cobrar. */
 const TURNO_PASADO = new Date("2026-09-03T14:00:00.000Z");
 
+// Los dos de abajo se calculan contra el reloj REAL y no contra AHORA: las
+// ramas que se prueban con ellos (programar o no un recordatorio al reabrir)
+// las decide la ruta, que usa `new Date()`. Con una constante fija el test
+// pasaría hasta que la fecha quedara en el pasado y después fallaría solo.
+const MS_POR_HORA = 60 * 60_000;
+const enUnaSemana = () => new Date(Date.now() + 7 * 24 * MS_POR_HORA);
+const haceUnaHora = () => new Date(Date.now() - MS_POR_HORA);
+
 interface Escenario {
   turnoId: string;
   recordatorioId: string;
@@ -390,6 +398,79 @@ describe("un turno que deja de estar programado cierra sus recordatorios", () =>
     });
     expect(vivos).toHaveLength(1);
     expect(vivos[0].id).not.toBe(recordatorioId);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Reabrir: la contracara de la regla de arriba.
+  //
+  // Al empezar a cerrar recordatorios en TODOS los cierres, un turno que se
+  // marcó "No vino" por error y se vuelve a "programado" quedaba sin
+  // ninguno: el cierre apagó el que había y, como la fecha no cambió, no se
+  // programaba otro. La paciente no recibía nada y en la pantalla el turno
+  // se veía perfecto.
+  // ─────────────────────────────────────────────────────────────────────
+  for (const estadoPrevio of ["ausente", "realizado"] as const) {
+    it(`reabrir un turno "${estadoPrevio}" sin tocar la fecha vuelve a programar el aviso`, async () => {
+      // Fecha relativa y no una constante del archivo: la ruta compara
+      // contra el reloj real (`new Date()`), así que el turno tiene que
+      // seguir siendo futuro corra el test cuando corra.
+      const { turnoId, recordatorioId } = await escenarioConReservaHuerfana({
+        estadoRecordatorio: "pendiente",
+        fechaTurno: enUnaSemana(),
+      });
+
+      // Se cierra: el recordatorio original se apaga.
+      await patchTurno(pedido({ estado: estadoPrevio }), {
+        params: Promise.resolve({ id: turnoId }),
+      });
+      expect(await estadoDe(recordatorioId)).toBe("cancelado");
+
+      // Y se reabre, sin mandar `fecha`.
+      const res = await patchTurno(pedido({ estado: "programado" }), {
+        params: Promise.resolve({ id: turnoId }),
+      });
+      expect(res.status).toBe(200);
+
+      // El viejo sigue cancelado —no se revive una fila apagada— y hay uno
+      // nuevo, vivo, para la misma fecha del turno.
+      expect(await estadoDe(recordatorioId)).toBe("cancelado");
+      const vivos = await prismaRaw.recordatorio.findMany({
+        where: { turnoId, estado: { in: ["pendiente", "enviando"] } },
+      });
+      expect(vivos).toHaveLength(1);
+      expect(vivos[0].id).not.toBe(recordatorioId);
+      expect(vivos[0].estado).toBe("pendiente");
+    });
+  }
+
+  it("reabrir un turno que YA PASÓ no programa ningún aviso", async () => {
+    // El turno es de hace una hora. Reabrirlo es corregir el registro, no
+    // convocar a nadie: mandar un SMS sobre una sesión que ya ocurrió es
+    // peor que no mandar nada. Lo decide `correspondeRecordatorio`, no esta
+    // rama; el test lo fija.
+    const { turnoId } = await escenarioConReservaHuerfana({
+      estadoRecordatorio: "pendiente",
+      fechaTurno: haceUnaHora(),
+    });
+
+    await patchTurno(pedido({ estado: "ausente" }), {
+      params: Promise.resolve({ id: turnoId }),
+    });
+    const res = await patchTurno(pedido({ estado: "programado" }), {
+      params: Promise.resolve({ id: turnoId }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(
+      await prismaRaw.recordatorio.findMany({
+        where: { turnoId, estado: { in: ["pendiente", "enviando"] } },
+      }),
+    ).toEqual([]);
+
+    // Y el despachador tampoco manda nada.
+    const stub = vi.fn(enviaOk);
+    await correrDespachador(stub);
+    expect(stub).not.toHaveBeenCalled();
   });
 
   it("editar un turno sin tocar estado ni fecha NO apaga nada", async () => {

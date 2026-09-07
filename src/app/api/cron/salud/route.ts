@@ -55,6 +55,7 @@ export async function GET(request: Request) {
     sesionesTrabadas,
     recordatoriosFallidos,
     recordatoriosTrabados,
+    smsTrasCancelacion,
     sesionesSinContexto,
     sesionesSinContextoSaturado,
     minutosAudioDelMes,
@@ -68,6 +69,9 @@ export async function GET(request: Request) {
     recordatoriosFallidos,
     /** Reservas de envío que el rescate no está pudiendo sacar. */
     recordatoriosTrabados,
+    /** SMS que salieron con el turno ya cerrado: pacientes a las que hay que
+     *  avisar a mano. */
+    smsTrasCancelacion,
     sesionesSinContexto,
     /** true si se llegó al tope: sesionesSinContexto es un piso. */
     sesionesSinContextoSaturado,

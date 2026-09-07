@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { db } from "@/lib/db";
 
 import { registrarAuditoria } from "../_lib/auditoria";
@@ -76,12 +77,16 @@ export async function POST(request: Request) {
         throw new ApiError("El turno ya tiene una sesión clínica", 409);
       }
 
-      const consentimiento = await tx.consentimientoGrabacion.findFirst({
-        where: { pacienteId: turno.pacienteId, revocadoEn: null },
-        select: { id: true },
-      });
+      // La organización va en la pregunta, no queda a criterio del llamador:
+      // ver la nota en src/lib/consentimiento.ts. Antes acá se preguntaba
+      // sólo por pacienteId.
+      const autorizada = await consentimientoVigenteDe(
+        tx,
+        turno.pacienteId,
+        organizationId,
+      );
 
-      if (!consentimiento) {
+      if (!autorizada) {
         throw new ApiError(
           "El paciente no tiene consentimiento de grabación vigente",
           400,

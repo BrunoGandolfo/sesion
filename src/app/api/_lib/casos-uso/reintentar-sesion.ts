@@ -18,6 +18,8 @@ import {
   type FilaSesionClinica,
 } from "../sesion-clinica";
 
+import { esEliminacionEnCurso } from "./eliminar-sesion";
+
 type ClientePrisma = typeof db;
 
 export interface ReintentarSesionInput {
@@ -43,7 +45,7 @@ export async function reintentarSesion({
 }: ReintentarSesionInput): Promise<FilaSesionClinica> {
   const existente = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
-    select: { id: true, estado: true, audioR2Key: true },
+    select: { id: true, estado: true, audioR2Key: true, error: true },
   });
 
   if (!existente) {
@@ -59,12 +61,47 @@ export async function reintentarSesion({
     );
   }
 
+  // La otra mitad de la reserva del borrado definitivo (ver
+  // PREFIJO_ELIMINACION_EN_CURSO en eliminar-sesion.ts): mientras esa marca
+  // esté puesta, el audio se está borrando en R2 y re-encolar la sesión
+  // dejaría al worker con una sesión sin blob. Es un token, no un lock, justo
+  // porque sobrevive al autocommit de quien lo escribió. Se pregunta por el
+  // prefijo porque cada reserva lleva su identificador propio.
+  if (esEliminacionEnCurso(existente.error)) {
+    throw new ApiError(
+      "Esta sesión se está eliminando: no se puede reintentar.",
+      409,
+    );
+  }
+
   // La organización va en el WHERE de la ESCRITURA, no sólo en el findFirst
   // de arriba: `update({ where: { id } })` escribe la fila aunque sea de otra
   // organización, y entre la lectura y la escritura hay una ventana. Con
   // updateMany la pertenencia es parte de la operación.
+  //
+  // Y el ESTADO y el ERROR también, por esa misma ventana: sin ellos, este
+  // reintento pisa una eliminación que empezó en el medio y el worker recibe
+  // una sesión cuyo audio se está borrando. Con los dos en el WHERE, el
+  // UPDATE condicionado toma el lock de la fila y reevalúa el predicado: o
+  // gana el reintento, o no escribe nada.
+  //
+  // Se compara contra el VALOR LEÍDO y no con `NOT: { error: marca }`, que
+  // fue el primer intento y estaba mal (Codex P2): Prisma lo traduce a
+  // `NOT (error = token)`, que en SQL es NULL —no true— cuando la columna es
+  // NULL. Una sesión en "error" con `error` nulo, que es un estado alcanzable
+  // (procesarCallback puede guardar un error sin texto), no matcheaba nunca:
+  // conservaba su audio y aun así el reintento contestaba 409 para siempre.
+  //
+  // Comparar contra lo leído arregla eso y además es más fuerte: excluye el
+  // token —si estuviera puesto, la guarda de más arriba ya habría cortado— y
+  // también cualquier otra escritura concurrente sobre la fila.
   const { count } = await prisma.sesionClinica.updateMany({
-    where: { id: sesionId, organizationId },
+    where: {
+      id: sesionId,
+      organizationId,
+      estado: existente.estado,
+      error: existente.error,
+    },
     data: {
       estado: "procesando",
       duracionAudioSeg,
@@ -75,7 +112,12 @@ export async function reintentarSesion({
   });
 
   if (count === 0) {
-    throw new ApiError("Sesión clínica no encontrada", 404);
+    // Con el estado y el token en el WHERE, 0 ya no significa sólo "no
+    // existe": también "cambió mientras se procesaba el pedido".
+    throw new ApiError(
+      "La sesión cambió mientras se procesaba el pedido. Volvé a abrirla.",
+      409,
+    );
   }
 
   const sesion = await prisma.sesionClinica.findFirstOrThrow({

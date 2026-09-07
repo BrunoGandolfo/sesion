@@ -28,9 +28,16 @@ lo hacen rutas con efectos propios.
 
 ### 3.1 Grabación en el navegador
 
-- Pantalla: ficha del paciente, pestaña Historia (`historia-tab.tsx`) o el
-  botón flotante de grabación (`paciente-detail-view.tsx`, hook
-  `useGrabacionSesion`). Hace falta un turno de hoy y consentimiento vigente.
+- Pantalla: `/grabar/[turnoId]`
+  (`src/app/(dashboard)/grabar/[turnoId]/page.tsx` +
+  `_components/grabar-view.tsx`). Se llega desde Hoy, desde el sheet del turno
+  en la agenda o desde el botón flotante de la ficha
+  (`paciente-detail-view.tsx`). Hace falta consentimiento vigente —la página
+  lo verifica en el servidor con `consentimientoVigenteDe`, la misma función
+  que usa la API—; el turno no: `/grabar/nuevo?pacienteId=…` lo crea al
+  empezar.
+  (La pestaña Historia y su `historia-tab.tsx` ya no existen: la grabación se
+  mudó a esta ruta y la revisión de la nota a `/sesiones/[id]`.)
 - `POST /api/sesion-clinica { turnoId }` crea la fila en `pendiente` (exige
   turno programado o realizado y consentimiento sin revocar). Después
   `PATCH /api/sesion-clinica/[id] { estado: "grabando" }`.
@@ -103,7 +110,7 @@ y repite desde el paso 1 con el mismo blob.
 - Contexto longitudinal: `GET /api/pacientes/{id}/contexto-clinico?format=llm`
   (Bearer M2M) devuelve Markdown con hipótesis, objetivos, temas, riesgos y
   análisis + plan de las últimas 3 sesiones aprobadas. Best-effort.
-- Llamada A (nota SOAP): prompt `prompts/clinical_note_v3.1.md`, schema
+- Llamada A (nota SOAP): prompt `prompts/clinical_note_v3.1.1.md`, schema
   `SCHEMA_NOTA`, modelo `LLM_MODEL_ID` (`claude-sonnet-5`), `max_tokens`
   8192, `effort` `medium`, timeout 300 s, 3 reintentos del SDK. Cabecera
   `anthropic-workspace-id` si `ANTHROPIC_WORKSPACE_ID` está seteada. Se validan

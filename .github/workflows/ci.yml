@@ -123,6 +123,35 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Una sola corrida de tests por vez en TODO el repositorio. Los tests de
+    # integración vacían la rama de test de Neon con TRUNCATE ... CASCADE
+    # entre casos, y esa rama es una sola: dos corridas en paralelo (dos PRs,
+    # o un PR y el push a main) se borran las filas entre ellas y fallan con
+    # errores que no tienen nada que ver con el cambio.
+    #
+    # `cancel-in-progress: false` y no true, al revés que la concurrency de
+    # arriba: acá el objetivo no es ahorrar minutos sino no pisar la base. Una
+    # corrida a mitad de camino que se cancela deja la rama en un estado
+    # arbitrario para la que entra atrás.
+    #
+    # LO QUE ESTO NO ES: una cola FIFO (Codex P2 sobre el PR #18). GitHub
+    # Actions mantiene como mucho UN miembro en curso y UNO esperando por
+    # grupo; un tercero que llega reemplaza al que esperaba y lo CANCELA,
+    # aunque cancel-in-progress sea false. Con tres refs compitiendo, la
+    # corrida de main que esperaba detrás de un PR puede quedar cancelada.
+    #
+    # Se asume, y no en silencio, porque el modo de falla es benigno: la
+    # corrida cancelada aparece como "cancelled", que no es success — no queda
+    # un commit en verde sin haber corrido los tests, queda uno con un check
+    # cancelado, visible y relanzable a mano. Una cola de verdad necesita un
+    # mecanismo externo (un runner dedicado, o un workflow que relance lo
+    # cancelado) y no vale ese costo para un repositorio de un solo autor.
+    #
+    # Lo que sí lo resolvería de raíz es una rama de Neon por corrida, o un
+    # Postgres efímero en el propio job. Anotado como trabajo aparte.
+    concurrency:
+      group: neon-test-branch
+      cancel-in-progress: false
     env:
       # Rama de Neon dedicada a tests: los tests de integración hacen
       # TRUNCATE ... CASCADE entre casos. NUNCA la DB de producción.

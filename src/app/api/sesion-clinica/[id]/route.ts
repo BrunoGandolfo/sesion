@@ -6,7 +6,11 @@ import { esTransicionPermitidaAlCliente } from "@/lib/sesion-clinica-utils";
 import { borrarAudioBestEffort } from "../../_lib/audio";
 import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
-import { eliminarSesion } from "../../_lib/casos-uso/eliminar-sesion";
+import {
+  ACCIONES_ELIMINAR,
+  eliminarSesion,
+  type AccionEliminar,
+} from "../../_lib/casos-uso/eliminar-sesion";
 import { reintentarSesion } from "../../_lib/casos-uso/reintentar-sesion";
 import { ApiError, errorResponse, ok, validationError } from "../../_lib/responses";
 import { SESION_SELECT, toSesionClinicaResponse } from "../../_lib/sesion-clinica";
@@ -57,16 +61,46 @@ export async function GET(_request: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: RouteParams) {
+/**
+ * La intención viaja en la query (`?accion=descartar|eliminar`) y no en el
+ * cuerpo: un DELETE con body no lo reenvían todos los intermediarios, y así
+ * la acción queda escrita en la propia URL del pedido.
+ *
+ * Es obligatoria. Sin ella el estado de la fila volvería a decidir solo, que
+ * es exactamente lo que se está sacando (ver la cabecera del caso de uso).
+ */
+function accionDe(request: Request): AccionEliminar {
+  const valor = new URL(request.url).searchParams.get("accion");
+
+  if (!esAccionEliminar(valor)) {
+    throw new ApiError(
+      `Falta decir qué se está pidiendo: accion=${ACCIONES_ELIMINAR.join(" o ")}`,
+      400,
+    );
+  }
+
+  return valor;
+}
+
+function esAccionEliminar(valor: unknown): valor is AccionEliminar {
+  return (
+    typeof valor === "string" &&
+    (ACCIONES_ELIMINAR as readonly string[]).includes(valor)
+  );
+}
+
+export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
+    const accion = accionDe(request);
 
     const resultado = await eliminarSesion({
       prisma: db,
       sesionId: id,
       organizationId,
       usuarioId: userId,
+      accion,
       borrarAudio: borrarAudioBestEffort,
       registrarAuditoria,
     });

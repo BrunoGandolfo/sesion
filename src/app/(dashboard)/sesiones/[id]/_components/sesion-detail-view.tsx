@@ -205,11 +205,16 @@ export function SesionDetailView({ id }: { id: string }) {
   // Descartar: la sesión vuelve a "error" conservando transcripción y audio.
   // No se navega a ningún lado — la pantalla pasa a mostrar el estado de
   // error, con Reintentar y Eliminar.
+  //
+  // `accion` va explícita: es la misma URL que usa `eliminar`, y lo único que
+  // las distingue. Si la sesión cambió de estado mientras la pantalla estaba
+  // abierta, la API contesta 409 y no hace la otra cosa (ver la cabecera de
+  // casos-uso/eliminar-sesion.ts).
   const descartar = async () => {
     setEnviando(true);
     setErrorAccion(null);
     try {
-      await apiDelete(`/api/sesion-clinica/${id}`);
+      await apiDelete(`/api/sesion-clinica/${id}?accion=descartar`);
       setIntentoCarga((n) => n + 1);
     } catch (error) {
       setErrorAccion(mensajeDeError(error));
@@ -239,7 +244,7 @@ export function SesionDetailView({ id }: { id: string }) {
     setEnviando(true);
     setErrorAccion(null);
     try {
-      await apiDelete(`/api/sesion-clinica/${id}`);
+      await apiDelete(`/api/sesion-clinica/${id}?accion=eliminar`);
       router.back();
     } catch (error) {
       setErrorAccion(mensajeDeError(error));
