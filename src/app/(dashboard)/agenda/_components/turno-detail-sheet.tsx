@@ -26,11 +26,29 @@ import {
   Textarea,
 } from "@/components/ui";
 import { useHoy } from "@/hooks/useHoy";
-import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
+import {
+  fechaInputMvd,
+  horaInputMvd,
+  instanteDesdeFechaHoraMvd,
+} from "@/lib/fechas-montevideo";
+import {
+  ApiClientError,
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  esAbort,
+} from "@/lib/api-client";
 import { fechaCorta, fechaLarga, hora, money } from "@/lib/format";
 import {
   AGENDADO,
   ALGO_FALLO,
+  COBRO_DESHECHO,
+  DESHACER_COBRO,
+  DESHACER_COBRO_ACCION,
+  DESHACER_COBRO_MENSAJE,
+  DESHACER_COBRO_TITULO,
+  DESHACIENDO_COBRO,
   GRABAR_SESION,
   NO_VINO,
   RECORDATORIO,
@@ -84,7 +102,8 @@ type Modo =
   | "cobrar"
   | "confirmar-no-vino"
   | "confirmar-cancelar"
-  | "confirmar-reintento";
+  | "confirmar-reintento"
+  | "confirmar-deshacer-cobro";
 
 /** El recordatorio tal como viaja por la red: las fechas son ISO. */
 type RecordatorioJson = {
@@ -102,19 +121,6 @@ interface Props {
   onClose: () => void;
   onUpdated: (message: string) => void;
   onError: (message: string) => void;
-}
-
-function toDateInput(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function toTimeInput(d: Date): string {
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
 }
 
 function chipDe(turno: TurnoConPaciente) {
@@ -224,8 +230,8 @@ export function TurnoDetailSheet({
   const abrirReprogramar = () => {
     if (!turno) return;
     reset({
-      fecha: toDateInput(turno.fecha),
-      hora: toTimeInput(turno.fecha),
+      fecha: fechaInputMvd(turno.fecha),
+      hora: horaInputMvd(turno.fecha),
       duracion: turno.duracion,
       modalidad: turno.modalidad,
       notas: turno.notas ?? "",
@@ -249,6 +255,9 @@ export function TurnoDetailSheet({
   const esAusente = turno.estado === "ausente";
   const sinCobrar = turno.pagoEstado === "pendiente";
   const puedeCobrar = (esProgramado || esRealizado) && sinCobrar;
+  // Se puede deshacer mientras el turno siga cobrado. Es una reversión: el
+  // turno vuelve a quedar sin cobrar y se puede volver a cobrar.
+  const puedeDeshacerCobro = turno.pagoEstado === "pagado";
   const puedeGrabarORevisar = esProgramado || esRealizado;
   const sesionId = sesion !== "sin-dato" && sesion ? sesion.id : null;
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
@@ -299,6 +308,23 @@ export function TurnoDetailSheet({
     }
   }
 
+  async function deshacerCobro() {
+    if (!turno) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      await apiDelete<Turno>(`/api/turnos/${turno.id}/cobrar`);
+      onUpdated(COBRO_DESHECHO);
+    } catch (err) {
+      const m = mensajeDe(err);
+      setError(m);
+      onError(m);
+      setModo("ver");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function reintentarRecordatorio() {
     if (!aviso) return;
     setEnviando(true);
@@ -321,7 +347,12 @@ export function TurnoDetailSheet({
   }
 
   const guardarReprogramacion = handleSubmit((values) => {
-    const fechaISO = new Date(`${values.fecha}T${values.hora}:00`).toISOString();
+    // La hora que ella escribe es la del consultorio, no la del aparato desde
+    // el que escribe: el turno de las 15:15 es a las 15:15 en Montevideo.
+    const fechaISO = instanteDesdeFechaHoraMvd(
+      values.fecha,
+      values.hora,
+    ).toISOString();
     const notas = values.notas?.trim() ?? "";
     void patchTurno(
       {
@@ -454,6 +485,19 @@ export function TurnoDetailSheet({
                   </Button>
                 ) : null}
 
+                {puedeDeshacerCobro ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setError(null);
+                      setModo("confirmar-deshacer-cobro");
+                    }}
+                    disabled={enviando}
+                  >
+                    {DESHACER_COBRO}
+                  </Button>
+                ) : null}
+
                 {sesionId ? (
                   <Button asChild variant="secondary">
                     <Link href={`/sesiones/${sesionId}`}>
@@ -580,6 +624,19 @@ export function TurnoDetailSheet({
             onConfirmar={() =>
               void patchTurno({ estado: "cancelado" }, "Turno cancelado")
             }
+            onCancelar={() => setModo("ver")}
+          />
+        ) : null}
+
+        {modo === "confirmar-deshacer-cobro" ? (
+          <Confirmar
+            titulo={DESHACER_COBRO_TITULO}
+            mensaje={DESHACER_COBRO_MENSAJE}
+            accion={DESHACER_COBRO_ACCION}
+            cancelar="Volver"
+            enviando={enviando}
+            enviandoLabel={DESHACIENDO_COBRO}
+            onConfirmar={() => void deshacerCobro()}
             onCancelar={() => setModo("ver")}
           />
         ) : null}

@@ -7,14 +7,25 @@ import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 
-import { Button, Chip, Sheet, Toast } from "@/components/ui";
+import { Button, Chip, Confirmar, Sheet, Toast } from "@/components/ui";
 import {
   CheckDibujado,
   useConfirmacionDibujada,
 } from "@/components/ui/movimiento";
-import { apiPost } from "@/lib/api-client";
+import { apiDelete, apiPost } from "@/lib/api-client";
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
-import { AGENDADO, ALGO_FALLO, NO_VINO, pluralizar } from "@/lib/glosario";
+import {
+  AGENDADO,
+  ALGO_FALLO,
+  COBRO_DESHECHO,
+  DESHACER_COBRO,
+  DESHACER_COBRO_ACCION,
+  DESHACER_COBRO_MENSAJE,
+  DESHACER_COBRO_TITULO,
+  DESHACIENDO_COBRO,
+  NO_VINO,
+  pluralizar,
+} from "@/lib/glosario";
 import type {
   MetodoPago,
   Modalidad,
@@ -81,6 +92,18 @@ export async function cobrarTurno(
   return parseTurno(json);
 }
 
+/**
+ * DELETE /api/turnos/[id]/cobrar → turno actualizado.
+ *
+ * Deshace el último cobro: el turno vuelve a `pagoEstado: "pendiente"` y su
+ * monto vuelve a la deuda. No toca el estado del turno (sigue realizado) y no
+ * borra nada, así que se puede volver a cobrar enseguida.
+ */
+export async function deshacerCobroTurno(turnoId: string): Promise<Turno> {
+  const json = await apiDelete<TurnoJson>(`/api/turnos/${turnoId}/cobrar`);
+  return parseTurno(json);
+}
+
 // Cobros optimistas sobre la lista recibida por props. Van atados a la
 // referencia de `turnos` que los originó: cuando el padre entrega una lista
 // nueva (refetch tras onTurnoActualizado) los ajustes viejos dejan de
@@ -138,7 +161,16 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
         <DeudaBanner monto={deudaTotal} cantidad={sesionesImpagas.length} />
       )}
 
-      <HistorialList turnos={turnosOrdenados} onCobrar={(turno) => setCobroTarget(turno)} />
+      <HistorialList
+        turnos={turnosOrdenados}
+        onCobrar={(turno) => setCobroTarget(turno)}
+        onDeshecho={(turno) => {
+          ajustarTurno(turno.id, turno);
+          setToast({ open: true, message: COBRO_DESHECHO });
+          onTurnoActualizado?.();
+        }}
+        onError={(mensaje) => setToast({ open: true, message: mensaje })}
+      />
 
       <Toast
         open={toast.open}
@@ -254,9 +286,13 @@ function DeudaBanner({ monto, cantidad }: { monto: number; cantidad: number }) {
 function HistorialList({
   turnos,
   onCobrar,
+  onDeshecho,
+  onError,
 }: {
   turnos: Turno[];
   onCobrar: (turno: Turno) => void;
+  onDeshecho: (turno: Turno) => void;
+  onError: (mensaje: string) => void;
 }) {
   if (turnos.length === 0) {
     return (
@@ -270,16 +306,50 @@ function HistorialList({
     <div className="overflow-hidden rounded-lg border border-[color:var(--border-subtle)] bg-white">
       <ul className="divide-y divide-[color:var(--border-subtle)]">
         {turnos.map((turno) => (
-          <TurnoRow key={turno.id} turno={turno} onCobrar={() => onCobrar(turno)} />
+          <TurnoRow
+            key={turno.id}
+            turno={turno}
+            onCobrar={() => onCobrar(turno)}
+            onDeshecho={onDeshecho}
+            onError={onError}
+          />
         ))}
       </ul>
     </div>
   );
 }
 
-function TurnoRow({ turno, onCobrar }: { turno: Turno; onCobrar: () => void }) {
+function TurnoRow({
+  turno,
+  onCobrar,
+  onDeshecho,
+  onError,
+}: {
+  turno: Turno;
+  onCobrar: () => void;
+  onDeshecho: (turno: Turno) => void;
+  onError: (mensaje: string) => void;
+}) {
   const mostrarCobrar = turno.estado === "realizado" && turno.pagoEstado === "pendiente";
   const mostrarPagado = turno.estado === "realizado" && turno.pagoEstado === "pagado";
+
+  // La confirmación se abre debajo de la fila, no en un sheet: es una
+  // reversión, no un cobro, y no hay nada que elegir.
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [deshaciendo, setDeshaciendo] = React.useState(false);
+
+  async function deshacer() {
+    setDeshaciendo(true);
+    try {
+      const actualizado = await deshacerCobroTurno(turno.id);
+      setConfirmando(false);
+      onDeshecho(actualizado);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : ALGO_FALLO);
+    } finally {
+      setDeshaciendo(false);
+    }
+  }
 
   return (
     <li>
@@ -343,10 +413,39 @@ function TurnoRow({ turno, onCobrar }: { turno: Turno; onCobrar: () => void }) {
               >
                 Cobrar
               </motion.button>
+            ) : mostrarPagado && !confirmando ? (
+              <motion.button
+                key="deshacer"
+                type="button"
+                onClick={() => setConfirmando(true)}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                whileTap={{ scale: 0.96 }}
+                className="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500 transition-colors duration-150 hover:bg-cream-100 hover:text-ink-700 lg:min-h-[36px]"
+              >
+                {DESHACER_COBRO}
+              </motion.button>
             ) : null}
           </AnimatePresence>
         </div>
       </div>
+
+      {confirmando ? (
+        <div className="px-5 pb-[14px]">
+          <Confirmar
+            titulo={DESHACER_COBRO_TITULO}
+            mensaje={DESHACER_COBRO_MENSAJE}
+            accion={DESHACER_COBRO_ACCION}
+            cancelar="Volver"
+            enviando={deshaciendo}
+            enviandoLabel={DESHACIENDO_COBRO}
+            onConfirmar={() => void deshacer()}
+            onCancelar={() => setConfirmando(false)}
+          />
+        </div>
+      ) : null}
     </li>
   );
 }
