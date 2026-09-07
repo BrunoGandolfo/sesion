@@ -71,5 +71,13 @@ export async function GET(request: Request) {
     console.error(fallo);
   }
 
+  // Un SMS que salió con el turno ya cerrado no es un error del sistema —el
+  // envío funcionó— pero sí es algo que alguien tiene que ver: hay una
+  // paciente citada a una sesión que no existe. Va a warn, no a error, por lo
+  // mismo: nada que reintentar, alguien que llamar.
+  for (const aviso of resumen.avisosTrasCancelacion) {
+    console.warn(aviso);
+  }
+
   return Response.json(resumen);
 }

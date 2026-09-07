@@ -17,11 +17,19 @@
 //   4. sesiones aprobadas hace rato que el Golden Thread no integró (la
 //      Llamada B del worker dejó de correr);
 //   5. minutos de audio transcriptos en el mes corriente, contra un techo
-//      explícito (control de gasto).
+//      explícito (control de gasto);
+//   6. SMS que salieron con el turno ya cerrado en las últimas 24 h.
 //
 // La 4 es la más silenciosa: la nota está aprobada, el audio ya se borró y la
 // app se ve perfecta; lo único que pasa es que el hilo del proceso —lo que
 // ella lee antes de la próxima sesión— se quedó viejo.
+//
+// La 6 es la única que no habla del sistema sino de una persona. Todas las
+// demás dicen "algo dejó de funcionar, andá a mirar"; ésta dice "hay una
+// paciente con un mensaje en el teléfono citándola a una sesión que ya no
+// existe". No hay nada que reintentar ni que arreglar en la app: la única
+// respuesta posible es que la terapeuta la llame. Por eso el aviso nombra la
+// acción y no la métrica.
 //
 // Y hay un aviso más que no es una cuenta sino una advertencia SOBRE las
 // cuentas. La métrica 4 mira como mucho TOPE_ATRASADAS filas, las más viejas
@@ -34,7 +42,10 @@
 import type { db } from "@/lib/db";
 import { finDeMesMvd, inicioDeMesMvd } from "@/lib/fechas-montevideo";
 
-import { RESCATE_MS } from "./enviar-recordatorios";
+import {
+  MENSAJE_ENVIADO_TRAS_CANCELACION,
+  RESCATE_MS,
+} from "./enviar-recordatorios";
 import {
   contarSesionesSinContextoAtrasadas,
   TOPE_ATRASADAS,
@@ -74,11 +85,21 @@ export const RECORDATORIO_TRABADO_MS = MULTIPLO_RESCATE_TRABADO * RESCATE_MS;
  *  El worker la hace enseguida de aprobar; un día es holgura, no expectativa. */
 export const RETRASO_CONTEXTO_MS = 24 * MS_POR_HORA;
 
+/**
+ * Ventana en la que se cuentan los SMS que salieron con el turno ya cerrado.
+ * La misma que la de fallidos, y por el mismo motivo: el cron corre cada hora
+ * y el aviso tiene que seguir estando hasta que alguien lo lea.
+ */
+export const VENTANA_TRAS_CANCELACION_MS = 24 * MS_POR_HORA;
+
 /** Desde cuántos casos cada métrica deja de ser ruido y pasa a ser aviso. */
 export const UMBRAL_SESIONES_TRABADAS = 1;
 export const UMBRAL_RECORDATORIOS_FALLIDOS = 1;
 export const UMBRAL_RECORDATORIOS_TRABADOS = 1;
 export const UMBRAL_SIN_CONTEXTO = 1;
+
+/** Uno solo ya es una paciente mal citada: no hay umbral de tolerancia. */
+export const UMBRAL_TRAS_CANCELACION = 1;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Control de gasto
@@ -138,6 +159,9 @@ export interface Salud {
   recordatoriosFallidos: number;
   /** Recordatorios en "enviando" desde hace más de RECORDATORIO_TRABADO_MS. */
   recordatoriosTrabados: number;
+  /** SMS que salieron con el turno ya cerrado en las últimas 24 h: cada uno
+   *  es una paciente citada a una sesión que no existe. */
+  smsTrasCancelacion: number;
   sesionesSinContexto: number;
   /** true si la métrica anterior llegó al tope: es un piso, no el total. */
   sesionesSinContextoSaturado: boolean;
@@ -161,6 +185,7 @@ export async function revisarSalud({
     sesionesTrabadas,
     recordatoriosFallidos,
     recordatoriosTrabados,
+    smsTrasCancelacion,
     sinContexto,
     audioDelMes,
   ] = await Promise.all([
@@ -180,6 +205,18 @@ export async function revisarSalud({
       where: {
         estado: "enviando",
         actualizadoEn: { lt: new Date(t - RECORDATORIO_TRABADO_MS) },
+      },
+    }),
+    // El envío tras cancelación se reconoce por la marca que le deja el
+    // despachador en `error`, y no por el estado: la fila queda en
+    // "cancelado", igual que las que se apagaron a tiempo y nunca mandaron
+    // nada. Lo que distingue a ésta es que además tiene `enviadoEn`, o sea
+    // que el SMS salió. Las dos condiciones juntas, o se cuentan
+    // cancelaciones normales.
+    prisma.recordatorio.count({
+      where: {
+        error: MENSAJE_ENVIADO_TRAS_CANCELACION,
+        enviadoEn: { gte: new Date(t - VENTANA_TRAS_CANCELACION_MS) },
       },
     }),
     contarSesionesSinContextoAtrasadas({
@@ -223,6 +260,15 @@ export async function revisarSalud({
     );
   }
 
+  // Texto propio, y en imperativo: es el único aviso cuya respuesta no es
+  // mirar un log sino levantar el teléfono.
+  if (smsTrasCancelacion >= UMBRAL_TRAS_CANCELACION) {
+    motivos.push(
+      `${smsTrasCancelacion} recordatorios salieron con el turno ya cerrado en las últimas 24 h: ` +
+        `hay pacientes con un SMS citándolas a una sesión que no está programada, hay que avisarles`,
+    );
+  }
+
   if (sinContexto.cantidad >= UMBRAL_SIN_CONTEXTO) {
     motivos.push(
       `${sinContexto.cantidad} sesiones aprobadas hace más de 24 h sin integrar al hilo`,
@@ -251,6 +297,7 @@ export async function revisarSalud({
     sesionesTrabadas,
     recordatoriosFallidos,
     recordatoriosTrabados,
+    smsTrasCancelacion,
     sesionesSinContexto: sinContexto.cantidad,
     sesionesSinContextoSaturado: sinContexto.saturado,
     minutosAudioDelMes,

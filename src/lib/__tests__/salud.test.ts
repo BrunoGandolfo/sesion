@@ -35,6 +35,8 @@ interface Escenario {
   integradas?: boolean;
   /** Segundos de audio transcriptos en el mes (lo que suma el aggregate). */
   segundosAudioDelMes?: number | null;
+  /** SMS que salieron con el turno ya cerrado en las últimas 24 h. */
+  smsTrasCancelacion?: number;
 }
 
 /** Doble mínimo del cliente Prisma: solo lo que toca revisarSalud. */
@@ -64,10 +66,19 @@ function prismaFalso(escenario: Escenario) {
       }),
     },
     recordatorio: {
-      count: async (args: { where: { estado: string } }) =>
-        args.where.estado === "fallido"
+      // Las tres consultas de recordatorios se distinguen por su where: dos
+      // preguntan por `estado`, la del envío tras cancelación por `error`
+      // (la fila queda en "cancelado", igual que una cancelación normal).
+      count: async (args: {
+        where: { estado?: string; error?: string };
+      }) => {
+        if (args.where.error !== undefined) {
+          return escenario.smsTrasCancelacion ?? 0;
+        }
+        return args.where.estado === "fallido"
           ? (escenario.recordatoriosFallidos ?? 0)
-          : (escenario.recordatoriosTrabados ?? 0),
+          : (escenario.recordatoriosTrabados ?? 0);
+      },
     },
     pacienteContextoClinico: {
       findMany: async () =>
@@ -95,6 +106,7 @@ describe("revisarSalud", () => {
       sesionesTrabadas: 0,
       recordatoriosFallidos: 0,
       recordatoriosTrabados: 0,
+      smsTrasCancelacion: 0,
       sesionesSinContexto: 0,
       sesionesSinContextoSaturado: false,
       minutosAudioDelMes: 0,
@@ -150,6 +162,43 @@ describe("revisarSalud", () => {
     expect(salud.alerta).not.toBeNull();
     expect(salud.alerta).toContain(`llegó al tope de ${TOPE_ATRASADAS} filas`);
     expect(salud.alerta).toContain("mirar la base a mano");
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // A3 — el SMS que salió con el turno ya cerrado.
+  //
+  // El despachador ya lo dejaba registrado en la fila (estado "cancelado",
+  // `enviadoEn` puesto y el motivo en `error`), pero nadie lo miraba: el
+  // único que veía esa evidencia era quien fuera a leer la columna a mano.
+  // Es el único aviso de este cron que no habla de una máquina sino de una
+  // paciente que recibió un mensaje equivocado.
+  // ─────────────────────────────────────────────────────────────────────
+
+  it("un solo SMS tras cancelación ya avisa, y dice qué hacer", async () => {
+    const salud = await correr({ smsTrasCancelacion: 1 });
+
+    expect(salud.smsTrasCancelacion).toBe(1);
+    expect(salud.alerta).toContain(
+      "1 recordatorios salieron con el turno ya cerrado",
+    );
+    // El texto nombra la acción, no la métrica: no hay nada que reintentar.
+    expect(salud.alerta).toContain("hay que avisarles");
+  });
+
+  it("sin ninguno no dice nada de esto", async () => {
+    const salud = await correr({ smsTrasCancelacion: 0 });
+
+    expect(salud.alerta).toBeNull();
+  });
+
+  it("convive con las otras métricas en el mismo aviso", async () => {
+    const salud = await correr({
+      recordatoriosFallidos: 2,
+      smsTrasCancelacion: 1,
+    });
+
+    expect(salud.alerta).toContain("2 recordatorios fallidos en 24 h");
+    expect(salud.alerta).toContain("salieron con el turno ya cerrado");
   });
 
   it("sin saturación y con sesiones sin integrar avisa la cuenta, no el tope", async () => {

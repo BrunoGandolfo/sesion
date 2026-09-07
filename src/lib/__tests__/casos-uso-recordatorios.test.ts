@@ -531,6 +531,16 @@ describe("cancelación del turno durante el envío", () => {
     expect(resumen.enviados).toBe(1);
     expect(resumen.enviadosTrasCancelacion).toBe(1);
 
+    // Y el aviso sale por su propio canal, para que el handler del cron no
+    // tenga que reconocer un prefijo dentro de la bitácora para gritarlo.
+    expect(resumen.avisosTrasCancelacion).toHaveLength(1);
+    expect(resumen.avisosTrasCancelacion[0]).toContain(
+      "[cron][enviado-tras-cancelacion]",
+    );
+    expect(resumen.avisosTrasCancelacion[0]).toContain(recordatorioId);
+    // La misma línea sigue estando en la bitácora completa.
+    expect(resumen.eventos).toContain(resumen.avisosTrasCancelacion[0]);
+
     const fila = await leer(recordatorioId);
     // Estado terminal: nadie lo vuelve a tomar, y "enviado" sería mentira
     // (el recordatorio no hizo su trabajo, avisó de algo que ya no existe).
@@ -583,6 +593,7 @@ describe("cancelación del turno durante el envío", () => {
 
     expect(resumen.enviados).toBe(1);
     expect(resumen.enviadosTrasCancelacion).toBe(0);
+    expect(resumen.avisosTrasCancelacion).toEqual([]);
     expect((await leer(recordatorioId)).estado).toBe("enviado");
   });
 });

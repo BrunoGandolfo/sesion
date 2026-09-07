@@ -143,6 +143,21 @@ export interface ResumenRecordatorios {
   /** Errores al persistir el resultado de un fallo (la fila puede haber
    *  quedado reservada y sin error guardado). */
   fallosPersistencia: string[];
+  /**
+   * Las líneas de `eventos` de los SMS que salieron con el turno ya cerrado,
+   * repetidas acá aparte.
+   *
+   * Por qué aparte y no filtrando `eventos` en el handler: `eventos` es la
+   * bitácora completa y vuelve en el cuerpo de la respuesta del cron, que no
+   * lee nadie salvo que vaya a buscarlo. Esto otro tiene que GRITAR — hay una
+   * paciente con un SMS en el teléfono citándola a una sesión que ya no
+   * existe, y la única que puede arreglarlo es la terapeuta llamándola. Que
+   * el handler tenga que reconocer un prefijo de string para encontrarlas
+   * sería atar el aviso al formato del log.
+   *
+   * La línea se arma una sola vez y se empuja a los dos lugares.
+   */
+  avisosTrasCancelacion: string[];
 }
 
 export async function enviarRecordatoriosVencidos({
@@ -191,6 +206,7 @@ export async function enviarRecordatoriosVencidos({
     errores: [],
     eventos: [],
     fallosPersistencia: [],
+    avisosTrasCancelacion: [],
   };
 
   for (const recordatorio of recordatorios) {
@@ -347,9 +363,9 @@ export async function enviarRecordatoriosVencidos({
           },
         });
         resumen.enviadosTrasCancelacion += 1;
-        resumen.eventos.push(
-          `[cron][enviado-tras-cancelacion] turno=${turno.id} id=${recordatorio.id} resultado=sms-salido-turno-cancelado intentos=${intentosActual} ts=${ts}`,
-        );
+        const aviso = `[cron][enviado-tras-cancelacion] turno=${turno.id} id=${recordatorio.id} resultado=sms-salido-turno-cancelado intentos=${intentosActual} ts=${ts}`;
+        resumen.eventos.push(aviso);
+        resumen.avisosTrasCancelacion.push(aviso);
       } else {
         resumen.eventos.push(
           `[cron][ok] turno=${turno.id} id=${recordatorio.id} resultado=enviado intentos=${intentosActual} ts=${ts}`,
