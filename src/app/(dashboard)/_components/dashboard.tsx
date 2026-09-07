@@ -12,6 +12,7 @@ import { Toast } from "@/components/ui";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { apiGet, apiPost } from "@/lib/api-client";
+import { instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import { ALGO_FALLO } from "@/lib/glosario";
 import type { MetodoPago, PacienteConDeuda } from "@/types/domain";
 
@@ -96,7 +97,11 @@ export function Dashboard() {
     (valores: NuevoTurnoData) => {
       apiPost("/api/turnos", {
         pacienteId: valores.pacienteId,
-        fecha: new Date(`${valores.fecha}T${valores.hora}:00`).toISOString(),
+        // La hora del formulario es la del consultorio, no la del aparato.
+        fecha: instanteDesdeFechaHoraMvd(
+          valores.fecha,
+          valores.hora,
+        ).toISOString(),
         duracion: valores.duracion,
         modalidad: valores.modalidad,
         notas: valores.notas?.trim() ? valores.notas.trim() : null,

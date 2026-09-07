@@ -8,6 +8,7 @@ import { Plus } from "lucide-react";
 import { Button, Card, Input, Segmented, Textarea } from "@/components/ui";
 import { avatarColor, initials, money } from "@/lib/format";
 import type { Duracion, Modalidad, Paciente } from "@/types/domain";
+import { agregarDiasMvd, fechaInputMvd } from "@/lib/fechas-montevideo";
 
 const duraciones: Duracion[] = [30, 45, 50, 60, 90];
 
@@ -44,17 +45,11 @@ export interface NuevoTurnoFormProps {
 
 type NuevoTurnoFormValues = z.infer<typeof nuevoTurnoSchema>;
 
-function formatDateInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
+// El día por defecto es mañana en Montevideo, no en la zona del aparato:
+// quien envía este formulario lo lee después con instanteDesdeFechaHoraMvd,
+// así que los dos lados tienen que hablar del mismo reloj.
 function tomorrowDateInputValue() {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return formatDateInputValue(tomorrow);
+  return fechaInputMvd(agregarDiasMvd(new Date(), 1));
 }
 
 function fullName(paciente: Pick<Paciente, "nombre" | "apellido">) {

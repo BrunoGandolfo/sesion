@@ -208,6 +208,21 @@ export const NO_VINO = "No vino";
 export const TURNO_SOLAPADO =
   "Ya tenés un turno a esa hora. Elegí otro horario, o cancelá el que está.";
 
+/** Revierte el cobro de un turno: vuelve a quedar sin cobrar. No es
+ *  "Anular" ni "Eliminar pago": no se borra nada, se deshace lo último. */
+export const DESHACER_COBRO = "Deshacer cobro";
+
+/** Confirmación: dice exactamente qué queda después. Se puede volver a
+ *  cobrar, así que no lleva tono de peligro. */
+export const DESHACER_COBRO_TITULO = "¿Deshacer el cobro?";
+export const DESHACER_COBRO_MENSAJE =
+  "El turno vuelve a quedar sin cobrar, con su monto en la deuda. Lo podés volver a cobrar cuando quieras.";
+export const DESHACER_COBRO_ACCION = "Deshacer el cobro";
+export const DESHACIENDO_COBRO = "Deshaciendo…";
+
+/** Confirmación de que quedó deshecho. */
+export const COBRO_DESHECHO = "Cobro deshecho";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Recordatorio de la sesión (el SMS)
 // Se llama igual que en "Tu consultorio": Recordatorio. No "aviso", no
@@ -449,6 +464,12 @@ export const HUECOS_EXPLICADOS =
 /** Falló la subida del audio. Lo importante es que no se perdió. */
 export const AUDIO_NO_GUARDADO =
   "No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de nuevo.";
+
+/** El audio se guardó pero el turno no llegó a quedar como realizado. Se
+ *  dice en ese orden: primero lo que sí se salvó (la sesión, que es lo
+ *  irrecuperable), después lo que falta y se puede repetir. */
+export const TURNO_NO_MARCADO =
+  "La sesión se guardó, pero el turno quedó como agendado. Probá de nuevo.";
 
 /** Falló el pipeline de transcripción o redacción. */
 export const NOTA_NO_ESCRITA = "No pudimos escribir la nota";

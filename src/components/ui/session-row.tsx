@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { TurnoConPaciente } from "@/types/domain";
+import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 import { hora, money } from "@/lib/format";
 import {
   AGENDADO,
@@ -60,11 +61,31 @@ function borderLeftClass(turno: TurnoConPaciente): string {
 }
 
 /**
+ * Se puede grabar mientras el turno siga vivo —programado o realizado— y sea
+ * del día de hoy en Montevideo (no en la zona del dispositivo: una sesión de
+ * las 21:30 es de hoy aunque el reloj UTC ya diga mañana).
+ *
+ * La hora del turno no entra en la cuenta. Antes la fila escondía "Grabar
+ * sesión" apenas pasaba la hora, y una sesión que empezó diez minutos tarde
+ * quedaba sin botón para grabarla —mientras la API y el FAB de la ficha la
+ * dejaban grabar igual. El límite real es el día: grabar el turno de ayer no
+ * es grabar una sesión, es otra cosa.
+ */
+export function puedeGrabarseHoy(
+  turno: Pick<TurnoConPaciente, "estado" | "fecha">,
+  ahora: Date,
+): boolean {
+  if (turno.estado !== "programado" && turno.estado !== "realizado") return false;
+  return esMismoDiaMvd(turno.fecha, ahora);
+}
+
+/**
  * Orden de precedencia, el mismo que la card de Ahora: sin autorización no
  * se graba; una nota escrita se revisa antes que nada; una sesión cuya hora
  * ya pasó y sigue impaga se cobra —aunque el turno todavía figure como
- * programado, porque el caso de uso de cobrar lo marca realizado—; y si la
- * hora no llegó, se graba. Sin handler, la fila muestra el chip de estado.
+ * programado, porque el caso de uso de cobrar lo marca realizado—; y si no
+ * hay cobro pendiente, se graba. Sin handler, la fila muestra el chip de
+ * estado.
  */
 function accionDe({
   turno,
@@ -98,7 +119,13 @@ function accionDe({
     return { label: "Cobrar", tono: "gold", onClick: onCobrar };
   }
 
-  if (!horaPasada && onGrabar) {
+  // Sin `ahora` no se puede saber si el turno es de hoy: se conserva la regla
+  // vieja (se graba lo que todavía figura como programado).
+  const puedeGrabar = ahora
+    ? puedeGrabarseHoy(turno, ahora)
+    : turno.estado === "programado";
+
+  if (puedeGrabar && onGrabar) {
     return { label: GRABAR_SESION, tono: "gold", onClick: onGrabar };
   }
 

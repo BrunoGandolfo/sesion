@@ -24,7 +24,11 @@ import {
 } from "@/components/grabacion/GrabadorSesion";
 import { Button, Confirmar, Toast } from "@/components/ui";
 import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
-import { subirAudioCifrado, volverAGrabando } from "@/hooks/useGrabacionSesion";
+import {
+  marcarTurnoRealizado,
+  subirAudioCifrado,
+  volverAGrabando,
+} from "@/hooks/useGrabacionSesion";
 import { apiGet, apiPatch, apiPost } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
@@ -39,6 +43,7 @@ import {
   PAUSAR,
   REANUDAR,
   TERMINAR_SESION,
+  TURNO_NO_MARCADO,
 } from "@/lib/glosario";
 
 import { MedidorAudio } from "./medidor-audio";
@@ -62,7 +67,15 @@ interface GrabarViewProps {
   autorizacionVigente: boolean;
 }
 
-type Fase = "previo" | "preparando" | "guardando" | "guardado" | "no-guardado";
+type Fase =
+  | "previo"
+  | "preparando"
+  | "guardando"
+  | "guardado"
+  | "no-guardado"
+  // El audio ya está en R2 y la nota está en camino; lo único que falló es
+  // marcar el turno como realizado. No se vuelve a la ficha hasta resolverlo.
+  | "turno-sin-marcar";
 
 type TurnoApi = { id: string; fecha: string };
 type SesionApi = { id: string; estado: string };
@@ -123,10 +136,17 @@ export function GrabarView({
 
         if (turnoProgramadoRef.current) {
           try {
-            await apiPatch(`/api/turnos/${turno}`, { estado: "realizado" });
+            await marcarTurnoRealizado(turno);
             turnoProgramadoRef.current = false;
-          } catch {
-            // best-effort: el audio ya está a salvo en R2.
+          } catch (error) {
+            // El audio ya está a salvo y la nota se está escribiendo: no se
+            // pierde nada. Lo que falta es el estado del turno, y eso se
+            // dice y se puede repetir, en vez de tragarlo.
+            console.warn("[grabar] el turno no quedó realizado", error);
+            setErrorPantalla(TURNO_NO_MARCADO);
+            setToast({ open: true, message: TURNO_NO_MARCADO });
+            setFase("turno-sin-marcar");
+            return;
           }
         }
 
@@ -246,6 +266,27 @@ export function GrabarView({
     router.push(`/pacientes/${pacienteId}`);
   }
 
+  /** Repite solo el PATCH del turno: el audio ya está subido. */
+  async function reintentarMarcarRealizado() {
+    const turno = turnoIdRef.current;
+
+    if (!turno) {
+      setToast({ open: true, message: ALGO_FALLO });
+      return;
+    }
+
+    try {
+      await marcarTurnoRealizado(turno);
+      turnoProgramadoRef.current = false;
+      setErrorPantalla(null);
+      setFase("guardado");
+      setToast({ open: true, message: NOTA_EN_CAMINO });
+    } catch (error) {
+      console.warn("[grabar] el turno no quedó realizado", error);
+      setToast({ open: true, message: TURNO_NO_MARCADO });
+    }
+  }
+
   function reintentarSubida() {
     const datos = audioRef.current;
 
@@ -294,9 +335,14 @@ export function GrabarView({
             progreso={fase === "guardado" ? 100 : progreso}
           />
         ) : fase === "no-guardado" ? (
-          <PantallaNoGuardado
+          <PantallaConReintento
             mensaje={errorPantalla ?? AUDIO_NO_GUARDADO}
             onReintentar={reintentarSubida}
+          />
+        ) : fase === "turno-sin-marcar" ? (
+          <PantallaConReintento
+            mensaje={errorPantalla ?? TURNO_NO_MARCADO}
+            onReintentar={() => void reintentarMarcarRealizado()}
           />
         ) : enCurso ? (
           <PantallaGrabando
@@ -595,7 +641,9 @@ function PantallaGuardando({ progreso }: { progreso: number | null }) {
   );
 }
 
-function PantallaNoGuardado({
+// Un mensaje y un botón para volver a intentar. Lo usan los dos fallos que
+// no pierden nada: la subida del audio y el turno que no quedó realizado.
+function PantallaConReintento({
   mensaje,
   onReintentar,
 }: {
