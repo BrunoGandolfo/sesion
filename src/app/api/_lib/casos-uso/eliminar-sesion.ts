@@ -7,6 +7,31 @@
 //   - resolverGrabacionAbandonada: huérfana en "grabando"; con audio pasa a
 //     error, sin audio se elimina.
 // Cualquier otro estado → ApiError 409.
+//
+// ─── LA INTENCIÓN LA TRAE QUIEN LLAMA ───────────────────────────────────────
+//
+// Hasta acá el estado de la fila era lo ÚNICO que decidía qué pasaba, y las
+// dos acciones de la pantalla de la nota —"Descartar" y "Eliminar"— mandaban
+// exactamente el mismo request. Los dos textos prometen cosas opuestas:
+//
+//   Descartar → "Se puede deshacer: la sesión vuelve a error y la podés
+//                volver a escribir. La transcripción y el audio se conservan."
+//   Eliminar  → "Se borran la sesión y su audio. No queda registro y no se
+//                puede deshacer."
+//
+// Con la intención implícita, entre que la pantalla se dibujó y la usuaria
+// tocó el botón la fila puede haber cambiado de estado —el worker contestó,
+// otra pestaña descartó— y entonces se confirma una cosa y ocurre la otra.
+// El caso feo es concreto: leer "se puede deshacer", tocar, y que la sesión
+// se borre para siempre porque mientras tanto había pasado a "error".
+//
+// Ahora la intención viaja explícita y el caso de uso la contrasta con el
+// estado real. Si no coinciden, 409 y no se toca nada: quien pidió descartar
+// nunca elimina, y quien pidió eliminar nunca descarta.
+//
+// La comprobación vive acá y no en la ruta a propósito: el estado se lee una
+// sola vez, y validar en la ruta obligaría a leerlo dos veces con una ventana
+// en el medio, que es justamente lo que se está cerrando.
 
 import type { db } from "@/lib/db";
 import { cifrarSesion } from "@/lib/prisma-encryption";
@@ -18,11 +43,27 @@ import { assertTransicionValida, extraerClaveTemporal } from "../sesion-clinica"
 
 type ClientePrisma = typeof db;
 
+/**
+ * Qué pidió quien llama, con las mismas palabras que la pantalla:
+ *
+ *   "descartar" — tirar lo generado y conservar lo grabado. Vale sobre una
+ *     nota en revisión y sobre una grabación abandonada. (Si esa grabación no
+ *     llegó a subir audio no queda nada que conservar y la fila se elimina:
+ *     el resultado es un borrado, la intención sigue siendo descartar.)
+ *
+ *   "eliminar" — borrado definitivo, con el audio. Solo sobre una sesión en
+ *     error, que es el único estado desde el que la pantalla lo ofrece.
+ */
+export const ACCIONES_ELIMINAR = ["descartar", "eliminar"] as const;
+export type AccionEliminar = (typeof ACCIONES_ELIMINAR)[number];
+
 export interface EliminarSesionInput {
   prisma: ClientePrisma;
   sesionId: string;
   organizationId: string;
   usuarioId: string;
+  /** Qué pidió la usuaria. Se contrasta con el estado real de la fila. */
+  accion: AccionEliminar;
   /** Borrado best-effort del audio en R2: true si ya no queda audio. */
   borrarAudio: (audioR2Key: string | null) => Promise<boolean>;
   registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
@@ -179,10 +220,36 @@ async function resolverGrabacionAbandonada(
   return { tipo: "eliminada" };
 }
 
+/**
+ * El desacuerdo entre lo que se pidió y lo que la fila permite, dicho de
+ * manera que la pantalla lo pueda mostrar tal cual: qué pasó, y qué se puede
+ * hacer ahora. No dice "409": dice que la sesión cambió.
+ */
+function conflictoDeIntencion(
+  accion: AccionEliminar,
+  estado: string,
+): ApiError {
+  if (accion === "descartar") {
+    return new ApiError(
+      estado === "error"
+        ? "Esta nota ya está descartada: la sesión quedó en error. Podés volver a escribirla o eliminarla definitivamente."
+        : `La sesión cambió mientras mirabas la pantalla y ya no tiene una nota para descartar (estado actual: ${estado}). Volvé a abrirla.`,
+      409,
+    );
+  }
+
+  return new ApiError(
+    estado === "revision"
+      ? "Esta sesión tiene una nota esperando revisión: no se elimina sin descartarla antes. Volvé a abrirla."
+      : `La sesión cambió mientras mirabas la pantalla y todavía no se puede eliminar (estado actual: ${estado}). Volvé a abrirla.`,
+    409,
+  );
+}
+
 export async function eliminarSesion(
   input: EliminarSesionInput,
 ): Promise<ResultadoEliminarSesion> {
-  const { prisma, sesionId, organizationId } = input;
+  const { prisma, sesionId, organizationId, accion } = input;
 
   const existente = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
@@ -202,15 +269,27 @@ export async function eliminarSesion(
 
   const ctx: Contexto = { ...input, existente };
 
+  // Cada rama exige SU intención. El orden es el de antes (el estado sigue
+  // eligiendo la rama); lo nuevo es que una intención que no le corresponde
+  // no cae a la rama siguiente, corta acá.
   if (existente.estado === "revision") {
+    if (accion !== "descartar") {
+      throw conflictoDeIntencion(accion, existente.estado);
+    }
     return descartarNotaEnRevision(ctx);
   }
 
   if (existente.estado === "error") {
+    if (accion !== "eliminar") {
+      throw conflictoDeIntencion(accion, existente.estado);
+    }
     return eliminarSesionConError(ctx);
   }
 
   if (existente.estado === "grabando" && esSesionHuerfana(existente)) {
+    if (accion !== "descartar") {
+      throw conflictoDeIntencion(accion, existente.estado);
+    }
     return resolverGrabacionAbandonada(ctx);
   }
 

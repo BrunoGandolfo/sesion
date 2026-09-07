@@ -473,6 +473,27 @@ describe("DELETE /api/sesion-clinica/[id] — aislamiento entre organizaciones",
       await prismaRaw.sesionClinica.count({ where: { id: sesionId } }),
     ).toBe(1);
   });
+
+  it("sin decir qué se pide, 400 y no se toca nada", async () => {
+    // La intención es obligatoria (A5): sin ella el estado de la fila
+    // volvería a decidir solo entre descartar y borrar para siempre.
+    const a = await crearOrg();
+    const sesionId = await crearSesionEnEstado(a, "revision");
+    como(a);
+
+    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
+      params: Promise.resolve({ id: sesionId }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(
+      (
+        await prismaRaw.sesionClinica.findUniqueOrThrow({
+          where: { id: sesionId },
+        })
+      ).estado,
+    ).toBe("revision");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

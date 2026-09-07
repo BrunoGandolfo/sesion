@@ -554,6 +554,7 @@ describe("eliminarSesion", () => {
       sesionId,
       organizationId: orgId,
       usuarioId: "u1",
+      accion: "descartar",
       ...stubs,
     });
 
@@ -588,6 +589,7 @@ describe("eliminarSesion", () => {
       sesionId,
       organizationId: orgId,
       usuarioId: "u1",
+      accion: "eliminar",
       ...stubs,
     });
 
@@ -610,6 +612,7 @@ describe("eliminarSesion", () => {
         sesionId,
         organizationId: orgId,
         usuarioId: "u1",
+        accion: "eliminar",
         ...stubs,
       }),
       409,
@@ -642,6 +645,7 @@ describe("eliminarSesion", () => {
       sesionId: conAudio.sesionId,
       organizationId: conAudio.orgId,
       usuarioId: "u1",
+      accion: "descartar",
       ...stubs,
     });
     expect(r1).toEqual({ tipo: "grabacion_abandonada_a_error" });
@@ -656,6 +660,7 @@ describe("eliminarSesion", () => {
       sesionId: sinAudio.sesionId,
       organizationId: sinAudio.orgId,
       usuarioId: "u1",
+      accion: "descartar",
       ...stubs,
     });
     expect(r2).toEqual({ tipo: "eliminada" });
@@ -682,6 +687,7 @@ describe("eliminarSesion", () => {
         sesionId: activa.sesionId,
         organizationId: activa.orgId,
         usuarioId: "u1",
+        accion: "descartar",
         ...stubs,
       }),
       409,
@@ -692,6 +698,7 @@ describe("eliminarSesion", () => {
         sesionId: aprobada.sesionId,
         organizationId: aprobada.orgId,
         usuarioId: "u1",
+        accion: "descartar",
         ...stubs,
       }),
       409,
@@ -700,6 +707,127 @@ describe("eliminarSesion", () => {
       await db.sesionClinica.findUnique({ where: { id: activa.sesionId } }),
     ).not.toBeNull();
     expect(stubs.eventos).toHaveLength(0);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // A5 — la intención tiene que coincidir con el estado.
+  //
+  // Antes las dos acciones de la pantalla mandaban el mismo request y el
+  // estado de la fila decidía cuál ocurría. Entre que la pantalla se dibujó
+  // y la usuaria tocó el botón, el estado puede haber cambiado: se
+  // confirmaba "se puede deshacer" y se ejecutaba el borrado definitivo.
+  //
+  // Las cuatro combinaciones de (intención × estado), en una tabla: las dos
+  // que corresponden hacen lo suyo, las dos cruzadas dan 409 y no tocan
+  // nada.
+  // ───────────────────────────────────────────────────────────────────────
+  describe("la intención se contrasta con el estado", () => {
+    it("descartar sobre una nota en revisión: la descarta", async () => {
+      const { sesionId, orgId } = await crearSesion({
+        estado: "revision",
+        audioR2Key: "audio/e.enc",
+        notaSubjetivo: "nota generada",
+      });
+      const stubs = crearStubs();
+
+      const resultado = await eliminarSesion({
+        prisma: db,
+        sesionId,
+        organizationId: orgId,
+        usuarioId: "u1",
+        accion: "descartar",
+        ...stubs,
+      });
+
+      expect(resultado).toEqual({
+        tipo: "nota_descartada",
+        audioConservado: true,
+      });
+    });
+
+    it("eliminar sobre una sesión en error: la elimina", async () => {
+      const { sesionId, orgId } = await crearSesion({
+        estado: "error",
+        audioR2Key: "audio/f.enc",
+      });
+      const stubs = crearStubs(true);
+
+      const resultado = await eliminarSesion({
+        prisma: db,
+        sesionId,
+        organizationId: orgId,
+        usuarioId: "u1",
+        accion: "eliminar",
+        ...stubs,
+      });
+
+      expect(resultado).toEqual({ tipo: "eliminada" });
+    });
+
+    it("eliminar sobre una nota en revisión: 409 y la nota sigue ahí", async () => {
+      // El caso peligroso al revés: quien tocó "Eliminar" en una pantalla
+      // vieja no se lleva por delante una nota que mientras tanto llegó.
+      const { sesionId, orgId } = await crearSesion({
+        estado: "revision",
+        audioR2Key: "audio/g.enc",
+        notaSubjetivo: "nota generada",
+      });
+      const stubs = crearStubs(true);
+
+      const error = await esperarApiError(
+        eliminarSesion({
+          prisma: db,
+          sesionId,
+          organizationId: orgId,
+          usuarioId: "u1",
+          accion: "eliminar",
+          ...stubs,
+        }),
+        409,
+      );
+      expect(error.message).toMatch(/esperando revisión/);
+
+      const fila = await db.sesionClinica.findUnique({
+        where: { id: sesionId },
+      });
+      expect(fila?.estado).toBe("revision");
+      expect(fila?.notaSubjetivo).toBe("nota generada");
+      // Ni se borró el audio ni se auditó nada.
+      expect(stubs.borrados).toHaveLength(0);
+      expect(stubs.eventos).toHaveLength(0);
+    });
+
+    it("descartar sobre una sesión en error: 409 y no se borra nada", async () => {
+      // Éste es EL caso: la usuaria leyó "se puede deshacer, la
+      // transcripción y el audio se conservan" y, con la intención
+      // implícita, la fila en error hacía el borrado definitivo.
+      const { sesionId, orgId } = await crearSesion({
+        estado: "error",
+        audioR2Key: "audio/h.enc",
+      });
+      const stubs = crearStubs(true);
+
+      const error = await esperarApiError(
+        eliminarSesion({
+          prisma: db,
+          sesionId,
+          organizationId: orgId,
+          usuarioId: "u1",
+          accion: "descartar",
+          ...stubs,
+        }),
+        409,
+      );
+      expect(error.message).toMatch(/ya está descartada/);
+
+      const fila = await db.sesionClinica.findUnique({
+        where: { id: sesionId },
+      });
+      expect(fila).not.toBeNull();
+      expect(fila?.audioR2Key).toBe("audio/h.enc");
+      expect(stubs.borrados).toHaveLength(0);
+      expect(stubs.eventos).toHaveLength(0);
+    });
   });
 });
 
