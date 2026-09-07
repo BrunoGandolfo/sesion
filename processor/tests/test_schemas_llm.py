@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 import clinical_analyzer
+import config
 from errores import PipelineError
 from schemas_llm import (
     ALIANZAS,
@@ -82,7 +83,7 @@ def _mockear_cliente(mocker, respuesta):
 def test_parsea_json_valido(mocker):
     esperado = _nota()
     _mockear_cliente(mocker, _respuesta(json.dumps(esperado)))
-    assert clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA) == esperado
+    assert clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, config.LLM_MAX_TOKENS) == esperado
 
 
 def test_texto_antes_del_json_es_llm_json_invalido(mocker):
@@ -91,7 +92,7 @@ def test_texto_antes_del_json_es_llm_json_invalido(mocker):
     texto = "Claro, aca va la nota:\n" + json.dumps(_nota())
     _mockear_cliente(mocker, _respuesta(texto))
     with pytest.raises(PipelineError) as exc:
-        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA)
+        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, config.LLM_MAX_TOKENS)
     assert exc.value.codigo == "llm_json_invalido"
     assert "Claro" not in str(exc.value)
 
@@ -99,7 +100,7 @@ def test_texto_antes_del_json_es_llm_json_invalido(mocker):
 def test_respuesta_truncada_es_llm_truncado(mocker):
     _mockear_cliente(mocker, _respuesta("{", stop_reason="max_tokens"))
     with pytest.raises(PipelineError) as exc:
-        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA)
+        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, config.LLM_MAX_TOKENS)
     assert exc.value.codigo == "llm_truncado"
 
 
@@ -108,7 +109,7 @@ def test_sin_bloque_de_texto_es_llm_sin_texto(mocker):
     respuesta.content = [SimpleNamespace(type="tool_use", text=None)]
     _mockear_cliente(mocker, respuesta)
     with pytest.raises(PipelineError) as exc:
-        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA)
+        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, config.LLM_MAX_TOKENS)
     assert exc.value.codigo == "llm_sin_texto"
 
 

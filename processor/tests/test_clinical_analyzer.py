@@ -11,6 +11,7 @@ Sin red: se mockea _llamar_llm, que es la frontera con Anthropic.
 import pytest
 
 import clinical_analyzer
+import config
 from clinical_analyzer import DiagnosticoLLM
 from errores import PipelineError
 from schemas_llm import SCHEMA_NOTA, validar_estructura_nota
@@ -148,9 +149,11 @@ def test_json_invalido_dos_veces_propaga_el_error_original(llm):
 
 
 @pytest.mark.parametrize(
-    "codigo", ["llm_timeout", "llm_error", "llm_truncado", "llm_rechazo"]
+    "codigo", ["llm_timeout", "llm_error", "llm_rechazo"]
 )
 def test_los_fallos_de_transporte_no_se_reintentan(llm, codigo):
+    # `llm_truncado` salio de esta lista el 2026-09-07: dejo de tratarse como
+    # un fallo terminal y pasa a reintentarse (ver los tests de mas abajo).
     llm.side_effect = [PipelineError(codigo, "fallo"), _nota()]
 
     with pytest.raises(PipelineError) as exc:
@@ -260,7 +263,7 @@ def test_feedback_que_falla_dos_veces_no_tira_la_sesion(llm, prompt):
     assert feedback is None
     assert nombre == "therapist_feedback_v1.1.md"
     assert diagnostico.advertencias == [
-        "feedbackTerapeuta no disponible: llm_estructura_invalida"
+        "feedback_no_generado: llm_estructura_invalida"
     ]
 
 
@@ -279,6 +282,107 @@ def test_feedback_gestalt_usa_su_prompt_y_su_validador(llm, prompt):
     assert nombre == "therapist_feedback_gestalt_v1.1.md"
     assert diagnostico.reintentos == 0
     assert feedback["itemsGTFS"][0]["score"] == 1
+
+
+# Respuesta truncada (llm_truncado) ─────────────────────────────────────────
+#
+# El caso del fin de semana del 6-7/9/2026: 5 de 8 sesiones terminaron con
+# "llm_truncado: Respuesta truncada en 8192 tokens" y quedaron sin "Para vos",
+# sin reintento y sin rastro en el payload. Tres cosas se arreglaron y estas
+# son las tres: el techo propio del feedback, el reintento, y la advertencia
+# con clave estable cuando aun asi no sale.
+
+def _truncado(tope: int = 8192) -> PipelineError:
+    return PipelineError("llm_truncado", f"Respuesta truncada en {tope} tokens")
+
+
+def test_feedback_truncado_reintenta_y_sale(llm, prompt):
+    llm.side_effect = [_truncado(), _feedback_cbt_mi()]
+
+    feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+
+    assert llm.call_count == 2
+    assert diagnostico.reintentos == 1
+    assert diagnostico.advertencias == []
+    assert feedback["mitiCounts"]["Q"] == 1
+
+
+def test_el_reintento_por_truncado_repite_el_pedido_sin_correccion(llm, prompt):
+    # Un bloque de correccion pidiendo "algo mas corto" seria decidir por
+    # Mariana cuanto dura el feedback. El pedido se repite igual.
+    llm.side_effect = [_truncado(), _feedback_cbt_mi()]
+
+    clinical_analyzer.generar_feedback_terapeuta("t")
+
+    primera = llm.call_args_list[0].args[1]
+    segunda = llm.call_args_list[1].args[1]
+    assert segunda == primera
+    assert "<correccion>" not in segunda
+
+
+def test_feedback_truncado_dos_veces_deja_advertencia_y_no_inventa_nada(llm, prompt):
+    llm.side_effect = [_truncado(16384), _truncado(16384)]
+
+    feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+
+    assert llm.call_count == 2
+    # Regla 13 del prompt de nota: null antes que inventar.
+    assert feedback is None
+    assert nombre == "therapist_feedback_v1.1.md"
+    assert diagnostico.advertencias == ["feedback_no_generado: llm_truncado"]
+
+
+def test_la_nota_tambien_reintenta_si_viene_truncada(llm):
+    llm.side_effect = [_truncado(), _nota()]
+
+    resultado, reintentos = _validando()
+
+    assert reintentos == 1
+    assert resultado["nota"]["analisis"] == "a"
+
+
+def test_la_nota_truncada_dos_veces_propaga_el_codigo(llm):
+    llm.side_effect = [_truncado(), _truncado()]
+
+    with pytest.raises(PipelineError) as exc:
+        _validando()
+
+    assert exc.value.codigo == "llm_truncado"
+    assert llm.call_count == 2
+
+
+# El techo de tokens de cada llamada ────────────────────────────────────────
+
+def test_el_feedback_pide_16384_tokens(llm, prompt):
+    llm.side_effect = [_feedback_cbt_mi()]
+
+    clinical_analyzer.generar_feedback_terapeuta("t")
+
+    assert config.LLM_MAX_TOKENS_FEEDBACK == 16384
+    assert llm.call_args.args[3] == 16384
+
+
+def test_el_feedback_gestalt_usa_el_mismo_techo(llm, prompt):
+    llm.side_effect = [{
+        "instrumento": "gestalt",
+        "itemsGTFS": [{"id": "gtfs_01", "score": 1}],
+        "fortalezas": [],
+        "areasCrecimiento": [],
+    }]
+
+    clinical_analyzer.generar_feedback_terapeuta("t", orientacion="gestalt")
+
+    assert llm.call_args.args[3] == config.LLM_MAX_TOKENS_FEEDBACK
+
+
+def test_la_nota_conserva_el_techo_comun(llm, prompt):
+    # Subir el del feedback no toca el de la nota.
+    llm.side_effect = [_nota()]
+
+    clinical_analyzer.analizar("[00:00] Terapeuta: hola")
+
+    assert llm.call_args.args[3] == config.LLM_MAX_TOKENS
+    assert config.LLM_MAX_TOKENS == 8192
 
 
 # Los prompts que declara PROMPTS existen en disco ──────────────────────────
