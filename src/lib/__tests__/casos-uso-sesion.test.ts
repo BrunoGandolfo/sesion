@@ -25,6 +25,7 @@ import type { EventoAuditoriaInput } from "@/app/api/_lib/auditoria-pura";
 import { aprobarSesion } from "@/app/api/_lib/casos-uso/aprobar-sesion";
 import {
   eliminarSesion,
+  MENSAJE_ELIMINACION_EN_CURSO,
   MENSAJE_AUDIO_NO_BORRADO,
 } from "@/app/api/_lib/casos-uso/eliminar-sesion";
 import {
@@ -1020,6 +1021,70 @@ describe("reintentarSesion", () => {
     const fila = await db.sesionClinica.findUnique({ where: { id: sesion.id } });
     expect(fila?.estado).toBe("error");
     expect(fila?.intentos).toBe(3);
+  });
+
+  it("una sesión en error con `error` NULO se puede reintentar igual", async () => {
+    // Codex P2: el primer intento de excluir el token de eliminación fue
+    // `NOT: { error: token }`, que Prisma traduce a `NOT (error = token)`.
+    // En SQL eso es NULL —no true— cuando la columna es NULL, así que la fila
+    // no matcheaba nunca: una sesión que conserva su audio quedaba
+    // contestando 409 para siempre. El estado es alcanzable (procesarCallback
+    // puede guardar un error sin texto).
+    const deps = await createDeps();
+    const sesion = await db.sesionClinica.create({
+      data: {
+        turnoId: deps.turnoId,
+        organizationId: deps.orgId,
+        estado: "error",
+        error: null,
+        intentos: 3,
+        audioR2Key: "audio/l.enc",
+      },
+    });
+    const stubs = crearStubs();
+
+    const resultado = await reintentarSesion({
+      prisma: db,
+      sesionId: sesion.id,
+      organizationId: deps.orgId,
+      usuarioId: "u1",
+      registrarAuditoria: stubs.registrarAuditoria,
+    });
+
+    expect(resultado.estado).toBe("procesando");
+    expect(
+      (await db.sesionClinica.findUnique({ where: { id: sesion.id } }))?.estado,
+    ).toBe("procesando");
+  });
+
+  it("con el token de eliminación puesto NO se reintenta", async () => {
+    const deps = await createDeps();
+    const sesion = await db.sesionClinica.create({
+      data: {
+        turnoId: deps.turnoId,
+        organizationId: deps.orgId,
+        estado: "error",
+        error: MENSAJE_ELIMINACION_EN_CURSO,
+        intentos: 3,
+        audioR2Key: "audio/m.enc",
+      },
+    });
+    const stubs = crearStubs();
+
+    const error = await esperarApiError(
+      reintentarSesion({
+        prisma: db,
+        sesionId: sesion.id,
+        organizationId: deps.orgId,
+        usuarioId: "u1",
+        registrarAuditoria: stubs.registrarAuditoria,
+      }),
+      409,
+    );
+    expect(error.message).toMatch(/se está eliminando/);
+    expect(
+      (await db.sesionClinica.findUnique({ where: { id: sesion.id } }))?.estado,
+    ).toBe("error");
   });
 
   it("con audio pasa a procesando, limpia el error, resetea intentos y audita", async () => {

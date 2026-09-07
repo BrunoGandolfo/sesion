@@ -77,17 +77,28 @@ export async function reintentarSesion({
   // organización, y entre la lectura y la escritura hay una ventana. Con
   // updateMany la pertenencia es parte de la operación.
   //
-  // Y el ESTADO y el token también, por esa misma ventana: sin ellos, este
+  // Y el ESTADO y el ERROR también, por esa misma ventana: sin ellos, este
   // reintento pisa una eliminación que empezó en el medio y el worker recibe
   // una sesión cuyo audio se está borrando. Con los dos en el WHERE, el
   // UPDATE condicionado toma el lock de la fila y reevalúa el predicado: o
   // gana el reintento, o no escribe nada.
+  //
+  // Se compara contra el VALOR LEÍDO y no con `NOT: { error: token }`, que
+  // fue el primer intento y estaba mal (Codex P2): Prisma lo traduce a
+  // `NOT (error = token)`, que en SQL es NULL —no true— cuando la columna es
+  // NULL. Una sesión en "error" con `error` nulo, que es un estado alcanzable
+  // (procesarCallback puede guardar un error sin texto), no matcheaba nunca:
+  // conservaba su audio y aun así el reintento contestaba 409 para siempre.
+  //
+  // Comparar contra lo leído arregla eso y además es más fuerte: excluye el
+  // token —si estuviera puesto, la guarda de más arriba ya habría cortado— y
+  // también cualquier otra escritura concurrente sobre la fila.
   const { count } = await prisma.sesionClinica.updateMany({
     where: {
       id: sesionId,
       organizationId,
       estado: existente.estado,
-      NOT: { error: MENSAJE_ELIMINACION_EN_CURSO },
+      error: existente.error,
     },
     data: {
       estado: "procesando",
