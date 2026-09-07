@@ -123,6 +123,19 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Una sola corrida de tests por vez en TODO el repositorio, cola en vez de
+    # cancelación. Los tests de integración vacían la rama de test de Neon con
+    # TRUNCATE ... CASCADE entre casos, y esa rama es una sola: dos corridas en
+    # paralelo (dos PRs, o un PR y el push a main) se borran las filas entre
+    # ellas y fallan con errores que no tienen nada que ver con el cambio.
+    #
+    # `cancel-in-progress: false` y no true, al revés que la concurrency de
+    # arriba: acá el objetivo no es ahorrar minutos sino no pisar la base. Una
+    # corrida a mitad de camino que se cancela deja la rama en un estado
+    # arbitrario para la que entra atrás.
+    concurrency:
+      group: neon-test-branch
+      cancel-in-progress: false
     env:
       # Rama de Neon dedicada a tests: los tests de integración hacen
       # TRUNCATE ... CASCADE entre casos. NUNCA la DB de producción.
