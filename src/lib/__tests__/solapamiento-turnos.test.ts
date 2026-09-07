@@ -479,6 +479,42 @@ describe("PATCH /api/turnos/[id] y el horario ocupado", () => {
     ).toBe("ausente");
   });
 
+  it("dos PATCH simultáneos sobre el mismo turno componen el intervalo sobre el resultado del otro", async () => {
+    // Codex P1 (segunda pasada): el intervalo final se componía con la fila
+    // leída ANTES del lock. Uno mueve el turno de 10:00 a 11:00 y el otro le
+    // cambia la duración a 90; el segundo espera el lock, valida el intervalo
+    // viejo (10:00-11:30), pasa, y su update parcial conserva las 11:00 recién
+    // commiteadas: el turno termina en 11:00-12:30, que nadie validó y que
+    // pisa al de las 11:30.
+    const orgId = await crearOrgConPacientes();
+    const movido = await turnoExistente(orgId, enUnaSemana(), 50);
+    // El que está en el camino del intervalo no validado.
+    await turnoExistente(orgId, enUnaSemana(90), 50);
+
+    const [a, b] = await Promise.all([
+      patchTurno(pedidoPatch({ fecha: enUnaSemana(60).toISOString() }), {
+        params: Promise.resolve({ id: movido }),
+      }),
+      patchTurno(pedidoPatch({ duracion: 90 }), {
+        params: Promise.resolve({ id: movido }),
+      }),
+    ]);
+
+    const fila = await prismaRaw.turno.findUniqueOrThrow({
+      where: { id: movido },
+    });
+    const fin =
+      fila.fecha.getTime() + fila.duracion * MS_POR_MINUTO;
+
+    // Sea cual sea el orden en que se resolvieron, el turno NO puede haber
+    // quedado pisando al de las 11:30. Que uno de los dos falle con 409 es
+    // aceptable; que los dos pasen y el resultado se solape, no.
+    expect(fin).toBeLessThanOrEqual(enUnaSemana(90).getTime());
+    expect([a.status, b.status].every((s) => s === 200 || s === 409)).toBe(
+      true,
+    );
+  });
+
   it("editar las notas de un turno que ya estaba solapado sigue funcionando", async () => {
     // Datos de antes de esta regla: no se revalida en cada edición, o el
     // turno quedaría sin poder tocarse nunca más.

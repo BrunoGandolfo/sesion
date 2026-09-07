@@ -67,8 +67,14 @@ type ClienteTurnos = Pick<typeof db, "turno" | "$executeRaw">;
  *
  * Colisión de hash entre dos organizaciones: dos agendas que se serializan
  * entre sí sin necesidad. No hay ningún problema de correctitud.
+ *
+ * Es re-entrante dentro de la misma transacción (Postgres lleva una cuenta y
+ * suelta todo al terminar), así que tomarlo de nuevo desde
+ * buscarTurnoSolapado no cuesta nada. Se exporta para que el PATCH lo tome
+ * ANTES de releer el turno: componer el intervalo final con datos de antes
+ * del lock es la carrera que el lock no cubre.
  */
-async function tomarLockDeAgenda(
+export async function tomarLockDeAgenda(
   prisma: ClienteTurnos,
   organizationId: string,
 ): Promise<void> {

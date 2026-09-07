@@ -867,6 +867,63 @@ describe("eliminarSesion", () => {
       expect(stubs.eventos).toHaveLength(0);
     });
 
+    it("un reintento que llega mientras se borra el audio no deja la sesión sin blob", async () => {
+      // Codex P1 (segunda pasada): la reserva por sí sola no alcanzaba. Un
+      // `updateMany` suelto autocommitea y suelta el lock de la fila antes
+      // del `await borrarAudio`, así que el reintento podía pasar la sesión a
+      // "procesando" mientras el blob se borraba: el DELETE final devolvía 0
+      // y contestaba 409, pero el worker quedaba con una sesión encolada sin
+      // audio.
+      //
+      // El doble mete el reintento DENTRO del borrado de R2, que es el único
+      // instante en que la ventana existía. Con la operación entera en una
+      // transacción, ese UPDATE espera al commit y no llega a ganar.
+      const { sesionId, orgId } = await crearSesion({
+        estado: "error",
+        audioR2Key: "audio/k.enc",
+      });
+
+      const borrados: string[] = [];
+      let reintentoFallo: unknown = null;
+
+      const resultado = await eliminarSesion({
+        prisma: db,
+        sesionId,
+        organizationId: orgId,
+        usuarioId: "u1",
+        accion: "eliminar",
+        borrarAudio: async (key) => {
+          // El reintento REAL, exactamente en el medio: es el que tiene que
+          // rebotar contra el token.
+          reintentoFallo = await reintentarSesion({
+            prisma: db,
+            sesionId,
+            organizationId: orgId,
+            usuarioId: "u2",
+            registrarAuditoria: async () => {},
+          }).then(
+            () => null,
+            (error: unknown) => error,
+          );
+          if (key) borrados.push(key);
+          return true;
+        },
+        registrarAuditoria: async () => {},
+      });
+
+      // El reintento no pudo: la sesión se estaba eliminando.
+      expect(reintentoFallo).toBeInstanceOf(ApiError);
+      expect((reintentoFallo as ApiError).status).toBe(409);
+
+      // Y la eliminación siguió su curso: fila y blob se fueron juntos. La
+      // invariante es que nunca queda una sesión viva sin audio.
+      expect(resultado).toEqual({ tipo: "eliminada" });
+      expect(borrados).toEqual(["audio/k.enc"]);
+      expect(
+        await db.sesionClinica.findUnique({ where: { id: sesionId } }),
+      ).toBeNull();
+    });
+
     it("descartar mientras la nota se aprueba en otra pestaña: 409 y no se pisa", async () => {
       const { sesionId, orgId } = await crearSesion({
         estado: "revision",

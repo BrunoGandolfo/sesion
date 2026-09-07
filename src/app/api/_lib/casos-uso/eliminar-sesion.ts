@@ -78,9 +78,12 @@ export const MENSAJE_AUDIO_NO_BORRADO =
   "No se pudo borrar el audio en R2; la sesión se conserva para reintentar la eliminación";
 
 /**
- * Marca que deja la reserva del borrado definitivo mientras se borra el audio
- * en R2. Si aparece en una fila viva, la eliminación se cortó entre el
- * borrado del blob y el DELETE: el audio puede no estar aunque la sesión sí.
+ * Token de la reserva del borrado definitivo. Se escribe en `error` antes de
+ * tocar R2 y es lo que impide que un reintento concurrente re-encole la
+ * sesión mientras el audio se está borrando: `reintentarSesion` lo rechaza.
+ *
+ * Si aparece en una fila viva, la eliminación se cortó entre el borrado del
+ * blob y el DELETE: el audio puede no estar aunque la sesión sí.
  */
 export const MENSAJE_ELIMINACION_EN_CURSO =
   "Eliminación en curso: se está borrando el audio antes de eliminar la sesión";
@@ -211,16 +214,35 @@ async function eliminarSesionConError(
 ): Promise<ResultadoEliminarSesion> {
   const { prisma, existente, borrarAudio } = ctx;
 
-  // La reserva va ANTES de tocar R2, y es lo que hace que el borrado del
-  // audio no ocurra sobre una sesión que dejó de estar en "error".
+  // ─── UN TOKEN, NO UN LOCK ────────────────────────────────────────────────
   //
-  // El orden importa: si primero se borrara el blob y recién después se
-  // condicionara el DELETE, un reintento concurrente ganaría la carrera y
-  // dejaría una sesión "procesando" cuyo audio ya no existe — el worker la
-  // levantaría para no encontrar nada. Escribir la marca en `error` con el
-  // estado en el WHERE toma el lock de la fila: el PATCH que re-encola espera
-  // a que esta transacción termine, y si llegó primero, acá el count es 0 y
-  // no se borra nada.
+  // Dos intentos previos y por qué no alcanzaban (Codex P1, dos pasadas):
+  //
+  //   1. Condicionar sólo el DELETE final al estado. El audio se borra ANTES,
+  //      así que el reintento gana la carrera, el DELETE devuelve 0 y queda
+  //      una sesión "procesando" cuyo blob ya no existe.
+  //
+  //   2. Agregar una reserva (updateMany condicionado) antes del borrado. Un
+  //      updateMany suelto autocommitea: suelta el lock de la fila antes del
+  //      `await borrarAudio` y deja la fila en "error", que es exactamente lo
+  //      que el reintento necesita para pasar. Misma ventana.
+  //
+  // Y meter todo en una transacción para sostener el lock tampoco sirve, por
+  // dos motivos que se ven al escribir el test: cualquier escritor concurrente
+  // de esa fila queda bloqueado toda la llamada de red, y si la transacción
+  // expira se revierte la base pero NO el borrado en R2 — el efecto que hay
+  // que proteger es justamente el que no participa de la transacción.
+  //
+  // Lo que sí cierra la ventana es un token: la reserva escribe una marca en
+  // `error`, y `reintentarSesion` se niega a re-encolar una sesión que la
+  // tiene (ver reintentar-sesion.ts, que además condiciona su propia
+  // escritura). El token sobrevive al autocommit, que es lo que un lock no
+  // hace, y no bloquea a nadie.
+  //
+  // Si el proceso se muere entre el borrado del blob y el DELETE, la fila
+  // queda con el token: dice lo que pasó, el reintento la rechaza —así que el
+  // worker nunca recibe una sesión sin audio— y lo único que se puede hacer
+  // con ella, eliminarla, es lo que se estaba pidiendo.
   const reserva = await prisma.sesionClinica.updateMany({
     where: suya(ctx),
     data: { error: MENSAJE_ELIMINACION_EN_CURSO },
@@ -231,15 +253,21 @@ async function eliminarSesionConError(
   }
 
   const audioBorrado = await borrarAudio(existente.audioR2Key);
+
   if (!audioBorrado && tieneAudioReal(existente.audioR2Key)) {
+    // El token se reemplaza por el motivo real: el audio sigue estando, así
+    // que la sesión vuelve a ser reintentable y eliminable.
     await prisma.sesionClinica.updateMany({
-      where: suya(ctx),
+      where: { ...suya(ctx), error: MENSAJE_ELIMINACION_EN_CURSO },
       data: { error: MENSAJE_AUDIO_NO_BORRADO },
     });
     throw new ApiError(MENSAJE_AUDIO_NO_BORRADO, 409);
   }
 
-  const borrada = await prisma.sesionClinica.deleteMany({ where: suya(ctx) });
+  // El token va en el WHERE junto con el estado: sólo borra quien reservó.
+  const borrada = await prisma.sesionClinica.deleteMany({
+    where: { ...suya(ctx), error: MENSAJE_ELIMINACION_EN_CURSO },
+  });
 
   if (borrada.count === 0) {
     throw cambioEnElMedio(existente.estado);

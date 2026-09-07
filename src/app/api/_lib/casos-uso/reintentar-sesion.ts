@@ -11,6 +11,7 @@
 import type { db } from "@/lib/db";
 
 import type { EventoAuditoriaInput } from "../auditoria-pura";
+import { MENSAJE_ELIMINACION_EN_CURSO } from "./eliminar-sesion";
 import { ApiError } from "../responses";
 import {
   assertTransicionValida,
@@ -43,7 +44,7 @@ export async function reintentarSesion({
 }: ReintentarSesionInput): Promise<FilaSesionClinica> {
   const existente = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
-    select: { id: true, estado: true, audioR2Key: true },
+    select: { id: true, estado: true, audioR2Key: true, error: true },
   });
 
   if (!existente) {
@@ -59,12 +60,35 @@ export async function reintentarSesion({
     );
   }
 
+  // La otra mitad de la reserva del borrado definitivo (ver
+  // MENSAJE_ELIMINACION_EN_CURSO en eliminar-sesion.ts): mientras esa marca
+  // esté puesta, el audio se está borrando en R2 y re-encolar la sesión
+  // dejaría al worker con una sesión sin blob. Es un token, no un lock, justo
+  // porque sobrevive al autocommit de quien lo escribió.
+  if (existente.error === MENSAJE_ELIMINACION_EN_CURSO) {
+    throw new ApiError(
+      "Esta sesión se está eliminando: no se puede reintentar.",
+      409,
+    );
+  }
+
   // La organización va en el WHERE de la ESCRITURA, no sólo en el findFirst
   // de arriba: `update({ where: { id } })` escribe la fila aunque sea de otra
   // organización, y entre la lectura y la escritura hay una ventana. Con
   // updateMany la pertenencia es parte de la operación.
+  //
+  // Y el ESTADO y el token también, por esa misma ventana: sin ellos, este
+  // reintento pisa una eliminación que empezó en el medio y el worker recibe
+  // una sesión cuyo audio se está borrando. Con los dos en el WHERE, el
+  // UPDATE condicionado toma el lock de la fila y reevalúa el predicado: o
+  // gana el reintento, o no escribe nada.
   const { count } = await prisma.sesionClinica.updateMany({
-    where: { id: sesionId, organizationId },
+    where: {
+      id: sesionId,
+      organizationId,
+      estado: existente.estado,
+      NOT: { error: MENSAJE_ELIMINACION_EN_CURSO },
+    },
     data: {
       estado: "procesando",
       duracionAudioSeg,
@@ -75,7 +99,12 @@ export async function reintentarSesion({
   });
 
   if (count === 0) {
-    throw new ApiError("Sesión clínica no encontrada", 404);
+    // Con el estado y el token en el WHERE, 0 ya no significa sólo "no
+    // existe": también "cambió mientras se procesaba el pedido".
+    throw new ApiError(
+      "La sesión cambió mientras se procesaba el pedido. Volvé a abrirla.",
+      409,
+    );
   }
 
   const sesion = await prisma.sesionClinica.findFirstOrThrow({

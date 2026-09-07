@@ -10,6 +10,7 @@ import {
 import {
   assertSinSolapamiento,
   ESTADOS_QUE_OCUPAN,
+  tomarLockDeAgenda,
 } from "../../_lib/casos-uso/solapamiento-turnos";
 import {
   duracionSchema,
@@ -47,30 +48,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return validationError(parsed.error);
     }
 
-    const existing = await db.turno.findFirst({
-      where: { id, organizationId },
-    });
-
-    if (!existing) {
-      throw new ApiError("Turno no encontrado", 404);
-    }
-
-    if (existing.estado === "cancelado" && parsed.data.estado !== undefined) {
-      throw new ApiError("No se puede reabrir un turno cancelado", 400);
-    }
-
     const changesDetails =
       parsed.data.fecha !== undefined ||
       parsed.data.duracion !== undefined ||
       parsed.data.modalidad !== undefined ||
       parsed.data.notas !== undefined;
-
-    if (changesDetails && existing.estado !== "programado") {
-      throw new ApiError(
-        "Solo se pueden editar datos de turnos programados",
-        400,
-      );
-    }
 
     const data = {
       fecha:
@@ -83,36 +65,73 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       estado: parsed.data.estado,
     };
 
-    // El intervalo en el que va a quedar el turno después de este PATCH: lo
-    // que se manda, o lo que ya tenía.
-    const fechaFinal = data.fecha ?? existing.fecha;
-    const duracionFinal = data.duracion ?? existing.duracion;
-    const estadoFinal = data.estado ?? existing.estado;
-
-    // Sólo se comprueba el solapamiento cuando este PATCH puede CREARLO. Dos
-    // formas, y ninguna más:
-    //
-    //   - se movió el intervalo (fecha o duración) de un turno que ocupa;
-    //   - el turno pasó de no ocupar a ocupar (ausente → programado; ver la
-    //     rama `reabierto` de más abajo).
-    //
-    // Lo que no se hace es revalidar en cada edición: un turno que ya estaba
-    // solapado —de antes de esta regla, o porque la ausencia se deshizo— no
-    // puede quedar con las notas sin poder editarse para siempre.
-    const ocupaAhora = ESTADOS_QUE_OCUPAN.includes(
-      estadoFinal as (typeof ESTADOS_QUE_OCUPAN)[number],
-    );
-    const movioElIntervalo =
-      (data.fecha !== undefined &&
-        data.fecha.getTime() !== existing.fecha.getTime()) ||
-      (data.duracion !== undefined && data.duracion !== existing.duracion);
-    const pasaAOcupar =
-      !ESTADOS_QUE_OCUPAN.includes(
-        existing.estado as (typeof ESTADOS_QUE_OCUPAN)[number],
-      ) && ocupaAhora;
+    const ocupa = (estado: string) =>
+      ESTADOS_QUE_OCUPAN.includes(
+        estado as (typeof ESTADOS_QUE_OCUPAN)[number],
+      );
 
     const turno = await db.$transaction(async (tx) => {
-      if (ocupaAhora && (movioElIntervalo || pasaAOcupar)) {
+      // El lock PRIMERO, y recién después releer el turno (Codex P1 sobre
+      // este PR).
+      //
+      // Componer el intervalo final con la fila que se leyó antes del lock es
+      // leer datos viejos: dos PATCH simultáneos sobre el MISMO turno que
+      // tocan campos distintos se pisan. El ejemplo que dio Codex: uno mueve
+      // un turno de 10:00/50 a las 11:00 y el otro le cambia la duración a
+      // 90. El segundo espera el lock, valida 10:00-11:30 (la fecha vieja),
+      // pasa, y su update parcial —que no manda `fecha`— conserva las 11:00
+      // recién commiteadas: el turno termina en 11:00-12:30, un intervalo que
+      // nadie validó y que puede pisar al de las 11:30.
+      //
+      // Releer adentro del lock hace que el segundo componga sobre el
+      // resultado del primero, que es lo que su UPDATE va a producir.
+      await tomarLockDeAgenda(tx, organizationId);
+
+      const actual = await tx.turno.findFirst({
+        where: { id, organizationId },
+      });
+
+      if (!actual) {
+        throw new ApiError("Turno no encontrado", 404);
+      }
+
+      // Las dos guardas de estado también miran la fila releída: si se
+      // decidieran con la lectura previa al lock, un turno cancelado en el
+      // medio se podría reabrir igual.
+      if (actual.estado === "cancelado" && parsed.data.estado !== undefined) {
+        throw new ApiError("No se puede reabrir un turno cancelado", 400);
+      }
+
+      if (changesDetails && actual.estado !== "programado") {
+        throw new ApiError(
+          "Solo se pueden editar datos de turnos programados",
+          400,
+        );
+      }
+
+      // El intervalo en el que va a quedar el turno después de este PATCH: lo
+      // que se manda, o lo que tiene AHORA.
+      const fechaFinal = data.fecha ?? actual.fecha;
+      const duracionFinal = data.duracion ?? actual.duracion;
+      const estadoFinal = data.estado ?? actual.estado;
+
+      // Sólo se comprueba el solapamiento cuando este PATCH puede CREARLO.
+      // Dos formas, y ninguna más:
+      //
+      //   - se movió el intervalo (fecha o duración) de un turno que ocupa;
+      //   - el turno pasó de no ocupar a ocupar (ausente → programado; ver la
+      //     rama `reabierto` de más abajo).
+      //
+      // Lo que no se hace es revalidar en cada edición: un turno que ya
+      // estaba solapado —de antes de esta regla, o porque la ausencia se
+      // deshizo— no puede quedar con las notas sin poder editarse para
+      // siempre.
+      const movioElIntervalo =
+        fechaFinal.getTime() !== actual.fecha.getTime() ||
+        duracionFinal !== actual.duracion;
+      const pasaAOcupar = !ocupa(actual.estado) && ocupa(estadoFinal);
+
+      if (ocupa(estadoFinal) && (movioElIntervalo || pasaAOcupar)) {
         await assertSinSolapamiento({
           prisma: tx,
           organizationId,
@@ -168,10 +187,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       // condición no lo asume: pregunta por el estado, no por cuál era.)
       const fechaCambio =
         parsed.data.fecha !== undefined &&
-        updated.fecha.getTime() !== existing.fecha.getTime();
+        updated.fecha.getTime() !== actual.fecha.getTime();
 
       const reabierto =
-        !turnoSigueProgramado(existing.estado) &&
+        !turnoSigueProgramado(actual.estado) &&
         turnoSigueProgramado(updated.estado);
 
       if (!fechaCambio && !reabierto) {
