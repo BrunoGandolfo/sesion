@@ -28,6 +28,26 @@
 // `inicio - DURACION_MAXIMA` no puede llegar a `inicio` ni durando lo máximo,
 // y uno que empieza en `fin` o después ya no toca el intervalo. Y es chica:
 // en el peor caso, los turnos de una hora y media alrededor.
+//
+// ─── POR QUÉ NO ALCANZA CON LA TRANSACCIÓN (Codex P1 sobre este PR) ─────────
+//
+// Meter la comprobación adentro del `$transaction` NO evita la doble reserva.
+// El nivel de aislamiento es READ COMMITTED y lo que se busca es la AUSENCIA
+// de filas: un SELECT no puede bloquear lo que todavía no existe. Dos altas
+// simultáneas para el mismo hueco leen las dos "libre", y como `Turno` no
+// tiene ninguna restricción de exclusión en la base, insertan las dos y
+// contestan 201 las dos. Exactamente el caso que esta regla existe para
+// impedir.
+//
+// La solución de fondo es una restricción de exclusión en Postgres
+// (`EXCLUDE USING gist` sobre tstzrange), que es una migración y las
+// migraciones no entran en esta tanda; queda anotado en el reporte del PR.
+//
+// Mientras tanto, un lock de asesoría por organización, tomado ANTES de leer
+// y liberado solo al terminar la transacción (`pg_advisory_xact_lock`). Es
+// exactamente el alcance que hace falta: serializa las altas y ediciones de
+// turnos de UNA agenda, y no molesta a las demás. Con una sola profesional
+// por organización, la contención es nula.
 
 import type { db } from "@/lib/db";
 
@@ -35,7 +55,25 @@ import { TURNO_SOLAPADO } from "@/lib/glosario";
 
 import { ApiError } from "../responses";
 
-type ClienteTurnos = Pick<typeof db, "turno">;
+/** `$executeRaw` además de `turno`: hace falta para el lock (ver abajo). El
+ *  cliente de una transacción también los tiene. */
+type ClienteTurnos = Pick<typeof db, "turno" | "$executeRaw">;
+
+/**
+ * Clave del lock: el hash de la organización. `hashtext` es estable dentro de
+ * una versión mayor de Postgres, que es todo lo que hace falta — el número no
+ * se persiste en ningún lado, solo tiene que ser el mismo para todos los
+ * pedidos concurrentes de la misma organización.
+ *
+ * Colisión de hash entre dos organizaciones: dos agendas que se serializan
+ * entre sí sin necesidad. No hay ningún problema de correctitud.
+ */
+async function tomarLockDeAgenda(
+  prisma: ClienteTurnos,
+  organizationId: string,
+): Promise<void> {
+  await prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`;
+}
 
 const MS_POR_MINUTO = 60_000;
 
@@ -96,6 +134,10 @@ export async function buscarTurnoSolapado({
   intervalo,
   excluirTurnoId,
 }: BuscarSolapadoParams): Promise<TurnoOcupado | null> {
+  // Antes de leer, no después: es lo que hace que dos pedidos simultáneos
+  // para el mismo hueco se ordenen en vez de pasar los dos.
+  await tomarLockDeAgenda(prisma, organizationId);
+
   const desde = new Date(
     intervalo.inicio.getTime() - DURACION_MAXIMA_MIN * MS_POR_MINUTO,
   );

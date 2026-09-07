@@ -111,9 +111,11 @@ export async function POST(request: Request) {
 
       const fecha = new Date(parsed.data.fecha);
 
-      // Dentro de la transacción y con la fila del paciente ya leída: dos
-      // altas en paralelo para el mismo horario no pueden pasar las dos la
-      // comprobación y crear las dos el turno.
+      // Dentro de la transacción: la comprobación toma un lock de asesoría
+      // por organización que se libera al terminarla, así que dos altas
+      // simultáneas para el mismo horario se ordenan y la segunda ve el turno
+      // de la primera. La transacción sola NO alcanzaría —READ COMMITTED no
+      // bloquea la ausencia de filas—; el porqué está en el caso de uso.
       await assertSinSolapamiento({
         prisma: tx,
         organizationId,

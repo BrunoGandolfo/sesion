@@ -374,6 +374,36 @@ describe("POST /api/turnos rechaza el horario ocupado", () => {
     expect((await postTurno(enUnaSemana())).status).toBe(201);
   });
 
+  it("dos altas simultáneas para el mismo hueco: una entra y la otra no", async () => {
+    // Codex P1: meter la comprobación adentro del $transaction NO alcanza.
+    // READ COMMITTED no bloquea la AUSENCIA de filas, y `Turno` no tiene
+    // restricción de exclusión en la base: las dos leen "libre" y las dos
+    // insertan. Lo que lo evita es el lock de asesoría por organización que
+    // toma buscarTurnoSolapado antes de leer.
+    await crearOrgConPacientes();
+    const hueco = enUnaSemana();
+
+    const [a, b] = await Promise.all([postTurno(hueco), postTurno(hueco)]);
+    const estados = [a.status, b.status].sort();
+
+    expect(estados).toEqual([201, 409]);
+    expect(await prismaRaw.turno.count()).toBe(1);
+  });
+
+  it("dos altas simultáneas en horarios distintos entran las dos", async () => {
+    // El lock serializa, no bloquea: dos turnos que no se pisan tienen que
+    // poder crearse igual.
+    await crearOrgConPacientes();
+
+    const [a, b] = await Promise.all([
+      postTurno(enUnaSemana()),
+      postTurno(enUnaSemana(180)),
+    ]);
+
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(await prismaRaw.turno.count()).toBe(2);
+  });
+
   it("un turno largo que empezó antes también se detecta", async () => {
     // El de 90 minutos empieza 60 antes, así que sigue vivo cuando arranca
     // el nuevo. Es el caso que la ventana de la consulta tiene que alcanzar.
