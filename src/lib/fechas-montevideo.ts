@@ -210,3 +210,56 @@ export function formatearFechaCortaMvd(instante: Date): string {
 export function formatearDiaSemanaMvd(instante: Date): string {
   return format(paraNombres(instante), "EEEE", { locale: es });
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Los <input type="date"> y <input type="time"> del formulario de turnos
+//
+// El navegador entrega y recibe strings sin zona: "2026-09-05" y "15:15". El
+// código que los armaba con getFullYear/getHours y los volvía a leer con
+// `new Date("2026-09-05T15:15:00")` los interpretaba en la zona del
+// dispositivo: desde un teléfono en Madrid, agendar "15:15" creaba un turno
+// de las 10:15 de Montevideo, y reprogramar mostraba una hora que no era la
+// del turno. Estas tres funciones son el puente, siempre en Montevideo.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** "2026-09-05": el día de Montevideo del instante, como lo quiere un
+ *  <input type="date">. */
+export function fechaInputMvd(instante: Date): string {
+  const { anio, mes, dia } = partesMvd(instante);
+  return `${anio}-${dosDigitos(mes + 1)}-${dosDigitos(dia)}`;
+}
+
+/** "15:15": la hora de Montevideo del instante, como la quiere un
+ *  <input type="time">. Es el mismo texto que formatearHoraMvd; se nombra
+ *  aparte porque quien llena un input no está formateando para leer. */
+export function horaInputMvd(instante: Date): string {
+  return formatearHoraMvd(instante);
+}
+
+/**
+ * "2026-09-05" + "15:15" → el instante en que eso pasa en Montevideo.
+ *
+ * Acepta "15:15" y "15:15:30" (los inputs con `step` mandan segundos). Si
+ * alguno de los dos no tiene la forma esperada devuelve un Date inválido, que
+ * es lo mismo que hacía `new Date(...)` con un string roto: quien llama ya
+ * valida con zod antes de llegar acá.
+ */
+export function instanteDesdeFechaHoraMvd(fecha: string, hora: string): Date {
+  const f = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  const h = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(hora);
+  if (!f || !h) return new Date(NaN);
+  return instanteMvd(
+    Number(f[1]),
+    Number(f[2]) - 1,
+    Number(f[3]),
+    Number(h[1]),
+    Number(h[2]),
+    h[3] ? Number(h[3]) : 0,
+  );
+}
+
+/** Los dos bordes del día de Montevideo en que cae el instante. El rango que
+ *  pide la agenda cuando se mira un solo día. */
+export function inicioFinDiaMvd(instante: Date): { desde: Date; hasta: Date } {
+  return { desde: inicioDelDiaMvd(instante), hasta: finDelDiaMvd(instante) };
+}

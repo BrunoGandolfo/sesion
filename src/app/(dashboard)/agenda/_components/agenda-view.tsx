@@ -1,19 +1,20 @@
 "use client";
 
 import * as React from "react";
-import {
-  addDays,
-  addMonths,
-  addWeeks,
-  endOfWeek,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { addDays, addMonths, addWeeks } from "date-fns";
 import { CalendarX2 } from "lucide-react";
 
 import { Fab, Sheet, Toast } from "@/components/ui";
 import { useHoy } from "@/hooks/useHoy";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import {
+  agregarDiasMvd,
+  finDelDiaMvd,
+  inicioDeMesMvd,
+  inicioDeSemanaMvd,
+  inicioFinDiaMvd,
+  instanteDesdeFechaHoraMvd,
+} from "@/lib/fechas-montevideo";
 import { ALGO_FALLO } from "@/lib/glosario";
 import type {
   Configuracion,
@@ -66,30 +67,25 @@ function parseTurno(raw: RawTurno): TurnoConPaciente {
   };
 }
 
+// El rango que se le pide a la API. Los bordes son los del día de
+// Montevideo, no los del dispositivo: con `setHours` un teléfono en Madrid
+// pedía de las 19:00 del día anterior a las 18:59 del día, y la sesión de
+// las 21:30 quedaba fuera de su propio día.
 function computeRange(
   view: AgendaViewMode,
   anchor: Date,
 ): { desde: Date; hasta: Date } {
   if (view === "día") {
-    const desde = new Date(anchor);
-    desde.setHours(0, 0, 0, 0);
-    const hasta = new Date(anchor);
-    hasta.setHours(23, 59, 59, 999);
-    return { desde, hasta };
+    return inicioFinDiaMvd(anchor);
   }
   if (view === "semana") {
-    const desde = startOfWeek(anchor, { weekStartsOn: 1 });
-    desde.setHours(0, 0, 0, 0);
-    const hasta = endOfWeek(anchor, { weekStartsOn: 1 });
-    hasta.setHours(23, 59, 59, 999);
-    return { desde, hasta };
+    const desde = inicioDeSemanaMvd(anchor);
+    return { desde, hasta: finDelDiaMvd(agregarDiasMvd(desde, 6)) };
   }
-  const monthStart = startOfMonth(anchor);
-  const desde = startOfWeek(monthStart, { weekStartsOn: 1 });
-  desde.setHours(0, 0, 0, 0);
-  const hasta = addDays(desde, 41);
-  hasta.setHours(23, 59, 59, 999);
-  return { desde, hasta };
+  // Seis semanas completas desde el lunes de la semana en que cae el día 1:
+  // la grilla del mes siempre dibuja 42 celdas.
+  const desde = inicioDeSemanaMvd(inicioDeMesMvd(anchor));
+  return { desde, hasta: finDelDiaMvd(agregarDiasMvd(desde, 41)) };
 }
 
 type LoadState = "idle" | "loading" | "error";
@@ -276,7 +272,8 @@ export function AgendaView() {
 
   // Lanza ApiClientError si la API rechaza: el formulario lo muestra.
   const handleCreateTurno = async (data: NuevoTurnoData) => {
-    const fechaISO = new Date(`${data.fecha}T${data.hora}:00`).toISOString();
+    // La hora del formulario es la del consultorio, no la del dispositivo.
+    const fechaISO = instanteDesdeFechaHoraMvd(data.fecha, data.hora).toISOString();
     try {
       await apiPost<Turno>("/api/turnos", {
         pacienteId: data.pacienteId,
