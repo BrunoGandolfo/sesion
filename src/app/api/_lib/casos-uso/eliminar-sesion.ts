@@ -77,6 +77,14 @@ export type ResultadoEliminarSesion =
 export const MENSAJE_AUDIO_NO_BORRADO =
   "No se pudo borrar el audio en R2; la sesión se conserva para reintentar la eliminación";
 
+/**
+ * Marca que deja la reserva del borrado definitivo mientras se borra el audio
+ * en R2. Si aparece en una fila viva, la eliminación se cortó entre el
+ * borrado del blob y el DELETE: el audio puede no estar aunque la sesión sí.
+ */
+export const MENSAJE_ELIMINACION_EN_CURSO =
+  "Eliminación en curso: se está borrando el audio antes de eliminar la sesión";
+
 type SesionExistente = {
   id: string;
   estado: string;
@@ -95,20 +103,44 @@ function tieneAudioReal(audioR2Key: string | null): boolean {
 }
 
 /**
- * El WHERE de toda escritura de esta sesión: id MÁS organización.
+ * El WHERE de toda escritura de esta sesión: id, organización Y el estado que
+ * se leyó.
  *
- * `update({ where: { id } })` y `delete({ where: { id } })` escriben la fila
- * aunque sea de otra organización; el findFirst de más arriba comprueba la
- * pertenencia, pero entre esa lectura y la escritura hay una ventana. Con
- * updateMany / deleteMany la pertenencia es parte de la propia operación.
+ * La organización, porque `update({ where: { id } })` escribe la fila aunque
+ * sea de otra; el findFirst comprueba la pertenencia, pero entre esa lectura
+ * y la escritura hay una ventana.
  *
- * No se mira el `count` que devuelven: 0 sólo puede pasar si la fila cambió
- * de organización o desapareció entre la lectura y la escritura, y en esta
- * app nada hace eso. Lo que importa es que una fila ajena NO se toque, y eso
- * lo garantiza el where, no el count.
+ * El ESTADO, porque esa misma ventana la puede usar otra pestaña. El caso
+ * concreto, y es destructivo: se lee la sesión en "error", y antes de que
+ * este DELETE escriba, un `PATCH { estado: "procesando" }` la re-encola al
+ * worker (reintentarSesion escribe con `{ id, organizationId }`, sin mirar
+ * el estado, así que gana). Sin el estado en el where, el `deleteMany`
+ * borraría una sesión que está procesándose, con su audio. Con el estado, un
+ * UPDATE/DELETE condicionado toma el lock de la fila y vuelve a evaluar el
+ * predicado: o gana este DELETE, o no toca nada y contesta 409.
+ *
+ * Por eso ahora el `count` SÍ se mira en cada rama (Codex P1 sobre este PR):
+ * 0 dejó de ser imposible y pasó a ser exactamente el caso que hay que
+ * rechazar.
  */
-function suya(ctx: Contexto): { id: string; organizationId: string } {
-  return { id: ctx.existente.id, organizationId: ctx.organizationId };
+function suya(ctx: Contexto): {
+  id: string;
+  organizationId: string;
+  estado: string;
+} {
+  return {
+    id: ctx.existente.id,
+    organizationId: ctx.organizationId,
+    estado: ctx.existente.estado,
+  };
+}
+
+/** La sesión cambió de estado entre la lectura y la escritura. */
+function cambioEnElMedio(estadoLeido: string): ApiError {
+  return new ApiError(
+    `La sesión cambió mientras se procesaba el pedido (estaba en ${estadoLeido}). Volvé a abrirla.`,
+    409,
+  );
 }
 
 function auditar(
@@ -141,7 +173,7 @@ async function descartarNotaEnRevision(
   // en NULL), pero el stash de la clave temporal se preserva: es lo único
   // necesario para reprocesar.
   const claveTemporal = extraerClaveTemporal(existente.datosEstructurados);
-  await prisma.sesionClinica.updateMany({
+  const { count } = await prisma.sesionClinica.updateMany({
     where: suya(ctx),
     data: {
       estado: "error",
@@ -160,6 +192,10 @@ async function descartarNotaEnRevision(
     },
   });
 
+  if (count === 0) {
+    throw cambioEnElMedio(existente.estado);
+  }
+
   await auditar(ctx, "sesion.descartar", audioConservado);
 
   return { tipo: "nota_descartada", audioConservado };
@@ -174,6 +210,26 @@ async function eliminarSesionConError(
   ctx: Contexto,
 ): Promise<ResultadoEliminarSesion> {
   const { prisma, existente, borrarAudio } = ctx;
+
+  // La reserva va ANTES de tocar R2, y es lo que hace que el borrado del
+  // audio no ocurra sobre una sesión que dejó de estar en "error".
+  //
+  // El orden importa: si primero se borrara el blob y recién después se
+  // condicionara el DELETE, un reintento concurrente ganaría la carrera y
+  // dejaría una sesión "procesando" cuyo audio ya no existe — el worker la
+  // levantaría para no encontrar nada. Escribir la marca en `error` con el
+  // estado en el WHERE toma el lock de la fila: el PATCH que re-encola espera
+  // a que esta transacción termine, y si llegó primero, acá el count es 0 y
+  // no se borra nada.
+  const reserva = await prisma.sesionClinica.updateMany({
+    where: suya(ctx),
+    data: { error: MENSAJE_ELIMINACION_EN_CURSO },
+  });
+
+  if (reserva.count === 0) {
+    throw cambioEnElMedio(existente.estado);
+  }
+
   const audioBorrado = await borrarAudio(existente.audioR2Key);
   if (!audioBorrado && tieneAudioReal(existente.audioR2Key)) {
     await prisma.sesionClinica.updateMany({
@@ -182,7 +238,12 @@ async function eliminarSesionConError(
     });
     throw new ApiError(MENSAJE_AUDIO_NO_BORRADO, 409);
   }
-  await prisma.sesionClinica.deleteMany({ where: suya(ctx) });
+
+  const borrada = await prisma.sesionClinica.deleteMany({ where: suya(ctx) });
+
+  if (borrada.count === 0) {
+    throw cambioEnElMedio(existente.estado);
+  }
 
   await auditar(ctx, "sesion.eliminar", false);
 
@@ -200,7 +261,7 @@ async function resolverGrabacionAbandonada(
   const { prisma, existente } = ctx;
   if (existente.audioR2Key) {
     assertTransicionValida(existente.estado, "error");
-    await prisma.sesionClinica.updateMany({
+    const { count } = await prisma.sesionClinica.updateMany({
       where: suya(ctx),
       data: {
         estado: "error",
@@ -208,12 +269,25 @@ async function resolverGrabacionAbandonada(
       },
     });
 
+    if (count === 0) {
+      throw cambioEnElMedio(existente.estado);
+    }
+
     await auditar(ctx, "sesion.descartar", true);
 
     return { tipo: "grabacion_abandonada_a_error" };
   }
 
-  await prisma.sesionClinica.deleteMany({ where: suya(ctx) });
+  // Sin audio no hay nada que conservar. El estado sigue en el WHERE: una
+  // grabación que se dio por abandonada pero que en el medio subió el audio
+  // (grabando → subiendo) no se borra por debajo.
+  const { count } = await prisma.sesionClinica.deleteMany({
+    where: suya(ctx),
+  });
+
+  if (count === 0) {
+    throw cambioEnElMedio(existente.estado);
+  }
 
   await auditar(ctx, "sesion.eliminar", false);
 

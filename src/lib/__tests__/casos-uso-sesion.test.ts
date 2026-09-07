@@ -797,6 +797,106 @@ describe("eliminarSesion", () => {
       expect(stubs.eventos).toHaveLength(0);
     });
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Codex P1 — la comprobación del estado tiene que ser parte de la
+    // escritura, no un chequeo anterior.
+    //
+    // Contrastar la intención contra el estado LEÍDO no alcanza: entre esa
+    // lectura y la escritura hay una ventana, y `reintentarSesion` escribe
+    // con `{ id, organizationId }` sin mirar el estado, así que gana. Sin el
+    // estado en el WHERE de la mutación, el borrado definitivo se llevaba
+    // puesta una sesión que en el medio volvió a "procesando" — con su audio.
+    //
+    // El doble intercala el cambio justo donde ocurre la carrera: después de
+    // que el caso de uso leyó la fila y antes de que escriba.
+    // ─────────────────────────────────────────────────────────────────────
+    function conCambioEnElMedio(sesionId: string, nuevoEstado: string) {
+      const real = db;
+      const modeloEspiado = new Proxy(real.sesionClinica, {
+        get(modelo, prop, receptor) {
+          if (prop !== "findFirst") return Reflect.get(modelo, prop, receptor);
+          return async (...args: unknown[]) => {
+            const fila = await (
+              modelo.findFirst as (...a: unknown[]) => Promise<unknown>
+            )(...args);
+            await real.sesionClinica.updateMany({
+              where: { id: sesionId },
+              data: { estado: nuevoEstado },
+            });
+            return fila;
+          };
+        },
+      });
+
+      return new Proxy(real, {
+        get(target, prop, receptor) {
+          if (prop === "sesionClinica") return modeloEspiado;
+          return Reflect.get(target, prop, receptor);
+        },
+      }) as typeof db;
+    }
+
+    it("eliminar mientras un reintento la devuelve a procesando: 409, y el audio NO se borra", async () => {
+      const { sesionId, orgId } = await crearSesion({
+        estado: "error",
+        audioR2Key: "audio/i.enc",
+      });
+      const stubs = crearStubs(true);
+
+      await esperarApiError(
+        eliminarSesion({
+          prisma: conCambioEnElMedio(sesionId, "procesando"),
+          sesionId,
+          organizationId: orgId,
+          usuarioId: "u1",
+          accion: "eliminar",
+          ...stubs,
+        }),
+        409,
+      );
+
+      // Lo que importa: la sesión sigue viva, procesándose, y su audio
+      // también. Si el borrado de R2 ocurriera antes de la reserva, el
+      // worker levantaría una sesión cuyo audio ya no existe.
+      const fila = await db.sesionClinica.findUnique({
+        where: { id: sesionId },
+      });
+      expect(fila?.estado).toBe("procesando");
+      expect(fila?.audioR2Key).toBe("audio/i.enc");
+      expect(stubs.borrados).toHaveLength(0);
+      expect(stubs.eventos).toHaveLength(0);
+    });
+
+    it("descartar mientras la nota se aprueba en otra pestaña: 409 y no se pisa", async () => {
+      const { sesionId, orgId } = await crearSesion({
+        estado: "revision",
+        audioR2Key: "audio/j.enc",
+        notaSubjetivo: "nota generada",
+      });
+      const stubs = crearStubs();
+
+      await esperarApiError(
+        eliminarSesion({
+          prisma: conCambioEnElMedio(sesionId, "aprobado"),
+          sesionId,
+          organizationId: orgId,
+          usuarioId: "u1",
+          accion: "descartar",
+          ...stubs,
+        }),
+        409,
+      );
+
+      const fila = await db.sesionClinica.findUnique({
+        where: { id: sesionId },
+      });
+      // Sin el estado en el WHERE, el descarte dejaba la sesión aprobada en
+      // "error" y le borraba la nota.
+      expect(fila?.estado).toBe("aprobado");
+      expect(fila?.notaSubjetivo).toBe("nota generada");
+      expect(stubs.eventos).toHaveLength(0);
+    });
+
     it("descartar sobre una sesión en error: 409 y no se borra nada", async () => {
       // Éste es EL caso: la usuaria leyó "se puede deshacer, la
       // transcripción y el audio se conservan" y, con la intención
