@@ -22,8 +22,12 @@ organización para crecer a varias.
 - **Configuración:** datos de la profesional, tarifa, plantilla del
   recordatorio, orientación teórica (CBT/MI o Gestalt).
 - **Recordatorios por SMS (Twilio):** un cron cada 5 minutos envía el
-  recordatorio de cada turno con la anticipación configurada. No hay canal
-  de WhatsApp.
+  recordatorio de cada turno en el momento configurado. La app **no envía
+  WhatsApp**: no hay integración con la API de WhatsApp y no hay forma de que
+  mande un mensaje por ese canal. Lo único que la nombra es el botón
+  "Recordar cobro" de Cobros, que abre `wa.me` con el texto ya armado
+  (`buildWhatsAppUrl`, `src/lib/deudas.ts`) para que lo mande la profesional
+  desde su propio WhatsApp; la app no envía nada ni se entera de si se mandó.
 - **Sesión grabada → nota clínica:** el navegador graba y cifra el audio, lo
   sube directo a R2, un worker lo transcribe con AssemblyAI, genera la nota
   SOAP y un feedback de auto-supervisión con Anthropic, y la profesional
