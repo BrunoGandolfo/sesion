@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../_lib/auth";
 import { programarRecordatorio } from "../_lib/casos-uso/recordatorios-del-turno";
+import { assertSinSolapamiento } from "../_lib/casos-uso/solapamiento-turnos";
 import {
   duracionSchema,
   isoDateTimeSchema,
@@ -109,6 +110,15 @@ export async function POST(request: Request) {
       }
 
       const fecha = new Date(parsed.data.fecha);
+
+      // Dentro de la transacción y con la fila del paciente ya leída: dos
+      // altas en paralelo para el mismo horario no pueden pasar las dos la
+      // comprobación y crear las dos el turno.
+      await assertSinSolapamiento({
+        prisma: tx,
+        organizationId,
+        intervalo: { inicio: fecha, duracionMin: parsed.data.duracion },
+      });
 
       const turno = await tx.turno.create({
         data: {
