@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { generarTextoConsentimiento } from "@/lib/consentimiento";
+import {
+  buscarConsentimientoVigente,
+  generarTextoConsentimiento,
+} from "@/lib/consentimiento";
 import { ipDeRequest } from "@/lib/request-huella";
 
 import { getOrganizationId } from "../../../_lib/auth";
@@ -75,15 +78,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     await assertPacienteExists(id, organizationId);
 
-    const consentimiento = await db.consentimientoGrabacion.findFirst({
-      where: {
-        pacienteId: id,
-        organizationId,
-        revocadoEn: null,
-      },
-      orderBy: { firmadoEn: "desc" },
-      select: consentimientoSelect,
-    });
+    const consentimiento = await buscarConsentimientoVigente(
+      db,
+      id,
+      organizationId,
+    );
 
     // Envoltorio único de la API: { data: { consentimiento } }. `null` es
     // una respuesta legítima —la paciente no firmó—, no un 404.

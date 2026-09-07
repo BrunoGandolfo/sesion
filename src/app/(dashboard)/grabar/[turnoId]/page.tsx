@@ -12,6 +12,7 @@
 import { notFound } from "next/navigation";
 
 import { getServerSession } from "@/lib/auth-utils";
+import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { db } from "@/lib/db";
 import { hora } from "@/lib/format";
 
@@ -19,13 +20,11 @@ import { GrabarView } from "./_components/grabar-view";
 
 export const dynamic = "force-dynamic";
 
-async function tieneAutorizacion(pacienteId: string, organizationId: string) {
-  const consentimiento = await db.consentimientoGrabacion.findFirst({
-    where: { pacienteId, organizationId, revocadoEn: null },
-    select: { id: true },
-  });
-
-  return consentimiento !== null;
+/** La misma pregunta que hace POST /api/sesion-clinica antes de crear la
+ *  sesión. Una sola función: si las dos no contestan lo mismo, la pantalla
+ *  ofrece grabar y la API lo rechaza (o al revés). */
+function tieneAutorizacion(pacienteId: string, organizationId: string) {
+  return consentimientoVigenteDe(db, pacienteId, organizationId);
 }
 
 export default async function GrabarPage({

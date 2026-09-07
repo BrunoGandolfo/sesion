@@ -76,6 +76,7 @@ let deleteSesion!: Handler;
 let uploadUrl!: Handler;
 let descobrarTurno!: Handler;
 let reintentarRecordatorio!: Handler;
+let crearSesionClinica!: (request: Request) => Promise<Response>;
 
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
@@ -177,8 +178,8 @@ function pedido(body: unknown, method = "PATCH"): Request {
   });
 }
 
-function pedidoSinCuerpo(method: string): Request {
-  return new Request("http://localhost/api", { method });
+function pedidoSinCuerpo(method: string, query = ""): Request {
+  return new Request(`http://localhost/api${query}`, { method });
 }
 
 function como(org: Org) {
@@ -202,6 +203,7 @@ beforeAll(async () => {
     rutaUpload,
     rutaCobrar,
     rutaReintentar,
+    rutaSesionesClinicas,
   ] = await Promise.all([
     import("@/app/api/pacientes/[id]/route"),
     import("@/app/api/turnos/[id]/route"),
@@ -209,6 +211,7 @@ beforeAll(async () => {
     import("@/app/api/sesion-clinica/[id]/upload-url/route"),
     import("@/app/api/turnos/[id]/cobrar/route"),
     import("@/app/api/recordatorios/[id]/reintentar/route"),
+    import("@/app/api/sesion-clinica/route"),
   ]);
   patchPaciente = rutaPaciente.PATCH as Handler;
   patchTurno = rutaTurno.PATCH as Handler;
@@ -217,6 +220,9 @@ beforeAll(async () => {
   uploadUrl = rutaUpload.POST as Handler;
   descobrarTurno = rutaCobrar.DELETE as Handler;
   reintentarRecordatorio = rutaReintentar.POST as Handler;
+  crearSesionClinica = rutaSesionesClinicas.POST as (
+    request: Request,
+  ) => Promise<Response>;
 });
 
 beforeEach(async () => {
@@ -413,9 +419,10 @@ describe("DELETE /api/sesion-clinica/[id] — aislamiento entre organizaciones",
     const sesionId = await crearSesionEnEstado(a, "revision");
     como(a);
 
-    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
-      params: Promise.resolve({ id: sesionId }),
-    });
+    const res = await deleteSesion(
+      pedidoSinCuerpo("DELETE", "?accion=descartar"),
+      { params: Promise.resolve({ id: sesionId }) },
+    );
 
     expect(res.status).toBe(200);
     expect(
@@ -433,9 +440,10 @@ describe("DELETE /api/sesion-clinica/[id] — aislamiento entre organizaciones",
     const b = await crearOrg();
     como(b);
 
-    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
-      params: Promise.resolve({ id: sesionId }),
-    });
+    const res = await deleteSesion(
+      pedidoSinCuerpo("DELETE", "?accion=descartar"),
+      { params: Promise.resolve({ id: sesionId }) },
+    );
 
     expect(res.status).toBe(404);
     expect(
@@ -455,14 +463,98 @@ describe("DELETE /api/sesion-clinica/[id] — aislamiento entre organizaciones",
     const b = await crearOrg();
     como(b);
 
-    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
-      params: Promise.resolve({ id: sesionId }),
-    });
+    const res = await deleteSesion(
+      pedidoSinCuerpo("DELETE", "?accion=eliminar"),
+      { params: Promise.resolve({ id: sesionId }) },
+    );
 
     expect(res.status).toBe(404);
     expect(
       await prismaRaw.sesionClinica.count({ where: { id: sesionId } }),
     ).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A4 — el consentimiento se busca con la organización en la pregunta.
+//
+// POST /api/sesion-clinica lo buscaba sólo por `pacienteId`, mientras la
+// página de grabar sí filtraba por organización. Con dos organizaciones, la
+// comprobación previa a grabar podía mirar la fila equivocada: la firma de
+// una paciente de otra consulta habilitaba la grabación de ésta.
+//
+// Ahora las dos preguntan por la misma función (`consentimientoVigenteDe`).
+// El test recorre el caso que estaba roto: la sesión clínica se pide para un
+// turno de la org A, cuya paciente NO firmó, mientras existe un
+// consentimiento vigente de otra paciente en la org B.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /api/sesion-clinica — el consentimiento es de la organización", () => {
+  it("sin consentimiento propio no se puede grabar, aunque otra org tenga uno", async () => {
+    const a = await crearOrg();
+    const b = await crearOrg();
+    // La paciente de B firmó; la de A no.
+    await prismaRaw.consentimientoGrabacion.create({
+      data: {
+        pacienteId: b.pacienteId,
+        organizationId: b.orgId,
+        firmadoEn: new Date(),
+        textoVersion: "1.1",
+        textoCompleto: "…",
+        firmaDigital: "data:image/png;base64,AAA",
+      },
+    });
+    const turnoId = await crearTurno(a);
+    como(a);
+
+    const res = await crearSesionClinica(pedido({ turnoId }, "POST"));
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/consentimiento/i);
+    expect(await prismaRaw.sesionClinica.count()).toBe(0);
+  });
+
+  it("con el consentimiento propio vigente, sí", async () => {
+    const a = await crearOrg();
+    await prismaRaw.consentimientoGrabacion.create({
+      data: {
+        pacienteId: a.pacienteId,
+        organizationId: a.orgId,
+        firmadoEn: new Date(),
+        textoVersion: "1.1",
+        textoCompleto: "…",
+        firmaDigital: "data:image/png;base64,AAA",
+      },
+    });
+    const turnoId = await crearTurno(a);
+    como(a);
+
+    const res = await crearSesionClinica(pedido({ turnoId }, "POST"));
+
+    expect(res.status).toBe(201);
+    expect(await prismaRaw.sesionClinica.count()).toBe(1);
+  });
+
+  it("una firma REVOCADA no habilita", async () => {
+    const a = await crearOrg();
+    await prismaRaw.consentimientoGrabacion.create({
+      data: {
+        pacienteId: a.pacienteId,
+        organizationId: a.orgId,
+        firmadoEn: new Date(),
+        revocadoEn: new Date(),
+        textoVersion: "1.1",
+        textoCompleto: "…",
+        firmaDigital: "data:image/png;base64,AAA",
+      },
+    });
+    const turnoId = await crearTurno(a);
+    como(a);
+
+    const res = await crearSesionClinica(pedido({ turnoId }, "POST"));
+
+    expect(res.status).toBe(400);
+    expect(await prismaRaw.sesionClinica.count()).toBe(0);
   });
 });
 

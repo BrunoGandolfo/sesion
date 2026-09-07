@@ -17,6 +17,8 @@
 // El texto es deliberadamente más largo que el de la 1.0: se agrega lo que
 // faltaba, no se recorta lo que ya estaba.
 
+import type { db } from "@/lib/db";
+
 export const CONSENTIMIENTO_VERSION = "1.1";
 
 export function generarTextoConsentimiento(params: {
@@ -88,4 +90,84 @@ export function esConsentimientoVigente(
 ): boolean {
   if (!consentimiento) return false;
   return consentimiento.revocadoEn === null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// La búsqueda del consentimiento vigente
+//
+// Estaba escrita tres veces, y una de las tres estaba mal: POST
+// /api/sesion-clinica preguntaba `{ pacienteId, revocadoEn: null }` SIN la
+// organización, mientras la página de grabar y el GET de /consentimiento sí la
+// filtraban. Con una sola organización no se nota; el día que haya dos, un id
+// de paciente ajeno alcanzaba para que la comprobación previa a grabar mirara
+// la fila equivocada. La pertenencia no es un detalle de cada llamador: es
+// parte de la pregunta.
+//
+// El `import type` de db es solo el tipo del cliente (se borra al compilar),
+// así que este módulo sigue siendo importable desde un componente cliente —
+// ConsentimientoForm.tsx trae de acá el texto y la versión.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Lo que devuelve la búsqueda. Es lo que necesita el GET de la ruta; el
+ *  resto de los llamadores solo mira si hay algo. */
+const CONSENTIMIENTO_SELECT = {
+  id: true,
+  pacienteId: true,
+  firmadoEn: true,
+  textoVersion: true,
+  revocadoEn: true,
+} as const;
+
+export interface ConsentimientoVigente {
+  id: string;
+  pacienteId: string;
+  firmadoEn: Date;
+  textoVersion: string;
+  revocadoEn: Date | null;
+}
+
+/** Lo mínimo del cliente Prisma que hace falta acá. `Pick` y no el cliente
+ *  entero para que también entre el de una transacción. */
+type ClienteConsentimientos = Pick<typeof db, "consentimientoGrabacion">;
+
+/**
+ * El consentimiento vigente de una paciente, o null.
+ *
+ * `revocadoEn: null` va en el WHERE —es la proyección en SQL de
+ * `esConsentimientoVigente`— y el predicado se vuelve a aplicar sobre la fila
+ * leída. Es a propósito, igual que con `esDeudaPendiente` en
+ * casos-uso/pendientes-terapeuta.ts: si mañana "vigente" pasa a significar
+ * otra cosa (un vencimiento, una versión mínima del texto), la regla sigue
+ * viviendo en una sola función y esto no queda contestando que sí por su
+ * cuenta.
+ *
+ * `orderBy` por fecha de firma descendente: firmar de nuevo revoca lo
+ * anterior en la misma transacción, así que en la práctica hay como mucho una
+ * fila viva; el orden es lo que hace determinista el caso de que no.
+ */
+export async function buscarConsentimientoVigente(
+  prisma: ClienteConsentimientos,
+  pacienteId: string,
+  organizationId: string,
+): Promise<ConsentimientoVigente | null> {
+  const consentimiento = await prisma.consentimientoGrabacion.findFirst({
+    where: { pacienteId, organizationId, revocadoEn: null },
+    orderBy: { firmadoEn: "desc" },
+    select: CONSENTIMIENTO_SELECT,
+  });
+
+  return esConsentimientoVigente(consentimiento) ? consentimiento : null;
+}
+
+/** ¿Se puede grabar a esta paciente? La pregunta que hacen la página de
+ *  grabar y la creación de la sesión clínica. */
+export async function consentimientoVigenteDe(
+  prisma: ClienteConsentimientos,
+  pacienteId: string,
+  organizationId: string,
+): Promise<boolean> {
+  return (
+    (await buscarConsentimientoVigente(prisma, pacienteId, organizationId)) !==
+    null
+  );
 }
