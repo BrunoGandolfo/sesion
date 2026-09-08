@@ -24,7 +24,8 @@ export function textoAtraso(diasAtraso: number): string {
 }
 
 /**
- * Template default para el recordatorio de cobro por WhatsApp.
+ * Template default del recordatorio de cobro. Es el texto que sale por SMS y
+ * el que ella lee entero antes de confirmar el envío (ver cobros-view).
  * Placeholders soportados por interpolarTemplateCobro:
  *   {{nombre}}        — nombre del paciente
  *   {{sesiones}}      — texto inteligente "1 sesión pendiente" / "N sesiones pendientes"
@@ -75,14 +76,4 @@ export function interpolarTemplateCobro(
     .replace(/\{\{monto\}\}/g, literal(vars.monto))
     .replace(/\{\{profesional\}\}/g, literal(vars.profesional))
     .trim();
-}
-
-/**
- * Construye una URL `wa.me` para abrir WhatsApp con un mensaje pre-armado.
- * El teléfono debe venir en formato E.164 (+598...). Quitamos el `+` y
- * cualquier separador no numérico para evitar URLs rotas.
- */
-export function buildWhatsAppUrl(phone: string, message: string): string {
-  const numero = phone.replace(/\+/g, "").replace(/\D/g, "");
-  return `https://wa.me/${numero}?text=${encodeURIComponent(message)}`;
 }

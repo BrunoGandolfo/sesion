@@ -318,12 +318,17 @@ export function calcularDeudores(
 // Deudores — query única y forma de respuesta de /api/deudores.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Item de /api/deudores: DeudaPaciente más lo que la UI de finanzas
- *  necesita para el recordatorio de cobro (teléfono para wa.me y minutos
- *  impagos para "Trabajaste X horas gratis"). */
+/** Item de /api/deudores: DeudaPaciente más lo que la pantalla de Cobros
+ *  necesita para el recordatorio (el teléfono al que sale el SMS, los
+ *  minutos impagos y cuándo se avisó por última vez). */
 export type DeudoresApiItem = DeudaPaciente & {
   telefono: string;
   minutosTotales: number;
+  /** Cuándo salió el último aviso de cobro que se envió, ISO; null si nunca
+   *  se le avisó. Sale de los eventos de auditoría (ver
+   *  casos-uso/recordar-cobro.ts): es lo que la pantalla muestra como
+   *  "Avisado hace N días" para no mandar el mismo SMS dos veces. */
+  ultimoAvisoEn: string | null;
 };
 
 /** Turno con deuda pendiente tal como lo devuelve buscarTurnosConDeuda. */
@@ -338,16 +343,23 @@ export interface TurnoConDeuda extends TurnoParaDeuda {
  * (regla esDeudaPendiente aplicada en la propia consulta). La consumen
  * /api/dashboard y /api/deudores, que después pasan el resultado por
  * calcularDeudores y aplican cada uno su orden y su tope.
+ *
+ * Con `pacienteId` acota a una sola paciente sin cambiar nada más: es lo que
+ * necesita recordar-cobro para saber cuánto debe la persona a la que le va a
+ * avisar, y tiene que ser esta misma consulta —si la deuda que se le cuenta
+ * en el SMS no es la que ve en la pantalla, el problema es peor que el bug.
  */
 export async function buscarTurnosConDeuda(
   prisma: typeof db,
   organizationId: string,
+  pacienteId?: string,
 ): Promise<TurnoConDeuda[]> {
   const turnos = await prisma.turno.findMany({
     where: {
       organizationId,
       estado: "realizado",
       pagoEstado: "pendiente",
+      ...(pacienteId ? { pacienteId } : {}),
     },
     select: {
       pacienteId: true,

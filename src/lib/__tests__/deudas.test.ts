@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 
 import {
   TEMPLATE_COBRO_DEFAULT,
-  buildWhatsAppUrl,
   interpolarTemplateCobro,
   textoAtraso,
   zonaDeuda,
@@ -14,7 +13,8 @@ import { money } from "@/lib/format";
 // y lo cubre `deuda.test.ts`.
 //
 // El bloque que más importa es interpolarTemplateCobro: lo que sale de ahí
-// es, literal, el mensaje de WhatsApp que le llega a una paciente.
+// es, literal, el SMS que le llega a una paciente (y el texto que la
+// pantalla le muestra a ella antes de confirmar el envío).
 
 // ─── zonaDeuda ────────────────────────────────────────────────────────────
 
@@ -212,40 +212,5 @@ describe("interpolarTemplateCobro — los valores entran literales", () => {
     expect(
       interpolarTemplateCobro("Total {{monto}}", { ...VARS, monto: "$1.200" }),
     ).toBe("Total $1.200");
-  });
-});
-
-// ─── buildWhatsAppUrl ─────────────────────────────────────────────────────
-
-describe("buildWhatsAppUrl", () => {
-  it("saca el + del E.164 y deja sólo dígitos", () => {
-    expect(buildWhatsAppUrl("+59899123456", "hola")).toBe(
-      "https://wa.me/59899123456?text=hola",
-    );
-  });
-
-  it("saca también espacios, guiones y paréntesis", () => {
-    expect(buildWhatsAppUrl("+598 99 123-456", "hola")).toBe(
-      "https://wa.me/59899123456?text=hola",
-    );
-  });
-
-  it("codifica el mensaje: acentos, ¿?, &, + y # no rompen la URL", () => {
-    const url = buildWhatsAppUrl("+59899123456", "¿Cómo estás? A & B +1 #2");
-    expect(url.startsWith("https://wa.me/59899123456?text=")).toBe(true);
-    const texto = new URL(url).searchParams.get("text");
-    expect(texto).toBe("¿Cómo estás? A & B +1 #2");
-  });
-
-  it("el mensaje real de cobro sobrevive el viaje de ida y vuelta", () => {
-    const mensaje = interpolarTemplateCobro(TEMPLATE_COBRO_DEFAULT, VARS);
-    const url = buildWhatsAppUrl("+59899123456", mensaje);
-    expect(new URL(url).searchParams.get("text")).toBe(mensaje);
-  });
-
-  it("un teléfono vacío no inventa un número", () => {
-    // La pantalla no ofrece el enlace sin teléfono; si igual llega, la URL
-    // queda sin destino en vez de apuntar a cualquier lado.
-    expect(buildWhatsAppUrl("", "hola")).toBe("https://wa.me/?text=hola");
   });
 });

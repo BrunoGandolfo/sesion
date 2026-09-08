@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../_lib/auth";
+import { ultimoAvisoPorPaciente } from "../_lib/casos-uso/recordar-cobro";
 import {
   buscarTurnosConDeuda,
   calcularDeudores,
@@ -25,7 +26,17 @@ export async function GET() {
       turnos.map((t) => [t.pacienteId, t.paciente.telefono]),
     );
 
-    const deudores: DeudoresApiItem[] = calcularDeudores(turnos, now)
+    // Cuándo se le avisó por última vez a cada una. Va en la misma respuesta
+    // porque es lo que evita mandar el mismo SMS dos veces: sin esto la
+    // pantalla no tiene cómo saberlo y el botón invita a repetir.
+    const agrupados = calcularDeudores(turnos, now);
+    const ultimoAviso = await ultimoAvisoPorPaciente(
+      db,
+      organizationId,
+      agrupados.map((d) => d.pacienteId),
+    );
+
+    const deudores: DeudoresApiItem[] = agrupados
       .map((d) => ({
         pacienteId: d.pacienteId,
         nombre: d.nombre,
@@ -35,6 +46,7 @@ export async function GET() {
         montoTotal: d.montoTotal,
         minutosTotales: d.minutosTotales,
         diasAtraso: d.diasAtraso ?? 0,
+        ultimoAvisoEn: ultimoAviso.get(d.pacienteId) ?? null,
       }))
       .sort((a, b) =>
         b.diasAtraso !== a.diasAtraso

@@ -2,39 +2,57 @@
 
 // Cobros: lo que entró este mes y lo que todavía te deben, en una sola
 // pantalla. Reúne lo que antes vivía en /finanzas (KPIs + cobros del mes) y
-// en /deudores (lista con "Recordar cobro" por WhatsApp).
+// en /deudores (la lista con "Recordar cobro").
 //
 // No se calcula "trabajaste N horas gratis": la deuda se cuenta en sesiones,
 // que es como ella la piensa.
+//
+// El recordatorio de cobro sale por SMS desde acá, y lo aprieta ella: antes
+// abría el teléfono con el texto cargado y la app no se enteraba de nada
+// —ni si el mensaje había salido, ni cuándo—, así que no había forma de
+// saber si ya le había avisado a alguien. Ahora se manda desde el servidor
+// (POST /api/pacientes/[id]/recordar-cobro), queda en la auditoría y la fila
+// muestra "Avisado hace N días". Nunca es automático: el mensaje se ve
+// entero, con el número al que sale, antes de confirmar.
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCircle2, ChevronRight, MessageCircle, Wallet } from "lucide-react";
+import { CheckCircle2, ChevronRight, Send, Wallet } from "lucide-react";
 
 import {
   Avatar,
   Button,
   Card,
+  Confirmar,
   EditorialRule,
   Segmented,
+  Toast,
 } from "@/components/ui";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
-import { apiGet, esAbort } from "@/lib/api-client";
+import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
 import {
   TEMPLATE_COBRO_DEFAULT,
-  buildWhatsAppUrl,
   interpolarTemplateCobro,
   textoAtraso,
   zonaDeuda,
   type ZonaDeuda,
 } from "@/lib/deudas";
+import { diasEnterosMvd } from "@/lib/fechas-montevideo";
 import { fechaCorta, fechaLarga, money, moneyShort } from "@/lib/format";
 import {
   ALGO_FALLO,
+  AVISADO,
+  ENVIANDO_SMS,
+  ENVIAR_SMS,
   METODO_PAGO_LABEL,
   NAV,
+  RECORDAR_COBRO,
+  RECORDAR_COBRO_TITULO,
   SIN_METODO,
+  SMS_DESTINO,
+  SMS_ENVIADO,
+  SMS_SIN_CONFIGURAR,
   TE_DEBEN,
   pluralizar,
 } from "@/lib/glosario";
@@ -52,7 +70,12 @@ import type {
 type DeudorItem = DeudaPaciente & {
   telefono: string;
   minutosTotales: number;
+  /** ISO del último aviso que salió; null si nunca se le avisó. */
+  ultimoAvisoEn: string | null;
 };
+
+/** Lo que contesta GET /api/sms/estado. */
+type SmsEstado = { ok: true } | { ok: false; motivo: string };
 
 type JsonTurno = Omit<
   TurnoConPaciente,
@@ -82,10 +105,12 @@ type DatosCobros = {
   deudores: DeudorItem[];
   cobros: TurnoConPaciente[];
   nombreProfesional: string;
+  /** false solo si el servidor dijo que falta configurar el SMS. */
+  smsOk: boolean;
 };
 
 async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
-  const [dashboard, deudores, cobros, config] = await Promise.all([
+  const [dashboard, deudores, cobros, config, sms] = await Promise.all([
     apiGet<{ kpis: KPIsDashboard }>("/api/dashboard", { signal }),
     apiGet<DeudorItem[]>("/api/deudores", { signal }),
     apiGet<JsonTurno[]>("/api/turnos/cobros", { signal }),
@@ -95,6 +120,14 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
       if (esAbort(err)) throw err;
       return null;
     }),
+    // Si esta consulta falla no se puede saber si el canal está bien, y
+    // esconder el botón por las dudas sería apagar algo que quizá funciona:
+    // se ofrece igual y, si el SMS no está configurado, el servidor lo dice
+    // con todas las letras al confirmar.
+    apiGet<SmsEstado>("/api/sms/estado", { signal }).catch((err: unknown) => {
+      if (esAbort(err)) throw err;
+      return { ok: true } as SmsEstado;
+    }),
   ]);
 
   return {
@@ -102,6 +135,7 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
     deudores,
     cobros: cobros.map(parseTurno),
     nombreProfesional: config?.nombreProfesional ?? "",
+    smsOk: sms.ok,
   };
 }
 
@@ -112,6 +146,27 @@ export function CobrosView() {
   const [ahora, setAhora] = React.useState<Date | null>(null);
   const [carga, setCarga] = React.useState<Carga>("cargando");
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [toast, setToast] = React.useState({ open: false, message: "" });
+
+  // El aviso que acaba de salir se pega en la fila sin recargar la pantalla:
+  // la lista ya está en pantalla y lo único que cambió es esa fecha.
+  const marcarAvisado = React.useCallback(
+    (pacienteId: string, enviadoEn: string) => {
+      setDatos((previo) =>
+        previo
+          ? {
+              ...previo,
+              deudores: previo.deudores.map((d) =>
+                d.pacienteId === pacienteId
+                  ? { ...d, ultimoAvisoEn: enviadoEn }
+                  : d,
+              ),
+            }
+          : previo,
+      );
+    },
+    [],
+  );
 
   // "cargando" es el estado inicial y el reintento lo vuelve a poner en su
   // propio handler: el efecto no toca estado antes de que responda la red.
@@ -164,7 +219,7 @@ export function CobrosView() {
 
   if (!datos || !ahora) return null;
 
-  const { kpis, deudores, cobros, nombreProfesional } = datos;
+  const { kpis, deudores, cobros, nombreProfesional, smsOk } = datos;
 
   const sesionesSinCobrar = deudores.reduce(
     (sum, d) => sum + d.sesionesImpagas,
@@ -200,11 +255,24 @@ export function CobrosView() {
           deudores={deudoresPorMonto}
           sesionesSinCobrar={sesionesSinCobrar}
           nombreProfesional={nombreProfesional}
+          ahora={ahora}
+          smsOk={smsOk}
+          onAvisado={(pacienteId, enviadoEn) => {
+            marcarAvisado(pacienteId, enviadoEn);
+            setToast({ open: true, message: SMS_ENVIADO });
+          }}
+          onError={(mensaje) => setToast({ open: true, message: mensaje })}
           onVerCobros={() => setPestana("cobros")}
         />
       ) : (
         <CobrosDelMes cobros={cobros} onVerTeDeben={() => setPestana("te-deben")} />
       )}
+
+      <Toast
+        open={toast.open}
+        message={toast.message}
+        onClose={() => setToast((actual) => ({ ...actual, open: false }))}
+      />
     </Marco>
   );
 }
@@ -345,11 +413,19 @@ function TeDeben({
   deudores,
   sesionesSinCobrar,
   nombreProfesional,
+  ahora,
+  smsOk,
+  onAvisado,
+  onError,
   onVerCobros,
 }: {
   deudores: DeudorItem[];
   sesionesSinCobrar: number;
   nombreProfesional: string;
+  ahora: Date;
+  smsOk: boolean;
+  onAvisado: (pacienteId: string, enviadoEn: string) => void;
+  onError: (mensaje: string) => void;
   onVerCobros: () => void;
 }) {
   if (deudores.length === 0) {
@@ -385,60 +461,17 @@ function TeDeben({
           item="li"
           className="divide-y divide-[color:var(--border-subtle)]"
         >
-          {deudores.map((d) => {
-            const nombreCompleto = `${d.nombre} ${d.apellido}`;
-            return (
-              <div
-                key={d.pacienteId}
-                className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:gap-4 lg:px-5 lg:py-4"
-              >
-                <Link
-                  href={`/pacientes/${d.pacienteId}`}
-                  className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition-colors duration-150 active:bg-cream-50"
-                  aria-label={`Abrir ficha de ${nombreCompleto}`}
-                >
-                  <Avatar nombre={d.nombre} apellido={d.apellido} size={40} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-semibold text-ink-900">
-                      {nombreCompleto}
-                    </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
-                      <span>
-                        {pluralizar(d.sesionesImpagas, "sesión", "sesiones")}{" "}
-                        sin cobrar
-                      </span>
-                      <span aria-hidden="true" className="text-ink-300">
-                        ·
-                      </span>
-                      <ZonaIndicador dias={d.diasAtraso} />
-                    </span>
-                  </span>
-                  <span className="font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-terracotta-600">
-                    {money(d.montoTotal)}
-                  </span>
-                  <ChevronRight
-                    size={16}
-                    strokeWidth={1.6}
-                    className="shrink-0 text-ink-300 lg:hidden"
-                    aria-hidden="true"
-                  />
-                </Link>
-                <div className="flex items-center gap-2 lg:shrink-0">
-                  <RecordarCobro
-                    deudor={d}
-                    nombreProfesional={nombreProfesional}
-                  />
-                  <Link
-                    href={`/pacientes/${d.pacienteId}`}
-                    aria-label={`Ver ficha de ${nombreCompleto}`}
-                    className="hidden text-ink-300 hover:text-ink-500 lg:inline-flex"
-                  >
-                    <ChevronRight size={16} strokeWidth={1.6} aria-hidden="true" />
-                  </Link>
-                </div>
-              </div>
-            );
-          })}
+          {deudores.map((d) => (
+            <FilaDeudor
+              key={d.pacienteId}
+              deudor={d}
+              nombreProfesional={nombreProfesional}
+              ahora={ahora}
+              smsOk={smsOk}
+              onAvisado={onAvisado}
+              onError={onError}
+            />
+          ))}
         </ListaEnCascada>
       </Card>
     </div>
@@ -461,35 +494,170 @@ function ZonaIndicador({ dias }: { dias: number }) {
   return <span className="text-sage-600">{texto}</span>;
 }
 
-function RecordarCobro({
+// ============================================
+// La fila de una deudora: quién es, cuánto debe, cuándo se le avisó y el
+// botón. La confirmación se abre debajo, a lo ancho: el mensaje entero tiene
+// que poder leerse antes de mandarlo, y no entra al lado del botón.
+// ============================================
+function FilaDeudor({
   deudor,
   nombreProfesional,
+  ahora,
+  smsOk,
+  onAvisado,
+  onError,
 }: {
   deudor: DeudorItem;
   nombreProfesional: string;
+  ahora: Date;
+  smsOk: boolean;
+  onAvisado: (pacienteId: string, enviadoEn: string) => void;
+  onError: (mensaje: string) => void;
 }) {
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [enviando, setEnviando] = React.useState(false);
+  const nombreCompleto = `${deudor.nombre} ${deudor.apellido}`;
   const telefono = deudor.telefono?.trim() ?? "";
-  if (!telefono) return null;
 
+  // El mismo texto que arma el servidor: mismo template, misma interpolación
+  // y el mismo money(). Lo que ella lee acá es, carácter por carácter, lo que
+  // le va a llegar a la paciente.
   const mensaje = interpolarTemplateCobro(TEMPLATE_COBRO_DEFAULT, {
     nombre: deudor.nombre,
     sesiones: deudor.sesionesImpagas,
     monto: money(deudor.montoTotal),
     profesional: nombreProfesional,
   });
-  const url = buildWhatsAppUrl(telefono, mensaje);
+
+  async function enviar() {
+    setEnviando(true);
+    try {
+      const resultado = await apiPost<{ enviadoEn: string }>(
+        `/api/pacientes/${deudor.pacienteId}/recordar-cobro`,
+        {},
+      );
+      setConfirmando(false);
+      onAvisado(deudor.pacienteId, resultado.enviadoEn);
+    } catch (error) {
+      // El mensaje viene del servidor: si Twilio rechazó el envío, dice por
+      // qué. Solo se cae al genérico si no hubo respuesta.
+      setConfirmando(false);
+      onError(error instanceof ApiClientError ? error.mensaje : ALGO_FALLO);
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Recordar cobro a ${deudor.nombre} ${deudor.apellido} por WhatsApp`}
-      className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-sage-500 px-4 text-[13px] font-semibold text-sage-600 transition-colors duration-150 hover:bg-sage-50 lg:min-h-[36px] lg:w-auto"
-    >
-      <MessageCircle size={14} strokeWidth={1.8} aria-hidden="true" />
-      Recordar cobro
-    </a>
+    <div className="px-4 py-3 lg:px-5 lg:py-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+        <Link
+          href={`/pacientes/${deudor.pacienteId}`}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition-colors duration-150 active:bg-cream-50"
+          aria-label={`Abrir ficha de ${nombreCompleto}`}
+        >
+          <Avatar nombre={deudor.nombre} apellido={deudor.apellido} size={40} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-semibold text-ink-900">
+              {nombreCompleto}
+            </span>
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
+              <span>
+                {pluralizar(deudor.sesionesImpagas, "sesión", "sesiones")} sin
+                cobrar
+              </span>
+              <span aria-hidden="true" className="text-ink-300">
+                ·
+              </span>
+              <ZonaIndicador dias={deudor.diasAtraso} />
+              {deudor.ultimoAvisoEn ? (
+                <>
+                  <span aria-hidden="true" className="text-ink-300">
+                    ·
+                  </span>
+                  <UltimoAviso enviadoEn={deudor.ultimoAvisoEn} ahora={ahora} />
+                </>
+              ) : null}
+            </span>
+          </span>
+          <span className="font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-terracotta-600">
+            {money(deudor.montoTotal)}
+          </span>
+          <ChevronRight
+            size={16}
+            strokeWidth={1.6}
+            className="shrink-0 text-ink-300 lg:hidden"
+            aria-hidden="true"
+          />
+        </Link>
+        <div className="flex items-center gap-2 lg:shrink-0">
+          {!smsOk ? (
+            <p className="text-[12px] leading-[1.4] text-ink-500 lg:max-w-[220px] lg:text-right">
+              {SMS_SIN_CONFIGURAR}
+            </p>
+          ) : telefono && !confirmando ? (
+            <button
+              type="button"
+              onClick={() => setConfirmando(true)}
+              aria-label={`${RECORDAR_COBRO} a ${nombreCompleto} por SMS`}
+              className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-sage-500 px-4 text-[13px] font-semibold text-sage-600 transition-colors duration-150 hover:bg-sage-50 lg:min-h-[36px] lg:w-auto"
+            >
+              <Send size={14} strokeWidth={1.8} aria-hidden="true" />
+              {RECORDAR_COBRO}
+            </button>
+          ) : null}
+          <Link
+            href={`/pacientes/${deudor.pacienteId}`}
+            aria-label={`Ver ficha de ${nombreCompleto}`}
+            className="hidden text-ink-300 hover:text-ink-500 lg:inline-flex"
+          >
+            <ChevronRight size={16} strokeWidth={1.6} aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+
+      {confirmando ? (
+        <Confirmar
+          className="mt-3"
+          titulo={RECORDAR_COBRO_TITULO}
+          mensaje={
+            <>
+              <span className="block whitespace-pre-wrap rounded-[10px] border-l-[3px] border-l-sage-500 bg-cream-100 px-4 py-[14px] italic">
+                {mensaje}
+              </span>
+              <span className="mt-2 block text-[12px] text-ink-500">
+                {SMS_DESTINO}{" "}
+                <span className="font-medium tabular-nums text-ink-700">
+                  {telefono}
+                </span>
+              </span>
+            </>
+          }
+          accion={ENVIAR_SMS}
+          enviando={enviando}
+          enviandoLabel={ENVIANDO_SMS}
+          onConfirmar={() => void enviar()}
+          onCancelar={() => setConfirmando(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** "Avisado hace 3 días". Los días se cuentan por calendario de Montevideo,
+ *  igual que el atraso de la deuda. */
+function UltimoAviso({
+  enviadoEn,
+  ahora,
+}: {
+  enviadoEn: string;
+  ahora: Date;
+}) {
+  const dias = diasEnterosMvd(new Date(enviadoEn), ahora);
+  return (
+    <span className="text-ink-500">
+      {AVISADO} {textoAtraso(dias)}
+    </span>
   );
 }
 
