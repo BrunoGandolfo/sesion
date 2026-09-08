@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 
 import {
   CONSENTIMIENTO_VERSION,
@@ -154,5 +154,198 @@ describe("esConsentimientoVigente", () => {
 
   it("devuelve false cuando el consentimiento es null", () => {
     expect(esConsentimientoVigente(null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Auditoría de la ruta: POST /api/pacientes/[id]/consentimiento y su DELETE.
+//
+// Firmar y revocar la autorización de grabación es el acto legal más sensible
+// de la app —es lo que habilita grabar a una persona— y hasta ahora no dejaba
+// rastro en eventos_auditoria. Estos casos son el guardián de que lo deje.
+//
+// Son unitarios: la base y la sesión están mockeadas. No prueban que Prisma
+// escriba (eso ya lo cubren los tests de integración de la tabla), prueban que
+// la ruta LLAME al registro y con qué.
+// ---------------------------------------------------------------------------
+
+const sesionActual = vi.hoisted(() => ({
+  organizationId: "org-1",
+  userId: "user-1",
+}));
+
+const baseDeDatos = vi.hoisted(() => ({
+  /** Eventos que la ruta mandó a eventos_auditoria, en orden. */
+  eventos: [] as Array<Record<string, unknown>>,
+  /** Cuántos consentimientos vigentes encuentra el updateMany de turno. */
+  vigentes: 0,
+  /** null para que el paciente "no exista". */
+  paciente: { id: "pac-1", nombre: "María", apellido: "González" } as {
+    id: string;
+    nombre: string;
+    apellido: string;
+  } | null,
+}));
+
+vi.mock("@/lib/auth-utils", () => ({
+  getCurrentOrganizationId: async () => sesionActual.organizationId,
+  getServerSession: async () => ({
+    organizationId: sesionActual.organizationId,
+    userId: sesionActual.userId,
+  }),
+}));
+
+vi.mock("@/lib/db", () => {
+  const revocarVigentes = async () => {
+    const count = baseDeDatos.vigentes;
+    baseDeDatos.vigentes = 0;
+    return { count };
+  };
+
+  const db = {
+    paciente: { findFirst: async () => baseDeDatos.paciente },
+    configuracion: {
+      findUnique: async () => ({
+        nombreProfesional: "Lic. Ana Pérez",
+        direccion: "Av. 18 de Julio 1234, Montevideo",
+      }),
+    },
+    consentimientoGrabacion: { updateMany: revocarVigentes },
+    eventoAuditoria: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        baseDeDatos.eventos.push(data);
+        return data;
+      },
+    },
+    $transaction: async (
+      fn: (tx: {
+        consentimientoGrabacion: {
+          updateMany: typeof revocarVigentes;
+          create: (args: unknown) => Promise<unknown>;
+        };
+      }) => Promise<unknown>,
+    ) =>
+      fn({
+        consentimientoGrabacion: {
+          updateMany: revocarVigentes,
+          create: async () => ({
+            id: "cons-1",
+            pacienteId: "pac-1",
+            firmadoEn: new Date("2026-03-01T12:00:00Z"),
+            textoVersion: CONSENTIMIENTO_VERSION,
+            revocadoEn: null,
+          }),
+        },
+      }),
+  };
+
+  return { db };
+});
+
+const { POST, DELETE } = await import(
+  "@/app/api/pacientes/[id]/consentimiento/route"
+);
+
+const params = { params: Promise.resolve({ id: "pac-1" }) };
+
+function pedidoFirma(): Request {
+  return new Request("http://localhost/api/pacientes/pac-1/consentimiento", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-forwarded-for": "200.40.1.7, 10.0.0.1",
+    },
+    body: JSON.stringify({
+      firmaDigital: "María González",
+      textoVersion: CONSENTIMIENTO_VERSION,
+    }),
+  });
+}
+
+function pedidoRevocacion(): Request {
+  return new Request("http://localhost/api/pacientes/pac-1/consentimiento", {
+    method: "DELETE",
+    headers: { "x-forwarded-for": "200.40.1.7" },
+  });
+}
+
+describe("auditoría de la autorización de grabación", () => {
+  beforeEach(() => {
+    baseDeDatos.eventos = [];
+    baseDeDatos.vigentes = 0;
+    baseDeDatos.paciente = {
+      id: "pac-1",
+      nombre: "María",
+      apellido: "González",
+    };
+  });
+
+  it("firmar registra consentimiento.firmar contra la paciente", async () => {
+    const respuesta = await POST(pedidoFirma(), params);
+    expect(respuesta.status).toBe(201);
+
+    expect(baseDeDatos.eventos).toHaveLength(1);
+    const [evento] = baseDeDatos.eventos;
+    expect(evento).toMatchObject({
+      organizationId: "org-1",
+      actorTipo: "usuario",
+      actorId: "user-1",
+      accion: "consentimiento.firmar",
+      entidad: "paciente",
+      entidadId: "pac-1",
+    });
+    expect(evento.detalle).toEqual({
+      consentimientoId: "cons-1",
+      textoVersion: CONSENTIMIENTO_VERSION,
+      reemplazados: 0,
+      ip: "200.40.1.7",
+    });
+  });
+
+  it("firmar sobre una autorización vigente deja constancia del reemplazo", async () => {
+    baseDeDatos.vigentes = 1;
+
+    await POST(pedidoFirma(), params);
+
+    expect(baseDeDatos.eventos[0]?.detalle).toMatchObject({ reemplazados: 1 });
+  });
+
+  it("revocar registra consentimiento.revocar contra la paciente", async () => {
+    baseDeDatos.vigentes = 1;
+
+    const respuesta = await DELETE(pedidoRevocacion(), params);
+    expect(respuesta.status).toBe(200);
+
+    expect(baseDeDatos.eventos).toHaveLength(1);
+    const [evento] = baseDeDatos.eventos;
+    expect(evento).toMatchObject({
+      organizationId: "org-1",
+      actorTipo: "usuario",
+      actorId: "user-1",
+      accion: "consentimiento.revocar",
+      entidad: "paciente",
+      entidadId: "pac-1",
+    });
+    expect(evento.detalle).toEqual({ revocados: 1, ip: "200.40.1.7" });
+  });
+
+  // El registro es de hechos, no de intentos: si no había nada vigente que
+  // revocar la ruta contesta 404 y no puede quedar un evento diciendo que se
+  // revocó algo.
+  it("un DELETE que no revoca nada no genera evento", async () => {
+    const respuesta = await DELETE(pedidoRevocacion(), params);
+
+    expect(respuesta.status).toBe(404);
+    expect(baseDeDatos.eventos).toHaveLength(0);
+  });
+
+  // Ni el texto legal completo ni la firma digital —el documento en sí— pueden
+  // filtrarse al registro, que no está pensado para guardar datos personales.
+  it("el evento de firma no contiene el texto ni la firma", async () => {
+    await POST(pedidoFirma(), params);
+
+    const detalle = JSON.stringify(baseDeDatos.eventos[0]?.detalle);
+    expect(detalle).not.toContain("María");
+    expect(detalle).not.toContain("Consentimiento informado");
   });
 });

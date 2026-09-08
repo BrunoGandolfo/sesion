@@ -6,7 +6,8 @@ import {
 } from "@/lib/consentimiento";
 import { ipDeRequest } from "@/lib/request-huella";
 
-import { getOrganizationId } from "../../../_lib/auth";
+import { registrarAuditoria } from "../../../_lib/auditoria";
+import { getOrganizationId, getSessionActor } from "../../../_lib/auth";
 import {
   ApiError,
   errorResponse,
@@ -100,7 +101,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    // getSessionActor y no getOrganizationId: la auditoría necesita saber
+    // QUIÉN firmó, y esta es la única forma de tener el userId con una sola
+    // resolución de sesión (igual que la ruta de documentación).
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
     const body = await parseJsonBody(request);
@@ -138,8 +142,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     const ipOrigen = ipDeRequest(request);
     const now = new Date();
 
-    const consentimiento = await db.$transaction(async (tx) => {
-      await tx.consentimientoGrabacion.updateMany({
+    const { consentimiento, reemplazados } = await db.$transaction(async (tx) => {
+      const { count } = await tx.consentimientoGrabacion.updateMany({
         where: {
           pacienteId: id,
           organizationId,
@@ -148,7 +152,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         data: { revocadoEn: now },
       });
 
-      return tx.consentimientoGrabacion.create({
+      const creado = await tx.consentimientoGrabacion.create({
         data: {
           pacienteId: id,
           organizationId,
@@ -160,6 +164,33 @@ export async function POST(request: Request, { params }: RouteParams) {
         },
         select: consentimientoSelect,
       });
+
+      return { consentimiento: creado, reemplazados: count };
+    });
+
+    // El acto que habilita a grabar a una persona: va al registro append-only
+    // sí o sí. Del consentimiento sólo entran identificadores, la versión del
+    // texto y desde dónde se firmó; ni el texto completo ni la firma digital,
+    // que son el documento en sí y viven en su propia tabla.
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: "usuario",
+      actorId: userId,
+      // La entidad es la paciente y no la fila del consentimiento: firmar y
+      // revocar quedan así en la misma línea de tiempo, consultable con una
+      // sola query por paciente (el DELETE revoca por lote y no tiene un id
+      // único que poner acá).
+      entidad: "paciente",
+      entidadId: id,
+      accion: "consentimiento.firmar",
+      detalle: {
+        consentimientoId: consentimiento.id,
+        textoVersion: consentimiento.textoVersion,
+        // > 0 sólo si ya había una autorización vigente que esta firma
+        // reemplazó (la transacción las revoca antes de crear la nueva).
+        reemplazados,
+        ip: ipOrigen,
+      },
     });
 
     // Mismo envoltorio que el GET: { data: { consentimiento } }. Antes salía
@@ -172,9 +203,9 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
     await assertPacienteExists(id, organizationId);
@@ -191,6 +222,18 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     if (count === 0) {
       throw new ApiError("Consentimiento vigente no encontrado", 404);
     }
+
+    // Revocar es tan sensible como firmar: a partir de acá no se puede grabar
+    // más, y hay que poder probar cuándo dejó de poderse y quién lo pidió.
+    await registrarAuditoria({
+      organizationId,
+      actorTipo: "usuario",
+      actorId: userId,
+      entidad: "paciente",
+      entidadId: id,
+      accion: "consentimiento.revocar",
+      detalle: { revocados: count, ip: ipDeRequest(request) },
+    });
 
     // { data: { revocados } }: el mismo envoltorio que el GET y el POST.
     return ok({ revocados: count });
