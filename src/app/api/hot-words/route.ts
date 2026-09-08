@@ -1,46 +1,23 @@
 import { Prisma } from "@prisma/client";
-import { z } from "zod";
 import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../_lib/auth";
 import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
+import {
+  hotWordItemSchema,
+  hotWordsBulkSchema,
+  hotWordsQuerySchema,
+} from "../_lib/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const scopeSchema = z.enum(["global", "profesional", "paciente"]);
-
-const itemSchema = z
-  .object({
-    termino: z.string().trim().min(1).max(200),
-    scope: scopeSchema,
-    categoria: z.string().trim().max(50).nullish(),
-    pacienteId: z.string().cuid().nullish(),
-  })
-  .refine(
-    (v) => (v.scope === "paciente" ? !!v.pacienteId : !v.pacienteId),
-    {
-      message:
-        "pacienteId es obligatorio solo cuando scope === 'paciente'",
-      path: ["pacienteId"],
-    },
-  );
-
-const bulkSchema = z.object({
-  hotWords: z.array(itemSchema).min(1),
-});
-
-const querySchema = z.object({
-  scope: scopeSchema,
-  pacienteId: z.string().cuid().optional(),
-});
 
 export async function GET(request: Request) {
   try {
     const organizationId = await getOrganizationId();
     const url = new URL(request.url);
 
-    const parsed = querySchema.safeParse({
+    const parsed = hotWordsQuerySchema.safeParse({
       scope: url.searchParams.get("scope") ?? undefined,
       pacienteId: url.searchParams.get("pacienteId") ?? undefined,
     });
@@ -91,7 +68,7 @@ export async function POST(request: Request) {
     const body: unknown = await request.json();
 
     if (typeof body === "object" && body !== null && "hotWords" in body) {
-      const parsed = bulkSchema.safeParse(body);
+      const parsed = hotWordsBulkSchema.safeParse(body);
       if (!parsed.success) {
         return validationError(parsed.error);
       }
@@ -112,7 +89,7 @@ export async function POST(request: Request) {
       return ok({ count: result.count }, 201);
     }
 
-    const parsed = itemSchema.safeParse(body);
+    const parsed = hotWordItemSchema.safeParse(body);
     if (!parsed.success) {
       return validationError(parsed.error);
     }

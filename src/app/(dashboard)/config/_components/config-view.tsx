@@ -2,9 +2,11 @@
 
 // Tu consultorio: lo que la app necesita saber de ella y de cómo trabaja.
 //
-// Cinco secciones, en el orden en que las piensa: quién es (Vos), cuánto
-// cobra, con qué enfoque trabaja, qué recordatorio reciben los pacientes y
-// la cuenta. Todo se guarda solo, con un aviso discreto.
+// Seis secciones, en el orden en que las piensa: quién es (Vos), cuánto
+// cobra, con qué enfoque trabaja, qué palabras tiene que escuchar bien la
+// transcripción (Vocabulario, que vive en vocabulario-seccion.tsx), qué
+// recordatorio reciben los pacientes y la cuenta. Todo se guarda solo, con un
+// aviso discreto.
 //
 // El enfoque teórico es una decisión clínica y se dice completa: cada
 // orientación nombra el instrumento con el que se evalúa su práctica.
@@ -13,7 +15,7 @@ import * as React from "react";
 import { LogOut } from "lucide-react";
 import { getSession, signOut } from "next-auth/react";
 
-import { Button, Card, EditorialRule, Input } from "@/components/ui";
+import { Button, Card, Input } from "@/components/ui";
 import { CheckDibujado } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
 import { ALGO_FALLO, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
@@ -27,6 +29,8 @@ import { buildSmsMessage, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
+import { TituloSeccion } from "./titulo-seccion";
+import { VocabularioSeccion } from "./vocabulario-seccion";
 
 // Datos de ejemplo de la vista previa: martes 21 de abril, 10:00.
 const FECHA_PREVIEW = new Date(2026, 3, 21, 10, 0);
@@ -456,6 +460,8 @@ export function ConfigView() {
           </Card>
         </section>
 
+        <VocabularioSeccion />
+
         {/* ─── Recordatorio ────────────────────────────────────── */}
         <section>
           <TituloSeccion>Recordatorio</TituloSeccion>
@@ -740,15 +746,6 @@ function IndicadorGuardado({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function TituloSeccion({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="mb-3 flex items-center text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-      <EditorialRule />
-      <span>{children}</span>
-    </h2>
   );
 }
 

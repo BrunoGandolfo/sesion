@@ -496,6 +496,39 @@ export const HUECOS_EXPLICADOS =
   "La línea se corta donde la sesión no registró el dato: no se completa por interpolación.";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Vocabulario clínico (hot words)
+//
+// Nunca se le dice "hot words" ni "word boost" en pantalla: eso es el nombre
+// del parámetro de AssemblyAI, no el de la cosa. Lo que ella carga son las
+// palabras que la transcripción tiene que escuchar bien.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** La sección de "Tu consultorio" y el bloque de la ficha. */
+export const VOCABULARIO = "Vocabulario";
+
+/** Qué hace, en una línea, sin hablar de modelos ni de parámetros. */
+export const VOCABULARIO_AYUDA =
+  "Palabras que la transcripción tiene que escuchar bien: términos clínicos, modismos y nombres propios.";
+
+/** El vocabulario de toda la cuenta: se aplica a todas las sesiones. */
+export const VOCABULARIO_GLOBAL = "De todas tus sesiones";
+
+export const VOCABULARIO_GLOBAL_AYUDA =
+  "Se usa en cada sesión que grabes, de cualquier paciente.";
+
+/** El de ella: cómo nombra su oficio. */
+export const VOCABULARIO_PROFESIONAL = "Tuyo";
+
+export const VOCABULARIO_PROFESIONAL_AYUDA =
+  "Las palabras de tu enfoque y tu manera de escribir.";
+
+/** El bloque de la ficha: solo para esa persona. */
+export const VOCABULARIO_PACIENTE = "Vocabulario de esta persona";
+
+export const VOCABULARIO_PACIENTE_AYUDA =
+  "Nombres y palabras que aparecen solo en las sesiones de este paciente. Se suman a las de toda la cuenta.";
+
+// ────────────────────────────────────────────────────────────────────────────
 // Errores — en castellano, sin HTTP, sin R2, sin CORS.
 // Cada uno dice qué pasó, si se perdió algo y qué puede hacer ella.
 // ────────────────────────────────────────────────────────────────────────────

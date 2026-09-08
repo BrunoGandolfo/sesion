@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../../../_lib/auth";
+import { terminosAsr } from "../../../_lib/casos-uso/terminos-asr";
 import { ApiError, errorResponse, ok } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
@@ -24,22 +25,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       throw new ApiError("Paciente no encontrado", 404);
     }
 
-    const hotWords = await db.hotWord.findMany({
-      where: {
-        organizationId,
-        activo: true,
-        OR: [
-          { scope: "global" },
-          { scope: "profesional" },
-          { scope: "paciente", pacienteId },
-        ],
-      },
-      select: { termino: true },
+    // La misma consulta que viaja al worker en cada sesión reclamada
+    // (_lib/casos-uso/terminos-asr.ts).
+    const terminos = await terminosAsr({
+      prisma: db,
+      organizationId,
+      pacienteId,
     });
-
-    const terminos = Array.from(
-      new Set(hotWords.map((h) => h.termino)),
-    ).sort();
 
     return ok(terminos);
   } catch (error) {

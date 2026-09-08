@@ -18,10 +18,16 @@ import {
 
 import { Button, Confirmar, EditorialRule, Textarea, Toast } from "@/components/ui";
 import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge";
+import { HotWordsManager } from "@/components/grabacion/HotWordsManager";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiPatch } from "@/lib/api-client";
 import { money } from "@/lib/format";
-import { ALGO_FALLO, AUTORIZACION_GRABACION } from "@/lib/glosario";
+import {
+  ALGO_FALLO,
+  AUTORIZACION_GRABACION,
+  VOCABULARIO_PACIENTE,
+  VOCABULARIO_PACIENTE_AYUDA,
+} from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { TurnosPagosTab } from "./turnos-pagos-tab";
@@ -54,6 +60,7 @@ export function FichaTab({
   const [confirmandoArchivo, setConfirmandoArchivo] = React.useState(false);
   const [archivando, setArchivando] = React.useState(false);
   const [turnosAbiertos, setTurnosAbiertos] = React.useState(false);
+  const [vocabularioAbierto, setVocabularioAbierto] = React.useState(false);
   const [toast, setToast] = React.useState<ToastState>({ open: false, message: "" });
 
   async function cambiarActivo(proximoActivo: boolean) {
@@ -149,6 +156,43 @@ export function FichaTab({
             onCambio={onPacienteActualizado}
           />
         </div>
+      </section>
+
+      {/* Vocabulario de esta persona: los nombres y las palabras que aparecen
+          solo en sus sesiones. Va acá, pegado a la autorización, porque las
+          dos cosas son de la grabación. Se monta recién al abrir: si no, cada
+          ficha que se abre pide una lista que casi nunca se mira. */}
+      <section>
+        <button
+          type="button"
+          aria-expanded={vocabularioAbierto}
+          onClick={() => setVocabularioAbierto((v) => !v)}
+          className="mb-3 flex w-full items-center justify-between gap-3 text-left"
+        >
+          <span className="flex items-center text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+            <EditorialRule />
+            <span>{VOCABULARIO_PACIENTE}</span>
+          </span>
+          <ChevronDown
+            size={16}
+            strokeWidth={1.8}
+            aria-hidden="true"
+            className={`shrink-0 text-ink-500 transition-transform duration-150 ${vocabularioAbierto ? "rotate-180" : ""}`}
+          />
+        </button>
+        {vocabularioAbierto ? (
+          <div className="rounded-lg border border-[color:var(--border-subtle)] bg-white px-5 pb-5">
+            <p className="pt-4 font-sans text-[12px] leading-[1.5] text-ink-500">
+              {VOCABULARIO_PACIENTE_AYUDA}
+            </p>
+            <HotWordsManager
+              compacto
+              scope="paciente"
+              pacienteId={paciente.id}
+              pacienteNombre={`${paciente.nombre} ${paciente.apellido}`}
+            />
+          </div>
+        ) : null}
       </section>
 
       <section>

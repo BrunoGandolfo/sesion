@@ -12,6 +12,7 @@
 import type { db } from "@/lib/db";
 
 import { extraerCriptoTemporal } from "../sesion-clinica";
+import { terminosAsr } from "./terminos-asr";
 
 type ClientePrisma = typeof db;
 
@@ -38,6 +39,13 @@ export interface SesionReclamada {
   createdAt: string;
   orientacionTeorica: string;
   intento: number;
+  /**
+   * Vocabulario clínico que el ASR tiene que escuchar en esta sesión: lo
+   * global y lo de la profesional, más lo propio de esta paciente. Ordenado
+   * y sin repetidos; `[]` si la organización todavía no cargó ninguno, que
+   * es el caso de una cuenta recién abierta.
+   */
+  terminosAsr: string[];
 }
 
 const ORIENTACION_DEFAULT = "cbt_mi";
@@ -115,6 +123,36 @@ export async function reclamarPendientes({
     if (count === 0) continue;
 
     const { claveCifrado, iv } = extraerCriptoTemporal(s.datosEstructurados);
+
+    // Después del claim y no antes: solo se consulta el vocabulario de las
+    // sesiones que efectivamente se entregan (a lo sumo `limite` por llamada).
+    //
+    // Y best-effort, como el contexto clínico del worker: el vocabulario
+    // mejora la transcripción, no la habilita. Si esta consulta explota, la
+    // sesión ya tiene el claim puesto —`intentos` incrementado, `updatedAt`
+    // renovado—, así que dejar subir el error la deja reclamada y sin
+    // entregar hasta que venza el lease, y en un lote se lleva puestas
+    // también a las que ya estaban listas. Se entrega igual, sin términos.
+    let terminos: string[] = [];
+    try {
+      terminos = await terminosAsr({
+        prisma,
+        organizationId: s.organizationId,
+        pacienteId: s.turno.paciente.id,
+      });
+    } catch (error) {
+      // El id y el tipo de error, nunca los términos: son vocabulario
+      // clínico y nombres propios de la paciente, y esto va al log de la
+      // función.
+      console.warn(
+        "[reclamar-pendientes] no se pudo leer el vocabulario; la sesión se entrega sin términos.",
+        {
+          sesionClinicaId: s.id,
+          tipoError: error instanceof Error ? error.name : typeof error,
+        },
+      );
+    }
+
     reclamadas.push({
       sesionClinicaId: s.id,
       turnoId: s.turnoId,
@@ -127,6 +165,7 @@ export async function reclamarPendientes({
       orientacionTeorica:
         orientacionPorOrg.get(s.organizationId) ?? ORIENTACION_DEFAULT,
       intento: s.intentos + 1,
+      terminosAsr: terminos,
     });
   }
 

@@ -14,6 +14,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
@@ -25,6 +26,7 @@ import {
   estaIntegrada,
   sesionesSinContexto,
 } from "@/app/api/_lib/casos-uso/sesiones-sin-contexto";
+import { terminosAsr } from "@/app/api/_lib/casos-uso/terminos-asr";
 import { __resetKeyCacheForTests } from "@/lib/encryption";
 import { cifrarSesion } from "@/lib/prisma-encryption";
 
@@ -33,6 +35,17 @@ import {
   vaciarTablas,
   type ClienteCifrado,
 } from "./db-test";
+
+// El módulo se mockea envolviendo la implementación real: todos los tests
+// siguen consultando la base de verdad, y el de la caída best-effort puede
+// hacer explotar una sola llamada con mockRejectedValueOnce.
+vi.mock("@/app/api/_lib/casos-uso/terminos-asr", async (importarOriginal) => {
+  const original =
+    await importarOriginal<
+      typeof import("@/app/api/_lib/casos-uso/terminos-asr")
+    >();
+  return { ...original, terminosAsr: vi.fn(original.terminosAsr) };
+});
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
@@ -111,6 +124,40 @@ async function leerSesion(id: string) {
     where: { id },
     select: { estado: true, intentos: true, updatedAt: true, error: true },
   });
+}
+
+async function crearHotWord(
+  base: Base,
+  datos: {
+    termino: string;
+    scope: string;
+    pacienteId?: string | null;
+    activo?: boolean;
+    organizationId?: string;
+  },
+): Promise<void> {
+  await prismaRaw.hotWord.create({
+    data: {
+      organizationId: datos.organizationId ?? base.orgId,
+      termino: datos.termino,
+      scope: datos.scope,
+      pacienteId: datos.pacienteId ?? null,
+      activo: datos.activo ?? true,
+    },
+  });
+}
+
+async function crearPaciente(orgId: string): Promise<string> {
+  const paciente = await prismaRaw.paciente.create({
+    data: {
+      nombre: "Otra",
+      apellido: "Persona",
+      telefono: "+59899000001",
+      tarifa: 1000,
+      organizationId: orgId,
+    },
+  });
+  return paciente.id;
 }
 
 function reclamar() {
@@ -232,6 +279,191 @@ describe("reclamarPendientes", () => {
     expect(reclamada.claveCifrado).toBe("k1");
     expect(reclamada.iv).toBe("iv1");
     expect(reclamada.orientacionTeorica).toBe("gestalt");
+  });
+
+  it("entrega el vocabulario de la sesión y vacío cuando no hay ninguno", async () => {
+    const base = await crearBase();
+    const id = await crearProcesando(base, { intentos: 0 });
+
+    const [sinVocabulario] = await reclamar();
+    expect(sinVocabulario.sesionClinicaId).toBe(id);
+    expect(sinVocabulario.terminosAsr).toEqual([]);
+
+    // Segunda sesión, ya con vocabulario cargado: entra lo de la cuenta y lo
+    // de esta paciente, no lo de otra.
+    const otroPacienteId = await crearPaciente(base.orgId);
+    await crearHotWord(base, { termino: "encuadre", scope: "global" });
+    await crearHotWord(base, { termino: "gestalt", scope: "profesional" });
+    await crearHotWord(base, {
+      termino: "Cachila",
+      scope: "paciente",
+      pacienteId: base.pacienteId,
+    });
+    await crearHotWord(base, {
+      termino: "Rocha",
+      scope: "paciente",
+      pacienteId: otroPacienteId,
+    });
+
+    const id2 = await crearProcesando(base, { intentos: 0 });
+    const reclamadas = await reclamar();
+    const conVocabulario = reclamadas.find((r) => r.sesionClinicaId === id2);
+
+    expect(conVocabulario?.terminosAsr).toEqual([
+      "Cachila",
+      "encuadre",
+      "gestalt",
+    ]);
+  });
+
+  it("si el vocabulario falla, la sesión se entrega igual y no arrastra al resto del lote", async () => {
+    const base = await crearBase();
+    await crearHotWord(base, { termino: "encuadre", scope: "global" });
+
+    // Dos sesiones en el mismo lote. Cuál se lleva el rechazo depende del
+    // orden de reclamo, y las dos se crean en el mismo instante: el test no
+    // lo asume, mira cuál volvió sin términos.
+    const primera = await crearProcesando(base, { intentos: 0 });
+    const segunda = await crearProcesando(base, { intentos: 0 });
+
+    const avisos = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(terminosAsr).mockRejectedValueOnce(
+      new Error("la base dijo que no"),
+    );
+
+    let reclamadas;
+    let llamadasAlLog;
+    try {
+      reclamadas = await reclamar();
+    } finally {
+      // Copiadas antes de restaurar: mockRestore también limpia mock.calls.
+      llamadasAlLog = [...avisos.mock.calls];
+      avisos.mockRestore();
+    }
+
+    // Las dos entregadas: una sin términos (la que falló) y la otra con los
+    // suyos. La falla de una no se lleva puesta a la otra.
+    expect(reclamadas.map((r) => r.sesionClinicaId).sort()).toEqual(
+      [primera, segunda].sort(),
+    );
+    const fallada = reclamadas.filter((r) => r.terminosAsr.length === 0);
+    const sanas = reclamadas.filter((r) => r.terminosAsr.length > 0);
+    expect(fallada).toHaveLength(1);
+    expect(sanas).toHaveLength(1);
+    expect(sanas[0].terminosAsr).toEqual(["encuadre"]);
+
+    // Y las dos quedan reclamadas de verdad, no a medias.
+    for (const id of [primera, segunda]) {
+      const fila = await leerSesion(id);
+      expect(fila.intentos).toBe(1);
+      expect(fila.estado).toBe("procesando");
+    }
+
+    // El aviso dice cuál falló y de qué; los términos no se loguean nunca.
+    expect(llamadasAlLog).toHaveLength(1);
+    const [mensaje, detalle] = llamadasAlLog[0];
+    expect(mensaje).toContain("[reclamar-pendientes]");
+    expect(detalle).toEqual({
+      sesionClinicaId: fallada[0].sesionClinicaId,
+      tipoError: "Error",
+    });
+    expect(JSON.stringify(llamadasAlLog)).not.toContain("encuadre");
+  });
+});
+
+describe("terminosAsr", () => {
+  it("suma global, profesional y el de esa paciente; deja fuera el de otra", async () => {
+    const base = await crearBase();
+    const otroPacienteId = await crearPaciente(base.orgId);
+
+    await crearHotWord(base, { termino: "encuadre", scope: "global" });
+    await crearHotWord(base, { termino: "gestalt", scope: "profesional" });
+    await crearHotWord(base, {
+      termino: "Cachila",
+      scope: "paciente",
+      pacienteId: base.pacienteId,
+    });
+    await crearHotWord(base, {
+      termino: "Rocha",
+      scope: "paciente",
+      pacienteId: otroPacienteId,
+    });
+
+    const terminos = await terminosAsr({
+      prisma: db,
+      organizationId: base.orgId,
+      pacienteId: base.pacienteId,
+    });
+
+    expect(terminos).toEqual(["Cachila", "encuadre", "gestalt"]);
+  });
+
+  it("no entrega los inactivos", async () => {
+    const base = await crearBase();
+    await crearHotWord(base, { termino: "activo", scope: "global" });
+    await crearHotWord(base, {
+      termino: "apagado",
+      scope: "global",
+      activo: false,
+    });
+
+    const terminos = await terminosAsr({
+      prisma: db,
+      organizationId: base.orgId,
+      pacienteId: base.pacienteId,
+    });
+
+    expect(terminos).toEqual(["activo"]);
+  });
+
+  it("no entrega el vocabulario de otra organización", async () => {
+    const base = await crearBase();
+    const otra = await crearBase();
+    await crearHotWord(base, { termino: "propio", scope: "global" });
+    await crearHotWord(otra, { termino: "ajeno", scope: "global" });
+
+    const terminos = await terminosAsr({
+      prisma: db,
+      organizationId: base.orgId,
+      pacienteId: base.pacienteId,
+    });
+
+    expect(terminos).toEqual(["propio"]);
+  });
+
+  it("deduplica el mismo término cargado en dos scopes y ordena", async () => {
+    const base = await crearBase();
+    await crearHotWord(base, { termino: "transferencia", scope: "global" });
+    await crearHotWord(base, {
+      termino: "transferencia",
+      scope: "profesional",
+    });
+    await crearHotWord(base, { termino: "abulia", scope: "global" });
+    await crearHotWord(base, {
+      termino: "zapallo",
+      scope: "paciente",
+      pacienteId: base.pacienteId,
+    });
+
+    const terminos = await terminosAsr({
+      prisma: db,
+      organizationId: base.orgId,
+      pacienteId: base.pacienteId,
+    });
+
+    expect(terminos).toEqual(["abulia", "transferencia", "zapallo"]);
+  });
+
+  it("sin vocabulario cargado devuelve una lista vacía, no null", async () => {
+    const base = await crearBase();
+
+    const terminos = await terminosAsr({
+      prisma: db,
+      organizationId: base.orgId,
+      pacienteId: base.pacienteId,
+    });
+
+    expect(terminos).toEqual([]);
   });
 });
 

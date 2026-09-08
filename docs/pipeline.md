@@ -82,7 +82,18 @@ y repite desde el paso 1 con el mismo blob.
   `MAX_INTENTOS_PROCESAMIENTO` (3) la sesión pasa a `error`.
 - Payload por sesión: `sesionClinicaId`, `turnoId`, `audioR2Key`,
   `duracionAudioSeg`, `pacienteId`, `claveCifrado`, `iv`, `createdAt`,
-  `orientacionTeorica` (de `Configuracion`, default `cbt_mi`), `intento`.
+  `orientacionTeorica` (de `Configuracion`, default `cbt_mi`), `intento`,
+  `terminosAsr`.
+- `terminosAsr` es el vocabulario clínico de esa sesión (hot words activas de
+  scope `global` y `profesional` de la organización, más las de scope
+  `paciente` de esa paciente), deduplicado y ordenado; `[]` si no hay ninguna.
+  Sale de `_lib/casos-uso/terminos-asr.ts`, la misma consulta que muestra
+  `GET /api/hot-words/paciente/[pacienteId]`. Es lo que el worker pasa a
+  AssemblyAI como `keyterms_prompt`; de ahí el máximo de seis palabras por
+  término que valida el POST de hot-words.
+- Si esa consulta falla, la sesión se entrega igual con `terminosAsr: []` y
+  queda un `console.warn` con el id: el vocabulario mejora la transcripción,
+  no la habilita, y la sesión ya tiene el claim puesto.
 
 ### 3.5 Worker: descarga, descifrado, ASR (`processor/processor.py`)
 

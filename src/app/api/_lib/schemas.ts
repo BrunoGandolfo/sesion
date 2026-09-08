@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { excedeMaximoPalabras, TERMINO_MUY_LARGO } from "@/lib/hot-words";
 import { normalizePhone } from "@/lib/phone";
 
 export const duracionSchema = z.union([
@@ -93,3 +94,47 @@ export const pacienteUpdateSchema = pacienteCreateSchema.partial().extend({
   activo: z.boolean().optional(),
 });
 export type PacienteUpdateInput = z.infer<typeof pacienteUpdateSchema>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Vocabulario clínico (hot words) — la validación del POST y del GET.
+//
+// Vivía dentro de src/app/api/hot-words/route.ts. Se mudó acá por dos
+// razones: es el mismo lugar donde ya viven las reglas de paciente y turno, y
+// un route.ts de Next solo puede exportar sus handlers, así que la regla no
+// se podía testear sin levantar la ruta entera.
+//
+// El límite de seis palabras por término es de AssemblyAI y sale de
+// @/lib/hot-words, que es lo que también lee el formulario.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const hotWordScopeSchema = z.enum(["global", "profesional", "paciente"]);
+
+export const terminoSchema = z
+  .string()
+  .trim()
+  .min(1, "Falta el término")
+  .max(200, "El término no puede pasar de 200 caracteres")
+  .refine((valor) => !excedeMaximoPalabras(valor), TERMINO_MUY_LARGO);
+
+/** Un término suelto. `pacienteId` va si y solo si el scope es "paciente". */
+export const hotWordItemSchema = z
+  .object({
+    termino: terminoSchema,
+    scope: hotWordScopeSchema,
+    categoria: z.string().trim().max(50).nullish(),
+    pacienteId: z.string().cuid().nullish(),
+  })
+  .refine((v) => (v.scope === "paciente" ? !!v.pacienteId : !v.pacienteId), {
+    message: "pacienteId es obligatorio solo cuando scope === 'paciente'",
+    path: ["pacienteId"],
+  });
+
+/** Carga masiva: la lista que manda el textarea de "Carga masiva". */
+export const hotWordsBulkSchema = z.object({
+  hotWords: z.array(hotWordItemSchema).min(1),
+});
+
+export const hotWordsQuerySchema = z.object({
+  scope: hotWordScopeSchema,
+  pacienteId: z.string().cuid().optional(),
+});
