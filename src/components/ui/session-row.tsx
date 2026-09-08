@@ -6,9 +6,13 @@ import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 import { hora, money } from "@/lib/format";
 import {
   AGENDADO,
+  CANCELADO,
+  COBRAR,
   FALTA_AUTORIZACION,
   GRABAR_SESION,
   NO_VINO,
+  PAGADO,
+  PENDIENTE,
   REVISAR_NOTA,
 } from "@/lib/glosario";
 import { Avatar } from "./avatar";
@@ -45,11 +49,11 @@ type Accion = {
 };
 
 function statusFor(turno: TurnoConPaciente): Status {
-  if (turno.estado === "cancelado") return { variant: "neutral", label: "Cancelado" };
+  if (turno.estado === "cancelado") return { variant: "neutral", label: CANCELADO };
   if (turno.estado === "ausente") return { variant: "neutral", label: NO_VINO };
-  if (turno.pagoEstado === "pagado") return { variant: "sage", label: "Pagado" };
+  if (turno.pagoEstado === "pagado") return { variant: "sage", label: PAGADO };
   if (turno.estado === "programado") return { variant: "gold", label: AGENDADO };
-  return { variant: "terracotta", label: "Pendiente" };
+  return { variant: "terracotta", label: PENDIENTE };
 }
 
 function borderLeftClass(turno: TurnoConPaciente): string {
@@ -116,7 +120,7 @@ function accionDe({
     : turno.estado === "realizado";
 
   if (horaPasada && turno.pagoEstado === "pendiente" && onCobrar) {
-    return { label: "Cobrar", tono: "gold", onClick: onCobrar };
+    return { label: COBRAR, tono: "gold", onClick: onCobrar };
   }
 
   // Sin `ahora` no se puede saber si el turno es de hoy: se conserva la regla

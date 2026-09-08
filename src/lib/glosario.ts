@@ -317,7 +317,13 @@ export const ENSEGUIDA = "Enseguida";
 /** Título del sheet que pregunta cómo pagó. */
 export const METODO_DE_PAGO = "Método de pago";
 
-// Estados de pago y de turno, tal como se muestran en chips y listas.
+// ────────────────────────────────────────────────────────────────────────────
+// Estado del turno en chips y listas
+// Un solo par de palabras para el mismo estado: la fila de la agenda decía
+// "Pagado"/"Pendiente" y el sheet del turno "Cobrado"/"Sin cobrar". Es el
+// mismo turno mirado desde dos pantallas, así que se llama igual en las dos.
+// ────────────────────────────────────────────────────────────────────────────
+
 export const PAGADO = "Pagado";
 export const PENDIENTE = "Pendiente";
 export const CANCELADO = "Cancelado";

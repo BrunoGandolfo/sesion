@@ -169,6 +169,15 @@ describe("glosario — constantes de texto", () => {
     }
   });
 
+  it("el estado del turno se dice igual en la fila y en el sheet", () => {
+    // La fila de la agenda decía "Pagado"/"Pendiente" y el sheet del turno
+    // "Cobrado"/"Sin cobrar" para el mismo turno. Ninguna pantalla vuelve a
+    // inventar una palabra: si estos nombres cambian, cambian en los dos.
+    expect(glosario.PAGADO).toBe("Pagado");
+    expect(glosario.PENDIENTE).toBe("Pendiente");
+    expect(glosario.CANCELADO).toBe("Cancelado");
+  });
+
   it("el selector de rango del Recorrido nombra sus cuatro opciones", () => {
     expect(glosario.RANGO_LABEL).toEqual({
       "10s": "Últimas 10",
