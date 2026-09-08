@@ -1,11 +1,8 @@
 import { db } from "@/lib/db";
+import { finDeMesMvd, inicioDeMesMvd } from "@/lib/fechas-montevideo";
 
 import { getOrganizationId } from "../../_lib/auth";
-import {
-  endOfMonth,
-  startOfMonth,
-  toTurnoConPaciente,
-} from "../../_lib/domain";
+import { toTurnoConPaciente } from "../../_lib/domain";
 import { errorResponse, ok } from "../../_lib/responses";
 
 export const runtime = "nodejs";
@@ -23,8 +20,8 @@ export async function GET() {
   try {
     const organizationId = await getOrganizationId();
     const now = new Date();
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
+    const monthStart = inicioDeMesMvd(now);
+    const monthEnd = finDeMesMvd(now);
 
     const turnos = await db.turno.findMany({
       where: {

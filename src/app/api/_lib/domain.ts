@@ -21,14 +21,7 @@ import type {
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
-import {
-  agregarDiasMvd,
-  diasEnterosMvd,
-  finDeMesMvd,
-  finDelDiaMvd,
-  inicioDeMesMvd,
-  inicioDelDiaMvd,
-} from "@/lib/fechas-montevideo";
+import { diasEnterosMvd } from "@/lib/fechas-montevideo";
 import { normalizarRecordatorioModo } from "@/lib/recordatorios-programacion";
 
 type TurnoStats = Pick<
@@ -186,15 +179,14 @@ export function minFecha(turnos: TurnoStats[]) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Bordes de día y de mes — hora de Montevideo, no la del proceso.
+// Antigüedad de la deuda — en días de calendario de Montevideo, no del
+// proceso: en Vercel, que corre en UTC, una sesión de las 21:30 de Montevideo
+// caía al día siguiente.
 //
-// Estas cinco funciones son las que contestan "hoy", "este mes" y "hace
-// cuántos días" en toda la API. Usaban setHours/getFullYear, o sea la zona
-// del proceso: en Vercel, que corre en UTC y no deja fijar TZ, una sesión de
-// las 21:30 de Montevideo caía en el día siguiente y desaparecía de la
-// agenda del día. Ahora delegan en fechas-montevideo, única fuente de
-// verdad del tiempo local; se conservan acá con su nombre para no tocar los
-// veinte lugares que ya las importan.
+// Acá vivían además startOfDay/endOfDay/startOfMonth/endOfMonth/addDays: cinco
+// envoltorios de una línea sobre fechas-montevideo que solo agregaban un
+// nombre en inglés y un salto más para llegar a la fuente de verdad. Quien las
+// usaba importa ahora de @/lib/fechas-montevideo directo.
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -205,26 +197,6 @@ export function minFecha(turnos: TurnoStats[]) {
 export function diasDesde(fecha: Date | null, ahora: Date): number {
   if (!fecha) return 0;
   return Math.max(0, diasEnterosMvd(fecha, ahora));
-}
-
-export function startOfDay(date: Date) {
-  return inicioDelDiaMvd(date);
-}
-
-export function endOfDay(date: Date) {
-  return finDelDiaMvd(date);
-}
-
-export function startOfMonth(date: Date) {
-  return inicioDeMesMvd(date);
-}
-
-export function endOfMonth(date: Date) {
-  return finDeMesMvd(date);
-}
-
-export function addDays(date: Date, days: number) {
-  return agregarDiasMvd(date, days);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

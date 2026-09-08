@@ -1,12 +1,12 @@
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { agregarDiasMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
 import {
   calcularProgramadoEn,
   normalizarRecordatorioModo,
 } from "@/lib/recordatorios-programacion";
 
 import { requireBearer } from "../_lib/auth";
-import { addDays, startOfDay } from "../_lib/domain";
 import { errorResponse } from "../_lib/responses";
 
 export const runtime = "nodejs";
@@ -73,14 +73,14 @@ function withTime(date: Date, hours: number, minutes: number) {
 
 function weekdayDates(start: Date, count: number, fromOffset: number) {
   const dates: Date[] = [];
-  let cursor = addDays(start, fromOffset);
+  let cursor = agregarDiasMvd(start, fromOffset);
 
   while (dates.length < count) {
     const day = cursor.getDay();
     if (day !== 0 && day !== 6) {
       dates.push(new Date(cursor));
     }
-    cursor = addDays(cursor, 1);
+    cursor = agregarDiasMvd(cursor, 1);
   }
 
   return dates;
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(seedUserPassword, 10);
     const now = new Date();
-    const today = startOfDay(now);
+    const today = inicioDelDiaMvd(now);
 
     const result = await db.$transaction(async (tx) => {
       const existingUser = await tx.user.findUnique({
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
               email: emailFrom(paciente.nombre, paciente.apellido),
               tarifa: paciente.tarifa,
               notas: paciente.notas ?? null,
-              creadoEn: addDays(today, -520 + index * 19),
+              creadoEn: agregarDiasMvd(today, -520 + index * 19),
             },
           }),
         ),
@@ -210,7 +210,7 @@ export async function POST(request: Request) {
             estado: esFuturo ? "programado" : "realizado",
             tarifaCobrada: paciente.tarifa,
             pagoEstado: pagado ? "pagado" : "pendiente",
-            pagoFecha: pagado ? addDays(fecha, 1) : null,
+            pagoFecha: pagado ? agregarDiasMvd(fecha, 1) : null,
             pagoMetodo: pagado ? "transferencia" : null,
             notas: null,
           },

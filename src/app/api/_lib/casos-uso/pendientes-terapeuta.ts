@@ -22,11 +22,10 @@
 
 import type { db } from "@/lib/db";
 import { esConsentimientoVigente } from "@/lib/consentimiento";
+import { finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
 
 import {
-  endOfDay,
   esDeudaPendiente,
-  startOfDay,
   type NotaParaRevisar,
   type PacienteSinCobrar,
   type PendientesTerapeuta,
@@ -119,8 +118,8 @@ export async function pendientesTerapeuta({
   organizationId,
   ahora,
 }: PendientesTerapeutaParams): Promise<PendientesTerapeuta> {
-  const inicioDelDia = startOfDay(ahora);
-  const finDelDia = endOfDay(ahora);
+  const inicioDelDia = inicioDelDiaMvd(ahora);
+  const finDelDia = finDelDiaMvd(ahora);
 
   const [sesionesEnRevision, turnosImpagos, turnosDeHoy] = await Promise.all([
     // 1. Notas generadas que todavía nadie aprobó. De cualquier fecha: una
