@@ -43,6 +43,7 @@ import { fechaCorta, fechaLarga, hora, money } from "@/lib/format";
 import {
   AGENDADO,
   ALGO_FALLO,
+  CANCELADO,
   COBRO_DESHECHO,
   DESHACER_COBRO,
   DESHACER_COBRO_ACCION,
@@ -50,7 +51,10 @@ import {
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   GRABAR_SESION,
+  METODOS_PAGO,
   NO_VINO,
+  PAGADO,
+  PENDIENTE,
   RECORDATORIO,
   RECORDATORIO_ESTADO,
   REINTENTANDO_RECORDATORIO,
@@ -71,14 +75,6 @@ import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-c
 
 const DURACIONES: Duracion[] = [30, 45, 50, 60, 90];
 
-const METODOS_PAGO: { value: MetodoPago; label: string }[] = [
-  { value: "efectivo", label: "Efectivo" },
-  { value: "transferencia", label: "Transferencia" },
-  { value: "mercadopago", label: "MercadoPago" },
-  { value: "debito", label: "Débito" },
-  { value: "credito", label: "Crédito" },
-  { value: "otro", label: "Otro" },
-];
 
 const editSchema = z.object({
   fecha: z.string().min(1, "Falta la fecha"),
@@ -123,15 +119,18 @@ interface Props {
   onError: (message: string) => void;
 }
 
+// El mismo estado que muestra la fila de la agenda (session-row), con las
+// mismas palabras: acá decía "Cobrado"/"Sin cobrar" y allá "Pagado"/
+// "Pendiente". Es un turno solo y se llama de una sola manera.
 function chipDe(turno: TurnoConPaciente) {
   if (turno.estado === "cancelado")
-    return { variant: "neutral" as const, label: "Cancelado" };
+    return { variant: "neutral" as const, label: CANCELADO };
   if (turno.estado === "ausente")
     return { variant: "neutral" as const, label: NO_VINO };
   if (turno.pagoEstado === "pagado")
-    return { variant: "sage" as const, label: "Cobrado" };
+    return { variant: "sage" as const, label: PAGADO };
   if (turno.estado === "realizado")
-    return { variant: "terracotta" as const, label: "Sin cobrar" };
+    return { variant: "terracotta" as const, label: PENDIENTE };
   return { variant: "gold" as const, label: AGENDADO };
 }
 

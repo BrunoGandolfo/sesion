@@ -1,7 +1,8 @@
 "use client";
 
 // "¿Cómo pagó?" — la única pregunta que hace falta para cerrar un cobro.
-// Mismos seis métodos que el sheet del turno en la agenda.
+// Los seis métodos salen del glosario: los mismos que ofrecen el sheet del
+// turno en la agenda y la pestaña de pagos de la ficha.
 //
 // La confirmación se dibuja acá, sobre el método que ella tocó, y no sólo en
 // el toast: el toast aparece abajo de todo, del otro lado de la pantalla, y
@@ -12,17 +13,8 @@ import * as React from "react";
 
 import { Sheet } from "@/components/ui";
 import { CheckDibujado, useConfirmacionDibujada } from "@/components/ui/movimiento";
-import { METODO_DE_PAGO } from "@/lib/glosario";
+import { METODOS_PAGO, METODO_DE_PAGO } from "@/lib/glosario";
 import type { MetodoPago } from "@/types/domain";
-
-const METODOS_PAGO: { value: MetodoPago; label: string }[] = [
-  { value: "efectivo", label: "Efectivo" },
-  { value: "transferencia", label: "Transferencia" },
-  { value: "mercadopago", label: "MercadoPago" },
-  { value: "debito", label: "Débito" },
-  { value: "credito", label: "Crédito" },
-  { value: "otro", label: "Otro" },
-];
 
 export function SheetMetodoPago({
   open,

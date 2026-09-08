@@ -24,6 +24,8 @@ import {
   DESHACER_COBRO_MENSAJE,
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
+  METODOS_PAGO,
+  METODO_PAGO_LABEL,
   NO_VINO,
   pluralizar,
 } from "@/lib/glosario";
@@ -55,23 +57,6 @@ const ESTADO_LABEL: Record<TurnoEstado, string> = {
   ausente: NO_VINO,
 };
 
-const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
-  efectivo: "Efectivo",
-  transferencia: "Transferencia",
-  mercadopago: "MercadoPago",
-  debito: "Débito",
-  credito: "Crédito",
-  otro: "Otro",
-};
-
-const METODOS_PAGO: { value: MetodoPago; label: string }[] = [
-  { value: "efectivo", label: "Efectivo" },
-  { value: "transferencia", label: "Transferencia" },
-  { value: "mercadopago", label: "MercadoPago" },
-  { value: "debito", label: "Débito" },
-  { value: "credito", label: "Crédito" },
-  { value: "otro", label: "Otro" },
-];
 
 function estadoChipVariant(
   estado: TurnoEstado,

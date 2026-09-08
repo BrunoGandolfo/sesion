@@ -22,6 +22,10 @@
 // Módulo puro: solo strings. Lo puede importar cualquier componente
 // cliente sin arrastrar dependencias.
 
+// El único import del módulo, y es de tipos: `MetodoPago` no existe en
+// tiempo de ejecución, así que el glosario sigue siendo sólo strings.
+import type { MetodoPago } from "@/types/domain";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Navegación
 // ────────────────────────────────────────────────────────────────────────────
@@ -313,10 +317,45 @@ export const ENSEGUIDA = "Enseguida";
 /** Título del sheet que pregunta cómo pagó. */
 export const METODO_DE_PAGO = "Método de pago";
 
-// Estados de pago y de turno, tal como se muestran en chips y listas.
+// ────────────────────────────────────────────────────────────────────────────
+// Estado del turno en chips y listas
+// Un solo par de palabras para el mismo estado: la fila de la agenda decía
+// "Pagado"/"Pendiente" y el sheet del turno "Cobrado"/"Sin cobrar". Es el
+// mismo turno mirado desde dos pantallas, así que se llama igual en las dos.
+// ────────────────────────────────────────────────────────────────────────────
+
 export const PAGADO = "Pagado";
 export const PENDIENTE = "Pendiente";
 export const CANCELADO = "Cancelado";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Métodos de pago
+// La lista estaba escrita cuatro veces —el sheet de la agenda, el sheet de
+// Hoy, la pestaña de pagos de la ficha y la lista de cobros—, dos veces como
+// array y dos como Record. Acá vive una sola vez.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Cómo se dice cada método guardado. El orden es el de la lista. */
+export const METODO_PAGO_LABEL: Readonly<Record<MetodoPago, string>> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  mercadopago: "MercadoPago",
+  debito: "Débito",
+  credito: "Crédito",
+  otro: "Otro",
+};
+
+/** Los métodos en el orden en que se ofrecen, para renderizar la lista. */
+export const METODOS_PAGO: ReadonlyArray<{
+  value: MetodoPago;
+  label: string;
+}> = (Object.keys(METODO_PAGO_LABEL) as MetodoPago[]).map((value) => ({
+  value,
+  label: METODO_PAGO_LABEL[value],
+}));
+
+/** Un cobro viejo que se registró sin método. */
+export const SIN_METODO = "Sin método";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pantalla de la nota (sesiones/[id])
