@@ -83,9 +83,7 @@ export function toPacienteConDeuda(
   const pagadas = paciente.turnos.filter(
     (turno) => turno.pagoEstado === "pagado",
   );
-  const impagas = realizadas.filter(
-    (turno) => turno.pagoEstado === "pendiente",
-  );
+  const impagas = paciente.turnos.filter(esDeudaPendiente);
 
   return {
     ...paciente,
@@ -200,9 +198,11 @@ export function diasDesde(fecha: Date | null, ahora: Date): number {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Deuda — única fuente de la regla "sesión impaga".
-// Misma regla que hoy repiten dashboard, deudores, toPacienteConDeuda,
-// resumen-tab y turnos-pagos-tab: turno realizado con pago pendiente.
+// Deuda — única fuente de la regla "sesión impaga": turno realizado con pago
+// pendiente. Ya no se reescribe en ningún lado: la llaman toPacienteConDeuda
+// y calcularDeudores acá, la query de buscarTurnosConDeuda la aplica en SQL,
+// y de la UI la usan datos.ts (Hoy), ficha-tab, sesiones-tab y
+// turnos-pagos-tab. Un cambio de la regla se hace en esta función y nada más.
 // ────────────────────────────────────────────────────────────────────────────
 
 export function esDeudaPendiente(turno: {

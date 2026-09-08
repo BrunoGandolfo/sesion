@@ -15,6 +15,7 @@ import { es } from "date-fns/locale";
 
 import { Button, Card, Chip } from "@/components/ui";
 import { AnilloProgreso, ListaEnCascada } from "@/components/ui/movimiento";
+import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaLarga, hora } from "@/lib/format";
@@ -352,7 +353,7 @@ function SesionDeHoy({
   onCobrar: () => void;
 }) {
   const chip = sesion ? chipDeEstado(sesion.estado) : null;
-  const cobrable = turno.estado === "realizado" && turno.pagoEstado === "pendiente";
+  const cobrable = esDeudaPendiente(turno);
 
   let accion: React.ReactNode = null;
   if (cargando) {
