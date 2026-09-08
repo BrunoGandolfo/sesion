@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lupita · aprobación visual</title>
+<style>
+  :root {
+    --sage-500:#4F7A6A; --sage-300:#9BB6AA; --sage-100:#E2EBE6; --sage-50:#F3F6F4;
+    --cream-50:#FAFAF6; --cream-100:#F4F0E8; --cream-200:#E8E1D2;
+    --ink-900:#1A2628; --ink-500:#627072; --gold-500:#A88534;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 24px 72px; background:var(--sage-500);
+          font:15px/1.55 system-ui,-apple-system,sans-serif; color:var(--ink-900); }
+  .wrap { max-width:1180px; margin:0 auto; }
+  h1 { font-family:Georgia,serif; font-weight:500; font-size:26px; color:var(--cream-50);
+        margin:0 0 28px; letter-spacing:.01em; }
+  .bloque { display:grid; grid-template-columns:300px 1fr; gap:28px; align-items:start;
+             background:var(--cream-50); border-radius:14px; padding:24px; margin:0 0 20px; }
+  .poses { display:flex; gap:22px; align-items:flex-end; padding:16px 18px;
+            background:var(--cream-100); border-radius:10px; }
+  .pose { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .sup, .sup2 { font-size:10px; font-weight:600; text-transform:uppercase;
+                 letter-spacing:.08em; color:var(--ink-500); }
+  .sup2 { margin:0 0 10px; }
+  .card { background:#fff; border:1px solid var(--cream-200); border-radius:10px;
+           padding:16px 18px; margin:0 0 10px; }
+  .card:last-child { margin-bottom:0; }
+  .ayuda { display:flex; gap:9px; align-items:flex-start; margin:0 0 10px;
+            font-size:14px; color:var(--ink-500); }
+  .ayuda:last-child { margin-bottom:0; }
+  .ayuda svg { flex:none; margin-top:1px; }
+  .panel-h { display:flex; gap:10px; align-items:center; }
+  .panel-h h4 { font-family:Georgia,serif; font-weight:500; font-size:19px; margin:0; }
+  .panel-p { margin:8px 0 0 42px; font-size:13px; color:var(--ink-500); }
+  .centro { display:flex; flex-direction:column; align-items:center; text-align:center;
+             padding:36px 18px; }
+  .circulo { width:128px; height:128px; border-radius:50%; background:var(--cream-100);
+              display:flex; align-items:center; justify-content:center; }
+  .vt { font-family:Georgia,serif; font-weight:500; font-size:19px; margin:18px 0 0; }
+  .vd { margin:6px 0 0; font-size:13px; color:var(--ink-500); max-width:34ch; }
+  .btn { margin-top:18px; min-height:44px; padding:0 20px; border-radius:999px;
+          border:1px solid var(--sage-500); background:transparent; color:#4A7364;
+          font:600 13px system-ui,sans-serif; cursor:pointer; }
+  .contraste { background:transparent; border:1px dashed rgba(250,250,246,.45);
+                border-radius:14px; padding:20px 24px; }
+  .contraste .sup2 { color:var(--cream-100); }
+  .contraste .poses { background:transparent; padding:0; gap:34px; }
+  .contraste .sup { color:var(--cream-100); opacity:.85; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Lupita</h1>
+
+  <div class="bloque">
+    <div><div class="sup2">20 px</div><div class="poses"><div class="pose"><div class="sup">saluda</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/></svg></div><div class="pose"><div class="sup">senala</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="senala"><path d="M12 21.5C12.6 16.6 13.6 12.4 15 8.6" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M13.6 14.9C17.1 14.4 19.4 11.4 19.4 7.7 15.8 8.7 13.4 11.3 13.6 14.9Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.2 11.6C10.9 11.2 9.2 9.3 9.1 6.7 11.4 7.3 13.1 9 13.2 11.6Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/></svg></div><div class="pose"><div class="sup">celebra</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="celebra"><path d="M12 21.5V9.4" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15C9.1 13.9 7.4 10.7 7.9 7 11.1 8.4 12.6 11.4 12 15Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 13.1C14.3 12.2 15.7 9.7 15.3 6.8 12.7 7.9 11.5 10.3 12 13.1Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/></svg></div></div></div>
+    <div>
+<div class="sup2">línea de ayuda · 20</div>
+<div class="card">
+  <p class="ayuda"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Todo lo que grabás se cifra en tu teléfono antes de salir de acá.</span></p>
+  <p class="ayuda"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="senala"><path d="M12 21.5C12.6 16.6 13.6 12.4 15 8.6" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M13.6 14.9C17.1 14.4 19.4 11.4 19.4 7.7 15.8 8.7 13.4 11.3 13.6 14.9Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.2 11.6C10.9 11.2 9.2 9.3 9.1 6.7 11.4 7.3 13.1 9 13.2 11.6Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/></svg><span>¿Buscás cómo cambiar el recordatorio? Está en Tu consultorio, abajo de la tarifa.</span></p>
+</div></div>
+  </div>
+
+  <div class="bloque">
+    <div><div class="sup2">32 px</div><div class="poses"><div class="pose"><div class="sup">saluda</div><svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg></div><div class="pose"><div class="sup">senala</div><svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="senala"><path d="M12 21.5C12.6 16.6 13.6 12.4 15 8.6" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M13.6 14.9C17.1 14.4 19.4 11.4 19.4 7.7 15.8 8.7 13.4 11.3 13.6 14.9Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.2 11.6C10.9 11.2 9.2 9.3 9.1 6.7 11.4 7.3 13.1 9 13.2 11.6Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="15.6" cy="6.9" r="1.0" fill="#A88534"/></svg></div><div class="pose"><div class="sup">celebra</div><svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="celebra"><path d="M12 21.5V9.4" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15C9.1 13.9 7.4 10.7 7.9 7 11.1 8.4 12.6 11.4 12 15Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 13.1C14.3 12.2 15.7 9.7 15.3 6.8 12.7 7.9 11.5 10.3 12 13.1Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg></div></div></div>
+    <div>
+<div class="sup2">encabezado del panel · 32</div>
+<div class="card">
+  <div class="panel-h"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg><h4>Esto es Hoy</h4></div>
+  <p class="panel-p">Lo que tenés por delante y lo que quedó pendiente. Es la pantalla que más vas a mirar.</p>
+</div>
+<div class="card">
+  <div class="panel-h"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="celebra"><path d="M12 21.5V9.4" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15C9.1 13.9 7.4 10.7 7.9 7 11.1 8.4 12.6 11.4 12 15Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 13.1C14.3 12.2 15.7 9.7 15.3 6.8 12.7 7.9 11.5 10.3 12 13.1Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg><h4>Cobrado. Ese ya está.</h4></div>
+</div></div>
+  </div>
+
+  <div class="bloque">
+    <div><div class="sup2">96 px</div><div class="poses"><div class="pose"><div class="sup">saluda</div><svg width="96" height="96" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg></div><div class="pose"><div class="sup">senala</div><svg width="96" height="96" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="senala"><path d="M12 21.5C12.6 16.6 13.6 12.4 15 8.6" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M13.6 14.9C17.1 14.4 19.4 11.4 19.4 7.7 15.8 8.7 13.4 11.3 13.6 14.9Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.2 11.6C10.9 11.2 9.2 9.3 9.1 6.7 11.4 7.3 13.1 9 13.2 11.6Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="15.6" cy="6.9" r="1.0" fill="#A88534"/></svg></div><div class="pose"><div class="sup">celebra</div><svg width="96" height="96" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="celebra"><path d="M12 21.5V9.4" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15C9.1 13.9 7.4 10.7 7.9 7 11.1 8.4 12.6 11.4 12 15Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 13.1C14.3 12.2 15.7 9.7 15.3 6.8 12.7 7.9 11.5 10.3 12 13.1Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg></div></div></div>
+    <div>
+<div class="sup2">estado vacío · 96</div>
+<div class="card centro">
+  <div class="circulo"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="senala"><path d="M12 21.5C12.6 16.6 13.6 12.4 15 8.6" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M13.6 14.9C17.1 14.4 19.4 11.4 19.4 7.7 15.8 8.7 13.4 11.3 13.6 14.9Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.2 11.6C10.9 11.2 9.2 9.3 9.1 6.7 11.4 7.3 13.1 9 13.2 11.6Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="15.6" cy="6.9" r="1.0" fill="#A88534"/></svg></div>
+  <h4 class="vt">Todavía no hay nadie acá.</h4>
+  <p class="vd">Cuando cargues tu primer paciente, aparece en esta lista.</p>
+  <button class="btn">Agregar paciente</button>
+</div></div>
+  </div>
+
+  <div class="contraste">
+    <div class="sup2">directamente sobre salvia · 96 / 32 / 20</div>
+    <div class="poses">
+      <div class="pose"><div class="sup">96</div><svg width="96" height="96" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg></div>
+      <div class="pose"><div class="sup">32</div><svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12.0" cy="6.4" r="1.0" fill="#A88534"/></svg></div>
+      <div class="pose"><div class="sup">20</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" data-pose="saluda"><path d="M12 21.5V8.2" stroke="#4F7A6A" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15.4C8.5 15.4 5.7 12.9 5.1 9.2 8.8 9.7 11.6 11.9 12 15.4Z" stroke="#4F7A6A" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 12.2C14.4 12.2 16.4 10.5 16.8 7.9 14.3 8.2 12.3 9.7 12 12.2Z" stroke="#9BB6AA" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

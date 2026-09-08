@@ -4,6 +4,15 @@ Tres conceptos, una recomendación. Todo dentro de los tokens que ya existen
 en `src/app/globals.css:9-80`: no se agrega un color a la paleta para que
 entre un personaje.
 
+> **Decidido.** Se eligió el concepto A —el brote— con todas las reglas de
+> este documento tal como están escritas, y se llama **Lupita**. El nombre es
+> lo único que cambió respecto de la recomendación original, que proponía
+> "Yuyo": la forma, la paleta, las poses, los tamaños y la regla de tono no se
+> tocaron. En el código vive en `src/components/ui/lupita.tsx`, el nombre sale
+> de `LUPITA` en `src/lib/glosario.ts` —de ahí lo lee también el system prompt
+> del asistente, en `ayuda-corpus.ts`— y la primera pantalla donde aparece es
+> el panel de ayuda (`src/components/ayuda/panel-ayuda.tsx`).
+
 Antes de los conceptos, dos cosas que valen para los tres.
 
 ## La regla de tono, escrita como se va a aplicar
@@ -68,10 +77,15 @@ neutros, todo en `ink-300`.
   brote separado 3 px del tallo, como si acabara de abrirse. Nada de
   confeti ni de destellos.
 
-**Nombres.**
-1. **Yuyo** — en rioplatense es cualquier planta que crece sola donde no la
-   plantaron. Cariñoso, humilde, nada corporativo, y una psicóloga
-   gestáltica lo va a leer bien: lo que crece por sí mismo si lo dejás.
+**Nombres.** El elegido es el 1.
+1. **Lupita** — el que quedó. Es un diminutivo de persona, no de cosa, y por
+   eso no infantiliza al dibujo: le pone un nombre propio y ahí termina. Suena
+   a alguien de confianza que pasa a dar una mano, que es exactamente el
+   trabajo que hace —explicar dónde está algo y volverse a ir—, y de paso
+   arrastra la lupa, que es lo que hace quien busca en la ayuda. El primer
+   candidato fue **Yuyo** —en rioplatense, cualquier planta que crece sola
+   donde no la plantaron: cariñoso, humilde, nada corporativo—; se descartó
+   por decisión de producto, no por un problema del nombre.
 2. **Retoño** — lo que vuelve a salir después de la poda. Dice
    exactamente lo que hace un proceso terapéutico, sin decirlo.
 3. **Malvón** — la planta de balcón de cualquier casa del Río de la Plata.
@@ -198,16 +212,15 @@ el trabajo clínico, ninguna felicitación por una racha.
 
 ---
 
-## Recomendación: **A, el brote — "Yuyo"**
+## Recomendación: **A, el brote — "Lupita"**
 
 **Por qué.** Es el único de los tres que ya está en la paleta sin
 negociación: es verde salvia, que es el color de marca, y no le pide a la
 app un acento nuevo. No tiene cara, así que no compite con nadie por ser
 simpático y no se parece a ninguna mascota existente —el riesgo real del
 encargo—. Funciona a 20 px, que es donde va a vivir el 90 % del tiempo. Y
-el nombre "Yuyo" hace el trabajo que ninguna ilustración hace sola: es
-afectuoso sin ser infantil, es rioplatense sin ser costumbrista, y no
-promete nada clínico.
+el nombre "Lupita" hace el trabajo que ninguna ilustración hace sola: es
+afectuoso sin ser infantil y no promete nada clínico.
 
 **Por qué no B.** El canto rodado es el más elegante y el más silencioso —y
 por eso mismo el que menos comunica. En un estado vacío que tiene que
