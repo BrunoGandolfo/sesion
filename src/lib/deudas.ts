@@ -59,12 +59,21 @@ export function interpolarTemplateCobro(
   const sesionesTexto =
     n === 1 ? "1 sesión pendiente" : `${n} sesiones pendientes`;
 
+  // Cada valor se inserta con una función en vez de con un string: como
+  // string, `$&`, `$\'` y `` $` `` son patrones de reemplazo y se expanden
+  // en silencio. El nombre y la firma salen de campos que escribe la
+  // profesional, y el mensaje lo lee una paciente: acá entra texto literal.
+  const literal = (valor: string) => () => valor;
+
   return template
-    .replace(/\{\{sesiones\}\}\s*sesión\/es\s+pendiente\/s/g, sesionesTexto)
-    .replace(/\{\{sesiones\}\}/g, String(n))
-    .replace(/\{\{nombre\}\}/g, vars.nombre)
-    .replace(/\{\{monto\}\}/g, vars.monto)
-    .replace(/\{\{profesional\}\}/g, vars.profesional)
+    .replace(
+      /\{\{sesiones\}\}\s*sesión\/es\s+pendiente\/s/g,
+      literal(sesionesTexto),
+    )
+    .replace(/\{\{sesiones\}\}/g, literal(String(n)))
+    .replace(/\{\{nombre\}\}/g, literal(vars.nombre))
+    .replace(/\{\{monto\}\}/g, literal(vars.monto))
+    .replace(/\{\{profesional\}\}/g, literal(vars.profesional))
     .trim();
 }
 
