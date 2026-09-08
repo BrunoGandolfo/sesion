@@ -4,11 +4,13 @@
 // Vive fuera de dashboard.tsx porque no es pantalla: es el borde entre
 // /api/dashboard y el render. Sin estado, sin efectos, sin React.
 
+import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet } from "@/lib/api-client";
-import type { DashboardData, PendientesTerapeuta } from "@/app/api/_lib/domain";
 import type {
   Configuracion,
+  DashboardData,
   PacienteConDeuda,
+  PendientesTerapeuta,
   TurnoConPaciente,
 } from "@/types/domain";
 
@@ -128,8 +130,7 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
     ahoraSinCobrar:
       ahoraTurno !== null &&
       debenPacientes.has(ahoraTurno.paciente.id) &&
-      ahoraTurno.estado === "realizado" &&
-      ahoraTurno.pagoEstado === "pendiente",
+      esDeudaPendiente(ahoraTurno),
   };
 }
 

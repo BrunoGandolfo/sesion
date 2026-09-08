@@ -12,6 +12,7 @@ import {
   CheckDibujado,
   useConfirmacionDibujada,
 } from "@/components/ui/movimiento";
+import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiDelete, apiPost } from "@/lib/api-client";
 import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
 import {
@@ -146,7 +147,7 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
   const sesionesImpagas = React.useMemo(
     () =>
       localTurnos.filter(
-        (turno) => turno.estado === "realizado" && turno.pagoEstado === "pendiente",
+        esDeudaPendiente,
       ),
     [localTurnos],
   );
@@ -330,7 +331,7 @@ function TurnoRow({
   onDeshecho: (turno: Turno) => void;
   onError: (mensaje: string) => void;
 }) {
-  const mostrarCobrar = turno.estado === "realizado" && turno.pagoEstado === "pendiente";
+  const mostrarCobrar = esDeudaPendiente(turno);
   const mostrarPagado = turno.estado === "realizado" && turno.pagoEstado === "pagado";
 
   // La confirmación se abre debajo de la fila, no en un sheet: es una

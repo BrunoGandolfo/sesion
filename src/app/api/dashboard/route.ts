@@ -1,16 +1,21 @@
 import { db } from "@/lib/db";
-import type { DeudaPaciente, KPIsDashboard } from "@/types/domain";
+import {
+  finDeMesMvd,
+  finDelDiaMvd,
+  inicioDeMesMvd,
+  inicioDelDiaMvd,
+} from "@/lib/fechas-montevideo";
+import type {
+  DashboardData,
+  DeudaPaciente,
+  KPIsDashboard,
+} from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
 import { pendientesTerapeuta } from "../_lib/casos-uso/pendientes-terapeuta";
 import {
   buscarTurnosConDeuda,
   calcularDeudores,
-  DashboardData,
-  endOfDay,
-  endOfMonth,
-  startOfDay,
-  startOfMonth,
   sumTarifas,
   toTurnoConPaciente,
 } from "../_lib/domain";
@@ -25,10 +30,10 @@ export async function GET() {
   try {
     const organizationId = await getOrganizationId();
     const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
+    const todayStart = inicioDelDiaMvd(now);
+    const todayEnd = finDelDiaMvd(now);
+    const monthStart = inicioDeMesMvd(now);
+    const monthEnd = finDeMesMvd(now);
 
     const [
       sesionesHoyCount,

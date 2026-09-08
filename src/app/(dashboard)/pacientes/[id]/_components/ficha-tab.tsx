@@ -18,6 +18,7 @@ import {
 
 import { Button, Confirmar, EditorialRule, Textarea, Toast } from "@/components/ui";
 import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge";
+import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiPatch } from "@/lib/api-client";
 import { money } from "@/lib/format";
 import { ALGO_FALLO, AUTORIZACION_GRABACION } from "@/lib/glosario";
@@ -73,9 +74,7 @@ export function FichaTab({
     }
   }
 
-  const impagas = turnos.filter(
-    (t) => t.estado === "realizado" && t.pagoEstado === "pendiente",
-  ).length;
+  const impagas = turnos.filter(esDeudaPendiente).length;
 
   return (
     <div className="flex flex-col gap-8">

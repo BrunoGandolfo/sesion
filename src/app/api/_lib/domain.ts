@@ -7,23 +7,20 @@ import type {
 import type {
   Configuracion,
   DeudaPaciente,
-  KPIsDashboard,
+  Duracion,
+  MetodoPago,
+  Modalidad,
   PacienteConDeuda,
+  PagoEstado,
   Recordatorio,
   Turno,
   TurnoConPaciente,
+  TurnoEstado,
 } from "@/types/domain";
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
-import {
-  agregarDiasMvd,
-  diasEnterosMvd,
-  finDeMesMvd,
-  finDelDiaMvd,
-  inicioDeMesMvd,
-  inicioDelDiaMvd,
-} from "@/lib/fechas-montevideo";
+import { diasEnterosMvd } from "@/lib/fechas-montevideo";
 import { normalizarRecordatorioModo } from "@/lib/recordatorios-programacion";
 
 type TurnoStats = Pick<
@@ -35,19 +32,56 @@ export type PacienteWithStats = PrismaPaciente & {
   turnos: TurnoStats[];
 };
 
-export type DashboardData = {
-  kpis: KPIsDashboard;
-  sesionesHoy: TurnoConPaciente[];
-  deudores: DeudaPaciente[];
-  proximaSesion: TurnoConPaciente | null;
-  /**
-   * Lo que espera a la terapeuta: notas sin aprobar, sesiones sin cobrar y
-   * turnos de hoy sin autorización de grabación (ver
-   * casos-uso/pendientes-terapeuta.ts). Obligatorio: la pantalla de Hoy lo
-   * consume desde que existe el bloque PENDIENTES.
-   */
-  pendientes: PendientesTerapeuta;
-};
+const DURACIONES: readonly Duracion[] = [30, 45, 50, 60, 90];
+const MODALIDADES: readonly Modalidad[] = ["presencial", "online"];
+const TURNO_ESTADOS: readonly TurnoEstado[] = [
+  "programado",
+  "realizado",
+  "cancelado",
+  "ausente",
+];
+const PAGO_ESTADOS: readonly PagoEstado[] = ["pendiente", "pagado"];
+const METODOS_PAGO: readonly MetodoPago[] = [
+  "efectivo",
+  "transferencia",
+  "mercadopago",
+  "debito",
+  "credito",
+  "otro",
+];
+
+/** El valor si pertenece a la unión; el default si no. Para los campos donde
+ *  el default es una preferencia y equivocarse no cambia ningún hecho. */
+function unionODefault<T extends string | number>(
+  valores: readonly T[],
+  valor: unknown,
+  fallback: T,
+): T {
+  return valores.includes(valor as T) ? (valor as T) : fallback;
+}
+
+/**
+ * El valor si pertenece a la unión; si no, se rompe.
+ *
+ * Para `estado` y `pagoEstado` no hay default honesto: elegir uno es afirmar
+ * un hecho que la base no dijo —que la sesión no se dio, que la paciente no
+ * pagó— y la app actúa sobre esa afirmación. Un valor fuera de la unión es
+ * un invariante roto de la base, no un dato a corregir de este lado, así que
+ * el turno no sale: falla acá, con el id a mano, y las rutas lo convierten
+ * en un 500 por su try/catch. La restricción a nivel Postgres, que es donde
+ * corresponde, va en otra tanda.
+ */
+function unionOError<T extends string>(
+  valores: readonly T[],
+  valor: unknown,
+  campo: string,
+  turnoId: string,
+): T {
+  if (valores.includes(valor as T)) return valor as T;
+  throw new Error(
+    `turno ${turnoId} tiene ${campo} inválido: '${String(valor)}'`,
+  );
+}
 
 export function toPacienteConDeuda(
   paciente: PacienteWithStats,
@@ -58,9 +92,7 @@ export function toPacienteConDeuda(
   const pagadas = paciente.turnos.filter(
     (turno) => turno.pagoEstado === "pagado",
   );
-  const impagas = realizadas.filter(
-    (turno) => turno.pagoEstado === "pendiente",
-  );
+  const impagas = paciente.turnos.filter(esDeudaPendiente);
 
   return {
     ...paciente,
@@ -72,8 +104,51 @@ export function toPacienteConDeuda(
   };
 }
 
+/**
+ * Fila de turno → tipo del dominio. En DB `duracion` es Int y `modalidad`,
+ * `estado`, `pagoEstado` y `pagoMetodo` son String (sin enum en la
+ * migración), así que acá se narrowean a su unión. Antes esto era un
+ * `as unknown as Turno`, que le mentía al resto de la app: una fila con
+ * `estado: "borrador"` viajaba tipada como TurnoEstado y nadie se enteraba
+ * hasta que la pantalla mostraba un chip vacío.
+ *
+ * Los cinco campos no se tratan igual, y la diferencia es la que importa:
+ *
+ *   - `duracion` y `modalidad` caen al default de la migración. Son
+ *     preferencias de cómo se dio la sesión: mostrar 50 minutos donde la
+ *     base dice 47 es un detalle de presentación.
+ *
+ *   - `estado` y `pagoEstado` NO tienen default: se rompe. Caer a
+ *     "pendiente" ante un valor desconocido le decía a la pantalla que la
+ *     sesión está impaga —con su botón Cobrar, que después choca contra el
+ *     caso de uso, porque `cobrar-turno` actualiza sólo las filas cuyo valor
+ *     guardado es exactamente "pendiente" y devuelve 409—, mientras los
+ *     agregados de deuda filtran el valor crudo antes de pasar por acá y dan
+ *     un total distinto. Dos pantallas contando la misma plata de dos
+ *     maneras es peor que un error.
+ *
+ *   - `pagoMetodo` sí cae a "otro", pero sólo si trae un método que no
+ *     existe: null es un valor legítimo (turno sin cobrar), no un
+ *     desconocido, y "otro" es un miembro real de la unión que no habilita
+ *     ninguna acción.
+ */
 export function toTurno(turno: PrismaTurno): Turno {
-  return turno as unknown as Turno;
+  return {
+    ...turno,
+    duracion: unionODefault(DURACIONES, turno.duracion, 50),
+    modalidad: unionODefault(MODALIDADES, turno.modalidad, "presencial"),
+    estado: unionOError(TURNO_ESTADOS, turno.estado, "estado", turno.id),
+    pagoEstado: unionOError(
+      PAGO_ESTADOS,
+      turno.pagoEstado,
+      "pagoEstado",
+      turno.id,
+    ),
+    pagoMetodo:
+      turno.pagoMetodo === null
+        ? null
+        : unionODefault(METODOS_PAGO, turno.pagoMetodo, "otro"),
+  };
 }
 
 export function toTurnoConPaciente(
@@ -133,15 +208,14 @@ export function minFecha(turnos: TurnoStats[]) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Bordes de día y de mes — hora de Montevideo, no la del proceso.
+// Antigüedad de la deuda — en días de calendario de Montevideo, no del
+// proceso: en Vercel, que corre en UTC, una sesión de las 21:30 de Montevideo
+// caía al día siguiente.
 //
-// Estas cinco funciones son las que contestan "hoy", "este mes" y "hace
-// cuántos días" en toda la API. Usaban setHours/getFullYear, o sea la zona
-// del proceso: en Vercel, que corre en UTC y no deja fijar TZ, una sesión de
-// las 21:30 de Montevideo caía en el día siguiente y desaparecía de la
-// agenda del día. Ahora delegan en fechas-montevideo, única fuente de
-// verdad del tiempo local; se conservan acá con su nombre para no tocar los
-// veinte lugares que ya las importan.
+// Acá vivían además startOfDay/endOfDay/startOfMonth/endOfMonth/addDays: cinco
+// envoltorios de una línea sobre fechas-montevideo que solo agregaban un
+// nombre en inglés y un salto más para llegar a la fuente de verdad. Quien las
+// usaba importa ahora de @/lib/fechas-montevideo directo.
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -154,30 +228,12 @@ export function diasDesde(fecha: Date | null, ahora: Date): number {
   return Math.max(0, diasEnterosMvd(fecha, ahora));
 }
 
-export function startOfDay(date: Date) {
-  return inicioDelDiaMvd(date);
-}
-
-export function endOfDay(date: Date) {
-  return finDelDiaMvd(date);
-}
-
-export function startOfMonth(date: Date) {
-  return inicioDeMesMvd(date);
-}
-
-export function endOfMonth(date: Date) {
-  return finDeMesMvd(date);
-}
-
-export function addDays(date: Date, days: number) {
-  return agregarDiasMvd(date, days);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
-// Deuda — única fuente de la regla "sesión impaga".
-// Misma regla que hoy repiten dashboard, deudores, toPacienteConDeuda,
-// resumen-tab y turnos-pagos-tab: turno realizado con pago pendiente.
+// Deuda — única fuente de la regla "sesión impaga": turno realizado con pago
+// pendiente. Ya no se reescribe en ningún lado: la llaman toPacienteConDeuda
+// y calcularDeudores acá, la query de buscarTurnosConDeuda la aplica en SQL,
+// y de la UI la usan datos.ts (Hoy), ficha-tab, sesiones-tab y
+// turnos-pagos-tab. Un cambio de la regla se hace en esta función y nada más.
 // ────────────────────────────────────────────────────────────────────────────
 
 export function esDeudaPendiente(turno: {
@@ -256,67 +312,6 @@ export function calcularDeudores(
   }
 
   return [...porPaciente.values()].sort((a, b) => b.montoTotal - a.montoTotal);
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Pendientes de la terapeuta — forma de las tres listas que devuelve
-// casos-uso/pendientes-terapeuta.ts y que viajan dentro de /api/dashboard.
-//
-// Las fechas van como string ISO, no como Date: son datos de sólo lectura
-// que la pantalla formatea, y así el tipo dice la verdad sobre lo que
-// llega por la red (Response.json ya serializa toda Date a ISO).
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Nota generada por el pipeline que todavía nadie aprobó. */
-export interface NotaParaRevisar {
-  sesionId: string;
-  turnoId: string;
-  pacienteId: string;
-  /** "Ana López" — nombre y apellido ya unidos. */
-  pacienteNombre: string;
-  /** Fecha y hora del turno, ISO. */
-  fecha: string;
-}
-
-/**
- * Deuda de una paciente, no de un turno.
- *
- * Se cobra por persona, no por sesión: quien debe tres sesiones recibe un
- * mensaje, no tres. Por eso la lista llega agrupada y con el monto sumado,
- * y `masAntiguo` al lado, que es lo que dice cuán vieja es la deuda.
- */
-export interface PacienteSinCobrar {
-  pacienteId: string;
-  pacienteNombre: string;
-  /** Cuántas sesiones realizadas e impagas tiene. Siempre ≥ 1. */
-  sesiones: number;
-  /** Suma de las tarifas de esas sesiones. */
-  monto: number;
-  /** Fecha del turno impago más viejo, ISO. */
-  masAntiguo: string;
-}
-
-/** El pie del bloque: cuánto es todo junto. */
-export interface TotalSinCobrar {
-  sesiones: number;
-  monto: number;
-  pacientes: number;
-}
-
-/** Turno de hoy cuya paciente no firmó la autorización de grabación. */
-export interface TurnoSinAutorizacion {
-  turnoId: string;
-  pacienteId: string;
-  pacienteNombre: string;
-  fecha: string;
-}
-
-export interface PendientesTerapeuta {
-  notasParaRevisar: NotaParaRevisar[];
-  /** Agrupado por paciente, de la deuda más grande a la más chica. */
-  sinCobrar: PacienteSinCobrar[];
-  totalSinCobrar: TotalSinCobrar;
-  sinAutorizacion: TurnoSinAutorizacion[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ import { Card } from "@/components/ui";
 import { Contador } from "@/components/ui/movimiento";
 import { fechaLarga, moneyShort } from "@/lib/format";
 import { ESTE_MES, POR_COBRAR, SESIONES_HOY, pluralizar } from "@/lib/glosario";
-import type { DashboardData } from "@/app/api/_lib/domain";
+import type { DashboardData } from "@/types/domain";
 
 /** Cómo se escribe cada número mientras sube. El contador cuenta enteros y
  *  el formato se aplica a cada paso, así "$ 12.4k" crece como plata y no
