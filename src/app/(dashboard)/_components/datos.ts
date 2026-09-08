@@ -6,10 +6,11 @@
 
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet } from "@/lib/api-client";
-import type { DashboardData, PendientesTerapeuta } from "@/app/api/_lib/domain";
 import type {
   Configuracion,
+  DashboardData,
   PacienteConDeuda,
+  PendientesTerapeuta,
   TurnoConPaciente,
 } from "@/types/domain";
 

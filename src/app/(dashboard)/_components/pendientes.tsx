@@ -22,7 +22,7 @@ import { FileText, ShieldAlert, Wallet } from "lucide-react";
 import { Card } from "@/components/ui";
 import { fechaCorta, money } from "@/lib/format";
 import { NAV, pluralizar } from "@/lib/glosario";
-import type { PendientesTerapeuta } from "@/app/api/_lib/domain";
+import type { PendientesTerapeuta } from "@/types/domain";
 
 /** Cuántos ítems se listan por fila antes de resumir el resto. La fila es
  *  un recordatorio, no la pantalla de trabajo. */

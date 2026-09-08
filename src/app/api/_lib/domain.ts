@@ -8,7 +8,6 @@ import type {
   Configuracion,
   DeudaPaciente,
   Duracion,
-  KPIsDashboard,
   MetodoPago,
   Modalidad,
   PacienteConDeuda,
@@ -31,20 +30,6 @@ type TurnoStats = Pick<
 
 export type PacienteWithStats = PrismaPaciente & {
   turnos: TurnoStats[];
-};
-
-export type DashboardData = {
-  kpis: KPIsDashboard;
-  sesionesHoy: TurnoConPaciente[];
-  deudores: DeudaPaciente[];
-  proximaSesion: TurnoConPaciente | null;
-  /**
-   * Lo que espera a la terapeuta: notas sin aprobar, sesiones sin cobrar y
-   * turnos de hoy sin autorización de grabación (ver
-   * casos-uso/pendientes-terapeuta.ts). Obligatorio: la pantalla de Hoy lo
-   * consume desde que existe el bloque PENDIENTES.
-   */
-  pendientes: PendientesTerapeuta;
 };
 
 const DURACIONES: readonly Duracion[] = [30, 45, 50, 60, 90];
@@ -281,67 +266,6 @@ export function calcularDeudores(
   }
 
   return [...porPaciente.values()].sort((a, b) => b.montoTotal - a.montoTotal);
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Pendientes de la terapeuta — forma de las tres listas que devuelve
-// casos-uso/pendientes-terapeuta.ts y que viajan dentro de /api/dashboard.
-//
-// Las fechas van como string ISO, no como Date: son datos de sólo lectura
-// que la pantalla formatea, y así el tipo dice la verdad sobre lo que
-// llega por la red (Response.json ya serializa toda Date a ISO).
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Nota generada por el pipeline que todavía nadie aprobó. */
-export interface NotaParaRevisar {
-  sesionId: string;
-  turnoId: string;
-  pacienteId: string;
-  /** "Ana López" — nombre y apellido ya unidos. */
-  pacienteNombre: string;
-  /** Fecha y hora del turno, ISO. */
-  fecha: string;
-}
-
-/**
- * Deuda de una paciente, no de un turno.
- *
- * Se cobra por persona, no por sesión: quien debe tres sesiones recibe un
- * mensaje, no tres. Por eso la lista llega agrupada y con el monto sumado,
- * y `masAntiguo` al lado, que es lo que dice cuán vieja es la deuda.
- */
-export interface PacienteSinCobrar {
-  pacienteId: string;
-  pacienteNombre: string;
-  /** Cuántas sesiones realizadas e impagas tiene. Siempre ≥ 1. */
-  sesiones: number;
-  /** Suma de las tarifas de esas sesiones. */
-  monto: number;
-  /** Fecha del turno impago más viejo, ISO. */
-  masAntiguo: string;
-}
-
-/** El pie del bloque: cuánto es todo junto. */
-export interface TotalSinCobrar {
-  sesiones: number;
-  monto: number;
-  pacientes: number;
-}
-
-/** Turno de hoy cuya paciente no firmó la autorización de grabación. */
-export interface TurnoSinAutorizacion {
-  turnoId: string;
-  pacienteId: string;
-  pacienteNombre: string;
-  fecha: string;
-}
-
-export interface PendientesTerapeuta {
-  notasParaRevisar: NotaParaRevisar[];
-  /** Agrupado por paciente, de la deuda más grande a la más chica. */
-  sinCobrar: PacienteSinCobrar[];
-  totalSinCobrar: TotalSinCobrar;
-  sinAutorizacion: TurnoSinAutorizacion[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

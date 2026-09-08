@@ -24,14 +24,15 @@ import type { db } from "@/lib/db";
 import { esConsentimientoVigente } from "@/lib/consentimiento";
 import { finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
 
-import {
-  esDeudaPendiente,
-  type NotaParaRevisar,
-  type PacienteSinCobrar,
-  type PendientesTerapeuta,
-  type TotalSinCobrar,
-  type TurnoSinAutorizacion,
-} from "../domain";
+import type {
+  NotaParaRevisar,
+  PacienteSinCobrar,
+  PendientesTerapeuta,
+  TotalSinCobrar,
+  TurnoSinAutorizacion,
+} from "@/types/domain";
+
+import { esDeudaPendiente } from "../domain";
 
 type ClientePrisma = typeof db;
 

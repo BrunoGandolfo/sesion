@@ -5,14 +5,17 @@ import {
   inicioDeMesMvd,
   inicioDelDiaMvd,
 } from "@/lib/fechas-montevideo";
-import type { DeudaPaciente, KPIsDashboard } from "@/types/domain";
+import type {
+  DashboardData,
+  DeudaPaciente,
+  KPIsDashboard,
+} from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
 import { pendientesTerapeuta } from "../_lib/casos-uso/pendientes-terapeuta";
 import {
   buscarTurnosConDeuda,
   calcularDeudores,
-  DashboardData,
   sumTarifas,
   toTurnoConPaciente,
 } from "../_lib/domain";
