@@ -23,6 +23,7 @@ import requests
 import app_client
 import config
 import contexto_worker
+import processor
 from processor import procesar_sesion
 
 logging.basicConfig(
@@ -61,7 +62,7 @@ _CAMPOS_OBLIGATORIOS = ("sesionClinicaId", "audioR2Key", "claveCifrado", "iv")
 
 def _extraer_args(
     item: dict,
-) -> tuple[str, str, str, str, str | None, str, int] | None:
+) -> tuple[str, str, str, str, str | None, str, int, list[str]] | None:
     if any(not item.get(campo) for campo in _CAMPOS_OBLIGATORIOS):
         return None
     try:
@@ -76,6 +77,8 @@ def _extraer_args(
         item.get("pacienteId") or None,
         item.get("orientacionTeorica") or "cbt_mi",
         intento,
+        # HotWords: el campo puede no venir todavia (ver terminos_asr_de).
+        processor.terminos_asr_de(item),
     )
 
 
@@ -94,7 +97,16 @@ def _procesar_pendientes(items: list[dict]) -> None:
                 f"faltan={','.join(faltan) or '?'}"
             )
             continue
-        sesion_id, audio_key, clave, iv, paciente_id, orientacion, intento = args
+        (
+            sesion_id,
+            audio_key,
+            clave,
+            iv,
+            paciente_id,
+            orientacion,
+            intento,
+            terminos_asr,
+        ) = args
         logger.info(f"Procesando sesion {sesion_id} (audio: {audio_key}, intento {intento})")
         try:
             procesar_sesion(
@@ -105,6 +117,7 @@ def _procesar_pendientes(items: list[dict]) -> None:
                 paciente_id=paciente_id,
                 orientacion_teorica=orientacion,
                 intento=intento,
+                terminos_asr=terminos_asr,
             )
             logger.info(f"Sesion {sesion_id} procesada")
         except Exception as e:

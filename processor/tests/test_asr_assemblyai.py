@@ -159,3 +159,173 @@ def test_los_logs_no_contienen_texto_de_la_transcripcion(http, caplog):
         asr_assemblyai.transcribir(b"audio")
 
     assert all("FRASE-SECRETA" not in r.getMessage() for r in caplog.records)
+
+
+# Keyterms (HotWords) ───────────────────────────────────────────────────────
+#
+# Segun la guia de Universal-3.5 Pro, `prompt` y `keyterms_prompt` son las dos
+# maneras de darle contexto al modelo y conviven en la misma request:
+#   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro/prompting
+
+
+def _payload_transcript(post):
+    """El body del POST /v2/transcript (la segunda llamada; la primera es upload)."""
+    return post.call_args_list[1].kwargs["json"]
+
+
+def test_sin_keyterms_el_payload_sale_igual_que_antes(http):
+    mocker, post, get, _ = http
+    get.return_value = _resp(mocker, 200, COMPLETADO)
+
+    asr_assemblyai.transcribir(b"audio")
+
+    # No se manda la clave vacia: la request es identica a la de antes de HotWords.
+    assert "keyterms_prompt" not in _payload_transcript(post)
+
+
+def test_lista_vacia_tampoco_manda_la_clave(http):
+    mocker, post, get, _ = http
+    get.return_value = _resp(mocker, 200, COMPLETADO)
+
+    asr_assemblyai.transcribir(b"audio", [])
+
+    assert "keyterms_prompt" not in _payload_transcript(post)
+
+
+def test_none_es_lo_mismo_que_no_pasar_nada(http):
+    mocker, post, get, _ = http
+    get.return_value = _resp(mocker, 200, COMPLETADO)
+
+    asr_assemblyai.transcribir(b"audio", None)
+
+    assert "keyterms_prompt" not in _payload_transcript(post)
+
+
+def test_los_terminos_viajan_en_keyterms_prompt_junto_al_prompt(http):
+    mocker, post, get, _ = http
+    mocker.patch.object(
+        asr_assemblyai.config, "ASR_PROMPT_ESCENARIO", "Sesion de psicoterapia."
+    )
+    get.return_value = _resp(mocker, 200, COMPLETADO)
+
+    asr_assemblyai.transcribir(b"audio", ["MITI 4.2.1", "alianza terapéutica"])
+
+    payload = _payload_transcript(post)
+    assert payload["keyterms_prompt"] == ["MITI 4.2.1", "alianza terapéutica"]
+    # Lo importante: los dos parametros conviven. La receta vieja de
+    # Universal-3 Pro era pegar los terminos dentro del prompt; hoy la guia
+    # pide lo contrario ("Don't pack lists of keywords into the contextual
+    # prompt"), asi que el prompt queda intacto.
+    assert payload["prompt"] == "Sesion de psicoterapia."
+
+
+def test_sin_prompt_configurado_los_keyterms_igual_salen(http):
+    mocker, post, get, _ = http
+    mocker.patch.object(asr_assemblyai.config, "ASR_PROMPT_ESCENARIO", "")
+    get.return_value = _resp(mocker, 200, COMPLETADO)
+
+    asr_assemblyai.transcribir(b"audio", ["disociación"])
+
+    payload = _payload_transcript(post)
+    assert payload["keyterms_prompt"] == ["disociación"]
+    assert "prompt" not in payload
+
+
+def test_saneamiento_llega_al_payload(http):
+    mocker, post, get, _ = http
+    get.return_value = _resp(mocker, 200, COMPLETADO)
+
+    asr_assemblyai.transcribir(b"audio", ["  ", "GTFS", "GTFS", "", "CTS-R"])
+
+    assert _payload_transcript(post)["keyterms_prompt"] == ["GTFS", "CTS-R"]
+
+
+def test_el_log_dice_cuantos_terminos_pero_no_cuales(http, caplog):
+    mocker, _, get, _ = http
+    get.return_value = _resp(mocker, 200, COMPLETADO)
+
+    with caplog.at_level(logging.DEBUG):
+        asr_assemblyai.transcribir(b"audio", ["Mariana", "NOMBRE-SECRETO"])
+
+    mensajes = [r.getMessage() for r in caplog.records]
+    assert any("2 keyterms" in m for m in mensajes)
+    # Un termino puede ser el nombre propio de la paciente: nunca al log.
+    assert all("NOMBRE-SECRETO" not in m for m in mensajes)
+    assert all("Mariana" not in m for m in mensajes)
+
+
+# Saneamiento, unidad ───────────────────────────────────────────────────────
+
+
+def test_sanear_descarta_vacios_y_lo_que_no_sea_texto():
+    entrada = ["", "   ", "\n\t", None, 42, ["GTFS"], {"a": 1}, "válido"]
+    assert asr_assemblyai._sanear_keyterms(entrada) == ["válido"]
+
+
+def test_sanear_corta_a_seis_palabras_por_termino():
+    largo = "uno dos tres cuatro cinco seis siete ocho"
+    assert asr_assemblyai._sanear_keyterms([largo]) == [
+        "uno dos tres cuatro cinco seis"
+    ]
+
+
+def test_sanear_deja_intacto_el_termino_de_exactamente_seis_palabras():
+    justo = "uno dos tres cuatro cinco seis"
+    assert asr_assemblyai._sanear_keyterms([justo]) == [justo]
+
+
+def test_sanear_normaliza_el_espacio_de_sobra():
+    assert asr_assemblyai._sanear_keyterms(["  alianza   terapéutica  "]) == [
+        "alianza terapéutica"
+    ]
+
+
+def test_sanear_deduplica_conservando_el_orden():
+    entrada = ["GTFS", "MITI", "GTFS", "CTS-R", "MITI"]
+    assert asr_assemblyai._sanear_keyterms(entrada) == ["GTFS", "MITI", "CTS-R"]
+
+
+def test_sanear_deduplica_lo_que_el_corte_dejo_igual():
+    # Dos terminos distintos en el origen que, cortados a seis palabras,
+    # quedan identicos: se manda uno.
+    entrada = [
+        "uno dos tres cuatro cinco seis siete",
+        "uno dos tres cuatro cinco seis ocho",
+    ]
+    assert asr_assemblyai._sanear_keyterms(entrada) == [
+        "uno dos tres cuatro cinco seis"
+    ]
+
+
+def test_sanear_no_baja_el_caso_al_deduplicar():
+    # "Mariana" y "mariana" no son el mismo termino para el ASR: pasar el
+    # nombre propio con su mayuscula es justamente el punto.
+    assert asr_assemblyai._sanear_keyterms(["Mariana", "mariana"]) == [
+        "Mariana",
+        "mariana",
+    ]
+
+
+def test_sanear_respeta_el_tope_total():
+    entrada = [f"termino{i}" for i in range(asr_assemblyai.MAX_KEYTERMS + 50)]
+
+    saneados = asr_assemblyai._sanear_keyterms(entrada)
+
+    assert len(saneados) == asr_assemblyai.MAX_KEYTERMS
+    # Se conservan los primeros: la app los manda ordenados por relevancia.
+    assert saneados[0] == "termino0"
+    assert saneados[-1] == f"termino{asr_assemblyai.MAX_KEYTERMS - 1}"
+
+
+def test_el_tope_es_el_del_modelo_mas_chico_de_speech_models():
+    # La referencia de POST /v2/transcript: "up to 200 (for Universal-2) or
+    # 1000 (for Universal-3.5 Pro)". La request manda los dos modelos y cual
+    # procesa el audio lo decide AssemblyAI, asi que el techo es el de 200.
+    assert asr_assemblyai.MAX_KEYTERMS == 200
+    assert asr_assemblyai.MAX_PALABRAS_POR_KEYTERM == 6
+
+
+def test_sanear_no_toca_la_lista_que_recibe():
+    entrada = ["GTFS", "GTFS"]
+    asr_assemblyai._sanear_keyterms(entrada)
+    assert entrada == ["GTFS", "GTFS"]

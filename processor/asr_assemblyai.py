@@ -71,6 +71,34 @@ SPEAKER_IDENTIFICATION = {
 #   https://www.assemblyai.com/docs/pre-recorded-audio/label-speakers
 SPEAKER_OPTIONS = {"min_speakers_expected": 2, "max_speakers_expected": 2}
 
+# Keyterms (HotWords): vocabulario clinico que se le adelanta al modelo para
+# que lo escriba bien (nombres de instrumentos, terminos del oficio, y nombres
+# propios que aparecen en la sesion).
+#
+# `prompt` y `keyterms_prompt` conviven en la misma request. La guia de
+# Universal-3.5 Pro los presenta como "two ways to give the model information
+# about your audio" y en ningun lado dice que se excluyan:
+#   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro/prompting
+# Ese silencio no es ambiguedad: cuando esta API exige exclusividad lo escribe
+# con todas las letras —`speakers_expected` "cannot be used together with
+# `speaker_options`"— en la misma referencia:
+#   https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/submit
+#
+# Y la receta vieja de Universal-3 Pro —pegar los terminos dentro del prompt
+# como "Context: ..."— hoy esta desaconsejada de forma explicita por la guia
+# de escritura del prompt: "Don't pack lists of keywords into the contextual
+# prompt". Asi que los terminos NO se mezclan con ASR_PROMPT_ESCENARIO: cada
+# cosa viaja en su parametro.
+#
+# Limites de la referencia: "up to 200 (for Universal-2) or 1000 (for
+# Universal-3.5 Pro) domain-specific words or phrases (maximum 6 words per
+# phrase)".
+MAX_PALABRAS_POR_KEYTERM = 6
+# El tope que vale es el del modelo mas chico de `speech_models`: la request
+# manda principal + fallback y cual procesa el audio lo decide AssemblyAI, asi
+# que un techo de 1000 se pasaria de rosca si el audio cae en universal-2.
+MAX_KEYTERMS = 200
+
 TIMEOUT_UPLOAD_SEG = 600  # audios de 60-90 min pueden pesar decenas de MB
 TIMEOUT_HTTP_SEG = 30
 MAX_FALLOS_POLLING_CONSECUTIVOS = 5
@@ -109,6 +137,35 @@ def _fallo_red(e: Exception, etapa: str) -> PipelineError:
     return PipelineError("asr_error", f"AssemblyAI no responde en {etapa}")
 
 
+def _sanear_keyterms(keyterms: list[str] | None) -> list[str]:
+    """
+    Segunda linea de defensa sobre lo que manda la app (que ya valida en el
+    origen): descarta lo que no sea texto util, corta cada termino a
+    MAX_PALABRAS_POR_KEYTERM palabras, deduplica conservando el orden y
+    recorta el total a MAX_KEYTERMS.
+
+    La deduplicacion compara el texto exacto, no en minusculas: para el ASR
+    "Mariana" y "mariana" no son el mismo termino —de eso se trata pasarlos—
+    y bajar el caso elegiria por su cuenta como se escribe un nombre propio.
+    """
+    limpios: list[str] = []
+    vistos: set[str] = set()
+    for termino in keyterms or []:
+        if not isinstance(termino, str):
+            continue
+        palabras = termino.split()
+        if not palabras:
+            continue
+        recortado = " ".join(palabras[:MAX_PALABRAS_POR_KEYTERM])
+        if recortado in vistos:
+            continue
+        vistos.add(recortado)
+        limpios.append(recortado)
+        if len(limpios) == MAX_KEYTERMS:
+            break
+    return limpios
+
+
 # Etapas ────────────────────────────────────────────────────────────────────
 
 def _subir(audio_bytes: bytes) -> str:
@@ -142,7 +199,7 @@ def _modelos() -> list[str]:
     return modelos
 
 
-def _crear_transcript(upload_url: str) -> str:
+def _crear_transcript(upload_url: str, keyterms: list[str] | None = None) -> str:
     # Parametros segun
     #   https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/submit
     # - speech_models: lista en orden de prioridad (reemplaza a `speech_model`,
@@ -151,6 +208,10 @@ def _crear_transcript(upload_url: str) -> str:
     # - language_code "es": valor valido del enum TranscriptLanguageCode.
     # - prompt: contexto en lenguaje natural, solo Universal-3.5 Pro.
     #   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro/prompting
+    # - keyterms_prompt: la lista de terminos, que va junto al prompt y no en
+    #   lugar de el (ver el bloque de MAX_KEYTERMS mas arriba). A diferencia de
+    #   `prompt`, la referencia no lo limita a Universal-3.5 Pro: universal-2,
+    #   nuestro fallback, tambien lo acepta (con un tope mas bajo).
     payload: dict = {
         "audio_url": upload_url,
         "speech_models": _modelos(),
@@ -164,6 +225,11 @@ def _crear_transcript(upload_url: str) -> str:
     prompt = (config.ASR_PROMPT_ESCENARIO or "").strip()
     if prompt:
         payload["prompt"] = prompt
+    terminos = _sanear_keyterms(keyterms)
+    if terminos:
+        payload["keyterms_prompt"] = terminos
+    # Solo la cantidad: los terminos pueden ser nombres propios de la paciente.
+    logger.info(f"AssemblyAI: transcript con {len(terminos)} keyterms")
     try:
         response = requests.post(
             f"{API_BASE}/transcript",
@@ -376,15 +442,20 @@ def _normalizar(data: dict, transcript_id: str, modelo_solicitado: str) -> dict:
 
 # API publica ───────────────────────────────────────────────────────────────
 
-def transcribir(audio_bytes: bytes) -> dict:
+def transcribir(audio_bytes: bytes, keyterms: list[str] | None = None) -> dict:
     """
     Transcribe y diariza el audio (bytes ya descifrados) via AssemblyAI.
     El endpoint de upload recibe el audio como application/octet-stream y
     detecta el formato solo: no hace falta declarar el content-type.
+
+    `keyterms` es el vocabulario clinico de la sesion (HotWords). Se puede
+    omitir —o pasar None, o vacia— y la request sale exactamente como antes:
+    los llamadores que no lo usan no cambian. Lo que llega se sanea en
+    _sanear_keyterms antes de salir a la red.
     """
     logger.info(f"AssemblyAI: subiendo {len(audio_bytes)} bytes")
     upload_url = _subir(audio_bytes)
-    transcript_id = _crear_transcript(upload_url)
+    transcript_id = _crear_transcript(upload_url, keyterms)
     logger.info(f"AssemblyAI: transcript {transcript_id} creado, esperando...")
     # Principal de `speech_models`: es lo que se asume si la respuesta no
     # informa speech_model_used.

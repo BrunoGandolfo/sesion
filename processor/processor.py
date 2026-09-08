@@ -61,6 +61,7 @@ def procesar_sesion(
     paciente_id: str | None = None,
     orientacion_teorica: str = "cbt_mi",
     intento: int = 1,
+    terminos_asr: list[str] | None = None,
 ) -> None:
     etiqueta = sesion_clinica_id
     # ASR provisional (modelo configurado) para los callbacks de error previos
@@ -71,7 +72,7 @@ def procesar_sesion(
     )
     try:
         audio = descargar_y_descifrar(etiqueta, audio_r2_key, clave_cifrado, iv_cifrado, intento)
-        transcripcion = transcribir(etiqueta, audio)
+        transcripcion = transcribir(etiqueta, audio, terminos_asr)
         del audio
         modelos.asr = f"assemblyai:{transcripcion['speech_model']}"
         analisis = analizar(etiqueta, transcripcion, paciente_id, orientacion_teorica)
@@ -85,6 +86,23 @@ def procesar_sesion(
         # respuesta de proveedores. Solo tipo y mensaje acotado.
         logger.error(f"[{etiqueta}] error_interno {type(e).__name__}: {_describir(e)}")
         reportar_error(sesion_clinica_id, "error_interno", modelos)
+
+
+def terminos_asr_de(sesion: dict) -> list[str]:
+    """
+    `terminosAsr` de una sesion reclamada en /pendientes (HotWords): el
+    vocabulario clinico que se le adelanta al ASR. La app lo manda ya
+    deduplicado y ordenado.
+
+    Ausente, None, o cualquier cosa que no sea una lista de strings con
+    contenido -> lista vacia. El worker tiene que seguir procesando sesiones
+    contra una app que todavia no manda el campo: no tener vocabulario no es
+    un error, es el estado normal de hoy.
+    """
+    valor = sesion.get("terminosAsr")
+    if not isinstance(valor, list):
+        return []
+    return [t for t in valor if isinstance(t, str) and t.strip()]
 
 
 # Pasos ─────────────────────────────────────────────────────────────────────
@@ -118,10 +136,18 @@ def descargar_y_descifrar(
         raise PipelineError("descifrado_error", "No se pudo descifrar el audio") from e
 
 
-def transcribir(etiqueta: str, audio_bytes: bytes) -> dict:
+def transcribir(
+    etiqueta: str, audio_bytes: bytes, terminos_asr: list[str] | None = None
+) -> dict:
     """AssemblyAI: transcripcion diarizada normalizada (ver asr_assemblyai)."""
-    logger.info(f"[{etiqueta}] Transcribiendo ({len(audio_bytes)} bytes)...")
-    transcripcion = asr_assemblyai.transcribir(audio_bytes)
+    terminos = terminos_asr or []
+    logger.info(
+        f"[{etiqueta}] Transcribiendo ({len(audio_bytes)} bytes, "
+        # Solo la cantidad: los terminos pueden ser nombres propios de la
+        # paciente y estos logs van al stdout de Railway.
+        f"{len(terminos)} terminos ASR)..."
+    )
+    transcripcion = asr_assemblyai.transcribir(audio_bytes, terminos)
     segments = transcripcion.get("segments") or []
     if not segments:
         raise PipelineError("asr_vacio", "La transcripcion no contiene segmentos")

@@ -3,6 +3,8 @@ Orquestacion de procesar_sesion con todos los pasos mockeados. Se verifica
 que cada fallo llegue al callback con el estado, el codigo y el modelo ASR
 correctos. Sin red.
 """
+import logging
+
 import pytest
 
 import config
@@ -298,3 +300,88 @@ def test_analizar_junta_las_advertencias_de_nota_y_feedback(mocker):
         "ratio": 1,
         "rolesOrigen": "asr_role",
     }
+
+
+# HotWords: terminosAsr de la sesion reclamada ──────────────────────────────
+
+
+def test_sesion_sin_el_campo_da_lista_vacia():
+    # El caso de hoy: la app todavia no manda terminosAsr y el worker tiene
+    # que procesar igual.
+    assert processor.terminos_asr_de({"sesionClinicaId": "s1"}) == []
+
+
+def test_sesion_con_el_campo_en_null_da_lista_vacia():
+    assert processor.terminos_asr_de({"terminosAsr": None}) == []
+
+
+def test_sesion_con_terminos_los_devuelve_en_orden():
+    sesion = {"terminosAsr": ["GTFS", "alianza terapéutica", "MITI 4.2.1"]}
+    assert processor.terminos_asr_de(sesion) == [
+        "GTFS",
+        "alianza terapéutica",
+        "MITI 4.2.1",
+    ]
+
+
+def test_terminos_asr_descarta_lo_que_no_sea_texto_con_contenido():
+    sesion = {"terminosAsr": ["GTFS", "", "   ", None, 7, ["x"], "CTS-R"]}
+    assert processor.terminos_asr_de(sesion) == ["GTFS", "CTS-R"]
+
+
+def test_terminos_asr_ignora_un_campo_que_no_sea_lista():
+    # Si la app manda cualquier otra cosa, el worker no se cae por eso.
+    for valor in ("GTFS", {"a": 1}, 3, True):
+        assert processor.terminos_asr_de({"terminosAsr": valor}) == []
+
+
+def test_procesar_sesion_pasa_los_terminos_al_asr(pasos):
+    mocker, _ = pasos
+    transcribir = mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
+
+    processor.procesar_sesion(
+        sesion_clinica_id="s1",
+        audio_r2_key="audio/org/s1/t1.enc",
+        clave_cifrado="clave",
+        iv_cifrado="iv",
+        terminos_asr=["GTFS", "MITI 4.2.1"],
+    )
+
+    assert transcribir.call_args.args[2] == ["GTFS", "MITI 4.2.1"]
+
+
+def test_procesar_sesion_sin_terminos_sigue_funcionando(pasos):
+    mocker, callback = pasos
+    transcribir = mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
+
+    _correr()
+
+    assert transcribir.call_args.args[2] is None
+    assert callback.call_args.kwargs["estado"] == "revision"
+
+
+def test_paso_transcribir_le_pasa_los_terminos_a_assemblyai(mocker):
+    asr = mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
+
+    processor.transcribir("s1", b"audio", ["GTFS"])
+
+    assert asr.call_args.args[1] == ["GTFS"]
+
+
+def test_paso_transcribir_sin_terminos_manda_lista_vacia(mocker):
+    asr = mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
+
+    processor.transcribir("s1", b"audio")
+
+    assert asr.call_args.args[1] == []
+
+
+def test_el_log_del_paso_no_nombra_los_terminos(mocker, caplog):
+    mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
+
+    with caplog.at_level(logging.DEBUG):
+        processor.transcribir("s1", b"audio", ["NOMBRE-SECRETO", "GTFS"])
+
+    mensajes = [r.getMessage() for r in caplog.records]
+    assert any("2 terminos ASR" in m for m in mensajes)
+    assert all("NOMBRE-SECRETO" not in m for m in mensajes)
