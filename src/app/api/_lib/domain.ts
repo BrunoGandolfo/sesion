@@ -50,13 +50,37 @@ const METODOS_PAGO: readonly MetodoPago[] = [
   "otro",
 ];
 
-/** El valor si pertenece a la unión; el default si no. */
+/** El valor si pertenece a la unión; el default si no. Para los campos donde
+ *  el default es una preferencia y equivocarse no cambia ningún hecho. */
 function unionODefault<T extends string | number>(
   valores: readonly T[],
   valor: unknown,
   fallback: T,
 ): T {
   return valores.includes(valor as T) ? (valor as T) : fallback;
+}
+
+/**
+ * El valor si pertenece a la unión; si no, se rompe.
+ *
+ * Para `estado` y `pagoEstado` no hay default honesto: elegir uno es afirmar
+ * un hecho que la base no dijo —que la sesión no se dio, que la paciente no
+ * pagó— y la app actúa sobre esa afirmación. Un valor fuera de la unión es
+ * un invariante roto de la base, no un dato a corregir de este lado, así que
+ * el turno no sale: falla acá, con el id a mano, y las rutas lo convierten
+ * en un 500 por su try/catch. La restricción a nivel Postgres, que es donde
+ * corresponde, va en otra tanda.
+ */
+function unionOError<T extends string>(
+  valores: readonly T[],
+  valor: unknown,
+  campo: string,
+  turnoId: string,
+): T {
+  if (valores.includes(valor as T)) return valor as T;
+  throw new Error(
+    `turno ${turnoId} tiene ${campo} inválido: '${String(valor)}'`,
+  );
 }
 
 export function toPacienteConDeuda(
@@ -81,23 +105,45 @@ export function toPacienteConDeuda(
 }
 
 /**
- * Fila de turno → tipo del dominio. Mismo criterio que toConfiguracion: en DB
- * `duracion` es Int y `modalidad`, `estado`, `pagoEstado` y `pagoMetodo` son
- * String (sin enum en la migración), así que acá se narrowean a su unión con
- * fallback al default de la migración ante valores desconocidos. Antes esto
- * era un `as unknown as Turno`, que le mentía al resto de la app: una fila
- * con `estado: "borrador"` viajaba tipada como TurnoEstado y nadie se
- * enteraba hasta que la pantalla mostraba un chip vacío.
+ * Fila de turno → tipo del dominio. En DB `duracion` es Int y `modalidad`,
+ * `estado`, `pagoEstado` y `pagoMetodo` son String (sin enum en la
+ * migración), así que acá se narrowean a su unión. Antes esto era un
+ * `as unknown as Turno`, que le mentía al resto de la app: una fila con
+ * `estado: "borrador"` viajaba tipada como TurnoEstado y nadie se enteraba
+ * hasta que la pantalla mostraba un chip vacío.
+ *
+ * Los cinco campos no se tratan igual, y la diferencia es la que importa:
+ *
+ *   - `duracion` y `modalidad` caen al default de la migración. Son
+ *     preferencias de cómo se dio la sesión: mostrar 50 minutos donde la
+ *     base dice 47 es un detalle de presentación.
+ *
+ *   - `estado` y `pagoEstado` NO tienen default: se rompe. Caer a
+ *     "pendiente" ante un valor desconocido le decía a la pantalla que la
+ *     sesión está impaga —con su botón Cobrar, que después choca contra el
+ *     caso de uso, porque `cobrar-turno` actualiza sólo las filas cuyo valor
+ *     guardado es exactamente "pendiente" y devuelve 409—, mientras los
+ *     agregados de deuda filtran el valor crudo antes de pasar por acá y dan
+ *     un total distinto. Dos pantallas contando la misma plata de dos
+ *     maneras es peor que un error.
+ *
+ *   - `pagoMetodo` sí cae a "otro", pero sólo si trae un método que no
+ *     existe: null es un valor legítimo (turno sin cobrar), no un
+ *     desconocido, y "otro" es un miembro real de la unión que no habilita
+ *     ninguna acción.
  */
 export function toTurno(turno: PrismaTurno): Turno {
   return {
     ...turno,
     duracion: unionODefault(DURACIONES, turno.duracion, 50),
     modalidad: unionODefault(MODALIDADES, turno.modalidad, "presencial"),
-    estado: unionODefault(TURNO_ESTADOS, turno.estado, "programado"),
-    pagoEstado: unionODefault(PAGO_ESTADOS, turno.pagoEstado, "pendiente"),
-    // `pagoMetodo` es nullable en DB: null es un valor legítimo (sin cobrar),
-    // no un desconocido; solo se cae a "otro" si trae un método que no existe.
+    estado: unionOError(TURNO_ESTADOS, turno.estado, "estado", turno.id),
+    pagoEstado: unionOError(
+      PAGO_ESTADOS,
+      turno.pagoEstado,
+      "pagoEstado",
+      turno.id,
+    ),
     pagoMetodo:
       turno.pagoMetodo === null
         ? null
