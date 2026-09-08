@@ -30,12 +30,18 @@ import {
   type ZonaDeuda,
 } from "@/lib/deudas";
 import { fechaCorta, fechaLarga, money, moneyShort } from "@/lib/format";
-import { ALGO_FALLO, NAV, TE_DEBEN, pluralizar } from "@/lib/glosario";
+import {
+  ALGO_FALLO,
+  METODO_PAGO_LABEL,
+  NAV,
+  SIN_METODO,
+  TE_DEBEN,
+  pluralizar,
+} from "@/lib/glosario";
 import type {
   Configuracion,
   DeudaPaciente,
   KPIsDashboard,
-  MetodoPago,
   TurnoConPaciente,
 } from "@/types/domain";
 
@@ -67,15 +73,6 @@ function parseTurno(raw: JsonTurno): TurnoConPaciente {
     actualizadoEn: new Date(raw.actualizadoEn),
   };
 }
-
-const METODO_LABEL: Record<MetodoPago, string> = {
-  efectivo: "Efectivo",
-  transferencia: "Transferencia",
-  mercadopago: "MercadoPago",
-  debito: "Débito",
-  credito: "Crédito",
-  otro: "Otro",
-};
 
 type Pestana = "te-deben" | "cobros";
 type Carga = "cargando" | "listo" | "error";
@@ -528,8 +525,8 @@ function CobrosDelMes({
           const nombreCompleto = `${t.paciente.nombre} ${t.paciente.apellido}`;
           const fecha = t.pagoFecha ?? t.fecha;
           const metodoLabel = t.pagoMetodo
-            ? METODO_LABEL[t.pagoMetodo]
-            : "Sin método";
+            ? METODO_PAGO_LABEL[t.pagoMetodo]
+            : SIN_METODO;
 
           return (
             <li

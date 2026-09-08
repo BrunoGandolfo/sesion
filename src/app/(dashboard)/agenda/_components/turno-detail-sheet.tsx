@@ -50,6 +50,7 @@ import {
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   GRABAR_SESION,
+  METODOS_PAGO,
   NO_VINO,
   RECORDATORIO,
   RECORDATORIO_ESTADO,
@@ -71,14 +72,6 @@ import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-c
 
 const DURACIONES: Duracion[] = [30, 45, 50, 60, 90];
 
-const METODOS_PAGO: { value: MetodoPago; label: string }[] = [
-  { value: "efectivo", label: "Efectivo" },
-  { value: "transferencia", label: "Transferencia" },
-  { value: "mercadopago", label: "MercadoPago" },
-  { value: "debito", label: "Débito" },
-  { value: "credito", label: "Crédito" },
-  { value: "otro", label: "Otro" },
-];
 
 const editSchema = z.object({
   fecha: z.string().min(1, "Falta la fecha"),

@@ -62,6 +62,7 @@ const CONSTANTES_REQUERIDAS = [
   "PAGADO",
   "PENDIENTE",
   "CANCELADO",
+  "SIN_METODO",
   // Chips de la nota
   "BORRADOR",
   "APROBADA",
@@ -142,6 +143,30 @@ describe("glosario — constantes de texto", () => {
     // guardada": el chip es otra tipografía, no otro concepto.
     expect(glosario.BORRADOR).toBe(glosario.PARA_REVISAR);
     expect(glosario.APROBADA).toBe(glosario.NOTA_GUARDADA);
+  });
+
+  it("los métodos de pago se dicen en un solo lugar", () => {
+    // Estaban escritos en cuatro pantallas, dos veces como array y dos como
+    // Record. La lista y el Record son ahora la misma cosa.
+    expect(glosario.METODO_PAGO_LABEL).toEqual({
+      efectivo: "Efectivo",
+      transferencia: "Transferencia",
+      mercadopago: "MercadoPago",
+      debito: "Débito",
+      credito: "Crédito",
+      otro: "Otro",
+    });
+    expect(glosario.METODOS_PAGO.map((m) => m.value)).toEqual([
+      "efectivo",
+      "transferencia",
+      "mercadopago",
+      "debito",
+      "credito",
+      "otro",
+    ]);
+    for (const metodo of glosario.METODOS_PAGO) {
+      expect(metodo.label).toBe(glosario.METODO_PAGO_LABEL[metodo.value]);
+    }
   });
 
   it("el selector de rango del Recorrido nombra sus cuatro opciones", () => {
