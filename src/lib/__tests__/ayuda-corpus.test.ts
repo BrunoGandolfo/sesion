@@ -99,7 +99,7 @@ describe("leerCorpus", () => {
 describe("systemPromptAyuda", () => {
   it("se presenta con el nombre del asistente", () => {
     expect(systemPromptAyuda()).toContain(`Sos ${NOMBRE_ASISTENTE},`);
-    expect(NOMBRE_ASISTENTE).toBe("Yuyo");
+    expect(NOMBRE_ASISTENTE).toBe("Lupita");
   });
 
   // El corazón del asunto: los cinco límites, con el texto exacto.

@@ -496,6 +496,49 @@ export const HUECOS_EXPLICADOS =
   "La línea se corta donde la sesión no registró el dato: no se completa por interpolación.";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Recordatorio de cobro
+//
+// El aviso lo manda ella, apretando, una persona por vez. Por eso los textos
+// dicen "Enviar SMS" y no "Notificar": se nombra el acto concreto, con el
+// canal a la vista, para que sepa exactamente qué va a pasar cuando toque.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** El botón de la fila del deudor. */
+export const RECORDAR_COBRO = "Recordar cobro";
+
+/** La pregunta de la confirmación, con el mensaje y el número a la vista. */
+export const RECORDAR_COBRO_TITULO = "¿Mandarle este mensaje?";
+
+/** El botón que confirma. Dice el canal: sale un SMS, no una notificación. */
+export const ENVIAR_SMS = "Enviar SMS";
+
+export const ENVIANDO_SMS = "Enviando…";
+
+/** Toast de éxito. */
+export const SMS_ENVIADO = "Aviso enviado";
+
+/** Rótulo del número destino en la confirmación. */
+export const SMS_DESTINO = "Sale a";
+
+/** Lo que muestra la fila cuando ya se le avisó. Se completa con
+ *  textoAtraso(): "Avisado hace 3 días". */
+export const AVISADO = "Avisado";
+
+/** El aviso no salió. Es el ÚNICO texto que la pantalla muestra cuando falla
+ *  el envío, pase lo que pase del otro lado: el motivo real de Twilio puede
+ *  ser "falta TWILIO_SMS_FROM" o un código de la API, y eso no es algo que
+ *  ella pueda leer ni arreglar. Dice las tres cosas que sí le importan: no
+ *  salió, no se perdió, se puede volver a intentar. El motivo entero queda en
+ *  la auditoría y en el log, que es donde sirve. */
+export const SMS_NO_ENVIADO =
+  "No pudimos enviar el SMS. Quedó registrado; probá más tarde.";
+
+/** Sin Twilio configurado no hay botón: se dice qué falta y dónde se
+ *  arregla, sin nombrar variables de entorno. */
+export const SMS_SIN_CONFIGURAR =
+  "Para avisar por SMS falta configurar el envío en Tu consultorio.";
+
+// ────────────────────────────────────────────────────────────────────────────
 // Vocabulario clínico (hot words)
 //
 // Nunca se le dice "hot words" ni "word boost" en pantalla: eso es el nombre
@@ -527,6 +570,79 @@ export const VOCABULARIO_PACIENTE = "Vocabulario de esta persona";
 
 export const VOCABULARIO_PACIENTE_AYUDA =
   "Nombres y palabras que aparecen solo en las sesiones de este paciente. Se suman a las de toda la cuenta.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Ayuda — Lupita
+//
+// El personaje de la app (docs/diseno/04-personaje.md, concepto A: el
+// brote). Habla en rioplatense, de vos, en frases cortas, sin signos de
+// admiración salvo que la frase sea genuinamente una celebración chica.
+// Nunca dice "usuario", "sistema" ni "procesando": de ahí que la espera se
+// diga "está buscando en la ayuda" y no "procesando tu consulta".
+//
+// Dónde aparece y dónde no está escrito en el documento: la ayuda, los
+// estados vacíos, el onboarding y las confirmaciones alegres. Nunca en la
+// nota clínica, en el brief pre-sesión, en el Recorrido, ni a menos de una
+// pantalla de una señal de riesgo.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Su nombre. Una sola fuente: también lo lee el system prompt del
+ *  asistente (ayuda-corpus.ts), para que no se llame de dos maneras según
+ *  quién hable. */
+export const LUPITA = "Lupita";
+
+/** La entrada del menú, en mobile y en desktop. */
+export const AYUDA = "Ayuda";
+
+/** Rótulo accesible del panel, para el lector de pantalla que anuncia el
+ *  diálogo: "Ayuda" solo no dice ayuda de qué. */
+export const AYUDA_PANEL = "Ayuda de la app";
+
+/** La línea de bienvenida del encabezado. Dice qué puede preguntar y, en la
+ *  misma respiración, lo que Lupita no ve: es la promesa de privacidad de la
+ *  app, y se hace antes de que ella escriba nada. */
+export const AYUDA_BIENVENIDA =
+  "Preguntame cómo se hace algo en la app y te digo dónde está. No veo tus pacientes ni tus montos: solo lo que está escrito en la ayuda.";
+
+/** Aviso de que el hilo no se guarda. Va abajo del campo, chico: es ayuda,
+ *  no un chat, y el historial vive en memoria hasta que se cierra el panel. */
+export const AYUDA_NO_SE_GUARDA =
+  "Cuando cerrás, esta conversación no queda.";
+
+/** Placeholder del campo. */
+export const AYUDA_PLACEHOLDER = "¿Qué querés saber?";
+
+/** El botón que manda la pregunta. */
+export const AYUDA_ENVIAR = "Preguntar";
+
+/** El botón que cierra el panel. */
+export const AYUDA_CERRAR = "Cerrar";
+
+/** La espera, mientras el asistente contesta. Nunca "procesando". */
+export const AYUDA_ESPERANDO = "Lupita está buscando en la ayuda…";
+
+/** Rótulo accesible del hilo de mensajes. */
+export const AYUDA_HILO = "Conversación con Lupita";
+
+/** Quién dijo cada mensaje, para el lector de pantalla: en la pantalla se
+ *  distinguen por el lado y por el brote, que no se leen en voz alta. */
+export const AYUDA_DIJO_USUARIA = "Vos:";
+export const AYUDA_DIJO_LUPITA = "Lupita:";
+
+// Los tres errores del panel. Ninguno dice el status, el proveedor ni el
+// motivo técnico: eso queda en el log de la función.
+
+/** No hubo forma de llegar al servidor. */
+export const AYUDA_SIN_CONEXION =
+  "Te quedaste sin conexión. Probá de nuevo cuando vuelva.";
+
+/** Se acabaron las preguntas del día. */
+export const AYUDA_TOPE_DIARIO =
+  "Por hoy Lupita ya contestó todo lo que podía. Mañana sigue.";
+
+// El fallo del proveedor usa ALGO_FALLO, más abajo: no se le inventa un
+// texto propio a algo que para ella es exactamente lo mismo que cualquier
+// otro fallo.
 
 // ────────────────────────────────────────────────────────────────────────────
 // Errores — en castellano, sin HTTP, sin R2, sin CORS.

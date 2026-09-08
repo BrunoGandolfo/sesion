@@ -32,12 +32,26 @@ function focusablesDe(panel: HTMLElement | null): HTMLElement[] {
   );
 }
 
+/**
+ * Cómo se para el panel en desktop. En mobile no cambia nada: los dos suben
+ * desde abajo, que es de donde llega el pulgar.
+ *
+ *   "centrado" — el diálogo de siempre, en el medio de la pantalla. Es lo
+ *                que usan el cobro, el turno nuevo y la firma: cosas que se
+ *                resuelven y se cierran.
+ *   "lateral"  — una columna a la derecha, de alto completo, que entra
+ *                deslizándose. Para lo que acompaña a la pantalla de atrás
+ *                en vez de interrumpirla: hoy, la ayuda.
+ */
+export type VarianteSheet = "centrado" | "lateral";
+
 interface SheetProps {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   maxWidth?: number;
   ariaLabel?: string;
+  variante?: VarianteSheet;
   className?: string;
 }
 
@@ -47,6 +61,7 @@ export function Sheet({
   children,
   maxWidth = 560,
   ariaLabel,
+  variante = "centrado",
   className = "",
 }: SheetProps) {
   const mobileRef = React.useRef<HTMLDivElement>(null);
@@ -138,6 +153,24 @@ export function Sheet({
 
   const ease = [0.16, 1, 0.3, 1] as const;
 
+  const lateral = variante === "lateral";
+
+  // El panel lateral es una columna de alto completo: no scrollea entero
+  // —eso dejaría el campo de escribir fuera de la vista— sino que le pasa un
+  // contexto de flex column con min-h-0 al contenido, que decide qué parte
+  // de él scrollea.
+  const clasesDesktop = lateral
+    ? "hidden lg:flex fixed z-50 inset-y-0 right-0 w-full flex-col bg-white shadow-raised outline-none"
+    : "hidden lg:block fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-48px)] bg-white rounded-lg shadow-raised max-h-[85vh] overflow-y-auto outline-none";
+
+  const entradaDesktop = lateral
+    ? { initial: { x: "100%" }, animate: { x: 0 }, exit: { x: "100%" } }
+    : {
+        initial: { opacity: 0, scale: 0.96 },
+        animate: { opacity: 1, scale: 1 },
+        exit: { opacity: 0, scale: 0.96 },
+      };
+
   return (
     <AnimatePresence>
       {open && (
@@ -191,14 +224,14 @@ export function Sheet({
             aria-label={ariaLabel}
             tabIndex={-1}
             onKeyDown={atraparTab}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.2, ease }}
+            {...entradaDesktop}
+            transition={{ duration: lateral ? 0.28 : 0.2, ease }}
             style={{ maxWidth }}
-            className={`hidden lg:block fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-48px)] bg-white rounded-lg shadow-raised max-h-[85vh] overflow-y-auto outline-none ${className}`}
+            className={`${clasesDesktop} ${className}`}
           >
-            <div className="p-7">{children}</div>
+            <div className={lateral ? "flex min-h-0 flex-1 flex-col p-7" : "p-7"}>
+              {children}
+            </div>
           </motion.div>
         </>
       )}

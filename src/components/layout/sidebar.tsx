@@ -6,16 +6,18 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   Calendar,
+  CircleHelp,
   Home,
   LogOut,
   Settings,
   Users,
   Wallet,
 } from "lucide-react";
+import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
 import type { DeudaPaciente } from "@/types/domain";
 import { apiGet } from "@/lib/api-client";
 import { zonaDeuda } from "@/lib/deudas";
-import { NAV, TU_CONSULTORIO } from "@/lib/glosario";
+import { AYUDA, NAV, TU_CONSULTORIO } from "@/lib/glosario";
 
 // Mismos destinos que el menú de mobile, más la configuración, que en
 // desktop se dice como la diría ella: "Tu consultorio". "Finanzas" pasó a
@@ -44,6 +46,12 @@ export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [redCount, setRedCount] = React.useState(0);
+  // La ayuda no es un destino: se abre encima de la pantalla en la que ella
+  // está y se cierra ahí mismo. El panel lo monta el menú —hay uno acá y
+  // otro en el menú de mobile— para no tocar el layout del dashboard; sólo
+  // uno de los dos menús existe en cada viewport, así que nunca hay dos
+  // paneles abiertos.
+  const [ayudaAbierta, setAyudaAbierta] = React.useState(false);
 
   const name = session?.user?.name?.trim() || "Usuario";
   const initials = getInitials(name);
@@ -76,68 +84,87 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden lg:flex w-60 flex-col flex-shrink-0 border-r bg-cream-100" style={{ borderColor: "var(--border-subtle)" }}>
-      {/* Wordmark */}
-      <div className="px-6 py-6">
-        <div className="flex items-baseline gap-2">
-          <span className="font-[family-name:var(--font-display)] text-[22px] font-medium tracking-tight text-ink-900 leading-none">
-            {firstName}
-          </span>
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-sage-500" />
+    <>
+      <aside className="hidden lg:flex w-60 flex-col flex-shrink-0 border-r bg-cream-100" style={{ borderColor: "var(--border-subtle)" }}>
+        {/* Wordmark */}
+        <div className="px-6 py-6">
+          <div className="flex items-baseline gap-2">
+            <span className="font-[family-name:var(--font-display)] text-[22px] font-medium tracking-tight text-ink-900 leading-none">
+              {firstName}
+            </span>
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-sage-500" />
+          </div>
         </div>
-      </div>
 
-      {/* Nav */}
-      <nav className="flex flex-col gap-0.5 px-3">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href);
-          const showBadge = href === "/cobros" && redCount > 0;
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] ${
-                active
-                  ? "bg-sage-50 text-sage-700"
-                  : "text-ink-500 hover:bg-cream-50 hover:text-ink-900"
-              }`}
-            >
-              <Icon size={18} strokeWidth={active ? 2 : 1.6} />
-              <span className="flex-1">{label}</span>
-              {showBadge ? (
-                <span
-                  aria-label={`${redCount} ${redCount === 1 ? "deudor" : "deudores"} con más de 30 días`}
-                  className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-terracotta-500 px-1.5 text-[10px] font-semibold leading-[18px] text-white"
-                >
-                  {redCount}
-                </span>
-              ) : null}
-            </Link>
-          );
-        })}
-      </nav>
+        {/* Nav */}
+        <nav className="flex flex-col gap-0.5 px-3">
+          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = isActive(href);
+            const showBadge = href === "/cobros" && redCount > 0;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] ${
+                  active
+                    ? "bg-sage-50 text-sage-700"
+                    : "text-ink-500 hover:bg-cream-50 hover:text-ink-900"
+                }`}
+              >
+                <Icon size={18} strokeWidth={active ? 2 : 1.6} />
+                <span className="flex-1">{label}</span>
+                {showBadge ? (
+                  <span
+                    aria-label={`${redCount} ${redCount === 1 ? "deudor" : "deudores"} con más de 30 días`}
+                    className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-terracotta-500 px-1.5 text-[10px] font-semibold leading-[18px] text-white"
+                  >
+                    {redCount}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
 
-      {/* Footer */}
-      <div className="mt-auto border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center gap-3 px-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sage-500 font-[family-name:var(--font-display)] text-xs font-medium text-cream-100">
-            {initials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-semibold text-ink-900 truncate">{name}</div>
-            <div className="text-[11px] text-ink-500">Consultorio</div>
-          </div>
+          {/* Ayuda: mismo tratamiento visual que los destinos, pero es un
+              botón —no navega— y nunca queda "activo", porque no hay ruta que
+              pueda estarlo. */}
           <button
             type="button"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            aria-label="Cerrar sesión"
-            title="Cerrar sesión"
-            className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"
+            onClick={() => setAyudaAbierta(true)}
+            className="flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm font-medium text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"
           >
-            <LogOut size={16} strokeWidth={1.8} />
+            <CircleHelp size={18} strokeWidth={1.6} aria-hidden="true" />
+            <span className="flex-1">{AYUDA}</span>
           </button>
+        </nav>
+
+        {/* Footer */}
+        <div className="mt-auto border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+          <div className="flex items-center gap-3 px-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sage-500 font-[family-name:var(--font-display)] text-xs font-medium text-cream-100">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold text-ink-900 truncate">{name}</div>
+              <div className="text-[11px] text-ink-500">Consultorio</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+              className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"
+            >
+              <LogOut size={16} strokeWidth={1.8} />
+            </button>
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+
+      <PanelAyuda
+        abierto={ayudaAbierta}
+        alCerrar={() => setAyudaAbierta(false)}
+      />
+    </>
   );
 }

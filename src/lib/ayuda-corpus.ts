@@ -40,8 +40,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** Nombre provisional del asistente. */
-export const NOMBRE_ASISTENTE = "Yuyo";
+import { LUPITA } from "@/lib/glosario";
+
+/** Cómo se llama el asistente cuando habla de sí mismo. El nombre sale del
+ *  glosario, que es el mismo que usa el panel de ayuda: si acá dijera una
+ *  cosa y la pantalla otra, la usuaria estaría hablando con dos personajes.
+ *  Ojo: cambiarlo invalida el prefijo cacheado del prompt una vez. */
+export const NOMBRE_ASISTENTE = LUPITA;
 
 /** Directorio del corpus, relativo a la raíz del proyecto. */
 export const DIRECTORIO_CORPUS = join("docs", "ayuda");
