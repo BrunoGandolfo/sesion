@@ -7,11 +7,16 @@ import type {
 import type {
   Configuracion,
   DeudaPaciente,
+  Duracion,
   KPIsDashboard,
+  MetodoPago,
+  Modalidad,
   PacienteConDeuda,
+  PagoEstado,
   Recordatorio,
   Turno,
   TurnoConPaciente,
+  TurnoEstado,
 } from "@/types/domain";
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
@@ -49,6 +54,33 @@ export type DashboardData = {
   pendientes: PendientesTerapeuta;
 };
 
+const DURACIONES: readonly Duracion[] = [30, 45, 50, 60, 90];
+const MODALIDADES: readonly Modalidad[] = ["presencial", "online"];
+const TURNO_ESTADOS: readonly TurnoEstado[] = [
+  "programado",
+  "realizado",
+  "cancelado",
+  "ausente",
+];
+const PAGO_ESTADOS: readonly PagoEstado[] = ["pendiente", "pagado"];
+const METODOS_PAGO: readonly MetodoPago[] = [
+  "efectivo",
+  "transferencia",
+  "mercadopago",
+  "debito",
+  "credito",
+  "otro",
+];
+
+/** El valor si pertenece a la unión; el default si no. */
+function unionODefault<T extends string | number>(
+  valores: readonly T[],
+  valor: unknown,
+  fallback: T,
+): T {
+  return valores.includes(valor as T) ? (valor as T) : fallback;
+}
+
 export function toPacienteConDeuda(
   paciente: PacienteWithStats,
 ): PacienteConDeuda {
@@ -72,8 +104,29 @@ export function toPacienteConDeuda(
   };
 }
 
+/**
+ * Fila de turno → tipo del dominio. Mismo criterio que toConfiguracion: en DB
+ * `duracion` es Int y `modalidad`, `estado`, `pagoEstado` y `pagoMetodo` son
+ * String (sin enum en la migración), así que acá se narrowean a su unión con
+ * fallback al default de la migración ante valores desconocidos. Antes esto
+ * era un `as unknown as Turno`, que le mentía al resto de la app: una fila
+ * con `estado: "borrador"` viajaba tipada como TurnoEstado y nadie se
+ * enteraba hasta que la pantalla mostraba un chip vacío.
+ */
 export function toTurno(turno: PrismaTurno): Turno {
-  return turno as unknown as Turno;
+  return {
+    ...turno,
+    duracion: unionODefault(DURACIONES, turno.duracion, 50),
+    modalidad: unionODefault(MODALIDADES, turno.modalidad, "presencial"),
+    estado: unionODefault(TURNO_ESTADOS, turno.estado, "programado"),
+    pagoEstado: unionODefault(PAGO_ESTADOS, turno.pagoEstado, "pendiente"),
+    // `pagoMetodo` es nullable en DB: null es un valor legítimo (sin cobrar),
+    // no un desconocido; solo se cae a "otro" si trae un método que no existe.
+    pagoMetodo:
+      turno.pagoMetodo === null
+        ? null
+        : unionODefault(METODOS_PAGO, turno.pagoMetodo, "otro"),
+  };
 }
 
 export function toTurnoConPaciente(
