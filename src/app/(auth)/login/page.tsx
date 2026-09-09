@@ -1,9 +1,36 @@
 "use client";
 
+// La pantalla de entrada.
+//
+// Es la única pantalla que ve alguien que todavía no usa Sesión, y hasta hoy
+// era un formulario con un nombre arriba: no decía qué es esto ni qué hace.
+// Ahora dice las dos cosas, en el orden en que las miran las apps del rubro
+// (ver el reporte): identidad, una frase, tres afirmaciones, la
+// confidencialidad en una línea, y recién ahí el formulario.
+//
+// EL LAYOUT
+//
+// Mobile primero y una sola columna: la presencia arriba, el formulario
+// debajo, como estaba. En lg pasan a dos columnas —presencia a la izquierda,
+// formulario a la derecha— porque en un monitor una columna centrada de
+// 380 px con medio metro de crema a cada lado se ve vacía, no sobria.
+//
+// El texto vive todo en glosario.ts, sección Entrada: el nombre y el eslogan
+// son constantes porque todavía se está decidiendo cuál es cuál.
+
 import * as React from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input } from "@/components/ui";
+import {
+  ENTRADA_CONTRASENA,
+  ENTRADA_EMAIL,
+  ENTRADA_ERROR,
+  ENTRADA_ERROR_DETALLE,
+  ENTRANDO,
+  ENTRAR,
+} from "@/lib/glosario";
+import { Presencia } from "./_components/presencia";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,73 +62,61 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-cream-50 p-6">
-      <div className="flex w-full flex-col items-center text-center">
-        <div className="flex items-baseline justify-center gap-2">
-          <h1 className="font-[family-name:var(--font-display)] text-[34px] font-medium leading-none tracking-[-0.015em] text-ink-900">
-            Sesión
-          </h1>
-          <span
-            aria-hidden="true"
-            className="inline-block h-2 w-2 rounded-full bg-sage-500"
-          />
+    <main className="min-h-screen bg-cream-50">
+      <div className="mx-auto flex min-h-screen w-full max-w-[420px] flex-col justify-center px-6 py-12 lg:max-w-[1020px] lg:flex-row lg:items-center lg:justify-center lg:gap-20 lg:px-12">
+        <Presencia />
+
+        <div className="mt-10 flex w-full flex-col lg:mt-0 lg:w-[380px] lg:shrink-0">
+          <Card className="p-7 shadow-subtle">
+            <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+              <Input
+                label={ENTRADA_EMAIL}
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                disabled={loading}
+                required
+              />
+              <Input
+                label={ENTRADA_CONTRASENA}
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                disabled={loading}
+                required
+              />
+
+              <Button
+                type="submit"
+                className="mt-[6px] w-full px-5 py-[13px]"
+                disabled={loading}
+              >
+                {loading ? ENTRANDO : ENTRAR}
+              </Button>
+
+              {/* Un solo mensaje para todos los casos: contraseña equivocada,
+                  email que no existe y acceso bloqueado por intentos. El
+                  porqué está escrito al lado de las constantes, en el
+                  glosario. */}
+              {error ? (
+                <div role="alert" className="mt-2 flex flex-col gap-1">
+                  <p className="text-[12px] text-[color:var(--color-error)]">
+                    {ENTRADA_ERROR}
+                  </p>
+                  <p className="text-[11px] leading-[1.45] text-ink-500">
+                    {ENTRADA_ERROR_DETALLE}
+                  </p>
+                </div>
+              ) : null}
+            </form>
+          </Card>
+
+          <p className="mt-6 text-center text-[11px] text-ink-300">
+            v1.0 · hecho con cuidado
+          </p>
         </div>
-
-        <p className="mt-3 text-[14px] italic text-ink-500">
-          Tu consulta, organizada.
-        </p>
-
-        <Card className="mt-8 w-full max-w-[380px] p-7 text-left shadow-subtle">
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-            <Input
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
-              disabled={loading}
-              required
-            />
-            <Input
-              label="Contraseña"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              disabled={loading}
-              required
-            />
-
-            <Button
-              type="submit"
-              className="mt-[6px] w-full px-5 py-[13px]"
-              disabled={loading}
-            >
-              {loading ? "Entrando…" : "Entrar"}
-            </Button>
-
-            {/* Un solo mensaje para todos los casos: contraseña equivocada,
-                email que no existe y acceso bloqueado por intentos. Decir
-                cuál de los tres fue es decirle a quien prueba si ese email
-                está dado de alta. La segunda línea explica el bloqueo sin
-                afirmar que sea lo que pasó ahora. */}
-            {error ? (
-              <div role="alert" className="mt-2 flex flex-col gap-1">
-                <p className="text-[12px] text-[color:var(--color-error)]">
-                  Email o contraseña incorrectos
-                </p>
-                <p className="text-[11px] leading-[1.45] text-ink-500">
-                  Después de varios intentos seguidos el acceso queda
-                  bloqueado unos minutos.
-                </p>
-              </div>
-            ) : null}
-          </form>
-        </Card>
-
-        <p className="mt-6 text-[11px] text-ink-300">
-          v1.0 · hecho con cuidado
-        </p>
       </div>
     </main>
   );

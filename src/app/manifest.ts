@@ -7,11 +7,17 @@
 
 import type { MetadataRoute } from "next";
 
+// El nombre y la descripción salen del glosario y no están escritos acá: son
+// las mismas dos constantes que dibuja la pantalla de entrada, y todavía se
+// está decidiendo cuál de las dos es el nombre. El glosario es un módulo de
+// puros strings, así que importarlo no arrastra nada al manifiesto.
+import { ESLOGAN, NOMBRE_PRODUCTO } from "@/lib/glosario";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Sesión",
-    short_name: "Sesión",
-    description: "Tu consulta, organizada.",
+    name: NOMBRE_PRODUCTO,
+    short_name: NOMBRE_PRODUCTO,
+    description: ESLOGAN,
     lang: "es",
     start_url: "/",
     display: "standalone",
