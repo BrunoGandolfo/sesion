@@ -12,6 +12,7 @@
 // la terapeuta termina, termina.
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -116,7 +117,7 @@ export function GrabarView({
   const [progreso, setProgreso] = React.useState<number | null>(null);
   const [errorPantalla, setErrorPantalla] = React.useState<string | null>(null);
   const [confirmarDescarte, setConfirmarDescarte] = React.useState(false);
-  const [toast, setToast] = React.useState({ open: false, message: "" });
+  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>({ open: false, message: "", variante: "aviso" });
 
   // El audio cifrado del último intento: lo que hace posible "Reintentar" sin
   // volver a grabar. Los chunks sin cifrar siguen en IndexedDB hasta que la
@@ -160,14 +161,14 @@ export function GrabarView({
             // dice y se puede repetir, en vez de tragarlo.
             console.warn("[grabar] el turno no quedó realizado", error);
             setErrorPantalla(TURNO_NO_MARCADO);
-            setToast({ open: true, message: TURNO_NO_MARCADO });
+            setToast({ open: true, message: TURNO_NO_MARCADO, variante: "aviso" });
             setFase("turno-sin-marcar");
             return;
           }
         }
 
         setFase("guardado");
-        setToast({ open: true, message: NOTA_EN_CAMINO });
+        setToast({ open: true, message: NOTA_EN_CAMINO, variante: "confirmacion" });
       } catch (error) {
         // Nada se borra: el blob cifrado queda en memoria y los chunks en
         // IndexedDB. La sesión vuelve a "grabando" para repetir desde
@@ -191,7 +192,7 @@ export function GrabarView({
   );
 
   const onErrorGrabacion = React.useCallback((mensaje: string) => {
-    setToast({ open: true, message: mensaje });
+    setToast({ open: true, message: mensaje, variante: "aviso" });
   }, []);
 
   const grabador = useGrabador({
@@ -272,7 +273,7 @@ export function GrabarView({
       await grabador.iniciar(turno);
     } catch (error) {
       setFase("previo");
-      setToast({ open: true, message: mensajeDe(error, ALGO_FALLO) });
+      setToast({ open: true, message: mensajeDe(error, ALGO_FALLO), variante: "aviso" });
     }
   }
 
@@ -287,7 +288,7 @@ export function GrabarView({
     const turno = turnoIdRef.current;
 
     if (!turno) {
-      setToast({ open: true, message: ALGO_FALLO });
+      setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
       return;
     }
 
@@ -296,10 +297,10 @@ export function GrabarView({
       turnoProgramadoRef.current = false;
       setErrorPantalla(null);
       setFase("guardado");
-      setToast({ open: true, message: NOTA_EN_CAMINO });
+      setToast({ open: true, message: NOTA_EN_CAMINO, variante: "confirmacion" });
     } catch (error) {
       console.warn("[grabar] el turno no quedó realizado", error);
-      setToast({ open: true, message: TURNO_NO_MARCADO });
+      setToast({ open: true, message: TURNO_NO_MARCADO, variante: "aviso" });
     }
   }
 
@@ -307,7 +308,7 @@ export function GrabarView({
     const datos = audioRef.current;
 
     if (!datos) {
-      setToast({ open: true, message: ALGO_FALLO });
+      setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
       return;
     }
 
@@ -407,6 +408,7 @@ export function GrabarView({
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((actual) => ({ ...actual, open: false }))}
       />
     </div>

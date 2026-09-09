@@ -3,6 +3,7 @@
 import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronRight, Plus, RotateCcw, Search } from "lucide-react";
 import {
@@ -45,6 +46,7 @@ type PacienteJson = Omit<
 type ToastState = {
   open: boolean;
   message: string;
+  variante: VarianteToast;
 };
 
 function parsePaciente(paciente: PacienteJson): PacienteConDeuda {
@@ -102,6 +104,7 @@ export function PacientesView({
   const [toast, setToast] = React.useState<ToastState>(() => ({
     open: archivedToast,
     message: archivedToast ? "Paciente archivado" : "",
+    variante: "confirmacion",
   }));
 
   const openNuevoPaciente = React.useCallback(() => {
@@ -123,7 +126,7 @@ export function PacientesView({
   );
   const handleNuevoPacienteSuccess = React.useCallback(() => {
     setShowNuevoPaciente(false);
-    setToast({ open: true, message: "Paciente creado" });
+    setToast({ open: true, message: "Paciente creado", variante: "confirmacion" });
     setSegment("activos");
     setReloadKey((current) => current + 1);
   }, []);
@@ -167,7 +170,7 @@ export function PacientesView({
 
     try {
       await apiPatch(`/api/pacientes/${paciente.id}`, { activo: true });
-      setToast({ open: true, message: "Paciente reactivado" });
+      setToast({ open: true, message: "Paciente reactivado", variante: "confirmacion" });
     } catch (err) {
       setPacientes((current) =>
         [...current, paciente].sort((a, b) =>
@@ -176,8 +179,7 @@ export function PacientesView({
       );
       setToast({
         open: true,
-        message: err instanceof ApiClientError ? err.mensaje : ALGO_FALLO,
-      });
+        message: err instanceof ApiClientError ? err.mensaje : ALGO_FALLO, variante: "aviso" });
     } finally {
       setReactivatingId(null);
     }
@@ -312,6 +314,7 @@ export function PacientesView({
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((current) => ({ ...current, open: false }))}
       />
     </div>
