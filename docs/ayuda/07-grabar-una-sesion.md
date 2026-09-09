@@ -65,21 +65,22 @@ y guardar la sesión. No se sube ni se aprueba sola.
 
 ## Si la subida falla
 
-Aparece: **"No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de
-nuevo."** y un botón **Reintentar**. **Nada se borró**: el audio cifrado sigue en
-memoria y la copia sin cifrar, en el teléfono. Reintentar manda el mismo audio.
+La pantalla ofrece **Reintentar** si no pudo completar el guardado. No tomes
+un mensaje de respaldo como garantía de que todo quedó guardado: mantené
+la pantalla abierta y comprobá que la subida se confirme.
 
-Si además se te cerró el navegador, al volver a la pantalla de grabar de ese
-mismo turno la app te ofrece: *"Quedó una grabación de ~N min sin enviar"*, con
-**Guardarla ahora** y **Descartarla**.
+Si el navegador se cerró, al volver al mismo turno puede aparecer un pendiente
+con **Guardarla ahora** y **Descartarla**. La recuperación puede fallar. Si hay
+audio pendiente, no empieces otra grabación del mismo turno ni lo descartes
+mientras intentás recuperarlo; puede reemplazarse la copia anterior.
 
 ## Qué hace la app por detrás
 
-El audio se graba en pedacitos de un segundo que forman un solo archivo, y cada
-pedacito se guarda en el teléfono desde el primer momento: si el navegador muere,
-la grabación sobrevive. Al terminar, el navegador genera una clave, cifra el
-audio y **recién ahí** lo sube, directo al depósito, sin pasar por el servidor de
-la app. La copia del teléfono se borra cuando la subida está confirmada.
+Durante la captura, la app intenta guardar fragmentos en el navegador.
+**La copia local previa no está cifrada** y puede faltar si el almacenamiento
+no estuvo disponible. Al terminar, el navegador genera una clave y cifra el
+audio antes de subirlo a R2. La app intenta limpiar la copia local cuando la
+subida se confirma; no hay garantía de recuperación después de cerrar la página.
 
 ## Lo que NO hace
 

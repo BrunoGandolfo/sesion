@@ -87,3 +87,32 @@ it("la ayuda avisa que un campo inválido frena el lote de configuración", () =
   expect(texto).toContain("antes de salir");
   expect(texto).not.toMatch(/lo demás se guarda igual|Cada campo se guarda por separado|Todo se guarda solo/);
 });
+
+it("explica el cifrado al terminar y la copia local previa sin cifrar", () => {
+  for (const archivo of ["00-que-es-sesion.md", "07-grabar-una-sesion.md", "12-camino-del-audio-y-privacidad.md"]) {
+    expect(documento(archivo)).toContain("copia local previa no está cifrada");
+    expect(documento(archivo)).toMatch(/Al terminar/i);
+  }
+});
+
+it("no convierte borrado, cifrado parcial y proveedores en garantías absolutas", () => {
+  const privacidad = documento("12-camino-del-audio-y-privacidad.md");
+  expect(privacidad).toContain("intenta borrar el audio remoto");
+  expect(privacidad).toContain("No todo dato clínico tiene ese cifrado");
+  expect(privacidad).toContain("vocabulario que cargás también se envía");
+  expect(privacidad).toContain("requieren comprobación");
+  for (const archivo of ["00-que-es-sesion.md", "12-camino-del-audio-y-privacidad.md", "13-preguntas-frecuentes.md"]) {
+    expect(documento(archivo)).not.toMatch(/Ninguna persona escucha|Ninguna persona\. El audio|sin que ninguna persona lo escuche/);
+  }
+  expect(documento("14-cuando-algo-falla.md")).not.toMatch(/Casi nada se pierde|Las dos únicas cosas/);
+  expect(documento("08-la-nota-clinica.md")).toContain("Puede equivocarse o agregar contenido incorrecto");
+  expect(documento("13-preguntas-frecuentes.md")).not.toContain("Al aprobar se borra el audio");
+});
+
+it("no promete un hilo inmutable ni un brief siempre aprobado", () => {
+  const texto = documento("10-el-hilo-y-el-recorrido.md");
+  expect(texto).toContain("una actualización automática puede reemplazar contenido");
+  expect(texto).toContain("puede usar un borrador");
+  expect(texto).toContain("esa tarea puede quedar pendiente o fallar");
+  expect(texto).not.toMatch(/Nunca se reinician|Nunca se borran|no se reescriben nunca|Todo se compone de notas ya aprobadas/);
+});

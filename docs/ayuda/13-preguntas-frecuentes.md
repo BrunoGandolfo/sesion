@@ -13,13 +13,14 @@ No. La paciente no entra a la app. Firma la autorización en tu dispositivo y na
 más. → `04-pacientes-y-ficha.md`
 
 **3. ¿Alguien escucha mis sesiones?**
-Ninguna persona. El audio pasa automáticamente por AssemblyAI (lo convierte en
-texto y borra su copia) y el texto por Anthropic (redacta el borrador y no lo
-conserva). → `12-camino-del-audio-y-privacidad.md`
+El procesamiento es automático, pero esta ayuda no puede garantizar los
+accesos o la retención de los proveedores. Hay que verificar sus condiciones
+vigentes. → `12-camino-del-audio-y-privacidad.md`
 
 **4. ¿Cuándo se borra el audio?**
-Cuando aprobás la nota. Se borra el archivo y se destruye su clave. En general,
-el mismo día. → `12-camino-del-audio-y-privacidad.md`
+Al aprobar, la app intenta borrar el audio remoto y quita la clave del registro
+activo. Eso no confirma la eliminación de todas las copias.
+→ `12-camino-del-audio-y-privacidad.md`
 
 **5. ¿La transcripción también se borra?**
 No. La transcripción queda guardada, cifrada, junto con la nota. Está dicho en la
@@ -51,7 +52,8 @@ pendientes. → `02-pantalla-hoy.md`
 No. La nota se guarda una sola vez, al aprobar. → `08-la-nota-clinica.md`
 
 **12. ¿Puedo desaprobar una nota?**
-No. Al aprobar se borra el audio y no se puede deshacer. → `08-la-nota-clinica.md`
+No. La app no ofrece deshacer la aprobación y al aprobar intenta borrar el
+audio remoto. No cuentes con ese audio para volver atrás. → `08-la-nota-clinica.md`
 
 **13. El botón "Aprobar nota" está apagado.**
 Hay una señal de riesgo sin marcar. Marcá todas las casillas **"Revisé esta

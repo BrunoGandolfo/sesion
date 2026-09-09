@@ -19,19 +19,18 @@ recordatorios por SMS y la nota clínica de cada sesión grabada.
 
 ## Qué pasa con tus datos y los de tus pacientes
 
-- El **audio se cifra en tu propio teléfono** apenas terminás de grabar, antes
-  de salir del dispositivo. Se guarda cifrado hasta que aprobás la nota.
-- **Al aprobar la nota, el audio se borra** y además se destruye su clave. Aunque
-  quedara una copia en algún lado, no se podría abrir.
-- Quedan guardadas, **cifradas en la base**, la nota clínica, la transcripción de
-  la sesión y el contexto longitudinal (el hilo del proceso).
-- Dos servicios del exterior tocan el material, de forma automática, sin que
-  ninguna persona lo escuche: **AssemblyAI** pasa el audio a texto (y después
-  borra su copia) y **Anthropic** redacta el borrador de la nota. Ninguna
-  persona ajena escucha tus sesiones. Todo esto está escrito en la autorización
-  que firma la paciente.
-- Queda un **registro de auditoría** de las acciones sobre datos clínicos —qué
-  se hizo y cuándo—, sin texto clínico adentro.
+- **Al terminar**, el audio se cifra antes de subirse. **La copia local previa
+  no está cifrada.** Su conservación depende del almacenamiento del navegador.
+- Al aprobar, la app **intenta borrar el audio remoto** y quita la clave del
+  registro activo. Esto no confirma la eliminación de todas las copias.
+- La nota clínica y la transcripción se cifran en la base. El contexto tiene
+  campos cifrados y otros sin ese cifrado: no todo el historial está protegido
+  de la misma manera. Ver `12-camino-del-audio-y-privacidad.md`.
+- **AssemblyAI** transcribe y **Anthropic** redacta. La app pide eliminar el
+  material de transcripción al terminar; la retención y los accesos de los
+  proveedores requieren verificación, no se garantizan desde esta ayuda.
+- Hay un registro de auditoría de acciones. No debe contener texto clínico;
+  no equivale a una copia de respaldo.
 
 ## Lo que NO hace
 
