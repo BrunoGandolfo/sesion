@@ -70,3 +70,12 @@ it.each(["04-pacientes-y-ficha.md", "07-grabar-una-sesion.md"])("%s ubica Grabar
   expect(texto).not.toContain("Abajo del todo");
   expect(texto).not.toContain("Grabar** de abajo a la derecha");
 });
+
+it("la ayuda lleva a la vista separada de Para vos y no promete salir al aprobar", () => {
+  const nota = documento("08-la-nota-clinica.md");
+  expect(nota).toContain("vista separada");
+  expect(nota).toContain("permanecés en la nota");
+  expect(nota).not.toContain("**Para vos** (plegado)");
+  expect(nota).not.toContain("pantalla vuelve sola");
+  expect(documento("09-para-vos-feedback.md")).toContain("abrir la vista no genera un análisis nuevo");
+});

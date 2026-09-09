@@ -24,9 +24,13 @@ a **Para revisar**.
    **Intervenciones** (con tipo y minuto), **Apareció por primera vez**, **Vuelve
    a aparecer**, **Se llevó**, **Intensidad emocional** (1 a 10) y **Alianza
    terapéutica** (frágil, inestable, estable, fuerte).
-6. **Para vos** (plegado) — la auto-supervisión. Ver `09-para-vos-feedback.md`.
-7. **Ver el borrador original** (plegado) — la nota tal como la escribió el
+6. **Ver el borrador original** (plegado) — la nota tal como la escribió el
    modelo, antes de que la tocaras. Queda ahí para siempre.
+
+**Para vos** tiene una vista separada, con dirección propia. Cuando hay análisis
+disponible, el selector de arriba permite pasar de **Nota clínica** a
+**Para vos**. Si falta, ese acceso puede no aparecer: no significa que se haya
+borrado la nota. Ver `09-para-vos-feedback.md`.
 
 Lo que no vino en el análisis no se dibuja.
 
@@ -56,7 +60,8 @@ nota."* Nunca viene pre-marcada.
 
 Tocá **✓ Aprobar nota**: *"El audio de la sesión se borra definitivamente y la
 nota queda como registro. Esto no se puede deshacer."* Al confirmar aparece
-**Nota guardada** y la pantalla vuelve sola.
+**Nota guardada** y permanecés en la nota. Si hay análisis disponible, podés
+tocar **Leer Para vos**; la app no te cambia de pantalla sola.
 
 Aprobar hace tres cosas: guarda tu nota editada, **borra el audio y destruye su
 clave**, y le pasa la sesión al hilo del proceso.
