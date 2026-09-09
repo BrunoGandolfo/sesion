@@ -14,13 +14,23 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Loader2, Mic, MicOff, Pause, Play, Square } from "lucide-react";
+import {
+  ChevronLeft,
+  Loader2,
+  Mic,
+  MicOff,
+  Pause,
+  Play,
+  Square,
+  Sun,
+} from "lucide-react";
 
 import {
   formatearDuracion,
   useGrabador,
   type DatosGrabacion,
   type EstadoGrabador,
+  type MotivoInterrupcion,
 } from "@/components/grabacion/GrabadorSesion";
 import { Button, Confirmar, Toast } from "@/components/ui";
 import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
@@ -35,6 +45,12 @@ import { limpiarGrabacion } from "@/lib/grabacion-storage";
 import {
   ALGO_FALLO,
   AUDIO_NO_GUARDADO,
+  AVISO_LIMITE_GRABACION,
+  AVISO_PANTALLA_APAGADA,
+  CORTE_LIMITE,
+  CORTE_MICROFONO,
+  CORTE_PANTALLA,
+  CORTE_SIN_SONIDO,
   EN_PAUSA,
   FALTA_AUTORIZACION,
   FIRMAR_AUTORIZACION,
@@ -350,6 +366,9 @@ export function GrabarView({
             segundos={grabador.segundos}
             nivel={grabador.nivelAudio}
             silencioso={grabador.audioSilencioso}
+            pantallaApagada={grabador.wakeLockSoltado}
+            avisoLimite={grabador.avisoLimite}
+            motivoInterrupcion={grabador.motivoInterrupcion}
             mensajeError={grabador.mensajeError}
             confirmando={confirmarDescarte}
             onPausar={grabador.pausar}
@@ -471,6 +490,9 @@ function PantallaGrabando({
   segundos,
   nivel,
   silencioso,
+  pantallaApagada,
+  avisoLimite,
+  motivoInterrupcion,
   mensajeError,
   confirmando,
   onPausar,
@@ -485,6 +507,9 @@ function PantallaGrabando({
   segundos: number;
   nivel: number;
   silencioso: boolean;
+  pantallaApagada: boolean;
+  avisoLimite: boolean;
+  motivoInterrupcion: MotivoInterrupcion | null;
   mensajeError: string | null;
   confirmando: boolean;
   onPausar: () => void;
@@ -535,8 +560,12 @@ function PantallaGrabando({
             aria-hidden="true"
             className="text-[color:var(--color-error)]"
           />
+          {/* Cuatro cortes distintos, cuatro explicaciones distintas: volver
+              a pedir el micrófono no arregla haber llegado al tope, y decirle
+              "se cortó el micrófono" cuando lo que pasó fue que se apagó la
+              pantalla la manda a buscar el problema donde no está. */}
           <p className="font-sans text-[14px] text-ink-700">
-            Se cortó el micrófono. Lo grabado está a salvo.
+            {textoDelCorte(motivoInterrupcion)}
           </p>
           {mensajeError ? (
             <p className="font-sans text-[13px] text-[color:var(--color-error)]">
@@ -545,7 +574,13 @@ function PantallaGrabando({
           ) : null}
         </div>
       ) : (
-        <MedidorAudio nivel={nivel} silencioso={silencioso} />
+        <>
+          <MedidorAudio nivel={nivel} silencioso={silencioso} />
+          <AvisosDeGrabacion
+            pantallaApagada={pantallaApagada}
+            avisoLimite={avisoLimite}
+          />
+        </>
       )}
 
       {confirmando ? (
@@ -607,8 +642,94 @@ function PantallaGrabando({
         </>
       )}
 
+      {/* Decía "Podés bloquear la pantalla". Podías, y por eso el 7/9 una
+          sesión de 120 minutos llegó cortada en 90: con la pantalla apagada
+          el micrófono deja de entregar señal sin avisar. Ahora la grabación
+          se pausa sola en vez de subirse, pero seguir grabando con la
+          pantalla encendida sigue siendo lo que mejor funciona. */}
       <p className="max-w-[320px] font-sans text-[13px] leading-[1.55] text-ink-500">
-        Se guarda cifrado en el teléfono. Podés bloquear la pantalla.
+        Se guarda cifrado en el teléfono. Dejá la pantalla encendida.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Por qué se interrumpió la grabación, en las palabras del glosario.
+ *
+ * El fallback es el corte de micrófono porque es el único que existía antes
+ * de que la interrupción tuviera motivo: una grabación cortada por una
+ * versión anterior no tiene con qué contestar, y "se cortó el micrófono" es
+ * lo que decía entonces.
+ */
+function textoDelCorte(motivo: MotivoInterrupcion | null) {
+  switch (motivo) {
+    case "limite":
+      return CORTE_LIMITE;
+    case "sin-sonido":
+      return CORTE_SIN_SONIDO;
+    case "pantalla":
+      return CORTE_PANTALLA;
+    default:
+      return CORTE_MICROFONO;
+  }
+}
+
+/**
+ * Los avisos de una grabación en curso: persistentes, apilados, y ninguno
+ * interrumpe nada.
+ *
+ * Los dos son cosas que el grabador ya sabía desde siempre y que nadie leía:
+ * `wakeLockSoltado` y `avisoLimite` se calculaban y se tiraban. Se muestran
+ * mientras la condición dure y se van solos cuando se resuelve: no hay nada
+ * que cerrar ni que confirmar, porque el trabajo de ella es la sesión, no la
+ * app.
+ *
+ * El tercer aviso —el silencio— vive en el medidor, pegado a las barras en
+ * cero que lo explican.
+ *
+ * El orden es el de urgencia: la pantalla apagada primero, porque es la única
+ * que puede terminar en una grabación pausada a mitad de sesión.
+ */
+function AvisosDeGrabacion({
+  pantallaApagada,
+  avisoLimite,
+}: {
+  pantallaApagada: boolean;
+  avisoLimite: boolean;
+}) {
+  if (!pantallaApagada && !avisoLimite) {
+    return null;
+  }
+
+  return (
+    <div role="status" className="flex w-full flex-col gap-2">
+      {pantallaApagada ? (
+        <Aviso icono={<Sun size={15} strokeWidth={1.8} aria-hidden="true" />}>
+          {AVISO_PANTALLA_APAGADA}
+        </Aviso>
+      ) : null}
+      {avisoLimite ? (
+        <Aviso icono={<Square size={13} strokeWidth={2} aria-hidden="true" />}>
+          {AVISO_LIMITE_GRABACION}
+        </Aviso>
+      ) : null}
+    </div>
+  );
+}
+
+function Aviso({
+  icono,
+  children,
+}: {
+  icono: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex w-full items-start gap-2 rounded-md border border-[color:var(--border-subtle)] bg-cream-100 px-3 py-2 text-left">
+      <span className="mt-[2px] shrink-0 text-ink-500">{icono}</span>
+      <p className="font-sans text-[13px] leading-[1.45] text-ink-700">
+        {children}
       </p>
     </div>
   );
