@@ -30,6 +30,7 @@ export async function GET() {
         pagoFecha: { gte: monthStart, lte: monthEnd },
       },
       include: {
+          sesionClinica: { select: { id: true, estado: true } },
         paciente: {
           select: {
             id: true,

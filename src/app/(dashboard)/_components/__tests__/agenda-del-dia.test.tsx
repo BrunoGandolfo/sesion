@@ -28,6 +28,7 @@ vi.mock("next/navigation", () => ({
 const AHORA = new Date("2026-09-07T15:00:00.000Z");
 
 const TURNO: TurnoConPaciente = {
+  sesionClinica: null,
   id: "t1",
   organizationId: "org",
   pacienteId: "p1",

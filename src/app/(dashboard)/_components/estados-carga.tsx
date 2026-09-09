@@ -1,19 +1,7 @@
-// Los dos estados de la pantalla de Hoy antes de tener datos. En minúscula
-// y sin spinner: es medio segundo, no un proceso.
+// Error recuperable de la pantalla de Hoy.
 
 import { Button } from "@/components/ui";
 import { ALGO_FALLO } from "@/lib/glosario";
-
-export function Cargando() {
-  return (
-    <div
-      aria-busy="true"
-      className="mx-auto w-full max-w-[1200px] p-5 text-[13px] text-ink-500 lg:p-14"
-    >
-      cargando tu día…
-    </div>
-  );
-}
 
 export function FalloDeCarga({ onReintentar }: { onReintentar: () => void }) {
   return (

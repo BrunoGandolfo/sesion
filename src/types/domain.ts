@@ -142,6 +142,7 @@ export interface PacienteConDeuda extends Paciente {
 }
 
 export interface TurnoConPaciente extends Turno {
+  sesionClinica: { id: string; estado: string } | null;
   paciente: Pick<Paciente, "id" | "nombre" | "apellido" | "telefono">;
 }
 
@@ -255,6 +256,7 @@ export interface SenalRiesgoDelDia {
  * la red y que leen los dos lados es dominio, no detalle de la ruta.
  */
 export type DashboardData = {
+  inicio: { tarifaCargada: boolean; tienePacientes: boolean; tieneTurnos: boolean };
   kpis: KPIsDashboard;
   sesionesHoy: TurnoConPaciente[];
   deudores: DeudaPaciente[];

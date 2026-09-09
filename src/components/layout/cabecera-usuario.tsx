@@ -1,34 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { Settings } from "lucide-react";
 
 import { fechaCorta, initials, saludo } from "@/lib/format";
 import { TU_CONSULTORIO } from "@/lib/glosario";
 
-// Quién sos y qué día es, arriba a la izquierda, y toda la cabecera lleva a
-// "Tu consultorio".
-//
-// Antes había dos accesos distintos a lo mismo: en Hoy el nombre propio era
-// un enlace subrayado con un engranaje al lado, y en Cobros un engranaje
-// suelto arriba a la derecha. Dos formas, dos lugares, y ninguna se parecía
-// a cómo se entra a la configuración en el resto de las apps que ella usa:
-// tocando tu propia foto.
-//
-// El avatar hace de ancla visual: es lo que se reconoce de lejos, y lo que
-// hace que un enlace de tres líneas se lea como un solo destino.
-//
-// PERO EL AVATAR SOLO NO ALCANZA. En un teléfono no hay hover, y sin hover
-// esto era un encabezado —un saludo, un nombre y una fecha— sin ninguna
-// marca de que fuera tocable: nadie descubre que el avatar es la puerta a la
-// configuración. Ahora el bloque dice a dónde lleva, con todas las letras y
-// con el mismo `ChevronRight` de lucide que marca "esto se abre" en la lista
-// de pacientes y en Cobros.
-//
-// El engranaje suelto no vuelve: se sacó a propósito porque repetía este
-// mismo destino en un ícono distinto, y dos accesos a lo mismo se aprenden
-// peor que uno. La fecha se subió a la línea del saludo para que el rótulo
-// no agregue una cuarta línea al bloque.
+// Decisión de producto: el nombre identifica a la profesional; no navega.
+// La configuración se reconoce por el engranaje arriba a la derecha,
+// separado del saludo y con el mismo destino en todas las cabeceras.
+
+export function AccesoConsultorio({ activo = false }: { activo?: boolean }) {
+  if (activo) {
+    return (
+      <span role="img" aria-label={TU_CONSULTORIO} aria-current="page" title={TU_CONSULTORIO}
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-sage-50 text-sage-700">
+        <Settings size={22} strokeWidth={1.8} aria-hidden="true" />
+      </span>
+    );
+  }
+  return (
+    <Link
+      href="/config"
+      aria-label={TU_CONSULTORIO}
+      title={TU_CONSULTORIO}
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-cream-100 hover:text-sage-700 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-sage-500/20"
+    >
+      <Settings size={22} strokeWidth={1.8} aria-hidden="true" />
+    </Link>
+  );
+}
 
 interface CabeceraUsuarioProps {
   /** Nombre de la profesional. null mientras carga la configuración. */
@@ -58,34 +59,27 @@ export function CabeceraUsuario({
   const iniciales = tieneNombre ? initials(nombre as string) : "·";
 
   return (
-    <Link
-      href="/config"
-      aria-label={TU_CONSULTORIO}
-      title={TU_CONSULTORIO}
-      className={`group inline-flex min-w-0 items-center gap-3 rounded-md py-1 pr-2 transition-colors duration-150 hover:bg-cream-100 focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 ${className}`}
-    >
-      <span
-        aria-hidden="true"
-        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cream-100 font-[family-name:var(--font-display)] text-[16px] font-medium leading-none text-sage-700 ring-1 ring-sage-200 transition-colors duration-150 group-hover:bg-cream-200"
-      >
-        {iniciales}
-      </span>
-
-      <span className="flex min-w-0 flex-col gap-0.5">
-        {conSaludo || ahora ? (
-          <span className="truncate font-sans text-[12px] leading-tight text-ink-500">
-            {conSaludo && ahora ? `${saludo(ahora)} · ` : null}
-            {ahora ? fechaCorta(ahora) : null}
+    <div className={`flex w-full min-w-0 items-start justify-between gap-3 ${className}`}>
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cream-100 font-[family-name:var(--font-display)] text-[16px] font-medium leading-none text-sage-700 ring-1 ring-sage-200"
+        >
+          {iniciales}
+        </span>
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="break-words font-[family-name:var(--font-display)] text-[24px] font-medium leading-tight text-ink-900 lg:text-[30px]">
+            {visible}
           </span>
-        ) : null}
-        <span className="truncate font-sans text-[15px] font-semibold leading-tight text-ink-900">
-          {visible}
+          {ahora ? (
+            <span className="font-sans text-[12px] leading-tight text-ink-500">
+              {conSaludo ? `${saludo(ahora)} · ` : null}
+              {fechaCorta(ahora)}
+            </span>
+          ) : null}
         </span>
-        <span className="inline-flex items-center gap-0.5 font-sans text-[12px] font-semibold leading-tight text-sage-600 group-hover:text-sage-700">
-          {TU_CONSULTORIO}
-          <ChevronRight size={14} strokeWidth={1.8} aria-hidden="true" />
-        </span>
-      </span>
-    </Link>
+      </div>
+      <AccesoConsultorio />
+    </div>
   );
 }

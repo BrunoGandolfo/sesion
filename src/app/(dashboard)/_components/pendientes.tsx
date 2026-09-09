@@ -16,9 +16,9 @@
 // mostraba sus tres nombres y el bloque de abajo otros tres —dos listas del
 // mismo dato, ordenadas distinto, a 400 px una de otra—.
 //
-// Cada fila se renderiza únicamente si tiene ítems, y si las tres están
-// vacías el bloque entero desaparece: un cartel de "no tenés nada
-// pendiente" ocuparía el lugar más caro de la pantalla para no decir nada.
+// Los pasos iniciales requieren datos explícitos de la cuenta: no tener
+// pendientes hoy no significa que todavía falten pacientes o turnos.
+// Cuando todas las tareas se cumplieron, el bloque desaparece.
 
 import * as React from "react";
 import Link from "next/link";
@@ -26,8 +26,8 @@ import { FileText, ShieldAlert, Wallet } from "lucide-react";
 
 import { Card } from "@/components/ui";
 import { fechaCorta, money } from "@/lib/format";
-import { NAV, pluralizar } from "@/lib/glosario";
-import type { PendientesTerapeuta } from "@/types/domain";
+import { INICIO_AGENDAR_SESION, INICIO_CARGAR_PACIENTE, INICIO_CARGAR_TARIFA, NAV, pluralizar } from "@/lib/glosario";
+import type { DashboardData, PendientesTerapeuta } from "@/types/domain";
 
 /** Cuántos ítems se listan por fila antes de resumir el resto. La fila es
  *  un recordatorio, no la pantalla de trabajo. */
@@ -35,6 +35,7 @@ const MAX_VISIBLES = 3;
 
 interface PendientesProps {
   pendientes: PendientesTerapeuta;
+  inicio?: DashboardData["inicio"];
 }
 
 function fecha(iso: string): string {
@@ -79,7 +80,7 @@ function Fila({
 const ITEM =
   "flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left transition-colors duration-150 hover:bg-cream-50";
 
-export function Pendientes({ pendientes }: PendientesProps) {
+export function Pendientes({ pendientes, inicio }: PendientesProps) {
   const { notasParaRevisar, sinCobrar, sinAutorizacion, totalSinCobrar } =
     pendientes;
 
@@ -94,10 +95,17 @@ export function Pendientes({ pendientes }: PendientesProps) {
     });
   }, [sinAutorizacion]);
 
+  const pasosIniciales = inicio ? [
+    { completo: inicio.tarifaCargada, texto: INICIO_CARGAR_TARIFA, href: "/config" },
+    { completo: inicio.tienePacientes, texto: INICIO_CARGAR_PACIENTE, href: "/pacientes" },
+    { completo: inicio.tieneTurnos, texto: INICIO_AGENDAR_SESION, href: "/agenda" },
+  ].filter((paso) => !paso.completo) : [];
+
   if (
     notasParaRevisar.length === 0 &&
     sinCobrar.length === 0 &&
-    pacientesSinAutorizacion.length === 0
+    pacientesSinAutorizacion.length === 0 &&
+    pasosIniciales.length === 0
   ) {
     return null;
   }
@@ -105,6 +113,17 @@ export function Pendientes({ pendientes }: PendientesProps) {
   return (
     <Card className="overflow-hidden rounded-[8px] border-l-2 border-l-gold-500 p-0">
       <div className="divide-y divide-[color:var(--border-subtle)]">
+        {pasosIniciales.length > 0 ? (
+          <ol className="px-4 py-2">
+            {pasosIniciales.map((paso) => (
+              <li key={paso.href}>
+                <Link href={paso.href} className={`${ITEM} min-h-11 font-sans text-[14px] font-semibold text-sage-700`}>
+                  {paso.texto}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        ) : null}
         {notasParaRevisar.length > 0 ? (
           <Fila
             icono={

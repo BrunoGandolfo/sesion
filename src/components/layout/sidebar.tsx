@@ -7,7 +7,6 @@ import { signOut, useSession } from "next-auth/react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Calendar,
-  CircleHelp,
   Home,
   LogOut,
   Settings,
@@ -18,8 +17,9 @@ import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
 import type { DeudaPaciente } from "@/types/domain";
 import { apiGet } from "@/lib/api-client";
 import { zonaDeuda } from "@/lib/deudas";
-import { SUAVE } from "@/components/ui/movimiento";
-import { AYUDA, NAV, TU_CONSULTORIO } from "@/lib/glosario";
+import { DURACION_NAVEGACION, SUAVE } from "@/components/ui/movimiento";
+import { Lupita } from "@/components/ui/lupita";
+import { LUPITA, NAV, TU_CONSULTORIO } from "@/lib/glosario";
 
 // Mismos destinos que el menú de mobile, más la configuración, que en
 // desktop se dice como la diría ella: "Tu consultorio". "Finanzas" pasó a
@@ -29,7 +29,6 @@ const NAV_ITEMS = [
   { href: "/agenda", label: NAV.AGENDA, icon: Calendar },
   { href: "/pacientes", label: NAV.PACIENTES, icon: Users },
   { href: "/cobros", label: NAV.COBROS, icon: Wallet },
-  { href: "/config", label: TU_CONSULTORIO, icon: Settings },
 ] as const;
 
 /** La misma identidad compartida que en el menú de mobile: framer-motion
@@ -40,10 +39,6 @@ const NAV_ITEMS = [
  *  framer-motion buscara el recorrido entre una barra vertical y un
  *  subrayado horizontal. */
 const INDICADOR = "nav-lateral-activo";
-
-/** Lo que tarda la marca en llegar al destino nuevo. El mismo valor que en
- *  mobile: es la misma navegación. */
-const DURACION_INDICADOR = 0.26;
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -143,7 +138,7 @@ export function Sidebar() {
                       layoutId={INDICADOR}
                       aria-hidden="true"
                       className="absolute inset-y-1.5 left-0 w-[2px] rounded-full bg-sage-500"
-                      transition={{ duration: DURACION_INDICADOR, ease: SUAVE }}
+                      transition={{ duration: DURACION_NAVEGACION, ease: SUAVE }}
                     />
                   )
                 ) : null}
@@ -169,9 +164,18 @@ export function Sidebar() {
             onClick={() => setAyudaAbierta(true)}
             className="flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm font-medium text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"
           >
-            <CircleHelp size={18} strokeWidth={1.6} aria-hidden="true" />
-            <span className="flex-1">{AYUDA}</span>
+            <Lupita pose="saluda" tamano={20} />
+            <span className="flex-1">{LUPITA}</span>
           </button>
+          <Link
+            href="/config"
+            aria-label={TU_CONSULTORIO}
+            aria-current={isActive("/config") ? "page" : undefined}
+            className={`flex min-h-11 items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium ${isActive("/config") ? "bg-sage-50 text-sage-700" : "text-ink-500 hover:bg-cream-50 hover:text-ink-900"}`}
+          >
+            <Settings size={18} strokeWidth={1.6} aria-hidden="true" />
+            {TU_CONSULTORIO}
+          </Link>
         </nav>
 
         {/* Footer */}

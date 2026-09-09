@@ -66,6 +66,9 @@ export async function GET() {
       sesionesHoyRows,
       pendientes,
       sesionesDelDia,
+      config,
+      pacientesActivos,
+      totalTurnos,
     ] = await Promise.all([
       db.turno.count({
         where: {
@@ -90,6 +93,7 @@ export async function GET() {
           estado: { not: "cancelado" },
         },
         include: {
+          sesionClinica: { select: { id: true, estado: true } },
           paciente: {
             select: {
               id: true,
@@ -120,6 +124,9 @@ export async function GET() {
         },
         select: { datosEstructurados: true },
       }),
+      db.configuracion.findUnique({ where: { organizationId }, select: { tarifaDefault: true } }),
+      db.paciente.count({ where: { organizationId, activo: true } }),
+      db.turno.count({ where: { organizationId } }),
     ]);
 
     const sesionesHoy = sesionesHoyRows.map(toTurnoConPaciente);
@@ -138,6 +145,11 @@ export async function GET() {
     };
 
     const data: DashboardData = {
+      inicio: {
+        tarifaCargada: (config?.tarifaDefault ?? 0) > 0,
+        tienePacientes: pacientesActivos > 0,
+        tieneTurnos: totalTurnos > 0,
+      },
       kpis,
       sesionesHoy,
       deudores,

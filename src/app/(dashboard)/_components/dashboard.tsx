@@ -8,6 +8,7 @@
 
 import * as React from "react";
 
+import { EsqueletoHoy } from "@/components/esqueletos";
 import { Toast } from "@/components/ui";
 import type { VarianteToast } from "@/components/ui/toast";
 import { ListaEnCascada, MS_CHECK_DIBUJADO } from "@/components/ui/movimiento";
@@ -34,7 +35,7 @@ import {
   type EstadoHoy,
   type JsonPaciente,
 } from "./datos";
-import { Cargando, FalloDeCarga } from "./estados-carga";
+import { FalloDeCarga } from "./estados-carga";
 import { Kpis } from "./kpis";
 import { Pendientes } from "./pendientes";
 import { Saludo } from "./saludo";
@@ -176,12 +177,16 @@ export function Dashboard() {
     [recargar],
   );
 
+  // La segunda espera: la ruta ya llegó (su loading.tsx mostró este mismo
+  // esqueleto) y ahora falta /api/dashboard. Se dibuja lo mismo, así que la
+  // pantalla no parpadea entre una espera y la otra.
   if (!estado) {
-    return fallo ? <FalloDeCarga onReintentar={recargar} /> : <Cargando />;
+    return fallo ? <FalloDeCarga onReintentar={recargar} /> : <EsqueletoHoy />;
   }
 
   const { data, nombre, ahora, riesgoEnElDia } = estado;
   const {
+    inicio,
     pendientes,
     turnos,
     notaPorTurno,
@@ -200,7 +205,7 @@ export function Dashboard() {
         <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
 
         <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
-          <Pendientes pendientes={pendientes} />
+          <Pendientes pendientes={pendientes} inicio={inicio} />
 
           {/* Lo primero que la pantalla tiene que decir es qué sesión viene
               ahora — o que no viene ninguna. Con el día ya empezado y todos

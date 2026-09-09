@@ -1,5 +1,7 @@
 "use client";
 
+import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
+
 // Tu consultorio: lo que la app necesita saber de ella y de cómo trabaja.
 //
 // Seis secciones, en el orden en que las piensa: quién es (Vos), cuánto
@@ -553,9 +555,12 @@ export function ConfigView() {
 function Marco({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-[800px] px-5 py-6 lg:px-12 lg:py-10">
-      <h1 className="mb-6 font-display text-[30px] font-medium leading-tight tracking-tight text-ink-900 lg:text-[36px]">
-        {TU_CONSULTORIO}
-      </h1>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="font-display text-[30px] font-medium leading-tight tracking-tight text-ink-900 lg:text-[36px]">
+          {TU_CONSULTORIO}
+        </h1>
+        <AccesoConsultorio activo />
+      </div>
       {children}
     </div>
   );

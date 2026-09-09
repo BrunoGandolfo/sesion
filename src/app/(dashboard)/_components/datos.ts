@@ -86,6 +86,7 @@ export interface EstadoHoy {
 }
 
 export interface DiaRepartido {
+  inicio: DashboardData["inicio"];
   pendientes: PendientesTerapeuta;
   /** Los turnos del día, en hora ascendente. */
   turnos: TurnoConPaciente[];
@@ -128,6 +129,7 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
   const debenPacientes = new Set(pendientes.sinCobrar.map((d) => d.pacienteId));
 
   return {
+    inicio: data.inicio,
     pendientes,
     turnos,
     notaPorTurno: new Map(

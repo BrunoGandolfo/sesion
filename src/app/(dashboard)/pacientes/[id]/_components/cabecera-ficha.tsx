@@ -21,9 +21,10 @@
 // agregando. Acá el botón no puede tapar nada: ocupa su lugar, empuja lo que
 // sigue y se scrollea con la ficha.
 
-import { Edit3, Mic } from "lucide-react";
+import { ChevronLeft, Edit3, Mic } from "lucide-react";
 import Link from "next/link";
 
+import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 import { Avatar, Button, Chip } from "@/components/ui";
 import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge";
 import { fechaCorta, hora, money } from "@/lib/format";
@@ -121,3 +122,19 @@ export function CabeceraFicha({
     </header>
   );
 }
+
+export function CabeceraNavegacionFicha() {
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <Link
+        href="/pacientes"
+        className="inline-flex items-center gap-1 text-[13px] text-ink-500 transition-colors duration-150 hover:text-ink-700"
+      >
+        <ChevronLeft size={16} strokeWidth={1.6} aria-hidden="true" />
+        <span>Pacientes</span>
+      </Link>
+      <AccesoConsultorio />
+    </div>
+  );
+}
+

@@ -11,8 +11,6 @@
 // acciones son enlaces a /grabar/[turnoId] y /sesiones/[id].
 
 import * as React from "react";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { isSameDay } from "date-fns";
 
 import { Button, Segmented, Sheet, Toast } from "@/components/ui";
@@ -22,7 +20,7 @@ import { apiGet, esAbort } from "@/lib/api-client";
 import { ALGO_FALLO, FICHA, RECORRIDO, SESIONES } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
-import { CabeceraFicha } from "./cabecera-ficha";
+import { CabeceraFicha, CabeceraNavegacionFicha } from "./cabecera-ficha";
 import { EditarPacienteForm } from "./editar-paciente-form";
 import {
   parsePaciente,
@@ -198,7 +196,7 @@ export function PacienteDetailView({ id }: { id: string }) {
   return (
     <>
       <div className="mx-auto max-w-[1120px] px-5 py-6 lg:px-10 lg:py-8">
-        <BackLink />
+        <CabeceraNavegacionFicha />
 
         {fichaActual.tipo === "cargando" ? <DetailSkeletonInner /> : null}
 
@@ -285,18 +283,6 @@ export function PacienteDetailView({ id }: { id: string }) {
         onClose={() => setToast((c) => ({ ...c, open: false }))}
       />
     </>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      href="/pacientes"
-      className="mb-4 inline-flex items-center gap-1 text-[13px] text-ink-500 transition-colors duration-150 hover:text-ink-700"
-    >
-      <ChevronLeft size={16} strokeWidth={1.6} aria-hidden="true" />
-      <span>Pacientes</span>
-    </Link>
   );
 }
 

@@ -69,6 +69,7 @@ export async function GET(request: Request) {
     const turnos = await db.turno.findMany({
       where,
       include: {
+          sesionClinica: { select: { id: true, estado: true } },
         paciente: {
           select: {
             id: true,

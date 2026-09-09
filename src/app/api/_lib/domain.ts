@@ -154,11 +154,13 @@ export function toTurno(turno: PrismaTurno): Turno {
 export function toTurnoConPaciente(
   turno: PrismaTurno & {
     paciente: Pick<PrismaPaciente, "id" | "nombre" | "apellido" | "telefono">;
+    sesionClinica: { id: string; estado: string } | null;
   },
 ): TurnoConPaciente {
   return {
     ...toTurno(turno),
     paciente: turno.paciente,
+    sesionClinica: turno.sesionClinica,
   };
 }
 

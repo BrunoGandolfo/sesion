@@ -1,5 +1,7 @@
 "use client";
 
+import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
+
 import * as React from "react";
 import Link from "next/link";
 import { ChevronRight, Plus, RotateCcw, Search } from "lucide-react";
@@ -14,6 +16,7 @@ import {
   Sheet,
   Toast,
 } from "@/components/ui";
+import { EsqueletoListaPacientes } from "@/components/esqueletos";
 import { TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
@@ -208,9 +211,12 @@ export function PacientesView({
 
   return (
     <div className="px-5 lg:px-10 py-6 lg:py-8 max-w-[1120px] mx-auto">
-      <h1 className="lg:hidden font-display text-[30px] font-medium text-ink-900 mb-4 tracking-tight leading-tight">
-        Pacientes
-      </h1>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="font-display text-[30px] font-medium text-ink-900 tracking-tight leading-tight">
+          Pacientes
+        </h1>
+        <AccesoConsultorio />
+      </div>
 
       <div className="flex items-center justify-between gap-3 mb-5">
         <Segmented
@@ -246,8 +252,13 @@ export function PacientesView({
         />
       </div>
 
+      {/* La segunda espera: la ruta ya llegó y falta /api/pacientes. Es la
+          misma lista gris que dibujó el loading.tsx de esta carpeta —el
+          mismo componente—, así que entre una espera y la otra no parpadea
+          nada. El título, el filtro y el buscador de arriba ya son tocables
+          y por eso quedan afuera del esqueleto. */}
       {loading && pacientes.length === 0 ? (
-        <PacientesSkeleton />
+        <EsqueletoListaPacientes />
       ) : error ? (
         <ErrorState
           message={error}
@@ -307,29 +318,10 @@ export function PacientesView({
   );
 }
 
-function PacientesSkeleton() {
-  return (
-    <div className="bg-white border border-[color:var(--border-subtle)] rounded-lg overflow-hidden">
-      <div className="hidden lg:grid grid-cols-[1.8fr_1fr_110px_1fr_120px_24px] gap-4 bg-cream-50 border-b border-[color:var(--border-subtle)] px-5 py-3">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <span key={index} className="h-3 rounded-sm bg-cream-200" />
-        ))}
-      </div>
-      <div className="divide-y divide-[color:var(--border-subtle)]">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="flex items-center gap-3 px-5 py-[14px]">
-            <span className="h-10 w-10 rounded-full bg-cream-200" />
-            <span className="flex flex-1 flex-col gap-2">
-              <span className="h-3 w-40 rounded-sm bg-cream-200" />
-              <span className="h-3 w-28 rounded-sm bg-cream-100" />
-            </span>
-            <span className="h-5 w-16 rounded-sm bg-cream-100" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// PacientesSkeleton se mudó a src/components/esqueletos/pacientes.tsx como
+// EsqueletoListaPacientes. Motivo: el loading.tsx de esta ruta necesita el
+// mismo dibujo, y un esqueleto que vive dentro de la vista sólo puede
+// dibujarse cuando la vista ya se montó — o sea, tarde.
 
 function ErrorState({
   message,
@@ -468,11 +460,11 @@ function MobileList({
             key={p.id}
             href={`/pacientes/${p.id}`}
             className="grid items-center gap-4 px-5 py-[14px] transition-colors duration-150 active:bg-cream-50"
-            style={{ gridTemplateColumns: "auto 1fr auto" }}
+            style={{ gridTemplateColumns: "auto minmax(0, 1fr) auto" }}
           >
             <Avatar nombre={p.nombre} apellido={p.apellido} size={40} />
             <span className="flex flex-col min-w-0">
-              <span className="text-[15px] font-semibold text-ink-900 truncate">
+              <span className="break-words text-[15px] font-semibold text-ink-900">
                 {p.nombre} {p.apellido}
               </span>
               {/* Sin `truncate`: la segunda línea decía "Hace 3 mes…" por
@@ -481,6 +473,11 @@ function MobileList({
                 {money(p.tarifa)} ·{" "}
                 {p.ultimaSesion ? fechaRelativa(p.ultimaSesion) : "-"}
               </span>
+              {!archived && p.deudaTotal > 0 ? (
+                <Chip variant="terracotta" size="sm" className="mt-1 self-start">
+                  {DEBE} {money(p.deudaTotal)}
+                </Chip>
+              ) : null}
             </span>
             <span className="flex shrink-0 items-center gap-2">
               {archived ? (
@@ -495,13 +492,7 @@ function MobileList({
                 >
                   Reactivar
                 </Button>
-              ) : (
-                p.deudaTotal > 0 && (
-                  <Chip variant="terracotta">
-                    {DEBE} {money(p.deudaTotal)}
-                  </Chip>
-                )
-              )}
+              ) : null}
               <ChevronRight
                 size={16}
                 strokeWidth={1.6}

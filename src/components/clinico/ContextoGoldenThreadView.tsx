@@ -636,8 +636,7 @@ function SectionIntervenciones({
                     Eficacia {i.eficaciaPercibida}
                   </Chip>
                   <span className="font-sans text-[12px] text-ink-500">
-                    {i.sesiones?.length ?? 0} sesión
-                    {(i.sesiones?.length ?? 0) === 1 ? "" : "es"}
+                    {pluralizar(i.sesiones?.length ?? 0, "sesión", "sesiones")}
                   </span>
                 </div>
               </li>

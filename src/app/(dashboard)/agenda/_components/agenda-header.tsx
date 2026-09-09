@@ -1,5 +1,7 @@
 "use client";
 
+import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
+
 import * as React from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { format, endOfWeek, startOfWeek } from "date-fns";
@@ -57,9 +59,12 @@ export function AgendaHeader({
 
   return (
     <header>
-      <h1 className="mb-4 font-[family-name:var(--font-display)] text-[30px] font-medium leading-none text-ink-900 lg:hidden">
-        {NAV.AGENDA}
-      </h1>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="font-[family-name:var(--font-display)] text-[30px] font-medium leading-none text-ink-900">
+          {NAV.AGENDA}
+        </h1>
+        <AccesoConsultorio />
+      </div>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">

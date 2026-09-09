@@ -29,6 +29,7 @@ import {
   Segmented,
   Toast,
 } from "@/components/ui";
+import { EsqueletoCobrosCuerpo } from "@/components/esqueletos";
 import { TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
@@ -45,7 +46,6 @@ import { fechaCorta, fechaLarga, money, moneyShort } from "@/lib/format";
 import {
   ALGO_FALLO,
   AVISADO,
-  CARGANDO,
   COBRASTE_ESTE_MES,
   COBROS_DEL_MES,
   COBROS_NO_CARGARON,
@@ -210,8 +210,11 @@ export function CobrosView() {
 
   if (carga === "cargando" && !datos) {
     return (
+      // La segunda espera: la ruta ya llegó y falta /api/cobros. El cuerpo
+      // es el mismo que dibujó el loading.tsx de esta carpeta, y el Marco
+      // acá ya es el de verdad.
       <Marco ahora={null} nombreProfesional={null}>
-        <p className="py-16 text-center text-[14px] text-ink-500">{CARGANDO}</p>
+        <EsqueletoCobrosCuerpo />
       </Marco>
     );
   }

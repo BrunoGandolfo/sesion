@@ -4,11 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { Home, Calendar, CircleHelp, Users, Wallet } from "lucide-react";
+import { Home, Calendar, Users, Wallet } from "lucide-react";
 
 import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
-import { SUAVE } from "@/components/ui/movimiento";
-import { AYUDA, NAV } from "@/lib/glosario";
+import { DURACION_NAVEGACION, SUAVE } from "@/components/ui/movimiento";
+import { Lupita } from "@/components/ui/lupita";
+import { LUPITA, NAV } from "@/lib/glosario";
 
 // Los cuatro destinos, con el nombre que usa toda la app (glosario NAV).
 // "Finanzas" pasó a ser Cobros: el menú nombra lo que se hace ahí, cobrar,
@@ -21,26 +22,12 @@ const NAV_ITEMS = [
   { href: "/cobros", label: NAV.COBROS, icon: Wallet },
 ] as const;
 
-// Ayuda, el quinto ítem. Es un botón y no un destino: abre un panel encima
-// de la pantalla en la que ella está. Va acá y no en un botón flotante
-// porque los flotantes que ya hay —el "+" de agendar y el de grabar de la
-// ficha— tapan contenido clínico (docs/diseno/01-auditoria-frontend.md), y
-// uno más sería el tercero.
-//
-// Cinco ítems entran: a 360 px de ancho tocan a 72 px cada uno, bien arriba
-// de los 44 del mínimo táctil. El sexto sí apretaría —60 px, y "Pacientes"
-// mide casi eso—, así que si algún día entra "Vos" (la alternativa A de la
-// auditoría, que reclama este mismo lugar para "Tu consultorio"), la ayuda
-// se va de acá antes que quedar los dos.
+// Lupita es el quinto ítem por decisión de producto. Abre el panel sobre
+// la pantalla actual; la configuración tiene su engranaje en la cabecera.
 
 /** Identidad compartida del subrayado: framer-motion lo desliza entre
  *  pestañas en vez de apagarlo acá y prenderlo allá. */
 const INDICADOR = "nav-activo";
-
-/** Lo que tarda el subrayado en llegar a la pestaña nueva. El mismo valor
- *  que la marca del destino activo en la barra lateral: es la misma
- *  navegación, en el otro viewport. */
-const DURACION_INDICADOR = 0.26;
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -82,7 +69,7 @@ export function BottomNav() {
                     layoutId={INDICADOR}
                     aria-hidden="true"
                     className="absolute inset-x-4 top-0 h-[2px] rounded-full bg-sage-500"
-                    transition={{ duration: DURACION_INDICADOR, ease: SUAVE }}
+                    transition={{ duration: DURACION_NAVEGACION, ease: SUAVE }}
                   />
                 )
               ) : null}
@@ -97,8 +84,8 @@ export function BottomNav() {
           onClick={() => setAyudaAbierta(true)}
           className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold text-ink-300 transition-colors duration-[var(--duration-fast)]"
         >
-          <CircleHelp size={22} strokeWidth={1.6} aria-hidden="true" />
-          {AYUDA}
+          <Lupita pose="saluda" tamano={20} />
+          {LUPITA}
         </button>
       </nav>
 

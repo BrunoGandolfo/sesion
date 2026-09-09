@@ -57,6 +57,7 @@ const TURNOS: TurnoConDeuda[] = [
 function datosDeHoy(): DashboardData {
   const { deudores, sinCobrar, totalSinCobrar } = deudaDeHoy(TURNOS, AHORA);
   return {
+    inicio: { tarifaCargada: true, tienePacientes: true, tieneTurnos: true },
     kpis: {
       sesionesHoy: 0,
       deudaAcumulada: totalSinCobrar.monto,

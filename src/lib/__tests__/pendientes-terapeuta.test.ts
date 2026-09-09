@@ -13,6 +13,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
@@ -26,6 +27,14 @@ import {
   vaciarTablas,
   type ClienteCifrado,
 } from "./db-test";
+
+const cuentaActual = vi.hoisted(() => ({ id: "" }));
+vi.mock("@/lib/auth-utils", () => ({
+  getCurrentOrganizationId: async () => cuentaActual.id,
+  getServerSession: async () => null,
+}));
+let leerDashboard: typeof import("@/app/api/dashboard/route").GET;
+let leerTurnos: typeof import("@/app/api/turnos/route").GET;
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
@@ -125,10 +134,13 @@ function pendientesDe(orgId: string) {
   return pendientesTerapeuta({ prisma: db, organizationId: orgId, ahora: AHORA });
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
   __resetKeyCacheForTests();
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
+  (globalThis as unknown as { prisma: unknown }).prisma = db;
+  leerDashboard = (await import("@/app/api/dashboard/route")).GET;
+  leerTurnos = (await import("@/app/api/turnos/route")).GET;
 });
 
 beforeEach(async () => {
@@ -617,5 +629,44 @@ describe("pendientesTerapeuta — las tres listas juntas", () => {
       pacientes: 1,
     });
     expect(pendientes.sinAutorizacion.map((t) => t.turnoId)).toEqual([turnoDeHoy]);
+  });
+});
+
+
+describe("GET dashboard y turnos — inicio y acceso a notas", () => {
+  it("una cuenta vacía devuelve los tres pasos sin cumplir, aislados de otras cuentas", async () => {
+    cuentaActual.id = await crearOrg();
+    await prismaRaw.configuracion.create({ data: { organizationId: cuentaActual.id, nombreProfesional: "Mariana", tarifaDefault: 0 } });
+    const otra = await crearOrg();
+    const paciente = await crearPaciente(otra);
+    await crearTurno({ orgId: otra, pacienteId: paciente, fecha: new Date() });
+    const respuesta = await leerDashboard();
+    expect(respuesta.status).toBe(200);
+    expect((await respuesta.json()).data.inicio).toEqual({ tarifaCargada: false, tienePacientes: false, tieneTurnos: false });
+  });
+
+  it("cuenta pacientes activos y turnos de cualquier fecha y transmite la nota en Hoy y Agenda", async () => {
+    cuentaActual.id = await crearOrg();
+    await prismaRaw.configuracion.create({ data: { organizationId: cuentaActual.id, nombreProfesional: "Mariana", tarifaDefault: 2200 } });
+    const pacienteId = await crearPaciente(cuentaActual.id);
+    const fecha = new Date();
+    const turnoId = await crearTurno({ orgId: cuentaActual.id, pacienteId, fecha });
+    const sesionId = await crearSesion({ orgId: cuentaActual.id, turnoId, estado: "aprobado" });
+    const sinNotaId = await crearTurno({ orgId: cuentaActual.id, pacienteId, fecha });
+    const respuesta = await leerDashboard();
+    expect(respuesta.status).toBe(200);
+    const { data } = await respuesta.json();
+    expect(data.inicio).toEqual({ tarifaCargada: true, tienePacientes: true, tieneTurnos: true });
+    expect(data.sesionesHoy.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobado" });
+    expect(data.sesionesHoy.find((t: { id: string }) => t.id === sinNotaId).sesionClinica).toBeNull();
+    const params = new URLSearchParams({ desde: new Date(fecha.getTime() - 60000).toISOString(), hasta: new Date(fecha.getTime() + 60000).toISOString() });
+    const agenda = await leerTurnos(new Request(`http://localhost/api/turnos?${params}`));
+    expect(agenda.status).toBe(200);
+    const lista = (await agenda.json()).data;
+    expect(lista.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobado" });
+    expect(lista.find((t: { id: string }) => t.id === sinNotaId).sesionClinica).toBeNull();
+    await prismaRaw.paciente.update({ where: { id: pacienteId }, data: { activo: false } });
+    await prismaRaw.turno.updateMany({ where: { organizationId: cuentaActual.id }, data: { fecha: SEMANA_PASADA } });
+    expect((await (await leerDashboard()).json()).data.inicio).toEqual({ tarifaCargada: true, tienePacientes: false, tieneTurnos: true });
   });
 });

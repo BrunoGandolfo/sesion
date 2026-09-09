@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import type { TurnoConPaciente } from "@/types/domain";
 import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 import { hora, money } from "@/lib/format";
@@ -14,6 +15,8 @@ import {
   PAGADO,
   PENDIENTE,
   REVISAR_NOTA,
+  VER_NOTA,
+  NOTA_PROCESANDO,
 } from "@/lib/glosario";
 import { Avatar } from "./avatar";
 import { Chip } from "./chip";
@@ -26,10 +29,11 @@ interface SessionRowProps {
   /** Momento actual. Con él la fila sabe si la hora del turno ya pasó; sin
    *  él cae en la regla vieja (cobrable solo si el turno está "realizado"). */
   ahora?: Date;
-  /** El turno tiene una nota generada esperando aprobación. */
+  /** @deprecated El estado de nota se lee de turno.sesionClinica. */
   notaParaRevisar?: boolean;
   /** La paciente no firmó la autorización para grabar. */
   sinAutorizacion?: boolean;
+  /** @deprecated El acceso a la nota usa el ID de turno.sesionClinica. */
   onRevisarNota?: () => void;
   onGrabar?: () => void;
   onAutorizar?: () => void;
@@ -62,6 +66,19 @@ type Accion = {
   tono: "gold" | "terracotta";
   onClick: () => void;
 };
+
+/** Alias viejo de "procesando" que todavía llega en filas antiguas. */
+const ESTADOS_PROCESANDO: ReadonlyArray<string> = ["procesando", "transcribiendo"];
+
+/** Ocultan "Grabar sesión": el audio ya salió del navegador y el pipeline
+ *  siguió, así que volver a grabar pisaría la nota. En "pendiente",
+ *  "grabando", "subiendo" y "error" la grabación quedó a medias y
+ *  GrabarView.asegurarSesion sabe retomarla. */
+const ESTADOS_PASADA_LA_GRABACION: ReadonlyArray<string> = [
+  ...ESTADOS_PROCESANDO,
+  "revision",
+  "aprobado",
+];
 
 function statusFor(turno: TurnoConPaciente): Status {
   if (turno.estado === "cancelado") return { variant: "neutral", label: CANCELADO };
@@ -100,19 +117,17 @@ export function puedeGrabarseHoy(
 
 /**
  * Orden de precedencia, el mismo que la card de Ahora: sin autorización no
- * se graba; una nota escrita se revisa antes que nada; una sesión cuya hora
+ * se graba; una sesión cuya hora
  * ya pasó y sigue impaga se cobra —aunque el turno todavía figure como
  * programado, porque el caso de uso de cobrar lo marca realizado—; y si no
  * hay cobro pendiente, se graba. Sin handler, la fila muestra el chip de
- * estado.
+ * estado. El acceso a la nota se muestra por separado, siempre.
  */
 function accionDe({
   turno,
   ahora,
-  notaParaRevisar,
   sinAutorizacion,
   onCobrar,
-  onRevisarNota,
   onGrabar,
   onAutorizar,
 }: SessionRowProps): Accion | null {
@@ -124,10 +139,6 @@ function accionDe({
       tono: "terracotta",
       onClick: onAutorizar,
     };
-  }
-
-  if (notaParaRevisar && onRevisarNota) {
-    return { label: REVISAR_NOTA, tono: "gold", onClick: onRevisarNota };
   }
 
   const horaPasada = ahora
@@ -144,7 +155,12 @@ function accionDe({
     ? puedeGrabarseHoy(turno, ahora)
     : turno.estado === "programado";
 
-  if (puedeGrabar && onGrabar) {
+  const estadoSesion = turno.sesionClinica?.estado;
+  const yaPasoLaGrabacion =
+    estadoSesion !== undefined &&
+    ESTADOS_PASADA_LA_GRABACION.includes(estadoSesion);
+
+  if (!yaPasoLaGrabacion && puedeGrabar && onGrabar) {
     return { label: GRABAR_SESION, tono: "gold", onClick: onGrabar };
   }
 
@@ -162,8 +178,12 @@ export function SessionRow(props: SessionRowProps) {
   const status = statusFor(turno);
   const leftClass = borderLeftClass(turno);
   const accion = accionDe(props);
+  const sesion = turno.sesionClinica;
+  const nota = sesion?.estado === "revision" ? REVISAR_NOTA
+    : sesion?.estado === "aprobado" ? VER_NOTA : null;
+  const procesando = sesion && ESTADOS_PROCESANDO.includes(sesion.estado);
 
-  const base = `w-full flex items-center gap-4 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-150 border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
+  const base = `w-full flex flex-wrap items-center gap-3 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-150 border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
 
   const content = (
     <>
@@ -193,42 +213,53 @@ export function SessionRow(props: SessionRowProps) {
         </div>
       </div>
 
-      <div className="flex items-center shrink-0">
-        {cobroConfirmado ? (
-          // Ocupa el lugar del botón, no se agrega al lado: la marca aparece
-          // donde estaba "Cobrar", que es donde ella tocó.
-          <span className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-sage-600">
-            <CheckDibujado tamano={20} />
-          </span>
-        ) : accion ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              accion.onClick();
-            }}
-            className="group inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-1"
-          >
-            <span
-              className={`rounded-full px-[10px] py-[3px] text-[12px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap transition-colors duration-150 ${TONO[accion.tono]}`}
-            >
-              {accion.label}
-            </span>
-          </button>
-        ) : (
-          <Chip variant={status.variant}>{status.label}</Chip>
-        )}
-      </div>
     </>
   );
 
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={base}>
-        {content}
-      </button>
-    );
-  }
-
-  return <div className={base}>{content}</div>;
+  return (
+    <div className={base}>
+      {onClick ? (
+        <button type="button" onClick={onClick} className="flex min-h-11 min-w-0 flex-1 basis-[180px] items-center gap-4 text-left">
+          {content}
+        </button>
+      ) : (
+        <div className="flex min-w-0 flex-1 basis-[180px] items-center gap-4">{content}</div>
+      )}
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {nota && sesion ? (
+          <Link href={`/sesiones/${sesion.id}`} className="inline-flex min-h-11 items-center rounded-md px-2 text-[13px] font-semibold text-sage-700 hover:bg-sage-50">
+            {nota}
+          </Link>
+        ) : procesando ? (
+          <span className="text-[13px] text-ink-500" role="status">{NOTA_PROCESANDO}</span>
+        ) : null}
+        <div className="flex items-center shrink-0">
+          {cobroConfirmado ? (
+            // Ocupa el lugar del botón, no se agrega al lado: la marca aparece
+            // donde estaba "Cobrar", que es donde ella tocó.
+            <span className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-sage-600">
+              <CheckDibujado tamano={20} />
+            </span>
+          ) : accion ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                accion.onClick();
+              }}
+              className="group inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-1"
+            >
+              <span
+                className={`rounded-full px-[10px] py-[3px] text-[12px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap transition-colors duration-150 ${TONO[accion.tono]}`}
+              >
+                {accion.label}
+              </span>
+            </button>
+          ) : (
+            <Chip variant={status.variant}>{status.label}</Chip>
+          )}
+        </div>
+    </div>
+    </div>
+  );
 }

@@ -356,11 +356,11 @@ function TurnoRow({
           </Chip>
         </div>
 
-        <Chip variant={estadoChipVariant(turno.estado)} size="sm">
+        <Chip variant={estadoChipVariant(turno.estado)} size="sm" className="self-start justify-self-start">
           {ESTADO_LABEL[turno.estado]}
         </Chip>
 
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-start gap-1">
           {mostrarPagado ? (
             <Chip variant="sage" size="sm">
               Pagado
