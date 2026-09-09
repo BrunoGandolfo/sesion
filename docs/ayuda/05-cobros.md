@@ -31,8 +31,8 @@ dibuja ningún tilde: el tilde confirma lo que pasó de verdad.
 
 ## La pantalla de Cobros
 
-Arriba, cuatro números: **Cobraste este mes**, **Te deben**, **Sesiones
-cobradas** (del mes) y **Sin cobrar** (cantidad de sesiones). Debajo, dos
+Arriba, dos importes: **Cobraste este mes** y **Sin cobrar**. Debajo de cada
+importe aparece la cantidad de sesiones correspondiente. Más abajo hay dos
 solapas:
 
 - **Te deben** — *"Son N sesiones sin cobrar."* y la lista **ordenada por monto**,

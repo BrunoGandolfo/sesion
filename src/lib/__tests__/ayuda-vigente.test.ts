@@ -116,3 +116,10 @@ it("no promete un hilo inmutable ni un brief siempre aprobado", () => {
   expect(texto).toContain("esa tarea puede quedar pendiente o fallar");
   expect(texto).not.toMatch(/Nunca se reinician|Nunca se borran|no se reescriben nunca|Todo se compone de notas ya aprobadas/);
 });
+
+it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
+  const texto = documento("05-cobros.md");
+  expect(texto).toContain("dos importes: **Cobraste este mes** y **Sin cobrar**");
+  expect(texto).toContain("cantidad de sesiones correspondiente");
+  expect(texto).not.toContain("cuatro números");
+});
