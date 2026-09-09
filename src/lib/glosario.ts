@@ -1060,7 +1060,7 @@ export const CARGANDO_COBROS = "Cargando tus cobros…";
  * `src/app/manifest.ts`.
  */
 export const NOMBRE_PRODUCTO = "Sesión";
-export const ESLOGAN = "Consultorio inteligente";
+export const ESLOGAN = "Convertí tu trabajo en un flujo enriquecedor";
 
 /**
  * Qué hace, en una frase. No es un párrafo a propósito: quien llega acá
