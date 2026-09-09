@@ -13,7 +13,7 @@ import { Toast } from "@/components/ui";
 import type { VarianteToast } from "@/components/ui/toast";
 import { ListaEnCascada, MS_CHECK_DIBUJADO } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { ApiClientError, apiGet, apiPost } from "@/lib/api-client";
 import { instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import {
   ALGO_FALLO,
@@ -166,10 +166,13 @@ export function Dashboard() {
           });
           recargar();
         })
-        .catch(() =>
+        .catch((error: unknown) =>
           setToast({
             open: true,
-            message: NO_SE_PUDO_AGENDAR,
+            message:
+              error instanceof ApiClientError && error.status === 409
+                ? error.mensaje
+                : NO_SE_PUDO_AGENDAR,
             variante: "aviso",
           }),
         );

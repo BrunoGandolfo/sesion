@@ -16,6 +16,7 @@
 // entero, con el número al que sale, antes de confirmar.
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronRight, Send, Wallet } from "lucide-react";
 
@@ -162,7 +163,7 @@ export function CobrosView() {
   const [ahora, setAhora] = React.useState<Date | null>(null);
   const [carga, setCarga] = React.useState<Carga>("cargando");
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [toast, setToast] = React.useState({ open: false, message: "" });
+  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>({ open: false, message: "", variante: "aviso" });
 
   // El aviso que acaba de salir se pega en la fila sin recargar la pantalla:
   // la lista ya está en pantalla y lo único que cambió es esa fecha.
@@ -274,9 +275,9 @@ export function CobrosView() {
           smsOk={smsOk}
           onAvisado={(pacienteId, enviadoEn) => {
             marcarAvisado(pacienteId, enviadoEn);
-            setToast({ open: true, message: SMS_ENVIADO });
+            setToast({ open: true, message: SMS_ENVIADO, variante: "confirmacion" });
           }}
-          onError={(mensaje) => setToast({ open: true, message: mensaje })}
+          onError={(mensaje) => setToast({ open: true, message: mensaje, variante: "aviso" })}
           onVerCobros={() => setPestana("cobros")}
         />
       ) : (
@@ -286,6 +287,7 @@ export function CobrosView() {
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((actual) => ({ ...actual, open: false }))}
       />
     </Marco>

@@ -1091,19 +1091,10 @@ export const ENTRADA_AFIRMACIONES = [
   "Un análisis de tu propia práctica, hecho para vos.",
 ] as const;
 
-/**
- * La confidencialidad, en una línea y con dos hechos verificables, no con un
- * sello de confianza. Las dos afirmaciones son literalmente lo que hace el
- * código y lo que ya le decimos a la paciente en el consentimiento
- * (`src/lib/consentimiento.ts:55-58`): se cifra en el dispositivo antes de
- * salir (`src/lib/grabacion-cifrado.ts`) y se borra al aprobarse la nota.
- *
- * No decimos "seguro", "encriptación de grado militar" ni ninguna sigla de
- * cumplimiento: son el vocabulario de las apps del norte y acá no
- * significarían nada.
- */
+/** El cifrado para la subida empieza al terminar, no durante la captura.
+ * La copia local previa no está cifrada: no prometer protección que no existe. */
 export const ENTRADA_CONFIDENCIALIDAD =
-  "El audio se cifra antes de salir de tu teléfono y se borra cuando aprobás la nota.";
+  "Al terminar, el audio se cifra antes de subirse. La copia local previa no está cifrada.";
 
 /** Los rótulos del formulario. Estaban escritos a mano en la página. */
 export const ENTRADA_EMAIL = "Email";

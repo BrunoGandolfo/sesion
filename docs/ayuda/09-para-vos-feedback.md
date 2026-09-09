@@ -3,11 +3,12 @@
 **Para qué sirve.** Es la otra cara de una sesión: habla de **tu** trabajo en
 esa sesión, no de la paciente. Se lee cuando querés, no antes que la nota.
 
-**Dónde está.** Arriba de la nota hay un selector de dos opciones,
+**Dónde está.** Cuando hay análisis disponible, arriba de la nota hay un selector de dos opciones,
 **Nota clínica | Para vos**. Se llega también desde el aviso que queda en la
 nota apenas la aprobás ("Leer Para vos") y desde la fila de la sesión en la
 pestaña Sesiones de la ficha. Tiene dirección propia, así que se puede volver
-con el botón de atrás.
+con el botón de atrás. Si no hay análisis, el selector puede no aparecer;
+abrir la vista no genera un análisis nuevo.
 
 Si al análisis le faltó una parte, se muestra igual lo que llegó, con un aviso
 que dice *"Parte del análisis no llegó."* Antes, cuando faltaba algo, el bloque

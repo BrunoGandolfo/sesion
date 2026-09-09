@@ -4,6 +4,7 @@
 // sheet de cobro, que también usa la card de la sesión de hoy en Sesiones.
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 
@@ -43,7 +44,7 @@ interface TurnosPagosTabProps {
   onTurnoActualizado?: () => void;
 }
 
-type ToastState = { open: boolean; message: string };
+type ToastState = { open: boolean; message: string; variante: VarianteToast };
 
 const MODALIDAD_LABEL: Record<Modalidad, string> = {
   presencial: "Presencial",
@@ -102,7 +103,7 @@ type AjustesCobro = {
 export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabProps) {
   const [ajustes, setAjustes] = React.useState<AjustesCobro | null>(null);
   const [cobroTarget, setCobroTarget] = React.useState<Turno | null>(null);
-  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "" });
+  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "", variante: "aviso" });
 
   const ajustesVigentes = ajustes && ajustes.base === turnos ? ajustes.porId : null;
   const localTurnos = React.useMemo(
@@ -152,15 +153,16 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
         onCobrar={(turno) => setCobroTarget(turno)}
         onDeshecho={(turno) => {
           ajustarTurno(turno.id, turno);
-          setToast({ open: true, message: COBRO_DESHECHO });
+          setToast({ open: true, message: COBRO_DESHECHO, variante: "confirmacion" });
           onTurnoActualizado?.();
         }}
-        onError={(mensaje) => setToast({ open: true, message: mensaje })}
+        onError={(mensaje) => setToast({ open: true, message: mensaje, variante: "aviso" })}
       />
 
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((current) => ({ ...current, open: false }))}
       />
 
@@ -169,10 +171,10 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
         onClose={() => setCobroTarget(null)}
         onCobrado={(turno) => {
           ajustarTurno(turno.id, turno);
-          setToast({ open: true, message: "Cobrado" });
+          setToast({ open: true, message: "Cobrado", variante: "confirmacion" });
           onTurnoActualizado?.();
         }}
-        onError={(mensaje) => setToast({ open: true, message: mensaje })}
+        onError={(mensaje) => setToast({ open: true, message: mensaje, variante: "aviso" })}
       />
     </div>
   );

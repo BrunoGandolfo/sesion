@@ -13,29 +13,31 @@ No. La paciente no entra a la app. Firma la autorización en tu dispositivo y na
 más. → `04-pacientes-y-ficha.md`
 
 **3. ¿Alguien escucha mis sesiones?**
-Ninguna persona. El audio pasa automáticamente por AssemblyAI (lo convierte en
-texto y borra su copia) y el texto por Anthropic (redacta el borrador y no lo
-conserva). → `12-camino-del-audio-y-privacidad.md`
+El procesamiento es automático, pero esta ayuda no puede garantizar los
+accesos o la retención de los proveedores. Hay que verificar sus condiciones
+vigentes. → `12-camino-del-audio-y-privacidad.md`
 
 **4. ¿Cuándo se borra el audio?**
-Cuando aprobás la nota. Se borra el archivo y se destruye su clave. En general,
-el mismo día. → `12-camino-del-audio-y-privacidad.md`
+Al aprobar, la app intenta borrar el audio remoto y quita la clave del registro
+activo. Eso no confirma la eliminación de todas las copias.
+→ `12-camino-del-audio-y-privacidad.md`
 
 **5. ¿La transcripción también se borra?**
 No. La transcripción queda guardada, cifrada, junto con la nota. Está dicho en la
 autorización que firma la paciente. → `12-camino-del-audio-y-privacidad.md`
 
 **6. ¿Puedo bloquear la pantalla mientras grabo?**
-Sí. La app te lo dice en pantalla: *"Se guarda cifrado en el teléfono. Podés
-bloquear la pantalla."* La grabación sigue. → `07-grabar-una-sesion.md`
+No bloquees la pantalla mientras grabás: mantené Sesión abierta. El teléfono
+puede suspender el micrófono o la página; al volver, revisá el estado.
+→ `07-grabar-una-sesion.md`
 
 **7. Pausé y me olvidé de reanudar. ¿Perdí la sesión?**
-No. El cronómetro se detiene en pausa, pero nada se pierde: **Reanudar** sigue en
-el mismo archivo. → `07-grabar-una-sesion.md`
+Mientras está pausada no se captura audio y el cronómetro se detiene.
+**Reanudar** retoma la captura; lo que no se grabó durante la pausa no se recupera. → `07-grabar-una-sesion.md`
 
 **8. Entró una llamada y se cortó el micrófono.**
-La pantalla pasa a **Cortado** y avisa *"Lo grabado está a salvo."* Podés
-**Reanudar** o **Terminar la sesión** con lo que hay. → `14-cuando-algo-falla.md`
+Revisá el estado y las opciones **Reanudar** o **Terminar la sesión**.
+La recuperación completa no está garantizada; no cierres ni descartes el audio. → `14-cuando-algo-falla.md`
 
 **9. ¿Cuánto tarda la nota?**
 No hay un tiempo fijo. Mientras se escribe ves **"Escribiendo la nota…"**; cuando
@@ -50,7 +52,8 @@ pendientes. → `02-pantalla-hoy.md`
 No. La nota se guarda una sola vez, al aprobar. → `08-la-nota-clinica.md`
 
 **12. ¿Puedo desaprobar una nota?**
-No. Al aprobar se borra el audio y no se puede deshacer. → `08-la-nota-clinica.md`
+No. La app no ofrece deshacer la aprobación y al aprobar intenta borrar el
+audio remoto. No cuentes con ese audio para volver atrás. → `08-la-nota-clinica.md`
 
 **13. El botón "Aprobar nota" está apagado.**
 Hay una señal de riesgo sin marcar. Marcá todas las casillas **"Revisé esta
@@ -89,7 +92,9 @@ No. Cancelar, reprogramar, cobrar o marcar "No vino" apaga el recordatorio.
 → `03-agenda-y-turnos.md`
 
 **21. Cobré un turno por error. ¿Cómo lo deshago?**
-Hoy no hay un botón para deshacer un cobro en la pantalla. → `05-cobros.md`
+Abrí el turno cobrado en Agenda o en **Ficha → Turnos y pagos** y tocá
+**Deshacer cobro**. Al confirmar, el monto vuelve a la deuda y el turno queda
+sin cobrar; no vuelve a Agendado. → `05-cobros.md`
 
 **22. Quiero cobrar un turno de hoy y no me deja.**
 Si la hora del turno todavía no llegó, la app dice *"La sesión todavía no

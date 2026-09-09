@@ -12,7 +12,7 @@ forma de grabar sin eso. Ver `04-pacientes-y-ficha.md`.
 ## Grabar
 
 1. Entrá desde **Hoy** (**Grabar sesión**), desde el turno en la agenda, o desde
-   la ficha con el botón **Grabar** de abajo a la derecha. Si hay turno hoy, se
+   la ficha con el botón **Grabar** de la cabecera. Si hay turno hoy, se
    graba ese turno; si no hay, la app **crea uno de 50 minutos, presencial, con
    la hora de ahora** recién cuando tocás el botón (y ese turno no genera
    recordatorio).
@@ -21,9 +21,11 @@ forma de grabar sin eso. Ver `04-pacientes-y-ficha.md`.
 
 ## Mientras grabás
 
-Un punto rojo que **late** y la palabra **REC**; el cronómetro grande; un medidor
-que se mueve con tu voz (si pasan 5 segundos sin que entre audio, te avisa); y
-abajo: *"Se guarda cifrado en el teléfono. Podés bloquear la pantalla."*
+La pantalla muestra el tiempo de grabación y un medidor de sonido.
+Mantené la pantalla encendida y Sesión abierta. Si deja de entrar sonido,
+la app avisa a los 2 minutos y pasa a interrumpida a los 5 minutos; si la
+pantalla está oculta, el umbral de interrupción es de 1 minuto. Eso no
+garantiza que el teléfono siga capturando cuando cambiás de app.
 
 ### Pausar
 
@@ -33,15 +35,16 @@ en el mismo archivo.
 
 ### Bloquear la pantalla
 
-Podés. La app pide mantener la pantalla encendida, pero si el sistema la apaga o
-cambiás de app, **la grabación sigue**.
+**No bloquees la pantalla mientras grabás.** La app intenta mantenerla
+encendida, pero el sistema puede suspender el micrófono o la página. Si pasa,
+volvé a Sesión y revisá su estado antes de seguir.
 
 ### Si se corta el micrófono
 
-Si llega una llamada o otra app se lleva el micrófono, la pantalla pasa a
-**Cortado**: *"Se cortó el micrófono. Lo grabado está a salvo."* Tenés dos
-caminos: **Reanudar** (sigue en el mismo archivo) o **Terminar la sesión**
-(guarda lo que hay hasta ahí).
+Una llamada u otra app puede interrumpir el micrófono. La pantalla ofrece
+**Reanudar** o **Terminar la sesión** con lo que haya capturado. Durante la
+interrupción no se graba. La recuperación completa no está garantizada: no
+cierres la pantalla ni descartes el audio mientras intentás guardarlo.
 
 ### Descartar
 
@@ -56,25 +59,28 @@ este teléfono. No se puede recuperar."*
 3. Al terminar aparece **"Te avisamos cuando la nota esté lista"**, la app vuelve
    sola a la ficha y el turno queda marcado como **realizado**.
 
-La grabación se corta sola a la hora y media.
+El límite es de **150 minutos** de grabación, con un aviso a los **135 minutos**.
+Al alcanzar el límite, la captura se interrumpe; todavía tenés que terminar
+y guardar la sesión. No se sube ni se aprueba sola.
 
 ## Si la subida falla
 
-Aparece: **"No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de
-nuevo."** y un botón **Reintentar**. **Nada se borró**: el audio cifrado sigue en
-memoria y la copia sin cifrar, en el teléfono. Reintentar manda el mismo audio.
+La pantalla ofrece **Reintentar** si no pudo completar el guardado. No tomes
+un mensaje de respaldo como garantía de que todo quedó guardado: mantené
+la pantalla abierta y comprobá que la subida se confirme.
 
-Si además se te cerró el navegador, al volver a la pantalla de grabar de ese
-mismo turno la app te ofrece: *"Quedó una grabación de ~N min sin enviar"*, con
-**Guardarla ahora** y **Descartarla**.
+Si el navegador se cerró, al volver al mismo turno puede aparecer un pendiente
+con **Guardarla ahora** y **Descartarla**. La recuperación puede fallar. Si hay
+audio pendiente, no empieces otra grabación del mismo turno ni lo descartes
+mientras intentás recuperarlo; puede reemplazarse la copia anterior.
 
 ## Qué hace la app por detrás
 
-El audio se graba en pedacitos de un segundo que forman un solo archivo, y cada
-pedacito se guarda en el teléfono desde el primer momento: si el navegador muere,
-la grabación sobrevive. Al terminar, el navegador genera una clave, cifra el
-audio y **recién ahí** lo sube, directo al depósito, sin pasar por el servidor de
-la app. La copia del teléfono se borra cuando la subida está confirmada.
+Durante la captura, la app intenta guardar fragmentos en el navegador.
+**La copia local previa no está cifrada** y puede faltar si el almacenamiento
+no estuvo disponible. Al terminar, el navegador genera una clave y cifra el
+audio antes de subirlo a R2. La app intenta limpiar la copia local cuando la
+subida se confirma; no hay garantía de recuperación después de cerrar la página.
 
 ## Lo que NO hace
 

@@ -5,6 +5,7 @@
 // Editar de la ficha está en la cabecera.
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -41,7 +42,7 @@ interface FichaTabProps {
   onPacienteActualizado: () => void;
 }
 
-type ToastState = { open: boolean; message: string };
+type ToastState = { open: boolean; message: string; variante: VarianteToast };
 
 // La fecha de alta sale de format.ts como todas las demás. Con el
 // Intl.DateTimeFormat("es-UY") que tenía acá decía "05 de setiembre de 2026"
@@ -62,7 +63,7 @@ export function FichaTab({
   const [archivando, setArchivando] = React.useState(false);
   const [turnosAbiertos, setTurnosAbiertos] = React.useState(false);
   const [vocabularioAbierto, setVocabularioAbierto] = React.useState(false);
-  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "" });
+  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "", variante: "aviso" });
 
   async function cambiarActivo(proximoActivo: boolean) {
     setArchivando(true);
@@ -70,13 +71,13 @@ export function FichaTab({
       await apiPatch(`/api/pacientes/${paciente.id}`, { activo: proximoActivo });
       setConfirmandoArchivo(false);
       if (proximoActivo) {
-        setToast({ open: true, message: "Paciente reactivado" });
+        setToast({ open: true, message: "Paciente reactivado", variante: "confirmacion" });
         onPacienteActualizado();
       } else {
         router.push("/pacientes?archivado=1");
       }
     } catch (err) {
-      setToast({ open: true, message: err instanceof Error ? err.message : ALGO_FALLO });
+      setToast({ open: true, message: err instanceof Error ? err.message : ALGO_FALLO, variante: "aviso" });
     } finally {
       setArchivando(false);
     }
@@ -282,6 +283,7 @@ export function FichaTab({
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((current) => ({ ...current, open: false }))}
       />
     </div>

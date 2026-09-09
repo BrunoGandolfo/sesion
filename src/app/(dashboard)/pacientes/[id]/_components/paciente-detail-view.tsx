@@ -11,6 +11,7 @@
 // acciones son enlaces a /grabar/[turnoId] y /sesiones/[id].
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import { isSameDay } from "date-fns";
 
 import { Button, Segmented, Sheet, Toast } from "@/components/ui";
@@ -40,7 +41,7 @@ const TAB_OPTIONS: { value: TabKey; label: string }[] = [
   { value: "ficha", label: FICHA },
 ];
 
-type ToastState = { open: boolean; message: string };
+type ToastState = { open: boolean; message: string; variante: VarianteToast };
 
 /** Ficha ya con las fechas parseadas: es lo que consumen las tres pestañas. */
 type FichaPaciente = { paciente: PacienteConDeuda; turnos: Turno[] };
@@ -62,7 +63,7 @@ export function PacienteDetailView({ id }: { id: string }) {
   const [activeTab, setActiveTab] = React.useState<TabKey>("sesiones");
   const [reloadKey, setReloadKey] = React.useState(0);
   const [editarOpen, setEditarOpen] = React.useState(false);
-  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "" });
+  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "", variante: "aviso" });
 
   // Envuelto en useMemo porque es dependencia del useMemo de `turnos`: la
   // rama `{ tipo: "cargando", id }` construye un objeto nuevo en cada render
@@ -139,8 +140,8 @@ export function PacienteDetailView({ id }: { id: string }) {
     refetchData();
   }
 
-  const avisar = React.useCallback((mensaje: string) => {
-    setToast({ open: true, message: mensaje });
+  const avisar = React.useCallback((mensaje: string, variante: VarianteToast = "aviso") => {
+    setToast({ open: true, message: mensaje, variante });
   }, []);
 
   const paciente = fichaActual.tipo === "lista" ? fichaActual.ficha.paciente : null;
@@ -185,7 +186,7 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   function handleEditarSuccess() {
     setEditarOpen(false);
-    avisar("Paciente actualizado");
+    avisar("Paciente actualizado", "confirmacion");
     refetchData();
   }
 
@@ -280,6 +281,7 @@ export function PacienteDetailView({ id }: { id: string }) {
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((c) => ({ ...c, open: false }))}
       />
     </>
