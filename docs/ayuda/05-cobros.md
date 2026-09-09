@@ -64,10 +64,14 @@ El pago se registra sobre el turno, con su fecha y su método. La deuda no es un
 número guardado: se calcula sumando los turnos realizados y sin cobrar de cada
 persona, y los días de atraso salen de la sesión impaga más vieja.
 
+## Si cobraste por error
+
+Abrí el turno cobrado en Agenda o en **Ficha → Turnos y pagos** y tocá
+**Deshacer cobro**. Revisá la confirmación: el monto vuelve a la deuda y el
+turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
+
 ## Lo que NO hace
 
-- **No hay botón para deshacer un cobro.** Si registraste un pago por error, hoy
-  no se corrige desde la pantalla.
 - **No cobra plata ni emite factura ni recibo.**
 - **No cobra parcial**: se cobra la tarifa completa del turno, no un monto libre.
 - **No cambia el mensaje de "Recordar cobro"**: no es configurable.

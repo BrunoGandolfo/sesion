@@ -26,3 +26,11 @@ describe("la ayuda describe las acciones disponibles", () => {
     expect(texto).not.toMatch(/abre\s+\*?\*?WhatsApp|desde WhatsApp|lo mandás vos\)/i);
   });
 });
+
+it.each(["05-cobros.md", "13-preguntas-frecuentes.md"])("%s permite corregir un cobro sin reabrir el turno", (archivo) => {
+  const texto = documento(archivo);
+  expect(texto).toContain("**Deshacer cobro**");
+  expect(texto).toContain("vuelve a la deuda");
+  expect(texto).toMatch(/no vuelve a Agendado/i);
+  expect(texto).not.toMatch(/no hay un botón para deshacer|No hay botón para deshacer/);
+});

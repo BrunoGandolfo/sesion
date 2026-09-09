@@ -89,7 +89,9 @@ No. Cancelar, reprogramar, cobrar o marcar "No vino" apaga el recordatorio.
 → `03-agenda-y-turnos.md`
 
 **21. Cobré un turno por error. ¿Cómo lo deshago?**
-Hoy no hay un botón para deshacer un cobro en la pantalla. → `05-cobros.md`
+Abrí el turno cobrado en Agenda o en **Ficha → Turnos y pagos** y tocá
+**Deshacer cobro**. Al confirmar, el monto vuelve a la deuda y el turno queda
+sin cobrar; no vuelve a Agendado. → `05-cobros.md`
 
 **22. Quiero cobrar un turno de hoy y no me deja.**
 Si la hora del turno todavía no llegó, la app dice *"La sesión todavía no
