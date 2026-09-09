@@ -15,6 +15,7 @@ import { es } from "date-fns/locale";
 
 import { Button, Card, Chip } from "@/components/ui";
 import { AnilloProgreso, ListaEnCascada } from "@/components/ui/movimiento";
+import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
@@ -26,6 +27,7 @@ import {
   NOTA_GUARDADA,
   NOTA_NO_ESCRITA,
   PARA_REVISAR,
+  PARA_VOS,
   REVISAR_NOTA,
   pluralizar,
 } from "@/lib/glosario";
@@ -482,22 +484,41 @@ function GrupoDeMes({
   );
 }
 
+// La fila de una sesión, con dos destinos.
+//
+// La tarjeta entera sigue llevando a la nota: es lo que ella toca sin mirar.
+// Pero desde esta lista también se llega a "Para vos" —la tercera entrada a
+// la vista, junto con el selector de la nota y el aviso de después de
+// aprobar—, porque buscar el análisis de una sesión de la semana pasada
+// empieza acá y no en la nota de esa sesión.
+//
+// POR QUÉ LA TARJETA DEJÓ DE SER UN <Link>
+//
+// Un enlace adentro de otro enlace no es HTML válido y el navegador lo
+// desarma. El patrón es el de siempre: la tarjeta es un contenedor
+// `relative`, el enlace principal se estira sobre ella con `absolute
+// inset-0` —así el área tocable no cambia— y el enlace secundario va encima,
+// con su propio `relative`. El foco de teclado sigue llegando a los dos, en
+// orden.
 function FilaSesion({ sesion }: { sesion: DocSesion }) {
   const fecha = new Date(sesion.fecha);
   const resumen =
     resumenCorto(sesion.datosEstructurados) ||
     temasDeLaSesion(sesion.datosEstructurados);
   const esRevision = sesion.estado === "revision";
+  const conParaVos = hayParaVos(sesion.datosEstructurados?.feedbackTerapeuta);
 
   return (
-    <Link
-      href={`/sesiones/${sesion.sesionClinicaId}`}
-      className="flex flex-col gap-2 rounded-lg border border-[color:var(--border-subtle)] bg-white px-4 py-4 transition-colors duration-150 hover:bg-cream-50 focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 sm:px-5"
-    >
+    <div className="relative flex flex-col gap-2 rounded-lg border border-[color:var(--border-subtle)] bg-white px-4 py-4 transition-colors duration-150 focus-within:ring-[3px] focus-within:ring-sage-500/20 hover:bg-cream-50 sm:px-5">
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <span className="font-display text-[15px] font-medium text-ink-900">
-            {fechaLarga(fecha)}
+            <Link
+              href={`/sesiones/${sesion.sesionClinicaId}`}
+              className="after:absolute after:inset-0 after:content-[''] focus:outline-none"
+            >
+              {fechaLarga(fecha)}
+            </Link>
           </span>
           <span className="font-sans text-[12px] text-ink-500 tabular-nums">
             {hora(fecha)} · {sesion.duracionMin} min ·{" "}
@@ -513,6 +534,14 @@ function FilaSesion({ sesion }: { sesion: DocSesion }) {
           {resumen}
         </p>
       ) : null}
-    </Link>
+      {conParaVos ? (
+        <Link
+          href={`/sesiones/${sesion.sesionClinicaId}/para-vos`}
+          className="relative inline-flex min-h-[44px] items-center self-start font-sans text-[13px] font-semibold text-sage-600 transition-colors duration-150 hover:text-sage-700"
+        >
+          {PARA_VOS}
+        </Link>
+      ) : null}
+    </div>
   );
 }

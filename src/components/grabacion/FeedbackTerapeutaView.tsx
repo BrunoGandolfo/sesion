@@ -1,37 +1,247 @@
 "use client";
 
-import { CheckCircle2, Lightbulb } from "lucide-react";
+import { AlertCircle, CheckCircle2, Lightbulb } from "lucide-react";
 
 import { Plegable } from "@/components/ui";
 import {
   CTSR,
   GTFS,
   MITI,
-  PARA_VOS,
+  PARA_VOS_INCOMPLETO,
   VER_DETALLE,
   pluralizar,
 } from "@/lib/glosario";
 import type {
   AreaCrecimientoFeedback,
+  CTSRSubset,
   EvidenciaFeedback,
-  FeedbackGestalt,
-  FeedbackMitiCtsr,
-  FeedbackNucleoPanteorico,
-  FeedbackTerapeuta,
-  FeedbackTerapeutaLegacy,
   FortalezaFeedback,
   ItemGTFS,
+  MITIGlobales,
+  OrientacionTeorica,
   ScoreCTSR,
   ScoreMITIGlobal,
 } from "@/types/domain";
-import { normalizarFeedback } from "@/types/domain";
 
-interface FeedbackTerapeutaViewProps {
-  feedbackTerapeuta:
-    | FeedbackTerapeuta
-    | FeedbackTerapeutaLegacy
-    | null
-    | undefined;
+// "Para vos": la auto-supervisión de una sesión, entera y sin plegar.
+//
+// Ya no es un bloque al pie de la nota. Vive en su propia vista
+// (/sesiones/[id]/para-vos) y este componente dibuja su contenido: el
+// instrumento, las fortalezas, las áreas de crecimiento y el disclaimer.
+//
+// EL GUARDIÁN, QUE ANTES ESCONDÍA
+//
+// La nota tenía un `esFeedbackRenderizable` que pedía dos arrays y, si
+// faltaba alguno, no dibujaba NADA — sin decirlo. El feedback existía, ella
+// no se enteraba. Acá el criterio es el opuesto: se lee lo que se pueda, se
+// muestra lo que llegó, y si algo faltó se avisa con una línea chica.
+// Lo único que devuelve null es un payload que no es un objeto: eso no es
+// feedback incompleto, es feedback ausente.
+//
+// Nada se inventa para tapar el hueco: un bloque de instrumento que no llegó
+// entero no se dibuja con ceros ni con "No determinable" —eso sería ponerle
+// al modelo palabras que no dijo—, simplemente no se dibuja y el aviso lo
+// cuenta.
+
+// ─── Lectura tolerante del payload ───────────────────────────────────
+// `feedbackTerapeuta` viaja como `unknown` en el contrato
+// (src/lib/sesion-clinica/schema.ts:139): la forma se valida al leer. Estos
+// guards son esa validación, pieza por pieza, para que la falta de una no
+// se lleve puestas a las otras.
+
+function esObjeto(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+}
+
+function esTexto(valor: unknown): valor is string {
+  return typeof valor === "string";
+}
+
+function esEvidencia(valor: unknown): valor is EvidenciaFeedback {
+  return esObjeto(valor) && esTexto(valor.quote) && esTexto(valor.timestamp);
+}
+
+/** Las citas son lo que sostiene cada afirmación: las que no tienen la forma
+ *  del contrato se descartan de a una, nunca se inventan. */
+function leerEvidencias(valor: unknown): EvidenciaFeedback[] {
+  return Array.isArray(valor) ? valor.filter(esEvidencia) : [];
+}
+
+function leerFortalezas(valor: unknown): FortalezaFeedback[] | null {
+  if (!Array.isArray(valor)) return null;
+  return valor.filter(esObjeto).flatMap((item) =>
+    esTexto(item.descripcion)
+      ? [{ descripcion: item.descripcion, evidence: leerEvidencias(item.evidence) }]
+      : [],
+  );
+}
+
+function leerAreas(valor: unknown): AreaCrecimientoFeedback[] | null {
+  if (!Array.isArray(valor)) return null;
+  return valor.filter(esObjeto).flatMap((item) =>
+    esTexto(item.observacion) && esTexto(item.sugerencia)
+      ? [
+          {
+            observacion: item.observacion,
+            sugerencia: item.sugerencia,
+            evidence: leerEvidencias(item.evidence),
+          },
+        ]
+      : [],
+  );
+}
+
+/** Un score es un número o un null explícito ("no determinable"). Cualquier
+ *  otra cosa —undefined, un string— no es un score y devuelve null acá, que
+ *  invalida el bloque entero de ese instrumento. */
+function leerScore(valor: unknown): ScoreMITIGlobal | null {
+  if (!esObjeto(valor)) return null;
+  const score = valor.score;
+  if (score !== null && typeof score !== "number") return null;
+  return {
+    score,
+    evidence: leerEvidencias(valor.evidence),
+    ...(esTexto(valor.razon) ? { razon: valor.razon } : {}),
+  };
+}
+
+const CLAVES_CTSR = [
+  "agendaSetting",
+  "feedback",
+  "collaboration",
+  "guidedDiscovery",
+] as const;
+
+function leerMitiGlobales(valor: unknown): MITIGlobales | null {
+  if (!esObjeto(valor)) return null;
+  // La vista lee empatía y colaboración; las otras dos globales viajan pero
+  // no se dibujan, así que no condicionan si el bloque se puede mostrar.
+  const empathy = leerScore(valor.empathy);
+  const partnership = leerScore(valor.partnership);
+  if (!empathy || !partnership) return null;
+  const resto = leerScore(valor.cultivatingChangeTalk) ?? empathy;
+  return {
+    empathy,
+    partnership,
+    cultivatingChangeTalk: resto,
+    softeningSustainTalk: leerScore(valor.softeningSustainTalk) ?? resto,
+  };
+}
+
+function leerCtsrSubset(valor: unknown): CTSRSubset | null {
+  if (!esObjeto(valor)) return null;
+  const items = CLAVES_CTSR.map((clave) => leerScore(valor[clave]));
+  if (items.some((item) => item === null)) return null;
+  const [agendaSetting, feedback, collaboration, guidedDiscovery] =
+    items as ScoreCTSR[];
+  return { agendaSetting, feedback, collaboration, guidedDiscovery };
+}
+
+function leerItemsGTFS(valor: unknown): ItemGTFS[] | null {
+  if (!Array.isArray(valor)) return null;
+  return valor.filter(esObjeto).flatMap((item) => {
+    const score = item.score;
+    if (!esTexto(item.id) || !esTexto(item.nombre)) return [];
+    if (score !== null && typeof score !== "number") return [];
+    return [
+      {
+        id: item.id,
+        nombre: item.nombre,
+        score,
+        ...(esTexto(item.razon) ? { razon: item.razon } : {}),
+        evidence: leerEvidencias(item.evidence),
+      },
+    ];
+  });
+}
+
+/** Lo que se pudo leer del análisis, con la marca de si llegó entero. */
+export interface FeedbackLegible {
+  instrumento: OrientacionTeorica;
+  fortalezas: FortalezaFeedback[];
+  areasCrecimiento: AreaCrecimientoFeedback[];
+  sugerenciaProximaSesion: string;
+  /** Bloque MITI/CTS-R, solo si llegó completo. */
+  mitiGlobales: MITIGlobales | null;
+  ctsrSubset: CTSRSubset | null;
+  /** Bloque GTFS, solo si llegó completo. */
+  itemsGTFS: ItemGTFS[] | null;
+  /** false si alguna parte del payload faltaba o no tenía la forma del
+   *  contrato. Es lo que enciende el aviso. */
+  completo: boolean;
+}
+
+/**
+ * Lee el `feedbackTerapeuta` de una sesión. Devuelve null solo cuando no hay
+ * análisis; cualquier objeto, por incompleto que esté, devuelve algo que se
+ * puede mostrar.
+ *
+ * Un feedback sin discriminador `instrumento` es de antes del contrato
+ * multi-orientación y siempre fue MITI/CTS-R: la misma regla que
+ * normalizarFeedback (src/lib/sesion-clinica/normalizar.ts), aplicada acá
+ * sobre `unknown` en vez de sobre la unión ya tipada.
+ */
+export function leerFeedback(valor: unknown): FeedbackLegible | null {
+  if (!esObjeto(valor)) return null;
+
+  const instrumento: OrientacionTeorica =
+    valor.instrumento === "gestalt" ? "gestalt" : "cbt_mi";
+
+  const fortalezas = leerFortalezas(valor.fortalezas);
+  const areasCrecimiento = leerAreas(valor.areasCrecimiento);
+  const sugerencia = valor.sugerenciaProximaSesion;
+
+  const itemsGTFS = instrumento === "gestalt" ? leerItemsGTFS(valor.itemsGTFS) : null;
+  const mitiGlobales =
+    instrumento === "cbt_mi" ? leerMitiGlobales(valor.mitiGlobales) : null;
+  const ctsrSubset =
+    instrumento === "cbt_mi" ? leerCtsrSubset(valor.ctsrSubset) : null;
+
+  const bloqueDelInstrumento =
+    instrumento === "gestalt"
+      ? itemsGTFS !== null
+      : mitiGlobales !== null && ctsrSubset !== null;
+
+  return {
+    instrumento,
+    fortalezas: fortalezas ?? [],
+    areasCrecimiento: areasCrecimiento ?? [],
+    sugerenciaProximaSesion: esTexto(sugerencia) ? sugerencia : "",
+    mitiGlobales,
+    ctsrSubset,
+    itemsGTFS,
+    completo:
+      fortalezas !== null &&
+      areasCrecimiento !== null &&
+      esTexto(sugerencia) &&
+      bloqueDelInstrumento,
+  };
+}
+
+/** True si hay algo que dibujar además del disclaimer. */
+function tieneContenido(feedback: FeedbackLegible): boolean {
+  return (
+    feedback.fortalezas.length > 0 ||
+    feedback.areasCrecimiento.length > 0 ||
+    feedback.sugerenciaProximaSesion.trim() !== "" ||
+    feedback.itemsGTFS !== null ||
+    feedback.mitiGlobales !== null
+  );
+}
+
+/**
+ * True si "Para vos" tiene algo que decir sobre esta sesión.
+ *
+ * Es exactamente el criterio con el que FeedbackTerapeutaView decide si
+ * dibuja o devuelve null, expuesto para que quien ofrece el camino —el
+ * selector de la sesión, el aviso de después de aprobar, la fila de la
+ * ficha— no ofrezca una pantalla vacía. Un análisis incompleto SÍ cuenta:
+ * ahí hay algo que mostrar y un aviso que dar.
+ */
+export function hayParaVos(valor: unknown): boolean {
+  const feedback = leerFeedback(valor);
+  if (!feedback) return false;
+  return !feedback.completo || tieneContenido(feedback);
 }
 
 type Tono = "sage" | "gold" | "terracotta" | "neutral";
@@ -249,42 +459,65 @@ function AreaCrecimientoItem({ area }: { area: AreaCrecimientoFeedback }) {
 const DISCLAIMER_TEXT =
   "Este análisis es generado por IA a partir de la transcripción. No sustituye la supervisión clínica profesional. Las métricas son orientativas y deben interpretarse en contexto.";
 
+interface FeedbackTerapeutaViewProps {
+  /** El payload crudo de `datosEstructurados.feedbackTerapeuta`. Va como
+   *  `unknown` porque así viaja en el contrato: la forma se valida acá. */
+  feedbackTerapeuta: unknown;
+}
+
 export function FeedbackTerapeutaView({
   feedbackTerapeuta,
 }: FeedbackTerapeutaViewProps) {
-  if (!feedbackTerapeuta) return null;
+  const feedback = leerFeedback(feedbackTerapeuta);
+  // Un análisis con la forma correcta y sin una sola línea adentro no es
+  // nada que leer: eso sí se calla. Lo que nunca se calla es un análisis
+  // incompleto, que es el caso que este componente vino a arreglar.
+  if (!feedback || !hayParaVos(feedbackTerapeuta)) return null;
 
-  // Punto de entrada de datos: las sesiones persistidas antes del contrato
-  // multi-orientación no traen discriminador `instrumento` — se normalizan
-  // al leer (nunca se migran).
-  const feedback = normalizarFeedback(feedbackTerapeuta);
-
-  // "Para vos", plegado: el feedback es sobre su trabajo, no sobre la
-  // paciente, y no es lo que vino a leer cuando abre la nota.
   return (
-    <Plegable titulo={PARA_VOS}>
-      {feedback.instrumento === "cbt_mi" ? (
-        <BloqueMitiCtsr feedback={feedback} />
-      ) : (
-        <BloqueGestalt feedback={feedback} />
-      )}
+    <div className="flex flex-col gap-5">
+      {feedback.completo ? null : <AvisoIncompleto />}
+
+      {feedback.mitiGlobales && feedback.ctsrSubset ? (
+        <BloqueMitiCtsr
+          mitiGlobales={feedback.mitiGlobales}
+          ctsrSubset={feedback.ctsrSubset}
+        />
+      ) : null}
+
+      {feedback.itemsGTFS ? <BloqueGestalt items={feedback.itemsGTFS} /> : null}
 
       <NucleoPanteoricoSections nucleo={feedback} />
 
       <p className="border-t border-cream-200 pt-4 font-sans text-[12px] leading-[1.55] italic text-ink-500">
         {DISCLAIMER_TEXT}
       </p>
-    </Plegable>
+    </div>
+  );
+}
+
+/** El hueco, dicho en una línea. Terracotta como cualquier aviso de la app,
+ *  y sin botón: no hay nada que ella pueda reintentar desde acá. */
+function AvisoIncompleto() {
+  return (
+    <p
+      role="status"
+      className="flex items-start gap-2 rounded-md bg-terracotta-50 px-3.5 py-2.5 font-sans text-[13px] leading-[1.5] text-terracotta-600"
+    >
+      <AlertCircle
+        size={16}
+        strokeWidth={1.9}
+        aria-hidden="true"
+        className="mt-[2px] shrink-0"
+      />
+      {PARA_VOS_INCOMPLETO}
+    </p>
   );
 }
 
 // ─── Núcleo panteórico (compartido por todo instrumento) ─────────────
 
-function NucleoPanteoricoSections({
-  nucleo,
-}: {
-  nucleo: FeedbackNucleoPanteorico;
-}) {
+function NucleoPanteoricoSections({ nucleo }: { nucleo: FeedbackLegible }) {
   const fortalezasVisibles = nucleo.fortalezas.slice(0, 3);
   const areasVisibles = nucleo.areasCrecimiento.slice(0, 3);
 
@@ -332,9 +565,13 @@ function NucleoPanteoricoSections({
 
 // ─── Bloque MITI 4.2.1 + CTS-R (instrumento cbt_mi) ──────────────────
 
-function BloqueMitiCtsr({ feedback }: { feedback: FeedbackMitiCtsr }) {
-  const { mitiGlobales, ctsrSubset } = feedback;
-
+function BloqueMitiCtsr({
+  mitiGlobales,
+  ctsrSubset,
+}: {
+  mitiGlobales: MITIGlobales;
+  ctsrSubset: CTSRSubset;
+}) {
   const empathy: ScoreMITIGlobal = mitiGlobales.empathy;
   const partnership: ScoreMITIGlobal = mitiGlobales.partnership;
 
@@ -408,8 +645,7 @@ function numeroDeItemGTFS(id: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-function BloqueGestalt({ feedback }: { feedback: FeedbackGestalt }) {
-  const items = feedback.itemsGTFS;
+function BloqueGestalt({ items }: { items: ItemGTFS[] }) {
   const evaluables = items.filter((item) => item.score !== null);
   const presentes = evaluables.filter((item) => (item.score ?? 0) > 0);
 

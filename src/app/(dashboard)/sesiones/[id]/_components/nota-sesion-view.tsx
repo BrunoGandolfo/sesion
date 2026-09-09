@@ -2,25 +2,17 @@
 
 import * as React from "react";
 
-import { Chip } from "@/components/ui";
-import { FeedbackTerapeutaView } from "@/components/grabacion/FeedbackTerapeutaView";
 import { RiesgoDetectadoBanner } from "@/components/grabacion/RiesgoDetectadoBanner";
-import { fechaLarga } from "@/lib/format";
 import type {
   NotaSoap,
   SesionClinicaResponse,
 } from "@/lib/sesion-clinica/schema";
-import type {
-  FeedbackTerapeuta,
-  FeedbackTerapeutaLegacy,
-} from "@/types/domain";
 
+import { CabeceraSesion } from "./cabecera-sesion";
 import { MasDeEstaSesion } from "./mas-de-esta-sesion";
 import { Plegable } from "./plegable";
 import { SeccionSoap } from "./seccion-soap";
 import {
-  CHIP_APROBADA,
-  CHIP_BORRADOR,
   ESTADO_EMOCIONAL_OBSERVADO,
   NOTA_CLINICA,
   RESUMEN,
@@ -31,7 +23,12 @@ import {
 // La nota, en el orden en que se lee.
 //
 // Cabecera → UN bloque de riesgo → Resumen → S, O, A, P → "Más de esta
-// sesión" → "Para vos" → "Ver el borrador original".
+// sesión" → "Ver el borrador original".
+//
+// "Para vos" YA NO ESTÁ ACÁ. Era el plegable del final —cerrado, a seis
+// pantallas de scroll— y ahora es la vista hermana /sesiones/[id]/para-vos,
+// a un toque del selector de arriba. La nota no cambió de contenido: perdió
+// ese bloque y nada más.
 //
 // Lo que se ve es lo que devolvió la API: acá no se resume, no se recorta y
 // no se infiere nada. Un campo ausente es un bloque que no se dibuja.
@@ -45,19 +42,12 @@ interface NotaSesionViewProps {
   onEditarSeccion?: (clave: keyof NotaSoap, valor: string) => void;
   revisadas?: ReadonlySet<string>;
   onRevisar?: (clave: string, marcada: boolean) => void;
-}
-
-/** El contrato transporta feedbackTerapeuta como `unknown` (su forma se
- *  valida al leer, con normalizarFeedback). Antes de pasárselo a la vista se
- *  chequea lo mínimo que esa vista lee sin preguntar: el núcleo panteórico. */
-function esFeedbackRenderizable(
-  valor: unknown,
-): valor is FeedbackTerapeuta | FeedbackTerapeutaLegacy {
-  if (typeof valor !== "object" || valor === null) return false;
-  const objeto = valor as Record<string, unknown>;
-  return (
-    Array.isArray(objeto.fortalezas) && Array.isArray(objeto.areasCrecimiento)
-  );
+  /** El selector de vista, que el contenedor arma porque conoce el id. Va
+   *  entre la cabecera y el bloque de riesgo. */
+  selector?: React.ReactNode;
+  /** Aviso de después de aprobar. Va arriba de todo lo que se lee, porque
+   *  es lo que acaba de pasar. */
+  aviso?: React.ReactNode;
 }
 
 export function NotaSesionView({
@@ -67,40 +57,22 @@ export function NotaSesionView({
   onEditarSeccion,
   revisadas,
   onRevisar,
+  selector,
+  aviso,
 }: NotaSesionViewProps) {
   const datos = sesion.datosEstructurados;
-  const paciente = sesion.turno?.paciente;
-  const nombrePaciente = paciente
-    ? `${paciente.nombre} ${paciente.apellido}`
-    : NOTA_CLINICA;
-  const fecha = sesion.turno ? fechaLarga(new Date(sesion.turno.fecha)) : null;
-  const aprobada = sesion.estado === "aprobado";
 
   const original = sesion.notaSoapOriginal;
   const hayOriginal =
     original !== null &&
     SECCIONES_SOAP.some(({ clave }) => (original[clave] ?? "").trim() !== "");
 
-  const feedback = datos?.feedbackTerapeuta;
-
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <p className="font-sans text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-          {NOTA_CLINICA}
-        </p>
-        <h1 className="font-display text-[24px] font-medium tracking-[-0.01em] text-ink-900 md:text-[30px]">
-          {nombrePaciente}
-        </h1>
-        <div className="flex flex-wrap items-center gap-3">
-          {fecha ? (
-            <span className="font-sans text-[14px] text-ink-500">{fecha}</span>
-          ) : null}
-          <Chip variant={aprobada ? "sage" : "gold"}>
-            {aprobada ? CHIP_APROBADA : CHIP_BORRADOR}
-          </Chip>
-        </div>
-      </header>
+      <CabeceraSesion sesion={sesion} rotulo={NOTA_CLINICA} />
+
+      {selector}
+      {aviso}
 
       <RiesgoDetectadoBanner
         riesgoDetectado={datos?.riesgoDetectado}
@@ -150,10 +122,6 @@ export function NotaSesionView({
       </div>
 
       <MasDeEstaSesion datos={datos} />
-
-      {esFeedbackRenderizable(feedback) ? (
-        <FeedbackTerapeutaView feedbackTerapeuta={feedback} />
-      ) : null}
 
       {hayOriginal && original ? (
         <Plegable titulo={VER_BORRADOR_ORIGINAL}>

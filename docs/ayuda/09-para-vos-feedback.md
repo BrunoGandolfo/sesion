@@ -1,8 +1,17 @@
 # "Para vos": la auto-supervisión
 
-**Para qué sirve.** Es el bloque plegado al final de la nota, sobre **tu**
-trabajo en esa sesión, no sobre la paciente. Se lee cuando querés, no antes que
-la nota.
+**Para qué sirve.** Es la otra cara de una sesión: habla de **tu** trabajo en
+esa sesión, no de la paciente. Se lee cuando querés, no antes que la nota.
+
+**Dónde está.** Arriba de la nota hay un selector de dos opciones,
+**Nota clínica | Para vos**. Se llega también desde el aviso que queda en la
+nota apenas la aprobás ("Leer Para vos") y desde la fila de la sesión en la
+pestaña Sesiones de la ficha. Tiene dirección propia, así que se puede volver
+con el botón de atrás.
+
+Si al análisis le faltó una parte, se muestra igual lo que llegó, con un aviso
+que dice *"Parte del análisis no llegó."* Antes, cuando faltaba algo, el bloque
+entero desaparecía sin avisar.
 
 ## Qué instrumento te toca
 
@@ -85,7 +94,9 @@ el audio no muestra que sobre lo que hiciste.
 src/components/grabacion/FeedbackTerapeutaView.tsx
 src/lib/glosario.ts
 src/app/(dashboard)/config/_components/config-view.tsx
-src/app/(dashboard)/sesiones/[id]/_components/nota-sesion-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
+src/app/(dashboard)/sesiones/[id]/para-vos/page.tsx
 processor/prompts/therapist_feedback_gestalt_v1.1.md
 processor/prompts/therapist_feedback_v1.1.md
 -->

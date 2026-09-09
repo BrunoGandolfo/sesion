@@ -73,6 +73,22 @@ function Rotulo({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Las cuatro listas de chips de este bloque —temas, emociones, lo que
+ * apareció por primera vez, lo que vuelve a aparecer— son TEXTO DEL MODELO,
+ * no rótulos de estado. Por eso van con `texto="libre"`: envuelven en varias
+ * líneas y, si les toca una palabra larguísima, la cortan.
+ *
+ * Iban con el default `texto="estado"`, que lleva `whitespace-nowrap`. Es el
+ * mismo bug que la auditoría encontró en el brief pre-sesión: un tema como
+ * "devolución diagnóstica e inestabilidad emocional" produce un chip más
+ * ancho que el teléfono y se sale por el borde derecho, en un layout
+ * `overflow-hidden` donde no hay scroll horizontal que lo rescate. O sea:
+ * texto clínico recortado (docs/diseno/01-auditoria-frontend.md, sección 0).
+ *
+ * Los chips de estado del bloque —el nombre de la intervención, la alianza—
+ * siguen sin envolver: son tres palabras cerradas y partirlas se lee peor.
+ */
 function ListaChips({
   rotulo,
   valores,
@@ -88,7 +104,7 @@ function ListaChips({
       <Rotulo>{rotulo}</Rotulo>
       <div className="flex flex-wrap gap-1.5">
         {valores.map((valor, indice) => (
-          <Chip key={`${valor}-${indice}`} variant={variante}>
+          <Chip key={`${valor}-${indice}`} variant={variante} texto="libre">
             {valor}
           </Chip>
         ))}

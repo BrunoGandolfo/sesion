@@ -3,7 +3,6 @@
 import * as React from "react";
 
 import { Button, Confirmar } from "@/components/ui";
-import { Aparece, CheckDibujado } from "@/components/ui/movimiento";
 
 import {
   APROBANDO,
@@ -15,7 +14,6 @@ import {
   DESCARTAR_MENSAJE,
   DESCARTAR_TITULO,
   FALTA_REVISAR_RIESGO,
-  NOTA_GUARDADA,
 } from "./textos";
 
 // Barra fija de la nota en revisión: las dos únicas acciones que cierran la
@@ -29,13 +27,20 @@ import {
 //
 // "Aprobar nota" está deshabilitado hasta que todas las casillas de riesgo
 // estén marcadas. La razón se dice arriba del botón, no se deja adivinar.
+//
+// LA CONFIRMACIÓN YA NO VIVE ACÁ
+//
+// La barra tenía un estado `guardada` que la reemplazaba por un check
+// dibujado y "Nota guardada". Existía para sostener el segundo que la
+// pantalla tardaba en irse sola después de aprobar. Ahora la pantalla no se
+// va: la fila aprobada entra en su lugar, esta barra se desmonta porque ya
+// no hay nada que firmar, y la confirmación queda arriba, en el aviso que
+// ofrece leer "Para vos" (sesion-detail-view.tsx).
 
 interface BarraAccionesProps {
   /** false mientras falte marcar alguna casilla de señal de riesgo. */
   puedeAprobar: boolean;
   enviando: boolean;
-  /** La nota ya se guardó. La barra deja de ofrecer acciones y confirma. */
-  guardada?: boolean;
   onAprobar: () => void;
   onDescartar: () => void;
 }
@@ -45,29 +50,10 @@ type Pendiente = "aprobar" | "descartar" | null;
 export function BarraAcciones({
   puedeAprobar,
   enviando,
-  guardada = false,
   onAprobar,
   onDescartar,
 }: BarraAccionesProps) {
   const [pendiente, setPendiente] = React.useState<Pendiente>(null);
-
-  // Guardada: la barra se queda en su lugar y cambia a la confirmación. No
-  // se desmonta ni salta — la pantalla vuelve sola un segundo después, y en
-  // ese segundo lo único que hay que ver es que la nota quedó.
-  if (guardada) {
-    return (
-      <div className="fixed inset-x-0 bottom-[64px] z-40 border-t border-[color:var(--border-subtle)] bg-cream-50/95 backdrop-blur lg:bottom-0">
-        <div className="mx-auto flex max-w-[1120px] items-center gap-2 px-5 py-4 text-sage-700 lg:px-10">
-          <CheckDibujado tamano={20} className="shrink-0" />
-          <Aparece como="span" retraso={0.12}>
-            <span className="font-sans text-[15px] font-semibold">
-              {NOTA_GUARDADA}
-            </span>
-          </Aparece>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-x-0 bottom-[64px] z-40 border-t border-[color:var(--border-subtle)] bg-cream-50/95 backdrop-blur lg:bottom-0">
