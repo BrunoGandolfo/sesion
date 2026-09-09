@@ -12,7 +12,7 @@ forma de grabar sin eso. Ver `04-pacientes-y-ficha.md`.
 ## Grabar
 
 1. Entrá desde **Hoy** (**Grabar sesión**), desde el turno en la agenda, o desde
-   la ficha con el botón **Grabar** de abajo a la derecha. Si hay turno hoy, se
+   la ficha con el botón **Grabar** de la cabecera. Si hay turno hoy, se
    graba ese turno; si no hay, la app **crea uno de 50 minutos, presencial, con
    la hora de ahora** recién cuando tocás el botón (y ese turno no genera
    recordatorio).

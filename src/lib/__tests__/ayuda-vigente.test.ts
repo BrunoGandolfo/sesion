@@ -62,3 +62,11 @@ it("los minutos que enseña la ayuda coinciden con los límites de captura", () 
   expect(texto).toContain("todavía tenés que terminar y guardar");
   expect(texto).not.toContain("hora y media");
 });
+
+it.each(["04-pacientes-y-ficha.md", "07-grabar-una-sesion.md"])("%s ubica Grabar en la cabecera", (archivo) => {
+  const texto = documento(archivo);
+  expect(texto).toContain("cabecera");
+  expect(texto).toContain("**Grabar**");
+  expect(texto).not.toContain("Abajo del todo");
+  expect(texto).not.toContain("Grabar** de abajo a la derecha");
+});
