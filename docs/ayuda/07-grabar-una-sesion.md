@@ -59,7 +59,9 @@ este teléfono. No se puede recuperar."*
 3. Al terminar aparece **"Te avisamos cuando la nota esté lista"**, la app vuelve
    sola a la ficha y el turno queda marcado como **realizado**.
 
-La grabación se corta sola a la hora y media.
+El límite es de **150 minutos** de grabación, con un aviso a los **135 minutos**.
+Al alcanzar el límite, la captura se interrumpe; todavía tenés que terminar
+y guardar la sesión. No se sube ni se aprueba sola.
 
 ## Si la subida falla
 

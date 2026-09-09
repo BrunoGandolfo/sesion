@@ -1,3 +1,5 @@
+import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { leerCorpus, olvidarCorpus, systemPromptAyuda } from "@/lib/ayuda-corpus";
@@ -51,4 +53,12 @@ it("no aconseja bloquear el teléfono ni garantiza recuperar una interrupción",
   const prompt = systemPromptAyuda();
   expect(prompt).toContain("La recuperación completa no está garantizada");
   expect(prompt).not.toContain("La llamada se llevó el micrófono, no la sesión");
+});
+
+it("los minutos que enseña la ayuda coinciden con los límites de captura", () => {
+  const texto = documento("07-grabar-una-sesion.md");
+  expect(texto).toContain(`**${LIMITE_SEGUNDOS / 60} minutos**`);
+  expect(texto).toContain(`**${AVISO_LIMITE_SEGUNDOS / 60} minutos**`);
+  expect(texto).toContain("todavía tenés que terminar y guardar");
+  expect(texto).not.toContain("hora y media");
 });
