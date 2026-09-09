@@ -129,6 +129,31 @@ body {
 }
 
 /* ============================================
+   Movimiento reducido
+   La preferencia del sistema apaga lo que gira y lo que pulsa en toda la
+   app, de una sola vez: los esqueletos de carga (ContextoGoldenThreadView,
+   HotWordsManager, ConsentimientoBadge) y cualquier animate-spin que quede
+   suelto. Los primitivos de movimiento.tsx ya consultan la preferencia en
+   JS; esto cubre lo que se anima con una clase de Tailwind, que desde JS no
+   se ve.
+
+   Apagar la animación no borra el elemento: el bloque crema queda quieto y
+   sigue diciendo "esto todavía no es el dato", y el spinner queda como un
+   anillo incompleto. La preferencia elimina el movimiento, no la
+   información (docs/diseno/03-plan-de-movimiento.md, D2).
+
+   Va fuera de @layer a propósito: las utilidades de Tailwind v4 viven en la
+   capa `utilities` y una regla sin capa le gana a cualquiera de ellas sin
+   pelear por especificidad ni por !important.
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-spin {
+    animation: none;
+  }
+}
+
+/* ============================================
    Anti auto-zoom en iOS
    Safari aplica zoom automático al enfocar inputs con font-size < 16px.
    Forzamos 16px solo en mobile para no alterar el diseño en desktop.

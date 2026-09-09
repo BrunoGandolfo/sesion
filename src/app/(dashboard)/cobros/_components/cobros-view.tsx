@@ -17,7 +17,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCircle2, ChevronRight, Send, Wallet } from "lucide-react";
+import { ChevronRight, Send, Wallet } from "lucide-react";
 
 import {
   Avatar,
@@ -25,9 +25,11 @@ import {
   Card,
   Confirmar,
   EditorialRule,
+  Lupita,
   Segmented,
   Toast,
 } from "@/components/ui";
+import { TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
@@ -43,17 +45,31 @@ import { fechaCorta, fechaLarga, money, moneyShort } from "@/lib/format";
 import {
   ALGO_FALLO,
   AVISADO,
+  CARGANDO,
+  COBRASTE_ESTE_MES,
+  COBROS_DEL_MES,
+  COBROS_NO_CARGARON,
   ENVIANDO_SMS,
   ENVIAR_SMS,
   METODO_PAGO_LABEL,
+  NADIE_TE_DEBE,
+  NADIE_TE_DEBE_LINEAS,
   NAV,
   RECORDAR_COBRO,
   RECORDAR_COBRO_TITULO,
+  REINTENTAR,
+  SIN_COBRAR,
+  SIN_COBRAR_FRASE_FINAL,
+  SIN_COBROS_ESTE_MES,
+  SIN_COBROS_ESTE_MES_LINEAS,
   SIN_METODO,
   SMS_DESTINO,
   SMS_ENVIADO,
   SMS_SIN_CONFIGURAR,
   TE_DEBEN,
+  VER_COBROS_DEL_MES,
+  VER_TE_DEBEN,
+  VISTA_DE_COBROS,
   pluralizar,
 } from "@/lib/glosario";
 import type {
@@ -195,7 +211,7 @@ export function CobrosView() {
   if (carga === "cargando" && !datos) {
     return (
       <Marco ahora={null} nombreProfesional={null}>
-        <p className="py-16 text-center text-[14px] text-ink-500">Cargando…</p>
+        <p className="py-16 text-center text-[14px] text-ink-500">{CARGANDO}</p>
       </Marco>
     );
   }
@@ -206,12 +222,8 @@ export function CobrosView() {
         <EstadoVacio
           icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
           titulo={ALGO_FALLO}
-          lineas={[
-            "No pudimos traer los cobros.",
-            "Puede ser la conexión.",
-            "Tus datos no se perdieron.",
-          ]}
-          accion={{ label: "Reintentar", onClick: reintentar }}
+          lineas={COBROS_NO_CARGARON}
+          accion={{ label: REINTENTAR, onClick: reintentar }}
         />
       </Marco>
     );
@@ -242,11 +254,11 @@ export function CobrosView() {
       <Segmented<Pestana>
         options={[
           { value: "te-deben", label: TE_DEBEN },
-          { value: "cobros", label: "Cobros del mes" },
+          { value: "cobros", label: COBROS_DEL_MES },
         ]}
         value={pestana}
         onChange={setPestana}
-        ariaLabel="Vista de cobros"
+        ariaLabel={VISTA_DE_COBROS}
         className="self-start"
       />
 
@@ -324,6 +336,17 @@ function Marco({
 }
 
 // ============================================
+// Dos números, no cuatro.
+//
+// La grilla decía cuatro cosas que eran dos: "Cobraste este mes $26.3k /
+// 12 sesiones" y "Sesiones cobradas 12 / este mes" son el mismo hecho, y
+// "Te deben $45.3k" y "Sin cobrar 21 sesiones" también
+// (01-auditoria-frontend.md, 5). Cada hecho quedó en una celda, con el monto
+// arriba y las sesiones abajo, que es donde ya vivía el subtexto.
+//
+// Y el rótulo de la deuda dejó de ser "Te deben": ese nombre es de la
+// pestaña de al lado. Acá dice "Sin cobrar", que es el número.
+// ============================================
 function KpiGrid({
   ingresosMes,
   deudaTotal,
@@ -337,50 +360,30 @@ function KpiGrid({
 }) {
   const items = [
     {
-      label: "Cobraste este mes",
+      label: COBRASTE_ESTE_MES,
       value: moneyShort(ingresosMes),
       subtext: pluralizar(cobradasCount, "sesión", "sesiones"),
       tone: "sage" as const,
     },
     {
-      label: TE_DEBEN,
+      label: SIN_COBRAR,
       value: moneyShort(deudaTotal),
-      subtext: deudaTotal > 0 ? "pendiente" : "al día",
+      subtext: pluralizar(sinCobrarCount, "sesión", "sesiones"),
       tone: deudaTotal > 0 ? ("terracotta" as const) : ("default" as const),
-    },
-    {
-      label: "Sesiones cobradas",
-      value: cobradasCount,
-      subtext: "este mes",
-      tone: "default" as const,
-    },
-    {
-      label: "Sin cobrar",
-      value: sinCobrarCount,
-      subtext: sinCobrarCount === 1 ? "sesión" : "sesiones",
-      tone: "default" as const,
     },
   ];
 
   return (
     <Card className="overflow-hidden rounded-[8px] p-0">
-      <div className="grid grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2">
         {items.map((item, index) => (
           <div
             key={item.label}
-            className={[
-              "min-w-0 p-4 lg:p-5",
-              index < 2 ? "border-b border-[color:var(--border-subtle)]" : "",
-              index % 2 === 0
+            className={`min-w-0 p-4 lg:p-5 ${
+              index === 0
                 ? "border-r border-[color:var(--border-subtle)]"
-                : "",
-              "lg:border-b-0",
-              index < 3
-                ? "lg:border-r lg:border-[color:var(--border-subtle)]"
-                : "lg:border-r-0",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+                : ""
+            }`}
           >
             <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
               {item.label}
@@ -431,14 +434,13 @@ function TeDeben({
   if (deudores.length === 0) {
     return (
       <EstadoVacio
-        icono={<CheckCircle2 size={28} strokeWidth={1.6} aria-hidden="true" />}
-        titulo="Nadie te debe"
-        lineas={[
-          "Todas las sesiones realizadas están cobradas.",
-          "Cuando cobres un turno desde la agenda, el pago aparece en Cobros del mes.",
-          "Si alguien queda sin pagar, va a aparecer acá con un botón para recordárselo.",
-        ]}
-        accion={{ label: "Ver cobros del mes", onClick: onVerCobros }}
+        // La única confirmación alegre que 04-personaje.md le permite a
+        // Cobros: nadie debe nada. Lupita a 96 px, celebrando, y el círculo
+        // crema crece para recibirla.
+        lupita
+        titulo={NADIE_TE_DEBE}
+        lineas={NADIE_TE_DEBE_LINEAS}
+        accion={{ label: VER_COBROS_DEL_MES, onClick: onVerCobros }}
       />
     );
   }
@@ -451,7 +453,7 @@ function TeDeben({
           <span className="font-[family-name:var(--font-display)] text-[24px] font-medium leading-none text-terracotta-600 lg:text-[28px]">
             {pluralizar(sesionesSinCobrar, "sesión", "sesiones")}
           </span>{" "}
-          sin cobrar.
+          {SIN_COBRAR_FRASE_FINAL}
         </p>
       </Card>
 
@@ -483,7 +485,10 @@ function ZonaIndicador({ dias }: { dias: number }) {
   const texto = textoAtraso(dias);
   if (zona === "terracotta") {
     return (
-      <span className="inline-flex items-center rounded-full bg-terracotta-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-terracotta-600">
+      // 12 px y el mismo tracking que ui/chip.tsx: era el único chip de la
+      // app por debajo del piso que ese archivo documenta, y a un brazo de
+      // distancia 11 px no se leen (01-auditoria-frontend.md, (d)).
+      <span className="inline-flex items-center rounded-full bg-terracotta-50 px-2 py-0.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-terracotta-600">
         {texto}
       </span>
     );
@@ -558,7 +563,7 @@ function FilaDeudor({
         >
           <Avatar nombre={deudor.nombre} apellido={deudor.apellido} size={40} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-semibold text-ink-900">
+            <span className="block text-[14px] font-semibold leading-[1.35] text-ink-900">
               {nombreCompleto}
             </span>
             <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
@@ -674,14 +679,12 @@ function CobrosDelMes({
   if (cobros.length === 0) {
     return (
       <EstadoVacio
+        // Este no se celebra: un mes sin cobrar nada no es una buena
+        // noticia. Ícono de siempre, sin personaje.
         icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
-        titulo="Todavía no cobraste este mes"
-        lineas={[
-          "Los cobros se registran desde el turno, en la agenda o en Hoy.",
-          "Cada pago aparece acá con la fecha y el método.",
-          "Lo que quedó sin cobrar está en Te deben.",
-        ]}
-        accion={{ label: `Ver ${TE_DEBEN.toLowerCase()}`, onClick: onVerTeDeben }}
+        titulo={SIN_COBROS_ESTE_MES}
+        lineas={SIN_COBROS_ESTE_MES_LINEAS}
+        accion={{ label: VER_TE_DEBEN, onClick: onVerTeDeben }}
       />
     );
   }
@@ -712,9 +715,12 @@ function CobrosDelMes({
               />
 
               <span className="min-w-0 flex-1">
+                {/* Sin truncate: "Rodrigo …" no es un nombre. A 390 px el
+                    apellido baja a la segunda línea, que es lo que ya hace
+                    el mismo dato en el Recorrido. */}
                 <Link
                   href={`/pacientes/${t.paciente.id}`}
-                  className="block truncate text-[14px] font-semibold text-ink-900 hover:underline"
+                  className="block text-[14px] font-semibold leading-[1.35] text-ink-900 hover:underline"
                 >
                   {nombreCompleto}
                 </Link>
@@ -735,24 +741,39 @@ function CobrosDelMes({
 }
 
 // ============================================
-// Estado vacío: ícono, titular, tres líneas, un botón.
+// Estado vacío: ícono, titular, tres líneas, un botón. La misma forma que en
+// la agenda, y no aparece un cuarto formato.
+//
+// Lo único que cambia entre uno y otro es quién ocupa el círculo: un ícono
+// de 28 px en el círculo de 56, o Lupita a 96 px en el círculo agrandado,
+// donde la pantalla tiene algo que celebrar.
 // ============================================
 function EstadoVacio({
   icono,
+  lupita = false,
   titulo,
   lineas,
   accion,
 }: {
-  icono: React.ReactNode;
+  icono?: React.ReactNode;
+  /** Lupita celebrando en vez del ícono. Sólo donde 04-personaje.md la deja
+   *  entrar; en Cobros, sólo en "Nadie te debe". */
+  lupita?: boolean;
   titulo: string;
-  lineas: [string, string, string];
+  lineas: readonly [string, string, string];
   accion: { label: string; onClick: () => void };
 }) {
   return (
     <Card className="flex flex-col items-center rounded-[8px] px-6 py-12 text-center">
-      <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-cream-100 text-sage-600">
-        {icono}
-      </span>
+      {lupita ? (
+        <span className="inline-flex h-[128px] w-[128px] items-center justify-center rounded-full bg-cream-100">
+          <Lupita pose="celebra" tamano={TAMANOS_LUPITA.vacio} />
+        </span>
+      ) : (
+        <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-cream-100 text-sage-600">
+          {icono}
+        </span>
+      )}
       <p className="mt-4 font-[family-name:var(--font-display)] text-[22px] font-medium italic leading-tight text-ink-900">
         {titulo}
       </p>

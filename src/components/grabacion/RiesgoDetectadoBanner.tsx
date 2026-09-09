@@ -24,6 +24,21 @@ import type { FlagsRiesgo, NivelRiesgo } from "@/types/domain";
 // clínico, no lo reemplaza, y la casilla por señal es obligatoria antes de
 // aprobar (la exige quien renderiza la barra de acciones, con
 // clavesDeRiesgo).
+//
+// SIN MOVIMIENTO, Y ES A PROPÓSITO
+//
+// Este bloque no entra: estaba. Se dibuja con la nota, sin fundido, sin
+// desplazamiento y sin retraso de cascada. Cero milisegundos.
+//
+// No es un olvido ni un delta pendiente: una señal de riesgo que "aparece"
+// se convierte en un aviso de app —algo que la interfaz decidió mostrarle—,
+// y esto es un dato clínico que estaba en la sesión antes de que se abriera
+// la pantalla. Por el mismo motivo Lupita no pasa ni cerca
+// (docs/diseno/04-personaje.md) y no hay nada acá que dependa de
+// prefers-reduced-motion: con la preferencia puesta o sin ella, se ve igual.
+//
+// Si algún día alguien envuelve esta sección en Aparece o en una cascada,
+// está rompiendo docs/diseno/03-plan-de-movimiento.md, D10.
 
 /** Clave de la casilla de la señal graduada (riesgoDetectado). Las demás
  *  claves son las de FlagsRiesgo, que ya son únicas. */

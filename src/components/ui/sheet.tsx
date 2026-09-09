@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+
+import { SUAVE } from "./movimiento";
 
 /**
  * Alto del menú inferior, en píxeles. Derivado de bottom-nav.tsx:30
@@ -151,9 +153,35 @@ export function Sheet({
     [panelActivo],
   );
 
-  const ease = [0.16, 1, 0.3, 1] as const;
-
   const lateral = variante === "lateral";
+
+  // prefers-reduced-motion: el overlay aparece sin fundido y el panel sin
+  // desplazamiento ni escala. Está o no está. No es un fundido más corto:
+  // quien pide menos movimiento no quiere 90 vh de pantalla desplazándose,
+  // ni rápido ni despacio (docs/diseno/03-plan-de-movimiento.md, D1).
+  //
+  // Lo que NO cambia es el foco: el panel se sigue enfocando al abrir, la
+  // trampa de Tab sigue igual y el foco vuelve al disparador al cerrar. Eso
+  // es lo que hace que el sheet sea un diálogo, y no depende de que se mueva.
+  const reducido = useReducedMotion();
+
+  const entradaOverlay = reducido
+    ? {}
+    : {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.2 },
+      };
+
+  const entradaMobile = reducido
+    ? {}
+    : {
+        initial: { y: "100%" },
+        animate: { y: 0 },
+        exit: { y: "100%" },
+        transition: { duration: 0.28, ease: SUAVE },
+      };
 
   // El panel lateral es una columna de alto completo: no scrollea entero
   // —eso dejaría el campo de escribir fuera de la vista— sino que le pasa un
@@ -163,12 +191,17 @@ export function Sheet({
     ? "hidden lg:flex fixed z-50 inset-y-0 right-0 w-full flex-col bg-white shadow-raised outline-none"
     : "hidden lg:block fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-48px)] bg-white rounded-lg shadow-raised max-h-[85vh] overflow-y-auto outline-none";
 
-  const entradaDesktop = lateral
-    ? { initial: { x: "100%" }, animate: { x: 0 }, exit: { x: "100%" } }
+  const entradaDesktop = reducido
+    ? {}
     : {
-        initial: { opacity: 0, scale: 0.96 },
-        animate: { opacity: 1, scale: 1 },
-        exit: { opacity: 0, scale: 0.96 },
+        ...(lateral
+          ? { initial: { x: "100%" }, animate: { x: 0 }, exit: { x: "100%" } }
+          : {
+              initial: { opacity: 0, scale: 0.96 },
+              animate: { opacity: 1, scale: 1 },
+              exit: { opacity: 0, scale: 0.96 },
+            }),
+        transition: { duration: lateral ? 0.28 : 0.2, ease: SUAVE },
       };
 
   return (
@@ -176,10 +209,7 @@ export function Sheet({
       {open && (
         <>
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            {...entradaOverlay}
             onClick={onClose}
             aria-hidden="true"
             className="fixed inset-0 z-40 bg-[rgba(26,38,40,0.3)] backdrop-blur-[2px]"
@@ -192,10 +222,7 @@ export function Sheet({
             aria-label={ariaLabel}
             tabIndex={-1}
             onKeyDown={atraparTab}
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ duration: 0.28, ease }}
+            {...entradaMobile}
             className={`lg:hidden fixed z-50 bottom-0 left-0 right-0 flex max-h-[90vh] flex-col bg-white rounded-t-xl outline-none ${className}`}
           >
             <div className="shrink-0 bg-white flex justify-center pt-3 pb-2">
@@ -225,7 +252,6 @@ export function Sheet({
             tabIndex={-1}
             onKeyDown={atraparTab}
             {...entradaDesktop}
-            transition={{ duration: lateral ? 0.28 : 0.2, ease }}
             style={{ maxWidth }}
             className={`${clasesDesktop} ${className}`}
           >

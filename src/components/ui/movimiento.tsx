@@ -32,8 +32,16 @@ import {
 // "un poquito menos": a estático. Quien pide menos movimiento por vértigo o
 // migraña no quiere un fundido corto, quiere que no se mueva.
 
-/** La misma curva que --ease-out. */
-const SUAVE = [0.16, 1, 0.3, 1] as const;
+/**
+ * La misma curva que --ease-out (globals.css). Es la única del proyecto: no
+ * hay una curva "de entrada" y otra "de salida", ni una con rebote.
+ *
+ * Se exporta porque vivía copiada como literal en cinco archivos —el
+ * template de página, el sheet, el toast y los dos menús—, y una curva
+ * duplicada es una curva que en algún momento deja de ser la misma. Quien
+ * necesite animar fuera de estos primitivos la importa de acá.
+ */
+export const SUAVE = [0.16, 1, 0.3, 1] as const;
 
 const DURACION_APARECE = 0.24;
 const DESPLAZAMIENTO = 6;
@@ -161,12 +169,26 @@ export function ListaEnCascada({
 // AlturaAnimada
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Segundos que tarda un bloque en abrirse o cerrarse. */
-const DURACION_PLIEGUE = 0.22;
+/** Lo que tarda un bloque en abrirse o cerrarse, en milisegundos. Se
+ *  exporta para que quien tenga que esperar al despliegue —el foco de
+ *  Confirmar, sin ir más lejos— no lo copie. */
+export const MS_PLIEGUE = 220;
+
+/** Lo mismo en segundos, que es como lo pide framer-motion. */
+const DURACION_PLIEGUE = MS_PLIEGUE / 1000;
 
 export interface AlturaAnimadaProps {
   /** Estado del bloque. El componente anima la transición entre los dos. */
   abierto: boolean;
+  /**
+   * Animar también la primera aparición, cuando el bloque ya nace abierto.
+   *
+   * Por defecto no: un plegable que arranca desplegado tiene que estar
+   * dibujado en el primer cuadro, no abrirse solo cada vez que se monta la
+   * pantalla. Lo pide quien se monta *por* haberse abierto —Confirmar, que
+   * aparece cuando ella tocó el botón—: ahí el montaje es la apertura.
+   */
+  alMontar?: boolean;
   children: React.ReactNode;
   /** Para que el `aria-controls` del disparador pueda apuntar al panel. */
   id?: string;
@@ -191,6 +213,7 @@ export interface AlturaAnimadaProps {
  */
 export function AlturaAnimada({
   abierto,
+  alMontar = false,
   children,
   id,
   className,
@@ -206,7 +229,7 @@ export function AlturaAnimada({
   }
 
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence initial={alMontar}>
       {abierto ? (
         <motion.div
           id={id}

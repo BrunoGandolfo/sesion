@@ -2,6 +2,8 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 
+import { SUAVE } from "@/components/ui/movimiento";
+
 // Transición entre rutas del dashboard.
 //
 // template.tsx (y no layout.tsx) porque Next remonta el template en cada
@@ -35,7 +37,7 @@ export default function TemplateDashboard({
       className="min-h-full"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: DURACION, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DURACION, ease: SUAVE }}
     >
       {children}
     </motion.div>

@@ -17,6 +17,7 @@ import {
 } from "@/lib/glosario";
 import { Avatar } from "./avatar";
 import { Chip } from "./chip";
+import { CheckDibujado } from "./movimiento";
 
 interface SessionRowProps {
   turno: TurnoConPaciente;
@@ -32,6 +33,20 @@ interface SessionRowProps {
   onRevisarNota?: () => void;
   onGrabar?: () => void;
   onAutorizar?: () => void;
+  /**
+   * El cobro de esta fila acaba de entrar y todavía se está confirmando.
+   *
+   * Quien lo pone es la pantalla que abrió el sheet del método de pago,
+   * mientras dura el respiro de `useConfirmacionDibujada`: el sheet se cierra
+   * y la fila que originó el cobro queda con su marca, en vez de cambiar de
+   * chip sin que nada diga que ese cambio es consecuencia de lo que ella
+   * acaba de tocar (docs/diseno/03-plan-de-movimiento.md, D9).
+   *
+   * No agrega tiempo: ocurre mientras el sheet se va. Con movimiento
+   * reducido el chip cambia sin trazo, porque el trazo lo dibuja
+   * `CheckDibujado`, que ya consulta la preferencia.
+   */
+  cobroConfirmado?: boolean;
   className?: string;
 }
 
@@ -143,7 +158,7 @@ const TONO: Record<Accion["tono"], string> = {
 };
 
 export function SessionRow(props: SessionRowProps) {
-  const { turno, onClick, className = "" } = props;
+  const { turno, onClick, cobroConfirmado = false, className = "" } = props;
   const status = statusFor(turno);
   const leftClass = borderLeftClass(turno);
   const accion = accionDe(props);
@@ -179,7 +194,13 @@ export function SessionRow(props: SessionRowProps) {
       </div>
 
       <div className="flex items-center shrink-0">
-        {accion ? (
+        {cobroConfirmado ? (
+          // Ocupa el lugar del botón, no se agrega al lado: la marca aparece
+          // donde estaba "Cobrar", que es donde ella tocó.
+          <span className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-sage-600">
+            <CheckDibujado tamano={20} />
+          </span>
+        ) : accion ? (
           <button
             type="button"
             onClick={(e) => {

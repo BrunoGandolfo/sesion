@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Home, Calendar, CircleHelp, Users, Wallet } from "lucide-react";
 
 import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
+import { SUAVE } from "@/components/ui/movimiento";
 import { AYUDA, NAV } from "@/lib/glosario";
 
 // Los cuatro destinos, con el nombre que usa toda la app (glosario NAV).
@@ -35,6 +36,11 @@ const NAV_ITEMS = [
 /** Identidad compartida del subrayado: framer-motion lo desliza entre
  *  pestañas en vez de apagarlo acá y prenderlo allá. */
 const INDICADOR = "nav-activo";
+
+/** Lo que tarda el subrayado en llegar a la pestaña nueva. El mismo valor
+ *  que la marca del destino activo en la barra lateral: es la misma
+ *  navegación, en el otro viewport. */
+const DURACION_INDICADOR = 0.26;
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -76,7 +82,7 @@ export function BottomNav() {
                     layoutId={INDICADOR}
                     aria-hidden="true"
                     className="absolute inset-x-4 top-0 h-[2px] rounded-full bg-sage-500"
-                    transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{ duration: DURACION_INDICADOR, ease: SUAVE }}
                   />
                 )
               ) : null}

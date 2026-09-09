@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Calendar,
   CircleHelp,
@@ -17,6 +18,7 @@ import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
 import type { DeudaPaciente } from "@/types/domain";
 import { apiGet } from "@/lib/api-client";
 import { zonaDeuda } from "@/lib/deudas";
+import { SUAVE } from "@/components/ui/movimiento";
 import { AYUDA, NAV, TU_CONSULTORIO } from "@/lib/glosario";
 
 // Mismos destinos que el menú de mobile, más la configuración, que en
@@ -29,6 +31,19 @@ const NAV_ITEMS = [
   { href: "/cobros", label: NAV.COBROS, icon: Wallet },
   { href: "/config", label: TU_CONSULTORIO, icon: Settings },
 ] as const;
+
+/** La misma identidad compartida que en el menú de mobile: framer-motion
+ *  desliza la marca del destino activo de un ítem al otro en vez de apagarla
+ *  acá y prenderla allá. El nombre es distinto del de bottom-nav a propósito:
+ *  los dos menús nunca están montados a la vez —uno es lg:hidden y el otro
+ *  hidden lg:flex—, pero dos layoutId iguales en el mismo árbol harían que
+ *  framer-motion buscara el recorrido entre una barra vertical y un
+ *  subrayado horizontal. */
+const INDICADOR = "nav-lateral-activo";
+
+/** Lo que tarda la marca en llegar al destino nuevo. El mismo valor que en
+ *  mobile: es la misma navegación. */
+const DURACION_INDICADOR = 0.26;
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -44,6 +59,7 @@ function getFirstName(name: string): string {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const reducido = useReducedMotion();
   const { data: session } = useSession();
   const [redCount, setRedCount] = React.useState(0);
   // La ayuda no es un destino: se abre encima de la pantalla en la que ella
@@ -105,12 +121,32 @@ export function Sidebar() {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] ${
+                aria-current={active ? "page" : undefined}
+                className={`relative flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] ${
                   active
                     ? "bg-sage-50 text-sage-700"
                     : "text-ink-500 hover:bg-cream-50 hover:text-ink-900"
                 }`}
               >
+                {/* La marca del destino activo. En vertical es una barra
+                    contra el borde izquierdo —el equivalente del subrayado
+                    de mobile— y se desliza al ítem nuevo. Con movimiento
+                    reducido aparece en su lugar, sin recorrido. */}
+                {active ? (
+                  reducido ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-1.5 left-0 w-[2px] rounded-full bg-sage-500"
+                    />
+                  ) : (
+                    <motion.span
+                      layoutId={INDICADOR}
+                      aria-hidden="true"
+                      className="absolute inset-y-1.5 left-0 w-[2px] rounded-full bg-sage-500"
+                      transition={{ duration: DURACION_INDICADOR, ease: SUAVE }}
+                    />
+                  )
+                ) : null}
                 <Icon size={18} strokeWidth={active ? 2 : 1.6} />
                 <span className="flex-1">{label}</span>
                 {showBadge ? (
