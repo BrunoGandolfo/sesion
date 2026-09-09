@@ -109,8 +109,8 @@ Aparecen **a partir de la tercera sesión grabada y aprobada**. Antes dice
 *"Todavía no hay suficiente recorrido."* → `10-el-hilo-y-el-recorrido.md`
 
 **26. Me olvidé la contraseña.**
-No hay recuperación por mail: la contraseña se cambia desde adentro, sabiendo la
-actual. → `01-entrar-y-cuenta.md`
+En la entrada tocá **¿Olvidaste tu contraseña?** y pedí un enlace por correo.
+Vence en una hora y se usa una sola vez. → `01-entrar-y-cuenta.md`
 
 **27. Me equivoqué cinco veces y no me deja entrar.**
 Es el bloqueo por intentos: 15 minutos la primera vez, y más si se repite. Se

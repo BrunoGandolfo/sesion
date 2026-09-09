@@ -203,6 +203,13 @@ function recorrerCadena(): { archivos: string[]; hallazgos: Hallazgo[] } {
 }
 
 describe("cadena de imports del middleware", () => {
+  it("no alcanza correo, sus plantillas ni los adaptadores de cuentas", () => {
+    const relativos = recorrerCadena().archivos.map((a) => a.slice(RAIZ.length + 1));
+    for (const archivo of ["correo.ts", "correo-plantillas.ts", "cuenta-recuperacion-db.ts", "cuenta-registro-db.ts"]) {
+      expect(relativos).not.toContain(`src/lib/${archivo}`);
+    }
+  });
+
   it("no alcanza ningún módulo node:* (el runtime edge no los tiene)", () => {
     const { hallazgos } = recorrerCadena();
 

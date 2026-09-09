@@ -21,7 +21,7 @@ mal escrito, o acceso bloqueado por intentos.
 4. Si vuelve a fallar después de esperar, el bloqueo puede ser más largo: 30
    minutos, una hora, o cuatro horas si se repitió mucho.
 
-No hay recuperación por mail. Detalle en `01-entrar-y-cuenta.md`.
+Si la olvidaste, tocá **¿Olvidaste tu contraseña?** en la entrada y pedí un enlace por correo. Detalle en `01-entrar-y-cuenta.md`.
 
 ---
 

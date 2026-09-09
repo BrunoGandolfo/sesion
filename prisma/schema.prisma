@@ -43,6 +43,7 @@ model User {
   creadoEn       DateTime @default(now()) @map("creado_en")
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  passwordResets PasswordReset[]
 
   @@map("usuarios")
 }
@@ -398,4 +399,18 @@ model EventoAuditoria {
   @@index([organizationId, createdAt])
   @@index([entidad, entidadId])
   @@map("eventos_auditoria")
+}
+
+// Enlaces de un solo uso. Nunca se almacena el token que viaja por correo.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_resets")
 }

@@ -1121,6 +1121,20 @@ export const ENTRADA_ERROR = "Email o contraseña incorrectos";
 export const ENTRADA_ERROR_DETALLE =
   "Después de varios intentos seguidos el acceso queda bloqueado unos minutos.";
 
+// Entrada — recuperar acceso
+export const ENTRADA_OLVIDASTE = "¿Olvidaste tu contraseña?";
+export const ENTRADA_RECUPERAR = "Recuperar contraseña";
+export const ENTRADA_RECUPERAR_BOTON = "Mandame un enlace";
+export const ENTRADA_RECUPERAR_ENVIADO = "Si ese correo existe, te mandamos un enlace";
+export const ENTRADA_RESTABLECER = "Cambiar contraseña";
+export const ENTRADA_REPETIR = "Repetí la contraseña";
+export const ENTRADA_VOLVER = "Volver a entrar";
+export const ENTRADA_PASSWORD_CAMBIADA = "Contraseña cambiada";
+export const ENTRADA_PASSWORD_NO_COINCIDE = "Las contraseñas no coinciden.";
+export const ENTRADA_PASSWORD_DISTINTA = "La contraseña nueva tiene que ser distinta de la actual.";
+export const ENTRADA_ENLACE_INVALIDO = "Este enlace venció o ya se usó. Pedí uno nuevo.";
+export const ENTRADA_CUENTA_ERROR = "No pudimos completar el pedido. Probá de nuevo.";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Correos
 // ────────────────────────────────────────────────────────────────────────────

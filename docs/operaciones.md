@@ -121,3 +121,29 @@ de Neon):
   destruye siempre, así que el blob remanente es inaccesible.
 - **CORS de R2.** Un 403 en el PUT del navegador casi siempre es CORS del
   bucket, no credenciales.
+
+
+## 6. Migraciones de cuentas
+
+Antes de desplegar el código nuevo, aplicar las migraciones pendientes con la
+conexión **directa** de Neon (`-pooler` no debe aparecer). Nunca `migrate dev`
+contra producción. En una terminal del dueño, con la URL de producción directa
+cargada en `DATABASE_URL_PRODUCCION_DIRECTA` sin imprimirla:
+
+```sh
+DATABASE_URL="$DATABASE_URL_PRODUCCION_DIRECTA" npx prisma migrate status
+DATABASE_URL="$DATABASE_URL_PRODUCCION_DIRECTA" npx prisma migrate deploy
+DATABASE_URL="$DATABASE_URL_PRODUCCION_DIRECTA" npx prisma migrate status
+npx prisma generate
+```
+
+Para test, el mismo `migrate deploy` con `DATABASE_URL` tomada de
+`DATABASE_URL_TEST`, validando antes que sea `ep-floral-sound`, nunca
+`ep-odd-night`, y usando conexión directa, como hace el helper de los tests.
+
+Cada migración de cuentas trae un `rollback.sql` que elimina sólo su tabla
+nueva. Se verifica en una transacción de test que luego hace rollback. Prisma
+Migrate no aplica esos inversos automáticamente: para revertir un despliegue
+normal alcanza con volver al código anterior y conservar las tablas aditivas.
+No ejecutar los inversos sobre producción como rutina ni borrar el historial
+`_prisma_migrations`.

@@ -20,9 +20,11 @@
 
 import * as React from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Card, Input } from "@/components/ui";
 import {
+  ENTRADA_OLVIDASTE, ENTRADA_PASSWORD_CAMBIADA,
   ENTRADA_CONTRASENA,
   ENTRADA_EMAIL,
   ENTRADA_ERROR,
@@ -34,6 +36,7 @@ import { Presencia } from "./_components/presencia";
 
 export default function LoginPage() {
   const router = useRouter();
+  const aviso = useSearchParams().get("aviso") === "password-cambiada";
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState(false);
@@ -68,6 +71,7 @@ export default function LoginPage() {
 
         <div className="mt-10 flex w-full flex-col lg:mt-0 lg:w-[380px] lg:shrink-0">
           <Card className="p-7 shadow-subtle">
+            {aviso && <p role="status" className="mb-4 text-sm text-sage-600">{ENTRADA_PASSWORD_CAMBIADA}</p>}
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <Input
                 label={ENTRADA_EMAIL}
@@ -95,6 +99,7 @@ export default function LoginPage() {
               >
                 {loading ? ENTRANDO : ENTRAR}
               </Button>
+              <Link href="/recuperar" className="text-center text-sm text-sage-600 underline">{ENTRADA_OLVIDASTE}</Link>
 
               {/* Un solo mensaje para todos los casos: contraseña equivocada,
                   email que no existe y acceso bloqueado por intentos. El
