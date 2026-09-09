@@ -1,5 +1,11 @@
 # El personaje
 
+> **Decisión de producto · 9 de septiembre de 2026.** Queda revocada la
+> indicación “Movimiento: ninguno en la primera versión” de este documento.
+> Lupita saluda al abrir la ayuda, se mueve al ritmo de `Latido` mientras
+> busca y celebra una vez al terminar. Conserva las tres poses, no tiene
+> movimiento de reposo y con `prefers-reduced-motion` queda estática.
+
 Tres conceptos, una recomendación. Todo dentro de los tokens que ya existen
 en `src/app/globals.css:9-80`: no se agrega un color a la paleta para que
 entre un personaje.

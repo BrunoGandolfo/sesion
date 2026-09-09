@@ -15,10 +15,12 @@
 
 import {
   crearMensaje,
+  crearMensajeStreaming,
   MODELO_AYUDA,
   systemCacheado,
   type MensajeAnthropic,
   type ResultadoMensajes,
+  type FlujoMensajes,
 } from "@/lib/anthropic-mensajes";
 import { systemPromptAyuda } from "@/lib/ayuda-corpus";
 import type { db } from "@/lib/db";
@@ -83,6 +85,10 @@ export interface ResponderAyudaInput {
   crear?: typeof crearMensaje;
   /** Inyectable: evita leer el corpus del disco en los tests del caso de uso. */
   systemPrompt?: string;
+}
+
+export interface ResponderAyudaStreamingInput extends ResponderAyudaInput {
+  crearStreaming?: typeof crearMensajeStreaming;
 }
 
 export interface RespuestaAyuda {
@@ -208,4 +214,39 @@ export async function responderAyuda(
     tokensSalida: resultado.tokensSalida,
     cacheLeido: resultado.cacheLeido,
   };
+}
+
+/** La variante incremental: valida y arma exactamente el mismo pedido. */
+export async function responderAyudaStreaming(
+  input: ResponderAyudaStreamingInput,
+): Promise<FlujoMensajes> {
+  const pregunta = input.pregunta.trim();
+  if (pregunta === "") throw new ApiError(MENSAJE_PREGUNTA_VACIA, 400);
+  if (pregunta.length > LARGO_MAX_PREGUNTA) {
+    throw new ApiError(MENSAJE_PREGUNTA_LARGA, 400);
+  }
+
+  const apiKey = input.apiKey ?? process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    console.warn("[ayuda] ANTHROPIC_API_KEY no configurada");
+    throw new ApiError(MENSAJE_SIN_CLAVE, 503);
+  }
+
+  try {
+    return await (input.crearStreaming ?? crearMensajeStreaming)(
+      {
+        model: MODELO_AYUDA,
+        max_tokens: MAX_TOKENS_RESPUESTA,
+        system: systemCacheado(input.systemPrompt ?? systemPromptAyuda()),
+        messages: [
+          ...historialAMensajes(input.historial ?? []),
+          { role: "user", content: pregunta },
+        ],
+      },
+      { apiKey },
+    );
+  } catch (error) {
+    console.error("[ayuda] fallo del proveedor", error);
+    throw new ApiError(MENSAJE_PROVEEDOR_CAIDO, 502);
+  }
 }

@@ -17,13 +17,13 @@
 // aria-hidden fijo, sin escape: acompaña a un texto que ya dice todo. Si
 // alguna vez Lupita queda sola, sin texto al lado, está mal puesta.
 //
-// SIN MOVIMIENTO
-//
-// Ninguno en esta versión, ni siquiera un fundido. Tampoco hay pose triste,
-// de error ni de carga: en un error hablan las palabras (glosario.ts) y en
-// una espera habla AnilloProgreso (movimiento.tsx).
+// El movimiento tiene significado: entra saludando, acompaña la espera al
+// ritmo de Latido y celebra una sola vez cuando terminó de responder.
 
 import * as React from "react";
+import { motion, useReducedMotion } from "framer-motion";
+
+import { Aparece, SUAVE } from "@/components/ui/movimiento";
 
 /** Las tres poses, y no hay una cuarta. */
 export type PoseLupita = "saluda" | "senala" | "celebra";
@@ -98,6 +98,7 @@ export interface LupitaProps {
   /** Lado del dibujo en píxeles. Ver TAMANOS_LUPITA. */
   tamano?: number;
   className?: string;
+  movimiento?: "quieta" | "entra" | "piensa" | "celebra";
 }
 
 /**
@@ -107,11 +108,17 @@ export interface LupitaProps {
  * El contenedor circular crema lo pone quien la usa, no el dibujo: a 20 px
  * va suelta en la línea de texto y a 96 px va dentro del círculo.
  */
-export function Lupita({ pose, tamano = 32, className }: LupitaProps) {
+export function Lupita({
+  pose,
+  tamano = 32,
+  className,
+  movimiento = "quieta",
+}: LupitaProps) {
+  const reducido = useReducedMotion();
   const forma = FORMAS[pose];
   const conBrote = tamano >= TAMANO_CON_DETALLE;
 
-  return (
+  const dibujo = (
     <svg
       width={tamano}
       height={tamano}
@@ -150,5 +157,30 @@ export function Lupita({ pose, tamano = 32, className }: LupitaProps) {
         />
       ) : null}
     </svg>
+  );
+
+  if (reducido || movimiento === "quieta") return dibujo;
+
+  if (movimiento === "entra") {
+    return <Aparece como="span">{dibujo}</Aparece>;
+  }
+
+  return (
+    <motion.span
+      aria-hidden="true"
+      className="inline-flex origin-bottom"
+      animate={
+        movimiento === "piensa"
+          ? { rotate: [-3, 3, -3] }
+          : { rotate: [0, -5, 5, 0], scale: [1, 1.08, 1.08, 1] }
+      }
+      transition={
+        movimiento === "piensa"
+          ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
+          : { duration: 0.3, ease: SUAVE }
+      }
+    >
+      {dibujo}
+    </motion.span>
   );
 }

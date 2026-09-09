@@ -1,53 +1,20 @@
-// Cliente mínimo de la API de mensajes de Anthropic, con fetch.
-//
-// POR QUÉ NO EL SDK
-//
-// El SDK oficial (@anthropic-ai/sdk) trae reintentos, streaming, tipos de
-// todas las herramientas y el runner de tool use. De todo eso, /api/ayuda usa
-// cero: una llamada, sin streaming, sin herramientas, con un system prompt y
-// un historial corto. Lo que sí trae es una dependencia más para auditar y
-// mantener en una app que hoy tiene 17. Cuando aparezca el streaming en la UI
-// —que es la razón por la que el SDK se vuelve razonable, porque parsear SSE
-// a mano no se justifica— se cambia; hasta entonces, esto son 40 líneas.
-//
-// PROMPT CACHING
-//
-// El caché se pide con `cache_control: { type: "ephemeral" }` en el bloque
-// del system, no con una cabecera: el beta `prompt-caching-2024-07-31` quedó
-// obsoleto cuando la función salió de beta, y mandarlo hoy no agrega nada.
-// Las únicas cabeceras necesarias son la clave, la versión y el content-type.
-//
-// El bloque cacheado tiene que ser un prefijo estable: por eso el system va
-// entero antes que los mensajes, y todo lo que cambia por pedido —la
-// pregunta, el historial— va después. Ver src/lib/ayuda-corpus.ts.
-//
+// Cliente de Anthropic para la ayuda de Sesión.
+// Usa el SDK oficial: MessageStream interpreta SSE y entrega deltas tipados.
 // Runtime nodejs. No es alcanzable desde src/middleware.ts (regla 9).
 
-export const URL_MENSAJES = "https://api.anthropic.com/v1/messages";
+import Anthropic from "@anthropic-ai/sdk";
+import type {
+  Message,
+  MessageParam,
+  TextBlockParam,
+} from "@anthropic-ai/sdk/resources/messages";
 
-/** Versión de la API de Anthropic. Cabecera obligatoria. */
+export const MODELO_AYUDA = "claude-haiku-4-5";
+export const TIMEOUT_MS = 30_000;
+export const URL_MENSAJES = "https://api.anthropic.com/v1/messages";
 export const VERSION_API_ANTHROPIC = "2023-06-01";
 
-/**
- * El modelo. Haiku 4.5 es el más chico de la generación actual: alcanza de
- * sobra para responder desde un corpus que ya está en el prompt, y con el
- * caché el corpus se lee al 10 % del precio de entrada.
- *
- * El identificador NO lleva sufijo de fecha: `claude-haiku-4-5` es completo
- * tal cual.
- */
-export const MODELO_AYUDA = "claude-haiku-4-5";
-
-/** Techo de espera de una llamada. Sin streaming, una respuesta corta de
- *  Haiku entra en pocos segundos; 30 s es el margen para un mal día de red. */
-export const TIMEOUT_MS = 30_000;
-
-// ────────────────────────────────────────────────────────────────────────────
-// Tipos de la API (solo la parte que se usa)
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Bloque de texto del system, opcionalmente marcado para cachear. */
-export interface BloqueSystem {
+export interface BloqueSystem extends TextBlockParam {
   type: "text";
   text: string;
   cache_control?: { type: "ephemeral" };
@@ -66,40 +33,15 @@ export interface PedidoMensajes {
   temperature?: number;
 }
 
-/** La respuesta de /v1/messages, recortada a lo que se lee. */
-interface CuerpoRespuesta {
-  content?: Array<{ type: string; text?: string }>;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    cache_creation_input_tokens?: number;
-    cache_read_input_tokens?: number;
-  };
-  stop_reason?: string;
-}
-
-/** Lo que devuelve crearMensaje, ya masticado. */
 export interface ResultadoMensajes {
-  /** El texto de la respuesta: los bloques `text` concatenados. */
   texto: string;
-  /** Tokens de entrada NO cacheados (los cacheados van aparte). */
   tokensEntrada: number;
   tokensSalida: number;
-  /** Tokens leídos del caché: si es 0 pedido tras pedido, algo lo invalida. */
   cacheLeido: number;
-  /** Tokens escritos al caché (se pagan ~1,25x; pasa en el primer pedido). */
   cacheEscrito: number;
-  /** `end_turn`, `max_tokens`, `refusal`… Puede faltar. */
   motivoDeCorte: string | null;
 }
 
-/**
- * Cualquier cosa que salga mal hablando con Anthropic: red, timeout, 4xx,
- * 5xx, cuerpo que no es JSON. `status` está solo cuando hubo respuesta HTTP.
- *
- * El mensaje puede contener detalle del proveedor: es para el log, NUNCA
- * para la usuaria. Quien lo atrapa (responder-ayuda.ts) lo traduce.
- */
 export class ErrorAnthropic extends Error {
   constructor(
     message: string,
@@ -110,7 +52,6 @@ export class ErrorAnthropic extends Error {
   }
 }
 
-/** La firma de fetch que hace falta. Inyectable para los tests. */
 export type FetchLike = (
   url: string,
   init: RequestInit,
@@ -118,90 +59,151 @@ export type FetchLike = (
 
 export interface OpcionesMensajes {
   apiKey: string;
-  /** Por defecto el fetch global. Los tests pasan el suyo. */
   fetchImpl?: FetchLike;
   timeoutMs?: number;
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+/** Un stream listo para consumir. resultado se resuelve sólo después de EOF. */
+export interface FlujoMensajes {
+  fragmentos: AsyncIterable<string>;
+  resultado: Promise<ResultadoMensajes>;
+  cancelar: () => void;
+}
 
-/** Arma el bloque de system cacheado. Un solo bloque: el prefijo entero. */
 export function systemCacheado(texto: string): BloqueSystem[] {
   return [{ type: "text", text: texto, cache_control: { type: "ephemeral" } }];
 }
 
-/**
- * Una llamada a POST /v1/messages. Sin reintentos: quien llama decide (hoy
- * nadie reintenta — la usuaria vuelve a preguntar, que es más barato que
- * duplicar una llamada que quizás salió bien).
- */
-export async function crearMensaje(
-  pedido: PedidoMensajes,
-  opciones: OpcionesMensajes,
-): Promise<ResultadoMensajes> {
-  const hacerFetch = opciones.fetchImpl ?? fetch;
-  const timeoutMs = opciones.timeoutMs ?? TIMEOUT_MS;
+function cliente(opciones: OpcionesMensajes): Anthropic {
+  return new Anthropic({
+    apiKey: opciones.apiKey,
+    timeout: opciones.timeoutMs ?? TIMEOUT_MS,
+    maxRetries: 0,
+    ...(opciones.fetchImpl
+      ? { fetch: opciones.fetchImpl as unknown as typeof fetch }
+      : {}),
+  });
+}
 
-  let respuesta: Response;
-  try {
-    respuesta = await hacerFetch(URL_MENSAJES, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": opciones.apiKey,
-        "anthropic-version": VERSION_API_ANTHROPIC,
-      },
-      body: JSON.stringify(pedido),
-      // AbortSignal.timeout aborta y rechaza con TimeoutError; no hay
-      // clearTimeout que olvidar ni handle que quede vivo.
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (error) {
-    const causa = error instanceof Error ? error.name : "desconocido";
-    throw new ErrorAnthropic(`fetch falló (${causa})`);
-  }
-
-  if (!respuesta.ok) {
-    // El cuerpo del error trae el motivo de Anthropic; se lee best-effort y
-    // se recorta, que un 500 puede venir con una página entera de HTML.
-    let cuerpo = "";
-    try {
-      cuerpo = (await respuesta.text()).slice(0, 500);
-    } catch {
-      cuerpo = "(sin cuerpo)";
-    }
-    throw new ErrorAnthropic(
-      `HTTP ${respuesta.status}: ${cuerpo}`,
-      respuesta.status,
-    );
-  }
-
-  let cuerpo: CuerpoRespuesta;
-  try {
-    cuerpo = (await respuesta.json()) as CuerpoRespuesta;
-  } catch {
-    throw new ErrorAnthropic("la respuesta no es JSON", respuesta.status);
-  }
-
-  const texto = (cuerpo.content ?? [])
-    .filter((bloque) => bloque.type === "text" && typeof bloque.text === "string")
-    .map((bloque) => bloque.text as string)
+function resultadoDe(mensaje: Message): ResultadoMensajes {
+  const usage = mensaje.usage;
+  const texto = mensaje.content
+    .filter((bloque) => bloque.type === "text")
+    .map((bloque) => bloque.text)
     .join("")
     .trim();
 
   if (texto === "") {
     throw new ErrorAnthropic(
-      `respuesta sin texto (stop_reason=${cuerpo.stop_reason ?? "?"})`,
-      respuesta.status,
+      `respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`,
     );
   }
 
   return {
     texto,
-    tokensEntrada: cuerpo.usage?.input_tokens ?? 0,
-    tokensSalida: cuerpo.usage?.output_tokens ?? 0,
-    cacheLeido: cuerpo.usage?.cache_read_input_tokens ?? 0,
-    cacheEscrito: cuerpo.usage?.cache_creation_input_tokens ?? 0,
-    motivoDeCorte: cuerpo.stop_reason ?? null,
+    tokensEntrada: usage?.input_tokens ?? 0,
+    tokensSalida: usage?.output_tokens ?? 0,
+    cacheLeido: usage?.cache_read_input_tokens ?? 0,
+    cacheEscrito: usage?.cache_creation_input_tokens ?? 0,
+    motivoDeCorte: mensaje.stop_reason ?? null,
   };
+}
+
+function envolverError(error: unknown): ErrorAnthropic {
+  if (error instanceof ErrorAnthropic) return error;
+  const status = error instanceof Anthropic.APIError ? error.status : undefined;
+  const detalle =
+    error instanceof Error ? error.message.slice(0, 500) : "desconocido";
+  return new ErrorAnthropic(detalle, status);
+}
+
+/** Camino no incremental conservado para pruebas y consumidores internos. */
+export async function crearMensaje(
+  pedido: PedidoMensajes,
+  opciones: OpcionesMensajes,
+): Promise<ResultadoMensajes> {
+  try {
+    const mensaje = await cliente(opciones).messages.create({
+      ...pedido,
+      system: pedido.system,
+      messages: pedido.messages as MessageParam[],
+    });
+    return resultadoDe(mensaje);
+  } catch (error) {
+    throw envolverError(error);
+  }
+}
+
+/**
+ * Abre el SSE y espera el handshake. Los 4xx/5xx iniciales todavía pueden
+ * convertirse en un status HTTP propio; luego fragmentos entrega text_delta.
+ */
+export async function crearMensajeStreaming(
+  pedido: PedidoMensajes,
+  opciones: OpcionesMensajes,
+): Promise<FlujoMensajes> {
+  // El timeout del SDK termina al recibir las cabeceras. Este plazo cubre
+  // también el body SSE, hasta el último evento o la cancelación.
+  const controller = new AbortController();
+  const timeoutMs = opciones.timeoutMs ?? TIMEOUT_MS;
+  let vencido = false;
+  const temporizador = setTimeout(() => {
+    vencido = true;
+    controller.abort();
+  }, timeoutMs);
+  const limpiar = () => clearTimeout(temporizador);
+  const errorDelFlujo = (error: unknown) =>
+    vencido
+      ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`)
+      : envolverError(error);
+
+  try {
+    const stream = cliente(opciones).messages.stream({
+      ...pedido,
+      system: pedido.system,
+      messages: pedido.messages as MessageParam[],
+    }, { signal: controller.signal });
+    stream.once("end", limpiar);
+    // Registrar el iterador antes de que lleguen eventos, incluso si quien
+    // llama demora en consumir los fragmentos o el timeout vence antes.
+    const eventos = stream[Symbol.asyncIterator]();
+    await stream.withResponse();
+
+    const resultado = stream.finalMessage().then(resultadoDe).catch((error) => {
+      throw errorDelFlujo(error);
+    });
+    // El iterador y el resultado reflejan el mismo error. Si quien consume se
+    // corta al fallar el iterador, esta guarda evita una rejection huérfana.
+    void resultado.catch(() => {});
+
+    async function* leer(): AsyncGenerator<string> {
+      try {
+        for await (const evento of { [Symbol.asyncIterator]: () => eventos }) {
+          if (
+            evento.type === "content_block_delta" &&
+            evento.delta.type === "text_delta"
+          ) {
+            yield evento.delta.text;
+          }
+        }
+        await resultado;
+      } catch (error) {
+        throw errorDelFlujo(error);
+      } finally {
+        limpiar();
+      }
+    }
+
+    return {
+      fragmentos: leer(),
+      resultado,
+      cancelar: () => {
+        limpiar();
+        controller.abort();
+      },
+    };
+  } catch (error) {
+    limpiar();
+    throw errorDelFlujo(error);
+  }
 }

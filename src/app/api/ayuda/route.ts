@@ -29,9 +29,9 @@ import {
   ENTIDAD_AYUDA,
   LARGO_MAX_PREGUNTA,
   MAX_TURNOS_HISTORIAL,
-  responderAyuda,
+  responderAyudaStreaming,
 } from "../_lib/casos-uso/responder-ayuda";
-import { errorResponse, ok, validationError } from "../_lib/responses";
+import { errorResponse, validationError } from "../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,30 +61,55 @@ export async function POST(request: Request) {
     // Antes de gastar una llamada al proveedor.
     await assertBajoElTope(db, { organizationId, userId });
 
-    const resultado = await responderAyuda({
+    const flujo = await responderAyudaStreaming({
       pregunta: parsed.data.pregunta,
       historial: parsed.data.historial,
     });
-
-    await registrarAuditoria({
-      organizationId,
-      actorTipo: "usuario",
-      actorId: userId,
-      accion: ACCION_AYUDA,
-      entidad: ENTIDAD_AYUDA,
-      entidadId: userId,
-      detalle: {
-        largoPregunta: parsed.data.pregunta.length,
-        largoRespuesta: resultado.respuesta.length,
-        turnosHistorial: parsed.data.historial?.length ?? 0,
-        modelo: MODELO_AYUDA,
-        tokensEntrada: resultado.tokensEntrada,
-        tokensSalida: resultado.tokensSalida,
-        cacheLeido: resultado.cacheLeido,
+    const codificador = new TextEncoder();
+    const cuerpo = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const fragmento of flujo.fragmentos) {
+            controller.enqueue(codificador.encode(fragmento));
+          }
+          const resultado = await flujo.resultado;
+          // La pregunta sólo consume cuota cuando Anthropic cerró un mensaje
+          // completo. El stream HTTP tampoco cierra antes de dejar este rastro.
+          await registrarAuditoria({
+            organizationId,
+            actorTipo: "usuario",
+            actorId: userId,
+            accion: ACCION_AYUDA,
+            entidad: ENTIDAD_AYUDA,
+            entidadId: userId,
+            detalle: {
+              largoPregunta: parsed.data.pregunta.length,
+              largoRespuesta: resultado.texto.length,
+              turnosHistorial: parsed.data.historial?.length ?? 0,
+              modelo: MODELO_AYUDA,
+              tokensEntrada: resultado.tokensEntrada,
+              tokensSalida: resultado.tokensSalida,
+              cacheLeido: resultado.cacheLeido,
+            },
+          });
+          controller.close();
+        } catch (error) {
+          console.error("[ayuda] stream interrumpido", error);
+          controller.error(error);
+        }
+      },
+      cancel() {
+        flujo.cancelar();
       },
     });
 
-    return ok({ respuesta: resultado.respuesta });
+    return new Response(cuerpo, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   } catch (error) {
     return errorResponse(error);
   }

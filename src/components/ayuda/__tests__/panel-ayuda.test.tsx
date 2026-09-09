@@ -7,12 +7,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { z } from "zod";
 
+const navegacion = vi.hoisted(() => ({ pathname: "/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => navegacion.pathname,
+}));
+
 import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
 import {
   ALGO_FALLO,
   AYUDA_ENVIAR,
   AYUDA_ESPERANDO,
   AYUDA_PLACEHOLDER,
+  AYUDA_PREGUNTAS_INICIALES,
+  AYUDA_STREAM_CORTADO,
   AYUDA_SIN_CONEXION,
   AYUDA_TOPE_DIARIO,
 } from "@/lib/glosario";
@@ -36,21 +43,19 @@ const preguntaSchema = z.object({
 
 /** Una respuesta 2xx de /api/ayuda, en la forma que devuelve `ok()`. */
 function respuestaOk(respuesta: string) {
-  return {
-    ok: true,
+  return new Response(respuesta, {
     status: 200,
-    json: async () => ({ data: { respuesta } }),
-  } as unknown as Response;
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
 }
 
 /** Una respuesta de error, con el texto que la ruta manda y el panel NO
  *  muestra. */
 function respuestaError(status: number) {
-  return {
-    ok: false,
+  return new Response(JSON.stringify({ error: "detalle técnico del servidor" }), {
     status,
-    json: async () => ({ error: "detalle técnico del servidor" }),
-  } as unknown as Response;
+    headers: { "content-type": "application/json" },
+  });
 }
 
 function montar() {
@@ -76,7 +81,80 @@ function cuerposEnviados(fetchMock: ReturnType<typeof vi.fn>): unknown[] {
 }
 
 afterEach(() => {
+  navegacion.pathname = "/";
   vi.unstubAllGlobals();
+});
+
+describe("PanelAyuda — primera impresión", () => {
+  it("ofrece tres preguntas del corpus y tocar una la envía", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respuestaOk("Listo."));
+    vi.stubGlobal("fetch", fetchMock);
+    const panel = montar();
+
+    for (const pregunta of AYUDA_PREGUNTAS_INICIALES) {
+      expect(panel.getByRole("button", { name: pregunta })).toBeTruthy();
+    }
+
+    fireEvent.click(
+      panel.getByRole("button", { name: AYUDA_PREGUNTAS_INICIALES[0] }),
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(cuerposEnviados(fetchMock)[0]).toEqual({
+      pregunta: AYUDA_PREGUNTAS_INICIALES[0],
+    });
+  });
+
+  it("no dibuja ninguna pose en una ruta clínica", () => {
+    navegacion.pathname = "/sesiones/una-sesion";
+    montar();
+    expect(document.querySelector("[data-pose]")).toBeNull();
+  });
+});
+
+describe("PanelAyuda — streaming", () => {
+  it("muestra el texto acumulado a medida que llegan fragmentos", async () => {
+    let controlador!: ReadableStreamDefaultController<Uint8Array>;
+    const cuerpo = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controlador = controller;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(cuerpo, { status: 200 })),
+    );
+    const panel = montar();
+    preguntar(panel, "¿dónde está?");
+    const encoder = new TextEncoder();
+
+    await act(async () => controlador.enqueue(encoder.encode("Está en ")));
+    expect(await panel.findByText("Está en")).toBeTruthy();
+    await act(async () => controlador.enqueue(encoder.encode("Tu consultorio.")));
+    expect(await panel.findByText("Está en Tu consultorio.")).toBeTruthy();
+    await act(async () => controlador.close());
+  });
+
+  it("conserva lo recibido y avisa si el stream se corta", async () => {
+    let controlador!: ReadableStreamDefaultController<Uint8Array>;
+    const cuerpo = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controlador = controller;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(cuerpo, { status: 200 })),
+    );
+    const panel = montar();
+    preguntar(panel, "¿dónde está?");
+    await act(async () =>
+      controlador.enqueue(new TextEncoder().encode("Lo que alcancé a ver")),
+    );
+    await act(async () => controlador.error(new Error("corte")));
+
+    expect(panel.getByText("Lo que alcancé a ver")).toBeTruthy();
+    expect(await panel.findByText(AYUDA_STREAM_CORTADO)).toBeTruthy();
+  });
 });
 
 describe("PanelAyuda — el historial", () => {

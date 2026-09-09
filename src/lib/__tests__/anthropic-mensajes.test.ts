@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   crearMensaje,
+  crearMensajeStreaming,
   ErrorAnthropic,
   MODELO_AYUDA,
   systemCacheado,
@@ -79,6 +80,87 @@ describe("systemCacheado", () => {
   });
 });
 
+describe("crearMensajeStreaming", () => {
+  // Como fetch real: ya entregó cabeceras, pero abortar la señal interrumpe
+  // también la lectura pendiente del body. El body nunca emite datos.
+  const fetchConBodyMudo: FetchLike = async (_url, opciones) =>
+    new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        const abortar = () => controller.error(new DOMException("aborted", "AbortError"));
+        if (opciones.signal?.aborted) abortar();
+        else opciones.signal?.addEventListener("abort", abortar, { once: true });
+      },
+    }), { headers: { "content-type": "text/event-stream" } });
+
+  it("el timeout interrumpe un body mudo después de las cabeceras", async () => {
+    const inicio = performance.now();
+    const flujo = await crearMensajeStreaming(PEDIDO, {
+      apiKey: API_KEY, fetchImpl: fetchConBodyMudo, timeoutMs: 10,
+    });
+    const consumir = async () => {
+      for await (const fragmento of flujo.fragmentos) {
+        throw new Error(`no debía emitir: ${fragmento}`);
+      }
+    };
+    const error = await atrapar<ErrorAnthropic>(consumir());
+    expect(error).toBeInstanceOf(ErrorAnthropic);
+    expect(error.message).toMatch(/timeout/i);
+    await expect(flujo.resultado).rejects.toMatchObject({ name: "ErrorAnthropic", message: expect.stringMatching(/timeout/i) });
+    expect(performance.now() - inicio).toBeLessThan(1000);
+  }, 1000);
+
+  it("rechaza resultado aunque todavía no se hayan consumido los fragmentos", async () => {
+    const flujo = await crearMensajeStreaming(PEDIDO, {
+      apiKey: API_KEY, fetchImpl: fetchConBodyMudo, timeoutMs: 10,
+    });
+    await expect(flujo.resultado).rejects.toThrow(/timeout/i);
+    await expect(flujo.fragmentos[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(ErrorAnthropic);
+  }, 1000);
+
+  it("cancelar interrumpe el body sin confundir la cancelación con un timeout", async () => {
+    const flujo = await crearMensajeStreaming(PEDIDO, {
+      apiKey: API_KEY, fetchImpl: fetchConBodyMudo,
+    });
+    flujo.cancelar();
+    const error = await atrapar<ErrorAnthropic>(flujo.resultado);
+    expect(error).toBeInstanceOf(ErrorAnthropic);
+    expect(error.message).not.toMatch(/timeout/i);
+    await expect(flujo.fragmentos[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(ErrorAnthropic);
+  }, 1000);
+
+  it("entrega los text_delta y resuelve las métricas al cerrar", async () => {
+    const eventos = [
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude-haiku-4-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":12,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":20000}}}\n\n',
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"","citations":null}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hola "}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Mariana"}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":8}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ].join("");
+    const fetchImpl: FetchLike = async () =>
+      new Response(eventos, {
+        headers: { "content-type": "text/event-stream" },
+      });
+
+    const flujo = await crearMensajeStreaming(PEDIDO, {
+      apiKey: API_KEY,
+      fetchImpl,
+    });
+    const fragmentos: string[] = [];
+    for await (const fragmento of flujo.fragmentos) fragmentos.push(fragmento);
+
+    expect(fragmentos).toEqual(["Hola ", "Mariana"]);
+    await expect(flujo.resultado).resolves.toMatchObject({
+      texto: "Hola Mariana",
+      tokensEntrada: 12,
+      tokensSalida: 8,
+      cacheLeido: 20_000,
+      motivoDeCorte: "end_turn",
+    });
+  });
+});
+
 describe("crearMensaje — lo que manda", () => {
   it("postea a /v1/messages con la clave y la versión", async () => {
     const { fetchImpl, llamadas } = fetchQueContesta(CUERPO_OK);
@@ -87,21 +169,18 @@ describe("crearMensaje — lo que manda", () => {
     const [url, opciones] = llamadas[0];
     expect(url).toBe(URL_MENSAJES);
     expect(opciones.method).toBe("POST");
-    expect(opciones.headers).toMatchObject({
-      "x-api-key": API_KEY,
-      "anthropic-version": VERSION_API_ANTHROPIC,
-      "content-type": "application/json",
-    });
+    const headers = new Headers(opciones.headers);
+    expect(headers.get("x-api-key")).toBe(API_KEY);
+    expect(headers.get("anthropic-version")).toBe(VERSION_API_ANTHROPIC);
+    expect(headers.get("content-type")).toBe("application/json");
   });
 
   it("no manda la cabecera beta de prompt caching (salió de beta)", async () => {
     const { fetchImpl, llamadas } = fetchQueContesta(CUERPO_OK);
     await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
 
-    const headers = llamadas[0][1].headers as Record<string, string>;
-    expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain(
-      "anthropic-beta",
-    );
+    const headers = new Headers(llamadas[0][1].headers);
+    expect(headers.has("anthropic-beta")).toBe(false);
   });
 
   it("manda el pedido tal cual, con el cache_control adentro", async () => {
