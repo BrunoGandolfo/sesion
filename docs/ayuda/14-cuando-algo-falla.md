@@ -34,8 +34,9 @@ No hay recuperación por mail. Detalle en `01-entrar-y-cuenta.md`.
 
 Pasa cuando entra una llamada o cuando otra app se lleva el micrófono.
 
-**Qué hacer:** **Reanudar** (sigue en el mismo archivo, no se pierde nada) o
-**Terminar la sesión** (guarda lo grabado hasta ahí).
+**Qué hacer:** revisá si podés **Reanudar** o **Terminar la sesión** con lo
+capturado. Durante el corte no se graba. La recuperación completa no está
+garantizada; no cierres ni descartes el audio mientras intentás guardarlo.
 
 ### Se cerró el navegador o se apagó el teléfono
 

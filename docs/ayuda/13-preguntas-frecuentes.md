@@ -26,16 +26,17 @@ No. La transcripción queda guardada, cifrada, junto con la nota. Está dicho en
 autorización que firma la paciente. → `12-camino-del-audio-y-privacidad.md`
 
 **6. ¿Puedo bloquear la pantalla mientras grabo?**
-Sí. La app te lo dice en pantalla: *"Se guarda cifrado en el teléfono. Podés
-bloquear la pantalla."* La grabación sigue. → `07-grabar-una-sesion.md`
+No bloquees la pantalla mientras grabás: mantené Sesión abierta. El teléfono
+puede suspender el micrófono o la página; al volver, revisá el estado.
+→ `07-grabar-una-sesion.md`
 
 **7. Pausé y me olvidé de reanudar. ¿Perdí la sesión?**
-No. El cronómetro se detiene en pausa, pero nada se pierde: **Reanudar** sigue en
-el mismo archivo. → `07-grabar-una-sesion.md`
+Mientras está pausada no se captura audio y el cronómetro se detiene.
+**Reanudar** retoma la captura; lo que no se grabó durante la pausa no se recupera. → `07-grabar-una-sesion.md`
 
 **8. Entró una llamada y se cortó el micrófono.**
-La pantalla pasa a **Cortado** y avisa *"Lo grabado está a salvo."* Podés
-**Reanudar** o **Terminar la sesión** con lo que hay. → `14-cuando-algo-falla.md`
+Revisá el estado y las opciones **Reanudar** o **Terminar la sesión**.
+La recuperación completa no está garantizada; no cierres ni descartes el audio. → `14-cuando-algo-falla.md`
 
 **9. ¿Cuánto tarda la nota?**
 No hay un tiempo fijo. Mientras se escribe ves **"Escribiendo la nota…"**; cuando

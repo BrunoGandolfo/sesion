@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { leerCorpus, olvidarCorpus } from "@/lib/ayuda-corpus";
+import { leerCorpus, olvidarCorpus, systemPromptAyuda } from "@/lib/ayuda-corpus";
 
 // Se prueba el material que recibe Lupita, no una copia de los documentos.
 // Estas restricciones editoriales no certifican la respuesta del modelo.
@@ -41,4 +41,14 @@ it("la ayuda explica el rechazo de solapamientos y permite turnos consecutivos",
   expect(texto).toContain("no se guarda el cambio");
   expect(texto).toContain("justo cuando termina el anterior");
   expect(texto).not.toContain("No avisa de choques");
+});
+
+it("no aconseja bloquear el teléfono ni garantiza recuperar una interrupción", () => {
+  for (const archivo of ["07-grabar-una-sesion.md", "13-preguntas-frecuentes.md"]) {
+    expect(documento(archivo)).toMatch(/No bloquees la pantalla/);
+    expect(documento(archivo)).not.toContain("Podés bloquear la pantalla");
+  }
+  const prompt = systemPromptAyuda();
+  expect(prompt).toContain("La recuperación completa no está garantizada");
+  expect(prompt).not.toContain("La llamada se llevó el micrófono, no la sesión");
 });

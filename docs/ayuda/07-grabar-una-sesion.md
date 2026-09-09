@@ -21,9 +21,11 @@ forma de grabar sin eso. Ver `04-pacientes-y-ficha.md`.
 
 ## Mientras grabás
 
-Un punto rojo que **late** y la palabra **REC**; el cronómetro grande; un medidor
-que se mueve con tu voz (si pasan 5 segundos sin que entre audio, te avisa); y
-abajo: *"Se guarda cifrado en el teléfono. Podés bloquear la pantalla."*
+La pantalla muestra el tiempo de grabación y un medidor de sonido.
+Mantené la pantalla encendida y Sesión abierta. Si deja de entrar sonido,
+la app avisa a los 2 minutos y pasa a interrumpida a los 5 minutos; si la
+pantalla está oculta, el umbral de interrupción es de 1 minuto. Eso no
+garantiza que el teléfono siga capturando cuando cambiás de app.
 
 ### Pausar
 
@@ -33,15 +35,16 @@ en el mismo archivo.
 
 ### Bloquear la pantalla
 
-Podés. La app pide mantener la pantalla encendida, pero si el sistema la apaga o
-cambiás de app, **la grabación sigue**.
+**No bloquees la pantalla mientras grabás.** La app intenta mantenerla
+encendida, pero el sistema puede suspender el micrófono o la página. Si pasa,
+volvé a Sesión y revisá su estado antes de seguir.
 
 ### Si se corta el micrófono
 
-Si llega una llamada o otra app se lleva el micrófono, la pantalla pasa a
-**Cortado**: *"Se cortó el micrófono. Lo grabado está a salvo."* Tenés dos
-caminos: **Reanudar** (sigue en el mismo archivo) o **Terminar la sesión**
-(guarda lo que hay hasta ahí).
+Una llamada u otra app puede interrumpir el micrófono. La pantalla ofrece
+**Reanudar** o **Terminar la sesión** con lo que haya capturado. Durante la
+interrupción no se graba. La recuperación completa no está garantizada: no
+cierres la pantalla ni descartes el audio mientras intentás guardarlo.
 
 ### Descartar
 
