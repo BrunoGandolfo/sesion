@@ -62,4 +62,17 @@ describe("Lupita", () => {
       dibujar("celebra", TAMANOS_LUPITA.vacio).querySelector("[data-brote]"),
     ).not.toBeNull();
   });
+
+  it("conserva la pose cuando recibe cada movimiento con significado", () => {
+    const movimientos = ["entra", "piensa", "celebra"] as const;
+    for (const movimiento of movimientos) {
+      const { container } = render(
+        <Lupita
+          pose={movimiento === "celebra" ? "celebra" : "senala"}
+          movimiento={movimiento}
+        />,
+      );
+      expect(container.querySelector("[data-pose]")).not.toBeNull();
+    }
+  });
 });

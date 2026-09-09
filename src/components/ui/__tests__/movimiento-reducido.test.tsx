@@ -75,8 +75,12 @@ describe("Sheet con movimiento reducido", () => {
       </Sheet>,
     );
 
-    const overlay = container.querySelector<HTMLElement>('[aria-hidden="true"]');
+    const overlay = document.body.querySelector<HTMLElement>(
+      '[aria-hidden="true"]',
+    );
     expect(overlay).not.toBeNull();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
     // Sin opacidad de arranque: se ve entero desde el primer cuadro.
     expect(overlay?.style.opacity ?? "").toBe("");
   });

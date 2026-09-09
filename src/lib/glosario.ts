@@ -45,6 +45,17 @@ export const TU_CONSULTORIO = "Tu consultorio";
 export const TE_DEBEN = "Te deben";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Menú y cabecera
+// ────────────────────────────────────────────────────────────────────────────
+
+export const VER_NOTA = "Ver nota";
+export const NOTA_PROCESANDO = "Procesando";
+
+export const INICIO_CARGAR_TARIFA = "Cargá tu tarifa";
+export const INICIO_CARGAR_PACIENTE = "Cargá tu primera paciente";
+export const INICIO_AGENDAR_SESION = "Agendá la primera sesión";
+
+// ────────────────────────────────────────────────────────────────────────────
 // Pestañas de la ficha del paciente
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -91,9 +102,20 @@ export const APROBADA = NOTA_GUARDADA;
 // que va debajo del rótulo.
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * La ayuda de la S no dice el género de nadie. Decía "Lo que la paciente
+ * relató", y el modelo de datos NO tiene género: `Paciente` es nombre,
+ * apellido, teléfono, email, tarifa (prisma/schema.prisma). O sea que ese
+ * femenino no salía del dato, estaba escrito fijo — y la app lo mostraba
+ * igual sobre un paciente varón.
+ *
+ * No se inventa un campo para arreglarlo: se dice de una forma que sirve
+ * para cualquier paciente y no pierde nada clínico. Si algún día el modelo
+ * trae género, esta línea puede volver a declinarse desde el dato.
+ */
 export const SOAP_S = {
   titulo: "Subjetivo (S)",
-  ayuda: "Lo que la paciente relató",
+  ayuda: "Lo relatado en sesión",
 } as const;
 
 export const SOAP_O = {
@@ -645,7 +667,18 @@ export const AYUDA_PANEL = "Ayuda de la app";
  *  misma respiración, lo que Lupita no ve: es la promesa de privacidad de la
  *  app, y se hace antes de que ella escriba nada. */
 export const AYUDA_BIENVENIDA =
-  "Preguntame cómo se hace algo en la app y te digo dónde está. No veo tus pacientes ni tus montos: solo lo que está escrito en la ayuda.";
+  "Soy la que sabe dónde quedó cada cosa. Vos preguntá, que yo busco.";
+
+export const AYUDA_PRIVACIDAD =
+  "No veo pacientes ni montos. Solo conozco la ayuda de Sesión.";
+
+export const AYUDA_PREGUNTAS_INICIALES = [
+  "¿Cómo cambio la tarifa?",
+  "¿Cómo configuro el recordatorio?",
+  "¿Qué pasa si se corta la grabación?",
+] as const;
+
+export const AYUDA_STREAM_CORTADO = "Se cortó, ¿lo repito?";
 
 /** Aviso de que el hilo no se guarda. Va abajo del campo, chico: es ayuda,
  *  no un chat, y el historial vive en memoria hasta que se cierra el panel. */
@@ -899,3 +932,191 @@ export const COBRADO = "Cobrado. Ese ya está.";
 export const NO_SE_PUDO_COBRAR = "No se pudo cobrar. Probá de nuevo.";
 export const TURNO_AGENDADO = "Turno agendado";
 export const NO_SE_PUDO_AGENDAR = "No se pudo agendar. Probá de nuevo.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// "Para vos" — la auto-supervisión, ahora como vista hermana de la nota
+//
+// Dejó de ser un plegable al pie de la nota (seis pantallas de scroll abajo,
+// cerrado) y pasó a tener URL propia: /sesiones/[id]/para-vos. Se llega por
+// el selector de arriba de la nota, por el aviso de después de aprobar y por
+// la fila de la sesión en la ficha.
+//
+// Es material sobre su práctica, no un premio: acá no hay personaje, no hay
+// celebración y no hay entrada animada (docs/diseno/04-personaje.md). Con
+// señal de riesgo en la sesión, la vista es exactamente la misma.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Rótulo de la nota en el selector de dos opciones. Es NOTA_CLINICA sin el
+ *  "(SOAP)": el paréntesis no entra en un control de dos botones a 390 px, y
+ *  el formato ya está dicho en el título de la nota, dos líneas más abajo. */
+export const VISTA_NOTA = "Nota clínica";
+
+/** aria-label del selector: dice qué elige, no cómo se llama el control. */
+export const SELECTOR_VISTA_SESION = "Qué mirás de esta sesión";
+
+/** Línea bajo el título de la vista. Dice de quién habla lo que sigue, que
+ *  es la única confusión posible con una pantalla que cuelga de una nota. */
+export const PARA_VOS_SUBTITULO = "Sobre tu trabajo en esta sesión.";
+
+/**
+ * El análisis llegó a medias. Antes, cuando al payload le faltaba una parte,
+ * el guardián de la nota lo escondía ENTERO y en silencio: ella no se
+ * enteraba de que había feedback. Ahora se muestra lo que llegó y este aviso
+ * dice que hay un hueco. Chico y sin alarma: no es un error de ella.
+ */
+export const PARA_VOS_INCOMPLETO = "Parte del análisis no llegó.";
+
+/** No hay ningún análisis para esta sesión. Se dice, en vez de dejar una
+ *  pantalla vacía: puede ser una sesión vieja o una que falló. */
+export const PARA_VOS_SIN_ANALISIS = "Esta sesión no tiene análisis.";
+
+/** Enlace a la vista, desde el aviso de después de aprobar y desde la fila
+ *  de la sesión en la ficha. */
+export const LEER_PARA_VOS = "Leer Para vos";
+
+/**
+ * Aviso que queda en la nota después de aprobar. Antes la pantalla se iba
+ * sola a los 1,1 s — justo cuando ella había terminado y era el momento de
+ * leer "Para vos". Ahora se queda, y el aviso ofrece el camino.
+ *
+ * Es una confirmación, no una celebración: la nota clínica no lleva
+ * personaje (docs/diseno/04-personaje.md).
+ */
+export const NOTA_APROBADA_AVISO = "Nota aprobada. Queda guardada así.";
+
+/**
+ * Salir de la nota en revisión con correcciones sin aprobar.
+ *
+ * El texto que ella edita vive en el estado de la pantalla y sólo se escribe
+ * al aprobar (sesion-detail-view.tsx). Cualquier cosa que desmonte esa
+ * pantalla —el selector de vista, el botón "Volver"— se lleva las
+ * correcciones sin que nada lo diga. Este es el aviso que lo tapa, y es el
+ * mismo en las dos puertas.
+ *
+ * El mensaje no nombra el destino a propósito: sirve igual yendo a "Para
+ * vos" que yendo para atrás, y una sola frase se aprende una vez.
+ *
+ * Las dos salidas se nombran por lo que hacen: ni "Sí/No" ni
+ * "Aceptar/Cancelar".
+ */
+export const CAMBIOS_SIN_APROBAR_TITULO =
+  "Tenés cambios sin aprobar en la nota.";
+export const CAMBIOS_SIN_APROBAR_MENSAJE =
+  "Si salís de la nota ahora, se pierden.";
+export const QUEDARME = "Quedarme";
+export const IR_IGUAL = "Ir igual";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Carga y navegación
+//
+// Lo que se dice mientras una pantalla todavía no es la pantalla.
+//
+// En pantalla no se dice nada: lo que se ve es el esqueleto
+// (src/components/esqueletos/), que dibuja los bloques que van a llegar en
+// gris crema. Estos textos son para el lector de pantalla —el `sr-only` de
+// cada esqueleto— y por eso nombran la pantalla concreta: quien no ve el
+// dibujo necesita saber QUÉ está por llegar, no que "algo" está cargando.
+//
+// CARGANDO ("Cargando…", en la sección de Cobros) sigue existiendo para los
+// bloques sueltos que todavía no tienen esqueleto propio.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Fallback de cualquier pantalla del dashboard sin esqueleto propio. */
+export const CARGANDO_PANTALLA = "Cargando la pantalla…";
+
+/** Hoy. La misma frase que decía el estado de carga viejo, en minúscula,
+ *  porque es media pantalla de espera y no un proceso. */
+export const CARGANDO_HOY = "Cargando tu día…";
+
+export const CARGANDO_PACIENTES = "Cargando tus pacientes…";
+
+export const CARGANDO_COBROS = "Cargando tus cobros…";
+
+/** La nota ya tenía su frase —ABRIENDO_NOTA— y se usa esa: el esqueleto no
+ *  es un estado nuevo, es el mismo momento mejor dibujado. */
+
+// ────────────────────────────────────────────────────────────────────────────
+// Entrada
+// La pantalla de /login, que hasta hoy era un formulario sin nombre ni
+// presencia. Es la única pantalla que ve alguien que todavía no es usuaria,
+// así que es la única que tiene que decir qué es esto.
+//
+// Es institucional: acá NO entra Lupita (docs/diseno/04-personaje.md fija
+// dónde aparece —ayuda, estados vacíos, onboarding, confirmaciones alegres—
+// y la entrada no es ninguno de esos).
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * El nombre del producto y su eslogan, en dos constantes y no en dos
+ * literales repartidos por el árbol.
+ *
+ * Por qué así: el dueño está decidiendo si el nombre es "Sesión" y el
+ * eslogan "Consultorio inteligente" o exactamente al revés. Con las dos
+ * constantes acá, darlo vuelta es cambiar estas dos líneas; con el texto
+ * escrito a mano habría que ir a la pantalla de entrada, al manifiesto de la
+ * PWA y a cualquier lugar que aparezca después.
+ *
+ * Los dos lugares que hoy las consumen son `src/app/(auth)/login/page.tsx` y
+ * `src/app/manifest.ts`.
+ */
+export const NOMBRE_PRODUCTO = "Sesión";
+export const ESLOGAN = "Consultorio inteligente";
+
+/**
+ * Qué hace, en una frase. No es un párrafo a propósito: quien llega acá
+ * está por escribir su contraseña, no por leer una landing.
+ *
+ * Dice el beneficio y no la tecnología —no aparece "IA" ni "transcripción"—
+ * porque lo que se promete es el rato que le queda libre, que es lo que ella
+ * mide.
+ */
+export const ENTRADA_QUE_HACE =
+  "El trabajo de después de la sesión, hecho antes de que entre la próxima.";
+
+/**
+ * Las tres cosas que hace, una línea cada una y en este orden: la nota
+ * primero, porque es el motivo por el que alguien instalaría esto; después
+ * lo administrativo; al final el análisis, que es lo que ninguna otra
+ * promete.
+ *
+ * La primera nombra a la profesional como quien decide ("la aprobás vos"):
+ * es la misma regla que sostiene toda la app —el borrador se llama borrador
+ * hasta que ella lo firma, ver [[BORRADOR]] y docs/diseno/02-referencias.md—
+ * y en la pantalla de entrada es, además, la respuesta a la primera objeción
+ * que tiene cualquier psicóloga frente a una nota escrita por una máquina.
+ */
+export const ENTRADA_AFIRMACIONES = [
+  "La nota clínica se escribe sola y la aprobás vos.",
+  "Los cobros y los recordatorios, al día.",
+  "Un análisis de tu propia práctica, hecho para vos.",
+] as const;
+
+/**
+ * La confidencialidad, en una línea y con dos hechos verificables, no con un
+ * sello de confianza. Las dos afirmaciones son literalmente lo que hace el
+ * código y lo que ya le decimos a la paciente en el consentimiento
+ * (`src/lib/consentimiento.ts:55-58`): se cifra en el dispositivo antes de
+ * salir (`src/lib/grabacion-cifrado.ts`) y se borra al aprobarse la nota.
+ *
+ * No decimos "seguro", "encriptación de grado militar" ni ninguna sigla de
+ * cumplimiento: son el vocabulario de las apps del norte y acá no
+ * significarían nada.
+ */
+export const ENTRADA_CONFIDENCIALIDAD =
+  "El audio se cifra antes de salir de tu teléfono y se borra cuando aprobás la nota.";
+
+/** Los rótulos del formulario. Estaban escritos a mano en la página. */
+export const ENTRADA_EMAIL = "Email";
+export const ENTRADA_CONTRASENA = "Contraseña";
+export const ENTRAR = "Entrar";
+export const ENTRANDO = "Entrando…";
+
+/**
+ * Un solo mensaje para los tres casos —contraseña equivocada, email que no
+ * existe y acceso bloqueado por intentos—. Decir cuál de los tres fue es
+ * decirle a quien prueba si ese email está dado de alta. La segunda línea
+ * explica el bloqueo sin afirmar que sea lo que pasó ahora.
+ */
+export const ENTRADA_ERROR = "Email o contraseña incorrectos";
+export const ENTRADA_ERROR_DETALLE =
+  "Después de varios intentos seguidos el acceso queda bloqueado unos minutos.";

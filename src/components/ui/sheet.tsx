@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import { SUAVE } from "./movimiento";
@@ -66,8 +67,17 @@ export function Sheet({
   variante = "centrado",
   className = "",
 }: SheetProps) {
+  const [montado, setMontado] = React.useState(false);
   const mobileRef = React.useRef<HTMLDivElement>(null);
   const desktopRef = React.useRef<HTMLDivElement>(null);
+
+  // El diálogo sale del stacking context de quien lo abre y vive junto a
+  // los demás overlays, directamente en body. El primer render del cliente
+  // replica el SSR (sin portal); recién después de montar existe document.
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- guardia de hidratación requerida por createPortal(document.body)
+    setMontado(true);
+  }, []);
 
   // Cuál de los dos paneles está a la vista en este viewport.
   const panelActivo = React.useCallback((): HTMLDivElement | null => {
@@ -79,13 +89,13 @@ export function Sheet({
   }, []);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !montado) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, montado, onClose]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -101,7 +111,7 @@ export function Sheet({
   // página de atrás mientras el diálogo está abierto, y al cerrarlo pierde
   // el lugar donde estaba.
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !montado) return;
     const previo =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -116,7 +126,7 @@ export function Sheet({
       // foco vuelve igual, en el mismo tick en que se pidió cerrar.
       previo?.focus();
     };
-  }, [open, panelActivo]);
+  }, [open, montado, panelActivo]);
 
   // Trampa de foco: Tab y Shift+Tab circulan dentro del panel abierto.
   const atraparTab = React.useCallback(
@@ -204,7 +214,9 @@ export function Sheet({
         transition: { duration: lateral ? 0.28 : 0.2, ease: SUAVE },
       };
 
-  return (
+  if (!montado) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -261,6 +273,7 @@ export function Sheet({
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
