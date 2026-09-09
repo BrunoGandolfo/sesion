@@ -34,3 +34,11 @@ it.each(["05-cobros.md", "13-preguntas-frecuentes.md"])("%s permite corregir un 
   expect(texto).toMatch(/no vuelve a Agendado/i);
   expect(texto).not.toMatch(/no hay un botón para deshacer|No hay botón para deshacer/);
 });
+
+it("la ayuda explica el rechazo de solapamientos y permite turnos consecutivos", () => {
+  const texto = documento("03-agenda-y-turnos.md");
+  expect(texto).toContain("No permite superponer turnos");
+  expect(texto).toContain("no se guarda el cambio");
+  expect(texto).toContain("justo cuando termina el anterior");
+  expect(texto).not.toContain("No avisa de choques");
+});
