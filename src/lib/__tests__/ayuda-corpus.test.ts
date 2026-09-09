@@ -114,13 +114,20 @@ describe("systemPromptAyuda", () => {
     expect(LIMITES_ASISTENTE).toHaveLength(5);
   });
 
-  it("los límites van ANTES del corpus", () => {
+  it("los límites de alcance y seguridad van ANTES del corpus", () => {
     const prompt = systemPromptAyuda();
     const ultimoLimite = prompt.indexOf(
       LIMITES_ASISTENTE[LIMITES_ASISTENTE.length - 1],
     );
     expect(ultimoLimite).toBeGreaterThan(-1);
     expect(ultimoLimite).toBeLessThan(prompt.indexOf("===== CORPUS"));
+  });
+
+  it("la regla de voz cierra el prompt después del corpus y los ejemplos", () => {
+    const prompt = systemPromptAyuda();
+    expect(prompt.endsWith(LIMITES_ASISTENTE[2])).toBe(true);
+    expect(prompt.lastIndexOf(LIMITES_ASISTENTE[2])).toBeGreaterThan(prompt.indexOf("===== FIN DEL CORPUS ====="));
+    expect(LIMITES_ASISTENTE[2]).toContain("Empezá cada respuesta con una frase corta y humana");
   });
 
   it("dice que no ve pacientes, turnos ni montos", () => {

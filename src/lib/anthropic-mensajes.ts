@@ -9,7 +9,7 @@ import type {
   TextBlockParam,
 } from "@anthropic-ai/sdk/resources/messages";
 
-export const MODELO_AYUDA = "claude-haiku-4-5";
+export const MODELO_AYUDA = "claude-sonnet-5";
 export const TIMEOUT_MS = 30_000;
 export const URL_MENSAJES = "https://api.anthropic.com/v1/messages";
 export const VERSION_API_ANTHROPIC = "2023-06-01";

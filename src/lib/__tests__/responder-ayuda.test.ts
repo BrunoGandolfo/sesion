@@ -235,7 +235,7 @@ describe("responderAyuda — el pedido que arma", () => {
     });
 
     expect(pedidos[0].model).toBe(MODELO_AYUDA);
-    expect(MODELO_AYUDA).toBe("claude-haiku-4-5");
+    expect(MODELO_AYUDA).toBe("claude-sonnet-5");
     expect(pedidos[0].max_tokens).toBe(MAX_TOKENS_RESPUESTA);
   });
 

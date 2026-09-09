@@ -19,6 +19,7 @@
 
 import { z } from "zod";
 import { MODELO_AYUDA } from "@/lib/anthropic-mensajes";
+import { limpiarMarkdown, type EstadoMarkdown } from "@/lib/ayuda-texto";
 import { db } from "@/lib/db";
 
 import { registrarAuditoria } from "../_lib/auditoria";
@@ -69,10 +70,16 @@ export async function POST(request: Request) {
     const cuerpo = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
+          let estado: EstadoMarkdown = { pendiente: "", linea: "inicio" };
           for await (const fragmento of flujo.fragmentos) {
-            controller.enqueue(codificador.encode(fragmento));
+            const limpio = limpiarMarkdown(fragmento, estado);
+            estado = limpio.estado;
+            if (limpio.texto) controller.enqueue(codificador.encode(limpio.texto));
           }
+          const cierre = limpiarMarkdown("", estado, true);
+          if (cierre.texto) controller.enqueue(codificador.encode(cierre.texto));
           const resultado = await flujo.resultado;
+          const textoCompleto = limpiarMarkdown(resultado.texto);
           // La pregunta sólo consume cuota cuando Anthropic cerró un mensaje
           // completo. El stream HTTP tampoco cierra antes de dejar este rastro.
           await registrarAuditoria({
@@ -84,7 +91,7 @@ export async function POST(request: Request) {
             entidadId: userId,
             detalle: {
               largoPregunta: parsed.data.pregunta.length,
-              largoRespuesta: resultado.texto.length,
+              largoRespuesta: textoCompleto.length,
               turnosHistorial: parsed.data.historial?.length ?? 0,
               modelo: MODELO_AYUDA,
               tokensEntrada: resultado.tokensEntrada,
@@ -106,7 +113,8 @@ export async function POST(request: Request) {
     return new Response(cuerpo, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
+        "Cache-Control": "no-store, no-transform",
+        "X-Accel-Buffering": "no",
         "X-Content-Type-Options": "nosniff",
       },
     });
