@@ -79,3 +79,11 @@ it("la ayuda lleva a la vista separada de Para vos y no promete salir al aprobar
   expect(nota).not.toContain("pantalla vuelve sola");
   expect(documento("09-para-vos-feedback.md")).toContain("abrir la vista no genera un análisis nuevo");
 });
+
+it("la ayuda avisa que un campo inválido frena el lote de configuración", () => {
+  const texto = documento("11-tu-consultorio.md");
+  expect(texto).toContain("no se guarda ninguno de esos cambios");
+  expect(texto).toContain("**Reintentar**");
+  expect(texto).toContain("antes de salir");
+  expect(texto).not.toMatch(/lo demás se guarda igual|Cada campo se guarda por separado|Todo se guarda solo/);
+});
