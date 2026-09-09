@@ -2,9 +2,32 @@
 
 > **Decisión de producto · 9 de septiembre de 2026.** Queda revocada la
 > indicación “Movimiento: ninguno en la primera versión” de este documento.
-> Lupita saluda al abrir la ayuda, se mueve al ritmo de `Latido` mientras
-> busca y celebra una vez al terminar. Conserva las tres poses, no tiene
-> movimiento de reposo y con `prefers-reduced-motion` queda estática.
+> La revisión con evidencia del celular reemplaza el vaivén de ±3° y el
+> fundido de 240 ms. El encabezado usa `TAMANOS_LUPITA.encabezado = 72 px`.
+> El panel es quien decide la secuencia de `movimiento` en `lupita.tsx`:
+>
+> - **brota**, al abrir: escala 0,4→1 desde abajo y balanceo -12°→0°;
+>   a los 500 ms pasa al reposo. Spring de framer-motion, stiffness 220,
+>   damping 14, con leve sobreimpulso.
+> - **respira**, sólo mientras la ayuda está abierta: escala 1→1,04→1,
+>   rotación -2°→2°→-2°, ciclo de 3,5 s, easeInOut, repetido.
+>   Es el único loop de reposo de la app: nunca en menú ni estados vacíos.
+> - **piensa**, desde la pregunta hasta el primer fragmento: inclinación
+>   -10°→10°→-10°, ciclo de 1,2 s; reemplaza la respiración.
+> - **habla**, por cada fragmento: bob vertical 0→-2→0 px en 150 ms;
+>   reemplaza la búsqueda, sin repetir mientras espera otro fragmento.
+> - **celebra**, al completar: salto 0→-10→0 px y escala 1→1,15→1 en
+>   450 ms con spring (subida y regreso), mientras las hojas se abren a
+>   la pose celebra. Una sola vez; después vuelve a respira.
+> - **quieta**: figuras del hilo y estados vacíos, sin animación.
+>
+> El menú inferior conserva 20 px: un bob 0→-3→0 px en 150 ms al tocar
+> el ítem (también al activarlo con teclado), sin loop. Las duraciones
+> tienen constantes con nombre en `lupita.tsx`.
+>
+> Con `prefers-reduced-motion` no se renderiza ningún `motion.span` de
+> Lupita ni se animan las hojas: entrada fija, pose señala durante la
+> espera y pose celebra al terminar, que permanece fija.
 
 Tres conceptos, una recomendación. Todo dentro de los tokens que ya existen
 en `src/app/globals.css:9-80`: no se agrega un color a la paleta para que
@@ -212,9 +235,10 @@ el trabajo clínico, ninguna felicitación por una racha.
 - **Accesibilidad.** Siempre `aria-hidden="true"`: es decoración de un texto
   que ya dice todo. Si alguna vez el personaje quedara solo, sin texto al
   lado, está mal puesto.
-- **Movimiento.** Ninguno en la primera versión. Si más adelante celebra, se
-  hace con `Aparece` (`movimiento.tsx:84`, 240 ms) y nada más; queda
-  estático con `prefers-reduced-motion` sin escribir una línea extra.
+- **Movimiento y tamaño del encabezado.** Rige la decisión de producto al
+  inicio de este documento: 72 px en ayuda, seis movimientos explícitos
+  y poses fijas con `prefers-reduced-motion`. Revoca la entrada con
+  `Aparece` de 240 ms y la ausencia de movimiento de reposo.
 
 ---
 

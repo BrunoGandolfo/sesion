@@ -5,10 +5,27 @@
 // no en node. Sin ella, `render` explota con "document is not defined".
 // Ver la nota de vitest.config.ts.
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 
-import { Lupita, TAMANOS_LUPITA, type PoseLupita } from "@/components/ui/lupita";
+import { Lupita, LupitaMenu, TAMANOS_LUPITA, type PoseLupita } from "@/components/ui/lupita";
+
+const preferencias = vi.hoisted(() => ({ reducido: false }));
+vi.mock("framer-motion", async (importOriginal) => {
+  const original = await importOriginal<typeof import("framer-motion")>();
+  return {
+    ...original,
+    useReducedMotion: () => preferencias.reducido,
+    motion: {
+      path: original.motion.path,
+      span: ({ children, animate, initial, transition, ...props }: import("react").ComponentProps<"span"> & {
+        animate?: unknown; initial?: unknown; transition?: unknown;
+      }) => <span {...props} data-motion-span="true" data-animate={JSON.stringify(animate)}
+        data-initial={JSON.stringify(initial)} data-transition={JSON.stringify(transition)}>{children}</span>,
+    },
+  };
+});
+beforeEach(() => { preferencias.reducido = false; });
 
 const POSES: PoseLupita[] = ["saluda", "senala", "celebra"];
 
@@ -64,7 +81,7 @@ describe("Lupita", () => {
   });
 
   it("conserva la pose cuando recibe cada movimiento con significado", () => {
-    const movimientos = ["entra", "piensa", "celebra"] as const;
+    const movimientos = ["brota", "respira", "piensa", "habla", "celebra", "quieta"] as const;
     for (const movimiento of movimientos) {
       const { container } = render(
         <Lupita
@@ -75,4 +92,47 @@ describe("Lupita", () => {
       expect(container.querySelector("[data-pose]")).not.toBeNull();
     }
   });
+});
+
+const MOVIMIENTOS = ["brota", "respira", "piensa", "habla", "celebra", "quieta"] as const;
+
+it("cada movimiento tiene un animate distinto en motion.span", () => {
+  const animaciones = MOVIMIENTOS.map((movimiento) => {
+    const { container } = render(<Lupita pose="saluda" movimiento={movimiento} />);
+    const span = container.querySelector("[data-motion-span]");
+    expect(span).not.toBeNull();
+    return span!.getAttribute("data-animate");
+  });
+  expect(new Set(animaciones).size).toBe(MOVIMIENTOS.length);
+});
+
+it.each(MOVIMIENTOS)("con movimiento reducido %s muestra sólo la pose fija", (movimiento) => {
+  preferencias.reducido = true;
+  const { container } = render(<Lupita pose="saluda" movimiento={movimiento} />);
+  expect(container.querySelector("span")).toBeNull();
+  expect(container.querySelector("svg")?.getAttribute("data-pose")).toBe(
+    movimiento === "piensa" ? "senala" : movimiento === "celebra" ? "celebra" : "saluda",
+  );
+});
+
+it("cada fragmento reinicia el bob de habla sin activar un loop", () => {
+  const { container, rerender } = render(<Lupita pose="saluda" movimiento="habla" pulso={1} />);
+  const primero = container.querySelector("[data-motion-span]");
+  expect(JSON.parse(primero!.getAttribute("data-animate")!)).toEqual({ scale: 1, rotate: 0, y: [0, -2, 0] });
+  expect(JSON.parse(primero!.getAttribute("data-transition")!)).toEqual({ duration: 0.15, ease: "easeInOut" });
+  rerender(<Lupita pose="saluda" movimiento="habla" pulso={2} />);
+  expect(container.querySelector("[data-motion-span]")).not.toBe(primero);
+});
+
+it("el menú hace un bob de 3 px por toque, sin loop ni movimiento reducido", () => {
+  const { container, rerender } = render(<LupitaMenu toque={0} />);
+  const antes = container.firstElementChild;
+  expect(JSON.parse(antes!.getAttribute("data-animate")!)).toEqual({ y: 0 });
+  rerender(<LupitaMenu toque={1} />);
+  expect(container.firstElementChild).not.toBe(antes);
+  expect(JSON.parse(container.firstElementChild!.getAttribute("data-animate")!)).toEqual({ y: [0, -3, 0] });
+  expect(JSON.parse(container.firstElementChild!.getAttribute("data-transition")!)).toEqual({ duration: 0.15, ease: "easeInOut" });
+  preferencias.reducido = true;
+  rerender(<LupitaMenu toque={2} />);
+  expect(container.querySelector("span")).toBeNull();
 });

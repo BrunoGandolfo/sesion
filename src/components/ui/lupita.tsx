@@ -9,7 +9,7 @@
 // POR QUÉ ES UN SVG Y NO UNA IMAGEN
 //
 // Entra en el bundle que ya existe, hereda los tokens de color de la app y
-// —si alguna vez se anima— se anima con los primitivos de movimiento.tsx y
+// se anima con framer-motion y
 // degrada solo con prefers-reduced-motion. Un GIF o un Lottie no degradan.
 //
 // SIEMPRE DECORATIVA
@@ -17,13 +17,12 @@
 // aria-hidden fijo, sin escape: acompaña a un texto que ya dice todo. Si
 // alguna vez Lupita queda sola, sin texto al lado, está mal puesta.
 //
-// El movimiento tiene significado: entra saludando, acompaña la espera al
-// ritmo de Latido y celebra una sola vez cuando terminó de responder.
+// El panel decide la secuencia. Sólo su encabezado respira en reposo;
+// menú y estados vacíos nunca repiten animaciones.
 
 import * as React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion, type TargetAndTransition, type Transition } from "framer-motion";
 
-import { Aparece, SUAVE } from "@/components/ui/movimiento";
 
 /** Las tres poses, y no hay una cuarta. */
 export type PoseLupita = "saluda" | "senala" | "celebra";
@@ -34,14 +33,14 @@ export type PoseLupita = "saluda" | "senala" | "celebra";
  *   20 — inline, en una línea de ayuda o al lado de un mensaje de Lupita.
  *        A este tamaño va SIN el punto dorado del brote: el detalle chico
  *        ensucia en vez de sumar.
- *   32 — encabezado de un panel, de un paso de onboarding o de un toast.
+ *   72 — encabezado del panel de ayuda: amplitudes legibles en el celular.
  *   96 — estado vacío, dentro del círculo crema.
  *
  * El tipo es abierto (`number`) a propósito para no pelear con un caso
  * legítimo que aparezca después, pero fuera de estos tres no hay dibujo
  * pensado. El punto dorado se dibuja a partir de TAMANO_CON_DETALLE.
  */
-export const TAMANOS_LUPITA = { inline: 20, encabezado: 32, vacio: 96 } as const;
+export const TAMANOS_LUPITA = { inline: 20, encabezado: 72, vacio: 96 } as const;
 
 /** Debajo de este tamaño no se dibuja el brote dorado. */
 export const TAMANO_CON_DETALLE = 32;
@@ -93,12 +92,47 @@ const FORMAS: Record<PoseLupita, FormaPose> = {
   },
 };
 
+/** Duraciones en segundos: el panel comparte las de los gestos finitos. */
+export const DURACION_BROTA = 0.5; // 500 ms para crecer desde el tallo.
+export const DURACION_RESPIRA = 3.5; // Reposo visible, sólo en la ayuda abierta.
+export const DURACION_PIENSA = 1.2; // Búsqueda hasta el primer fragmento.
+export const DURACION_HABLA = 0.15; // Un bob de 150 ms por fragmento.
+export const DURACION_CELEBRA = 0.45; // Salto completo: subida y regreso.
+export const DURACION_TOQUE_MENU = 0.15; // Respuesta breve al toque, sin loop.
+
+export type MovimientoLupita = "brota" | "respira" | "piensa" | "habla" | "celebra" | "quieta";
+
+const ANIMACIONES: Record<MovimientoLupita, TargetAndTransition> = {
+  brota: { scale: [0.4, 1], rotate: [-12, 0], y: 0 },
+  respira: { scale: [1, 1.04, 1], rotate: [-2, 2, -2], y: 0 },
+  piensa: { scale: 1, rotate: [-10, 10, -10], y: 0 },
+  habla: { scale: 1, rotate: 0, y: [0, -2, 0] },
+  // El spring admite dos keyframes: reverse hace el regreso una sola vez.
+  celebra: { scale: [1, 1.15], rotate: 0, y: [0, -10] },
+  quieta: { scale: 1, rotate: 0, y: 0 },
+};
+
+const TRANSICIONES: Record<MovimientoLupita, Transition> = {
+  // El panel da paso al reposo a los 500 ms; la física aporta el sobreimpulso.
+  brota: { type: "spring", stiffness: 220, damping: 14 },
+  respira: { duration: DURACION_RESPIRA, repeat: Infinity, ease: "easeInOut" },
+  piensa: { duration: DURACION_PIENSA, repeat: Infinity, ease: "easeInOut" },
+  habla: { duration: DURACION_HABLA, ease: "easeInOut" },
+  celebra: {
+    type: "spring", duration: DURACION_CELEBRA / 2, bounce: 0.2,
+    repeat: 1, repeatType: "reverse",
+  },
+  quieta: { duration: 0 },
+};
+
 export interface LupitaProps {
   pose: PoseLupita;
   /** Lado del dibujo en píxeles. Ver TAMANOS_LUPITA. */
   tamano?: number;
   className?: string;
-  movimiento?: "quieta" | "entra" | "piensa" | "celebra";
+  movimiento?: MovimientoLupita;
+  /** El panel incrementa el pulso por fragmento para reiniciar el bob. */
+  pulso?: number;
 }
 
 /**
@@ -113,9 +147,12 @@ export function Lupita({
   tamano = 32,
   className,
   movimiento = "quieta",
+  pulso = 0,
 }: LupitaProps) {
   const reducido = useReducedMotion();
-  const forma = FORMAS[pose];
+  const poseVisible = reducido && movimiento === "piensa" ? "senala"
+    : movimiento === "celebra" ? "celebra" : pose;
+  const forma = FORMAS[poseVisible];
   const conBrote = tamano >= TAMANO_CON_DETALLE;
 
   const dibujo = (
@@ -126,7 +163,7 @@ export function Lupita({
       fill="none"
       aria-hidden="true"
       focusable="false"
-      data-pose={pose}
+      data-pose={poseVisible}
       className={className}
     >
       <path
@@ -135,18 +172,22 @@ export function Lupita({
         strokeWidth={TRAZO}
         strokeLinecap="round"
       />
-      <path
-        d={forma.hojaGrande}
-        className="stroke-sage-500"
-        strokeWidth={TRAZO}
-        strokeLinejoin="round"
-      />
-      <path
-        d={forma.hojaChica}
-        className="stroke-sage-300"
-        strokeWidth={TRAZO}
-        strokeLinejoin="round"
-      />
+      {(["hojaGrande", "hojaChica"] as const).map((hoja) => {
+        const atributos = {
+          className: hoja === "hojaGrande" ? "stroke-sage-500" : "stroke-sage-300",
+          strokeWidth: TRAZO,
+          strokeLinejoin: "round" as const,
+        };
+        return !reducido && movimiento === "celebra" ? (
+          <motion.path
+            key={hoja}
+            {...atributos}
+            initial={{ d: FORMAS.saluda[hoja] }}
+            animate={{ d: FORMAS.celebra[hoja] }}
+            transition={{ duration: DURACION_CELEBRA, ease: "easeInOut" }}
+          />
+        ) : <path key={hoja} {...atributos} d={forma[hoja]} />;
+      })}
       {conBrote ? (
         <circle
           data-brote="true"
@@ -159,26 +200,38 @@ export function Lupita({
     </svg>
   );
 
-  if (reducido || movimiento === "quieta") return dibujo;
-
-  if (movimiento === "entra") {
-    return <Aparece como="span">{dibujo}</Aparece>;
-  }
+  if (reducido) return dibujo;
 
   return (
     <motion.span
+      key={`${movimiento}-${movimiento === "habla" ? pulso : 0}`}
       aria-hidden="true"
+      data-movimiento={movimiento}
       className="inline-flex origin-bottom"
-      animate={
-        movimiento === "piensa"
-          ? { rotate: [-3, 3, -3] }
-          : { rotate: [0, -5, 5, 0], scale: [1, 1.08, 1.08, 1] }
-      }
-      transition={
-        movimiento === "piensa"
-          ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
-          : { duration: 0.3, ease: SUAVE }
-      }
+      initial={movimiento === "brota" ? { scale: 0.4, rotate: -12, y: 0 }
+        : movimiento === "quieta" ? false : { scale: 1, rotate: 0, y: 0 }}
+      animate={ANIMACIONES[movimiento]}
+      transition={TRANSICIONES[movimiento]}
+    >
+      {dibujo}
+    </motion.span>
+  );
+}
+
+/** Única reacción del menú: el botón incrementa toque, también con teclado.
+ * No cambia estados del panel ni activa sus loops. */
+export function LupitaMenu({ toque }: { toque: number }) {
+  const reducido = useReducedMotion();
+  const dibujo = <Lupita pose="saluda" tamano={TAMANOS_LUPITA.inline} />;
+  if (reducido) return dibujo;
+  return (
+    <motion.span
+      key={toque}
+      aria-hidden="true"
+      className="inline-flex"
+      initial={{ y: 0 }}
+      animate={{ y: toque === 0 ? 0 : [0, -3, 0] }}
+      transition={{ duration: DURACION_TOQUE_MENU, ease: "easeInOut" }}
     >
       {dibujo}
     </motion.span>

@@ -8,7 +8,7 @@ import { Home, Calendar, Users, Wallet } from "lucide-react";
 
 import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
 import { DURACION_NAVEGACION, SUAVE } from "@/components/ui/movimiento";
-import { Lupita } from "@/components/ui/lupita";
+import { LupitaMenu } from "@/components/ui/lupita";
 import { LUPITA, NAV } from "@/lib/glosario";
 
 // Los cuatro destinos, con el nombre que usa toda la app (glosario NAV).
@@ -32,6 +32,7 @@ const INDICADOR = "nav-activo";
 export function BottomNav() {
   const pathname = usePathname();
   const reducido = useReducedMotion();
+  const [toquesLupita, setToquesLupita] = React.useState(0);
   const [ayudaAbierta, setAyudaAbierta] = React.useState(false);
 
   function isActive(href: string) {
@@ -81,10 +82,13 @@ export function BottomNav() {
 
         <button
           type="button"
-          onClick={() => setAyudaAbierta(true)}
+          onClick={() => {
+            setToquesLupita((toques) => toques + 1);
+            setAyudaAbierta(true);
+          }}
           className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold text-ink-300 transition-colors duration-[var(--duration-fast)]"
         >
-          <Lupita pose="saluda" tamano={20} />
+          <LupitaMenu toque={toquesLupita} />
           {LUPITA}
         </button>
       </nav>
