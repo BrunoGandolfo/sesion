@@ -93,6 +93,6 @@ export const config = {
     // /api/pacientes/{id}/contexto-clinico (GET) acepta Bearer PROCESSING_SECRET
     // para que el worker arme el prompt del LLM; la propia ruta decide entre
     // auth M2M y session.
-    "/((?!_next/static|_next/image|static|favicon.ico|api/auth|api/seed|api/cron|api/health|api/csp-report|api/sesion-clinica/callback|api/sesion-clinica/pendientes|api/sesion-clinica/aprobadas-sin-contexto|api/pacientes/[^/]+/contexto-clinico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+    "/((?!_next/static|_next/image|static|favicon.ico|icon/|apple-icon|manifest.webmanifest|api/auth|api/seed|api/cron|api/health|api/csp-report|api/sesion-clinica/callback|api/sesion-clinica/pendientes|api/sesion-clinica/aprobadas-sin-contexto|api/pacientes/[^/]+/contexto-clinico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };
