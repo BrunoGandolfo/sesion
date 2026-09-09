@@ -16,6 +16,7 @@ valores.
 | ASR | AssemblyAI | Cuenta con API key. |
 | LLM | Anthropic | Workspace dedicado, con retención de datos deshabilitada (configuración de la consola, no del repo). Clave "identity-linked": exige `anthropic-workspace-id`. |
 | SMS | Twilio, subcuenta dedicada | Número emisor comprado en E.164. |
+| Correo | Resend | API HTTP, sin SDK. Verificar el dominio antes de probar entregas reales. |
 | CI y backups | GitHub Actions | `.github/workflows/ci.yml` y `backup.yml`. |
 
 ## 2. Secretos: qué existen y dónde
@@ -25,7 +26,8 @@ Vercel (app):
 | Variable | Para qué |
 | --- | --- |
 | `DATABASE_URL` | Rama `production` de Neon. |
-| `AUTH_SECRET`, `NEXTAUTH_URL` | Auth.js. |
+| `AUTH_SECRET`, `AUTH_URL` | Auth.js. `AUTH_URL=https://sesionapp.app`. |
+| `RESEND_API_KEY` | Correo transaccional por Resend. Dominio `sesionapp.app` verificado; remitente `no-responder@sesionapp.app`. Sin clave se registra el fallo sin revelar si existe la cuenta. |
 | `NOTES_ENCRYPTION_KEY` | Cifrado en reposo (`docs/encryption.md`). |
 | `PROCESSING_SECRET` | Bearer M2M con el worker. Mismo valor en Railway. |
 | `CRON_SECRET` | Bearer de los crons. |

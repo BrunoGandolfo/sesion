@@ -1120,3 +1120,13 @@ export const ENTRANDO = "Entrando…";
 export const ENTRADA_ERROR = "Email o contraseña incorrectos";
 export const ENTRADA_ERROR_DETALLE =
   "Después de varios intentos seguidos el acceso queda bloqueado unos minutos.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Correos
+// ────────────────────────────────────────────────────────────────────────────
+export const CORREO_RECUPERAR_ASUNTO = "Cambiá tu contraseña de Sesión";
+export const CORREO_RECUPERAR_TEXTO = "Recibimos un pedido para cambiar tu contraseña. Abrí este enlace para elegir una nueva:";
+export const CORREO_RECUPERAR_BOTON = "Elegir una contraseña nueva";
+export const CORREO_RECUPERAR_VENCE = "El enlace vence en una hora y se puede usar una sola vez. Si pedís otro, este deja de funcionar.";
+export const CORREO_RECUPERAR_IGNORAR = "Si no lo pediste vos, ignorá este correo. Tu contraseña sigue igual.";
+export const CORREO_FIRMA = "Sesión · Tu consultorio, en orden.";
