@@ -1,13 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Trash2 } from "lucide-react";
-import { Button, Card, Chip, Input } from "@/components/ui";
+import { X } from "lucide-react";
+import { Button, Card, Chip, Input, Plegable } from "@/components/ui";
 import {
   excedeMaximoPalabras,
   MAX_PALABRAS_TERMINO,
   TERMINO_MUY_LARGO,
 } from "@/lib/hot-words";
+import {
+  VOCABULARIO_CARGA_MASIVA,
+  VOCABULARIO_CARGA_MASIVA_AYUDA,
+  VOCABULARIO_QUITAR,
+  VOCABULARIO_QUITAR_CONFIRMAR,
+} from "@/lib/glosario";
+
+// LA LISTA ES UNA NUBE, NO UNA TABLA
+//
+// Los términos se dibujaban uno por fila, con su categoría y su botón de
+// borrar: con veinte modismos —que es lo normal— eran veinte renglones y la
+// sección se volvía interminable, tanto en la ficha ("Vocabulario de esta
+// persona") como en Tu consultorio. Ahora son chips que envuelven: el
+// término, la categoría por color, y una x para quitarlo. Veinte términos
+// entran en tres renglones y se leen de un vistazo.
+//
+// El chip es el mismo componente de la app en su variante de texto libre
+// (ui/chip.tsx): un término puede ser "trastorno límite de la personalidad"
+// y tiene que envolver, no recortarse.
 
 type Categoria =
   | "termino_clinico"
@@ -80,6 +99,17 @@ const CATEGORIAS: ReadonlyArray<CategoriaInfo> = [
 /** A partir de cuántos términos el modo compacto muestra el buscador. */
 const BUSQUEDA_DESDE = 8;
 
+/** El punto de la leyenda, del color con el que se pinta cada categoría.
+ *  "Nombre propio" y "Otro" comparten el crema: son dos y no hay dos colores
+ *  más en la paleta que no signifiquen otra cosa (terracotta es deuda y
+ *  riesgo en toda la app). */
+const PUNTO_CATEGORIA: Record<ChipVariant, string> = {
+  sage: "bg-sage-500",
+  gold: "bg-gold-500",
+  terracotta: "bg-terracotta-500",
+  neutral: "bg-cream-200",
+};
+
 function infoCategoria(cat: string | null): CategoriaInfo {
   return CATEGORIAS.find((c) => c.value === cat) ?? CATEGORIAS[3];
 }
@@ -103,40 +133,6 @@ function tituloScope(scope: Scope, pacienteNombre?: string): string {
   return pacienteNombre
     ? `Vocabulario de ${pacienteNombre}`
     : "Vocabulario del paciente";
-}
-
-interface SwitchProps {
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  ariaLabel: string;
-  disabled?: boolean;
-}
-
-function Switch({ checked, onChange, ariaLabel, disabled }: SwitchProps) {
-  return (
-    <label className="inline-flex shrink-0 items-center cursor-pointer">
-      <input
-        type="checkbox"
-        role="switch"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only peer"
-        aria-label={ariaLabel}
-      />
-      <span
-        className={`relative inline-block h-6 w-10 rounded-full transition-colors duration-150 peer-focus-visible:ring-2 peer-focus-visible:ring-sage-500/30 ${
-          checked ? "bg-sage-500" : "bg-cream-200"
-        } ${disabled ? "opacity-50" : ""}`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 inline-block h-5 w-5 rounded-full bg-white shadow-subtle transition-transform duration-150 ${
-            checked ? "translate-x-4" : "translate-x-0"
-          }`}
-        />
-      </span>
-    </label>
-  );
 }
 
 export function HotWordsManager({
@@ -465,143 +461,141 @@ export function HotWordsManager({
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-[color:var(--border-subtle)]">
-            {itemsFiltrados.map((item) => {
-              const cat = infoCategoria(item.categoria);
-              const enConfirmacion = confirmDelete === item.id;
-              return (
-                <li
-                  key={item.id}
-                  className={`flex flex-wrap items-center gap-3 py-3 transition-opacity duration-150 ${px} ${
-                    item.activo ? "" : "opacity-50"
-                  }`}
-                >
-                  <span
-                    className={`flex-1 min-w-[160px] truncate font-sans text-[15px] ${
-                      item.activo ? "text-ink-900" : "text-ink-500"
-                    }`}
-                    title={item.termino}
-                  >
-                    {item.termino}
-                  </span>
-
-                  <Chip variant={cat.variant} size="sm">
-                    {cat.chipLabel}
-                  </Chip>
-
-                  <Switch
-                    checked={item.activo}
-                    onChange={(v) => void handleToggle(item.id, v)}
-                    ariaLabel={
-                      item.activo
-                        ? `Desactivar ${item.termino}`
-                        : `Activar ${item.termino}`
-                    }
-                  />
-
-                  {enConfirmacion ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void handleBorrar(item.id)}
-                      className="!bg-terracotta-500 hover:!bg-terracotta-600 !text-white"
+          <div className={`py-4 ${px}`}>
+            <ul className="flex flex-wrap gap-2">
+              {itemsFiltrados.map((item) => {
+                const cat = infoCategoria(item.categoria);
+                const enConfirmacion = confirmDelete === item.id;
+                return (
+                  <li key={item.id}>
+                    <Chip
+                      variant={enConfirmacion ? "terracotta" : cat.variant}
+                      texto="libre"
+                      className={`gap-1 py-[3px] pr-[3px] pl-[4px] text-[13px] transition-opacity duration-150 ${
+                        item.activo ? "" : "opacity-50"
+                      }`}
                     >
-                      Confirmá borrar
-                    </Button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void handleBorrar(item.id)}
-                      aria-label={`Borrar ${item.termino}`}
-                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-terracotta-500 transition-colors duration-150 hover:bg-terracotta-50"
-                    >
-                      <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                      {/* El término es el que enciende y apaga: apagado no se
+                          borra, deja de mandarse a la transcripción. Era un
+                          switch por fila; en una nube no entra uno por chip y
+                          el propio chip lo dice mejor. */}
+                      <button
+                        type="button"
+                        aria-pressed={item.activo}
+                        // El color dice la categoría a quien la ve; el
+                        // rótulo, a quien la escucha.
+                        aria-label={`${item.termino}, ${cat.label}`}
+                        title={cat.label}
+                        onClick={() => void handleToggle(item.id, !item.activo)}
+                        className="min-h-[26px] rounded-full px-[6px] py-[3px] text-left transition-colors duration-150 hover:bg-black/5"
+                      >
+                        {item.termino}
+                      </button>
+
+                      {enConfirmacion ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleBorrar(item.id)}
+                          aria-label={`${VOCABULARIO_QUITAR} ${item.termino}, confirmar`}
+                          className="min-h-[28px] rounded-full bg-terracotta-500 px-2 py-[4px] font-semibold text-white transition-colors duration-150 hover:bg-terracotta-600"
+                        >
+                          {VOCABULARIO_QUITAR_CONFIRMAR}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleBorrar(item.id)}
+                          aria-label={`${VOCABULARIO_QUITAR} ${item.termino}`}
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-500 transition-colors duration-150 hover:bg-terracotta-50 hover:text-terracotta-500"
+                        >
+                          <X size={13} strokeWidth={2.2} aria-hidden="true" />
+                        </button>
+                      )}
+                    </Chip>
+                  </li>
+                );
+              })}
+            </ul>
+            <Leyenda />
+          </div>
         )}
       </div>
 
+      {/* La carga masiva se usa una vez, al principio, y después estorba:
+          va plegada, con el mismo Plegable que el resto de la app. */}
       {scope === "global" && (
         <div
           className={`flex flex-col gap-3 border-t border-[color:var(--border-subtle)] py-5 ${px}`}
         >
-          <div className="flex flex-col gap-1">
-            <h3 className="font-display text-[16px] font-medium text-ink-900">
-              Carga masiva
-            </h3>
-            <p className="font-sans text-[13px] text-ink-500">
-              Pegá una lista de términos separados por coma o salto de línea.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label
-              htmlFor={bulkId}
-              className="font-sans font-semibold text-[11px] uppercase tracking-[0.08em] text-ink-500"
-            >
-              Términos
-            </label>
-            <textarea
-              id={bulkId}
-              value={bulkText}
-              onChange={(e) => {
-                setBulkText(e.target.value);
-                if (bulkError) setBulkError(null);
-              }}
-              placeholder="transferencia, contratransferencia, encuadre&#10;gurí&#10;Lacan"
-              rows={5}
-              className="resize-y rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] leading-[1.5] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
-            />
-          </div>
-
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-3">
-            <div className="flex flex-col gap-2 md:w-[220px]">
+          <Plegable
+            titulo={VOCABULARIO_CARGA_MASIVA}
+            ayuda={VOCABULARIO_CARGA_MASIVA_AYUDA}
+          >
+            <div className="flex flex-col gap-2">
               <label
-                htmlFor={bulkCategoriaId}
+                htmlFor={bulkId}
                 className="font-sans font-semibold text-[11px] uppercase tracking-[0.08em] text-ink-500"
               >
-                Categoría para todos
+                Términos
               </label>
-              <select
-                id={bulkCategoriaId}
-                value={bulkCategoria}
-                onChange={(e) => setBulkCategoria(e.target.value as Categoria)}
-                className="rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
-              >
-                {CATEGORIAS.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+              <textarea
+                id={bulkId}
+                value={bulkText}
+                onChange={(e) => {
+                  setBulkText(e.target.value);
+                  if (bulkError) setBulkError(null);
+                }}
+                placeholder="transferencia, contratransferencia, encuadre&#10;gurí&#10;Lacan"
+                rows={5}
+                className="resize-y rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] leading-[1.5] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
+              />
             </div>
 
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => void handleBulk()}
-              disabled={importando || terminosBulk.length === 0}
-            >
-              {importando
-                ? "Importando…"
-                : `Importar ${terminosBulk.length} ${
-                    terminosBulk.length === 1 ? "término" : "términos"
-                  }`}
-            </Button>
-          </div>
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-3">
+              <div className="flex flex-col gap-2 md:w-[220px]">
+                <label
+                  htmlFor={bulkCategoriaId}
+                  className="font-sans font-semibold text-[11px] uppercase tracking-[0.08em] text-ink-500"
+                >
+                  Categoría para todos
+                </label>
+                <select
+                  id={bulkCategoriaId}
+                  value={bulkCategoria}
+                  onChange={(e) => setBulkCategoria(e.target.value as Categoria)}
+                  className="rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
+                >
+                  {CATEGORIAS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          {bulkError && (
-            <p
-              role="alert"
-              className="font-sans text-[13px] text-[color:var(--color-error)]"
-            >
-              {bulkError}
-            </p>
-          )}
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => void handleBulk()}
+                disabled={importando || terminosBulk.length === 0}
+              >
+                {importando
+                  ? "Importando…"
+                  : `Importar ${terminosBulk.length} ${
+                      terminosBulk.length === 1 ? "término" : "términos"
+                    }`}
+              </Button>
+            </div>
+
+            {bulkError && (
+              <p
+                role="alert"
+                className="font-sans text-[13px] text-[color:var(--color-error)]"
+              >
+                {bulkError}
+              </p>
+            )}
+          </Plegable>
         </div>
       )}
     </>
@@ -611,18 +605,51 @@ export function HotWordsManager({
   return <Card className="!p-0">{cuerpo}</Card>;
 }
 
+// D2: el pulso sale de `animate-pulse`, que la regla global de globals.css
+// apaga con prefers-reduced-motion. Nada de estilos inline acá: un
+// `style={{ animation: … }}` la pisaría y el bloque seguiría latiendo contra
+// la preferencia declarada. Quieto, un bloque crema ya dice "falta el dato".
 function ListaSkeleton({ px }: { px: string }) {
+  const anchos = ["w-24", "w-32", "w-20", "w-28", "w-36", "w-24"];
   return (
-    <ul aria-hidden="true" className="divide-y divide-[color:var(--border-subtle)]">
-      {[0, 1, 2, 3].map((i) => (
-        <li key={i} className={`flex items-center gap-3 py-3 ${px}`}>
-          <span className="h-4 flex-1 max-w-[220px] animate-pulse rounded bg-cream-100" />
-          <span className="h-5 w-14 animate-pulse rounded-full bg-cream-100" />
-          <span className="h-6 w-10 animate-pulse rounded-full bg-cream-100" />
-          <span className="h-6 w-6 animate-pulse rounded bg-cream-100" />
-        </li>
+    <ul aria-hidden="true" className={`flex flex-wrap gap-2 py-4 ${px}`}>
+      {anchos.map((ancho, i) => (
+        <li
+          key={i}
+          className={`h-8 ${ancho} animate-pulse rounded-full bg-cream-100`}
+        />
       ))}
     </ul>
+  );
+}
+
+/**
+ * Qué significa cada color de la nube. Sin esto los chips son tres tonos sin
+ * explicación, que es exactamente lo que la auditoría le señala a los puntos
+ * del mes en la agenda.
+ */
+function Leyenda() {
+  const porColor = CATEGORIAS.reduce<Map<ChipVariant, string[]>>((acc, cat) => {
+    const previas = acc.get(cat.variant) ?? [];
+    acc.set(cat.variant, [...previas, cat.label]);
+    return acc;
+  }, new Map());
+
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-sans text-[11px] text-ink-500">
+      {[...porColor.entries()].map(([variant, labels]) => (
+        <span key={variant} className="inline-flex items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className={`h-[6px] w-[6px] rounded-full ${PUNTO_CATEGORIA[variant]}`}
+          />
+          {labels.join(" · ")}
+        </span>
+      ))}
+      <span className="text-ink-300">
+        Tocá un término para apagarlo sin borrarlo.
+      </span>
+    </p>
   );
 }
 

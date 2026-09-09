@@ -1,7 +1,10 @@
 "use client";
 
 // Ficha del paciente: carga, cabecera, tres pestañas (Sesiones, Recorrido,
-// Ficha), un solo sheet de edición y el FAB de grabar.
+// Ficha) y un solo sheet de edición.
+//
+// Sin flotantes: "Grabar" vive en la cabecera, en el flujo del documento.
+// El porqué está escrito en cabecera-ficha.tsx.
 //
 // Acá no se graba ni se revisa: la sesión de hoy se lee por el hook de
 // grabación (carga por turno + polling mientras está en el pipeline) y las
@@ -9,7 +12,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ChevronLeft, Mic } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { isSameDay } from "date-fns";
 
 import { Button, Segmented, Sheet, Toast } from "@/components/ui";
@@ -221,6 +224,7 @@ export function PacienteDetailView({ id }: { id: string }) {
               consentimientoVigente={consentimientoVigente}
               config={config}
               reloadKey={reloadKey}
+              hrefGrabar={hrefGrabar}
               onEditar={() => setEditarOpen(true)}
               onConsentimientoCambio={refetchData}
             />
@@ -275,29 +279,12 @@ export function PacienteDetailView({ id }: { id: string }) {
         </Sheet>
       ) : null}
 
-      <FabGrabar href={hrefGrabar} />
-
       <Toast
         open={toast.open}
         message={toast.message}
         onClose={() => setToast((c) => ({ ...c, open: false }))}
       />
     </>
-  );
-}
-
-// Siempre visible. Con turno hoy va a grabar ese turno; sin turno, a grabar
-// una sesión nueva para este paciente (contrato de la pantalla de grabación).
-function FabGrabar({ href }: { href: string }) {
-  return (
-    <Link
-      href={href}
-      aria-label="Grabar"
-      className="fixed bottom-24 right-5 z-30 inline-flex h-14 items-center gap-2 rounded-full bg-sage-500 pl-4 pr-5 font-sans text-[14px] font-semibold text-white shadow-raised transition-colors duration-150 hover:bg-sage-600 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30 lg:bottom-8 lg:right-8"
-    >
-      <Mic size={22} strokeWidth={1.9} aria-hidden="true" />
-      Grabar
-    </Link>
   );
 }
 

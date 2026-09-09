@@ -117,6 +117,13 @@ interface Props {
   onClose: () => void;
   onUpdated: (message: string) => void;
   onError: (message: string) => void;
+  /**
+   * El cobro entró. Lo avisa aparte de `onUpdated` para que la pantalla
+   * pueda dejarle la marca a la fila que lo originó mientras este sheet se
+   * va (D9). El mensaje del toast no alcanza para reconocerlo: sería
+   * comparar un string de copy.
+   */
+  onCobrado?: (turnoId: string) => void;
 }
 
 // El mismo estado que muestra la fila de la agenda (session-row), con las
@@ -146,6 +153,7 @@ export function TurnoDetailSheet({
   onClose,
   onUpdated,
   onError,
+  onCobrado,
 }: Props) {
   const [modo, setModo] = React.useState<Modo>("ver");
   const [enviando, setEnviando] = React.useState(false);
@@ -296,6 +304,9 @@ export function TurnoDetailSheet({
     setError(null);
     try {
       await apiPost<Turno>(`/api/turnos/${turno.id}/cobrar`, { metodo });
+      // Primero la marca en la fila, después el cierre: el trazo empieza
+      // mientras el sheet se va, no después.
+      onCobrado?.(turno.id);
       onUpdated("Cobro registrado");
     } catch (err) {
       const m = mensajeDe(err);

@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { addDays, addMonths, addWeeks } from "date-fns";
+import { addDays, addMonths, addWeeks, isSameDay } from "date-fns";
 import { CalendarX2 } from "lucide-react";
 
 import { Fab, Sheet, Toast } from "@/components/ui";
+import { useConfirmacionDibujada } from "@/components/ui/movimiento";
 import { useHoy } from "@/hooks/useHoy";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
 import {
@@ -16,7 +17,7 @@ import {
   instanteDesdeFechaHoraMvd,
   instanteMvd,
 } from "@/lib/fechas-montevideo";
-import { ALGO_FALLO } from "@/lib/glosario";
+import { AGENDAR, ALGO_FALLO } from "@/lib/glosario";
 import type {
   Configuracion,
   PacienteConDeuda,
@@ -109,6 +110,11 @@ export function anclaDelDiaTocado(day: Date): Date {
 
 type LoadState = "idle" | "loading" | "error";
 
+/** El respiro del check de D9 no cierra nada: el sheet ya se fue solo con
+ *  onUpdated y la marca vive en la fila. Estable, para no reiniciar el
+ *  temporizador en cada render. */
+const SIN_NADA_QUE_HACER = () => {};
+
 /** Un solo copy de carga para toda la agenda. */
 function Cargando() {
   return (
@@ -132,6 +138,10 @@ export function AgendaView() {
   const anchor = anchorUsuario ?? today;
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [detalleId, setDetalleId] = React.useState<string | null>(null);
+  // D9: la fila que originó el cobro se queda con el trazo mientras el sheet
+  // se cierra. No agrega tiempo: ocurre mientras el sheet se va.
+  const [turnoCobradoId, marcarCobrado] =
+    useConfirmacionDibujada<string>(SIN_NADA_QUE_HACER);
   // Mobile: el mes se despliega detrás del título de la fecha.
   const [mesAbierto, setMesAbierto] = React.useState(false);
   const [toast, setToast] = React.useState<{ open: boolean; message: string }>(
@@ -327,6 +337,18 @@ export function AgendaView() {
   // el mismo React #418 que rompe los event handlers.
   const isReady = anchor !== null && today !== null;
 
+  // El FAB tapaba la tarjeta punteada del día vacío, a centímetros del botón
+  // "Agendar" que esa misma tarjeta ofrece: dos botones para lo mismo, uno
+  // sobre el otro (docs/diseno/01-auditoria-frontend.md, sección 2). Cuando
+  // el estado vacío está en pantalla, el flotante no aparece: el camino a un
+  // turno nuevo sigue siendo uno solo, el que ya se está mirando.
+  const diaVacio =
+    isReady &&
+    view === "día" &&
+    turnos !== null &&
+    !turnos.some((t) => isSameDay(t.fecha, anchor));
+  const mostrarFab = !diaVacio && !showFullError;
+
   return (
     <>
       <div className="mx-auto w-full max-w-[1200px] p-5 lg:p-12">
@@ -381,6 +403,7 @@ export function AgendaView() {
               <DayView
                 date={anchor}
                 turnos={turnos}
+                turnoCobradoId={turnoCobradoId}
                 onOpenTurno={handleEventClick}
                 onNuevoTurno={openSheet}
               />
@@ -403,7 +426,7 @@ export function AgendaView() {
         </div>
       </div>
 
-      <Fab label="Agendar" onClick={openSheet} />
+      {mostrarFab ? <Fab label={AGENDAR} onClick={openSheet} /> : null}
 
       <Sheet open={sheetOpen} onClose={closeSheet} ariaLabel="Agendar">
         {pacientes === null && pacientesStatus === "error" ? (
@@ -437,6 +460,7 @@ export function AgendaView() {
         onClose={closeDetalle}
         onUpdated={handleTurnoUpdated}
         onError={handleTurnoError}
+        onCobrado={marcarCobrado}
       />
 
       <Toast

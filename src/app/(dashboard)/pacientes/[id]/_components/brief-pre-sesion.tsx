@@ -245,10 +245,14 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
                 </ul>
               ) : null}
               {hiloLongitudinal.temasRecurrentes.length > 0 ? (
+                // Texto libre, no estado: un tema del hilo puede medir una
+                // línea entera y acá envuelve en vez de recortarse contra el
+                // borde de la pantalla. Es el mismo dibujo que el Recorrido.
                 <div className="flex flex-wrap gap-1.5">
                   {hiloLongitudinal.temasRecurrentes.map(({ tema, conteo }) => (
-                    <Chip key={tema} variant="neutral" size="sm">
-                      {tema} · {conteo}
+                    <Chip key={tema} variant="neutral" size="sm" texto="libre">
+                      <span className="font-semibold">{formatearEtiqueta(tema)}</span>
+                      <span className="ml-1 text-ink-500">· {conteo}</span>
                     </Chip>
                   ))}
                 </div>

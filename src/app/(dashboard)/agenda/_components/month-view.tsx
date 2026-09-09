@@ -8,6 +8,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
+import { AGENDADO, MES_LEYENDA, PAGADO } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
 interface Props {
@@ -89,6 +90,29 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
           );
         })}
       </div>
+      <Leyenda />
+    </div>
+  );
+}
+
+/**
+ * Qué significan el punto dorado y el verde. La grilla no dice otra cosa que
+ * puntos, y el código de color —dorado agendado, verde pagado— sólo estaba
+ * escrito en session-row, tres pantallas más allá
+ * (docs/diseno/01-auditoria-frontend.md, sección 2).
+ */
+function Leyenda() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[color:var(--border-subtle)] bg-cream-50 px-3 py-2 text-[11px] text-ink-500">
+      <span>{MES_LEYENDA}</span>
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-gold-500" />
+        {AGENDADO}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-sage-500" />
+        {PAGADO}
+      </span>
     </div>
   );
 }

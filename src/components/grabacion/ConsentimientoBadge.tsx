@@ -12,6 +12,7 @@ import { AlertTriangle, ShieldCheck } from "lucide-react";
 
 import { Button, Chip, Confirmar, Sheet } from "@/components/ui";
 import { apiDelete, apiGet, esAbort } from "@/lib/api-client";
+import { fechaCompleta } from "@/lib/format";
 import {
   ALGO_FALLO,
   FALTA_AUTORIZACION,
@@ -44,11 +45,10 @@ type Estado =
   | { tipo: "sin" }
   | { tipo: "error" };
 
-const fechaFormatter = new Intl.DateTimeFormat("es-UY", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
+// La fecha de la firma sale de format.ts, como el resto de las fechas de la
+// app: el Intl.DateTimeFormat("es-UY") que estaba acá escribía "setiembre"
+// contra el "septiembre" de la agenda y de Cobros, y leía la zona del
+// dispositivo en vez de la de Montevideo.
 
 // GET /consentimiento responde ok({ consentimiento }): entra por el cliente
 // de API como todo lo demás.
@@ -181,6 +181,9 @@ export function ConsentimientoBadge({
         aria-label="Verificando autorización"
         className="inline-flex items-center gap-2"
       >
+        {/* D2: el pulso es `animate-pulse` y nada más. La regla de
+            globals.css lo apaga con prefers-reduced-motion; un estilo inline
+            acá la pisaría y el bloque seguiría latiendo. */}
         <span className="h-5 w-40 animate-pulse rounded-full bg-cream-100" />
       </div>
     );
@@ -212,7 +215,7 @@ export function ConsentimientoBadge({
             ) : null}
           </div>
           <span className="font-sans text-[12px] text-ink-500">
-            Firmada el {fechaFormatter.format(firmadoEn)}
+            Firmada el {fechaCompleta(firmadoEn)}
           </span>
         </div>
         {confirmandoRevocar ? (

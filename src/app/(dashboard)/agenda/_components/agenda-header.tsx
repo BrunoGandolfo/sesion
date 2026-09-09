@@ -7,7 +7,7 @@ import { es } from "date-fns/locale";
 
 import { Button, Segmented } from "@/components/ui";
 import { fechaCorta, fechaLarga } from "@/lib/format";
-import { NAV } from "@/lib/glosario";
+import { AGENDAR, NAV } from "@/lib/glosario";
 import type { AgendaViewMode } from "./agenda-view";
 
 interface Props {
@@ -88,9 +88,13 @@ export function AgendaHeader({
             onClick={onToggleMes}
             aria-expanded={mesAbierto}
             aria-controls="agenda-mes-mobile"
-            className="flex min-h-[44px] min-w-0 flex-1 items-center gap-1 text-left lg:hidden"
+            className="flex min-h-[44px] min-w-0 flex-1 items-center gap-1 py-1 text-left lg:hidden"
           >
-            <span className="min-w-0 truncate font-[family-name:var(--font-display)] text-[16px] font-medium leading-tight text-ink-900">
+            {/* Sin `truncate`: era el único lugar donde se dice qué día se
+                está mirando y decía "lunes 7 de septiem…". Envuelve en dos
+                renglones antes que recortarse
+                (docs/diseno/01-auditoria-frontend.md, sección 2). */}
+            <span className="min-w-0 font-[family-name:var(--font-display)] text-[16px] font-medium leading-tight text-ink-900">
               {labelMobile}
             </span>
             <ChevronDown
@@ -121,7 +125,7 @@ export function AgendaHeader({
             icon={<Plus size={14} strokeWidth={2} aria-hidden="true" />}
             onClick={onNewTurno}
           >
-            Agendar
+            {AGENDAR}
           </Button>
         </div>
       </div>

@@ -21,7 +21,7 @@ import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge"
 import { HotWordsManager } from "@/components/grabacion/HotWordsManager";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiPatch } from "@/lib/api-client";
-import { money } from "@/lib/format";
+import { fechaCompleta, money } from "@/lib/format";
 import {
   ALGO_FALLO,
   AUTORIZACION_GRABACION,
@@ -43,11 +43,12 @@ interface FichaTabProps {
 
 type ToastState = { open: boolean; message: string };
 
-const fechaAltaFormatter = new Intl.DateTimeFormat("es-UY", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
+// La fecha de alta sale de format.ts como todas las demás. Con el
+// Intl.DateTimeFormat("es-UY") que tenía acá decía "05 de setiembre de 2026"
+// mientras la agenda decía "7 de septiembre" y Cobros "Septiembre 2026": dos
+// ortografías del mismo mes en la misma sesión de uso. Y de paso se saltaba
+// la regla de zona horaria de Montevideo que respeta el resto del proyecto
+// (docs/diseno/01-auditoria-frontend.md, sección 4).
 
 export function FichaTab({
   paciente,
@@ -128,7 +129,7 @@ export function FichaTab({
             label="Alta"
           >
             <span className="text-ink-700">
-              {fechaAltaFormatter.format(new Date(paciente.creadoEn))}
+              {fechaCompleta(new Date(paciente.creadoEn))}
             </span>
           </DatoLinea>
         </div>
