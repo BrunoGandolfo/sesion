@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 
 import { fechaCorta, initials, saludo } from "@/lib/format";
 import { TU_CONSULTORIO } from "@/lib/glosario";
@@ -16,6 +17,18 @@ import { TU_CONSULTORIO } from "@/lib/glosario";
 //
 // El avatar hace de ancla visual: es lo que se reconoce de lejos, y lo que
 // hace que un enlace de tres líneas se lea como un solo destino.
+//
+// PERO EL AVATAR SOLO NO ALCANZA. En un teléfono no hay hover, y sin hover
+// esto era un encabezado —un saludo, un nombre y una fecha— sin ninguna
+// marca de que fuera tocable: nadie descubre que el avatar es la puerta a la
+// configuración. Ahora el bloque dice a dónde lleva, con todas las letras y
+// con el mismo `ChevronRight` de lucide que marca "esto se abre" en la lista
+// de pacientes y en Cobros.
+//
+// El engranaje suelto no vuelve: se sacó a propósito porque repetía este
+// mismo destino en un ícono distinto, y dos accesos a lo mismo se aprenden
+// peor que uno. La fecha se subió a la línea del saludo para que el rótulo
+// no agregue una cuarta línea al bloque.
 
 interface CabeceraUsuarioProps {
   /** Nombre de la profesional. null mientras carga la configuración. */
@@ -58,20 +71,20 @@ export function CabeceraUsuario({
         {iniciales}
       </span>
 
-      <span className="flex min-w-0 flex-col">
-        {conSaludo && ahora ? (
+      <span className="flex min-w-0 flex-col gap-0.5">
+        {conSaludo || ahora ? (
           <span className="truncate font-sans text-[12px] leading-tight text-ink-500">
-            {saludo(ahora)}
+            {conSaludo && ahora ? `${saludo(ahora)} · ` : null}
+            {ahora ? fechaCorta(ahora) : null}
           </span>
         ) : null}
         <span className="truncate font-sans text-[15px] font-semibold leading-tight text-ink-900">
           {visible}
         </span>
-        {ahora ? (
-          <span className="truncate font-sans text-[12px] leading-tight text-ink-300">
-            {fechaCorta(ahora)}
-          </span>
-        ) : null}
+        <span className="inline-flex items-center gap-0.5 font-sans text-[12px] font-semibold leading-tight text-sage-600 group-hover:text-sage-700">
+          {TU_CONSULTORIO}
+          <ChevronRight size={14} strokeWidth={1.8} aria-hidden="true" />
+        </span>
       </span>
     </Link>
   );

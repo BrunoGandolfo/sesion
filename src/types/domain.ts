@@ -229,6 +229,26 @@ export interface PendientesTerapeuta {
 }
 
 /**
+ * La señal de riesgo de una sesión, reducida a lo que hace falta para saber
+ * si la hubo: el nivel graduado y los cinco booleanos.
+ *
+ * Va con la forma completa del contrato pero vacía de contenido —sin
+ * indicadores, sin evidencia, sin nota para la terapeuta y sin el `detalle`
+ * de los flags—: eso es material clínico y la pantalla de Hoy no lo muestra.
+ * Las tres claves de más no son decorativas: sin ellas el guard de
+ * `normalizarRiesgo` lee toda señal como "ninguno".
+ */
+export interface SenalRiesgoDelDia {
+  riesgoDetectado: {
+    nivel: unknown;
+    indicadores: string[];
+    evidencia: never[];
+    notaParaTerapeuta: null;
+  } | null;
+  flagsRiesgo: FlagsRiesgo | null;
+}
+
+/**
  * Todo lo que devuelve GET /api/dashboard, que es lo que dibuja la pantalla
  * de Hoy. Vivía en el `_lib` privado de la API, pero lo importan tres
  * componentes de presentación (kpis, datos, pendientes): un tipo que cruza
@@ -239,6 +259,14 @@ export type DashboardData = {
   sesionesHoy: TurnoConPaciente[];
   deudores: DeudaPaciente[];
   proximaSesion: TurnoConPaciente | null;
+  /**
+   * La señal de riesgo de cada sesión del día, para la regla dura del
+   * personaje (docs/diseno/04-personaje.md): si alguna la tiene, Lupita no
+   * aparece en Hoy ese día. Quien decide es `clavesDeRiesgo`
+   * (RiesgoDetectadoBanner.tsx) en el cliente, con estos dos campos: la
+   * regla sigue escrita en un solo lugar.
+   */
+  riesgoDelDia: SenalRiesgoDelDia[];
   /**
    * Lo que espera a la terapeuta: notas sin aprobar, sesiones sin cobrar y
    * turnos de hoy sin autorización de grabación (ver

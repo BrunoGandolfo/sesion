@@ -3,14 +3,27 @@
 // La lista de turnos del día. Cada fila ofrece lo que corresponde al momento
 // del turno (SessionRow decide cuál); acá solo se enlaza a dónde va cada
 // acción y se agenda uno nuevo.
+//
+// SIN CASCADA PROPIA (delta D4). Los turnos entran con el bloque, de una
+// sola vez. Antes había una cascada acá adentro de la cascada de
+// dashboard.tsx: el bloque llegaba a los 120 ms y recién ahí empezaban a
+// entrar los turnos de a uno, así que el octavo aterrizaba casi 0,6 s
+// después de abrir la pantalla que ella abre ocho a doce veces por día. La
+// cascada de afuera se conserva; ésta no significaba nada que la de afuera
+// no dijera ya.
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { Button, Card, SessionRow } from "@/components/ui";
-import { ListaEnCascada } from "@/components/ui/movimiento";
-import { AGENDA_DEL_DIA } from "@/lib/glosario";
+import { Lupita, TAMANOS_LUPITA } from "@/components/ui/lupita";
+import {
+  AGENDA_DEL_DIA,
+  AGENDAR,
+  HOY_SIN_TURNOS_DETALLE,
+  HOY_SIN_TURNOS_TITULO,
+} from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
 import { Titulo } from "./titulo";
@@ -22,6 +35,8 @@ export function AgendaDelDia({
   sinAutorizacion,
   onCobrar,
   onAgendar,
+  turnoCobrado = null,
+  riesgoEnElDia = false,
 }: {
   turnos: TurnoConPaciente[];
   ahora: Date;
@@ -31,6 +46,15 @@ export function AgendaDelDia({
   sinAutorizacion: Set<string>;
   onCobrar: (turnoId: string) => void;
   onAgendar: () => void;
+  /** El turno cuyo cobro acaba de entrar y todavía se está confirmando en su
+   *  propia fila (delta D9). Lo sostiene la pantalla mientras dura el trazo:
+   *  el sheet se cierra y la marca queda donde ella tocó, en vez de que la
+   *  fila cambie de chip sin que nada diga por qué. */
+  turnoCobrado?: string | null;
+  /** Alguna sesión del día tiene señal de riesgo. Con esto en true el estado
+   *  vacío se dibuja sin Lupita: docs/diseno/04-personaje.md, "la regla de
+   *  tono". El texto no cambia — el que habla siempre es el texto. */
+  riesgoEnElDia?: boolean;
 }) {
   const router = useRouter();
 
@@ -44,7 +68,7 @@ export function AgendaDelDia({
               onClick={onAgendar}
               icon={<Plus size={14} strokeWidth={1.8} aria-hidden="true" />}
             >
-              Turno
+              {AGENDAR}
             </Button>
             <Link
               href="/agenda"
@@ -59,9 +83,7 @@ export function AgendaDelDia({
       </Titulo>
 
       {turnos.length > 0 ? (
-        // Los turnos del día entran de arriba abajo, en el orden en que van
-        // a ocurrir. Con más de ocho, del noveno en adelante entran quietos.
-        <ListaEnCascada className="space-y-2">
+        <div className="space-y-2">
           {turnos.map((turno) => (
             <SessionRow
               key={turno.id}
@@ -69,6 +91,7 @@ export function AgendaDelDia({
               ahora={ahora}
               notaParaRevisar={notaPorTurno.has(turno.id)}
               sinAutorizacion={sinAutorizacion.has(turno.id)}
+              cobroConfirmado={turno.id === turnoCobrado}
               onCobrar={() => onCobrar(turno.id)}
               onRevisarNota={() =>
                 router.push(`/sesiones/${notaPorTurno.get(turno.id)}`)
@@ -77,14 +100,21 @@ export function AgendaDelDia({
               onAutorizar={() => router.push(`/pacientes/${turno.paciente.id}`)}
             />
           ))}
-        </ListaEnCascada>
+        </div>
       ) : (
-        <Card className="rounded-[8px] p-6 text-center">
+        <Card className="flex flex-col items-center rounded-[8px] p-6 text-center">
+          {/* El círculo crema del resto de los estados vacíos (day-view,
+              cobros-view), agrandado para los 96 px del dibujo. */}
+          {riesgoEnElDia ? null : (
+            <span className="mb-4 inline-flex h-32 w-32 items-center justify-center rounded-full bg-cream-100">
+              <Lupita pose="saluda" tamano={TAMANOS_LUPITA.vacio} />
+            </span>
+          )}
           <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-900">
-            Hoy tu agenda está libre.
+            {HOY_SIN_TURNOS_TITULO}
           </p>
           <p className="mt-2 text-[14px] text-ink-500">
-            Buen día para ordenar pendientes, o para descansar un rato.
+            {HOY_SIN_TURNOS_DETALLE}
           </p>
         </Card>
       )}

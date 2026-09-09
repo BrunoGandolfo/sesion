@@ -9,16 +9,25 @@
 import * as React from "react";
 
 import { Toast } from "@/components/ui";
-import { ListaEnCascada } from "@/components/ui/movimiento";
+import type { VarianteToast } from "@/components/ui/toast";
+import { ListaEnCascada, MS_CHECK_DIBUJADO } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
-import { ALGO_FALLO } from "@/lib/glosario";
+import {
+  ALGO_FALLO,
+  COBRADO,
+  HOY_SIN_PROXIMA,
+  NO_SE_PUDO_AGENDAR,
+  NO_SE_PUDO_COBRAR,
+  TURNO_AGENDADO,
+} from "@/lib/glosario";
 import type { MetodoPago, PacienteConDeuda } from "@/types/domain";
 
 import { AgendaDelDia } from "./agenda-del-dia";
 import { CardAhora } from "./card-ahora";
 import {
+  aplicarCobro,
   leerHoy,
   parsePaciente,
   repartirElDia,
@@ -37,14 +46,36 @@ export function Dashboard() {
   const [estado, setEstado] = React.useState<EstadoHoy | null>(null);
   const [fallo, setFallo] = React.useState(false);
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [toast, setToast] = React.useState({ open: false, message: "" });
+  const [toast, setToast] = React.useState<{
+    open: boolean;
+    message: string;
+    variante: VarianteToast;
+  }>({ open: false, message: "", variante: "confirmacion" });
   const [turnoSheet, setTurnoSheet] = React.useState(false);
   const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
     null,
   );
   const [cobrando, setCobrando] = React.useState<string | null>(null);
+  // El turno cuyo cobro se está confirmando en su propia fila (delta D9).
+  const [cobroConfirmado, setCobroConfirmado] = React.useState<string | null>(
+    null,
+  );
 
   const recargar = React.useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // La marca del cobro en la fila dura lo que el sheet tarda en irse —su
+  // trazo más el respiro de 120 ms de useConfirmacionDibujada— más su propio
+  // trazo. Empieza cuando el cobro entró, así que se superpone con el cierre
+  // del sheet y no agrega ni un milisegundo de espera: cuando el panel se
+  // corre, la fila que ella tocó ya está confirmando.
+  React.useEffect(() => {
+    if (!cobroConfirmado) return;
+    const timer = window.setTimeout(
+      () => setCobroConfirmado(null),
+      MS_CHECK_DIBUJADO + 120 + MS_CHECK_DIBUJADO,
+    );
+    return () => window.clearTimeout(timer);
+  }, [cobroConfirmado]);
 
   React.useEffect(() => {
     let cancelado = false;
@@ -69,7 +100,7 @@ export function Dashboard() {
       .then((lista) => setPacientes(lista.map(parsePaciente)))
       .catch(() => {
         setPacientes([]);
-        setToast({ open: true, message: ALGO_FALLO });
+        setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
       });
   }, [pacientes]);
 
@@ -77,6 +108,13 @@ export function Dashboard() {
   // el check sobre el método elegido (ver SheetMetodoPago). Por eso `cobrar`
   // devuelve la promesa y vuelve a lanzar el error: el sheet necesita saber
   // si el cobro entró antes de confirmar nada.
+  //
+  // Cobrar NO recarga la pantalla (delta D12): el turno cobrado se actualiza
+  // en el estado que ya está en pantalla, como hace cobros-view con el aviso
+  // de cobro. Con `recargar()` volvían a entrar los cuatro bloques, la
+  // cascada y el fundido de página, varias veces por jornada, para cambiar
+  // un renglón. La cuenta de la deuda la baja `aplicarCobro`, que toca el
+  // turno, el KPI y la lista de deudores a la vez.
   const cobrar = React.useCallback(
     async (metodo: MetodoPago) => {
       const turnoId = cobrando;
@@ -84,13 +122,25 @@ export function Dashboard() {
       try {
         await apiPost(`/api/turnos/${turnoId}/cobrar`, { metodo });
       } catch (error) {
-        setToast({ open: true, message: "No se pudo cobrar. Probá de nuevo." });
+        setToast({
+          open: true,
+          message: NO_SE_PUDO_COBRAR,
+          variante: "aviso",
+        });
         throw error;
       }
-      setToast({ open: true, message: "Cobrado" });
-      recargar();
+      setEstado((previo) =>
+        previo
+          ? {
+              ...previo,
+              data: aplicarCobro(previo.data, turnoId, metodo, new Date()),
+            }
+          : previo,
+      );
+      setCobroConfirmado(turnoId);
+      setToast({ open: true, message: COBRADO, variante: "confirmacion" });
     },
-    [cobrando, recargar],
+    [cobrando],
   );
 
   const agendar = React.useCallback(
@@ -108,13 +158,18 @@ export function Dashboard() {
       })
         .then(() => {
           setTurnoSheet(false);
-          setToast({ open: true, message: "Turno agendado" });
+          setToast({
+            open: true,
+            message: TURNO_AGENDADO,
+            variante: "confirmacion",
+          });
           recargar();
         })
         .catch(() =>
           setToast({
             open: true,
-            message: "No se pudo agendar. Probá de nuevo.",
+            message: NO_SE_PUDO_AGENDAR,
+            variante: "aviso",
           }),
         );
     },
@@ -125,7 +180,7 @@ export function Dashboard() {
     return fallo ? <FalloDeCarga onReintentar={recargar} /> : <Cargando />;
   }
 
-  const { data, nombre, ahora } = estado;
+  const { data, nombre, ahora, riesgoEnElDia } = estado;
   const {
     pendientes,
     turnos,
@@ -147,6 +202,10 @@ export function Dashboard() {
         <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
           <Pendientes pendientes={pendientes} />
 
+          {/* Lo primero que la pantalla tiene que decir es qué sesión viene
+              ahora — o que no viene ninguna. Con el día ya empezado y todos
+              los turnos pasados, la línea ocupa el lugar de la tarjeta en
+              vez de dejar un hueco. */}
           {ahoraTurno ? (
             <CardAhora
               turno={ahoraTurno}
@@ -156,6 +215,10 @@ export function Dashboard() {
               onCobrar={() => setCobrando(ahoraTurno.id)}
               reloadKey={reloadKey}
             />
+          ) : turnos.length > 0 ? (
+            <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-500">
+              {HOY_SIN_PROXIMA}
+            </p>
           ) : null}
 
           <Kpis ahora={ahora} data={data} />
@@ -168,6 +231,8 @@ export function Dashboard() {
               sinAutorizacion={sinAutorizacion}
               onCobrar={setCobrando}
               onAgendar={abrirTurno}
+              turnoCobrado={cobroConfirmado}
+              riesgoEnElDia={riesgoEnElDia}
             />
 
             <TeDeben deudores={data.deudores} />
@@ -191,6 +256,7 @@ export function Dashboard() {
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((t) => ({ ...t, open: false }))}
       />
     </>

@@ -270,6 +270,49 @@ export const REANUDAR = "Reanudar";
  *  "Cifrando audio…", "Subiendo el audio cifrado…" y "Audio cifrado listo". */
 export const GUARDANDO = "Guardando…";
 
+// ─── Avisos de una grabación en curso ───────────────────────────────────────
+// Los tres son persistentes: se quedan en pantalla mientras la condición
+// dure. No son toasts. Un aviso que se va solo no sirve para algo que hay
+// que resolver ahora.
+
+/** Falta poco para el tope de 150 minutos. El número sale de
+ *  AVISO_LIMITE_SEGUNDOS: se avisa con 15 minutos de anticipación. */
+export const AVISO_LIMITE_GRABACION = "Quedan 15 minutos de grabación";
+
+/** El sistema operativo soltó el wake lock: la pantalla se apagó sola o ella
+ *  la apagó. Es la antesala del corte del 7/9, y por eso se dice con todas
+ *  las letras qué puede pasar y qué hacer. */
+export const AVISO_PANTALLA_APAGADA =
+  "La pantalla se apagó: la grabación se puede cortar. Mantenela encendida.";
+
+/** Hace rato que no entra señal y la pantalla está a la vista. Se avisa
+ *  antes de cortar porque en sesión un silencio largo puede ser normal. */
+export const AVISO_SIN_SONIDO = "No está entrando sonido";
+
+// ─── Por qué se interrumpió una grabación ───────────────────────────────────
+// Una interrupción NUNCA cierra la sesión sola: el audio queda entero y ella
+// decide si reanuda o termina. Lo que cambia es la explicación, porque no se
+// resuelven igual.
+
+/** El micrófono se cortó: llamada entrante, otra app se lo llevó, la pista
+ *  murió. Se reanuda volviendo a pedir el micrófono. */
+export const CORTE_MICROFONO = "Se cortó el micrófono. Lo grabado está a salvo.";
+
+/** Se llegó al tope de duración. No es una falla: es el archivo que no puede
+ *  crecer más. Se dice el número para que se entienda que no se rompió nada. */
+export const CORTE_LIMITE =
+  "Llegaste a las 2 horas y media de grabación. Lo grabado está a salvo.";
+
+/** No entró sonido durante minutos. La causa más común es la pantalla
+ *  bloqueada, así que se nombra: es lo que ella puede cambiar. */
+export const CORTE_SIN_SONIDO =
+  "Dejó de entrar sonido y se pausó la grabación. Lo grabado está a salvo.";
+
+/** La pantalla se apagó y el navegador descargó la página. Se vuelve con los
+ *  chunks recuperados del teléfono, en pausa, esperando decisión. */
+export const CORTE_PANTALLA =
+  "La pantalla se apagó y se pausó la grabación. Lo grabado está a salvo.";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Autorización de grabación (consentimiento informado)
 // ────────────────────────────────────────────────────────────────────────────
@@ -645,6 +688,143 @@ export const AYUDA_TOPE_DIARIO =
 // otro fallo.
 
 // ────────────────────────────────────────────────────────────────────────────
+// Ficha, Pacientes y Agenda
+//
+// Los textos de las tres pantallas que se navegan una detrás de la otra:
+// la lista de pacientes, la ficha de una persona y el día de la agenda.
+//
+// Los dos estados vacíos de acá son de los que hablan con la voz de Lupita
+// (docs/diseno/04-personaje.md): enseñan el próximo paso en vez de decir
+// "no hay datos". La ficha, el brief y el Recorrido NO: son pantallas
+// clínicas y ahí el personaje no entra.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** El botón que crea una persona. Se dice igual en la lista, en el estado
+ *  vacío y en el rótulo del flotante. */
+export const NUEVO_PACIENTE = "Nuevo paciente";
+
+/** Lista de pacientes sin nadie todavía. Es la voz de Lupita, textual del
+ *  documento del personaje. */
+export const PACIENTES_VACIO_TITULO = "Todavía no hay nadie acá.";
+export const PACIENTES_VACIO_LINEA =
+  "Cuando cargues tu primer paciente, aparece en esta lista.";
+
+/** El monto que debe una persona, en la lista. El chip iba sin rótulo y en
+ *  la misma fila hay otro número con signo de pesos —la tarifa—: sin la
+ *  palabra, "$ 11.000" al lado de "$ 2.200" pide un segundo de lectura. */
+export const DEBE = "Debe";
+
+/** El Editar de la cabecera de la ficha. Dice qué edita porque el Recorrido
+ *  tiene su propio Editar, para el hilo, a una pantalla de distancia. */
+export const EDITAR_DATOS = "Editar datos";
+
+/** La acción principal de la ficha: grabar la sesión de esta persona. */
+export const GRABAR = "Grabar";
+
+/** El día de la agenda sin turnos. La primera línea es la de Lupita; las
+ *  otras dos enseñan lo que la pantalla hace sola. */
+export const AGENDA_DIA_VACIO_TITULO = "Nada agendado este día";
+export const AGENDA_DIA_VACIO_LINEAS: [string, string, string] = [
+  "A veces eso también es parte del trabajo.",
+  "Si el paciente ya vino, la app propone el mismo día y hora de la última vez.",
+  "El recordatorio se programa solo al agendar.",
+];
+
+/** El botón que agenda un turno, desde el estado vacío o desde el header. */
+export const AGENDAR = "Agendar";
+
+/** Los puntos del mes: dorado y verde no se explican en ningún lado de esa
+ *  pantalla, y son el único dato de la grilla. */
+export const MES_LEYENDA = "Cada punto es un turno:";
+
+/** La carga masiva del vocabulario, que vive plegada: se usa una vez, al
+ *  principio, y el resto del tiempo estorba a la lista. */
+export const VOCABULARIO_CARGA_MASIVA = "Carga masiva";
+export const VOCABULARIO_CARGA_MASIVA_AYUDA =
+  "Pegá una lista de términos separados por coma o salto de línea.";
+
+/** Quitar un término de la nube. Dos toques: el primero pregunta. */
+export const VOCABULARIO_QUITAR = "Quitar";
+export const VOCABULARIO_QUITAR_CONFIRMAR = "¿Quitar?";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cobros y sistema
+// Lo que dice la pantalla de Cobros, que hasta ahora vivía suelto adentro de
+// cobros-view.tsx. Los estados vacíos siguen la forma de siempre —titular y
+// tres líneas que enseñan el próximo paso— y los rótulos de la grilla dicen
+// cada hecho una sola vez.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Rótulo del número que entró este mes. */
+export const COBRASTE_ESTE_MES = "Cobraste este mes";
+
+/**
+ * Rótulo de lo que falta cobrar, en la grilla de Cobros.
+ *
+ * Dice "Sin cobrar" y no TE_DEBEN a propósito: "Te deben" es el nombre de
+ * una vista —la pestaña con la lista de deudoras— y usarlo también para un
+ * número dejaba el mismo rótulo nombrando dos cosas distintas en la misma
+ * pantalla (01-auditoria-frontend.md, 5).
+ */
+export const SIN_COBRAR = "Sin cobrar";
+
+/** La otra vista de Cobros: los pagos que entraron este mes. */
+export const COBROS_DEL_MES = "Cobros del mes";
+
+/** Rótulo accesible del control que cambia entre las dos vistas. */
+export const VISTA_DE_COBROS = "Vista de cobros";
+
+/** El titular del bloque de deuda: la deuda se cuenta en sesiones, que es
+ *  como ella la piensa. Se completa con el número. */
+export const SIN_COBRAR_FRASE_FINAL = "sin cobrar.";
+
+// ─── Estado vacío: nadie debe nada ──────────────────────────────────────────
+// Es la única confirmación alegre que 04-personaje.md le permite a Cobros, y
+// por eso es el único lugar de esta pantalla donde aparece Lupita.
+
+export const NADIE_TE_DEBE = "Nadie te debe";
+export const NADIE_TE_DEBE_LINEAS = [
+  "Todas las sesiones realizadas están cobradas.",
+  "Cuando cobres un turno desde la agenda, el pago aparece en Cobros del mes.",
+  "Si alguien queda sin pagar, va a aparecer acá con un botón para recordárselo.",
+] as const;
+
+/** El botón del estado vacío: lleva a la otra vista. */
+export const VER_COBROS_DEL_MES = "Ver cobros del mes";
+
+// ─── Estado vacío: todavía no entró nada este mes ───────────────────────────
+// Este no se celebra: no cobrar nada en un mes no es una buena noticia. Va
+// con el ícono de siempre y sin personaje.
+
+export const SIN_COBROS_ESTE_MES = "Todavía no cobraste este mes";
+export const SIN_COBROS_ESTE_MES_LINEAS = [
+  "Los cobros se registran desde el turno, en la agenda o en Hoy.",
+  "Cada pago aparece acá con la fecha y el método.",
+  "Lo que quedó sin cobrar está en Te deben.",
+] as const;
+
+/** El botón del estado vacío: lleva a la otra vista. */
+export const VER_TE_DEBEN = "Ver te deben";
+
+// ─── Estado vacío: no se pudieron traer los cobros ──────────────────────────
+
+export const COBROS_NO_CARGARON = [
+  "No pudimos traer los cobros.",
+  "Puede ser la conexión.",
+  "Tus datos no se perdieron.",
+] as const;
+
+/** El botón de cualquier fallo de carga sale de REINTENTAR, más arriba: es
+ *  el mismo verbo que ya usa la nota. */
+
+/** Mientras la pantalla trae los datos. Nunca "cargando datos" ni
+ *  "procesando". */
+export const CARGANDO = "Cargando…";
+
+// La confirmación del cobro (COBRADO) y su fallo (NO_SE_PUDO_COBRAR) viven
+// en la sección de Hoy, que es la pantalla desde donde se cobra.
+
+// ────────────────────────────────────────────────────────────────────────────
 // Errores — en castellano, sin HTTP, sin R2, sin CORS.
 // Cada uno dice qué pasó, si se perdió algo y qué puede hacer ella.
 // ────────────────────────────────────────────────────────────────────────────
@@ -679,3 +859,43 @@ export const ALGO_FALLO = "Algo falló. Probá de nuevo.";
 export function pluralizar(n: number, singular: string, plural: string): string {
   return `${n} ${n === 1 ? singular : plural}`;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Hoy
+// Los textos propios de la pantalla de Hoy: el estado vacío del día, lo que
+// se dice cuando ya no queda ninguna sesión por delante y las cuatro
+// confirmaciones que antes vivían sueltas en dashboard.tsx.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Estado vacío del día, con Lupita al lado (docs/diseno/04-personaje.md).
+ *  Dos frases: la primera dice el hecho, la segunda lo acompaña. */
+export const HOY_SIN_TURNOS_TITULO = "Hoy no hay nada agendado.";
+export const HOY_SIN_TURNOS_DETALLE =
+  "A veces eso también es parte del trabajo.";
+
+/** Pie del encabezado cuando el día no tiene ningún turno. */
+export const HOY_SIN_SESIONES = "sin sesiones agendadas";
+
+/** El día tiene turnos, pero todos ya pasaron: no hay ninguna sesión que
+ *  esperar. Ocupa el lugar de la tarjeta de AHORA. */
+export const HOY_SIN_PROXIMA = "No queda ninguna sesión por delante hoy.";
+
+/** Confirmaciones y fallos de la pantalla de Hoy. Estaban escritos a mano en
+ *  dashboard.tsx, que es exactamente lo que este módulo existe para evitar. */
+
+/**
+ * El toast de vuelta después de cobrar, con las palabras que le pone
+ * docs/diseno/04-personaje.md. La frase es alegre; el dibujo que la
+ * acompaña es el CheckDibujado de siempre (`variante="confirmacion"`).
+ *
+ * Lupita no entra al toast: se dibuja sobre ink-900 y su paleta está fijada
+ * sobre blanco o crema (ver la nota de ui/toast.tsx). El tono alegre lo
+ * ponen las palabras, que es donde 04-personaje.md dice que vive.
+ */
+export const COBRADO = "Cobrado. Ese ya está.";
+
+/** El cobro no entró. Va sin check —`variante="aviso"`—: un tilde verde
+ *  sobre un fracaso es la peor confirmación posible. */
+export const NO_SE_PUDO_COBRAR = "No se pudo cobrar. Probá de nuevo.";
+export const TURNO_AGENDADO = "Turno agendado";
+export const NO_SE_PUDO_AGENDAR = "No se pudo agendar. Probá de nuevo.";

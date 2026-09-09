@@ -315,7 +315,7 @@ describe("pendientesTerapeuta — sinCobrar", () => {
     expect(totalSinCobrar).toEqual({ sesiones: 2, monto: 4200, pacientes: 1 });
   });
 
-  it("deja fuera lo pagado, lo cancelado, lo ausente y lo que todavía no pasó", async () => {
+  it("deja fuera lo pagado, lo cancelado, lo ausente y lo que todavía no se dio", async () => {
     const orgId = await crearOrg();
     const pacienteId = await crearPaciente(orgId);
 
@@ -348,19 +348,50 @@ describe("pendientesTerapeuta — sinCobrar", () => {
       estado: "programado",
       pagoEstado: "pendiente",
     });
-    // Anomalía defensiva: marcado realizado con fecha futura.
+
+    const { sinCobrar, totalSinCobrar } = await pendientesDe(orgId);
+
+    expect(sinCobrar).toEqual([]);
+    expect(totalSinCobrar).toEqual({ sesiones: 0, monto: 0, pacientes: 0 });
+  });
+
+  it("cuenta un turno realizado con fecha futura, igual que Cobros", async () => {
+    // La regla de qué es deuda es una sola —`esDeudaPendiente`: realizado y
+    // con pago pendiente— y la consulta también: `buscarTurnosConDeuda`, la
+    // misma que alimenta /api/deudores y la pantalla de Cobros. Este caso de
+    // uso tenía además un `fecha <= ahora` propio, y por ese filtro de más
+    // la misma sesión contaba en Cobros y no en Hoy.
+    //
+    // Un turno realizado con fecha futura no puede existir por la API: el
+    // camino que marca un turno como realizado es la grabación de la sesión,
+    // y cobrar-turno rechaza con 400 cualquier cosa que no sea un turno ya
+    // realizado. Si aparece uno, es una fila escrita a mano en la base, y lo
+    // correcto es que las dos pantallas digan lo mismo sobre ella —lo peor
+    // posible es que dos pantallas cuenten la misma plata de dos maneras—.
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId, "Pedro", "Ruiz");
+
     await crearTurno({
       orgId,
       pacienteId,
       fecha: MANANA,
       estado: "realizado",
       pagoEstado: "pendiente",
+      tarifaCobrada: 3000,
     });
 
     const { sinCobrar, totalSinCobrar } = await pendientesDe(orgId);
 
-    expect(sinCobrar).toEqual([]);
-    expect(totalSinCobrar).toEqual({ sesiones: 0, monto: 0, pacientes: 0 });
+    expect(sinCobrar).toEqual([
+      {
+        pacienteId,
+        pacienteNombre: "Pedro Ruiz",
+        sesiones: 1,
+        monto: 3000,
+        masAntiguo: MANANA.toISOString(),
+      },
+    ]);
+    expect(totalSinCobrar).toEqual({ sesiones: 1, monto: 3000, pacientes: 1 });
   });
 
   it("ordena por monto descendente y, a igual monto, la deuda más vieja primero", async () => {

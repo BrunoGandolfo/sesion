@@ -11,6 +11,11 @@
 // sesiones es un pendiente, no seis. El cobro en sí se hace en Cobros o en
 // la ficha, donde está la sesión concreta que se está pagando.
 //
+// Y va SIN nombres: es la cuenta y el camino, nada más. Los nombres los
+// lista "Te deben", una sola vez y en un solo orden. Antes esta fila
+// mostraba sus tres nombres y el bloque de abajo otros tres —dos listas del
+// mismo dato, ordenadas distinto, a 400 px una de otra—.
+//
 // Cada fila se renderiza únicamente si tiene ítems, y si las tres están
 // vacías el bloque entero desaparece: un cartel de "no tenés nada
 // pendiente" ocuparía el lugar más caro de la pantalla para no decir nada.
@@ -49,7 +54,8 @@ function Fila({
   restantes?: number;
   /** Alternativa al resumen: un enlace a la pantalla donde está el resto. */
   pie?: React.ReactNode;
-  children: React.ReactNode;
+  /** La fila de la deuda no lista nombres: son la cuenta y el camino. */
+  children?: React.ReactNode;
 }) {
   return (
     <div className="px-4 py-3.5">
@@ -57,7 +63,9 @@ function Fila({
         {icono}
         {titulo}
       </p>
-      <ul className="mt-1.5 flex flex-col">{children}</ul>
+      {children ? (
+        <ul className="mt-1.5 flex flex-col">{children}</ul>
+      ) : null}
       {pie ? <div className="mt-1 pl-[26px]">{pie}</div> : null}
       {!pie && restantes > 0 ? (
         <p className="mt-1 pl-[26px] font-sans text-[12px] text-ink-500">
@@ -152,21 +160,7 @@ export function Pendientes({ pendientes }: PendientesProps) {
                 Ver todos → {NAV.COBROS}
               </Link>
             }
-          >
-            {sinCobrar.slice(0, MAX_VISIBLES).map((deudor) => (
-              <li key={deudor.pacienteId}>
-                <Link href={`/pacientes/${deudor.pacienteId}`} className={ITEM}>
-                  <span className="min-w-0 truncate font-sans text-[13px] text-ink-900">
-                    {deudor.pacienteNombre}
-                  </span>
-                  <span className="shrink-0 font-sans text-[12px] tabular-nums text-ink-500">
-                    {pluralizar(deudor.sesiones, "sesión", "sesiones")} ·{" "}
-                    {money(deudor.monto)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </Fila>
+          />
         ) : null}
 
         {pacientesSinAutorizacion.length > 0 ? (
