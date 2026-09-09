@@ -35,9 +35,9 @@ recordatorios por SMS y la nota clínica de cada sesión grabada.
 
 ## Lo que NO hace
 
-- **No manda WhatsApp automáticos.** Los recordatorios de turno salen por SMS.
-  El botón "Recordar cobro" abre WhatsApp en tu teléfono con el mensaje ya
-  escrito, pero lo enviás vos.
+- **No manda WhatsApp.** Los recordatorios de turno salen por SMS.
+  **Recordar cobro** también manda un SMS, pero solo cuando vos confirmás
+  el envío desde Cobros.
 - **No graba video.** Solo audio.
 - **No diagnostica.** El borrador de nota no pone diagnósticos DSM/CIE: la
   hipótesis diagnóstica la escribís vos.

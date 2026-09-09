@@ -51,14 +51,12 @@ número rojo con cuántas personas están en esa última zona.
 ## "Recordar cobro"
 
 En **Te deben**, cada persona con teléfono cargado tiene el botón **Recordar
-cobro**. Abre **WhatsApp** en tu teléfono, con el mensaje ya escrito:
+cobro**. Revisá el mensaje y confirmá: se envía un **SMS**, sin abrir WhatsApp.
 
-> Hola [Nombre], ¿cómo estás? Te escribo para recordarte que tenés N sesiones
-> pendientes de pago por un total de $ …. Cualquier duda estoy a disposición.
-> [Tu nombre]
-
-**El mensaje no se manda solo: lo mandás vos desde WhatsApp.** Es distinto del
-recordatorio del turno, que sale por SMS y sí es automático.
+El recordatorio de cobro **sale solo cuando vos confirmás el envío**; el del
+turno se programa automáticamente. El texto del cobro no es configurable.
+Si no se puede enviar, la pantalla muestra el error. Si figura enviado, eso
+indica que el servicio aceptó el SMS: no confirma que la paciente lo leyó.
 
 ## Qué hace la app por detrás
 
