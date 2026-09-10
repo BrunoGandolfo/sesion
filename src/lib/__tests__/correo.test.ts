@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { enviarCorreo, REMITENTE_CORREO } from "@/lib/correo";
 import { plantillaRecuperar } from "@/lib/correo-plantillas";
+import { ESLOGAN } from "@/lib/glosario";
 
 const correo = { para: "colega@example.test", ...plantillaRecuperar("https://sesionapp.app/restablecer?token=prueba") };
 afterEach(() => vi.restoreAllMocks());
@@ -32,6 +33,10 @@ it("escapa HTML y conserva el enlace en texto plano", () => {
   const enlace = 'https://sesionapp.app/restablecer?token=a&otro="<b>';
   const plantilla = plantillaRecuperar(enlace);
   expect(plantilla.texto).toContain(enlace);
+  expect(plantilla.texto).toContain(`Sesión · ${ESLOGAN}`);
+  expect(plantilla.html).toContain(`Sesión · ${ESLOGAN}`);
+  expect(plantilla.texto).not.toContain("Tu consultorio, en orden.");
+  expect(plantilla.html).not.toContain("Tu consultorio, en orden.");
   expect(plantilla.html).toContain("&amp;otro=&quot;&lt;b&gt;");
   expect(() => plantillaRecuperar("javascript:alert(1)")).toThrow();
 });
