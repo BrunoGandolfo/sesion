@@ -1134,7 +1134,7 @@ export const CORREO_RECUPERAR_TEXTO = "Recibimos un pedido para cambiar tu contr
 export const CORREO_RECUPERAR_BOTON = "Elegir una contraseña nueva";
 export const CORREO_RECUPERAR_VENCE = "El enlace vence en una hora y se puede usar una sola vez. Si pedís otro, este deja de funcionar.";
 export const CORREO_RECUPERAR_IGNORAR = "Si no lo pediste vos, ignorá este correo. Tu contraseña sigue igual.";
-export const CORREO_FIRMA = "Sesión · Tu consultorio, en orden.";
+export const CORREO_FIRMA = `Sesión · ${ESLOGAN}`;
 
 
 // Entrada — invitaciones, alta y términos provisionales
