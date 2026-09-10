@@ -1144,3 +1144,35 @@ export const CORREO_RECUPERAR_BOTON = "Elegir una contraseña nueva";
 export const CORREO_RECUPERAR_VENCE = "El enlace vence en una hora y se puede usar una sola vez. Si pedís otro, este deja de funcionar.";
 export const CORREO_RECUPERAR_IGNORAR = "Si no lo pediste vos, ignorá este correo. Tu contraseña sigue igual.";
 export const CORREO_FIRMA = "Sesión · Tu consultorio, en orden.";
+
+
+// Entrada — invitaciones, alta y términos provisionales
+export const ENTRADA_REGISTRO = "Crear mi cuenta";
+export const ENTRADA_NOMBRE = "Tu nombre";
+export const ENTRADA_ACEPTA_TERMINOS = "Acepto los términos y la política de privacidad";
+export const ENTRADA_TERMINOS_REQUERIDOS = "Para crear tu cuenta necesitás aceptar los términos y la política de privacidad.";
+export const ENTRADA_INVITACION_INVALIDA = "Este enlace venció o ya se usó.";
+export const ENTRADA_PEDIR_INVITACION = "Pedile otro a quien te invitó";
+export const ENTRADA_REGISTRO_ERROR = "No pudimos crear la cuenta con esos datos. Revisalos o probá entrar con tu cuenta.";
+export const ENTRADA_CUENTA_CREADA_SIN_SESION = "Tu cuenta ya está creada. Entrá con tu email y contraseña. Si el acceso está bloqueado por intentos, esperá antes de volver a probar.";
+export const INVITAR_COLEGA = "Invitar a una colega";
+export const INVITAR_DESCRIPCION = "Tu colega crea su propio consultorio, separado del tuyo. El enlace vence en 7 días y se usa una sola vez. Compartilo sólo con ella.";
+export const INVITAR_GENERAR = "Generar enlace";
+export const INVITAR_ENLACE = "Enlace de invitación";
+export const INVITAR_COPIAR = "Copiar";
+export const INVITAR_COPIADO = "Enlace copiado";
+export const INVITAR_WHATSAPP = "Compartir por WhatsApp";
+export const INVITAR_MENSAJE = "Te invito a probar Sesión. Con este enlace creás tu propio consultorio. Vence en 7 días:";
+export const INVITAR_ERROR_COPIA = "No pude copiarlo. Seleccioná el enlace y copialo desde tu navegador.";
+export const TERMINOS_TITULO = "Términos y política de privacidad";
+export const TERMINOS_FECHA = "Borrador del 9 de septiembre de 2026";
+export const TERMINOS_VERSION = "borrador-2026-09-09";
+export const TERMINOS_BORRADOR = "BORRADOR PENDIENTE DE REVISIÓN LEGAL";
+export const TERMINOS_SECCIONES = [
+  { titulo: "Qué hace Sesión", texto: "Sesión ayuda a organizar el consultorio: agenda, pacientes, cobros y recordatorios. Puede transcribir una grabación y preparar un borrador de nota clínica que la profesional revisa y aprueba. La aplicación no reemplaza su criterio profesional." },
+  { titulo: "Qué información guarda", texto: "La app guarda los datos de la cuenta y del consultorio, los datos de pacientes que cargás, turnos, cobros, consentimientos y registros de actividad. Si grabás una sesión, procesa audio, transcripción y notas. El audio se cifra antes de salir del dispositivo y se borra al aprobar la nota; las notas y transcripciones se guardan cifradas en la base." },
+  { titulo: "Dónde se procesa y se guarda", texto: "Vercel ejecuta la aplicación; Neon aloja la base de datos; Cloudflare R2 guarda el audio cifrado y las copias de respaldo cifradas. Railway ejecuta el proceso que coordina el trabajo con los audios. AssemblyAI transcribe el audio; Anthropic genera borradores y respuestas de ayuda; Twilio envía recordatorios por SMS; Resend envía los correos para recuperar el acceso. Cada servicio recibe la información necesaria para su tarea. Este borrador no establece países de alojamiento ni plazos contractuales: deben revisarse antes de publicar el texto definitivo." },
+  { titulo: "El consentimiento de tus pacientes", texto: "La profesional es responsable de obtener el consentimiento de sus pacientes para cargar y procesar sus datos y para grabar las sesiones, y de explicarles cómo se usa la aplicación. Revisar y aprobar cada nota también queda a su cargo." },
+  { titulo: "Cómo pedir la baja", texto: "Para pedir la baja de tu cuenta, contactá a quien administra Sesión por el canal con el que recibiste acceso. Hoy no hay una baja automática en la app. Quedan pendientes de definir y publicar el canal de contacto definitivo, los pasos para entregar o eliminar la información y el tratamiento de las copias de respaldo." },
+  { titulo: "Texto pendiente", texto: "Este contenido es un borrador de trabajo para que el responsable de Sesión lo reescriba y lo revise con asesoramiento legal. No presenta condiciones jurídicas definitivas ni certifica cumplimiento de una norma." },
+] as const;

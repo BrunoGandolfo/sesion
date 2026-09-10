@@ -40,6 +40,7 @@ import path from 'path'
 //   src/components/ayuda/__tests__/panel-ayuda.test.tsx
 
 const INTEGRACION = [
+  'src/lib/__tests__/registro-atomico.test.ts',
   'src/lib/__tests__/recuperacion-atomica.test.ts',
   'src/lib/__tests__/prisma-encryption.test.ts',
   'src/lib/__tests__/casos-uso-sesion.test.ts',

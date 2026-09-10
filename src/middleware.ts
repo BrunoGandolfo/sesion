@@ -44,7 +44,7 @@ export default auth((request) => {
   const isLoggedIn = Boolean(request.auth);
   const { nextUrl } = request;
   const isLoginRoute = nextUrl.pathname === "/login";
-  const isPublicRoute = isLoginRoute || ["/recuperar", "/restablecer", "/api/cuenta/recuperar", "/api/cuenta/restablecer"].includes(nextUrl.pathname);
+  const isPublicRoute = isLoginRoute || ["/registro", "/terminos", "/api/cuenta/registro", "/recuperar", "/restablecer", "/api/cuenta/recuperar", "/api/cuenta/restablecer"].includes(nextUrl.pathname);
   const origin = `${nextUrl.protocol}//${
     request.headers.get("host") ?? nextUrl.host
   }`;

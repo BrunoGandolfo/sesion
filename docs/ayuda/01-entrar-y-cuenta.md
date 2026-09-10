@@ -3,6 +3,14 @@
 **Para qué sirve.** Cómo se entra a Sesión, qué pasa si te equivocás varias
 veces con la contraseña y cómo cambiarla.
 
+## Crear tu cuenta con una invitación
+
+Necesitás un enlace de una colega que ya use Sesión. Completá nombre, email,
+contraseña dos veces y aceptá los términos y la política de privacidad.
+Al tocar **Crear mi cuenta**, se abre tu propio consultorio y entrás a **Hoy**.
+Los datos de quien te invitó permanecen separados. Si el enlace venció o ya
+se usó, pedile otro. Más detalles en `11-tu-consultorio.md`.
+
 ## Entrar
 
 1. Abrí la app. Vas a ver el título **Sesión** y abajo *Tu consulta, organizada.*

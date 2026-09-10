@@ -147,3 +147,27 @@ Migrate no aplica esos inversos automáticamente: para revertir un despliegue
 normal alcanza con volver al código anterior y conservar las tablas aditivas.
 No ejecutar los inversos sobre producción como rutina ni borrar el historial
 `_prisma_migrations`.
+
+
+### Tablas y pendientes de publicación
+
+- `password_resets`: hashes de enlaces de recuperación, vigencia de una hora,
+  consumo e índice por usuario/fecha para el máximo de tres pedidos por hora.
+- `invitaciones`: hashes de invitaciones de siete días, creadora y consumo.
+  En esta versión `organization_id` y `email` se crean nulos: el registro
+  crea una organización propia, nunca comparte el consultorio de la invitante.
+- La aceptación de términos queda en el evento `cuenta.registro`, con su
+  versión, dentro de la transacción de alta. No se registra el email ni el token.
+
+Antes de ofrecer el acceso, el dueño debe terminar la verificación del dominio
+`sesionapp.app` en Resend y revisar el texto de `/terminos` (constantes
+`TERMINOS_*` de `glosario.ts`, actualizando también `TERMINOS_VERSION`). El borrador deja explícitamente pendiente el
+canal definitivo de baja y el tratamiento de los respaldos. Con el dominio
+verificado, probar un correo real y una recuperación completa.
+
+El login sigue usando Auth.js v5, credenciales y JWT de 30 días. La recuperación
+no revoca los JWT existentes ni borra el contador de intentos del login, igual
+que el cambio de contraseña anterior. El alta usa el mismo `signIn` de
+credenciales y respeta sus límites; si el acceso falla después de crear la
+cuenta, el formulario avisa que debe entrar desde login, sin consumir otra
+invitación ni intentar crear otra organización.
