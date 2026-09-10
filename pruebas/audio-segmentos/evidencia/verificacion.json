@@ -1,0 +1,24 @@
+{
+  "at": "2026-09-10T21:18:28.147Z",
+  "sourceSha256": "05156ca79de80c8cd25ccac996f58b45a9cb90e03e7271a1fa7043dc0cbf71a6",
+  "reportsVerified": [
+    "chromium-continua",
+    "chromium-pausa",
+    "chromium-recarga",
+    "chromium-segundo-plano",
+    "webkit-continua",
+    "webkit-pausa",
+    "webkit-recarga",
+    "webkit-segundo-plano",
+    "chromium-continua-timeslice20",
+    "chromium-continua-60s",
+    "chromium-continua-pcm16k",
+    "chromium-continua-12s",
+    "chromium-continua-opus16k"
+  ],
+  "pcmHeader": {
+    "codecFloatIEEE": true,
+    "bitDepth32": true,
+    "bytes": 646641
+  }
+}

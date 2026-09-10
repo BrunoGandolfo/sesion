@@ -1,0 +1,12 @@
+{
+  "name": "prueba-audio-segmentos",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "node servidor.mjs",
+    "test:audio": "node pruebas.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

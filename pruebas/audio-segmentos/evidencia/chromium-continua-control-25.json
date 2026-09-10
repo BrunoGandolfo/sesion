@@ -1,0 +1,381 @@
+{
+  "browser": "chromium",
+  "scenario": "continua",
+  "startedAt": "2026-09-10T20:56:42.161Z",
+  "durationSeconds": 25,
+  "segmentSeconds": 10,
+  "playwrightVersion": "1.63.0",
+  "browserVersion": "153.0.8010.12",
+  "os": "linux 6.18.33.2-microsoft-standard-WSL2",
+  "sourceSha256": "4f6609a4973b8c6aa170c238528648f749d9ff77c41a82c2dc39f9b4c4e38f52",
+  "headless": false,
+  "launchMode": "Chrome nativo + CDP noDefaults:true",
+  "errors": [],
+  "preflight": {
+    "mediaRecorder": "function",
+    "audioContext": "function",
+    "visibility": "visible",
+    "error": "",
+    "strictStorageReady": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "supportedMimes": [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4"
+    ]
+  },
+  "calibration": [
+    {
+      "insertedMs": -80,
+      "expectedIntervalMs": 920,
+      "actualIntervalMs": 919.9999999999999,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 0,
+      "expectedIntervalMs": 1000,
+      "actualIntervalMs": 1000,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 80,
+      "expectedIntervalMs": 1080,
+      "actualIntervalMs": 1080,
+      "found": 4,
+      "passed": true
+    }
+  ],
+  "finishedAt": "2026-09-10T20:57:25.092Z",
+  "elapsedWindowMs": 45173.551354,
+  "diagnostic": {
+    "version": 1,
+    "protocol": "MediaRecorder nuevo por archivo; no timeslice; 64 kbps solicitados",
+    "run": {
+      "id": "bca55cec-16a1-42c7-a9c2-763cef1bcc0c",
+      "startedAt": "2026-09-10T20:56:42.425Z",
+      "source": "synthetic",
+      "segmentSeconds": 10,
+      "requestedMimeType": "audio/webm;codecs=opus",
+      "nextIndex": 4,
+      "strictDurability": true,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "sampleRate": 44100,
+      "expectedBeeps": 25,
+      "status": "finished",
+      "wallRecordedMs": 25059.7,
+      "expectedBeepsByAudioClock": 15,
+      "sourceRenderedSec": 14.791111111111112,
+      "observedAt": "2026-09-10T20:57:25.093Z",
+      "events": [
+        {
+          "at": "2026-09-10T20:56:42.463Z",
+          "wallMs": 246.1,
+          "type": "audio-context",
+          "state": "running",
+          "audioTime": 0
+        },
+        {
+          "at": "2026-09-10T20:56:42.565Z",
+          "wallMs": 102.60000002384186,
+          "type": "source-warmup"
+        },
+        {
+          "at": "2026-09-10T20:56:42.569Z",
+          "wallMs": 352.1,
+          "type": "segment-start",
+          "index": 1,
+          "sourceTime": 0,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:56:52.571Z",
+          "wallMs": 10353.6,
+          "type": "segment-stop",
+          "index": 1,
+          "reason": "rotation",
+          "rotationLateMs": 1.6
+        },
+        {
+          "at": "2026-09-10T20:56:52.571Z",
+          "wallMs": 10354.4,
+          "type": "segment-start",
+          "index": 2,
+          "sourceTime": 10.00780045351474,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:56:52.579Z",
+          "wallMs": 10361.6,
+          "type": "saved",
+          "index": 1,
+          "bytes": 10519,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:57:02.572Z",
+          "wallMs": 20354.6,
+          "type": "segment-stop",
+          "index": 2,
+          "reason": "rotation",
+          "rotationLateMs": 0.3
+        },
+        {
+          "at": "2026-09-10T20:57:02.572Z",
+          "wallMs": 20355.1,
+          "type": "segment-start",
+          "index": 3,
+          "sourceTime": 14.744671201814059,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:57:02.576Z",
+          "wallMs": 20359.2,
+          "type": "saved",
+          "index": 2,
+          "bytes": 5350,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:57:04.977Z",
+          "wallMs": 25411.5,
+          "type": "segment-stop",
+          "index": 3,
+          "reason": "finish",
+          "rotationLateMs": 0
+        },
+        {
+          "at": "2026-09-10T20:57:04.993Z",
+          "wallMs": 25427.9,
+          "type": "saved",
+          "index": 3,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:57:04.994Z",
+          "wallMs": 25428.7,
+          "type": "finish"
+        },
+        {
+          "at": "2026-09-10T20:57:04.994Z",
+          "wallMs": 25428.9,
+          "type": "audio-context",
+          "state": "closed",
+          "audioTime": 14.895600907029479
+        }
+      ],
+      "sourceIntervals": [
+        [
+          0,
+          10.00780045351474
+        ],
+        [
+          10.00780045351474,
+          14.744671201814059
+        ],
+        [
+          14.744671201814059,
+          14.791111111111112
+        ]
+      ],
+      "segmentCount": 3,
+      "audioContextState": null,
+      "visibility": "visible"
+    },
+    "analysis": {
+      "source": "synthetic",
+      "recovered": false,
+      "interrupted": false,
+      "expectedCountIsLowerBound": false,
+      "wallRecordedMs": 25059.7,
+      "savedSegmentsWallMs": 25058.3,
+      "decodedDurationSec": 14.699955,
+      "decodedMinusWallMs": -10359.745,
+      "sourceRenderedSec": 14.791111111111112,
+      "expectedBeepsByAudioClock": 15,
+      "expectedBeeps": 25,
+      "foundBeeps": null,
+      "allDecodable": false,
+      "segments": [
+        {
+          "index": 1,
+          "decodable": true,
+          "bytes": 10519,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 9.959977324263038,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 10001.6,
+          "rotationLateMs": 1.6,
+          "reason": "rotation"
+        },
+        {
+          "index": 2,
+          "decodable": true,
+          "bytes": 5350,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 4.739977324263038,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 10000.3,
+          "rotationLateMs": 0.3,
+          "reason": "rotation"
+        },
+        {
+          "index": 3,
+          "decodable": false,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "error": "EncodingError: Unable to decode audio data"
+        }
+      ],
+      "boundaries": [],
+      "beeps": []
+    },
+    "events": [
+      {
+        "at": "2026-09-10T20:56:42.463Z",
+        "wallMs": 246.1,
+        "type": "audio-context",
+        "state": "running",
+        "audioTime": 0
+      },
+      {
+        "at": "2026-09-10T20:56:42.565Z",
+        "wallMs": 102.60000002384186,
+        "type": "source-warmup"
+      },
+      {
+        "at": "2026-09-10T20:56:42.569Z",
+        "wallMs": 352.1,
+        "type": "segment-start",
+        "index": 1,
+        "sourceTime": 0,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:56:52.571Z",
+        "wallMs": 10353.6,
+        "type": "segment-stop",
+        "index": 1,
+        "reason": "rotation",
+        "rotationLateMs": 1.6
+      },
+      {
+        "at": "2026-09-10T20:56:52.571Z",
+        "wallMs": 10354.4,
+        "type": "segment-start",
+        "index": 2,
+        "sourceTime": 10.00780045351474,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:56:52.579Z",
+        "wallMs": 10361.6,
+        "type": "saved",
+        "index": 1,
+        "bytes": 10519,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:57:02.572Z",
+        "wallMs": 20354.6,
+        "type": "segment-stop",
+        "index": 2,
+        "reason": "rotation",
+        "rotationLateMs": 0.3
+      },
+      {
+        "at": "2026-09-10T20:57:02.572Z",
+        "wallMs": 20355.1,
+        "type": "segment-start",
+        "index": 3,
+        "sourceTime": 14.744671201814059,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:57:02.576Z",
+        "wallMs": 20359.2,
+        "type": "saved",
+        "index": 2,
+        "bytes": 5350,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:57:04.977Z",
+        "wallMs": 25411.5,
+        "type": "segment-stop",
+        "index": 3,
+        "reason": "finish",
+        "rotationLateMs": 0
+      },
+      {
+        "at": "2026-09-10T20:57:04.993Z",
+        "wallMs": 25427.9,
+        "type": "saved",
+        "index": 3,
+        "bytes": 110,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:57:04.994Z",
+        "wallMs": 25428.7,
+        "type": "finish"
+      },
+      {
+        "at": "2026-09-10T20:57:04.994Z",
+        "wallMs": 25428.9,
+        "type": "audio-context",
+        "state": "closed",
+        "audioTime": 14.895600907029479
+      }
+    ],
+    "environment": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "secureContext": true,
+      "supportedMimes": [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4"
+      ]
+    }
+  },
+  "uiError": "",
+  "status": "ejecutado",
+  "zipDownload": {
+    "name": "prueba-audio-bca55cec.zip",
+    "failure": null,
+    "bytes": 23998,
+    "sha256": "1da2070bf3f347bf0b4fe6b89ba2ee860f1be577312aa84e712a99a59b03b318"
+  },
+  "zipVerification": {
+    "crcError": null,
+    "entries": [
+      "segmento-001.webm",
+      "segmento-002.webm",
+      "segmento-003.webm",
+      "diagnostico.json"
+    ],
+    "sizes": [
+      10519,
+      5350,
+      110,
+      7559
+    ]
+  },
+  "individualDownload": {
+    "name": "segmento-001.webm",
+    "failure": null,
+    "bytes": 10519,
+    "sha256": "5a61b199dd25d9ea7a88fd40b40c648aa4ff963ba45c21ac24abf51542b53001"
+  }
+}

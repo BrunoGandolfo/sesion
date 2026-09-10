@@ -1,0 +1,948 @@
+{
+  "browser": "chromium",
+  "scenario": "continua",
+  "startedAt": "2026-09-10T21:10:39.125Z",
+  "durationSeconds": 125,
+  "segmentSeconds": 60,
+  "playwrightVersion": "1.63.0",
+  "browserVersion": "153.0.8010.12",
+  "os": "linux 6.18.33.2-microsoft-standard-WSL2",
+  "sourceSha256": "05156ca79de80c8cd25ccac996f58b45a9cb90e03e7271a1fa7043dc0cbf71a6",
+  "headless": false,
+  "launchMode": "Chrome nativo + CDP noDefaults:true",
+  "errors": [],
+  "audioOutput": "PulseAudio privado, null sink, 48000 Hz",
+  "internalTimesliceMs": null,
+  "variant": {
+    "forcedMimeType": null,
+    "sourceSampleRate": null,
+    "sourceChannels": null
+  },
+  "preflight": {
+    "mediaRecorder": "function",
+    "audioContext": "function",
+    "visibility": "visible",
+    "error": "",
+    "strictStorageReady": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "supportedMimes": [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4"
+    ]
+  },
+  "calibration": [
+    {
+      "insertedMs": -80,
+      "expectedIntervalMs": 920,
+      "actualIntervalMs": 919.9999999999999,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": -40,
+      "expectedIntervalMs": 960,
+      "actualIntervalMs": 960,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 0,
+      "expectedIntervalMs": 1000,
+      "actualIntervalMs": 1000,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 40,
+      "expectedIntervalMs": 1040,
+      "actualIntervalMs": 1040,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 80,
+      "expectedIntervalMs": 1080,
+      "actualIntervalMs": 1080,
+      "found": 4,
+      "passed": true
+    }
+  ],
+  "finishedAt": "2026-09-10T21:12:35.828Z",
+  "elapsedWindowMs": 125683.695656,
+  "diagnostic": {
+    "version": 1,
+    "protocol": "MediaRecorder nuevo por archivo; no timeslice; 64 kbps solicitados",
+    "run": {
+      "id": "7741713a-af24-44d4-95c1-d332efc0aab4",
+      "startedAt": "2026-09-10T21:10:39.345Z",
+      "source": "synthetic",
+      "segmentSeconds": 60,
+      "requestedMimeType": "audio/webm;codecs=opus",
+      "nextIndex": 4,
+      "strictDurability": true,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "sampleRate": 44100,
+      "expectedBeeps": 125,
+      "status": "finished",
+      "wallRecordedMs": 125031.2,
+      "expectedBeepsByAudioClock": 125,
+      "sourceRenderedSec": 125.03945578231291,
+      "observedAt": "2026-09-10T21:12:35.831Z",
+      "events": [
+        {
+          "at": "2026-09-10T21:10:39.389Z",
+          "wallMs": 220.9,
+          "type": "audio-context",
+          "state": "running",
+          "audioTime": 0
+        },
+        {
+          "at": "2026-09-10T21:10:40.792Z",
+          "wallMs": 1403.3999999761581,
+          "type": "source-warmup"
+        },
+        {
+          "at": "2026-09-10T21:10:40.796Z",
+          "wallMs": 1627.7,
+          "type": "segment-start",
+          "index": 1,
+          "sourceTime": 0,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T21:11:35.479Z",
+          "wallMs": 61630,
+          "type": "segment-stop",
+          "index": 1,
+          "reason": "rotation",
+          "rotationLateMs": 2.3
+        },
+        {
+          "at": "2026-09-10T21:11:35.481Z",
+          "wallMs": 61631.3,
+          "type": "segment-start",
+          "index": 2,
+          "sourceTime": 60.02358276643991,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T21:11:35.488Z",
+          "wallMs": 61638.8,
+          "type": "saved",
+          "index": 1,
+          "bytes": 61727,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T21:12:30.147Z",
+          "wallMs": 121631.4,
+          "type": "segment-stop",
+          "index": 2,
+          "reason": "rotation",
+          "rotationLateMs": 0.2
+        },
+        {
+          "at": "2026-09-10T21:12:30.149Z",
+          "wallMs": 121632.8,
+          "type": "segment-start",
+          "index": 3,
+          "sourceTime": 120.0239455782313,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T21:12:30.154Z",
+          "wallMs": 121638.2,
+          "type": "saved",
+          "index": 2,
+          "bytes": 69916,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T21:12:35.175Z",
+          "wallMs": 126658.6,
+          "type": "segment-stop",
+          "index": 3,
+          "reason": "finish",
+          "rotationLateMs": 0
+        },
+        {
+          "at": "2026-09-10T21:12:35.190Z",
+          "wallMs": 126674.2,
+          "type": "saved",
+          "index": 3,
+          "bytes": 6980,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T21:12:35.191Z",
+          "wallMs": 126674.9,
+          "type": "finish"
+        },
+        {
+          "at": "2026-09-10T21:12:35.191Z",
+          "wallMs": 126675.1,
+          "type": "audio-context",
+          "state": "closed",
+          "audioTime": 125.19038548752835
+        }
+      ],
+      "sourceIntervals": [
+        [
+          0,
+          60.011972789115646
+        ],
+        [
+          60.02358276643991,
+          120.0239455782313
+        ],
+        [
+          120.0239455782313,
+          125.0510657596372
+        ]
+      ],
+      "segmentCount": 3,
+      "audioContextState": null,
+      "visibility": "visible"
+    },
+    "analysis": {
+      "source": "synthetic",
+      "recovered": false,
+      "interrupted": false,
+      "expectedCountIsLowerBound": false,
+      "wallRecordedMs": 125031.2,
+      "savedSegmentsWallMs": 125028.4,
+      "decodedDurationSec": 124.979932,
+      "decodedMinusWallMs": -51.268,
+      "sourceRenderedSec": 125.03945578231291,
+      "expectedBeepsByAudioClock": 125,
+      "expectedBeeps": 125,
+      "foundBeeps": 125,
+      "allDecodable": true,
+      "segments": [
+        {
+          "index": 1,
+          "decodable": true,
+          "bytes": 61727,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 59.999977324263035,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 60002.3,
+          "rotationLateMs": 2.3,
+          "reason": "rotation"
+        },
+        {
+          "index": 2,
+          "decodable": true,
+          "bytes": 69916,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 59.999977324263035,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 60000.2,
+          "rotationLateMs": 0.2,
+          "reason": "rotation"
+        },
+        {
+          "index": 3,
+          "decodable": true,
+          "bytes": 6980,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 4.9799773242630385,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 5025.9,
+          "rotationLateMs": 0,
+          "reason": "finish"
+        }
+      ],
+      "boundaries": [
+        {
+          "from": 1,
+          "to": 2,
+          "atSec": 60,
+          "intervalMs": 980.771,
+          "deviationMs": -19.229,
+          "exceeds40ms": false,
+          "intentionalPause": false
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "atSec": 120,
+          "intervalMs": 999.728,
+          "deviationMs": -0.272,
+          "exceeds40ms": false,
+          "intentionalPause": false
+        }
+      ],
+      "beeps": [
+        {
+          "onsetSec": 0.5078458049886622,
+          "endSec": 0.5866666666666667
+        },
+        {
+          "onsetSec": 1.5075736961451247,
+          "endSec": 1.5863945578231293
+        },
+        {
+          "onsetSec": 2.5082993197278913,
+          "endSec": 2.5861224489795918
+        },
+        {
+          "onsetSec": 3.5080272108843538,
+          "endSec": 3.586848072562358
+        },
+        {
+          "onsetSec": 4.507755102040816,
+          "endSec": 4.586575963718821
+        },
+        {
+          "onsetSec": 5.508480725623583,
+          "endSec": 5.5863038548752835
+        },
+        {
+          "onsetSec": 6.5082086167800455,
+          "endSec": 6.586031746031746
+        },
+        {
+          "onsetSec": 7.507936507936508,
+          "endSec": 7.586757369614513
+        },
+        {
+          "onsetSec": 8.50766439909297,
+          "endSec": 8.586485260770974
+        },
+        {
+          "onsetSec": 9.508390022675737,
+          "endSec": 9.586213151927439
+        },
+        {
+          "onsetSec": 10.5081179138322,
+          "endSec": 10.585941043083901
+        },
+        {
+          "onsetSec": 11.507845804988662,
+          "endSec": 11.586666666666666
+        },
+        {
+          "onsetSec": 12.507573696145124,
+          "endSec": 12.586394557823128
+        },
+        {
+          "onsetSec": 13.508299319727891,
+          "endSec": 13.586122448979593
+        },
+        {
+          "onsetSec": 14.508027210884354,
+          "endSec": 14.586848072562358
+        },
+        {
+          "onsetSec": 15.507755102040816,
+          "endSec": 15.58657596371882
+        },
+        {
+          "onsetSec": 16.50848072562358,
+          "endSec": 16.586303854875283
+        },
+        {
+          "onsetSec": 17.508208616780045,
+          "endSec": 17.586031746031747
+        },
+        {
+          "onsetSec": 18.50793650793651,
+          "endSec": 18.586757369614514
+        },
+        {
+          "onsetSec": 19.50766439909297,
+          "endSec": 19.586485260770974
+        },
+        {
+          "onsetSec": 20.508390022675737,
+          "endSec": 20.58621315192744
+        },
+        {
+          "onsetSec": 21.508117913832198,
+          "endSec": 21.5859410430839
+        },
+        {
+          "onsetSec": 22.507845804988662,
+          "endSec": 22.586666666666666
+        },
+        {
+          "onsetSec": 23.507573696145126,
+          "endSec": 23.58639455782313
+        },
+        {
+          "onsetSec": 24.50829931972789,
+          "endSec": 24.58612244897959
+        },
+        {
+          "onsetSec": 25.508027210884354,
+          "endSec": 25.586848072562358
+        },
+        {
+          "onsetSec": 26.507755102040818,
+          "endSec": 26.586575963718822
+        },
+        {
+          "onsetSec": 27.50848072562358,
+          "endSec": 27.586303854875283
+        },
+        {
+          "onsetSec": 28.508208616780045,
+          "endSec": 28.586031746031747
+        },
+        {
+          "onsetSec": 29.50793650793651,
+          "endSec": 29.586757369614514
+        },
+        {
+          "onsetSec": 30.50766439909297,
+          "endSec": 30.586485260770974
+        },
+        {
+          "onsetSec": 31.508390022675737,
+          "endSec": 31.58621315192744
+        },
+        {
+          "onsetSec": 32.5081179138322,
+          "endSec": 32.5859410430839
+        },
+        {
+          "onsetSec": 33.50784580498866,
+          "endSec": 33.586666666666666
+        },
+        {
+          "onsetSec": 34.50757369614512,
+          "endSec": 34.58639455782313
+        },
+        {
+          "onsetSec": 35.50829931972789,
+          "endSec": 35.586122448979594
+        },
+        {
+          "onsetSec": 36.50802721088435,
+          "endSec": 36.58684807256236
+        },
+        {
+          "onsetSec": 37.50775510204082,
+          "endSec": 37.58657596371882
+        },
+        {
+          "onsetSec": 38.508480725623585,
+          "endSec": 38.58630385487528
+        },
+        {
+          "onsetSec": 39.508208616780045,
+          "endSec": 39.58603174603174
+        },
+        {
+          "onsetSec": 40.507936507936506,
+          "endSec": 40.58675736961451
+        },
+        {
+          "onsetSec": 41.507664399092974,
+          "endSec": 41.58648526077098
+        },
+        {
+          "onsetSec": 42.508390022675734,
+          "endSec": 42.58621315192744
+        },
+        {
+          "onsetSec": 43.5081179138322,
+          "endSec": 43.5859410430839
+        },
+        {
+          "onsetSec": 44.50784580498866,
+          "endSec": 44.586666666666666
+        },
+        {
+          "onsetSec": 45.50757369614512,
+          "endSec": 45.58639455782313
+        },
+        {
+          "onsetSec": 46.50829931972789,
+          "endSec": 46.586122448979594
+        },
+        {
+          "onsetSec": 47.50802721088435,
+          "endSec": 47.58684807256236
+        },
+        {
+          "onsetSec": 48.50775510204082,
+          "endSec": 48.58657596371882
+        },
+        {
+          "onsetSec": 49.508480725623585,
+          "endSec": 49.58630385487528
+        },
+        {
+          "onsetSec": 50.508208616780045,
+          "endSec": 50.58603174603174
+        },
+        {
+          "onsetSec": 51.507936507936506,
+          "endSec": 51.58675736961451
+        },
+        {
+          "onsetSec": 52.507664399092974,
+          "endSec": 52.58648526077098
+        },
+        {
+          "onsetSec": 53.508390022675734,
+          "endSec": 53.58621315192744
+        },
+        {
+          "onsetSec": 54.5081179138322,
+          "endSec": 54.5859410430839
+        },
+        {
+          "onsetSec": 55.50784580498866,
+          "endSec": 55.586666666666666
+        },
+        {
+          "onsetSec": 56.50757369614512,
+          "endSec": 56.58639455782313
+        },
+        {
+          "onsetSec": 57.50829931972789,
+          "endSec": 57.586122448979594
+        },
+        {
+          "onsetSec": 58.50802721088435,
+          "endSec": 58.58684807256236
+        },
+        {
+          "onsetSec": 59.50775510204082,
+          "endSec": 59.58657596371882
+        },
+        {
+          "onsetSec": 60.488526077097504,
+          "endSec": 60.56634920634921
+        },
+        {
+          "onsetSec": 61.48825396825397,
+          "endSec": 61.56607709750567
+        },
+        {
+          "onsetSec": 62.48798185941043,
+          "endSec": 62.566802721088436
+        },
+        {
+          "onsetSec": 63.48770975056689,
+          "endSec": 63.5665306122449
+        },
+        {
+          "onsetSec": 64.48843537414966,
+          "endSec": 64.56625850340136
+        },
+        {
+          "onsetSec": 65.48816326530613,
+          "endSec": 65.56598639455783
+        },
+        {
+          "onsetSec": 66.48789115646258,
+          "endSec": 66.56671201814059
+        },
+        {
+          "onsetSec": 67.48761904761905,
+          "endSec": 67.56643990929705
+        },
+        {
+          "onsetSec": 68.48834467120182,
+          "endSec": 68.56616780045351
+        },
+        {
+          "onsetSec": 69.48807256235828,
+          "endSec": 69.56689342403628
+        },
+        {
+          "onsetSec": 70.48780045351474,
+          "endSec": 70.56662131519275
+        },
+        {
+          "onsetSec": 71.4885260770975,
+          "endSec": 71.5663492063492
+        },
+        {
+          "onsetSec": 72.48825396825397,
+          "endSec": 72.56607709750567
+        },
+        {
+          "onsetSec": 73.48798185941043,
+          "endSec": 73.56680272108844
+        },
+        {
+          "onsetSec": 74.48770975056689,
+          "endSec": 74.5665306122449
+        },
+        {
+          "onsetSec": 75.48843537414966,
+          "endSec": 75.56625850340136
+        },
+        {
+          "onsetSec": 76.48816326530613,
+          "endSec": 76.56598639455783
+        },
+        {
+          "onsetSec": 77.48789115646258,
+          "endSec": 77.56671201814059
+        },
+        {
+          "onsetSec": 78.48761904761905,
+          "endSec": 78.56643990929705
+        },
+        {
+          "onsetSec": 79.48834467120182,
+          "endSec": 79.56616780045351
+        },
+        {
+          "onsetSec": 80.48807256235828,
+          "endSec": 80.56689342403628
+        },
+        {
+          "onsetSec": 81.48780045351474,
+          "endSec": 81.56662131519275
+        },
+        {
+          "onsetSec": 82.4885260770975,
+          "endSec": 82.5663492063492
+        },
+        {
+          "onsetSec": 83.48825396825397,
+          "endSec": 83.56607709750567
+        },
+        {
+          "onsetSec": 84.48798185941043,
+          "endSec": 84.56680272108844
+        },
+        {
+          "onsetSec": 85.48770975056689,
+          "endSec": 85.5665306122449
+        },
+        {
+          "onsetSec": 86.48843537414966,
+          "endSec": 86.56625850340136
+        },
+        {
+          "onsetSec": 87.48816326530613,
+          "endSec": 87.56598639455783
+        },
+        {
+          "onsetSec": 88.48789115646258,
+          "endSec": 88.56671201814059
+        },
+        {
+          "onsetSec": 89.48761904761905,
+          "endSec": 89.56643990929705
+        },
+        {
+          "onsetSec": 90.48834467120182,
+          "endSec": 90.56616780045351
+        },
+        {
+          "onsetSec": 91.48807256235828,
+          "endSec": 91.56689342403628
+        },
+        {
+          "onsetSec": 92.48780045351474,
+          "endSec": 92.56662131519275
+        },
+        {
+          "onsetSec": 93.4885260770975,
+          "endSec": 93.5663492063492
+        },
+        {
+          "onsetSec": 94.48825396825397,
+          "endSec": 94.56607709750567
+        },
+        {
+          "onsetSec": 95.48798185941043,
+          "endSec": 95.56680272108844
+        },
+        {
+          "onsetSec": 96.48770975056689,
+          "endSec": 96.5665306122449
+        },
+        {
+          "onsetSec": 97.48843537414966,
+          "endSec": 97.56625850340136
+        },
+        {
+          "onsetSec": 98.48816326530613,
+          "endSec": 98.56598639455783
+        },
+        {
+          "onsetSec": 99.48789115646258,
+          "endSec": 99.56671201814059
+        },
+        {
+          "onsetSec": 100.48761904761905,
+          "endSec": 100.56643990929705
+        },
+        {
+          "onsetSec": 101.48834467120182,
+          "endSec": 101.56616780045351
+        },
+        {
+          "onsetSec": 102.48807256235828,
+          "endSec": 102.56689342403628
+        },
+        {
+          "onsetSec": 103.48780045351474,
+          "endSec": 103.56662131519275
+        },
+        {
+          "onsetSec": 104.4885260770975,
+          "endSec": 104.5663492063492
+        },
+        {
+          "onsetSec": 105.48825396825397,
+          "endSec": 105.56607709750567
+        },
+        {
+          "onsetSec": 106.48798185941043,
+          "endSec": 106.56680272108844
+        },
+        {
+          "onsetSec": 107.48770975056689,
+          "endSec": 107.5665306122449
+        },
+        {
+          "onsetSec": 108.48843537414966,
+          "endSec": 108.56625850340136
+        },
+        {
+          "onsetSec": 109.48816326530613,
+          "endSec": 109.56598639455783
+        },
+        {
+          "onsetSec": 110.48789115646258,
+          "endSec": 110.56671201814059
+        },
+        {
+          "onsetSec": 111.48761904761905,
+          "endSec": 111.56643990929705
+        },
+        {
+          "onsetSec": 112.48834467120182,
+          "endSec": 112.56616780045351
+        },
+        {
+          "onsetSec": 113.48807256235828,
+          "endSec": 113.56689342403628
+        },
+        {
+          "onsetSec": 114.48780045351474,
+          "endSec": 114.56662131519275
+        },
+        {
+          "onsetSec": 115.4885260770975,
+          "endSec": 115.5663492063492
+        },
+        {
+          "onsetSec": 116.48825396825397,
+          "endSec": 116.56607709750567
+        },
+        {
+          "onsetSec": 117.48798185941043,
+          "endSec": 117.56680272108844
+        },
+        {
+          "onsetSec": 118.48770975056689,
+          "endSec": 118.5665306122449
+        },
+        {
+          "onsetSec": 119.48843537414966,
+          "endSec": 119.56625850340136
+        },
+        {
+          "onsetSec": 120.48816326530613,
+          "endSec": 120.56598639455783
+        },
+        {
+          "onsetSec": 121.48789115646258,
+          "endSec": 121.56671201814059
+        },
+        {
+          "onsetSec": 122.48761904761905,
+          "endSec": 122.56643990929705
+        },
+        {
+          "onsetSec": 123.48834467120182,
+          "endSec": 123.56616780045351
+        },
+        {
+          "onsetSec": 124.48807256235828,
+          "endSec": 124.56589569160998
+        }
+      ]
+    },
+    "events": [
+      {
+        "at": "2026-09-10T21:10:39.389Z",
+        "wallMs": 220.9,
+        "type": "audio-context",
+        "state": "running",
+        "audioTime": 0
+      },
+      {
+        "at": "2026-09-10T21:10:40.792Z",
+        "wallMs": 1403.3999999761581,
+        "type": "source-warmup"
+      },
+      {
+        "at": "2026-09-10T21:10:40.796Z",
+        "wallMs": 1627.7,
+        "type": "segment-start",
+        "index": 1,
+        "sourceTime": 0,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T21:11:35.479Z",
+        "wallMs": 61630,
+        "type": "segment-stop",
+        "index": 1,
+        "reason": "rotation",
+        "rotationLateMs": 2.3
+      },
+      {
+        "at": "2026-09-10T21:11:35.481Z",
+        "wallMs": 61631.3,
+        "type": "segment-start",
+        "index": 2,
+        "sourceTime": 60.02358276643991,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T21:11:35.488Z",
+        "wallMs": 61638.8,
+        "type": "saved",
+        "index": 1,
+        "bytes": 61727,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T21:12:30.147Z",
+        "wallMs": 121631.4,
+        "type": "segment-stop",
+        "index": 2,
+        "reason": "rotation",
+        "rotationLateMs": 0.2
+      },
+      {
+        "at": "2026-09-10T21:12:30.149Z",
+        "wallMs": 121632.8,
+        "type": "segment-start",
+        "index": 3,
+        "sourceTime": 120.0239455782313,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T21:12:30.154Z",
+        "wallMs": 121638.2,
+        "type": "saved",
+        "index": 2,
+        "bytes": 69916,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T21:12:35.175Z",
+        "wallMs": 126658.6,
+        "type": "segment-stop",
+        "index": 3,
+        "reason": "finish",
+        "rotationLateMs": 0
+      },
+      {
+        "at": "2026-09-10T21:12:35.190Z",
+        "wallMs": 126674.2,
+        "type": "saved",
+        "index": 3,
+        "bytes": 6980,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T21:12:35.191Z",
+        "wallMs": 126674.9,
+        "type": "finish"
+      },
+      {
+        "at": "2026-09-10T21:12:35.191Z",
+        "wallMs": 126675.1,
+        "type": "audio-context",
+        "state": "closed",
+        "audioTime": 125.19038548752835
+      }
+    ],
+    "environment": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "secureContext": true,
+      "supportedMimes": [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4"
+      ]
+    }
+  },
+  "uiError": "",
+  "status": "ejecutado",
+  "playback": {
+    "at": "2026-09-10T21:12:35.858Z",
+    "wallMs": 127342.1,
+    "type": "playback-scheduled",
+    "files": 3,
+    "starts": [
+      {
+        "start": 0.15,
+        "duration": 59.999977324263035
+      },
+      {
+        "start": 60.149977324263034,
+        "duration": 59.999977324263035
+      },
+      {
+        "start": 120.14995464852606,
+        "duration": 4.9799773242630385
+      }
+    ]
+  },
+  "maxScheduledPlaybackGapMs": 0,
+  "zipDownload": {
+    "name": "prueba-audio-7741713a.zip",
+    "failure": null,
+    "bytes": 159709,
+    "sha256": "88ae12aa47f63d735b69f3b1d0ab45c389e2459b16263a122dbc019cdab7ae04"
+  },
+  "zipVerification": {
+    "crcError": null,
+    "entries": [
+      "segmento-001.webm",
+      "segmento-002.webm",
+      "segmento-003.webm",
+      "diagnostico.json"
+    ],
+    "sizes": [
+      61727,
+      69916,
+      6980,
+      20626
+    ]
+  },
+  "individualDownload": {
+    "name": "segmento-001.webm",
+    "failure": null,
+    "bytes": 61727,
+    "sha256": "d4f185b897be5d5319124f7cf8897946251e51b5a064c7fb2928ee8d72108052"
+  }
+}

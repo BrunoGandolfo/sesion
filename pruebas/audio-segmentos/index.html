@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#246352">
+<title>Prueba de audio por segmentos · Sesión</title>
+<style>
+  :root { color-scheme: light; font: 16px/1.5 system-ui,sans-serif; color:#183c33; background:#f3f6f2 }
+  * { box-sizing:border-box } body { max-width:1000px; margin:auto; padding:24px 16px 80px }
+  h1 { font-size:clamp(1.6rem,5vw,2.3rem); line-height:1.15 } h2 { font-size:1.25rem }
+  p { max-width:78ch } .card { background:white; border:1px solid #cddcd4; border-radius:16px; padding:20px; margin:18px 0 }
+  .row { display:flex; flex-wrap:wrap; gap:12px; align-items:end } label { display:grid; gap:5px }
+  button,select,input { font:inherit; border-radius:8px; border:1px solid #829c90; padding:10px 12px; min-height:44px }
+  button { background:#246352; color:white; cursor:pointer } button.secondary { background:white; color:#183c33 }
+  button:disabled { opacity:.45; cursor:default } a { color:#155745 } input { width:110px }
+  :focus-visible { outline:3px solid #dd8c28; outline-offset:3px } .muted { color:#50675e; font-size:.9rem }
+  #status { font-weight:650 } #error { color:#9e1f24; white-space:pre-wrap } .scroll { overflow:auto }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:.9rem }
+  th,td { text-align:left; padding:9px; border-bottom:1px solid #dde6df; white-space:nowrap }
+  th { background:#eef3ef } .bad { color:#ad2525; font-weight:700 } .ok { color:#246352 }
+  #events { white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.5 monospace; max-height:260px; overflow:auto }
+  #summary { font-variant-numeric:tabular-nums } small { display:block } .badge { letter-spacing:.1em; text-transform:uppercase; font-size:.75rem }
+</style>
+<body>
+<header><div class="badge">Sesión · experimento aislado</div><h1>¿Se puede grabar de a un minuto?</h1>
+<p>Cada corte crea un archivo de audio completo. Al terminar, escuchá los archivos seguidos y revisá cuánto audio se conservó.</p></header>
+<div class="card">
+  <p class="muted">El audio queda en este navegador, sin cifrado y sin enviarse a un servidor. Usá voz de prueba. No borres los datos del sitio antes de descargarlo.</p>
+  <div class="row">
+    <label>Fuente<select id="source"><option value="mic">Micrófono</option><option value="synthetic">Pitidos de prueba (1 por segundo)</option></select></label>
+    <label>Segundos por archivo<input id="seconds" type="number" value="60" min="2" max="120" step="1"></label>
+    <label>Formato<select id="codec"><option value="auto">Automático</option><option value="webm">WebM / Opus</option><option value="mp4">MP4 / AAC</option></select></label>
+  </div>
+  <p id="mime" class="muted">Comprobando formatos…</p>
+  <div class="row"><button id="record" disabled>Grabar</button><button id="pause" disabled>Pausar</button><button id="finish" disabled>Terminar</button></div>
+  <p id="status" role="status" aria-live="polite">Abriendo almacenamiento…</p><p id="clock">0,0 s grabados</p>
+  <p id="error" role="alert"></p>
+</div>
+<section class="card" aria-labelledby="diag-title">
+  <h2 id="diag-title">Diagnóstico</h2><div id="summary">Todavía no hay audio.</div>
+  <p class="muted">En la fuente sintética, el intervalo entre pitidos debe ser 1000 ms. Una desviación mayor a 40 ms en una frontera señala un problema. Una señal periódica no permite distinguir por sí sola la pérdida de segundos enteros: mirá también el conteo y la duración.</p>
+  <div class="row"><button id="analyze" class="secondary" disabled>Analizar de nuevo</button><button id="report" class="secondary" disabled>Descargar diagnóstico</button></div>
+  <div class="scroll"><table><thead><tr><th>Frontera</th><th>Intervalo de pitidos</th><th>Desvío de 1000 ms</th><th>Resultado</th></tr></thead><tbody id="boundaries"></tbody></table></div>
+</section>
+<section class="card" aria-labelledby="files-title">
+  <h2 id="files-title">Archivos guardados</h2>
+  <div class="row"><button id="play" disabled>Reproducir todos</button><button id="stopPlay" class="secondary" disabled>Detener reproducción</button><button id="zip" class="secondary" disabled>Descargar conjunto (.zip)</button></div>
+  <p id="playStatus" class="muted">Se decodifica cada archivo por separado y se programa el siguiente con el reloj de audio, sin esperas entre reproductores.</p>
+  <div class="scroll"><table><thead><tr><th>Archivo</th><th>Tamaño</th><th>Formato</th><th>Hora</th><th>Reloj</th><th>Decodificado</th><th>Descarga</th></tr></thead><tbody id="files"></tbody></table></div>
+</section>
+<details class="card"><summary>Cómo hacer la prueba en tu teléfono</summary>
+<ol><li>Dejá Micrófono y 60 segundos. Tocá Grabar y hablá durante 3 minutos.</li><li>En el medio, pausá 5 segundos, reanudá y bloqueá la pantalla durante 20 segundos. Anotá cuándo lo hiciste.</li><li>Volvé, tocá Terminar y escuchá Reproducir todos. Descargá el conjunto y el diagnóstico.</li><li>Para probar recuperación, empezá otra prueba y recargá mientras graba. Se recuperan los archivos ya guardados; el archivo en curso puede perderse. La grabación no se reinicia sola.</li><li>Repetí con Pitidos de prueba para medir los cortes. Esos pitidos suenan a volumen bajo mientras graba; podés bajar el volumen del dispositivo.</li></ol>
+<p>El bloqueo de pantalla puede suspender la captura o demorar los cortes. Esta prueba lo mide; no promete un límite de pérdida de 60 segundos. En micrófono se comparan duraciones, pero no se puede medir cada frontera sin una señal conocida.</p></details>
+<details class="card"><summary>Eventos y entorno</summary><pre id="events"></pre></details>
+<script>
+'use strict';
+// No framework, service worker, red, cifrado ni backend. IndexedDB es el único destino del audio.
+const $ = id => document.getElementById(id);
+const DB_NAME = 'sesion-prueba-segmentos-v1';
+const AC = window.AudioContext || window.webkitAudioContext;
+let db, run = null, segments = [], buffers = [], analysis = null;
+let state = 'loading', stream, context, oscillator, gate, active = null, rotation, heartbeat;
+let pending = Promise.resolve(), playback = null, playbackNodes = [], playTimer;
+let activeSince = null, savedClockMs = 0, generationStart = 0, sourceIntervals = [];
+let syntheticGraph = []; // Conservar el grafo de la fuente hasta el cierre del contexto.
+let syntheticEnvelope, syntheticAmplitude, pausedAudioAt = null, pausedPhase = 0;
+const events = [];
+const round = (n, digits = 3) => Number(n.toFixed(digits));
+const format = (n, digits = 3) => Number(n).toLocaleString('es-UY', {maximumFractionDigits:digits});
+
+function log(type, detail = {}) {
+  events.push({at:new Date().toISOString(), wallMs:round(performance.now()), type, ...detail});
+  $('events').textContent = JSON.stringify({userAgent:navigator.userAgent, secureContext:isSecureContext, events}, null, 2);
+}
+function fail(error) {
+  $('error').textContent = error?.message || String(error);
+  log('error', {message:$('error').textContent});
+}
+function formats() {
+  if (!window.MediaRecorder) return [];
+  const mp4 = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4'];
+  const webm = ['audio/webm;codecs=opus', 'audio/webm'];
+  const candidates = $('codec').value === 'mp4' ? mp4 : $('codec').value === 'webm' ? webm :
+    /Chrome|Chromium|Edg\//.test(navigator.userAgent) ? [...webm,...mp4] : [...mp4,...webm];
+  return candidates.filter(mime => MediaRecorder.isTypeSupported(mime));
+}
+function refreshMime() { $('mime').textContent = `Formato disponible: ${formats()[0] || 'ninguno compatible'}`; }
+function clockMs() { return savedClockMs + (activeSince === null ? 0 : performance.now() - activeSince); }
+function beepCount(from, to) {
+  // Centros al medio segundo, período exacto del buffer de control de ganancia.
+  const first = Math.max(0, Math.ceil(from - 0.5 - 1e-7));
+  const last = Math.ceil(to - 0.5 - 1e-7) - 1;
+  return Math.max(0, last - first + 1);
+}
+function expectedBeepsByAudioClock() {
+  if (!run || run.source !== 'synthetic') return null;
+  const intervals = sourceIntervals.map(x => [...x]);
+  if (active && context) intervals.push([active.sourceStart, context.currentTime - generationStart]);
+  return intervals.reduce((sum, [a,b]) => sum + beepCount(a,b), 0);
+}
+function expectedBeeps() { return run?.source === 'synthetic' ? beepCount(0,clockMs()/1000) : null; }
+function sourceRenderedSec() {
+  return sourceIntervals.reduce((sum,[a,b]) => sum+b-a,0) + (active && context ? context.currentTime-generationStart-active.sourceStart : 0);
+}
+function snapshot() {
+  if (!run) return null;
+  return {...run, status:state, wallRecordedMs:round(clockMs()), expectedBeeps:expectedBeeps(),
+    expectedBeepsByAudioClock:expectedBeepsByAudioClock(), sourceRenderedSec:sourceRenderedSec(),
+    observedAt:new Date().toISOString(), events:[...events], sourceIntervals:[...sourceIntervals],
+    segmentCount:segments.length, audioContextState:context?.state || null, visibility:document.visibilityState};
+}
+function controls() {
+  const busy = ['recording','pausing','paused','starting','stopping','analyzing'].includes(state);
+  $('record').disabled = busy || !db || !formats().length;
+  $('pause').disabled = !['recording','paused'].includes(state);
+  $('pause').textContent = state === 'paused' ? 'Reanudar' : 'Pausar';
+  $('finish').disabled = !['recording','paused'].includes(state);
+  for (const id of ['source','seconds','codec']) $(id).disabled = busy;
+  $('analyze').disabled = busy || !segments.length;
+  $('play').disabled = busy || !buffers.length || buffers.some(b => !b);
+  $('zip').disabled = busy || !segments.length;
+  $('report').disabled = busy || !run;
+}
+function strictTransaction(stores) {
+  const tx = db.transaction(stores, 'readwrite', {durability:'strict'});
+  if (tx.durability !== 'strict') {
+    tx.abort();
+    throw new Error('Este navegador no confirma durability strict. La prueba no puede garantizar esa escritura.');
+  }
+  return tx;
+}
+function write(stores, operation) {
+  return new Promise((resolve,reject) => {
+    try {
+      const tx = strictTransaction(stores);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('Falló IndexedDB'));
+      tx.onabort = () => reject(tx.error || new Error('Escritura cancelada'));
+      operation(tx);
+    } catch(error) { reject(error); }
+  });
+}
+function queue(operation) {
+  const work = pending.then(operation);
+  pending = work.catch(error => {
+    fail(error);
+    // Nunca seguir informando que se guarda audio después de un error de disco.
+    if (state === 'recording' || state === 'paused') void finish().catch(fail);
+  });
+  return work;
+}
+async function checkpoint() {
+  const data = snapshot();
+  if (data) await queue(() => write(['meta'], tx => tx.objectStore('meta').put(data, 'run')));
+}
+async function openDatabase() {
+  db = await new Promise((resolve,reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('segments', {keyPath:'index'}); req.result.createObjectStore('meta'); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  // Probar el modo estricto antes de permitir una grabación, incluso sin datos anteriores.
+  await write(['meta'], () => {});
+  const data = await new Promise((resolve,reject) => {
+    const tx = db.transaction(['meta','segments'], 'readonly');
+    const m = tx.objectStore('meta').get('run'), s = tx.objectStore('segments').getAll();
+    tx.oncomplete = () => resolve({run:m.result, segments:s.result});
+    tx.onerror = () => reject(tx.error);
+  });
+  run = data.run || null; segments = data.segments.sort((a,b) => a.index-b.index);
+  state = 'idle';
+  if (run) {
+    const interrupted = ['recording','starting','paused','stopping'].includes(run.status);
+    savedClockMs = run.wallRecordedMs || 0;
+    sourceIntervals = run.sourceIntervals || [];
+    events.push(...(run.events || []));
+    // Mantener el conteo observado antes de la recarga; el último checkpoint es una cota inferior.
+    run.recovered = true; run.interrupted = interrupted;
+    state = 'recovered';
+    $('status').textContent = interrupted ? `Recuperados ${segments.length} archivos. La grabación se interrumpió; el archivo en curso puede haberse perdido.` : `Recuperados ${segments.length} archivos guardados.`;
+    log('recovery', {interrupted, segments:segments.length, lastObservedAt:run.observedAt});
+    await analyze();
+  } else $('status').textContent = 'Lista para grabar. Al recargar se conservan los archivos terminados.';
+  renderFiles(); controls();
+}
+async function makeSynthetic() {
+  context = new AC();
+  const sourceContext = context;
+  sourceContext.onstatechange = () => log('audio-context', {state:sourceContext.state, audioTime:sourceContext.currentTime});
+  await context.resume();
+  // Esperar el arranque del dispositivo de audio ANTES de contar el tiempo grabado.
+  // En una máquina recién iniciada resume() puede resolver antes del primer bloque de audio.
+  const warmupStart = performance.now(), initialAudioTime = context.currentTime;
+  while (context.currentTime-initialAudioTime < 0.1) {
+    if (performance.now()-warmupStart > 10000) throw new Error('El reloj de audio no arrancó en 10 segundos.');
+    await new Promise(resolve => setTimeout(resolve,20));
+  }
+  log('source-warmup', {wallMs:performance.now()-warmupStart});
+  const destination = context.createMediaStreamDestination();
+  oscillator = context.createOscillator(); oscillator.frequency.value = 1000;
+  const amplitude = context.createGain(); amplitude.gain.value = 0;
+  // Una envolvente de 1 segundo que se repite en el hilo de audio. No depende de setInterval.
+  const envelope = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  syntheticEnvelope = envelope; syntheticAmplitude = amplitude;
+  const samples = envelope.getChannelData(0);
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / context.sampleRate - 0.5;
+    if (t >= 0 && t < 0.08) samples[i] = 0.6 * Math.min(1,t/0.005,(0.08-t)/0.005);
+  }
+  gate = context.createBufferSource(); gate.buffer = envelope; gate.loop = true;
+  gate.connect(amplitude.gain); oscillator.connect(amplitude); amplitude.connect(destination);
+  // Una ruta de salida activa hace explícito qué conduce el reloj de la fuente.
+  // La captura recibe amplitud completa; la escucha de control sale a volumen bajo.
+  const monitor = context.createGain(); monitor.gain.value = 0.1;
+  amplitude.connect(monitor); monitor.connect(context.destination);
+  syntheticGraph = [destination,amplitude,gate,oscillator,monitor];
+  generationStart = context.currentTime;
+  gate.start(generationStart); oscillator.start(generationStart);
+  run.sampleRate = context.sampleRate;
+  return destination.stream;
+}
+function pauseSynthetic() {
+  pausedAudioAt = context.currentTime;
+  pausedPhase = (pausedAudioAt-generationStart)%1;
+  gate.stop(pausedAudioAt);
+  // El reloj sigue corriendo. Sólo callar la fuente evita medir el reinicio del dispositivo
+  // de salida como si fuera una pérdida del MediaRecorder al reanudar.
+}
+function resumeSynthetic() {
+  const now = context.currentTime;
+  generationStart += now-pausedAudioAt;
+  gate = context.createBufferSource(); gate.buffer = syntheticEnvelope; gate.loop = true;
+  gate.connect(syntheticAmplitude.gain); gate.start(now,pausedPhase);
+  syntheticGraph.push(gate); pausedAudioAt = null;
+}
+function startSegment() {
+  const recorder = new MediaRecorder(stream, {mimeType:run.requestedMimeType, audioBitsPerSecond:64000});
+  const segment = {index:run.nextIndex++, mimeType:recorder.mimeType, createdAt:new Date().toISOString(),
+    startWallMs:performance.now(), sourceStart:context ? context.currentTime-generationStart : null, parts:[], recorder};
+  segment.done = new Promise((resolve,reject) => { segment.resolve = resolve; segment.reject = reject; });
+  recorder.ondataavailable = event => { if (event.data.size) segment.parts.push(event.data); };
+  recorder.onerror = event => { fail(event.error || new Error('Falló MediaRecorder')); void finish().catch(fail); };
+  recorder.onstop = () => {
+    const blob = new Blob(segment.parts, {type:segment.parts[0]?.type || segment.mimeType});
+    const item = {index:segment.index, blob, bytes:blob.size, mimeType:blob.type, createdAt:segment.createdAt,
+      wallDurationMs:round(segment.endWallMs-segment.startWallMs), startWallMs:segment.startWallMs,
+      endWallMs:segment.endWallMs, sourceStart:segment.sourceStart, sourceEnd:segment.sourceEnd,
+      reason:segment.reason, rotationLateMs:segment.rotationLateMs || 0};
+    queue(async () => {
+      if (!blob.size) throw new Error(`El archivo ${item.index} está vacío.`);
+      const data = snapshot();
+      await write(['segments','meta'], tx => { tx.objectStore('segments').put(item); tx.objectStore('meta').put(data,'run'); });
+      segments.push(item); segments.sort((a,b) => a.index-b.index);
+      log('saved', {index:item.index, bytes:item.bytes, mimeType:item.mimeType, durability:'strict'});
+      renderFiles();
+    }).then(segment.resolve, segment.reject);
+  };
+  recorder.start(); // Sin timeslice: cada instancia entrega su propio archivo completo al detenerse.
+  active = segment;
+  $('mime').textContent = `Formato real: ${recorder.mimeType} · escritura IndexedDB: strict`;
+  log('segment-start', {index:segment.index, sourceTime:segment.sourceStart, mimeType:recorder.mimeType});
+  rotation = setTimeout(rotate, run.segmentSeconds*1000);
+}
+function stopSegment(reason) {
+  clearTimeout(rotation);
+  const segment = active;
+  if (!segment) return Promise.resolve();
+  active = null;
+  segment.endWallMs = performance.now(); segment.reason = reason;
+  segment.sourceEnd = context ? context.currentTime-generationStart : null;
+  segment.rotationLateMs = reason === 'rotation' ? round(segment.endWallMs-segment.startWallMs-run.segmentSeconds*1000) : 0;
+  if (context) sourceIntervals.push([segment.sourceStart,segment.sourceEnd]);
+  log('segment-stop', {index:segment.index, reason, rotationLateMs:segment.rotationLateMs});
+  segment.recorder.stop();
+  return segment.done;
+}
+function rotate() {
+  if (state !== 'recording') return;
+  // Iniciar el próximo recorder en el mismo turno, sin esperar onstop ni la escritura del anterior.
+  const completion = stopSegment('rotation');
+  try { startSegment(); } catch(error) { fail(error); void finish().catch(fail); }
+  void completion.catch(fail);
+}
+async function start() {
+  if (!['idle','recovered','finished'].includes(state)) return;
+  const seconds = Number($('seconds').value);
+  if (!Number.isFinite(seconds) || seconds < 2 || seconds > 120) throw new Error('Elegí entre 2 y 120 segundos.');
+  if (segments.length && !confirm('Una nueva prueba reemplaza los archivos guardados en este navegador. Descargalos antes si querés conservarlos. ¿Empezar otra prueba?')) return;
+  stopPlayback(); $('error').textContent = ''; state = 'starting'; controls();
+  try {
+    // Pedir permiso antes de borrar una prueba anterior.
+    const source = $('source').value;
+    if (source === 'mic') {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('El micrófono necesita HTTPS y un navegador compatible.');
+      stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    }
+    await pending;
+    await write(['segments','meta'], tx => { tx.objectStore('segments').clear(); tx.objectStore('meta').clear(); });
+    segments = []; buffers = []; analysis = null; events.length = 0; savedClockMs = 0; sourceIntervals = [];
+    run = {id:crypto.randomUUID(), startedAt:new Date().toISOString(), source, segmentSeconds:seconds,
+      requestedMimeType:formats()[0], nextIndex:1, strictDurability:true, userAgent:navigator.userAgent};
+    if (source === 'synthetic') stream = await makeSynthetic();
+    stream.getTracks().forEach(track => {
+      track.onmute = () => log('track-muted', {kind:track.kind});
+      track.onunmute = () => log('track-unmuted', {kind:track.kind});
+      track.onended = () => { fail(new Error('El navegador terminó la fuente de audio.')); void finish().catch(fail); };
+    });
+    state = 'recording'; activeSince = performance.now(); startSegment();
+    $('status').textContent = 'Grabando. Cada archivo terminado se guarda en este navegador.';
+    heartbeat = setInterval(() => {
+      $('clock').textContent = `${format(clockMs()/1000,1)} s grabados · ${segments.length} archivos guardados`;
+      void checkpoint().catch(fail);
+    },1000);
+    await checkpoint(); renderFiles(); controls();
+  } catch(error) {
+    if (active) await stopSegment('error').catch(fail);
+    stream?.getTracks().forEach(track => track.stop());
+    if (context && context.state !== 'closed') await context.close();
+    context = null; syntheticGraph = []; activeSince = null; state = 'idle'; controls(); throw error;
+  }
+}
+async function togglePause() {
+  $('pause').disabled = true;
+  if (state === 'recording') {
+    savedClockMs = clockMs(); activeSince = null; state = 'pausing'; controls();
+    const completion = stopSegment('pause');
+    if (context) pauseSynthetic();
+    await completion; state = 'paused';
+    log('pause'); $('status').textContent = 'En pausa. El último archivo quedó guardado.';
+  } else if (state === 'paused') {
+    state = 'starting'; controls();
+    if (context) resumeSynthetic();
+    activeSince = performance.now(); state = 'recording'; startSegment();
+    log('resume'); $('status').textContent = 'Grabando otra vez.';
+  }
+  await checkpoint(); controls();
+}
+async function finish() {
+  if (!['recording','paused'].includes(state)) return;
+  savedClockMs = clockMs(); activeSince = null; state = 'stopping'; clearInterval(heartbeat); controls();
+  await stopSegment('finish');
+  await pending;
+  run.expectedBeeps = expectedBeeps();
+  stream?.getTracks().forEach(track => track.stop());
+  if (context && context.state !== 'closed') await context.close();
+  context = null; syntheticGraph = []; state = 'finished'; log('finish');
+  await checkpoint();
+  $('clock').textContent = `${format(savedClockMs/1000,1)} s grabados`;
+  $('status').textContent = 'Grabación terminada. Analizando cada archivo por separado…';
+  await analyze();
+  $('status').textContent = `Prueba terminada: ${segments.length} archivos guardados.`;
+  controls();
+}
+
+// Detector sobre el audio decodificado concatenado, también cuando un pitido atraviesa un corte.
+// RMS en ventanas de ~1 ms; agrupa pausas de hasta 120 ms para no duplicar un pitido partido.
+function detectBeeps(audioBuffers) {
+  const sampleRate = audioBuffers[0]?.sampleRate || 48000;
+  const length = audioBuffers.reduce((n,b) => n + b.length,0);
+  const pcm = new Float32Array(length);
+  let offset = 0;
+  for (const buffer of audioBuffers) { pcm.set(buffer.getChannelData(0),offset); offset += buffer.length; }
+  const step = Math.max(1,Math.round(sampleRate/1000)), maxSilence = Math.round(sampleRate*0.12);
+  const beeps = []; let begin = null, lastLoud = 0, loudSamples = 0;
+  function flush() {
+    if (begin !== null && loudSamples/sampleRate >= 0.015) beeps.push({onsetSec:begin/sampleRate, endSec:lastLoud/sampleRate});
+    begin = null; loudSamples = 0;
+  }
+  for (let i = 0; i < pcm.length; i += step) {
+    let sum = 0; const end = Math.min(i+step,pcm.length);
+    for (let j = i; j < end; j++) sum += pcm[j]*pcm[j];
+    const loud = Math.sqrt(sum/(end-i)) > 0.08;
+    if (loud) { if (begin === null) begin = i; lastLoud = end; loudSamples += end-i; }
+    else if (begin !== null && i-lastLoud > maxSilence) flush();
+  }
+  flush(); return beeps;
+}
+async function analyze() {
+  const oldState = state; state = 'analyzing'; controls(); buffers = [];
+  const decoder = new AC(); const results = [];
+  try {
+    for (const segment of segments) {
+      try {
+        const buffer = await decoder.decodeAudioData(await segment.blob.arrayBuffer());
+        buffers.push(buffer);
+        results.push({index:segment.index, decodable:true, bytes:segment.bytes, mimeType:segment.mimeType,
+          durationSec:buffer.duration, sampleRate:buffer.sampleRate, channels:buffer.numberOfChannels,
+          wallDurationMs:segment.wallDurationMs, rotationLateMs:segment.rotationLateMs, reason:segment.reason});
+      } catch(error) {
+        buffers.push(null); results.push({index:segment.index, decodable:false, bytes:segment.bytes, mimeType:segment.mimeType, error:String(error)});
+      }
+    }
+    const allDecodable = buffers.every(Boolean);
+    const beeps = run?.source === 'synthetic' && allDecodable ? detectBeeps(buffers) : [];
+    const boundaries = []; let boundarySec = 0;
+    if (allDecodable) for (let i = 0; i < buffers.length-1; i++) {
+      boundarySec += buffers[i].duration;
+      const before = [...beeps].reverse().find(b => b.onsetSec < boundarySec);
+      const after = beeps.find(b => b.onsetSec >= boundarySec);
+      const intervalMs = before && after ? (after.onsetSec-before.onsetSec)*1000 : null;
+      boundaries.push({from:segments[i].index,to:segments[i+1].index, atSec:round(boundarySec),
+        intervalMs:intervalMs === null ? null : round(intervalMs),
+        deviationMs:intervalMs === null ? null : round(intervalMs-1000),
+        exceeds40ms:intervalMs === null ? null : Math.abs(round(intervalMs-1000))>40,
+        intentionalPause:segments[i].reason === 'pause'});
+    }
+    // Tras recarga, usar el último conteo observado; no recalcularlo sólo desde los archivos salvados.
+    const expected = run?.recovered ? run.expectedBeeps : expectedBeeps();
+    const total = results.reduce((n,r) => n+(r.durationSec || 0),0);
+    analysis = {source:run?.source, recovered:!!run?.recovered, interrupted:!!run?.interrupted,
+      expectedCountIsLowerBound:!!(run?.recovered && run?.interrupted),
+      wallRecordedMs:round(savedClockMs), savedSegmentsWallMs:round(segments.reduce((n,s) => n+s.wallDurationMs,0)),
+      decodedDurationSec:round(total,6), decodedMinusWallMs:round(total*1000-savedClockMs),
+      sourceRenderedSec:run?.recovered ? run.sourceRenderedSec : sourceRenderedSec(),
+      expectedBeepsByAudioClock:run?.recovered ? run.expectedBeepsByAudioClock : expectedBeepsByAudioClock(),
+      expectedBeeps:expected, foundBeeps:run?.source === 'synthetic' && allDecodable ? beeps.length : null,
+      allDecodable, segments:results, boundaries, beeps};
+    renderAnalysis(); renderFiles();
+  } finally { await decoder.close(); state = oldState; controls(); }
+  return analysis;
+}
+function renderAnalysis() {
+  if (!analysis) return;
+  const a = analysis;
+  $('summary').replaceChildren();
+  const lines = [
+    `${segments.length} archivos · ${a.allDecodable ? 'todos decodificables' : 'hay archivos que no se pueden decodificar'}`,
+    `Audio decodificado: ${format(a.decodedDurationSec)} s · reloj grabado: ${format(a.wallRecordedMs/1000)} s · diferencia: ${format(a.decodedMinusWallMs)} ms`,
+    `Reloj de los archivos guardados: ${format(a.savedSegmentsWallMs/1000)} s · IndexedDB: durability strict.`
+  ];
+  if (a.source === 'synthetic') {
+    lines.push(`Pitidos esperados por reloj: ${a.expectedBeeps ?? 'sin dato'} · encontrados: ${a.foundBeeps ?? 'no se pudo medir'}`);
+    lines.push(`Reloj de la fuente: ${format(a.sourceRenderedSec)} s · pitidos según ese reloj: ${a.expectedBeepsByAudioClock}. Si la fuente se frena, su reloj también lo revela.`);
+  }
+  else lines.push('Sin señal sintética no se puede medir un hueco en cada frontera: las duraciones por sí solas no lo localizan.');
+  if (a.expectedCountIsLowerBound) lines.push('Recuperación: reloj y pitidos esperados provienen del último guardado de diagnóstico; son una cota inferior, con aproximadamente 1 s de resolución en primer plano.');
+  for (const line of lines) { const p = document.createElement('p'); p.textContent = line; $('summary').append(p); }
+  $('boundaries').replaceChildren();
+  for (const boundary of a.boundaries) {
+    const tr = document.createElement('tr');
+    const values = [`${boundary.from} → ${boundary.to}${boundary.intentionalPause ? ' (pausa)' : ''}`,
+      boundary.intervalMs === null ? 'No medible' : `${format(boundary.intervalMs)} ms`,
+      boundary.deviationMs === null ? '—' : `${boundary.deviationMs>0?'+':''}${format(boundary.deviationMs)} ms`,
+      boundary.exceeds40ms === null ? 'Sin señal conocida' : boundary.exceeds40ms ? 'Supera 40 ms' : 'Dentro de 40 ms'];
+    for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
+    if (boundary.exceeds40ms) tr.className = 'bad'; $('boundaries').append(tr);
+  }
+}
+function filename(segment) { return `segmento-${String(segment.index).padStart(3,'0')}.${segment.mimeType.includes('mp4') ? 'm4a' : 'webm'}`; }
+function download(blob, name) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url),60000);
+}
+function renderFiles() {
+  $('files').replaceChildren();
+  segments.forEach((segment,i) => {
+    const tr = document.createElement('tr');
+    const result = analysis?.segments.find(s => s.index === segment.index);
+    const values = [segment.index,`${format(segment.bytes/1024,1)} KiB`,segment.mimeType,new Date(segment.createdAt).toLocaleTimeString(),
+      `${format(segment.wallDurationMs/1000)} s`,result ? result.decodable ? `${format(result.durationSec)} s` : 'No decodifica' : 'Pendiente'];
+    for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
+    const td = document.createElement('td'), button = document.createElement('button');
+    button.className = 'secondary'; button.textContent = 'Descargar'; button.setAttribute('aria-label',`Descargar archivo ${segment.index}`);
+    button.onclick = () => download(segment.blob,filename(segment)); td.append(button); tr.append(td); $('files').append(tr);
+  });
+}
+function stopPlayback() {
+  clearTimeout(playTimer); playbackNodes.forEach(node => { try { node.stop(); } catch {} }); playbackNodes = [];
+  if (playback) void playback.close(); playback = null; $('stopPlay').disabled = true;
+}
+async function playAll() {
+  stopPlayback(); playback = new AC(); await playback.resume();
+  let time = playback.currentTime + 0.15; const starts = [];
+  for (const buffer of buffers) {
+    const node = playback.createBufferSource(); node.buffer = buffer; node.connect(playback.destination);
+    node.start(time); starts.push({start:time,duration:buffer.duration}); time += buffer.duration; playbackNodes.push(node);
+  }
+  log('playback-scheduled', {files:buffers.length, starts});
+  $('stopPlay').disabled = false; $('playStatus').textContent = `Reproduciendo ${buffers.length} archivos, programados sin separación añadida.`;
+  playTimer = setTimeout(() => { stopPlayback(); $('playStatus').textContent = 'Reproducción terminada.'; }, (time-playback.currentTime)*1000+100);
+  return starts;
+}
+function diagnostic() {
+  return {version:1, protocol:'MediaRecorder nuevo por archivo; no timeslice; 64 kbps solicitados',
+    run:run?.recovered ? run : snapshot(), analysis, events, environment:{userAgent:navigator.userAgent,secureContext:isSecureContext,supportedMimes:formats()}};
+}
+// ZIP sin compresión (STORE), escrito aquí para mantener el HTML autocontenido.
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) { crc ^= byte; for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+async function zipAll() {
+  const entries = segments.map(s => ({name:filename(s),blob:s.blob}));
+  entries.push({name:'diagnostico.json',blob:new Blob([JSON.stringify(diagnostic(),null,2)])});
+  const local = [], central = []; let offset = 0;
+  for (const entry of entries) {
+    const data = new Uint8Array(await entry.blob.arrayBuffer()), name = new TextEncoder().encode(entry.name), crc = crc32(data);
+    const header = new Uint8Array(30+name.length), h = new DataView(header.buffer);
+    h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true);
+    h.setUint32(14,crc,true); h.setUint32(18,data.length,true); h.setUint32(22,data.length,true); h.setUint16(26,name.length,true); header.set(name,30);
+    const directory = new Uint8Array(46+name.length), d = new DataView(directory.buffer);
+    d.setUint32(0,0x02014b50,true); d.setUint16(4,20,true); d.setUint16(6,20,true); d.setUint16(8,0x0800,true);
+    d.setUint32(16,crc,true); d.setUint32(20,data.length,true); d.setUint32(24,data.length,true); d.setUint16(28,name.length,true); d.setUint32(42,offset,true); directory.set(name,46);
+    local.push(header,data); central.push(directory); offset += header.length+data.length;
+  }
+  const size = central.reduce((n,x) => n+x.length,0), end = new Uint8Array(22), e = new DataView(end.buffer);
+  e.setUint32(0,0x06054b50,true); e.setUint16(8,entries.length,true); e.setUint16(10,entries.length,true);
+  e.setUint32(12,size,true); e.setUint32(16,offset,true);
+  download(new Blob([...local,...central,end], {type:'application/zip'}),`prueba-audio-${run.id.slice(0,8)}.zip`);
+}
+for (const [id,action] of Object.entries({record:start,pause:togglePause,finish,analyze,play:playAll,zip:zipAll})) {
+  $(id).onclick = () => void Promise.resolve().then(action).catch(fail);
+}
+$('stopPlay').onclick = stopPlayback;
+$('report').onclick = () => download(new Blob([JSON.stringify(diagnostic(),null,2)],{type:'application/json'}),'diagnostico-audio.json');
+$('codec').onchange = refreshMime;
+document.addEventListener('visibilitychange', () => { log('visibility', {state:document.visibilityState, audioTime:context?.currentTime}); if (state === 'recording') void checkpoint().catch(fail); });
+window.addEventListener('pagehide', () => log('pagehide'));
+// Superficie de lectura para el arnés. Los controles de grabación se accionan por la interfaz.
+window.prueba = {get state(){return state;}, snapshot, diagnostic, detectBeeps, playAll,
+  get segments(){return segments.map(({blob,...meta}) => meta);}};
+refreshMime(); openDatabase().catch(error => { state = 'error'; fail(error); controls(); });
+</script>
+</body>
+</html>

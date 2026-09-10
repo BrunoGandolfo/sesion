@@ -1,0 +1,601 @@
+{
+  "browser": "chromium",
+  "scenario": "continua",
+  "startedAt": "2026-09-10T20:52:48.667Z",
+  "durationSeconds": 65,
+  "segmentSeconds": 10,
+  "playwrightVersion": "1.63.0",
+  "browserVersion": "153.0.8010.12",
+  "os": "linux 6.18.33.2-microsoft-standard-WSL2",
+  "sourceSha256": "0fadea45152508ac27692de4d1f0e368b26b5b3ecae39a388f0ea5b8870c94fa",
+  "headless": false,
+  "launchMode": "Chrome nativo + CDP noDefaults:true",
+  "errors": [
+    "TimeoutError: page.waitForEvent: Timeout 30000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n============================================================"
+  ],
+  "preflight": {
+    "mediaRecorder": "function",
+    "audioContext": "function",
+    "visibility": "visible",
+    "error": "",
+    "strictStorageReady": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "supportedMimes": [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4"
+    ]
+  },
+  "calibration": [
+    {
+      "insertedMs": -80,
+      "expectedIntervalMs": 920,
+      "actualIntervalMs": 919.9999999999999,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 0,
+      "expectedIntervalMs": 1000,
+      "actualIntervalMs": 1000,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 80,
+      "expectedIntervalMs": 1080,
+      "actualIntervalMs": 1080,
+      "found": 4,
+      "passed": true
+    }
+  ],
+  "finishedAt": "2026-09-10T20:54:06.232Z",
+  "elapsedWindowMs": 85165.00677200001,
+  "diagnostic": {
+    "version": 1,
+    "protocol": "MediaRecorder nuevo por archivo; no timeslice; 64 kbps solicitados",
+    "run": {
+      "id": "a7e7d722-1f7f-4ac6-9554-9e2dcbe834af",
+      "startedAt": "2026-09-10T20:52:48.899Z",
+      "source": "synthetic",
+      "segmentSeconds": 10,
+      "requestedMimeType": "audio/webm;codecs=opus",
+      "nextIndex": 8,
+      "strictDurability": true,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "sampleRate": 44100,
+      "expectedBeeps": 15,
+      "status": "finished",
+      "wallRecordedMs": 65037.3,
+      "observedAt": "2026-09-10T20:54:06.233Z",
+      "events": [
+        {
+          "at": "2026-09-10T20:52:48.942Z",
+          "wallMs": 226.8,
+          "type": "audio-context",
+          "state": "running",
+          "audioTime": 0
+        },
+        {
+          "at": "2026-09-10T20:52:49.044Z",
+          "wallMs": 102.69999998807907,
+          "type": "source-warmup"
+        },
+        {
+          "at": "2026-09-10T20:52:49.048Z",
+          "wallMs": 332.2,
+          "type": "segment-start",
+          "index": 1,
+          "sourceTime": 0,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:52:59.053Z",
+          "wallMs": 10337.5,
+          "type": "segment-stop",
+          "index": 1,
+          "reason": "rotation",
+          "rotationLateMs": 5.3
+        },
+        {
+          "at": "2026-09-10T20:52:59.054Z",
+          "wallMs": 10338.3,
+          "type": "segment-start",
+          "index": 2,
+          "sourceTime": 10.00780045351474,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:52:59.062Z",
+          "wallMs": 10346.9,
+          "type": "saved",
+          "index": 1,
+          "bytes": 10519,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:53:06.368Z",
+          "wallMs": 20338.7,
+          "type": "segment-stop",
+          "index": 2,
+          "reason": "rotation",
+          "rotationLateMs": 0.4
+        },
+        {
+          "at": "2026-09-10T20:53:06.368Z",
+          "wallMs": 20339.3,
+          "type": "segment-start",
+          "index": 3,
+          "sourceTime": 14.767891156462586,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:53:06.373Z",
+          "wallMs": 20343.3,
+          "type": "saved",
+          "index": 2,
+          "bytes": 5350,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:53:16.369Z",
+          "wallMs": 30339.6,
+          "type": "segment-stop",
+          "index": 3,
+          "reason": "rotation",
+          "rotationLateMs": 0.4
+        },
+        {
+          "at": "2026-09-10T20:53:16.369Z",
+          "wallMs": 30340.2,
+          "type": "segment-start",
+          "index": 4,
+          "sourceTime": 14.837551020408164,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:53:16.373Z",
+          "wallMs": 30343.8,
+          "type": "saved",
+          "index": 3,
+          "bytes": 310,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:53:26.370Z",
+          "wallMs": 40340.3,
+          "type": "segment-stop",
+          "index": 4,
+          "reason": "rotation",
+          "rotationLateMs": 0.2
+        },
+        {
+          "at": "2026-09-10T20:53:26.370Z",
+          "wallMs": 40341,
+          "type": "segment-start",
+          "index": 5,
+          "sourceTime": 14.86077097505669,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:53:26.373Z",
+          "wallMs": 40344,
+          "type": "saved",
+          "index": 4,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:53:33.803Z",
+          "wallMs": 50341.2,
+          "type": "segment-stop",
+          "index": 5,
+          "reason": "rotation",
+          "rotationLateMs": 0.4
+        },
+        {
+          "at": "2026-09-10T20:53:33.804Z",
+          "wallMs": 50341.8,
+          "type": "segment-start",
+          "index": 6,
+          "sourceTime": 14.883990929705217,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:53:33.807Z",
+          "wallMs": 50345,
+          "type": "saved",
+          "index": 5,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:53:43.804Z",
+          "wallMs": 60341.9,
+          "type": "segment-stop",
+          "index": 6,
+          "reason": "rotation",
+          "rotationLateMs": 0.2
+        },
+        {
+          "at": "2026-09-10T20:53:43.805Z",
+          "wallMs": 60342.5,
+          "type": "segment-start",
+          "index": 7,
+          "sourceTime": 14.907210884353741,
+          "mimeType": "audio/webm;codecs=opus"
+        },
+        {
+          "at": "2026-09-10T20:53:43.809Z",
+          "wallMs": 60346.8,
+          "type": "saved",
+          "index": 6,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:53:48.832Z",
+          "wallMs": 65369.4,
+          "type": "segment-stop",
+          "index": 7,
+          "reason": "finish",
+          "rotationLateMs": 0
+        },
+        {
+          "at": "2026-09-10T20:53:48.846Z",
+          "wallMs": 65383.5,
+          "type": "saved",
+          "index": 7,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-10T20:53:48.847Z",
+          "wallMs": 65384.5,
+          "type": "finish"
+        },
+        {
+          "at": "2026-09-10T20:53:48.847Z",
+          "wallMs": 65384.7,
+          "type": "audio-context",
+          "state": "closed",
+          "audioTime": 15.011700680272108
+        }
+      ],
+      "sourceIntervals": [
+        [
+          0,
+          10.00780045351474
+        ],
+        [
+          10.00780045351474,
+          14.767891156462586
+        ],
+        [
+          14.767891156462586,
+          14.837551020408164
+        ],
+        [
+          14.837551020408164,
+          14.86077097505669
+        ],
+        [
+          14.86077097505669,
+          14.883990929705217
+        ],
+        [
+          14.883990929705217,
+          14.907210884353741
+        ],
+        [
+          14.907210884353741,
+          14.907210884353741
+        ]
+      ],
+      "segmentCount": 7,
+      "audioContextState": null,
+      "visibility": "visible"
+    },
+    "analysis": {
+      "source": "synthetic",
+      "recovered": false,
+      "interrupted": false,
+      "expectedCountIsLowerBound": false,
+      "wallRecordedMs": 65037.3,
+      "savedSegmentsWallMs": 65033.8,
+      "decodedDurationSec": 14.759932,
+      "decodedMinusWallMs": -50277.368,
+      "expectedBeeps": 15,
+      "foundBeeps": null,
+      "allDecodable": false,
+      "segments": [
+        {
+          "index": 1,
+          "decodable": true,
+          "bytes": 10519,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 9.959977324263038,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 10005.3,
+          "rotationLateMs": 5.3,
+          "reason": "rotation"
+        },
+        {
+          "index": 2,
+          "decodable": true,
+          "bytes": 5350,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 4.739977324263038,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 10000.4,
+          "rotationLateMs": 0.4,
+          "reason": "rotation"
+        },
+        {
+          "index": 3,
+          "decodable": true,
+          "bytes": 310,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 0.05997732426303855,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 10000.4,
+          "rotationLateMs": 0.4,
+          "reason": "rotation"
+        },
+        {
+          "index": 4,
+          "decodable": false,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "error": "EncodingError: Unable to decode audio data"
+        },
+        {
+          "index": 5,
+          "decodable": false,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "error": "EncodingError: Unable to decode audio data"
+        },
+        {
+          "index": 6,
+          "decodable": false,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "error": "EncodingError: Unable to decode audio data"
+        },
+        {
+          "index": 7,
+          "decodable": false,
+          "bytes": 110,
+          "mimeType": "audio/webm;codecs=opus",
+          "error": "EncodingError: Unable to decode audio data"
+        }
+      ],
+      "boundaries": [],
+      "beeps": []
+    },
+    "events": [
+      {
+        "at": "2026-09-10T20:52:48.942Z",
+        "wallMs": 226.8,
+        "type": "audio-context",
+        "state": "running",
+        "audioTime": 0
+      },
+      {
+        "at": "2026-09-10T20:52:49.044Z",
+        "wallMs": 102.69999998807907,
+        "type": "source-warmup"
+      },
+      {
+        "at": "2026-09-10T20:52:49.048Z",
+        "wallMs": 332.2,
+        "type": "segment-start",
+        "index": 1,
+        "sourceTime": 0,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:52:59.053Z",
+        "wallMs": 10337.5,
+        "type": "segment-stop",
+        "index": 1,
+        "reason": "rotation",
+        "rotationLateMs": 5.3
+      },
+      {
+        "at": "2026-09-10T20:52:59.054Z",
+        "wallMs": 10338.3,
+        "type": "segment-start",
+        "index": 2,
+        "sourceTime": 10.00780045351474,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:52:59.062Z",
+        "wallMs": 10346.9,
+        "type": "saved",
+        "index": 1,
+        "bytes": 10519,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:53:06.368Z",
+        "wallMs": 20338.7,
+        "type": "segment-stop",
+        "index": 2,
+        "reason": "rotation",
+        "rotationLateMs": 0.4
+      },
+      {
+        "at": "2026-09-10T20:53:06.368Z",
+        "wallMs": 20339.3,
+        "type": "segment-start",
+        "index": 3,
+        "sourceTime": 14.767891156462586,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:53:06.373Z",
+        "wallMs": 20343.3,
+        "type": "saved",
+        "index": 2,
+        "bytes": 5350,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:53:16.369Z",
+        "wallMs": 30339.6,
+        "type": "segment-stop",
+        "index": 3,
+        "reason": "rotation",
+        "rotationLateMs": 0.4
+      },
+      {
+        "at": "2026-09-10T20:53:16.369Z",
+        "wallMs": 30340.2,
+        "type": "segment-start",
+        "index": 4,
+        "sourceTime": 14.837551020408164,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:53:16.373Z",
+        "wallMs": 30343.8,
+        "type": "saved",
+        "index": 3,
+        "bytes": 310,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:53:26.370Z",
+        "wallMs": 40340.3,
+        "type": "segment-stop",
+        "index": 4,
+        "reason": "rotation",
+        "rotationLateMs": 0.2
+      },
+      {
+        "at": "2026-09-10T20:53:26.370Z",
+        "wallMs": 40341,
+        "type": "segment-start",
+        "index": 5,
+        "sourceTime": 14.86077097505669,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:53:26.373Z",
+        "wallMs": 40344,
+        "type": "saved",
+        "index": 4,
+        "bytes": 110,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:53:33.803Z",
+        "wallMs": 50341.2,
+        "type": "segment-stop",
+        "index": 5,
+        "reason": "rotation",
+        "rotationLateMs": 0.4
+      },
+      {
+        "at": "2026-09-10T20:53:33.804Z",
+        "wallMs": 50341.8,
+        "type": "segment-start",
+        "index": 6,
+        "sourceTime": 14.883990929705217,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:53:33.807Z",
+        "wallMs": 50345,
+        "type": "saved",
+        "index": 5,
+        "bytes": 110,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:53:43.804Z",
+        "wallMs": 60341.9,
+        "type": "segment-stop",
+        "index": 6,
+        "reason": "rotation",
+        "rotationLateMs": 0.2
+      },
+      {
+        "at": "2026-09-10T20:53:43.805Z",
+        "wallMs": 60342.5,
+        "type": "segment-start",
+        "index": 7,
+        "sourceTime": 14.907210884353741,
+        "mimeType": "audio/webm;codecs=opus"
+      },
+      {
+        "at": "2026-09-10T20:53:43.809Z",
+        "wallMs": 60346.8,
+        "type": "saved",
+        "index": 6,
+        "bytes": 110,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:53:48.832Z",
+        "wallMs": 65369.4,
+        "type": "segment-stop",
+        "index": 7,
+        "reason": "finish",
+        "rotationLateMs": 0
+      },
+      {
+        "at": "2026-09-10T20:53:48.846Z",
+        "wallMs": 65383.5,
+        "type": "saved",
+        "index": 7,
+        "bytes": 110,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-10T20:53:48.847Z",
+        "wallMs": 65384.5,
+        "type": "finish"
+      },
+      {
+        "at": "2026-09-10T20:53:48.847Z",
+        "wallMs": 65384.7,
+        "type": "audio-context",
+        "state": "closed",
+        "audioTime": 15.011700680272108
+      }
+    ],
+    "environment": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "secureContext": true,
+      "supportedMimes": [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4"
+      ]
+    }
+  },
+  "uiError": "",
+  "status": "error"
+}
