@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import bcrypt from "bcryptjs";
 import type { PrismaClient } from "@prisma/client";
@@ -8,6 +8,14 @@ import { hashTokenCuenta } from "@/lib/cuenta-tokens";
 import { restablecerCuenta } from "@/app/api/_lib/casos-uso/recuperar-cuenta";
 import { BCRYPT_RONDAS } from "@/lib/password";
 let prisma: PrismaClient;
+const sesion = vi.hoisted(() => ({ organizationId: "", userId: "" }));
+vi.mock("@/lib/auth-utils", () => ({
+  getCurrentOrganizationId: async () => sesion.organizationId,
+  getServerSession: async () => ({ ...sesion, user: { id: sesion.userId, organizationId: sesion.organizationId } }),
+}));
+// Las rutas ejercitan la base real validada por db-test, incluida la auditoría.
+vi.mock("@/lib/db", () => ({ get db() { return prisma; } }));
+vi.mock("@/lib/db-auth", () => ({ get dbAuth() { return prisma; } }));
 const claveAnterior = process.env.NOTES_ENCRYPTION_KEY;
 const ahora = new Date("2026-09-10T12:00:00Z");
 const token = "a".repeat(64);
@@ -41,6 +49,33 @@ it("dos consumos simultáneos cambian la contraseña una sola vez", async () => 
   const guardado = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
   expect(await bcrypt.compare("contraseña anterior", guardado.hashedPassword)).toBe(false);
   expect(await prisma.passwordReset.count({ where: { userId: user.id, usedAt: null } })).toBe(0);
+});
+it("cambiar por la ruta autenticada invalida el enlace previo y conserva la contraseña nueva", async () => {
+  const user = await usuaria();
+  Object.assign(sesion, { userId: user.id, organizationId: user.organizationId });
+  const emitido = new Date();
+  const repo = repositorioRecuperacion(prisma);
+  await repo.crearSolicitud(user.email, await hashTokenCuenta(token), emitido);
+  const enlace = await prisma.passwordReset.findUniqueOrThrow({ where: { tokenHash: await hashTokenCuenta(token) } });
+  expect(enlace.usedAt).toBeNull();
+  expect(enlace.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+  const cambiar = (await import("@/app/api/cuenta/password/route")).POST;
+  const restablecer = (await import("@/app/api/cuenta/restablecer/route")).POST;
+  const respuesta = await cambiar(new Request("http://localhost/api/cuenta/password", {
+    method: "POST", body: JSON.stringify({ actual: "contraseña anterior", nueva: "contraseña elegida" }),
+  }));
+  expect(respuesta.status).toBe(200);
+  const consumido = await prisma.passwordReset.findUniqueOrThrow({ where: { id: enlace.id } });
+  expect(consumido.usedAt?.getTime()).toBeGreaterThanOrEqual(emitido.getTime());
+  expect(consumido.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  const intento = await restablecer(new Request("http://localhost/api/cuenta/restablecer", {
+    method: "POST", body: JSON.stringify({ token, password: "contraseña del enlace" }),
+  }));
+  expect(intento.status).toBe(400);
+  const guardado = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+  expect(await bcrypt.compare("contraseña elegida", guardado.hashedPassword)).toBe(true);
+  expect(await bcrypt.compare("contraseña del enlace", guardado.hashedPassword)).toBe(false);
 });
 it("el SQL inverso revierte la tabla dentro de una transacción que luego deshacemos", async () => {
   const inversa = readFileSync("prisma/migrations/20260909193000_password_reset/rollback.sql", "utf8");

@@ -14,7 +14,7 @@
 //
 // QUÉ NO INVALIDA
 //
-// Nada. La sesión es un JWT firmado (session.strategy = "jwt" en
+// Las sesiones. La sesión es un JWT firmado (session.strategy = "jwt" en
 // src/lib/auth.ts): no hay tabla de sesiones que borrar, y el token sigue
 // siendo válido hasta que vence. Cerrar la sesión activa sería echar a la
 // profesional de su propio teléfono justo después de que hizo lo correcto.
@@ -26,9 +26,11 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { tomarLocks, OPCIONES_TRANSACCION } from "@/lib/intentos-serializados";
 import { BCRYPT_RONDAS, validarPasswordNueva } from "@/lib/password";
 import {
   MENSAJE_DEMASIADOS_INTENTOS,
+  clavePassword,
   procesarCambioPassword,
 } from "@/lib/password-eventos";
 import { huellaDeRequest } from "@/lib/request-huella";
@@ -118,14 +120,21 @@ export async function POST(request: Request) {
 
     // updateMany con la organización en el WHERE, igual que el resto de las
     // escrituras por id (ver los PATCH de paciente, turno y sesión).
-    const { count } = await db.user.updateMany({
-      where: { id: userId, organizationId },
-      data: { hashedPassword: hashNuevo },
-    });
-
-    if (count === 0) {
-      throw new ApiError("No autorizado", 401);
-    }
+    await db.$transaction(async (tx) => {
+      // Mismo orden que el contador: password primero, recuperar después.
+      // Crear y consumir enlaces toman recuperar; ninguna escritura puede
+      // intercalarse entre cambiar la contraseña e invalidar los enlaces.
+      await tomarLocks(tx, [clavePassword(userId), `recuperar:${userId}`]);
+      const { count } = await tx.user.updateMany({
+        where: { id: userId, organizationId },
+        data: { hashedPassword: hashNuevo },
+      });
+      if (count === 0) throw new ApiError("No autorizado", 401);
+      await tx.passwordReset.updateMany({
+        where: { userId, usedAt: null },
+        data: { usedAt: ahora },
+      });
+    }, OPCIONES_TRANSACCION);
 
     // Ni la contraseña ni su hash van al registro: sólo que pasó, cuándo y
     // desde dónde. (detalleSeguro descartaría igual cualquier objeto anidado,
