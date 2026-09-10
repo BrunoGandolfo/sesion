@@ -163,6 +163,28 @@ describe("normalizarReportes — lo que no puede pasar", () => {
 });
 
 describe("formatearViolacion", () => {
+  it.each([
+    ["document-uri", "documentURL"],
+    ["blocked-uri", "blockedURL"],
+    ["source-file", "sourceFile"],
+  ])("redacta tokens en %s y %s antes de loguear", (clasico, moderno) => {
+    const url = "https://sesionapp.app/restablecer?token=abc-secreto&modo=prueba&token=abc-otro";
+    for (const cuerpo of [
+      { "csp-report": { [clasico]: url } },
+      [{ type: "csp-violation", body: { [moderno]: url } }],
+    ]) {
+      const linea = formatearViolacion(normalizarReportes(cuerpo)[0]);
+      expect(linea).not.toContain("abc");
+      expect(linea).toContain("?token=<redactado>&modo=prueba&token=<redactado>");
+    }
+  });
+
+  it("redacta también claves codificadas y tokens largos antes de recortar", () => {
+    const [v] = normalizarReportes({ documentURL: `https://sesionapp.app/registro?%74oken=${"abc".repeat(MAX_CAMPO)}&vista=1` });
+    expect(formatearViolacion(v)).not.toContain("abc");
+    expect(v.documento).toBe("https://sesionapp.app/registro?%74oken=<redactado>&vista=1");
+  });
+
   it("una línea greppable con los campos nombrados", () => {
     const [v] = normalizarReportes(CLASICO);
 
