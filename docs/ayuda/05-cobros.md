@@ -31,8 +31,8 @@ dibuja ningún tilde: el tilde confirma lo que pasó de verdad.
 
 ## La pantalla de Cobros
 
-Arriba, cuatro números: **Cobraste este mes**, **Te deben**, **Sesiones
-cobradas** (del mes) y **Sin cobrar** (cantidad de sesiones). Debajo, dos
+Arriba, dos importes: **Cobraste este mes** y **Sin cobrar**. Debajo de cada
+importe aparece la cantidad de sesiones correspondiente. Más abajo hay dos
 solapas:
 
 - **Te deben** — *"Son N sesiones sin cobrar."* y la lista **ordenada por monto**,
@@ -51,14 +51,12 @@ número rojo con cuántas personas están en esa última zona.
 ## "Recordar cobro"
 
 En **Te deben**, cada persona con teléfono cargado tiene el botón **Recordar
-cobro**. Abre **WhatsApp** en tu teléfono, con el mensaje ya escrito:
+cobro**. Revisá el mensaje y confirmá: se envía un **SMS**, sin abrir WhatsApp.
 
-> Hola [Nombre], ¿cómo estás? Te escribo para recordarte que tenés N sesiones
-> pendientes de pago por un total de $ …. Cualquier duda estoy a disposición.
-> [Tu nombre]
-
-**El mensaje no se manda solo: lo mandás vos desde WhatsApp.** Es distinto del
-recordatorio del turno, que sale por SMS y sí es automático.
+El recordatorio de cobro **sale solo cuando vos confirmás el envío**; el del
+turno se programa automáticamente. El texto del cobro no es configurable.
+Si no se puede enviar, la pantalla muestra el error. Si figura enviado, eso
+indica que el servicio aceptó el SMS: no confirma que la paciente lo leyó.
 
 ## Qué hace la app por detrás
 
@@ -66,10 +64,14 @@ El pago se registra sobre el turno, con su fecha y su método. La deuda no es un
 número guardado: se calcula sumando los turnos realizados y sin cobrar de cada
 persona, y los días de atraso salen de la sesión impaga más vieja.
 
+## Si cobraste por error
+
+Abrí el turno cobrado en Agenda o en **Ficha → Turnos y pagos** y tocá
+**Deshacer cobro**. Revisá la confirmación: el monto vuelve a la deuda y el
+turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
+
 ## Lo que NO hace
 
-- **No hay botón para deshacer un cobro.** Si registraste un pago por error, hoy
-  no se corrige desde la pantalla.
 - **No cobra plata ni emite factura ni recibo.**
 - **No cobra parcial**: se cobra la tarifa completa del turno, no un monto libre.
 - **No cambia el mensaje de "Recordar cobro"**: no es configurable.

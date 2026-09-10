@@ -28,7 +28,8 @@ Arriba: el nombre, un chip **Archivado** si corresponde, *"Debe $ …"* si hay
 deuda, *"Próxima: …"* o *"Sin próximo turno"*, y **Editar**. Si falta la
 autorización, ahí mismo aparece un aviso dorado —**"Falta la autorización** para
 grabar las sesiones. La paciente la firma acá mismo."*— con el botón **Firmar
-autorización**. Abajo del todo, siempre, el botón **Grabar**.
+autorización**. El botón **Grabar** está en la cabecera de la ficha, junto
+a las acciones del paciente; no es un botón flotante.
 
 ### Pestaña **Sesiones**
 

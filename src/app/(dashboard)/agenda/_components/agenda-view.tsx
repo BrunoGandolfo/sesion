@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import { addDays, addMonths, addWeeks, isSameDay } from "date-fns";
 import { CalendarX2 } from "lucide-react";
 
@@ -144,8 +145,8 @@ export function AgendaView() {
     useConfirmacionDibujada<string>(SIN_NADA_QUE_HACER);
   // Mobile: el mes se despliega detrás del título de la fecha.
   const [mesAbierto, setMesAbierto] = React.useState(false);
-  const [toast, setToast] = React.useState<{ open: boolean; message: string }>(
-    { open: false, message: "" },
+  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>(
+    { open: false, message: "", variante: "aviso" },
   );
 
   // En mobile siempre se mira un día (la semana se dibuja como día). "mes"
@@ -283,12 +284,12 @@ export function AgendaView() {
 
   const handleTurnoUpdated = (message: string) => {
     setDetalleId(null);
-    setToast({ open: true, message });
+    setToast({ open: true, message, variante: "confirmacion" });
     refetchTurnos();
   };
 
   const handleTurnoError = (message: string) => {
-    setToast({ open: true, message });
+    setToast({ open: true, message, variante: "aviso" });
   };
 
   const openSheet = () => {
@@ -316,7 +317,7 @@ export function AgendaView() {
       throw new ApiClientError(ALGO_FALLO, 0);
     }
     setSheetOpen(false);
-    setToast({ open: true, message: "Turno agendado" });
+    setToast({ open: true, message: "Turno agendado", variante: "confirmacion" });
     // Si se creó un paciente en el camino, la lista tiene que reflejarlo.
     setPacientes(null);
     refetchTurnos();
@@ -466,6 +467,7 @@ export function AgendaView() {
       <Toast
         open={toast.open}
         message={toast.message}
+        variante={toast.variante}
         onClose={() => setToast((current) => ({ ...current, open: false }))}
       />
     </>

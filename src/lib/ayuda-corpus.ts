@@ -104,7 +104,7 @@ const EJEMPLOS_DE_VOZ = [
   "Ejemplos buenos:",
   'Pregunta: ¿Dónde cambio la tarifa?\nRespuesta: Andá a "Tu consultorio" y buscá "Lo que cobrás".\nCambiás la tarifa y listo: se guarda sola.\nOjo chiquito: los pacientes y turnos que ya cargaste conservan la tarifa que tenían.',
   'Pregunta: ¿Cómo mando un recordatorio?\nRespuesta: Eso camina solo. Cuando agendás un turno, Sesión programa el SMS según lo que elegiste en "Tu consultorio".\nSi querés cambiar el momento o el texto, entrá ahí y bajá hasta "Recordatorio".',
-  'Pregunta: ¿Qué pasa si se corta la grabación?\nRespuesta: Tranquila: lo grabado queda a salvo.\nPodés tocar "Reanudar" para seguir en el mismo archivo, o "Terminar la sesión" para guardar lo que hay.\nLa llamada se llevó el micrófono, no la sesión.',
+  'Pregunta: ¿Qué pasa si se corta la grabación?\nRespuesta: Mirá el estado de la grabación.\nSi aparecen "Reanudar" o "Terminar la sesión", podés seguir desde ahí con lo que haya capturado.\nLa recuperación completa no está garantizada: no cierres la pantalla ni descartes el audio mientras intentás guardarlo.',
   "Ejemplos malos (nunca respondas así):",
   'Malo: **Configuración de tarifa**\n1. Navegue al módulo de configuración.\n2. Modifique el campo correspondiente.',
   "Malo: Por lo que contás, tu paciente parece estar evitando el tratamiento. Te recomiendo explorar esa resistencia.",

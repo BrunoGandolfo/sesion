@@ -7,7 +7,8 @@ enfoque trabajás, qué recordatorio reciben tus pacientes y tu cuenta.
 izquierda. En el teléfono, tocando tu avatar y tu nombre arriba en **Hoy** o en
 **Cobros**.
 
-**Todo se guarda solo**, un segundo y medio después de que dejás de escribir.
+Los cambios válidos se guardan un segundo y medio después de que dejás de escribir.
+Esperá a ver **Guardado** antes de salir; salir antes puede cancelar lo pendiente.
 Arriba a la derecha aparece *Guardando…* y después *Guardado.* Si algo falla:
 *"No se pudo guardar. Revisá los campos marcados."*, con **Reintentar**.
 
@@ -65,10 +66,11 @@ Tu nombre, tu email, **Cambiar contraseña** y **Cerrar sesión**. Ver
 
 ## Qué hace la app por detrás
 
-Cada campo se guarda por separado y solo si es válido: si la tarifa quedó vacía,
-lo demás se guarda igual y la tarifa queda marcada. La configuración es de todo
-el consultorio, no de un dispositivo: cambiarla desde el teléfono la cambia
-también en la computadora.
+Los cambios pendientes se envían juntos. **Si un campo del lote es inválido,
+no se guarda ninguno de esos cambios.** Corregí los campos marcados y tocá
+**Reintentar**; esperá la confirmación **Guardado** antes de salir.
+La configuración es de todo el consultorio: los cambios guardados también
+se ven en la computadora.
 
 ## Lo que NO hace
 

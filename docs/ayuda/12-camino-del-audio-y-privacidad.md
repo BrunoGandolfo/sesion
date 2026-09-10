@@ -1,73 +1,58 @@
 # El camino del audio y la privacidad
 
-**Para qué sirve.** Por dónde pasa el audio de una sesión, quién lo toca, cuándo
-se borra y qué queda guardado. Es lo que le prometés a tu paciente cuando firma.
+**Para qué sirve.** Distinguir qué hace la app de lo que todavía necesita
+verificación sobre las copias y los proveedores.
 
 ## El camino, paso a paso
 
-1. **Se graba en tu dispositivo**, en pedacitos que quedan guardados ahí mientras
-   grabás, por si el navegador muere.
-2. **Se cifra ahí mismo.** Al terminar, el navegador genera una clave única para
-   esa sesión y cifra el audio (AES-256-GCM). **El audio sin cifrar nunca sale de
-   tu teléfono.**
-3. **Se sube ya cifrado**, directo al depósito (Cloudflare R2), sin pasar por el
-   servidor de la app.
-4. **Un proceso aparte lo baja y lo descifra en memoria**, sin escribir a disco.
-5. **AssemblyAI lo pasa a texto**, separando quién habla. Al terminar, la app
-   **le pide que borre** el texto y su copia del audio.
-6. **Anthropic redacta el borrador y el bloque "Para vos"**, bajo un acuerdo que
-   no le permite conservar el contenido ni usarlo para entrenar.
-7. **La nota vuelve a la app** y queda **Para revisar**.
-8. **Al aprobar, el audio se borra** y **se destruye su clave**.
+1. Durante la grabación, la app intenta guardar fragmentos en el navegador.
+   **La copia local previa no está cifrada.** Puede faltar si el almacenamiento
+   no estuvo disponible; no es una garantía de recuperación.
+2. **Al terminar**, el navegador cifra el audio antes de subirlo a R2.
+3. El proceso de transcripción baja ese audio y lo descifra. **AssemblyAI**
+   recibe el audio descifrado; **Anthropic** recibe la transcripción para
+   redactar la nota y el análisis para vos.
+4. Al terminar la transcripción, la app **pide eliminar** ese material del
+   proveedor. Una solicitud de borrado no confirma que se hayan eliminado
+   todas las copias.
+5. Al aprobar la nota, la app **intenta borrar el audio remoto** y quita la
+   clave del registro activo. La limpieza puede fallar; los respaldos previos
+   y las copias de proveedores requieren verificación aparte.
 
-## Quién procesa qué
+## Qué información reciben los proveedores
 
-| Quién | Qué recibe | Después |
-| --- | --- | --- |
-| Tu dispositivo | El audio en claro | Se borra al confirmarse la subida |
-| El depósito (R2) | El audio **cifrado** | Se borra al aprobar la nota |
-| **AssemblyAI** (EE.UU.) | El audio, descifrado, automáticamente | Borra el texto y su copia del audio |
-| **Anthropic** (EE.UU.) | La transcripción en texto | No lo conserva ni lo usa para entrenar |
+El audio y su transcripción pueden contener nombres y otros datos que se
+digan durante la sesión. El vocabulario que cargás también se envía al servicio
+de transcripción y puede contener nombres propios. No se envía automáticamente
+la ficha de contacto completa por ese camino.
 
-A esos servicios **no se les manda el nombre, el teléfono ni el documento de la
-paciente**: reciben el audio y el texto, nada más. Pero, y está dicho en la
-autorización: **si en la sesión se dicen nombres en voz alta, esos nombres viajan
-dentro del audio.**
+La retención, los accesos humanos y el uso para entrenamiento dependen de las
+condiciones y de la configuración vigente de los proveedores. Esta ayuda no
+puede certificar que nunca acceda una persona ni que todas las copias se borren.
+Si necesitás confirmar esas condiciones, pedí que se verifiquen antes de usarlas
+como garantía frente a una paciente.
 
-**Ninguna persona escucha tus sesiones**: ni de tu consultorio, ni de esas
-empresas.
+## Qué queda guardado
 
-## Cuándo se borra el audio
+La nota clínica, el borrador original, la transcripción y los datos estructurados
+de la sesión se cifran en la base. En el contexto longitudinal se cifran la
+hipótesis, el resumen acumulado y los riesgos históricos.
 
-**Al aprobar la nota**, en general el mismo día. Se borran el archivo y su clave:
-aunque quedara una copia en algún lado, **sin la clave no se puede abrir**.
-También se borra si eliminás una sesión que quedó en error. Entre grabar y
-aprobar, el audio existe cifrado en el depósito.
+**No todo dato clínico tiene ese cifrado:** las notas privadas de la ficha,
+las notas del turno, los objetivos, las intervenciones y los temas del contexto
+quedan fuera de ese cifrado de la aplicación. No los describas como si tuvieran
+la misma protección que la nota clínica.
 
-## Qué queda guardado, y cifrado
+Hay un registro de auditoría y un proceso de respaldo diario cifrado. La
+existencia de esos mecanismos no confirma que cada evento o respaldo se haya
+completado: su funcionamiento y recuperación requieren comprobación.
 
-En la base de datos, cifrado y visible solo para vos: **la nota clínica**, **el
-borrador original**, **la transcripción completa**, **los datos de la sesión**
-(temas, emociones, intervenciones, riesgo, feedback), **el hilo del proceso**
-(hipótesis, recorrido acumulado y señales históricas) y tus comentarios.
+## Después de aprobar
 
-Hay además un **registro de auditoría** de qué se hizo y cuándo (crear una
-sesión, aprobar una nota, cambiar la contraseña). **No guarda texto clínico**: de
-la nota aprobada guarda solo una huella que permite probar después que lo
-aprobado fue exactamente eso. Y hay copias de seguridad diarias de la base,
-también cifradas.
-
-## Lo que NO pasa
-
-- **El audio no se guarda para siempre**: se borra al aprobar.
-- **El audio no pasa por el servidor de la app.**
-- **Nadie escucha las sesiones.**
-- **No se usan tus sesiones para entrenar modelos.**
-- **Los datos de contacto de tus pacientes no salen** hacia esos servicios.
-- **La transcripción no se borra al aprobar**: queda, y la autorización que firma
-  la paciente lo dice explícitamente.
-- **Nada de esto es opcional por sesión**: si autorizó, este es el camino; si no,
-  no se graba.
+La transcripción y la nota se conservan. Aprobar no permite volver a grabar el
+audio original ni garantiza recuperar una copia perdida. Tampoco hay que
+confundir quitar una clave del registro activo con eliminar todas las copias
+previas que pudieran conservarla.
 
 <!-- fuentes:
 src/components/grabacion/GrabadorSesion.tsx

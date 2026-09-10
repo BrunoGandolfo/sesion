@@ -5,22 +5,26 @@ Recorrido, cómo se ve ese proceso en el tiempo.
 
 ## El hilo
 
-Está en la ficha, pestaña **Recorrido**, arriba de todo. Se arma solo: al aprobar
-una nota, el hilo se actualiza con lo que esa nota aportó. Seis bloques:
+Está en la ficha, pestaña **Recorrido**, arriba de todo. Un proceso automático
+intenta incorporar las notas aprobadas. Aprobar no confirma que el hilo ya esté
+actualizado: esa tarea puede quedar pendiente o fallar. Seis bloques:
 
-- **Hipótesis diagnóstica** — la escribís vos. La app no la inventa a partir de
-  síntomas sueltos: solo la cambia si reformulaste explícitamente en el Análisis.
+- **Hipótesis diagnóstica** — podés editarla. El modelo recibe instrucciones
+  para respetar lo que formulaste; revisá que la actualización las cumpla.
 - **Objetivos terapéuticos** — con su fecha de inicio y su estado: **Activo**,
   **Pausado** o **Cerrado**. Editando los agregás y cambiás su estado.
 - **Intervenciones probadas** — se acumulan solas: técnica, eficacia percibida
   (alta / media / baja) y en cuántas sesiones apareció.
-- **Temas recurrentes** — cada uno con su cuenta. **Nunca se reinician ni se
-  borran.**
+- **Temas recurrentes** — cada uno con su cuenta.
 - **El recorrido hasta hoy** — el resumen acumulado, con el chip *Generado por
   IA*. Se agrega un párrafo por sesión aprobada, que empieza con *"Sesión del …:
-  "*. **Los anteriores no se reescriben nunca.**
+  "*. La conservación de los párrafos anteriores depende de la actualización.
 - **Señales anteriores** — todas, con su fecha, de la más reciente a la más
-  vieja. Nunca se borran.
+  vieja.
+
+El hilo no es un historial inmutable: una actualización automática puede
+reemplazar contenido y pisar una corrección. Revisá los objetivos, temas y
+señales después de una actualización; no des por preservado todo lo anterior.
 
 Arriba hay un chip: **Revisado** (verde) o **"Actualizado tras la última sesión ·
 revisalo"** (dorado). Con el dorado aparece además: *"Lo escribió la IA después
@@ -36,7 +40,10 @@ de la última sesión. Revisalo y guardalo."* Con **Editar** y después
 - **La versión corta**, en la tarjeta de **Hoy** y en el turno de la agenda: dos
   líneas para leer de pie.
 
-Todo se compone de notas ya aprobadas: acá no se genera nada.
+El brief toma la última nota aprobada disponible, aunque haya una revisión más
+reciente. Si no hay aprobadas, puede usar un borrador. La advertencia de falta
+de aprobación no aparece en todas las vistas: comprobá la nota de origen si
+necesitás saber qué fue revisado. Abrir el brief no genera una nota nueva.
 
 ## El Recorrido ("Cómo va")
 

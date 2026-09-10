@@ -76,7 +76,9 @@ ningún recordatorio**.
   programado**: solo de los agendados.
 - **No cobra un turno agendado cuya hora todavía no llegó**: dice *"La sesión
   todavía no empezó: vas a poder cobrarla cuando llegue la hora"*.
-- **No avisa de choques de horario**: podés agendar dos turnos a la misma hora.
+- **No permite superponer turnos** con otro turno agendado o realizado.
+  Si se pisan los horarios, no se guarda el cambio: elegí otra hora o duración.
+  Un turno puede empezar justo cuando termina el anterior.
 - **No hay turnos que se repitan solos** cada semana.
 - **No se borran turnos.**
 

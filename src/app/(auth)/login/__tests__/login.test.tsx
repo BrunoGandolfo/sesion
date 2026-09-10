@@ -57,6 +57,12 @@ describe("Pantalla de entrada", () => {
     expect(screen.getByText(ENTRADA_CONFIDENCIALIDAD)).toBeDefined();
   });
 
+  it("aclara que el cifrado empieza al terminar y no protege la copia local previa", () => {
+    render(<LoginPage />);
+    expect(screen.getByText("Al terminar, el audio se cifra antes de subirse. La copia local previa no está cifrada.")).toBeDefined();
+    expect(screen.queryByText(/se borra cuando aprobás la nota/)).toBeNull();
+  });
+
   it("el formulario sigue funcionando: los dos campos y el botón tienen nombre accesible", () => {
     render(<LoginPage />);
 

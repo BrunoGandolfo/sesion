@@ -67,8 +67,8 @@ enviar". Si una corrida se corta, la siguiente lo retoma sin gastarle un intento
 
 ## Lo que NO hace
 
-- **No manda WhatsApp.** El canal es SMS. (El botón "Recordar cobro" de Cobros sí
-  abre WhatsApp, pero ese lo mandás vos.)
+- **No manda WhatsApp.** El canal es SMS, también en **Recordar cobro**.
+  El recordatorio de cobro sale solo cuando vos confirmás el envío en Cobros.
 - **No recibe respuestas.**
 - **No manda mails** ni notificaciones.
 - **No hay un recordatorio distinto por paciente**: el momento y el texto son los

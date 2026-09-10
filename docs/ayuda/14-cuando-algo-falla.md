@@ -1,7 +1,7 @@
 # Cuando algo falla
 
-**Para qué sirve.** Síntoma por síntoma: qué pasó, qué se perdió (casi siempre
-nada) y qué podés hacer.
+**Para qué sirve.** Síntoma por síntoma: qué revisar y qué podés hacer,
+sin dar por guardado lo que todavía no se confirmó.
 
 ---
 
@@ -34,8 +34,9 @@ Si la olvidaste, tocá **¿Olvidaste tu contraseña?** en la entrada y pedí un 
 
 Pasa cuando entra una llamada o cuando otra app se lleva el micrófono.
 
-**Qué hacer:** **Reanudar** (sigue en el mismo archivo, no se pierde nada) o
-**Terminar la sesión** (guarda lo grabado hasta ahí).
+**Qué hacer:** revisá si podés **Reanudar** o **Terminar la sesión** con lo
+capturado. Durante el corte no se graba. La recuperación completa no está
+garantizada; no cierres ni descartes el audio mientras intentás guardarlo.
 
 ### Se cerró el navegador o se apagó el teléfono
 
@@ -48,7 +49,8 @@ quedó algo, la app te ofrece: *"Quedó una grabación de ~N min sin enviar"*, c
 **Ves:** *"No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de
 nuevo."* y un botón **Reintentar**.
 
-Casi siempre es la conexión. **Nada se borró**: el audio sigue en el teléfono.
+Puede ser la conexión u otro fallo. La copia local puede faltar: no des por
+guardado el audio hasta comprobar la confirmación de subida.
 
 **Qué hacer:** poné el teléfono en una conexión buena (wifi mejor que datos) y
 tocá **Reintentar**. Podés reintentar las veces que haga falta. Si vas a salir de
@@ -83,7 +85,8 @@ en el bloque de pendientes, y en la ficha con el chip **Para revisar**.
 
 ### Dice "No pudimos escribir la nota"
 
-La sesión quedó en error. **El audio no se perdió.** Tenés dos botones:
+La sesión quedó en error. Si el audio sigue disponible, se puede reintentar.
+La pantalla ofrece estas acciones:
 
 - **Reintentar** — vuelve a escribir la nota con el mismo audio. Es lo primero
   que hay que probar.
@@ -153,11 +156,11 @@ hubo recordatorio que mandar.
 
 ## Una regla general
 
-**Casi nada se pierde.** El audio se guarda en el teléfono antes de subirse, la
-sesión se puede reintentar, la nota descartada se puede volver a escribir, los
-turnos y los pacientes no se borran. Las dos únicas cosas que no vuelven son:
-**el audio después de aprobar la nota** y **una grabación que descartaste a
-propósito**.
+No confundas una opción de reintento con una garantía de recuperación.
+Podés perder una grabación si falló el almacenamiento local o la descartaste;
+también las correcciones de una nota si salís sin aprobar. Si hay audio
+pendiente, no empieces otra grabación del mismo turno ni lo descartes.
+Comprobá el estado guardado antes de salir y pedí ayuda si sigue fallando.
 
 <!-- fuentes:
 src/app/(auth)/login/page.tsx

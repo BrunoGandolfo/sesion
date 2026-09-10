@@ -8,6 +8,7 @@
 // hook de grabación en el padre).
 
 import * as React from "react";
+import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronDown, Mic } from "lucide-react";
 import { format } from "date-fns";
@@ -49,7 +50,7 @@ interface SesionesTabProps {
   sesionHoy: SesionClinicaResponse | null;
   sesionHoyCargando: boolean;
   onTurnoActualizado: () => void;
-  onAviso: (mensaje: string) => void;
+  onAviso: (mensaje: string, variante?: VarianteToast) => void;
 }
 
 // Ítem de GET /api/pacientes/[id]/documentacion: nota ya ensamblada y
@@ -334,7 +335,7 @@ export function SesionesTab({
         turno={cobroTarget}
         onClose={() => setCobroTarget(null)}
         onCobrado={() => {
-          onAviso("Cobrado");
+          onAviso("Cobrado", "confirmacion");
           onTurnoActualizado();
         }}
         onError={onAviso}
