@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RegistroForm } from "@/app/(auth)/registro/registro-form";
 import TerminosPage from "@/app/(auth)/terminos/page";
 import { InvitarColega } from "@/app/(dashboard)/config/_components/invitar-colega";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { ENTRADA_NOMBRE, ENTRADA_EMAIL, ENTRADA_CONTRASENA, ENTRADA_REPETIR, ENTRADA_REGISTRO, ENTRADA_ACEPTA_TERMINOS, ENTRADA_PEDIR_INVITACION, INVITAR_GENERAR, INVITAR_COPIAR, INVITAR_WHATSAPP, TERMINOS_BORRADOR } from "@/lib/glosario";
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("next-auth/react", () => ({ signIn: vi.fn().mockResolvedValue({ ok: true }) }));
+vi.mock("next-auth/react", () => ({ signIn: vi.fn().mockResolvedValue({ ok: true }), signOut: vi.fn().mockResolvedValue({ url: "/login" }) }));
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 function completar() {
   for (const [label, value] of [[ENTRADA_NOMBRE, "Colega"], [ENTRADA_EMAIL, "colega@example.test"], [ENTRADA_CONTRASENA, "contraseña larga"], [ENTRADA_REPETIR, "contraseña larga"]]) {
@@ -21,16 +21,24 @@ it("sin invitación válida muestra el pedido de otro enlace", () => {
   expect(screen.queryByRole("button")).toBeNull();
 });
 it("exige términos, crea cuenta e inicia sesión por credentials hacia Hoy", async () => {
+  let terminarSalida!: (valor: { url: string }) => void;
+  vi.mocked(signOut).mockReturnValueOnce(new Promise<{ url: string }>(resolve => { terminarSalida = resolve; }));
   const fetcher = vi.fn().mockResolvedValue(Response.json({ data: { creada: true } }, { status: 201 })); vi.stubGlobal("fetch", fetcher);
   render(<RegistroForm token={"a".repeat(64)} valida />); completar();
   const boton = screen.getByRole("button", { name: ENTRADA_REGISTRO });
   fireEvent.submit(boton.closest("form")!);
   expect(fetcher).not.toHaveBeenCalled();
+  expect(signOut).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("checkbox", { name: ENTRADA_ACEPTA_TERMINOS }));
   expect(screen.getByRole("link", { name: ENTRADA_ACEPTA_TERMINOS }).getAttribute("href")).toBe("/terminos");
   fireEvent.click(boton);
+  await waitFor(() => expect(signOut).toHaveBeenCalledWith({ redirect: false }));
+  expect(signIn).not.toHaveBeenCalled();
+  expect(router.replace).not.toHaveBeenCalled();
+  await act(async () => terminarSalida({ url: "/login" }));
   await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/"));
   expect(signIn).toHaveBeenCalledWith("credentials", { email: "colega@example.test", password: "contraseña larga", redirect: false });
+  expect(vi.mocked(signOut).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(signIn).mock.invocationCallOrder[0]);
   expect(JSON.parse(fetcher.mock.calls[0][1].body).aceptaTerminos).toBe(true);
 });
 it("muestra el enlace de invitación y permite copiarlo y compartirlo", async () => {

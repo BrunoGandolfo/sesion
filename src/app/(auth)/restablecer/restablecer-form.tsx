@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { Button, Input } from "@/components/ui";
 import { ApiClientError, apiPost } from "@/lib/api-client";
 import { validarPasswordNueva, PASSWORD_MIN } from "@/lib/password";
@@ -23,6 +24,7 @@ export function RestablecerForm({ token }: { token: string }) {
     setEnviando(true); setError("");
     try {
       await apiPost("/api/cuenta/restablecer", { token, password });
+      await signOut({ redirect: false });
       router.replace("/login?aviso=password-cambiada");
     } catch (e) { setError(e instanceof ApiClientError ? e.message : ENTRADA_CUENTA_ERROR); }
     finally { setEnviando(false); }

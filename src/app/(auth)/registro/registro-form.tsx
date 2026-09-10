@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { Button, Input } from "@/components/ui";
 import { ApiClientError, apiPost } from "@/lib/api-client";
 import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
@@ -31,6 +31,7 @@ export function RegistroForm({ token, valida }: { token: string; valida: boolean
     try {
       await apiPost("/api/cuenta/registro", { token, nombre, email, password, aceptaTerminos: true });
       cuentaCreada = true; setCreada(true);
+      await signOut({ redirect: false });
       const resultado = await signIn("credentials", { email: email.trim().toLowerCase(), password, redirect: false });
       if (resultado?.ok && !resultado.error) { router.replace("/"); router.refresh(); }
       else setError(ENTRADA_CUENTA_CREADA_SIN_SESION);
