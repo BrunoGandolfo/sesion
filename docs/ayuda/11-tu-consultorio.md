@@ -82,6 +82,23 @@ se ven en la computadora.
 - **No cambia el texto de la autorización** de grabación.
 - **No hay segunda usuaria** ni permisos que repartir.
 
+## Invitar a una colega
+
+1. En **Tu consultorio**, buscá **Invitar a una colega** y tocá **Generar enlace**.
+2. Usá **Copiar** o **Compartir por WhatsApp**. La app abre WhatsApp con el texto;
+   vos elegís a quién mandarlo y confirmás el envío.
+3. Tu colega abre el enlace, completa su nombre, email y contraseña dos veces,
+   acepta los términos y la política de privacidad y toca **Crear mi cuenta**.
+
+El enlace vence en **7 días** y se usa una sola vez. Si venció o ya se usó,
+tu colega necesita pedirte otro. Compartilo sólo con ella.
+
+La invitada tiene **un consultorio nuevo y separado**, con configuración vacía
+y tarifa inicial 0. No ve tus pacientes, turnos ni notas, y vos no ves los suyos.
+Al terminar entra a **Hoy**, donde Pendientes le muestra los primeros pasos.
+Si la cuenta se creó pero el acceso quedó bloqueado por intentos, puede entrar
+más tarde desde la pantalla de entrada: no necesita registrarse otra vez.
+
 <!-- fuentes:
 src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/config/_components/editor-recordatorio.tsx

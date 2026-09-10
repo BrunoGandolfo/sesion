@@ -116,8 +116,18 @@ const CONTROLES = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/g;
  *  que sale de acá lo escribió alguien de afuera. */
 function texto(valor: unknown): string {
   if (typeof valor === "string") {
+    // Antes del recorte: un token largo o repetido tampoco deja un prefijo
+    // secreto en el log. Conservamos la URL y sus parámetros de diagnóstico.
+    const seguro = valor.replace(/([?&])([^=&#]+)=([^&#]*)/g, (parametro, separador, clave) => {
+      try {
+        if (decodeURIComponent(clave).toLowerCase() === "token") {
+          return `${separador}${clave}=<redactado>`;
+        }
+      } catch { /* Una clave mal codificada no es el parámetro token. */ }
+      return parametro;
+    });
     const recortado =
-      valor.length > MAX_CAMPO ? `${valor.slice(0, MAX_CAMPO)}…` : valor;
+      seguro.length > MAX_CAMPO ? `${seguro.slice(0, MAX_CAMPO)}…` : seguro;
     // Espacio y no vacío: recortar cambiaría la longitud y taparía que el
     // campo venía con basura.
     return recortado.replace(CONTROLES, " ");

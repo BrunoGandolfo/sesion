@@ -31,6 +31,7 @@ import { buildSmsMessage, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
+import { InvitarColega } from "./invitar-colega";
 import { TituloSeccion } from "./titulo-seccion";
 import { VocabularioSeccion } from "./vocabulario-seccion";
 
@@ -511,6 +512,8 @@ export function ConfigView() {
             </div>
           </Card>
         </section>
+
+        <InvitarColega />
 
         {/* ─── Cuenta ──────────────────────────────────────────── */}
         <section className="pt-2">

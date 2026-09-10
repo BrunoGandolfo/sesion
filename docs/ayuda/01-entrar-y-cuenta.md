@@ -3,6 +3,14 @@
 **Para qué sirve.** Cómo se entra a Sesión, qué pasa si te equivocás varias
 veces con la contraseña y cómo cambiarla.
 
+## Crear tu cuenta con una invitación
+
+Necesitás un enlace de una colega que ya use Sesión. Completá nombre, email,
+contraseña dos veces y aceptá los términos y la política de privacidad.
+Al tocar **Crear mi cuenta**, se abre tu propio consultorio y entrás a **Hoy**.
+Los datos de quien te invitó permanecen separados. Si el enlace venció o ya
+se usó, pedile otro. Más detalles en `11-tu-consultorio.md`.
+
 ## Entrar
 
 1. Abrí la app. Vas a ver el título **Sesión** y abajo *Tu consulta, organizada.*
@@ -28,6 +36,22 @@ La sesión abierta dura **30 días** sin que tengas que volver a entrar.
 - **Acertar la contraseña no borra el contador.** Si te equivocaste cinco veces
   hoy, esperás igual aunque después te acuerdes.
 - No hay nada que tocar: se destraba solo cuando pasa el tiempo.
+
+## Si olvidaste la contraseña
+
+1. En la pantalla de entrada, tocá **¿Olvidaste tu contraseña?**.
+2. Escribí tu email y tocá **Mandame un enlace**. Siempre aparece
+   *Si ese correo existe, te mandamos un enlace*: no confirma si hay una cuenta.
+3. Revisá tu correo y la carpeta de spam. El enlace vence en **una hora**,
+   se usa una sola vez y pedir uno nuevo invalida el anterior.
+4. Abrí el enlace, escribí una contraseña nueva dos veces y tocá **Cambiar contraseña**.
+   Volvés a la entrada con el aviso *Contraseña cambiada*.
+
+Se pueden pedir hasta **tres enlaces por hora** para una cuenta. Si no llega,
+esperá antes de pedir otro y avisale a quien administra Sesión si el problema sigue.
+La contraseña necesita al menos 10 caracteres, hasta 72 bytes (las letras con
+tilde pueden ocupar más de uno), no puede ser sólo espacios ni igual a la anterior.
+Los accesos ya abiertos y el bloqueo por intentos de login conservan su duración.
 
 ## Cambiar la contraseña
 
@@ -57,8 +81,6 @@ para adivinarla a fuerza de probar.
 
 ## Lo que NO hace
 
-- **No hay "olvidé mi contraseña".** No se manda un correo de recuperación: la
-  contraseña se cambia desde adentro, sabiendo la actual.
 - **No te dice cuál de los dos datos está mal**, ni si ese email existe.
 - **No te cierra la sesión** cuando cambiás la contraseña, ni en este dispositivo
   ni en otros: los accesos ya abiertos siguen abiertos hasta que venzan.

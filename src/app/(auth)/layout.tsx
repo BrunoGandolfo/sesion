@@ -20,6 +20,8 @@
 // configuración de segmento (`dynamic`, `revalidate`, …) sólo la lee Next en
 // componentes de servidor. Mismo patrón que (dashboard)/layout.tsx.
 
+export const metadata = { referrer: "no-referrer" as const };
+
 export const dynamic = "force-dynamic";
 
 export default function AuthLayout({
