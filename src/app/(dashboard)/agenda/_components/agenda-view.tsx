@@ -429,7 +429,8 @@ export function AgendaView() {
 
       {mostrarFab ? <Fab label={AGENDAR} onClick={openSheet} /> : null}
 
-      <Sheet open={sheetOpen} onClose={closeSheet} ariaLabel="Agendar">
+      <Sheet open={sheetOpen} onClose={closeSheet} ariaLabel="Agendar" formulario>
+        <div className="px-6 pt-3 lg:px-7 lg:pt-7">
         {pacientes === null && pacientesStatus === "error" ? (
           <EstadoVacio
             icono={<CalendarX2 size={28} strokeWidth={1.6} aria-hidden="true" />}
@@ -452,6 +453,7 @@ export function AgendaView() {
             onCancel={closeSheet}
           />
         )}
+        </div>
       </Sheet>
 
       <TurnoDetailSheet

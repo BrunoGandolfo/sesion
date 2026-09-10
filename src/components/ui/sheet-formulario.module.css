@@ -1,0 +1,23 @@
+/* Sólo los paneles de alta optan por este contenedor. El formulario entero
+   viaja en el scroll del Sheet; sus listas desplegables conservan el suyo. */
+.contenido {
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+.contenido > *,
+.contenido > * > div,
+.contenido form,
+.contenido form > div {
+  max-height: none;
+  overflow-x: visible;
+  overflow-y: visible;
+  flex-shrink: 0;
+}
+
+.contenido form {
+  min-height: 0;
+}
+
+.contenido form > div:last-child {
+  position: static;
+}

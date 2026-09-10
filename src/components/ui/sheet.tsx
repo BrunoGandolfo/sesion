@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import { SUAVE } from "./movimiento";
+import estilosFormulario from "./sheet-formulario.module.css";
 
 /**
  * Alto del menú inferior, en píxeles. Derivado de bottom-nav.tsx:30
@@ -56,6 +57,8 @@ interface SheetProps {
   ariaLabel?: string;
   variante?: VarianteSheet;
   className?: string;
+  /** Las altas usan el scroll del panel, incluso si el formulario trae uno propio. */
+  formulario?: boolean;
 }
 
 export function Sheet({
@@ -66,6 +69,7 @@ export function Sheet({
   ariaLabel,
   variante = "centrado",
   className = "",
+  formulario = false,
 }: SheetProps) {
   const [montado, setMontado] = React.useState(false);
   const mobileRef = React.useRef<HTMLDivElement>(null);
@@ -235,6 +239,7 @@ export function Sheet({
             tabIndex={-1}
             onKeyDown={atraparTab}
             {...entradaMobile}
+            style={formulario ? { maxHeight: "90dvh" } : undefined}
             className={`lg:hidden fixed z-50 bottom-0 left-0 right-0 flex max-h-[90vh] flex-col bg-white rounded-t-xl outline-none ${className}`}
           >
             <div className="shrink-0 bg-white flex justify-center pt-3 pb-2">
@@ -243,8 +248,8 @@ export function Sheet({
                 className="block w-10 h-1 rounded-full bg-ink-300"
               />
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="px-6 pb-6">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto" style={formulario ? { overscrollBehaviorY: "contain" } : undefined}>
+              <div className={formulario ? estilosFormulario.contenido : "px-6 pb-6"}>{children}</div>
               {/* Franja que el menú inferior tapa. Va fuera del bloque con
                   padding para que los formularios a sangre completa (que
                   cancelan px-6/pb-6 con márgenes negativos) igual la
@@ -264,10 +269,10 @@ export function Sheet({
             tabIndex={-1}
             onKeyDown={atraparTab}
             {...entradaDesktop}
-            style={{ maxWidth }}
+            style={{ maxWidth, ...(formulario ? { maxHeight: "85dvh", overscrollBehaviorY: "contain" } : {}) }}
             className={`${clasesDesktop} ${className}`}
           >
-            <div className={lateral ? "flex min-h-0 flex-1 flex-col p-7" : "p-7"}>
+            <div className={formulario ? estilosFormulario.contenido : lateral ? "flex min-h-0 flex-1 flex-col p-7" : "p-7"}>
               {children}
             </div>
           </motion.div>

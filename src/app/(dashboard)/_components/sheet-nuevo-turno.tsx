@@ -22,8 +22,7 @@ export function SheetNuevoTurno({
   onSubmit: (valores: NuevoTurnoData) => void;
 }) {
   return (
-    <Sheet open={open} onClose={onClose} ariaLabel="Agendar turno">
-      <div className="-mx-6 -mb-6 lg:-m-7">
+    <Sheet open={open} onClose={onClose} ariaLabel="Agendar turno" formulario>
         {pacientes === null ? (
           <div className="px-6 py-14 text-center text-[13px] text-ink-500">
             Cargando pacientes…
@@ -35,7 +34,6 @@ export function SheetNuevoTurno({
             onCancel={onClose}
           />
         )}
-      </div>
     </Sheet>
   );
 }

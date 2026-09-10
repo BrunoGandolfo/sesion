@@ -295,8 +295,8 @@ export function PacientesView({
         open={showNuevoPaciente}
         onClose={closeNuevoPaciente}
         ariaLabel={NUEVO_PACIENTE}
+        formulario
       >
-        <div className="-mx-6 -mb-6 lg:-m-7">
           {tarifaCargada ? (
             <NuevoPacienteForm
               tarifaDefault={tarifaDefault}
@@ -308,7 +308,6 @@ export function PacientesView({
               Cargando…
             </p>
           )}
-        </div>
       </Sheet>
 
       <Toast
