@@ -21,6 +21,7 @@ import type { AlianzaTerapeutica, NivelRiesgo } from "@/types/domain";
 
 import type { Lectura, TonoLectura } from "../progreso-lecturas";
 import { SIN_DATO } from "./textos";
+import { etiquetasDeFechas, useAnchoGrafico } from "./medidas";
 
 export const COLOR = {
   sage: "#4F7A6A",
@@ -252,7 +253,7 @@ export function LineaPorFecha({
   fillColor: string;
   ariaLabel: string;
 }) {
-  const W = 600;
+  const { ref, ancho: W } = useAnchoGrafico();
   const H = 220;
   const padL = yLabels ? 82 : 36;
   const padR = 16;
@@ -284,15 +285,16 @@ export function LineaPorFecha({
   const primero = conDato[0];
   const ultimo = conDato[conDato.length - 1];
   const todosLosMarcadores = conDato.length <= MAX_MARCADORES;
-  const etiquetas = indicesConEtiqueta(puntos.length);
+  const etiquetas = etiquetasDeFechas(puntos.map((p) => p.fecha), puntos.map((_, i) => xFor(i)), padL, W - padR);
 
   return (
-    <div className="overflow-x-auto">
+    <div ref={ref} className="min-w-0 w-full">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         role="img"
         aria-label={ariaLabel}
-        className="h-auto w-full min-w-[320px]"
+        height={H}
+        className="block w-full max-w-full"
         preserveAspectRatio="xMidYMid meet"
       >
         {yTicks.map((t) => (
@@ -309,7 +311,7 @@ export function LineaPorFecha({
               x={padL - 8}
               y={yFor(t) + 4}
               textAnchor="end"
-              fontSize="10"
+              fontSize="12"
               fill="#627072"
               fontFamily="var(--font-sans)"
             >
@@ -363,17 +365,18 @@ export function LineaPorFecha({
           );
         })}
 
-        {etiquetas.map((i) => (
+        {etiquetas.map(({ indice, texto, x }) => (
           <text
-            key={`x-${i}`}
-            x={xFor(i)}
+            key={`x-${indice}`}
+            data-eje="x"
+            x={x}
             y={H - 8}
-            textAnchor={i === 0 ? "start" : i === puntos.length - 1 ? "end" : "middle"}
-            fontSize="10"
+            textAnchor="middle"
+            fontSize="12"
             fill="#627072"
             fontFamily="var(--font-sans)"
           >
-            {fechaCorta(puntos[i].fecha)}
+            {texto}
           </text>
         ))}
       </svg>
@@ -408,7 +411,7 @@ export function BarrasPorFecha({
   yMax: number;
   ariaLabel: string;
 }) {
-  const W = 600;
+  const { ref, ancho: W } = useAnchoGrafico();
   const H = 240;
   const padL = 36;
   const padR = 16;
@@ -418,18 +421,19 @@ export function BarrasPorFecha({
   const innerH = H - padT - padB;
   const n = Math.max(1, barras.length);
   const slotW = innerW / n;
-  const barW = Math.max(2, Math.min(36, slotW * 0.6));
+  const barW = Math.min(36, slotW * 0.6);
   const yFor = (v: number) => padT + innerH - (v / yMax) * innerH;
-  const indicesEtiqueta = indicesConEtiqueta(barras.length);
+  const rotulos = etiquetasDeFechas(barras.map((b) => b.fecha), barras.map((_, i) => padL + slotW * i + slotW / 2), padL, W - padR);
 
   return (
     <div>
-      <div className="overflow-x-auto">
+      <div ref={ref} className="min-w-0 w-full">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           role="img"
           aria-label={ariaLabel}
-          className="h-auto w-full min-w-[320px]"
+          height={H}
+          className="block w-full max-w-full"
           preserveAspectRatio="xMidYMid meet"
         >
           {yTicks.map((t) => (
@@ -446,7 +450,7 @@ export function BarrasPorFecha({
                 x={padL - 8}
                 y={yFor(t) + 4}
                 textAnchor="end"
-                fontSize="10"
+                fontSize="12"
                 fill="#627072"
                 fontFamily="var(--font-sans)"
               >
@@ -482,19 +486,19 @@ export function BarrasPorFecha({
             );
           })}
 
-          {indicesEtiqueta.map((i) => {
-            const cx = padL + slotW * i + slotW / 2;
+          {rotulos.map(({ indice, texto, x }) => {
             return (
               <text
-                key={`x-${i}`}
-                x={cx}
+                key={`x-${indice}`}
+                data-eje="x"
+                x={x}
                 y={H - 8}
                 textAnchor="middle"
-                fontSize="10"
+                fontSize="12"
                 fill="#627072"
                 fontFamily="var(--font-sans)"
               >
-                {fechaCorta(barras[i].fecha)}
+                {texto}
               </text>
             );
           })}

@@ -27,16 +27,13 @@ import {
   RECORDATORIO_MODO_DEFAULT,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
-import { buildSmsMessage, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
+import { TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
-import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
+import { MensajeRecordatorio } from "./mensaje-recordatorio";
 import { InvitarColega } from "./invitar-colega";
 import { TituloSeccion } from "./titulo-seccion";
 import { VocabularioSeccion } from "./vocabulario-seccion";
-
-// Datos de ejemplo de la vista previa: martes 21 de abril, 10:00.
-const FECHA_PREVIEW = new Date(2026, 3, 21, 10, 0);
 
 type CampoConfig =
   | "nombreProfesional"
@@ -320,19 +317,6 @@ export function ConfigView() {
     void guardarPendientes();
   }, [guardarPendientes]);
 
-  const vistaPrevia = React.useMemo(
-    () =>
-      buildSmsMessage(form.templateRecordatorio, {
-        nombre: "Lucía",
-        apellido: "Fernández",
-        fecha: FECHA_PREVIEW,
-        direccion: form.direccion,
-        profesional: form.nombreProfesional,
-        telefonoConsultorio: form.whatsappOrigen,
-      }),
-    [form],
-  );
-
   if (cargando) {
     return (
       <Marco>
@@ -475,40 +459,15 @@ export function ConfigView() {
                 onChange={(valor) => actualizarCampo("recordatorioModo", valor)}
               />
 
-              <div>
-                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                  Mensaje
-                </span>
-                <EditorRecordatorio
+              <MensajeRecordatorio
                   template={form.templateRecordatorio}
+                  profesional={form.nombreProfesional}
+                  direccion={form.direccion}
+                  telefono={form.whatsappOrigen}
                   onChange={(valor) =>
                     actualizarCampo("templateRecordatorio", valor)
                   }
-                  fichas={FICHAS_INSERTABLES}
-                />
-                {form.templateRecordatorio.trim() === "" ? (
-                  <p
-                    role="alert"
-                    className="mt-2 text-[12px] text-[color:var(--color-error)]"
-                  >
-                    El recordatorio no puede quedar vacío.
-                  </p>
-                ) : null}
-                <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
-                  Tocá una ficha para agregarla donde está el cursor. La línea
-                  de contacto con tu nombre y tu teléfono se agrega sola si la
-                  borrás.
-                </p>
-              </div>
-
-              <div>
-                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                  Así lo recibe la paciente
-                </span>
-                <div className="whitespace-pre-wrap rounded-[10px] border-l-[3px] border-l-sage-500 bg-cream-100 px-4 py-[14px] text-[14px] italic leading-[1.5] text-ink-900">
-                  {vistaPrevia}
-                </div>
-              </div>
+              />
             </div>
           </Card>
         </section>
