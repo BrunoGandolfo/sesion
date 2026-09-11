@@ -11,6 +11,7 @@ import { errorResponse } from "../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const ORGANIZATION_NAME = "Consultorio Mariana Roldán";
 const MARIANA_EMAIL = "mariana@consultorio.uy";

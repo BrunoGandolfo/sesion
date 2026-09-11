@@ -13,6 +13,7 @@ import { revisarSalud } from "../../_lib/casos-uso/salud";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const WEBHOOK_TIMEOUT_MS = 10_000;
 

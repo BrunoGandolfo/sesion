@@ -8,6 +8,7 @@ import { ApiError, errorResponse, ok, validationError } from "../_lib/responses"
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 // ────────────────────────────────────────────────────────────────────────────
 // `horasAnticipacion` NO está acá, y es a propósito.

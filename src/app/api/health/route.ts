@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 function reportar(error: unknown): void {
   try {

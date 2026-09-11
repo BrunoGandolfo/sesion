@@ -37,6 +37,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 export async function POST(request: Request) {
   // Siempre 204, pase lo que pase: el navegador no tiene nada que hacer con

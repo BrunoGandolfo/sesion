@@ -10,6 +10,7 @@ import { ApiError, errorResponse, ok } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 const schema = z.object({ token: z.string().max(64), password: z.string().max(1000) });
 export async function POST(request: Request) {
   try {

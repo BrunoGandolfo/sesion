@@ -46,6 +46,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 // El schema sólo mira que haya algo: el largo y la diferencia con la actual
 // los decide validarPasswordNueva, que es la misma regla que usa el

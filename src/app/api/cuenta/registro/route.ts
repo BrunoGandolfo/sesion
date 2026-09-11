@@ -8,6 +8,7 @@ import { registrarCuenta } from "../../_lib/casos-uso/registrar-cuenta";
 import { ApiError, errorResponse, ok } from "../../_lib/responses";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 const schema = z.object({ token: z.string().max(64), nombre: z.string().max(120), email: z.string().max(254), password: z.string().max(1000), aceptaTerminos: z.boolean().default(false) });
 export async function POST(request: Request) {
   try {

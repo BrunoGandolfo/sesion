@@ -11,6 +11,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 type RouteParams = {
   params: Promise<{ id: string }>;

@@ -6,6 +6,7 @@ import { ApiError, errorResponse, ok } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 type RouteParams = {
   params: Promise<{ pacienteId: string }>;
