@@ -453,7 +453,7 @@ function TeDeben({
     <div className="flex flex-col gap-4">
       <Card className="rounded-[8px] border-l-2 border-l-terracotta-500 bg-cream-100 px-5 py-4 lg:px-6 lg:py-5">
         <p className="text-[15px] leading-[1.55] text-ink-700">
-          Son{" "}
+          {sesionesSinCobrar === 1 ? "Es" : "Son"}{" "}
           <span className="font-[family-name:var(--font-display)] text-[24px] font-medium leading-none text-terracotta-600 lg:text-[28px]">
             {pluralizar(sesionesSinCobrar, "sesión", "sesiones")}
           </span>{" "}
