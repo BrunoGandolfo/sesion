@@ -1,0 +1,141 @@
+# ============================================================================
+# Publicación: main → release, sólo con CI en verde y migraciones aplicadas.
+#
+# Vercel publica desde la rama `release` (Production Branch en el panel; el
+# deploy automático desde main está apagado en vercel.json). Esta rama la
+# mueve ÚNICAMENTE este workflow, y sólo cuando:
+#
+#   1. el workflow CI terminó en verde para un push a main, y
+#   2. `prisma migrate deploy` corrió contra producción sin error.
+#
+# El orden es deliberado: migraciones ANTES de avanzar release. El código
+# nuevo nunca se encuentra con un esquema viejo. Lo que sí puede pasar es que
+# el código viejo vea, durante unos segundos, un esquema más nuevo; por eso
+# las migraciones que se aplican junto con código tienen que ser aditivas, y
+# una destructiva va en el despliegue siguiente (lo verifica
+# scripts/ci/migraciones.mjs en el CI).
+#
+# El push a release es FAST-FORWARD, sin --force. Si falla, release divergió
+# (alguien empujó a mano) y eso es una alerta, no algo que se resuelva
+# pisando.
+#
+# Si el CI de main termina en rojo, no se publica nada y se avisa con el sha
+# y quién lo empujó: main roja bloquea a todos, y romperla tiene que tener
+# dueño.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   DATABASE_URL_PRODUCCION_DIRECTA  conexión DIRECTA de Neon (sin -pooler)
+#   RESEND_API_KEY, ALERTA_CORREO    para las alertas por correo
+# ============================================================================
+
+name: Publicar
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+# Una publicación por vez, en orden. Nunca cancelar una a medias: podría
+# quedar la migración aplicada y release sin avanzar.
+concurrency:
+  group: publicar
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+
+jobs:
+  publicar:
+    name: Migrar producción y avanzar release
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # El sha exacto que pasó el CI, no "lo último de main".
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Verificar secrets
+        env:
+          DATABASE_URL_PRODUCCION_DIRECTA: ${{ secrets.DATABASE_URL_PRODUCCION_DIRECTA }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL_PRODUCCION_DIRECTA:-}" ]; then
+            echo "ERROR: falta el secret DATABASE_URL_PRODUCCION_DIRECTA." >&2
+            exit 1
+          fi
+          case "${DATABASE_URL_PRODUCCION_DIRECTA}" in
+            *-pooler*)
+              echo "ERROR: DATABASE_URL_PRODUCCION_DIRECTA apunta al pooler; las migraciones van por la conexión directa." >&2
+              exit 1 ;;
+          esac
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Estado de las migraciones en producción (antes)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCCION_DIRECTA }}
+        run: npx prisma migrate status || true
+
+      - name: Aplicar migraciones a producción
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCCION_DIRECTA }}
+        run: npx prisma migrate deploy
+
+      - name: Avanzar release (fast-forward, sin force)
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git push origin "${SHA}:refs/heads/release"
+          echo "release → ${SHA}"
+
+      - name: Avisar si algo falló
+        if: failure()
+        uses: ./.github/actions/alerta-correo
+        with:
+          asunto: "La publicación de main a release falló"
+          texto: |
+            No se publicó ${{ github.event.workflow_run.head_sha }} (${{ github.event.workflow_run.head_commit.message }}).
+            Si falló la migración, la base puede haber quedado a medias: revisar `prisma migrate status` antes de reintentar.
+            Si falló el push, release divergió de main: no pisar, mirar quién empujó.
+            Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
+
+  ci-rojo:
+    name: Avisar que main está roja
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/alerta-correo
+        with:
+          asunto: "CI de main en rojo: no se publica"
+          texto: |
+            El CI falló en ${{ github.event.workflow_run.head_sha }}, empujado por ${{ github.event.workflow_run.head_commit.author.name }}:
+            ${{ github.event.workflow_run.head_commit.message }}
+            Mientras main esté roja nada llega a producción.
+            Corrida del CI: ${{ github.event.workflow_run.html_url }}
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
