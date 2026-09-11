@@ -1,42 +1,56 @@
-// Endpoint público para servicios de monitoreo (UptimeRobot, etc.).
-// El middleware excluye /api/health del auth.
+// Endpoint público para el monitor externo (UptimeRobot, BetterStack o el que
+// contrate el dueño) y para .github/workflows/latido.yml.
 //
-// La respuesta es un semáforo y nada más: { status: "ok" } con 200, o
-// { status: "error" } con 503. Antes devolvía `error.message` de Prisma a
-// cualquiera que hiciera GET sin autenticarse: una URL de conexión, el
-// nombre del host de la base o el detalle del driver, servidos en abierto.
-// El diagnóstico no se pierde —va a Sentry, o a los logs si el SDK no está
-// inicializado en este entorno—, pero no viaja en la respuesta.
+// La respuesta es un semáforo y nada más: { status: "ok", commit } con 200,
+// o { status: "error" } con 503. Nunca `error.message`: antes se devolvía el
+// detalle de Prisma a cualquiera que hiciera GET sin autenticarse (host de
+// la base, driver). El diagnóstico va a Sentry o al log, no a la respuesta.
+//
+// Dos cosas hacen 503:
+//   - la base no responde (SELECT 1 falla);
+//   - en producción falta alguna variable de operación (env-operacion.ts):
+//     sin alertas o sin SMS el sistema no está sano aunque responda, y así
+//     el monitor lo ve en el primer deploy y no el día que hacía falta.
+//
+// `commit` es el sha corto que Vercel inyecta: sirve para que el monitor (o
+// una persona) compare lo que está corriendo con el HEAD de `release`.
 
 import * as Sentry from "@sentry/nextjs";
 
 import { db } from "@/lib/db";
+import { validarEnvOperacion } from "@/lib/env-operacion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
-function reportar(error: unknown): void {
+function reportar(mensaje: string, error?: unknown): void {
   try {
-    // getClient() es undefined si Sentry no se inicializó (dev, tests, o
-    // sin DSN): ahí el detalle va a los logs del servidor.
     if (Sentry.getClient()) {
-      Sentry.captureException(error);
+      if (error !== undefined) Sentry.captureException(error);
+      else Sentry.captureMessage(mensaje, "error");
       return;
     }
   } catch {
     // Un fallo del propio SDK no puede tumbar el health check.
   }
-  console.error("[health] la base no respondió", error);
+  console.error(`[health] ${mensaje}`, error ?? "");
 }
 
 export async function GET() {
+  const commit = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null;
+
+  const { faltantes, produccion } = validarEnvOperacion();
+  if (produccion && faltantes.length > 0) {
+    reportar(`faltan variables de operación: ${faltantes.join(", ")}`);
+    return Response.json({ status: "error" }, { status: 503 });
+  }
+
   try {
-    // Verificar conexión a la DB con un query mínimo.
     await db.$queryRaw`SELECT 1`;
-    return Response.json({ status: "ok" });
+    return Response.json({ status: "ok", commit });
   } catch (error) {
-    reportar(error);
+    reportar("la base no respondió", error);
     return Response.json({ status: "error" }, { status: 503 });
   }
 }

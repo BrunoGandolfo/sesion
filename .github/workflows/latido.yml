@@ -1,0 +1,75 @@
+# ============================================================================
+# Latido de respaldo: cada 15 minutos, ¿la app y el worker responden?
+#
+# Es la RED DE LA RED. El monitor primario es un servicio de uptime externo
+# (lo contrata el dueño; ver docs/operaciones.md §2) contra /api/health cada
+# 5 minutos y /api/estado-worker cada 15. Esto existe porque ningún monitor
+# solo alcanza, y tiene una limitación que hay que decir: GitHub deshabilita
+# los `schedule` tras 60 días sin actividad en el repositorio (le pasó a
+# backup.yml entre julio y septiembre de 2026). Por eso es el respaldo y no
+# el primario.
+#
+# Qué mira:
+#   GET /api/health         200 = la base responde y no falta ninguna variable
+#   GET /api/estado-worker  200 = el worker hizo poll hace menos de 10 min
+#
+# Si alguno no da 200, alerta por correo con la acción compuesta.
+#
+# Variable de repositorio (Settings → Variables): APP_URL, opcional; default
+# https://sesionapp.app. Secrets: RESEND_API_KEY, ALERTA_CORREO.
+# ============================================================================
+
+name: Latido
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latido:
+    name: Consultar /api/health y /api/estado-worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      APP_URL: ${{ vars.APP_URL || 'https://sesionapp.app' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: /api/health
+        id: health
+        run: |
+          set -uo pipefail
+          codigo="$(curl --silent --show-error --max-time 20 -o /tmp/health.json -w '%{http_code}' "${APP_URL}/api/health" || echo "000")"
+          echo "health=${codigo}" >> "$GITHUB_OUTPUT"
+          echo "/api/health → HTTP ${codigo}"
+          cat /tmp/health.json 2>/dev/null || true
+          [ "${codigo}" = "200" ]
+
+      - name: /api/estado-worker
+        id: worker
+        if: always()
+        run: |
+          set -uo pipefail
+          codigo="$(curl --silent --show-error --max-time 20 -o /tmp/worker.json -w '%{http_code}' "${APP_URL}/api/estado-worker" || echo "000")"
+          echo "worker=${codigo}" >> "$GITHUB_OUTPUT"
+          echo "/api/estado-worker → HTTP ${codigo}"
+          cat /tmp/worker.json 2>/dev/null || true
+          [ "${codigo}" = "200" ]
+
+      - name: Avisar si algo no responde
+        if: failure()
+        uses: ./.github/actions/alerta-correo
+        with:
+          asunto: "Latido: la app o el worker no responden"
+          texto: |
+            /api/health → HTTP ${{ steps.health.outputs.health || 'sin respuesta' }}
+            /api/estado-worker → HTTP ${{ steps.worker.outputs.worker || 'sin respuesta' }}
+            Un 503 en health es la base o una variable de operación faltante; en estado-worker, el worker sin poll hace más de 10 minutos.
+            Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
