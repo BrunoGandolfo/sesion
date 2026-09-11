@@ -1,3 +1,34 @@
+// ============================================================================
+// Sesión — esquema definitivo (reconstrucción, Fase 2, 11-09-2026)
+//
+// Escrito desde cero. No hay compatibilidad hacia atrás: los 13 pasos de
+// migración anteriores se descartaron y este archivo se aplica con UNA
+// migración inicial (prisma/migrations/0_init).
+//
+// Convenciones:
+//   - Tablas y columnas en español, snake_case en la base vía @map / @@map;
+//     camelCase en Prisma.
+//   - Todo estado o categoría cerrada es un enum de Postgres (con @@map a
+//     snake_case). La única excepción es `Turno.duracion`: Int con CHECK,
+//     porque se usa en aritmética de minutos.
+//   - Toda tabla con datos de una organización lleva `organizationId`.
+//   - Ids: uuid generado por la app (`@default(uuid())`, columna TEXT). Se
+//     eligió uuid y no cuid porque el cifrado v2 ata cada blob a su fila
+//     (AAD = tabla:columna:id) y por eso el id tiene que existir ANTES del
+//     create; `crypto.randomUUID()` viene en Web Crypto sin dependencia
+//     nueva, cuid obligaría a sumar una librería.
+//   - Índices: solo los que una consulta real de los diseños necesita; cada
+//     uno lleva un comentario con la consulta que lo usa.
+//
+// Cifrado en reposo (columnas *Encrypted, tipo Bytes):
+//   Formato v2: "ENC2" (4B) || idClave (1B) || IV (12B) || tag (16B) ||
+//   ciphertext. AAD = "<tabla>:<columna>:<id de la fila>". Llavero en la
+//   variable CLAVES_CIFRADO ("1=<base64>,2=<base64>"); no hay tabla de
+//   claves. Los campos lógicos en claro los expone la extensión de Prisma
+//   (src/lib/prisma-encryption.ts), no este archivo. Ninguna columna cifrada
+//   se usa en WHERE, ORDER BY ni índices.
+// ============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,76 +38,223 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// Organizaciones — multi-tenant desde el día 1
-// En el MVP hay una sola fila. Cuando escale
-// a SaaS, no tocamos el modelo.
-// ============================================
+// ============================================================================
+// Organización y cuenta
+// ============================================================================
 
+/// Una organización = un consultorio. Hoy una sola profesional por
+/// organización (User.rol tiene un único valor). Multi-tenant desde el día 1.
 model Organization {
-  id       String   @id @default(cuid())
+  id       String   @id @default(uuid())
   nombre   String
   creadoEn DateTime @default(now()) @map("creado_en")
 
-  invitaciones        Invitacion[]
-  configuracion       Configuracion?
-  pacientes           Paciente[]
-  turnos              Turno[]
-  usuarios            User[]
-  consentimientos     ConsentimientoGrabacion[]
-  sesionesClinicas    SesionClinica[]
-  hotWords            HotWord[]
-  contextosClinicos   PacienteContextoClinico[]
+  usuarios         User[]
+  configuracion    Configuracion?
+  pacientes        Paciente[]
+  seriesTurno      SerieTurno[]
+  turnos           Turno[]
+  enviosSms        EnvioSms[]
+  consentimientos  ConsentimientoGrabacion[]
+  sesionesClinicas SesionClinica[]
+  audioSegmentos   AudioSegmento[]
+  trabajos         Trabajo[]
+  hotWords         HotWord[]
+  hilos            Hilo[]
+  hiloVersiones    HiloVersion[]
 
   @@map("organizaciones")
 }
 
-// ============================================
-// Auth — single user en MVP, multi-user en SaaS
-// ============================================
+/// Rol dentro de la organización. Un solo valor por ahora: la titular del
+/// consultorio. Existe para que "quién puede invitar" sea una regla sobre
+/// el rol y no sobre "cualquier sesión".
+enum RolUsuario {
+  titular
+
+  @@map("rol_usuario")
+}
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  hashedPassword String   @map("hashed_password")
+  id             String     @id @default(uuid())
+  email          String     @unique
+  hashedPassword String     @map("hashed_password")
   nombre         String
-  organizationId String   @map("organization_id")
-  creadoEn       DateTime @default(now()) @map("creado_en")
+  rol            RolUsuario @default(titular)
+  organizationId String     @map("organization_id")
+  creadoEn       DateTime   @default(now()) @map("creado_en")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  passwordResets PasswordReset[]
-  invitacionesCreadas Invitacion[] @relation("InvitacionesCreadas")
+  organization        Organization    @relation(fields: [organizationId], references: [id])
+  sesionesAcceso      SesionAcceso[]
+  passwordResets      PasswordReset[]
+  invitacionesCreadas Invitacion[]
+  cuposAyuda          CupoAyuda[]
 
   @@map("usuarios")
 }
 
-// ============================================
+/// Por qué se cerró una sesión de acceso. `vencimiento` lo escribe el cron;
+/// `incidente` se escribe a mano (SQL) cuando se sospecha un token filtrado.
+enum MotivoCierreSesion {
+  salida
+  salida_todas
+  cambio_password
+  restablecimiento
+  vencimiento
+  incidente
+
+  @@map("motivo_cierre_sesion")
+}
+
+/// Sesión de acceso de la profesional (reemplaza al JWT de Auth.js). La
+/// cookie lleva un token opaco de 32 bytes; acá se guarda solo su sha256.
+/// "Viva" = cerradaEn IS NULL AND venceEn > now() AND ultimoUsoEn > now() - 14 d
+/// (una sola función lo implementa; el where la proyecta).
+/// Sin organizationId: es de la profesional, la organización sale de `user`.
+/// Retención: el cron de mantenimiento borra las cerradas o vencidas hace
+/// más de 30 días.
+model SesionAcceso {
+  id           String              @id @default(uuid())
+  userId       String              @map("user_id")
+  /// sha256 hex del token de la cookie. El token nunca se guarda.
+  tokenHash    String              @unique @map("token_hash") @db.Char(64)
+  creadaEn     DateTime            @default(now()) @map("creada_en")
+  /// Se actualiza como mucho cada 5 minutos, no en cada request.
+  ultimoUsoEn  DateTime            @map("ultimo_uso_en")
+  /// creadaEn + 30 días (vencimiento absoluto).
+  venceEn      DateTime            @map("vence_en")
+  cerradaEn    DateTime?           @map("cerrada_en")
+  motivoCierre MotivoCierreSesion? @map("motivo_cierre")
+  /// IP y user-agent de la creación: existen para investigar un incidente
+  /// y para la lista "desde dónde estás entrada" (la IP no se muestra).
+  ip           String?
+  userAgent    String?             @map("user_agent") @db.VarChar(120)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // "Cerrar sesión en los demás dispositivos" y la lista de sesiones:
+  // WHERE user_id = ? AND cerrada_en IS NULL.
+  @@index([userId, cerradaEn])
+  @@map("sesiones_acceso")
+}
+
+enum TipoIntentoAcceso {
+  login
+  password
+  recuperar
+
+  @@map("tipo_intento_acceso")
+}
+
+/// Intentos FALLIDOS de entrar, cambiar contraseña o pedir recuperación.
+/// Alimentan los contadores de bloqueo. Separada de eventos_auditoria para
+/// que el rastro clínico siga siendo append-only y sin IPs. Los éxitos no
+/// van acá. Retención 30 días (cron de mantenimiento).
+model IntentoAcceso {
+  id        String            @id @default(uuid())
+  tipo      TipoIntentoAcceso
+  /// `email:<sha256>`, `ip:<ip>`, `usuario:<id>` o `recuperar-ip:<ip>`.
+  clave     String
+  ip        String?
+  userAgent String?           @map("user_agent") @db.VarChar(120)
+  creadoEn  DateTime          @default(now()) @map("creado_en")
+
+  // Contador de bloqueo: WHERE clave = ? AND creado_en > now() - ventana.
+  @@index([clave, creadoEn])
+  @@map("intentos_acceso")
+}
+
+/// Enlace de un solo uso para restablecer la contraseña. El token que viaja
+/// por correo nunca se guarda, solo su hash.
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  venceEn   DateTime  @map("vence_en")
+  usadoEn   DateTime? @map("usado_en")
+  /// null = el correo no salió: la fila NO vale para restablecer y NO
+  /// cuenta para el cupo. Se escribe recién cuando el proveedor aceptó el
+  /// correo (así un fallo de Resend no gasta el cupo ni mata los enlaces
+  /// anteriores).
+  enviadoEn DateTime? @map("enviado_en")
+  creadoEn  DateTime  @default(now()) @map("creado_en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Cupo: COUNT WHERE user_id = ? AND enviado_en > now() - 1 h.
+  @@index([userId, enviadoEn])
+  @@map("password_resets")
+}
+
+/// Invitación a abrir un consultorio propio. Solo puede crearla quien tenga
+/// permiso (rol titular); tope de invitaciones vigentes por creadora en una
+/// constante del código (marcada como temporal). Crear y usar una invitación
+/// dejan evento en eventos_auditoria (sin token, sin email).
+/// Sin `email` ni `organizationId`: hoy siempre eran null (código muerto).
+model Invitacion {
+  id          String    @id @default(uuid())
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  venceEn     DateTime  @map("vence_en")
+  usadaEn     DateTime? @map("usada_en")
+  creadaPorId String    @map("creada_por_id")
+  creadaEn    DateTime  @default(now()) @map("creada_en")
+
+  creadaPor User @relation(fields: [creadaPorId], references: [id], onDelete: Cascade)
+
+  // Tope de vigentes: COUNT WHERE creada_por_id = ? AND usada_en IS NULL AND vence_en > now().
+  @@index([creadaPorId])
+  @@map("invitaciones")
+}
+
+/// Cupo diario de preguntas a Lupita (la ayuda). Reserva atómica ANTES de
+/// llamar al proveedor: INSERT … ON CONFLICT DO UPDATE SET usadas = usadas + 1
+/// WHERE usadas < tope RETURNING usadas; 0 filas → 429.
+model CupoAyuda {
+  userId String @map("user_id")
+  /// Día de Montevideo, "AAAA-MM-DD". Texto y no DATE para que el día lo
+  /// decida la app con su zona horaria, no el driver.
+  dia    String @db.VarChar(10)
+  usadas Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, dia])
+  @@map("cupos_ayuda")
+}
+
+// ============================================================================
 // Configuración — singleton por organización
-// ============================================
+// ============================================================================
+
+/// Cuándo sale el recordatorio de SMS, dicho como lo piensa la profesional.
+enum ModoRecordatorio {
+  dia_anterior
+  dos_dias_antes
+  misma_manana
+
+  @@map("modo_recordatorio")
+}
+
+/// Orientación teórica de la profesional: decide el instrumento de
+/// auto-supervisión de "Para vos" (cbt_mi → MITI + CTS-R; gestalt → GTFS).
+enum OrientacionTeorica {
+  cbt_mi
+  gestalt
+
+  @@map("orientacion_teorica")
+}
 
 model Configuracion {
-  id                   String @id @default(cuid())
-  nombreProfesional    String @map("nombre_profesional")
-  direccion            String @default("")
-  whatsappOrigen       String @default("") @map("whatsapp_origen")
-  tarifaDefault        Int    @map("tarifa_default")
-  horasAnticipacion    Int    @default(24) @map("horas_anticipacion")
-
-  // Cuándo sale el recordatorio de WhatsApp, dicho como lo piensa ella y no
-  // en horas: "dia_anterior" | "dos_dias_antes" | "misma_manana". La cuenta
-  // vive en src/lib/recordatorios-programacion.ts (calcularProgramadoEn),
-  // única para crear y para reprogramar turnos.
-  //
-  // horasAnticipacion se conserva por compatibilidad: ya no decide nada de
-  // la programación, pero sigue en la fila y en la API para no romper a
-  // quien todavía la lea.
-  recordatorioModo     String @default("dia_anterior") @map("recordatorio_modo")
-  templateRecordatorio String @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
-
-  // Orientación teórica de la profesional. Determina el instrumento de
-  // auto-supervisión (Llamada C): "cbt_mi" → MITI 4.2.1 + CTS-R,
-  // "gestalt" → GTFS. Ver docs/contrato-multi-orientacion.md.
-  orientacionTeorica String @default("cbt_mi") @map("orientacion_teorica")
+  id                   String             @id @default(uuid())
+  nombreProfesional    String             @map("nombre_profesional")
+  direccion            String             @default("")
+  whatsappOrigen       String             @default("") @map("whatsapp_origen")
+  tarifaDefault        Int                @map("tarifa_default")
+  recordatorioModo     ModoRecordatorio   @default(dia_anterior) @map("recordatorio_modo")
+  /// Plantilla del recordatorio de turno. El texto de cada SMS enviado NO
+  /// se guarda; sí la plantilla vigente.
+  templateRecordatorio String             @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
+  orientacionTeorica   OrientacionTeorica @default(cbt_mi) @map("orientacion_teorica")
 
   organizationId String       @unique @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -84,311 +262,711 @@ model Configuracion {
   @@map("configuraciones")
 }
 
-// ============================================
+// ============================================================================
 // Pacientes
-// ============================================
+// ============================================================================
 
+/// Nombre, apellido y teléfono quedan en claro a propósito: la búsqueda y el
+/// orden de la agenda los necesitan en SQL y el cron de SMS lee el teléfono
+/// en lote. Todo lo demás con contenido personal va cifrado. Sin `email`:
+/// nadie lo usaba.
 model Paciente {
-  id            String   @id @default(cuid())
-  nombre        String
-  apellido      String
-  telefono      String
-  email         String?
-  tarifa        Int
-  notas         String?  @db.Text
-  activo        Boolean  @default(true)
-  creadoEn      DateTime @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  id             String   @id @default(uuid())
+  nombre         String
+  apellido       String
+  /// E.164 o vacío, validado al escribir (no al enviar el SMS).
+  telefono       String
+  tarifa         Int
+  /// Campo lógico `notas` (texto libre de la ficha), cifrado.
+  notasEncrypted Bytes?   @map("notas_encrypted")
+  activo         Boolean  @default(true)
+  creadoEn       DateTime @default(now()) @map("creado_en")
+  actualizadoEn  DateTime @updatedAt @map("actualizado_en")
 
-  organizationId  String                    @map("organization_id")
-  organization    Organization              @relation(fields: [organizationId], references: [id])
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
   turnos          Turno[]
+  seriesTurno     SerieTurno[]
+  enviosSms       EnvioSms[]
   consentimientos ConsentimientoGrabacion[]
   hotWords        HotWord[]
-  contextoClinico PacienteContextoClinico?
+  hilo            Hilo?
 
+  // Lista de pacientes activos: WHERE organization_id = ? AND activo = true.
   @@index([organizationId, activo])
+  // Orden y búsqueda por apellido dentro de la organización.
   @@index([organizationId, apellido])
   @@map("pacientes")
 }
 
-// ============================================
-// Turnos — con pago inline
-// ============================================
+// ============================================================================
+// Agenda: series y turnos
+// ============================================================================
 
+/// Un turno "único" no crea serie. Las frecuencias posibles son las que el
+/// formulario ofrece.
+enum FrecuenciaSerie {
+  semanal
+  quincenal
+
+  @@map("frecuencia_serie")
+}
+
+/// Turno recurrente: el generador y el ancla para "cancelar el resto de la
+/// serie". Cada Turno generado sigue siendo independiente (moverlo, cobrarlo
+/// o cancelarlo es el mismo caso de uso que para un turno suelto). A
+/// propósito NO tiene generadaHasta, activa ni avisos: la serie se genera
+/// completa al crearla (horizonte fijo en el código) y solo sirve para
+/// generar y para cancelar el resto.
+model SerieTurno {
+  id             String          @id @default(uuid())
+  organizationId String          @map("organization_id")
+  pacienteId     String          @map("paciente_id")
+  frecuencia     FrecuenciaSerie
+  /// Instante del primer turno de la serie (hora de Montevideo implícita en
+  /// el instante). Las ocurrencias son este ancla + 7 o + 14 días.
+  horaAncla      DateTime        @map("hora_ancla")
+  creadaEn       DateTime        @default(now()) @map("creada_en")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  paciente     Paciente     @relation(fields: [pacienteId], references: [id])
+  turnos       Turno[]
+
+  @@map("series_turno")
+}
+
+enum EstadoTurno {
+  programado
+  realizado
+  cancelado
+  ausente
+
+  @@map("estado_turno")
+}
+
+enum EstadoPago {
+  pendiente
+  pagado
+
+  @@map("estado_pago")
+}
+
+/// Los valores viven también en src/lib/constantes-turno.ts (MODALIDADES):
+/// hay que mantenerlos iguales a mano.
+enum Modalidad {
+  presencial
+  online
+
+  @@map("modalidad")
+}
+
+/// Ídem: METODOS_PAGO en src/lib/constantes-turno.ts.
+enum MetodoPago {
+  efectivo
+  transferencia
+  mercadopago
+  debito
+  credito
+  otro
+
+  @@map("metodo_pago")
+}
+
+/// Turno con el pago inline (no hay tabla de pagos: un turno se cobra una vez).
 model Turno {
-  id            String    @id @default(cuid())
-  fecha         DateTime
-  duracion      Int       @default(50)
-  modalidad     String    @default("presencial")
-  estado        String    @default("programado")
-  tarifaCobrada Int       @map("tarifa_cobrada")
-  pagoEstado    String    @default("pendiente") @map("pago_estado")
-  pagoFecha     DateTime? @map("pago_fecha")
-  pagoMetodo    String?   @map("pago_metodo")
-  notas         String?   @db.Text
-  creadoEn      DateTime  @default(now()) @map("creado_en")
-  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+  id             String      @id @default(uuid())
+  fecha          DateTime
+  /// Minutos. CHECK en la migración: IN (30, 45, 50, 60, 90), igual que
+  /// DURACIONES en src/lib/constantes-turno.ts. Int y no enum porque se suma
+  /// a la fecha para calcular el fin del turno.
+  duracion       Int         @default(50)
+  modalidad      Modalidad   @default(presencial)
+  estado         EstadoTurno @default(programado)
+  tarifaCobrada  Int         @map("tarifa_cobrada")
+  pagoEstado     EstadoPago  @default(pendiente) @map("pago_estado")
+  pagoFecha      DateTime?   @map("pago_fecha")
+  pagoMetodo     MetodoPago? @map("pago_metodo")
+  /// Campo lógico `notas` (nota privada del turno), cifrado.
+  notasEncrypted Bytes?      @map("notas_encrypted")
+  creadoEn       DateTime    @default(now()) @map("creado_en")
+  actualizadoEn  DateTime    @updatedAt @map("actualizado_en")
 
-  pacienteId     String         @map("paciente_id")
-  paciente       Paciente       @relation(fields: [pacienteId], references: [id])
-  organizationId String         @map("organization_id")
-  organization   Organization   @relation(fields: [organizationId], references: [id])
-  recordatorios  Recordatorio[]
-  sesionClinica  SesionClinica?
+  pacienteId     String       @map("paciente_id")
+  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  /// null = turno suelto. No se limpia al mover el turno: sigue sirviendo
+  /// para "cancelar el resto desde acá".
+  serieId        String?      @map("serie_id")
+  serie          SerieTurno?  @relation(fields: [serieId], references: [id], onDelete: SetNull)
 
+  sesionClinica SesionClinica?
+  enviosSms     EnvioSms[]
+
+  // Agenda (día, semana, mes) y "Ahora": WHERE organization_id = ? AND fecha BETWEEN …
   @@index([organizationId, fecha])
+  // Cobros y deudores: WHERE organization_id = ? AND pago_estado = 'pendiente'.
   @@index([organizationId, pagoEstado])
+  // Ficha del paciente: sus turnos.
   @@index([pacienteId])
+  // Cancelar el resto de la serie: WHERE serie_id = ? AND fecha > ? AND estado = 'programado'.
+  @@index([serieId])
   @@map("turnos")
 }
 
-// ============================================
-// Recordatorios de WhatsApp
-// ============================================
+// ============================================================================
+// SMS como sistema de entrega durable (reemplaza a Recordatorio)
+// ============================================================================
 
-model Recordatorio {
-  id            String    @id @default(cuid())
-  programadoEn  DateTime  @map("programado_en")
-  enviadoEn     DateTime? @map("enviado_en")
-  estado        String    @default("pendiente")
-  textoEnviado  String?   @map("texto_enviado") @db.Text
-  error         String?   @db.Text
-  intentos      Int       @default(0)
+enum MotivoSms {
+  recordatorio_turno
+  cambio_de_horario
+  recordatorio_cobro
+
+  @@map("motivo_sms")
+}
+
+/// `aceptado` = Twilio devolvió 2xx (queued/accepted); NO es "llegó".
+/// `entregado` / `no_entregado` los escribe el StatusCallback del operador.
+/// `desconocido` = se llamó a Twilio y no sabemos si aceptó: NUNCA se
+/// reenvía solo; lo resuelve la conciliación contra la API o una persona.
+/// Terminales: entregado, no_entregado, cancelado, fallido.
+enum EstadoEnvioSms {
+  pendiente
+  enviando
+  aceptado
+  entregado
+  no_entregado
+  cancelado
+  fallido
+  desconocido
+
+  @@map("estado_envio_sms")
+}
+
+/// Un SMS que la app decidió mandar. Nunca guarda el texto (decisión del
+/// dueño): sí lo que hace falta para no duplicar, contar y explicar.
+model EnvioSms {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  /// Dos pedidos con la misma clave son el MISMO mensaje: impide el duplicado
+  /// tanto por reintento como por reprogramación repetida.
+  ///   turno:<turnoId>:<fechaTurnoISO>   (recordatorio_turno, cambio_de_horario)
+  ///   cobro:<pacienteId>:<fechaMvd>     (recordatorio_cobro)
+  /// Reprogramar el turno cambia la fecha y por lo tanto la clave: es un
+  /// mensaje distinto (cambio_de_horario), y eso es correcto.
+  claveIdempotencia String @unique @map("clave_idempotencia")
+
+  motivo MotivoSms
+  estado EstadoEnvioSms @default(pendiente)
+
+  pacienteId String   @map("paciente_id")
+  paciente   Paciente @relation(fields: [pacienteId], references: [id])
+  turnoId    String?  @map("turno_id")
+  turno      Turno?   @relation(fields: [turnoId], references: [id], onDelete: SetNull)
+  /// Teléfono E.164 congelado al crear el envío.
+  destino    String
+
+  programadoEn     DateTime  @map("programado_en")
+  proximoIntentoEn DateTime? @map("proximo_intento_en")
+  intentos         Int       @default(0)
+
+  /// MessageSid de Twilio; llega con el 2xx y lo usa el StatusCallback.
+  sid             String? @unique
+  /// ErrorCode de Twilio (del 4xx o del callback).
+  codigoProveedor String? @map("codigo_proveedor")
+  /// Por qué no salió, para la pantalla, en los casos sin código de Twilio
+  /// (teléfono vacío, ventana útil agotada, paciente dada de baja).
+  motivoNoEnvio   String? @map("motivo_no_envio") @db.VarChar(500)
+  /// Segmentos que cobró Twilio: es lo que se suma para el conteo mensual.
+  segmentos       Int?
+
   creadoEn      DateTime  @default(now()) @map("creado_en")
+  aceptadoEn    DateTime? @map("aceptado_en")
+  cerradoEn     DateTime? @map("cerrado_en")
   actualizadoEn DateTime  @updatedAt @map("actualizado_en")
 
-  turnoId String @map("turno_id")
-  turno   Turno  @relation(fields: [turnoId], references: [id])
-
-  @@index([estado, programadoEn])
-  @@map("recordatorios")
+  // Cron de despacho y conciliación: WHERE estado IN (…) AND proximo_intento_en <= now().
+  @@index([estado, proximoIntentoEn])
+  // Conteo mensual por consultorio: WHERE organization_id = ? AND aceptado_en BETWEEN …
+  @@index([organizationId, aceptadoEn])
+  // Cancelar / reprogramar los envíos de un turno.
+  @@index([turnoId])
+  @@map("envios_sms")
 }
 
-// ============================================
-// Consentimiento para grabación de sesiones
-// ============================================
+enum MotivoBajaSms {
+  respuesta_baja
+  twilio_21610
+  manual
 
+  @@map("motivo_baja_sms")
+}
+
+/// Teléfonos que pidieron no recibir más SMS ("BAJA"). Obligación legal: se
+/// consulta antes de TODO envío, en el nivel más bajo. Es por teléfono y no
+/// por organización porque la baja es del número, no del consultorio.
+model BajaSms {
+  /// E.164
+  telefono String        @id
+  motivo   MotivoBajaSms
+  creadoEn DateTime      @default(now()) @map("creado_en")
+
+  @@map("bajas_sms")
+}
+
+// ============================================================================
+// Consentimiento para grabación
+// ============================================================================
+
+/// Texto y firma cifrados (son datos personales de la paciente). Sin
+/// `ipOrigen` (decisión del dueño). Vigente = revocadoEn IS NULL.
 model ConsentimientoGrabacion {
-  id             String       @id @default(cuid())
-  pacienteId     String
-  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-
-  firmadoEn     DateTime // Timestamp de la firma
-  revocadoEn    DateTime? // Null = vigente, con fecha = revocado
-  textoVersion  String // Versión del texto de consentimiento firmado (ej: "1.0")
-  textoCompleto String    @db.Text // Texto íntegro que el paciente firmó
-  firmaDigital  String // Representación de la firma (base64 del canvas)
-  ipOrigen      String? // IP desde donde se firmó (auditoría)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([pacienteId])
-  @@index([organizationId])
-  @@map("consentimientos_grabacion")
-}
-
-// ============================================
-// Sesión clínica — datos generados por IA
-// a partir de la grabación de un turno realizado.
-// ============================================
-
-model SesionClinica {
-  id             String       @id @default(cuid())
-  turnoId        String       @unique // Relación 1:1 con Turno
-  turno          Turno        @relation(fields: [turnoId], references: [id])
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-
-  // Estado del pipeline
-  estado String @default("pendiente")
-  // Valores: pendiente | grabando | subiendo | procesando | revision | aprobado | error
-
-  // Audio
-  duracionAudioSeg Int? // Duración del audio en segundos
-  audioR2Key       String? // Key del audio cifrado en R2 (null después de borrar)
-  audioBorradoEn   DateTime? // Cuándo se borró el audio
-
-  // Tramos en que la grabación estuvo en pausa, tal como los reporta el
-  // navegador al confirmar la subida: [{ inicio: ISO, fin: ISO }].
-  // Sin cifrar a propósito: son marcas de tiempo del dispositivo, no
-  // contenido clínico, y sirven para leer la duración real de la sesión.
-  pausas           Json?
-
-  // ──────────────────────────────────────────────────────────────────────
-  // Notas clínicas — cifrado en reposo (AES-256-GCM)
-  //
-  // Solo existen las columnas cifradas. Los campos lógicos en claro
-  // (transcripcion, notaSubjetivo/Objetivo/Analisis/Plan, datosEstructurados,
-  // notasEdicion, notaSoapOriginal) NO están en este schema: los expone la
-  // extensión de Prisma Client (src/lib/prisma-encryption.ts), que cifra al
-  // escribir y descifra al leer. Formato del blob:
-  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
-  // Clave maestra en NOTES_ENCRYPTION_KEY (32 bytes en base64).
-  // Estos campos NO deben usarse en WHERE / ORDER BY / índices.
-  // ──────────────────────────────────────────────────────────────────────
-  transcripcionEncrypted      Bytes? @map("transcripcion_encrypted") // texto plano: transcripcion
-  notaSoapEncrypted           Bytes? @map("nota_soap_encrypted") // texto plano: JSON.stringify({subjetivo, objetivo, analisis, plan})
-  datosEstructuradosEncrypted Bytes? @map("datos_estructurados_encrypted") // texto plano: JSON.stringify(datosEstructurados ya parseado)
-  // Nota tal como la generó la IA (antes de cualquier edición humana). Misma
-  // forma y cifrado que notaSoapEncrypted. Se escribe UNA sola vez (primer
-  // callback con nota); aprobar/reproceso nunca la pisan. Campo lógico en la
-  // extensión Prisma: notaSoapOriginal ({subjetivo, objetivo, analisis, plan} | null).
-  notaSoapOriginalEncrypted   Bytes? @map("nota_soap_original_encrypted")
-
-  // Metadatos de procesamiento
-  modeloASR   String? // Ej: "qwen3-asr-1.7b"
-  modeloLLM   String? // Ej: "qwen3.5-72b-q4"
-  // Versión del prompt con el que el worker generó la nota (trazabilidad).
-  promptVersion String? @map("prompt_version")
-  // Etiqueta de hablante que el pipeline asignó a la terapeuta ("S0" por
-  // convención del worker). Permite reinterpretar la transcripción si la
-  // diarización invirtió los roles.
-  hablanteTerapeuta String? @default("S0") @map("hablante_terapeuta")
-  procesadoEn DateTime? // Cuándo terminó el procesamiento
-  error       String?   @db.Text // Detalle del error si estado = "error"
-  intentos    Int       @default(0)
-
-  // Aprobación por la profesional
-  aprobadoEn            DateTime? // Cuándo Mariana aprobó la nota
-  // Ediciones manuales de Mariana, cifradas. Campo lógico: notasEdicion.
-  notasEdicionEncrypted Bytes?    @map("notas_edicion_encrypted")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([organizationId])
-  @@index([estado])
-  @@map("sesiones_clinicas")
-}
-
-// ============================================
-// HotWords — vocabulario clínico para mejorar
-// la transcripción ASR (términos clínicos,
-// modismos rioplatenses, nombres propios).
-// ============================================
-
-model HotWord {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-
-  scope      String // "global" | "profesional" | "paciente"
-  pacienteId String? // Solo si scope === "paciente"
-  paciente   Paciente? @relation(fields: [pacienteId], references: [id])
-
-  termino   String  @db.VarChar(200)
-  categoria String? @db.VarChar(50) // "termino_clinico" | "modismo_rioplatense" | "nombre_propio" | "otro"
-  activo    Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([organizationId, scope, pacienteId, termino])
-  @@index([organizationId])
-  @@index([scope])
-  @@index([pacienteId])
-  @@map("hot_words")
-}
-
-// ============================================
-// Golden Thread — contexto longitudinal del
-// paciente que se inyecta al LLM antes de
-// generar cada nota SOAP. Una fila por paciente.
-//
-// El artefacto es editable por la terapeuta: las
-// actualizaciones automáticas generadas tras
-// aprobar una sesión quedan con
-// `aprobadoPorTerapeutaEn = null` hasta que la
-// profesional revisa.
-// ============================================
-
-model PacienteContextoClinico {
-  id             String       @id @default(cuid())
-  pacienteId     String       @unique @map("paciente_id")
+  id             String       @id @default(uuid())
+  pacienteId     String       @map("paciente_id")
   paciente       Paciente     @relation(fields: [pacienteId], references: [id])
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
-  // ──────────────────────────────────────────────────────────────────────
-  // Estructura editable, sin cifrar.
-  //
-  // Son arrays de strings cortos / objetos pequeños útiles para queries y
-  // dashboards. Tomada la decisión deliberada de no cifrarlos: si en algún
-  // momento queremos tablero "pacientes con objetivos activos sobre X",
-  // necesitamos poder consultar estas columnas. PHI clínicamente densa va
-  // abajo en las columnas *_encrypted.
-  // ──────────────────────────────────────────────────────────────────────
-  objetivosTerapeuticos  Json @default("[]") @map("objetivos_terapeuticos")
-  // Array de {id, descripcion, estado: "activo"|"cerrado"|"pausado", fechaInicio, fechaCierre?}
+  firmadoEn              DateTime  @map("firmado_en")
+  revocadoEn             DateTime? @map("revocado_en")
+  /// Versión del texto que firmó (ej. "2.0").
+  textoVersion           String    @map("texto_version")
+  /// Campo lógico `textoCompleto`: el texto íntegro que firmó, cifrado.
+  textoCompletoEncrypted Bytes     @map("texto_completo_encrypted")
+  /// Campo lógico `firmaDigital`: la firma del canvas (base64), cifrada.
+  firmaDigitalEncrypted  Bytes     @map("firma_digital_encrypted")
 
-  intervencionesProbadas Json @default("[]") @map("intervenciones_probadas")
-  // Array de {tecnica, eficaciaPercibida: "alta"|"media"|"baja", sesiones: number[]}
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
 
-  temasRecurrentes       Json @default("[]") @map("temas_recurrentes")
-  // Array de {tema, conteo}
-
-  // ──────────────────────────────────────────────────────────────────────
-  // PHI sensible — cifrado en reposo (AES-256-GCM)
-  //
-  // Mismo patrón que SesionClinica: solo existe la columna Bytes? con el
-  // blob cifrado; el campo lógico en claro (hipotesisDiagnostica,
-  // resumenAcumulativo, riesgosHistoricos) lo expone la extensión de Prisma
-  // Client (src/lib/prisma-encryption.ts). Formato del blob:
-  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
-  //
-  // riesgosHistoricos se guarda como JSON serializado (timeline de flags):
-  //   [{ sesionId, fecha, flag: "ideacionSuicida"|..., detalle }]
-  //
-  // Estos campos NO pueden usarse en WHERE / ORDER BY / índices — la
-  // extensión Prisma lo enforza en runtime.
-  // ──────────────────────────────────────────────────────────────────────
-  hipotesisDiagnosticaEncrypted Bytes?  @map("hipotesis_diagnostica_encrypted")
-  resumenAcumulativoEncrypted   Bytes?  @map("resumen_acumulativo_encrypted")
-  riesgosHistoricosEncrypted    Bytes?  @map("riesgos_historicos_encrypted")
-
-  // ──────────────────────────────────────────────────────────────────────
-  // Tracking del Golden Thread
-  // ──────────────────────────────────────────────────────────────────────
-  // String suelto (no FK): la sesión que generó la última actualización del
-  // contexto. Mantenerlo desacoplado evita ciclos de relación y permite que
-  // sea null para contextos creados manualmente por la terapeuta.
-  ultimaSesionId         String?   @map("ultima_sesion_id")
-  version                Int       @default(1)
-  // null = sugerencia generada por la IA pendiente de revisión humana.
-  // Con timestamp = aprobado por la terapeuta y considerado canónico.
-  aprobadoPorTerapeutaEn DateTime? @map("aprobado_por_terapeuta_en")
-  creadoEn               DateTime  @default(now()) @map("creado_en")
-  actualizadoEn          DateTime  @updatedAt @map("actualizado_en")
-
-  @@index([organizationId])
-  @@index([aprobadoPorTerapeutaEn])
-  @@map("paciente_contexto_clinico")
+  // Consentimiento vigente de la paciente: WHERE paciente_id = ? AND revocado_en IS NULL.
+  @@index([pacienteId])
+  @@map("consentimientos_grabacion")
 }
 
-// ============================================
-// Auditoría — registro de acciones sobre datos
-// clínicos (quién, qué, cuándo, sobre qué).
-//
-// append-only: nunca update ni delete desde la app.
-// Sin relación a Organization ni a las entidades
-// auditadas: no queremos cascadas que borren el
-// rastro cuando se elimina lo auditado. `detalle`
-// jamás contiene texto clínico ni datos personales
-// (ver src/app/api/_lib/auditoria.ts → detalleSeguro).
-// ============================================
+// ============================================================================
+// Sesión clínica: grabación → transcripción → nota → aprobación
+// ============================================================================
+
+/// Máquina de estados de la sesión. `aprobada` es el único terminal.
+/// No existe "descartada": descartar-para-reprocesar es `reprocesar`
+/// (revision → procesando, sin borrar) y descartar-para-borrar es `eliminar`
+/// (solo desde fallida; borra la fila entera).
+enum EstadoSesion {
+  grabando
+  subiendo
+  procesando
+  revision
+  aprobada
+  fallida
+
+  @@map("estado_sesion")
+}
+
+/// Dónde está el audio hoy. La key de R2 NO se persiste: se calcula
+/// (organizationId/sesionId/indice) y ningún payload la trae.
+enum EstadoAudio {
+  sin_audio
+  en_r2
+  borrado
+
+  @@map("estado_audio")
+}
+
+/// "Para vos" (feedback de auto-supervisión) tiene estado propio: se puede
+/// regenerar sin tocar la nota, incluso después de aprobar.
+enum EstadoFeedback {
+  no_pedido
+  pendiente
+  listo
+  fallido
+
+  @@map("estado_feedback")
+}
+
+/// Una fila por turno grabado. Todo cambio de estado es una operación con
+/// nombre cuyo UPDATE lleva en el WHERE el estado de partida, la
+/// organización y (para el worker) el `intento` vigente.
+model SesionClinica {
+  id             String       @id @default(uuid())
+  turnoId        String       @unique @map("turno_id")
+  turno          Turno        @relation(fields: [turnoId], references: [id])
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  estado EstadoSesion @default(grabando)
+
+  // ── Audio ──────────────────────────────────────────────────────────────
+  // Se graba en segmentos independientes de ~60 s, cifrados en el teléfono
+  // con esta clave y subidos mientras se graba (tabla audio_segmentos).
+  audioEstado         EstadoAudio @default(sin_audio) @map("audio_estado")
+  /// Campo lógico `audioClave`: clave AES-256 del audio, cifrada por la
+  /// extensión. Es la única clave de la sesión; el IV de cada segmento vive
+  /// en audio_segmentos.iv. Se destruye (NULL) en la misma transacción que
+  /// aprueba: aunque el borrado en R2 tarde, el audio ya no se puede abrir.
+  audioClaveEncrypted Bytes?      @map("audio_clave_encrypted")
+  duracionAudioSeg    Int?        @map("duracion_audio_seg")
+  /// Tramos en pausa tal como los reporta el teléfono: [{ inicio, fin }].
+  /// Sin cifrar: marcas de tiempo, no contenido.
+  pausas              Json?
+  /// Lo escribe el trabajo borrar_audio_r2 al verificar que el objeto no está.
+  audioBorradoEn      DateTime?   @map("audio_borrado_en")
+
+  // ── Procesamiento: identidad del intento y lease ───────────────────────
+  /// Identidad del reclamo: monotónico, NUNCA se resetea. Todo lo que el
+  /// worker escribe lleva `intento` y se rechaza (409) si no es el vigente.
+  intento          Int       @default(0)
+  /// Fallos transitorios seguidos; se resetea al reintentar/reprocesar.
+  fallosSeguidos   Int       @default(0) @map("fallos_seguidos")
+  proximoIntentoEn DateTime? @map("proximo_intento_en")
+  /// Lo renueva el worker cada 60 s mientras trabaja (LEASE corto).
+  leaseVenceEn     DateTime? @map("lease_vence_en")
+  /// sha256 hex del ticket entregado en el último reclamo. El ticket es la
+  /// credencial del worker para escribir en ESTA sesión (lease, checkpoint,
+  /// resultado); vence con `leaseVenceEn` y se anula al aceptar el
+  /// resultado. PROCESSING_SECRET solo autoriza reclamar.
+  ticketHash       String?   @unique @map("ticket_hash") @db.Char(64)
+  /// Ej. asr_timeout, intentos_agotados, grabacion_abandonada.
+  falloCodigo      String?   @map("fallo_codigo")
+  /// Diagnóstico acotado, nunca texto de la sesión.
+  falloDetalle     String?   @map("fallo_detalle") @db.VarChar(500)
+
+  // ── Resultado de la generación vigente (cifrado) ───────────────────────
+  /// Cuántas veces el worker entregó una nota. La nota IA es POR GENERACIÓN:
+  /// reprocesar no la borra, el resultado siguiente la reemplaza.
+  generacion             Int            @default(0)
+  /// Campo lógico `transcripcion`. Se escribe en el checkpoint posterior al
+  /// ASR, antes de la primera llamada al modelo: ningún reintento vuelve a
+  /// transcribir. Visible para la profesional; se conserva con la nota.
+  transcripcionEncrypted Bytes?         @map("transcripcion_encrypted")
+  /// Métricas de habla (ratios, silencios) que produce el ASR. Sin cifrar:
+  /// números, no contenido. Se guarda en el mismo checkpoint.
+  speechAnalytics        Json?          @map("speech_analytics")
+  /// Campo lógico `notaIa`: {subjetivo, objetivo, analisis, plan} tal como
+  /// la generó la IA en ESTA generación.
+  notaIaEncrypted        Bytes?         @map("nota_ia_encrypted")
+  /// Campo lógico `datos`: datos estructurados (riesgo, intervenciones,
+  /// menciones léxicas…), sin feedback y sin clave de audio.
+  datosEncrypted         Bytes?         @map("datos_encrypted")
+  feedbackEstado         EstadoFeedback @default(no_pedido) @map("feedback_estado")
+  /// Campo lógico `feedback`: el reporte "Para vos".
+  feedbackEncrypted      Bytes?         @map("feedback_encrypted")
+  feedbackError          String?        @map("feedback_error") @db.VarChar(500)
+  /// Último transcript creado en AssemblyAI: para auditar su borrado.
+  asrTranscriptId        String?        @map("asr_transcript_id")
+  modeloAsr              String?        @map("modelo_asr")
+  modeloLlm              String?        @map("modelo_llm")
+  promptVersion          String?        @map("prompt_version")
+  procesadaEn            DateTime?      @map("procesada_en")
+  /// Consumo: { asrSegundos, llamadas: [{ nombre, entrada, salida,
+  /// cacheLectura, cacheEscritura }] }. Lo suma el reporte mensual.
+  uso                    Json?
+
+  // ── Aprobación ─────────────────────────────────────────────────────────
+  /// Campo lógico `notaFinal`: lo que ella aprobó (con sus ediciones).
+  notaFinalEncrypted    Bytes?    @map("nota_final_encrypted")
+  /// Campo lógico `notasEdicion`: comentarios de la profesional al aprobar.
+  notasEdicionEncrypted Bytes?    @map("notas_edicion_encrypted")
+  aprobadaEn            DateTime? @map("aprobada_en")
+
+  creadaEn      DateTime @default(now()) @map("creada_en")
+  actualizadaEn DateTime @updatedAt @map("actualizada_en")
+
+  segmentos AudioSegmento[]
+
+  // Ficha, "Ahora" y huérfanas: WHERE organization_id = ? AND estado IN (…).
+  @@index([organizationId, estado])
+  // Reclamo del worker: WHERE estado = 'procesando' AND proximo_intento_en <= now()
+  //   AND (lease_vence_en IS NULL OR lease_vence_en < now()).
+  @@index([estado, proximoIntentoEn, leaseVenceEn])
+  @@map("sesiones_clinicas")
+}
+
+/// Un segmento de audio (~60 s, comprimido, cifrado en el teléfono con la
+/// clave de la sesión y un IV propio). La key en R2 se calcula:
+/// <organizationId>/<sesionId>/<indice>. Descriptor inmutable: iv, bytes y
+/// sha256 los declara el cliente al reservar y se comprueban al confirmar
+/// (HEAD). confirmadoEn null = reservado, no confirmado. Se borra con la
+/// sesión (eliminar); el trabajo borrar_audio_r2 lleva en su payload lo que
+/// necesita para borrar los objetos.
+model AudioSegmento {
+  sesionId       String    @map("sesion_id")
+  organizationId String    @map("organization_id")
+  indice         Int
+  /// 12 bytes aleatorios generados en el teléfono para este segmento. Un IV
+  /// por segmento evita repetir nonce con la misma clave (la falla grave de
+  /// AES-GCM) sin depender de ninguna regla de derivación. No es secreto: va
+  /// en claro.
+  iv             Bytes
+  bytes          Int
+  sha256         String    @db.Char(64)
+  confirmadoEn   DateTime? @map("confirmado_en")
+
+  sesion       SesionClinica @relation(fields: [sesionId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id])
+
+  // Inventario de una sesión, en orden: WHERE sesion_id = ? ORDER BY indice.
+  @@id([sesionId, indice])
+  @@map("audio_segmentos")
+}
+
+// ============================================================================
+// Trabajo durable (efectos externos fuera del request)
+// ============================================================================
+
+/// borrar_audio_r2 (app: tiene credenciales de R2), borrar_transcript_asr y
+/// generar_feedback (worker), integrar_contexto (worker: la Llamada B, que
+/// deja una propuesta en hilo_versiones). integrar_contexto se crea en la
+/// MISMA transacción que aprueba la sesión: no hay fecha de corte ni
+/// inferencia recorriendo aprobadas.
+enum TipoTrabajo {
+  borrar_audio_r2
+  borrar_transcript_asr
+  generar_feedback
+  integrar_contexto
+
+  @@map("tipo_trabajo")
+}
+
+enum EstadoTrabajo {
+  pendiente
+  en_curso
+  hecho
+  fallido
+
+  @@map("estado_trabajo")
+}
+
+/// Quién lo consume: la app (cron cada 10 min) o el worker (en cada poll).
+enum EjecutorTrabajo {
+  app
+  worker
+
+  @@map("ejecutor_trabajo")
+}
+
+/// El request solo escribe en la base; lo que hay que hacer afuera se anota
+/// acá y lo hace después un proceso que puede fallar y volver a intentar.
+/// Claim: UPDATE … SET estado = 'en_curso', intentos = intentos + 1,
+/// lease_vence_en = now() + LEASE WHERE id = ? AND estado IN ('pendiente',
+/// 'en_curso') AND proximo_intento_en <= now() AND (lease_vence_en IS NULL
+/// OR lease_vence_en < now()).
+model Trabajo {
+  id             String          @id @default(uuid())
+  tipo           TipoTrabajo
+  ejecutor       EjecutorTrabajo
+  organizationId String          @map("organization_id")
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  /// Sin FK: la sesión puede haberse borrado (eliminar) y el trabajo tiene
+  /// que completarse igual.
+  sesionId       String?         @map("sesion_id")
+  /// Sin FK, mismo motivo. Lo lleva integrar_contexto para la regla de
+  /// encadenado (una propuesta por paciente a la vez).
+  pacienteId     String?         @map("paciente_id")
+  /// Nunca contenido clínico. borrar_audio_r2: { prefijo, indices };
+  /// borrar_transcript_asr: { transcriptId }; generar_feedback e
+  /// integrar_contexto: { sesionId, pacienteId }. Lo clínico que el worker
+  /// necesita se adjunta descifrado al entregarlo, por TLS, y no se persiste.
+  payload        Json
+
+  estado           EstadoTrabajo @default(pendiente)
+  intentos         Int           @default(0)
+  proximoIntentoEn DateTime      @default(now()) @map("proximo_intento_en")
+  leaseVenceEn     DateTime?     @map("lease_vence_en")
+  /// sha256 hex del ticket entregado al worker con este trabajo: es la
+  /// credencial para informar su resultado. Vence con `leaseVenceEn`.
+  ticketHash       String?       @unique @map("ticket_hash") @db.Char(64)
+  /// Tipo y mensaje truncados, nunca contenido.
+  ultimoError      String?       @map("ultimo_error") @db.VarChar(500)
+  /// Consumo de la llamada al modelo (misma forma que SesionClinica.uso).
+  uso              Json?
+  creadoEn         DateTime      @default(now()) @map("creado_en")
+  hechoEn          DateTime?     @map("hecho_en")
+
+  // Claim: WHERE estado IN ('pendiente','en_curso') AND ejecutor = ? AND proximo_intento_en <= now().
+  @@index([estado, ejecutor, proximoIntentoEn])
+  // Trabajos de una sesión (estado de "Para vos", limpieza pendiente).
+  @@index([sesionId])
+  // Encadenado de integrar_contexto: NOT EXISTS (… WHERE paciente_id = ? AND tipo = ? AND estado IN (…)).
+  @@index([pacienteId])
+  @@map("trabajos")
+}
+
+/// Señal de vida del worker: una sola fila que la app actualiza en cada
+/// GET /pendientes (cabeceras X-Worker-Id / X-Worker-Version). Sin poll en N
+/// minutos → alerta. No hay ruta de latido aparte.
+model WorkerEstado {
+  id              String    @id @default("worker")
+  workerId        String    @map("worker_id")
+  version         String
+  ultimoPollEn    DateTime  @map("ultimo_poll_en")
+  /// Último resultado, checkpoint o renovación de lease recibido.
+  ultimoTrabajoEn DateTime? @map("ultimo_trabajo_en")
+
+  @@map("worker_estado")
+}
+
+// ============================================================================
+// HotWords — vocabulario para el ASR
+// ============================================================================
+
+enum AlcanceHotWord {
+  global
+  profesional
+  paciente
+
+  @@map("alcance_hot_word")
+}
+
+enum CategoriaHotWord {
+  termino_clinico
+  modismo_rioplatense
+  nombre_propio
+  otro
+
+  @@map("categoria_hot_word")
+}
+
+/// El término va cifrado (puede ser un nombre propio del entorno de la
+/// paciente). `terminoHash` existe solo para la unicidad.
+model HotWord {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  alcance    AlcanceHotWord
+  /// Solo si alcance = paciente.
+  pacienteId String?        @map("paciente_id")
+  paciente   Paciente?      @relation(fields: [pacienteId], references: [id])
+
+  /// Campo lógico `termino`, cifrado.
+  terminoEncrypted Bytes             @map("termino_encrypted")
+  /// sha256 hex del término normalizado (trim, minúsculas, sin acentos).
+  terminoHash      String            @map("termino_hash") @db.Char(64)
+  categoria        CategoriaHotWord?
+  activo           Boolean           @default(true)
+
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  // Unicidad y a la vez el índice de lectura (términos de la organización
+  // por alcance, y los de una paciente). Con paciente_id NULL Postgres no
+  // aplica esta unicidad: la migración agrega a mano un índice único parcial
+  // para las filas sin paciente.
+  @@unique([organizationId, alcance, pacienteId, terminoHash])
+  @@map("hot_words")
+}
+
+// ============================================================================
+// Recorrido (hilo longitudinal por paciente): append-only, la IA propone
+// ============================================================================
+
+enum ActorHilo {
+  profesional
+  ia
+
+  @@map("actor_hilo")
+}
+
+/// aplicada: fue o es la vigente. propuesta: la IA la dejó y ella no la
+/// resolvió. desactualizada: la vigente cambió después de que se propuso.
+/// rechazada: ella la descartó (cierra el tema para esa sesión).
+enum EstadoVersionHilo {
+  aplicada
+  propuesta
+  desactualizada
+  rechazada
+
+  @@map("estado_version_hilo")
+}
+
+/// Una fila por paciente: el puntero a la versión vigente y el contador. Es
+/// la fila que se bloquea (SELECT … FOR UPDATE) para asignar números de
+/// versión: no hay dos escritores que creen la misma.
+model Hilo {
+  pacienteId     String   @id @map("paciente_id")
+  organizationId String   @map("organization_id")
+  /// null = todavía no hay hilo.
+  vigenteId      String?  @unique @map("vigente_id")
+  ultimaVersion  Int      @default(0) @map("ultima_version")
+  actualizadoEn  DateTime @updatedAt @map("actualizado_en")
+
+  paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  vigente      HiloVersion?  @relation("HiloVigente", fields: [vigenteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  versiones    HiloVersion[] @relation("HiloVersiones")
+
+  @@map("hilos")
+}
+
+/// Cada escritura es una fila nueva; nunca se hace UPDATE del contenido.
+/// Solo cambian `estado`, `resueltaEn` y `resueltaPorUserId`. A lo sumo una
+/// `propuesta` abierta por paciente: índice único parcial en la migración.
+model HiloVersion {
+  id                 String            @id @default(uuid())
+  pacienteId         String            @map("paciente_id")
+  organizationId     String            @map("organization_id")
+  /// 1, 2, 3… por paciente.
+  version            Int
+  /// Sobre qué versión se escribió; null solo en la primera. Permite marcar
+  /// `desactualizada` y detectar que otra pestaña guardó antes (409).
+  basadaEnVersion    Int?              @map("basada_en_version")
+  actor              ActorHilo
+  estado             EstadoVersionHilo
+  /// Campo lógico `contenido`: UN solo JSON cifrado con hipótesis, resumen,
+  /// objetivos, intervenciones, temas, riesgos y `cambios[]` (solo IA: qué
+  /// cambió y por qué, para la pantalla). Nada del hilo queda en claro.
+  contenidoEncrypted Bytes             @map("contenido_encrypted")
+  /// La sesión aprobada que motivó esta versión (IA) o null (edición
+  /// manual). Sin FK: es trazabilidad, no debe frenar ni cascadear borrados.
+  sesionOrigenId     String?           @map("sesion_origen_id")
+  promptVersion      String?           @map("prompt_version")
+  modeloLlm          String?           @map("modelo_llm")
+  /// La profesional que la escribió (actor profesional) o null (IA).
+  creadaPorUserId    String?           @map("creada_por_user_id")
+  creadaEn           DateTime          @default(now()) @map("creada_en")
+  resueltaEn         DateTime?         @map("resuelta_en")
+  resueltaPorUserId  String?           @map("resuelta_por_user_id")
+  /// Si esta versión (profesional) nació de aceptar-con-ediciones una
+  /// propuesta, cuál.
+  propuestaOrigenId  String?           @map("propuesta_origen_id")
+
+  hilo         Hilo         @relation("HiloVersiones", fields: [pacienteId], references: [pacienteId], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
+  vigenteDe    Hilo?        @relation("HiloVigente")
+
+  @@unique([pacienteId, version])
+  // Propuesta abierta e historial por estado: WHERE paciente_id = ? AND estado = ?.
+  @@index([pacienteId, estado])
+  @@map("hilo_versiones")
+}
+
+// ============================================================================
+// Auditoría — rastro clínico, append-only
+// ============================================================================
 
 enum ActorAuditoria {
   usuario
   worker
   sistema
+
+  @@map("actor_auditoria")
 }
 
+/// Quién hizo qué, cuándo, sobre qué. Nunca update ni delete desde la app.
+/// Sin relación a Organization ni a lo auditado: no queremos cascadas que
+/// borren el rastro. `detalle` jamás lleva texto clínico, datos personales,
+/// IP ni user-agent (los intentos fallidos van a intentos_acceso).
+/// `accion` es texto abierto (ej. sesion.ver, sesion.ver_transcripcion,
+/// hilo.aceptar, cuenta.invitacion_usada). Toda exportación a PDF deja su
+/// acción: sesion.exportar_pdf, paciente.exportar_ficha_pdf,
+/// paciente.exportar_estado_cuenta_pdf.
 model EventoAuditoria {
-  id             String         @id @default(cuid())
+  id             String         @id @default(uuid())
   organizationId String         @map("organization_id")
   actorTipo      ActorAuditoria @map("actor_tipo")
   actorId        String?        @map("actor_id")
@@ -396,40 +974,11 @@ model EventoAuditoria {
   entidad        String
   entidadId      String         @map("entidad_id")
   detalle        Json?
-  createdAt      DateTime       @default(now()) @map("created_at")
+  creadoEn       DateTime       @default(now()) @map("creado_en")
 
-  @@index([organizationId, createdAt])
+  // Rastro de la organización en el tiempo.
+  @@index([organizationId, creadoEn])
+  // Historia de una entidad (una sesión, una paciente).
   @@index([entidad, entidadId])
   @@map("eventos_auditoria")
-}
-
-// Enlaces de un solo uso. Nunca se almacena el token que viaja por correo.
-model PasswordReset {
-  id        String    @id @default(cuid())
-  userId    String    @map("user_id")
-  tokenHash String    @unique @map("token_hash")
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("password_resets")
-}
-
-// En esta versión organizationId y email se crean siempre null: consultorio propio.
-model Invitacion {
-  id             String        @id @default(cuid())
-  organizationId String?       @map("organization_id")
-  email          String?
-  tokenHash      String        @unique @map("token_hash")
-  expiresAt      DateTime      @map("expires_at")
-  usedAt         DateTime?     @map("used_at")
-  createdBy      String        @map("created_by")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  creadora       User          @relation("InvitacionesCreadas", fields: [createdBy], references: [id], onDelete: Cascade)
-
-  @@index([createdBy, createdAt])
-  @@map("invitaciones")
 }
