@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/movimiento";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiDelete, apiPost } from "@/lib/api-client";
-import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
+import { fechaCorta, hora, money } from "@/lib/format";
 import {
   AGENDADO,
   ALGO_FALLO,
@@ -266,7 +266,7 @@ function DeudaBanner({ monto, cantidad }: { monto: number; cantidad: number }) {
         </p>
       </div>
       <span className="font-display text-[18px] font-medium tabular-nums text-terracotta-500 sm:text-[20px]">
-        {moneyShort(monto)}
+        {money(monto)}
       </span>
     </div>
   );

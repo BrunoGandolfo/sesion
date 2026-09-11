@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { Card } from "@/components/ui";
 import { Contador } from "@/components/ui/movimiento";
-import { fechaLarga, moneyShort } from "@/lib/format";
+import { fechaLarga, money } from "@/lib/format";
 import { ESTE_MES, SESIONES_HOY, pluralizar } from "@/lib/glosario";
 import type { DashboardData } from "@/types/domain";
 
@@ -34,7 +34,7 @@ export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
     {
       label: ESTE_MES,
       valor: data.kpis.ingresosMes,
-      formato: moneyShort,
+      formato: money,
       contar: true,
       pie: `cobrado ${mes}`,
       acento: false,

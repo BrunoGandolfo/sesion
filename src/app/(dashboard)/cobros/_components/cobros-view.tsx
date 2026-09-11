@@ -21,7 +21,6 @@ import Link from "next/link";
 import { ChevronRight, Send, Wallet } from "lucide-react";
 
 import {
-  Avatar,
   Button,
   Card,
   Confirmar,
@@ -43,7 +42,7 @@ import {
   type ZonaDeuda,
 } from "@/lib/deudas";
 import { diasEnterosMvd } from "@/lib/fechas-montevideo";
-import { fechaCorta, fechaLarga, money, moneyShort } from "@/lib/format";
+import { fechaCorta, fechaLarga, money } from "@/lib/format";
 import {
   ALGO_FALLO,
   AVISADO,
@@ -366,13 +365,13 @@ function KpiGrid({
   const items = [
     {
       label: COBRASTE_ESTE_MES,
-      value: moneyShort(ingresosMes),
+      value: money(ingresosMes),
       subtext: pluralizar(cobradasCount, "sesión", "sesiones"),
       tone: "sage" as const,
     },
     {
       label: SIN_COBRAR,
-      value: moneyShort(deudaTotal),
+      value: money(deudaTotal),
       subtext: pluralizar(sinCobrarCount, "sesión", "sesiones"),
       tone: deudaTotal > 0 ? ("terracotta" as const) : ("default" as const),
     },
@@ -394,7 +393,7 @@ function KpiGrid({
               {item.label}
             </span>
             <span
-              className={`mt-2 block font-[family-name:var(--font-display)] text-[26px] font-medium leading-none tabular-nums lg:text-[30px] ${kpiValueClass(item.tone)}`}
+              className={`mt-2 block whitespace-nowrap font-[family-name:var(--font-display)] text-[22px] font-medium leading-none tabular-nums lg:text-[30px] ${kpiValueClass(item.tone)}`}
             >
               {item.value}
             </span>
@@ -563,15 +562,14 @@ function FilaDeudor({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
         <Link
           href={`/pacientes/${deudor.pacienteId}`}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition-colors duration-150 active:bg-cream-50"
+          className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 rounded-md transition-colors duration-150 active:bg-cream-50"
           aria-label={`Abrir ficha de ${nombreCompleto}`}
         >
-          <Avatar nombre={deudor.nombre} apellido={deudor.apellido} size={40} />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[14px] font-semibold leading-[1.35] text-ink-900">
+          <span className="contents">
+            <span className="col-start-1 row-start-1 block min-w-0 break-words text-[14px] font-semibold leading-[1.35] text-ink-900">
               {nombreCompleto}
             </span>
-            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
+            <span className="col-span-2 row-start-2 mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
               <span>
                 {pluralizar(deudor.sesionesImpagas, "sesión", "sesiones")} sin
                 cobrar
@@ -590,15 +588,9 @@ function FilaDeudor({
               ) : null}
             </span>
           </span>
-          <span className="font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-terracotta-600">
+          <span className="col-start-2 row-start-1 whitespace-nowrap font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-terracotta-600">
             {money(deudor.montoTotal)}
           </span>
-          <ChevronRight
-            size={16}
-            strokeWidth={1.6}
-            className="shrink-0 text-ink-300 lg:hidden"
-            aria-hidden="true"
-          />
         </Link>
         <div className="flex items-center gap-2 lg:shrink-0">
           {!smsOk ? (
@@ -705,37 +697,15 @@ function CobrosDelMes({
             : SIN_METODO;
 
           return (
-            <li
-              key={t.id}
-              className="flex items-center gap-3 px-4 py-3 lg:px-5 lg:py-4"
-            >
-              <span className="w-[64px] shrink-0 text-[12px] font-semibold uppercase tracking-[0.04em] text-ink-500">
-                {fechaCorta(fecha)}
-              </span>
-
-              <Avatar
-                nombre={t.paciente.nombre}
-                apellido={t.paciente.apellido}
-                size={32}
-              />
-
-              <span className="min-w-0 flex-1">
-                {/* Sin truncate: "Rodrigo …" no es un nombre. A 390 px el
-                    apellido baja a la segunda línea, que es lo que ya hace
-                    el mismo dato en el Recorrido. */}
-                <Link
-                  href={`/pacientes/${t.paciente.id}`}
-                  className="block text-[14px] font-semibold leading-[1.35] text-ink-900 hover:underline"
-                >
-                  {nombreCompleto}
-                </Link>
-                <span className="mt-0.5 block text-[11px] text-ink-500">
-                  {metodoLabel}
-                </span>
-              </span>
-
-              <span className="font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-sage-700">
+            <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3 lg:px-5 lg:py-4">
+              <Link href={`/pacientes/${t.paciente.id}`} className="min-w-0 break-words text-[14px] font-semibold leading-[1.35] text-ink-900 hover:underline">
+                {nombreCompleto}
+              </Link>
+              <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-sage-700">
                 {money(t.tarifaCobrada)}
+              </span>
+              <span className="col-span-2 text-[12px] text-ink-500">
+                {fechaCorta(fecha)} · {metodoLabel}
               </span>
             </li>
           );
