@@ -38,7 +38,7 @@ export interface ResultadoEnvOperacion {
 
 /** Pura: recibe el ambiente y dice qué falta. */
 export function validarEnvOperacion(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): ResultadoEnvOperacion {
   const faltantes = VARIABLES_OPERACION.filter((v) => !env[v]?.trim());
   return { faltantes, produccion: env.NODE_ENV === "production" };
@@ -48,7 +48,7 @@ export function validarEnvOperacion(
  * Lanza si en producción falta alguna. En desarrollo y test no lanza: la
  * app tiene que poder arrancar sin Twilio para tocar la agenda.
  */
-export function exigirEnvOperacion(env: NodeJS.ProcessEnv = process.env): void {
+export function exigirEnvOperacion(env: Record<string, string | undefined> = process.env): void {
   const { faltantes, produccion } = validarEnvOperacion(env);
   if (produccion && faltantes.length > 0) {
     throw new Error(

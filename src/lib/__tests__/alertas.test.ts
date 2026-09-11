@@ -125,7 +125,7 @@ describe("alertar", () => {
     expect(sentry.mensajes).toHaveLength(1);
     expect(sentry.mensajes[0]).toContain("[Sesión] CRÍTICO: La base no responde");
     // Y el contenido de la alerta quedó en el log, no se perdió.
-    const logueado = error.mock.calls.map((c) => String(c[0])).join("\n");
+    const logueado = error.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
     expect(logueado).toContain("La base no responde");
     expect(logueado).toContain("error: x");
   });

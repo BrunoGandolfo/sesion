@@ -8,7 +8,7 @@ import {
   VARIABLES_OPERACION,
 } from "@/lib/env-operacion";
 
-const COMPLETO: NodeJS.ProcessEnv = Object.fromEntries(
+const COMPLETO: Record<string, string | undefined> = Object.fromEntries(
   VARIABLES_OPERACION.map((v) => [v, "x"]),
 );
 

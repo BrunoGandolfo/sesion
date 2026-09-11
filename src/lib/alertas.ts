@@ -42,7 +42,7 @@ export interface OpcionesAlerta {
   esperar?: (ms: number) => Promise<void>;
   ahora?: Date;
   /** Para tests: dónde leer ALERTA_CORREO y RESEND_API_KEY. */
-  env?: NodeJS.ProcessEnv;
+  env?: Record<string, string | undefined>;
 }
 
 function escaparHtml(texto: string): string {
