@@ -17,7 +17,7 @@ const TURNO: TurnoConPaciente = {
   pagoMetodo: null,
   pagoFecha: null,
   tarifaCobrada: 2200,
-  notas: null,
+  notas: null, serieId: null,
   creadoEn: new Date("2026-09-01T10:00:00.000Z"),
   actualizadoEn: new Date("2026-09-01T10:00:00.000Z"),
   paciente: {

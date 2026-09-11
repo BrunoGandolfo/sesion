@@ -20,7 +20,7 @@ import {
   TERMINO_MUY_LARGO,
 } from "@/lib/hot-words";
 
-const CUID = "clh1234567890abcdefghijkl";
+const PACIENTE_ID = "6f1c2b3a-4d5e-4f60-8a7b-9c0d1e2f3a4b"; // uuid: los ids los genera la app
 
 function palabras(n: number): string {
   return Array.from({ length: n }, (_, i) => `palabra${i + 1}`).join(" ");
@@ -86,14 +86,14 @@ describe("hotWordItemSchema", () => {
       hotWordItemSchema.safeParse({
         termino: "gurí",
         scope: "paciente",
-        pacienteId: CUID,
+        pacienteId: PACIENTE_ID,
       }).success,
     ).toBe(true);
     expect(
       hotWordItemSchema.safeParse({
         termino: "gurí",
         scope: "global",
-        pacienteId: CUID,
+        pacienteId: PACIENTE_ID,
       }).success,
     ).toBe(false);
   });

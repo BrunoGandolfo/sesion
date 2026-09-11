@@ -1,90 +1,51 @@
 import type {
   Configuracion as PrismaConfiguracion,
   Paciente as PrismaPaciente,
-  Recordatorio as PrismaRecordatorio,
   Turno as PrismaTurno,
 } from "@prisma/client";
 import type {
   Configuracion,
   DeudaPaciente,
-  Duracion,
-  MetodoPago,
-  Modalidad,
   PacienteConDeuda,
-  PagoEstado,
-  Recordatorio,
   Turno,
   TurnoConPaciente,
-  TurnoEstado,
 } from "@/types/domain";
+import { esDuracion } from "@/lib/constantes-turno";
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
 import { diasEnterosMvd } from "@/lib/fechas-montevideo";
-import { normalizarRecordatorioModo } from "@/lib/recordatorios-programacion";
 
 type TurnoStats = Pick<
   PrismaTurno,
   "fecha" | "estado" | "pagoEstado" | "tarifaCobrada"
 >;
 
-export type PacienteWithStats = PrismaPaciente & {
+/**
+ * Fila de paciente como la entrega la extensión de cifrado: sin la columna
+ * `notasEncrypted` y con el campo lógico `notas` en claro.
+ */
+type FilaPaciente = Omit<PrismaPaciente, "notasEncrypted"> & {
+  notas: string | null;
+};
+
+type PacienteConTurnos = FilaPaciente & {
   turnos: TurnoStats[];
 };
 
-const DURACIONES: readonly Duracion[] = [30, 45, 50, 60, 90];
-const MODALIDADES: readonly Modalidad[] = ["presencial", "online"];
-const TURNO_ESTADOS: readonly TurnoEstado[] = [
-  "programado",
-  "realizado",
-  "cancelado",
-  "ausente",
-];
-const PAGO_ESTADOS: readonly PagoEstado[] = ["pendiente", "pagado"];
-const METODOS_PAGO: readonly MetodoPago[] = [
-  "efectivo",
-  "transferencia",
-  "mercadopago",
-  "debito",
-  "credito",
-  "otro",
-];
-
-/** El valor si pertenece a la unión; el default si no. Para los campos donde
- *  el default es una preferencia y equivocarse no cambia ningún hecho. */
-function unionODefault<T extends string | number>(
-  valores: readonly T[],
-  valor: unknown,
-  fallback: T,
-): T {
-  return valores.includes(valor as T) ? (valor as T) : fallback;
-}
+/** Ídem para el turno. */
+type FilaTurno = Omit<PrismaTurno, "notasEncrypted"> & {
+  notas: string | null;
+};
 
 /**
- * El valor si pertenece a la unión; si no, se rompe.
- *
- * Para `estado` y `pagoEstado` no hay default honesto: elegir uno es afirmar
- * un hecho que la base no dijo —que la sesión no se dio, que la paciente no
- * pagó— y la app actúa sobre esa afirmación. Un valor fuera de la unión es
- * un invariante roto de la base, no un dato a corregir de este lado, así que
- * el turno no sale: falla acá, con el id a mano, y las rutas lo convierten
- * en un 500 por su try/catch. La restricción a nivel Postgres, que es donde
- * corresponde, va en otra tanda.
+ * Los mappers arman el objeto campo por campo, sin spread de la fila: la
+ * fila que llega de Prisma trae también `notasEncrypted` (el blob), y un
+ * `...fila` lo mandaría al JSON de la respuesta. Que un campo nuevo de la
+ * base no salga hasta que alguien lo agregue acá es a propósito.
  */
-function unionOError<T extends string>(
-  valores: readonly T[],
-  valor: unknown,
-  campo: string,
-  turnoId: string,
-): T {
-  if (valores.includes(valor as T)) return valor as T;
-  throw new Error(
-    `turno ${turnoId} tiene ${campo} inválido: '${String(valor)}'`,
-  );
-}
-
 export function toPacienteConDeuda(
-  paciente: PacienteWithStats,
+  paciente: PacienteConTurnos,
 ): PacienteConDeuda {
   const realizadas = paciente.turnos.filter(
     (turno) => turno.estado === "realizado",
@@ -95,7 +56,16 @@ export function toPacienteConDeuda(
   const impagas = paciente.turnos.filter(esDeudaPendiente);
 
   return {
-    ...paciente,
+    id: paciente.id,
+    nombre: paciente.nombre,
+    apellido: paciente.apellido,
+    telefono: paciente.telefono,
+    tarifa: paciente.tarifa,
+    notas: paciente.notas,
+    activo: paciente.activo,
+    creadoEn: paciente.creadoEn,
+    actualizadoEn: paciente.actualizadoEn,
+    organizationId: paciente.organizationId,
     sesionesRealizadas: realizadas.length,
     totalCobrado: sumTarifas(pagadas),
     sesionesImpagas: impagas.length,
@@ -105,54 +75,41 @@ export function toPacienteConDeuda(
 }
 
 /**
- * Fila de turno → tipo del dominio. En DB `duracion` es Int y `modalidad`,
- * `estado`, `pagoEstado` y `pagoMetodo` son String (sin enum en la
- * migración), así que acá se narrowean a su unión. Antes esto era un
- * `as unknown as Turno`, que le mentía al resto de la app: una fila con
- * `estado: "borrador"` viajaba tipada como TurnoEstado y nadie se enteraba
- * hasta que la pantalla mostraba un chip vacío.
- *
- * Los cinco campos no se tratan igual, y la diferencia es la que importa:
- *
- *   - `duracion` y `modalidad` caen al default de la migración. Son
- *     preferencias de cómo se dio la sesión: mostrar 50 minutos donde la
- *     base dice 47 es un detalle de presentación.
- *
- *   - `estado` y `pagoEstado` NO tienen default: se rompe. Caer a
- *     "pendiente" ante un valor desconocido le decía a la pantalla que la
- *     sesión está impaga —con su botón Cobrar, que después choca contra el
- *     caso de uso, porque `cobrar-turno` actualiza sólo las filas cuyo valor
- *     guardado es exactamente "pendiente" y devuelve 409—, mientras los
- *     agregados de deuda filtran el valor crudo antes de pasar por acá y dan
- *     un total distinto. Dos pantallas contando la misma plata de dos
- *     maneras es peor que un error.
- *
- *   - `pagoMetodo` sí cae a "otro", pero sólo si trae un método que no
- *     existe: null es un valor legítimo (turno sin cobrar), no un
- *     desconocido, y "otro" es un miembro real de la unión que no habilita
- *     ninguna acción.
+ * Fila de turno → tipo del dominio. `modalidad`, `estado`, `pagoEstado` y
+ * `pagoMetodo` son enums de Postgres: Prisma ya los tipa con la unión y no
+ * hay nada que narrowear. `duracion` es Int con CHECK en la migración
+ * (IN (30, 45, 50, 60, 90), el mismo DURACIONES de constantes-turno): una
+ * fila fuera de la lista es un invariante roto de la base, así que no se
+ * corrige del lado de la app —el turno no sale, falla acá con el id a mano
+ * y la ruta lo convierte en 500 por su try/catch—.
  */
-export function toTurno(turno: PrismaTurno): Turno {
+export function toTurno(turno: FilaTurno): Turno {
+  if (!esDuracion(turno.duracion)) {
+    throw new Error(
+      `turno ${turno.id} tiene duracion inválida: '${String(turno.duracion)}'`,
+    );
+  }
   return {
-    ...turno,
-    duracion: unionODefault(DURACIONES, turno.duracion, 50),
-    modalidad: unionODefault(MODALIDADES, turno.modalidad, "presencial"),
-    estado: unionOError(TURNO_ESTADOS, turno.estado, "estado", turno.id),
-    pagoEstado: unionOError(
-      PAGO_ESTADOS,
-      turno.pagoEstado,
-      "pagoEstado",
-      turno.id,
-    ),
-    pagoMetodo:
-      turno.pagoMetodo === null
-        ? null
-        : unionODefault(METODOS_PAGO, turno.pagoMetodo, "otro"),
+    id: turno.id,
+    pacienteId: turno.pacienteId,
+    fecha: turno.fecha,
+    duracion: turno.duracion,
+    modalidad: turno.modalidad,
+    estado: turno.estado,
+    tarifaCobrada: turno.tarifaCobrada,
+    pagoEstado: turno.pagoEstado,
+    pagoFecha: turno.pagoFecha,
+    pagoMetodo: turno.pagoMetodo,
+    notas: turno.notas,
+    serieId: turno.serieId,
+    creadoEn: turno.creadoEn,
+    actualizadoEn: turno.actualizadoEn,
+    organizationId: turno.organizationId,
   };
 }
 
 export function toTurnoConPaciente(
-  turno: PrismaTurno & {
+  turno: FilaTurno & {
     paciente: Pick<PrismaPaciente, "id" | "nombre" | "apellido" | "telefono">;
     sesionClinica: { id: string; estado: string } | null;
   },
@@ -164,48 +121,35 @@ export function toTurnoConPaciente(
   };
 }
 
-export function toRecordatorio(recordatorio: PrismaRecordatorio): Recordatorio {
-  return recordatorio as Recordatorio;
-}
-
 /**
- * Fila de configuración → tipo del dominio. `Configuracion` ya declara
- * `recordatorioModo`, así que la API no tiene una forma propia: el alias
- * `ConfiguracionApi` que existía acá era el mismo tipo con otro nombre.
+ * Fila de configuración → tipo del dominio. `recordatorioModo` y
+ * `orientacionTeorica` son enums de Postgres, tipados por Prisma.
  */
 export function toConfiguracion(
   configuracion: PrismaConfiguracion,
 ): Configuracion {
-  // En DB orientacionTeorica y recordatorioModo son String (sin enum en la
-  // migración); acá se narrowean a su unión, con fallback al default ante
-  // valores desconocidos — misma regla que el contrato multi-orientación.
   return {
-    ...configuracion,
-    orientacionTeorica:
-      configuracion.orientacionTeorica === "gestalt" ? "gestalt" : "cbt_mi",
-    recordatorioModo: normalizarRecordatorioModo(
-      configuracion.recordatorioModo,
-    ),
+    id: configuracion.id,
+    nombreProfesional: configuracion.nombreProfesional,
+    direccion: configuracion.direccion,
+    whatsappOrigen: configuracion.whatsappOrigen,
+    tarifaDefault: configuracion.tarifaDefault,
+    recordatorioModo: configuracion.recordatorioModo,
+    templateRecordatorio: configuracion.templateRecordatorio,
+    orientacionTeorica: configuracion.orientacionTeorica,
+    organizationId: configuracion.organizationId,
   };
 }
 
-export function sumTarifas(turnos: TurnoStats[]) {
+function sumTarifas(turnos: TurnoStats[]) {
   return turnos.reduce((total, turno) => total + turno.tarifaCobrada, 0);
 }
 
-export function maxFecha(turnos: TurnoStats[]) {
+function maxFecha(turnos: TurnoStats[]) {
   if (turnos.length === 0) return null;
   return turnos.reduce<Date | null>((latest, turno) => {
     if (!latest || turno.fecha > latest) return turno.fecha;
     return latest;
-  }, null);
-}
-
-export function minFecha(turnos: TurnoStats[]) {
-  if (turnos.length === 0) return null;
-  return turnos.reduce<Date | null>((earliest, turno) => {
-    if (!earliest || turno.fecha < earliest) return turno.fecha;
-    return earliest;
   }, null);
 }
 
@@ -257,7 +201,7 @@ export interface TurnoParaDeuda {
   fecha?: Date;
 }
 
-export interface DeudorAgrupado {
+interface DeudorAgrupado {
   pacienteId: string;
   nombre: string;
   apellido: string;

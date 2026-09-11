@@ -10,7 +10,7 @@ function turno(id: string, hora: number, minuto = 0, duracion: TurnoConPaciente[
   return {
     id, pacienteId: id, organizationId: "org", fecha: new Date(`2026-09-07T${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}:00-03:00`),
     duracion, modalidad: "presencial", estado: "programado", tarifaCobrada: 2200,
-    pagoEstado: "pendiente", pagoFecha: null, pagoMetodo: null, notas: null,
+    pagoEstado: "pendiente", pagoFecha: null, pagoMetodo: null, notas: null, serieId: null,
     creadoEn: dia, actualizadoEn: dia, sesionClinica: null,
     paciente: { id, nombre: id, apellido: "Prueba", telefono: "099123456" },
   };

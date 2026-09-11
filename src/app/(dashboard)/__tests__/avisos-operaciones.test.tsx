@@ -77,7 +77,8 @@ const PACIENTE: PacienteConDeuda = {
 const TURNO: Turno = {
   id: "t1", pacienteId: "p1", fecha: AHORA, duracion: 50, modalidad: "presencial",
   estado: "realizado", tarifaCobrada: 1500, pagoEstado: "pendiente", pagoFecha: null,
-  pagoMetodo: null, notas: null, creadoEn: AHORA, actualizadoEn: AHORA, organizationId: "test",
+  pagoMetodo: null, notas: null, serieId: null, creadoEn: AHORA, actualizadoEn: AHORA,
+  organizationId: "test",
 };
 function jsonTurno(pagado = false) {
   return { ...TURNO, fecha: AHORA.toISOString(), creadoEn: AHORA.toISOString(), actualizadoEn: AHORA.toISOString(),

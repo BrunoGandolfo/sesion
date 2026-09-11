@@ -3,12 +3,22 @@
 // Fuente de verdad para toda la aplicación.
 // Si algo cambia acá, cambia en todos lados.
 //
-// Excepción: el contrato de sesión clínica (estados, nota SOAP, datos
-// estructurados, enumeraciones de riesgo/alianza/intervención) vive en
-// src/lib/sesion-clinica/schema.ts (Zod, única definición). Acá se
-// re-exporta para que los importadores existentes sigan compilando.
+// Excepciones, que acá solo se re-exportan para que los importadores
+// existentes sigan compilando:
+//   - el contrato de sesión clínica (estados, nota SOAP, datos
+//     estructurados, enumeraciones de riesgo/alianza/intervención) vive en
+//     src/lib/sesion-clinica/schema.ts (Zod, única definición);
+//   - las listas cerradas del turno (duración, modalidad, estados, método
+//     de pago, frecuencia de serie) viven en src/lib/constantes-turno.ts.
 // ============================================
 
+import type {
+  Duracion,
+  EstadoPago,
+  EstadoTurno,
+  MetodoPago,
+  Modalidad,
+} from "@/lib/constantes-turno";
 import type { RecordatorioModo } from "@/lib/recordatorios-programacion";
 import type {
   AlianzaTerapeutica,
@@ -19,26 +29,19 @@ import type {
   NotaSoap,
 } from "@/lib/sesion-clinica/schema";
 
-/** Estados del ciclo de vida de un turno */
-export type TurnoEstado = "programado" | "realizado" | "cancelado" | "ausente";
+export type {
+  Duracion,
+  FrecuenciaSerie,
+  FrecuenciaTurno,
+  MetodoPago,
+  Modalidad,
+} from "@/lib/constantes-turno";
 
-/** Estados de pago de una sesión realizada */
-export type PagoEstado = "pendiente" | "pagado";
+/** Estados del ciclo de vida de un turno (nombre histórico de EstadoTurno). */
+export type TurnoEstado = EstadoTurno;
 
-/** Métodos de pago aceptados */
-export type MetodoPago =
-  | "efectivo"
-  | "transferencia"
-  | "mercadopago"
-  | "debito"
-  | "credito"
-  | "otro";
-
-/** Modalidad de la sesión */
-export type Modalidad = "presencial" | "online";
-
-/** Duraciones permitidas en minutos */
-export type Duracion = 30 | 45 | 50 | 60 | 90;
+/** Estados de pago de una sesión realizada (nombre histórico de EstadoPago). */
+export type PagoEstado = EstadoPago;
 
 /**
  * Estados del recordatorio por SMS.
@@ -65,8 +68,9 @@ export interface Paciente {
   nombre: string;
   apellido: string;
   telefono: string;        // formato +5989XXXXXXX
-  email: string | null;
   tarifa: number;           // en UYU, sin centavos
+  /** Notas privadas de la ficha. En la base van cifradas (notas_encrypted);
+   *  acá llegan ya en claro por la extensión de Prisma. */
   notas: string | null;
   activo: boolean;
   creadoEn: Date;
@@ -85,7 +89,12 @@ export interface Turno {
   pagoEstado: PagoEstado;
   pagoFecha: Date | null;
   pagoMetodo: MetodoPago | null;
+  /** Nota privada del turno. Cifrada en la base, en claro acá. */
   notas: string | null;
+  /** null = turno suelto. Un turno de una serie sigue siendo independiente
+   *  (moverlo, cobrarlo o cancelarlo es lo mismo que para uno suelto); el
+   *  id solo sirve para "cancelar el resto de la serie desde acá". */
+  serieId: string | null;
   creadoEn: Date;
   actualizadoEn: Date;
   organizationId: string;
@@ -110,21 +119,15 @@ export interface Configuracion {
   direccion: string;
   whatsappOrigen: string;
   tarifaDefault: number;    // en UYU
-  /** @deprecated Ya no decide cuándo sale el recordatorio: eso es
-   *  `recordatorioModo`. Se conserva en la fila y en la API mientras haya
-   *  quien la lea. */
-  horasAnticipacion: number; // default 24
   /** Cuándo sale el recordatorio, dicho como momento y no como número de
    *  horas. La cuenta vive en src/lib/recordatorios-programacion.ts
    *  (calcularProgramadoEn), única para crear y para reprogramar turnos.
-   *  Siempre presente: en DB tiene default "dia_anterior" y el mapper
-   *  toConfiguracion() narrowea con normalizarRecordatorioModo(). */
+   *  En la base es el enum modo_recordatorio. */
   recordatorioModo: RecordatorioModo;
   templateRecordatorio: string;
   /** Orientación teórica de la profesional. Determina el instrumento de
-   *  auto-supervisión (ver contrato multi-orientación). Siempre presente:
-   *  en DB Configuracion.orientacionTeorica tiene default "cbt_mi" y el
-   *  mapper toConfiguracion() narrowea con fallback a "cbt_mi". */
+   *  auto-supervisión (ver contrato multi-orientación). En la base es el
+   *  enum orientacion_teorica. */
   orientacionTeorica: OrientacionTeorica;
   organizationId: string;
 }
