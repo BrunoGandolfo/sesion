@@ -1,0 +1,33 @@
+{
+  "produccion": [
+    "entrada",
+    "recuperación sin envío",
+    "registro sin enlace vigente",
+    "Hoy con turnos",
+    "Agenda día/semana/mes",
+    "Pacientes activos/búsqueda/archivados vacíos",
+    "alta inválida",
+    "ficha Sesiones/Recorrido/Ficha",
+    "Recorrido con y sin datos",
+    "nota aprobada y original",
+    "Para vos",
+    "Cobros deudas e historial",
+    "cobrar/deshacer",
+    "Config inválida sin persistir",
+    "recordatorio y vocabulario",
+    "Lupita 3 preguntas"
+  ],
+  "simuladoLocal": [
+    "Hoy sin turnos",
+    "Pacientes sin registros",
+    "Cobros sin deudas ni pagos",
+    "sesión fallida",
+    "Agenda superposiciones/07/22/nombres largos",
+    "Cobros nombres y montos largos"
+  ],
+  "limites": [
+    "No teléfono real ni teclado nativo: ventana390x500",
+    "Registro con invitación vigente pendiente",
+    "No audio/SMS/correo ni reintento procesamiento"
+  ]
+}
