@@ -390,7 +390,7 @@ export const METODO_DE_PAGO = "Método de pago";
 // ────────────────────────────────────────────────────────────────────────────
 
 export const PAGADO = "Pagado";
-export const PENDIENTE = "Pendiente";
+export const PENDIENTE = "Sin cobrar";
 export const CANCELADO = "Cancelado";
 
 // ────────────────────────────────────────────────────────────────────────────

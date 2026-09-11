@@ -28,6 +28,7 @@ import {
   METODOS_PAGO,
   METODO_PAGO_LABEL,
   NO_VINO,
+  PENDIENTE,
   pluralizar,
 } from "@/lib/glosario";
 import type {
@@ -369,7 +370,7 @@ function TurnoRow({
             </Chip>
           ) : turno.estado === "realizado" ? (
             <Chip variant="terracotta" size="sm">
-              Pendiente
+              {PENDIENTE}
             </Chip>
           ) : (
             <span className="font-sans text-[11px] text-ink-300">—</span>
