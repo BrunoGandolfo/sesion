@@ -28,11 +28,11 @@ try {
   await page.evaluate(async ({diagnostic,files}) => {
     const db = await new Promise((resolve,reject) => {
       const request = indexedDB.open('sesion-prueba-segmentos-v1',1);
-      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(new Error('Abrir IndexedDB: '+String(request.error))); 
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(new Error('Abrir IndexedDB: '+String(request.error)));
     });
     await new Promise((resolve,reject) => {
       const tx = db.transaction(['meta','segments'],'readwrite',{durability:'strict'});
-      tx.oncomplete = resolve; tx.onerror = event => reject(new Error('Sembrar IndexedDB: '+String(event.target.error || tx.error))); tx.onabort = () => reject(new Error('IndexedDB abortado: '+String(tx.error))); 
+      tx.oncomplete = resolve; tx.onerror = event => reject(new Error('Sembrar IndexedDB: '+String(event.target.error || tx.error))); tx.onabort = () => reject(new Error('IndexedDB abortado: '+String(tx.error)));
       tx.objectStore('meta').put(diagnostic.run,'run');
       for (const segment of diagnostic.analysis.segments) {
         const name = `segmento-${String(segment.index).padStart(3,'0')}.${segment.mimeType.includes('mp4')?'m4a':'webm'}`;

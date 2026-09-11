@@ -4,6 +4,8 @@ Fecha: 11 de septiembre de 2026. Rama: `prueba-audio`. Sólo cambia `pruebas/aud
 
 Página publicada: **https://prueba-audio.vercel.app/**, proyecto Vercel independiente de la aplicación.
 
+Publicación verificada: HTTP 200, HTTPS, HTML idéntico al medido, solape inicial 1000 ms, interfaz a 390 px sin desborde ni errores de página. [Verificación de la URL pública](evidencia/publicacion-solape.json).
+
 ## Resultado de esta vuelta
 
 Chromium 153.0.8010.12, WebM/Opus: **dos recorders simultáneos sobre el mismo stream funcionaron en esta muestra**. Ambos ensayos de 125 s produjeron tres archivos, todos decodificables. Con solape, se encontraron 127 pitidos brutos: los 125 originales y dos repeticiones dentro de los solapes. El recorte nominal conservó 125/125; no se detectaron IDs faltantes, inesperados ni repetidos fuera del solape. Esto verifica esta señal sintética de escritorio; no demuestra la corrección del reinicio AAC en un iPhone.

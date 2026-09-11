@@ -4,6 +4,8 @@ const read = async name => JSON.parse(await readFile(new URL(`evidencia/${name}.
 const cases = await Promise.all(['chromium-continua-solape-0','chromium-continua-solape-1000'].map(read));
 const edges = await Promise.all(['chromium-continua-fin-en-solape-completo','chromium-pausa-pausa-en-solape','chromium-recarga-recarga-solape'].map(read));
 const webkit = await read('descarga-webkit-solape'), verification = await read('verificacion-solape');
+const publication = await read('publicacion-solape');
+if (publication.status !== 200 || publication.sourceSha256 !== verification.sourceSha256 || !publication.htmlMatchesLocal) throw new Error('Publicación distinta del HTML medido');
 if (!verification.passed) throw new Error('Falta validar la evidencia.');
 const f = n => n === null || n === undefined ? '—' : Number(n).toFixed(3);
 let report = `# Segunda vuelta: solape al reiniciar el grabador
@@ -11,6 +13,8 @@ let report = `# Segunda vuelta: solape al reiniciar el grabador
 Fecha: 11 de septiembre de 2026. Rama: \`prueba-audio\`. Sólo cambia \`pruebas/audio-segmentos/\`.
 
 Página publicada: **https://prueba-audio.vercel.app/**, proyecto Vercel independiente de la aplicación.
+
+Publicación verificada: HTTP ${publication.status}, HTTPS, HTML idéntico al medido, solape inicial 1000 ms, interfaz a 390 px sin desborde ni errores de página. [Verificación de la URL pública](evidencia/publicacion-solape.json).
 
 ## Resultado de esta vuelta
 

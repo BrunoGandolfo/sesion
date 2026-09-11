@@ -1,0 +1,26 @@
+{
+  "at": "2026-09-11T18:11:39.408Z",
+  "url": "https://prueba-audio.vercel.app/",
+  "status": 200,
+  "redirected": false,
+  "htmlMatchesLocal": true,
+  "sourceSha256": "d0da8ad2682a83d1413dc92f6c37fd48cfd31c9301f9d70a1d83b47e16271b2c",
+  "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "permissions-policy": "microphone=(self), camera=()",
+    "cache-control": "no-store"
+  },
+  "browser": {
+    "secureContext": true,
+    "state": "idle",
+    "microphoneApi": true,
+    "bodyWidth": 390,
+    "viewportWidth": 390,
+    "recordEnabled": true,
+    "overlapDefault": "1000",
+    "playbackRemoved": true,
+    "shareButton": true,
+    "mime": "Formato disponible: audio/webm;codecs=opus"
+  },
+  "pageErrors": []
+}
