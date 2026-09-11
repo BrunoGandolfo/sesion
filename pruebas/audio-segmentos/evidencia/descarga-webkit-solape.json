@@ -1,0 +1,47 @@
+{
+  "at": "2026-09-11T18:09:38.389Z",
+  "browserVersion": "26.6",
+  "sourceSha256": "d0da8ad2682a83d1413dc92f6c37fd48cfd31c9301f9d70a1d83b47e16271b2c",
+  "storageProfile": "persistente; el contexto efímero falló con UnknownError: Error preparing Blob/File data to be stored in object store",
+  "scope": "WebKit GTK escritorio: descargas reales; share sustituido para comprobar gesto y File. No es Safari iOS físico.",
+  "mediaRecorder": "undefined",
+  "zip": {
+    "path": "/home/bruno/proyectos/prueba-audio/pruebas/audio-segmentos/artefactos/webkit-solape.zip",
+    "name": "prueba-audio-f0e5b8bd.zip",
+    "bytes": 213156
+  },
+  "originalAudioAndTimingsPreserved": true,
+  "individual": {
+    "path": "/home/bruno/proyectos/prueba-audio/pruebas/audio-segmentos/artefactos/webkit-solape-primero.audio",
+    "name": "segmento-001.webm",
+    "bytes": 61727
+  },
+  "directLink": {
+    "path": "/home/bruno/proyectos/prueba-audio/pruebas/audio-segmentos/artefactos/webkit-solape-enlace.zip",
+    "name": "prueba-audio-f0e5b8bd.zip",
+    "bytes": 213156
+  },
+  "recoveredSegments": 3,
+  "decodable": [
+    true,
+    true,
+    true
+  ],
+  "mobileWidth": {
+    "width": 390,
+    "body": 390
+  },
+  "shareProbe": {
+    "active": true,
+    "files": [
+      {
+        "name": "prueba-audio-f0e5b8bd.zip",
+        "bytes": 213156,
+        "type": "application/zip",
+        "isFile": true
+      }
+    ]
+  },
+  "errors": [],
+  "passed": true
+}

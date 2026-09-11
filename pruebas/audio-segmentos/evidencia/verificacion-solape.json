@@ -1,0 +1,85 @@
+{
+  "at": "2026-09-11T18:09:40.510Z",
+  "sourceSha256": "d0da8ad2682a83d1413dc92f6c37fd48cfd31c9301f9d70a1d83b47e16271b2c",
+  "passed": true,
+  "reports": [
+    "chromium-continua-solape-0",
+    "chromium-continua-solape-1000",
+    "chromium-continua-fin-en-solape",
+    "chromium-continua-fin-en-solape-completo",
+    "chromium-pausa-pausa-en-solape",
+    "chromium-recarga-recarga-solape"
+  ],
+  "observations": [
+    {
+      "name": "chromium-continua-solape-0",
+      "files": 3,
+      "expected": 125,
+      "raw": 125,
+      "trimmed": 125,
+      "boundariesMs": [
+        1000.726,
+        989.751
+      ],
+      "boundariesExceeding40ms": 0
+    },
+    {
+      "name": "chromium-continua-solape-1000",
+      "files": 3,
+      "expected": 125,
+      "raw": 127,
+      "trimmed": 125,
+      "boundariesMs": [
+        1001.723,
+        988.753
+      ],
+      "boundariesExceeding40ms": 0
+    },
+    {
+      "name": "chromium-continua-fin-en-solape",
+      "files": 2,
+      "expected": 4,
+      "raw": 3,
+      "trimmed": 3,
+      "boundariesMs": [
+        null
+      ],
+      "boundariesExceeding40ms": 0
+    },
+    {
+      "name": "chromium-continua-fin-en-solape-completo",
+      "files": 2,
+      "expected": 4,
+      "raw": 5,
+      "trimmed": 4,
+      "boundariesMs": [
+        null
+      ],
+      "boundariesExceeding40ms": 0
+    },
+    {
+      "name": "chromium-pausa-pausa-en-solape",
+      "files": 4,
+      "expected": 7,
+      "raw": 8,
+      "trimmed": 7,
+      "boundariesMs": [
+        1000.726,
+        1000.726,
+        null
+      ],
+      "boundariesExceeding40ms": 0
+    },
+    {
+      "name": "chromium-recarga-recarga-solape",
+      "files": 1,
+      "expected": 6,
+      "raw": 4,
+      "trimmed": 4,
+      "boundariesMs": [],
+      "boundariesExceeding40ms": 0
+    }
+  ],
+  "webkitDownloadsPassed": true,
+  "iphonePhysicalTest": "pendiente del dueño"
+}

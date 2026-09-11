@@ -17,6 +17,7 @@ const matrix = process.env.CASES ? process.env.CASES.split(',') : ['continua','p
 const engines = process.env.BROWSERS ? process.env.BROWSERS.split(',') : ['chromium','webkit'];
 const segmentSeconds = Number(process.env.SEGMENT_SECONDS || 10);
 const durationSeconds = Number(process.env.DURATION_SECONDS || 65);
+const overlapMs = Number(process.env.OVERLAP_MS || 0);
 const suffix = process.env.LABEL ? `-${process.env.LABEL}` : '';
 const internalTimesliceMs = Number(process.env.INTERNAL_TIMESLICE_MS || 0);
 const forcedMimeType = process.env.FORCE_MIME || null;
@@ -83,7 +84,7 @@ async function calibration(page) {
 
 async function runCase(name,scenario) {
   const env = await launch(name);
-  const result = {browser:name,scenario,startedAt:new Date().toISOString(),durationSeconds,segmentSeconds,
+  const result = {browser:name,scenario,startedAt:new Date().toISOString(),durationSeconds,segmentSeconds,overlapMs,
     playwrightVersion:pkg.version,browserVersion:env.browser.version(),os:`${platform()} ${release()}`,sourceSha256,
     headless:false,launchMode:name === 'chromium' ? 'Chrome nativo + CDP noDefaults:true' : 'Playwright WebKit GTK',errors:[]};
   result.audioOutput = pulse ? 'PulseAudio privado, null sink, 48000 Hz' : 'Servidor de audio del sistema';
@@ -161,6 +162,7 @@ async function runCase(name,scenario) {
       }
     }
     await page.selectOption('#source','synthetic'); await page.fill('#seconds',String(segmentSeconds));
+    await page.fill('#overlap',String(overlapMs));
     if (process.env.CODEC) await page.selectOption('#codec',process.env.CODEC);
     await page.click('#record');
     await page.waitForFunction(() => prueba.state === 'recording',{},{timeout:15000});
@@ -169,7 +171,7 @@ async function runCase(name,scenario) {
     const at = seconds => sleep(start+seconds*1000-performance.now());
     console.log(`${name} ${scenario}: capturando ${durationSeconds} s; segmentos ${segmentSeconds} s`);
     if (scenario === 'pausa') {
-      await at(27.5); await page.click('#pause');
+      await at(Number(process.env.PAUSE_AT_SECONDS || 27.5)); await page.click('#pause');
       await page.waitForFunction(() => prueba.state === 'paused');
       result.pauseStartedAtMs = performance.now()-start;
       await sleep(5000);
@@ -177,7 +179,7 @@ async function runCase(name,scenario) {
       result.resumedAtMs = performance.now()-start;
       console.log(`${name}: pausa realizada (${Math.round(result.resumedAtMs-result.pauseStartedAtMs)} ms)`);
     } else if (scenario === 'recarga') {
-      await at(35);
+      await at(Number(process.env.RELOAD_AT_SECONDS || 35));
       result.beforeReload = await page.evaluate(() => ({snapshot:prueba.snapshot(),segments:prueba.segments}));
       await page.reload();
       await page.waitForFunction(() => prueba.state === 'recovered');
@@ -207,21 +209,26 @@ async function runCase(name,scenario) {
     result.diagnostic = await page.evaluate(() => prueba.diagnostic());
     result.uiError = await page.locator('#error').textContent();
     result.status = 'ejecutado';
-    if (result.diagnostic.analysis.allDecodable) {
-      await page.click('#play');
-      await page.waitForFunction(() => prueba.diagnostic().events.some(e => e.type === 'playback-scheduled'));
-      result.playback = await page.evaluate(() => prueba.diagnostic().events.filter(e => e.type === 'playback-scheduled').at(-1));
-      result.maxScheduledPlaybackGapMs = Math.max(0,...result.playback.starts.slice(1).map((s,i) => Math.abs(s.start-(result.playback.starts[i].start+result.playback.starts[i].duration))*1000));
-      await page.click('#stopPlay');
-    }
+    result.playbackRemoved = await page.locator('#play').count() === 0;
+    const diagnostic = result.diagnostic;
+    result.overlapChecks = {
+      maxSimultaneous:Math.max(...diagnostic.events.filter(e => e.type === 'segment-start').map(e => e.simultaneousRecorders)),
+      sameStreamTracks: new Set(diagnostic.timing.segments.map(s => JSON.stringify(s.trackIds))).size === 1,
+      overlapsMs:diagnostic.timing.boundaries.map(b => b.actualOverlapMs),
+      allTimingFinite:diagnostic.timing.segments.every(s => ['startWallMs','endWallMs','startEventMs','stopEventMs'].every(k => Number.isFinite(s[k]))),
+      trimmedFound:diagnostic.analysis.trimmed.foundBeeps,
+      duplicatesOutsideOverlap:diagnostic.analysis.identityCheck?.duplicatesOutsideOverlap,
+      missingIds:diagnostic.analysis.identityCheck?.missingIds,
+      unexpectedIds:diagnostic.analysis.identityCheck?.unexpectedIds
+    };
     const zipPath = `${artifactPath}/${name}-${scenario}${suffix}.zip`;
     result.zipDownload = await saveDownload('#zip',zipPath);
     result.zipVerification = JSON.parse(execFileSync('python3',['-c',
       'import json,sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); print(json.dumps({"crcError":z.testzip(),"entries":z.namelist(),"sizes":[i.file_size for i in z.infolist()]}))',zipPath]).toString());
-    result.individualDownload = await saveDownload('#files button',`${artifactPath}/${name}-${scenario}${suffix}-primero.audio`);
+    result.individualDownload = await saveDownload('#files a',`${artifactPath}/${name}-${scenario}${suffix}-primero.audio`);
     await page.screenshot({path:`${artifactPath}/${name}-${scenario}${suffix}.png`,fullPage:true});
     const a = result.diagnostic.analysis;
-    console.log(`${name} ${scenario}: ${a.segments.length} archivos; ${a.foundBeeps}/${a.expectedBeeps} pitidos; fronteras ${a.boundaries.map(b => b.intervalMs).join(', ')} ms`);
+    console.log(`${name} ${scenario}: ${a.segments.length} archivos; ${a.foundBeeps}/${a.expectedBeeps} pitidos; fronteras ${a.boundaries.map(b => b.intervalMs).join(', ')} ms; recortadas ${a.trimmed.boundaries.map(b => b.intervalMs).join(', ')} ms; ${a.trimmed.foundBeeps} pitidos recortados`);
   } catch(error) { result.status = 'error'; result.errors.push(String(error)); console.log(`${name} ${scenario}: ERROR ${error}`); }
   finally { await env.close(); }
   return result;

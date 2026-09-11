@@ -23,12 +23,13 @@
 </style>
 <body>
 <header><div class="badge">Sesión · experimento aislado</div><h1>¿Se puede grabar de a un minuto?</h1>
-<p>Cada corte crea un archivo de audio completo. Al terminar, escuchá los archivos seguidos y revisá cuánto audio se conservó.</p></header>
+<p>Cada corte crea un archivo completo. El siguiente empieza antes de terminar el anterior para proteger el sonido durante el reinicio. Descargá los archivos para escucharlos y analizar los cortes.</p></header>
 <div class="card">
   <p class="muted">El audio queda en este navegador, sin cifrado y sin enviarse a un servidor. Usá voz de prueba. No borres los datos del sitio antes de descargarlo.</p>
   <div class="row">
     <label>Fuente<select id="source"><option value="mic">Micrófono</option><option value="synthetic">Pitidos de prueba (1 por segundo)</option></select></label>
     <label>Segundos por archivo<input id="seconds" type="number" value="60" min="2" max="120" step="1"></label>
+    <label>Solape (ms)<input id="overlap" type="number" value="1000" min="0" max="5000" step="100"></label>
     <label>Formato<select id="codec"><option value="auto">Automático</option><option value="webm">WebM / Opus</option><option value="mp4">MP4 / AAC</option></select></label>
   </div>
   <p id="mime" class="muted">Comprobando formatos…</p>
@@ -38,18 +39,19 @@
 </div>
 <section class="card" aria-labelledby="diag-title">
   <h2 id="diag-title">Diagnóstico</h2><div id="summary">Todavía no hay audio.</div>
-  <p class="muted">En la fuente sintética, el intervalo entre pitidos debe ser 1000 ms. Una desviación mayor a 40 ms en una frontera señala un problema. Una señal periódica no permite distinguir por sí sola la pérdida de segundos enteros: mirá también el conteo y la duración.</p>
+  <p class="muted">Con 60 s y 1000 ms, los archivos empiezan cada 59 s. Se conserva el final del viejo y se recorta el inicio del nuevo. Los tiempos de la API no identifican el primer sample: hay que verificar el resultado en iPhone. En la fuente sintética, el intervalo entre pitidos debe ser 1000 ms. Una desviación mayor a 40 ms en una frontera señala un problema. Una señal periódica no permite distinguir por sí sola la pérdida de segundos enteros: mirá también el conteo y la duración.</p>
   <div class="row"><button id="analyze" class="secondary" disabled>Analizar de nuevo</button><button id="report" class="secondary" disabled>Descargar diagnóstico</button></div>
-  <div class="scroll"><table><thead><tr><th>Frontera</th><th>Intervalo de pitidos</th><th>Desvío de 1000 ms</th><th>Resultado</th></tr></thead><tbody id="boundaries"></tbody></table></div>
+  <div class="scroll"><table><thead><tr><th>Frontera</th><th>Intervalo tras recorte nominal</th><th>Desvío de 1000 ms</th><th>Resultado</th></tr></thead><tbody id="boundaries"></tbody></table></div>
 </section>
 <section class="card" aria-labelledby="files-title">
   <h2 id="files-title">Archivos guardados</h2>
-  <div class="row"><button id="play" disabled>Reproducir todos</button><button id="stopPlay" class="secondary" disabled>Detener reproducción</button><button id="zip" class="secondary" disabled>Descargar conjunto (.zip)</button></div>
-  <p id="playStatus" class="muted">Se decodifica cada archivo por separado y se programa el siguiente con el reloj de audio, sin esperas entre reproductores.</p>
+  <div class="row"><button id="zip" class="secondary" disabled>Descargar conjunto (.zip)</button><button id="share" class="secondary" disabled>Compartir / guardar en Archivos</button></div>
+  <p id="downloadStatus" class="muted">El ZIP se prepara al terminar e incluye los audios originales y diagnostico.json. En iPhone podés usar Compartir → Guardar en Archivos. La reproducción se hace fuera de esta página.</p>
+  <p><a id="zipLink" hidden>Enlace directo al ZIP</a></p>
   <div class="scroll"><table><thead><tr><th>Archivo</th><th>Tamaño</th><th>Formato</th><th>Hora</th><th>Reloj</th><th>Decodificado</th><th>Descarga</th></tr></thead><tbody id="files"></tbody></table></div>
 </section>
 <details class="card"><summary>Cómo hacer la prueba en tu teléfono</summary>
-<ol><li>Dejá Micrófono y 60 segundos. Tocá Grabar y hablá durante 3 minutos.</li><li>En el medio, pausá 5 segundos, reanudá y bloqueá la pantalla durante 20 segundos. Anotá cuándo lo hiciste.</li><li>Volvé, tocá Terminar y escuchá Reproducir todos. Descargá el conjunto y el diagnóstico.</li><li>Para probar recuperación, empezá otra prueba y recargá mientras graba. Se recuperan los archivos ya guardados; el archivo en curso puede perderse. La grabación no se reinicia sola.</li><li>Repetí con Pitidos de prueba para medir los cortes. Esos pitidos suenan a volumen bajo mientras graba; podés bajar el volumen del dispositivo.</li></ol>
+<ol><li>Dejá Micrófono, 60 segundos y solape de 1000 ms. Tocá Grabar y hablá durante 3 minutos.</li><li>En el medio, pausá 5 segundos, reanudá y bloqueá la pantalla durante 20 segundos. Anotá cuándo lo hiciste.</li><li>Volvé, tocá Terminar y esperá que se habilite Descargar conjunto. El ZIP incluye diagnostico.json. En iPhone, también podés tocar Compartir / guardar en Archivos y elegir Guardar en Archivos.</li><li>Para probar recuperación, empezá otra prueba y recargá mientras graba. Se recuperan los archivos ya guardados; el archivo en curso puede perderse. La grabación no se reinicia sola.</li><li>Repetí con Pitidos de prueba para medir los cortes. Esos pitidos suenan a volumen bajo mientras graba; podés bajar el volumen del dispositivo.</li></ol>
 <p>El bloqueo de pantalla puede suspender la captura o demorar los cortes. Esta prueba lo mide; no promete un límite de pérdida de 60 segundos. En micrófono se comparan duraciones, pero no se puede medir cada frontera sin una señal conocida.</p></details>
 <details class="card"><summary>Eventos y entorno</summary><pre id="events"></pre></details>
 <script>
@@ -59,8 +61,11 @@ const $ = id => document.getElementById(id);
 const DB_NAME = 'sesion-prueba-segmentos-v1';
 const AC = window.AudioContext || window.webkitAudioContext;
 let db, run = null, segments = [], buffers = [], analysis = null;
-let state = 'loading', stream, context, oscillator, gate, active = null, rotation, heartbeat;
-let pending = Promise.resolve(), playback = null, playbackNodes = [], playTimer;
+let state = 'loading', stream, context, oscillator, gate, heartbeat;
+let pending = Promise.resolve(), zipFile = null, zipUrl = null;
+const liveSegments = new Map();
+const fileUrls = [];
+let transitions = [];
 let activeSince = null, savedClockMs = 0, generationStart = 0, sourceIntervals = [];
 let syntheticGraph = []; // Conservar el grafo de la fuente hasta el cierre del contexto.
 let syntheticEnvelope, syntheticAmplitude, pausedAudioAt = null, pausedPhase = 0;
@@ -92,21 +97,31 @@ function beepCount(from, to) {
   const last = Math.ceil(to - 0.5 - 1e-7) - 1;
   return Math.max(0, last - first + 1);
 }
+function capturedSourceIntervals() {
+  const intervals = sourceIntervals.map(x => [...x]);
+  if (context) for (const segment of liveSegments.values()) intervals.push([segment.sourceStart,context.currentTime-generationStart]);
+  const merged = [];
+  for (const interval of intervals.sort((a,b) => a[0]-b[0])) {
+    const previous = merged.at(-1);
+    if (previous && interval[0] <= previous[1]) previous[1] = Math.max(previous[1],interval[1]);
+    else merged.push([...interval]);
+  }
+  return merged; // Unión, no suma: el solape no agrega segundos a la fuente original.
+}
 function expectedBeepsByAudioClock() {
   if (!run || run.source !== 'synthetic') return null;
-  const intervals = sourceIntervals.map(x => [...x]);
-  if (active && context) intervals.push([active.sourceStart, context.currentTime - generationStart]);
-  return intervals.reduce((sum, [a,b]) => sum + beepCount(a,b), 0);
+  return capturedSourceIntervals().reduce((sum, [a,b]) => sum + beepCount(a,b), 0);
 }
 function expectedBeeps() { return run?.source === 'synthetic' ? beepCount(0,clockMs()/1000) : null; }
 function sourceRenderedSec() {
-  return sourceIntervals.reduce((sum,[a,b]) => sum+b-a,0) + (active && context ? context.currentTime-generationStart-active.sourceStart : 0);
+  return capturedSourceIntervals().reduce((sum,[a,b]) => sum+b-a,0);
 }
 function snapshot() {
   if (!run) return null;
   return {...run, status:state, wallRecordedMs:round(clockMs()), expectedBeeps:expectedBeeps(),
     expectedBeepsByAudioClock:expectedBeepsByAudioClock(), sourceRenderedSec:sourceRenderedSec(),
     observedAt:new Date().toISOString(), events:[...events], sourceIntervals:[...sourceIntervals],
+    transitions:transitions.map(t => ({...t})), liveSegments:[...liveSegments.values()].map(timing),
     segmentCount:segments.length, audioContextState:context?.state || null, visibility:document.visibilityState};
 }
 function controls() {
@@ -115,10 +130,10 @@ function controls() {
   $('pause').disabled = !['recording','paused'].includes(state);
   $('pause').textContent = state === 'paused' ? 'Reanudar' : 'Pausar';
   $('finish').disabled = !['recording','paused'].includes(state);
-  for (const id of ['source','seconds','codec']) $(id).disabled = busy;
+  for (const id of ['source','seconds','overlap','codec']) $(id).disabled = busy;
   $('analyze').disabled = busy || !segments.length;
-  $('play').disabled = busy || !buffers.length || buffers.some(b => !b);
-  $('zip').disabled = busy || !segments.length;
+  $('zip').disabled = busy || !zipFile;
+  $('share').disabled = busy || !zipFile || !navigator.canShare?.({files:[zipFile]});
   $('report').disabled = busy || !run;
 }
 function strictTransaction(stores) {
@@ -171,9 +186,10 @@ async function openDatabase() {
   run = data.run || null; segments = data.segments.sort((a,b) => a.index-b.index);
   state = 'idle';
   if (run) {
-    const interrupted = ['recording','starting','paused','stopping'].includes(run.status);
+    const interrupted = ['recording','starting','pausing','paused','stopping'].includes(run.status);
     savedClockMs = run.wallRecordedMs || 0;
     sourceIntervals = run.sourceIntervals || [];
+    transitions = run.transitions || [];
     events.push(...(run.events || []));
     // Mantener el conteo observado antes de la recarga; el último checkpoint es una cota inferior.
     run.recovered = true; run.interrupted = interrupted;
@@ -234,19 +250,32 @@ function resumeSynthetic() {
   gate.connect(syntheticAmplitude.gain); gate.start(now,pausedPhase);
   syntheticGraph.push(gate); pausedAudioAt = null;
 }
+// Todos estos tiempos pertenecen a performance.timeOrigin de esta carga. No se redondean.
+// Son llamadas/eventos de la API: MediaRecorder no expone el instante del primer/último sample.
+const completions = new Set();
+function timing(segment) {
+  const keys = ['index','createdAt','mimeType','startWallMs','startReturnedMs','startEventMs','startEventTimestampMs',
+    'endWallMs','stopReturnedMs','stopEventMs','stopEventTimestampMs','sourceStart','sourceEnd','reason','trackIds'];
+  return Object.fromEntries(keys.filter(key => segment[key] !== undefined).map(key => [key,segment[key]]));
+}
 function startSegment() {
   const recorder = new MediaRecorder(stream, {mimeType:run.requestedMimeType, audioBitsPerSecond:64000});
   const segment = {index:run.nextIndex++, mimeType:recorder.mimeType, createdAt:new Date().toISOString(),
-    startWallMs:performance.now(), sourceStart:context ? context.currentTime-generationStart : null, parts:[], recorder};
+    parts:[], recorder, trackIds:stream.getAudioTracks().map(track => track.id)};
   segment.done = new Promise((resolve,reject) => { segment.resolve = resolve; segment.reject = reject; });
+  completions.add(segment.done);
+  segment.done.then(() => completions.delete(segment.done), () => completions.delete(segment.done));
   recorder.ondataavailable = event => { if (event.data.size) segment.parts.push(event.data); };
+  recorder.onstart = event => {
+    segment.startEventMs = performance.now(); segment.startEventTimestampMs = event.timeStamp;
+    log('recorder-start-event', {index:segment.index, timeMs:segment.startEventMs});
+  };
   recorder.onerror = event => { fail(event.error || new Error('Falló MediaRecorder')); void finish().catch(fail); };
-  recorder.onstop = () => {
+  recorder.onstop = event => {
+    segment.stopEventMs = performance.now(); segment.stopEventTimestampMs = event.timeStamp;
     const blob = new Blob(segment.parts, {type:segment.parts[0]?.type || segment.mimeType});
-    const item = {index:segment.index, blob, bytes:blob.size, mimeType:blob.type, createdAt:segment.createdAt,
-      wallDurationMs:round(segment.endWallMs-segment.startWallMs), startWallMs:segment.startWallMs,
-      endWallMs:segment.endWallMs, sourceStart:segment.sourceStart, sourceEnd:segment.sourceEnd,
-      reason:segment.reason, rotationLateMs:segment.rotationLateMs || 0};
+    const item = {...timing(segment), blob, bytes:blob.size, mimeType:blob.type,
+      wallDurationMs:round(segment.endWallMs-segment.startWallMs), rotationLateMs:segment.rotationLateMs || 0};
     queue(async () => {
       if (!blob.size) throw new Error(`El archivo ${item.index} está vacío.`);
       const data = snapshot();
@@ -256,38 +285,65 @@ function startSegment() {
       renderFiles();
     }).then(segment.resolve, segment.reject);
   };
-  recorder.start(); // Sin timeslice: cada instancia entrega su propio archivo completo al detenerse.
-  active = segment;
-  $('mime').textContent = `Formato real: ${recorder.mimeType} · escritura IndexedDB: strict`;
-  log('segment-start', {index:segment.index, sourceTime:segment.sourceStart, mimeType:recorder.mimeType});
-  rotation = setTimeout(rotate, run.segmentSeconds*1000);
+  segment.sourceStart = context ? context.currentTime-generationStart : null;
+  segment.startWallMs = performance.now();
+  try { recorder.start(); } catch(error) { segment.reject(error); throw error; }
+  segment.startReturnedMs = performance.now();
+  liveSegments.set(segment.index,segment);
+  $('mime').textContent = `Formato real: ${recorder.mimeType} · escritura IndexedDB: strict · solape: ${run.overlapMs} ms`;
+  log('segment-start', {index:segment.index, timeMs:segment.startWallMs, sourceTime:segment.sourceStart,
+    mimeType:recorder.mimeType, simultaneousRecorders:liveSegments.size, trackIds:segment.trackIds});
+  segment.rotationTimer = setTimeout(() => rotate(segment),Math.max(0,
+    segment.startWallMs+run.segmentSeconds*1000-run.overlapMs-performance.now()));
+  return segment;
 }
-function stopSegment(reason) {
-  clearTimeout(rotation);
-  const segment = active;
-  if (!segment) return Promise.resolve();
-  active = null;
-  segment.endWallMs = performance.now(); segment.reason = reason;
+function stopSegment(segment,reason) {
+  if (!segment || !liveSegments.has(segment.index)) return segment?.done || Promise.resolve();
+  clearTimeout(segment.rotationTimer); clearTimeout(segment.stopTimer);
   segment.sourceEnd = context ? context.currentTime-generationStart : null;
+  segment.reason = reason;
+  segment.endWallMs = performance.now();
+  segment.recorder.stop();
+  segment.stopReturnedMs = performance.now();
+  liveSegments.delete(segment.index);
   segment.rotationLateMs = reason === 'rotation' ? round(segment.endWallMs-segment.startWallMs-run.segmentSeconds*1000) : 0;
   if (context) sourceIntervals.push([segment.sourceStart,segment.sourceEnd]);
-  log('segment-stop', {index:segment.index, reason, rotationLateMs:segment.rotationLateMs});
-  segment.recorder.stop();
+  for (const boundary of transitions) if (boundary.from === segment.index) {
+    boundary.oldStopCallMs = segment.endWallMs;
+    boundary.actualOverlapMs = segment.endWallMs-boundary.newStartCallMs;
+  }
+  log('segment-stop', {index:segment.index, timeMs:segment.endWallMs, reason, rotationLateMs:segment.rotationLateMs,
+    simultaneousRecorders:liveSegments.size});
   return segment.done;
 }
-function rotate() {
-  if (state !== 'recording') return;
-  // Iniciar el próximo recorder en el mismo turno, sin esperar onstop ni la escritura del anterior.
-  const completion = stopSegment('rotation');
-  try { startSegment(); } catch(error) { fail(error); void finish().catch(fail); }
-  void completion.catch(fail);
+async function stopAll(reason) {
+  for (const segment of [...liveSegments.values()]) void stopSegment(segment,reason).catch(fail);
+  await Promise.all([...completions]); // Incluye recorders ya detenidos cuyo onstop aún no llegó.
+}
+function rotate(previous) {
+  if (state !== 'recording' || !liveSegments.has(previous.index)) return;
+  try {
+    if (!run.overlapMs) void stopSegment(previous,'rotation').catch(fail);
+    // Si los timers estuvieron suspendidos, no acumular un tercer recorder.
+    for (const segment of [...liveSegments.values()]) if (segment !== previous) void stopSegment(segment,'rotation').catch(fail);
+    const next = startSegment();
+    const boundary = {from:previous.index,to:next.index,requestedOverlapMs:run.overlapMs,
+      plannedOldStopMs:previous.startWallMs+run.segmentSeconds*1000,newStartCallMs:next.startWallMs,
+      oldStopCallMs:previous.endWallMs ?? null,
+      actualOverlapMs:previous.endWallMs === undefined ? null : previous.endWallMs-next.startWallMs};
+    transitions.push(boundary);
+    log('rotation', {...boundary});
+    if (run.overlapMs) previous.stopTimer = setTimeout(() => void stopSegment(previous,'rotation').catch(fail),
+      Math.max(0,boundary.plannedOldStopMs-performance.now()));
+  } catch(error) { fail(error); void finish().catch(fail); }
 }
 async function start() {
   if (!['idle','recovered','finished'].includes(state)) return;
-  const seconds = Number($('seconds').value);
+  const seconds = Number($('seconds').value), overlapMs = Number($('overlap').value);
   if (!Number.isFinite(seconds) || seconds < 2 || seconds > 120) throw new Error('Elegí entre 2 y 120 segundos.');
+  if (!Number.isFinite(overlapMs) || overlapMs < 0 || overlapMs > 5000 || overlapMs >= seconds*500) throw new Error('El solape debe ser entre 0 y 5000 ms y menor que la mitad del archivo.');
   if (segments.length && !confirm('Una nueva prueba reemplaza los archivos guardados en este navegador. Descargalos antes si querés conservarlos. ¿Empezar otra prueba?')) return;
-  stopPlayback(); $('error').textContent = ''; state = 'starting'; controls();
+  clearZip(); $('error').textContent = ''; state = 'starting'; controls();
   try {
     // Pedir permiso antes de borrar una prueba anterior.
     const source = $('source').value;
@@ -297,8 +353,8 @@ async function start() {
     }
     await pending;
     await write(['segments','meta'], tx => { tx.objectStore('segments').clear(); tx.objectStore('meta').clear(); });
-    segments = []; buffers = []; analysis = null; events.length = 0; savedClockMs = 0; sourceIntervals = [];
-    run = {id:crypto.randomUUID(), startedAt:new Date().toISOString(), source, segmentSeconds:seconds,
+    segments = []; buffers = []; analysis = null; events.length = 0; savedClockMs = 0; sourceIntervals = []; transitions = [];
+    run = {id:crypto.randomUUID(), startedAt:new Date().toISOString(), source, segmentSeconds:seconds, overlapMs, timeOriginMs:performance.timeOrigin,
       requestedMimeType:formats()[0], nextIndex:1, strictDurability:true, userAgent:navigator.userAgent};
     if (source === 'synthetic') stream = await makeSynthetic();
     stream.getTracks().forEach(track => {
@@ -314,7 +370,7 @@ async function start() {
     },1000);
     await checkpoint(); renderFiles(); controls();
   } catch(error) {
-    if (active) await stopSegment('error').catch(fail);
+    await stopAll('error').catch(fail);
     stream?.getTracks().forEach(track => track.stop());
     if (context && context.state !== 'closed') await context.close();
     context = null; syntheticGraph = []; activeSince = null; state = 'idle'; controls(); throw error;
@@ -324,7 +380,7 @@ async function togglePause() {
   $('pause').disabled = true;
   if (state === 'recording') {
     savedClockMs = clockMs(); activeSince = null; state = 'pausing'; controls();
-    const completion = stopSegment('pause');
+    const completion = stopAll('pause');
     if (context) pauseSynthetic();
     await completion; state = 'paused';
     log('pause'); $('status').textContent = 'En pausa. El último archivo quedó guardado.';
@@ -339,7 +395,7 @@ async function togglePause() {
 async function finish() {
   if (!['recording','paused'].includes(state)) return;
   savedClockMs = clockMs(); activeSince = null; state = 'stopping'; clearInterval(heartbeat); controls();
-  await stopSegment('finish');
+  await stopAll('finish');
   await pending;
   run.expectedBeeps = expectedBeeps();
   stream?.getTracks().forEach(track => track.stop());
@@ -376,6 +432,64 @@ function detectBeeps(audioBuffers) {
   }
   flush(); return beeps;
 }
+function boundaryMeasurements(audioBuffers, beeps) {
+  const boundaries = []; let boundarySec = 0;
+  for (let i = 0; i < audioBuffers.length-1; i++) {
+    boundarySec += audioBuffers[i].duration;
+    const before = [...beeps].reverse().find(b => b.onsetSec < boundarySec);
+    const after = beeps.find(b => b.onsetSec >= boundarySec);
+    const intervalMs = before && after ? (after.onsetSec-before.onsetSec)*1000 : null;
+    boundaries.push({from:segments[i].index,to:segments[i+1].index, atSec:round(boundarySec),
+      intervalMs:intervalMs === null ? null : round(intervalMs),
+      deviationMs:intervalMs === null ? null : round(intervalMs-1000),
+      exceeds40ms:intervalMs === null ? null : Math.abs(round(intervalMs-1000))>40,
+      intentionalPause:segments[i].reason === 'pause'});
+  }
+  return boundaries;
+}
+function trimmedTimeline(audioBuffers) {
+  let coveredUntil = -Infinity;
+  return audioBuffers.map((buffer,i) => {
+    const segment = segments[i];
+    const requestedTrimSec = Math.max(0,(coveredUntil-segment.startWallMs)/1000);
+    const trimSamples = Math.min(buffer.length,Math.round(requestedTrimSec*buffer.sampleRate));
+    coveredUntil = Math.max(coveredUntil,segment.endWallMs);
+    const pcm = buffer.getChannelData(0).subarray(trimSamples);
+    return {index:segment.index, requestedTrimSec, trimSamples, trimSec:trimSamples/buffer.sampleRate,
+      length:pcm.length, sampleRate:buffer.sampleRate, duration:pcm.length/buffer.sampleRate,getChannelData:() => pcm};
+  });
+}
+// La señal de 1 Hz no distingue segundos enteros por sí sola. Proyectar cada pitido sobre
+// el reloj conocido de la fuente permite contar repeticiones y ubicar su región de origen.
+// Esta proyección es evidencia de esta fuente controlada, no un alineador para voz en iPhone.
+function identifyBeeps(audioBuffers) {
+  const occurrences = new Map();
+  const perSegment = audioBuffers.map((buffer,i) => {
+    const segment = segments[i], detected = detectBeeps([buffer]);
+    const projected = detected.map(beep => {
+      const estimatedSourceSec = segment.sourceStart+beep.onsetSec;
+      const id = Math.round(estimatedSourceSec-0.5);
+      const value = {id,segment:segment.index,onsetSec:beep.onsetSec,estimatedSourceSec,
+        alignmentErrorMs:round((estimatedSourceSec-(id+0.5))*1000)};
+      if (!occurrences.has(id)) occurrences.set(id,[]);
+      occurrences.get(id).push(value); return value;
+    });
+    return {index:segment.index,found:detected.length,beeps:projected};
+  });
+  const duplicates = [...occurrences].filter(([,items]) => items.length>1).map(([id,items]) => {
+    const files = items.map(item => segments.find(s => s.index === item.segment));
+    const overlapStart = Math.max(...files.map(s => s.sourceStart));
+    const overlapEnd = Math.min(...files.map(s => s.sourceEnd));
+    return {id,segments:items.map(item => item.segment),overlapStart,overlapEnd,
+      withinOverlap:overlapEnd>overlapStart && id+0.58>overlapStart && id+0.5<overlapEnd};
+  });
+  const expectedIds = new Set();
+  for (const segment of segments) for (let id=Math.max(0,Math.ceil(segment.sourceStart-.5));id+.5<segment.sourceEnd;id++) expectedIds.add(id);
+  return {method:'ID aproximado por reloj Web Audio + inicio decodificado; revisar alignmentErrorMs',perSegment,duplicates,
+    duplicatesOutsideOverlap:duplicates.filter(d => !d.withinOverlap),uniqueFound:occurrences.size,
+    missingIds:[...expectedIds].filter(id => !occurrences.has(id)),
+    unexpectedIds:[...occurrences.keys()].filter(id => !expectedIds.has(id))};
+}
 async function analyze() {
   const oldState = state; state = 'analyzing'; controls(); buffers = [];
   const decoder = new AC(); const results = [];
@@ -393,18 +507,10 @@ async function analyze() {
     }
     const allDecodable = buffers.every(Boolean);
     const beeps = run?.source === 'synthetic' && allDecodable ? detectBeeps(buffers) : [];
-    const boundaries = []; let boundarySec = 0;
-    if (allDecodable) for (let i = 0; i < buffers.length-1; i++) {
-      boundarySec += buffers[i].duration;
-      const before = [...beeps].reverse().find(b => b.onsetSec < boundarySec);
-      const after = beeps.find(b => b.onsetSec >= boundarySec);
-      const intervalMs = before && after ? (after.onsetSec-before.onsetSec)*1000 : null;
-      boundaries.push({from:segments[i].index,to:segments[i+1].index, atSec:round(boundarySec),
-        intervalMs:intervalMs === null ? null : round(intervalMs),
-        deviationMs:intervalMs === null ? null : round(intervalMs-1000),
-        exceeds40ms:intervalMs === null ? null : Math.abs(round(intervalMs-1000))>40,
-        intentionalPause:segments[i].reason === 'pause'});
-    }
+    const boundaries = allDecodable ? boundaryMeasurements(buffers,beeps) : [];
+    const trimmed = allDecodable ? trimmedTimeline(buffers) : [];
+    const trimmedBeeps = run?.source === 'synthetic' && allDecodable ? detectBeeps(trimmed) : [];
+    const trimmedDuration = trimmed.reduce((n,b) => n+b.duration,0);
     // Tras recarga, usar el último conteo observado; no recalcularlo sólo desde los archivos salvados.
     const expected = run?.recovered ? run.expectedBeeps : expectedBeeps();
     const total = results.reduce((n,r) => n+(r.durationSec || 0),0);
@@ -415,9 +521,16 @@ async function analyze() {
       sourceRenderedSec:run?.recovered ? run.sourceRenderedSec : sourceRenderedSec(),
       expectedBeepsByAudioClock:run?.recovered ? run.expectedBeepsByAudioClock : expectedBeepsByAudioClock(),
       expectedBeeps:expected, foundBeeps:run?.source === 'synthetic' && allDecodable ? beeps.length : null,
-      allDecodable, segments:results, boundaries, beeps};
+      allDecodable, segments:results, boundaries, beeps,
+      identityCheck:run?.source === 'synthetic' && allDecodable ? identifyBeeps(buffers) : null,
+      trimmed:{method:'Conservar el viejo; recortar el inicio del nuevo según solape de llamadas performance.now; no compensa latencia del codec',
+        decodedDurationSec:round(trimmedDuration,6),decodedMinusWallMs:round(trimmedDuration*1000-savedClockMs),
+        foundBeeps:run?.source === 'synthetic' && allDecodable ? trimmedBeeps.length : null,
+        segments:trimmed.map(({getChannelData,...meta}) => meta),
+        boundaries:allDecodable ? boundaryMeasurements(trimmed,trimmedBeeps) : [],beeps:trimmedBeeps}};
     renderAnalysis(); renderFiles();
   } finally { await decoder.close(); state = oldState; controls(); }
+  await prepareZip(); controls();
   return analysis;
 }
 function renderAnalysis() {
@@ -426,18 +539,19 @@ function renderAnalysis() {
   $('summary').replaceChildren();
   const lines = [
     `${segments.length} archivos · ${a.allDecodable ? 'todos decodificables' : 'hay archivos que no se pueden decodificar'}`,
-    `Audio decodificado: ${format(a.decodedDurationSec)} s · reloj grabado: ${format(a.wallRecordedMs/1000)} s · diferencia: ${format(a.decodedMinusWallMs)} ms`,
+    `Audio bruto decodificado (incluye repeticiones del solape): ${format(a.decodedDurationSec)} s · reloj grabado: ${format(a.wallRecordedMs/1000)} s · diferencia: ${format(a.decodedMinusWallMs)} ms`,
+    `Con recorte nominal del solape: ${format(a.trimmed.decodedDurationSec)} s · diferencia con reloj: ${format(a.trimmed.decodedMinusWallMs)} ms`,
     `Reloj de los archivos guardados: ${format(a.savedSegmentsWallMs/1000)} s · IndexedDB: durability strict.`
   ];
   if (a.source === 'synthetic') {
-    lines.push(`Pitidos esperados por reloj: ${a.expectedBeeps ?? 'sin dato'} · encontrados: ${a.foundBeeps ?? 'no se pudo medir'}`);
+    lines.push(`Pitidos esperados por reloj: ${a.expectedBeeps ?? 'sin dato'} · encontrados brutos: ${a.foundBeeps ?? 'no se pudo medir'} · después de recortar: ${a.trimmed.foundBeeps ?? 'no medible'}`);
     lines.push(`Reloj de la fuente: ${format(a.sourceRenderedSec)} s · pitidos según ese reloj: ${a.expectedBeepsByAudioClock}. Si la fuente se frena, su reloj también lo revela.`);
   }
   else lines.push('Sin señal sintética no se puede medir un hueco en cada frontera: las duraciones por sí solas no lo localizan.');
   if (a.expectedCountIsLowerBound) lines.push('Recuperación: reloj y pitidos esperados provienen del último guardado de diagnóstico; son una cota inferior, con aproximadamente 1 s de resolución en primer plano.');
   for (const line of lines) { const p = document.createElement('p'); p.textContent = line; $('summary').append(p); }
   $('boundaries').replaceChildren();
-  for (const boundary of a.boundaries) {
+  for (const boundary of a.trimmed.boundaries) {
     const tr = document.createElement('tr');
     const values = [`${boundary.from} → ${boundary.to}${boundary.intentionalPause ? ' (pausa)' : ''}`,
       boundary.intervalMs === null ? 'No medible' : `${format(boundary.intervalMs)} ms`,
@@ -454,6 +568,7 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url),60000);
 }
 function renderFiles() {
+  fileUrls.splice(0).forEach(url => URL.revokeObjectURL(url));
   $('files').replaceChildren();
   segments.forEach((segment,i) => {
     const tr = document.createElement('tr');
@@ -461,30 +576,41 @@ function renderFiles() {
     const values = [segment.index,`${format(segment.bytes/1024,1)} KiB`,segment.mimeType,new Date(segment.createdAt).toLocaleTimeString(),
       `${format(segment.wallDurationMs/1000)} s`,result ? result.decodable ? `${format(result.durationSec)} s` : 'No decodifica' : 'Pendiente'];
     for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
-    const td = document.createElement('td'), button = document.createElement('button');
+    const td = document.createElement('td'), button = document.createElement('a');
     button.className = 'secondary'; button.textContent = 'Descargar'; button.setAttribute('aria-label',`Descargar archivo ${segment.index}`);
-    button.onclick = () => download(segment.blob,filename(segment)); td.append(button); tr.append(td); $('files').append(tr);
+    const url = URL.createObjectURL(segment.blob); fileUrls.push(url);
+    button.href = url; button.download = filename(segment); td.append(button); tr.append(td); $('files').append(tr);
   });
 }
-function stopPlayback() {
-  clearTimeout(playTimer); playbackNodes.forEach(node => { try { node.stop(); } catch {} }); playbackNodes = [];
-  if (playback) void playback.close(); playback = null; $('stopPlay').disabled = true;
-}
-async function playAll() {
-  stopPlayback(); playback = new AC(); await playback.resume();
-  let time = playback.currentTime + 0.15; const starts = [];
-  for (const buffer of buffers) {
-    const node = playback.createBufferSource(); node.buffer = buffer; node.connect(playback.destination);
-    node.start(time); starts.push({start:time,duration:buffer.duration}); time += buffer.duration; playbackNodes.push(node);
-  }
-  log('playback-scheduled', {files:buffers.length, starts});
-  $('stopPlay').disabled = false; $('playStatus').textContent = `Reproduciendo ${buffers.length} archivos, programados sin separación añadida.`;
-  playTimer = setTimeout(() => { stopPlayback(); $('playStatus').textContent = 'Reproducción terminada.'; }, (time-playback.currentTime)*1000+100);
-  return starts;
-}
 function diagnostic() {
-  return {version:1, protocol:'MediaRecorder nuevo por archivo; no timeslice; 64 kbps solicitados',
-    run:run?.recovered ? run : snapshot(), analysis, events, environment:{userAgent:navigator.userAgent,secureContext:isSecureContext,supportedMimes:formats()}};
+  const saved = new Map(segments.map(segment => [segment.index,segment]));
+  return {version:2, protocol:'MediaRecorder independiente; dos instancias sobre el mismo stream durante el solape; sin timeslice; 64 kbps solicitados',
+    timing:{clock:'performance.now()',timeOriginMs:run?.timeOriginMs ?? null,
+      precision:'Valores sin redondear; resolución limitada por el navegador. Llamadas y eventos NO son tiempos del primer/último sample ni compensan AAC/Opus.',
+      trimPolicy:'Conservar el archivo viejo completo; recortar del inicio del nuevo max(0, oldStopCallMs-newStartCallMs). Validar por audio decodificado.',
+      segments:segments.map(timing),boundaries:transitions.map(boundary => {
+        const old = saved.get(boundary.from), next = saved.get(boundary.to);
+        return {...boundary,oldSaved:!!old,newSaved:!!next,newStartEventMs:next?.startEventMs ?? null,
+          oldStopEventMs:old?.stopEventMs ?? null,
+          actualOverlapMs:old && next ? old.endWallMs-next.startWallMs : boundary.actualOverlapMs};
+      })},
+    run:run?.recovered ? run : snapshot(), analysis, events,
+    environment:{userAgent:navigator.userAgent,secureContext:isSecureContext,supportedMimes:formats(),webShareFiles:!!navigator.canShare}};
+}
+function clearZip() {
+  zipFile = null;
+  if (zipUrl) URL.revokeObjectURL(zipUrl);
+  zipUrl = null; $('zipLink').hidden = true; $('zipLink').removeAttribute('href');
+}
+async function prepareZip() {
+  clearZip();
+  if (!segments.length) return;
+  $('downloadStatus').textContent = 'Preparando el ZIP con los audios originales y diagnostico.json…';
+  const blob = await zipAll();
+  zipFile = new File([blob],`prueba-audio-${run.id.slice(0,8)}.zip`,{type:'application/zip'});
+  zipUrl = URL.createObjectURL(zipFile);
+  $('zipLink').href = zipUrl; $('zipLink').download = zipFile.name; $('zipLink').hidden = false;
+  $('downloadStatus').textContent = 'ZIP listo. Tocá Descargar conjunto. En iPhone también podés tocar Compartir / guardar en Archivos y elegir Guardar en Archivos. Si se abre una vista previa, usá su botón Compartir.';
 }
 // ZIP sin compresión (STORE), escrito aquí para mantener el HTML autocontenido.
 function crc32(bytes) {
@@ -509,18 +635,26 @@ async function zipAll() {
   const size = central.reduce((n,x) => n+x.length,0), end = new Uint8Array(22), e = new DataView(end.buffer);
   e.setUint32(0,0x06054b50,true); e.setUint16(8,entries.length,true); e.setUint16(10,entries.length,true);
   e.setUint32(12,size,true); e.setUint32(16,offset,true);
-  download(new Blob([...local,...central,end], {type:'application/zip'}),`prueba-audio-${run.id.slice(0,8)}.zip`);
+  return new Blob([...local,...central,end], {type:'application/zip'});
 }
-for (const [id,action] of Object.entries({record:start,pause:togglePause,finish,analyze,play:playAll,zip:zipAll})) {
+for (const [id,action] of Object.entries({record:start,pause:togglePause,finish,analyze})) {
   $(id).onclick = () => void Promise.resolve().then(action).catch(fail);
 }
-$('stopPlay').onclick = stopPlayback;
+// No await, promesas ni construcción del ZIP antes de abrir la descarga/hoja nativa.
+// El gesto de la usuaria llega directamente al navegador, también en Safari iOS.
+$('zip').onclick = () => { if (zipFile) $('zipLink').click(); };
+$('share').onclick = () => {
+  if (!zipFile) return;
+  navigator.share({files:[zipFile],title:'Prueba de audio por segmentos'}).catch(error => {
+    if (error.name !== 'AbortError') fail(new Error('No se pudo compartir. Usá Descargar conjunto o el enlace directo al ZIP.'));
+  });
+};
 $('report').onclick = () => download(new Blob([JSON.stringify(diagnostic(),null,2)],{type:'application/json'}),'diagnostico-audio.json');
 $('codec').onchange = refreshMime;
 document.addEventListener('visibilitychange', () => { log('visibility', {state:document.visibilityState, audioTime:context?.currentTime}); if (state === 'recording') void checkpoint().catch(fail); });
 window.addEventListener('pagehide', () => log('pagehide'));
 // Superficie de lectura para el arnés. Los controles de grabación se accionan por la interfaz.
-window.prueba = {get state(){return state;}, snapshot, diagnostic, detectBeeps, playAll,
+window.prueba = {get state(){return state;}, snapshot, diagnostic, detectBeeps,
   get segments(){return segments.map(({blob,...meta}) => meta);}};
 refreshMime(); openDatabase().catch(error => { state = 'error'; fail(error); controls(); });
 </script>

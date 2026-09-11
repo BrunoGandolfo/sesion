@@ -1,0 +1,2695 @@
+{
+  "browser": "chromium",
+  "scenario": "continua",
+  "startedAt": "2026-09-11T18:04:50.158Z",
+  "durationSeconds": 125,
+  "segmentSeconds": 60,
+  "overlapMs": 1000,
+  "playwrightVersion": "1.63.0",
+  "browserVersion": "153.0.8010.12",
+  "os": "linux 6.18.33.2-microsoft-standard-WSL2",
+  "sourceSha256": "d0da8ad2682a83d1413dc92f6c37fd48cfd31c9301f9d70a1d83b47e16271b2c",
+  "headless": false,
+  "launchMode": "Chrome nativo + CDP noDefaults:true",
+  "errors": [],
+  "audioOutput": "PulseAudio privado, null sink, 48000 Hz",
+  "internalTimesliceMs": null,
+  "variant": {
+    "forcedMimeType": null,
+    "sourceSampleRate": null,
+    "sourceChannels": null
+  },
+  "preflight": {
+    "mediaRecorder": "function",
+    "audioContext": "function",
+    "visibility": "visible",
+    "error": "",
+    "strictStorageReady": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+    "secureContext": true,
+    "supportedMimes": [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4"
+    ],
+    "webShareFiles": false
+  },
+  "calibration": [
+    {
+      "insertedMs": -80,
+      "expectedIntervalMs": 920,
+      "actualIntervalMs": 919.9999999999999,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": -40,
+      "expectedIntervalMs": 960,
+      "actualIntervalMs": 960,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 0,
+      "expectedIntervalMs": 1000,
+      "actualIntervalMs": 1000,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 40,
+      "expectedIntervalMs": 1040,
+      "actualIntervalMs": 1040,
+      "found": 4,
+      "passed": true
+    },
+    {
+      "insertedMs": 80,
+      "expectedIntervalMs": 1080,
+      "actualIntervalMs": 1080,
+      "found": 4,
+      "passed": true
+    }
+  ],
+  "finishedAt": "2026-09-11T18:06:48.352Z",
+  "elapsedWindowMs": 125734.228457,
+  "diagnostic": {
+    "version": 2,
+    "protocol": "MediaRecorder independiente; dos instancias sobre el mismo stream durante el solape; sin timeslice; 64 kbps solicitados",
+    "timing": {
+      "clock": "performance.now()",
+      "timeOriginMs": 1789149890197.1,
+      "precision": "Valores sin redondear; resolución limitada por el navegador. Llamadas y eventos NO son tiempos del primer/último sample ni compensan AAC/Opus.",
+      "trimPolicy": "Conservar el archivo viejo completo; recortar del inicio del nuevo max(0, oldStopCallMs-newStartCallMs). Validar por audio decodificado.",
+      "segments": [
+        {
+          "index": 1,
+          "createdAt": "2026-09-11T18:04:51.854Z",
+          "mimeType": "audio/webm;codecs=opus",
+          "startWallMs": 1657.1000000000931,
+          "startReturnedMs": 1657.2000000001863,
+          "startEventMs": 1729.7000000001863,
+          "startEventTimestampMs": 1729.7000000001863,
+          "endWallMs": 61657,
+          "stopReturnedMs": 61657.89999999991,
+          "stopEventMs": 61658.200000000186,
+          "stopEventTimestampMs": 61657.89999999991,
+          "sourceStart": 0,
+          "sourceEnd": 60.00036281179138,
+          "reason": "rotation",
+          "trackIds": [
+            "4e3c3bf0-5d18-4b04-a530-db61828053be"
+          ]
+        },
+        {
+          "index": 2,
+          "createdAt": "2026-09-11T18:05:46.236Z",
+          "mimeType": "audio/webm;codecs=opus",
+          "startWallMs": 60658.10000000009,
+          "startReturnedMs": 60658.200000000186,
+          "startEventMs": 60720.39999999991,
+          "startEventTimestampMs": 60720.39999999991,
+          "endWallMs": 120659.3999999999,
+          "stopReturnedMs": 120660.29999999981,
+          "stopEventMs": 120660.5,
+          "stopEventTimestampMs": 120660.29999999981,
+          "sourceStart": 59.00190476190476,
+          "sourceEnd": 119.01387755102041,
+          "reason": "rotation",
+          "trackIds": [
+            "4e3c3bf0-5d18-4b04-a530-db61828053be"
+          ]
+        },
+        {
+          "index": 3,
+          "createdAt": "2026-09-11T18:06:40.618Z",
+          "mimeType": "audio/webm;codecs=opus",
+          "startWallMs": 119658.70000000019,
+          "startReturnedMs": 119658.79999999981,
+          "startEventMs": 119716.70000000019,
+          "startEventTimestampMs": 119716.70000000019,
+          "endWallMs": 126683.70000000019,
+          "stopReturnedMs": 126684.20000000019,
+          "stopEventMs": 126695.70000000019,
+          "stopEventTimestampMs": 126684.20000000019,
+          "sourceStart": 118.01541950113379,
+          "sourceEnd": 125.03945578231293,
+          "reason": "finish",
+          "trackIds": [
+            "4e3c3bf0-5d18-4b04-a530-db61828053be"
+          ]
+        }
+      ],
+      "boundaries": [
+        {
+          "from": 1,
+          "to": 2,
+          "requestedOverlapMs": 1000,
+          "plannedOldStopMs": 61657.10000000009,
+          "newStartCallMs": 60658.10000000009,
+          "oldStopCallMs": 61657,
+          "actualOverlapMs": 998.8999999999069,
+          "oldSaved": true,
+          "newSaved": true,
+          "newStartEventMs": 60720.39999999991,
+          "oldStopEventMs": 61658.200000000186
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "requestedOverlapMs": 1000,
+          "plannedOldStopMs": 120658.1000000001,
+          "newStartCallMs": 119658.70000000019,
+          "oldStopCallMs": 120659.3999999999,
+          "actualOverlapMs": 1000.6999999997206,
+          "oldSaved": true,
+          "newSaved": true,
+          "newStartEventMs": 119716.70000000019,
+          "oldStopEventMs": 120660.5
+        }
+      ]
+    },
+    "run": {
+      "id": "f0e5b8bd-1e5e-4df1-a5fe-b0823a0e43f6",
+      "startedAt": "2026-09-11T18:04:50.398Z",
+      "source": "synthetic",
+      "segmentSeconds": 60,
+      "overlapMs": 1000,
+      "timeOriginMs": 1789149890197.1,
+      "requestedMimeType": "audio/webm;codecs=opus",
+      "nextIndex": 4,
+      "strictDurability": true,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "sampleRate": 44100,
+      "expectedBeeps": 125,
+      "status": "finished",
+      "wallRecordedMs": 125026.8,
+      "expectedBeepsByAudioClock": 125,
+      "sourceRenderedSec": 125.03945578231293,
+      "observedAt": "2026-09-11T18:06:48.355Z",
+      "events": [
+        {
+          "at": "2026-09-11T18:04:50.440Z",
+          "wallMs": 243,
+          "type": "audio-context",
+          "state": "running",
+          "audioTime": 0
+        },
+        {
+          "at": "2026-09-11T18:04:51.850Z",
+          "wallMs": 1410.7000000001863,
+          "type": "source-warmup"
+        },
+        {
+          "at": "2026-09-11T18:04:51.854Z",
+          "wallMs": 1657.3,
+          "type": "segment-start",
+          "index": 1,
+          "timeMs": 1657.1000000000931,
+          "sourceTime": 0,
+          "mimeType": "audio/webm;codecs=opus",
+          "simultaneousRecorders": 1,
+          "trackIds": [
+            "4e3c3bf0-5d18-4b04-a530-db61828053be"
+          ]
+        },
+        {
+          "at": "2026-09-11T18:04:51.926Z",
+          "wallMs": 1729.7,
+          "type": "recorder-start-event",
+          "index": 1,
+          "timeMs": 1729.7000000001863
+        },
+        {
+          "at": "2026-09-11T18:05:46.236Z",
+          "wallMs": 60658.3,
+          "type": "segment-start",
+          "index": 2,
+          "timeMs": 60658.10000000009,
+          "sourceTime": 59.00190476190476,
+          "mimeType": "audio/webm;codecs=opus",
+          "simultaneousRecorders": 2,
+          "trackIds": [
+            "4e3c3bf0-5d18-4b04-a530-db61828053be"
+          ]
+        },
+        {
+          "at": "2026-09-11T18:05:46.236Z",
+          "wallMs": 60658.4,
+          "type": "rotation",
+          "from": 1,
+          "to": 2,
+          "requestedOverlapMs": 1000,
+          "plannedOldStopMs": 61657.10000000009,
+          "newStartCallMs": 60658.10000000009,
+          "oldStopCallMs": null,
+          "actualOverlapMs": null
+        },
+        {
+          "at": "2026-09-11T18:05:46.298Z",
+          "wallMs": 60720.4,
+          "type": "recorder-start-event",
+          "index": 2,
+          "timeMs": 60720.39999999991
+        },
+        {
+          "at": "2026-09-11T18:05:47.236Z",
+          "wallMs": 61658,
+          "type": "segment-stop",
+          "index": 1,
+          "timeMs": 61657,
+          "reason": "rotation",
+          "rotationLateMs": -0.1,
+          "simultaneousRecorders": 1
+        },
+        {
+          "at": "2026-09-11T18:05:47.250Z",
+          "wallMs": 61671.5,
+          "type": "saved",
+          "index": 1,
+          "bytes": 61727,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-11T18:06:40.618Z",
+          "wallMs": 119658.8,
+          "type": "segment-start",
+          "index": 3,
+          "timeMs": 119658.70000000019,
+          "sourceTime": 118.01541950113379,
+          "mimeType": "audio/webm;codecs=opus",
+          "simultaneousRecorders": 2,
+          "trackIds": [
+            "4e3c3bf0-5d18-4b04-a530-db61828053be"
+          ]
+        },
+        {
+          "at": "2026-09-11T18:06:40.619Z",
+          "wallMs": 119658.9,
+          "type": "rotation",
+          "from": 2,
+          "to": 3,
+          "requestedOverlapMs": 1000,
+          "plannedOldStopMs": 120658.1000000001,
+          "newStartCallMs": 119658.70000000019,
+          "oldStopCallMs": null,
+          "actualOverlapMs": null
+        },
+        {
+          "at": "2026-09-11T18:06:40.676Z",
+          "wallMs": 119716.7,
+          "type": "recorder-start-event",
+          "index": 3,
+          "timeMs": 119716.70000000019
+        },
+        {
+          "at": "2026-09-11T18:06:41.620Z",
+          "wallMs": 120660.3,
+          "type": "segment-stop",
+          "index": 2,
+          "timeMs": 120659.3999999999,
+          "reason": "rotation",
+          "rotationLateMs": 1.3,
+          "simultaneousRecorders": 1
+        },
+        {
+          "at": "2026-09-11T18:06:41.637Z",
+          "wallMs": 120677.9,
+          "type": "saved",
+          "index": 2,
+          "bytes": 69754,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-11T18:06:47.644Z",
+          "wallMs": 126684.2,
+          "type": "segment-stop",
+          "index": 3,
+          "timeMs": 126683.70000000019,
+          "reason": "finish",
+          "rotationLateMs": 0,
+          "simultaneousRecorders": 0
+        },
+        {
+          "at": "2026-09-11T18:06:47.659Z",
+          "wallMs": 126699.4,
+          "type": "saved",
+          "index": 3,
+          "bytes": 10138,
+          "mimeType": "audio/webm;codecs=opus",
+          "durability": "strict"
+        },
+        {
+          "at": "2026-09-11T18:06:47.661Z",
+          "wallMs": 126701,
+          "type": "finish"
+        },
+        {
+          "at": "2026-09-11T18:06:47.661Z",
+          "wallMs": 126701.3,
+          "type": "audio-context",
+          "state": "closed",
+          "audioTime": 125.16716553287982
+        }
+      ],
+      "sourceIntervals": [
+        [
+          0,
+          60.00036281179138
+        ],
+        [
+          59.00190476190476,
+          119.01387755102041
+        ],
+        [
+          118.01541950113379,
+          125.03945578231293
+        ]
+      ],
+      "transitions": [
+        {
+          "from": 1,
+          "to": 2,
+          "requestedOverlapMs": 1000,
+          "plannedOldStopMs": 61657.10000000009,
+          "newStartCallMs": 60658.10000000009,
+          "oldStopCallMs": 61657,
+          "actualOverlapMs": 998.8999999999069
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "requestedOverlapMs": 1000,
+          "plannedOldStopMs": 120658.1000000001,
+          "newStartCallMs": 119658.70000000019,
+          "oldStopCallMs": 120659.3999999999,
+          "actualOverlapMs": 1000.6999999997206
+        }
+      ],
+      "liveSegments": [],
+      "segmentCount": 3,
+      "audioContextState": null,
+      "visibility": "visible"
+    },
+    "analysis": {
+      "source": "synthetic",
+      "recovered": false,
+      "interrupted": false,
+      "expectedCountIsLowerBound": false,
+      "wallRecordedMs": 125026.8,
+      "savedSegmentsWallMs": 127026.2,
+      "decodedDurationSec": 127.019955,
+      "decodedMinusWallMs": 1993.155,
+      "sourceRenderedSec": 125.03945578231293,
+      "expectedBeepsByAudioClock": 125,
+      "expectedBeeps": 125,
+      "foundBeeps": 127,
+      "allDecodable": true,
+      "segments": [
+        {
+          "index": 1,
+          "decodable": true,
+          "bytes": 61727,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 59.999977324263035,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 59999.9,
+          "rotationLateMs": -0.1,
+          "reason": "rotation"
+        },
+        {
+          "index": 2,
+          "decodable": true,
+          "bytes": 69754,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 59.999977324263035,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 60001.3,
+          "rotationLateMs": 1.3,
+          "reason": "rotation"
+        },
+        {
+          "index": 3,
+          "decodable": true,
+          "bytes": 10138,
+          "mimeType": "audio/webm;codecs=opus",
+          "durationSec": 7.02,
+          "sampleRate": 44100,
+          "channels": 2,
+          "wallDurationMs": 7025,
+          "rotationLateMs": 0,
+          "reason": "finish"
+        }
+      ],
+      "boundaries": [
+        {
+          "from": 1,
+          "to": 2,
+          "atSec": 60,
+          "intervalMs": 1000.726,
+          "deviationMs": 0.726,
+          "exceeds40ms": false,
+          "intentionalPause": false
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "atSec": 120,
+          "intervalMs": 989.751,
+          "deviationMs": -10.249,
+          "exceeds40ms": false,
+          "intentionalPause": false
+        }
+      ],
+      "beeps": [
+        {
+          "onsetSec": 0.5078458049886622,
+          "endSec": 0.5866666666666667
+        },
+        {
+          "onsetSec": 1.5075736961451247,
+          "endSec": 1.5863945578231293
+        },
+        {
+          "onsetSec": 2.5082993197278913,
+          "endSec": 2.5861224489795918
+        },
+        {
+          "onsetSec": 3.5080272108843538,
+          "endSec": 3.586848072562358
+        },
+        {
+          "onsetSec": 4.507755102040816,
+          "endSec": 4.586575963718821
+        },
+        {
+          "onsetSec": 5.508480725623583,
+          "endSec": 5.5863038548752835
+        },
+        {
+          "onsetSec": 6.5082086167800455,
+          "endSec": 6.586031746031746
+        },
+        {
+          "onsetSec": 7.507936507936508,
+          "endSec": 7.586757369614513
+        },
+        {
+          "onsetSec": 8.50766439909297,
+          "endSec": 8.586485260770974
+        },
+        {
+          "onsetSec": 9.508390022675737,
+          "endSec": 9.586213151927439
+        },
+        {
+          "onsetSec": 10.5081179138322,
+          "endSec": 10.585941043083901
+        },
+        {
+          "onsetSec": 11.507845804988662,
+          "endSec": 11.586666666666666
+        },
+        {
+          "onsetSec": 12.507573696145124,
+          "endSec": 12.586394557823128
+        },
+        {
+          "onsetSec": 13.508299319727891,
+          "endSec": 13.586122448979593
+        },
+        {
+          "onsetSec": 14.508027210884354,
+          "endSec": 14.586848072562358
+        },
+        {
+          "onsetSec": 15.507755102040816,
+          "endSec": 15.58657596371882
+        },
+        {
+          "onsetSec": 16.50848072562358,
+          "endSec": 16.586303854875283
+        },
+        {
+          "onsetSec": 17.508208616780045,
+          "endSec": 17.586031746031747
+        },
+        {
+          "onsetSec": 18.50793650793651,
+          "endSec": 18.586757369614514
+        },
+        {
+          "onsetSec": 19.50766439909297,
+          "endSec": 19.586485260770974
+        },
+        {
+          "onsetSec": 20.508390022675737,
+          "endSec": 20.58621315192744
+        },
+        {
+          "onsetSec": 21.508117913832198,
+          "endSec": 21.5859410430839
+        },
+        {
+          "onsetSec": 22.507845804988662,
+          "endSec": 22.586666666666666
+        },
+        {
+          "onsetSec": 23.507573696145126,
+          "endSec": 23.58639455782313
+        },
+        {
+          "onsetSec": 24.50829931972789,
+          "endSec": 24.58612244897959
+        },
+        {
+          "onsetSec": 25.508027210884354,
+          "endSec": 25.586848072562358
+        },
+        {
+          "onsetSec": 26.507755102040818,
+          "endSec": 26.586575963718822
+        },
+        {
+          "onsetSec": 27.50848072562358,
+          "endSec": 27.586303854875283
+        },
+        {
+          "onsetSec": 28.508208616780045,
+          "endSec": 28.586031746031747
+        },
+        {
+          "onsetSec": 29.50793650793651,
+          "endSec": 29.586757369614514
+        },
+        {
+          "onsetSec": 30.50766439909297,
+          "endSec": 30.586485260770974
+        },
+        {
+          "onsetSec": 31.508390022675737,
+          "endSec": 31.58621315192744
+        },
+        {
+          "onsetSec": 32.5081179138322,
+          "endSec": 32.5859410430839
+        },
+        {
+          "onsetSec": 33.50784580498866,
+          "endSec": 33.586666666666666
+        },
+        {
+          "onsetSec": 34.50757369614512,
+          "endSec": 34.58639455782313
+        },
+        {
+          "onsetSec": 35.50829931972789,
+          "endSec": 35.586122448979594
+        },
+        {
+          "onsetSec": 36.50802721088435,
+          "endSec": 36.58684807256236
+        },
+        {
+          "onsetSec": 37.50775510204082,
+          "endSec": 37.58657596371882
+        },
+        {
+          "onsetSec": 38.508480725623585,
+          "endSec": 38.58630385487528
+        },
+        {
+          "onsetSec": 39.508208616780045,
+          "endSec": 39.58603174603174
+        },
+        {
+          "onsetSec": 40.507936507936506,
+          "endSec": 40.58675736961451
+        },
+        {
+          "onsetSec": 41.507664399092974,
+          "endSec": 41.58648526077098
+        },
+        {
+          "onsetSec": 42.508390022675734,
+          "endSec": 42.58621315192744
+        },
+        {
+          "onsetSec": 43.5081179138322,
+          "endSec": 43.5859410430839
+        },
+        {
+          "onsetSec": 44.50784580498866,
+          "endSec": 44.586666666666666
+        },
+        {
+          "onsetSec": 45.50757369614512,
+          "endSec": 45.58639455782313
+        },
+        {
+          "onsetSec": 46.50829931972789,
+          "endSec": 46.586122448979594
+        },
+        {
+          "onsetSec": 47.50802721088435,
+          "endSec": 47.58684807256236
+        },
+        {
+          "onsetSec": 48.50775510204082,
+          "endSec": 48.58657596371882
+        },
+        {
+          "onsetSec": 49.508480725623585,
+          "endSec": 49.58630385487528
+        },
+        {
+          "onsetSec": 50.508208616780045,
+          "endSec": 50.58603174603174
+        },
+        {
+          "onsetSec": 51.507936507936506,
+          "endSec": 51.58675736961451
+        },
+        {
+          "onsetSec": 52.507664399092974,
+          "endSec": 52.58648526077098
+        },
+        {
+          "onsetSec": 53.508390022675734,
+          "endSec": 53.58621315192744
+        },
+        {
+          "onsetSec": 54.5081179138322,
+          "endSec": 54.5859410430839
+        },
+        {
+          "onsetSec": 55.50784580498866,
+          "endSec": 55.586666666666666
+        },
+        {
+          "onsetSec": 56.50757369614512,
+          "endSec": 56.58639455782313
+        },
+        {
+          "onsetSec": 57.50829931972789,
+          "endSec": 57.586122448979594
+        },
+        {
+          "onsetSec": 58.50802721088435,
+          "endSec": 58.58684807256236
+        },
+        {
+          "onsetSec": 59.50775510204082,
+          "endSec": 59.58657596371882
+        },
+        {
+          "onsetSec": 60.508480725623585,
+          "endSec": 60.58630385487528
+        },
+        {
+          "onsetSec": 61.508208616780045,
+          "endSec": 61.58603174603174
+        },
+        {
+          "onsetSec": 62.507936507936506,
+          "endSec": 62.58675736961451
+        },
+        {
+          "onsetSec": 63.507664399092974,
+          "endSec": 63.58648526077098
+        },
+        {
+          "onsetSec": 64.50839002267574,
+          "endSec": 64.58621315192744
+        },
+        {
+          "onsetSec": 65.5081179138322,
+          "endSec": 65.5859410430839
+        },
+        {
+          "onsetSec": 66.50784580498866,
+          "endSec": 66.58666666666667
+        },
+        {
+          "onsetSec": 67.50757369614513,
+          "endSec": 67.58639455782313
+        },
+        {
+          "onsetSec": 68.5082993197279,
+          "endSec": 68.5861224489796
+        },
+        {
+          "onsetSec": 69.50802721088435,
+          "endSec": 69.58684807256236
+        },
+        {
+          "onsetSec": 70.50775510204082,
+          "endSec": 70.58657596371881
+        },
+        {
+          "onsetSec": 71.50848072562358,
+          "endSec": 71.58630385487528
+        },
+        {
+          "onsetSec": 72.50820861678004,
+          "endSec": 72.58603174603175
+        },
+        {
+          "onsetSec": 73.5079365079365,
+          "endSec": 73.58675736961452
+        },
+        {
+          "onsetSec": 74.50766439909297,
+          "endSec": 74.58648526077097
+        },
+        {
+          "onsetSec": 75.50839002267574,
+          "endSec": 75.58621315192744
+        },
+        {
+          "onsetSec": 76.5081179138322,
+          "endSec": 76.5859410430839
+        },
+        {
+          "onsetSec": 77.50784580498866,
+          "endSec": 77.58666666666667
+        },
+        {
+          "onsetSec": 78.50757369614513,
+          "endSec": 78.58639455782313
+        },
+        {
+          "onsetSec": 79.5082993197279,
+          "endSec": 79.5861224489796
+        },
+        {
+          "onsetSec": 80.50802721088435,
+          "endSec": 80.58684807256236
+        },
+        {
+          "onsetSec": 81.50775510204082,
+          "endSec": 81.58657596371881
+        },
+        {
+          "onsetSec": 82.50848072562358,
+          "endSec": 82.58630385487528
+        },
+        {
+          "onsetSec": 83.50820861678004,
+          "endSec": 83.58603174603175
+        },
+        {
+          "onsetSec": 84.5079365079365,
+          "endSec": 84.58675736961452
+        },
+        {
+          "onsetSec": 85.50766439909297,
+          "endSec": 85.58648526077097
+        },
+        {
+          "onsetSec": 86.50839002267574,
+          "endSec": 86.58621315192744
+        },
+        {
+          "onsetSec": 87.5081179138322,
+          "endSec": 87.5859410430839
+        },
+        {
+          "onsetSec": 88.50784580498866,
+          "endSec": 88.58666666666667
+        },
+        {
+          "onsetSec": 89.50757369614513,
+          "endSec": 89.58639455782313
+        },
+        {
+          "onsetSec": 90.5082993197279,
+          "endSec": 90.5861224489796
+        },
+        {
+          "onsetSec": 91.50802721088435,
+          "endSec": 91.58684807256236
+        },
+        {
+          "onsetSec": 92.50775510204082,
+          "endSec": 92.58657596371881
+        },
+        {
+          "onsetSec": 93.50848072562358,
+          "endSec": 93.58630385487528
+        },
+        {
+          "onsetSec": 94.50820861678004,
+          "endSec": 94.58603174603175
+        },
+        {
+          "onsetSec": 95.5079365079365,
+          "endSec": 95.58675736961452
+        },
+        {
+          "onsetSec": 96.50766439909297,
+          "endSec": 96.58648526077097
+        },
+        {
+          "onsetSec": 97.50839002267574,
+          "endSec": 97.58621315192744
+        },
+        {
+          "onsetSec": 98.5081179138322,
+          "endSec": 98.5859410430839
+        },
+        {
+          "onsetSec": 99.50784580498866,
+          "endSec": 99.58666666666667
+        },
+        {
+          "onsetSec": 100.50757369614513,
+          "endSec": 100.58639455782313
+        },
+        {
+          "onsetSec": 101.5082993197279,
+          "endSec": 101.5861224489796
+        },
+        {
+          "onsetSec": 102.50802721088435,
+          "endSec": 102.58684807256236
+        },
+        {
+          "onsetSec": 103.50775510204082,
+          "endSec": 103.58657596371881
+        },
+        {
+          "onsetSec": 104.50848072562358,
+          "endSec": 104.58630385487528
+        },
+        {
+          "onsetSec": 105.50820861678004,
+          "endSec": 105.58603174603175
+        },
+        {
+          "onsetSec": 106.5079365079365,
+          "endSec": 106.58675736961452
+        },
+        {
+          "onsetSec": 107.50766439909297,
+          "endSec": 107.58648526077097
+        },
+        {
+          "onsetSec": 108.50839002267574,
+          "endSec": 108.58621315192744
+        },
+        {
+          "onsetSec": 109.5081179138322,
+          "endSec": 109.5859410430839
+        },
+        {
+          "onsetSec": 110.50784580498866,
+          "endSec": 110.58666666666667
+        },
+        {
+          "onsetSec": 111.50757369614513,
+          "endSec": 111.58639455782313
+        },
+        {
+          "onsetSec": 112.5082993197279,
+          "endSec": 112.5861224489796
+        },
+        {
+          "onsetSec": 113.50802721088435,
+          "endSec": 113.58684807256236
+        },
+        {
+          "onsetSec": 114.50775510204082,
+          "endSec": 114.58657596371881
+        },
+        {
+          "onsetSec": 115.50848072562358,
+          "endSec": 115.58630385487528
+        },
+        {
+          "onsetSec": 116.50820861678004,
+          "endSec": 116.58603174603175
+        },
+        {
+          "onsetSec": 117.5079365079365,
+          "endSec": 117.58675736961452
+        },
+        {
+          "onsetSec": 118.50766439909297,
+          "endSec": 118.58648526077097
+        },
+        {
+          "onsetSec": 119.50839002267574,
+          "endSec": 119.58621315192744
+        },
+        {
+          "onsetSec": 120.49814058956916,
+          "endSec": 120.57596371882086
+        },
+        {
+          "onsetSec": 121.49786848072563,
+          "endSec": 121.57668934240363
+        },
+        {
+          "onsetSec": 122.49759637188208,
+          "endSec": 122.5764172335601
+        },
+        {
+          "onsetSec": 123.49832199546485,
+          "endSec": 123.57614512471655
+        },
+        {
+          "onsetSec": 124.49804988662132,
+          "endSec": 124.57687074829931
+        },
+        {
+          "onsetSec": 125.49777777777778,
+          "endSec": 125.57659863945578
+        },
+        {
+          "onsetSec": 126.49850340136054,
+          "endSec": 126.57632653061225
+        }
+      ],
+      "identityCheck": {
+        "method": "ID aproximado por reloj Web Audio + inicio decodificado; revisar alignmentErrorMs",
+        "perSegment": [
+          {
+            "index": 1,
+            "found": 60,
+            "beeps": [
+              {
+                "id": 0,
+                "segment": 1,
+                "onsetSec": 0.5078458049886622,
+                "estimatedSourceSec": 0.5078458049886622,
+                "alignmentErrorMs": 7.846
+              },
+              {
+                "id": 1,
+                "segment": 1,
+                "onsetSec": 1.5075736961451247,
+                "estimatedSourceSec": 1.5075736961451247,
+                "alignmentErrorMs": 7.574
+              },
+              {
+                "id": 2,
+                "segment": 1,
+                "onsetSec": 2.5082993197278913,
+                "estimatedSourceSec": 2.5082993197278913,
+                "alignmentErrorMs": 8.299
+              },
+              {
+                "id": 3,
+                "segment": 1,
+                "onsetSec": 3.5080272108843538,
+                "estimatedSourceSec": 3.5080272108843538,
+                "alignmentErrorMs": 8.027
+              },
+              {
+                "id": 4,
+                "segment": 1,
+                "onsetSec": 4.507755102040816,
+                "estimatedSourceSec": 4.507755102040816,
+                "alignmentErrorMs": 7.755
+              },
+              {
+                "id": 5,
+                "segment": 1,
+                "onsetSec": 5.508480725623583,
+                "estimatedSourceSec": 5.508480725623583,
+                "alignmentErrorMs": 8.481
+              },
+              {
+                "id": 6,
+                "segment": 1,
+                "onsetSec": 6.5082086167800455,
+                "estimatedSourceSec": 6.5082086167800455,
+                "alignmentErrorMs": 8.209
+              },
+              {
+                "id": 7,
+                "segment": 1,
+                "onsetSec": 7.507936507936508,
+                "estimatedSourceSec": 7.507936507936508,
+                "alignmentErrorMs": 7.937
+              },
+              {
+                "id": 8,
+                "segment": 1,
+                "onsetSec": 8.50766439909297,
+                "estimatedSourceSec": 8.50766439909297,
+                "alignmentErrorMs": 7.664
+              },
+              {
+                "id": 9,
+                "segment": 1,
+                "onsetSec": 9.508390022675737,
+                "estimatedSourceSec": 9.508390022675737,
+                "alignmentErrorMs": 8.39
+              },
+              {
+                "id": 10,
+                "segment": 1,
+                "onsetSec": 10.5081179138322,
+                "estimatedSourceSec": 10.5081179138322,
+                "alignmentErrorMs": 8.118
+              },
+              {
+                "id": 11,
+                "segment": 1,
+                "onsetSec": 11.507845804988662,
+                "estimatedSourceSec": 11.507845804988662,
+                "alignmentErrorMs": 7.846
+              },
+              {
+                "id": 12,
+                "segment": 1,
+                "onsetSec": 12.507573696145124,
+                "estimatedSourceSec": 12.507573696145124,
+                "alignmentErrorMs": 7.574
+              },
+              {
+                "id": 13,
+                "segment": 1,
+                "onsetSec": 13.508299319727891,
+                "estimatedSourceSec": 13.508299319727891,
+                "alignmentErrorMs": 8.299
+              },
+              {
+                "id": 14,
+                "segment": 1,
+                "onsetSec": 14.508027210884354,
+                "estimatedSourceSec": 14.508027210884354,
+                "alignmentErrorMs": 8.027
+              },
+              {
+                "id": 15,
+                "segment": 1,
+                "onsetSec": 15.507755102040816,
+                "estimatedSourceSec": 15.507755102040816,
+                "alignmentErrorMs": 7.755
+              },
+              {
+                "id": 16,
+                "segment": 1,
+                "onsetSec": 16.50848072562358,
+                "estimatedSourceSec": 16.50848072562358,
+                "alignmentErrorMs": 8.481
+              },
+              {
+                "id": 17,
+                "segment": 1,
+                "onsetSec": 17.508208616780045,
+                "estimatedSourceSec": 17.508208616780045,
+                "alignmentErrorMs": 8.209
+              },
+              {
+                "id": 18,
+                "segment": 1,
+                "onsetSec": 18.50793650793651,
+                "estimatedSourceSec": 18.50793650793651,
+                "alignmentErrorMs": 7.937
+              },
+              {
+                "id": 19,
+                "segment": 1,
+                "onsetSec": 19.50766439909297,
+                "estimatedSourceSec": 19.50766439909297,
+                "alignmentErrorMs": 7.664
+              },
+              {
+                "id": 20,
+                "segment": 1,
+                "onsetSec": 20.508390022675737,
+                "estimatedSourceSec": 20.508390022675737,
+                "alignmentErrorMs": 8.39
+              },
+              {
+                "id": 21,
+                "segment": 1,
+                "onsetSec": 21.508117913832198,
+                "estimatedSourceSec": 21.508117913832198,
+                "alignmentErrorMs": 8.118
+              },
+              {
+                "id": 22,
+                "segment": 1,
+                "onsetSec": 22.507845804988662,
+                "estimatedSourceSec": 22.507845804988662,
+                "alignmentErrorMs": 7.846
+              },
+              {
+                "id": 23,
+                "segment": 1,
+                "onsetSec": 23.507573696145126,
+                "estimatedSourceSec": 23.507573696145126,
+                "alignmentErrorMs": 7.574
+              },
+              {
+                "id": 24,
+                "segment": 1,
+                "onsetSec": 24.50829931972789,
+                "estimatedSourceSec": 24.50829931972789,
+                "alignmentErrorMs": 8.299
+              },
+              {
+                "id": 25,
+                "segment": 1,
+                "onsetSec": 25.508027210884354,
+                "estimatedSourceSec": 25.508027210884354,
+                "alignmentErrorMs": 8.027
+              },
+              {
+                "id": 26,
+                "segment": 1,
+                "onsetSec": 26.507755102040818,
+                "estimatedSourceSec": 26.507755102040818,
+                "alignmentErrorMs": 7.755
+              },
+              {
+                "id": 27,
+                "segment": 1,
+                "onsetSec": 27.50848072562358,
+                "estimatedSourceSec": 27.50848072562358,
+                "alignmentErrorMs": 8.481
+              },
+              {
+                "id": 28,
+                "segment": 1,
+                "onsetSec": 28.508208616780045,
+                "estimatedSourceSec": 28.508208616780045,
+                "alignmentErrorMs": 8.209
+              },
+              {
+                "id": 29,
+                "segment": 1,
+                "onsetSec": 29.50793650793651,
+                "estimatedSourceSec": 29.50793650793651,
+                "alignmentErrorMs": 7.937
+              },
+              {
+                "id": 30,
+                "segment": 1,
+                "onsetSec": 30.50766439909297,
+                "estimatedSourceSec": 30.50766439909297,
+                "alignmentErrorMs": 7.664
+              },
+              {
+                "id": 31,
+                "segment": 1,
+                "onsetSec": 31.508390022675737,
+                "estimatedSourceSec": 31.508390022675737,
+                "alignmentErrorMs": 8.39
+              },
+              {
+                "id": 32,
+                "segment": 1,
+                "onsetSec": 32.5081179138322,
+                "estimatedSourceSec": 32.5081179138322,
+                "alignmentErrorMs": 8.118
+              },
+              {
+                "id": 33,
+                "segment": 1,
+                "onsetSec": 33.50784580498866,
+                "estimatedSourceSec": 33.50784580498866,
+                "alignmentErrorMs": 7.846
+              },
+              {
+                "id": 34,
+                "segment": 1,
+                "onsetSec": 34.50757369614512,
+                "estimatedSourceSec": 34.50757369614512,
+                "alignmentErrorMs": 7.574
+              },
+              {
+                "id": 35,
+                "segment": 1,
+                "onsetSec": 35.50829931972789,
+                "estimatedSourceSec": 35.50829931972789,
+                "alignmentErrorMs": 8.299
+              },
+              {
+                "id": 36,
+                "segment": 1,
+                "onsetSec": 36.50802721088435,
+                "estimatedSourceSec": 36.50802721088435,
+                "alignmentErrorMs": 8.027
+              },
+              {
+                "id": 37,
+                "segment": 1,
+                "onsetSec": 37.50775510204082,
+                "estimatedSourceSec": 37.50775510204082,
+                "alignmentErrorMs": 7.755
+              },
+              {
+                "id": 38,
+                "segment": 1,
+                "onsetSec": 38.508480725623585,
+                "estimatedSourceSec": 38.508480725623585,
+                "alignmentErrorMs": 8.481
+              },
+              {
+                "id": 39,
+                "segment": 1,
+                "onsetSec": 39.508208616780045,
+                "estimatedSourceSec": 39.508208616780045,
+                "alignmentErrorMs": 8.209
+              },
+              {
+                "id": 40,
+                "segment": 1,
+                "onsetSec": 40.507936507936506,
+                "estimatedSourceSec": 40.507936507936506,
+                "alignmentErrorMs": 7.937
+              },
+              {
+                "id": 41,
+                "segment": 1,
+                "onsetSec": 41.507664399092974,
+                "estimatedSourceSec": 41.507664399092974,
+                "alignmentErrorMs": 7.664
+              },
+              {
+                "id": 42,
+                "segment": 1,
+                "onsetSec": 42.508390022675734,
+                "estimatedSourceSec": 42.508390022675734,
+                "alignmentErrorMs": 8.39
+              },
+              {
+                "id": 43,
+                "segment": 1,
+                "onsetSec": 43.5081179138322,
+                "estimatedSourceSec": 43.5081179138322,
+                "alignmentErrorMs": 8.118
+              },
+              {
+                "id": 44,
+                "segment": 1,
+                "onsetSec": 44.50784580498866,
+                "estimatedSourceSec": 44.50784580498866,
+                "alignmentErrorMs": 7.846
+              },
+              {
+                "id": 45,
+                "segment": 1,
+                "onsetSec": 45.50757369614512,
+                "estimatedSourceSec": 45.50757369614512,
+                "alignmentErrorMs": 7.574
+              },
+              {
+                "id": 46,
+                "segment": 1,
+                "onsetSec": 46.50829931972789,
+                "estimatedSourceSec": 46.50829931972789,
+                "alignmentErrorMs": 8.299
+              },
+              {
+                "id": 47,
+                "segment": 1,
+                "onsetSec": 47.50802721088435,
+                "estimatedSourceSec": 47.50802721088435,
+                "alignmentErrorMs": 8.027
+              },
+              {
+                "id": 48,
+                "segment": 1,
+                "onsetSec": 48.50775510204082,
+                "estimatedSourceSec": 48.50775510204082,
+                "alignmentErrorMs": 7.755
+              },
+              {
+                "id": 49,
+                "segment": 1,
+                "onsetSec": 49.508480725623585,
+                "estimatedSourceSec": 49.508480725623585,
+                "alignmentErrorMs": 8.481
+              },
+              {
+                "id": 50,
+                "segment": 1,
+                "onsetSec": 50.508208616780045,
+                "estimatedSourceSec": 50.508208616780045,
+                "alignmentErrorMs": 8.209
+              },
+              {
+                "id": 51,
+                "segment": 1,
+                "onsetSec": 51.507936507936506,
+                "estimatedSourceSec": 51.507936507936506,
+                "alignmentErrorMs": 7.937
+              },
+              {
+                "id": 52,
+                "segment": 1,
+                "onsetSec": 52.507664399092974,
+                "estimatedSourceSec": 52.507664399092974,
+                "alignmentErrorMs": 7.664
+              },
+              {
+                "id": 53,
+                "segment": 1,
+                "onsetSec": 53.508390022675734,
+                "estimatedSourceSec": 53.508390022675734,
+                "alignmentErrorMs": 8.39
+              },
+              {
+                "id": 54,
+                "segment": 1,
+                "onsetSec": 54.5081179138322,
+                "estimatedSourceSec": 54.5081179138322,
+                "alignmentErrorMs": 8.118
+              },
+              {
+                "id": 55,
+                "segment": 1,
+                "onsetSec": 55.50784580498866,
+                "estimatedSourceSec": 55.50784580498866,
+                "alignmentErrorMs": 7.846
+              },
+              {
+                "id": 56,
+                "segment": 1,
+                "onsetSec": 56.50757369614512,
+                "estimatedSourceSec": 56.50757369614512,
+                "alignmentErrorMs": 7.574
+              },
+              {
+                "id": 57,
+                "segment": 1,
+                "onsetSec": 57.50829931972789,
+                "estimatedSourceSec": 57.50829931972789,
+                "alignmentErrorMs": 8.299
+              },
+              {
+                "id": 58,
+                "segment": 1,
+                "onsetSec": 58.50802721088435,
+                "estimatedSourceSec": 58.50802721088435,
+                "alignmentErrorMs": 8.027
+              },
+              {
+                "id": 59,
+                "segment": 1,
+                "onsetSec": 59.50775510204082,
+                "estimatedSourceSec": 59.50775510204082,
+                "alignmentErrorMs": 7.755
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "found": 60,
+            "beeps": [
+              {
+                "id": 59,
+                "segment": 2,
+                "onsetSec": 0.5078458049886622,
+                "estimatedSourceSec": 59.50975056689342,
+                "alignmentErrorMs": 9.751
+              },
+              {
+                "id": 60,
+                "segment": 2,
+                "onsetSec": 1.5075736961451247,
+                "estimatedSourceSec": 60.509478458049884,
+                "alignmentErrorMs": 9.478
+              },
+              {
+                "id": 61,
+                "segment": 2,
+                "onsetSec": 2.5082993197278913,
+                "estimatedSourceSec": 61.51020408163265,
+                "alignmentErrorMs": 10.204
+              },
+              {
+                "id": 62,
+                "segment": 2,
+                "onsetSec": 3.5080272108843538,
+                "estimatedSourceSec": 62.50993197278912,
+                "alignmentErrorMs": 9.932
+              },
+              {
+                "id": 63,
+                "segment": 2,
+                "onsetSec": 4.507755102040816,
+                "estimatedSourceSec": 63.50965986394558,
+                "alignmentErrorMs": 9.66
+              },
+              {
+                "id": 64,
+                "segment": 2,
+                "onsetSec": 5.508480725623583,
+                "estimatedSourceSec": 64.51038548752834,
+                "alignmentErrorMs": 10.385
+              },
+              {
+                "id": 65,
+                "segment": 2,
+                "onsetSec": 6.5082086167800455,
+                "estimatedSourceSec": 65.5101133786848,
+                "alignmentErrorMs": 10.113
+              },
+              {
+                "id": 66,
+                "segment": 2,
+                "onsetSec": 7.507936507936508,
+                "estimatedSourceSec": 66.50984126984127,
+                "alignmentErrorMs": 9.841
+              },
+              {
+                "id": 67,
+                "segment": 2,
+                "onsetSec": 8.50766439909297,
+                "estimatedSourceSec": 67.50956916099773,
+                "alignmentErrorMs": 9.569
+              },
+              {
+                "id": 68,
+                "segment": 2,
+                "onsetSec": 9.508390022675737,
+                "estimatedSourceSec": 68.5102947845805,
+                "alignmentErrorMs": 10.295
+              },
+              {
+                "id": 69,
+                "segment": 2,
+                "onsetSec": 10.5081179138322,
+                "estimatedSourceSec": 69.51002267573696,
+                "alignmentErrorMs": 10.023
+              },
+              {
+                "id": 70,
+                "segment": 2,
+                "onsetSec": 11.507845804988662,
+                "estimatedSourceSec": 70.50975056689342,
+                "alignmentErrorMs": 9.751
+              },
+              {
+                "id": 71,
+                "segment": 2,
+                "onsetSec": 12.507573696145124,
+                "estimatedSourceSec": 71.50947845804988,
+                "alignmentErrorMs": 9.478
+              },
+              {
+                "id": 72,
+                "segment": 2,
+                "onsetSec": 13.508299319727891,
+                "estimatedSourceSec": 72.51020408163265,
+                "alignmentErrorMs": 10.204
+              },
+              {
+                "id": 73,
+                "segment": 2,
+                "onsetSec": 14.508027210884354,
+                "estimatedSourceSec": 73.50993197278912,
+                "alignmentErrorMs": 9.932
+              },
+              {
+                "id": 74,
+                "segment": 2,
+                "onsetSec": 15.507755102040816,
+                "estimatedSourceSec": 74.50965986394557,
+                "alignmentErrorMs": 9.66
+              },
+              {
+                "id": 75,
+                "segment": 2,
+                "onsetSec": 16.50848072562358,
+                "estimatedSourceSec": 75.51038548752834,
+                "alignmentErrorMs": 10.385
+              },
+              {
+                "id": 76,
+                "segment": 2,
+                "onsetSec": 17.508208616780045,
+                "estimatedSourceSec": 76.5101133786848,
+                "alignmentErrorMs": 10.113
+              },
+              {
+                "id": 77,
+                "segment": 2,
+                "onsetSec": 18.50793650793651,
+                "estimatedSourceSec": 77.50984126984127,
+                "alignmentErrorMs": 9.841
+              },
+              {
+                "id": 78,
+                "segment": 2,
+                "onsetSec": 19.50766439909297,
+                "estimatedSourceSec": 78.50956916099773,
+                "alignmentErrorMs": 9.569
+              },
+              {
+                "id": 79,
+                "segment": 2,
+                "onsetSec": 20.508390022675737,
+                "estimatedSourceSec": 79.5102947845805,
+                "alignmentErrorMs": 10.295
+              },
+              {
+                "id": 80,
+                "segment": 2,
+                "onsetSec": 21.508117913832198,
+                "estimatedSourceSec": 80.51002267573696,
+                "alignmentErrorMs": 10.023
+              },
+              {
+                "id": 81,
+                "segment": 2,
+                "onsetSec": 22.507845804988662,
+                "estimatedSourceSec": 81.50975056689342,
+                "alignmentErrorMs": 9.751
+              },
+              {
+                "id": 82,
+                "segment": 2,
+                "onsetSec": 23.50857142857143,
+                "estimatedSourceSec": 82.5104761904762,
+                "alignmentErrorMs": 10.476
+              },
+              {
+                "id": 83,
+                "segment": 2,
+                "onsetSec": 24.50829931972789,
+                "estimatedSourceSec": 83.51020408163265,
+                "alignmentErrorMs": 10.204
+              },
+              {
+                "id": 84,
+                "segment": 2,
+                "onsetSec": 25.508027210884354,
+                "estimatedSourceSec": 84.50993197278912,
+                "alignmentErrorMs": 9.932
+              },
+              {
+                "id": 85,
+                "segment": 2,
+                "onsetSec": 26.507755102040818,
+                "estimatedSourceSec": 85.50965986394559,
+                "alignmentErrorMs": 9.66
+              },
+              {
+                "id": 86,
+                "segment": 2,
+                "onsetSec": 27.50848072562358,
+                "estimatedSourceSec": 86.51038548752834,
+                "alignmentErrorMs": 10.385
+              },
+              {
+                "id": 87,
+                "segment": 2,
+                "onsetSec": 28.508208616780045,
+                "estimatedSourceSec": 87.5101133786848,
+                "alignmentErrorMs": 10.113
+              },
+              {
+                "id": 88,
+                "segment": 2,
+                "onsetSec": 29.50793650793651,
+                "estimatedSourceSec": 88.50984126984127,
+                "alignmentErrorMs": 9.841
+              },
+              {
+                "id": 89,
+                "segment": 2,
+                "onsetSec": 30.50766439909297,
+                "estimatedSourceSec": 89.50956916099773,
+                "alignmentErrorMs": 9.569
+              },
+              {
+                "id": 90,
+                "segment": 2,
+                "onsetSec": 31.508390022675737,
+                "estimatedSourceSec": 90.5102947845805,
+                "alignmentErrorMs": 10.295
+              },
+              {
+                "id": 91,
+                "segment": 2,
+                "onsetSec": 32.5081179138322,
+                "estimatedSourceSec": 91.51002267573696,
+                "alignmentErrorMs": 10.023
+              },
+              {
+                "id": 92,
+                "segment": 2,
+                "onsetSec": 33.50784580498866,
+                "estimatedSourceSec": 92.50975056689342,
+                "alignmentErrorMs": 9.751
+              },
+              {
+                "id": 93,
+                "segment": 2,
+                "onsetSec": 34.50857142857143,
+                "estimatedSourceSec": 93.5104761904762,
+                "alignmentErrorMs": 10.476
+              },
+              {
+                "id": 94,
+                "segment": 2,
+                "onsetSec": 35.50829931972789,
+                "estimatedSourceSec": 94.51020408163265,
+                "alignmentErrorMs": 10.204
+              },
+              {
+                "id": 95,
+                "segment": 2,
+                "onsetSec": 36.50802721088435,
+                "estimatedSourceSec": 95.5099319727891,
+                "alignmentErrorMs": 9.932
+              },
+              {
+                "id": 96,
+                "segment": 2,
+                "onsetSec": 37.50775510204082,
+                "estimatedSourceSec": 96.50965986394559,
+                "alignmentErrorMs": 9.66
+              },
+              {
+                "id": 97,
+                "segment": 2,
+                "onsetSec": 38.508480725623585,
+                "estimatedSourceSec": 97.51038548752834,
+                "alignmentErrorMs": 10.385
+              },
+              {
+                "id": 98,
+                "segment": 2,
+                "onsetSec": 39.508208616780045,
+                "estimatedSourceSec": 98.5101133786848,
+                "alignmentErrorMs": 10.113
+              },
+              {
+                "id": 99,
+                "segment": 2,
+                "onsetSec": 40.507936507936506,
+                "estimatedSourceSec": 99.50984126984127,
+                "alignmentErrorMs": 9.841
+              },
+              {
+                "id": 100,
+                "segment": 2,
+                "onsetSec": 41.507664399092974,
+                "estimatedSourceSec": 100.50956916099773,
+                "alignmentErrorMs": 9.569
+              },
+              {
+                "id": 101,
+                "segment": 2,
+                "onsetSec": 42.508390022675734,
+                "estimatedSourceSec": 101.5102947845805,
+                "alignmentErrorMs": 10.295
+              },
+              {
+                "id": 102,
+                "segment": 2,
+                "onsetSec": 43.5081179138322,
+                "estimatedSourceSec": 102.51002267573696,
+                "alignmentErrorMs": 10.023
+              },
+              {
+                "id": 103,
+                "segment": 2,
+                "onsetSec": 44.50784580498866,
+                "estimatedSourceSec": 103.50975056689342,
+                "alignmentErrorMs": 9.751
+              },
+              {
+                "id": 104,
+                "segment": 2,
+                "onsetSec": 45.50857142857143,
+                "estimatedSourceSec": 104.5104761904762,
+                "alignmentErrorMs": 10.476
+              },
+              {
+                "id": 105,
+                "segment": 2,
+                "onsetSec": 46.50829931972789,
+                "estimatedSourceSec": 105.51020408163265,
+                "alignmentErrorMs": 10.204
+              },
+              {
+                "id": 106,
+                "segment": 2,
+                "onsetSec": 47.50802721088435,
+                "estimatedSourceSec": 106.5099319727891,
+                "alignmentErrorMs": 9.932
+              },
+              {
+                "id": 107,
+                "segment": 2,
+                "onsetSec": 48.50775510204082,
+                "estimatedSourceSec": 107.50965986394559,
+                "alignmentErrorMs": 9.66
+              },
+              {
+                "id": 108,
+                "segment": 2,
+                "onsetSec": 49.508480725623585,
+                "estimatedSourceSec": 108.51038548752834,
+                "alignmentErrorMs": 10.385
+              },
+              {
+                "id": 109,
+                "segment": 2,
+                "onsetSec": 50.508208616780045,
+                "estimatedSourceSec": 109.5101133786848,
+                "alignmentErrorMs": 10.113
+              },
+              {
+                "id": 110,
+                "segment": 2,
+                "onsetSec": 51.507936507936506,
+                "estimatedSourceSec": 110.50984126984127,
+                "alignmentErrorMs": 9.841
+              },
+              {
+                "id": 111,
+                "segment": 2,
+                "onsetSec": 52.507664399092974,
+                "estimatedSourceSec": 111.50956916099773,
+                "alignmentErrorMs": 9.569
+              },
+              {
+                "id": 112,
+                "segment": 2,
+                "onsetSec": 53.508390022675734,
+                "estimatedSourceSec": 112.5102947845805,
+                "alignmentErrorMs": 10.295
+              },
+              {
+                "id": 113,
+                "segment": 2,
+                "onsetSec": 54.5081179138322,
+                "estimatedSourceSec": 113.51002267573696,
+                "alignmentErrorMs": 10.023
+              },
+              {
+                "id": 114,
+                "segment": 2,
+                "onsetSec": 55.50784580498866,
+                "estimatedSourceSec": 114.50975056689342,
+                "alignmentErrorMs": 9.751
+              },
+              {
+                "id": 115,
+                "segment": 2,
+                "onsetSec": 56.50857142857143,
+                "estimatedSourceSec": 115.5104761904762,
+                "alignmentErrorMs": 10.476
+              },
+              {
+                "id": 116,
+                "segment": 2,
+                "onsetSec": 57.50829931972789,
+                "estimatedSourceSec": 116.51020408163265,
+                "alignmentErrorMs": 10.204
+              },
+              {
+                "id": 117,
+                "segment": 2,
+                "onsetSec": 58.50802721088435,
+                "estimatedSourceSec": 117.5099319727891,
+                "alignmentErrorMs": 9.932
+              },
+              {
+                "id": 118,
+                "segment": 2,
+                "onsetSec": 59.50775510204082,
+                "estimatedSourceSec": 118.50965986394559,
+                "alignmentErrorMs": 9.66
+              }
+            ]
+          },
+          {
+            "index": 3,
+            "found": 7,
+            "beeps": [
+              {
+                "id": 118,
+                "segment": 3,
+                "onsetSec": 0.49786848072562356,
+                "estimatedSourceSec": 118.51328798185942,
+                "alignmentErrorMs": 13.288
+              },
+              {
+                "id": 119,
+                "segment": 3,
+                "onsetSec": 1.4975963718820862,
+                "estimatedSourceSec": 119.51301587301587,
+                "alignmentErrorMs": 13.016
+              },
+              {
+                "id": 120,
+                "segment": 3,
+                "onsetSec": 2.4983219954648526,
+                "estimatedSourceSec": 120.51374149659864,
+                "alignmentErrorMs": 13.741
+              },
+              {
+                "id": 121,
+                "segment": 3,
+                "onsetSec": 3.498049886621315,
+                "estimatedSourceSec": 121.51346938775511,
+                "alignmentErrorMs": 13.469
+              },
+              {
+                "id": 122,
+                "segment": 3,
+                "onsetSec": 4.497777777777777,
+                "estimatedSourceSec": 122.51319727891158,
+                "alignmentErrorMs": 13.197
+              },
+              {
+                "id": 123,
+                "segment": 3,
+                "onsetSec": 5.498503401360544,
+                "estimatedSourceSec": 123.51392290249433,
+                "alignmentErrorMs": 13.923
+              },
+              {
+                "id": 124,
+                "segment": 3,
+                "onsetSec": 6.498231292517007,
+                "estimatedSourceSec": 124.5136507936508,
+                "alignmentErrorMs": 13.651
+              }
+            ]
+          }
+        ],
+        "duplicates": [
+          {
+            "id": 59,
+            "segments": [
+              1,
+              2
+            ],
+            "overlapStart": 59.00190476190476,
+            "overlapEnd": 60.00036281179138,
+            "withinOverlap": true
+          },
+          {
+            "id": 118,
+            "segments": [
+              2,
+              3
+            ],
+            "overlapStart": 118.01541950113379,
+            "overlapEnd": 119.01387755102041,
+            "withinOverlap": true
+          }
+        ],
+        "duplicatesOutsideOverlap": [],
+        "uniqueFound": 125,
+        "missingIds": [],
+        "unexpectedIds": []
+      },
+      "trimmed": {
+        "method": "Conservar el viejo; recortar el inicio del nuevo según solape de llamadas performance.now; no compensa latencia del codec",
+        "decodedDurationSec": 125.020363,
+        "decodedMinusWallMs": -6.437,
+        "foundBeeps": 125,
+        "segments": [
+          {
+            "index": 1,
+            "requestedTrimSec": 0,
+            "trimSamples": 0,
+            "trimSec": 0,
+            "length": 2645999,
+            "sampleRate": 44100,
+            "duration": 59.999977324263035
+          },
+          {
+            "index": 2,
+            "requestedTrimSec": 0.9988999999999069,
+            "trimSamples": 44051,
+            "trimSec": 0.9988888888888889,
+            "length": 2601948,
+            "sampleRate": 44100,
+            "duration": 59.00108843537415
+          },
+          {
+            "index": 3,
+            "requestedTrimSec": 1.0006999999997206,
+            "trimSamples": 44131,
+            "trimSec": 1.000702947845805,
+            "length": 265451,
+            "sampleRate": 44100,
+            "duration": 6.019297052154195
+          }
+        ],
+        "boundaries": [
+          {
+            "from": 1,
+            "to": 2,
+            "atSec": 60,
+            "intervalMs": 1001.723,
+            "deviationMs": 1.723,
+            "exceeds40ms": false,
+            "intentionalPause": false
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "atSec": 119.001,
+            "intervalMs": 988.753,
+            "deviationMs": -11.247,
+            "exceeds40ms": false,
+            "intentionalPause": false
+          }
+        ],
+        "beeps": [
+          {
+            "onsetSec": 0.5078458049886622,
+            "endSec": 0.5866666666666667
+          },
+          {
+            "onsetSec": 1.5075736961451247,
+            "endSec": 1.5863945578231293
+          },
+          {
+            "onsetSec": 2.5082993197278913,
+            "endSec": 2.5861224489795918
+          },
+          {
+            "onsetSec": 3.5080272108843538,
+            "endSec": 3.586848072562358
+          },
+          {
+            "onsetSec": 4.507755102040816,
+            "endSec": 4.586575963718821
+          },
+          {
+            "onsetSec": 5.508480725623583,
+            "endSec": 5.5863038548752835
+          },
+          {
+            "onsetSec": 6.5082086167800455,
+            "endSec": 6.586031746031746
+          },
+          {
+            "onsetSec": 7.507936507936508,
+            "endSec": 7.586757369614513
+          },
+          {
+            "onsetSec": 8.50766439909297,
+            "endSec": 8.586485260770974
+          },
+          {
+            "onsetSec": 9.508390022675737,
+            "endSec": 9.586213151927439
+          },
+          {
+            "onsetSec": 10.5081179138322,
+            "endSec": 10.585941043083901
+          },
+          {
+            "onsetSec": 11.507845804988662,
+            "endSec": 11.586666666666666
+          },
+          {
+            "onsetSec": 12.507573696145124,
+            "endSec": 12.586394557823128
+          },
+          {
+            "onsetSec": 13.508299319727891,
+            "endSec": 13.586122448979593
+          },
+          {
+            "onsetSec": 14.508027210884354,
+            "endSec": 14.586848072562358
+          },
+          {
+            "onsetSec": 15.507755102040816,
+            "endSec": 15.58657596371882
+          },
+          {
+            "onsetSec": 16.50848072562358,
+            "endSec": 16.586303854875283
+          },
+          {
+            "onsetSec": 17.508208616780045,
+            "endSec": 17.586031746031747
+          },
+          {
+            "onsetSec": 18.50793650793651,
+            "endSec": 18.586757369614514
+          },
+          {
+            "onsetSec": 19.50766439909297,
+            "endSec": 19.586485260770974
+          },
+          {
+            "onsetSec": 20.508390022675737,
+            "endSec": 20.58621315192744
+          },
+          {
+            "onsetSec": 21.508117913832198,
+            "endSec": 21.5859410430839
+          },
+          {
+            "onsetSec": 22.507845804988662,
+            "endSec": 22.586666666666666
+          },
+          {
+            "onsetSec": 23.507573696145126,
+            "endSec": 23.58639455782313
+          },
+          {
+            "onsetSec": 24.50829931972789,
+            "endSec": 24.58612244897959
+          },
+          {
+            "onsetSec": 25.508027210884354,
+            "endSec": 25.586848072562358
+          },
+          {
+            "onsetSec": 26.507755102040818,
+            "endSec": 26.586575963718822
+          },
+          {
+            "onsetSec": 27.50848072562358,
+            "endSec": 27.586303854875283
+          },
+          {
+            "onsetSec": 28.508208616780045,
+            "endSec": 28.586031746031747
+          },
+          {
+            "onsetSec": 29.50793650793651,
+            "endSec": 29.586757369614514
+          },
+          {
+            "onsetSec": 30.50766439909297,
+            "endSec": 30.586485260770974
+          },
+          {
+            "onsetSec": 31.508390022675737,
+            "endSec": 31.58621315192744
+          },
+          {
+            "onsetSec": 32.5081179138322,
+            "endSec": 32.5859410430839
+          },
+          {
+            "onsetSec": 33.50784580498866,
+            "endSec": 33.586666666666666
+          },
+          {
+            "onsetSec": 34.50757369614512,
+            "endSec": 34.58639455782313
+          },
+          {
+            "onsetSec": 35.50829931972789,
+            "endSec": 35.586122448979594
+          },
+          {
+            "onsetSec": 36.50802721088435,
+            "endSec": 36.58684807256236
+          },
+          {
+            "onsetSec": 37.50775510204082,
+            "endSec": 37.58657596371882
+          },
+          {
+            "onsetSec": 38.508480725623585,
+            "endSec": 38.58630385487528
+          },
+          {
+            "onsetSec": 39.508208616780045,
+            "endSec": 39.58603174603174
+          },
+          {
+            "onsetSec": 40.507936507936506,
+            "endSec": 40.58675736961451
+          },
+          {
+            "onsetSec": 41.507664399092974,
+            "endSec": 41.58648526077098
+          },
+          {
+            "onsetSec": 42.508390022675734,
+            "endSec": 42.58621315192744
+          },
+          {
+            "onsetSec": 43.5081179138322,
+            "endSec": 43.5859410430839
+          },
+          {
+            "onsetSec": 44.50784580498866,
+            "endSec": 44.586666666666666
+          },
+          {
+            "onsetSec": 45.50757369614512,
+            "endSec": 45.58639455782313
+          },
+          {
+            "onsetSec": 46.50829931972789,
+            "endSec": 46.586122448979594
+          },
+          {
+            "onsetSec": 47.50802721088435,
+            "endSec": 47.58684807256236
+          },
+          {
+            "onsetSec": 48.50775510204082,
+            "endSec": 48.58657596371882
+          },
+          {
+            "onsetSec": 49.508480725623585,
+            "endSec": 49.58630385487528
+          },
+          {
+            "onsetSec": 50.508208616780045,
+            "endSec": 50.58603174603174
+          },
+          {
+            "onsetSec": 51.507936507936506,
+            "endSec": 51.58675736961451
+          },
+          {
+            "onsetSec": 52.507664399092974,
+            "endSec": 52.58648526077098
+          },
+          {
+            "onsetSec": 53.508390022675734,
+            "endSec": 53.58621315192744
+          },
+          {
+            "onsetSec": 54.5081179138322,
+            "endSec": 54.5859410430839
+          },
+          {
+            "onsetSec": 55.50784580498866,
+            "endSec": 55.586666666666666
+          },
+          {
+            "onsetSec": 56.50757369614512,
+            "endSec": 56.58639455782313
+          },
+          {
+            "onsetSec": 57.50829931972789,
+            "endSec": 57.586122448979594
+          },
+          {
+            "onsetSec": 58.50802721088435,
+            "endSec": 58.58684807256236
+          },
+          {
+            "onsetSec": 59.50775510204082,
+            "endSec": 59.58657596371882
+          },
+          {
+            "onsetSec": 60.509478458049884,
+            "endSec": 60.58730158730159
+          },
+          {
+            "onsetSec": 61.50920634920635,
+            "endSec": 61.58702947845805
+          },
+          {
+            "onsetSec": 62.50893424036281,
+            "endSec": 62.587755102040816
+          },
+          {
+            "onsetSec": 63.50866213151927,
+            "endSec": 63.58748299319728
+          },
+          {
+            "onsetSec": 64.50938775510204,
+            "endSec": 64.58721088435374
+          },
+          {
+            "onsetSec": 65.50911564625851,
+            "endSec": 65.5879365079365
+          },
+          {
+            "onsetSec": 66.50884353741496,
+            "endSec": 66.58766439909297
+          },
+          {
+            "onsetSec": 67.50956916099773,
+            "endSec": 67.58739229024944
+          },
+          {
+            "onsetSec": 68.5092970521542,
+            "endSec": 68.5871201814059
+          },
+          {
+            "onsetSec": 69.50902494331066,
+            "endSec": 69.58784580498866
+          },
+          {
+            "onsetSec": 70.50875283446712,
+            "endSec": 70.58757369614513
+          },
+          {
+            "onsetSec": 71.50947845804988,
+            "endSec": 71.58730158730158
+          },
+          {
+            "onsetSec": 72.50920634920635,
+            "endSec": 72.58702947845805
+          },
+          {
+            "onsetSec": 73.5089342403628,
+            "endSec": 73.58775510204082
+          },
+          {
+            "onsetSec": 74.50866213151927,
+            "endSec": 74.58748299319728
+          },
+          {
+            "onsetSec": 75.50938775510204,
+            "endSec": 75.58721088435374
+          },
+          {
+            "onsetSec": 76.50911564625851,
+            "endSec": 76.5879365079365
+          },
+          {
+            "onsetSec": 77.50884353741496,
+            "endSec": 77.58766439909297
+          },
+          {
+            "onsetSec": 78.50956916099773,
+            "endSec": 78.58739229024944
+          },
+          {
+            "onsetSec": 79.5092970521542,
+            "endSec": 79.5871201814059
+          },
+          {
+            "onsetSec": 80.50902494331066,
+            "endSec": 80.58784580498866
+          },
+          {
+            "onsetSec": 81.50875283446712,
+            "endSec": 81.58757369614513
+          },
+          {
+            "onsetSec": 82.50947845804988,
+            "endSec": 82.58730158730158
+          },
+          {
+            "onsetSec": 83.50920634920635,
+            "endSec": 83.58702947845805
+          },
+          {
+            "onsetSec": 84.5089342403628,
+            "endSec": 84.58775510204082
+          },
+          {
+            "onsetSec": 85.50965986394557,
+            "endSec": 85.58748299319728
+          },
+          {
+            "onsetSec": 86.50938775510204,
+            "endSec": 86.58721088435374
+          },
+          {
+            "onsetSec": 87.50911564625851,
+            "endSec": 87.5879365079365
+          },
+          {
+            "onsetSec": 88.50884353741496,
+            "endSec": 88.58766439909297
+          },
+          {
+            "onsetSec": 89.50956916099773,
+            "endSec": 89.58739229024944
+          },
+          {
+            "onsetSec": 90.5092970521542,
+            "endSec": 90.5871201814059
+          },
+          {
+            "onsetSec": 91.50902494331066,
+            "endSec": 91.58784580498866
+          },
+          {
+            "onsetSec": 92.50875283446712,
+            "endSec": 92.58757369614513
+          },
+          {
+            "onsetSec": 93.50947845804988,
+            "endSec": 93.58730158730158
+          },
+          {
+            "onsetSec": 94.50920634920635,
+            "endSec": 94.58702947845805
+          },
+          {
+            "onsetSec": 95.5089342403628,
+            "endSec": 95.58775510204082
+          },
+          {
+            "onsetSec": 96.50965986394557,
+            "endSec": 96.58748299319728
+          },
+          {
+            "onsetSec": 97.50938775510204,
+            "endSec": 97.58721088435374
+          },
+          {
+            "onsetSec": 98.50911564625851,
+            "endSec": 98.5879365079365
+          },
+          {
+            "onsetSec": 99.50884353741496,
+            "endSec": 99.58766439909297
+          },
+          {
+            "onsetSec": 100.50956916099773,
+            "endSec": 100.58739229024944
+          },
+          {
+            "onsetSec": 101.5092970521542,
+            "endSec": 101.5871201814059
+          },
+          {
+            "onsetSec": 102.50902494331066,
+            "endSec": 102.58784580498866
+          },
+          {
+            "onsetSec": 103.50875283446712,
+            "endSec": 103.58757369614513
+          },
+          {
+            "onsetSec": 104.50947845804988,
+            "endSec": 104.58730158730158
+          },
+          {
+            "onsetSec": 105.50920634920635,
+            "endSec": 105.58702947845805
+          },
+          {
+            "onsetSec": 106.5089342403628,
+            "endSec": 106.58775510204082
+          },
+          {
+            "onsetSec": 107.50965986394557,
+            "endSec": 107.58748299319728
+          },
+          {
+            "onsetSec": 108.50938775510204,
+            "endSec": 108.58721088435374
+          },
+          {
+            "onsetSec": 109.50911564625851,
+            "endSec": 109.5879365079365
+          },
+          {
+            "onsetSec": 110.50884353741496,
+            "endSec": 110.58766439909297
+          },
+          {
+            "onsetSec": 111.50956916099773,
+            "endSec": 111.58739229024944
+          },
+          {
+            "onsetSec": 112.5092970521542,
+            "endSec": 112.5871201814059
+          },
+          {
+            "onsetSec": 113.50902494331066,
+            "endSec": 113.58784580498866
+          },
+          {
+            "onsetSec": 114.50875283446712,
+            "endSec": 114.58757369614513
+          },
+          {
+            "onsetSec": 115.50947845804988,
+            "endSec": 115.58730158730158
+          },
+          {
+            "onsetSec": 116.50920634920635,
+            "endSec": 116.58702947845805
+          },
+          {
+            "onsetSec": 117.5089342403628,
+            "endSec": 117.58775510204082
+          },
+          {
+            "onsetSec": 118.50965986394557,
+            "endSec": 118.58748299319728
+          },
+          {
+            "onsetSec": 119.4984126984127,
+            "endSec": 119.5772335600907
+          },
+          {
+            "onsetSec": 120.49814058956916,
+            "endSec": 120.57696145124717
+          },
+          {
+            "onsetSec": 121.49886621315193,
+            "endSec": 121.57668934240363
+          },
+          {
+            "onsetSec": 122.4985941043084,
+            "endSec": 122.5764172335601
+          },
+          {
+            "onsetSec": 123.49832199546485,
+            "endSec": 123.57714285714286
+          },
+          {
+            "onsetSec": 124.49804988662132,
+            "endSec": 124.57687074829931
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "at": "2026-09-11T18:04:50.440Z",
+        "wallMs": 243,
+        "type": "audio-context",
+        "state": "running",
+        "audioTime": 0
+      },
+      {
+        "at": "2026-09-11T18:04:51.850Z",
+        "wallMs": 1410.7000000001863,
+        "type": "source-warmup"
+      },
+      {
+        "at": "2026-09-11T18:04:51.854Z",
+        "wallMs": 1657.3,
+        "type": "segment-start",
+        "index": 1,
+        "timeMs": 1657.1000000000931,
+        "sourceTime": 0,
+        "mimeType": "audio/webm;codecs=opus",
+        "simultaneousRecorders": 1,
+        "trackIds": [
+          "4e3c3bf0-5d18-4b04-a530-db61828053be"
+        ]
+      },
+      {
+        "at": "2026-09-11T18:04:51.926Z",
+        "wallMs": 1729.7,
+        "type": "recorder-start-event",
+        "index": 1,
+        "timeMs": 1729.7000000001863
+      },
+      {
+        "at": "2026-09-11T18:05:46.236Z",
+        "wallMs": 60658.3,
+        "type": "segment-start",
+        "index": 2,
+        "timeMs": 60658.10000000009,
+        "sourceTime": 59.00190476190476,
+        "mimeType": "audio/webm;codecs=opus",
+        "simultaneousRecorders": 2,
+        "trackIds": [
+          "4e3c3bf0-5d18-4b04-a530-db61828053be"
+        ]
+      },
+      {
+        "at": "2026-09-11T18:05:46.236Z",
+        "wallMs": 60658.4,
+        "type": "rotation",
+        "from": 1,
+        "to": 2,
+        "requestedOverlapMs": 1000,
+        "plannedOldStopMs": 61657.10000000009,
+        "newStartCallMs": 60658.10000000009,
+        "oldStopCallMs": null,
+        "actualOverlapMs": null
+      },
+      {
+        "at": "2026-09-11T18:05:46.298Z",
+        "wallMs": 60720.4,
+        "type": "recorder-start-event",
+        "index": 2,
+        "timeMs": 60720.39999999991
+      },
+      {
+        "at": "2026-09-11T18:05:47.236Z",
+        "wallMs": 61658,
+        "type": "segment-stop",
+        "index": 1,
+        "timeMs": 61657,
+        "reason": "rotation",
+        "rotationLateMs": -0.1,
+        "simultaneousRecorders": 1
+      },
+      {
+        "at": "2026-09-11T18:05:47.250Z",
+        "wallMs": 61671.5,
+        "type": "saved",
+        "index": 1,
+        "bytes": 61727,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-11T18:06:40.618Z",
+        "wallMs": 119658.8,
+        "type": "segment-start",
+        "index": 3,
+        "timeMs": 119658.70000000019,
+        "sourceTime": 118.01541950113379,
+        "mimeType": "audio/webm;codecs=opus",
+        "simultaneousRecorders": 2,
+        "trackIds": [
+          "4e3c3bf0-5d18-4b04-a530-db61828053be"
+        ]
+      },
+      {
+        "at": "2026-09-11T18:06:40.619Z",
+        "wallMs": 119658.9,
+        "type": "rotation",
+        "from": 2,
+        "to": 3,
+        "requestedOverlapMs": 1000,
+        "plannedOldStopMs": 120658.1000000001,
+        "newStartCallMs": 119658.70000000019,
+        "oldStopCallMs": null,
+        "actualOverlapMs": null
+      },
+      {
+        "at": "2026-09-11T18:06:40.676Z",
+        "wallMs": 119716.7,
+        "type": "recorder-start-event",
+        "index": 3,
+        "timeMs": 119716.70000000019
+      },
+      {
+        "at": "2026-09-11T18:06:41.620Z",
+        "wallMs": 120660.3,
+        "type": "segment-stop",
+        "index": 2,
+        "timeMs": 120659.3999999999,
+        "reason": "rotation",
+        "rotationLateMs": 1.3,
+        "simultaneousRecorders": 1
+      },
+      {
+        "at": "2026-09-11T18:06:41.637Z",
+        "wallMs": 120677.9,
+        "type": "saved",
+        "index": 2,
+        "bytes": 69754,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-11T18:06:47.644Z",
+        "wallMs": 126684.2,
+        "type": "segment-stop",
+        "index": 3,
+        "timeMs": 126683.70000000019,
+        "reason": "finish",
+        "rotationLateMs": 0,
+        "simultaneousRecorders": 0
+      },
+      {
+        "at": "2026-09-11T18:06:47.659Z",
+        "wallMs": 126699.4,
+        "type": "saved",
+        "index": 3,
+        "bytes": 10138,
+        "mimeType": "audio/webm;codecs=opus",
+        "durability": "strict"
+      },
+      {
+        "at": "2026-09-11T18:06:47.661Z",
+        "wallMs": 126701,
+        "type": "finish"
+      },
+      {
+        "at": "2026-09-11T18:06:47.661Z",
+        "wallMs": 126701.3,
+        "type": "audio-context",
+        "state": "closed",
+        "audioTime": 125.16716553287982
+      }
+    ],
+    "environment": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "secureContext": true,
+      "supportedMimes": [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4"
+      ],
+      "webShareFiles": false
+    }
+  },
+  "uiError": "",
+  "status": "ejecutado",
+  "playbackRemoved": true,
+  "overlapChecks": {
+    "maxSimultaneous": 2,
+    "sameStreamTracks": true,
+    "overlapsMs": [
+      998.8999999999069,
+      1000.6999999997206
+    ],
+    "allTimingFinite": true,
+    "trimmedFound": 125,
+    "duplicatesOutsideOverlap": [],
+    "missingIds": [],
+    "unexpectedIds": []
+  },
+  "zipDownload": {
+    "name": "prueba-audio-f0e5b8bd.zip",
+    "failure": null,
+    "bytes": 213023,
+    "sha256": "e1cbd0cf90a108a6c39951ff0f0ba74047211ec6f3e1134dc2b87d7a6e5f6b36"
+  },
+  "zipVerification": {
+    "crcError": null,
+    "entries": [
+      "segmento-001.webm",
+      "segmento-002.webm",
+      "segmento-003.webm",
+      "diagnostico.json"
+    ],
+    "sizes": [
+      61727,
+      69754,
+      10138,
+      70944
+    ]
+  },
+  "individualDownload": {
+    "name": "segmento-001.webm",
+    "failure": null,
+    "bytes": 61727,
+    "sha256": "f0dce1a0da051b4a86bb4b2e88960550bf71e3c43516c6364ae2c7c3220cf907"
+  }
+}

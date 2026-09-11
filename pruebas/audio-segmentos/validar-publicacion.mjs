@@ -17,9 +17,10 @@ try {
   await page.goto(url); await page.waitForFunction(() => prueba.state === 'idle');
   result.browser = await page.evaluate(() => ({secureContext:isSecureContext,state:prueba.state,
     microphoneApi:!!navigator.mediaDevices?.getUserMedia,bodyWidth:document.body.scrollWidth,viewportWidth:innerWidth,
-    recordEnabled:!document.querySelector('#record').disabled,mime:document.querySelector('#mime').textContent}));
+    recordEnabled:!document.querySelector('#record').disabled,overlapDefault:document.querySelector('#overlap').value,playbackRemoved:!document.querySelector('#play'),shareButton:!!document.querySelector('#share'),mime:document.querySelector('#mime').textContent}));
   await page.screenshot({path:new URL('artefactos/publicacion-movil.png',import.meta.url).pathname,fullPage:true});
   result.pageErrors = errors;
+  if (errors.length || result.browser.overlapDefault !== '1000' || !result.browser.playbackRemoved || !result.browser.shareButton || result.browser.bodyWidth>result.browser.viewportWidth) throw new Error(JSON.stringify(result));
 } finally {await browser.close();}
-await writeFile(new URL('evidencia/publicacion.json',import.meta.url),JSON.stringify(result,null,2)+'\n');
+await writeFile(new URL('evidencia/publicacion-solape.json',import.meta.url),JSON.stringify(result,null,2)+'\n');
 console.log(result);
