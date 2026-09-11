@@ -1,10 +1,7 @@
 "use client";
 
-// Pantalla de Hoy. Orquesta cuatro bloques en este orden: PENDIENTES (lo que
-// espera una acción), AHORA (la sesión en curso o la que viene), AGENDA DEL
-// DÍA y TE DEBEN. Acá no se decide ninguna regla clínica ni de cobro: se lee
-// /api/dashboard una vez (datos.ts), se reparte y se vuelve a leer cuando
-// algo cambió. Cada bloque vive en su archivo.
+// Hoy empieza por la agenda. La deuda se muestra una vez en Pendientes.
+// Las reglas y las acciones siguen en sus componentes originales.
 
 import * as React from "react";
 
@@ -41,7 +38,6 @@ import { Pendientes } from "./pendientes";
 import { Saludo } from "./saludo";
 import { SheetMetodoPago } from "./sheet-metodo-pago";
 import { SheetNuevoTurno } from "./sheet-nuevo-turno";
-import { TeDeben } from "./te-deben";
 
 export function Dashboard() {
   const [estado, setEstado] = React.useState<EstadoHoy | null>(null);
@@ -208,12 +204,20 @@ export function Dashboard() {
         <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
 
         <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
+          <AgendaDelDia
+          turnos={turnos}
+          ahora={ahora}
+          notaPorTurno={notaPorTurno}
+          sinAutorizacion={sinAutorizacion}
+          onCobrar={setCobrando}
+          onAgendar={abrirTurno}
+          turnoCobrado={cobroConfirmado}
+          riesgoEnElDia={riesgoEnElDia}
+          />
+
           <Pendientes pendientes={pendientes} inicio={inicio} />
 
-          {/* Lo primero que la pantalla tiene que decir es qué sesión viene
-              ahora — o que no viene ninguna. Con el día ya empezado y todos
-              los turnos pasados, la línea ocupa el lugar de la tarjeta en
-              vez de dejar un hueco. */}
+          {/* El detalle de la próxima sesión acompaña a la agenda. */}
           {ahoraTurno ? (
             <CardAhora
               turno={ahoraTurno}
@@ -231,20 +235,7 @@ export function Dashboard() {
 
           <Kpis ahora={ahora} data={data} />
 
-          <div className="grid gap-7 lg:grid-cols-[1.5fr_1fr] lg:gap-10">
-            <AgendaDelDia
-              turnos={turnos}
-              ahora={ahora}
-              notaPorTurno={notaPorTurno}
-              sinAutorizacion={sinAutorizacion}
-              onCobrar={setCobrando}
-              onAgendar={abrirTurno}
-              turnoCobrado={cobroConfirmado}
-              riesgoEnElDia={riesgoEnElDia}
-            />
 
-            <TeDeben deudores={data.deudores} />
-          </div>
         </ListaEnCascada>
       </div>
 

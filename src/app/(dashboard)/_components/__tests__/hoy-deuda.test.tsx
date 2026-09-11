@@ -1,18 +1,9 @@
 // @vitest-environment jsdom
 //
-// Una sola cuenta de deuda en la pantalla de Hoy.
-//
-// La deuda se dice en tres lugares —el bloque de pendientes, el KPI "Por
-// cobrar" y "Te deben"— y hasta esta tanda cada uno la contaba por su lado:
-// arriba "11 pacientes te deben", en el KPI "10 pacientes", y los tres
-// nombres de arriba no eran los tres de abajo. Lo que se verifica acá es que
-// los tres salgan de `deudaDeHoy` y digan lo mismo: mismo número, mismo
-// total y mismos nombres en el mismo orden.
-//
-// Ver la nota de vitest.config.ts sobre la primera línea de este archivo.
+// La deuda conserva su cuenta única aunque Hoy la muestre una sola vez.
 
 import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 import { deudaDeHoy } from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
 import type { TurnoConDeuda } from "@/app/api/_lib/domain";
@@ -85,7 +76,7 @@ function nombresDeTeDeben(data: DashboardData): string[] {
 }
 
 describe("la deuda de Hoy sale de una sola cuenta", () => {
-  it("dice el mismo número de pacientes en los tres lugares", () => {
+  it("conserva la cuenta y evita repetirla entre los indicadores", () => {
     const data = datosDeHoy();
     const esperados = 3;
 
@@ -100,12 +91,10 @@ describe("la deuda de Hoy sale de una sola cuenta", () => {
     ).toBeTruthy();
     unmount();
 
-    // 2. El KPI "Por cobrar".
+    // El resumen enlaza a Cobros; los indicadores ya no repiten la deuda.
     const kpis = render(<Kpis ahora={AHORA} data={data} />);
-    const porCobrar = screen.getByText("Por cobrar").parentElement;
-    expect(within(porCobrar as HTMLElement).getByText(
-      `${esperados} pacientes`,
-    )).toBeTruthy();
+    expect(screen.queryByText("Por cobrar")).toBeNull();
+    expect(screen.getByText("Sesiones hoy")).toBeTruthy();
     kpis.unmount();
 
     // 3. "Te deben": tantos nombres como el tope de la sección, pero de la
