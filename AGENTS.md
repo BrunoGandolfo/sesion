@@ -35,9 +35,18 @@ postea las violaciones a `/api/csp-report`, que las deja en el log de la
 función (no en `eventos_auditoria`: son ruido de diagnóstico, no rastro
 clínico).
 
-Pasar a enforce es cambiar UNA línea —`Content-Security-Policy-Report-Only`
-por `Content-Security-Policy` en `conReporteCsp`— y por eso mismo hay que
-ganarse el derecho antes.
+Pasar a enforce es cambiar `Content-Security-Policy-Report-Only` por
+`Content-Security-Policy` en `conReporteCsp`. **Pero antes de enforzar hay
+que verificar que `DESTINOS_EXTERNOS` (`src/lib/csp.ts`) cubre todo lo que
+el navegador usa.** Cuando esta política se escribió, no cubría R2 y
+enforzar habría roto la subida de toda grabación: el navegador hace PUT del
+audio cifrado directo al bucket, y `connect-src` gobierna ese PUT. Hoy R2
+entra por `R2_PUBLIC_HOST` (origen exacto de la URL prefirmada, que lleva el
+**bucket** como primer subdominio:
+`https://<bucket>.<accountId>.r2.cloudflarestorage.com`; sin comodín;
+obligatoria en producción) y `src/lib/__tests__/csp-destinos.test.ts` falla ante cualquier
+host `https://` nuevo en `src/**` que no esté declarado. Ese test es la
+condición previa; el log de reportes es la confirmación.
 
 ## Qué mirar en los reportes
 
@@ -72,7 +81,15 @@ Se clasifican en tres montones, y cada uno se resuelve distinto:
 
 3. **`connect-src`, `img-src`, `media-src`, `font-src`** — algo que la app
    pide y la política no contempla. Se agrega el destino a
-   `src/lib/csp.ts` con un comentario que diga qué lo pide.
+   `DESTINOS_EXTERNOS` en `src/lib/csp.ts` con un comentario que diga qué lo
+   pide, y a `csp-destinos.test.ts` si es un host que sólo usa el servidor.
+   **Un reporte de `connect-src` con `bloqueado` en
+   `r2.cloudflarestorage.com` ya debería haber aparecido** en el log desde
+   que existe la política (cada grabación subida generaba uno, hasta que
+   R2 entró a la política). Si en el log no hay ninguno de antes de ese
+   cambio, eso significa que nadie estaba mirando el log, no que no
+   existiera: revisar cómo se leen los reportes antes de confiar en las
+   cuatro semanas de abajo.
 
 ## Cuánto tiempo
 
@@ -83,12 +100,15 @@ grabación, aprobación de nota, configuración, cobros— en su teléfono y en 
 computadora, y para que hayan entrado uno o dos ciclos de dependencias de
 Next.
 
-Antes de cambiar la línea, tres condiciones:
+Antes de cambiar la línea, cuatro condiciones:
 
+- `csp-destinos.test.ts` en verde y `R2_PUBLIC_HOST` cargada en Vercel con
+  el host exacto de la cuenta (`/api/health` contesta 503 si falta);
 - **cero** reportes del montón 1 que vengan del dominio propio en las últimas
   dos semanas;
 - se hizo al menos una grabación completa de una sesión real bajo la política
-  (la pantalla de grabar es la que más JavaScript mueve);
+  (la pantalla de grabar es la que más JavaScript mueve, y la subida a R2 es
+  el único `connect-src` externo con datos clínicos);
 - se leyó el log después del último deploy de Next o de una dependencia
   grande: una versión nueva puede inyectar un script nuevo.
 
