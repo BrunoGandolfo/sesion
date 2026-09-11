@@ -19,7 +19,7 @@
 import { describe, expect, it } from "vitest";
 
 import { anclaDelDiaTocado } from "@/app/(dashboard)/agenda/_components/agenda-view";
-import { proponerDesdeUltimoTurno } from "@/app/(dashboard)/agenda/_components/nuevo-turno-form";
+import { proponerDesdeUltimoTurno } from "@/components/forms/nuevo-turno-form";
 import {
   fechaInputMvd,
   horaInputMvd,

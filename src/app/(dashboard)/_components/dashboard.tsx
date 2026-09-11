@@ -23,7 +23,11 @@ import {
   NO_SE_PUDO_COBRAR,
   TURNO_AGENDADO,
 } from "@/lib/glosario";
-import type { MetodoPago, PacienteConDeuda } from "@/types/domain";
+import type {
+  Configuracion,
+  MetodoPago,
+  PacienteConDeuda,
+} from "@/types/domain";
 
 import { AgendaDelDia } from "./agenda-del-dia";
 import { CardAhora } from "./card-ahora";
@@ -56,6 +60,8 @@ export function Dashboard() {
   const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
     null,
   );
+  // Tarifa de Tu consultorio, para "Crear a X" desde el formulario de turno.
+  const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
   const [cobrando, setCobrando] = React.useState<string | null>(null);
   // El turno cuyo cobro se está confirmando en su propia fila (delta D9).
   const [cobroConfirmado, setCobroConfirmado] = React.useState<string | null>(
@@ -97,8 +103,16 @@ export function Dashboard() {
   const abrirTurno = React.useCallback(() => {
     setTurnoSheet(true);
     if (pacientes !== null) return;
-    apiGet<JsonPaciente[]>("/api/pacientes")
-      .then((lista) => setPacientes(lista.map(parsePaciente)))
+    // La tarifa es best-effort: sin ella el formulario agenda igual, solo
+    // no deja crear pacientes desde ahí.
+    Promise.all([
+      apiGet<JsonPaciente[]>("/api/pacientes"),
+      apiGet<Configuracion>("/api/config").catch(() => null),
+    ])
+      .then(([lista, config]) => {
+        setPacientes(lista.map(parsePaciente));
+        setTarifaDefault(config?.tarifaDefault ?? null);
+      })
       .catch(() => {
         setPacientes([]);
         setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
@@ -144,38 +158,35 @@ export function Dashboard() {
     [cobrando],
   );
 
+  // Si la API rechaza (un 409 por solapamiento, por ejemplo) se relanza:
+  // el formulario muestra el motivo y se queda abierto con lo escrito, igual
+  // que en la agenda. Lo que no es un error de la API sale como aviso
+  // general.
   const agendar = React.useCallback(
-    (valores: NuevoTurnoData) => {
-      apiPost("/api/turnos", {
-        pacienteId: valores.pacienteId,
-        // La hora del formulario es la del consultorio, no la del aparato.
-        fecha: instanteDesdeFechaHoraMvd(
-          valores.fecha,
-          valores.hora,
-        ).toISOString(),
-        duracion: valores.duracion,
-        modalidad: valores.modalidad,
-        notas: valores.notas?.trim() ? valores.notas.trim() : null,
-      })
-        .then(() => {
-          setTurnoSheet(false);
-          setToast({
-            open: true,
-            message: TURNO_AGENDADO,
-            variante: "confirmacion",
-          });
-          recargar();
-        })
-        .catch((error: unknown) =>
-          setToast({
-            open: true,
-            message:
-              error instanceof ApiClientError && error.status === 409
-                ? error.mensaje
-                : NO_SE_PUDO_AGENDAR,
-            variante: "aviso",
-          }),
-        );
+    async (valores: NuevoTurnoData) => {
+      try {
+        await apiPost("/api/turnos", {
+          pacienteId: valores.pacienteId,
+          // La hora del formulario es la del consultorio, no la del aparato.
+          fecha: instanteDesdeFechaHoraMvd(
+            valores.fecha,
+            valores.hora,
+          ).toISOString(),
+          duracion: valores.duracion,
+          modalidad: valores.modalidad,
+          notas: valores.notas?.trim() ? valores.notas.trim() : null,
+        });
+      } catch (error) {
+        if (error instanceof ApiClientError) throw error;
+        throw new ApiClientError(NO_SE_PUDO_AGENDAR, 0);
+      }
+      setTurnoSheet(false);
+      setToast({
+        open: true,
+        message: TURNO_AGENDADO,
+        variante: "confirmacion",
+      });
+      recargar();
     },
     [recargar],
   );
@@ -251,6 +262,7 @@ export function Dashboard() {
       <SheetNuevoTurno
         open={turnoSheet}
         pacientes={pacientes}
+        tarifaDefault={tarifaDefault}
         onClose={() => setTurnoSheet(false)}
         onSubmit={agendar}
       />

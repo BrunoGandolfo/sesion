@@ -10,21 +10,17 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useForm, useWatch } from "react-hook-form";
+import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { ArrowRight, Mic } from "lucide-react";
 
+import { Avatar, Button, Chip, Confirmar, Sheet } from "@/components/ui";
 import {
-  Avatar,
-  Button,
-  Chip,
-  Confirmar,
-  Input,
-  Segmented,
-  Sheet,
-  Textarea,
-} from "@/components/ui";
+  CAMPOS_TURNO_DEFAULT,
+  TurnoEditarCampos,
+  camposTurnoSchema,
+  type CamposTurnoValores,
+} from "@/components/forms/turno-editar-campos";
 import { useHoy } from "@/hooks/useHoy";
 import {
   fechaInputMvd,
@@ -63,34 +59,13 @@ import {
   REINTENTAR_RECORDATORIO_TITULO,
   REVISAR_NOTA,
 } from "@/lib/glosario";
-import type {
-  Duracion,
-  MetodoPago,
-  Modalidad,
-  Turno,
-  TurnoConPaciente,
-} from "@/types/domain";
+import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 
-const DURACIONES: Duracion[] = [30, 45, 50, 60, 90];
-
-
-const editSchema = z.object({
-  fecha: z.string().min(1, "Falta la fecha"),
-  hora: z.string().min(1, "Falta la hora"),
-  duracion: z.union([
-    z.literal(30),
-    z.literal(45),
-    z.literal(50),
-    z.literal(60),
-    z.literal(90),
-  ]),
-  modalidad: z.enum(["presencial", "online"]),
-  notas: z.string().optional(),
-});
-
-type EditValues = z.infer<typeof editSchema>;
+// Los campos de "Reprogramar" son los del alta (fecha, hora, duración,
+// modalidad, notas): mismo schema y mismo componente, turno-editar-campos.
+type EditValues = CamposTurnoValores;
 
 type Modo =
   | "ver"
@@ -173,27 +148,12 @@ export function TurnoDetailSheet({
   const [recordatorioKey, setRecordatorioKey] = React.useState(0);
   const hoy = useHoy();
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    control,
-    reset,
-    formState: { errors },
-  } = useForm<EditValues>({
-    resolver: zodResolver(editSchema),
-    defaultValues: {
-      fecha: "",
-      hora: "",
-      duracion: 50,
-      modalidad: "presencial",
-      notas: "",
-    },
+  const metodos = useForm<EditValues>({
+    resolver: zodResolver(camposTurnoSchema),
+    defaultValues: CAMPOS_TURNO_DEFAULT,
     mode: "onSubmit",
   });
-
-  const duracion = useWatch({ control, name: "duracion" });
-  const modalidad = useWatch({ control, name: "modalidad" });
+  const { handleSubmit, reset } = metodos;
 
   const turnoId = turno?.id;
   const turnoEstado = turno?.estado;
@@ -665,85 +625,9 @@ export function TurnoDetailSheet({
 
         {/* Reprogramar */}
         {modo === "reprogramar" ? (
+          <FormProvider {...metodos}>
           <form onSubmit={guardarReprogramacion} className="flex flex-col gap-4">
-            <input type="hidden" {...register("duracion", { valueAsNumber: true })} />
-            <input type="hidden" {...register("modalidad")} />
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Input
-                label="Fecha"
-                type="date"
-                error={errors.fecha?.message}
-                {...register("fecha")}
-              />
-              <Input
-                label="Hora"
-                type="time"
-                error={errors.hora?.message}
-                {...register("hora")}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <span className="block font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                Duración
-              </span>
-              <div className="flex gap-2">
-                {DURACIONES.map((opcion) => {
-                  const activo = duracion === opcion;
-                  return (
-                    <Button
-                      key={opcion}
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      aria-pressed={activo}
-                      onClick={() =>
-                        setValue("duracion", opcion, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        })
-                      }
-                      className={`flex-1 !px-0 border ${
-                        activo
-                          ? "!border-sage-500 !bg-sage-500 !text-white hover:!bg-sage-500"
-                          : "!border-[color:var(--border-subtle)] !bg-cream-50 !text-ink-700 hover:!bg-cream-100"
-                      }`}
-                    >
-                      {opcion}′
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <span className="block font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                Modalidad
-              </span>
-              <Segmented
-                ariaLabel="Modalidad"
-                value={modalidad}
-                onChange={(valor: Modalidad) =>
-                  setValue("modalidad", valor, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-                options={[
-                  { value: "presencial", label: "Presencial" },
-                  { value: "online", label: "Online" },
-                ]}
-              />
-            </div>
-
-            <Textarea
-              label="Notas"
-              placeholder="Algo para recordar del turno."
-              error={errors.notas?.message}
-              className="min-h-[72px]"
-              {...register("notas")}
-            />
+            <TurnoEditarCampos notasLabel="Notas" />
 
             {error ? (
               <p role="alert" className="text-[12px] text-[color:var(--color-error)]">
@@ -765,6 +649,7 @@ export function TurnoDetailSheet({
               </Button>
             </div>
           </form>
+          </FormProvider>
         ) : null}
       </div>
     </Sheet>

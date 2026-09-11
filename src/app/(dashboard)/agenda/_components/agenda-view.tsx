@@ -30,7 +30,10 @@ import { AgendaHeader } from "./agenda-header";
 import { DayView, EstadoVacio } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
-import { NuevoTurnoForm, type NuevoTurnoData } from "./nuevo-turno-form";
+import {
+  NuevoTurnoForm,
+  type NuevoTurnoData,
+} from "@/components/forms/nuevo-turno-form";
 import { TurnoDetailSheet } from "./turno-detail-sheet";
 
 export type AgendaViewMode = "día" | "semana" | "mes";

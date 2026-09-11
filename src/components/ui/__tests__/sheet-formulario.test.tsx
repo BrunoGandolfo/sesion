@@ -7,8 +7,7 @@ import { fireEvent, render, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Sheet } from "../sheet";
 import estilos from "../sheet-formulario.module.css";
-import { NuevoTurnoForm as FormHoy } from "@/components/forms/nuevo-turno-form";
-import { NuevoTurnoForm as FormAgenda } from "@/app/(dashboard)/agenda/_components/nuevo-turno-form";
+import { NuevoTurnoForm } from "@/components/forms/nuevo-turno-form";
 import { NuevoPacienteForm } from "@/app/(dashboard)/pacientes/_components/nuevo-paciente-form";
 import { SheetNuevoTurno } from "@/app/(dashboard)/_components/sheet-nuevo-turno";
 
@@ -63,14 +62,16 @@ function comprobarPanel(panel: HTMLElement) {
 }
 const pacientes = [{ id: "lucia", nombre: "Lucía", apellido: "Prueba", tarifa: 2200 }];
 
+// El formulario de turno es uno solo para Hoy y Agenda; se prueba con las
+// props de cada pantalla (Hoy no manda tarifa ni fecha inicial).
 describe("panel de alta con un solo scroll", () => {
   it.each(["hoy", "agenda", "paciente"] as const)("mantiene los botones dentro del scroll en móvil y escritorio: %s", async (tipo) => {
     const formulario = tipo === "hoy"
-      ? <FormHoy pacientes={pacientes} onSubmit={vi.fn()} onCancel={vi.fn()} />
+      ? <NuevoTurnoForm pacientes={pacientes} onSubmit={vi.fn()} onCancel={vi.fn()} />
       : tipo === "agenda"
-        ? <FormAgenda pacientes={pacientes} tarifaDefault={2200} fechaInicial={new Date("2026-09-10T12:00:00-03:00")} onSubmit={vi.fn()} onCancel={vi.fn()} />
+        ? <NuevoTurnoForm pacientes={pacientes} tarifaDefault={2200} fechaInicial={new Date("2026-09-10T12:00:00-03:00")} onSubmit={vi.fn()} onCancel={vi.fn()} />
         : <NuevoPacienteForm tarifaDefault={2200} onSuccess={vi.fn()} onCancel={vi.fn()} />;
-    render(<Sheet open formulario onClose={vi.fn()}>{formulario}</Sheet>);
+    render(<Sheet open formulario onClose={vi.fn()}><div className="px-6 pt-3 lg:px-7 lg:pt-7">{formulario}</div></Sheet>);
     await aplicarEstilos();
     const paneles = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'));
     expect(paneles).toHaveLength(2);
@@ -83,8 +84,8 @@ describe("panel de alta con un solo scroll", () => {
   it.each(["hoy", "agenda"] as const)("conserva el scroll propio del selector de pacientes: %s", async (tipo) => {
     render(<Sheet open formulario onClose={vi.fn()}>
       {tipo === "hoy"
-        ? <FormHoy pacientes={pacientes} onSubmit={vi.fn()} onCancel={vi.fn()} />
-        : <FormAgenda pacientes={pacientes} tarifaDefault={2200} fechaInicial={null} onSubmit={vi.fn()} onCancel={vi.fn()} />}
+        ? <NuevoTurnoForm pacientes={pacientes} onSubmit={vi.fn()} onCancel={vi.fn()} />
+        : <NuevoTurnoForm pacientes={pacientes} tarifaDefault={2200} fechaInicial={null} onSubmit={vi.fn()} onCancel={vi.fn()} />}
     </Sheet>);
     const panel = document.querySelector<HTMLElement>('[role="dialog"]')!;
     fireEvent.focus(within(panel).getByLabelText("Paciente"));

@@ -29,11 +29,23 @@ vi.mock("../agenda-del-dia", () => ({
 }));
 // Se mantiene el sheet abierto/cerrado por el Dashboard real; el formulario
 // entrega los mismos datos en cada intento para verificar que el rechazo
-// no cierra la edición ni transforma el pedido.
-vi.mock("../sheet-nuevo-turno", () => ({
-  SheetNuevoTurno: ({ open, onSubmit }: { open: boolean; onSubmit: (d: NuevoTurnoData) => void }) =>
-    open ? <div role="dialog" aria-label="Agendar"><button onClick={() => onSubmit(VALORES)}>Guardar turno</button></div> : null,
-}));
+// no cierra la edición ni transforma el pedido. Como el formulario real,
+// muestra el motivo del rechazo (ApiClientError.mensaje) en un alert.
+vi.mock("../sheet-nuevo-turno", async () => {
+  const React = await import("react");
+  return {
+    SheetNuevoTurno: ({ open, onSubmit }: { open: boolean; onSubmit: (d: NuevoTurnoData) => Promise<void> }) => {
+      const [error, setError] = React.useState<string | null>(null);
+      if (!open) return null;
+      return (
+        <div role="dialog" aria-label="Agendar">
+          <button onClick={() => { setError(null); onSubmit(VALORES).catch((e: ApiClientError) => setError(e.mensaje)); }}>Guardar turno</button>
+          {error ? <p role="alert">{error}</p> : null}
+        </div>
+      );
+    },
+  };
+});
 const VALORES: NuevoTurnoData = {
   pacienteId: "p1", fecha: "2026-09-10", hora: "12:00", duracion: 50, modalidad: "presencial", notas: "  consulta  ",
 };
@@ -56,12 +68,12 @@ async function guardar() {
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Guardar turno" })); });
 }
 describe("Hoy conserva el motivo del solapamiento", () => {
-  it("muestra el conflicto sin tilde y permite repetir el mismo pedido", async () => {
+  it("muestra el conflicto en el formulario y permite repetir el mismo pedido", async () => {
     api.post.mockRejectedValueOnce(new ApiClientError(TURNO_SOLAPADO, 409));
     await guardar();
-    const aviso = await screen.findByRole("status");
+    const aviso = await screen.findByRole("alert");
     expect(aviso.textContent).toBe(TURNO_SOLAPADO);
-    expect(aviso.querySelector("svg")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByRole("dialog", { name: "Agendar" })).toBeTruthy();
     expect(api.post).toHaveBeenNthCalledWith(1, "/api/turnos", PEDIDO);
     expect(leerHoy).toHaveBeenCalledTimes(1);
@@ -72,12 +84,19 @@ describe("Hoy conserva el motivo del solapamiento", () => {
     expect(screen.getByRole("status").querySelector("svg")).toBeTruthy();
     expect(leerHoy).toHaveBeenCalledTimes(2);
   });
-  it.each([new Error("Sin conexión"), new ApiClientError("Detalle interno", 500)])("conserva el aviso general si no es un conflicto: %s", async (error) => {
-    api.post.mockRejectedValue(error);
+  it("un fallo que no viene de la API sale como aviso general, en el formulario", async () => {
+    api.post.mockRejectedValue(new Error("Sin conexión"));
     await guardar();
-    const aviso = await screen.findByRole("status");
+    const aviso = await screen.findByRole("alert");
     expect(aviso.textContent).toBe(NO_SE_PUDO_AGENDAR);
-    expect(aviso.querySelector("svg")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Agendar" })).toBeTruthy();
+    expect(leerHoy).toHaveBeenCalledTimes(1);
+  });
+  it("un rechazo de la API que no es conflicto muestra su motivo, como en la agenda", async () => {
+    api.post.mockRejectedValue(new ApiClientError("Paciente no encontrado", 404));
+    await guardar();
+    expect((await screen.findByRole("alert")).textContent).toBe("Paciente no encontrado");
     expect(screen.getByRole("dialog", { name: "Agendar" })).toBeTruthy();
   });
 });
