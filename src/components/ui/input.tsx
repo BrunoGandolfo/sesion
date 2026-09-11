@@ -50,7 +50,7 @@ export function Input({
           id={inputId}
           aria-invalid={error ? true : undefined}
           aria-describedby={errorId}
-          className={`flex-1 min-w-0 bg-transparent py-[10px] text-[15px] text-ink-900 outline-none placeholder:text-ink-300 ${prefix ? "pl-2 pr-[14px]" : "px-[14px]"} ${className}`}
+          className={`flex-1 min-w-0 bg-transparent py-[10px] text-[15px] text-ink-900 outline-none placeholder:text-ink-500 ${prefix ? "pl-2 pr-[14px]" : "px-[14px]"} ${className}`}
           {...rest}
         />
       </div>

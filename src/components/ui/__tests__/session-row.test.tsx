@@ -93,3 +93,10 @@ it("usa Sin cobrar también en los turnos de la ficha", () => {
   expect(screen.getByText("Sin cobrar")).toBeTruthy();
   expect(screen.queryByText("Pendiente")).toBeNull();
 });
+
+it('permite leer la duración de la sesión como texto secundario',()=>{
+ render(<SessionRow turno={TURNO}/>);
+ const duracion=screen.getByText('50 min');
+ expect(duracion.classList.contains('text-ink-500')).toBe(true);
+ expect(duracion.classList.contains('text-[12px]')).toBe(true);
+});

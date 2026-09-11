@@ -97,3 +97,9 @@ describe("Pantalla de entrada", () => {
     expect(container.textContent).not.toContain("Lupita");
   });
 });
+
+it('mantiene legible el pie de la entrada',()=>{
+ render(<LoginPage/>);
+ const pie=screen.getByText(/v1.0/);
+ expect(pie.classList.contains('text-ink-500')).toBe(true);
+});

@@ -191,7 +191,7 @@ export function SessionRow(props: SessionRowProps) {
         <span className="font-display text-[19px] font-medium tabular-nums leading-none text-ink-900">
           {hora(turno.fecha)}
         </span>
-        <span className="text-[11px] text-ink-300 mt-1">
+        <span className="text-[12px] text-ink-500 mt-1">
           {turno.duracion} min
         </span>
       </div>

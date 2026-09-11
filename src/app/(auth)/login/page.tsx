@@ -101,7 +101,7 @@ export default function LoginPage() {
             </form>
           </Card>
 
-          <p className="mt-6 text-center text-[11px] text-ink-300">
+          <p className="mt-6 text-center text-[12px] text-ink-500">
             v1.0 · hecho con cuidado
           </p>
         </div>

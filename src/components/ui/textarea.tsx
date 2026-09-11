@@ -43,7 +43,7 @@ export function Textarea({
           id={textareaId}
           aria-invalid={error ? true : undefined}
           aria-describedby={errorId}
-          className={`flex-1 min-w-0 bg-transparent px-[14px] py-[10px] text-[15px] text-ink-900 outline-none placeholder:text-ink-300 resize-y min-h-[100px] ${className}`}
+          className={`flex-1 min-w-0 bg-transparent px-[14px] py-[10px] text-[15px] text-ink-900 outline-none placeholder:text-ink-500 resize-y min-h-[100px] ${className}`}
           {...rest}
         />
       </div>

@@ -32,3 +32,13 @@ it("el menú lateral enlaza Tu consultorio a configuración", async () => {
   render(<Sidebar />);
   expect((await screen.findByRole("link", { name: "Tu consultorio" })).getAttribute("href")).toBe("/config");
 });
+
+it('hace legibles los destinos inactivos sin cambiar los enlaces ni la altura de línea',()=>{
+ render(<BottomNav/>);
+ const agenda=screen.getByRole('link',{name:'Agenda'});
+ expect(agenda.classList.contains('text-ink-500')).toBe(true);
+ expect(agenda.classList.contains('text-[12px]')).toBe(true);
+ expect(agenda.classList.contains('leading-[15px]')).toBe(true);
+ expect(agenda.getAttribute('href')).toBe('/agenda');
+ expect(screen.getByRole('button',{name:'Lupita'}).classList.contains('text-ink-500')).toBe(true);
+});

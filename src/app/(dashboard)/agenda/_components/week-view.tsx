@@ -82,7 +82,7 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                   style={{ height: ROW_HEIGHT }}
                   className="border-t border-[color:var(--border-subtle)] px-2 py-[6px]"
                 >
-                  <span className="text-[10px] text-ink-300 tabular-nums">
+                  <span className="text-[12px] text-ink-500 tabular-nums">
                     {String(h % 24).padStart(2, "0")}:00{h >= 24 ? " (+1 día)" : ""}
                   </span>
                 </div>

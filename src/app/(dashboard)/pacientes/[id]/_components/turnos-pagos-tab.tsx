@@ -347,7 +347,7 @@ function TurnoRow({
           <span className="font-sans text-[13px] font-medium text-ink-700 tabular-nums">
             {fechaCorta(turno.fecha)}
           </span>
-          <span className="font-sans text-[11px] text-ink-300 tabular-nums">
+          <span className="font-sans text-[12px] text-ink-500 tabular-nums">
             {hora(turno.fecha)}
           </span>
         </div>
