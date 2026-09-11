@@ -1,175 +1,179 @@
-# Cifrado en reposo de datos clínicos
+# Cifrado en reposo de datos clínicos y personales
 
-Qué se cifra, cómo, y qué hacer con la clave. Describe el estado vigente:
-solo existen columnas `*_encrypted`; las columnas en texto plano se
-eliminaron (Fase 4). La versión de fase 1, con columnas legacy en paralelo y
-script de backfill, está en `docs/historico/encryption-fase1.md`.
+Qué se cifra, cómo, y qué hacer con las claves. Describe el estado vigente
+tras la reconstrucción (esquema nuevo, formato `ENC2`). El formato anterior
+(`ENC1`, una sola clave, sin rótulo por fila) no tiene datos que leer: la base
+se creó desde cero.
 
 ## 1. Qué se cifra
 
 Extensión de Prisma Client `withEncryption` (`src/lib/prisma-encryption.ts`),
-aplicada al cliente único de `src/lib/db.ts`. Cada campo lógico vive en una
-columna `Bytes` con `@map` a snake_case. Los campos lógicos no existen en
-`prisma/schema.prisma`: los define la extensión.
+aplicada al único cliente de `src/lib/db.ts`. Cada campo lógico vive en una
+columna `Bytes` (`*_encrypted`). Los campos lógicos no existen en
+`prisma/schema.prisma`: los define la tabla `CAMPOS_CIFRADOS` de la extensión,
+que es el contrato del anexo de `docs/esquema.md`.
 
-`SesionClinica`:
-
-| Campo lógico | Tipo al leer | Columna | Contenido |
+| Modelo (tabla) | Campo lógico | Columna | Tipo al leer |
 | --- | --- | --- | --- |
-| `transcripcion` | `string \| null` | `transcripcion_encrypted` | Transcripción diarizada. |
-| `notaSubjetivo`, `notaObjetivo`, `notaAnalisis`, `notaPlan` | `string \| null` | `nota_soap_encrypted` | Un solo JSON `{subjetivo, objetivo, analisis, plan}`. Una escritura reemplaza el JSON completo: las secciones no enviadas quedan en null. |
-| `notaSoapOriginal` | `NotaSoapOriginal \| null` | `nota_soap_original_encrypted` | Nota tal como la generó la IA; se escribe una sola vez. |
-| `datosEstructurados` | `unknown` (JSON parseado) | `datos_estructurados_encrypted` | Datos extraídos, incluida la clave temporal del audio mientras el audio existe. |
-| `notasEdicion` | `string \| null` | `notas_edicion_encrypted` | Comentarios de la profesional al aprobar. |
+| `Paciente` (`pacientes`) | `notas` | `notas_encrypted` | `string \| null` |
+| `Turno` (`turnos`) | `notas` | `notas_encrypted` | `string \| null` |
+| `ConsentimientoGrabacion` (`consentimientos_grabacion`) | `textoCompleto` | `texto_completo_encrypted` | `string` |
+| | `firmaDigital` | `firma_digital_encrypted` | `string` |
+| `HotWord` (`hot_words`) | `termino` | `termino_encrypted` | `string` |
+| `SesionClinica` (`sesiones_clinicas`) | `audioClave` | `audio_clave_encrypted` | `string \| null` (base64) |
+| | `transcripcion` | `transcripcion_encrypted` | `string \| null` |
+| | `notaIa` | `nota_ia_encrypted` | `NotaSoap \| null` |
+| | `datos` | `datos_encrypted` | `unknown` (JSON parseado) |
+| | `feedback` | `feedback_encrypted` | `unknown` (JSON parseado) |
+| | `notaFinal` | `nota_final_encrypted` | `NotaSoap \| null` |
+| | `notasEdicion` | `notas_edicion_encrypted` | `string \| null` |
+| `HiloVersion` (`hilo_versiones`) | `contenido` | `contenido_encrypted` | `unknown` (JSON parseado) |
 
-`PacienteContextoClinico` (Golden Thread), sin agrupar:
+`NotaSoap` es `{ subjetivo, objetivo, analisis, plan }`, cada sección
+`string | null`; al escribir se normaliza a esas cuatro claves.
 
-| Campo lógico | Tipo al leer | Columna |
-| --- | --- | --- |
-| `hipotesisDiagnostica` | `string \| null` | `hipotesis_diagnostica_encrypted` |
-| `resumenAcumulativo` | `string \| null` | `resumen_acumulativo_encrypted` |
-| `riesgosHistoricos` | `unknown[] \| null` (JSON parseado) | `riesgos_historicos_encrypted` |
+Quedan en claro, a propósito: nombre, apellido y teléfono de la paciente (la
+búsqueda, el orden de la agenda y el envío de SMS los necesitan en SQL),
+fechas y montos, `speech_analytics` (números), IP y navegador en
+`sesiones_acceso` e `intentos_acceso` (30 días). La lista completa está en
+`docs/esquema.md`.
 
-No se cifran `objetivosTerapeuticos`, `intervencionesProbadas` ni
-`temasRecurrentes` (columnas `Json`), por decisión documentada en
-`prisma/schema.prisma`: son consultables para tableros.
-
-Tampoco se cifran todavía `Paciente.notas`, `Turno.notas` ni el texto del
-consentimiento: es una tarea aparte.
-
-El audio se cifra aparte, en el navegador, con una clave por sesión (ver
-`docs/pipeline.md` §3.2). Los backups de la base se cifran con gpg (ver
-`docs/operaciones.md`).
+El audio se cifra aparte, en el teléfono, con una clave por sesión (columna
+`audio_clave_encrypted`) y un IV por segmento (`audio_segmentos.iv`). Los
+backups de la base se cifran con gpg (`docs/operaciones.md`).
 
 ## 2. Cómo funciona
 
-- Algoritmo AES-256-GCM (`src/lib/encryption.ts`). Clave de 32 bytes en
-  `NOTES_ENCRYPTION_KEY`, codificada en base64. Se valida al construir el
-  cliente: si falta o no decodifica a 32 bytes, la app no arranca.
-- Formato del blob: `"ENC1"` (4 bytes) `||` IV (12 bytes) `||` tag (16 bytes)
-  `||` ciphertext. IV aleatorio por escritura.
-- Un blob no nulo que no descifra (sin prefijo `ENC1`, clave distinta, bytes
-  alterados) es un dato corrupto: la lectura falla con error. No hay columna
-  en claro a la que caer.
+### El blob: `ENC2`
+
+```
+byte 0-3   "ENC2"
+byte 4     id de la clave (1..255)
+byte 5-16  IV (12 bytes aleatorios por escritura)
+byte 17-32 tag de AES-GCM (16 bytes)
+byte 33-   ciphertext
+```
+
+AES-256-GCM (`src/lib/encryption.ts`). El **AAD** (datos asociados
+autenticados: un rótulo que entra en el tag pero no viaja en el blob) es
+`"<tabla>:<columna>:<id de la fila>"` con los nombres de la base, por
+ejemplo `sesiones_clinicas:nota_ia_encrypted:7f3a…`. Un blob copiado a otra
+fila, otra columna u otra tabla no descifra. Por eso el **id existe antes del
+create**: los ids son uuid que genera la app (`crypto.randomUUID()`).
+
+### El llavero: `CLAVES_CIFRADO`
+
+`src/lib/llavero.ts`. Una variable con la lista `"1=<base64>,2=<base64>"`
+(32 bytes cada una). La activa es la de id más alto; las demás solo leen. Se
+valida al construir el cliente: sin llavero, o con una clave mal formada, la
+app no arranca. No hay tabla de claves.
 
 ### Lectura: implícita y tipada
 
-Cada campo lógico es un campo calculado de la extensión `result` de Prisma,
-con `needs` sobre su columna cifrada y `compute` que descifra. El cliente
-extendido lo conoce: se puede pedir en `select` (también dentro de una
-relación) y su tipo es el de la tabla de §1. Al seleccionar un campo lógico
-Prisma trae solo la columna cifrada y no la expone en el resultado. Sin
-`select`, la fila trae todas las columnas, cifradas incluidas, más los campos
-calculados.
+Cada campo lógico es un campo calculado de la extensión `result`, con
+`needs` sobre su columna cifrada y sobre `id`. Se puede pedir en `select`
+(también dentro de una relación) y su tipo es el de la tabla de §1.
 
 ```ts
-const sesion = await db.sesionClinica.findFirst({
-  where: { id, organizationId },
-  select: { id: true, estado: true, notaPlan: true, datosEstructurados: true },
-});
-// sesion.notaPlan: string | null    sesion.datosEstructurados: unknown
+const p = await db.paciente.findUnique({ where: { id }, select: { id: true, notas: true } });
+// p.notas: string | null
 ```
 
 ### Escritura: explícita y tipada
 
-`cifrarSesion` y `cifrarContexto` (`src/lib/prisma-encryption.ts`) toman
-campos lógicos y devuelven las columnas cifradas listas para `data`, en
-`create`, `update`, `updateMany`, `upsert` y `createMany`. `null` cifra como
-null (deja la columna en NULL); `undefined` o ausente no toca la columna.
-Las cuatro secciones SOAP viajan juntas: enviar una reemplaza el JSON
-completo, y enviar las cuatro en null deja `nota_soap_encrypted` en NULL.
+`cifrarPaciente`, `cifrarTurno`, `cifrarConsentimiento`, `cifrarHotWord`,
+`cifrarSesion`, `cifrarHiloVersion` (`src/lib/prisma-encryption.ts`) reciben
+el **id de la fila** y los campos lógicos, y devuelven `{ id, ...columnas }`
+listo para `data`. `null` deja la columna en NULL; `undefined` o ausente no
+la toca. Los campos `json` (`datos`, `feedback`, `contenido`) aceptan el
+objeto o el string JSON ya serializado.
 
 ```ts
+const id = crypto.randomUUID();
+await db.turno.create({
+  data: { fecha, tarifaCobrada, pacienteId, organizationId, ...cifrarTurno(id, { notas }) },
+});
+
 await db.sesionClinica.updateMany({
-  where: { id, estado: "revision" },
-  data: {
-    estado: "aprobado",
-    aprobadoEn: new Date(),
-    ...cifrarSesion({
-      notasEdicion,
-      notaSubjetivo: notaEditada?.subjetivo,
-      notaPlan: notaEditada?.plan,
-      datosEstructurados: JSON.stringify(datosSinClave),
-    }),
-  },
+  where: { id, organizationId, estado: "revision" },
+  data: { estado: "aprobada", ...cifrarSesion(id, { notaFinal, notasEdicion, audioClave: null }) },
 });
 ```
 
 Escribir un campo lógico directamente en `data` no compila (no existe en el
-tipo generado) y escribir una columna `*Encrypted` a mano saltea el cifrado:
-siempre pasar por `cifrarSesion` / `cifrarContexto`.
+tipo generado). Escribir una columna `*Encrypted` a mano pasa por la guarda 2.
 
-### Guarda: nada cifrado en `where` ni `orderBy`
+### Guardas (extensión `query`, seis modelos)
 
-Una extensión `query` sobre los dos modelos rechaza en runtime cualquier
-`where` u `orderBy` (incluidos `AND` / `OR` / `NOT`) que nombre un campo
-lógico o una columna cifrada. `assertConsultaSinCifrados` está exportada para
-probarla sin base.
+1. **Nada cifrado en `where` ni `orderBy`** (también dentro de `AND` / `OR` /
+   `NOT`): error en runtime. `assertConsultaSinCifrados` está exportada para
+   probarla sin base.
+2. **Toda escritura de una columna cifrada lleva el id de su fila y el blob
+   descifra con el AAD de esa fila**: `data.id` en `create`/`createMany`,
+   `where.id` en `update`/`updateMany`, ambos en `upsert`. Un `create` sin
+   id, un `updateMany` por organización, o un blob cifrado para otra fila se
+   rechazan antes de llegar a la base. Cuesta un descifrado por columna
+   escrita. `assertEscrituraCifradaConsistente` está exportada.
 
-## 3. Estado tras la Fase 4
+Límite: las guardas miran el modelo de la operación, no los `create`
+anidados de otro modelo dentro de `data`. No se escriben columnas cifradas
+por escritura anidada.
 
-- Ya no existen columnas en texto plano para `transcripcion`,
-  `notaSubjetivo`, `notaObjetivo`, `notaAnalisis`, `notaPlan`,
-  `datosEstructurados`, `notasEdicion`, `hipotesisDiagnostica`,
-  `resumenAcumulativo` ni `riesgosHistoricos`. Los campos lógicos existen solo
-  en la extensión.
-- No hay fallback de lectura a columna legacy ni escritura a columnas en
-  claro. El script de backfill `scripts/migrate-encrypt-existing-notas.ts`
-  quedó vacío y debe borrarse.
-- Los dumps anteriores a la Fase 4 contienen texto clínico en claro en las
-  columnas legacy. Descartarlos una vez que exista un backup posterior a la
-  migración.
+## 3. Rotación de claves
+
+Sin ventana de mantenimiento:
+
+1. `openssl rand -base64 32` → agregar `,2=<nueva>` a `CLAVES_CIFRADO` en
+   Vercel con `printf` (no `echo`). Deploy. Desde ese instante lo nuevo se
+   cifra con la 2; lo viejo se sigue leyendo con la 1.
+2. El cron diario de mantenimiento (`/api/cron/mantenimiento`) re-cifra hasta
+   200 filas por corrida cuyo id de clave no sea el activo, en todas las
+   columnas de §1. Para apurar: `GET /api/cron/mantenimiento?recifrar=todo`
+   con el `CRON_SECRET` corre hasta agotar o hasta 50 s. Devuelve
+   `{ recifradas, pendientes }`.
+3. Cuando `pendientes` da 0 y la consulta de §4 no muestra filas con id 1,
+   sacar `1=…` de la variable. Deploy. Si quedara una fila con una clave
+   ausente, su lectura falla con `clave 1 ausente del llavero` (nunca un
+   texto vacío): el paso 3 no se hace hasta que dé 0.
+4. Guardar la clave nueva en el gestor de contraseñas con fecha; la vieja se
+   conserva 30 días más (mientras haya backups que la necesiten) y se
+   destruye después.
+
+Incidentes ("creo que se filtró la clave"): `docs/operaciones.md` §3.
 
 ## 4. Verificación rápida
 
-```sql
-SELECT
-  COUNT(*) FILTER (WHERE substring(nota_soap_encrypted FROM 1 FOR 4) = '\x454e4331'::bytea) AS nota_soap_ok,
-  COUNT(*) FILTER (WHERE substring(nota_soap_original_encrypted FROM 1 FOR 4) = '\x454e4331'::bytea) AS nota_soap_original_ok,
-  COUNT(*) FILTER (WHERE substring(datos_estructurados_encrypted FROM 1 FOR 4) = '\x454e4331'::bytea) AS datos_ok,
-  COUNT(*) FILTER (WHERE substring(transcripcion_encrypted FROM 1 FOR 4) = '\x454e4331'::bytea) AS transcripcion_ok,
-  COUNT(*) FILTER (WHERE substring(notas_edicion_encrypted FROM 1 FOR 4) = '\x454e4331'::bytea) AS notas_edicion_ok,
-  COUNT(*) AS total
-FROM sesiones_clinicas;
-```
-
-`454e4331` es `ENC1` en hex. Un blob no nulo sin ese prefijo es un problema:
-la extensión falla al leer esa fila.
-
-Y que las columnas legacy no existan:
+Prefijo y distribución por id de clave, por tabla:
 
 ```sql
-SELECT table_name, column_name
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND (
-    (table_name = 'sesiones_clinicas' AND column_name IN
-      ('transcripcion', 'notaSubjetivo', 'notaObjetivo', 'notaAnalisis',
-       'notaPlan', 'datosEstructurados', 'notasEdicion'))
-    OR (table_name = 'paciente_contexto_clinico' AND column_name IN
-      ('hipotesis_diagnostica', 'resumen_acumulativo', 'riesgos_historicos'))
-  );
+SELECT 'pacientes' AS tabla, get_byte(notas_encrypted, 4) AS id_clave, count(*)
+  FROM pacientes WHERE notas_encrypted IS NOT NULL GROUP BY 2
+UNION ALL
+SELECT 'sesiones_clinicas', get_byte(nota_ia_encrypted, 4), count(*)
+  FROM sesiones_clinicas WHERE nota_ia_encrypted IS NOT NULL GROUP BY 2
+UNION ALL
+SELECT 'hilo_versiones', get_byte(contenido_encrypted, 4), count(*)
+  FROM hilo_versiones GROUP BY 2;
 ```
 
-Debe devolver cero filas.
+Un blob no nulo cuyos primeros cuatro bytes no sean `\x454e4332` (`ENC2` en
+hex) es un problema: la extensión falla al leer esa fila.
 
-## 5. La clave
+## 5. Las claves
 
 - Generar: `openssl rand -base64 32`.
-- Cargar en Vercel con `printf` (no `echo`, que agrega un salto de línea):
-  `printf 'CLAVE' | vercel env add NOTES_ENCRYPTION_KEY production`.
-- Guardar copia en el gestor de contraseñas con fecha. Sin la clave, las
-  notas no se recuperan.
-- CI usa una clave dummy (32 bytes en cero) solo para pasar la validación al
-  importar `db.ts`; los tests de cifrado generan una propia.
-- No hay rotación automática. Rotar implica descifrar con la clave vieja y
-  re-cifrar con la nueva todas las columnas listadas en §1; no existe script
-  para eso hoy.
+- Cargar en Vercel con `printf 'CLAVES_CIFRADO=…'`, no `echo` (agrega un
+  salto de línea).
+- CI usa `1=<32 bytes en cero en base64>` solo para pasar la validación al
+  importar `db.ts`; los tests de cifrado generan claves propias.
+- Sin la clave, las notas no se recuperan. Copia en el gestor de contraseñas,
+  con fecha.
 
 ## 6. Tests
 
-`src/lib/__tests__/prisma-encryption.test.ts` corre contra la rama `test` de
-Neon (`DATABASE_URL_TEST`) y hace `TRUNCATE ... CASCADE` en cada caso. Por eso
-`vitest.config.ts` fija `fileParallelism: false`. Nunca apuntar
-`DATABASE_URL_TEST` a producción. La rama `test` tiene que tener aplicada la
-migración que elimina las columnas legacy.
+- `src/lib/__tests__/llavero.test.ts`, `encryption.test.ts`: unitarios.
+- `src/lib/__tests__/prisma-encryption.test.ts`: unitario (cifrarX, guardas)
+  e integración contra la base de test (`DATABASE_URL_TEST`, esquema nuevo),
+  incluidos "blob movido de fila no descifra" y la rotación.
+- La conexión y el vaciado de la base de test para estos archivos están en
+  `src/lib/__tests__/base-identidad.ts`.

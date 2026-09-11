@@ -1,107 +1,174 @@
+// Cifrado en reposo de las columnas *_encrypted, como extensión de Prisma.
+//
+// En la base solo existen las columnas `*Encrypted` (Bytes). Los campos
+// lógicos en claro (notas, transcripcion, notaIa, contenido, …) NO están en
+// prisma/schema.prisma: los define este módulo, en la tabla CAMPOS_CIFRADOS,
+// y existen en tres lugares:
+//
+//   LECTURA, implícita y tipada: extensión `result`. Cada campo lógico es
+//   un campo calculado con `needs` sobre su columna cifrada Y sobre `id`
+//   (el AAD lo necesita) y `compute` que descifra.
+//     db.paciente.findFirst({ select: { id: true, notas: true } })
+//
+//   ESCRITURA, explícita y tipada: cifrarPaciente / cifrarTurno /
+//   cifrarConsentimiento / cifrarHotWord / cifrarSesion / cifrarHiloVersion.
+//   Reciben el id de la fila y los campos lógicos, y devuelven `{ id,
+//   ...columnas cifradas }` listo para `data`:
+//     data: { ...otros, ...cifrarTurno(id, { notas }) }
+//   `null` cifra como null (deja la columna en NULL); `undefined` o ausente
+//   no la toca. El id tiene que existir ANTES del create (por eso los ids
+//   son uuid generados por la app: `crypto.randomUUID()`), porque el AAD
+//   es "<tabla>:<columna>:<id>" y ata el blob a su celda.
+//
+//   GUARDAS, en la extensión `query`, para los seis modelos:
+//     1. Ningún `where` ni `orderBy` sobre un campo lógico o una columna
+//        cifrada: no son consultables.
+//     2. Toda escritura de una columna cifrada tiene que traer el id de la
+//        fila (`data.id` en create/createMany, `where.id` en update/
+//        updateMany, ambos en upsert) y el blob tiene que descifrar con el
+//        AAD de esa fila. Un `create` sin id, o un blob cifrado para otra
+//        fila, se rechaza antes de llegar a la base. Es lo que hace que el
+//        AAD sea una garantía y no una convención.
+//
+// Límite dicho a propósito: las guardas miran el modelo de la operación,
+// no los `create`/`update` anidados de otro modelo dentro de `data`. No
+// se escriben columnas cifradas por escritura anidada.
+
 import { Buffer } from "node:buffer";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import type { NotaSoapOriginal } from "@/lib/sesion-clinica/schema";
-
-import { decrypt, encrypt, validateKey } from "./encryption";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Cifrado en reposo (AES-256-GCM) de los campos clínicos.
-//
-// En la base solo existen las columnas `*Encrypted` (Bytes?). Los campos
-// lógicos en claro (transcripcion, notaSubjetivo, hipotesisDiagnostica, …)
-// existen en tres lugares:
-//
-//   LECTURA, implícita y tipada: extensión `result` de Prisma Client. Cada
-//   campo lógico es un campo calculado con `needs` sobre su columna cifrada
-//   y `compute` que descifra. `select: { notaSubjetivo: true }` compila,
-//   trae solo la columna cifrada y devuelve `string | null`. Vale también en
-//   relaciones anidadas.
-//
-//   ESCRITURA, explícita y tipada: `cifrarSesion` / `cifrarContexto` toman
-//   campos lógicos y devuelven las columnas cifradas listas para `data`:
-//     data: { estado: "revision", ...cifrarSesion({ notaSubjetivo, datosEstructurados }) }
-//   `null` cifra como null (borra la columna); `undefined` no la toca.
-//
-//   GUARDA: extensión `query` que rechaza `where` / `orderBy` sobre campos
-//   lógicos o columnas cifradas. No son consultables.
-//
-// Formato del blob: "ENC1" (4B) || IV (12B) || authTag (16B) || ciphertext.
-// Un blob no nulo que no descifra es un dato corrupto: la lectura falla.
-// ────────────────────────────────────────────────────────────────────────────
+import { aadDe, cifrar, descifrar, ErrorDescifrado } from "./encryption";
+import { validarLlavero } from "./llavero";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Contrato hacia afuera
+// Tipos de los campos lógicos (así se leen y así los aceptan los cifrarX)
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Campos lógicos de SesionClinica: así se leen y así los acepta cifrarSesion. */
+/** Una nota SOAP: las cuatro secciones, cada una texto o null. */
+export interface NotaSoap {
+  subjetivo: string | null;
+  objetivo: string | null;
+  analisis: string | null;
+  plan: string | null;
+}
+
+export interface CamposPaciente {
+  /** Notas privadas de la ficha. */
+  notas: string | null;
+}
+
+export interface CamposTurno {
+  /** Nota privada del turno. */
+  notas: string | null;
+}
+
+export interface CamposConsentimiento {
+  /** Texto íntegro que la paciente firmó. */
+  textoCompleto: string;
+  /** Firma del canvas (base64). */
+  firmaDigital: string;
+}
+
+export interface CamposHotWord {
+  termino: string;
+}
+
 export interface CamposSesionClinica {
+  /** Clave AES del audio, en base64. NULL después de aprobar. */
+  audioClave: string | null;
   transcripcion: string | null;
-  notaSubjetivo: string | null;
-  notaObjetivo: string | null;
-  notaAnalisis: string | null;
-  notaPlan: string | null;
-  /** Nota tal como la generó la IA. Se escribe una sola vez. */
-  notaSoapOriginal: NotaSoapOriginal | null;
+  /** Nota tal como la generó la IA en la generación vigente. */
+  notaIa: NotaSoap | null;
   /**
-   * Al leer: JSON parseado (objeto del tablero), o null. Al escribir acepta
-   * el objeto o el string JSON ya serializado; el string se cifra tal cual.
+   * Datos estructurados (riesgo, intervenciones, menciones léxicas…). Al
+   * leer: JSON parseado. Al escribir acepta el objeto, o el string JSON ya
+   * serializado (se cifra tal cual).
    */
-  datosEstructurados: unknown;
+  datos: unknown;
+  /** El reporte "Para vos". Misma regla que `datos`. */
+  feedback: unknown;
+  /** Lo que la profesional aprobó, con sus ediciones. */
+  notaFinal: NotaSoap | null;
+  /** Comentarios de la profesional al aprobar. */
   notasEdicion: string | null;
 }
 
-/** Campos lógicos de PacienteContextoClinico (Golden Thread). */
-export interface CamposContextoClinico {
-  hipotesisDiagnostica: string | null;
-  resumenAcumulativo: string | null;
-  /** Timeline de flags, ya parseada; se guarda como JSON. */
-  riesgosHistoricos: unknown[] | null;
+export interface CamposHiloVersion {
+  /** Todo el contenido de la versión, un solo JSON. Misma regla que `datos`. */
+  contenido: unknown;
 }
 
-const CAMPOS_LOGICOS_SESION = [
-  "transcripcion",
-  "notaSubjetivo",
-  "notaObjetivo",
-  "notaAnalisis",
-  "notaPlan",
-  "notaSoapOriginal",
-  "datosEstructurados",
-  "notasEdicion",
-] as const satisfies readonly (keyof CamposSesionClinica)[];
+// ────────────────────────────────────────────────────────────────────────────
+// La tabla: modelo → tabla SQL → campo lógico → columna (Prisma y SQL)
+// ────────────────────────────────────────────────────────────────────────────
 
-const COLUMNAS_SESION = [
-  "transcripcionEncrypted",
-  "notaSoapEncrypted",
-  "notaSoapOriginalEncrypted",
-  "datosEstructuradosEncrypted",
-  "notasEdicionEncrypted",
-] as const;
+/** Cómo se serializa el campo antes de cifrar y cómo se lee después. */
+type TipoCampo =
+  | "texto" // string tal cual
+  | "json" // objeto/array → JSON.stringify; string → tal cual; lee JSON.parse
+  | "nota"; // NotaSoap normalizada a sus 4 claves → JSON
 
-const CAMPOS_LOGICOS_CONTEXTO = [
-  "hipotesisDiagnostica",
-  "resumenAcumulativo",
-  "riesgosHistoricos",
-] as const satisfies readonly (keyof CamposContextoClinico)[];
+interface DefCampo {
+  columna: string;
+  columnaSql: string;
+  tipo: TipoCampo;
+}
 
-const COLUMNAS_CONTEXTO = [
-  "hipotesisDiagnosticaEncrypted",
-  "resumenAcumulativoEncrypted",
-  "riesgosHistoricosEncrypted",
-] as const;
+interface DefModelo {
+  tabla: string;
+  campos: Record<string, DefCampo>;
+}
 
-/** Columnas cifradas de SesionClinica, con el tipo que Prisma acepta en `data` (create y update). */
-export type ColumnasCifradasSesion = Pick<
-  Prisma.SesionClinicaUncheckedCreateInput,
-  (typeof COLUMNAS_SESION)[number]
->;
+function campo(columna: string, columnaSql: string, tipo: TipoCampo): DefCampo {
+  return { columna, columnaSql, tipo };
+}
 
-/** Ídem para PacienteContextoClinico. */
-export type ColumnasCifradasContexto = Pick<
-  Prisma.PacienteContextoClinicoUncheckedCreateInput,
-  (typeof COLUMNAS_CONTEXTO)[number]
->;
+/**
+ * La única definición de qué está cifrado. Es el contrato del anexo de
+ * docs/esquema.md: si cambia una columna del schema, cambia acá.
+ */
+export const CAMPOS_CIFRADOS = {
+  Paciente: {
+    tabla: "pacientes",
+    campos: { notas: campo("notasEncrypted", "notas_encrypted", "texto") },
+  },
+  Turno: {
+    tabla: "turnos",
+    campos: { notas: campo("notasEncrypted", "notas_encrypted", "texto") },
+  },
+  ConsentimientoGrabacion: {
+    tabla: "consentimientos_grabacion",
+    campos: {
+      textoCompleto: campo("textoCompletoEncrypted", "texto_completo_encrypted", "texto"),
+      firmaDigital: campo("firmaDigitalEncrypted", "firma_digital_encrypted", "texto"),
+    },
+  },
+  HotWord: {
+    tabla: "hot_words",
+    campos: { termino: campo("terminoEncrypted", "termino_encrypted", "texto") },
+  },
+  SesionClinica: {
+    tabla: "sesiones_clinicas",
+    campos: {
+      audioClave: campo("audioClaveEncrypted", "audio_clave_encrypted", "texto"),
+      transcripcion: campo("transcripcionEncrypted", "transcripcion_encrypted", "texto"),
+      notaIa: campo("notaIaEncrypted", "nota_ia_encrypted", "nota"),
+      datos: campo("datosEncrypted", "datos_encrypted", "json"),
+      feedback: campo("feedbackEncrypted", "feedback_encrypted", "json"),
+      notaFinal: campo("notaFinalEncrypted", "nota_final_encrypted", "nota"),
+      notasEdicion: campo("notasEdicionEncrypted", "notas_edicion_encrypted", "texto"),
+    },
+  },
+  HiloVersion: {
+    tabla: "hilo_versiones",
+    campos: { contenido: campo("contenidoEncrypted", "contenido_encrypted", "json") },
+  },
+} as const satisfies Record<string, DefModelo>;
+
+export type ModeloCifrado = keyof typeof CAMPOS_CIFRADOS;
+
+export const MODELOS_CIFRADOS = Object.keys(CAMPOS_CIFRADOS) as ModeloCifrado[];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Utilidades
@@ -117,10 +184,7 @@ function textoONull(valor: unknown): string | null {
   return typeof valor === "string" ? valor : null;
 }
 
-/**
- * Normaliza el blob que devuelve Prisma para Bytes? a Buffer. Prisma 5
- * entrega Buffer en Node; algunos entornos entregan Uint8Array "puro".
- */
+/** Prisma 5 entrega Buffer en Node; algunos entornos entregan Uint8Array. */
 function aBuffer(valor: unknown): Buffer | null {
   if (valor == null) return null;
   if (Buffer.isBuffer(valor)) return valor;
@@ -131,7 +195,7 @@ function aBuffer(valor: unknown): Buffer | null {
 }
 
 /** Cualquier objeto → las 4 claves SOAP (extras se descartan, faltantes → null). */
-function normalizarNotaSoap(valor: unknown): NotaSoapOriginal | null {
+export function normalizarNotaSoap(valor: unknown): NotaSoap | null {
   if (!esObjetoPlano(valor)) return null;
   return {
     subjetivo: textoONull(valor.subjetivo),
@@ -141,144 +205,194 @@ function normalizarNotaSoap(valor: unknown): NotaSoapOriginal | null {
   };
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Lectura (usada por los campos calculados)
-// ────────────────────────────────────────────────────────────────────────────
-
-function descifrarTexto(blob: unknown): string | null {
-  const buffer = aBuffer(blob);
-  return buffer === null ? null : decrypt(buffer);
+function definicion(modelo: ModeloCifrado): DefModelo {
+  return CAMPOS_CIFRADOS[modelo];
 }
 
-function descifrarJson(blob: unknown): unknown {
-  const texto = descifrarTexto(blob);
-  return texto === null ? null : JSON.parse(texto);
+function aadCelda(modelo: ModeloCifrado, def: DefCampo, id: string): string {
+  return aadDe(definicion(modelo).tabla, def.columnaSql, id);
 }
 
-/** Una sección del JSON {subjetivo, objetivo, analisis, plan} de nota_soap_encrypted. */
-function seccionSoap(blob: unknown, clave: keyof NotaSoapOriginal): string | null {
-  return normalizarNotaSoap(descifrarJson(blob))?.[clave] ?? null;
-}
-
-function descifrarRiesgos(blob: unknown): unknown[] | null {
-  const valor = descifrarJson(blob);
-  return Array.isArray(valor) ? valor : null;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Escritura
-// ────────────────────────────────────────────────────────────────────────────
-
-function cifrarTexto(texto: string | null): Buffer | null {
-  return texto === null ? null : encrypt(texto);
-}
-
-/** String JSON tal cual; objeto o array serializado; null se mantiene. */
-function serializarJson(valor: unknown): string | null {
-  if (valor === null) return null;
-  return typeof valor === "string" ? valor : JSON.stringify(valor);
-}
-
-const SECCIONES_SOAP = [
-  ["notaSubjetivo", "subjetivo"],
-  ["notaObjetivo", "objetivo"],
-  ["notaAnalisis", "analisis"],
-  ["notaPlan", "plan"],
-] as const;
-
-/**
- * Las 4 secciones SOAP van juntas en un único JSON. Una escritura reemplaza
- * el JSON completo: las secciones no enviadas quedan en null. Si ninguna
- * sección viene, la columna no se toca; si todas vienen null, queda NULL.
- */
-function empaquetarSoap(
-  campos: Partial<CamposSesionClinica>,
-): string | null | undefined {
-  const nota: NotaSoapOriginal = {
-    subjetivo: null,
-    objetivo: null,
-    analisis: null,
-    plan: null,
-  };
-  let alguna = false;
-  let conTexto = false;
-  for (const [campo, clave] of SECCIONES_SOAP) {
-    const valor = campos[campo];
-    if (valor === undefined) continue;
-    alguna = true;
-    nota[clave] = valor;
-    if (valor !== null) conTexto = true;
+function exigirId(modelo: ModeloCifrado, id: unknown): string {
+  if (typeof id !== "string" || id.length === 0) {
+    throw new Error(
+      `cifrar${modelo}: el id de la fila es obligatorio y tiene que existir ` +
+        `antes del create (usar crypto.randomUUID()).`,
+    );
   }
-  if (!alguna) return undefined;
-  return conTexto ? JSON.stringify(nota) : null;
+  return id;
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Serialización por tipo
+// ────────────────────────────────────────────────────────────────────────────
+
+function serializar(def: DefCampo, valor: unknown): string | null {
+  if (valor === null) return null;
+  switch (def.tipo) {
+    case "texto":
+      if (typeof valor !== "string") {
+        throw new Error(`${def.columna}: se esperaba string o null`);
+      }
+      return valor;
+    case "json":
+      return typeof valor === "string" ? valor : JSON.stringify(valor);
+    case "nota": {
+      const nota = normalizarNotaSoap(valor);
+      return nota === null ? null : JSON.stringify(nota);
+    }
+  }
+}
+
+function deserializar(def: DefCampo, texto: string): unknown {
+  switch (def.tipo) {
+    case "texto":
+      return texto;
+    case "json":
+      return JSON.parse(texto);
+    case "nota":
+      return normalizarNotaSoap(JSON.parse(texto));
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Lectura (los campos calculados)
+// ────────────────────────────────────────────────────────────────────────────
+
+function leer(modelo: ModeloCifrado, nombre: string, id: unknown, blob: unknown): unknown {
+  const buffer = aBuffer(blob);
+  if (buffer === null) return null;
+  const def = definicion(modelo).campos[nombre];
+  const texto = descifrar(buffer, aadCelda(modelo, def, exigirId(modelo, id)));
+  return deserializar(def, texto);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Escritura (los cifrarX)
+// ────────────────────────────────────────────────────────────────────────────
+
 /**
- * Campos lógicos de SesionClinica → columnas cifradas para `data`.
- * `null` deja la columna en NULL; `undefined` (o ausente) no la toca.
+ * Cuerpo común: campos lógicos → columnas cifradas, atadas a la fila `id`.
+ * `undefined` no toca la columna; `null` la deja en NULL.
  */
+function cifrarCampos(
+  modelo: ModeloCifrado,
+  idCrudo: unknown,
+  campos: object,
+): Record<string, Buffer | null | string> {
+  const id = exigirId(modelo, idCrudo);
+  const def = definicion(modelo);
+  const columnas: Record<string, Buffer | null | string> = { id };
+  for (const [nombre, valor] of Object.entries(campos)) {
+    const defCampo = def.campos[nombre];
+    if (!defCampo) {
+      throw new Error(`cifrar${modelo}: "${nombre}" no es un campo cifrado`);
+    }
+    if (valor === undefined) continue;
+    const texto = serializar(defCampo, valor);
+    columnas[defCampo.columna] =
+      texto === null ? null : cifrar(texto, aadCelda(modelo, defCampo, id));
+  }
+  return columnas;
+}
+
+type ConId = { id: string };
+
+export type ColumnasCifradasPaciente = ConId &
+  Pick<Prisma.PacienteUncheckedCreateInput, "notasEncrypted">;
+export type ColumnasCifradasTurno = ConId &
+  Pick<Prisma.TurnoUncheckedCreateInput, "notasEncrypted">;
+export type ColumnasCifradasConsentimiento = ConId &
+  Required<
+    Pick<
+      Prisma.ConsentimientoGrabacionUncheckedCreateInput,
+      "textoCompletoEncrypted" | "firmaDigitalEncrypted"
+    >
+  >;
+export type ColumnasCifradasHotWord = ConId &
+  Required<Pick<Prisma.HotWordUncheckedCreateInput, "terminoEncrypted">>;
+export type ColumnasCifradasSesion = ConId &
+  Pick<
+    Prisma.SesionClinicaUncheckedCreateInput,
+    | "audioClaveEncrypted"
+    | "transcripcionEncrypted"
+    | "notaIaEncrypted"
+    | "datosEncrypted"
+    | "feedbackEncrypted"
+    | "notaFinalEncrypted"
+    | "notasEdicionEncrypted"
+  >;
+export type ColumnasCifradasHiloVersion = ConId &
+  Required<Pick<Prisma.HiloVersionUncheckedCreateInput, "contenidoEncrypted">>;
+
+export function cifrarPaciente(
+  id: string,
+  campos: Partial<CamposPaciente>,
+): ColumnasCifradasPaciente {
+  return cifrarCampos("Paciente", id, campos) as ColumnasCifradasPaciente;
+}
+
+export function cifrarTurno(
+  id: string,
+  campos: Partial<CamposTurno>,
+): ColumnasCifradasTurno {
+  return cifrarCampos("Turno", id, campos) as ColumnasCifradasTurno;
+}
+
+/** Los dos campos son obligatorios: un consentimiento sin texto o sin firma
+ *  no es un consentimiento (las columnas son NOT NULL). */
+export function cifrarConsentimiento(
+  id: string,
+  campos: CamposConsentimiento,
+): ColumnasCifradasConsentimiento {
+  return cifrarCampos(
+    "ConsentimientoGrabacion",
+    id,
+    campos,
+  ) as ColumnasCifradasConsentimiento;
+}
+
+export function cifrarHotWord(
+  id: string,
+  campos: CamposHotWord,
+): ColumnasCifradasHotWord {
+  return cifrarCampos("HotWord", id, campos) as ColumnasCifradasHotWord;
+}
+
 export function cifrarSesion(
+  id: string,
   campos: Partial<CamposSesionClinica>,
 ): ColumnasCifradasSesion {
-  const columnas: ColumnasCifradasSesion = {};
-  if (campos.transcripcion !== undefined) {
-    columnas.transcripcionEncrypted = cifrarTexto(campos.transcripcion);
-  }
-  const soap = empaquetarSoap(campos);
-  if (soap !== undefined) {
-    columnas.notaSoapEncrypted = cifrarTexto(soap);
-  }
-  if (campos.notaSoapOriginal !== undefined) {
-    const nota = normalizarNotaSoap(campos.notaSoapOriginal);
-    columnas.notaSoapOriginalEncrypted = cifrarTexto(
-      nota === null ? null : JSON.stringify(nota),
-    );
-  }
-  if (campos.datosEstructurados !== undefined) {
-    columnas.datosEstructuradosEncrypted = cifrarTexto(
-      serializarJson(campos.datosEstructurados),
-    );
-  }
-  if (campos.notasEdicion !== undefined) {
-    columnas.notasEdicionEncrypted = cifrarTexto(campos.notasEdicion);
-  }
-  return columnas;
+  return cifrarCampos("SesionClinica", id, campos) as ColumnasCifradasSesion;
 }
 
-/** Campos lógicos de PacienteContextoClinico → columnas cifradas para `data`. */
-export function cifrarContexto(
-  campos: Partial<CamposContextoClinico>,
-): ColumnasCifradasContexto {
-  const columnas: ColumnasCifradasContexto = {};
-  if (campos.hipotesisDiagnostica !== undefined) {
-    columnas.hipotesisDiagnosticaEncrypted = cifrarTexto(
-      campos.hipotesisDiagnostica,
-    );
-  }
-  if (campos.resumenAcumulativo !== undefined) {
-    columnas.resumenAcumulativoEncrypted = cifrarTexto(campos.resumenAcumulativo);
-  }
-  if (campos.riesgosHistoricos !== undefined) {
-    columnas.riesgosHistoricosEncrypted = cifrarTexto(
-      serializarJson(campos.riesgosHistoricos),
-    );
-  }
-  return columnas;
+export function cifrarHiloVersion(
+  id: string,
+  campos: CamposHiloVersion,
+): ColumnasCifradasHiloVersion {
+  return cifrarCampos("HiloVersion", id, campos) as ColumnasCifradasHiloVersion;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Guarda: nada cifrado en where / orderBy
+// Guarda 1: nada cifrado en where / orderBy
 // ────────────────────────────────────────────────────────────────────────────
 
-const NO_CONSULTABLES: Record<ModeloCifrado, ReadonlySet<string>> = {
-  SesionClinica: new Set<string>([...CAMPOS_LOGICOS_SESION, ...COLUMNAS_SESION]),
-  PacienteContextoClinico: new Set<string>([
-    ...CAMPOS_LOGICOS_CONTEXTO,
-    ...COLUMNAS_CONTEXTO,
-  ]),
-};
+const NO_CONSULTABLES = new Map<ModeloCifrado, ReadonlySet<string>>(
+  MODELOS_CIFRADOS.map((modelo) => {
+    const def = definicion(modelo);
+    return [
+      modelo,
+      new Set<string>([
+        ...Object.keys(def.campos),
+        ...Object.values(def.campos).map((c) => c.columna),
+      ]),
+    ];
+  }),
+);
 
-export type ModeloCifrado = "SesionClinica" | "PacienteContextoClinico";
+function noConsultables(modelo: ModeloCifrado): ReadonlySet<string> {
+  return NO_CONSULTABLES.get(modelo) ?? new Set();
+}
 
 function rechazar(modelo: string, campo: string, uso: "filter" | "order"): never {
   throw new Error(
@@ -290,7 +404,7 @@ function rechazar(modelo: string, campo: string, uso: "filter" | "order"): never
 function validarWhere(modelo: ModeloCifrado, where: unknown): void {
   if (!esObjetoPlano(where)) return;
   for (const [clave, valor] of Object.entries(where)) {
-    if (NO_CONSULTABLES[modelo].has(clave)) rechazar(modelo, clave, "filter");
+    if (noConsultables(modelo).has(clave)) rechazar(modelo, clave, "filter");
     if (clave === "AND" || clave === "OR" || clave === "NOT") {
       for (const sub of Array.isArray(valor) ? valor : [valor]) {
         validarWhere(modelo, sub);
@@ -306,96 +420,218 @@ function validarOrderBy(modelo: ModeloCifrado, orderBy: unknown): void {
   }
   if (!esObjetoPlano(orderBy)) return;
   for (const clave of Object.keys(orderBy)) {
-    if (NO_CONSULTABLES[modelo].has(clave)) rechazar(modelo, clave, "order");
+    if (noConsultables(modelo).has(clave)) rechazar(modelo, clave, "order");
   }
 }
 
 /**
- * Lanza si los args de una operación filtran u ordenan por un campo lógico o
- * una columna cifrada. Exportada para testearla sin pasar por Prisma.
+ * Lanza si los args filtran u ordenan por un campo lógico o una columna
+ * cifrada. Exportada para testearla sin pasar por Prisma.
  */
-export function assertConsultaSinCifrados(
-  modelo: ModeloCifrado,
-  args: unknown,
-): void {
+export function assertConsultaSinCifrados(modelo: ModeloCifrado, args: unknown): void {
   if (!esObjetoPlano(args)) return;
   validarWhere(modelo, args.where);
   validarOrderBy(modelo, args.orderBy);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Extensión
+// Guarda 2: toda columna cifrada que se escribe va con el id de su fila y
+// descifra con el AAD de esa fila
 // ────────────────────────────────────────────────────────────────────────────
 
+const OPERACIONES_DE_ESCRITURA = new Set([
+  "create",
+  "createMany",
+  "createManyAndReturn",
+  "update",
+  "updateMany",
+  "upsert",
+]);
+
+/** Columnas cifradas presentes en `data` con un blob (no null, no undefined). */
+function blobsEn(modelo: ModeloCifrado, data: unknown): Array<[DefCampo, Buffer]> {
+  if (!esObjetoPlano(data)) return [];
+  const out: Array<[DefCampo, Buffer]> = [];
+  for (const def of Object.values(definicion(modelo).campos)) {
+    const valor = data[def.columna];
+    if (valor === undefined || valor === null) continue;
+    const buffer = aBuffer(valor);
+    if (buffer === null) {
+      throw new Error(
+        `${modelo}.${def.columna}: solo acepta un blob de cifrar${modelo} (o null)`,
+      );
+    }
+    out.push([def, buffer]);
+  }
+  return out;
+}
+
+function verificarBlobs(
+  modelo: ModeloCifrado,
+  data: unknown,
+  id: unknown,
+  origenDelId: string,
+): void {
+  const blobs = blobsEn(modelo, data);
+  if (blobs.length === 0) return;
+  if (typeof id !== "string" || id.length === 0) {
+    throw new Error(
+      `${modelo}: escribir una columna cifrada exige ${origenDelId} (string). ` +
+        `Usá cifrar${modelo}(id, …) y ponelo en data: { ...cifrar${modelo}(id, …) }.`,
+    );
+  }
+  for (const [def, blob] of blobs) {
+    try {
+      descifrar(blob, aadCelda(modelo, def, id));
+    } catch (error) {
+      if (error instanceof ErrorDescifrado) {
+        throw new Error(
+          `${modelo}.${def.columna}: el blob no fue cifrado para la fila ${id} ` +
+            `(${error.codigo}). Cifrá con cifrar${modelo}(id, …) usando el id de ESA fila.`,
+        );
+      }
+      throw error;
+    }
+  }
+}
+
+/**
+ * Lanza si una escritura lleva columnas cifradas sin el id de la fila o con
+ * blobs que no descifran con el AAD de esa fila. Exportada para testearla
+ * sin pasar por Prisma.
+ */
+export function assertEscrituraCifradaConsistente(
+  modelo: ModeloCifrado,
+  operacion: string,
+  args: unknown,
+): void {
+  if (!OPERACIONES_DE_ESCRITURA.has(operacion) || !esObjetoPlano(args)) return;
+
+  switch (operacion) {
+    case "create":
+      verificarBlobs(modelo, args.data, esObjetoPlano(args.data) ? args.data.id : undefined, "data.id");
+      return;
+    case "createMany":
+    case "createManyAndReturn": {
+      const filas = Array.isArray(args.data) ? args.data : [args.data];
+      for (const fila of filas) {
+        verificarBlobs(modelo, fila, esObjetoPlano(fila) ? fila.id : undefined, "data.id");
+      }
+      return;
+    }
+    case "update":
+    case "updateMany": {
+      const where = esObjetoPlano(args.where) ? args.where : {};
+      verificarBlobs(modelo, args.data, where.id, "where.id");
+      return;
+    }
+    case "upsert": {
+      const where = esObjetoPlano(args.where) ? args.where : {};
+      verificarBlobs(modelo, args.create, esObjetoPlano(args.create) ? args.create.id : undefined, "create.id");
+      verificarBlobs(modelo, args.update, where.id, "where.id");
+      return;
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// La extensión
+// ────────────────────────────────────────────────────────────────────────────
+
+type ArgsQuery = { args: unknown; query: (args: never) => Promise<unknown>; operation: string };
+
+function guarda(modelo: ModeloCifrado) {
+  return {
+    $allOperations({ args, query, operation }: ArgsQuery) {
+      assertConsultaSinCifrados(modelo, args);
+      assertEscrituraCifradaConsistente(modelo, operation, args);
+      return query(args as never);
+    },
+  };
+}
+
 export function withEncryption<C extends PrismaClient>(client: C) {
-  validateKey();
+  validarLlavero();
 
   return client.$extends({
-    name: "sesion-clinica-encryption",
+    name: "cifrado-en-reposo",
     result: {
-      sesionClinica: {
-        transcripcion: {
-          needs: { transcripcionEncrypted: true },
-          compute: (fila) => descifrarTexto(fila.transcripcionEncrypted),
-        },
-        notaSubjetivo: {
-          needs: { notaSoapEncrypted: true },
-          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "subjetivo"),
-        },
-        notaObjetivo: {
-          needs: { notaSoapEncrypted: true },
-          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "objetivo"),
-        },
-        notaAnalisis: {
-          needs: { notaSoapEncrypted: true },
-          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "analisis"),
-        },
-        notaPlan: {
-          needs: { notaSoapEncrypted: true },
-          compute: (fila) => seccionSoap(fila.notaSoapEncrypted, "plan"),
-        },
-        notaSoapOriginal: {
-          needs: { notaSoapOriginalEncrypted: true },
-          compute: (fila) =>
-            normalizarNotaSoap(descifrarJson(fila.notaSoapOriginalEncrypted)),
-        },
-        datosEstructurados: {
-          needs: { datosEstructuradosEncrypted: true },
-          compute: (fila) => descifrarJson(fila.datosEstructuradosEncrypted),
-        },
-        notasEdicion: {
-          needs: { notasEdicionEncrypted: true },
-          compute: (fila) => descifrarTexto(fila.notasEdicionEncrypted),
+      paciente: {
+        notas: {
+          needs: { id: true, notasEncrypted: true },
+          compute: (f) => leer("Paciente", "notas", f.id, f.notasEncrypted) as string | null,
         },
       },
-      pacienteContextoClinico: {
-        hipotesisDiagnostica: {
-          needs: { hipotesisDiagnosticaEncrypted: true },
-          compute: (fila) => descifrarTexto(fila.hipotesisDiagnosticaEncrypted),
+      turno: {
+        notas: {
+          needs: { id: true, notasEncrypted: true },
+          compute: (f) => leer("Turno", "notas", f.id, f.notasEncrypted) as string | null,
         },
-        resumenAcumulativo: {
-          needs: { resumenAcumulativoEncrypted: true },
-          compute: (fila) => descifrarTexto(fila.resumenAcumulativoEncrypted),
+      },
+      consentimientoGrabacion: {
+        textoCompleto: {
+          needs: { id: true, textoCompletoEncrypted: true },
+          compute: (f) =>
+            leer("ConsentimientoGrabacion", "textoCompleto", f.id, f.textoCompletoEncrypted) as string,
         },
-        riesgosHistoricos: {
-          needs: { riesgosHistoricosEncrypted: true },
-          compute: (fila) => descifrarRiesgos(fila.riesgosHistoricosEncrypted),
+        firmaDigital: {
+          needs: { id: true, firmaDigitalEncrypted: true },
+          compute: (f) =>
+            leer("ConsentimientoGrabacion", "firmaDigital", f.id, f.firmaDigitalEncrypted) as string,
+        },
+      },
+      hotWord: {
+        termino: {
+          needs: { id: true, terminoEncrypted: true },
+          compute: (f) => leer("HotWord", "termino", f.id, f.terminoEncrypted) as string,
+        },
+      },
+      sesionClinica: {
+        audioClave: {
+          needs: { id: true, audioClaveEncrypted: true },
+          compute: (f) => leer("SesionClinica", "audioClave", f.id, f.audioClaveEncrypted) as string | null,
+        },
+        transcripcion: {
+          needs: { id: true, transcripcionEncrypted: true },
+          compute: (f) => leer("SesionClinica", "transcripcion", f.id, f.transcripcionEncrypted) as string | null,
+        },
+        notaIa: {
+          needs: { id: true, notaIaEncrypted: true },
+          compute: (f) => leer("SesionClinica", "notaIa", f.id, f.notaIaEncrypted) as NotaSoap | null,
+        },
+        datos: {
+          needs: { id: true, datosEncrypted: true },
+          compute: (f) => leer("SesionClinica", "datos", f.id, f.datosEncrypted),
+        },
+        feedback: {
+          needs: { id: true, feedbackEncrypted: true },
+          compute: (f) => leer("SesionClinica", "feedback", f.id, f.feedbackEncrypted),
+        },
+        notaFinal: {
+          needs: { id: true, notaFinalEncrypted: true },
+          compute: (f) => leer("SesionClinica", "notaFinal", f.id, f.notaFinalEncrypted) as NotaSoap | null,
+        },
+        notasEdicion: {
+          needs: { id: true, notasEdicionEncrypted: true },
+          compute: (f) => leer("SesionClinica", "notasEdicion", f.id, f.notasEdicionEncrypted) as string | null,
+        },
+      },
+      hiloVersion: {
+        contenido: {
+          needs: { id: true, contenidoEncrypted: true },
+          compute: (f) => leer("HiloVersion", "contenido", f.id, f.contenidoEncrypted),
         },
       },
     },
     query: {
-      sesionClinica: {
-        $allOperations({ args, query }) {
-          assertConsultaSinCifrados("SesionClinica", args);
-          return query(args);
-        },
-      },
-      pacienteContextoClinico: {
-        $allOperations({ args, query }) {
-          assertConsultaSinCifrados("PacienteContextoClinico", args);
-          return query(args);
-        },
-      },
+      paciente: guarda("Paciente"),
+      turno: guarda("Turno"),
+      consentimientoGrabacion: guarda("ConsentimientoGrabacion"),
+      hotWord: guarda("HotWord"),
+      sesionClinica: guarda("SesionClinica"),
+      hiloVersion: guarda("HiloVersion"),
     },
   });
 }
+
+export type ClienteCifrado = ReturnType<typeof withEncryption<PrismaClient>>;
