@@ -2,42 +2,46 @@
 # Backup diario de la base de datos de Sesión a Cloudflare R2.
 #
 # Flujo:
-#   pg_dump (formato custom) → gpg --symmetric (AES-256) → aws s3 cp a R2 →
-#   verificación → retención 30 días → alerta por webhook si algo falló.
+#   secretos → pg_dump (formato custom) → pg_restore --list (¿es un dump
+#   legible?) → gpg --symmetric (AES-256) → aws s3 cp a R2 → head-object →
+#   copia mensual (día 1) → retención (30 días diarios, 12 meses mensuales)
+#   → alerta por correo si algo falló.
 #
 # La clave del bucket usa timestamp en UTC con segundos, así dos corridas el
 # mismo día (scheduled + manual, p. ej.) generan archivos distintos y no se
 # pisan: el workflow es seguro de ejecutar N veces.
 #
-# Secrets requeridos (configurados en GitHub Settings → Secrets → Actions):
-#   - DATABASE_URL              (Neon, incluir sslmode=require)
+# Secrets requeridos (Settings → Secrets and variables → Actions). TODOS
+# obligatorios: el primer paso falla si falta alguno. La alerta dejó de ser
+# opcional: un backup que falla sin que nadie se entere es lo que pasó entre
+# julio y septiembre de 2026 (dos meses sin una sola copia).
+#   - DATABASE_URL              (Neon, producción, incluir sslmode=require)
 #   - R2_ACCESS_KEY_ID          (token R2 con permiso Object Read/Write)
 #   - R2_SECRET_ACCESS_KEY
 #   - R2_BUCKET                 (solo el nombre, sin s3://)
 #   - R2_ENDPOINT               (https://<accountid>.r2.cloudflarestorage.com)
 #   - BACKUP_ENCRYPTION_KEY     (passphrase fuerte — guardarla offline también)
-#   - BACKUP_ALERT_WEBHOOK      (opcional; Slack/Discord/otro)
+#   - RESEND_API_KEY            (alertas por correo)
+#   - ALERTA_CORREO             (a quién)
+#
+# Cómo se prueba que esto sirve: .github/workflows/ensayo-restauracion.yml
+# restaura el último backup en un Postgres efímero una vez por mes, y el
+# dueño hace a mano el ensayo trimestral que descifra una nota
+# (docs/operaciones.md §4).
 # ============================================================================
 
 name: Backup diario de base de datos
 
 on:
   # 06:00 UTC = 03:00 America/Montevideo (UY no tiene DST, es UTC-3 fijo).
-  # Requiere los secrets listados arriba; sin ellos el job falla en el paso
-  # correspondiente y dispara la alerta (si BACKUP_ALERT_WEBHOOK está seteado).
   schedule:
     - cron: "0 6 * * *"
-  # Permite correr el backup manualmente desde la pestaña Actions.
   workflow_dispatch:
 
-# Evita que dos ejecuciones (cron + dispatch manual) corran en paralelo contra
-# R2 y se enreden con la retención. Encolamos en vez de cancelar.
 concurrency:
   group: db-backup
   cancel-in-progress: false
 
-# Este workflow no escribe en el repo ni usa el GITHUB_TOKEN — le damos el
-# mínimo posible.
 permissions:
   contents: read
 
@@ -54,14 +58,34 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
+      PG_BIN: /usr/lib/postgresql/17/bin
 
     steps:
+      # Sólo para la acción compuesta de alerta (vive en el repo).
+      - uses: actions/checkout@v5
+
       # ---------------------------------------------------------------------
-      # 1. Instalar postgresql-client-17.
-      # ubuntu-latest no trae el cliente 17 por defecto. Usamos el repo oficial
-      # de PostgreSQL (PGDG) con keyring moderno (apt-key está deprecado).
-      # TODO: cuando Neon actualice a Postgres 18+, cambiar postgresql-client-17
-      # por la versión que matchee el server. pg_dump debe ser >= al server.
+      # 0. Secretos primero. Si falta uno, se sabe acá y no en el paso 6.
+      # ---------------------------------------------------------------------
+      - name: Verificar secrets
+        run: |
+          set -euo pipefail
+          faltan=""
+          for v in DATABASE_URL R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_ENDPOINT BACKUP_ENCRYPTION_KEY RESEND_API_KEY ALERTA_CORREO; do
+            if [ -z "${!v:-}" ]; then faltan="${faltan} ${v}"; fi
+          done
+          if [ -n "${faltan}" ]; then
+            echo "ERROR: faltan secrets:${faltan}" >&2
+            exit 1
+          fi
+          echo "Secrets presentes."
+
+      # ---------------------------------------------------------------------
+      # 1. postgresql-client-17 (ubuntu-latest no lo trae). pg_dump debe ser
+      #    >= al server. TODO: cuando Neon pase a Postgres 18, cambiar acá,
+      #    en ensayo-restauracion.yml, en ci.yml y en docker-compose.yml.
       # ---------------------------------------------------------------------
       - name: Instalar postgresql-client-17
         run: |
@@ -75,38 +99,30 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client-17
-          /usr/lib/postgresql/17/bin/pg_dump --version
+          "${PG_BIN}/pg_dump" --version
 
       # ---------------------------------------------------------------------
-      # 2. Calcular nombre del backup.
-      # Timestamp en UTC (sin ambigüedad de zona) y con segundos para evitar
-      # colisiones entre corridas concurrentes/dispatch.
+      # 2. Nombre del backup (UTC con segundos) y si hoy toca copia mensual.
       # ---------------------------------------------------------------------
       - name: Calcular nombre del backup
         run: |
           set -euo pipefail
           stamp="$(date -u +'%Y-%m-%d-%H%M%S')"
           file="sesion-backup-${stamp}.dump"
-          key="backups/${file}.gpg"
           echo "BACKUP_FILE=${file}" >> "$GITHUB_ENV"
-          echo "BACKUP_KEY=${key}" >> "$GITHUB_ENV"
+          echo "BACKUP_KEY=backups/${file}.gpg" >> "$GITHUB_ENV"
+          echo "BACKUP_KEY_MENSUAL=backups/mensuales/${file}.gpg" >> "$GITHUB_ENV"
+          if [ "$(date -u +'%d')" = "01" ]; then echo "ES_DIA_UNO=1" >> "$GITHUB_ENV"; else echo "ES_DIA_UNO=0" >> "$GITHUB_ENV"; fi
           echo "Archivo local: ${file}"
-          echo "Clave en R2:  ${key}"
 
       # ---------------------------------------------------------------------
-      # 3. pg_dump en formato custom (-Fc).
-      # --no-owner / --no-privileges para facilitar restore a otra DB con
-      # roles distintos. La URL de Neon ya trae sslmode=require, no hace falta
-      # configurar SSL a mano.
+      # 3. pg_dump en formato custom. --no-owner / --no-privileges para poder
+      #    restaurar en otra base con roles distintos.
       # ---------------------------------------------------------------------
       - name: Ejecutar pg_dump
         run: |
           set -euo pipefail
-          if [ -z "${DATABASE_URL:-}" ]; then
-            echo "ERROR: falta el secret DATABASE_URL." >&2
-            exit 1
-          fi
-          /usr/lib/postgresql/17/bin/pg_dump \
+          "${PG_BIN}/pg_dump" \
             --format=custom \
             --no-owner \
             --no-privileges \
@@ -115,18 +131,32 @@ jobs:
           ls -lh "${BACKUP_FILE}"
 
       # ---------------------------------------------------------------------
-      # 4. Cifrado simétrico con gpg (AES-256).
-      # La passphrase entra por stdin (--passphrase-fd 0) para que nunca
-      # aparezca en la tabla de procesos. Borramos el dump plano apenas está
-      # el .gpg listo.
+      # 4. ¿Es un backup? Antes sólo se comprobaba que el objeto subido pesara
+      #    más de 0. `pg_restore --list` lee el índice del dump: si no tiene
+      #    un catálogo legible con las tablas del esquema, no es un backup y
+      #    no se sube.
+      # ---------------------------------------------------------------------
+      - name: Verificar que el dump se puede leer (pg_restore --list)
+        run: |
+          set -euo pipefail
+          "${PG_BIN}/pg_restore" --list "${BACKUP_FILE}" > toc.txt
+          tablas="$(grep -c 'TABLE DATA' toc.txt || true)"
+          echo "Entradas TABLE DATA en el índice: ${tablas}"
+          for t in organizaciones usuarios pacientes turnos sesiones_clinicas envios_sms; do
+            if ! grep -q "TABLE DATA public ${t} " toc.txt; then
+              echo "ERROR: el dump no contiene la tabla ${t}." >&2
+              exit 1
+            fi
+          done
+          echo "OK: índice legible, tablas del esquema presentes."
+
+      # ---------------------------------------------------------------------
+      # 5. Cifrado simétrico con gpg (AES-256). La passphrase entra por stdin
+      #    para que nunca aparezca en la tabla de procesos.
       # ---------------------------------------------------------------------
       - name: Cifrar backup con gpg
         run: |
           set -euo pipefail
-          if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
-            echo "ERROR: falta el secret BACKUP_ENCRYPTION_KEY." >&2
-            exit 1
-          fi
           printf '%s' "${BACKUP_ENCRYPTION_KEY}" | gpg \
             --batch --yes --quiet \
             --symmetric \
@@ -134,16 +164,13 @@ jobs:
             --passphrase-fd 0 \
             --output "${BACKUP_FILE}.gpg" \
             "${BACKUP_FILE}"
-          rm -f "${BACKUP_FILE}"
+          rm -f "${BACKUP_FILE}" toc.txt
           ls -lh "${BACKUP_FILE}.gpg"
 
       # ---------------------------------------------------------------------
-      # 5. Configurar aws cli para R2.
-      # R2 es S3-compatible, solo hace falta apuntar --endpoint-url. La región
-      # la ignora pero el SDK la exige → "auto".
-      # Los flags de checksum deshabilitan el comportamiento nuevo del aws-cli
-      # v2.23+ que R2 todavía no soporta en todas las rutas y puede romper
-      # uploads multipart.
+      # 6. aws cli contra R2 (S3-compatible). Los flags de checksum
+      #    deshabilitan el comportamiento nuevo del aws-cli v2.23+ que R2 no
+      #    soporta en todas las rutas.
       # ---------------------------------------------------------------------
       - name: Configurar credenciales AWS CLI para R2
         run: |
@@ -154,96 +181,72 @@ jobs:
           aws configure set default.s3.request_checksum_calculation when_required
           aws configure set default.s3.response_checksum_validation when_required
 
-      # ---------------------------------------------------------------------
-      # 6. Upload a R2.
-      # ---------------------------------------------------------------------
       - name: Subir backup cifrado a R2
         run: |
           set -euo pipefail
-          aws s3 cp \
-            "${BACKUP_FILE}.gpg" \
-            "s3://${R2_BUCKET}/${BACKUP_KEY}" \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --only-show-errors
+          aws s3 cp "${BACKUP_FILE}.gpg" "s3://${R2_BUCKET}/${BACKUP_KEY}" \
+            --endpoint-url "${R2_ENDPOINT}" --only-show-errors
           echo "Subido: s3://${R2_BUCKET}/${BACKUP_KEY}"
 
-      # ---------------------------------------------------------------------
-      # 7. Verificación de integridad de ubicación.
-      # head-object devuelve error si la clave no existe → el job falla y se
-      # dispara la alerta. También chequeamos que el ContentLength > 0.
-      # ---------------------------------------------------------------------
       - name: Verificar que el backup está en R2
         run: |
           set -euo pipefail
-          meta="$(aws s3api head-object \
-            --bucket "${R2_BUCKET}" \
-            --key "${BACKUP_KEY}" \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --output json)"
-          echo "${meta}"
+          meta="$(aws s3api head-object --bucket "${R2_BUCKET}" --key "${BACKUP_KEY}" \
+            --endpoint-url "${R2_ENDPOINT}" --output json)"
           size="$(printf '%s' "${meta}" | jq -r '.ContentLength // 0')"
-          if [ "${size}" -le 0 ]; then
-            echo "ERROR: el objeto subido tiene tamaño 0." >&2
+          local_size="$(stat -c %s "${BACKUP_FILE}.gpg")"
+          if [ "${size}" -le 0 ] || [ "${size}" != "${local_size}" ]; then
+            echo "ERROR: tamaño en R2 (${size}) distinto del local (${local_size})." >&2
             exit 1
           fi
           echo "OK: backup verificado (${size} bytes)."
 
       # ---------------------------------------------------------------------
-      # 8. Retención: borrar backups con LastModified > 30 días.
-      # Filtramos con JMESPath del lado del CLI para no traer todo el listado.
-      # Con backup diario y retención 30, esto borra 1 archivo por día.
+      # 7. Copia mensual: el día 1 el mismo .gpg va también a
+      #    backups/mensuales/. La retención diaria NUNCA toca ese prefijo.
       # ---------------------------------------------------------------------
-      - name: Limpiar backups > 30 días
+      - name: Copia mensual (día 1)
+        if: env.ES_DIA_UNO == '1'
         run: |
           set -euo pipefail
-          cutoff="$(date -u -d '30 days ago' +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "Borrando objetos anteriores a ${cutoff}"
-
-          old_keys="$(aws s3api list-objects-v2 \
-            --bucket "${R2_BUCKET}" \
-            --prefix "backups/" \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --query "Contents[?LastModified<'${cutoff}'].Key" \
-            --output text)"
-
-          if [ -z "${old_keys}" ] || [ "${old_keys}" = "None" ]; then
-            echo "No hay backups viejos para borrar."
-            exit 0
-          fi
-
-          # --output text separa claves con tabs → las pasamos a una línea c/u.
-          while IFS= read -r key; do
-            [ -z "${key}" ] && continue
-            echo "Borrando s3://${R2_BUCKET}/${key}"
-            aws s3 rm "s3://${R2_BUCKET}/${key}" \
-              --endpoint-url "${R2_ENDPOINT}"
-          done < <(printf '%s\n' "${old_keys}" | tr '\t' '\n')
+          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_KEY}" "s3://${R2_BUCKET}/${BACKUP_KEY_MENSUAL}" \
+            --endpoint-url "${R2_ENDPOINT}" --only-show-errors
+          echo "Copia mensual: s3://${R2_BUCKET}/${BACKUP_KEY_MENSUAL}"
 
       # ---------------------------------------------------------------------
-      # 9. Alerta por webhook si cualquier paso previo falló.
-      # El payload lleva `text` y `content` para cubrir Slack (text) y Discord
-      # (content) con el mismo JSON; los servicios ignoran los campos extras.
-      # Si el webhook no está seteado, salimos sin error para no enmascarar
-      # la falla original.
-      # TODO: cuando Bruno defina el destino final (Slack app, Discord, etc.)
-      # ajustar el payload al schema específico (bloques, embeds, etc.).
+      # 8. Retención. Diarios: 30 días, sólo bajo backups/sesion-backup-*
+      #    (el prefijo excluye mensuales/). Mensuales: 12 meses.
       # ---------------------------------------------------------------------
-      - name: Avisar falla vía webhook
-        if: failure()
-        env:
-          BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Limpiar diarios > 30 días y mensuales > 12 meses
         run: |
-          set -uo pipefail
-          if [ -z "${BACKUP_ALERT_WEBHOOK:-}" ]; then
-            echo "BACKUP_ALERT_WEBHOOK no configurado — salto la alerta."
-            exit 0
-          fi
-          msg="🚨 Backup de Sesión falló. Run: ${RUN_URL}"
-          payload="$(jq -nc --arg m "${msg}" '{text:$m, content:$m}')"
-          curl --silent --show-error --max-time 15 \
-            -X POST \
-            -H "Content-Type: application/json" \
-            --data "${payload}" \
-            "${BACKUP_ALERT_WEBHOOK}" \
-            || echo "El webhook no respondió OK, pero seguimos."
+          set -euo pipefail
+          borrar_anteriores_a() {
+            local prefijo="$1" cutoff="$2"
+            local keys
+            keys="$(aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "${prefijo}" \
+              --endpoint-url "${R2_ENDPOINT}" \
+              --query "Contents[?LastModified<'${cutoff}'].Key" --output text)"
+            if [ -z "${keys}" ] || [ "${keys}" = "None" ]; then
+              echo "Nada que borrar bajo ${prefijo} antes de ${cutoff}."
+              return 0
+            fi
+            while IFS= read -r key; do
+              [ -z "${key}" ] && continue
+              echo "Borrando s3://${R2_BUCKET}/${key}"
+              aws s3 rm "s3://${R2_BUCKET}/${key}" --endpoint-url "${R2_ENDPOINT}"
+            done < <(printf '%s\n' "${keys}" | tr '\t' '\n')
+          }
+          borrar_anteriores_a "backups/sesion-backup-" "$(date -u -d '30 days ago' +'%Y-%m-%dT%H:%M:%SZ')"
+          borrar_anteriores_a "backups/mensuales/"     "$(date -u -d '366 days ago' +'%Y-%m-%dT%H:%M:%SZ')"
+
+      # ---------------------------------------------------------------------
+      # 9. Alerta por correo si cualquier paso previo falló.
+      # ---------------------------------------------------------------------
+      - name: Avisar falla por correo
+        if: failure()
+        uses: ./.github/actions/alerta-correo
+        with:
+          asunto: "Backup diario de la base falló"
+          texto: |
+            El backup de hoy no se completó. Hasta que se arregle, el último backup válido es el del día anterior.
+            Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
