@@ -3,11 +3,10 @@
 //
 // La regla —lo global y lo de la profesional siempre, más lo propio de esa
 // paciente, todo activo, deduplicado y ordenado— vivía escrita dentro de
-// GET /api/hot-words/paciente/[pacienteId]. Ahora la leen dos consumidores:
-// esa ruta (que la muestra) y reclamar-pendientes (que la manda al worker
-// dentro de cada sesión reclamada). Una consulta, dos consumidores: si mañana
-// se agrega un scope o se decide que los inactivos cuentan, se toca acá y los
-// dos lados dicen lo mismo.
+// GET /api/hot-words/paciente/[pacienteId], una ruta sin ningún cliente que
+// se borró en la reconstrucción. Hoy la lee reclamar-pendientes (que la manda
+// al worker dentro de cada sesión reclamada). Si mañana se agrega un scope o
+// se decide que los inactivos cuentan, se toca acá.
 //
 // Sin request ni Response: recibe prisma como parámetro.
 

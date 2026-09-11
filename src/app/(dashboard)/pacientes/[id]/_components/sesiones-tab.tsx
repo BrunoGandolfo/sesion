@@ -32,14 +32,13 @@ import {
   REVISAR_NOTA,
   pluralizar,
 } from "@/lib/glosario";
-import type { EstadoSesion, NotaSoap } from "@/lib/sesion-clinica/schema";
 import type {
   DatosEstructurados,
-  EstadoProcesamiento,
-  Modalidad,
-  SesionClinicaResponse,
-  Turno,
-} from "@/types/domain";
+  EstadoSesion,
+  NotaSoap,
+} from "@/lib/sesion-clinica/schema";
+import type { SesionClinicaEnsamblada } from "@/lib/sesion-clinica-utils";
+import type { EstadoProcesamiento, Modalidad, Turno } from "@/types/domain";
 
 import { BriefPreSesion } from "./brief-pre-sesion";
 import { CobrarSheet } from "./turnos-pagos-tab";
@@ -47,7 +46,7 @@ import { CobrarSheet } from "./turnos-pagos-tab";
 interface SesionesTabProps {
   pacienteId: string;
   turnoHoy: Turno | null;
-  sesionHoy: SesionClinicaResponse | null;
+  sesionHoy: SesionClinicaEnsamblada | null;
   sesionHoyCargando: boolean;
   onTurnoActualizado: () => void;
   onAviso: (mensaje: string, variante?: VarianteToast) => void;
@@ -351,7 +350,7 @@ function SesionDeHoy({
   onCobrar,
 }: {
   turno: Turno;
-  sesion: SesionClinicaResponse | null;
+  sesion: SesionClinicaEnsamblada | null;
   cargando: boolean;
   onCobrar: () => void;
 }) {

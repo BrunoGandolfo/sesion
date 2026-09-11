@@ -11,7 +11,8 @@ import {
   type SesionClinicaApi,
   type SesionClinicaApiBase,
 } from "@/hooks/useSesionClinicaPolling";
-import type { SesionClinicaResponse, Turno } from "@/types/domain";
+import type { SesionClinicaEnsamblada } from "@/lib/sesion-clinica-utils";
+import type { Turno } from "@/types/domain";
 
 export interface DatosGrabacion {
   audioBlob: Blob;
@@ -34,7 +35,7 @@ interface UseGrabacionSesionOptions {
 }
 
 interface UseGrabacionSesionResult {
-  sesionClinica: SesionClinicaResponse | null;
+  sesionClinica: SesionClinicaEnsamblada | null;
   loading: boolean;
   submitting: boolean;
   error: string | null;
@@ -244,7 +245,7 @@ export async function marcarTurnoRealizado(turnoId: string): Promise<void> {
 // de un efecto.
 type CargaSesion = {
   turnoId: string;
-  sesion: SesionClinicaResponse | null;
+  sesion: SesionClinicaEnsamblada | null;
 };
 
 export function useGrabacionSesion({
@@ -289,7 +290,7 @@ export function useGrabacionSesion({
     turnoId !== null && (carga === null || carga.turnoId !== turnoId);
 
   const guardarSesion = React.useCallback(
-    (sesion: SesionClinicaResponse | null) => {
+    (sesion: SesionClinicaEnsamblada | null) => {
       if (!turnoId) return;
       setCarga({ turnoId, sesion });
     },
@@ -300,7 +301,7 @@ export function useGrabacionSesion({
     if (!turnoId) return;
     let cancelado = false;
     (async () => {
-      let sesion: SesionClinicaResponse | null = null;
+      let sesion: SesionClinicaEnsamblada | null = null;
       try {
         const res = await fetch(`/api/sesion-clinica?turnoId=${turnoId}`, {
           cache: "no-store",

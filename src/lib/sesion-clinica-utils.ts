@@ -2,13 +2,10 @@ import {
   estadoSesionSchema,
   parseDatosEstructurados as parseDatosEstructuradosTablero,
   type DatosEstructurados as DatosEstructuradosTablero,
+  type DatosEstructurados,
   type EstadoSesion,
 } from "@/lib/sesion-clinica/schema";
-import type {
-  DatosEstructurados,
-  NotaSOAP,
-  SesionClinicaResponse,
-} from "@/types/domain";
+import type { NotaSOAP } from "@/types/domain";
 
 export type { EstadoSesion };
 
@@ -253,9 +250,30 @@ export interface RawSesionClinica {
   error: string | null;
 }
 
+/**
+ * La sesión clínica como la consume la UI de grabación y la ficha: la nota
+ * SOAP ensamblada en un solo objeto (la API la devuelve en cuatro columnas,
+ * ver `sesionClinicaResponseSchema` en src/lib/sesion-clinica/schema.ts).
+ * Es una forma derivada, no el contrato: se construye acá y en
+ * normalizarSesionClinica (src/hooks/useSesionClinicaPolling.ts).
+ */
+export interface SesionClinicaEnsamblada {
+  id: string;
+  turnoId: string;
+  estado: EstadoSesion;
+  duracionAudioSeg: number | null;
+  nota: NotaSOAP | null;
+  datosEstructurados: DatosEstructurados | null;
+  modeloASR: string | null;
+  modeloLLM: string | null;
+  procesadoEn: string | null; // ISO
+  aprobadoEn: string | null; // ISO
+  error: string | null;
+}
+
 export function normalizeSesionClinica(
   raw: RawSesionClinica,
-): SesionClinicaResponse {
+): SesionClinicaEnsamblada {
   return {
     id: raw.id,
     turnoId: raw.turnoId,

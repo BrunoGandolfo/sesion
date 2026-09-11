@@ -7,11 +7,11 @@ import {
   type EstadoSesion,
   type SesionClinicaResponse as SesionClinicaApi,
 } from "@/lib/sesion-clinica/schema";
-import { ensamblarNotaSOAP } from "@/lib/sesion-clinica-utils";
-import type {
-  DatosEstructurados,
-  SesionClinicaResponse,
-} from "@/types/domain";
+import {
+  ensamblarNotaSOAP,
+  type SesionClinicaEnsamblada,
+} from "@/lib/sesion-clinica-utils";
+import type { DatosEstructurados } from "@/lib/sesion-clinica/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Contrato de sesión clínica hacia la UI. Este hook es el nivel más bajo que
@@ -55,14 +55,14 @@ export type SesionClinicaApiBase = Pick<
 export type { SesionClinicaApi };
 
 /**
- * Fila del contrato → forma que consume la UI (src/types/domain
- * SesionClinicaResponse, con `nota` ensamblada). La nota se arma con
+ * Fila del contrato → forma que consume la UI (SesionClinicaEnsamblada,
+ * con `nota` ensamblada). La nota se arma con
  * ensamblarNotaSOAP y datosEstructurados se valida con el parser del
  * contrato (un shape inválido queda en null).
  */
 export function normalizarSesionClinica(
   fila: SesionClinicaApiBase,
-): SesionClinicaResponse {
+): SesionClinicaEnsamblada {
   // parseDatosEstructurados devuelve el tipo del contrato, con todas las
   // propiedades opcionales. Los consumidores (NotaClinicaView,
   // FeedbackTerapeutaView, paciente-detail-view) siguen tipados con
@@ -102,11 +102,11 @@ interface UseSesionClinicaPollingOptions {
 
 export interface ResultadoPolling {
   fila: SesionClinicaApi;
-  sesion: SesionClinicaResponse;
+  sesion: SesionClinicaEnsamblada;
 }
 
 interface UseSesionClinicaPollingResult {
-  data: SesionClinicaResponse | null;
+  data: SesionClinicaEnsamblada | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -117,7 +117,7 @@ interface UseSesionClinicaPollingResult {
 // resetear estado dentro de un efecto.
 type EstadoPolling = {
   sesionClinicaId: string;
-  data: SesionClinicaResponse | null;
+  data: SesionClinicaEnsamblada | null;
   loading: boolean;
   error: string | null;
 };

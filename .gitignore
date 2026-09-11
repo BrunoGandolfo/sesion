@@ -42,3 +42,11 @@ next-env.d.ts
 !.env.example
 prisma/scripts/manual/*.json
 processor/*.wav
+
+# configuración personal de agentes (nunca versionar)
+.claude/settings.local.json
+.codex
+
+# python
+__pycache__/
+.pytest_cache/

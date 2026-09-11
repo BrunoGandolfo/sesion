@@ -87,8 +87,7 @@ y repite desde el paso 1 con el mismo blob.
 - `terminosAsr` es el vocabulario clínico de esa sesión (hot words activas de
   scope `global` y `profesional` de la organización, más las de scope
   `paciente` de esa paciente), deduplicado y ordenado; `[]` si no hay ninguna.
-  Sale de `_lib/casos-uso/terminos-asr.ts`, la misma consulta que muestra
-  `GET /api/hot-words/paciente/[pacienteId]`. Es lo que el worker pasa a
+  Sale de `_lib/casos-uso/terminos-asr.ts`. Es lo que el worker pasa a
   AssemblyAI como `keyterms_prompt`; de ahí el máximo de seis palabras por
   término que valida el POST de hot-words.
 - Si esa consulta falla, la sesión se entrega igual con `terminosAsr: []` y
