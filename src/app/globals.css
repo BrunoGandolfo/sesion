@@ -85,7 +85,7 @@
 :root {
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 150ms;
-  --duration-normal: 240ms;
+  --duration-normal: 220ms;
 
   /* Borders */
   --border-subtle: var(--color-cream-200);

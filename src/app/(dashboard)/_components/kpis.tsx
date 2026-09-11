@@ -11,7 +11,7 @@ import { ESTE_MES, SESIONES_HOY, pluralizar } from "@/lib/glosario";
 import type { DashboardData } from "@/types/domain";
 
 /** Segundos del conteo. El default del primitivo son 600 ms. */
-const DURACION_CONTEO = 0.36;
+const DURACION_CONTEO = 0.22;
 
 export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
   const mes = fechaLarga(ahora).split(" de ").at(-1) ?? "";
