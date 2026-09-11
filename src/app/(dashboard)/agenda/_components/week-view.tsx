@@ -17,7 +17,6 @@ const DAY_LABELS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"] as const;
 const START_HOUR = 8;
 const END_HOUR = 21;
 const ROW_HEIGHT = ALTO_HORA;
-const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 
 export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
   const weekStart = startOfWeek(anchor, { weekStartsOn: 1 });
@@ -27,6 +26,15 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
       .filter((t) => isSameDay(t.fecha, day))
       .sort((a, b) => a.fecha.getTime() - b.fecha.getTime()),
   );
+
+  // La escala es presentación: alcanza a todos los turnos visibles sin
+  // cambiar sus horarios, duraciones ni la distribución de los solapes.
+  const visibles = turnosPorDia.flat();
+  const horaInicial = Math.min(START_HOUR, ...visibles.map((t) => t.fecha.getHours()));
+  const horaFinal = Math.max(END_HOUR, ...visibles.map((t) =>
+    Math.ceil((t.fecha.getHours() * 60 + t.fecha.getMinutes() + t.duracion) / 60),
+  ));
+  const horas = Array.from({ length: horaFinal - horaInicial }, (_, i) => horaInicial + i);
 
   return (
     <div className="overflow-hidden rounded-lg border border-[color:var(--border-subtle)] bg-white">
@@ -68,14 +76,14 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
           <div className="flex">
             {/* Hours column */}
             <div className="w-[60px] shrink-0">
-              {HOURS.map((h) => (
+              {horas.map((h) => (
                 <div
                   key={h}
                   style={{ height: ROW_HEIGHT }}
                   className="border-t border-[color:var(--border-subtle)] px-2 py-[6px]"
                 >
                   <span className="text-[10px] text-ink-300 tabular-nums">
-                    {String(h).padStart(2, "0")}:00
+                    {String(h % 24).padStart(2, "0")}:00{h >= 24 ? " (+1 día)" : ""}
                   </span>
                 </div>
               ))}
@@ -86,14 +94,14 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                 key={i}
                 className="relative min-w-0 flex-1 border-l border-[color:var(--border-subtle)]"
               >
-                {HOURS.map((h) => (
+                {horas.map((h) => (
                   <div
                     key={h}
                     style={{ height: ROW_HEIGHT }}
                     className="border-t border-[color:var(--border-subtle)]"
                   />
                 ))}
-                {distribuirTurnos(turnosPorDia[i], START_HOUR).map(({ turno, top, height, columna, columnas }) => {
+                {distribuirTurnos(turnosPorDia[i], horaInicial).map(({ turno, top, height, columna, columnas }) => {
                   const isPresencial = turno.modalidad === "presencial";
                   return (
                     <button
