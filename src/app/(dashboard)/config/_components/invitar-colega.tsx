@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { Button, Card } from "@/components/ui";
-import { apiPost } from "@/lib/api-client";
+import { ApiClientError, apiPost } from "@/lib/api-client";
 import { INVITAR_COLEGA, INVITAR_DESCRIPCION, INVITAR_GENERAR, INVITAR_COPIAR, INVITAR_COPIADO, INVITAR_WHATSAPP, INVITAR_MENSAJE, INVITAR_ENLACE, INVITAR_ERROR_COPIA, ENTRADA_CUENTA_ERROR, GUARDANDO } from "@/lib/glosario";
 import { TituloSeccion } from "./titulo-seccion";
 export function InvitarColega() {
@@ -11,7 +11,8 @@ export function InvitarColega() {
     if (creando) return;
     setCreando(true); setError(""); setCopiado(false);
     try { const datos = await apiPost<{ enlace: string }>("/api/cuenta/invitaciones", {}); setEnlace(datos.enlace); }
-    catch { setError(ENTRADA_CUENTA_ERROR); }
+    // 403 (esta cuenta no invita) y 429 (tope de vigentes) traen su motivo.
+    catch (e) { setError(e instanceof ApiClientError ? e.message : ENTRADA_CUENTA_ERROR); }
     finally { setCreando(false); }
   }
   async function copiar() {

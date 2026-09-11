@@ -1,21 +1,30 @@
 "use client";
 
-import { SessionProvider } from "next-auth/react";
+import * as React from "react";
 
-// Wrapper client-side para exponer la sesión de next-auth a los
-// componentes del dashboard (sidebar, bottom-nav, etc.) vía useSession.
-//
-// IMPORTANTE: el layout del dashboard debe envolver sus children con
-// este componente para que useSession funcione. Ejemplo en
-// src/app/(dashboard)/layout.tsx:
-//
-//   import { Providers } from "@/components/layout/providers";
-//   ...
-//   <Providers>
-//     <Sidebar />
-//     <main>{children}</main>
-//     <BottomNav />
-//   </Providers>
-export function Providers({ children }: { children: React.ReactNode }) {
-  return <SessionProvider>{children}</SessionProvider>;
+// Quién está entrada, para los componentes cliente del dashboard (sidebar,
+// configuración). Lo alimenta el layout del dashboard, que es un componente
+// de servidor y resuelve la sesión con getSessionActor(): acá no hay fetch
+// ni proveedor externo. Reemplaza al SessionProvider de next-auth.
+
+export interface UsuariaActual {
+  nombre: string;
+  email: string;
+}
+
+const SesionContext = React.createContext<UsuariaActual | null>(null);
+
+export function Providers({
+  usuaria,
+  children,
+}: {
+  usuaria: UsuariaActual;
+  children: React.ReactNode;
+}) {
+  return <SesionContext.Provider value={usuaria}>{children}</SesionContext.Provider>;
+}
+
+/** La usuaria de la sesión, o null fuera del dashboard. */
+export function useSesionActual(): UsuariaActual | null {
+  return React.useContext(SesionContext);
 }

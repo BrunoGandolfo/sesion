@@ -1,248 +1,194 @@
 /**
- * Integración — el intento de login es atómico. Contra la DB real de test
- * (DATABASE_URL_TEST): hace falta Postgres de verdad porque lo que se prueba
- * es `pg_advisory_xact_lock`, que ningún doble puede imitar.
- *
- * Ejecutar:
- *   DATABASE_URL_TEST="postgres://..." \
- *   npx vitest run src/lib/__tests__/login-atomico.test.ts
- *
- * QUÉ PROTEGE
- *
- * El agujero que reportó Codex sobre el PR #11: evaluar el contador y
- * registrar el fallo eran dos pasos separados, así que N requests en paralelo
- * leían todos el mismo contador viejo, todos pasaban, y el umbral de 5 no
- * frenaba nada. Un atacante lo saltaba mandando la tanda entera de una.
- *
- * El caso central de acá es exactamente ése: `Promise.all` de N intentos
- * fallidos contra el mismo email y la misma IP, y la cuenta de veces que se
- * llegó a verificar la contraseña tiene que ser el umbral, no N.
- *
- * `eventos_auditoria` NO está en vaciarTablas (los otros tests no la
- * escriben), así que este archivo limpia lo suyo en beforeEach.
+ * Integración — entrar: el intento es atómico (pg_advisory_xact_lock, que
+ * ningún doble imita), la sesión queda en sesiones_acceso y la ruta deja la
+ * cookie. Contra la base de test (DATABASE_URL_TEST, esquema nuevo).
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 
-import type { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { iniciarSesion } from "@/app/api/_lib/casos-uso/iniciar-sesion";
+import {
+  claveEmail,
+  evaluarBloqueoDe,
+  procesarIntentoLogin,
+} from "@/lib/intentos-acceso";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 import { UMBRAL_INTENTOS } from "@/lib/login-intentos";
+import { BCRYPT_RONDAS } from "@/lib/password";
+import {
+  buscarSesionViva,
+  cerrarSesion,
+  cerrarTodas,
+  hashTokenSesion,
+  listarSesionesVivas,
+} from "@/lib/sesion-acceso";
+import { nombreCookie, tokenDeCookieHeader } from "@/lib/sesion-cookie";
 
-import { conectarBaseDeTest, vaciarTablas } from "./db-test";
+import {
+  CLAVES_CIFRADO_TEST,
+  conectarBaseIdentidad,
+  vaciarBaseIdentidad,
+  type BaseIdentidad,
+} from "./base-identidad";
 
-let prismaRaw!: PrismaClient;
-let login!: typeof import("@/lib/login-eventos");
+const estado = vi.hoisted(() => ({ base: null as unknown as BaseIdentidad }));
+vi.mock("@/lib/db", () => ({ get db() { return estado.base.db; } }));
 
-/** Instante UTC explícito: todos los intentos comparten la misma hora, así
- *  la ventana de 15 minutos no depende de cuánto tarde la corrida. */
 const AHORA = new Date("2026-09-05T15:00:00.000Z");
-
-const IP = "203.0.113.7";
-const USER_AGENT = "vitest";
-
-/** Cuántos intentos se mandan a la vez. Más que el umbral, a propósito. */
+const HUELLA = { ip: "203.0.113.7", userAgent: "vitest" };
 const EN_PARALELO = 12;
 
-function intentoDe(email: string) {
-  return { email, ip: IP, userAgent: USER_AGENT, ahora: AHORA };
+beforeAll(() => {
+  process.env.CLAVES_CIFRADO = CLAVES_CIFRADO_TEST;
+  __resetLlaveroForTests();
+  estado.base = conectarBaseIdentidad();
+});
+beforeEach(() => vaciarBaseIdentidad(estado.base.prisma));
+afterAll(() => estado.base.prisma.$disconnect());
+
+async function cuenta(password = "contraseña larga y buena") {
+  const org = await estado.base.prisma.organization.create({ data: { nombre: `Org ${randomUUID()}` } });
+  const user = await estado.base.prisma.user.create({
+    data: { email: `${randomUUID()}@test.uy`, hashedPassword: await bcrypt.hash(password, BCRYPT_RONDAS), nombre: "Mariana", organizationId: org.id },
+  });
+  return { org, user, password };
 }
 
-/** Cuenta las filas de fallo escritas para la clave del email. */
-async function fallosDelEmail(email: string): Promise<number> {
-  return prismaRaw.eventoAuditoria.count({
-    where: {
-      entidad: login.ENTIDAD_LOGIN,
-      accion: login.ACCION_LOGIN_FALLIDO,
-      entidadId: await login.claveEmail(email),
-    },
-  });
+async function fallosDe(email: string) {
+  return estado.base.prisma.intentoAcceso.count({ where: { tipo: "login", clave: await claveEmail(email) } });
 }
 
-beforeAll(async () => {
-  ({ prisma: prismaRaw } = conectarBaseDeTest());
-
-  // Mismo patrón que multi-tenant.test.ts: src/lib/db-auth.ts cachea el
-  // cliente en globalThis, así que dejarlo puesto ANTES del import hace que
-  // el módulo use la base de test. Por eso el import es dinámico.
-  (globalThis as unknown as { prismaAuth: unknown }).prismaAuth = prismaRaw;
-  login = await import("@/lib/login-eventos");
-});
-
-beforeEach(async () => {
-  await vaciarTablas(prismaRaw);
-  await prismaRaw.eventoAuditoria.deleteMany({
-    where: { entidad: "login" },
-  });
-});
-
-afterAll(async () => {
-  await prismaRaw.eventoAuditoria.deleteMany({ where: { entidad: "login" } });
-  await prismaRaw.$disconnect();
-});
-
-describe("procesarIntento", () => {
-  it("N intentos fallidos en paralelo no pasan del umbral", async () => {
+describe("procesarIntentoLogin", () => {
+  it("N intentos fallidos en paralelo no pasan del umbral y escriben un fallo por verificación", async () => {
     const email = `${randomUUID()}@test.uy`;
     let verificaciones = 0;
-
     const resultados = await Promise.all(
       Array.from({ length: EN_PARALELO }, () =>
-        login.procesarIntento<string>({
-          prisma: prismaRaw,
-          intento: intentoDe(email),
+        procesarIntentoLogin<string>({
+          prisma: estado.base.db,
+          intento: { email, huella: HUELLA, ahora: AHORA },
           verificar: async () => {
             verificaciones += 1;
-            return { ok: false, motivo: "password", organizationId: null };
+            return { ok: false, motivo: "password" };
           },
         }),
       ),
     );
-
-    // Ninguno entra: todas las contraseñas eran incorrectas.
-    expect(resultados.every((r) => r === null)).toBe(true);
-
-    // Lo que importa: la contraseña se llegó a verificar exactamente UMBRAL
-    // veces. Sin el lock, los 12 leían "0 fallos" y verificaban los 12.
+    expect(resultados.every((r) => r.estado === "rechazado")).toBe(true);
     expect(verificaciones).toBe(UMBRAL_INTENTOS);
-
-    // Y quedó escrito exactamente un fallo por verificación. Ni de más (un
-    // intento bloqueado no registra nada) ni de menos.
-    expect(await fallosDelEmail(email)).toBe(UMBRAL_INTENTOS);
+    expect(await fallosDe(email)).toBe(UMBRAL_INTENTOS);
+    // También una fila por IP por cada fallo, con IP y user-agent.
+    const porIp = await estado.base.prisma.intentoAcceso.findMany({ where: { clave: `ip:${HUELLA.ip}` } });
+    expect(porIp).toHaveLength(UMBRAL_INTENTOS);
+    expect(porIp[0]).toMatchObject({ tipo: "login", ip: HUELLA.ip, userAgent: "vitest" });
   });
 
-  it("después de la tanda el email queda bloqueado", async () => {
+  it("después de la tanda el email queda bloqueado y un intento bloqueado no escribe nada", async () => {
     const email = `${randomUUID()}@test.uy`;
-
     await Promise.all(
       Array.from({ length: EN_PARALELO }, () =>
-        login.procesarIntento({
-          prisma: prismaRaw,
-          intento: intentoDe(email),
-          verificar: async () => ({
-            ok: false as const,
-            motivo: "password" as const,
-            organizationId: null,
-          }),
-        }),
+        procesarIntentoLogin({ prisma: estado.base.db, intento: { email, huella: HUELLA, ahora: AHORA }, verificar: async () => ({ ok: false, motivo: "password" }) }),
       ),
     );
-
-    const estado = await login.evaluarIntento(intentoDe(email), prismaRaw);
-    expect(estado.bloqueado).toBe(true);
-    expect(estado.nivel).toBe(1);
+    const bloqueo = await evaluarBloqueoDe(estado.base.db, "login", [await claveEmail(email)], AHORA);
+    expect(bloqueo.bloqueado).toBe(true);
+    const antes = await fallosDe(email);
+    let verificado = false;
+    const r = await procesarIntentoLogin({ prisma: estado.base.db, intento: { email, huella: HUELLA, ahora: AHORA }, verificar: async () => { verificado = true; return { ok: true, resultado: 1 }; } });
+    expect(r.estado).toBe("rechazado");
+    expect(verificado).toBe(false);
+    expect(await fallosDe(email)).toBe(antes);
   });
 
-  it("un intento bloqueado no escribe ninguna fila nueva", async () => {
-    // Si cada intento bloqueado contara como fallo, quien golpea la puerta
-    // dejaría afuera a la profesional para siempre y la tabla crecería sin
-    // techo.
+  it("los éxitos no se registran como intentos", async () => {
     const email = `${randomUUID()}@test.uy`;
+    const r = await procesarIntentoLogin({ prisma: estado.base.db, intento: { email, huella: HUELLA, ahora: AHORA }, verificar: async () => ({ ok: true, resultado: "sesion" }) });
+    expect(r).toEqual({ estado: "ok", resultado: "sesion" });
+    expect(await estado.base.prisma.intentoAcceso.count()).toBe(0);
+  });
+});
 
-    await Promise.all(
-      Array.from({ length: EN_PARALELO }, () =>
-        login.procesarIntento({
-          prisma: prismaRaw,
-          intento: intentoDe(email),
-          verificar: async () => ({
-            ok: false as const,
-            motivo: "password" as const,
-            organizationId: null,
-          }),
-        }),
-      ),
-    );
-    const despuesDeLaTanda = await fallosDelEmail(email);
+describe("iniciarSesion", () => {
+  const deps = { comparar: bcrypt.compare, hashear: bcrypt.hash, huella: HUELLA };
 
-    let verificaciones = 0;
-    const resultado = await login.procesarIntento({
-      prisma: prismaRaw,
-      intento: intentoDe(email),
-      verificar: async () => {
-        verificaciones += 1;
-        return { ok: false as const, motivo: "password" as const, organizationId: null };
-      },
-    });
+  it("con la contraseña buena crea la sesión (solo el hash del token) y el evento cuenta.entrada sin IP", async () => {
+    const { user, org, password } = await cuenta();
+    const r = await iniciarSesion({ prisma: estado.base.db, email: user.email.toUpperCase(), password, ...deps });
+    expect(r.estado).toBe("ok");
+    if (r.estado !== "ok") return;
+    expect(r.resultado).toMatchObject({ userId: user.id, organizationId: org.id });
 
-    expect(resultado).toBeNull();
-    expect(verificaciones).toBe(0);
-    expect(await fallosDelEmail(email)).toBe(despuesDeLaTanda);
+    const fila = await estado.base.prisma.sesionAcceso.findUniqueOrThrow({ where: { id: r.resultado.sesionId } });
+    expect(fila.tokenHash).toBe(await hashTokenSesion(r.resultado.token));
+    expect(fila.ip).toBe(HUELLA.ip);
+    expect(fila.cerradaEn).toBeNull();
+    expect(JSON.stringify(fila)).not.toContain(r.resultado.token);
+
+    const viva = await buscarSesionViva(estado.base.db, r.resultado.token, new Date());
+    expect(viva?.user).toMatchObject({ id: user.id, organizationId: org.id, rol: "titular" });
+
+    const evento = await estado.base.prisma.eventoAuditoria.findFirstOrThrow({ where: { accion: "cuenta.entrada", actorId: user.id } });
+    expect(JSON.stringify(evento.detalle)).not.toContain(HUELLA.ip);
+    expect(evento.detalle).toMatchObject({ sesionId: r.resultado.sesionId });
   });
 
-  it("con la credencial buena devuelve la sesión y registra la entrada", async () => {
-    const email = `${randomUUID()}@test.uy`;
-    const org = await prismaRaw.organization.create({
-      data: { nombre: `Org ${randomUUID()}` },
-    });
-    const user = await prismaRaw.user.create({
-      data: {
-        email,
-        hashedPassword: "no-importa",
-        nombre: "Mariana",
-        organizationId: org.id,
-      },
-    });
-
-    const sesion = await login.procesarIntento<{ id: string }>({
-      prisma: prismaRaw,
-      intento: intentoDe(email),
-      verificar: async () => ({
-        ok: true,
-        userId: user.id,
-        organizationId: org.id,
-        sesion: { id: user.id },
-      }),
-    });
-
-    expect(sesion).toEqual({ id: user.id });
-    expect(await fallosDelEmail(email)).toBe(0);
-
-    const entradas = await prismaRaw.eventoAuditoria.count({
-      where: {
-        entidad: login.ENTIDAD_LOGIN,
-        accion: login.ACCION_LOGIN_OK,
-        entidadId: user.id,
-      },
-    });
-    expect(entradas).toBe(1);
+  it("contraseña mal o email inexistente: rechazado, sin sesión", async () => {
+    const { user } = await cuenta();
+    expect((await iniciarSesion({ prisma: estado.base.db, email: user.email, password: "otra cosa distinta", ...deps })).estado).toBe("rechazado");
+    expect((await iniciarSesion({ prisma: estado.base.db, email: "nadie@test.uy", password: "otra cosa distinta", ...deps })).estado).toBe("rechazado");
+    expect(await estado.base.prisma.sesionAcceso.count()).toBe(0);
+    expect(await estado.base.prisma.intentoAcceso.count({ where: { tipo: "login" } })).toBeGreaterThan(0);
   });
 
-  it("cuatro fallos no impiden entrar al quinto intento, si la credencial es buena", async () => {
-    const email = `${randomUUID()}@test.uy`;
-    const org = await prismaRaw.organization.create({
-      data: { nombre: `Org ${randomUUID()}` },
-    });
-    const user = await prismaRaw.user.create({
-      data: {
-        email,
-        hashedPassword: "no-importa",
-        nombre: "Mariana",
-        organizationId: org.id,
-      },
-    });
+  it("cerrar una sesión la mata; cerrar todas respeta la excepción", async () => {
+    const { user, password } = await cuenta();
+    const abrir = async () => {
+      const r = await iniciarSesion({ prisma: estado.base.db, email: user.email, password, ...deps });
+      if (r.estado !== "ok") throw new Error("no abrió");
+      return r.resultado;
+    };
+    const [a, b, c] = [await abrir(), await abrir(), await abrir()];
+    expect(await listarSesionesVivas(estado.base.db, user.id, new Date())).toHaveLength(3);
 
-    for (let i = 0; i < UMBRAL_INTENTOS - 1; i++) {
-      await login.procesarIntento({
-        prisma: prismaRaw,
-        intento: intentoDe(email),
-        verificar: async () => ({
-          ok: false as const,
-          motivo: "password" as const,
-          organizationId: org.id,
-        }),
-      });
-    }
+    expect(await cerrarSesion(estado.base.db, { id: a.sesionId, userId: user.id, motivo: "salida", ahora: new Date() })).toBe(true);
+    expect(await buscarSesionViva(estado.base.db, a.token, new Date())).toBeNull();
+    expect(await cerrarSesion(estado.base.db, { id: a.sesionId, userId: user.id, motivo: "salida", ahora: new Date() })).toBe(false);
 
-    const sesion = await login.procesarIntento<{ id: string }>({
-      prisma: prismaRaw,
-      intento: intentoDe(email),
-      verificar: async () => ({
-        ok: true,
-        userId: user.id,
-        organizationId: org.id,
-        sesion: { id: user.id },
-      }),
-    });
+    expect(await cerrarTodas(estado.base.db, { userId: user.id, motivo: "salida_todas", ahora: new Date(), exceptoId: c.sesionId })).toBe(1);
+    expect(await buscarSesionViva(estado.base.db, b.token, new Date())).toBeNull();
+    expect(await buscarSesionViva(estado.base.db, c.token, new Date())).not.toBeNull();
+    const cerrada = await estado.base.prisma.sesionAcceso.findUniqueOrThrow({ where: { id: b.sesionId } });
+    expect(cerrada.motivoCierre).toBe("salida_todas");
+  });
+});
 
-    expect(sesion).toEqual({ id: user.id });
+describe("POST /api/cuenta/entrar", () => {
+  it("200 con la cookie HttpOnly cuyo token abre la sesión; 401 genérico si no", async () => {
+    const { user, password } = await cuenta();
+    const { POST } = await import("@/app/api/cuenta/entrar/route");
+    const ok = await POST(new Request("http://localhost/api/cuenta/entrar", {
+      method: "POST", headers: { "x-forwarded-for": HUELLA.ip, "user-agent": "vitest" },
+      body: JSON.stringify({ email: user.email, password }),
+    }));
+    expect(ok.status).toBe(200);
+    const setCookie = ok.headers.get("set-cookie")!;
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Lax");
+    const token = tokenDeCookieHeader(setCookie.split(";")[0], nombreCookie());
+    expect(token).not.toBeNull();
+    expect(await buscarSesionViva(estado.base.db, token!, new Date())).not.toBeNull();
+
+    const mal = await POST(new Request("http://localhost/api/cuenta/entrar", {
+      method: "POST", body: JSON.stringify({ email: user.email, password: "otra cosa distinta" }),
+    }));
+    expect(mal.status).toBe(401);
+    expect(mal.headers.get("set-cookie")).toBeNull();
+    const inexistente = await POST(new Request("http://localhost/api/cuenta/entrar", {
+      method: "POST", body: JSON.stringify({ email: "nadie@test.uy", password: "otra cosa distinta" }),
+    }));
+    expect(inexistente.status).toBe(401);
+    expect(await inexistente.text()).toBe(await mal.text());
   });
 });

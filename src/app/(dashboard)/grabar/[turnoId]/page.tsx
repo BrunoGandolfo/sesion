@@ -11,7 +11,7 @@
 
 import { notFound } from "next/navigation";
 
-import { getServerSession } from "@/lib/auth-utils";
+import { buscarActor } from "@/app/api/_lib/auth";
 import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { db } from "@/lib/db";
 import { hora } from "@/lib/format";
@@ -37,7 +37,7 @@ export default async function GrabarPage({
   const [{ turnoId }, { pacienteId }, sesion] = await Promise.all([
     params,
     searchParams,
-    getServerSession(),
+    buscarActor(),
   ]);
 
   if (!sesion) {

@@ -15,7 +15,8 @@ import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 
 import * as React from "react";
 import { LogOut } from "lucide-react";
-import { getSession, signOut } from "next-auth/react";
+import { useSesionActual } from "@/components/layout/providers";
+import { cerrarSesion } from "@/lib/sesion-cliente";
 
 import { Button, Card, Input } from "@/components/ui";
 import { CheckDibujado } from "@/components/ui/movimiento";
@@ -161,7 +162,7 @@ export function ConfigView() {
   const [reloadKey, setReloadKey] = React.useState(0);
   const [estadoGuardado, setEstadoGuardado] =
     React.useState<EstadoGuardado>("idle");
-  const [emailSesion, setEmailSesion] = React.useState<string | null>(null);
+  const emailSesion = useSesionActual()?.email ?? null;
 
   const formRef = React.useRef(form);
   const debounceRef = React.useRef<number | null>(null);
@@ -257,16 +258,12 @@ export function ConfigView() {
     montadoRef.current = true;
     const controller = new AbortController();
 
-    Promise.all([
-      apiGet<Configuracion>("/api/config", { signal: controller.signal }),
-      getSession().catch(() => null),
-    ])
-      .then(([config, session]) => {
+    apiGet<Configuracion>("/api/config", { signal: controller.signal })
+      .then((config) => {
         const siguiente = formDesdeConfig(config);
         formRef.current = siguiente;
         camposSuciosRef.current.clear();
         setForm(siguiente);
-        setEmailSesion(session?.user?.email ?? null);
         setEstadoGuardado("idle");
         setCargando(false);
       })
@@ -490,6 +487,7 @@ export function ConfigView() {
                 ) : null}
               </div>
               <CambiarPassword />
+              <CerrarOtrasSesiones />
 
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
@@ -498,7 +496,7 @@ export function ConfigView() {
                   icon={<LogOut size={16} strokeWidth={2} aria-hidden="true" />}
                   className="w-full sm:w-auto"
                   onClick={() => {
-                    void signOut({ callbackUrl: "/login" });
+                    void cerrarSesion("/login");
                   }}
                 >
                   Cerrar sesión
@@ -583,6 +581,9 @@ function CambiarPassword() {
       limpiar();
       setAbierto(false);
       setListo(true);
+      // El servidor cerró todas las sesiones, incluida esta: la cookie ya no
+      // vale. A /login con el aviso, sin pasar por el proxy con cookie muerta.
+      window.location.assign("/login?aviso=password-cambiada");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
     } finally {
@@ -610,7 +611,7 @@ function CambiarPassword() {
             className="flex items-center gap-2 text-[13px] text-sage-600"
           >
             <CheckDibujado tamano={16} className="shrink-0" />
-            Contraseña cambiada. Seguís con la sesión abierta acá.
+            {PASSWORD_CAMBIADA_REINGRESO}
           </p>
         ) : null}
       </div>
@@ -651,8 +652,7 @@ function CambiarPassword() {
       />
 
       <p className="text-[12px] leading-[1.5] text-ink-500">
-        Al menos {PASSWORD_MIN} caracteres. No te vamos a cerrar la sesión en
-        este dispositivo.
+        Al menos {PASSWORD_MIN} caracteres. {PASSWORD_AVISO_CIERRE}
       </p>
 
       {error ? (
@@ -675,6 +675,74 @@ function CambiarPassword() {
         </Button>
       </div>
     </form>
+  );
+}
+
+// Textos nuevos de esta pantalla; van al glosario cuando el área 6 los
+// integre (docs/pendientes/03-identidad.md).
+const PASSWORD_AVISO_CIERRE =
+  "Al cambiarla te vamos a pedir que entres de nuevo en todos tus dispositivos, este incluido.";
+const PASSWORD_CAMBIADA_REINGRESO = "Contraseña cambiada. Entrá de nuevo.";
+const OTRAS_SESIONES_BOTON = "Cerrar sesión en los demás dispositivos";
+const OTRAS_SESIONES_DESCRIPCION =
+  "Si perdiste un teléfono o entraste desde una computadora ajena, esto cierra todas las demás sesiones. Esta sigue abierta.";
+const OTRAS_SESIONES_CERRANDO = "Cerrando…";
+function otrasSesionesCerradas(n: number): string {
+  if (n === 0) return "No había otras sesiones abiertas.";
+  return n === 1 ? "Cerramos 1 sesión en otro dispositivo." : `Cerramos ${n} sesiones en otros dispositivos.`;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cerrar sesión en los demás dispositivos
+//
+// POST /api/cuenta/salir-todas cierra todas las sesiones vivas menos la
+// actual. Existe porque ahora la sesión vive en la base y se puede apagar de
+// verdad; antes el token de 30 días no se podía revocar.
+// ────────────────────────────────────────────────────────────────────────────
+
+function CerrarOtrasSesiones() {
+  const [enviando, setEnviando] = React.useState(false);
+  const [resultado, setResultado] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function cerrar() {
+    if (enviando) return;
+    setEnviando(true);
+    setError(null);
+    setResultado(null);
+    try {
+      const { cerradas } = await apiPost<{ cerradas: number }>("/api/cuenta/salir-todas", {});
+      setResultado(otrasSesionesCerradas(cerradas));
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        className="w-full sm:w-auto"
+        disabled={enviando}
+        onClick={() => void cerrar()}
+      >
+        {enviando ? OTRAS_SESIONES_CERRANDO : OTRAS_SESIONES_BOTON}
+      </Button>
+      <p className="text-[12px] leading-[1.5] text-ink-500">{OTRAS_SESIONES_DESCRIPCION}</p>
+      {resultado ? (
+        <p role="status" className="text-[13px] text-sage-600">
+          {resultado}
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-[12px] text-[color:var(--color-error)]">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

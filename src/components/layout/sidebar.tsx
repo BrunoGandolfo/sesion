@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { useSesionActual } from "@/components/layout/providers";
+import { cerrarSesion } from "@/lib/sesion-cliente";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Calendar,
@@ -55,7 +56,7 @@ function getFirstName(name: string): string {
 export function Sidebar() {
   const pathname = usePathname();
   const reducido = useReducedMotion();
-  const { data: session } = useSession();
+  const usuaria = useSesionActual();
   const [redCount, setRedCount] = React.useState(0);
   // La ayuda no es un destino: se abre encima de la pantalla en la que ella
   // está y se cierra ahí mismo. El panel lo monta el menú —hay uno acá y
@@ -64,7 +65,7 @@ export function Sidebar() {
   // paneles abiertos.
   const [ayudaAbierta, setAyudaAbierta] = React.useState(false);
 
-  const name = session?.user?.name?.trim() || "Usuario";
+  const name = usuaria?.nombre.trim() || "Usuario";
   const initials = getInitials(name);
   const firstName = getFirstName(name);
 
@@ -190,7 +191,7 @@ export function Sidebar() {
             </div>
             <button
               type="button"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => void cerrarSesion("/login")}
               aria-label="Cerrar sesión"
               title="Cerrar sesión"
               className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"

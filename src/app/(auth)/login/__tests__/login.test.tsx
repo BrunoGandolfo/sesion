@@ -13,13 +13,12 @@
 //     ser un botón, nadie entra. Se consulta por rol y por nombre —lo que ve
 //     y toca quien usa la pantalla—, nunca por clase ni por id.
 //
-// `signIn` de next-auth/react se reemplaza porque el test monta la página, no
-// la red: sin esto el módulo intenta hablar con el servidor de sesión.
+// Entrar es un POST a /api/cuenta/entrar; acá solo se monta la página, y el
+// router de Next se dobla.
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("next-auth/react", () => ({ signIn: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),

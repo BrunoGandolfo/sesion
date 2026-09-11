@@ -1,42 +1,166 @@
+// Invitaciones y alta de cuenta. Sin Prisma, bcrypt ni Request: dependencias
+// explícitas (RepositorioRegistro lo implementa src/lib/cuenta-registro-db.ts).
 import { z } from "zod";
-import { hashTokenCuenta, nuevoTokenCuenta, ORIGEN_CUENTA, TOKEN_CUENTA, tokenVigente } from "@/lib/cuenta-tokens";
+
+import {
+  hashTokenCuenta,
+  nuevoTokenCuenta,
+  ORIGEN_CUENTA,
+  TOKEN_CUENTA,
+  tokenVigente,
+} from "@/lib/cuenta-tokens";
+import {
+  ENTRADA_INVITACION_INVALIDA,
+  ENTRADA_REGISTRO_ERROR,
+  ENTRADA_TERMINOS_REQUERIDOS,
+} from "@/lib/glosario";
 import { validarPasswordNueva } from "@/lib/password";
-import { ENTRADA_INVITACION_INVALIDA, ENTRADA_REGISTRO_ERROR, ENTRADA_TERMINOS_REQUERIDOS } from "@/lib/glosario";
+
 import { ApiError } from "../responses";
+
 export const VIGENCIA_INVITACION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * TEMPORAL: tope de invitaciones vigentes por creadora, por costo de APIs
+ * durante la prueba. Cuando la prueba termine, este número sube o se saca.
+ */
+export const MAX_INVITACIONES_VIGENTES = 2;
+
+/**
+ * TEMPORAL: quién puede invitar, por costo de APIs durante la prueba. Hoy la
+ * cuenta de Mariana, configurable por INVITACIONES_PERMITIDAS (emails
+ * separados por coma). Sin la variable nadie invita. Además exige rol
+ * titular: cuando haya más roles, la regla es sobre el rol y no sobre la
+ * lista.
+ */
+export function puedeInvitar(
+  actor: { rol: string; email: string },
+  permitidas: string | undefined = process.env.INVITACIONES_PERMITIDAS,
+): boolean {
+  if (actor.rol !== "titular") return false;
+  const lista = (permitidas ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return lista.includes(actor.email.trim().toLowerCase());
+}
+
 export interface InvitacionGuardada {
-  id: string; organizationId: string | null; email: string | null;
-  expiresAt: Date; usedAt: Date | null;
+  id: string;
+  creadaPorId: string;
+  venceEn: Date;
+  usadaEn: Date | null;
 }
-export interface DatosRegistro { token: string; nombre: string; email: string; password: string; aceptaTerminos: boolean }
+
+export interface DatosRegistro {
+  token: string;
+  nombre: string;
+  email: string;
+  password: string;
+  aceptaTerminos: boolean;
+}
+
+export interface SesionNueva {
+  tokenHash: string;
+  ip: string | null;
+  userAgent: string | null;
+}
+
 export interface RepositorioRegistro {
-  crearInvitacion(input: { tokenHash: string; expiresAt: Date; createdAt: Date; createdBy: string }): Promise<void>;
+  contarVigentes(creadaPorId: string, ahora: Date): Promise<number>;
+  crearInvitacion(input: {
+    tokenHash: string;
+    venceEn: Date;
+    creadaEn: Date;
+    creadaPorId: string;
+  }): Promise<{ id: string }>;
   buscarInvitacion(tokenHash: string): Promise<InvitacionGuardada | null>;
-  // Crea organización, usuario, configuración, consumo y auditoría atómicamente.
-  registrar(input: { invitacionId: string; nombre: string; email: string; hashedPassword: string; ahora: Date }): Promise<{ userId: string; organizationId: string }>;
+  /** Crea organización, usuaria, configuración, sesión, consumo de la
+   *  invitación y los dos eventos de auditoría, atómicamente. */
+  registrar(input: {
+    invitacionId: string;
+    nombre: string;
+    email: string;
+    hashedPassword: string;
+    ahora: Date;
+    sesion: SesionNueva;
+  }): Promise<{ userId: string; organizationId: string; sesionId: string }>;
 }
-export async function crearInvitacion(createdBy: string, repo: RepositorioRegistro, ahora = new Date()) {
+
+export interface ActorInvitante {
+  userId: string;
+  email: string;
+  rol: string;
+}
+
+export async function crearInvitacion(
+  actor: ActorInvitante,
+  repo: RepositorioRegistro,
+  ahora = new Date(),
+): Promise<{ enlace: string; vence: string; invitacionId: string }> {
+  if (!puedeInvitar(actor)) throw new ApiError("No podés invitar desde esta cuenta.", 403);
+  if ((await repo.contarVigentes(actor.userId, ahora)) >= MAX_INVITACIONES_VIGENTES) {
+    throw new ApiError(
+      `Ya tenés ${MAX_INVITACIONES_VIGENTES} invitaciones vigentes. Esperá a que se usen o venzan.`,
+      429,
+    );
+  }
   const token = nuevoTokenCuenta();
-  const expiresAt = new Date(ahora.getTime() + VIGENCIA_INVITACION_MS);
-  await repo.crearInvitacion({ createdBy, tokenHash: await hashTokenCuenta(token), expiresAt, createdAt: ahora });
-  return { enlace: `${ORIGEN_CUENTA}/registro?token=${token}`, vence: expiresAt.toISOString() };
+  const venceEn = new Date(ahora.getTime() + VIGENCIA_INVITACION_MS);
+  const { id } = await repo.crearInvitacion({
+    creadaPorId: actor.userId,
+    tokenHash: await hashTokenCuenta(token),
+    venceEn,
+    creadaEn: ahora,
+  });
+  return { enlace: `${ORIGEN_CUENTA}/registro?token=${token}`, vence: venceEn.toISOString(), invitacionId: id };
 }
-export async function invitacionDisponible(token: string, repo: RepositorioRegistro, ahora = new Date()) {
+
+export async function invitacionDisponible(
+  token: string,
+  repo: RepositorioRegistro,
+  ahora = new Date(),
+): Promise<InvitacionGuardada | null> {
   if (!TOKEN_CUENTA.test(token)) return null;
   const invitacion = await repo.buscarInvitacion(await hashTokenCuenta(token));
-  // Esta versión nunca incorpora a la invitada al consultorio de otra persona.
-  return invitacion && invitacion.organizationId === null && tokenVigente(invitacion, ahora) ? invitacion : null;
+  return invitacion && tokenVigente({ venceEn: invitacion.venceEn, usadoEn: invitacion.usadaEn }, ahora)
+    ? invitacion
+    : null;
 }
-export async function registrarCuenta(datos: DatosRegistro, deps: {
-  repo: RepositorioRegistro; hashear: (password: string) => Promise<string>; ahora?: Date;
-}) {
+
+export async function registrarCuenta(
+  datos: DatosRegistro,
+  deps: {
+    repo: RepositorioRegistro;
+    hashear: (password: string) => Promise<string>;
+    /** Token de la sesión que se abre en el alta (nuevoTokenSesion()). */
+    tokenSesion: string;
+    huella: { ip: string | null; userAgent: string | null };
+    hashTokenSesion: (token: string) => Promise<string>;
+    ahora?: Date;
+  },
+): Promise<{ userId: string; organizationId: string; sesionId: string }> {
   if (datos.aceptaTerminos !== true) throw new ApiError(ENTRADA_TERMINOS_REQUERIDOS, 400);
-  const email = datos.email.trim().toLowerCase(); const nombre = datos.nombre.trim();
-  if (!nombre || nombre.length > 120 || !z.string().email().max(254).safeParse(email).success) throw new ApiError(ENTRADA_REGISTRO_ERROR, 400);
+  const email = datos.email.trim().toLowerCase();
+  const nombre = datos.nombre.trim();
+  if (!nombre || nombre.length > 120 || !z.string().email().max(254).safeParse(email).success) {
+    throw new ApiError(ENTRADA_REGISTRO_ERROR, 400);
+  }
   const validacion = validarPasswordNueva(datos.password);
   if (!validacion.ok) throw new ApiError(validacion.motivo, 400);
-  const invitacion = await invitacionDisponible(datos.token, deps.repo, deps.ahora ?? new Date());
-  if (!invitacion || (invitacion.email !== null && invitacion.email.toLowerCase() !== email)) throw new ApiError(ENTRADA_INVITACION_INVALIDA, 400);
-  return deps.repo.registrar({ invitacionId: invitacion.id, nombre, email,
-    hashedPassword: await deps.hashear(datos.password), ahora: deps.ahora ?? new Date() });
+  const ahora = deps.ahora ?? new Date();
+  const invitacion = await invitacionDisponible(datos.token, deps.repo, ahora);
+  if (!invitacion) throw new ApiError(ENTRADA_INVITACION_INVALIDA, 400);
+  return deps.repo.registrar({
+    invitacionId: invitacion.id,
+    nombre,
+    email,
+    hashedPassword: await deps.hashear(datos.password),
+    ahora,
+    sesion: {
+      tokenHash: await deps.hashTokenSesion(deps.tokenSesion),
+      ip: deps.huella.ip,
+      userAgent: deps.huella.userAgent,
+    },
+  });
 }
