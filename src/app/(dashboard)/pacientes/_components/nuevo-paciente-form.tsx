@@ -161,6 +161,7 @@ export function NuevoPacienteForm({
                   step={1}
                   className="pl-[56px] tabular-nums"
                   aria-invalid={errors.tarifa ? true : undefined}
+                  aria-describedby={errors.tarifa ? `${tarifaId}-error` : undefined}
                   {...register("tarifa", { valueAsNumber: true })}
                 />
               </div>
@@ -171,6 +172,7 @@ export function NuevoPacienteForm({
               ) : null}
               {errors.tarifa?.message && (
                 <p
+                  id={`${tarifaId}-error`}
                   role="alert"
                   className="mt-2 font-sans text-[12px] text-[color:var(--color-error)]"
                 >

@@ -403,7 +403,7 @@ export function ConfigView() {
             <div className="relative">
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute left-[14px] top-1/2 z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
+                className="pointer-events-none absolute left-[14px] top-[22px] z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
               >
                 $UYU
               </span>
@@ -419,7 +419,9 @@ export function ConfigView() {
                 error={
                   form.tarifaDefault.trim() === ""
                     ? "Falta la tarifa"
-                    : undefined
+                    : !Number.isInteger(Number(form.tarifaDefault)) || Number(form.tarifaDefault) < 0
+                      ? "Usá un importe entero, de cero en adelante."
+                      : undefined
                 }
               />
             </div>
@@ -705,7 +707,7 @@ function IndicadorGuardado({
       {estado === "error" ? (
         <div className="flex items-center gap-2">
           <span className="text-[12px] font-semibold text-[color:var(--color-error)]">
-            No se pudo guardar. Revisá los campos marcados.
+            Hay cambios sin guardar. Revisá los datos y reintentá.
           </span>
           <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
             Reintentar
