@@ -16,10 +16,12 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
+const CATEGORIAS = ["termino_clinico", "modismo_rioplatense", "nombre_propio", "otro"] as const;
+
 const updateSchema = z
   .object({
     activo: z.boolean().optional(),
-    categoria: z.string().trim().max(50).nullable().optional(),
+    categoria: z.enum(CATEGORIAS).nullable().optional(),
   })
   .refine((v) => v.activo !== undefined || v.categoria !== undefined, {
     message: "Nada para actualizar",
@@ -53,16 +55,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const hotWord = await db.hotWord.findUniqueOrThrow({
       where: { id },
-      select: {
-        id: true,
-        termino: true,
-        scope: true,
-        categoria: true,
-        activo: true,
-      },
+      select: { id: true, termino: true, alcance: true, categoria: true, activo: true },
     });
 
-    return ok(hotWord);
+    // En la API sigue siendo `scope`; en la base es `alcance`.
+    return ok({ id: hotWord.id, termino: hotWord.termino, scope: hotWord.alcance, categoria: hotWord.categoria, activo: hotWord.activo });
   } catch (error) {
     return errorResponse(error);
   }

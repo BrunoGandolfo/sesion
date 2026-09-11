@@ -1,25 +1,40 @@
-// Texto del consentimiento informado para grabar sesiones.
+// Texto del consentimiento informado para grabar sesiones, versión 2.0.
 //
-// Versión 1.1 — corrección por veracidad. La 1.0 afirmaba dos cosas que el
-// pipeline real no cumple (ver docs/pipeline.md, verificado 2026-09-04):
+// Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
+// algo sobre el tratamiento de los datos sale de una constante que el código
+// hace verdadera, y consentimiento.test.ts las ata. Lo que la 1.1 decía mal
+// (que no viajaban nombres, que AssemblyAI "borra de sus servidores" sin
+// comprobarlo, que "cualquier copia sería imposible de abrir") acá se dice
+// como es.
 //
-//   - "El audio se procesa en un servidor privado al que solo accede la
-//     profesional. No se sube a servicios en internet de uso general ni
-//     queda guardado en servidores de empresas externas." Falso: el audio
-//     se transcribe en AssemblyAI y la nota la redacta Anthropic, las dos
-//     empresas en Estados Unidos.
-//   - "Solo queda la nota clínica escrita." Incompleto: la transcripción
-//     completa de la sesión también queda guardada, cifrada, en la base.
-//
-// Un consentimiento que describe mal el tratamiento de datos no es
-// consentimiento informado bajo la Ley 18.331, por más firmado que esté.
-//
-// El texto es deliberadamente más largo que el de la 1.0: se agrega lo que
-// faltaba, no se recorta lo que ya estaba.
+// Las firmas de la 1.1 siguen vigentes; la app sugiere firmar la 2.0 en la
+// próxima sesión (sugiereRefirmar), no obliga. Decisión del dueño.
 
 import type { db } from "@/lib/db";
 
-export const CONSENTIMIENTO_VERSION = "1.1";
+import {
+  ANTHROPIC_RETENCION_CERO,
+  ASR_BORRADO_CON_REINTENTO,
+  BACKUP_INCLUYE_CLAVE_AUDIO,
+  CLAVE_POR_SESION,
+  LIMPIEZA_AUDIO_REINTENTA,
+  LLM_RECIBE_CONTEXTO,
+  MARCO_LEGAL,
+  MEDIOS_CAPTURA,
+  PROVEEDORES,
+  RESPALDO_LOCAL_CIFRADO,
+  RETENCION_BACKUPS_DIAS,
+  REVOCAR_BORRA_HISTORIA,
+  VOCABULARIO_A_ASR,
+  VOCABULARIO_INCLUYE_NOMBRES,
+} from "@/lib/consentimiento-hechos";
+
+export const CONSENTIMIENTO_VERSION = "2.0";
+
+/** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
+export function sugiereRefirmar(textoVersion: string): boolean {
+  return textoVersion !== CONSENTIMIENTO_VERSION;
+}
 
 export function generarTextoConsentimiento(params: {
   nombrePaciente: string;
@@ -27,6 +42,43 @@ export function generarTextoConsentimiento(params: {
   direccionConsultorio: string;
 }): string {
   const { nombrePaciente, nombreProfesional, direccionConsultorio } = params;
+  const { assemblyai, anthropic, r2, railway, neon } = PROVEEDORES;
+
+  const soloAudio = MEDIOS_CAPTURA.length === 1 && MEDIOS_CAPTURA[0] === "audio";
+
+  const respaldoLocal = RESPALDO_LOCAL_CIFRADO
+    ? `1. Mientras se graba, el audio se cifra en el teléfono de ${nombreProfesional}, por tramos, ${CLAVE_POR_SESION ? "con una clave que se crea para esa sesión" : "con la clave de la aplicación"}, y se va subiendo ya cifrado. En el teléfono no queda audio sin cifrar.`
+    : `1. Mientras se graba, el audio queda en el teléfono de ${nombreProfesional}. En esa etapa todavía no está cifrado. Al terminar se cifra en el teléfono, antes de salir, ${CLAVE_POR_SESION ? "con una clave que se crea para esa sesión" : "con la clave de la aplicación"}.`;
+
+  const vocabulario = VOCABULARIO_A_ASR
+    ? VOCABULARIO_INCLUYE_NOMBRES
+      ? ` Recibe además una lista de palabras que ${nombreProfesional} carga para que se escriban bien: términos clínicos y nombres propios, que pueden incluir el tuyo y el de personas que nombrás en las sesiones.`
+      : ` Recibe además una lista de términos clínicos que ${nombreProfesional} carga para que se escriban bien; esa lista no incluye nombres de personas.`
+    : "";
+
+  const borradoAsr = ASR_BORRADO_CON_REINTENTO
+    ? " Cuando termina, la aplicación le pide que borre el audio y el texto, y repite el pedido hasta que el servicio confirma que lo hizo."
+    : " Cuando termina, la aplicación le pide que borre el audio y el texto; esta aplicación no puede comprobar si lo hizo.";
+
+  const contexto = LLM_RECIBE_CONTEXTO
+    ? "recibe el texto de la sesión y el resumen de tu proceso hasta ese día, y redacta el borrador de la nota"
+    : "recibe el texto de la sesión y redacta el borrador de la nota";
+
+  const retencion = ANTHROPIC_RETENCION_CERO
+    ? ` La cuenta que usa esta aplicación está configurada para que ${anthropic.nombre} no conserve ese contenido ni lo use para entrenar sus sistemas.`
+    : "";
+
+  const limpieza = LIMPIEZA_AUDIO_REINTENTA
+    ? "En ese momento la aplicación destruye la clave que abre el audio y borra el archivo; si el borrado falla, lo reintenta hasta lograrlo."
+    : "En ese momento la aplicación destruye la clave que abre el audio y borra el archivo.";
+
+  const backups = BACKUP_INCLUYE_CLAVE_AUDIO
+    ? ` Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días y no contienen el audio, pero sí pueden contener, cifrada, la clave de un audio que todavía no se había borrado.`
+    : ` Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días y no contienen el audio ni su clave.`;
+
+  const revocar = REVOCAR_BORRA_HISTORIA
+    ? "Lo ya guardado se elimina de tu historia clínica."
+    : "Lo ya guardado sigue formando parte de tu historia clínica.";
 
   return `Consentimiento informado para grabación de sesiones
 Versión ${CONSENTIMIENTO_VERSION}
@@ -36,80 +88,63 @@ Hola ${nombrePaciente}.
 Antes de empezar queremos contarte cómo funciona la grabación de las sesiones y pedirte que la autorices por escrito. Tomate el tiempo de leerlo: se trata de tus datos y de tu intimidad.
 
 ¿Qué se graba?
-Se graba el audio de tu sesión de psicoterapia con ${nombreProfesional}, en el consultorio ubicado en ${direccionConsultorio}. No se graba video.
+El audio de tu sesión de psicoterapia con ${nombreProfesional}, en el consultorio ubicado en ${direccionConsultorio}.${soloAudio ? " No se graba video." : ""}
 
-¿Para qué se graba?
-El audio se usa para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: el registro escrito que ${nombreProfesional} guarda en tu historia clínica. Le permite estar más presente durante la sesión y dedicarle menos tiempo a escribir después.
+¿Para qué?
+Para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: el registro escrito que ${nombreProfesional} guarda en tu historia clínica y que ella revisa y aprueba antes de que quede guardado. También para preparar, a partir de varias sesiones, un resumen de tu proceso que solo ella ve y edita, y un análisis de su propio trabajo que solo ella ve.
 
-¿Quién escucha el audio?
-Ninguna persona además de ${nombreProfesional}. Nadie más de su consultorio, ni de ninguna empresa, escucha tus sesiones.
+¿Por dónde pasa el audio?
+${respaldoLocal}
+2. Ya cifrado, se guarda en un servicio de almacenamiento (${r2.nombre}) y de ahí lo toma un programa de esta aplicación que corre en un servidor (${railway.nombre}), lo descifra solo en memoria y lo manda a transcribir.
+3. ${assemblyai.nombre}, una empresa de ${assemblyai.pais}, convierte el audio en texto. Recibe el audio sin cifrar.${vocabulario}${borradoAsr}
+4. ${anthropic.nombre}, otra empresa de ${anthropic.pais}, ${contexto}.${retencion}
 
-El audio sí pasa, de forma automática y sin que ninguna persona lo oiga, por dos servicios de empresas que están en Estados Unidos. Es importante que lo sepas antes de firmar:
+No se les envía tu teléfono ni tu documento. Lo que sí reciben es lo que se dice en la sesión${VOCABULARIO_A_ASR ? " y las palabras de la lista" : ""}.
 
-1. AssemblyAI convierte el audio en texto. Cuando termina, borra de sus servidores tanto ese texto como la copia del audio.
-2. Anthropic toma ese texto y redacta la nota clínica. Trabaja bajo un acuerdo que no le permite conservar el contenido ni usarlo para entrenar sus sistemas.
+¿Quién puede escuchar o leer?
+${nombreProfesional}, desde su cuenta. Nadie más de su consultorio. ${assemblyai.nombre} y ${anthropic.nombre} procesan de forma automática; sus condiciones dicen que ninguna persona accede al contenido, pero eso depende de ellos y esta aplicación no puede verificarlo.
 
-A esos servicios no se les envía tu nombre, tu teléfono ni tu documento: reciben el audio y el texto de la sesión, nada más. Tené en cuenta que, si durante la sesión se dicen nombres en voz alta, esos nombres viajan dentro del audio.
+¿Cuánto tiempo queda el audio?
+Hasta que ${nombreProfesional} revisa y aprueba la nota, en general el mismo día. ${limpieza}${backups}
 
-¿Cómo viaja y dónde se guarda el audio?
-El audio se cifra en el mismo teléfono de ${nombreProfesional} apenas termina la grabación, antes de salir del dispositivo. Queda guardado, siempre cifrado, en un servicio de almacenamiento, hasta que se escribe la nota. La clave para abrirlo la tiene solamente esta aplicación.
-
-¿Cuánto tiempo se guarda el audio?
-Hasta que ${nombreProfesional} revisa y aprueba la nota clínica, en general el mismo día de la sesión. En ese momento el audio se borra y además se destruye su clave, así que cualquier copia que llegara a quedar en algún lado sería imposible de abrir.
-
-¿Qué queda guardado entonces?
-Quedan dos cosas, las dos cifradas en la base de datos de la aplicación y accesibles solamente para ${nombreProfesional}:
-
-- La nota clínica, que forma parte de tu historia clínica igual que las notas que ella escribiría a mano.
-- La transcripción de la sesión, que es el texto de lo que se habló.
-
+¿Qué queda guardado?
+En la base de datos de la aplicación (${neon.nombre}), cifrado, y accesible solo para ${nombreProfesional}:
+- La nota clínica, como parte de tu historia clínica.
+- La transcripción de la sesión.
+- El resumen de tu proceso que ella mantiene.
+- Este consentimiento y tu firma.
 El audio no queda.
 
 ¿Podés cambiar de opinión?
-Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a ${nombreProfesional}. A partir de ese momento las sesiones siguientes no se graban. Esto no afecta en nada la continuidad de tu tratamiento ni tu relación con ella.
+Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a ${nombreProfesional}. A partir de ese momento no se graban más sesiones. ${revocar} Esto no afecta tu tratamiento ni tu relación con ella.
 
 ¿Es obligatorio aceptar?
-No. La grabación es totalmente opcional. Si preferís que no se grabe, la sesión sigue de manera normal y ${nombreProfesional} toma notas como siempre. No hay ninguna consecuencia por decir que no.
+No. Si preferís que no se grabe, la sesión sigue igual y ${nombreProfesional} toma notas como siempre.
 
 Marco legal
-Esta autorización se enmarca en la Ley 18.331 de Protección de Datos Personales de la República Oriental del Uruguay, que exige que el tratamiento de datos sensibles —como los datos de salud— se haga con tu consentimiento previo, libre, expreso e informado. Como parte de tus sesiones se procesa fuera del país, esta autorización incluye esa transferencia internacional de datos. Tenés derecho a acceder a tus datos, a pedir que se corrijan y a pedir que se eliminen.
+${MARCO_LEGAL.ley}: el tratamiento de datos de salud exige tu consentimiento previo, libre, expreso e informado.${MARCO_LEGAL.transferenciaInternacional ? " Parte del procesamiento ocurre fuera del país; esta autorización incluye esa transferencia internacional." : ""} Tenés derecho a acceder a tus datos, a pedir que se corrijan y a pedir que se eliminen.
 
 Al firmar, declaro que:
-- Leí y entendí esta información
-- Autorizo la grabación de mis sesiones con ${nombreProfesional}
-- Entiendo que el audio y su transcripción se procesan en los servicios del exterior mencionados más arriba
-- Sé que puedo revocar esta autorización cuando quiera
+- Leí y entendí esta información.
+- Autorizo la grabación de mis sesiones con ${nombreProfesional}.
+- Entiendo que el audio${VOCABULARIO_A_ASR ? ", la lista de palabras" : ""} y el texto de la sesión se procesan en los servicios del exterior mencionados.
+- Sé que puedo revocar esta autorización cuando quiera.
 `;
 }
 
 export function esConsentimientoVigente(
-  consentimiento: {
-    firmadoEn: Date;
-    revocadoEn: Date | null;
-  } | null,
+  consentimiento: { firmadoEn: Date; revocadoEn: Date | null } | null,
 ): boolean {
   if (!consentimiento) return false;
   return consentimiento.revocadoEn === null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// La búsqueda del consentimiento vigente
-//
-// Estaba escrita tres veces, y una de las tres estaba mal: POST
-// /api/sesion-clinica preguntaba `{ pacienteId, revocadoEn: null }` SIN la
-// organización, mientras la página de grabar y el GET de /consentimiento sí la
-// filtraban. Con una sola organización no se nota; el día que haya dos, un id
-// de paciente ajeno alcanzaba para que la comprobación previa a grabar mirara
-// la fila equivocada. La pertenencia no es un detalle de cada llamador: es
-// parte de la pregunta.
-//
-// El `import type` de db es solo el tipo del cliente (se borra al compilar),
-// así que este módulo sigue siendo importable desde un componente cliente —
-// ConsentimientoForm.tsx trae de acá el texto y la versión.
+// La búsqueda del consentimiento vigente, una sola vez y con la organización
+// en la pregunta (ver el historial de esta función: estaba escrita tres veces
+// y una sin organización).
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Lo que devuelve la búsqueda. Es lo que necesita el GET de la ruta; el
- *  resto de los llamadores solo mira si hay algo. */
 const CONSENTIMIENTO_SELECT = {
   id: true,
   pacienteId: true,
@@ -126,25 +161,8 @@ export interface ConsentimientoVigente {
   revocadoEn: Date | null;
 }
 
-/** Lo mínimo del cliente Prisma que hace falta acá. `Pick` y no el cliente
- *  entero para que también entre el de una transacción. */
 type ClienteConsentimientos = Pick<typeof db, "consentimientoGrabacion">;
 
-/**
- * El consentimiento vigente de una paciente, o null.
- *
- * `revocadoEn: null` va en el WHERE —es la proyección en SQL de
- * `esConsentimientoVigente`— y el predicado se vuelve a aplicar sobre la fila
- * leída. Es a propósito, igual que con `esDeudaPendiente` en
- * casos-uso/pendientes-terapeuta.ts: si mañana "vigente" pasa a significar
- * otra cosa (un vencimiento, una versión mínima del texto), la regla sigue
- * viviendo en una sola función y esto no queda contestando que sí por su
- * cuenta.
- *
- * `orderBy` por fecha de firma descendente: firmar de nuevo revoca lo
- * anterior en la misma transacción, así que en la práctica hay como mucho una
- * fila viva; el orden es lo que hace determinista el caso de que no.
- */
 export async function buscarConsentimientoVigente(
   prisma: ClienteConsentimientos,
   pacienteId: string,
@@ -155,19 +173,13 @@ export async function buscarConsentimientoVigente(
     orderBy: { firmadoEn: "desc" },
     select: CONSENTIMIENTO_SELECT,
   });
-
   return esConsentimientoVigente(consentimiento) ? consentimiento : null;
 }
 
-/** ¿Se puede grabar a esta paciente? La pregunta que hacen la página de
- *  grabar y la creación de la sesión clínica. */
 export async function consentimientoVigenteDe(
   prisma: ClienteConsentimientos,
   pacienteId: string,
   organizationId: string,
 ): Promise<boolean> {
-  return (
-    (await buscarConsentimientoVigente(prisma, pacienteId, organizationId)) !==
-    null
-  );
+  return (await buscarConsentimientoVigente(prisma, pacienteId, organizationId)) !== null;
 }

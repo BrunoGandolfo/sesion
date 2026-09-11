@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { cifrarTurno } from "@/lib/prisma-encryption";
 
 import { getOrganizationId } from "../../_lib/auth";
 import {
@@ -23,6 +24,13 @@ import { toTurno } from "../../_lib/domain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Las columnas cifradas sin el `id` que cifrarTurno devuelve para los create. */
+function sinId<T extends { id: string }>(columnas: T): Omit<T, "id"> {
+  const { id: _id, ...resto } = columnas;
+  void _id;
+  return resto;
+}
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -61,8 +69,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
           : new Date(parsed.data.fecha),
       duracion: parsed.data.duracion,
       modalidad: parsed.data.modalidad,
-      notas: parsed.data.notas,
       estado: parsed.data.estado,
+      // La nota va cifrada, atada a ESTA fila; `undefined` no la toca.
+      ...(parsed.data.notas === undefined ? {} : sinId(cifrarTurno(id, { notas: parsed.data.notas }))),
     };
 
     const ocupa = (estado: string) =>

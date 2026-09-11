@@ -11,6 +11,8 @@
 // viaje de red. Módulo puro —solo un número, un contador y un mensaje—, así
 // lo puede importar un componente cliente sin arrastrar la capa API.
 
+import { sha256Hex } from "@/lib/crypto";
+
 /** Máximo de palabras por término que acepta AssemblyAI. */
 export const MAX_PALABRAS_TERMINO = 6;
 
@@ -27,3 +29,30 @@ export function excedeMaximoPalabras(termino: string): boolean {
 
 /** El mismo aviso en la respuesta de la API y en el formulario. */
 export const TERMINO_MUY_LARGO = `Un término puede tener hasta ${MAX_PALABRAS_TERMINO} palabras.`;
+
+// ────────────────────────────────────────────────────────────────────────────
+// El término va CIFRADO en la base (puede ser un nombre propio del entorno
+// de la paciente). Para la unicidad —no cargar dos veces "Rorschach" y
+// "rorschach"— la fila lleva además termino_hash: sha256 del término
+// normalizado. Solo sirve para eso; no se puede buscar por texto.
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * trim, minúsculas, sin acentos (NFD y quitar diacríticos), espacios
+ * simples. La eñe se conserva: "año" y "ano" son términos distintos.
+ */
+export function normalizarTermino(termino: string): string {
+  return termino
+    .trim()
+    .toLowerCase()
+    .replace(/ñ/g, "\u0000")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0000/g, "ñ")
+    .replace(/\s+/g, " ");
+}
+
+/** sha256 hex del término normalizado: la columna termino_hash. */
+export async function hashTermino(termino: string): Promise<string> {
+  return sha256Hex(normalizarTermino(termino));
+}

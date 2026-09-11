@@ -124,3 +124,23 @@ describe("hotWordsBulkSchema", () => {
     expect(hotWordsBulkSchema.safeParse({ hotWords: [] }).success).toBe(false);
   });
 });
+
+// ─── El término cifrado y su hash de unicidad ──────────────────────────────
+
+import { hashTermino, normalizarTermino } from "@/lib/hot-words";
+
+describe("normalizarTermino", () => {
+  it("recorta, baja a minúsculas, quita acentos y colapsa espacios", () => {
+    expect(normalizarTermino("  Rorschach ")).toBe("rorschach");
+    expect(normalizarTermino("Gurí   Chiquito")).toBe("guri chiquito");
+    expect(normalizarTermino("Ñandú")).toBe("ñandu");
+    expect(normalizarTermino("ANSIEDAD\tde\nseparación")).toBe("ansiedad de separacion");
+  });
+
+  it("hashTermino iguala variantes del mismo término y distingue términos distintos", async () => {
+    expect(await hashTermino("Rorschach")).toBe(await hashTermino("  rorschach  "));
+    expect(await hashTermino("Separación")).toBe(await hashTermino("separacion"));
+    expect(await hashTermino("gurí")).not.toBe(await hashTermino("gurisa"));
+    expect(await hashTermino("x")).toMatch(/^[a-f0-9]{64}$/);
+  });
+});
