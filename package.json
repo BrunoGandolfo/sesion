@@ -14,7 +14,10 @@
     "test:unit": "VITEST_SUITE=unit vitest run",
     "test:integration": "VITEST_SUITE=integration vitest run",
     "test:watch": "vitest",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:test:up": "docker compose up -d --wait postgres-test && DATABASE_URL=postgresql://postgres:postgres@localhost:5433/sesion_test prisma migrate deploy",
+    "db:test:down": "docker compose down -v",
+    "guardias": "node scripts/ci/max-duration.mjs && node scripts/ci/acta-vigente.mjs && node scripts/ci/migraciones.mjs --sin-drift"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
@@ -49,6 +52,6 @@
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.11"
   }
 }

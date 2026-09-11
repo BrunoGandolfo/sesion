@@ -1,0 +1,26 @@
+# Postgres 17 para los tests de integración, en la máquina de quien tenga
+# Docker. Es OPCIONAL: sin Docker, la alternativa es la rama `test` de Neon
+# (ver .env.test.example y docs/operaciones.md §5).
+#
+#   npm run db:test:up     levanta el contenedor y aplica las migraciones
+#   npm run test:integration
+#   npm run db:test:down   lo tira, con sus datos
+#
+# Puerto 5433 y no 5432 para no chocar con un Postgres local. Los datos van
+# a tmpfs: la base nace vacía cada vez que se levanta, que es exactamente lo
+# que los tests esperan (los vacían con TRUNCATE entre casos).
+services:
+  postgres-test:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sesion_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 15

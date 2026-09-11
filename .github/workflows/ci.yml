@@ -1,30 +1,38 @@
 # ============================================================================
-# CI básico para Sesión.
+# CI de Sesión.
 #
-# Corre en cada push a main y en cada PR contra main, antes de que Vercel
-# auto-deploye. Si rompe el build / typecheck / lint / tests, nos enteramos
-# acá y no en producción.
+# Corre en cada push a main y en cada PR contra main. Vercel NO mira main:
+# publica desde la rama `release`, que sólo avanza cuando este workflow
+# terminó en verde y las migraciones se aplicaron (ver publicar.yml). Por eso
+# el verde de acá significa "esto va a producción", no "esto ya está".
 #
-# Cinco jobs en paralelo:
+# Jobs, todos en paralelo:
 #   - typecheck: tsc --noEmit
 #   - build:     next build
 #   - lint:      eslint
-#   - test:      vitest run (incluye tests de integración contra la DB de test)
-#   - audit:     npm audit (informativo, no bloquea; ver el job)
+#   - test:      vitest run, con un Postgres 17 EFÍMERO por corrida (service
+#                container). Nada comparte base con nadie: ni con otra
+#                corrida, ni con la laptop de nadie, ni con Neon.
+#   - guardias:  drift de migraciones, migraciones destructivas sin marca,
+#                maxDuration en toda ruta, acta de restauración vigente.
+#   - audit:     npm audit, BLOQUEANTE en high; moderate informa y no frena.
+#   - worker-tests: pytest + pip-audit del worker Python.
 #
 # Notas:
-#   - postinstall del package.json ya corre `prisma generate`, pero igual lo
-#     llamamos explícito después de npm ci por si en el futuro alguien lo saca.
+#   - postinstall del package.json ya corre `prisma generate`; se llama igual
+#     explícito por si alguien lo saca.
 #   - Prisma necesita DATABASE_URL para `generate` (parsea el schema, no se
-#     conecta), así que pasamos una URL dummy. NO usar la DB real acá.
-#   - Next build también lee DATABASE_URL al evaluar rutas que la importan;
-#     la dummy alcanza porque no se ejecuta ninguna query en build time.
-#   - src/lib/db.ts construye el cliente Prisma al importarse y pasa por
-#     withEncryption() (src/lib/prisma-encryption.ts), que llama validateKey()
-#     (src/lib/encryption.ts): NOTES_ENCRYPTION_KEY tiene que existir y
-#     decodificar en base64 a exactamente 32 bytes, si no el import lanza.
-#     Por eso typecheck, build y test reciben una clave dummy: 32 bytes en
-#     cero, codificados en base64. No cifra nada real; solo pasa el guard.
+#     conecta): la dummy alcanza. El job `test` la pisa a nivel step con la
+#     del contenedor para `migrate deploy`.
+#   - src/lib/db.ts construye el cliente Prisma al importarse y la extensión
+#     de cifrado valida la clave al construirse. Van claves dummy (32 bytes en
+#     cero, base64) en las DOS variables que conviven durante la
+#     reconstrucción: NOTES_ENCRYPTION_KEY (formato ENC1) y CLAVES_CIFRADO
+#     (llavero "1=<base64>", formato ENC2). No cifran nada real.
+#   - No hay `concurrency` en `test`: con base propia por corrida no hay nada
+#     que serializar. La de arriba sólo cancela corridas viejas del mismo ref.
+#   - Dependabot no recibe secrets: este workflow no usa ninguno, así que sus
+#     PRs corren la suite completa y un verde de Dependabot es mergeable.
 # ============================================================================
 
 name: CI
@@ -35,8 +43,6 @@ on:
   pull_request:
     branches: [main]
 
-# Si llega un push nuevo a la misma branch/PR, cancelamos la corrida anterior
-# en vez de encolar — ahorra minutos y feedback más rápido.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -45,33 +51,26 @@ permissions:
   contents: read
 
 env:
-  # DATABASE_URL dummy: prisma generate y next build solo necesitan que la
-  # variable exista y sea parseable como URL de Postgres. No se conecta a nada.
   DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+  NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  CLAVES_CIFRADO: "1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 jobs:
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      # Dummy: 32 bytes 0x00 en base64 (44 chars). Ver nota en el encabezado.
-      NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Node 22
         uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
-
       - name: Instalar dependencias
         run: npm ci
-
       - name: Generar Prisma Client
         run: npx prisma generate
-
       - name: Chequear tipos
         run: npx tsc --noEmit
 
@@ -79,24 +78,17 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      # Dummy: 32 bytes 0x00 en base64 (44 chars). Ver nota en el encabezado.
-      NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Node 22
         uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
-
       - name: Instalar dependencias
         run: npm ci
-
       - name: Generar Prisma Client
         run: npx prisma generate
-
       - name: Build de Next.js
         run: npm run build
 
@@ -106,16 +98,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Node 22
         uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
-
       - name: Instalar dependencias
         run: npm ci
-
       - name: Ejecutar ESLint
         run: npm run lint
 
@@ -123,104 +112,107 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Una sola corrida de tests por vez en TODO el repositorio. Los tests de
-    # integración vacían la rama de test de Neon con TRUNCATE ... CASCADE
-    # entre casos, y esa rama es una sola: dos corridas en paralelo (dos PRs,
-    # o un PR y el push a main) se borran las filas entre ellas y fallan con
-    # errores que no tienen nada que ver con el cambio.
-    #
-    # `cancel-in-progress: false` y no true, al revés que la concurrency de
-    # arriba: acá el objetivo no es ahorrar minutos sino no pisar la base. Una
-    # corrida a mitad de camino que se cancela deja la rama en un estado
-    # arbitrario para la que entra atrás.
-    #
-    # LO QUE ESTO NO ES: una cola FIFO (Codex P2 sobre el PR #18). GitHub
-    # Actions mantiene como mucho UN miembro en curso y UNO esperando por
-    # grupo; un tercero que llega reemplaza al que esperaba y lo CANCELA,
-    # aunque cancel-in-progress sea false. Con tres refs compitiendo, la
-    # corrida de main que esperaba detrás de un PR puede quedar cancelada.
-    #
-    # Se asume, y no en silencio, porque el modo de falla es benigno: la
-    # corrida cancelada aparece como "cancelled", que no es success — no queda
-    # un commit en verde sin haber corrido los tests, queda uno con un check
-    # cancelado, visible y relanzable a mano. Una cola de verdad necesita un
-    # mecanismo externo (un runner dedicado, o un workflow que relance lo
-    # cancelado) y no vale ese costo para un repositorio de un solo autor.
-    #
-    # Lo que sí lo resolvería de raíz es una rama de Neon por corrida, o un
-    # Postgres efímero en el propio job. Anotado como trabajo aparte.
-    concurrency:
-      group: neon-test-branch
-      cancel-in-progress: false
+    # Postgres 17 efímero: nace con el job y muere con él. Es lo que hace que
+    # un rojo sea un rojo y un verde sea un verde (antes, una corrida local
+    # en otra máquina vaciaba la misma rama de Neon a mitad de la suite).
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sesion_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
-      # Rama de Neon dedicada a tests: los tests de integración hacen
-      # TRUNCATE ... CASCADE entre casos. NUNCA la DB de producción.
-      # src/lib/__tests__/db-test.ts valida la URL antes de conectar y aborta
-      # si no es la rama de test (o si es la de producción).
-      DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
-      # Mismo dummy que typecheck/build. Cada archivo de integración
-      # sobreescribe la variable con una clave aleatoria propia en beforeAll,
-      # pero el resto de la suite puede importar src/lib/db.ts y necesita el
-      # guard.
-      NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      # Local al runner. src/lib/__tests__/db-test.ts sólo acepta localhost
+      # salvo PERMITIR_BASE_REMOTA_DE_TEST=1, que acá no está.
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/sesion_test
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Node 22
         uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
-
       - name: Instalar dependencias
         run: npm ci
-
       - name: Generar Prisma Client
         run: npx prisma generate
-
-      # Las migraciones nuevas se aplican solas a la rama de test antes de
-      # correr nada: si no, un PR que agrega una columna falla acá con un
-      # error de Prisma sobre una columna inexistente y hay que ir a aplicar
-      # la migración a mano. `migrate deploy` solo aplica lo pendiente y no
-      # genera ni resetea nada.
-      #
-      # DATABASE_URL a nivel step pisa el dummy del workflow: es la única
-      # parte del CI que se conecta a una base real, y es la de test.
-      - name: Aplicar migraciones a la rama de test
+      - name: Aplicar migraciones a la base efímera
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_test
         run: npx prisma migrate deploy
-
       - name: Ejecutar tests
         run: npm test
 
-  # No bloquea todavía, a propósito: hoy no sabemos qué devuelve `npm audit`
-  # en este árbol de dependencias, y un job rojo desde el primer día se
-  # aprende a ignorar — que es peor que no tenerlo. Arranca informativo para
-  # ver el ruido real durante unas semanas; cuando el inventario esté limpio
-  # (o con los avisos que no se pueden arreglar documentados), se saca
-  # `continue-on-error` y pasa a ser obligatorio.
-  #
-  # --audit-level=high: moderate y low en dependencias de desarrollo no
-  # justifican frenar un deploy de una app de una sola usuaria.
+  guardias:
+    name: Guardias
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Base sombra para `prisma migrate diff --from-migrations`: aplica las
+    # migraciones en una base vacía y la compara con schema.prisma.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sesion_shadow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Historia completa: el guardián de migraciones compara contra
+          # origin/release para saber qué archivos .sql son nuevos.
+          fetch-depth: 0
+      - name: Setup Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Migraciones (drift y destructivas)
+        env:
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_shadow
+        run: node scripts/ci/migraciones.mjs
+      - name: Toda ruta declara maxDuration
+        run: node scripts/ci/max-duration.mjs
+      - name: Acta de restauración vigente
+        run: node scripts/ci/acta-vigente.mjs
+
   audit:
     name: Audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Node 22
         uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
-
-      # Sin `npm ci`: audit resuelve el árbol desde package-lock.json y no
-      # necesita node_modules. Evita correr el postinstall (prisma generate).
-      - name: Auditar dependencias
+      # Sin `npm ci`: audit resuelve el árbol desde package-lock.json.
+      # Bloqueante en high: una vulnerabilidad alta no se mergea, se arregla
+      # o se documenta por qué no se puede (y entonces se ignora acá con
+      # nombre y fecha, no bajando el nivel).
+      - name: Auditar dependencias (high bloquea)
         run: npm audit --audit-level=high
+      # Informativo: se ve en el log, no frena. Cuando aparece algo acá con
+      # arreglo disponible, se arregla en el próximo PR de dependencias.
+      - name: Auditar dependencias (moderate informa)
+        continue-on-error: true
+        run: npm audit --audit-level=moderate
 
   worker-tests:
     name: Worker tests
@@ -231,16 +223,17 @@ jobs:
         working-directory: processor
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
           cache-dependency-path: processor/requirements-dev.txt
-
       - name: Instalar dependencias
-        run: pip install -r requirements-dev.txt
-
+        run: pip install -r requirements-dev.txt pip-audit
       - name: Ejecutar pytest
         run: python -m pytest tests -q
+      # Nadie auditaba las dependencias de Python. Bloqueante desde el primer
+      # día: el worker descarga audio clínico y habla con dos proveedores.
+      - name: Auditar dependencias de Python
+        run: pip-audit -r requirements.txt
