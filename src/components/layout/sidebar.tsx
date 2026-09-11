@@ -147,9 +147,10 @@ export function Sidebar() {
                 {showBadge ? (
                   <span
                     aria-label={`${redCount} ${redCount === 1 ? "deudor" : "deudores"} con más de 30 días`}
-                    className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-terracotta-500 px-1.5 text-[10px] font-semibold leading-[18px] text-white"
+                    title={`${redCount} pacientes con deudas de más de 30 días`}
+                    className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-terracotta-600 px-1.5 text-[11px] font-semibold leading-[18px] text-white"
                   >
-                    {redCount}
+                    {redCount} · +30 días
                   </span>
                 ) : null}
               </Link>
