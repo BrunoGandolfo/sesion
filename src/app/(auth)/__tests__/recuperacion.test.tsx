@@ -41,3 +41,13 @@ it("sin token no permite enviar contraseñas", () => {
   expect(screen.getByRole("alert")).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
 });
+
+it("recuperar pone el formulario y la vuelta a entrar antes de la explicación", () => {
+  render(<RecuperarPage />);
+  const formulario = screen.getByLabelText(ENTRADA_EMAIL).closest("form")!;
+  const explicacion = screen.getByText("El trabajo de después de la sesión, hecho antes de que entre la próxima.");
+  const volver = screen.getByRole("link", { name: "Volver a entrar" });
+  expect(formulario.compareDocumentPosition(explicacion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(volver.compareDocumentPosition(explicacion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(volver.getAttribute("href")).toBe("/login");
+});

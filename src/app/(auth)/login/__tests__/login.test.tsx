@@ -38,6 +38,14 @@ import {
 } from "@/lib/glosario";
 
 describe("Pantalla de entrada", () => {
+  it("permite llegar al formulario antes de la explicación en el orden de lectura móvil", () => {
+    render(<LoginPage />);
+    const formulario = screen.getByLabelText(ENTRADA_EMAIL).closest("form")!;
+    const explicacion = screen.getByText(ENTRADA_QUE_HACE);
+    expect(formulario.compareDocumentPosition(explicacion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("link", { name: "¿Olvidaste tu contraseña?" }).getAttribute("href")).toBe("/recuperar");
+  });
+
   it("se presenta: el nombre del producto es el encabezado y el eslogan está al lado", () => {
     render(<LoginPage />);
 

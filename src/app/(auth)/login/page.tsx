@@ -1,22 +1,7 @@
 "use client";
 
-// La pantalla de entrada.
-//
-// Es la única pantalla que ve alguien que todavía no usa Sesión, y hasta hoy
-// era un formulario con un nombre arriba: no decía qué es esto ni qué hace.
-// Ahora dice las dos cosas, en el orden en que las miran las apps del rubro
-// (ver el reporte): identidad, una frase, tres afirmaciones, la
-// confidencialidad en una línea, y recién ahí el formulario.
-//
-// EL LAYOUT
-//
-// Mobile primero y una sola columna: la presencia arriba, el formulario
-// debajo, como estaba. En lg pasan a dos columnas —presencia a la izquierda,
-// formulario a la derecha— porque en un monitor una columna centrada de
-// 380 px con medio metro de crema a cada lado se ve vacía, no sobria.
-//
-// El texto vive todo en glosario.ts, sección Entrada: el nombre y el eslogan
-// son constantes porque todavía se está decidiendo cuál es cuál.
+// En móvil, el formulario va antes de la explicación. En escritorio se
+// conserva la presencia a la izquierda mediante el orden visual de las columnas.
 
 import * as React from "react";
 import { signIn } from "next-auth/react";
@@ -67,9 +52,7 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-cream-50">
       <div className="mx-auto flex min-h-screen w-full max-w-[420px] flex-col justify-center px-6 py-12 lg:max-w-[1020px] lg:flex-row lg:items-center lg:justify-center lg:gap-20 lg:px-12">
-        <Presencia />
-
-        <div className="mt-10 flex w-full flex-col lg:mt-0 lg:w-[380px] lg:shrink-0">
+        <div className="flex w-full flex-col lg:w-[380px] lg:shrink-0">
           <Card className="p-7 shadow-subtle">
             {aviso && <p role="status" className="mb-4 text-sm text-sage-600">{ENTRADA_PASSWORD_CAMBIADA}</p>}
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -121,6 +104,9 @@ export default function LoginPage() {
           <p className="mt-6 text-center text-[11px] text-ink-300">
             v1.0 · hecho con cuidado
           </p>
+        </div>
+        <div className="mt-8 w-full lg:order-first lg:mt-0 lg:min-w-0">
+          <Presencia />
         </div>
       </div>
     </main>
