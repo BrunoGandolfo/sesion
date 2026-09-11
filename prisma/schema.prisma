@@ -605,14 +605,10 @@ model SesionClinica {
   // con esta clave y subidos mientras se graba (tabla audio_segmentos).
   audioEstado         EstadoAudio @default(sin_audio) @map("audio_estado")
   /// Campo lógico `audioClave`: clave AES-256 del audio, cifrada por la
-  /// extensión. Se destruye (NULL) en la misma transacción que aprueba:
-  /// aunque el borrado en R2 tarde, el audio ya no se puede abrir.
+  /// extensión. Es la única clave de la sesión; el IV de cada segmento vive
+  /// en audio_segmentos.iv. Se destruye (NULL) en la misma transacción que
+  /// aprueba: aunque el borrado en R2 tarde, el audio ya no se puede abrir.
   audioClaveEncrypted Bytes?      @map("audio_clave_encrypted")
-  /// Campo lógico `audioIv`: IV base del audio, cifrado por la extensión.
-  /// Cada segmento deriva su nonce de este IV y de su `indice` (ver
-  /// docs/esquema.md §5); un mismo índice nunca se vuelve a cifrar con
-  /// contenido distinto. Se destruye junto con la clave.
-  audioIvEncrypted    Bytes?      @map("audio_iv_encrypted")
   duracionAudioSeg    Int?        @map("duracion_audio_seg")
   /// Tramos en pausa tal como los reporta el teléfono: [{ inicio, fin }].
   /// Sin cifrar: marcas de tiempo, no contenido.
@@ -690,16 +686,22 @@ model SesionClinica {
   @@map("sesiones_clinicas")
 }
 
-/// Un segmento de audio (~60 s, comprimido, cifrado en el teléfono). La key
-/// en R2 se calcula: <organizationId>/<sesionId>/<indice>. Descriptor
-/// inmutable: bytes y sha256 los declara el cliente al reservar y se
-/// comprueban al confirmar (HEAD). confirmadoEn null = reservado, no
-/// confirmado. Se borra con la sesión (eliminar); el trabajo borrar_audio_r2
-/// lleva en su payload lo que necesita para borrar los objetos.
+/// Un segmento de audio (~60 s, comprimido, cifrado en el teléfono con la
+/// clave de la sesión y un IV propio). La key en R2 se calcula:
+/// <organizationId>/<sesionId>/<indice>. Descriptor inmutable: iv, bytes y
+/// sha256 los declara el cliente al reservar y se comprueban al confirmar
+/// (HEAD). confirmadoEn null = reservado, no confirmado. Se borra con la
+/// sesión (eliminar); el trabajo borrar_audio_r2 lleva en su payload lo que
+/// necesita para borrar los objetos.
 model AudioSegmento {
   sesionId       String    @map("sesion_id")
   organizationId String    @map("organization_id")
   indice         Int
+  /// 12 bytes aleatorios generados en el teléfono para este segmento. Un IV
+  /// por segmento evita repetir nonce con la misma clave (la falla grave de
+  /// AES-GCM) sin depender de ninguna regla de derivación. No es secreto: va
+  /// en claro.
+  iv             Bytes
   bytes          Int
   sha256         String    @db.Char(64)
   confirmadoEn   DateTime? @map("confirmado_en")

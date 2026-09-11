@@ -86,8 +86,8 @@ abrir.
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), la clave y el IV cifrados, duración, pausas, cuándo se borró. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. La clave del audio se destruye en la misma transacción que aprueba. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
-| `audio_segmentos` | Por sesión y por índice: tamaño en bytes, sha256, cuándo se confirmó en R2. | El inventario de los segmentos de ~60 s que el teléfono cifra y sube mientras graba. La ubicación en R2 **no se guarda**: se calcula `organización/sesión/índice`. Ningún pedido del cliente trae una key. | Reservar y confirmar segmentos. | Finalizar la grabación (¿están todos?), el worker (qué bajar), el borrado. |
+| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), la clave cifrada (el IV de cada segmento vive en `audio_segmentos`), duración, pausas, cuándo se borró. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. La clave del audio se destruye en la misma transacción que aprueba. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
+| `audio_segmentos` | Por sesión y por índice: el IV de 12 bytes con que se cifró ese segmento (en claro: no es secreto), tamaño en bytes, sha256, cuándo se confirmó en R2. | El inventario de los segmentos de ~60 s que el teléfono cifra y sube mientras graba. Un IV propio por segmento: nunca se repite nonce con la misma clave. La ubicación en R2 **no se guarda**: se calcula `organización/sesión/índice`. Ningún pedido del cliente trae una key. | Reservar y confirmar segmentos. | Finalizar la grabación (¿están todos?), el worker (qué bajar), el borrado. |
 
 ### Trabajo durable y worker
 
@@ -139,9 +139,10 @@ Los once primeros los resolvió el dueño en la consigna; los aplico tal cual y
 anoto cómo se ven en el esquema. Del 12 en adelante son los que encontré yo.
 
 1. **Audio.** No se adopta el formato binario `SAP1` ni el manifiesto con hash
-   del diseño 01. La sesión lleva la clave y el IV cifrados en columnas
-   propias, `audio_estado`, y la tabla `audio_segmentos` mínima. La key de R2
-   no existe como columna.
+   del diseño 01. La sesión lleva la clave cifrada en columna propia,
+   `audio_estado`, y la tabla `audio_segmentos` mínima más una columna `iv`
+   por segmento (ver §5, punto 1, aceptado por el dueño). La key de R2 no
+   existe como columna.
 2. **Estados de la sesión.** El enum y las columnas de identidad del intento
    son los del 02, más `speech_analytics` y `uso` que pidió el 04.
 3. **Trabajos.** La tabla genérica del 02 con los cuatro tipos; `integrar_contexto`
@@ -262,26 +263,21 @@ Las dejo por si alguna está mal:
 
 ## 5. Desacuerdos
 
-El esquema está escrito como se pidió. Esto se lee antes de aprobar.
+Revisados por el dueño el 11-09-2026: el 1 se aceptó y se aplicó; el 2, el 3
+y el 4 se aceptaron sin cambios. Las dos preguntas de §4 quedan como están.
 
-1. **Un solo IV para un audio en segmentos.** La resolución 1 pone "la clave y
-   el IV del audio" en la sesión, y la tabla de segmentos no lleva IV. Con
-   AES-GCM, dos segmentos distintos cifrados con la misma clave y el mismo IV
-   es la falla más grave que tiene el algoritmo: se recupera texto claro. Así
-   que el IV de la sesión solo puede ser un IV **base**, y cada segmento tiene
-   que derivar el suyo de ese base más su índice (por ejemplo: 8 bytes
-   aleatorios de la sesión + 4 bytes con el índice del segmento, que es la
-   construcción estándar de nonce de 96 bits). Lo dejé documentado en el
-   propio esquema con esa regla, y con la condición que la hace segura: **un
-   mismo índice nunca se vuelve a cifrar con contenido distinto** (si el
-   teléfono se cae después de cifrar el segmento 5 y antes de guardarlo, al
-   volver ese segmento se recifra igual: mismo audio, mismo índice; nunca otro
-   audio con el índice 5). El diseño 01 advirtió justamente contra derivar el
-   IV del índice por este riesgo. Mi recomendación: agregar a
-   `audio_segmentos` una columna `iv` de 12 bytes aleatorios por segmento.
-   Cuesta doce bytes por minuto de audio y elimina la regla que el área 1
-   tiene que cumplir a mano. Es una migración aditiva de una línea; la puedo
-   hacer en cuanto lo digas.
+1. **Un solo IV para un audio en segmentos** (aceptado por el dueño el
+   11-09-2026 y ya aplicado). La resolución original ponía "la clave y el IV
+   del audio" en la sesión, sin IV en los segmentos. Con AES-GCM, dos
+   segmentos distintos cifrados con la misma clave y el mismo IV es la falla
+   más grave que tiene el algoritmo: se recupera texto claro. Evitarlo con un
+   solo IV obligaba a derivar el nonce de cada segmento del IV base más su
+   índice y a que un mismo índice nunca se recifrara con contenido distinto,
+   una regla que el área 1 tenía que cumplir a mano y contra la que el diseño
+   01 ya había advertido. Lo que quedó: `audio_segmentos.iv`, 12 bytes
+   aleatorios por segmento, obligatorio y en claro (no es secreto); la sesión
+   guarda solo la clave (`audio_clave_encrypted`). Cuesta doce bytes por
+   minuto de audio y no depende de ninguna regla.
 2. **Nombre, apellido y teléfono en claro.** Es la decisión del 03 y la
    respeto porque la búsqueda y la agenda los necesitan en SQL. Dejo constancia
    de que es la única información que identifica a una persona y que queda sin
@@ -309,7 +305,7 @@ El esquema está escrito como se pidió. Esto se lee antes de aprobar.
   `notas`; `consentimientos_grabacion.texto_completo_encrypted` →
   `textoCompleto`, `firma_digital_encrypted` → `firmaDigital`;
   `hot_words.termino_encrypted` → `termino`; `sesiones_clinicas`:
-  `audio_clave_encrypted` → `audioClave`, `audio_iv_encrypted` → `audioIv`,
+  `audio_clave_encrypted` → `audioClave`,
   `transcripcion_encrypted` → `transcripcion`, `nota_ia_encrypted` → `notaIa`,
   `datos_encrypted` → `datos`, `feedback_encrypted` → `feedback`,
   `nota_final_encrypted` → `notaFinal`, `notas_edicion_encrypted` →
