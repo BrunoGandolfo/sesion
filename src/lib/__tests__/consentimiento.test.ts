@@ -139,6 +139,9 @@ const baseDeDatos = vi.hoisted(() => ({
   creados: [] as Array<Record<string, unknown>>,
   vigentes: 0,
   paciente: { id: "pac-1", nombre: "María", apellido: "González" } as { id: string; nombre: string; apellido: string } | null,
+  /** Lo que el GET encuentra firmado (findFirst), y con qué `where` preguntó. */
+  firmado: null as null | { id: string; pacienteId: string; firmadoEn: Date; textoVersion: string; revocadoEn: Date | null },
+  ultimoWhere: null as null | Record<string, unknown>,
 }));
 
 vi.mock("@/app/api/_lib/auth", () => ({
@@ -155,7 +158,13 @@ vi.mock("@/lib/db", () => {
   const db = {
     paciente: { findFirst: async () => baseDeDatos.paciente },
     configuracion: { findUnique: async () => ({ nombreProfesional: "Lic. Ana Pérez", direccion: "Av. 18 de Julio 1234, Montevideo" }) },
-    consentimientoGrabacion: { updateMany: revocarVigentes },
+    consentimientoGrabacion: {
+      updateMany: revocarVigentes,
+      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+        baseDeDatos.ultimoWhere = where;
+        return baseDeDatos.firmado;
+      },
+    },
     eventoAuditoria: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         baseDeDatos.eventos.push(data);
@@ -176,7 +185,7 @@ vi.mock("@/lib/db", () => {
   return { db };
 });
 
-const { POST, DELETE } = await import("@/app/api/pacientes/[id]/consentimiento/route");
+const { GET, POST, DELETE } = await import("@/app/api/pacientes/[id]/consentimiento/route");
 const params = { params: Promise.resolve({ id: "pac-1" }) };
 
 function pedidoFirma(): Request {
@@ -197,6 +206,19 @@ describe("la ruta de consentimiento", () => {
     baseDeDatos.creados = [];
     baseDeDatos.vigentes = 0;
     baseDeDatos.paciente = { id: "pac-1", nombre: "María", apellido: "González" };
+    baseDeDatos.firmado = null;
+    baseDeDatos.ultimoWhere = null;
+  });
+
+  it("una firma de la versión 1.1 sigue vigente: el GET la devuelve vigente y solo sugiere re-firmar", async () => {
+    baseDeDatos.firmado = { id: "c-11", pacienteId: "pac-1", firmadoEn: new Date("2026-01-10T12:00:00Z"), textoVersion: "1.1", revocadoEn: null };
+    const res = await GET(new Request("http://localhost/x"), params);
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.consentimiento).toMatchObject({ textoVersion: "1.1", vigente: true, sugiereRefirmar: true });
+    // La vigencia se decide por revocación, nunca por versión del texto.
+    expect(baseDeDatos.ultimoWhere).toEqual({ pacienteId: "pac-1", organizationId: "org-1", revocadoEn: null });
+    expect(baseDeDatos.ultimoWhere).not.toHaveProperty("textoVersion");
   });
 
   it("guarda texto y firma cifrados (ENC2) atados al id de la fila, y ninguna IP", async () => {
