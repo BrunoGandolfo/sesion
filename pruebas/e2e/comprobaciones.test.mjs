@@ -15,6 +15,10 @@ test('el detector acepta una vista sana y rechaza desbordes y errores visibles',
     await assert.rejects(() => presentacion(page), /Alerta inesperada/);
     await page.setContent('<p>Application error: a client-side exception has occurred</p>');
     await assert.rejects(() => presentacion(page), /Pantalla de error/);
+    await page.setContent('<div role="alert">SEÑAL DE RIESGO\nContenido clínico de prueba</div>');
+    await presentacion(page, {alertasEsperadas:[/^Señal de riesgo\s/i]});
+    await page.setContent('<div role="alert">SEÑAL DE RIESGO\nContenido clínico de prueba</div><p role="alert">No se pudo guardar</p>');
+    await assert.rejects(() => presentacion(page, {alertasEsperadas:[/^Señal de riesgo\s/i]}), /Alerta inesperada/);
     await page.setContent('<p role="alert">Enlace vencido</p><p role="alert">Error nuevo</p>');
     await assert.rejects(() => presentacion(page, {alertasEsperadas:[/^Enlace vencido$/]}), /Alerta inesperada/);
   } finally { await browser.close(); }

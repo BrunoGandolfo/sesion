@@ -15,7 +15,7 @@ export async function alcanzable(locator) {
   assert(rect.x >= -1 && rect.x + rect.width <= viewport.width + 1, 'Control cortado horizontalmente');
 }
 
-export async function presentacion(page, { alertasEsperadas = [], estadoError = false } = {}) {
+export async function presentacion(page, { alertasEsperadas = [] } = {}) {
   await page.evaluate(() => document.fonts.ready);
   const problemas = await page.evaluate(() => {
     const errores = [];
@@ -39,13 +39,11 @@ export async function presentacion(page, { alertasEsperadas = [], estadoError = 
   assert.deepEqual(problemas, [], 'Presentación: ' + problemas.join(', '));
   const texto = await page.locator('body').innerText();
   assert(!/Application error:|Internal Server Error|This page could not be found|^404$/mi.test(texto), 'Pantalla de error del servidor');
-  if (!estadoError) assert(!/^\s*(Algo falló|No pudimos (traer|cargar|leer)|Hubo un error|Error al cargar)/mi.test(texto), 'Error visible al cargar la pantalla');
-  if (!estadoError) {
-    for (const alerta of await page.getByRole('alert').all()) {
-      if (await alerta.isVisible()) {
-        const texto = (await alerta.innerText()).trim();
-        assert(!texto || alertasEsperadas.some(patron => patron.test(texto)), 'Alerta inesperada en pantalla');
-      }
+  assert(!/^\s*(Algo falló|No pudimos (traer|cargar|leer)|Hubo un error|Error al cargar)/mi.test(texto), 'Error visible al cargar la pantalla');
+  for (const alerta of await page.getByRole('alert').all()) {
+    if (await alerta.isVisible()) {
+      const texto = (await alerta.innerText()).trim();
+      assert(!texto || alertasEsperadas.some(patron => patron.test(texto)), 'Alerta inesperada en pantalla');
     }
   }
 }
