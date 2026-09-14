@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const createSchema = z.object({
-  turnoId: z.string().cuid("Turno inválido"),
+  turnoId: z.string().uuid("turnoId inválido"),
 });
 
 export async function GET(request: Request) {
@@ -98,7 +98,9 @@ export async function POST(request: Request) {
         data: {
           turnoId: turno.id,
           organizationId,
-          estado: "pendiente",
+          // OPERACIONES.crear.hacia (src/lib/sesion-clinica/estados.ts): la
+          // sesión nace grabando; "pendiente" ya no existe.
+          estado: "grabando",
         },
         select: SESION_SELECT,
       });

@@ -1,6 +1,6 @@
 /**
- * Integración — aislamiento entre organizaciones en los PATCH de paciente,
- * turno y sesión clínica. Contra la DB real de test (DATABASE_URL_TEST).
+ * Integración — aislamiento entre organizaciones en los PATCH de paciente y
+ * turno, el consentimiento al crear una sesión clínica y el descobro. Contra la DB real de test (DATABASE_URL_TEST).
  *
  * Ejecutar:
  *   DATABASE_URL_TEST="postgres://..." \
@@ -33,7 +33,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 
 import { __resetLlaveroForTests } from "@/lib/llavero";
-import { cifrarSesion } from "@/lib/prisma-encryption";
+import { cifrarConsentimiento } from "@/lib/prisma-encryption";
 
 import {
   conectarBaseDeTest,
@@ -47,17 +47,22 @@ const sesionActual = vi.hoisted(() => ({
   userId: "",
 }));
 
-vi.mock("@/lib/auth-utils", () => ({
-  getCurrentOrganizationId: async () => {
+// Como el resto de los tests de rutas: se mockea la capa de auth de la API,
+// no Auth.js (que ya no existe: la sesión vive en sesiones_acceso).
+vi.mock("@/app/api/_lib/auth", () => ({
+  getOrganizationId: async () => {
     if (!sesionActual.organizationId) throw new Error("sin sesión");
     return sesionActual.organizationId;
   },
-  getServerSession: async () => {
-    if (!sesionActual.organizationId) return null;
+  getSessionActor: async () => {
+    if (!sesionActual.organizationId) throw new Error("sin sesión");
     return {
       organizationId: sesionActual.organizationId,
       userId: sesionActual.userId,
-      user: { id: sesionActual.userId, organizationId: sesionActual.organizationId },
+      sesionId: "s",
+      rol: "titular",
+      nombre: "Mariana",
+      email: "mariana@test.uy",
     };
   },
 }));
@@ -71,11 +76,7 @@ let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
 let patchPaciente!: Handler;
 let patchTurno!: Handler;
-let patchSesion!: Handler;
-let deleteSesion!: Handler;
-let uploadUrl!: Handler;
 let descobrarTurno!: Handler;
-let reintentarRecordatorio!: Handler;
 let crearSesionClinica!: (request: Request) => Promise<Response>;
 
 const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
@@ -119,39 +120,6 @@ async function crearTurno(org: Org): Promise<string> {
     },
   });
   return turno.id;
-}
-
-async function crearSesionPendiente(org: Org): Promise<string> {
-  const turnoId = await crearTurno(org);
-  const sesion = await db.sesionClinica.create({
-    data: {
-      turnoId,
-      organizationId: org.orgId,
-      estado: "pendiente",
-      ...cifrarSesion({ notaSubjetivo: "S" }),
-    },
-    select: { id: true },
-  });
-  return sesion.id;
-}
-
-async function crearSesionEnEstado(
-  org: Org,
-  estado: string,
-  extra: Record<string, unknown> = {},
-): Promise<string> {
-  const turnoId = await crearTurno(org);
-  const sesion = await db.sesionClinica.create({
-    data: {
-      turnoId,
-      organizationId: org.orgId,
-      estado,
-      ...extra,
-      ...cifrarSesion({ notaSubjetivo: "S" }),
-    },
-    select: { id: true },
-  });
-  return sesion.id;
 }
 
 async function crearTurnoCobrado(org: Org): Promise<string> {
@@ -199,27 +167,17 @@ beforeAll(async () => {
   const [
     rutaPaciente,
     rutaTurno,
-    rutaSesion,
-    rutaUpload,
     rutaCobrar,
-    rutaReintentar,
     rutaSesionesClinicas,
   ] = await Promise.all([
     import("@/app/api/pacientes/[id]/route"),
     import("@/app/api/turnos/[id]/route"),
-    import("@/app/api/sesion-clinica/[id]/route"),
-    import("@/app/api/sesion-clinica/[id]/upload-url/route"),
     import("@/app/api/turnos/[id]/cobrar/route"),
-    import("@/app/api/recordatorios/[id]/reintentar/route"),
     import("@/app/api/sesion-clinica/route"),
   ]);
   patchPaciente = rutaPaciente.PATCH as Handler;
   patchTurno = rutaTurno.PATCH as Handler;
-  patchSesion = rutaSesion.PATCH as Handler;
-  deleteSesion = rutaSesion.DELETE as Handler;
-  uploadUrl = rutaUpload.POST as Handler;
   descobrarTurno = rutaCobrar.DELETE as Handler;
-  reintentarRecordatorio = rutaReintentar.POST as Handler;
   crearSesionClinica = rutaSesionesClinicas.POST as (
     request: Request,
   ) => Promise<Response>;
@@ -311,191 +269,6 @@ describe("PATCH /api/turnos/[id] — aislamiento entre organizaciones", () => {
   });
 });
 
-describe("PATCH /api/sesion-clinica/[id] — aislamiento entre organizaciones", () => {
-  it("la organización dueña puede pasar la sesión a grabando", async () => {
-    const a = await crearOrg();
-    const sesionId = await crearSesionPendiente(a);
-    como(a);
-
-    const res = await patchSesion(pedido({ estado: "grabando" }), {
-      params: Promise.resolve({ id: sesionId }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(
-      (
-        await prismaRaw.sesionClinica.findUniqueOrThrow({
-          where: { id: sesionId },
-        })
-      ).estado,
-    ).toBe("grabando");
-  });
-
-  it("otra organización recibe 404 y la sesión sigue pendiente", async () => {
-    const a = await crearOrg();
-    const sesionId = await crearSesionPendiente(a);
-    const b = await crearOrg();
-    como(b);
-
-    const res = await patchSesion(pedido({ estado: "grabando" }), {
-      params: Promise.resolve({ id: sesionId }),
-    });
-
-    expect(res.status).toBe(404);
-    expect(
-      (
-        await prismaRaw.sesionClinica.findUniqueOrThrow({
-          where: { id: sesionId },
-        })
-      ).estado,
-    ).toBe("pendiente");
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Escrituras por id que hasta ahora no llevaban la organización en el WHERE
-//
-// Las cuatro hacían `update`/`delete` por id después de comprobar la
-// pertenencia con un findFirst. Entre esa lectura y la escritura hay una
-// ventana; ahora la pertenencia viaja adentro de la propia sentencia
-// (updateMany / deleteMany).
-//
-// Un test de ruta NO puede provocar esa ventana —el findFirst contesta 404
-// antes—, así que lo que fijan estos casos es el contrato observable: con la
-// sesión de otra organización, 404 y la fila INTACTA. Si mañana alguien saca
-// el findFirst por considerarlo redundante, estos tests siguen en verde
-// gracias al where de la escritura; si sacara los dos, se ponen rojos.
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("PATCH /api/sesion-clinica/[id] — reintento (error → procesando)", () => {
-  it("la organización dueña puede reintentar su sesión con error", async () => {
-    const a = await crearOrg();
-    const sesionId = await crearSesionEnEstado(a, "error", {
-      audioR2Key: "audios/a.enc",
-      error: "algo salió mal",
-      intentos: 3,
-    });
-    como(a);
-
-    const res = await patchSesion(pedido({ estado: "procesando" }), {
-      params: Promise.resolve({ id: sesionId }),
-    });
-
-    expect(res.status).toBe(200);
-    const fila = await prismaRaw.sesionClinica.findUniqueOrThrow({
-      where: { id: sesionId },
-    });
-    expect(fila.estado).toBe("procesando");
-    expect(fila.error).toBeNull();
-    expect(fila.intentos).toBe(0);
-  });
-
-  it("otra organización recibe 404 y la sesión sigue en error", async () => {
-    const a = await crearOrg();
-    const sesionId = await crearSesionEnEstado(a, "error", {
-      audioR2Key: "audios/a.enc",
-      error: "algo salió mal",
-      intentos: 3,
-    });
-    const b = await crearOrg();
-    como(b);
-
-    const res = await patchSesion(pedido({ estado: "procesando" }), {
-      params: Promise.resolve({ id: sesionId }),
-    });
-
-    expect(res.status).toBe(404);
-    const fila = await prismaRaw.sesionClinica.findUniqueOrThrow({
-      where: { id: sesionId },
-    });
-    expect(fila.estado).toBe("error");
-    expect(fila.intentos).toBe(3);
-  });
-});
-
-describe("DELETE /api/sesion-clinica/[id] — aislamiento entre organizaciones", () => {
-  it("la organización dueña descarta su nota en revisión", async () => {
-    const a = await crearOrg();
-    const sesionId = await crearSesionEnEstado(a, "revision");
-    como(a);
-
-    const res = await deleteSesion(
-      pedidoSinCuerpo("DELETE", "?accion=descartar"),
-      { params: Promise.resolve({ id: sesionId }) },
-    );
-
-    expect(res.status).toBe(200);
-    expect(
-      (
-        await prismaRaw.sesionClinica.findUniqueOrThrow({
-          where: { id: sesionId },
-        })
-      ).estado,
-    ).toBe("error");
-  });
-
-  it("otra organización recibe 404 y la nota sigue en revisión", async () => {
-    const a = await crearOrg();
-    const sesionId = await crearSesionEnEstado(a, "revision");
-    const b = await crearOrg();
-    como(b);
-
-    const res = await deleteSesion(
-      pedidoSinCuerpo("DELETE", "?accion=descartar"),
-      { params: Promise.resolve({ id: sesionId }) },
-    );
-
-    expect(res.status).toBe(404);
-    expect(
-      (
-        await prismaRaw.sesionClinica.findUniqueOrThrow({
-          where: { id: sesionId },
-        })
-      ).estado,
-    ).toBe("revision");
-  });
-
-  it("otra organización no puede eliminar una sesión con error", async () => {
-    // Rama de borrado definitivo: sin audio real no hay nada que borrar en
-    // R2, así que sin el aislamiento la fila desaparecería.
-    const a = await crearOrg();
-    const sesionId = await crearSesionEnEstado(a, "error");
-    const b = await crearOrg();
-    como(b);
-
-    const res = await deleteSesion(
-      pedidoSinCuerpo("DELETE", "?accion=eliminar"),
-      { params: Promise.resolve({ id: sesionId }) },
-    );
-
-    expect(res.status).toBe(404);
-    expect(
-      await prismaRaw.sesionClinica.count({ where: { id: sesionId } }),
-    ).toBe(1);
-  });
-
-  it("sin decir qué se pide, 400 y no se toca nada", async () => {
-    // La intención es obligatoria (A5): sin ella el estado de la fila
-    // volvería a decidir solo entre descartar y borrar para siempre.
-    const a = await crearOrg();
-    const sesionId = await crearSesionEnEstado(a, "revision");
-    como(a);
-
-    const res = await deleteSesion(pedidoSinCuerpo("DELETE"), {
-      params: Promise.resolve({ id: sesionId }),
-    });
-
-    expect(res.status).toBe(400);
-    expect(
-      (
-        await prismaRaw.sesionClinica.findUniqueOrThrow({
-          where: { id: sesionId },
-        })
-      ).estado,
-    ).toBe("revision");
-  });
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // A4 — el consentimiento se busca con la organización en la pregunta.
 //
@@ -521,8 +294,7 @@ describe("POST /api/sesion-clinica — el consentimiento es de la organización"
         organizationId: b.orgId,
         firmadoEn: new Date(),
         textoVersion: "1.1",
-        textoCompleto: "…",
-        firmaDigital: "data:image/png;base64,AAA",
+        ...cifrarConsentimiento(randomUUID(), { textoCompleto: "…", firmaDigital: "data:image/png;base64,AAA" }),
       },
     });
     const turnoId = await crearTurno(a);
@@ -543,8 +315,7 @@ describe("POST /api/sesion-clinica — el consentimiento es de la organización"
         organizationId: a.orgId,
         firmadoEn: new Date(),
         textoVersion: "1.1",
-        textoCompleto: "…",
-        firmaDigital: "data:image/png;base64,AAA",
+        ...cifrarConsentimiento(randomUUID(), { textoCompleto: "…", firmaDigital: "data:image/png;base64,AAA" }),
       },
     });
     const turnoId = await crearTurno(a);
@@ -565,8 +336,7 @@ describe("POST /api/sesion-clinica — el consentimiento es de la organización"
         firmadoEn: new Date(),
         revocadoEn: new Date(),
         textoVersion: "1.1",
-        textoCompleto: "…",
-        firmaDigital: "data:image/png;base64,AAA",
+        ...cifrarConsentimiento(randomUUID(), { textoCompleto: "…", firmaDigital: "data:image/png;base64,AAA" }),
       },
     });
     const turnoId = await crearTurno(a);
@@ -576,32 +346,6 @@ describe("POST /api/sesion-clinica — el consentimiento es de la organización"
 
     expect(res.status).toBe(400);
     expect(await prismaRaw.sesionClinica.count()).toBe(0);
-  });
-});
-
-describe("POST /api/sesion-clinica/[id]/upload-url — aislamiento entre organizaciones", () => {
-  it("otra organización recibe 404 y la sesión sigue grabando", async () => {
-    const a = await crearOrg();
-    const sesionId = await crearSesionEnEstado(a, "grabando");
-    const b = await crearOrg();
-    como(b);
-
-    const res = await uploadUrl(
-      pedido(
-        { claveCifrado: "k", iv: "iv", tamanoBytes: 1024, mime: "audio/webm" },
-        "POST",
-      ),
-      { params: Promise.resolve({ id: sesionId }) },
-    );
-
-    expect(res.status).toBe(404);
-    expect(
-      (
-        await prismaRaw.sesionClinica.findUniqueOrThrow({
-          where: { id: sesionId },
-        })
-      ).estado,
-    ).toBe("grabando");
   });
 });
 
@@ -640,77 +384,5 @@ describe("DELETE /api/turnos/[id]/cobrar — aislamiento entre organizaciones", 
     });
     expect(fila.pagoEstado).toBe("pagado");
     expect(fila.pagoMetodo).toBe("efectivo");
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// POST /api/recordatorios/[id]/reintentar
-//
-// El recordatorio no tiene columna propia de organización: se filtra por la
-// del turno. La LECTURA ya lo hacía; la escritura no, y `updateMany` por id
-// revive el recordatorio de cualquier organización — con `programadoEn` en
-// ahora, así que el próximo tick del cron le manda el SMS a una paciente que
-// no es de quien pidió.
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("POST /api/recordatorios/[id]/reintentar — aislamiento", () => {
-  const MANANA_MAS = new Date("2026-12-02T15:00:00.000Z");
-
-  /** Turno futuro y programado, con un recordatorio que ya agotó intentos. */
-  async function crearRecordatorioFallido(org: Org): Promise<string> {
-    const turno = await prismaRaw.turno.create({
-      data: {
-        fecha: MANANA_MAS,
-        tarifaCobrada: 1000,
-        pacienteId: org.pacienteId,
-        organizationId: org.orgId,
-      },
-    });
-    const recordatorio = await prismaRaw.recordatorio.create({
-      data: {
-        turnoId: turno.id,
-        estado: "fallido",
-        intentos: 3,
-        error: "Twilio caído",
-        programadoEn: new Date("2026-12-01T23:00:00.000Z"),
-      },
-    });
-    return recordatorio.id;
-  }
-
-  it("la organización dueña puede reintentar", async () => {
-    const a = await crearOrg();
-    const recordatorioId = await crearRecordatorioFallido(a);
-    como(a);
-
-    const res = await reintentarRecordatorio(pedidoSinCuerpo("POST"), {
-      params: Promise.resolve({ id: recordatorioId }),
-    });
-
-    expect(res.status).toBe(200);
-    const fila = await prismaRaw.recordatorio.findUniqueOrThrow({
-      where: { id: recordatorioId },
-    });
-    expect(fila.estado).toBe("pendiente");
-    expect(fila.intentos).toBe(0);
-    expect(fila.error).toBeNull();
-  });
-
-  it("otra organización recibe 404 y el recordatorio sigue fallido", async () => {
-    const a = await crearOrg();
-    const recordatorioId = await crearRecordatorioFallido(a);
-    const b = await crearOrg();
-    como(b);
-
-    const res = await reintentarRecordatorio(pedidoSinCuerpo("POST"), {
-      params: Promise.resolve({ id: recordatorioId }),
-    });
-
-    expect(res.status).toBe(404);
-    const fila = await prismaRaw.recordatorio.findUniqueOrThrow({
-      where: { id: recordatorioId },
-    });
-    expect(fila.estado).toBe("fallido");
-    expect(fila.intentos).toBe(3);
   });
 });

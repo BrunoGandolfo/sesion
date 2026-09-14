@@ -31,7 +31,7 @@ import {
 } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
-import type { PrismaClient } from "@prisma/client";
+import type { EstadoTurno, PrismaClient } from "@prisma/client";
 
 import {
   DURACION_MAXIMA_MIN,
@@ -245,7 +245,7 @@ async function turnoExistente(
   organizationId: string,
   fecha: Date,
   duracion = 50,
-  estado = "programado",
+  estado: EstadoTurno = "programado",
 ): Promise<string> {
   const turno = await prismaRaw.turno.create({
     data: {

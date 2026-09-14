@@ -17,10 +17,11 @@ import {
 } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
-import type { PrismaClient } from "@prisma/client";
+import type { EstadoPago, EstadoSesion, EstadoTurno, PrismaClient } from "@prisma/client";
 
 import { pendientesTerapeuta } from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
 import { __resetLlaveroForTests } from "@/lib/llavero";
+import { cifrarConsentimiento } from "@/lib/prisma-encryption";
 
 import {
   conectarBaseDeTest,
@@ -29,9 +30,16 @@ import {
 } from "./db-test";
 
 const cuentaActual = vi.hoisted(() => ({ id: "" }));
-vi.mock("@/lib/auth-utils", () => ({
-  getCurrentOrganizationId: async () => cuentaActual.id,
-  getServerSession: async () => null,
+vi.mock("@/app/api/_lib/auth", () => ({
+  getOrganizationId: async () => cuentaActual.id,
+  getSessionActor: async () => ({
+    organizationId: cuentaActual.id,
+    userId: "u",
+    sesionId: "s",
+    rol: "titular",
+    nombre: "Mariana",
+    email: "mariana@test.uy",
+  }),
 }));
 let leerDashboard: typeof import("@/app/api/dashboard/route").GET;
 let leerTurnos: typeof import("@/app/api/turnos/route").GET;
@@ -79,8 +87,8 @@ async function crearTurno(opciones: {
   orgId: string;
   pacienteId: string;
   fecha: Date;
-  estado?: string;
-  pagoEstado?: string;
+  estado?: EstadoTurno;
+  pagoEstado?: EstadoPago;
   tarifaCobrada?: number;
 }): Promise<string> {
   const turno = await prismaRaw.turno.create({
@@ -99,7 +107,7 @@ async function crearTurno(opciones: {
 async function crearSesion(opciones: {
   orgId: string;
   turnoId: string;
-  estado: string;
+  estado: EstadoSesion;
 }): Promise<string> {
   const sesion = await db.sesionClinica.create({
     data: {
@@ -124,8 +132,7 @@ async function crearConsentimiento(opciones: {
       firmadoEn: SEMANA_PASADA,
       revocadoEn: opciones.revocadoEn ?? null,
       textoVersion: "1.1",
-      textoCompleto: "Texto del consentimiento firmado.",
-      firmaDigital: "data:image/png;base64,AAAA",
+      ...cifrarConsentimiento(randomUUID(), { textoCompleto: "Texto del consentimiento firmado.", firmaDigital: "data:image/png;base64,AAAA" }),
     },
   });
 }
@@ -203,7 +210,7 @@ describe("pendientesTerapeuta — notasParaRevisar", () => {
     const orgId = await crearOrg();
     const pacienteId = await crearPaciente(orgId);
 
-    for (const estado of ["aprobado", "procesando", "grabando", "error"]) {
+    for (const estado of ["aprobada", "procesando", "grabando", "fallida"] as const) {
       const turnoId = await crearTurno({
         orgId,
         pacienteId,
@@ -651,19 +658,19 @@ describe("GET dashboard y turnos — inicio y acceso a notas", () => {
     const pacienteId = await crearPaciente(cuentaActual.id);
     const fecha = new Date();
     const turnoId = await crearTurno({ orgId: cuentaActual.id, pacienteId, fecha });
-    const sesionId = await crearSesion({ orgId: cuentaActual.id, turnoId, estado: "aprobado" });
+    const sesionId = await crearSesion({ orgId: cuentaActual.id, turnoId, estado: "aprobada" });
     const sinNotaId = await crearTurno({ orgId: cuentaActual.id, pacienteId, fecha });
     const respuesta = await leerDashboard();
     expect(respuesta.status).toBe(200);
     const { data } = await respuesta.json();
     expect(data.inicio).toEqual({ tarifaCargada: true, tienePacientes: true, tieneTurnos: true });
-    expect(data.sesionesHoy.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobado" });
+    expect(data.sesionesHoy.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobada" });
     expect(data.sesionesHoy.find((t: { id: string }) => t.id === sinNotaId).sesionClinica).toBeNull();
     const params = new URLSearchParams({ desde: new Date(fecha.getTime() - 60000).toISOString(), hasta: new Date(fecha.getTime() + 60000).toISOString() });
     const agenda = await leerTurnos(new Request(`http://localhost/api/turnos?${params}`));
     expect(agenda.status).toBe(200);
     const lista = (await agenda.json()).data;
-    expect(lista.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobado" });
+    expect(lista.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobada" });
     expect(lista.find((t: { id: string }) => t.id === sinNotaId).sesionClinica).toBeNull();
     await prismaRaw.paciente.update({ where: { id: pacienteId }, data: { activo: false } });
     await prismaRaw.turno.updateMany({ where: { organizationId: cuentaActual.id }, data: { fecha: SEMANA_PASADA } });

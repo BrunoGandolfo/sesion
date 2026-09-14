@@ -304,7 +304,7 @@ function armarRiesgos(sesiones: SesionCruda[]): RiesgoProgreso[] {
     const fecha = sesion.fecha.toISOString();
 
     for (const flag of flagRiesgoSchema.options) {
-      if (!flags[flag]) continue;
+      if (flags[flag as keyof typeof flags] !== true) continue;
       riesgos.push({
         sesionId: sesion.sesionId,
         fecha,

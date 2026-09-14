@@ -16,7 +16,7 @@ import {
 } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
-import type { PrismaClient } from "@prisma/client";
+import type { EstadoPago, EstadoTurno, MetodoPago, PrismaClient } from "@prisma/client";
 
 import {
   cobrarTurno,
@@ -52,9 +52,9 @@ type Fixture = { orgId: string; pacienteId: string; turnoId: string };
 
 async function crearTurno(opciones: {
   fecha?: Date;
-  estado?: string;
-  pagoEstado?: string;
-  pagoMetodo?: string | null;
+  estado?: EstadoTurno;
+  pagoEstado?: EstadoPago;
+  pagoMetodo?: MetodoPago | null;
   pagoFecha?: Date | null;
 } = {}): Promise<Fixture> {
   const org = await prismaRaw.organization.create({

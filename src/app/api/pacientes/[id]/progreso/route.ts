@@ -5,7 +5,7 @@
 // armado vive en casos-uso/progreso-clinico.ts; acá solo se lee la base y se
 // responde.
 //
-// Solo entran las sesiones que ya tienen nota (revision o aprobado): una
+// Solo entran las sesiones que ya tienen nota (revision o aprobada): una
 // sesión que todavía se está procesando no tiene nada que graficar.
 
 import { db } from "@/lib/db";
@@ -45,13 +45,14 @@ export async function GET(request: Request, { params }: RouteParams) {
     const filas = await db.sesionClinica.findMany({
       where: {
         organizationId,
-        estado: { in: ["revision", "aprobado"] },
+        estado: { in: ["revision", "aprobada"] },
         turno: { pacienteId: id },
       },
       orderBy: { turno: { fecha: "asc" } },
       select: {
         id: true,
-        datosEstructurados: true,
+        // Campo lógico de la extensión de cifrado (src/lib/prisma-encryption.ts).
+        datos: true,
         turno: { select: { fecha: true } },
       },
     });
@@ -63,7 +64,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       sesiones: filas.map((fila) => ({
         sesionId: fila.id,
         fecha: fila.turno.fecha,
-        datos: parseDatosEstructurados(fila.datosEstructurados),
+        datos: parseDatosEstructurados(fila.datos),
       })),
       rango,
       ahora: new Date(),
