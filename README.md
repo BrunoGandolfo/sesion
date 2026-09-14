@@ -14,7 +14,11 @@ organización para crecer a varias.
 
 - **Hoy:** agenda del día, próxima sesión, KPIs (pacientes activos, sesiones,
   por cobrar, cobrado en el mes), deudores.
-- **Agenda:** turnos por semana; alta, edición, cancelación, ausencias.
+- **Agenda:** turnos por semana; alta, edición, cancelación, ausencias. Un
+  turno puede repetirse cada semana o cada 15 días durante tres meses; cada
+  turno de la serie es independiente (se mueve, cobra o cancela solo) y desde
+  cualquiera se puede cancelar el resto de la serie. El formulario de alta es
+  uno solo, el mismo en Hoy y en Agenda.
 - **Pacientes:** ficha con pestañas Resumen, Historia (grabación y notas),
   Progreso (contexto longitudinal), Turnos y Datos (consentimiento de
   grabación).
@@ -83,16 +87,17 @@ cp .env.example .env
 Completar en `.env` como mínimo:
 
 - `DATABASE_URL` (con `sslmode=require` si es Neon).
-- `AUTH_SECRET` y `NEXTAUTH_URL=http://localhost:3001`.
-- `NOTES_ENCRYPTION_KEY` (`openssl rand -base64 32`); sin ella la app no arranca.
+- Las variables de cuenta y de cifrado. Sus nombres y cómo generarlas están
+  en `.env.example`, no acá: este archivo ya estuvo desactualizado una vez
+  (`NEXTAUTH_URL`, un nombre que la app no leía). Sin la clave de cifrado la
+  app no arranca.
 - `PROCESSING_SECRET` y `CRON_SECRET` (cualquier valor largo en local).
 - `SEED_SECRET` y `SEED_USER_PASSWORD` para crear el usuario inicial.
 
 Opcionales: Twilio (sin `TWILIO_SMS_FROM` el cron no envía nada), Sentry,
 `ALERTA_WEBHOOK_URL`. Para grabar y procesar sesiones hacen falta además las
-variables de R2 (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
-`R2_BUCKET_NAME`; no están en `.env.example`) y el worker corriendo con su
-propio `processor/.env` (ver `processor/.env.example`).
+variables de R2 (las `R2_*` de `.env.example`, que vienen vacías) y el worker
+corriendo con su propio `processor/.env` (ver `processor/.env.example`).
 
 ```bash
 npx prisma generate
@@ -117,14 +122,18 @@ python worker.py
 
 ```text
 src/app/(dashboard)/     Pantallas: hoy, agenda, pacientes, finanzas, config
-src/app/api/             API routes; reglas en src/app/api/_lib/casos-uso/
+src/app/api/             API routes: sólo validan y llaman a un caso de uso
+src/app/api/_lib/casos-uso/  Toda regla de negocio, sin HTTP (AGENTS.md, regla 2)
 src/components/          UI, grabación, formularios
 src/hooks/               Grabación y polling de sesión clínica
 src/lib/                 Auth, Prisma + cifrado, R2, SMS, contrato de sesión
+src/lib/constantes-turno.ts  Única fuente de duraciones, modalidades, estados y métodos de pago
 src/types/domain.ts      Tipos de dominio
-prisma/                  Schema y migraciones
+prisma/                  Schema y una única migración inicial (docs/esquema.md)
 processor/               Worker Python (ASR, LLM, callback, contexto)
+processor/contrato/      Enums clínicos compartidos entre la app y el worker (un JSON, dos lectores)
 docs/                    Documentación; docs/historico/ para lo que ya no existe
+docs/pendientes/         Textos de pantalla y ayuda que cada área deja para integrar
 ```
 
 ## Documentación

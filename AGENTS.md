@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Reglas del repositorio
 
-9. NUNCA importar módulos de Node en ningún archivo alcanzable desde el
+1. NUNCA importar módulos de Node en ningún archivo alcanzable desde el
    middleware/proxy. Las DOS formas están prohibidas: `node:crypto` y
    `crypto` pelado son el mismo módulo y rompen el Edge igual. Web Crypto
    (`globalThis.crypto`) sí.
@@ -26,6 +26,32 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
    desde `src/middleware.ts` y falla ante cualquier módulo built-in, con o
    sin prefijo (la lista sale de `builtinModules` de `node:module`, no está
    escrita a mano).
+
+2. Ningún archivo `route.ts` bajo `src/app/api/**` llama a `db.` o `prisma.`
+   directamente. Una ruta solo hace: leer la sesión/organización, validar el
+   body con Zod (`src/app/api/_lib/schemas.ts`), llamar a una función de
+   `src/app/api/_lib/casos-uso/*` pasándole `prisma: db`, y responder con
+   `_lib/responses.ts`. Toda regla de negocio, incluida una sola consulta de
+   lectura, vive en un caso de uso: ahí se testea sin levantar la ruta.
+   El guardián es `src/lib/__tests__/rutas-sin-prisma.test.ts`: recorre cada
+   `route.ts` del disco y falla ante cualquier `db.<modelo>.<operación>(` o
+   `db.$transaction(`. Tiene una lista de excepciones temporales con las
+   rutas de las áreas que todavía no migraron, cada una con su dueño; la
+   lista tiene que quedar vacía, y el propio test falla si una excepción ya
+   está limpia y sigue anotada.
+
+3. Las listas cerradas del turno (duraciones, modalidades, estados, métodos
+   de pago, frecuencias de serie) se declaran UNA vez, en
+   `src/lib/constantes-turno.ts`; los tipos, los schemas Zod y los
+   formularios derivan de ahí. Los enums de Postgres y el CHECK de
+   `turnos.duracion` son la única copia que no puede derivar, y
+   `src/lib/__tests__/constantes-turno.test.ts` los compara con los arrays.
+   Lo mismo para los enums clínicos que comparten la app y el worker
+   (`tipoIntervencion`, `flagRiesgo`, `nivelRiesgo`, `alianzaTerapeutica`,
+   `confianzaModelo`): la única copia es `processor/contrato/enums-clinicos.json`,
+   que leen tanto `src/lib/sesion-clinica/schema.ts` como
+   `processor/schemas_llm.py`. Un valor nuevo se agrega ahí y en ningún otro
+   lado; los tests de los dos lados lo verifican.
 
 # Content-Security-Policy: el plan para pasar a enforce
 
