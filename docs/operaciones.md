@@ -8,7 +8,7 @@ valores.
 
 | Pieza | Servicio | Cómo se despliega |
 | --- | --- | --- |
-| App Next.js 16 (UI + API + crons) | Vercel | Vercel publica desde la rama `release` (Production Branch en el panel; el deploy desde `main` está apagado en `vercel.json`). `release` la mueve sólo `.github/workflows/publicar.yml`, cuando el CI de `main` terminó en verde y las migraciones se aplicaron a producción. Crons en `vercel.json`: `/api/cron/recordatorios` cada 5 min, `/api/cron/salud` cada hora, `/api/cron/trabajos` cada 10 min, `/api/cron/mantenimiento` a las 6:30 UTC. |
+| App Next.js 16 (UI + API + crons) | Vercel | Vercel publica desde la rama `release` (Production Branch en el panel; el deploy desde `main` está apagado en `vercel.json`). `release` la mueve sólo `.github/workflows/publicar.yml`, cuando el CI de `main` terminó en verde y las migraciones se aplicaron a producción. Crons en `vercel.json`: `/api/cron/recordatorios` cada 5 min, `/api/cron/salud` cada hora, `/api/cron/trabajos` cada 10 min, `/api/cron/mantenimiento` a las 04:00 UTC. |
 | Postgres 17 | Neon | Rama `production` (la app). Los tests de integración NO usan Neon: el CI levanta un Postgres 17 efímero por corrida y en local se usa el contenedor de `docker-compose.yml` (o cualquier `postgres:17` en localhost). La rama `test` de Neon queda como alternativa explícita sin Docker, y agotó la cuota una vez (septiembre de 2026). |
 | Audio cifrado | Cloudflare R2, bucket `sesion-audio` | Sin deploy. CORS del bucket debe permitir el PUT desde el dominio de la app. |
 | Backups cifrados de la base | Cloudflare R2, prefijo `backups/` del bucket del secret `R2_BUCKET` | Los escribe GitHub Actions. |

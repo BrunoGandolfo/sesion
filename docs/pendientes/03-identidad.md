@@ -39,15 +39,10 @@ Texto de la pantalla de configuración sobre la contraseña: el viejo "No te
 vamos a cerrar la sesión en este dispositivo" ya no es cierto y fue
 reemplazado por `PASSWORD_AVISO_CIERRE`.
 
-## 2. `vercel.json` (área 5 / CI)
+## 2. CI (área 5)
 
-Sumar el cron de mantenimiento. La ruta ya existe y exige `CRON_SECRET`:
-
-```json
-{ "path": "/api/cron/mantenimiento", "schedule": "0 4 * * *" }
-```
-
-Y en CI: `CLAVES_CIFRADO="1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="` (32
+El cron de mantenimiento ya está en `vercel.json` (`0 4 * * *`, tras la
+fusión con main). Queda en CI: `CLAVES_CIFRADO="1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="` (32
 bytes en cero) reemplaza a `NOTES_ENCRYPTION_KEY`; `AUTH_SECRET` y
 `AUTH_URL` se retiran de Vercel y de CI. `PROCESSING_SECRET` y `CRON_SECRET`
 aceptan lista separada por comas.
@@ -76,9 +71,10 @@ El reemplazo es `__resetLlaveroForTests` de `@/lib/llavero` con
 `process.env.CLAVES_CIFRADO = "1=<base64>"` (ver
 `src/lib/__tests__/base-identidad.ts`, `CLAVES_CIFRADO_TEST`):
 
-`casos-uso-recordatorios`, `casos-uso-sesion`, `casos-uso-worker`,
-`cobrar-turno`, `config-contrato`, `contexto-clinico`, `multi-tenant`,
-`pendientes-terapeuta`, `solapamiento-turnos`, `turno-recordatorios`.
+`casos-uso-sesion`, `casos-uso-worker`, `cobrar-turno`, `config-contrato`,
+`contexto-clinico`, `multi-tenant`, `pendientes-terapeuta`,
+`solapamiento-turnos`, y los de SMS que llegaron con main: `despachar-sms`,
+`envios-del-turno`, `sms-callback`.
 
 `src/app/api/_lib/contexto-clinico/actualizar.ts` importa `cifrarContexto`,
 que no existe: el contexto pasó a `hilo_versiones` y se escribe con
