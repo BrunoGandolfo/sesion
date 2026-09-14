@@ -14,6 +14,49 @@ Sin contenido clínico en descripciones: solo nombres técnicos de propiedades
 y enums de valores fijos.
 """
 
+import json
+from pathlib import Path
+
+# Enums compartidos con la app ──────────────────────────────────────────────
+#
+# Los valores de tipoIntervencion, flagRiesgo, nivelRiesgo, alianzaTerapeutica
+# y confianzaModelo NO se escriben acá: se leen de contrato/enums-clinicos.json,
+# el mismo archivo que importa src/lib/sesion-clinica/schema.ts. Un valor nuevo
+# se agrega en el JSON y los dos lados lo ven (AGENTS.md, regla 3). Si el
+# archivo falta o le falta una clave, el worker no arranca: mejor eso que
+# validar contra una lista vieja.
+
+RUTA_CONTRATO = Path(__file__).resolve().parent / "contrato" / "enums-clinicos.json"
+
+CLAVES_CONTRATO = (
+    "tipoIntervencion",
+    "flagRiesgo",
+    "nivelRiesgo",
+    "alianzaTerapeutica",
+    "confianzaModelo",
+)
+
+
+def cargar_enums_clinicos(ruta: Path = RUTA_CONTRATO) -> dict[str, tuple[str, ...]]:
+    """Lee el contrato y devuelve cada enum como tupla de strings. Falla con un
+    mensaje claro si falta una clave o si un enum viene vacío o repetido."""
+    with open(ruta, encoding="utf-8") as f:
+        crudo = json.load(f)
+    enums: dict[str, tuple[str, ...]] = {}
+    for clave in CLAVES_CONTRATO:
+        valores = crudo.get(clave)
+        if not isinstance(valores, list) or not valores:
+            raise ValueError(f"{ruta}: falta el enum '{clave}' o está vacío")
+        if any(not isinstance(v, str) or not v for v in valores):
+            raise ValueError(f"{ruta}: el enum '{clave}' tiene valores que no son texto")
+        if len(set(valores)) != len(valores):
+            raise ValueError(f"{ruta}: el enum '{clave}' tiene valores repetidos")
+        enums[clave] = tuple(valores)
+    return enums
+
+
+_ENUMS = cargar_enums_clinicos()
+
 # Helpers ───────────────────────────────────────────────────────────────────
 
 _STR = {"type": "string"}
@@ -52,24 +95,11 @@ def _enum_null(*valores: str) -> dict:
 
 # Fragmentos compartidos ────────────────────────────────────────────────────
 
-TIPOS_INTERVENCION = (
-    "reformulacion",
-    "senalamiento",
-    "confrontacion",
-    "interpretacion",
-    "pregunta_circular",
-    "validacion",
-    "silencio_terapeutico",
-    "otra",
-)
-
-FLAGS_RIESGO = (
-    "ideacionSuicida",
-    "autolesion",
-    "violenciaTerceros",
-    "sintomasPsicoticos",
-    "crisisPanico",
-)
+TIPOS_INTERVENCION = _ENUMS["tipoIntervencion"]
+FLAGS_RIESGO = _ENUMS["flagRiesgo"]
+NIVELES_RIESGO = _ENUMS["nivelRiesgo"]
+ALIANZAS = _ENUMS["alianzaTerapeutica"]
+CONFIANZAS_MODELO = _ENUMS["confianzaModelo"]
 
 # {timestamp, quote}: cita anclada en la transcripción.
 _EVIDENCIA = _arr(_obj({"timestamp": _STR, "quote": _STR}))
@@ -110,7 +140,7 @@ SCHEMA_NOTA = _obj({
         # valoracion, no hechos. Sin material para evaluarlas el modelo dice
         # null en vez de inventar un 0 que despues se grafica como medicion.
         "intensidadEmocional": _INT_NULL,
-        "alianzaTerapeutica": _enum_null("fragil", "inestable", "estable", "fuerte"),
+        "alianzaTerapeutica": _enum_null(*ALIANZAS),
         "intervenciones": _arr(_obj({
             "tipo": _enum(*TIPOS_INTERVENCION),
             "descripcion": _STR,
@@ -130,12 +160,12 @@ SCHEMA_NOTA = _obj({
             "detalle": _STR,
         }),
         "riesgoDetectado": _obj({
-            "nivel": _enum("ninguno", "bajo", "moderado", "alto"),
+            "nivel": _enum(*NIVELES_RIESGO),
             "indicadores": _arr(_STR),
             "evidencia": _EVIDENCIA,
             "notaParaTerapeuta": _STR_NULL,
         }),
-        "confianzaModelo": _enum("alta", "media", "baja"),
+        "confianzaModelo": _enum(*CONFIANZAS_MODELO),
         "duracionRealMin": _INT_NULL,
         "observacionIA": _STR,
     }),
@@ -155,7 +185,7 @@ SCHEMA_CONTEXTO = _obj({
     })),
     "intervencionesProbadas": _arr(_obj({
         "tecnica": _enum(*TIPOS_INTERVENCION),
-        "eficaciaPercibida": _enum("alta", "media", "baja"),
+        "eficaciaPercibida": _enum(*CONFIANZAS_MODELO),
         "sesiones": _arr(_INT),
     })),
     "temasRecurrentes": _arr(_obj({"tema": _STR, "conteo": _INT})),
@@ -277,8 +307,7 @@ SCHEMA_FEEDBACK_GESTALT = _obj({
 # ────────────────────────────────────────────────────────────────────────────
 
 SECCIONES_SOAP = ("subjetivo", "objetivo", "analisis", "plan")
-NIVELES_RIESGO = ("ninguno", "bajo", "moderado", "alto")
-ALIANZAS = ("fragil", "inestable", "estable", "fuerte")
+# NIVELES_RIESGO y ALIANZAS vienen del contrato compartido (arriba).
 
 RANGO_INTENSIDAD = (1, 10)
 # Escalas de los puntajes por item de cada instrumento de feedback.

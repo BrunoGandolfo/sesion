@@ -1,2 +1,6 @@
-processor/
+# processor/ es el worker (se despliega en Railway, no en Vercel), salvo el
+# contrato de enums clínicos: src/lib/sesion-clinica/schema.ts lo importa en
+# el build, así que tiene que viajar con la app.
+processor/*
+!processor/contrato/
 *.wav

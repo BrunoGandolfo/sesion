@@ -11,6 +11,8 @@
 
 import { z } from "zod";
 
+import enumsClinicos from "../../../processor/contrato/enums-clinicos.json";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Enumeraciones (una sola vez)
 // ────────────────────────────────────────────────────────────────────────────
@@ -26,39 +28,38 @@ export const estadoSesionSchema = z.enum([
 ]);
 export type EstadoSesion = z.infer<typeof estadoSesionSchema>;
 
-export const tipoIntervencionSchema = z.enum([
-  "reformulacion",
-  "senalamiento",
-  "confrontacion",
-  "interpretacion",
-  "pregunta_circular",
-  "validacion",
-  "silencio_terapeutico",
-  "otra",
-]);
+// Los enums que también lee el worker salen de processor/contrato/
+// enums-clinicos.json, la única copia (AGENTS.md, regla 3): un valor nuevo se
+// agrega ahí y los dos lados lo ven. El costo es que TypeScript no puede
+// inferir literales de un JSON, así que estos tipos son `string` y no la
+// unión de valores; la validación real la hace Zod en tiempo de ejecución con
+// la lista del archivo.
+export const ENUMS_CLINICOS = enumsClinicos;
+
+function enumDelContrato(valores: readonly string[]) {
+  const [primero, ...resto] = valores;
+  if (primero === undefined) {
+    throw new Error("processor/contrato/enums-clinicos.json: enum vacío");
+  }
+  return z.enum([primero, ...resto]);
+}
+
+export const tipoIntervencionSchema = enumDelContrato(ENUMS_CLINICOS.tipoIntervencion);
 export type TipoIntervencion = z.infer<typeof tipoIntervencionSchema>;
 
-export const flagRiesgoSchema = z.enum([
-  "ideacionSuicida",
-  "autolesion",
-  "violenciaTerceros",
-  "sintomasPsicoticos",
-  "crisisPanico",
-]);
-export type FlagRiesgo = z.infer<typeof flagRiesgoSchema>;
+export const flagRiesgoSchema = enumDelContrato(ENUMS_CLINICOS.flagRiesgo);
+/** Las flags son además las claves del objeto `flagsRiesgo` (abajo), así que
+ *  el tipo sale de ahí y sigue siendo la unión literal; el test
+ *  enums-clinicos.test.ts verifica que esas claves son las del contrato. */
+export type FlagRiesgo = Exclude<keyof z.infer<typeof flagsRiesgoSchema>, "detalle">;
 
-export const nivelRiesgoSchema = z.enum(["ninguno", "bajo", "moderado", "alto"]);
+export const nivelRiesgoSchema = enumDelContrato(ENUMS_CLINICOS.nivelRiesgo);
 export type NivelRiesgo = z.infer<typeof nivelRiesgoSchema>;
 
-export const alianzaTerapeuticaSchema = z.enum([
-  "fragil",
-  "inestable",
-  "estable",
-  "fuerte",
-]);
+export const alianzaTerapeuticaSchema = enumDelContrato(ENUMS_CLINICOS.alianzaTerapeutica);
 export type AlianzaTerapeutica = z.infer<typeof alianzaTerapeuticaSchema>;
 
-export const confianzaModeloSchema = z.enum(["alta", "media", "baja"]);
+export const confianzaModeloSchema = enumDelContrato(ENUMS_CLINICOS.confianzaModelo);
 export type ConfianzaModelo = z.infer<typeof confianzaModeloSchema>;
 
 export const rolesOrigenSchema = z.enum(["asr_role", "posicional"]);

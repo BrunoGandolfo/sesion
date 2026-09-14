@@ -18,6 +18,7 @@ import config
 from errores import PipelineError
 from schemas_llm import (
     ALIANZAS,
+    RUTA_CONTRATO,
     SCHEMA_NOTA,
     TIPOS_INTERVENCION,
     sanear_datos_nota,
@@ -28,17 +29,13 @@ from schemas_llm import (
     validar_estructura_nota,
 )
 
-# Mismo enum que tipoIntervencionSchema en src/lib/sesion-clinica/schema.ts.
-TIPOS_INTERVENCION_APP = (
-    "reformulacion",
-    "senalamiento",
-    "confrontacion",
-    "interpretacion",
-    "pregunta_circular",
-    "validacion",
-    "silencio_terapeutico",
-    "otra",
-)
+# El enum de tipos de intervención no se copia acá: se lee del mismo JSON que
+# leen schemas_llm.py y src/lib/sesion-clinica/schema.ts. Antes había una
+# copia a mano en este test que se comparaba con otra copia a mano del
+# módulo: dos copias nacidas juntas siempre coinciden aunque las dos estén
+# viejas respecto de la app.
+with open(RUTA_CONTRATO, encoding="utf-8") as _f:
+    TIPOS_INTERVENCION_APP = tuple(json.load(_f)["tipoIntervencion"])
 
 RIESGO_SIN_SEÑAL = {
     "nivel": "ninguno",

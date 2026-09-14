@@ -1,0 +1,23 @@
+{
+  "_comentario": "Única copia de los enums clínicos que comparten la app (src/lib/sesion-clinica/schema.ts) y el worker (processor/schemas_llm.py). Los dos leen este archivo: un valor se agrega acá y en ningún otro lado. Vive bajo processor/ porque Railway despliega el worker con rootDirectory=/processor.",
+  "tipoIntervencion": [
+    "reformulacion",
+    "senalamiento",
+    "confrontacion",
+    "interpretacion",
+    "pregunta_circular",
+    "validacion",
+    "silencio_terapeutico",
+    "otra"
+  ],
+  "flagRiesgo": [
+    "ideacionSuicida",
+    "autolesion",
+    "violenciaTerceros",
+    "sintomasPsicoticos",
+    "crisisPanico"
+  ],
+  "nivelRiesgo": ["ninguno", "bajo", "moderado", "alto"],
+  "alianzaTerapeutica": ["fragil", "inestable", "estable", "fuerte"],
+  "confianzaModelo": ["alta", "media", "baja"]
+}
