@@ -93,6 +93,7 @@ describe("revisarSalud (agregador)", () => {
 
 interface EscenarioSms {
   fallidos?: number;
+  trasCancelacion?: number;
   desconocidos?: number;
   trabados?: number;
   porOrganizacion?: Array<{ organizationId: string; segmentos: number | null }>;
@@ -105,6 +106,7 @@ function prismaSms(e: EscenarioSms): ContextoMetricas["prisma"] {
         const w = args.where;
         if (w.estado === "fallido") return e.fallidos ?? 0;
         if (w.estado === "desconocido") return e.desconocidos ?? 0;
+        if (w.estado === "cancelado") return e.trasCancelacion ?? 0;
         if (w.estado === "enviando") {
           // La consulta de trabados tiene que mirar hacia atrás SMS_TRABADO_MS.
           expect(w.actualizadoEn?.lt?.getTime()).toBe(AHORA.getTime() - SMS_TRABADO_MS);
@@ -146,6 +148,12 @@ describe("metricasSms", () => {
     const salud = await correrSms({ desconocidos: UMBRAL_SMS_DESCONOCIDOS });
     expect(salud.alerta).toContain("estado desconocido");
     expect(salud.alerta).toContain("no se reenvían solos");
+  });
+
+  it("un solo SMS tras cancelación ya avisa, y dice qué hacer", async () => {
+    const salud = await correrSms({ trasCancelacion: 1 });
+    expect(salud.alerta).toContain("1 SMS salieron con el turno ya cerrado");
+    expect(salud.alerta).toContain("hay que avisarles");
   });
 
   it("los trabados en enviando avisan", async () => {

@@ -1,5 +1,5 @@
 // Métricas de salud de los SMS, en la forma que espera el agregador
-// (src/lib/salud-metricas.ts). Cuatro cosas se miran:
+// (src/lib/salud-metricas.ts). Cinco cosas se miran:
 //
 //   1. fallidos en las últimas 24 h: el sistema agotó la ventana útil sin
 //      poder mandar un aviso; la profesional lo ve en el turno, pero alguien
@@ -10,7 +10,10 @@
 //      porque uno suelto es un timeout y tres seguidos es un problema.
 //   3. trabados en `enviando`: una corrida del cron murió con la reserva
 //      tomada y el rescate no la está sacando.
-//   4. segmentos aceptados en el mes, por consultorio: se CUENTA, no se
+//   4. salieron con el turno ya cerrado: la única métrica que habla de una
+//      persona y no del sistema; uno solo ya avisa, y el texto nombra la
+//      acción (llamarla).
+//   5. segmentos aceptados en el mes, por consultorio: se CUENTA, no se
 //      limita (decisión del dueño: contar sí, tope no). Informativa.
 
 import { finDeMesMvd, inicioDeMesMvd } from "@/lib/fechas-montevideo";
@@ -35,7 +38,7 @@ export const SMS_TRABADO_MS = 30 * MS_POR_MINUTO;
 export const metricasSms: FuenteMetricas = async ({ prisma, ahora }) => {
   const t = ahora.getTime();
 
-  const [fallidos, desconocidos, trabados, porOrganizacion] = await Promise.all([
+  const [fallidos, desconocidos, trabados, trasCancelacion, porOrganizacion] = await Promise.all([
     prisma.envioSms.count({
       where: { estado: "fallido", cerradoEn: { gte: new Date(t - VENTANA_SMS_MS) } },
     }),
@@ -44,6 +47,13 @@ export const metricasSms: FuenteMetricas = async ({ prisma, ahora }) => {
     }),
     prisma.envioSms.count({
       where: { estado: "enviando", actualizadoEn: { lt: new Date(t - SMS_TRABADO_MS) } },
+    }),
+    // Salió (Twilio lo aceptó) pero el turno se cerró mientras se enviaba:
+    // la fila queda en `cancelado` con aceptadoEn puesto. Es el único aviso
+    // que no habla del sistema sino de una persona: hay una paciente con un
+    // SMS citándola a una sesión que no existe.
+    prisma.envioSms.count({
+      where: { estado: "cancelado", aceptadoEn: { gte: new Date(t - VENTANA_SMS_MS) } },
     }),
     // Mes de MONTEVIDEO: la factura del consultorio se cierra en el
     // calendario de acá. `aceptadoEn` es cuando Twilio cobró.
@@ -68,6 +78,13 @@ export const metricasSms: FuenteMetricas = async ({ prisma, ahora }) => {
       umbral: UMBRAL_SMS_DESCONOCIDOS,
       nivel: "aviso",
       texto: "SMS en estado desconocido en 24 h: se llamó a Twilio y no se sabe si aceptó; no se reenvían solos, hay que mirar la consola de Twilio",
+    },
+    {
+      nombre: "sms_tras_cancelacion_24h",
+      valor: trasCancelacion,
+      umbral: 1,
+      nivel: "aviso",
+      texto: "SMS salieron con el turno ya cerrado en 24 h: hay pacientes con un aviso de una sesión que no está programada, hay que avisarles",
     },
     {
       nombre: "sms_trabados_enviando",
