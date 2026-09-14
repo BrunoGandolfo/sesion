@@ -1,6 +1,6 @@
-// Cómo se serializa un intento de credencial. Módulo compartido por el login
-// (src/lib/login-eventos.ts) y por el cambio de contraseña
-// (src/lib/password-eventos.ts).
+// Cómo se serializa un intento de credencial. Módulo compartido por el login,
+// el cambio de contraseña y el pedido de recuperación (src/lib/intentos-acceso.ts),
+// y por las transacciones de cuenta que necesitan un lock por clave.
 //
 // EL PROBLEMA, UNA VEZ MÁS
 //

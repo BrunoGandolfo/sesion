@@ -4,7 +4,7 @@ import { buscarActor } from "@/app/api/_lib/auth";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { Providers } from "@/components/layout/providers";
 import { Sidebar } from "@/components/layout/sidebar";
-import { PARAM_SESION_VENCIDA } from "@/proxy";
+import { PARAM_SESION_VENCIDA } from "@/lib/sesion-cookie";
 
 export const dynamic = "force-dynamic";
 

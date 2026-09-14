@@ -23,12 +23,8 @@ import {
   esOrigenPropio,
   esRutaPublica,
   nombreCookie,
+  PARAM_SESION_VENCIDA,
 } from "@/lib/sesion-cookie";
-
-/** Con este parámetro /login no redirige a / aunque haya cookie: el layout
- *  del dashboard manda acá cuando la cookie no resuelve a una sesión viva,
- *  y la pantalla de entrada la borra. Sin esto habría un bucle. */
-export const PARAM_SESION_VENCIDA = "sesion";
 
 /**
  * Deja la respuesta con la política en modo reporte y con el endpoint al que

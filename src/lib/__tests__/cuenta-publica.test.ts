@@ -2,8 +2,8 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
-import { PARAM_SESION_VENCIDA, proxy } from "@/proxy";
-import { nombreCookie } from "@/lib/sesion-cookie";
+import { nombreCookie, PARAM_SESION_VENCIDA } from "@/lib/sesion-cookie";
+import { proxy } from "@/proxy";
 
 const HOST = "https://sesionapp.app";
 const TOKEN = "a".repeat(43);

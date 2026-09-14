@@ -89,6 +89,13 @@ export function esRutaPublica(pathname: string): boolean {
   return RUTAS_PUBLICAS.includes(pathname);
 }
 
+/**
+ * Con este parámetro en /login el proxy no redirige a / aunque haya cookie:
+ * el layout del dashboard manda acá cuando la cookie no resuelve a una sesión
+ * viva, y la pantalla de entrada la borra. Sin esto habría un bucle.
+ */
+export const PARAM_SESION_VENCIDA = "sesion";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Origen propio (CSRF): un pedido que cambia estado tiene que venir del
 // propio sitio. SameSite=Lax ya impide que un formulario ajeno mande la
