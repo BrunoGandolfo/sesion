@@ -139,6 +139,18 @@ it(`tope: la invitación ${MAX_INVITACIONES_VIGENTES + 1} vigente es 429; usar u
   await expect(crearInvitacion(actor, repo, ahora)).rejects.toMatchObject({ status: 403 });
 });
 
+it(`tope en paralelo: ${MAX_INVITACIONES_VIGENTES + 3} pedidos a la vez dejan exactamente ${MAX_INVITACIONES_VIGENTES} vigentes`, async () => {
+  const { repo, actor } = await preparar(); // ya hay 1 vigente
+  const resultados = await Promise.allSettled(
+    Array.from({ length: MAX_INVITACIONES_VIGENTES + 3 }, () => crearInvitacion(actor, repo, ahora)),
+  );
+  expect(resultados.filter((r) => r.status === "fulfilled")).toHaveLength(MAX_INVITACIONES_VIGENTES - 1);
+  for (const r of resultados.filter((r) => r.status === "rejected")) {
+    expect((r as PromiseRejectedResult).reason).toMatchObject({ status: 429 });
+  }
+  expect(await estado.base.prisma.invitacion.count({ where: { usadaEn: null } })).toBe(MAX_INVITACIONES_VIGENTES);
+});
+
 it("POST /api/cuenta/registro responde 201 con la cookie de la sesión creada, y esa cookie autentica", async () => {
   const { token } = await preparar();
   const { POST } = await import("@/app/api/cuenta/registro/route");

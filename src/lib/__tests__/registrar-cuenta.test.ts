@@ -21,8 +21,10 @@ const hashTokenSesion = async (t: string) => `hash(${t})`;
 function preparar(cambios: Partial<InvitacionGuardada> = {}, vigentes = 0) {
   const invitacion: InvitacionGuardada = { id: "invitacion", creadaPorId: "duena", venceEn: new Date(ahora.getTime() + 10000), usadaEn: null, ...cambios };
   const repo: RepositorioRegistro = {
-    contarVigentes: vi.fn().mockResolvedValue(vigentes),
-    crearInvitacion: vi.fn().mockResolvedValue({ id: "inv-nueva" }),
+    // El repositorio real cuenta y crea bajo lock; el doble simula el conteo.
+    crearInvitacion: vi.fn().mockImplementation(async ({ topeVigentes }: { topeVigentes: number }) =>
+      vigentes >= topeVigentes ? null : { id: "inv-nueva" },
+    ),
     buscarInvitacion: vi.fn().mockResolvedValue(invitacion),
     registrar: vi.fn().mockResolvedValue({ userId: "nueva", organizationId: "nuevo-consultorio", sesionId: "ses" }),
   };
@@ -52,6 +54,7 @@ it("crea un enlace canónico de 7 días, guardando sólo el hash", async () => {
   expect(resultado.invitacionId).toBe("inv-nueva");
   const guardado = vi.mocked(deps.repo.crearInvitacion).mock.calls[0][0];
   expect(guardado.creadaPorId).toBe("duena");
+  expect(guardado.topeVigentes).toBe(MAX_INVITACIONES_VIGENTES);
   expect(resultado.enlace).not.toContain(guardado.tokenHash);
 });
 
@@ -62,11 +65,11 @@ it("sin permiso: 403 y no crea nada", async () => {
   expect(deps.repo.crearInvitacion).not.toHaveBeenCalled();
 });
 
-it(`con ${MAX_INVITACIONES_VIGENTES} vigentes: 429 y no crea nada`, async () => {
+it(`con ${MAX_INVITACIONES_VIGENTES} vigentes: 429 (el repositorio no crea, bajo su lock)`, async () => {
   process.env.INVITACIONES_PERMITIDAS = actor.email;
   const deps = preparar({}, MAX_INVITACIONES_VIGENTES);
   await expect(crearInvitacion(actor, deps.repo, ahora)).rejects.toMatchObject({ status: 429 });
-  expect(deps.repo.crearInvitacion).not.toHaveBeenCalled();
+  // TEMPORAL: tope por costo de APIs durante la prueba.
   expect(MAX_INVITACIONES_VIGENTES).toBe(2);
 });
 

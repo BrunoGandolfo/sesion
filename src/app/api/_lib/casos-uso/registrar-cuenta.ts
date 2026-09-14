@@ -67,13 +67,16 @@ export interface SesionNueva {
 }
 
 export interface RepositorioRegistro {
-  contarVigentes(creadaPorId: string, ahora: Date): Promise<number>;
+  /** Cuenta las vigentes de la creadora y crea la nueva en UN acto (lock por
+   *  creadora): `null` si ya hay `topeVigentes`. Dos pedidos en paralelo no
+   *  pueden superar el tope. */
   crearInvitacion(input: {
     tokenHash: string;
     venceEn: Date;
     creadaEn: Date;
     creadaPorId: string;
-  }): Promise<{ id: string }>;
+    topeVigentes: number;
+  }): Promise<{ id: string } | null>;
   buscarInvitacion(tokenHash: string): Promise<InvitacionGuardada | null>;
   /** Crea organización, usuaria, configuración, sesión, consumo de la
    *  invitación y los dos eventos de auditoría, atómicamente. */
@@ -99,21 +102,22 @@ export async function crearInvitacion(
   ahora = new Date(),
 ): Promise<{ enlace: string; vence: string; invitacionId: string }> {
   if (!puedeInvitar(actor)) throw new ApiError("No podés invitar desde esta cuenta.", 403);
-  if ((await repo.contarVigentes(actor.userId, ahora)) >= MAX_INVITACIONES_VIGENTES) {
+  const token = nuevoTokenCuenta();
+  const venceEn = new Date(ahora.getTime() + VIGENCIA_INVITACION_MS);
+  const creada = await repo.crearInvitacion({
+    creadaPorId: actor.userId,
+    tokenHash: await hashTokenCuenta(token),
+    venceEn,
+    creadaEn: ahora,
+    topeVigentes: MAX_INVITACIONES_VIGENTES,
+  });
+  if (!creada) {
     throw new ApiError(
       `Ya tenés ${MAX_INVITACIONES_VIGENTES} invitaciones vigentes. Esperá a que se usen o venzan.`,
       429,
     );
   }
-  const token = nuevoTokenCuenta();
-  const venceEn = new Date(ahora.getTime() + VIGENCIA_INVITACION_MS);
-  const { id } = await repo.crearInvitacion({
-    creadaPorId: actor.userId,
-    tokenHash: await hashTokenCuenta(token),
-    venceEn,
-    creadaEn: ahora,
-  });
-  return { enlace: `${ORIGEN_CUENTA}/registro?token=${token}`, vence: venceEn.toISOString(), invitacionId: id };
+  return { enlace: `${ORIGEN_CUENTA}/registro?token=${token}`, vence: venceEn.toISOString(), invitacionId: creada.id };
 }
 
 export async function invitacionDisponible(

@@ -8,9 +8,17 @@ import { VIGENCIA_ABSOLUTA_MS } from "@/lib/sesion-acceso";
 
 export function repositorioRegistro(prisma: ClienteCifrado): RepositorioRegistro {
   return {
-    contarVigentes: (creadaPorId, ahora) =>
-      prisma.invitacion.count({ where: { creadaPorId, usadaEn: null, venceEn: { gt: ahora } } }),
-    crearInvitacion: (datos) => prisma.invitacion.create({ data: datos, select: { id: true } }),
+    crearInvitacion: ({ topeVigentes, ...datos }) =>
+      prisma.$transaction(async (tx) => {
+        // Contar y crear bajo el mismo lock: sin esto, dos pedidos en paralelo
+        // leen "1 vigente" los dos y quedan tres.
+        await tomarLocks(tx, [`invitaciones:${datos.creadaPorId}`]);
+        const vigentes = await tx.invitacion.count({
+          where: { creadaPorId: datos.creadaPorId, usadaEn: null, venceEn: { gt: datos.creadaEn } },
+        });
+        if (vigentes >= topeVigentes) return null;
+        return tx.invitacion.create({ data: datos, select: { id: true } });
+      }, OPCIONES_TRANSACCION),
     buscarInvitacion: (tokenHash) =>
       prisma.invitacion.findUnique({
         where: { tokenHash },
