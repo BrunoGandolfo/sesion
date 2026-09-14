@@ -48,7 +48,10 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (!sesionVencida) return;
-    void fetch("/api/cuenta/salir", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
+    // /limpiar borra la cookie SOLO si no resuelve a una sesión viva: una
+    // navegación inducida a /login?sesion=x no puede cerrar una sesión ajena
+    // (auditoría de Codex, docs/pendientes/03-identidad.md §8).
+    void fetch("/api/cuenta/limpiar", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
   }, [sesionVencida]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
