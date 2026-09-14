@@ -21,7 +21,7 @@ import type { EventoAuditoriaInput } from "../../auditoria-pura";
 import { ApiError } from "../../responses";
 import { crearTrabajo } from "../trabajos/crear";
 
-import { cifrarSesion } from "./cifrado";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 import { transicionar, type ClienteTransaccional } from "./transicion";
 
 export interface ResultadoSesionInput {

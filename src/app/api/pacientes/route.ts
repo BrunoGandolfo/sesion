@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import type { Paciente } from "@/types/domain";
+import { cifrarPaciente } from "@/lib/prisma-encryption";
 
 import { getOrganizationId } from "../_lib/auth";
 import { pacienteCreateSchema, toBooleanParam } from "../_lib/schemas";
@@ -10,6 +12,7 @@ import { toPacienteConDeuda } from "../_lib/domain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const querySchema = z.object({
   activo: z.boolean(),
@@ -73,19 +76,21 @@ export async function POST(request: Request) {
     }
 
     // telefono ya viene normalizado a E.164 por el .transform del esquema.
-    const paciente = await db.paciente.create({
+    // Las notas van cifradas, atadas al id de la fila: por eso el id se
+    // genera antes del create. `email` ya no existe en el esquema.
+    const { notasEncrypted: _blob, ...paciente } = await db.paciente.create({
       data: {
         nombre: parsed.data.nombre,
         apellido: parsed.data.apellido,
         telefono: parsed.data.telefono,
-        email: parsed.data.email ?? null,
         tarifa: parsed.data.tarifa,
-        notas: parsed.data.notas ?? null,
         organizationId,
+        ...cifrarPaciente(randomUUID(), { notas: parsed.data.notas ?? null }),
       },
     });
+    void _blob;
 
-    return ok<Paciente>(paciente, 201);
+    return ok(paciente, 201);
   } catch (error) {
     return errorResponse(error);
   }

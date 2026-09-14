@@ -1,10 +1,14 @@
+import { randomUUID } from "node:crypto";
+
 import { z } from "zod";
-import { db } from "@/lib/db";
+
 import {
   buscarConsentimientoVigente,
   generarTextoConsentimiento,
+  sugiereRefirmar,
 } from "@/lib/consentimiento";
-import { ipDeRequest } from "@/lib/request-huella";
+import { db } from "@/lib/db";
+import { cifrarConsentimiento } from "@/lib/prisma-encryption";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getOrganizationId, getSessionActor } from "../../../_lib/auth";
@@ -17,6 +21,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -50,6 +55,8 @@ function toConsentimientoResponse(consentimiento: ConsentimientoResponseInput) {
     firmadoEn: consentimiento.firmadoEn,
     textoVersion: consentimiento.textoVersion,
     vigente: consentimiento.revocadoEn === null,
+    // La app sugiere firmar el texto vigente; no obliga (decisión del dueño).
+    sugiereRefirmar: sugiereRefirmar(consentimiento.textoVersion),
   };
 }
 
@@ -139,8 +146,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       direccionConsultorio: configuracion.direccion,
     });
 
-    const ipOrigen = ipDeRequest(request);
     const now = new Date();
+    // El id existe antes del create: el texto y la firma se cifran atados a
+    // esta fila (AAD = tabla:columna:id). Sin IP: decisión del dueño.
+    const consentimientoId = randomUUID();
 
     const { consentimiento, reemplazados } = await db.$transaction(async (tx) => {
       const { count } = await tx.consentimientoGrabacion.updateMany({
@@ -158,9 +167,10 @@ export async function POST(request: Request, { params }: RouteParams) {
           organizationId,
           firmadoEn: now,
           textoVersion: parsed.data.textoVersion,
-          textoCompleto,
-          firmaDigital: parsed.data.firmaDigital,
-          ipOrigen,
+          ...cifrarConsentimiento(consentimientoId, {
+            textoCompleto,
+            firmaDigital: parsed.data.firmaDigital,
+          }),
         },
         select: consentimientoSelect,
       });
@@ -169,9 +179,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     // El acto que habilita a grabar a una persona: va al registro append-only
-    // sí o sí. Del consentimiento sólo entran identificadores, la versión del
-    // texto y desde dónde se firmó; ni el texto completo ni la firma digital,
-    // que son el documento en sí y viven en su propia tabla.
+    // sí o sí. Del consentimiento sólo entran identificadores y la versión del
+    // texto; ni el texto completo ni la firma digital (el documento en sí,
+    // cifrados en su tabla) ni la IP (no se guarda: decisión del dueño).
     await registrarAuditoria({
       organizationId,
       actorTipo: "usuario",
@@ -189,7 +199,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         // > 0 sólo si ya había una autorización vigente que esta firma
         // reemplazó (la transacción las revoca antes de crear la nueva).
         reemplazados,
-        ip: ipOrigen,
       },
     });
 
@@ -203,7 +212,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
@@ -232,7 +241,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       entidad: "paciente",
       entidadId: id,
       accion: "consentimiento.revocar",
-      detalle: { revocados: count, ip: ipDeRequest(request) },
+      detalle: { revocados: count },
     });
 
     // { data: { revocados } }: el mismo envoltorio que el GET y el POST.

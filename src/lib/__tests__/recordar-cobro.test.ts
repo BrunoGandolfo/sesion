@@ -1,15 +1,15 @@
 /**
- * Integración — recordarCobro y ultimoAvisoPorPaciente contra la DB real de
- * test (DATABASE_URL_TEST). Twilio no interviene: el envío es un stub
- * inyectado, igual que en casos-uso-recordatorios.
+ * Integración — recordarCobro y ultimoAvisoPorPaciente contra la base real
+ * de test. Twilio no interviene: acá no se manda nada, se CREA el envío en
+ * envios_sms y lo manda el cron (despachar-sms.test.ts prueba esa parte).
  *
- * Lo que se prueba acá es el aviso de cobro por SMS: que salga con la deuda
- * que la paciente realmente tiene, que quede el rastro (y también cuando
- * falla), que no se le avise a quien no debe, y que la pantalla pueda saber
- * cuándo fue el último aviso para no mandarlo dos veces.
+ * Lo que se prueba: que el aviso quede en cola con la deuda real y el
+ * teléfono congelado, que dos toques el mismo día sean un solo envío, que no
+ * se le avise a quien no debe (ni a quien pidió la baja), y que la pantalla
+ * pueda saber cuándo fue el último aviso que SALIÓ.
  *
  * Ejecutar:
- *   DATABASE_URL_TEST="postgres://..." \
+ *   DATABASE_URL_TEST="postgresql://postgres:postgres@localhost:5433/sesion_test" \
  *   npx vitest run src/lib/__tests__/recordar-cobro.test.ts
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -17,51 +17,34 @@ import { randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
+import type { EventoAuditoriaInput } from "@/app/api/_lib/auditoria-pura";
+import { claveDeCobro } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import {
   ACCION_AVISO,
-  ACCION_AVISO_FALLIDO,
+  MOTIVO_PACIENTE_DADA_DE_BAJA,
   recordarCobro,
   ultimoAvisoPorPaciente,
-  type EnviarSms,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
-import type { EventoAuditoriaInput } from "@/app/api/_lib/auditoria-pura";
 import { ApiError } from "@/app/api/_lib/responses";
-import { SMS_NO_ENVIADO } from "@/lib/glosario";
-import type { SmsMessage } from "@/lib/recordatorios-sms";
 
-import {
-  conectarBaseDeTest,
-  vaciarTablas,
-  type ClienteCifrado,
-} from "./db-test";
+import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
 
 const AHORA = new Date("2026-09-03T15:00:00.000Z");
 const TARIFA = 1200;
+const TELEFONO = "+59899123456";
 
 type Base = { orgId: string; pacienteId: string };
 
-async function crearBase(opciones: { nombreProfesional?: string } = {}) {
-  const org = await prismaRaw.organization.create({
-    data: { nombre: `Org ${randomUUID()}` },
-  });
+async function crearBase(): Promise<Base> {
+  const org = await prismaRaw.organization.create({ data: { nombre: `Org ${randomUUID()}` } });
   await prismaRaw.configuracion.create({
-    data: {
-      organizationId: org.id,
-      nombreProfesional: opciones.nombreProfesional ?? "Mariana Roldán",
-      tarifaDefault: TARIFA,
-    },
+    data: { organizationId: org.id, nombreProfesional: "Mariana Roldán", tarifaDefault: TARIFA },
   });
   const paciente = await prismaRaw.paciente.create({
-    data: {
-      nombre: "Lucía",
-      apellido: "Fernández",
-      telefono: "+59899123456",
-      tarifa: TARIFA,
-      organizationId: org.id,
-    },
+    data: { nombre: "Lucía", apellido: "Fernández", telefono: TELEFONO, tarifa: TARIFA, organizationId: org.id },
   });
   return { orgId: org.id, pacienteId: paciente.id };
 }
@@ -81,16 +64,6 @@ async function crearImpago(base: Base, diasAtras: number): Promise<void> {
   });
 }
 
-/** Stub del envío: registra lo que se le pidió mandar. */
-function stubSms(resultado: { success: boolean; sid?: string; error?: string }) {
-  const enviados: SmsMessage[] = [];
-  const enviarSms: EnviarSms = async (mensaje) => {
-    enviados.push(mensaje);
-    return resultado;
-  };
-  return { enviados, enviarSms };
-}
-
 function stubAuditoria() {
   const eventos: EventoAuditoriaInput[] = [];
   return {
@@ -100,6 +73,9 @@ function stubAuditoria() {
     },
   };
 }
+
+const enviosDe = (pacienteId: string) =>
+  prismaRaw.envioSms.findMany({ where: { pacienteId }, orderBy: { creadoEn: "asc" } });
 
 beforeAll(() => {
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
@@ -114,12 +90,10 @@ afterAll(async () => {
 });
 
 describe("recordarCobro", () => {
-  it("manda el SMS con la deuda real y lo deja auditado", async () => {
+  it("deja el aviso en cola con la deuda real, el teléfono congelado y quién lo pidió", async () => {
     const base = await crearBase();
     await crearImpago(base, 40);
     await crearImpago(base, 12);
-
-    const sms = stubSms({ success: true, sid: "SM123" });
     const auditoria = stubAuditoria();
 
     const resultado = await recordarCobro({
@@ -127,115 +101,73 @@ describe("recordarCobro", () => {
       organizationId: base.orgId,
       pacienteId: base.pacienteId,
       usuarioId: "user-1",
-      enviarSms: sms.enviarSms,
       registrarAuditoria: auditoria.registrarAuditoria,
       ahora: AHORA,
     });
 
-    expect(resultado).toEqual({
-      enviadoEn: AHORA.toISOString(),
+    expect(resultado).toMatchObject({
+      creado: true,
+      programadoEn: AHORA.toISOString(),
       sesiones: 2,
       monto: 2 * TARIFA,
-      sid: "SM123",
     });
 
-    // Sale al teléfono de la paciente, con su nombre, la cuenta bien hecha y
-    // la firma de la profesional.
-    expect(sms.enviados).toHaveLength(1);
-    expect(sms.enviados[0].to).toBe("+59899123456");
-    expect(sms.enviados[0].text).toContain("Lucía");
-    expect(sms.enviados[0].text).toContain("2 sesiones pendientes");
-    expect(sms.enviados[0].text).toContain("$ 2.400");
-    expect(sms.enviados[0].text).toContain("Mariana Roldán");
+    const envios = await enviosDe(base.pacienteId);
+    expect(envios).toHaveLength(1);
+    expect(envios[0]).toMatchObject({
+      id: resultado.envioId,
+      organizationId: base.orgId,
+      motivo: "recordatorio_cobro",
+      estado: "pendiente",
+      destino: TELEFONO,
+      turnoId: null,
+      claveIdempotencia: claveDeCobro(base.pacienteId, AHORA),
+      programadoEn: AHORA,
+      proximoIntentoEn: AHORA,
+      intentos: 0,
+    });
 
     expect(auditoria.eventos).toHaveLength(1);
     const evento = auditoria.eventos[0];
-    expect(evento.accion).toBe(ACCION_AVISO);
-    expect(evento.entidad).toBe("paciente");
-    expect(evento.entidadId).toBe(base.pacienteId);
-    expect(evento.actorTipo).toBe("usuario");
-    expect(evento.actorId).toBe("user-1");
-    expect(evento.detalle).toEqual({
-      sesiones: 2,
-      monto: 2 * TARIFA,
-      sid: "SM123",
+    expect(evento).toMatchObject({
+      accion: ACCION_AVISO,
+      entidad: "paciente",
+      entidadId: base.pacienteId,
+      actorTipo: "usuario",
+      actorId: "user-1",
+      detalle: { sesiones: 2, monto: 2 * TARIFA, envioId: resultado.envioId },
     });
-
-    // Ni el texto del mensaje ni el teléfono entran al registro.
+    // Ni el teléfono ni el nombre entran al registro.
     const serializado = JSON.stringify(evento);
-    expect(serializado).not.toContain("+59899123456");
+    expect(serializado).not.toContain(TELEFONO);
     expect(serializado).not.toContain("Lucía");
   });
 
-  it("si Twilio rechaza, sube un texto estable y el motivo real queda en la auditoría", async () => {
+  it("dos toques el mismo día son un solo envío y un solo evento", async () => {
     const base = await crearBase();
     await crearImpago(base, 5);
-
-    const sms = stubSms({
-      success: false,
-      error: "Twilio 21610: número dado de baja",
-    });
     const auditoria = stubAuditoria();
+    const pedir = () =>
+      recordarCobro({
+        prisma: db,
+        organizationId: base.orgId,
+        pacienteId: base.pacienteId,
+        registrarAuditoria: auditoria.registrarAuditoria,
+        ahora: AHORA,
+      });
 
-    const promesa = recordarCobro({
-      prisma: db,
-      organizationId: base.orgId,
-      pacienteId: base.pacienteId,
-      usuarioId: "user-1",
-      enviarSms: sms.enviarSms,
-      registrarAuditoria: auditoria.registrarAuditoria,
-      ahora: AHORA,
-    });
+    const primero = await pedir();
+    const segundo = await pedir();
 
-    // Lo que llega a la pantalla: el texto del glosario y nada más.
-    await expect(promesa).rejects.toThrow(SMS_NO_ENVIADO);
-    await expect(promesa).rejects.toBeInstanceOf(ApiError);
-    await expect(promesa).rejects.toMatchObject({ status: 502 });
-
-    // Lo que Twilio dijo de verdad: en el evento, que es donde sirve.
+    expect(primero.creado).toBe(true);
+    expect(segundo.creado).toBe(false);
+    expect(segundo.envioId).toBe(primero.envioId);
+    expect(await enviosDe(base.pacienteId)).toHaveLength(1);
     expect(auditoria.eventos).toHaveLength(1);
-    expect(auditoria.eventos[0].accion).toBe(ACCION_AVISO_FALLIDO);
-    expect(auditoria.eventos[0].detalle).toEqual({
-      sesiones: 1,
-      monto: TARIFA,
-      error: "Twilio 21610: número dado de baja",
-    });
   });
 
-  it("un fallo de configuración no le muestra el nombre de la variable", async () => {
+  it("a quien no debe nada no se le avisa: 409 y no se crea nada", async () => {
     const base = await crearBase();
-    await crearImpago(base, 5);
-
-    // Lo que devuelve sendSms cuando falta el número de Twilio: el motivo
-    // nombra una variable de entorno, y eso no puede llegar a la pantalla.
-    const sms = stubSms({
-      success: false,
-      error: "SMS no configurado: falta TWILIO_SMS_FROM",
-    });
-    const auditoria = stubAuditoria();
-
-    const promesa = recordarCobro({
-      prisma: db,
-      organizationId: base.orgId,
-      pacienteId: base.pacienteId,
-      enviarSms: sms.enviarSms,
-      registrarAuditoria: auditoria.registrarAuditoria,
-      ahora: AHORA,
-    });
-
-    const error = await promesa.catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ApiError);
-    expect((error as ApiError).message).toBe(SMS_NO_ENVIADO);
-    expect((error as ApiError).message).not.toContain("TWILIO");
-
-    expect(auditoria.eventos[0].detalle).toMatchObject({
-      error: "SMS no configurado: falta TWILIO_SMS_FROM",
-    });
-  });
-
-  it("a quien no debe nada no se le avisa: 409 y no se manda nada", async () => {
-    const base = await crearBase();
-    // Una sesión realizada y ya cobrada: no es deuda.
     await prismaRaw.turno.create({
       data: {
         fecha: new Date(AHORA.getTime() - 86_400_000),
@@ -247,22 +179,18 @@ describe("recordarCobro", () => {
         organizationId: base.orgId,
       },
     });
-
-    const sms = stubSms({ success: true, sid: "SM123" });
     const auditoria = stubAuditoria();
 
-    const llamar = () =>
+    await expect(
       recordarCobro({
         prisma: db,
         organizationId: base.orgId,
         pacienteId: base.pacienteId,
-        enviarSms: sms.enviarSms,
         registrarAuditoria: auditoria.registrarAuditoria,
         ahora: AHORA,
-      });
-
-    await expect(llamar()).rejects.toMatchObject({ status: 409 });
-    expect(sms.enviados).toHaveLength(0);
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await enviosDe(base.pacienteId)).toHaveLength(0);
     expect(auditoria.eventos).toHaveLength(0);
   });
 
@@ -270,8 +198,6 @@ describe("recordarCobro", () => {
     const base = await crearBase();
     const otra = await crearBase();
     await crearImpago(otra, 10);
-
-    const sms = stubSms({ success: true });
     const auditoria = stubAuditoria();
 
     await expect(
@@ -279,23 +205,17 @@ describe("recordarCobro", () => {
         prisma: db,
         organizationId: base.orgId,
         pacienteId: otra.pacienteId,
-        enviarSms: sms.enviarSms,
         registrarAuditoria: auditoria.registrarAuditoria,
         ahora: AHORA,
       }),
     ).rejects.toMatchObject({ status: 404 });
-    expect(sms.enviados).toHaveLength(0);
+    expect(await enviosDe(otra.pacienteId)).toHaveLength(0);
   });
 
   it("sin teléfono cargado no hay a dónde mandarlo: 409", async () => {
     const base = await crearBase();
     await crearImpago(base, 3);
-    await prismaRaw.paciente.update({
-      where: { id: base.pacienteId },
-      data: { telefono: "   " },
-    });
-
-    const sms = stubSms({ success: true });
+    await prismaRaw.paciente.update({ where: { id: base.pacienteId }, data: { telefono: "   " } });
     const auditoria = stubAuditoria();
 
     await expect(
@@ -303,80 +223,81 @@ describe("recordarCobro", () => {
         prisma: db,
         organizationId: base.orgId,
         pacienteId: base.pacienteId,
-        enviarSms: sms.enviarSms,
         registrarAuditoria: auditoria.registrarAuditoria,
         ahora: AHORA,
       }),
     ).rejects.toMatchObject({ status: 409 });
-    expect(sms.enviados).toHaveLength(0);
+    expect(await enviosDe(base.pacienteId)).toHaveLength(0);
+  });
+
+  it("un teléfono dado de baja: 409 con el motivo y no se crea nada", async () => {
+    const base = await crearBase();
+    await crearImpago(base, 3);
+    await prismaRaw.bajaSms.create({ data: { telefono: TELEFONO, motivo: "respuesta_baja" } });
+    const auditoria = stubAuditoria();
+
+    const error = await recordarCobro({
+      prisma: db,
+      organizationId: base.orgId,
+      pacienteId: base.pacienteId,
+      registrarAuditoria: auditoria.registrarAuditoria,
+      ahora: AHORA,
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(409);
+    expect((error as ApiError).message).toBe(MOTIVO_PACIENTE_DADA_DE_BAJA);
+    expect(await enviosDe(base.pacienteId)).toHaveLength(0);
   });
 });
 
 describe("ultimoAvisoPorPaciente", () => {
-  async function crearEvento(
+  type Estado = "pendiente" | "aceptado" | "entregado" | "no_entregado" | "fallido";
+
+  async function crearEnvio(
     base: Base,
-    opciones: { accion: string; createdAt: Date; pacienteId?: string },
+    opciones: { estado: Estado; aceptadoEn: Date | null; pacienteId?: string; motivo?: "recordatorio_cobro" | "recordatorio_turno" },
   ): Promise<void> {
-    const evento = await prismaRaw.eventoAuditoria.create({
+    await prismaRaw.envioSms.create({
       data: {
         organizationId: base.orgId,
-        actorTipo: "usuario",
-        accion: opciones.accion,
-        entidad: "paciente",
-        entidadId: opciones.pacienteId ?? base.pacienteId,
+        claveIdempotencia: `k:${randomUUID()}`,
+        motivo: opciones.motivo ?? "recordatorio_cobro",
+        estado: opciones.estado,
+        pacienteId: opciones.pacienteId ?? base.pacienteId,
+        destino: TELEFONO,
+        programadoEn: AHORA,
+        aceptadoEn: opciones.aceptadoEn,
+        sid: opciones.aceptadoEn ? `SM${randomUUID().replaceAll("-", "")}` : null,
       },
-      select: { id: true },
     });
-    // createdAt es @default(now()): para fechar el evento en el pasado hay
-    // que pisarlo por SQL.
-    await prismaRaw.$executeRawUnsafe(
-      `UPDATE eventos_auditoria SET created_at = $1 WHERE id = $2`,
-      opciones.createdAt,
-      evento.id,
-    );
   }
 
-  it("devuelve el aviso más reciente de cada paciente", async () => {
+  it("devuelve el aviso más reciente que SALIÓ de cada paciente", async () => {
     const base = await crearBase();
     const otra = await prismaRaw.paciente.create({
-      data: {
-        nombre: "Ana",
-        apellido: "Pérez",
-        telefono: "+59899000002",
-        tarifa: TARIFA,
-        organizationId: base.orgId,
-      },
+      data: { nombre: "Ana", apellido: "Pérez", telefono: "+59899000002", tarifa: TARIFA, organizationId: base.orgId },
     });
-
     const viejo = new Date("2026-08-01T12:00:00.000Z");
     const nuevo = new Date("2026-09-01T12:00:00.000Z");
-    await crearEvento(base, { accion: ACCION_AVISO, createdAt: viejo });
-    await crearEvento(base, { accion: ACCION_AVISO, createdAt: nuevo });
-    await crearEvento(base, {
-      accion: ACCION_AVISO,
-      createdAt: viejo,
-      pacienteId: otra.id,
-    });
+    await crearEnvio(base, { estado: "entregado", aceptadoEn: viejo });
+    await crearEnvio(base, { estado: "aceptado", aceptadoEn: nuevo });
+    await crearEnvio(base, { estado: "aceptado", aceptadoEn: viejo, pacienteId: otra.id });
 
-    const mapa = await ultimoAvisoPorPaciente(db, base.orgId, [
-      base.pacienteId,
-      otra.id,
-    ]);
+    const mapa = await ultimoAvisoPorPaciente(db, base.orgId, [base.pacienteId, otra.id]);
 
     expect(mapa.get(base.pacienteId)).toBe(nuevo.toISOString());
     expect(mapa.get(otra.id)).toBe(viejo.toISOString());
   });
 
-  it("un intento fallido no cuenta como aviso", async () => {
+  it("uno en cola, fallido o no entregado no cuenta como aviso; un recordatorio de turno tampoco", async () => {
     const base = await crearBase();
-    await crearEvento(base, {
-      accion: ACCION_AVISO_FALLIDO,
-      createdAt: new Date("2026-09-01T12:00:00.000Z"),
-    });
+    await crearEnvio(base, { estado: "pendiente", aceptadoEn: null });
+    await crearEnvio(base, { estado: "fallido", aceptadoEn: null });
+    await crearEnvio(base, { estado: "no_entregado", aceptadoEn: new Date("2026-09-01T12:00:00.000Z") });
+    await crearEnvio(base, { estado: "entregado", aceptadoEn: new Date("2026-09-02T12:00:00.000Z"), motivo: "recordatorio_turno" });
 
-    const mapa = await ultimoAvisoPorPaciente(db, base.orgId, [
-      base.pacienteId,
-    ]);
+    const mapa = await ultimoAvisoPorPaciente(db, base.orgId, [base.pacienteId]);
 
     expect(mapa.has(base.pacienteId)).toBe(false);
   });
@@ -384,16 +305,10 @@ describe("ultimoAvisoPorPaciente", () => {
   it("no cruza organizaciones ni inventa avisos", async () => {
     const base = await crearBase();
     const otra = await crearBase();
-    await crearEvento(otra, {
-      accion: ACCION_AVISO,
-      createdAt: new Date("2026-09-01T12:00:00.000Z"),
-    });
+    await crearEnvio(otra, { estado: "aceptado", aceptadoEn: new Date("2026-09-01T12:00:00.000Z") });
 
     // El id existe, pero el aviso es de otra organización.
-    const mapa = await ultimoAvisoPorPaciente(db, base.orgId, [
-      otra.pacienteId,
-      base.pacienteId,
-    ]);
+    const mapa = await ultimoAvisoPorPaciente(db, base.orgId, [otra.pacienteId, base.pacienteId]);
 
     expect(mapa.size).toBe(0);
   });

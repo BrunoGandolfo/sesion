@@ -6,7 +6,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { descifrarSesion } from "@/app/api/_lib/casos-uso/sesion/cifrado";
 import { eliminarSesion } from "@/app/api/_lib/casos-uso/sesion/eliminar";
 import { reclamarSesiones } from "@/app/api/_lib/casos-uso/sesion/reclamar";
 import { registrarAsr } from "@/app/api/_lib/casos-uso/sesion/registrar-asr";
@@ -21,6 +20,7 @@ import { LEASE_SESION_MS } from "@/lib/sesion-clinica/estados";
 
 import {
   auditoriaEnMemoria,
+  camposDe,
   conectarArea2,
   crearOrg,
   crearSesion,
@@ -164,7 +164,7 @@ describe("ASR y checkpoint", () => {
     expect(fila?.estado).toBe("procesando");
     expect(fila?.modeloAsr).toBe("assemblyai:universal-2");
     expect(fila?.speechAnalytics).toMatchObject({ ratioHablaTerapeuta: 0.4 });
-    expect(descifrarSesion(sesionId, fila!).transcripcion).toBe(TRANSCRIPCION);
+    expect((await camposDe(base.db, sesionId)).transcripcion).toBe(TRANSCRIPCION);
     // Idempotente.
     await checkpoint(sesionId, intento);
     await expect(codigo(checkpoint(sesionId, intento + 1))).resolves.toBe(409);
@@ -230,7 +230,7 @@ describe("resultado", () => {
       promptVersion: "clinical_note_v4.md",
     });
     expect(fila?.procesadaEn).not.toBeNull();
-    const campos = descifrarSesion(sesionId, fila!);
+    const campos = await camposDe(base.db, sesionId);
     expect(campos.notaIa).toEqual(NOTA);
     expect(campos.datos).toEqual({ temas: ["x"], riesgoDetectado: { nivel: "bajo", indicadores: [], evidencia: [], notaParaTerapeuta: null } });
     expect(campos.notaFinal).toBeNull();
@@ -296,7 +296,7 @@ describe("reprocesar (Volver a escribirla)", () => {
     expect(r.estado).toBe("procesando");
     const fila = await filaDe(base.prisma, sesionId);
     expect(fila).toMatchObject({ estado: "procesando", generacion: 1, fallosSeguidos: 0, intento, ticketHash: null });
-    const campos = descifrarSesion(sesionId, fila!);
+    const campos = await camposDe(base.db, sesionId);
     expect(campos.notaIa?.plan).toBe("Plan 1");
     expect(campos.transcripcion).toBe(TRANSCRIPCION);
     expect(fila?.audioClaveEncrypted).not.toBeNull();
@@ -311,7 +311,7 @@ describe("reprocesar (Volver a escribirla)", () => {
     await nota(sesionId, segunda.intento, "Plan 2");
     const fila2 = await filaDe(base.prisma, sesionId);
     expect(fila2?.generacion).toBe(2);
-    expect(descifrarSesion(sesionId, fila2!).notaIa?.plan).toBe("Plan 2");
+    expect((await camposDe(base.db, sesionId)).notaIa?.plan).toBe("Plan 2");
   });
 
   it("sin audio ni transcripción no se puede reprocesar (409)", async () => {

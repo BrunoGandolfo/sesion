@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { cifrarTurno } from "@/lib/prisma-encryption";
 
 import { getOrganizationId } from "../_lib/auth";
 import { programarRecordatorio } from "../_lib/casos-uso/recordatorios-del-turno";
@@ -16,6 +19,7 @@ import { toRecordatorio, toTurno, toTurnoConPaciente } from "../_lib/domain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const querySchema = z.object({
   desde: isoDateTimeSchema,
@@ -133,7 +137,8 @@ export async function POST(request: Request) {
           estado: "programado",
           tarifaCobrada: paciente.tarifa,
           pagoEstado: "pendiente",
-          notas: parsed.data.notas ?? null,
+          // La nota va cifrada, atada al id de la fila (por eso el id nace acá).
+          ...cifrarTurno(randomUUID(), { notas: parsed.data.notas ?? null }),
         },
       });
 

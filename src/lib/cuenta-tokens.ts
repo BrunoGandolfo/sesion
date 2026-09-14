@@ -11,6 +11,18 @@ export function nuevoTokenCuenta(): string {
     (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 export const hashTokenCuenta = sha256Hex;
-export function tokenVigente(token: { expiresAt: Date; usedAt: Date | null } | null, ahora: Date): boolean {
-  return token !== null && token.usedAt === null && token.expiresAt.getTime() > ahora.getTime();
+
+/**
+ * ¿Vale este enlace? No usado y no vencido. Para los de recuperación, además
+ * `enviadoEn` no null: una fila cuyo correo no salió no vale para restablecer.
+ * (`enviadoEn` ausente = invitación, que no tiene correo.)
+ */
+export function tokenVigente(
+  token: { venceEn: Date; usadoEn: Date | null; enviadoEn?: Date | null } | null,
+  ahora: Date,
+): boolean {
+  if (token === null) return false;
+  if (token.usadoEn !== null) return false;
+  if ("enviadoEn" in token && token.enviadoEn === null) return false;
+  return token.venceEn.getTime() > ahora.getTime();
 }

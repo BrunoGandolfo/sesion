@@ -2,18 +2,18 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn, signOut } from "next-auth/react";
 import { Button, Input } from "@/components/ui";
 import { ApiClientError, apiPost } from "@/lib/api-client";
 import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
 import {
   ENTRADA_REGISTRO, ENTRADA_NOMBRE, ENTRADA_EMAIL, ENTRADA_CONTRASENA, ENTRADA_REPETIR,
   ENTRADA_ACEPTA_TERMINOS, ENTRADA_TERMINOS_REQUERIDOS, ENTRADA_INVITACION_INVALIDA,
-  ENTRADA_PEDIR_INVITACION, ENTRADA_PASSWORD_NO_COINCIDE, ENTRADA_CUENTA_ERROR,
-  ENTRADA_CUENTA_CREADA_SIN_SESION, GUARDANDO,
+  ENTRADA_PEDIR_INVITACION, ENTRADA_PASSWORD_NO_COINCIDE, ENTRADA_CUENTA_ERROR, GUARDANDO,
 } from "@/lib/glosario";
 import { EntradaMarco } from "../_components/entrada-marco";
 
+// El POST de registro deja la cookie de sesión puesta: no hay segundo paso
+// de entrada. Con 201, vamos a Hoy.
 export function RegistroForm({ token, valida }: { token: string; valida: boolean }) {
   const router = useRouter();
   const [nombre, setNombre] = React.useState(""); const [email, setEmail] = React.useState("");
@@ -27,20 +27,16 @@ export function RegistroForm({ token, valida }: { token: string; valida: boolean
     if (!validacion.ok) { setError(validacion.motivo); return; }
     if (password !== repetida) { setError(ENTRADA_PASSWORD_NO_COINCIDE); return; }
     setEnviando(true); setError("");
-    let cuentaCreada = false;
     try {
       await apiPost("/api/cuenta/registro", { token, nombre, email, password, aceptaTerminos: true });
-      cuentaCreada = true; setCreada(true);
-      await signOut({ redirect: false });
-      const resultado = await signIn("credentials", { email: email.trim().toLowerCase(), password, redirect: false });
-      if (resultado?.ok && !resultado.error) { router.replace("/"); router.refresh(); }
-      else setError(ENTRADA_CUENTA_CREADA_SIN_SESION);
-    } catch (e) { setError(cuentaCreada ? ENTRADA_CUENTA_CREADA_SIN_SESION : e instanceof ApiClientError ? e.message : ENTRADA_CUENTA_ERROR); }
+      setCreada(true);
+      router.replace("/"); router.refresh();
+    } catch (e) { setError(e instanceof ApiClientError ? e.message : ENTRADA_CUENTA_ERROR); }
     finally { setEnviando(false); }
   }
   return <EntradaMarco titulo={ENTRADA_REGISTRO}>
     {!valida ? <div role="alert"><p>{ENTRADA_INVITACION_INVALIDA}</p><p className="mt-2">{ENTRADA_PEDIR_INVITACION}</p></div>
-      : creada ? (error ? <p role="status">{error}</p> : <p role="status">{GUARDANDO}</p>)
+      : creada ? <p role="status">{GUARDANDO}</p>
       : <form onSubmit={enviar} className="flex flex-col gap-4">
         <Input label={ENTRADA_NOMBRE} autoComplete="name" required maxLength={120} value={nombre} onChange={e => setNombre(e.target.value)} disabled={enviando} />
         <Input label={ENTRADA_EMAIL} type="email" autoComplete="email" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} disabled={enviando} />

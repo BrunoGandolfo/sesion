@@ -10,7 +10,7 @@ import type { SpeechAnalytics } from "@/lib/sesion-clinica/schema";
 
 import type { EventoAuditoriaInput } from "../../auditoria-pura";
 
-import { cifrarSesion } from "./cifrado";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 import { transicionar, type ClienteSesion } from "./transicion";
 
 export interface RegistrarTranscripcionInput {

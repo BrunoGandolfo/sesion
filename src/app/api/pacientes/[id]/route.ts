@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import type { Paciente } from "@/types/domain";
+import { cifrarPaciente } from "@/lib/prisma-encryption";
 
 import { getOrganizationId } from "../../_lib/auth";
 import { toPacienteConDeuda, toTurno } from "../../_lib/domain";
@@ -8,6 +8,7 @@ import { pacienteUpdateSchema } from "../../_lib/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -61,18 +62,25 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     //
     // Los campos ausentes quedan undefined y Prisma no los toca; telefono, si
     // vino, ya está normalizado a E.164 por el esquema.
+    // `notas` va cifrada, atada a esta fila; `email` ya no existe en el
+    // esquema (el schema Zod todavía lo acepta: área 6).
+    const { notas, email: _email, ...resto } = parsed.data as typeof parsed.data & { email?: unknown };
+    void _email;
+    const { id: _id, ...notasCifradas } = notas === undefined ? { id } : cifrarPaciente(id, { notas });
+    void _id;
     const { count } = await db.paciente.updateMany({
       where: { id, organizationId },
-      data: parsed.data,
+      data: { ...resto, ...notasCifradas },
     });
 
     if (count === 0) {
       throw new ApiError("Paciente no encontrado", 404);
     }
 
-    const paciente = await db.paciente.findUniqueOrThrow({ where: { id } });
+    const { notasEncrypted: _blob, ...paciente } = await db.paciente.findUniqueOrThrow({ where: { id } });
+    void _blob;
 
-    return ok<Paciente>(paciente);
+    return ok(paciente);
   } catch (error) {
     return errorResponse(error);
   }

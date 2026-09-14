@@ -91,16 +91,22 @@ Los schemas Zod viven en `src/lib/sesion-clinica/schema.ts`.
   stream (`MediaRecorder` con `timeslice`), así que concatenarlos en orden da
   un archivo válido. Si el teléfono produce archivos independientes, hay que
   cambiar `descargar_y_descifrar` en `processor.py`.
-- **Área 3 (cifrado y auth).** `casos-uso/sesion/cifrado.ts` es la ÚNICA
-  costura: `cifrarSesion(id, campos)`, `descifrarSesion(id, fila)` y
-  `descifrarCampo` con la misma firma que su extensión. Hoy usa ENC1 sin AAD;
-  al fusionar, ese módulo delega a `src/lib/prisma-encryption.ts` (o se borra
-  y `SESION_SELECT` pide los campos lógicos). `tickets.ts` duplica
-  `nuevoTicket`/`hashTicket`/`ticketDe` de su `auth.ts`: al fusionar,
-  `emitirTicket`/`hashDeTicket`/`ticketDe` pasan a delegar. Su proxy ya exime
-  `api/sesion-clinica/[id]/{lease,asr,resultado,transcripcion}` y
-  `api/trabajos/**`. El `GET …/transcripcion` (usuaria) hace su propia auth
-  de sesión aunque el proxy lo exima.
+- **Área 3 (cifrado y auth).** Fusionado: las escrituras usan
+  `cifrarSesion(id, campos)` de `src/lib/prisma-encryption.ts` y las lecturas
+  piden el campo lógico en el `select` (`notaIa`, `datos`, `feedback`,
+  `notaFinal`, `notasEdicion`, `transcripcion`, `audioClave`). Los tests fijan
+  `CLAVES_CIFRADO` y llaman `__resetLlaveroForTests` de `@/lib/llavero`.
+  `tickets.ts` duplica `nuevoTicket`/`hashTicket`/`ticketDe` de `auth.ts`
+  (síncrono con node:crypto; el de auth es Web Crypto y async): unificar
+  cuando convenga, no cambia el hash. El proxy exime
+  `api/sesion-clinica/[id]/{lease,asr,resultado,transcripcion}`,
+  `api/trabajos/**` y `api/sesion-clinica/pendientes`; `rutas-area2.test.ts`
+  lo verifica contra el matcher real y exige que ninguna ruta excluida
+  acepte sesión de usuaria con método no seguro sin `esOrigenPropio` (hoy la
+  única con sesión fuera del proxy es el GET de la transcripción).
+  Se dejó `src/lib/sesion-clinica-utils.ts` como módulo de compatibilidad
+  con SOLO `ensamblarNotaSOAP` (marcado deprecated) para que los hooks del
+  grabador y sus tests unitarios sigan cargando; se borra con ellos.
 - **Área 4 (hilo y worker).** `integrar_contexto` nace en la transacción de
   aprobar con `{ sesionId, pacienteId }` y `pacienteId` en la fila. Para
   entregarlo y aplicarlo hay dos ganchos sin tocar archivos del área 2:

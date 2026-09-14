@@ -5,7 +5,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { descifrarSesion } from "@/app/api/_lib/casos-uso/sesion/cifrado";
 import { reintentarFeedback } from "@/app/api/_lib/casos-uso/sesion/reintentar-feedback";
 import { verTranscripcion } from "@/app/api/_lib/casos-uso/sesion/ver-transcripcion";
 import { correrTrabajosApp } from "@/app/api/_lib/casos-uso/trabajos/correr-app";
@@ -22,6 +21,7 @@ import { autorizarTicketTrabajo } from "@/app/api/_lib/tickets";
 
 import {
   auditoriaEnMemoria,
+  camposDe,
   conectarArea2,
   crearOrg,
   crearSesion,
@@ -136,7 +136,7 @@ describe("Para vos", () => {
     const fila = await filaDe(base.prisma, sesionId);
     expect(fila?.feedbackEstado).toBe("listo");
     expect(fila?.estado).toBe("revision");
-    expect(descifrarSesion(sesionId, fila!)).toMatchObject({ feedback: { fortalezas: ["escucha"] }, notaIa: NOTA });
+    expect(await camposDe(base.db, sesionId)).toMatchObject({ feedback: { fortalezas: ["escucha"] }, notaIa: NOTA });
     expect((await base.prisma.trabajo.findUniqueOrThrow({ where: { id: t.trabajoId } })).estado).toBe("hecho");
     // El ticket se anuló con el resultado.
     await expect(codigo(autorizarTicketTrabajo(pedidoConTicket(t.ticket), base.db, t.trabajoId))).resolves.toBe(401);
@@ -208,7 +208,7 @@ describe("Para vos", () => {
     await aplicarResultadoTrabajo({ prisma: base.db, trabajo: nuevo.autorizado, resultado: { ok: true, feedback: { nuevo: true } } });
     const fila2 = await filaDe(base.prisma, sesionId);
     expect(fila2?.feedbackEstado).toBe("listo");
-    expect(descifrarSesion(sesionId, fila2!).feedback).toEqual({ nuevo: true });
+    expect((await camposDe(base.db, sesionId)).feedback).toEqual({ nuevo: true });
   });
 
   it("integrar_contexto sin quien lo aplique responde 501 y el trabajo sigue reclamado", async () => {

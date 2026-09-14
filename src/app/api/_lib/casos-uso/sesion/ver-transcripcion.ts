@@ -7,7 +7,6 @@
 import type { EventoAuditoriaInput } from "../../auditoria-pura";
 import { ApiError } from "../../responses";
 
-import { descifrarCampo } from "./cifrado";
 import type { ClienteSesion } from "./transicion";
 
 /** Convención del worker: la terapeuta es siempre el hablante S0. */
@@ -35,15 +34,12 @@ export async function verTranscripcion({
 }: VerTranscripcionInput): Promise<TranscripcionVisible> {
   const sesion = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
-    select: { id: true, estado: true, transcripcionEncrypted: true },
+    // `transcripcion` es el campo lógico: la extensión lo descifra al leer.
+    select: { id: true, estado: true, transcripcion: true },
   });
   if (!sesion) throw new ApiError("Sesión clínica no encontrada", 404);
 
-  const transcripcion = descifrarCampo(
-    sesion.id,
-    "transcripcion",
-    sesion.transcripcionEncrypted,
-  );
+  const transcripcion = sesion.transcripcion;
   if (!transcripcion) {
     throw new ApiError("La sesión todavía no tiene transcripción", 409);
   }

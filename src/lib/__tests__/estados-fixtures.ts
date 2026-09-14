@@ -6,47 +6,38 @@
 // archivo crea su organización con ids únicos y borra sólo lo suyo al
 // terminar, así la misma base sirve a varios archivos a la vez.
 //
-// Una URL de localhost se acepta tal cual (no puede ser producción); cualquier
-// otra pasa por la guarda de db-test.ts.
+// La URL pasa por la guarda de db-test.ts (sólo bases locales).
 
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { PrismaClient, type EstadoSesion, type EstadoFeedback, type EstadoAudio } from "@prisma/client";
 
-import { cifrarSesion, type CamposCifradosSesion } from "@/app/api/_lib/casos-uso/sesion/cifrado";
 import type { ClienteTransaccional } from "@/app/api/_lib/casos-uso/sesion/transicion";
 import type { EventoAuditoriaInput } from "@/app/api/_lib/auditoria-pura";
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests, VARIABLE_LLAVERO } from "@/lib/llavero";
+import {
+  cifrarSesion,
+  type CamposSesionClinica,
+  type ClienteCifrado,
+} from "@/lib/prisma-encryption";
 import type { NotaSoap } from "@/lib/sesion-clinica/schema";
 
-import { urlDeBaseDeTest } from "./db-test";
+import { conectarBaseDeTest } from "./db-test";
 
 export interface BaseArea2 {
   /** Cliente crudo: columnas físicas, fixtures, aserciones. */
   prisma: PrismaClient;
-  /** El mismo cliente con el tipo que esperan los casos de uso. */
-  db: ClienteTransaccional;
+  /** El mismo cliente con la extensión de cifrado (campos lógicos). */
+  db: ClienteCifrado & ClienteTransaccional;
 }
 
 /** Llamar en beforeAll: fija una clave de cifrado propia y conecta. */
-function urlLocalOGuardada(): string {
-  const url = process.env.DATABASE_URL_TEST?.trim();
-  if (url) {
-    try {
-      const host = new URL(url).hostname;
-      if (host === "localhost" || host === "127.0.0.1") return url;
-    } catch {
-      /* la guarda de abajo explica el error */
-    }
-  }
-  return urlDeBaseDeTest();
-}
-
+/** Llamar en beforeAll: fija un llavero propio de la corrida y conecta. */
 export function conectarArea2(): BaseArea2 {
-  process.env.NOTES_ENCRYPTION_KEY = randomBytes(32).toString("base64");
-  __resetKeyCacheForTests();
-  const prisma = new PrismaClient({ datasources: { db: { url: urlLocalOGuardada() } } });
-  return { prisma, db: prisma as unknown as ClienteTransaccional };
+  process.env[VARIABLE_LLAVERO] = `1=${randomBytes(32).toString("base64")}`;
+  __resetLlaveroForTests();
+  const { prisma, db } = conectarBaseDeTest();
+  return { prisma, db: db as ClienteCifrado & ClienteTransaccional };
 }
 
 export interface Org {
@@ -133,7 +124,7 @@ async function crearSesionUnaVez(
 ): Promise<{ sesionId: string; turnoId: string }> {
   const sesionId = randomUUID();
   const conAudio = opciones.audio ?? true;
-  const campos: Partial<CamposCifradosSesion> = {
+  const campos: Partial<CamposSesionClinica> = {
     audioClave: conAudio ? CLAVE_AUDIO : null,
     transcripcion: opciones.transcripcion ?? null,
     notaIa: opciones.notaIa ?? null,
@@ -148,7 +139,7 @@ async function crearSesionUnaVez(
       organizationId: org.orgId,
       sesionClinica: {
         create: {
-          id: sesionId,
+          // cifrarSesion devuelve { id, …columnas }: el id va una sola vez.
           organizationId: org.orgId,
           estado: opciones.estado,
           audioEstado: opciones.audioEstado ?? (conAudio ? "en_r2" : "sin_audio"),
@@ -211,6 +202,22 @@ export function auditoriaEnMemoria() {
 /** Lee la fila cruda de una sesión (o null si ya no está). */
 export function filaDe(prisma: PrismaClient, sesionId: string) {
   return prisma.sesionClinica.findUnique({ where: { id: sesionId } });
+}
+
+/** Los campos cifrados de una sesión, descifrados por la extensión. */
+export function camposDe(db: ClienteCifrado, sesionId: string) {
+  return db.sesionClinica.findUniqueOrThrow({
+    where: { id: sesionId },
+    select: {
+      audioClave: true,
+      transcripcion: true,
+      notaIa: true,
+      datos: true,
+      feedback: true,
+      notaFinal: true,
+      notasEdicion: true,
+    },
+  });
 }
 
 /** Trabajos de una sesión, del más viejo al más nuevo. */

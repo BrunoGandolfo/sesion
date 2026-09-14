@@ -11,8 +11,6 @@ import type { Prisma, TipoTrabajo } from "@prisma/client";
 
 import type { db } from "@/lib/db";
 
-import { descifrarCampo } from "../sesion/cifrado";
-
 import { reclamarTrabajos, type TrabajoReclamado } from "./reclamar";
 
 type ClienteEntrega = Pick<typeof db, "trabajo" | "hiloVersion" | "sesionClinica" | "configuracion">;
@@ -32,12 +30,12 @@ async function adjuntoFeedback(prisma: ClienteEntrega, trabajo: TrabajoReclamado
     select: {
       id: true,
       speechAnalytics: true,
-      transcripcionEncrypted: true,
+      transcripcion: true,
       organization: { select: { configuracion: { select: { orientacionTeorica: true } } } },
     },
   });
   if (!sesion) return null;
-  const transcripcion = descifrarCampo(sesion.id, "transcripcion", sesion.transcripcionEncrypted);
+  const transcripcion = sesion.transcripcion;
   if (!transcripcion) return null;
   return {
     transcripcionFormateada: transcripcion,

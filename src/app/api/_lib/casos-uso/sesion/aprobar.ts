@@ -12,9 +12,8 @@
 //   - menciones léxicas con el modelo en `ninguno` o sin graduar ⇒
 //     `confirmoMenciones` (diseño 04 §2.9: "Leí las menciones").
 
-import {
-  normalizarRiesgo,
-} from "@/lib/sesion-clinica/normalizar";
+import { cifrarSesion } from "@/lib/prisma-encryption";
+import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
 import { prefijoAudio } from "@/lib/sesion-clinica/estados";
 import {
   parseDatosEstructurados,
@@ -26,7 +25,6 @@ import { ApiError } from "../../responses";
 import type { FilaSesionClinica } from "../../sesion-clinica";
 import { crearTrabajo } from "../trabajos/crear";
 
-import { cifrarSesion, descifrarSesion } from "./cifrado";
 import { leerSesion } from "./leer";
 import { transicionar, type ClienteTransaccional } from "./transicion";
 
@@ -66,8 +64,9 @@ export async function aprobarSesion({
       id: true,
       estado: true,
       audioEstado: true,
-      notaIaEncrypted: true,
-      datosEncrypted: true,
+      // Campos lógicos: la extensión los descifra al leer.
+      notaIa: true,
+      datos: true,
       turno: { select: { pacienteId: true } },
       segmentos: { select: { indice: true }, orderBy: { indice: "asc" } },
     },
@@ -77,13 +76,12 @@ export async function aprobarSesion({
     throw new ApiError("Solo se puede aprobar una nota en revisión", 409);
   }
 
-  const campos = descifrarSesion(existente.id, existente);
-  const notaFinal = notaEditada ?? campos.notaIa ?? null;
+  const notaFinal = notaEditada ?? existente.notaIa;
   if (!notaFinal) {
     throw new ApiError("La sesión no tiene una nota para aprobar", 409);
   }
 
-  const datos = parseDatosEstructurados(campos.datos);
+  const datos = parseDatosEstructurados(existente.datos);
   const riesgo = normalizarRiesgo(datos?.riesgoDetectado);
   const nivelExigeConfirmacion =
     riesgo.nivel === "alto" || riesgo.nivel === "moderado";

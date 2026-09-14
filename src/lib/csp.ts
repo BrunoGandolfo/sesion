@@ -62,16 +62,99 @@ export function generarNonce(): string {
   return btoa(binario);
 }
 
-/** Destinos externos a los que el navegador puede hablar. Hoy sólo Sentry. */
-const CONNECT_EXTERNOS = [
+// ────────────────────────────────────────────────────────────────────────────
+// Destinos externos
+//
+// Todo host externo al que el NAVEGADOR habla, uno solo y con nombre. Si un
+// host no está acá, la política lo bloquea el día del enforce; y si está acá
+// sin que nadie sepa por qué, la política es más ancha de lo que debería.
+// src/lib/__tests__/csp-destinos.test.ts recorre src/** y falla ante un host
+// nuevo que no esté declarado en ningún lado.
+//
+// R2: el navegador hace PUT del audio cifrado DIRECTO al bucket (la URL la
+// firma /api/sesion-clinica/[id]/upload-url). Va como host EXACTO, de la
+// variable R2_PUBLIC_HOST. OJO con la forma: el SDK de S3 firma en estilo
+// "virtual-hosted", así que la URL prefirmada tiene el BUCKET como primer
+// subdominio y el origen es
+//   https://<bucket>.<accountId>.r2.cloudflarestorage.com
+// (verificado generando una URL con src/lib/r2.ts; csp-destinos.test.ts lo
+// vuelve a verificar en cada corrida). Una fuente exacta de CSP no cubre
+// subdominios: con el host de la cuenta a secas, la subida sigue afuera.
+//   - explícito y no derivado de R2_ACCOUNT_ID, porque el middleware corre en
+//     edge y no tiene por qué saber cómo Cloudflare arma sus nombres;
+//   - exacto y no `https://*.r2.cloudflarestorage.com`, porque un comodín
+//     abre la política a cualquier cuenta de R2 del mundo, y "igual la URL la
+//     firma nuestro servidor" es cierto sólo mientras no haya un XSS, que es
+//     exactamente el escenario contra el que existe la CSP;
+//   - el id de cuenta viaja igual en cada URL prefirmada, así que no es un
+//     secreto.
+// Cuando esta política se escribió (septiembre de 2026) R2 NO estaba, y
+// enforzar habría roto la subida de toda grabación. Ver AGENTS.md.
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface DestinosExternos {
+  sentry: readonly string[];
+  /** Vacío si R2_PUBLIC_HOST falta o no es un host exacto. */
+  r2: readonly string[];
+}
+
+const SENTRY = [
   "https://*.ingest.sentry.io",
   "https://*.ingest.us.sentry.io",
   "https://*.ingest.de.sentry.io",
-];
+] as const;
+
+/** Sufijo que todo endpoint S3 de R2 tiene (src/lib/r2.ts arma el de la
+ *  cuenta; el SDK le antepone el bucket al firmar). */
+export const SUFIJO_HOST_R2 = ".r2.cloudflarestorage.com";
+
+/**
+ * `https://<host>` exacto, o null si el valor no sirve: sin esquema, con
+ * comodín, con ruta o puerto, o con un host que no es de R2. Pura.
+ */
+export function validarHostR2(valor: string | undefined): string | null {
+  const limpio = valor?.trim();
+  if (!limpio) return null;
+  let url: URL;
+  try {
+    url = new URL(limpio);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:") return null;
+  if (url.pathname !== "/" || url.search || url.hash || url.port) return null;
+  if (url.hostname.includes("*")) return null;
+  if (!url.hostname.endsWith(SUFIJO_HOST_R2)) return null;
+  if (url.hostname === SUFIJO_HOST_R2.slice(1)) return null;
+  return `https://${url.hostname}`;
+}
+
+/** Los destinos a partir del ambiente. Pura: recibe el env. */
+export function construirDestinos(
+  env: Record<string, string | undefined> = process.env,
+): DestinosExternos {
+  const r2 = validarHostR2(env.R2_PUBLIC_HOST);
+  return { sentry: SENTRY, r2: r2 ? [r2] : [] };
+}
+
+/** Todos los hosts, planos, en el orden en que van a connect-src. */
+export function hostsExternos(destinos: DestinosExternos): string[] {
+  return [...destinos.sentry, ...destinos.r2];
+}
+
+/**
+ * Los destinos de este despliegue. Si R2_PUBLIC_HOST falta, R2 queda AFUERA
+ * de la política: en report-only eso sólo genera reportes de connect-src; en
+ * enforce rompería la subida. Por eso la variable es obligatoria en
+ * producción (src/lib/env-operacion.ts) y /api/health contesta 503 sin ella.
+ */
+export const DESTINOS_EXTERNOS: DestinosExternos = construirDestinos();
 
 export interface OpcionesCsp {
   /** En desarrollo Next usa eval para React Refresh. Ver abajo. */
   desarrollo?: boolean;
+  /** Para tests: los destinos en vez de los del ambiente. */
+  destinos?: DestinosExternos;
 }
 
 /**
@@ -103,7 +186,7 @@ export interface OpcionesCsp {
  */
 export function construirCsp(
   nonce: string,
-  { desarrollo = false }: OpcionesCsp = {},
+  { desarrollo = false, destinos = DESTINOS_EXTERNOS }: OpcionesCsp = {},
 ): string {
   const script = [
     "'self'",
@@ -118,7 +201,7 @@ export function construirCsp(
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    `connect-src 'self' ${CONNECT_EXTERNOS.join(" ")}`,
+    `connect-src 'self' ${hostsExternos(destinos).join(" ")}`,
     // MediaRecorder y la reproducción local trabajan con blobs.
     "media-src 'self' blob:",
     "worker-src 'self' blob:",

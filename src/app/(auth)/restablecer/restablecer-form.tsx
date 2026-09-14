@@ -1,7 +1,6 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
 import { Button, Input } from "@/components/ui";
 import { ApiClientError, apiPost } from "@/lib/api-client";
 import { validarPasswordNueva, PASSWORD_MIN } from "@/lib/password";
@@ -9,6 +8,8 @@ import { TOKEN_CUENTA } from "@/lib/cuenta-tokens";
 import { ENTRADA_RESTABLECER, ENTRADA_CONTRASENA, ENTRADA_REPETIR, ENTRADA_PASSWORD_NO_COINCIDE, ENTRADA_ENLACE_INVALIDO, ENTRADA_CUENTA_ERROR, GUARDANDO } from "@/lib/glosario";
 import { EntradaMarco } from "../_components/entrada-marco";
 
+// Restablecer cierra todas las sesiones del lado del servidor; acá solo se
+// redirige al login con el aviso. No hay sesión que cerrar en el navegador.
 export function RestablecerForm({ token }: { token: string }) {
   const router = useRouter();
   const [password, setPassword] = React.useState("");
@@ -24,7 +25,6 @@ export function RestablecerForm({ token }: { token: string }) {
     setEnviando(true); setError("");
     try {
       await apiPost("/api/cuenta/restablecer", { token, password });
-      await signOut({ redirect: false });
       router.replace("/login?aviso=password-cambiada");
     } catch (e) { setError(e instanceof ApiClientError ? e.message : ENTRADA_CUENTA_ERROR); }
     finally { setEnviando(false); }

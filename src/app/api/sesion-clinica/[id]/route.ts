@@ -13,7 +13,7 @@ import { toSesionClinicaResponse } from "../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 15;
+export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 type RouteParams = { params: Promise<{ id: string }> };
 

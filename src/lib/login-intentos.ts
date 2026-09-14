@@ -8,11 +8,10 @@
 // Map de módulo (el patrón de manual) no cuenta nada: dos intentos seguidos
 // pueden verse en dos lambdas que no se conocen.
 //
-// La cuenta se deriva entonces de eventos_auditoria, que ya existe, ya es
-// append-only y ya está indexada por (entidad, entidadId). No hace falta
-// tabla nueva ni migración: el registro de "hubo un intento fallido" ES el
-// contador. Quién lee esa tabla y arma la lista es src/lib/login-eventos.ts;
-// acá sólo vive la regla.
+// La cuenta se deriva entonces de la tabla intentos_acceso (solo fallos,
+// indexada por clave y fecha, purgada a los 30 días): el registro de "hubo
+// un intento fallido" ES el contador. Quién lee esa tabla y arma la lista es
+// src/lib/intentos-acceso.ts; acá sólo vive la regla.
 //
 // LA REGLA
 //

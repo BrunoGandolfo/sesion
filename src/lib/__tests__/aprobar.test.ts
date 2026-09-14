@@ -7,7 +7,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { aprobarSesion } from "@/app/api/_lib/casos-uso/sesion/aprobar";
-import { descifrarSesion } from "@/app/api/_lib/casos-uso/sesion/cifrado";
 import { eliminarSesion } from "@/app/api/_lib/casos-uso/sesion/eliminar";
 import { reintentarSesion } from "@/app/api/_lib/casos-uso/sesion/reintentar";
 import { reprocesarSesion } from "@/app/api/_lib/casos-uso/sesion/reprocesar";
@@ -17,6 +16,7 @@ import * as r2 from "@/lib/r2";
 
 import {
   auditoriaEnMemoria,
+  camposDe,
   conectarArea2,
   crearOrg,
   crearSesion,
@@ -92,7 +92,7 @@ describe("aprobar", () => {
     expect(fila?.audioClaveEncrypted).toBeNull();
     // El audio sigue anotado como en R2 hasta que el trabajo lo borre.
     expect(fila?.audioEstado).toBe("en_r2");
-    const campos = descifrarSesion(sesionId, fila!);
+    const campos = await camposDe(base.db, sesionId);
     expect(campos.notaFinal).toEqual(NOTA);
     expect(campos.notaIa).toEqual(NOTA);
     expect(campos.notasEdicion).toBe("sin cambios");
@@ -124,7 +124,7 @@ describe("aprobar", () => {
       notaEditada: editada,
       registrarAuditoria: auditoriaEnMemoria().registrar,
     });
-    const campos = descifrarSesion(sesionId, (await filaDe(base.prisma, sesionId))!);
+    const campos = await camposDe(base.db, sesionId);
     expect(campos.notaFinal).toEqual(editada);
     expect(campos.notaIa).toEqual(NOTA);
   });

@@ -2,66 +2,68 @@
 
 // La pantalla de entrada.
 //
-// Es la única pantalla que ve alguien que todavía no usa Sesión, y hasta hoy
-// era un formulario con un nombre arriba: no decía qué es esto ni qué hace.
-// Ahora dice las dos cosas, en el orden en que las miran las apps del rubro
-// (ver el reporte): identidad, una frase, tres afirmaciones, la
-// confidencialidad en una línea, y recién ahí el formulario.
+// Es la única pantalla que ve alguien que todavía no usa Sesión: dice qué es
+// esto (presencia, una frase, tres afirmaciones, la confidencialidad) y
+// recién ahí el formulario. El texto vive en glosario.ts, sección Entrada.
 //
-// EL LAYOUT
-//
-// Mobile primero y una sola columna: la presencia arriba, el formulario
-// debajo, como estaba. En lg pasan a dos columnas —presencia a la izquierda,
-// formulario a la derecha— porque en un monitor una columna centrada de
-// 380 px con medio metro de crema a cada lado se ve vacía, no sobria.
-//
-// El texto vive todo en glosario.ts, sección Entrada: el nombre y el eslogan
-// son constantes porque todavía se está decidiendo cuál es cuál.
+// Entrar es un POST a /api/cuenta/entrar: el servidor verifica, abre la
+// sesión en la base y deja la cookie. Si llegamos acá con ?sesion=vencida
+// (el layout del dashboard encontró una cookie que ya no resuelve a una
+// sesión viva), primero se le pide al servidor que la borre, así el proxy no
+// nos manda de vuelta a / con una cookie muerta.
 
 import * as React from "react";
-import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+
 import { Button, Card, Input } from "@/components/ui";
+import { apiPost } from "@/lib/api-client";
 import {
-  ENTRADA_OLVIDASTE, ENTRADA_PASSWORD_CAMBIADA,
   ENTRADA_CONTRASENA,
   ENTRADA_EMAIL,
   ENTRADA_ERROR,
   ENTRADA_ERROR_DETALLE,
+  ENTRADA_OLVIDASTE,
+  ENTRADA_PASSWORD_CAMBIADA,
   ENTRANDO,
   ENTRAR,
 } from "@/lib/glosario";
+
 import { Presencia } from "./_components/presencia";
+
+// Texto nuevo de esta pantalla; va al glosario cuando el área 6 lo integre
+// (docs/pendientes/03-identidad.md).
+const ENTRADA_REINGRESO =
+  "Cambiaste la contraseña: entrá de nuevo en todos tus dispositivos.";
 
 export default function LoginPage() {
   const router = useRouter();
-  const aviso = useSearchParams().get("aviso") === "password-cambiada";
+  const parametros = useSearchParams();
+  const aviso = parametros.get("aviso") === "password-cambiada";
+  const sesionVencida = parametros.has("sesion");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
+  React.useEffect(() => {
+    if (!sesionVencida) return;
+    void fetch("/api/cuenta/salir", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
+  }, [sesionVencida]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(false);
     setLoading(true);
-
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
-    setLoading(false);
-
-    if (result?.ok && !result.error) {
+    try {
+      await apiPost("/api/cuenta/entrar", { email, password });
       router.push("/");
       router.refresh();
-      return;
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-
-    setError(true);
   }
 
   return (
@@ -71,7 +73,11 @@ export default function LoginPage() {
 
         <div className="mt-10 flex w-full flex-col lg:mt-0 lg:w-[380px] lg:shrink-0">
           <Card className="p-7 shadow-subtle">
-            {aviso && <p role="status" className="mb-4 text-sm text-sage-600">{ENTRADA_PASSWORD_CAMBIADA}</p>}
+            {aviso && (
+              <p role="status" className="mb-4 text-sm text-sage-600">
+                {ENTRADA_PASSWORD_CAMBIADA}. {ENTRADA_REINGRESO}
+              </p>
+            )}
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <Input
                 label={ENTRADA_EMAIL}
@@ -92,35 +98,25 @@ export default function LoginPage() {
                 required
               />
 
-              <Button
-                type="submit"
-                className="mt-[6px] w-full px-5 py-[13px]"
-                disabled={loading}
-              >
+              <Button type="submit" className="mt-[6px] w-full px-5 py-[13px]" disabled={loading}>
                 {loading ? ENTRANDO : ENTRAR}
               </Button>
-              <Link href="/recuperar" className="text-center text-sm text-sage-600 underline">{ENTRADA_OLVIDASTE}</Link>
+              <Link href="/recuperar" className="text-center text-sm text-sage-600 underline">
+                {ENTRADA_OLVIDASTE}
+              </Link>
 
               {/* Un solo mensaje para todos los casos: contraseña equivocada,
-                  email que no existe y acceso bloqueado por intentos. El
-                  porqué está escrito al lado de las constantes, en el
-                  glosario. */}
+                  email que no existe y acceso bloqueado por intentos. */}
               {error ? (
                 <div role="alert" className="mt-2 flex flex-col gap-1">
-                  <p className="text-[12px] text-[color:var(--color-error)]">
-                    {ENTRADA_ERROR}
-                  </p>
-                  <p className="text-[11px] leading-[1.45] text-ink-500">
-                    {ENTRADA_ERROR_DETALLE}
-                  </p>
+                  <p className="text-[12px] text-[color:var(--color-error)]">{ENTRADA_ERROR}</p>
+                  <p className="text-[11px] leading-[1.45] text-ink-500">{ENTRADA_ERROR_DETALLE}</p>
                 </div>
               ) : null}
             </form>
           </Card>
 
-          <p className="mt-6 text-center text-[11px] text-ink-300">
-            v1.0 · hecho con cuidado
-          </p>
+          <p className="mt-6 text-center text-[11px] text-ink-300">v1.0 · hecho con cuidado</p>
         </div>
       </div>
     </main>

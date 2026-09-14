@@ -6,9 +6,9 @@
 // lectura) ni la clave del audio (material criptográfico del pipeline). La
 // key de R2 no existe como columna: se calcula (estados.ts).
 //
-// Las columnas cifradas que sí trae (nota IA, datos, feedback, nota final,
-// comentarios) se abren en toSesionClinicaResponse con el único módulo del
-// área que sabe de cifrado (casos-uso/sesion/cifrado.ts).
+// Lo cifrado que sí trae (nota IA, datos, feedback, nota final, comentarios)
+// se pide por su campo lógico: la extensión de cifrado (src/lib/
+// prisma-encryption.ts) lo descifra al leer con el AAD de la fila.
 
 import type { Prisma } from "@prisma/client";
 
@@ -19,8 +19,6 @@ import {
   sesionClinicaResponseSchema,
   type SesionClinicaResponse,
 } from "@/lib/sesion-clinica/schema";
-
-import { descifrarSesion } from "./casos-uso/sesion/cifrado";
 
 export const SESION_SELECT = {
   id: true,
@@ -43,11 +41,11 @@ export const SESION_SELECT = {
   aprobadaEn: true,
   feedbackEstado: true,
   feedbackError: true,
-  notaIaEncrypted: true,
-  datosEncrypted: true,
-  feedbackEncrypted: true,
-  notaFinalEncrypted: true,
-  notasEdicionEncrypted: true,
+  notaIa: true,
+  datos: true,
+  feedback: true,
+  notaFinal: true,
+  notasEdicion: true,
   creadaEn: true,
   actualizadaEn: true,
   turno: {
@@ -64,7 +62,7 @@ export const SESION_SELECT = {
       },
     },
   },
-} satisfies Prisma.SesionClinicaSelect;
+} satisfies Prisma.Args<typeof db.sesionClinica, "findFirst">["select"];
 
 /** Fila exacta que devuelve Prisma para SESION_SELECT. */
 type FilaSesionSelect = Prisma.Result<
@@ -104,8 +102,6 @@ function aIso(fecha: Date | null | undefined): string | null {
 export function toSesionClinicaResponse(
   fila: FilaSesionClinica,
 ): SesionClinicaResponse {
-  const campos = descifrarSesion(fila.id, fila);
-
   return sesionClinicaResponseSchema.parse({
     id: fila.id,
     turnoId: fila.turnoId,
@@ -119,12 +115,12 @@ export function toSesionClinicaResponse(
     falloCodigo: fila.falloCodigo,
     falloDetalle: fila.falloDetalle,
     transcripcionDisponible: fila.modeloAsr !== null,
-    notaIa: campos.notaIa ?? null,
-    notaFinal: campos.notaFinal ?? null,
-    notasEdicion: campos.notasEdicion ?? null,
-    datos: parseDatosEstructurados(campos.datos),
+    notaIa: fila.notaIa,
+    notaFinal: fila.notaFinal,
+    notasEdicion: fila.notasEdicion,
+    datos: parseDatosEstructurados(fila.datos),
     feedbackEstado: fila.feedbackEstado,
-    feedback: campos.feedback ?? null,
+    feedback: fila.feedback ?? null,
     feedbackError: fila.feedbackError,
     modeloAsr: fila.modeloAsr,
     modeloLlm: fila.modeloLlm,

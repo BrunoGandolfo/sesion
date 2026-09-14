@@ -23,7 +23,6 @@ import type { SpeechAnalytics } from "@/lib/sesion-clinica/schema";
 
 import { emitirTicket } from "../../tickets";
 
-import { descifrarSesion } from "./cifrado";
 import type { ClienteSesion } from "./transicion";
 import { transicionar } from "./transicion";
 
@@ -147,8 +146,9 @@ export async function reclamarSesiones({
         modeloAsr: true,
         speechAnalytics: true,
         audioEstado: true,
-        audioClaveEncrypted: true,
-        transcripcionEncrypted: true,
+        // Campos lógicos: la extensión los descifra al leer.
+        audioClave: true,
+        transcripcion: true,
         turno: { select: { pacienteId: true } },
         segmentos: {
           select: { indice: true, iv: true, bytes: true },
@@ -159,22 +159,21 @@ export async function reclamarSesiones({
         },
       },
     });
-    const campos = descifrarSesion(c.id, fila);
     const pacienteId = fila.turno.pacienteId;
 
     const checkpoint: CheckpointEntregado | null =
-      campos.transcripcion && fila.modeloAsr
+      fila.transcripcion && fila.modeloAsr
         ? {
-            transcripcion: campos.transcripcion,
+            transcripcion: fila.transcripcion,
             speechAnalytics: (fila.speechAnalytics as SpeechAnalytics | null) ?? null,
             modeloAsr: fila.modeloAsr,
           }
         : null;
 
     const audio: AudioEntregado | null =
-      !checkpoint && fila.audioEstado === "en_r2" && campos.audioClave
+      !checkpoint && fila.audioEstado === "en_r2" && fila.audioClave
         ? {
-            clave: campos.audioClave,
+            clave: fila.audioClave,
             segmentos: fila.segmentos.map((s) => ({
               indice: s.indice,
               key: keyAudio(fila.organizationId, c.id, s.indice),

@@ -21,7 +21,7 @@ import type { ResultadoTrabajo } from "@/lib/sesion-clinica/schema";
 
 import { ApiError } from "../../responses";
 import type { TrabajoAutorizado } from "../../tickets";
-import { cifrarSesion } from "../sesion/cifrado";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 
 import { describirError } from "./politica";
 import { resolverTrabajo, type EstadoResuelto } from "./resolver";

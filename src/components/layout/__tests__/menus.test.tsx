@@ -5,10 +5,10 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import { Sidebar } from "@/components/layout/sidebar";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
-vi.mock("next-auth/react", () => ({
-  useSession: () => ({ data: { user: { name: "Mariana Roldán" } } }),
-  signOut: vi.fn(),
+vi.mock("@/components/layout/providers", () => ({
+  useSesionActual: () => ({ nombre: "Mariana Roldán", email: "mariana@example.test" }),
 }));
+vi.mock("@/lib/sesion-cliente", () => ({ cerrarSesion: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({ apiGet: async () => [] }));
 vi.mock("@/components/ayuda/panel-ayuda", () => ({
   PanelAyuda: ({ abierto, alCerrar }: { abierto: boolean; alCerrar: () => void }) =>

@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/recordatorios",
@@ -11,6 +16,10 @@
     {
       "path": "/api/cron/trabajos",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/mantenimiento",
+      "schedule": "0 4 * * *"
     }
   ]
 }
