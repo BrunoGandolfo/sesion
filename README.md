@@ -58,14 +58,14 @@ GitHub Actions: CI (typecheck, build, lint, tests) y backup nocturno cifrado
 | Pieza | Tecnología |
 | --- | --- |
 | Frontend y API | Next.js 16 (App Router), React 19, TypeScript strict, Tailwind 4 |
-| Auth | Auth.js v5 (credenciales, JWT) |
+| Auth | Propia: cookie opaca `__Host-sesion` + tabla `sesiones_acceso` (revocable; cambiar la contraseña cierra todas) |
 | ORM y base | Prisma 5.22, PostgreSQL 17 en Neon (ramas `production` y `test`) |
 | Almacenamiento de audio | Cloudflare R2, bucket `sesion-audio`, subida con URL prefirmada |
 | Worker | Python 3 en Railway (`processor/`), sin SDKs de ASR: cliente REST |
 | Transcripción | AssemblyAI `universal-3-5-pro`, fallback `universal-2`, diarización con roles; transcript borrado por API al terminar |
 | Notas y feedback | Anthropic `claude-sonnet-5` con structured outputs, workspace dedicado con retención deshabilitada |
 | SMS | Twilio |
-| Cifrado en reposo | AES-256-GCM en una extensión de Prisma Client |
+| Cifrado en reposo | AES-256-GCM (`ENC2`, blob atado a su fila por AAD) en una extensión de Prisma Client; llavero rotable en `CLAVES_CIFRADO` |
 | Backups | `pg_dump` 17 → gpg AES-256 → R2, diario, retención 30 días (GitHub Actions) |
 | CI | GitHub Actions: `tsc --noEmit`, `next build`, ESLint, Vitest secuencial contra la rama `test` |
 | Errores | Sentry (opcional) |
@@ -93,6 +93,8 @@ Completar en `.env` como mínimo:
   app no arranca.
 - `PROCESSING_SECRET` y `CRON_SECRET` (cualquier valor largo en local).
 - `SEED_SECRET` y `SEED_USER_PASSWORD` para crear el usuario inicial.
+- `INVITACIONES_PERMITIDAS` (emails separados por coma) si querés crear
+  invitaciones desde una cuenta; sin la variable nadie invita.
 
 Opcionales: Twilio (sin `TWILIO_SMS_FROM` el cron no envía nada), Sentry,
 `ALERTA_WEBHOOK_URL`. Para grabar y procesar sesiones hacen falta además las

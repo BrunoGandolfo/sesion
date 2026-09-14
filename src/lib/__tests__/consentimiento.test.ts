@@ -1,10 +1,15 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { randomBytes } from "node:crypto";
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import * as hechos from "@/lib/consentimiento-hechos";
 import {
   CONSENTIMIENTO_VERSION,
   esConsentimientoVigente,
   generarTextoConsentimiento,
+  sugiereRefirmar,
 } from "@/lib/consentimiento";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 
 const baseParams = {
   nombrePaciente: "María González",
@@ -13,186 +18,135 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 1.1", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("1.1");
+  it("la versión vigente del texto es la 2.0 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.0");
+    expect(sugiereRefirmar("1.1")).toBe(true);
+    expect(sugiereRefirmar("2.0")).toBe(false);
   });
 
-  // Texto legal completo: cualquier cambio de redacción tiene que ser
-  // deliberado (y, en general, subir CONSENTIMIENTO_VERSION).
-  it("genera el texto legal completo con los datos interpolados", () => {
-    expect(generarTextoConsentimiento(baseParams)).toMatchInlineSnapshot(`
-      "Consentimiento informado para grabación de sesiones
-      Versión 1.1
-
-      Hola María González.
-
-      Antes de empezar queremos contarte cómo funciona la grabación de las sesiones y pedirte que la autorices por escrito. Tomate el tiempo de leerlo: se trata de tus datos y de tu intimidad.
-
-      ¿Qué se graba?
-      Se graba el audio de tu sesión de psicoterapia con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo. No se graba video.
-
-      ¿Para qué se graba?
-      El audio se usa para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: el registro escrito que Lic. Ana Pérez guarda en tu historia clínica. Le permite estar más presente durante la sesión y dedicarle menos tiempo a escribir después.
-
-      ¿Quién escucha el audio?
-      Ninguna persona además de Lic. Ana Pérez. Nadie más de su consultorio, ni de ninguna empresa, escucha tus sesiones.
-
-      El audio sí pasa, de forma automática y sin que ninguna persona lo oiga, por dos servicios de empresas que están en Estados Unidos. Es importante que lo sepas antes de firmar:
-
-      1. AssemblyAI convierte el audio en texto. Cuando termina, borra de sus servidores tanto ese texto como la copia del audio.
-      2. Anthropic toma ese texto y redacta la nota clínica. Trabaja bajo un acuerdo que no le permite conservar el contenido ni usarlo para entrenar sus sistemas.
-
-      A esos servicios no se les envía tu nombre, tu teléfono ni tu documento: reciben el audio y el texto de la sesión, nada más. Tené en cuenta que, si durante la sesión se dicen nombres en voz alta, esos nombres viajan dentro del audio.
-
-      ¿Cómo viaja y dónde se guarda el audio?
-      El audio se cifra en el mismo teléfono de Lic. Ana Pérez apenas termina la grabación, antes de salir del dispositivo. Queda guardado, siempre cifrado, en un servicio de almacenamiento, hasta que se escribe la nota. La clave para abrirlo la tiene solamente esta aplicación.
-
-      ¿Cuánto tiempo se guarda el audio?
-      Hasta que Lic. Ana Pérez revisa y aprueba la nota clínica, en general el mismo día de la sesión. En ese momento el audio se borra y además se destruye su clave, así que cualquier copia que llegara a quedar en algún lado sería imposible de abrir.
-
-      ¿Qué queda guardado entonces?
-      Quedan dos cosas, las dos cifradas en la base de datos de la aplicación y accesibles solamente para Lic. Ana Pérez:
-
-      - La nota clínica, que forma parte de tu historia clínica igual que las notas que ella escribiría a mano.
-      - La transcripción de la sesión, que es el texto de lo que se habló.
-
-      El audio no queda.
-
-      ¿Podés cambiar de opinión?
-      Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a Lic. Ana Pérez. A partir de ese momento las sesiones siguientes no se graban. Esto no afecta en nada la continuidad de tu tratamiento ni tu relación con ella.
-
-      ¿Es obligatorio aceptar?
-      No. La grabación es totalmente opcional. Si preferís que no se grabe, la sesión sigue de manera normal y Lic. Ana Pérez toma notas como siempre. No hay ninguna consecuencia por decir que no.
-
-      Marco legal
-      Esta autorización se enmarca en la Ley 18.331 de Protección de Datos Personales de la República Oriental del Uruguay, que exige que el tratamiento de datos sensibles —como los datos de salud— se haga con tu consentimiento previo, libre, expreso e informado. Como parte de tus sesiones se procesa fuera del país, esta autorización incluye esa transferencia internacional de datos. Tenés derecho a acceder a tus datos, a pedir que se corrijan y a pedir que se eliminen.
-
-      Al firmar, declaro que:
-      - Leí y entendí esta información
-      - Autorizo la grabación de mis sesiones con Lic. Ana Pérez
-      - Entiendo que el audio y su transcripción se procesan en los servicios del exterior mencionados más arriba
-      - Sé que puedo revocar esta autorización cuando quiera
-      "
-    `);
+  it("interpola los tres datos y lleva la versión", () => {
+    const texto = generarTextoConsentimiento(baseParams);
+    expect(texto).toContain("Versión 2.0");
+    expect(texto).toContain("Hola María González.");
+    expect(texto).toContain("con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo");
   });
 });
 
-// Estas afirmaciones son el motivo por el que existe la versión 1.1. Si
-// alguna se rompe, el texto volvió a describir un pipeline que no es el que
-// corre, y deja de ser consentimiento informado bajo la Ley 18.331.
-describe("el texto describe el pipeline real", () => {
+// Cada frase que afirma algo sobre el tratamiento sale de una constante de
+// consentimiento-hechos.ts. Si una constante cambia y la frase no, o al revés,
+// el texto miente: este bloque es el que lo grita.
+describe("cada frase tiene el hecho que la respalda", () => {
   const texto = generarTextoConsentimiento(baseParams);
 
-  it("nombra a los dos proveedores externos y dice dónde están", () => {
-    expect(texto).toContain("AssemblyAI");
-    expect(texto).toContain("Anthropic");
-    expect(texto).toContain("Estados Unidos");
+  it("solo audio", () => {
+    expect([...hechos.MEDIOS_CAPTURA]).toEqual(["audio"]);
+    expect(texto).toContain("No se graba video.");
   });
 
-  it("dice que AssemblyAI borra el audio y el texto al terminar", () => {
-    expect(texto).toContain(
-      "borra de sus servidores tanto ese texto como la copia del audio",
-    );
+  it("el respaldo local va cifrado por tramos con clave por sesión", () => {
+    expect(hechos.RESPALDO_LOCAL_CIFRADO).toBe(true);
+    expect(hechos.CLAVE_POR_SESION).toBe(true);
+    expect(texto).toContain("se cifra en el teléfono de Lic. Ana Pérez, por tramos, con una clave que se crea para esa sesión");
+    expect(texto).toContain("En el teléfono no queda audio sin cifrar.");
+    expect(texto).not.toContain("todavía no está cifrado");
   });
 
-  it("dice que Anthropic no conserva el contenido", () => {
-    expect(texto).toContain("no le permite conservar el contenido");
+  it("nombra a los proveedores reales y dónde están", () => {
+    for (const p of Object.values(hechos.PROVEEDORES)) expect(texto).toContain(p.nombre);
+    expect(texto).toContain(`AssemblyAI, una empresa de ${hechos.PROVEEDORES.assemblyai.pais}`);
+    expect(texto).toContain(`Anthropic, otra empresa de ${hechos.PROVEEDORES.anthropic.pais}`);
   });
 
-  it("dice que el audio se cifra en el teléfono antes de salir", () => {
-    expect(texto).toContain("se cifra en el mismo teléfono");
-    expect(texto).toContain("antes de salir del dispositivo");
+  it("el vocabulario con nombres propios SÍ viaja a AssemblyAI, y lo dice", () => {
+    expect(hechos.VOCABULARIO_A_ASR).toBe(true);
+    expect(hechos.VOCABULARIO_INCLUYE_NOMBRES).toBe(true);
+    expect(texto).toContain("términos clínicos y nombres propios, que pueden incluir el tuyo");
+    expect(texto).toContain("y las palabras de la lista");
+    expect(texto).not.toContain("no se les envía tu nombre");
   });
 
-  it("dice que el audio se borra al aprobar la nota, con su clave", () => {
-    expect(texto).toContain("revisa y aprueba la nota clínica");
-    expect(texto).toContain("se destruye su clave");
+  it("el borrado en AssemblyAI se reintenta hasta la confirmación, no se da por hecho", () => {
+    expect(hechos.ASR_BORRADO_CON_REINTENTO).toBe(true);
+    expect(texto).toContain("repite el pedido hasta que el servicio confirma que lo hizo");
+    expect(texto).not.toContain("borra de sus servidores");
   });
 
-  it("avisa que la transcripción también queda guardada, cifrada", () => {
-    expect(texto).toContain("La transcripción de la sesión");
-    expect(texto).toContain("cifradas en la base de datos");
+  it("Anthropic recibe la transcripción y el resumen del proceso, con retención cero", () => {
+    expect(hechos.LLM_RECIBE_CONTEXTO).toBe(true);
+    expect(hechos.ANTHROPIC_RETENCION_CERO).toBe(true);
+    expect(texto).toContain("el resumen de tu proceso hasta ese día");
+    expect(texto).toContain("no conserve ese contenido ni lo use para entrenar");
   });
 
-  it("cubre la transferencia internacional y la Ley 18.331", () => {
-    expect(texto).toContain("Ley 18.331");
-    expect(texto).toContain("transferencia internacional de datos");
+  it("no promete lo que no puede verificar sobre las personas de los proveedores", () => {
+    expect(texto).toContain("esta aplicación no puede verificarlo");
+    expect(texto).not.toContain("Ninguna persona además de");
   });
 
-  it("conserva el derecho a revocar", () => {
+  it("no menciona el acceso técnico del administrador (decisión del dueño)", () => {
+    expect(texto).not.toMatch(/administra/i);
+  });
+
+  it("el audio se borra al aprobar, la clave se destruye, y el borrado se reintenta", () => {
+    expect(hechos.LIMPIEZA_AUDIO_REINTENTA).toBe(true);
+    expect(texto).toContain("revisa y aprueba la nota");
+    expect(texto).toContain("destruye la clave que abre el audio y borra el archivo; si el borrado falla, lo reintenta");
+    expect(texto).not.toContain("imposible de abrir");
+  });
+
+  it("los backups se declaran con su plazo y que pueden contener la clave cifrada", () => {
+    expect(hechos.RETENCION_BACKUPS_DIAS).toBe(30);
+    expect(hechos.BACKUP_INCLUYE_CLAVE_AUDIO).toBe(true);
+    expect(texto).toContain("se guardan 30 días");
+    expect(texto).toContain("sí pueden contener, cifrada, la clave de un audio");
+  });
+
+  it("dice qué queda guardado, cifrado: nota, transcripción, resumen, consentimiento y firma", () => {
+    expect(texto).toContain("La transcripción de la sesión.");
+    expect(texto).toContain("El resumen de tu proceso que ella mantiene.");
+    expect(texto).toContain("Este consentimiento y tu firma.");
+    expect(texto).toContain("El audio no queda.");
+  });
+
+  it("revocar no borra la historia clínica, y se puede revocar cuando quiera", () => {
+    expect(hechos.REVOCAR_BORRA_HISTORIA).toBe(false);
+    expect(texto).toContain("Lo ya guardado sigue formando parte de tu historia clínica.");
     expect(texto).toContain("Sé que puedo revocar esta autorización cuando quiera");
   });
 
-  it("ya no afirma lo que la versión 1.0 afirmaba de más", () => {
-    // Las dos frases falsas de la 1.0.
-    expect(texto).not.toContain("servidor privado");
-    expect(texto).not.toContain(
-      "ni queda guardado en servidores de empresas externas",
-    );
-    expect(texto).not.toContain("Solo queda la nota clínica escrita");
+  it("marco legal y transferencia internacional", () => {
+    expect(texto).toContain(hechos.MARCO_LEGAL.ley);
+    expect(texto).toContain("transferencia internacional");
   });
 });
 
 describe("esConsentimientoVigente", () => {
-  it("devuelve true cuando está firmado y no revocado", () => {
-    expect(
-      esConsentimientoVigente({
-        firmadoEn: new Date("2026-01-01"),
-        revocadoEn: null,
-      }),
-    ).toBe(true);
-  });
-
-  it("devuelve false cuando tiene fecha de revocación", () => {
-    expect(
-      esConsentimientoVigente({
-        firmadoEn: new Date("2026-01-01"),
-        revocadoEn: new Date("2026-02-01"),
-      }),
-    ).toBe(false);
-  });
-
-  it("devuelve false cuando el consentimiento es null", () => {
+  it("firmado y no revocado → vigente; revocado o null → no", () => {
+    expect(esConsentimientoVigente({ firmadoEn: new Date("2026-01-01"), revocadoEn: null })).toBe(true);
+    expect(esConsentimientoVigente({ firmadoEn: new Date("2026-01-01"), revocadoEn: new Date("2026-02-01") })).toBe(false);
     expect(esConsentimientoVigente(null)).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Auditoría de la ruta: POST /api/pacientes/[id]/consentimiento y su DELETE.
-//
-// Firmar y revocar la autorización de grabación es el acto legal más sensible
-// de la app —es lo que habilita grabar a una persona— y hasta ahora no dejaba
-// rastro en eventos_auditoria. Estos casos son el guardián de que lo deje.
-//
-// Son unitarios: la base y la sesión están mockeadas. No prueban que Prisma
-// escriba (eso ya lo cubren los tests de integración de la tabla), prueban que
-// la ruta LLAME al registro y con qué.
+// La ruta: cifra texto y firma atados al id, no guarda IP, y audita sin
+// texto, sin firma y sin IP. Base y sesión dobladas.
 // ---------------------------------------------------------------------------
 
-const sesionActual = vi.hoisted(() => ({
-  organizationId: "org-1",
-  userId: "user-1",
-}));
-
+const sesionActual = vi.hoisted(() => ({ organizationId: "org-1", userId: "user-1" }));
 const baseDeDatos = vi.hoisted(() => ({
-  /** Eventos que la ruta mandó a eventos_auditoria, en orden. */
   eventos: [] as Array<Record<string, unknown>>,
-  /** Cuántos consentimientos vigentes encuentra el updateMany de turno. */
+  creados: [] as Array<Record<string, unknown>>,
   vigentes: 0,
-  /** null para que el paciente "no exista". */
-  paciente: { id: "pac-1", nombre: "María", apellido: "González" } as {
-    id: string;
-    nombre: string;
-    apellido: string;
-  } | null,
+  paciente: { id: "pac-1", nombre: "María", apellido: "González" } as { id: string; nombre: string; apellido: string } | null,
+  /** Lo que el GET encuentra firmado (findFirst), y con qué `where` preguntó. */
+  firmado: null as null | { id: string; pacienteId: string; firmadoEn: Date; textoVersion: string; revocadoEn: Date | null },
+  ultimoWhere: null as null | Record<string, unknown>,
 }));
 
-vi.mock("@/lib/auth-utils", () => ({
-  getCurrentOrganizationId: async () => sesionActual.organizationId,
-  getServerSession: async () => ({
-    organizationId: sesionActual.organizationId,
-    userId: sesionActual.userId,
-  }),
+vi.mock("@/app/api/_lib/auth", () => ({
+  getOrganizationId: async () => sesionActual.organizationId,
+  getSessionActor: async () => ({ ...sesionActual, sesionId: "s", rol: "titular", nombre: "Ana", email: "a@example.test" }),
 }));
 
 vi.mock("@/lib/db", () => {
@@ -201,151 +155,119 @@ vi.mock("@/lib/db", () => {
     baseDeDatos.vigentes = 0;
     return { count };
   };
-
   const db = {
     paciente: { findFirst: async () => baseDeDatos.paciente },
-    configuracion: {
-      findUnique: async () => ({
-        nombreProfesional: "Lic. Ana Pérez",
-        direccion: "Av. 18 de Julio 1234, Montevideo",
-      }),
+    configuracion: { findUnique: async () => ({ nombreProfesional: "Lic. Ana Pérez", direccion: "Av. 18 de Julio 1234, Montevideo" }) },
+    consentimientoGrabacion: {
+      updateMany: revocarVigentes,
+      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+        baseDeDatos.ultimoWhere = where;
+        return baseDeDatos.firmado;
+      },
     },
-    consentimientoGrabacion: { updateMany: revocarVigentes },
     eventoAuditoria: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         baseDeDatos.eventos.push(data);
         return data;
       },
     },
-    $transaction: async (
-      fn: (tx: {
-        consentimientoGrabacion: {
-          updateMany: typeof revocarVigentes;
-          create: (args: unknown) => Promise<unknown>;
-        };
-      }) => Promise<unknown>,
-    ) =>
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         consentimientoGrabacion: {
           updateMany: revocarVigentes,
-          create: async () => ({
-            id: "cons-1",
-            pacienteId: "pac-1",
-            firmadoEn: new Date("2026-03-01T12:00:00Z"),
-            textoVersion: CONSENTIMIENTO_VERSION,
-            revocadoEn: null,
-          }),
+          create: async ({ data }: { data: Record<string, unknown> }) => {
+            baseDeDatos.creados.push(data);
+            return { id: data.id, pacienteId: "pac-1", firmadoEn: new Date("2026-03-01T12:00:00Z"), textoVersion: CONSENTIMIENTO_VERSION, revocadoEn: null };
+          },
         },
       }),
   };
-
   return { db };
 });
 
-const { POST, DELETE } = await import(
-  "@/app/api/pacientes/[id]/consentimiento/route"
-);
-
+const { GET, POST, DELETE } = await import("@/app/api/pacientes/[id]/consentimiento/route");
 const params = { params: Promise.resolve({ id: "pac-1" }) };
 
 function pedidoFirma(): Request {
   return new Request("http://localhost/api/pacientes/pac-1/consentimiento", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-forwarded-for": "200.40.1.7, 10.0.0.1",
-    },
-    body: JSON.stringify({
-      firmaDigital: "María González",
-      textoVersion: CONSENTIMIENTO_VERSION,
-    }),
+    headers: { "Content-Type": "application/json", "x-forwarded-for": "200.40.1.7, 10.0.0.1" },
+    body: JSON.stringify({ firmaDigital: "data:image/png;base64,FIRMA", textoVersion: CONSENTIMIENTO_VERSION }),
   });
 }
 
-function pedidoRevocacion(): Request {
-  return new Request("http://localhost/api/pacientes/pac-1/consentimiento", {
-    method: "DELETE",
-    headers: { "x-forwarded-for": "200.40.1.7" },
+describe("la ruta de consentimiento", () => {
+  beforeAll(() => {
+    process.env.CLAVES_CIFRADO = `1=${randomBytes(32).toString("base64")}`;
+    __resetLlaveroForTests();
   });
-}
-
-describe("auditoría de la autorización de grabación", () => {
   beforeEach(() => {
     baseDeDatos.eventos = [];
+    baseDeDatos.creados = [];
     baseDeDatos.vigentes = 0;
-    baseDeDatos.paciente = {
-      id: "pac-1",
-      nombre: "María",
-      apellido: "González",
-    };
+    baseDeDatos.paciente = { id: "pac-1", nombre: "María", apellido: "González" };
+    baseDeDatos.firmado = null;
+    baseDeDatos.ultimoWhere = null;
   });
 
-  it("firmar registra consentimiento.firmar contra la paciente", async () => {
+  it("una firma de la versión 1.1 sigue vigente: el GET la devuelve vigente y solo sugiere re-firmar", async () => {
+    baseDeDatos.firmado = { id: "c-11", pacienteId: "pac-1", firmadoEn: new Date("2026-01-10T12:00:00Z"), textoVersion: "1.1", revocadoEn: null };
+    const res = await GET(new Request("http://localhost/x"), params);
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.consentimiento).toMatchObject({ textoVersion: "1.1", vigente: true, sugiereRefirmar: true });
+    // La vigencia se decide por revocación, nunca por versión del texto.
+    expect(baseDeDatos.ultimoWhere).toEqual({ pacienteId: "pac-1", organizationId: "org-1", revocadoEn: null });
+    expect(baseDeDatos.ultimoWhere).not.toHaveProperty("textoVersion");
+  });
+
+  it("guarda texto y firma cifrados (ENC2) atados al id de la fila, y ninguna IP", async () => {
     const respuesta = await POST(pedidoFirma(), params);
     expect(respuesta.status).toBe(201);
+    const [fila] = baseDeDatos.creados;
+    expect(typeof fila.id).toBe("string");
+    expect(Buffer.isBuffer(fila.textoCompletoEncrypted)).toBe(true);
+    expect((fila.textoCompletoEncrypted as Buffer).subarray(0, 4).toString("ascii")).toBe("ENC2");
+    expect(Buffer.isBuffer(fila.firmaDigitalEncrypted)).toBe(true);
+    expect(fila).not.toHaveProperty("textoCompleto");
+    expect(fila).not.toHaveProperty("firmaDigital");
+    expect(fila).not.toHaveProperty("ipOrigen");
+    const { descifrar, aadDe } = await import("@/lib/encryption");
+    const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
+    expect(texto).toContain("Hola María González.");
+    expect(texto).toContain("Versión 2.0");
+    const cuerpo = await respuesta.json();
+    expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
+  });
 
+  it("firmar registra consentimiento.firmar sin IP, sin texto y sin firma", async () => {
+    await POST(pedidoFirma(), params);
     expect(baseDeDatos.eventos).toHaveLength(1);
     const [evento] = baseDeDatos.eventos;
-    expect(evento).toMatchObject({
-      organizationId: "org-1",
-      actorTipo: "usuario",
-      actorId: "user-1",
-      accion: "consentimiento.firmar",
-      entidad: "paciente",
-      entidadId: "pac-1",
-    });
-    expect(evento.detalle).toEqual({
-      consentimientoId: "cons-1",
-      textoVersion: CONSENTIMIENTO_VERSION,
-      reemplazados: 0,
-      ip: "200.40.1.7",
-    });
+    expect(evento).toMatchObject({ organizationId: "org-1", actorTipo: "usuario", actorId: "user-1", accion: "consentimiento.firmar", entidad: "paciente", entidadId: "pac-1" });
+    expect(evento.detalle).toEqual({ consentimientoId: baseDeDatos.creados[0].id, textoVersion: CONSENTIMIENTO_VERSION, reemplazados: 0 });
+    const detalle = JSON.stringify(evento.detalle);
+    expect(detalle).not.toContain("200.40.1.7");
+    expect(detalle).not.toContain("María");
+    expect(detalle).not.toContain("FIRMA");
   });
 
   it("firmar sobre una autorización vigente deja constancia del reemplazo", async () => {
     baseDeDatos.vigentes = 1;
-
     await POST(pedidoFirma(), params);
-
     expect(baseDeDatos.eventos[0]?.detalle).toMatchObject({ reemplazados: 1 });
   });
 
-  it("revocar registra consentimiento.revocar contra la paciente", async () => {
+  it("revocar registra consentimiento.revocar sin IP; sin nada vigente es 404 y no hay evento", async () => {
     baseDeDatos.vigentes = 1;
+    const ok = await DELETE(new Request("http://localhost/x", { method: "DELETE", headers: { "x-forwarded-for": "200.40.1.7" } }), params);
+    expect(ok.status).toBe(200);
+    expect(baseDeDatos.eventos[0]).toMatchObject({ accion: "consentimiento.revocar", entidadId: "pac-1" });
+    expect(baseDeDatos.eventos[0].detalle).toEqual({ revocados: 1 });
 
-    const respuesta = await DELETE(pedidoRevocacion(), params);
-    expect(respuesta.status).toBe(200);
-
-    expect(baseDeDatos.eventos).toHaveLength(1);
-    const [evento] = baseDeDatos.eventos;
-    expect(evento).toMatchObject({
-      organizationId: "org-1",
-      actorTipo: "usuario",
-      actorId: "user-1",
-      accion: "consentimiento.revocar",
-      entidad: "paciente",
-      entidadId: "pac-1",
-    });
-    expect(evento.detalle).toEqual({ revocados: 1, ip: "200.40.1.7" });
-  });
-
-  // El registro es de hechos, no de intentos: si no había nada vigente que
-  // revocar la ruta contesta 404 y no puede quedar un evento diciendo que se
-  // revocó algo.
-  it("un DELETE que no revoca nada no genera evento", async () => {
-    const respuesta = await DELETE(pedidoRevocacion(), params);
-
-    expect(respuesta.status).toBe(404);
+    baseDeDatos.eventos = [];
+    const nada = await DELETE(new Request("http://localhost/x", { method: "DELETE" }), params);
+    expect(nada.status).toBe(404);
     expect(baseDeDatos.eventos).toHaveLength(0);
-  });
-
-  // Ni el texto legal completo ni la firma digital —el documento en sí— pueden
-  // filtrarse al registro, que no está pensado para guardar datos personales.
-  it("el evento de firma no contiene el texto ni la firma", async () => {
-    await POST(pedidoFirma(), params);
-
-    const detalle = JSON.stringify(baseDeDatos.eventos[0]?.detalle);
-    expect(detalle).not.toContain("María");
-    expect(detalle).not.toContain("Consentimiento informado");
   });
 });

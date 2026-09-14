@@ -2,7 +2,7 @@
 import * as React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { asegurarLineaContacto, buildSmsMessage, LINEA_CONTACTO } from "@/lib/sms-texto";
+import { asegurarLineaContacto, buildSmsMessage, LINEA_CONTACTO } from "@/lib/sms/texto";
 import { htmlATemplate } from "../editor-recordatorio";
 import { MensajeRecordatorio } from "../mensaje-recordatorio";
 

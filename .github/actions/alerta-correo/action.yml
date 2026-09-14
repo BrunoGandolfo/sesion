@@ -1,0 +1,60 @@
+# Alerta por correo desde un workflow, vía Resend. Es el único canal de
+# alertas del sistema (decisión del dueño): lo mismo que hace
+# src/lib/alertas.ts desde la app, hecho con curl para GitHub Actions.
+#
+# Uso, en un step con `if: failure()` (o donde haga falta):
+#
+#   - uses: ./.github/actions/alerta-correo
+#     with:
+#       asunto: "Backup de Sesión falló"
+#       texto: "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+#     env:
+#       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+#       ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
+#
+# Si faltan los secrets, el step FALLA con un mensaje que lo dice: una alerta
+# que no se puede mandar es un problema de configuración y tiene que verse en
+# rojo, no salir por `echo` y dejar el workflow en verde.
+
+name: Alerta por correo
+description: Manda un correo de alerta por Resend a la casilla del dueño.
+
+inputs:
+  asunto:
+    description: Asunto del correo (se le antepone "[Sesión]").
+    required: true
+  texto:
+    description: Cuerpo en texto plano. Sin datos clínicos ni secretos.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Enviar correo por Resend
+      shell: bash
+      env:
+        ASUNTO: ${{ inputs.asunto }}
+        TEXTO: ${{ inputs.texto }}
+      run: |
+        set -euo pipefail
+        if [ -z "${RESEND_API_KEY:-}" ] || [ -z "${ALERTA_CORREO:-}" ]; then
+          echo "ERROR: faltan RESEND_API_KEY o ALERTA_CORREO (secrets de Actions): no se pudo mandar la alerta \"${ASUNTO}\"." >&2
+          exit 1
+        fi
+        payload="$(jq -nc \
+          --arg from "Sesión <no-responder@sesionapp.app>" \
+          --arg to "${ALERTA_CORREO}" \
+          --arg subject "[Sesión] ${ASUNTO}" \
+          --arg text "${TEXTO}" \
+          '{from: $from, to: [$to], subject: $subject, text: $text}')"
+        codigo="$(curl --silent --show-error --max-time 15 \
+          -o /tmp/resend-respuesta.json -w '%{http_code}' \
+          -X POST https://api.resend.com/emails \
+          -H "Authorization: Bearer ${RESEND_API_KEY}" \
+          -H "Content-Type: application/json" \
+          --data "${payload}")"
+        if [ "${codigo}" -lt 200 ] || [ "${codigo}" -ge 300 ]; then
+          echo "ERROR: Resend respondió HTTP ${codigo} al mandar \"${ASUNTO}\"." >&2
+          exit 1
+        fi
+        echo "Alerta enviada: ${ASUNTO}"

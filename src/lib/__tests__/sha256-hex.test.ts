@@ -1,13 +1,13 @@
-// El sha256 del email pasó de `node:crypto` a Web Crypto porque el módulo que
-// lo usa (src/lib/login-eventos.ts) entra en el bundle edge del middleware.
+// El sha256 es Web Crypto (src/lib/crypto.ts) para que sirva en cualquier
+// runtime; lo usan el contador de intentos (clave `email:<sha256 hex>` en
+// intentos_acceso), el hash de los tokens de sesión, de recuperación y de
+// invitación, y el de los tickets del worker.
 //
 // Lo que este test protege NO es "que hashee": es que hashee EXACTAMENTE
-// igual que antes. En `eventos_auditoria` ya hay filas escritas con
-// `entidadId = "email:<sha256 hex>"`, y son el contador del rate limit del
-// login. Si el hex cambiara aunque sea en un byte, esas filas dejarían de
-// coincidir con la clave nueva y el bloqueo por email arrancaría de cero:
-// quien está a mitad de un ataque por fuerza bruta se despertaría con el
-// contador limpio.
+// igual que `node:crypto`. Las filas de intentos_acceso y los hashes de
+// tokens ya escritos dependen de ese valor: si el hex cambiara aunque sea en
+// un byte, el bloqueo por email arrancaría de cero y ninguna sesión abierta
+// resolvería.
 //
 // Dos capas:
 //
@@ -20,9 +20,9 @@
 //      importan de verdad (emails con acentos, mayúsculas, largos) sin tener
 //      que pegar un hex a mano por cada una.
 //
-// `node:crypto` acá es legal: este archivo es un test, corre en Node y no lo
-// alcanza el middleware. La regla 9 de AGENTS.md es sobre la cadena del
-// middleware; src/lib/__tests__/middleware-edge.test.ts la vigila.
+// `node:crypto` acá es legal: este archivo es un test y corre en Node. La
+// regla 9 de AGENTS.md es sobre la cadena de imports del proxy;
+// src/lib/__tests__/proxy-liviano.test.ts la vigila.
 
 import { createHash } from "node:crypto";
 

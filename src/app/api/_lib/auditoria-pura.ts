@@ -44,6 +44,12 @@ const CLAVES_PROHIBIDAS: ReadonlySet<string> = new Set([
   "datosEstructurados",
   "claveCifrado",
   "iv",
+  // IP y navegador viven en sesiones_acceso e intentos_acceso, con purga a
+  // 30 días. El rastro clínico es para siempre y no los lleva.
+  "ip",
+  "ipOrigen",
+  "userAgent",
+  "user_agent",
 ]);
 
 type Primitivo = string | number | boolean | null;

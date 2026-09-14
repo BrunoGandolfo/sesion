@@ -36,11 +36,12 @@ export async function terminosAsr({
       organizationId,
       activo: true,
       OR: [
-        { scope: "global" },
-        { scope: "profesional" },
-        { scope: "paciente", pacienteId },
+        { alcance: "global" },
+        { alcance: "profesional" },
+        { alcance: "paciente", pacienteId },
       ],
     },
+    // `termino` es el campo lógico: la extensión lo descifra al leer.
     select: { termino: true },
   });
 

@@ -14,11 +14,13 @@
     "test:unit": "VITEST_SUITE=unit vitest run",
     "test:integration": "VITEST_SUITE=integration vitest run",
     "test:watch": "vitest",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:test:up": "docker compose up -d --wait postgres-test && DATABASE_URL=postgresql://postgres:postgres@localhost:5433/sesion_test prisma migrate deploy",
+    "db:test:down": "docker compose down -v",
+    "guardias": "node scripts/ci/max-duration.mjs && node scripts/ci/acta-vigente.mjs && node scripts/ci/migraciones.mjs --sin-drift"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
-    "@auth/core": "^0.41.3",
     "@aws-sdk/client-s3": "^3.1038.0",
     "@aws-sdk/s3-request-presigner": "3.1038.0",
     "@hookform/resolvers": "^5.2.2",
@@ -29,7 +31,6 @@
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.8.0",
     "next": "16.3.3",
-    "next-auth": "^5.0.0-beta.32",
     "prisma": "^5.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -49,6 +50,6 @@
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.11"
   }
 }

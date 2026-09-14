@@ -6,6 +6,7 @@ import { errorResponse, ok } from "../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 /** La pantalla Hoy. Qué se lee y cómo se compone está en
  *  casos-uso/obtener-dashboard.ts. */

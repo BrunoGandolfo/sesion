@@ -1,6 +1,10 @@
-import { Sidebar } from "@/components/layout/sidebar";
+import { redirect } from "next/navigation";
+
+import { buscarActor } from "@/app/api/_lib/auth";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { Providers } from "@/components/layout/providers";
+import { Sidebar } from "@/components/layout/sidebar";
+import { PARAM_SESION_VENCIDA } from "@/lib/sesion-cookie";
 
 export const dynamic = "force-dynamic";
 
@@ -45,13 +49,19 @@ export const dynamic = "force-dynamic";
 // escribía (`document.body.style.overflow = "hidden"`) recién ahora hace
 // algo. Antes el body nunca scrolleaba y esa línea era decorativa.
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // El proxy solo miró que hubiera cookie; acá se comprueba que resuelva a
+  // una sesión viva. Si no, a /login con el parámetro que le dice al proxy
+  // que no nos rebote y a la pantalla de entrada que borre la cookie muerta.
+  const actor = await buscarActor();
+  if (!actor) redirect(`/login?${PARAM_SESION_VENCIDA}=vencida`);
+
   return (
-    <Providers>
+    <Providers usuaria={{ nombre: actor.nombre, email: actor.email }}>
       <div className="flex min-h-screen bg-cream-50">
         <div className="shrink-0 lg:sticky lg:top-0 lg:flex lg:h-screen">
           <Sidebar />
