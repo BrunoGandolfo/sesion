@@ -143,12 +143,21 @@ Dudas que dejó y no se resolvieron en código: `x-forwarded-for` se confía
 tal cual (en Vercel lo pone la plataforma); `INVITACIONES_PERMITIDAS` solo
 debe listar cuentas ya creadas (documentado en `.env.example`).
 
-## 9. Verificación que no se pudo hacer desde esta máquina
+## 9. Cómo correr los tests de integración del área
 
-Los tests de integración del área (`password-atomico`, `login-atomico`,
-`registro-atomico`, `recuperacion-atomica`, `prisma-encryption` con el
-mantenimiento) están escritos y en la lista `INTEGRACION` de
-`vitest.config.ts`, pero al cerrar el área la rama `test` de Neon no
-respondía desde acá. Hay que correr `npm run test:integration` con
-`DATABASE_URL_TEST` apuntando a una base con el esquema nuevo
-(`prisma migrate deploy`) antes de mergear.
+La rama `test` de Neon es compartida entre agentes y produce deadlocks y
+violaciones de clave foránea ajenas; Neon queda solo para producción. Los
+tests del área (`login-atomico`, `password-atomico`, `registro-atomico`,
+`recuperacion-atomica`, `prisma-encryption` con el mantenimiento: 66 casos)
+pasan limpios contra un Postgres 17 propio:
+
+```sh
+docker run -d --name pg-sesion -p 0:5432 -e POSTGRES_PASSWORD=test postgres:17
+PUERTO=$(docker port pg-sesion 5432 | head -1 | sed 's/.*://')
+URL="postgresql://postgres:test@localhost:$PUERTO/postgres"
+DATABASE_URL="$URL" npx prisma migrate deploy
+DATABASE_URL_TEST="$URL" npm run test:integration
+```
+
+`base-identidad.ts` acepta `localhost` como host de test. Verificado el
+14-09-2026: 5 archivos, 66 tests, 7 s.
