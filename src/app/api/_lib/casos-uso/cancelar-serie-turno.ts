@@ -7,8 +7,8 @@
 //   - los programados anteriores a este turno (cancelar "desde acá" no
 //     borra la semana pasada);
 //   - turnos de otra organización, aunque compartan serieId por error.
-// Cada turno cancelado apaga su recordatorio, igual que si se cancelara
-// solo (casos-uso/recordatorios-del-turno.ts).
+// Cada turno cancelado apaga sus avisos por SMS, igual que si se cancelara
+// solo (casos-uso/envios-del-turno.ts).
 //
 // Cancelar UN turno de la serie sigue siendo el PATCH de siempre; esto es
 // una acción aparte, no una variante.
@@ -16,7 +16,7 @@
 import type { db } from "@/lib/db";
 
 import { ApiError } from "../responses";
-import { cerrarRecordatoriosDelTurno } from "./recordatorios-del-turno";
+import { cancelarEnviosDelTurno } from "./envios-del-turno";
 import { tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
@@ -85,16 +85,14 @@ export async function cancelarRestoDeSerie({
       data: { estado: "cancelado" },
     });
 
-    // Recordatorios sólo de los que efectivamente se cancelaron. Cerrar es
+    // Avisos sólo de los que efectivamente se cancelaron. Cancelar es
     // idempotente: si uno lo canceló un PATCH en el medio, ya lo apagó.
-    // COSTURA con el área 5 (docs/pendientes/06-estructura.md): la llamada
-    // es `cancelarEnviosDelTurno(tx, id)`.
     const cancelados = await tx.turno.findMany({
       where: { id: { in: ids }, estado: "cancelado" },
       select: { id: true },
     });
     for (const { id } of cancelados) {
-      await cerrarRecordatoriosDelTurno(tx, id);
+      await cancelarEnviosDelTurno(tx, id);
     }
 
     return { serieId: desde.serieId, cancelados: count };

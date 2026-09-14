@@ -34,7 +34,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import {
   conectarBaseDeTest,
@@ -44,29 +44,28 @@ import {
 
 const sesionActual = vi.hoisted(() => ({ organizationId: "", userId: "" }));
 
-vi.mock("@/lib/auth-utils", () => ({
-  getCurrentOrganizationId: async () => {
+// La ruta lee la organización de la sesión en base (src/app/api/_lib/auth.ts,
+// sin Auth.js): acá se reemplaza por la que fija cada test.
+vi.mock("@/app/api/_lib/auth", () => ({
+  getOrganizationId: async () => {
     if (!sesionActual.organizationId) throw new Error("sin sesión");
     return sesionActual.organizationId;
   },
-  getServerSession: async () => {
-    if (!sesionActual.organizationId) return null;
-    return {
-      organizationId: sesionActual.organizationId,
-      userId: sesionActual.userId,
-      user: {
-        id: sesionActual.userId,
-        organizationId: sesionActual.organizationId,
-      },
-    };
-  },
+  getSessionActor: async () => ({
+    organizationId: sesionActual.organizationId,
+    userId: sesionActual.userId,
+    sesionId: "s",
+    rol: "titular",
+    nombre: "Mariana",
+    email: "mariana@test.uy",
+  }),
 }));
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
 let patchConfig!: (request: Request) => Promise<Response>;
 
-const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
+const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
 async function crearOrgConConfig(): Promise<string> {
@@ -111,8 +110,8 @@ function leerConfig(organizationId: string) {
 }
 
 beforeAll(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
   (globalThis as unknown as { prisma: unknown }).prisma = db;
 
@@ -121,8 +120,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   await vaciarTablas(prismaRaw);
   sesionActual.organizationId = "";
   sesionActual.userId = "";
@@ -131,11 +130,11 @@ beforeEach(async () => {
 afterAll(async () => {
   await prismaRaw.$disconnect();
   if (ORIGINAL_KEY === undefined) {
-    delete process.env.NOTES_ENCRYPTION_KEY;
+    delete process.env.CLAVES_CIFRADO;
   } else {
-    process.env.NOTES_ENCRYPTION_KEY = ORIGINAL_KEY;
+    process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
   }
-  __resetKeyCacheForTests();
+  __resetLlaveroForTests();
 });
 
 describe("PATCH /api/config y horasAnticipacion", () => {

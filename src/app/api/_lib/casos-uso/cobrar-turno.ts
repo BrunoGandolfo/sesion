@@ -19,7 +19,7 @@ import type { MetodoPago, Turno } from "@/types/domain";
 
 import { toTurno } from "../domain";
 import { ApiError } from "../responses";
-import { cerrarRecordatoriosDelTurno } from "./recordatorios-del-turno";
+import { cancelarEnviosDelTurno } from "./envios-del-turno";
 
 type ClientePrisma = typeof db;
 
@@ -125,7 +125,7 @@ export async function cobrarTurno({
     // su hora dejaba el recordatorio vivo, y la paciente recibía el SMS de
     // una sesión que ya había tenido.
     if (cierraElTurno) {
-      await cerrarRecordatoriosDelTurno(tx, turnoId);
+      await cancelarEnviosDelTurno(tx, turnoId);
     }
 
     const turno = await tx.turno.findFirstOrThrow({

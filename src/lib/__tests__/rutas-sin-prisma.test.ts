@@ -35,9 +35,12 @@ const EXCEPCIONES_TEMPORALES: Record<string, string> = {
   "pacientes/[id]/contexto-clinico/route.ts": "área 4 (recorrido)",
   "pacientes/[id]/documentacion/route.ts": "área 1/2 (sesión clínica)",
   "pacientes/[id]/progreso/route.ts": "área 4 (recorrido)",
-  "recordatorios/[id]/reintentar/route.ts": "área 5 (SMS)",
-  "recordatorios/route.ts": "área 5 (SMS)",
-  "seed/route.ts": "área 5 (operación)",
+  // Las rutas del SMS durable y del latido del worker nacieron después de
+  // la regla; el área 5 las mueve a casos de uso cuando pase por acá.
+  "cron/recordatorios/route.ts": "área 5 (SMS)",
+  "estado-worker/route.ts": "área 5 (operación)",
+  "sms/callback/route.ts": "área 5 (SMS)",
+  "sms/entrante/route.ts": "área 5 (SMS)",
   "sesion-clinica/[id]/route.ts": "área 2 (estados)",
   "sesion-clinica/[id]/upload-confirmar/route.ts": "área 1 (grabador)",
   "sesion-clinica/[id]/upload-url/route.ts": "área 1 (grabador)",

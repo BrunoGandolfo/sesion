@@ -6,16 +6,12 @@
  *   DATABASE_URL_TEST="postgres://..." \
  *   npx vitest run src/lib/__tests__/crear-serie-turno.test.ts
  *
- * Dos colaboradores se reemplazan, y es a propósito:
- *
- *   - `cifrarTurno` (@/lib/prisma-encryption) es del área 3 y todavía no
- *     está en esta rama. Si existe, se usa el real; si no, un doble que
- *     guarda el texto como bytes. Lo que se prueba acá es la regla de la
- *     serie, no el cifrado (eso lo prueba prisma-encryption.test.ts).
- *   - `recordatorios-del-turno` (área 5) escribe en una tabla que el esquema
- *     nuevo reemplazó. Se reemplaza por un doble que anota las llamadas, y
- *     así además se verifica que CADA turno de la serie pide su recordatorio
- *     y que cancelar el resto apaga uno por turno cancelado.
+ * Un colaborador se reemplaza, y es a propósito: `envios-del-turno` (los SMS
+ * del área 5) se cambia por un doble que anota las llamadas. Lo que se prueba
+ * acá es la regla de la serie, y de paso que CADA turno generado pide su
+ * aviso y que cancelar el resto apaga uno por turno cancelado; los envíos
+ * tienen su propio test (envios-del-turno.test.ts). El cifrado de las notas
+ * es el real.
  *
  * No usa vaciarTablas: otras ramas comparten esta base. Crea su propia
  * organización por test y borra lo suyo al final.
@@ -40,7 +36,7 @@ import {
 import { crearTurno } from "@/app/api/_lib/casos-uso/crear-turno";
 import { fechasDeSerie } from "@/app/api/_lib/casos-uso/serie-turnos";
 import { actualizarTurno } from "@/app/api/_lib/casos-uso/turnos";
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 import { agregarDiasMvd, instanteMvd } from "@/lib/fechas-montevideo";
 import { TURNO_SOLAPADO } from "@/lib/glosario";
 
@@ -52,30 +48,24 @@ import { urlDeBaseDeTest, type ClienteCifrado } from "./db-test";
 
 const recordatorios = vi.hoisted(() => ({
   programados: [] as string[],
+  reprogramados: [] as string[],
   cerrados: [] as string[],
 }));
 
-vi.mock("@/lib/prisma-encryption", async (original) => {
-  const real = await original<typeof import("@/lib/prisma-encryption")>();
-  const doble = (id: string, campos: { notas?: string | null }) => ({
-    id,
-    notasEncrypted:
-      campos.notas == null ? null : Buffer.from(campos.notas, "utf8"),
-  });
-  return { ...real, cifrarTurno: "cifrarTurno" in real ? real.cifrarTurno : doble };
-});
-
-vi.mock("@/app/api/_lib/casos-uso/recordatorios-del-turno", async (original) => {
+vi.mock("@/app/api/_lib/casos-uso/envios-del-turno", async (original) => {
   const real =
-    await original<typeof import("@/app/api/_lib/casos-uso/recordatorios-del-turno")>();
+    await original<typeof import("@/app/api/_lib/casos-uso/envios-del-turno")>();
   return {
     ...real,
-    programarRecordatorio: async ({ turnoId }: { turnoId: string }) => {
+    programarEnvioDelTurno: async (_tx: unknown, { turnoId }: { turnoId: string }) => {
       recordatorios.programados.push(turnoId);
-      return null;
     },
-    cerrarRecordatoriosDelTurno: async (_tx: unknown, turnoId: string) => {
+    reprogramarEnvioDelTurno: async (_tx: unknown, { turnoId }: { turnoId: string }) => {
+      recordatorios.reprogramados.push(turnoId);
+    },
+    cancelarEnviosDelTurno: async (_tx: unknown, turnoId: string) => {
       recordatorios.cerrados.push(turnoId);
+      return 1;
     },
   };
 });
@@ -83,7 +73,7 @@ vi.mock("@/app/api/_lib/casos-uso/recordatorios-del-turno", async (original) => 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
 
-const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
+const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
 // Martes 15 de septiembre de 2026, 15:00 de Montevideo: tres meses de
@@ -133,8 +123,8 @@ function base(orgId: string, pacienteId: string) {
 }
 
 beforeAll(() => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   // Mismas opciones de transacción que src/lib/db.ts: crear una serie son
   // unos cuarenta viajes a la base dentro de UNA transacción, y con el
   // timeout por defecto de Prisma (5 s) contra Neon desde afuera de su
@@ -150,6 +140,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   recordatorios.programados.length = 0;
+  recordatorios.reprogramados.length = 0;
   recordatorios.cerrados.length = 0;
 });
 
@@ -167,8 +158,8 @@ afterEach(async () => {
 
 afterAll(async () => {
   await prismaRaw.$disconnect();
-  process.env.NOTES_ENCRYPTION_KEY = ORIGINAL_KEY;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
+  __resetLlaveroForTests();
 });
 
 describe("crearTurno con frecuencia", () => {

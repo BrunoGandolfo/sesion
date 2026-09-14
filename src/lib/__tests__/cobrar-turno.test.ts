@@ -28,7 +28,7 @@ import {
   MENSAJE_YA_COBRADO,
 } from "@/app/api/_lib/casos-uso/cobrar-turno";
 import { ApiError } from "@/app/api/_lib/responses";
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import {
   conectarBaseDeTest,
@@ -39,7 +39,7 @@ import {
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
 
-const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
+const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
 // Jueves 3 de septiembre de 2026, 15:00. La sesión de las 14 ya terminó;
@@ -104,25 +104,25 @@ async function esperarApiError(
 }
 
 beforeAll(() => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
 });
 
 beforeEach(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   await vaciarTablas(prismaRaw);
 });
 
 afterAll(async () => {
   await prismaRaw.$disconnect();
   if (ORIGINAL_KEY === undefined) {
-    delete process.env.NOTES_ENCRYPTION_KEY;
+    delete process.env.CLAVES_CIFRADO;
   } else {
-    process.env.NOTES_ENCRYPTION_KEY = ORIGINAL_KEY;
+    process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
   }
-  __resetKeyCacheForTests();
+  __resetLlaveroForTests();
 });
 
 describe("cobrarTurno — los cuatro estados", () => {

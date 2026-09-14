@@ -16,10 +16,11 @@ import type { Turno, TurnoConPaciente } from "@/types/domain";
 import { toTurno, toTurnoConPaciente } from "../domain";
 import { ApiError } from "../responses";
 import {
-  cerrarRecordatoriosDelTurno,
-  programarRecordatorio,
+  cancelarEnviosDelTurno,
+  programarEnvioDelTurno,
+  reprogramarEnvioDelTurno,
   turnoSigueProgramado,
-} from "./recordatorios-del-turno";
+} from "./envios-del-turno";
 import {
   assertSinSolapamiento,
   ESTADOS_QUE_OCUPAN,
@@ -249,9 +250,9 @@ export async function actualizarTurno({
 
     // Un turno que dejó de estar programado —realizado, ausente o
     // cancelado— no avisa nada. La regla vive en
-    // casos-uso/recordatorios-del-turno.ts, no acá.
+    // casos-uso/envios-del-turno.ts, no acá.
     if (!turnoSigueProgramado(updated.estado)) {
-      await cerrarRecordatoriosDelTurno(tx, turnoId);
+      await cancelarEnviosDelTurno(tx, turnoId);
       return updated;
     }
 
@@ -267,28 +268,22 @@ export async function actualizarTurno({
       turnoSigueProgramado(updated.estado);
 
     if (fechaCambio) {
-      // Se apaga lo viejo y se programa lo nuevo. Si la fecha ya pasó,
-      // programarRecordatorio no crea nada.
-      // COSTURA con el área 5 (docs/pendientes/06-estructura.md): estas dos
-      // llamadas son `reprogramarEnvioDelTurno(tx, { turnoId, organizationId,
-      // pacienteId: updated.pacienteId, fechaTurno: updated.fecha,
-      // fechaTurnoPrevia: actual.fecha, ahora })`.
-      await cerrarRecordatoriosDelTurno(tx, turnoId);
-      await programarRecordatorio({
-        prisma: tx,
+      // Se apaga lo pendiente de la fecha vieja y se programa el aviso de la
+      // nueva (o un cambio de horario, si el de la fecha vieja ya salió).
+      await reprogramarEnvioDelTurno(tx, {
         turnoId: updated.id,
         organizationId,
+        pacienteId: updated.pacienteId,
         fechaTurno: updated.fecha,
+        fechaTurnoPrevia: actual.fecha,
         ahora,
       });
     } else if (reabierto) {
-      // COSTURA con el área 5: `programarEnvioDelTurno(tx, { turnoId,
-      // organizationId, pacienteId: updated.pacienteId, fechaTurno:
-      // updated.fecha, ahora })` (revive el envío cancelado).
-      await programarRecordatorio({
-        prisma: tx,
+      // Revive el envío que el cierre había cancelado.
+      await programarEnvioDelTurno(tx, {
         turnoId: updated.id,
         organizationId,
+        pacienteId: updated.pacienteId,
         fechaTurno: updated.fecha,
         ahora,
       });

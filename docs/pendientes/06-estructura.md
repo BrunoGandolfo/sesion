@@ -76,46 +76,23 @@ las frases con número o regla: "tres meses", "cada semana o cada 15 días",
 
 ## Costuras con otras ramas (para quien fusiona)
 
-### Con `f3-identidad` (Área 3): firmas que estos casos de uso ya llaman
+### Con `f3-identidad` (Área 3) y `f3-operacion` (Área 5): resueltas
 
-Los casos de uso importan, con la firma exacta de esa rama, funciones que en
-`main` todavía no existen. `tsc` queda rojo en esos archivos hasta la fusión:
+`origin/main` (62aaa09) ya trae las dos ramas y esta rama las fusionó. Los
+casos de uso llaman a `cifrarTurno/cifrarPaciente/cifrarHotWord(id, campos)` y
+`hashTermino` reales, leen `notas`, `termino` y `datos` por campo lógico, y
+los avisos por SMS pasan por `envios-del-turno.ts`
+(`programarEnvioDelTurno`, `reprogramarEnvioDelTurno`,
+`cancelarEnviosDelTurno`, con `tx`), también en `cobrar-turno.ts`, que el
+Área 5 dejaba para esta área. `POST /api/turnos` ya no devuelve el campo
+`recordatorio` (nadie lo leía y el modelo no existe): la respuesta es
+`data: TurnoCreado`.
 
-| Firma | Módulo | La llama |
-| --- | --- | --- |
-| `cifrarTurno(id, { notas })` → `{ id, notasEncrypted }` | `@/lib/prisma-encryption` | `casos-uso/crear-turno.ts`, `casos-uso/turnos.ts` |
-| `cifrarPaciente(id, { notas })` → `{ id, notasEncrypted }` | `@/lib/prisma-encryption` | `casos-uso/pacientes.ts` |
-| `cifrarHotWord(id, { termino })` → `{ id, terminoEncrypted }` | `@/lib/prisma-encryption` | `casos-uso/hot-words.ts` |
-| `hashTermino(termino): Promise<string>` | `@/lib/hot-words` | `casos-uso/hot-words.ts` |
-| campos lógicos `notas` (pacientes y turnos), `termino` (hot words) y `datos` (sesiones clínicas) en `select` y en las filas leídas | extensión `withEncryption` | `domain.ts` (`toTurno`, `toPacienteConDeuda`), `casos-uso/obtener-dashboard.ts`, `casos-uso/hot-words.ts` |
-
-Esa rama además editó `src/app/api/{pacientes,turnos,hot-words}/**/route.ts`
-para llamar a esas funciones desde la ruta. En la fusión ganan las versiones
-de `f3-estructura` (las rutas son finas y las llamadas ya están en los casos
-de uso); de sus cambios en esos seis `route.ts` no hay nada que conservar.
-
-El test `src/lib/__tests__/crear-serie-turno.test.ts` reemplaza `cifrarTurno`
-con un doble **solo si no existe**: al fusionar usa el real sin tocar nada.
-
-### Con `f3-operacion` (Área 5): las tres funciones del SMS durable
-
-`docs/pendientes/05-operacion.md` §1 pide cablear `envios-del-turno.ts` en
-las rutas de turnos. Esas llamadas ahora viven en los casos de uso, en
-líneas marcadas `COSTURA con el área 5`:
-
-| Hoy (`recordatorios-del-turno.ts`) | Reemplazo (`envios-del-turno.ts`) | Dónde |
-| --- | --- | --- |
-| `programarRecordatorio({ prisma: tx, turnoId, organizationId, fechaTurno, ahora })` | `programarEnvioDelTurno(tx, { turnoId, organizationId, pacienteId, fechaTurno, ahora })` | `crear-turno.ts` (por cada turno de la serie); `turnos.ts` rama `reabierto` |
-| `cerrarRecordatoriosDelTurno(tx, id)` + `programarRecordatorio(…)` al cambiar la fecha | `reprogramarEnvioDelTurno(tx, { turnoId, organizationId, pacienteId, fechaTurno: updated.fecha, fechaTurnoPrevia: actual.fecha, ahora })` | `turnos.ts` rama `fechaCambio` |
-| `cerrarRecordatoriosDelTurno(tx, id)` al dejar de estar programado | `cancelarEnviosDelTurno(tx, id)` | `turnos.ts`; `cancelar-serie-turno.ts` (uno por turno cancelado) |
-| `turnoSigueProgramado` | misma función, exportada desde `envios-del-turno.ts` | `turnos.ts` |
-
-`POST /api/turnos` ya no devuelve el campo `recordatorio` (nadie lo leía y el
-modelo no existe): la respuesta es `data: TurnoCreado`.
-
-El test de series reemplaza `recordatorios-del-turno` con un doble que anota
-las llamadas (una por turno creado, una por turno cancelado). Al cablear las
-tres funciones hay que apuntar ese doble al módulo nuevo.
+El test de series reemplaza `envios-del-turno` con un doble que anota las
+llamadas (una por turno creado, una por turno cancelado); el cifrado es el
+real. `config-contrato.test.ts` y `solapamiento-turnos.test.ts`, que ejercen
+rutas de turnos y configuración, mockean `@/app/api/_lib/auth` como el resto
+de los tests de `main`.
 
 ### Con el guardián `rutas-sin-prisma.test.ts`
 

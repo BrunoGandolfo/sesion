@@ -23,7 +23,7 @@ vi.mock("@/lib/alertas", () => ({
 }));
 
 import { MOTIVO_BAJA } from "@/app/api/_lib/casos-uso/despachar-sms";
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 import { firmaTwilio, URL_CALLBACK, URL_ENTRANTE } from "@/lib/sms/firma";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
@@ -34,7 +34,7 @@ type Handler = (request: Request) => Promise<Response>;
 let callback!: Handler;
 let entrante!: Handler;
 
-const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
+const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 const TOKEN = "token-de-prueba";
 const AHORA = new Date("2026-09-03T15:00:00.000Z");
@@ -65,9 +65,9 @@ async function crearEnvio(estado: "aceptado" | "entregado" | "pendiente" | "envi
 const leer = (id: string) => prismaRaw.envioSms.findUniqueOrThrow({ where: { id } });
 
 beforeAll(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
   process.env.TWILIO_AUTH_TOKEN = TOKEN;
-  __resetKeyCacheForTests();
+  __resetLlaveroForTests();
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
   (globalThis as unknown as { prisma: unknown }).prisma = db;
   ({ POST: callback } = await import("@/app/api/sms/callback/route"));
@@ -75,17 +75,17 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   alertas.enviadas = [];
   await vaciarTablas(prismaRaw);
 });
 
 afterAll(async () => {
   await prismaRaw.$disconnect();
-  if (ORIGINAL_KEY === undefined) delete process.env.NOTES_ENCRYPTION_KEY;
-  else process.env.NOTES_ENCRYPTION_KEY = ORIGINAL_KEY;
-  __resetKeyCacheForTests();
+  if (ORIGINAL_KEY === undefined) delete process.env.CLAVES_CIFRADO;
+  else process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
+  __resetLlaveroForTests();
 });
 
 describe("POST /api/sms/callback", () => {

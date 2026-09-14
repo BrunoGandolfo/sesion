@@ -32,7 +32,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 import { cifrarSesion } from "@/lib/prisma-encryption";
 
 import {
@@ -78,7 +78,7 @@ let descobrarTurno!: Handler;
 let reintentarRecordatorio!: Handler;
 let crearSesionClinica!: (request: Request) => Promise<Response>;
 
-const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
+const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
 const MANANA = new Date("2026-12-01T15:00:00.000Z");
@@ -188,8 +188,8 @@ function como(org: Org) {
 }
 
 beforeAll(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
 
   // El cliente de test entra por el cache global que lee src/lib/db.ts. Tiene
@@ -226,8 +226,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   await vaciarTablas(prismaRaw);
   sesionActual.organizationId = "";
   sesionActual.userId = "";
@@ -236,11 +236,11 @@ beforeEach(async () => {
 afterAll(async () => {
   await prismaRaw.$disconnect();
   if (ORIGINAL_KEY === undefined) {
-    delete process.env.NOTES_ENCRYPTION_KEY;
+    delete process.env.CLAVES_CIFRADO;
   } else {
-    process.env.NOTES_ENCRYPTION_KEY = ORIGINAL_KEY;
+    process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
   }
-  __resetKeyCacheForTests();
+  __resetLlaveroForTests();
 });
 
 describe("PATCH /api/pacientes/[id] — aislamiento entre organizaciones", () => {

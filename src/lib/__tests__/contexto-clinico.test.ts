@@ -28,7 +28,7 @@ import {
   contextoVacio,
   type ContextoPayload,
 } from "@/app/api/_lib/contexto-clinico/tipos";
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import {
   conectarBaseDeTest,
@@ -247,7 +247,7 @@ describeConDb("contexto-clinico — integración", () => {
   let prismaRaw!: PrismaClient;
   let db!: ClienteCifrado;
 
-  const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
+  const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
   const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
   async function crearPaciente(): Promise<{
@@ -270,25 +270,25 @@ describeConDb("contexto-clinico — integración", () => {
   }
 
   beforeAll(() => {
-    process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-    __resetKeyCacheForTests();
+    process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+    __resetLlaveroForTests();
     ({ prisma: prismaRaw, db } = conectarBaseDeTest());
   });
 
   beforeEach(async () => {
-    process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-    __resetKeyCacheForTests();
+    process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+    __resetLlaveroForTests();
     await vaciarTablas(prismaRaw);
   });
 
   afterAll(async () => {
     await prismaRaw.$disconnect();
     if (ORIGINAL_KEY === undefined) {
-      delete process.env.NOTES_ENCRYPTION_KEY;
+      delete process.env.CLAVES_CIFRADO;
     } else {
-      process.env.NOTES_ENCRYPTION_KEY = ORIGINAL_KEY;
+      process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
     }
-    __resetKeyCacheForTests();
+    __resetLlaveroForTests();
   });
 
   describe("cargarContexto", () => {

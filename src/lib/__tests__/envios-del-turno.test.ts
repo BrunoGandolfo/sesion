@@ -23,7 +23,7 @@ import {
   programarEnvioDelTurno,
   reprogramarEnvioDelTurno,
 } from "@/app/api/_lib/casos-uso/envios-del-turno";
-import { __resetKeyCacheForTests } from "@/lib/encryption";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 import { calcularProgramadoEn } from "@/lib/recordatorios-programacion";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
@@ -31,7 +31,7 @@ import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
 
-const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
+const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
 const HORA = 60 * 60_000;
@@ -56,22 +56,22 @@ async function fixture(opciones: { telefono?: string; modo?: "dia_anterior" | "d
 const enviosDe = (turnoId: string) => prismaRaw.envioSms.findMany({ where: { turnoId }, orderBy: { creadoEn: "asc" } });
 
 beforeAll(() => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
 });
 
 beforeEach(async () => {
-  process.env.NOTES_ENCRYPTION_KEY = TEST_KEY_B64;
-  __resetKeyCacheForTests();
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   await vaciarTablas(prismaRaw);
 });
 
 afterAll(async () => {
   await prismaRaw.$disconnect();
-  if (ORIGINAL_KEY === undefined) delete process.env.NOTES_ENCRYPTION_KEY;
-  else process.env.NOTES_ENCRYPTION_KEY = ORIGINAL_KEY;
-  __resetKeyCacheForTests();
+  if (ORIGINAL_KEY === undefined) delete process.env.CLAVES_CIFRADO;
+  else process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
+  __resetLlaveroForTests();
 });
 
 describe("programarEnvioDelTurno", () => {
