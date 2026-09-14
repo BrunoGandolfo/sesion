@@ -54,6 +54,12 @@ const PROPIOS_O_NAVEGACION: Record<string, string> = {
   "wa.me": "enlace <a href> para compartir una invitación por WhatsApp (abre otra pestaña)",
 };
 
+/** Hosts que aparecen sólo como TEXTO (un enlace dentro de un correo de
+ *  alerta): nadie les habla, ni el navegador ni el servidor. */
+const SOLO_TEXTO: Record<string, string> = {
+  "www.twilio.com": "enlace a la documentación del código de error de Twilio, va en el correo de alerta (src/lib/sms/clasificar.ts)",
+};
+
 /** Un host declarado en DESTINOS_EXTERNOS: comodín `*.` al principio, o exacto. */
 function coincideConDestino(host: string, patron: string): boolean {
   const patronHost = patron.replace(/^https:\/\//, "");
@@ -116,13 +122,15 @@ describe("destinos externos del código", () => {
       if (DESTINOS.some((p) => coincideConDestino(host, p))) return false;
       if (host in SERVIDOR_A_SERVIDOR) return false;
       if (host in PROPIOS_O_NAVEGACION) return false;
+      if (host in SOLO_TEXTO) return false;
       return true;
     });
 
     const detalle = sinDeclarar.map(
       (h) =>
         `${h.archivo}: ${h.host} — si el NAVEGADOR le habla va en DESTINOS_EXTERNOS ` +
-        "(src/lib/csp.ts); si sólo el servidor, en SERVIDOR_A_SERVIDOR de este test.",
+        "(src/lib/csp.ts); si sólo el servidor, en SERVIDOR_A_SERVIDOR de este test; " +
+        "si es sólo un enlace en un texto, en SOLO_TEXTO.",
     );
     expect(detalle).toEqual([]);
   });

@@ -1,29 +1,43 @@
-// Texto de los recordatorios por SMS: template, variables y conteo de
-// longitud. Módulo puro (sin Twilio, sin process.env) para que lo pueda
-// importar la UI ("use client") sin arrastrar el cliente de envío.
+// Texto de los SMS: plantillas, variables y conteo de segmentos. Módulo PURO
+// (sin Twilio, sin process.env, sin base) para que lo pueda importar la UI
+// ("use client") sin arrastrar el cliente de envío. Absorbe al viejo
+// src/lib/sms-texto.ts.
 //
 // La fecha y la hora se resuelven SIEMPRE en hora de Montevideo. El cron
 // corre en Vercel, que va en UTC y no deja fijar TZ: el 4/9 un turno de las
 // 15:15 salió anunciado "a las 18:15". La paciente lee la hora de su
 // consultorio, no la del centro de datos.
+//
+// EL TEXTO DEL SMS NO SE GUARDA (decisión del dueño). Se arma en el momento
+// de mandar, con la plantilla vigente de la organización, y de él sólo
+// queda `segmentos` en envios_sms para el conteo mensual.
+
 import {
   formatearFechaLargaMvd,
   formatearHoraMvd,
 } from "@/lib/fechas-montevideo";
 
 /** Línea de contacto OBLIGATORIA por diseño: todo SMS termina indicando a
- *  quién y a qué número escribir para cambios. El cron la agrega si el
- *  template guardado por la usuaria no la contiene. */
+ *  quién y a qué número escribir para cambios. El despachador la agrega si
+ *  la plantilla guardada por la usuaria no la contiene. */
 export const LINEA_CONTACTO =
   "Para cambios, comunicate con {{profesional}} al {{telefonoConsultorio}}";
 
-/** Template sugerido (es también el valor por defecto del formulario de
- *  configuración). Con datos realistas (Lucía / martes 21 de abril / 10:00 /
- *  Mariana Roldán / +598 99 876 543) rinde 133 caracteres. Como el español
- *  lleva tildes ("sesión", "Lucía", "Roldán") el mensaje viaja en UCS-2 →
- *  2 segmentos. Quitar las tildes del template no alcanza: los nombres
+/** Plantilla sugerida del recordatorio (es también el valor por defecto del
+ *  formulario de configuración). Con datos realistas rinde 133 caracteres;
+ *  como el español lleva tildes ("sesión", "Lucía") viaja en UCS-2 →
+ *  2 segmentos. Quitar las tildes de la plantilla no alcanza: los nombres
  *  propios las traen. */
 export const TEMPLATE_SMS_SUGERIDO = `Hola {{nombre}}, te recordamos tu sesión el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+
+/**
+ * Plantilla del aviso de CAMBIO DE HORARIO. No es configurable: cuando la
+ * profesional mueve un turno cuyo recordatorio ya salió, la paciente tiene
+ * que enterarse de que cambió, no recibir un segundo "te recordamos". Un
+ * mensaje que dice "cambió" es lo que evita que se presente al horario
+ * viejo; por eso el texto es fijo y dice eso primero.
+ */
+export const PLANTILLA_CAMBIO_DE_HORARIO = `Hola {{nombre}}, cambió el horario de tu sesión: ahora es el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
 
 export interface SmsTemplateData {
   nombre: string;
@@ -32,33 +46,64 @@ export interface SmsTemplateData {
   direccion: string;
   profesional: string;
   /** Teléfono del consultorio. Sale de Configuracion.whatsappOrigen (la
-   *  columna conserva ese nombre hasta la próxima migración). */
+   *  columna conserva ese nombre). */
   telefonoConsultorio?: string;
 }
 
+/**
+ * Reemplaza las variables de la plantilla. El reemplazo va con FUNCIÓN y no
+ * con string: `String.prototype.replaceAll(patrón, texto)` interpreta `$&`,
+ * `$1` y `$$` dentro del texto de reemplazo, así que una paciente llamada
+ * "Ana $&" o una dirección con "$" salían mal. Con función, el valor entra
+ * tal cual.
+ */
 export function buildSmsMessage(
   template: string,
   data: SmsTemplateData,
 ): string {
-  const fechaFmt = formatearFechaLargaMvd(data.fecha);
-  const horaFmt = formatearHoraMvd(data.fecha);
-
-  return template
-    .replaceAll("{{nombre}}", data.nombre)
-    .replaceAll("{{apellido}}", data.apellido)
-    .replaceAll("{{fecha}}", fechaFmt)
-    .replaceAll("{{hora}}", horaFmt)
-    .replaceAll("{{direccion}}", data.direccion)
-    .replaceAll("{{profesional}}", data.profesional)
-    .replaceAll("{{telefonoConsultorio}}", data.telefonoConsultorio ?? "");
+  const valores: Record<string, string> = {
+    nombre: data.nombre,
+    apellido: data.apellido,
+    fecha: formatearFechaLargaMvd(data.fecha),
+    hora: formatearHoraMvd(data.fecha),
+    direccion: data.direccion,
+    profesional: data.profesional,
+    telefonoConsultorio: data.telefonoConsultorio ?? "",
+  };
+  let out = template;
+  for (const [clave, valor] of Object.entries(valores)) {
+    out = out.replaceAll(`{{${clave}}}`, () => valor);
+  }
+  return out;
 }
 
-/** Garantiza que el template termine con la línea de contacto obligatoria.
- *  Si ya la contiene, lo devuelve tal cual. */
+/** Garantiza que la plantilla termine con la línea de contacto obligatoria.
+ *  Si ya la contiene, la devuelve tal cual. */
 export function asegurarLineaContacto(template: string): string {
   if (template.includes(LINEA_CONTACTO)) return template;
   const base = template.trimEnd();
   return base.length === 0 ? LINEA_CONTACTO : `${base}\n${LINEA_CONTACTO}`;
+}
+
+/** Los motivos de SMS que tienen plantilla acá (el de cobro vive en
+ *  src/lib/deudas.ts y lo manda la pantalla de Cobros). */
+export type MotivoConPlantilla = "recordatorio_turno" | "cambio_de_horario";
+
+/**
+ * El texto de un envío según su motivo: el recordatorio usa la plantilla de
+ * la organización (con la línea de contacto asegurada); el cambio de horario
+ * usa la plantilla fija.
+ */
+export function textoDelEnvio(
+  motivo: MotivoConPlantilla,
+  plantillaRecordatorio: string,
+  data: SmsTemplateData,
+): string {
+  const plantilla =
+    motivo === "cambio_de_horario"
+      ? PLANTILLA_CAMBIO_DE_HORARIO
+      : asegurarLineaContacto(plantillaRecordatorio);
+  return buildSmsMessage(plantilla, data);
 }
 
 // ---------------------------------------------------------------------------
