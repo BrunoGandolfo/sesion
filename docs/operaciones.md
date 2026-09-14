@@ -8,7 +8,7 @@ valores.
 
 | Pieza | Servicio | Cómo se despliega |
 | --- | --- | --- |
-| App Next.js 16 (UI + API + crons) | Vercel | Push a `main` → deploy automático. Crons en `vercel.json`: `/api/cron/recordatorios` cada 5 min, `/api/cron/salud` cada hora. |
+| App Next.js 16 (UI + API + crons) | Vercel | Push a `main` → deploy automático. Crons en `vercel.json`: `/api/cron/recordatorios` cada 5 min, `/api/cron/salud` cada hora, `/api/cron/mantenimiento` diario a las 04:00 UTC (pendiente de agregar a `vercel.json`: área 5, ver `docs/pendientes/03-identidad.md`). |
 | Postgres 17 | Neon | Rama `production` (la app) y rama `test` (CI y tests de integración). |
 | Audio cifrado | Cloudflare R2, bucket `sesion-audio` | Sin deploy. CORS del bucket debe permitir el PUT desde el dominio de la app. |
 | Backups cifrados de la base | Cloudflare R2, prefijo `backups/` del bucket del secret `R2_BUCKET` | Los escribe GitHub Actions. |
@@ -26,11 +26,11 @@ Vercel (app):
 | Variable | Para qué |
 | --- | --- |
 | `DATABASE_URL` | Rama `production` de Neon. |
-| `AUTH_SECRET`, `AUTH_URL` | Auth.js. `AUTH_URL=https://sesionapp.app`. |
 | `RESEND_API_KEY` | Correo transaccional por Resend. Dominio `sesionapp.app` verificado; remitente `no-responder@sesionapp.app`. Sin clave se registra el fallo sin revelar si existe la cuenta. |
-| `NOTES_ENCRYPTION_KEY` | Cifrado en reposo (`docs/encryption.md`). |
-| `PROCESSING_SECRET` | Bearer M2M con el worker. Mismo valor en Railway. |
-| `CRON_SECRET` | Bearer de los crons. |
+| `CLAVES_CIFRADO` | Llavero del cifrado en reposo, `"1=<base64>,2=<base64>"` (`docs/encryption.md`). No hay secreto de sesión: las sesiones son filas de `sesiones_acceso`. |
+| `INVITACIONES_PERMITIDAS` | TEMPORAL. Emails de las cuentas que pueden crear invitaciones (tope de 2 vigentes por cuenta, constante `MAX_INVITACIONES_VIGENTES`). Sin la variable nadie invita. |
+| `PROCESSING_SECRET` | Bearer con el que el worker reclama trabajo. Acepta lista separada por comas. Mismo valor en Railway. |
+| `CRON_SECRET` | Bearer de los crons. Acepta lista separada por comas. |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | URL prefirmada, HeadObject y borrado del audio. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` | SMS. Sin `TWILIO_SMS_FROM` el cron no toca ningún recordatorio. |
 | `ALERTA_WEBHOOK_URL` (opcional) | Destino del cron de salud. |
@@ -58,10 +58,10 @@ Neon: contraseñas de los roles de cada rama (viven en las connection strings).
 
 | Secreto | Pasos |
 | --- | --- |
-| `PROCESSING_SECRET` | Generar (`openssl rand -base64 32`), cargar en Vercel y Railway, redeploy de ambos. Mientras difieran, el worker recibe 401 y no procesa. |
-| `CRON_SECRET` | Generar, cargar en Vercel. Vercel Cron manda el nuevo automáticamente. |
-| `NOTES_ENCRYPTION_KEY` | No rotable en caliente: hay que re-cifrar todas las columnas. Hoy no hay script. Ver `docs/encryption.md` §5. |
-| `AUTH_SECRET` | Generar y cargar en Vercel. Cierra todas las sesiones. |
+| `PROCESSING_SECRET` | Sin ventana de 401: en Vercel `"viejo,nuevo"` y deploy; en Railway `"nuevo"` y redeploy; en Vercel `"nuevo"` y deploy. |
+| `CRON_SECRET` | Igual que `PROCESSING_SECRET` (lista). Vercel Cron manda el valor vigente de la variable. |
+| `CLAVES_CIFRADO` | En caliente: agregar `,2=<nueva>` con `printf`, deploy; el cron de mantenimiento re-cifra 200 filas por corrida (`GET /api/cron/mantenimiento?recifrar=todo` con el `CRON_SECRET` para apurar); cuando `pendientes` da 0, sacar `1=…` y deploy. Procedimiento completo en `docs/encryption.md` §3. |
+| Sesiones de la profesional | No hay secreto que rotar. Desde Configuración, "Cerrar sesión en los demás dispositivos"; o cambiar la contraseña, que cierra todas. Ver §7. |
 | Credenciales R2 | Crear token nuevo en Cloudflare, cargar en Vercel, Railway y GitHub Actions, borrar el viejo después. |
 | `ASSEMBLYAI_API_KEY` | Nueva key en AssemblyAI, cargar en Railway, redeploy. |
 | `ANTHROPIC_API_KEY` | Nueva key en el mismo workspace (o cambiar también `ANTHROPIC_WORKSPACE_ID`), cargar en Railway, redeploy. |
@@ -90,9 +90,11 @@ de Neon):
    `-pooler`) y el cliente 17:
    `/usr/lib/postgresql/17/bin/pg_restore --no-owner --no-privileges --dbname "<DATABASE_URL de la rama destino>" <archivo>.dump`
 4. Verificar: contar filas de `sesiones_clinicas`, `pacientes`, `turnos`;
-   correr la consulta de prefijo `ENC1` de `docs/encryption.md` §4.
+   correr la consulta por id de clave de `docs/encryption.md` §4.
 5. Apuntar la app a esa rama solo si el objetivo es reemplazar producción.
-   `NOTES_ENCRYPTION_KEY` tiene que ser la misma que cifró los datos del dump.
+   `CLAVES_CIFRADO` tiene que contener todas las claves con las que se
+   cifraron los datos del dump (por eso una clave rotada se conserva 30 días
+   más, lo que duran los backups).
 
 ## 5. Trampas conocidas
 
@@ -123,51 +125,86 @@ de Neon):
   bucket, no credenciales.
 
 
-## 6. Migraciones de cuentas
+## 6. Esquema y migraciones
 
-Antes de desplegar el código nuevo, aplicar las migraciones pendientes con la
-conexión **directa** de Neon (`-pooler` no debe aparecer). Nunca `migrate dev`
-contra producción. En una terminal del dueño, con la URL de producción directa
-cargada en `DATABASE_URL_PRODUCCION_DIRECTA` sin imprimirla:
+La base tiene una sola migración inicial (`prisma/migrations/0_init`,
+`docs/esquema.md`). Contra `production` solo `prisma migrate deploy` por la
+conexión directa (`-pooler` no debe aparecer); nunca `migrate dev`. Los
+índices parciales y los CHECK escritos a mano están al final de la migración
+en un bloque marcado "A MANO".
 
-```sh
-DATABASE_URL="$DATABASE_URL_PRODUCCION_DIRECTA" npx prisma migrate status
-DATABASE_URL="$DATABASE_URL_PRODUCCION_DIRECTA" npx prisma migrate deploy
-DATABASE_URL="$DATABASE_URL_PRODUCCION_DIRECTA" npx prisma migrate status
-npx prisma generate
-```
+Cuentas, en el esquema nuevo:
 
-Para test, el mismo `migrate deploy` con `DATABASE_URL` tomada de
-`DATABASE_URL_TEST`, validando antes que sea `ep-floral-sound`, nunca
-`ep-odd-night`, y usando conexión directa, como hace el helper de los tests.
-
-Cada migración de cuentas trae un `rollback.sql` que elimina sólo su tabla
-nueva. Se verifica en una transacción de test que luego hace rollback. Prisma
-Migrate no aplica esos inversos automáticamente: para revertir un despliegue
-normal alcanza con volver al código anterior y conservar las tablas aditivas.
-No ejecutar los inversos sobre producción como rutina ni borrar el historial
-`_prisma_migrations`.
-
-
-### Tablas y pendientes de publicación
-
-- `password_resets`: hashes de enlaces de recuperación, vigencia de una hora,
-  consumo e índice por usuario/fecha para el máximo de tres pedidos por hora.
-- `invitaciones`: hashes de invitaciones de siete días, creadora y consumo.
-  En esta versión `organization_id` y `email` se crean nulos: el registro
-  crea una organización propia, nunca comparte el consultorio de la invitante.
+- `sesiones_acceso`: una fila por dispositivo entrado (hash del token de la
+  cookie, creación, último uso, vencimiento, cierre y motivo, IP y navegador
+  de la creación). Cerrar sesión cierra la fila; cambiar o restablecer la
+  contraseña cierra todas. Vigente = no cerrada, no vencida (30 días) y con
+  uso en los últimos 14 días.
+- `intentos_acceso`: solo intentos fallidos (login, contraseña, recuperación)
+  con IP; es el contador de bloqueo. Purga a 30 días.
+- `password_resets`: hash del enlace, vencimiento, uso y `enviado_en`; una
+  fila cuyo correo no salió no vale ni cuenta para el cupo de 3 por hora.
+- `invitaciones`: hash, vencimiento (7 días), uso y creadora. Solo las
+  cuentas de `INVITACIONES_PERMITIDAS`, con tope de 2 vigentes (TEMPORAL).
 - La aceptación de términos queda en el evento `cuenta.registro`, con su
-  versión, dentro de la transacción de alta. No se registra el email ni el token.
+  versión, dentro de la transacción de alta. No se registra el email ni el
+  token. `eventos_auditoria` no lleva IP ni navegador: eso vive en las dos
+  tablas de arriba, con purga.
 
 Antes de ofrecer el acceso, el dueño debe terminar la verificación del dominio
 `sesionapp.app` en Resend y revisar el texto de `/terminos` (constantes
-`TERMINOS_*` de `glosario.ts`, actualizando también `TERMINOS_VERSION`). El borrador deja explícitamente pendiente el
-canal definitivo de baja y el tratamiento de los respaldos. Con el dominio
-verificado, probar un correo real y una recuperación completa.
+`TERMINOS_*` de `glosario.ts`, actualizando también `TERMINOS_VERSION`). Con el
+dominio verificado, probar un correo real y una recuperación completa.
 
-El login sigue usando Auth.js v5, credenciales y JWT de 30 días. La recuperación
-no revoca los JWT existentes ni borra el contador de intentos del login, igual
-que el cambio de contraseña anterior. El alta usa el mismo `signIn` de
-credenciales y respeta sus límites; si el acceso falla después de crear la
-cuenta, el formulario avisa que debe entrar desde login, sin consumir otra
-invitación ni intentar crear otra organización.
+## 7. Incidentes de identidad y cifrado
+
+### "Creo que se filtró un token de sesión"
+
+No hay un secreto que firme sesiones: lo que se puede filtrar es la cookie de
+un dispositivo. Un volcado de `sesiones_acceso` no sirve para entrar (solo
+hashes).
+
+1. Desde Configuración: "Cerrar sesión en los demás dispositivos". Si no se
+   puede entrar, en Neon:
+   `UPDATE sesiones_acceso SET cerrada_en = now(), motivo_cierre = 'incidente' WHERE cerrada_en IS NULL;`
+2. Cambiar la contraseña (cierra todo otra vez, incluida la propia).
+3. Mirar `sesiones_acceso` de los últimos 30 días: IPs y navegadores que no
+   sean de ella.
+4. Fuera de servicio: nada. Ella entra de nuevo una vez.
+
+### "Creo que se filtró CLAVES_CIFRADO"
+
+Lo que ya se copió de la base no se puede des-filtrar: rotar protege lo que
+venga. Por eso hay que actuar rápido y averiguar si también se filtró la base.
+
+1. Generar clave nueva (`openssl rand -base64 32`), agregar `,N+1=…` a
+   `CLAVES_CIFRADO` en Vercel con `printf`, deploy. Nada queda fuera de
+   servicio.
+2. Forzar el re-cifrado: `GET /api/cron/mantenimiento?recifrar=todo` con el
+   `CRON_SECRET`, repetir hasta `pendientes: 0`. Verificar con la consulta de
+   `docs/encryption.md` §4.
+3. Sacar la clave vieja de la variable, deploy. Destruirla del gestor.
+4. Backups: si solo se filtró la clave, los backups siguen protegidos por
+   `BACKUP_ENCRYPTION_KEY`. Si hay sospecha de que también se filtró la
+   passphrase gpg o el acceso a R2: borrar los backups anteriores al paso 3,
+   tomar uno nuevo a mano, rotar `BACKUP_ENCRYPTION_KEY` y las credenciales
+   de R2.
+5. Si el vector fue Vercel entero, rotar también `PROCESSING_SECRET`,
+   `CRON_SECRET` y las credenciales de R2.
+6. Registrar acá fecha, alcance y qué se rotó. Si hay indicios de que la base
+   también se copió, es una brecha de datos sensibles y aplica la obligación
+   de notificar (Ley 18.331 / URCDP); lo decide el abogado.
+
+### "Creo que se filtró PROCESSING_SECRET"
+
+Con el secreto solo se reclama trabajo: sesiones en `procesando` (clave del
+audio, inútil sin R2) y los tickets con los que sí se puede escribir un
+resultado falso en esas sesiones. No se lee ni escribe nada más.
+
+1. Rotar sin ventana (§3). Fuera de servicio: nada.
+2. Buscar en `eventos_auditoria` los resultados del worker del período
+   sospechoso con versión de worker o de prompt desconocida: esas sesiones
+   pueden tener notas falsas. Las que estén en `revision` se descartan y
+   reprocesan; las ya aprobadas se revisan a mano con la profesional.
+3. Si el vector fue Railway (variables juntas): rotar también
+   `ASSEMBLYAI_API_KEY`, `ANTHROPIC_API_KEY` y las credenciales de R2.

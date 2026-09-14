@@ -10,26 +10,30 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Reglas del repositorio
 
-9. NUNCA importar módulos de Node en ningún archivo alcanzable desde el
-   middleware/proxy. Las DOS formas están prohibidas: `node:crypto` y
-   `crypto` pelado son el mismo módulo y rompen el Edge igual. Web Crypto
-   (`globalThis.crypto`) sí.
-   Alcanzable incluye los `await import()` dinámicos: el empaquetador los
-   sigue igual aunque el código nunca corra en el edge.
-   Ejemplo de hoy: `src/lib/login-eventos.ts` importaba `node:crypto` para
-   hashear el email, entraba al bundle por el import dinámico de
-   `authorize()` en `src/lib/auth.ts`, pasó CI entero y reventó recién en el
-   deploy de Vercel con `The Edge Function "_middleware" is referencing
-   unsupported modules: node:crypto`.
+9. El proxy (`src/proxy.ts`, convención de Next 16; ya no hay
+   `src/middleware.ts`) importa EXACTAMENTE dos módulos propios:
+   `@/lib/csp` y `@/lib/sesion-cookie`, y de paquetes solo `next/server`.
+   No conoce la base, la autenticación, el correo ni el glosario, y ninguno
+   de los tres archivos importa un built-in de Node (ni `node:crypto` ni
+   `crypto` pelado; Web Crypto sí). Alcanzable incluye los `await import()`
+   dinámicos: el empaquetador los sigue igual.
+   Por qué: un proxy que arrastre la base hace una consulta por request para
+   todos los estáticos y prefetches, y no puede caer sin tirar la app entera.
+   Verificar la sesión es trabajo de `getSessionActor()` en cada ruta y del
+   layout del dashboard; el proxy solo mira si hay cookie y arma la CSP.
+   Historia: en la versión anterior el middleware corría en Edge y
+   `src/lib/login-eventos.ts` importaba `node:crypto` por el import dinámico
+   de `authorize()` de Auth.js; pasó CI entero y reventó en el deploy de
+   Vercel. Auth.js, `login-eventos` y el middleware ya no existen.
    El guardián que lo atrapa antes del merge es
-   `src/lib/__tests__/middleware-edge.test.ts`: camina el grafo de imports
-   desde `src/middleware.ts` y falla ante cualquier módulo built-in, con o
-   sin prefijo (la lista sale de `builtinModules` de `node:module`, no está
-   escrita a mano).
+   `src/lib/__tests__/proxy-liviano.test.ts`: camina el grafo de imports
+   desde `src/proxy.ts`, exige que el conjunto sea exactamente esos tres
+   archivos y falla ante cualquier módulo built-in, con o sin prefijo (la
+   lista sale de `builtinModules` de `node:module`, no está escrita a mano).
 
 # Content-Security-Policy: el plan para pasar a enforce
 
-Hoy la CSP sale del middleware (`src/middleware.ts`, política en
+Hoy la CSP sale del proxy (`src/proxy.ts`, política en
 `src/lib/csp.ts`) en modo **Report-Only**: el navegador no bloquea nada y
 postea las violaciones a `/api/csp-report`, que las deja en el log de la
 función (no en `eventos_auditoria`: son ruido de diagnóstico, no rastro
@@ -101,4 +105,4 @@ bloqueado si algo se rompe. Después se saca la de reporte.
 
 Y en ese momento se puede fusionar la CSP mínima de `next.config.ts`
 (`frame-ancestors 'none'`, que hoy existe aparte porque una política
-report-only no impide el embebido) con la del middleware.
+report-only no impide el embebido) con la del proxy.
