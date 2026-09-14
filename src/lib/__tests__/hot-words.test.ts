@@ -124,3 +124,28 @@ describe("hotWordsBulkSchema", () => {
     expect(hotWordsBulkSchema.safeParse({ hotWords: [] }).success).toBe(false);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Categorías: la lista del schema Zod y el enum de Postgres (vía el cliente
+// que genera Prisma) tienen que ser la misma. Mismo guardián que
+// constantes-turno.test.ts para duración, modalidad y método de pago.
+// ────────────────────────────────────────────────────────────────────────────
+
+import { CategoriaHotWord as EnumCategoriaHotWord } from "@prisma/client";
+
+import { CATEGORIAS_HOT_WORD } from "@/app/api/_lib/schemas";
+
+describe("categorías del vocabulario", () => {
+  it("CATEGORIAS_HOT_WORD es el enum categoria_hot_word", () => {
+    expect([...CATEGORIAS_HOT_WORD].sort()).toEqual(
+      Object.values(EnumCategoriaHotWord).sort(),
+    );
+  });
+
+  it("una categoría fuera de la lista se rechaza al cargar el término", () => {
+    const base = { termino: "ansiedad", scope: "global" as const };
+    expect(hotWordItemSchema.safeParse({ ...base, categoria: "termino_clinico" }).success).toBe(true);
+    expect(hotWordItemSchema.safeParse({ ...base, categoria: null }).success).toBe(true);
+    expect(hotWordItemSchema.safeParse({ ...base, categoria: "cualquier cosa" }).success).toBe(false);
+  });
+});

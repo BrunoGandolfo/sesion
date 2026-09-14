@@ -16,6 +16,7 @@ import type {
   Duracion,
   EstadoPago,
   EstadoTurno,
+  FrecuenciaSerie,
   MetodoPago,
   Modalidad,
 } from "@/lib/constantes-turno";
@@ -99,6 +100,22 @@ export interface Turno {
   actualizadoEn: Date;
   organizationId: string;
 }
+
+/** La serie que creó POST /api/turnos cuando se pidió repetir el turno. */
+export interface SerieCreada {
+  id: string;
+  frecuencia: FrecuenciaSerie;
+  /** Turnos que quedaron agendados, contando el primero. */
+  creados: number;
+  /** Fechas de la serie que chocaban con otro turno y no se agendaron. Por
+   *  la red llegan como ISO; en el servidor son Date. */
+  omitidas: Date[];
+}
+
+/** `data` de POST /api/turnos: el turno, más la serie si se pidió una. Es un
+ *  Turno con un campo extra, así quien solo espera un Turno (la pantalla de
+ *  grabar) sigue leyendo `id` y `fecha` igual. */
+export type TurnoCreado = Turno & { serie: SerieCreada | null };
 
 export interface Recordatorio {
   id: string;

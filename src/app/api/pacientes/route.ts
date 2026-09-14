@@ -1,12 +1,10 @@
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import type { Paciente } from "@/types/domain";
 
 import { getOrganizationId } from "../_lib/auth";
+import { crearPaciente, listarPacientes } from "../_lib/casos-uso/pacientes";
 import { pacienteCreateSchema, toBooleanParam } from "../_lib/schemas";
 import { errorResponse, ok, validationError } from "../_lib/responses";
-import { toPacienteConDeuda } from "../_lib/domain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,34 +27,14 @@ export async function GET(request: Request) {
       return validationError(parsed.error);
     }
 
-    const where: Prisma.PacienteWhereInput = {
+    const pacientes = await listarPacientes({
+      prisma: db,
       organizationId,
       activo: parsed.data.activo,
-    };
-
-    if (parsed.data.q) {
-      where.OR = [
-        { nombre: { contains: parsed.data.q, mode: "insensitive" } },
-        { apellido: { contains: parsed.data.q, mode: "insensitive" } },
-      ];
-    }
-
-    const pacientes = await db.paciente.findMany({
-      where,
-      include: {
-        turnos: {
-          select: {
-            fecha: true,
-            estado: true,
-            pagoEstado: true,
-            tarifaCobrada: true,
-          },
-        },
-      },
-      orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
+      q: parsed.data.q,
     });
 
-    return ok(pacientes.map(toPacienteConDeuda));
+    return ok(pacientes);
   } catch (error) {
     return errorResponse(error);
   }
@@ -73,19 +51,19 @@ export async function POST(request: Request) {
     }
 
     // telefono ya viene normalizado a E.164 por el .transform del esquema.
-    const paciente = await db.paciente.create({
-      data: {
+    const paciente = await crearPaciente({
+      prisma: db,
+      organizationId,
+      datos: {
         nombre: parsed.data.nombre,
         apellido: parsed.data.apellido,
         telefono: parsed.data.telefono,
-        email: parsed.data.email ?? null,
         tarifa: parsed.data.tarifa,
         notas: parsed.data.notas ?? null,
-        organizationId,
       },
     });
 
-    return ok<Paciente>(paciente, 201);
+    return ok(paciente, 201);
   } catch (error) {
     return errorResponse(error);
   }

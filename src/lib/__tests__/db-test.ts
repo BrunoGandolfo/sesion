@@ -90,8 +90,23 @@ function hostDe(url: string): string {
   }
 }
 
+const HOSTS_LOCALES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** True si la URL apunta a un Postgres de esta misma máquina. */
+function esLocal(url: string): boolean {
+  try {
+    return HOSTS_LOCALES.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 const AYUDA = [
   "Cómo arreglarlo:",
+  "  - Local con Docker: `docker run -d --name pg-sesion -p 0:5432 \\",
+  "      -e POSTGRES_PASSWORD=test postgres:17`, `prisma migrate deploy` contra",
+  "    postgresql://postgres:test@localhost:<puerto>/postgres, y esa URL en",
+  "    DATABASE_URL_TEST.",
   "  - Local: poné DATABASE_URL_TEST en .env.test con la connection string de",
   "    la rama de test de Neon (Neon → Branches → test → Connection string).",
   "  - CI: el job `test` la recibe de secrets.DATABASE_URL_TEST.",
@@ -133,6 +148,14 @@ export function urlDeBaseDeTest(): string {
         AYUDA,
       ].join("\n"),
     );
+  }
+
+  // Un Postgres propio en la máquina (Docker, `docker run ... postgres:17`)
+  // también sirve: es la forma de correr integración sin compartir base con
+  // otras ramas. Solo localhost; cualquier otro host sigue teniendo que ser
+  // la rama de test de Neon.
+  if (esLocal(url)) {
+    return url;
   }
 
   if (!url.includes(RAMA_TEST)) {
@@ -200,14 +223,27 @@ export function conectarBaseDeTest(): BaseDeTest {
  * stub y ningún test escribe esa tabla.
  */
 const TABLAS = [
+  // Las tablas del esquema nuevo (prisma/schema.prisma, @@map). Con CASCADE
+  // el orden no importa. eventos_auditoria sigue afuera, ver arriba.
+  "audio_segmentos",
   "sesiones_clinicas",
-  "paciente_contexto_clinico",
+  "trabajos",
+  "worker_estado",
+  "hilo_versiones",
+  "hilos",
   "consentimientos_grabacion",
-  "recordatorios",
+  "envios_sms",
+  "bajas_sms",
   "turnos",
+  "series_turno",
   "hot_words",
   "pacientes",
   "configuraciones",
+  "cupos_ayuda",
+  "invitaciones",
+  "password_resets",
+  "intentos_acceso",
+  "sesiones_acceso",
   "usuarios",
   "organizaciones",
 ] as const;

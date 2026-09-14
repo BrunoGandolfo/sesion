@@ -67,12 +67,23 @@ import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-c
 // modalidad, notas): mismo schema y mismo componente, turno-editar-campos.
 type EditValues = CamposTurnoValores;
 
+// Textos nuevos de pantalla (pendientes de glosario.ts: ver
+// docs/pendientes/06-estructura.md).
+const CANCELAR_SERIE = "Cancelar el resto de la serie";
+const CANCELAR_SERIE_TITULO = "¿Cancelar este turno y los que siguen?";
+const CANCELAR_SERIE_MENSAJE =
+  "Se cancelan este turno y todos los siguientes de la serie que todavía estén programados, con sus recordatorios. Los ya realizados y los anteriores quedan como están.";
+const CANCELAR_SERIE_ACCION = "Cancelar el resto";
+const SERIE_CANCELADA = (n: number) =>
+  n === 1 ? "Se canceló 1 turno de la serie" : `Se cancelaron ${n} turnos de la serie`;
+
 type Modo =
   | "ver"
   | "reprogramar"
   | "cobrar"
   | "confirmar-no-vino"
   | "confirmar-cancelar"
+  | "confirmar-cancelar-serie"
   | "confirmar-reintento"
   | "confirmar-deshacer-cobro";
 
@@ -248,6 +259,29 @@ export function TurnoDetailSheet({
     try {
       await apiPatch<Turno>(`/api/turnos/${turno.id}`, payload);
       onUpdated(mensaje);
+    } catch (err) {
+      const m = mensajeDe(err);
+      setError(m);
+      onError(m);
+      setModo("ver");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  // Cancela este turno y los siguientes de su serie que sigan programados
+  // (casos-uso/cancelar-serie-turno.ts). Los realizados y los anteriores no
+  // se tocan; cancelar UNO solo sigue siendo "Cancelar turno".
+  async function cancelarRestoDeSerie() {
+    if (!turno) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      const resultado = await apiPost<{ cancelados: number }>(
+        `/api/turnos/${turno.id}/cancelar-serie`,
+        {},
+      );
+      onUpdated(SERIE_CANCELADA(resultado.cancelados));
     } catch (err) {
       const m = mensajeDe(err);
       setError(m);
@@ -518,6 +552,19 @@ export function TurnoDetailSheet({
                     >
                       Cancelar turno
                     </Button>
+                    {turno.serieId ? (
+                      <Button
+                        variant="ghost"
+                        className="!text-terracotta-600 hover:!bg-terracotta-50"
+                        onClick={() => {
+                          setError(null);
+                          setModo("confirmar-cancelar-serie");
+                        }}
+                        disabled={enviando}
+                      >
+                        {CANCELAR_SERIE}
+                      </Button>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -594,6 +641,20 @@ export function TurnoDetailSheet({
             onConfirmar={() =>
               void patchTurno({ estado: "cancelado" }, "Turno cancelado")
             }
+            onCancelar={() => setModo("ver")}
+          />
+        ) : null}
+
+        {modo === "confirmar-cancelar-serie" ? (
+          <Confirmar
+            titulo={CANCELAR_SERIE_TITULO}
+            mensaje={CANCELAR_SERIE_MENSAJE}
+            accion={CANCELAR_SERIE_ACCION}
+            cancelar="Volver"
+            variante="peligro"
+            enviando={enviando}
+            enviandoLabel="Cancelando…"
+            onConfirmar={() => void cancelarRestoDeSerie()}
             onCancelar={() => setModo("ver")}
           />
         ) : null}

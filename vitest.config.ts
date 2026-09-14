@@ -56,6 +56,7 @@ const INTEGRACION = [
   'src/lib/__tests__/password-atomico.test.ts',
   'src/lib/__tests__/solapamiento-turnos.test.ts',
   'src/lib/__tests__/config-contrato.test.ts',
+  'src/lib/__tests__/crear-serie-turno.test.ts',
 ]
 
 // Repetidos a mano en vez de importar `defaultExclude`: al pasar `exclude`

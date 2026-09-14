@@ -18,8 +18,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus } from "lucide-react";
 
-import { Avatar, Button, Input } from "@/components/ui";
+import { Avatar, Button, Input, Segmented } from "@/components/ui";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import {
+  frecuenciaTurnoSchema,
+  type FrecuenciaTurno,
+} from "@/lib/constantes-turno";
 // Los inputs se llenan con el reloj de Montevideo porque así los lee después
 // instanteDesdeFechaHoraMvd al enviar. Con getFullYear/getHours el par no
 // cerraba: desde Madrid, la propuesta "el mismo día y hora que la última vez"
@@ -42,6 +46,7 @@ import {
 
 const schema = camposTurnoSchema.extend({
   pacienteId: z.string(),
+  frecuencia: frecuenciaTurnoSchema,
 });
 
 type Valores = z.infer<typeof schema>;
@@ -53,7 +58,19 @@ export interface NuevoTurnoData {
   duracion: Duracion;
   modalidad: Modalidad;
   notas: string;
+  /** "unico", o la frecuencia de la serie que se repite tres meses. */
+  frecuencia: FrecuenciaTurno;
 }
+
+// Texto nuevo de pantalla (pendiente de glosario.ts, ver
+// docs/pendientes/06-estructura.md).
+const OPCIONES_FRECUENCIA: { value: FrecuenciaTurno; label: string }[] = [
+  { value: "unico", label: "Una vez" },
+  { value: "semanal", label: "Cada semana" },
+  { value: "quincenal", label: "Cada 15 días" },
+];
+const AYUDA_SERIE =
+  "Se agendan tres meses de turnos, cada uno independiente: podés mover o cancelar cualquiera sin tocar el resto.";
 
 type PacienteOpcion = Pick<Paciente, "id" | "nombre" | "apellido" | "tarifa">;
 
@@ -119,6 +136,7 @@ export function NuevoTurnoForm({
     defaultValues: {
       ...CAMPOS_TURNO_DEFAULT,
       pacienteId: "",
+      frecuencia: "unico",
       fecha: fechaInputMvd(fechaInicial ?? agregarDiasMvd(new Date(), 1)),
       hora: "10:00",
     },
@@ -133,6 +151,7 @@ export function NuevoTurnoForm({
     control,
     formState: { errors },
   } = metodos;
+  const frecuencia = useWatch({ control, name: "frecuencia" });
 
   const pacienteId = useWatch({ control, name: "pacienteId" });
 
@@ -359,6 +378,7 @@ export function NuevoTurnoForm({
         duracion: valores.duracion,
         modalidad: valores.modalidad,
         notas: valores.notas ?? "",
+        frecuencia: valores.frecuencia,
       });
     } catch (err) {
       setErrorEnvio(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
@@ -545,6 +565,28 @@ export function NuevoTurnoForm({
               </p>
             ) : null}
           </TurnoEditarCampos>
+
+          {/* Repetición: una vez, o una serie de tres meses */}
+          <div className="space-y-2">
+            <input type="hidden" {...register("frecuencia")} />
+            <span className="block font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+              Se repite
+            </span>
+            <Segmented
+              ariaLabel="Se repite"
+              value={frecuencia}
+              onChange={(valor: FrecuenciaTurno) =>
+                setValue("frecuencia", valor, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              options={OPCIONES_FRECUENCIA}
+            />
+            {frecuencia !== "unico" ? (
+              <p className="text-[12px] leading-[1.5] text-ink-500">{AYUDA_SERIE}</p>
+            ) : null}
+          </div>
 
           {errorEnvio ? (
             <p role="alert" className="text-[12px] text-[color:var(--color-error)]">

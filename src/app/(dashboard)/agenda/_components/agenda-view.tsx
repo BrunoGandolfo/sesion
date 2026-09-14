@@ -8,6 +8,7 @@ import { CalendarX2 } from "lucide-react";
 import { Fab, Sheet, Toast } from "@/components/ui";
 import { useConfirmacionDibujada } from "@/components/ui/movimiento";
 import { useHoy } from "@/hooks/useHoy";
+import { mensajeTurnoAgendado, payloadNuevoTurno } from "@/lib/agendar-turno";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
 import {
   agregarDiasMvd,
@@ -15,14 +16,13 @@ import {
   inicioDeMesMvd,
   inicioDeSemanaMvd,
   inicioFinDiaMvd,
-  instanteDesdeFechaHoraMvd,
   instanteMvd,
 } from "@/lib/fechas-montevideo";
 import { AGENDAR, ALGO_FALLO } from "@/lib/glosario";
 import type {
   Configuracion,
   PacienteConDeuda,
-  Turno,
+  TurnoCreado,
   TurnoConPaciente,
 } from "@/types/domain";
 
@@ -305,22 +305,16 @@ export function AgendaView() {
 
   // Lanza ApiClientError si la API rechaza: el formulario lo muestra.
   const handleCreateTurno = async (data: NuevoTurnoData) => {
-    // La hora del formulario es la del consultorio, no la del dispositivo.
-    const fechaISO = instanteDesdeFechaHoraMvd(data.fecha, data.hora).toISOString();
+    // El body y el mensaje son los mismos que en Hoy (src/lib/agendar-turno.ts).
+    let creado: TurnoCreado;
     try {
-      await apiPost<Turno>("/api/turnos", {
-        pacienteId: data.pacienteId,
-        fecha: fechaISO,
-        duracion: data.duracion,
-        modalidad: data.modalidad,
-        notas: data.notas ? data.notas : null,
-      });
+      creado = await apiPost<TurnoCreado>("/api/turnos", payloadNuevoTurno(data));
     } catch (err) {
       if (err instanceof ApiClientError) throw err;
       throw new ApiClientError(ALGO_FALLO, 0);
     }
     setSheetOpen(false);
-    setToast({ open: true, message: "Turno agendado", variante: "confirmacion" });
+    setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
     // Si se creó un paciente en el camino, la lista tiene que reflejarlo.
     setPacientes(null);
     refetchTurnos();

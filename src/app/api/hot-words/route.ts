@@ -1,8 +1,12 @@
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../_lib/auth";
-import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
+import {
+  crearHotWord,
+  crearHotWords,
+  listarHotWords,
+} from "../_lib/casos-uso/hot-words";
+import { errorResponse, ok, validationError } from "../_lib/responses";
 import {
   hotWordItemSchema,
   hotWordsBulkSchema,
@@ -26,34 +30,11 @@ export async function GET(request: Request) {
       return validationError(parsed.error);
     }
 
-    if (parsed.data.scope === "paciente" && !parsed.data.pacienteId) {
-      throw new ApiError(
-        "pacienteId es obligatorio cuando scope === 'paciente'",
-        400,
-      );
-    }
-
-    const where: Prisma.HotWordWhereInput = {
+    const hotWords = await listarHotWords({
+      prisma: db,
       organizationId,
       scope: parsed.data.scope,
-    };
-
-    if (parsed.data.scope === "paciente") {
-      where.pacienteId = parsed.data.pacienteId;
-    } else {
-      where.pacienteId = null;
-    }
-
-    const hotWords = await db.hotWord.findMany({
-      where,
-      select: {
-        id: true,
-        termino: true,
-        scope: true,
-        categoria: true,
-        activo: true,
-      },
-      orderBy: { termino: "asc" },
+      pacienteId: parsed.data.pacienteId,
     });
 
     return ok(hotWords);
@@ -67,26 +48,20 @@ export async function POST(request: Request) {
     const organizationId = await getOrganizationId();
     const body: unknown = await request.json();
 
+    // Carga masiva: { hotWords: [...] }. Un término suelto: el objeto solo.
     if (typeof body === "object" && body !== null && "hotWords" in body) {
       const parsed = hotWordsBulkSchema.safeParse(body);
       if (!parsed.success) {
         return validationError(parsed.error);
       }
 
-      await assertPacientesExisten(parsed.data.hotWords, organizationId);
-
-      const result = await db.hotWord.createMany({
-        data: parsed.data.hotWords.map((h) => ({
-          organizationId,
-          termino: h.termino,
-          scope: h.scope,
-          categoria: h.categoria ?? null,
-          pacienteId: h.scope === "paciente" ? h.pacienteId ?? null : null,
-        })),
-        skipDuplicates: true,
+      const result = await crearHotWords({
+        prisma: db,
+        organizationId,
+        hotWords: parsed.data.hotWords,
       });
 
-      return ok({ count: result.count }, 201);
+      return ok(result, 201);
     }
 
     const parsed = hotWordItemSchema.safeParse(body);
@@ -94,63 +69,14 @@ export async function POST(request: Request) {
       return validationError(parsed.error);
     }
 
-    await assertPacientesExisten([parsed.data], organizationId);
+    const hotWord = await crearHotWord({
+      prisma: db,
+      organizationId,
+      hotWord: parsed.data,
+    });
 
-    try {
-      const hotWord = await db.hotWord.create({
-        data: {
-          organizationId,
-          termino: parsed.data.termino,
-          scope: parsed.data.scope,
-          categoria: parsed.data.categoria ?? null,
-          pacienteId:
-            parsed.data.scope === "paciente"
-              ? parsed.data.pacienteId ?? null
-              : null,
-        },
-        select: {
-          id: true,
-          termino: true,
-          scope: true,
-          categoria: true,
-          activo: true,
-        },
-      });
-      return ok(hotWord, 201);
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        throw new ApiError("Hot word duplicado", 409);
-      }
-      throw error;
-    }
+    return ok(hotWord, 201);
   } catch (error) {
     return errorResponse(error);
-  }
-}
-
-async function assertPacientesExisten(
-  items: Array<{ scope: string; pacienteId?: string | null }>,
-  organizationId: string,
-) {
-  const ids = Array.from(
-    new Set(
-      items
-        .filter((i) => i.scope === "paciente" && i.pacienteId)
-        .map((i) => i.pacienteId as string),
-    ),
-  );
-
-  if (ids.length === 0) return;
-
-  const pacientes = await db.paciente.findMany({
-    where: { id: { in: ids }, organizationId },
-    select: { id: true },
-  });
-
-  if (pacientes.length !== ids.length) {
-    throw new ApiError("Paciente no encontrado", 404);
   }
 }

@@ -15,9 +15,11 @@
  * llega el SMS a la paciente. Un contrato que contesta que sí a algo que no
  * hace es peor que uno que no lo acepta.
  *
- * La columna sigue existiendo (sacarla es una migración). Lo que se prueba es
- * que el PATCH la ignore, y que ignorarla no le impida guardar el resto del
- * cuerpo.
+ * La columna ya no existe (esquema nuevo, docs/esquema.md). Lo que se prueba
+ * es que un cliente viejo que todavía la mande reciba 200 sin que eso le
+ * impida guardar el resto del cuerpo, y que lo que decide el aviso es
+ * `recordatorioModo`. La ruta es fina: la regla vive en
+ * casos-uso/configuracion.ts.
  */
 import {
   afterAll,
@@ -67,9 +69,6 @@ let patchConfig!: (request: Request) => Promise<Response>;
 const ORIGINAL_KEY = process.env.NOTES_ENCRYPTION_KEY;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
-/** El valor que tiene la columna antes de cada test. */
-const HORAS_INICIALES = 24;
-
 async function crearOrgConConfig(): Promise<string> {
   const org = await prismaRaw.organization.create({
     data: { nombre: `Org ${randomUUID()}` },
@@ -86,7 +85,6 @@ async function crearOrgConConfig(): Promise<string> {
     data: {
       organizationId: org.id,
       tarifaDefault: 1000,
-      horasAnticipacion: HORAS_INICIALES,
       nombreProfesional: "Mariana Roldán",
       direccion: "Rivera 2540",
       whatsappOrigen: "+598 99 876 543",
@@ -141,13 +139,14 @@ afterAll(async () => {
 });
 
 describe("PATCH /api/config y horasAnticipacion", () => {
-  it("mandarla no rompe, pero no la escribe", async () => {
+  it("mandarla no rompe y no cambia nada", async () => {
     const orgId = await crearOrgConConfig();
+    const antes = await leerConfig(orgId);
 
     const res = await patchConfig(pedidoPatch({ horasAnticipacion: 72 }));
 
     expect(res.status).toBe(200);
-    expect((await leerConfig(orgId)).horasAnticipacion).toBe(HORAS_INICIALES);
+    expect(await leerConfig(orgId)).toEqual(antes);
   });
 
   it("mezclada con campos reales, los reales se guardan igual", async () => {
@@ -167,7 +166,7 @@ describe("PATCH /api/config y horasAnticipacion", () => {
     const fila = await leerConfig(orgId);
     expect(fila.nombreProfesional).toBe("Mariana R.");
     expect(fila.recordatorioModo).toBe("misma_manana");
-    expect(fila.horasAnticipacion).toBe(HORAS_INICIALES);
+    expect("horasAnticipacion" in fila).toBe(false);
   });
 
   it("lo que sí decide cuándo sale el aviso es recordatorioModo", async () => {

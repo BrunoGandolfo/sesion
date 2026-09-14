@@ -1,13 +1,21 @@
 import { z } from "zod";
 
+import {
+  duracionSchema,
+  estadoTurnoSchema,
+  frecuenciaTurnoSchema,
+  modalidadSchema,
+} from "@/lib/constantes-turno";
 import { excedeMaximoPalabras, TERMINO_MUY_LARGO } from "@/lib/hot-words";
 import { normalizePhone } from "@/lib/phone";
+import { RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
 
 // Las listas cerradas del turno se declaran una sola vez en
 // src/lib/constantes-turno.ts; acá solo se re-exportan para las rutas.
 export {
   duracionSchema,
   frecuenciaSerieSchema,
+  frecuenciaTurnoSchema,
   metodoPagoSchema,
   modalidadSchema,
   estadoTurnoSchema as turnoEstadoSchema,
@@ -17,6 +25,32 @@ export const isoDateTimeSchema = z.string().refine(
   (value) => !Number.isNaN(Date.parse(value)),
   "Fecha inválida",
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// Turno — el body de POST /api/turnos y de PATCH /api/turnos/[id]. Viven acá
+// y no en las rutas porque un route.ts solo puede exportar sus handlers, y
+// los tests los necesitan.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Los ids los genera la app como uuid (docs/esquema.md §2, punto 12). */
+export const turnoCreateSchema = z.object({
+  pacienteId: z.string().uuid("Paciente inválido"),
+  fecha: isoDateTimeSchema,
+  duracion: duracionSchema,
+  modalidad: modalidadSchema,
+  notas: z.string().trim().nullable().optional(),
+  /** "unico" agenda uno solo; semanal/quincenal crean una serie. Opcional
+   *  para quien agenda uno sin pensar en series (la pantalla de grabar). */
+  frecuencia: frecuenciaTurnoSchema.default("unico"),
+});
+
+export const turnoUpdateSchema = z.object({
+  fecha: isoDateTimeSchema.optional(),
+  duracion: duracionSchema.optional(),
+  modalidad: modalidadSchema.optional(),
+  notas: z.string().trim().nullable().optional(),
+  estado: estadoTurnoSchema.optional(),
+});
 
 export function toBooleanParam(value: string | null, fallback: boolean) {
   if (value === null || value === "") return fallback;
@@ -86,6 +120,27 @@ export const pacienteUpdateSchema = pacienteCreateSchema.partial().extend({
 
 const hotWordScopeSchema = z.enum(["global", "profesional", "paciente"]);
 
+/** Las categorías del vocabulario. Espejo del enum `categoria_hot_word` de
+ *  Postgres (prisma/schema.prisma): src/lib/__tests__/hot-words.test.ts
+ *  compara las dos listas, así que una divergencia falla en CI. */
+export const CATEGORIAS_HOT_WORD = [
+  "termino_clinico",
+  "modismo_rioplatense",
+  "nombre_propio",
+  "otro",
+] as const;
+export const categoriaHotWordSchema = z.enum(CATEGORIAS_HOT_WORD);
+
+/** PATCH /api/hot-words/[id]: activar/desactivar o recategorizar. */
+export const hotWordUpdateSchema = z
+  .object({
+    activo: z.boolean().optional(),
+    categoria: categoriaHotWordSchema.nullable().optional(),
+  })
+  .refine((v) => v.activo !== undefined || v.categoria !== undefined, {
+    message: "Nada para actualizar",
+  });
+
 const terminoSchema = z
   .string()
   .trim()
@@ -98,7 +153,8 @@ export const hotWordItemSchema = z
   .object({
     termino: terminoSchema,
     scope: hotWordScopeSchema,
-    categoria: z.string().trim().max(50).nullish(),
+    // Antes era texto libre; en la base es un enum, así que el 400 sale acá.
+    categoria: categoriaHotWordSchema.nullish(),
     pacienteId: z.string().uuid().nullish(),
   })
   .refine((v) => (v.scope === "paciente" ? !!v.pacienteId : !v.pacienteId), {
@@ -114,4 +170,33 @@ export const hotWordsBulkSchema = z.object({
 export const hotWordsQuerySchema = z.object({
   scope: hotWordScopeSchema,
   pacienteId: z.string().uuid().optional(),
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Configuración — el body de PATCH /api/config.
+//
+// `horasAnticipacion` NO está, a propósito: dejó de decidir nada cuando el
+// recordatorio pasó a guardarse como un MOMENTO (`recordatorioModo`). Un
+// contrato que contesta que sí a algo que no hace es una mentira, no una
+// compatibilidad. Como zod ignora las claves que el objeto no declara,
+// mandarlo no rompe: se descarta en silencio y el resto se guarda igual.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const configUpdateSchema = z.object({
+  nombreProfesional: z.string().trim().min(1, "Falta el nombre").optional(),
+  direccion: z.string().trim().optional(),
+  whatsappOrigen: z.string().trim().optional(),
+  tarifaDefault: z
+    .number()
+    .int()
+    .min(0, "La tarifa no puede ser negativa")
+    .optional(),
+  /** Cuándo sale el recordatorio. Ver src/lib/recordatorios-programacion.ts. */
+  recordatorioModo: z.enum(RECORDATORIO_MODOS).optional(),
+  templateRecordatorio: z
+    .string()
+    .trim()
+    .min(1, "Falta el template")
+    .optional(),
+  orientacionTeorica: z.enum(["cbt_mi", "gestalt"]).optional(),
 });

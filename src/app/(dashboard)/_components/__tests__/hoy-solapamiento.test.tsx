@@ -47,9 +47,9 @@ vi.mock("../sheet-nuevo-turno", async () => {
   };
 });
 const VALORES: NuevoTurnoData = {
-  pacienteId: "p1", fecha: "2026-09-10", hora: "12:00", duracion: 50, modalidad: "presencial", notas: "  consulta  ",
+  pacienteId: "p1", fecha: "2026-09-10", hora: "12:00", duracion: 50, modalidad: "presencial", notas: "  consulta  ", frecuencia: "unico",
 };
-const PEDIDO = { pacienteId: "p1", fecha: "2026-09-10T15:00:00.000Z", duracion: 50, modalidad: "presencial", notas: "consulta" };
+const PEDIDO = { pacienteId: "p1", fecha: "2026-09-10T15:00:00.000Z", duracion: 50, modalidad: "presencial", notas: "consulta", frecuencia: "unico" };
 beforeEach(() => {
   vi.clearAllMocks();
   api.get.mockResolvedValue([]);

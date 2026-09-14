@@ -13,20 +13,20 @@ import { Toast } from "@/components/ui";
 import type { VarianteToast } from "@/components/ui/toast";
 import { ListaEnCascada, MS_CHECK_DIBUJADO } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
+import { mensajeTurnoAgendado, payloadNuevoTurno } from "@/lib/agendar-turno";
 import { ApiClientError, apiGet, apiPost } from "@/lib/api-client";
-import { instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import {
   ALGO_FALLO,
   COBRADO,
   HOY_SIN_PROXIMA,
   NO_SE_PUDO_AGENDAR,
   NO_SE_PUDO_COBRAR,
-  TURNO_AGENDADO,
 } from "@/lib/glosario";
 import type {
   Configuracion,
   MetodoPago,
   PacienteConDeuda,
+  TurnoCreado,
 } from "@/types/domain";
 
 import { AgendaDelDia } from "./agenda-del-dia";
@@ -164,18 +164,14 @@ export function Dashboard() {
   // general.
   const agendar = React.useCallback(
     async (valores: NuevoTurnoData) => {
+      let creado: TurnoCreado;
       try {
-        await apiPost("/api/turnos", {
-          pacienteId: valores.pacienteId,
-          // La hora del formulario es la del consultorio, no la del aparato.
-          fecha: instanteDesdeFechaHoraMvd(
-            valores.fecha,
-            valores.hora,
-          ).toISOString(),
-          duracion: valores.duracion,
-          modalidad: valores.modalidad,
-          notas: valores.notas?.trim() ? valores.notas.trim() : null,
-        });
+        // El body y el mensaje son los mismos que en la agenda
+        // (src/lib/agendar-turno.ts).
+        creado = await apiPost<TurnoCreado>(
+          "/api/turnos",
+          payloadNuevoTurno(valores),
+        );
       } catch (error) {
         if (error instanceof ApiClientError) throw error;
         throw new ApiClientError(NO_SE_PUDO_AGENDAR, 0);
@@ -183,7 +179,7 @@ export function Dashboard() {
       setTurnoSheet(false);
       setToast({
         open: true,
-        message: TURNO_AGENDADO,
+        message: mensajeTurnoAgendado(creado),
         variante: "confirmacion",
       });
       recargar();

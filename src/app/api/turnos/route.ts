@@ -1,18 +1,15 @@
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../_lib/auth";
-import { programarRecordatorio } from "../_lib/casos-uso/recordatorios-del-turno";
-import { assertSinSolapamiento } from "../_lib/casos-uso/solapamiento-turnos";
+import { crearTurno } from "../_lib/casos-uso/crear-turno";
+import { listarTurnos } from "../_lib/casos-uso/turnos";
 import {
-  duracionSchema,
   isoDateTimeSchema,
-  modalidadSchema,
   toBooleanParam,
+  turnoCreateSchema,
 } from "../_lib/schemas";
-import { ApiError, errorResponse, ok, validationError } from "../_lib/responses";
-import { toRecordatorio, toTurno, toTurnoConPaciente } from "../_lib/domain";
+import { errorResponse, ok, validationError } from "../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,14 +19,6 @@ const querySchema = z.object({
   hasta: isoDateTimeSchema,
   pacienteId: z.string().optional(),
   includeCancelados: z.boolean(),
-});
-
-const createTurnoSchema = z.object({
-  pacienteId: z.string().cuid("Paciente inválido"),
-  fecha: isoDateTimeSchema,
-  duracion: duracionSchema,
-  modalidad: modalidadSchema,
-  notas: z.string().trim().nullable().optional(),
 });
 
 export async function GET(request: Request) {
@@ -50,39 +39,16 @@ export async function GET(request: Request) {
       return validationError(parsed.error);
     }
 
-    const where: Prisma.TurnoWhereInput = {
+    const turnos = await listarTurnos({
+      prisma: db,
       organizationId,
-      fecha: {
-        gte: new Date(parsed.data.desde),
-        lte: new Date(parsed.data.hasta),
-      },
-    };
-
-    if (parsed.data.pacienteId) {
-      where.pacienteId = parsed.data.pacienteId;
-    }
-
-    if (!parsed.data.includeCancelados) {
-      where.estado = { not: "cancelado" };
-    }
-
-    const turnos = await db.turno.findMany({
-      where,
-      include: {
-          sesionClinica: { select: { id: true, estado: true } },
-        paciente: {
-          select: {
-            id: true,
-            nombre: true,
-            apellido: true,
-            telefono: true,
-          },
-        },
-      },
-      orderBy: { fecha: "asc" },
+      desde: new Date(parsed.data.desde),
+      hasta: new Date(parsed.data.hasta),
+      pacienteId: parsed.data.pacienteId,
+      includeCancelados: parsed.data.includeCancelados,
     });
 
-    return ok(turnos.map(toTurnoConPaciente));
+    return ok(turnos);
   } catch (error) {
     return errorResponse(error);
   }
@@ -92,81 +58,25 @@ export async function POST(request: Request) {
   try {
     const organizationId = await getOrganizationId();
     const body = await request.json();
-    const parsed = createTurnoSchema.safeParse(body);
+    const parsed = turnoCreateSchema.safeParse(body);
 
     if (!parsed.success) {
       return validationError(parsed.error);
     }
 
-    const ahora = new Date();
-
-    const result = await db.$transaction(async (tx) => {
-      const paciente = await tx.paciente.findFirst({
-        where: { id: parsed.data.pacienteId, organizationId },
-        select: { id: true, tarifa: true },
-      });
-
-      if (!paciente) {
-        throw new ApiError("Paciente no encontrado", 404);
-      }
-
-      const fecha = new Date(parsed.data.fecha);
-
-      // Dentro de la transacción: la comprobación toma un lock de asesoría
-      // por organización que se libera al terminarla, así que dos altas
-      // simultáneas para el mismo horario se ordenan y la segunda ve el turno
-      // de la primera. La transacción sola NO alcanzaría —READ COMMITTED no
-      // bloquea la ausencia de filas—; el porqué está en el caso de uso.
-      await assertSinSolapamiento({
-        prisma: tx,
-        organizationId,
-        intervalo: { inicio: fecha, duracionMin: parsed.data.duracion },
-      });
-
-      const turno = await tx.turno.create({
-        data: {
-          pacienteId: paciente.id,
-          organizationId,
-          fecha,
-          duracion: parsed.data.duracion,
-          modalidad: parsed.data.modalidad,
-          estado: "programado",
-          tarifaCobrada: paciente.tarifa,
-          pagoEstado: "pendiente",
-          notas: parsed.data.notas ?? null,
-        },
-      });
-
-      // Un turno con fecha pasada no lleva recordatorio: es el caso de
-      // /grabar/nuevo, que crea el turno con la hora de este instante porque
-      // la sesión está empezando. Sin esta guarda se creaba igual, con
-      // `programadoEn` calculado hacia atrás (las 20:00 de ayer), y el cron
-      // le mandaba a la paciente un SMS recordándole la sesión que estaba
-      // teniendo en ese momento. La regla vive en
-      // casos-uso/recordatorios-del-turno.ts.
-      const recordatorio = await programarRecordatorio({
-        prisma: tx,
-        turnoId: turno.id,
-        organizationId,
-        fechaTurno: fecha,
-        ahora,
-      });
-
-      return { turno, recordatorio };
+    const turno = await crearTurno({
+      prisma: db,
+      organizationId,
+      pacienteId: parsed.data.pacienteId,
+      fecha: new Date(parsed.data.fecha),
+      duracion: parsed.data.duracion,
+      modalidad: parsed.data.modalidad,
+      notas: parsed.data.notas ?? null,
+      frecuencia: parsed.data.frecuencia,
+      ahora: new Date(),
     });
 
-    return Response.json(
-      {
-        data: toTurno(result.turno),
-        // null cuando el turno ya había empezado. Nadie lo lee hoy (los
-        // formularios usan sólo `data`), pero el campo no se saca: es la
-        // forma de la respuesta desde que existe la ruta.
-        recordatorio: result.recordatorio
-          ? toRecordatorio(result.recordatorio)
-          : null,
-      },
-      { status: 201 },
-    );
+    return ok(turno, 201);
   } catch (error) {
     return errorResponse(error);
   }
