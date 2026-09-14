@@ -1,20 +1,33 @@
 """
-Orquesta el pipeline completo de una sesion:
-R2 -> descifrado -> AssemblyAI -> speech analytics -> nota SOAP -> feedback
--> callback a la app.
+Orquesta el pipeline de una sesion reclamada:
+R2 (segmentos) -> descifrado -> AssemblyAI -> checkpoint de transcripcion en
+la app -> nota SOAP -> resultado a la app. Y ejecuta los trabajos durables
+que la app le entrega (borrar el transcript en AssemblyAI, generar "Para vos").
 
-La actualizacion del contexto longitudinal (Llamada B) NO vive aca: corre
-sobre sesiones ya aprobadas, en contexto_worker.py.
+Reglas con la app (contrato Area 2, src/app/api/_lib/casos-uso/sesion/*):
+  - todo lo que se escribe sobre la sesion lleva el ticket del reclamo y el
+    numero de intento; un 401/409 significa que otro reclamo se llevo la
+    sesion y se abandona la corrida sin informar nada (LeasePerdido);
+  - el lease se renueva cada LEASE_RENOVACION_SEG en un hilo aparte mientras
+    dura la corrida;
+  - la transcripcion se registra apenas existe (checkpoint), antes de la
+    primera llamada al modelo: si la sesion vuelve, llega con `checkpoint` y
+    no se descarga audio ni se paga el ASR de nuevo;
+  - el transcript de AssemblyAI se registra apenas se conoce su id, para que
+    la app lo borre con reintentos aunque este proceso muera;
+  - "Para vos" NO se genera aca: la app crea el trabajo `generar_feedback` al
+    recibir la nota y llega por /api/trabajos/pendientes con la transcripcion
+    adjunta.
 
 Privacidad de logs: solo ids, conteos, codigos y status. Nunca clave, iv,
 texto de transcripcion/nota ni datos del paciente.
-
-procesar_sesion solo encadena pasos con nombre; cada paso traduce sus
-fallos a PipelineError con el codigo y mensaje que llegan al callback.
 """
 import base64
 import logging
+import threading
 from dataclasses import dataclass, field
+
+import requests
 
 import app_client
 import asr_assemblyai
@@ -24,127 +37,219 @@ import r2_client
 import speech_analytics
 from clinical_analyzer import mensaje_error_api
 from crypto import descifrar
-from errores import PipelineError
+from errores import LeasePerdido, PipelineError
 from transcripcion import formatear_para_llm
 
 logger = logging.getLogger(__name__)
 
+# Cada cuanto se renueva el lease. La app lo da por 5 min (LEASE_SESION_MS):
+# un worker muerto se detecta en ese plazo.
+LEASE_RENOVACION_SEG = 60
+
+# Tipos de trabajo que este worker sabe ejecutar. integrar_contexto lo suma
+# el Area 4 cuando enganche la Llamada B.
+TIPOS_TRABAJO = ["borrar_transcript_asr", "generar_feedback"]
+
+TIMEOUT_ASR_DELETE_SEG = 30
+
+
+# Sesion reclamada ──────────────────────────────────────────────────────────
 
 @dataclass
-class Modelos:
-    """Identificadores que se reportan en el callback (exito o error)."""
-    asr: str
-    llm: str
+class SesionReclamada:
+    """Un item de GET /api/sesion-clinica/pendientes (SesionReclamada en reclamar.ts)."""
+    sesion_clinica_id: str
+    intento: int
+    ticket: str
+    paciente_id: str | None
+    orientacion_teorica: str
+    terminos_asr: list[str]
+    # {clave: base64, segmentos: [{indice, key, iv: base64, bytes}]} o None si hay checkpoint.
+    audio: dict | None
+    # {transcripcion, speechAnalytics, modeloAsr} o None.
+    checkpoint: dict | None
+    duracion_audio_seg: int | None = None
 
-
-@dataclass
-class Analisis:
-    transcripcion_fmt: str
-    nota: dict | None
-    datos_estructurados: dict
-    prompt_nota: str
-    prompt_feedback: str
-    # Escalas que llegaron fuera de rango y se anularon, en nota y feedback.
-    # La sesion sale igual: solo pierde esos campos.
-    advertencias: list[str] = field(default_factory=list)
-    # Veces que hubo que pedirle al modelo la nota de nuevo por forma
-    # invalida: 0 o 1. Un reintento del feedback queda en `advertencias`,
-    # porque el feedback no bloquea la sesion.
-    reintentos_llm: int = 0
-
-
-def procesar_sesion(
-    sesion_clinica_id: str,
-    audio_r2_key: str,
-    clave_cifrado: str,
-    iv_cifrado: str,
-    paciente_id: str | None = None,
-    orientacion_teorica: str = "cbt_mi",
-    intento: int = 1,
-    terminos_asr: list[str] | None = None,
-) -> None:
-    etiqueta = sesion_clinica_id
-    # ASR provisional (modelo configurado) para los callbacks de error previos
-    # a transcribir; tras el ASR se reemplaza por el modelo real usado.
-    modelos = Modelos(
-        asr=f"assemblyai:{config.ASR_MODEL_ID}",
-        llm=f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}",
-    )
-    try:
-        audio = descargar_y_descifrar(etiqueta, audio_r2_key, clave_cifrado, iv_cifrado, intento)
-        transcripcion = transcribir(etiqueta, audio, terminos_asr)
-        del audio
-        modelos.asr = f"assemblyai:{transcripcion['speech_model']}"
-        analisis = analizar(etiqueta, transcripcion, paciente_id, orientacion_teorica)
-        resultado = armar_resultado(transcripcion, analisis, modelos, intento)
-        reportar(etiqueta, sesion_clinica_id, resultado)
-    except PipelineError as e:
-        logger.error(f"[{etiqueta}] {e.codigo}: {e.mensaje_publico}")
-        reportar_error(sesion_clinica_id, f"{e.codigo}: {e.mensaje_publico}"[:200], modelos)
-    except Exception as e:
-        # Sin traza: la cadena de excepciones puede arrastrar cuerpos de
-        # respuesta de proveedores. Solo tipo y mensaje acotado.
-        logger.error(f"[{etiqueta}] error_interno {type(e).__name__}: {_describir(e)}")
-        reportar_error(sesion_clinica_id, "error_interno", modelos)
+    @staticmethod
+    def desde_item(item: dict) -> "SesionReclamada | None":
+        """None si faltan los campos sin los cuales no se puede ni empezar."""
+        if not isinstance(item, dict):
+            return None
+        sesion_id = item.get("sesionClinicaId")
+        ticket = item.get("ticket")
+        intento = item.get("intento")
+        if not sesion_id or not ticket or not isinstance(intento, int) or intento < 1:
+            return None
+        audio = item.get("audio") if isinstance(item.get("audio"), dict) else None
+        checkpoint = item.get("checkpoint") if isinstance(item.get("checkpoint"), dict) else None
+        if checkpoint and not checkpoint.get("transcripcion"):
+            checkpoint = None
+        if not audio and not checkpoint:
+            return None
+        return SesionReclamada(
+            sesion_clinica_id=sesion_id,
+            intento=intento,
+            ticket=ticket,
+            paciente_id=item.get("pacienteId") or None,
+            orientacion_teorica=item.get("orientacionTeorica") or "cbt_mi",
+            terminos_asr=terminos_asr_de(item),
+            audio=audio,
+            checkpoint=checkpoint,
+            duracion_audio_seg=item.get("duracionAudioSeg"),
+        )
 
 
 def terminos_asr_de(sesion: dict) -> list[str]:
-    """
-    `terminosAsr` de una sesion reclamada en /pendientes (HotWords): el
-    vocabulario clinico que se le adelanta al ASR. La app lo manda ya
-    deduplicado y ordenado.
-
-    Ausente, None, o cualquier cosa que no sea una lista de strings con
-    contenido -> lista vacia. El worker tiene que seguir procesando sesiones
-    contra una app que todavia no manda el campo: no tener vocabulario no es
-    un error, es el estado normal de hoy.
-    """
+    """`terminosAsr` saneado: solo strings con contenido; cualquier otra cosa, lista vacia."""
     valor = sesion.get("terminosAsr")
     if not isinstance(valor, list):
         return []
     return [t for t in valor if isinstance(t, str) and t.strip()]
 
 
+# Lease ─────────────────────────────────────────────────────────────────────
+
+class Lease:
+    """
+    Renueva el lease de la sesion cada LEASE_RENOVACION_SEG en un hilo
+    daemon. Si la app rechaza (401/409), marca `perdido`: el pipeline lo
+    consulta entre pasos y abandona. Un 5xx o un corte de red no lo pierde:
+    la proxima renovacion lo intenta de nuevo.
+    """
+
+    def __init__(self, sesion: SesionReclamada, intervalo_seg: float = LEASE_RENOVACION_SEG):
+        self.sesion = sesion
+        self.intervalo_seg = intervalo_seg
+        self.perdido = False
+        self.paso = "inicio"
+        self._parar = threading.Event()
+        self._hilo = threading.Thread(target=self._correr, name=f"lease-{sesion.sesion_clinica_id}", daemon=True)
+
+    def __enter__(self) -> "Lease":
+        self._hilo.start()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self._parar.set()
+        self._hilo.join(timeout=5)
+
+    def _correr(self) -> None:
+        while not self._parar.wait(self.intervalo_seg):
+            self.renovar()
+
+    def renovar(self) -> None:
+        try:
+            res = app_client.renovar_lease(
+                self.sesion.sesion_clinica_id, self.sesion.ticket, self.sesion.intento, self.paso
+            )
+        except Exception as e:  # el hilo no puede morir por una excepcion
+            logger.warning(f"[{self.sesion.sesion_clinica_id}] lease: {type(e).__name__}")
+            return
+        if res.rechazado:
+            self.perdido = True
+
+    def comprobar(self, paso: str) -> None:
+        self.paso = paso
+        if self.perdido:
+            raise LeasePerdido()
+
+
+# Pipeline ──────────────────────────────────────────────────────────────────
+
+@dataclass
+class Transcripto:
+    """Lo que hace falta del ASR para el modelo, venga del checkpoint o de AssemblyAI."""
+    transcripcion_fmt: str
+    speech_metrics: dict
+    modelo_asr: str
+
+
+@dataclass
+class Analisis:
+    nota: dict
+    datos_estructurados: dict
+    prompt_nota: str
+    # Escalas que llegaron fuera de rango y se anularon. La sesion sale igual.
+    advertencias: list[str] = field(default_factory=list)
+    # Veces que hubo que pedirle al modelo la nota de nuevo por forma invalida.
+    reintentos_llm: int = 0
+
+
+def procesar_sesion(sesion: SesionReclamada) -> None:
+    etiqueta = sesion.sesion_clinica_id
+    modelo_llm = f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"
+    with Lease(sesion) as lease:
+        try:
+            if sesion.checkpoint:
+                logger.info(f"[{etiqueta}] Intento {sesion.intento}: con checkpoint, no se transcribe de nuevo")
+                transcripto = desde_checkpoint(sesion.checkpoint)
+            else:
+                lease.comprobar("audio")
+                audio = descargar_y_descifrar(etiqueta, sesion.audio, sesion.intento)
+                lease.comprobar("asr")
+                transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr)
+                del audio
+                transcripto = registrar_checkpoint(sesion, transcripcion)
+            lease.comprobar("nota")
+            analisis = analizar(etiqueta, transcripto, sesion.paciente_id)
+            lease.comprobar("resultado")
+            reportar_nota(sesion, analisis, modelo_llm)
+        except LeasePerdido:
+            logger.warning(f"[{etiqueta}] el intento {sesion.intento} ya no es el vigente; se abandona sin informar")
+        except PipelineError as e:
+            logger.error(f"[{etiqueta}] {e.codigo}: {e.mensaje_publico} ({'definitivo' if e.definitivo else 'transitorio'})")
+            reportar_fallo(sesion, e, lease.paso)
+        except Exception as e:
+            # Sin traza: la cadena de excepciones puede arrastrar cuerpos de
+            # respuesta de proveedores. Solo tipo y mensaje acotado.
+            logger.error(f"[{etiqueta}] error_interno {type(e).__name__}: {_describir(e)}")
+            reportar_fallo(sesion, PipelineError("error_interno", "Error interno del worker", definitivo=False), lease.paso)
+
+
 # Pasos ─────────────────────────────────────────────────────────────────────
 
-def descargar_y_descifrar(
-    etiqueta: str, audio_r2_key: str, clave_cifrado: str, iv_cifrado: str, intento: int
-) -> bytes:
-    """R2 -> bytes de audio en claro, todo en memoria (sin escritura a disco)."""
-    if not clave_cifrado or not iv_cifrado:
-        raise PipelineError("audio_sin_clave", "Falta clave o iv para descifrar el audio")
-    if audio_r2_key == "dev-no-r2":
+def descargar_y_descifrar(etiqueta: str, audio: dict | None, intento: int) -> bytes:
+    """
+    R2 -> bytes de audio en claro, todo en memoria. Cada segmento (~60 s,
+    cifrado en el telefono con la clave de la sesion y su propio IV) se
+    descarga por la key que calculo la app y se descifra; el audio es la
+    concatenacion en orden de indice.
+    """
+    if not audio or not audio.get("clave"):
+        raise PipelineError("audio_sin_clave", "Falta la clave para descifrar el audio")
+    segmentos = audio.get("segmentos") or []
+    if not segmentos:
+        raise PipelineError("audio_sin_segmentos", "La sesion no tiene segmentos de audio")
+    if any(not s.get("key") or not s.get("iv") for s in segmentos):
+        raise PipelineError("audio_sin_clave", "Un segmento no tiene key o iv")
+    if any(str(s.get("key")).endswith("dev-no-r2") for s in segmentos):
         raise PipelineError("audio_dev", "Audio en modo dev, no hay audio real")
 
-    logger.info(f"[{etiqueta}] Intento {intento}. Descargando de R2: {audio_r2_key}")
-    try:
-        audio_cifrado, _ = r2_client.descargar_audio(audio_r2_key)
-    except Exception as e:
-        logger.error(f"[{etiqueta}] R2 fallo ({type(e).__name__}): {str(e)[:300]}")
-        raise PipelineError("r2_error", "No se pudo descargar el audio de R2") from e
-    logger.info(f"[{etiqueta}] Descargado: {len(audio_cifrado)} bytes")
+    partes: list[bytes] = []
+    logger.info(f"[{etiqueta}] Intento {intento}. Descargando {len(segmentos)} segmento(s) de R2")
+    for seg in sorted(segmentos, key=lambda s: int(s.get("indice", 0))):
+        try:
+            cifrado, _ = r2_client.descargar_audio(seg["key"])
+        except Exception as e:
+            logger.error(f"[{etiqueta}] R2 fallo en {seg['key']} ({type(e).__name__}): {str(e)[:300]}")
+            raise PipelineError("r2_error", "No se pudo descargar el audio de R2") from e
+        try:
+            partes.append(descifrar(base64.b64encode(cifrado).decode(), audio["clave"], seg["iv"]))
+        except ValueError as e:
+            # Los mensajes de crypto.descifrar son de forma (largos, tag), sin material de clave.
+            logger.error(f"[{etiqueta}] Descifrado fallo en el segmento {seg.get('indice')}: {str(e)[:120]}")
+            raise PipelineError("descifrado_error", "No se pudo descifrar el audio") from e
+    total = sum(len(p) for p in partes)
+    logger.info(f"[{etiqueta}] Descargado y descifrado: {total} bytes")
+    return b"".join(partes)
 
-    try:
-        return descifrar(
-            base64.b64encode(audio_cifrado).decode(),
-            clave_cifrado,
-            iv_cifrado,
-        )
-    except ValueError as e:
-        # Los mensajes de crypto.descifrar son de forma (largos, tag), sin material de clave.
-        logger.error(f"[{etiqueta}] Descifrado fallo: {str(e)[:120]}")
-        raise PipelineError("descifrado_error", "No se pudo descifrar el audio") from e
 
-
-def transcribir(
-    etiqueta: str, audio_bytes: bytes, terminos_asr: list[str] | None = None
-) -> dict:
+def transcribir(etiqueta: str, audio_bytes: bytes, terminos_asr: list[str] | None = None) -> dict:
     """AssemblyAI: transcripcion diarizada normalizada (ver asr_assemblyai)."""
     terminos = terminos_asr or []
     logger.info(
         f"[{etiqueta}] Transcribiendo ({len(audio_bytes)} bytes, "
-        # Solo la cantidad: los terminos pueden ser nombres propios de la
-        # paciente y estos logs van al stdout de Railway.
+        # Solo la cantidad: los terminos pueden ser nombres propios de la paciente.
         f"{len(terminos)} terminos ASR)..."
     )
     transcripcion = asr_assemblyai.transcribir(audio_bytes, terminos)
@@ -159,117 +264,177 @@ def transcribir(
     return transcripcion
 
 
-def analizar(
-    etiqueta: str,
-    transcripcion: dict,
-    paciente_id: str | None,
-    orientacion_teorica: str,
-) -> Analisis:
-    """Speech analytics + contexto longitudinal + nota SOAP (A) + feedback (C)."""
-    transcripcion_fmt = formatear_para_llm(transcripcion)
+def registrar_checkpoint(sesion: SesionReclamada, transcripcion: dict) -> Transcripto:
+    """
+    Registra el transcript en AssemblyAI (para que la app lo borre con
+    reintentos) y guarda la transcripcion formateada como checkpoint. Los dos
+    van con ticket e intento: un rechazo es LeasePerdido; un 5xx es un fallo
+    transitorio (la sesion vuelve y se transcribe de nuevo, porque el
+    checkpoint no quedo).
+    """
+    etiqueta = sesion.sesion_clinica_id
+    asr_id = transcripcion.get("asr_id")
+    if asr_id:
+        res = app_client.registrar_asr(etiqueta, sesion.ticket, sesion.intento, asr_id)
+        if res.rechazado:
+            raise LeasePerdido()
+        if not res.ok:
+            # Best-effort: el transcript ya se borra en asr_assemblyai al
+            # terminar; la app solo pierde el reintento durable.
+            logger.warning(f"[{etiqueta}] no se pudo registrar el transcript (status={res.status})")
 
     speech_metrics = speech_analytics.compute(transcripcion["segments"])
     speech_metrics["rolesOrigen"] = transcripcion["roles_origen"]
+    transcripcion_fmt = formatear_para_llm(transcripcion)
+    modelo_asr = f"assemblyai:{transcripcion['speech_model']}"
 
-    # Golden Thread: best-effort, None si no hay o falla.
-    contexto_llm = (
-        app_client.obtener_contexto_clinico_llm(paciente_id) if paciente_id else None
+    res = app_client.registrar_transcripcion(
+        etiqueta,
+        sesion.ticket,
+        sesion.intento,
+        transcripcion_fmt,
+        modelo_asr,
+        speech_analytics=speech_metrics,
+        duracion_seg=transcripcion.get("duration_seconds"),
+        asr_transcript_id=asr_id,
     )
+    if res.rechazado:
+        raise LeasePerdido()
+    if not res.ok:
+        raise PipelineError("app_error", f"La app no guardo la transcripcion (HTTP {res.status})", definitivo=False)
+    return Transcripto(transcripcion_fmt=transcripcion_fmt, speech_metrics=speech_metrics, modelo_asr=modelo_asr)
+
+
+def desde_checkpoint(checkpoint: dict) -> Transcripto:
+    transcripcion_fmt = checkpoint.get("transcripcion")
+    if not isinstance(transcripcion_fmt, str) or not transcripcion_fmt.strip():
+        raise PipelineError("checkpoint_invalido", "El checkpoint no trae transcripcion")
+    speech = checkpoint.get("speechAnalytics")
+    return Transcripto(
+        transcripcion_fmt=transcripcion_fmt,
+        speech_metrics=speech if isinstance(speech, dict) else {},
+        modelo_asr=str(checkpoint.get("modeloAsr") or f"assemblyai:{config.ASR_MODEL_ID}"),
+    )
+
+
+def analizar(etiqueta: str, transcripto: Transcripto, paciente_id: str | None) -> Analisis:
+    """Contexto longitudinal (best-effort) + nota SOAP (Llamada A). Sin feedback: es otro trabajo."""
+    contexto_llm = app_client.obtener_contexto_clinico_llm(paciente_id) if paciente_id else None
     if contexto_llm:
         logger.info(f"[{etiqueta}] Contexto longitudinal: {len(contexto_llm)} chars")
 
     logger.info(f"[{etiqueta}] Generando nota...")
-    resultado, prompt_nota, diag_nota = clinical_analyzer.analizar(
-        transcripcion_fmt,
+    resultado, prompt_nota, diag = clinical_analyzer.analizar(
+        transcripto.transcripcion_fmt,
         contexto_clinico=contexto_llm,
-        speech_analytics=speech_metrics,
+        speech_analytics=transcripto.speech_metrics,
     )
-    datos_estructurados = resultado.get("datosEstructurados") or {}
-    datos_estructurados["speechAnalytics"] = speech_metrics
-
-    logger.info(f"[{etiqueta}] Generando feedback terapeuta...")
-    feedback, prompt_feedback, diag_feedback = clinical_analyzer.generar_feedback_terapeuta(
-        transcripcion_fmt,
-        speech_analytics=speech_metrics,
-        orientacion=orientacion_teorica,
-    )
-    if feedback:
-        datos_estructurados["feedbackTerapeuta"] = feedback
-
-    advertencias = [*diag_nota.advertencias, *diag_feedback.advertencias]
-    if diag_feedback.reintentos:
-        advertencias.append("feedbackTerapeuta requirio una segunda pasada")
-    if advertencias:
-        logger.info(f"[{etiqueta}] {len(advertencias)} advertencia(s) de forma")
-
+    nota = resultado.get("nota")
+    if not isinstance(nota, dict):
+        raise PipelineError("llm_invalido", "El modelo no devolvio una nota")
+    datos = resultado.get("datosEstructurados") or {}
+    datos["speechAnalytics"] = transcripto.speech_metrics
+    if diag.advertencias:
+        logger.info(f"[{etiqueta}] {len(diag.advertencias)} advertencia(s) de forma")
     return Analisis(
-        transcripcion_fmt=transcripcion_fmt,
-        nota=resultado.get("nota"),
-        datos_estructurados=datos_estructurados,
+        nota=nota,
+        datos_estructurados=datos,
         prompt_nota=prompt_nota,
-        prompt_feedback=prompt_feedback,
-        advertencias=advertencias,
-        reintentos_llm=diag_nota.reintentos,
+        advertencias=list(diag.advertencias),
+        reintentos_llm=diag.reintentos,
     )
 
 
-def armar_resultado(
-    transcripcion: dict, analisis: Analisis, modelos: Modelos, intento: int
-) -> dict:
-    """Argumentos del callback de exito (nombres = parametros de enviar_callback)."""
-    datos = analisis.datos_estructurados
-    datos["_pipeline"] = {
-        "promptNota": analisis.prompt_nota,
-        "promptFeedback": analisis.prompt_feedback,
-        "modeloLLM": modelos.llm,
-        "modeloASR": modelos.asr,
-        "rolesOrigen": transcripcion["roles_origen"],
-        "workerVersion": config.WORKER_VERSION,
-        "asrId": transcripcion.get("asr_id"),
-        "intento": intento,
-        # Escalas anuladas por venir fuera de rango. Lista vacia = la salida
-        # del modelo vino limpia.
-        "advertencias": analisis.advertencias,
-        # 0 o 1: si hizo falta pedirle la nota de nuevo por forma invalida.
-        "reintentosLLM": analisis.reintentos_llm,
-    }
-    # audio_duration: transcripcion["duration_seconds"] queda disponible pero
-    # NO se envia; el contrato del callback (callbackSchema en
-    # src/app/api/sesion-clinica/callback/route.ts) todavia no lo acepta.
-    # Cuando exista el campo, va aca como `duracionAudioSeg`.
-    return {
-        "transcripcion": analisis.transcripcion_fmt,
+def reportar_nota(sesion: SesionReclamada, analisis: Analisis, modelo_llm: str) -> None:
+    """Resultado "nota". Si la app rechaza, otro intento ya es el vigente."""
+    payload = {
+        "intento": sesion.intento,
+        "resultado": "nota",
         "nota": analisis.nota,
-        "datos_estructurados": datos,
-        "modelo_asr": modelos.asr,
-        "modelo_llm": modelos.llm,
-        "prompt_version": f"{analisis.prompt_nota}+{analisis.prompt_feedback}",
+        "datos": analisis.datos_estructurados,
+        "modeloLlm": modelo_llm,
+        "promptVersion": analisis.prompt_nota,
     }
-
-
-def reportar(etiqueta: str, sesion_clinica_id: str, resultado: dict) -> None:
-    """Callback de exito. El audio NO se borra aca: vive en R2 hasta /aprobar."""
-    res = app_client.enviar_callback(
-        sesion_clinica_id=sesion_clinica_id, estado="revision", **resultado
-    )
+    res = app_client.enviar_resultado(sesion.sesion_clinica_id, sesion.ticket, payload)
+    if res.rechazado:
+        raise LeasePerdido()
     if not res.terminal:
-        logger.error(f"[{etiqueta}] Callback fallo (status={res.status}); el lease reintentara")
+        logger.error(f"[{sesion.sesion_clinica_id}] Resultado fallo (status={res.status}); el lease reintentara")
         return
-    logger.info(f"[{etiqueta}] Completado")
+    logger.info(f"[{sesion.sesion_clinica_id}] Completado")
 
 
-def reportar_error(sesion_clinica_id: str, error: str, modelos: Modelos) -> None:
-    """Callback de error, best-effort: si tambien falla solo se loguea."""
+def reportar_fallo(sesion: SesionReclamada, error: PipelineError, paso: str) -> None:
+    """Resultado "fallo", best-effort: si tambien falla solo se loguea."""
+    payload = {
+        "intento": sesion.intento,
+        "resultado": "fallo",
+        "codigo": error.codigo[:60],
+        "definitivo": error.definitivo,
+        "paso": paso[:40],
+        "detalle": error.mensaje_publico[:500],
+    }
     try:
-        app_client.enviar_callback(
-            sesion_clinica_id=sesion_clinica_id,
-            estado="error",
-            error=error,
-            modelo_asr=modelos.asr,
-            modelo_llm=modelos.llm,
-        )
+        app_client.enviar_resultado(sesion.sesion_clinica_id, sesion.ticket, payload)
     except Exception as e:
-        logger.error(f"[{sesion_clinica_id}] Callback de error tambien fallo ({type(e).__name__})")
+        logger.error(f"[{sesion.sesion_clinica_id}] El resultado de fallo tambien fallo ({type(e).__name__})")
+
+
+# Trabajos durables ─────────────────────────────────────────────────────────
+
+def ejecutar_trabajo(trabajo: dict) -> dict:
+    """
+    Ejecuta un trabajo entregado por GET /api/trabajos/pendientes y devuelve
+    el payload para POST /api/trabajos/[id]/resultado ({ok: true, ...} o
+    {ok: false, error}). Nunca lanza.
+    """
+    tipo = trabajo.get("tipo")
+    try:
+        if tipo == "borrar_transcript_asr":
+            return borrar_transcript_asr(trabajo.get("payload") or {})
+        if tipo == "generar_feedback":
+            return generar_feedback(trabajo.get("adjunto") or {})
+        return {"ok": False, "error": f"tipo no soportado: {tipo}"}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {_describir(e)}"[:500]}
+
+
+def borrar_transcript_asr(payload: dict) -> dict:
+    """DELETE en AssemblyAI. 200 y 404 son "hecho" (idempotente)."""
+    transcript_id = payload.get("transcriptId")
+    if not transcript_id:
+        return {"ok": False, "error": "payload sin transcriptId"}
+    response = requests.delete(
+        f"{asr_assemblyai.API_BASE}/transcript/{transcript_id}",
+        headers={"authorization": config.ASSEMBLYAI_API_KEY},
+        timeout=TIMEOUT_ASR_DELETE_SEG,
+    )
+    logger.info(f"AssemblyAI delete {transcript_id}: HTTP {response.status_code}")
+    if response.status_code in (200, 404):
+        return {"ok": True}
+    return {"ok": False, "error": f"AssemblyAI respondio HTTP {response.status_code}"}
+
+
+def generar_feedback(adjunto: dict) -> dict:
+    """Llamada C con lo que la app adjunta: transcripcion, metricas y orientacion."""
+    transcripcion_fmt = adjunto.get("transcripcionFormateada")
+    if not isinstance(transcripcion_fmt, str) or not transcripcion_fmt.strip():
+        return {"ok": False, "error": "adjunto sin transcripcionFormateada"}
+    speech = adjunto.get("speechAnalytics")
+    feedback, prompt_feedback, diag = clinical_analyzer.generar_feedback_terapeuta(
+        transcripcion_fmt,
+        speech_analytics=speech if isinstance(speech, dict) else None,
+        orientacion=adjunto.get("orientacionTeorica") or "cbt_mi",
+    )
+    if not feedback:
+        motivo = "; ".join(diag.advertencias) or "feedback_no_generado"
+        return {"ok": False, "error": motivo[:500]}
+    return {
+        "ok": True,
+        "feedback": feedback,
+        "promptVersion": prompt_feedback,
+        "modeloLlm": f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}",
+    }
 
 
 def _describir(e: Exception) -> str:
