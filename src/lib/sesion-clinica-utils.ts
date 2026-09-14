@@ -1,227 +1,25 @@
-import {
-  estadoSesionSchema,
-  parseDatosEstructurados as parseDatosEstructuradosTablero,
-  type DatosEstructurados as DatosEstructuradosTablero,
-  type DatosEstructurados,
-  type EstadoSesion,
-} from "@/lib/sesion-clinica/schema";
-import type { NotaSOAP } from "@/types/domain";
-
-export type { EstadoSesion };
-
-// Lista derivada del enum del tablero: existe una sola vez.
-export const ESTADOS_SESION: ReadonlyArray<EstadoSesion> =
-  estadoSesionSchema.options;
-
-// ÚNICA fuente de verdad de la máquina de estados de SesionClinica. La
-// consumen todos los endpoints que mutan `estado` (PATCH/DELETE de [id],
-// upload-url, upload-confirmar, aprobar) vía assertTransicionValida() en
-// src/app/api/_lib/sesion-clinica.ts. No duplicar esta tabla en las rutas.
+// MÓDULO DE COMPATIBILIDAD, transitorio. La tabla de transiciones, las keys
+// del audio y la regla de huérfanas viven en src/lib/sesion-clinica/estados.ts
+// y ahí hay que importarlas. Esto queda SOLO para los importadores que
+// todavía no migraron (useSesionClinicaPolling, useGrabacionSesion,
+// pacientes/[id]/documentacion, sesiones-sin-contexto) y se borra con ellos.
 //
-// - grabando → subiendo: POST [id]/upload-url (guarda clave+IV y emite la
-//   URL prefirmada de R2). Desde acá el navegador sube DIRECTO a R2.
-// - subiendo → procesando: POST [id]/upload-confirmar, tras verificar con
-//   HeadObject que el objeto existe en R2.
-// - subiendo → grabando: reintento de la subida (cliente por PATCH, o el
-//   propio upload-confirmar cuando el objeto no llegó a R2).
-// - grabando → error / subiendo → error: descarte de una grabación abandonada
-//   con audio subido (DELETE) o fallo de subida.
-// - grabando → procesando: se conserva por compatibilidad con filas viejas;
-//   ninguna ruta la usa (la subida siempre pasa por "subiendo").
-// - revision → error: descarte de la nota (DELETE), la sesión queda
-//   reprocesable. revision → aprobado: solo el endpoint /aprobar.
-// - error → procesando: reintento (PATCH), re-encola al worker.
-const TRANSICIONES_PERMITIDAS: Record<
-  EstadoSesion,
-  ReadonlyArray<EstadoSesion>
-> = {
-  pendiente: ["grabando"],
-  grabando: ["subiendo", "procesando", "error"],
-  subiendo: ["procesando", "grabando", "error"],
-  procesando: ["revision", "error"],
-  revision: ["aprobado", "error"],
-  aprobado: [],
-  error: ["procesando"],
-};
+// La nota IA y la nota final ya viajan enteras (`notaIa`, `notaFinal` en
+// sesionClinicaResponseSchema): ensamblar secciones sueltas es de la forma
+// vieja de la respuesta.
 
-export function esEstadoSesion(value: unknown): value is EstadoSesion {
-  return estadoSesionSchema.safeParse(value).success;
-}
+import type { NotaSoap } from "./sesion-clinica/schema";
 
-// Tolerante a strings desconocidos (filas con estado corrupto): un estado
-// que no está en la tabla no puede transicionar a nada.
-export function esTransicionValida(
-  estadoActual: EstadoSesion | string,
-  estadoNuevo: EstadoSesion | string,
-): boolean {
-  if (!esEstadoSesion(estadoActual) || !esEstadoSesion(estadoNuevo)) {
-    return false;
-  }
-  return TRANSICIONES_PERMITIDAS[estadoActual].includes(estadoNuevo);
-}
-
-// Subconjunto de TRANSICIONES_PERMITIDAS que el navegador puede pedir
-// directamente vía PATCH /api/sesion-clinica/[id] { estado }. Todo lo demás
-// tiene una ruta con efectos propios y NO puede pedirse por PATCH:
-//   grabando → subiendo             → POST [id]/upload-url (guarda clave+IV,
-//                                     emite URL prefirmada). NO es de cliente:
-//                                     la hace el servidor al emitir la URL.
-//   subiendo → procesando           → POST [id]/upload-confirmar (HeadObject)
-//   procesando → revision|error     → POST callback (M2M, escribe la nota)
-//   revision → aprobado             → POST [id]/aprobar (chequeo de riesgo,
-//                                     borrado de audio, destrucción de clave)
-//   revision → error, grabando → error con audio → DELETE [id]
-//
-// Evidencia de uso real en el frontend (única fuente para esta lista):
-//   pendiente → grabando : useGrabacionSesion.ts (iniciar) y
-//                          historia-tab.tsx (iniciarGrabacionFlow), tras
-//                          crear la sesión.
-//   grabando → error     : sin uso en el frontend actual (ambos flujos
-//                          vuelven a "grabando" tras un fallo de subida).
-//                          Se conserva para el descarte desde la UI vía
-//                          SesionHuerfanaBanner / DELETE.
-//   subiendo → grabando  : useGrabacionSesion.ts e historia-tab.tsx
-//                          (volverAGrabando) tras un fallo en el PUT a R2 o
-//                          en la confirmación: la sesión vuelve a "grabando"
-//                          para repetir desde upload-url con el mismo blob.
-//   error → procesando   : useGrabacionSesion.ts (reintentar) e
-//                          historia-tab.tsx, "Reintentar"; re-encola al
-//                          worker vía /pendientes.
-const TRANSICIONES_CLIENTE: Partial<
-  Record<EstadoSesion, ReadonlyArray<EstadoSesion>>
-> = {
-  pendiente: ["grabando"],
-  grabando: ["error"],
-  subiendo: ["grabando"],
-  error: ["procesando"],
-};
-
-// Key del objeto de audio cifrado en R2. Es determinística por sesión: el
-// servidor la calcula al emitir la URL prefirmada y la vuelve a calcular al
-// confirmar, y solo acepta la que coincide (nunca una key arbitraria que
-// mande el cliente).
-export function keyAudioEsperada(
-  organizationId: string,
-  sesionClinicaId: string,
-  turnoId: string,
-): string {
-  return `audio/${organizationId}/${sesionClinicaId}/${turnoId}.enc`;
-}
-
-export function esKeyAudioDeSesion(
-  key: unknown,
-  organizationId: string,
-  sesionClinicaId: string,
-  turnoId: string,
-): boolean {
-  return (
-    typeof key === "string" &&
-    key === keyAudioEsperada(organizationId, sesionClinicaId, turnoId)
-  );
-}
-
-export function esTransicionPermitidaAlCliente(
-  estadoActual: EstadoSesion | string,
-  estadoNuevo: EstadoSesion | string,
-): boolean {
-  if (!esTransicionValida(estadoActual, estadoNuevo)) return false;
-  if (!esEstadoSesion(estadoActual) || !esEstadoSesion(estadoNuevo)) {
-    return false;
-  }
-  const permitidas = TRANSICIONES_CLIENTE[estadoActual] ?? [];
-  return permitidas.includes(estadoNuevo);
-}
-
-// Umbral para considerar abandonada una sesión en "grabando": una sesión
-// real dura máx ~90 min; con margen amplio, >4 h sin actualización significa
-// que el navegador murió y el audio nunca se subió.
-export const UMBRAL_HUERFANA_HORAS = 4;
-
-const UMBRAL_HUERFANA_MS = UMBRAL_HUERFANA_HORAS * 60 * 60 * 1000;
-
-function toEpochMs(value: Date | string | null | undefined): number | null {
-  if (value == null) return null;
-  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
-  return Number.isFinite(ms) ? ms : null;
-}
-
-/**
- * Fuente de verdad única de la regla de "sesión huérfana".
- *
- * - estado "error": siempre huérfana (el pipeline murió; requiere acción
- *   de la usuaria: reintentar o descartar).
- * - estado "grabando": huérfana si la última actualización (updatedAt,
- *   con fallback a createdAt) fue hace más de UMBRAL_HUERFANA_HORAS.
- *   Si no hay timestamp disponible NO se considera huérfana — default
- *   seguro: nunca ofrecer descartar una grabación posiblemente activa.
- */
-export function esSesionHuerfana(sesion: {
-  estado: EstadoSesion | string;
-  updatedAt?: Date | string | null;
-  createdAt?: Date | string | null;
-}): boolean {
-  if (sesion.estado === "error") return true;
-  if (sesion.estado !== "grabando") return false;
-
-  const referencia =
-    toEpochMs(sesion.updatedAt) ?? toEpochMs(sesion.createdAt);
-  if (referencia === null) return false;
-
-  return Date.now() - referencia > UMBRAL_HUERFANA_MS;
-}
-
-/**
- * @deprecated Usar `parseDatosEstructurados` de
- * "@/lib/sesion-clinica/schema" (única definición del contrato). Este
- * nombre se conserva solo por compatibilidad de importadores y delega en
- * el tablero: acepta objeto o string JSON, devuelve null si no valida.
- */
-export function parseDatosEstructurados(
-  raw: unknown,
-): DatosEstructuradosTablero | null {
-  return parseDatosEstructuradosTablero(raw);
-}
-
-export function esNotaCompleta(nota: Partial<NotaSOAP>): boolean {
-  return Boolean(
-    nota.subjetivo?.trim() &&
-      nota.objetivo?.trim() &&
-      nota.analisis?.trim() &&
-      nota.plan?.trim(),
-  );
-}
-
-// Versión permisiva (sin validación de shape): acepta el objeto ya
-// deserializado por la extensión Prisma o el string JSON crudo de filas
-// legacy. Para inputs de fronteras no confiables, usar
-// parseDatosEstructurados del tablero (src/lib/sesion-clinica/schema.ts).
-export function coerceDatosEstructurados(
-  value: DatosEstructurados | string | null | undefined,
-): DatosEstructurados | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value) as DatosEstructurados;
-  } catch {
-    return null;
-  }
-}
-
-// Retorna null SOLO si los cuatro campos están ausentes; si al menos uno
-// trae valor, los faltantes se completan con "".
+/** @deprecated Usar `notaIa` / `notaFinal` de la respuesta. Retorna null sólo
+ *  si los cuatro campos están ausentes; los faltantes se completan con "". */
 export function ensamblarNotaSOAP(campos: {
   subjetivo?: string | null;
   objetivo?: string | null;
   analisis?: string | null;
   plan?: string | null;
-}): NotaSOAP | null {
+}): NotaSoap | null {
   const { subjetivo, objetivo, analisis, plan } = campos;
-  if (
-    subjetivo == null &&
-    objetivo == null &&
-    analisis == null &&
-    plan == null
-  ) {
+  if (subjetivo == null && objetivo == null && analisis == null && plan == null) {
     return null;
   }
   return {
@@ -229,69 +27,5 @@ export function ensamblarNotaSOAP(campos: {
     objetivo: objetivo ?? "",
     analisis: analisis ?? "",
     plan: plan ?? "",
-  };
-}
-
-export interface RawSesionClinica {
-  id: string;
-  turnoId: string;
-  estado: EstadoSesion | string;
-  duracionAudioSeg: number | null;
-  nota?: NotaSOAP | null;
-  notaSubjetivo?: string | null;
-  notaObjetivo?: string | null;
-  notaAnalisis?: string | null;
-  notaPlan?: string | null;
-  datosEstructurados?: DatosEstructurados | string | null;
-  modeloASR: string | null;
-  modeloLLM: string | null;
-  procesadoEn: string | null;
-  aprobadoEn: string | null;
-  error: string | null;
-}
-
-/**
- * La sesión clínica como la consume la UI de grabación y la ficha: la nota
- * SOAP ensamblada en un solo objeto (la API la devuelve en cuatro columnas,
- * ver `sesionClinicaResponseSchema` en src/lib/sesion-clinica/schema.ts).
- * Es una forma derivada, no el contrato: se construye acá y en
- * normalizarSesionClinica (src/hooks/useSesionClinicaPolling.ts).
- */
-export interface SesionClinicaEnsamblada {
-  id: string;
-  turnoId: string;
-  estado: EstadoSesion;
-  duracionAudioSeg: number | null;
-  nota: NotaSOAP | null;
-  datosEstructurados: DatosEstructurados | null;
-  modeloASR: string | null;
-  modeloLLM: string | null;
-  procesadoEn: string | null; // ISO
-  aprobadoEn: string | null; // ISO
-  error: string | null;
-}
-
-export function normalizeSesionClinica(
-  raw: RawSesionClinica,
-): SesionClinicaEnsamblada {
-  return {
-    id: raw.id,
-    turnoId: raw.turnoId,
-    estado: raw.estado as EstadoSesion,
-    duracionAudioSeg: raw.duracionAudioSeg,
-    nota:
-      raw.nota ??
-      ensamblarNotaSOAP({
-        subjetivo: raw.notaSubjetivo,
-        objetivo: raw.notaObjetivo,
-        analisis: raw.notaAnalisis,
-        plan: raw.notaPlan,
-      }),
-    datosEstructurados: coerceDatosEstructurados(raw.datosEstructurados),
-    modeloASR: raw.modeloASR,
-    modeloLLM: raw.modeloLLM,
-    procesadoEn: raw.procesadoEn,
-    aprobadoEn: raw.aprobadoEn,
-    error: raw.error,
   };
 }

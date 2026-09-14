@@ -1,6 +1,7 @@
 """
-Cliente HTTP unico hacia la app: header Bearer, timeouts y semantica de
-status. requests mockeado; sin red.
+Cliente HTTP unico hacia la app: dos credenciales (PROCESSING_SECRET para
+reclamar, ticket para todo lo demas), latido en los headers, timeouts y
+semantica de status. requests mockeado; sin red.
 """
 import pytest
 import requests
@@ -22,20 +23,22 @@ def _resp(mocker, status: int, body=None, text: str = ""):
     return r
 
 
-BEARER = f"Bearer {config.PROCESSING_SECRET}"
+SECRETO = f"Bearer {config.PROCESSING_SECRET}"
+TICKET = "a" * 64
+LATIDO = {"X-Worker-Id": app_client.WORKER_ID, "X-Worker-Version": config.WORKER_VERSION}
 
 
-# Lecturas ──────────────────────────────────────────────────────────────────
+# Reclamos (PROCESSING_SECRET) ─────────────────────────────────────────────
 
-def test_obtener_pendientes_manda_bearer_y_devuelve_la_lista(mocker):
+def test_obtener_pendientes_manda_el_secreto_y_el_latido(mocker):
     get = mocker.patch("app_client.requests.get", return_value=_resp(mocker, 200, [{"sesionClinicaId": "s1"}]))
 
     assert app_client.obtener_pendientes() == [{"sesionClinicaId": "s1"}]
 
-    kwargs = get.call_args.kwargs
-    assert get.call_args.args[0] == config.PENDIENTES_URL
-    assert kwargs["headers"] == {"Authorization": BEARER}
-    assert kwargs["timeout"] == app_client.TIMEOUT_LECTURA_SEG
+    # De a una: lo que espera en una cola local perderia el lease.
+    assert get.call_args.args[0] == f"{config.PENDIENTES_URL}?limite=1"
+    assert get.call_args.kwargs["headers"] == {"Authorization": SECRETO, **LATIDO}
+    assert get.call_args.kwargs["timeout"] == app_client.TIMEOUT_LECTURA_SEG
 
 
 def test_obtener_pendientes_ignora_cuerpos_que_no_son_lista(mocker):
@@ -49,11 +52,99 @@ def test_obtener_pendientes_propaga_5xx(mocker):
         app_client.obtener_pendientes()
 
 
-def test_obtener_aprobadas_usa_su_url(mocker):
-    get = mocker.patch("app_client.requests.get", return_value=_resp(mocker, 200, []))
-    assert app_client.obtener_aprobadas_sin_contexto() == []
-    assert get.call_args.args[0] == config.APROBADAS_URL
+def test_trabajos_pendientes_pide_solo_los_tipos_que_sabe_ejecutar(mocker):
+    get = mocker.patch("app_client.requests.get", return_value=_resp(mocker, 200, [{"trabajoId": "t1"}]))
+    assert app_client.trabajos_pendientes(["borrar_transcript_asr", "generar_feedback"]) == [{"trabajoId": "t1"}]
+    assert get.call_args.args[0] == f"{config.APP_BASE_URL}/api/trabajos/pendientes?tipos=borrar_transcript_asr,generar_feedback"
+    assert get.call_args.kwargs["headers"]["Authorization"] == SECRETO
 
+
+# Escrituras con ticket ─────────────────────────────────────────────────────
+
+def test_lease_va_con_el_ticket_el_intento_y_el_paso(mocker):
+    post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
+
+    res = app_client.renovar_lease("s1", TICKET, 2, paso="asr")
+
+    assert res.ok and res.terminal and not res.rechazado
+    assert post.call_args.args[0] == f"{config.APP_BASE_URL}/api/sesion-clinica/s1/lease"
+    assert post.call_args.kwargs["headers"] == {"Authorization": f"Bearer {TICKET}", "Content-Type": "application/json", **LATIDO}
+    assert post.call_args.kwargs["json"] == {"intento": 2, "paso": "asr"}
+    assert post.call_args.kwargs["timeout"] == app_client.TIMEOUT_ESCRITURA_SEG
+
+
+def test_registrar_asr_y_transcripcion_llevan_intento(mocker):
+    post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
+
+    app_client.registrar_asr("s1", TICKET, 3, "tr-9")
+    assert post.call_args.args[0].endswith("/api/sesion-clinica/s1/asr")
+    assert post.call_args.kwargs["json"] == {"intento": 3, "transcriptId": "tr-9"}
+
+    app_client.registrar_transcripcion(
+        "s1", TICKET, 3, "[00:00] T: hola", "assemblyai:universal-2",
+        speech_analytics={"ratio": 1}, duracion_seg=61.7, asr_transcript_id="tr-9",
+    )
+    assert post.call_args.args[0].endswith("/api/sesion-clinica/s1/transcripcion")
+    assert post.call_args.kwargs["json"] == {
+        "intento": 3,
+        "transcripcion": "[00:00] T: hola",
+        "modeloAsr": "assemblyai:universal-2",
+        "speechAnalytics": {"ratio": 1},
+        "duracionSeg": 61,
+        "asrTranscriptId": "tr-9",
+    }
+
+
+def test_enviar_resultado_manda_el_payload_tal_cual(mocker):
+    post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
+    payload = {"intento": 1, "resultado": "fallo", "codigo": "asr_timeout", "definitivo": False}
+    res = app_client.enviar_resultado("s1", TICKET, payload)
+    assert res.ok
+    assert post.call_args.args[0].endswith("/api/sesion-clinica/s1/resultado")
+    assert post.call_args.kwargs["json"] == payload
+
+
+def test_resolver_trabajo_usa_el_ticket_del_trabajo(mocker):
+    post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
+    app_client.resolver_trabajo("t1", TICKET, {"ok": True})
+    assert post.call_args.args[0] == f"{config.APP_BASE_URL}/api/trabajos/t1/resultado"
+    assert post.call_args.kwargs["headers"]["Authorization"] == f"Bearer {TICKET}"
+
+
+# Semantica de status ───────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("status", [401, 409])
+def test_401_y_409_son_rechazo_terminal(mocker, status):
+    mocker.patch("app_client.requests.post", return_value=_resp(mocker, status, {"error": "ya no es el vigente"}))
+    res = app_client.enviar_resultado("s1", TICKET, {"intento": 1, "resultado": "nota"})
+    assert not res.ok and res.rechazado and res.terminal
+
+
+def test_4xx_de_contrato_es_terminal_pero_no_rechazo(mocker):
+    mocker.patch("app_client.requests.post", return_value=_resp(mocker, 422, {"error": "Datos inválidos"}))
+    res = app_client.enviar_resultado("s1", TICKET, {})
+    assert not res.ok and not res.rechazado and res.terminal
+
+
+def test_5xx_y_sin_respuesta_no_son_terminales_y_no_lanzan(mocker):
+    mocker.patch("app_client.requests.post", return_value=_resp(mocker, 503))
+    res = app_client.enviar_resultado("s1", TICKET, {})
+    assert not res.ok and res.status == 503 and not res.terminal
+
+    mocker.patch("app_client.requests.post", side_effect=requests.ConnectionError("boom"))
+    res = app_client.renovar_lease("s1", TICKET, 1)
+    assert not res.ok and res.status is None and not res.terminal
+
+
+def test_las_escrituras_no_loguean_el_payload(mocker, caplog):
+    mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
+    with caplog.at_level("DEBUG"):
+        app_client.registrar_transcripcion("s1", TICKET, 1, "FRASE-SECRETA", "m")
+        app_client.enviar_resultado("s1", TICKET, {"intento": 1, "resultado": "nota", "nota": {"plan": "FRASE-SECRETA"}})
+    assert all("FRASE-SECRETA" not in r.getMessage() for r in caplog.records)
+
+
+# Contexto para el prompt ───────────────────────────────────────────────────
 
 def test_contexto_llm_devuelve_texto_o_none(mocker):
     get = mocker.patch("app_client.requests.get")
@@ -61,84 +152,9 @@ def test_contexto_llm_devuelve_texto_o_none(mocker):
     get.return_value = _resp(mocker, 200, text="  # contexto  \n")
     assert app_client.obtener_contexto_clinico_llm("p1") == "# contexto"
     assert get.call_args.kwargs["params"] == {"format": "llm"}
-    assert get.call_args.kwargs["headers"] == {"Authorization": BEARER}
 
     get.return_value = _resp(mocker, 404)
     assert app_client.obtener_contexto_clinico_llm("p1") is None
 
-    get.return_value = _resp(mocker, 200, text="   ")
-    assert app_client.obtener_contexto_clinico_llm("p1") is None
-
     get.side_effect = requests.ConnectionError("boom")
     assert app_client.obtener_contexto_clinico_llm("p1") is None
-
-
-# Callback ──────────────────────────────────────────────────────────────────
-
-def test_callback_2xx_es_ok_y_terminal(mocker):
-    post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
-
-    res = app_client.enviar_callback("s1", "revision", nota={"plan": "p"}, modelo_asr="a")
-
-    assert res.ok and res.status == 200 and res.terminal
-    kwargs = post.call_args.kwargs
-    assert post.call_args.args[0] == config.CALLBACK_URL
-    assert kwargs["headers"] == {"Authorization": BEARER, "Content-Type": "application/json"}
-    assert kwargs["timeout"] == app_client.TIMEOUT_ESCRITURA_SEG
-    assert kwargs["json"] == {
-        "sesionClinicaId": "s1",
-        "estado": "revision",
-        "nota": {"plan": "p"},
-        "modeloASR": "a",
-    }
-
-
-def test_callback_409_no_es_ok_pero_es_terminal(mocker):
-    mocker.patch("app_client.requests.post", return_value=_resp(mocker, 409, {"error": "ya no esta"}))
-    res = app_client.enviar_callback("s1", "revision")
-    assert not res.ok and res.status == 409 and res.terminal
-
-
-def test_callback_4xx_es_terminal(mocker):
-    mocker.patch("app_client.requests.post", return_value=_resp(mocker, 422, {"error": "Datos inválidos"}))
-    res = app_client.enviar_callback("s1", "revision")
-    assert not res.ok and res.status == 422 and res.terminal
-
-
-def test_callback_5xx_no_es_terminal(mocker):
-    mocker.patch("app_client.requests.post", return_value=_resp(mocker, 503))
-    res = app_client.enviar_callback("s1", "revision")
-    assert not res.ok and res.status == 503 and not res.terminal
-
-
-def test_callback_sin_respuesta_no_es_terminal_y_no_lanza(mocker):
-    mocker.patch("app_client.requests.post", side_effect=requests.ConnectionError("boom"))
-    res = app_client.enviar_callback("s1", "error", error="asr_error: x")
-    assert not res.ok and res.status is None and not res.terminal
-
-
-def test_callback_no_loguea_el_payload(mocker, caplog):
-    mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
-    with caplog.at_level("DEBUG"):
-        app_client.enviar_callback("s1", "revision", transcripcion="FRASE-SECRETA")
-    assert all("FRASE-SECRETA" not in r.getMessage() for r in caplog.records)
-
-
-# Contexto ──────────────────────────────────────────────────────────────────
-
-def test_actualizar_contexto_devuelve_status(mocker):
-    patch = mocker.patch("app_client.requests.patch", return_value=_resp(mocker, 200))
-
-    assert app_client.actualizar_contexto("p1", {"ultimaSesionId": "s1"}) == 200
-
-    kwargs = patch.call_args.kwargs
-    assert patch.call_args.args[0] == config.contexto_clinico_url("p1")
-    assert kwargs["json"] == {"ultimaSesionId": "s1"}
-    assert kwargs["headers"] == {"Authorization": BEARER, "Content-Type": "application/json"}
-    assert kwargs["timeout"] == app_client.TIMEOUT_ESCRITURA_SEG
-
-
-def test_actualizar_contexto_lanza_con_el_status(mocker):
-    mocker.patch("app_client.requests.patch", return_value=_resp(mocker, 400))
-    with pytest.raises(RuntimeError, match="HTTP 400"):
-        app_client.actualizar_contexto("p1", {})

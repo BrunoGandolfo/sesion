@@ -7,9 +7,10 @@ import {
   sesionClinicaResponseSchema,
 } from "@/lib/sesion-clinica/schema";
 
-// Payload realista de `datosEstructurados` tal como lo manda el worker al
-// callback (src/app/api/sesion-clinica/callback/route.ts), con todos los
-// bloques opcionales presentes.
+// Payload realista de `datos` tal como lo manda el worker en el resultado
+// (POST /api/sesion-clinica/[id]/resultado), con todos los bloques
+// opcionales presentes. Las claves que ya no son del contrato
+// (feedbackTerapeuta, _pipeline) se descartan al parsear.
 const datosCallbackCompletos = {
   temas: ["ansiedad", "trabajo"],
   emocionesPaciente: ["frustración", "alivio"],
@@ -93,7 +94,6 @@ describe("datosEstructuradosSchema", () => {
     if (resultado.success) {
       expect(resultado.data.speechAnalytics?.rolesOrigen).toBe("asr_role");
       expect(resultado.data.riesgoDetectado?.nivel).toBe("bajo");
-      expect(resultado.data._pipeline).toEqual({ intento: 1, promptVersion: "v2.1" });
       expect(resultado.data.intervenciones?.[1]?.timestampAprox).toBeUndefined();
     }
   });
@@ -181,25 +181,28 @@ describe("sesionClinicaResponseSchema", () => {
     id: "ses1",
     turnoId: "tur1",
     estado: "revision",
-    duracionAudioSeg: 3000,
-    audioR2Key: "audio/org/ses1/tur1.enc",
+    audioEstado: "en_r2",
     audioBorradoEn: null,
-    notaSubjetivo: "s",
-    notaObjetivo: "o",
-    notaAnalisis: "a",
-    notaPlan: "p",
-    notaSoapOriginal: { subjetivo: "s", objetivo: null, analisis: "a", plan: "p" },
-    datosEstructurados: { temas: ["x"] },
-    modeloASR: "asr",
-    modeloLLM: "llm",
+    duracionAudioSeg: 3000,
+    intento: 1,
+    generacion: 1,
+    falloCodigo: null,
+    falloDetalle: null,
+    transcripcionDisponible: true,
+    notaIa: { subjetivo: "s", objetivo: "o", analisis: "a", plan: "p" },
+    notaFinal: null,
+    notasEdicion: null,
+    datos: { temas: ["x"] },
+    feedbackEstado: "pendiente",
+    feedback: null,
+    feedbackError: null,
+    modeloAsr: "asr",
+    modeloLlm: "llm",
     promptVersion: "v2.1",
-    hablanteTerapeuta: "S0",
-    procesadoEn: "2026-04-20T12:00:00.000Z",
-    aprobadoEn: null,
-    error: null,
-    intentos: 1,
-    createdAt: "2026-04-20T11:00:00.000Z",
-    updatedAt: "2026-04-20T12:00:00.000Z",
+    procesadaEn: "2026-04-20T12:00:00.000Z",
+    aprobadaEn: null,
+    creadaEn: "2026-04-20T11:00:00.000Z",
+    actualizadaEn: "2026-04-20T12:00:00.000Z",
   };
 
   it("acepta una respuesta sin turno", () => {
@@ -227,7 +230,7 @@ describe("sesionClinicaResponseSchema", () => {
   });
 
   it("rechaza fechas que no son ISO", () => {
-    const malo = { ...base, createdAt: "20/04/2026" };
+    const malo = { ...base, creadaEn: "20/04/2026" };
     expect(sesionClinicaResponseSchema.safeParse(malo).success).toBe(false);
   });
 

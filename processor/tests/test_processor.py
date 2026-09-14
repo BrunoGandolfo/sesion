@@ -1,7 +1,7 @@
 """
-Orquestacion de procesar_sesion con todos los pasos mockeados. Se verifica
-que cada fallo llegue al callback con el estado, el codigo y el modelo ASR
-correctos. Sin red.
+Orquestacion de procesar_sesion con todos los pasos mockeados: checkpoint,
+resultado nota, fallos transitorios/definitivos, lease perdido, y los
+trabajos durables. Sin red.
 """
 import logging
 
@@ -9,8 +9,9 @@ import pytest
 
 import config
 import processor
-from app_client import RespuestaCallback
-from errores import PipelineError
+from app_client import RespuestaApp
+from errores import LeasePerdido, PipelineError
+from processor import SesionReclamada
 
 TRANSCRIPCION = {
     "duration_seconds": 3,
@@ -20,368 +21,356 @@ TRANSCRIPCION = {
     "speech_model": "universal-2",
 }
 
-ANALISIS = processor.Analisis(
-    transcripcion_fmt="[00:00] Terapeuta: hola",
-    nota={"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"},
-    datos_estructurados={"temas": ["x"]},
-    prompt_nota="clinical_note_v3.1.1.md",
-    prompt_feedback="therapist_feedback_v1.1.md",
-)
-
-ASR_PROVISIONAL = f"assemblyai:{config.ASR_MODEL_ID}"
+NOTA = {"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"}
 LLM = f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"
+TICKET = "a" * 64
+
+
+def sesion(**extra) -> SesionReclamada:
+    base = dict(
+        sesion_clinica_id="s1",
+        intento=2,
+        ticket=TICKET,
+        paciente_id="p1",
+        orientacion_teorica="cbt_mi",
+        terminos_asr=["GTFS"],
+        audio={"clave": "k", "segmentos": [{"indice": 0, "key": "org/s1/0", "iv": "iv", "bytes": 10}]},
+        checkpoint=None,
+    )
+    base.update(extra)
+    return SesionReclamada(**base)
 
 
 @pytest.fixture
 def pasos(mocker):
     """Pasos exitosos por defecto; cada test rompe el que le interesa."""
+    mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
     mocker.patch("processor.descargar_y_descifrar", return_value=b"audio")
     mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
-    mocker.patch("processor.analizar", return_value=ANALISIS)
-    callback = mocker.patch(
-        "processor.app_client.enviar_callback",
-        return_value=RespuestaCallback(ok=True, status=200),
+    mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
+    mocker.patch("processor.formatear_para_llm", return_value="[00:00] Terapeuta: hola")
+    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
+    mocker.patch(
+        "processor.clinical_analyzer.analizar",
+        return_value=({"nota": NOTA, "datosEstructurados": {"temas": ["x"]}}, "clinical_note_v4.md", _diag()),
     )
-    return mocker, callback
+    ok = RespuestaApp(ok=True, status=200)
+    return {
+        "mocker": mocker,
+        "asr": mocker.patch("processor.app_client.registrar_asr", return_value=ok),
+        "checkpoint": mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok),
+        "resultado": mocker.patch("processor.app_client.enviar_resultado", return_value=ok),
+        "lease": mocker.patch("processor.app_client.renovar_lease", return_value=ok),
+    }
 
 
-def _correr():
+def _diag(advertencias=None, reintentos=0):
+    from clinical_analyzer import DiagnosticoLLM
+
+    return DiagnosticoLLM(reintentos=reintentos, advertencias=advertencias or [])
+
+
+# Camino feliz ──────────────────────────────────────────────────────────────
+
+def test_registra_el_asr_y_el_checkpoint_antes_del_modelo_y_entrega_la_nota(pasos):
+    orden: list[str] = []
+    pasos["asr"].side_effect = lambda *a, **k: orden.append("asr") or RespuestaApp(True, 200)
+    pasos["checkpoint"].side_effect = lambda *a, **k: orden.append("checkpoint") or RespuestaApp(True, 200)
+    pasos["mocker"].patch("processor.analizar", side_effect=lambda *a, **k: orden.append("nota") or processor.Analisis(NOTA, {"temas": ["x"]}, "clinical_note_v4.md"))
+
+    processor.procesar_sesion(sesion())
+
+    assert orden == ["asr", "checkpoint", "nota"]
+    pasos["asr"].assert_called_once_with("s1", TICKET, 2, "tr1")
+    kw = pasos["checkpoint"].call_args
+    assert kw.args[:3] == ("s1", TICKET, 2)
+    assert kw.args[3] == "[00:00] Terapeuta: hola"
+    assert kw.args[4] == "assemblyai:universal-2"
+    assert kw.kwargs["speech_analytics"] == {"ratio": 1, "rolesOrigen": "asr_role"}
+    assert kw.kwargs["asr_transcript_id"] == "tr1"
+
+    pasos["resultado"].assert_called_once()
+    sid, ticket, payload = pasos["resultado"].call_args.args
+    assert (sid, ticket) == ("s1", TICKET)
+    assert payload == {
+        "intento": 2,
+        "resultado": "nota",
+        "nota": NOTA,
+        "datos": {"temas": ["x"]},
+        "modeloLlm": LLM,
+        "promptVersion": "clinical_note_v4.md",
+    }
+
+
+def test_analizar_no_genera_feedback_y_suma_speech_analytics(pasos):
+    feedback = pasos["mocker"].patch("processor.clinical_analyzer.generar_feedback_terapeuta")
+
+    processor.procesar_sesion(sesion())
+
+    feedback.assert_not_called()
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload["datos"]["speechAnalytics"] == {"ratio": 1, "rolesOrigen": "asr_role"}
+    assert "feedbackTerapeuta" not in payload["datos"]
+    assert "_pipeline" not in payload["datos"]
+
+
+def test_con_checkpoint_no_descarga_ni_transcribe(pasos):
+    descargar = pasos["mocker"].patch("processor.descargar_y_descifrar")
+    transcribir = pasos["mocker"].patch("processor.transcribir")
+
     processor.procesar_sesion(
-        sesion_clinica_id="s1",
-        audio_r2_key="audio/org/s1/t1.enc",
-        clave_cifrado="clave",
-        iv_cifrado="iv",
-        paciente_id="p1",
-        orientacion_teorica="cbt_mi",
-        intento=2,
+        sesion(audio=None, checkpoint={"transcripcion": "[00:00] T: hola", "speechAnalytics": {"ratio": 2}, "modeloAsr": "assemblyai:x"})
     )
 
-
-def test_exito_reporta_revision_con_el_modelo_asr_real(pasos):
-    _, callback = pasos
-
-    _correr()
-
-    callback.assert_called_once()
-    kw = callback.call_args.kwargs
-    assert kw["sesion_clinica_id"] == "s1"
-    assert kw["estado"] == "revision"
-    assert kw["modelo_asr"] == "assemblyai:universal-2"
-    assert kw["modelo_llm"] == LLM
-    assert kw["nota"] == ANALISIS.nota
-    assert kw["transcripcion"] == ANALISIS.transcripcion_fmt
-    assert kw["prompt_version"] == "clinical_note_v3.1.1.md+therapist_feedback_v1.1.md"
-    pipeline = kw["datos_estructurados"]["_pipeline"]
-    assert pipeline["intento"] == 2
-    assert pipeline["asrId"] == "tr1"
-    assert pipeline["modeloASR"] == "assemblyai:universal-2"
-    assert "duracionAudioSeg" not in kw["datos_estructurados"]
-    # Los dos campos nuevos viajan siempre, aunque no haya nada que reportar.
-    assert pipeline["advertencias"] == []
-    assert pipeline["reintentosLLM"] == 0
+    descargar.assert_not_called()
+    transcribir.assert_not_called()
+    pasos["asr"].assert_not_called()
+    pasos["checkpoint"].assert_not_called()
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload["resultado"] == "nota"
+    assert payload["datos"]["speechAnalytics"] == {"ratio": 2}
 
 
-def test_las_advertencias_y_el_reintento_viajan_en_pipeline(pasos):
-    mocker, callback = pasos
-    mocker.patch(
-        "processor.analizar",
-        return_value=processor.Analisis(
-            transcripcion_fmt=ANALISIS.transcripcion_fmt,
-            nota=ANALISIS.nota,
-            datos_estructurados={"temas": ["x"]},
-            prompt_nota=ANALISIS.prompt_nota,
-            prompt_feedback=ANALISIS.prompt_feedback,
-            advertencias=["intensidadEmocional=0 fuera de rango 1..10, anulado"],
-            reintentos_llm=1,
-        ),
-    )
+# Fallos ────────────────────────────────────────────────────────────────────
 
-    _correr()
+def test_fallo_transitorio_en_asr_se_informa_como_no_definitivo_con_el_paso(pasos):
+    pasos["mocker"].patch("processor.transcribir", side_effect=PipelineError("asr_timeout", "AssemblyAI no completo"))
 
-    kw = callback.call_args.kwargs
-    # Lo importante: la sesion llega a revision igual.
-    assert kw["estado"] == "revision"
-    pipeline = kw["datos_estructurados"]["_pipeline"]
-    assert pipeline["advertencias"] == [
-        "intensidadEmocional=0 fuera de rango 1..10, anulado"
-    ]
-    assert pipeline["reintentosLLM"] == 1
+    processor.procesar_sesion(sesion())
+
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload == {
+        "intento": 2,
+        "resultado": "fallo",
+        "codigo": "asr_timeout",
+        "definitivo": False,
+        "paso": "asr",
+        "detalle": "AssemblyAI no completo",
+    }
 
 
-def test_fallo_en_asr_reporta_error_con_el_modelo_provisional(pasos):
-    mocker, callback = pasos
-    mocker.patch(
-        "processor.transcribir",
-        side_effect=PipelineError("asr_error", "AssemblyAI respondio 500 en upload"),
-    )
+def test_fallo_definitivo_en_descifrado(pasos):
+    pasos["mocker"].patch("processor.descargar_y_descifrar", side_effect=PipelineError("descifrado_error", "No se pudo descifrar el audio"))
 
-    _correr()
+    processor.procesar_sesion(sesion())
 
-    callback.assert_called_once()
-    kw = callback.call_args.kwargs
-    assert kw["estado"] == "error"
-    assert kw["error"] == "asr_error: AssemblyAI respondio 500 en upload"
-    assert kw["modelo_asr"] == ASR_PROVISIONAL
-    assert kw["modelo_llm"] == LLM
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload["resultado"] == "fallo"
+    assert payload["codigo"] == "descifrado_error"
+    assert payload["definitivo"] is True
+    assert payload["paso"] == "audio"
 
 
-def test_fallo_en_llm_reporta_error_con_el_modelo_asr_real(pasos):
-    mocker, callback = pasos
-    mocker.patch(
-        "processor.analizar",
-        side_effect=PipelineError("llm_timeout", "Anthropic no respondio a tiempo"),
-    )
-
-    _correr()
-
-    kw = callback.call_args.kwargs
-    assert kw["estado"] == "error"
-    assert kw["error"] == "llm_timeout: Anthropic no respondio a tiempo"
-    assert kw["modelo_asr"] == "assemblyai:universal-2"
-
-
-def test_fallo_en_descarga_reporta_r2_error(pasos):
-    mocker, callback = pasos
-    mocker.patch(
-        "processor.descargar_y_descifrar",
-        side_effect=PipelineError("r2_error", "No se pudo descargar el audio de R2"),
-    )
-
-    _correr()
-
-    kw = callback.call_args.kwargs
-    assert kw["estado"] == "error"
-    assert kw["error"] == "r2_error: No se pudo descargar el audio de R2"
-
-
-def test_excepcion_inesperada_reporta_error_interno_sin_detalle(pasos, caplog):
-    mocker, callback = pasos
-    mocker.patch("processor.analizar", side_effect=KeyError("segments"))
+def test_excepcion_inesperada_es_error_interno_transitorio_sin_traza(pasos, caplog):
+    pasos["mocker"].patch("processor.analizar", side_effect=KeyError("segments"))
 
     with caplog.at_level("ERROR"):
-        _correr()
+        processor.procesar_sesion(sesion())
 
-    kw = callback.call_args.kwargs
-    assert kw["estado"] == "error"
-    assert kw["error"] == "error_interno"
-    # Sin traza: el registro no lleva exc_info.
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload["codigo"] == "error_interno" and payload["definitivo"] is False
     assert all(r.exc_info is None for r in caplog.records)
 
 
-def test_callback_no_terminal_no_lanza(pasos):
-    mocker, callback = pasos
-    callback.return_value = RespuestaCallback(ok=False, status=503)
+def test_si_la_app_no_guarda_el_checkpoint_el_fallo_es_transitorio_y_no_se_llama_al_modelo(pasos):
+    pasos["checkpoint"].return_value = RespuestaApp(ok=False, status=503)
+    analizar = pasos["mocker"].patch("processor.analizar")
 
-    _correr()  # el lease de la app reintentara; no hay callback de error
+    processor.procesar_sesion(sesion())
 
-    assert callback.call_count == 1
-    assert callback.call_args.kwargs["estado"] == "revision"
+    analizar.assert_not_called()
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload["codigo"] == "app_error" and payload["definitivo"] is False
 
 
-def test_pasos_reales_sin_clave_ni_dev(mocker):
+def test_resultado_no_terminal_no_lanza_ni_informa_fallo(pasos):
+    pasos["resultado"].return_value = RespuestaApp(ok=False, status=503)
+
+    processor.procesar_sesion(sesion())
+
+    assert pasos["resultado"].call_count == 1
+    assert pasos["resultado"].call_args.args[2]["resultado"] == "nota"
+
+
+# Lease e identidad del intento ─────────────────────────────────────────────
+
+def test_un_409_en_el_checkpoint_abandona_sin_informar_nada(pasos):
+    pasos["checkpoint"].return_value = RespuestaApp(ok=False, status=409)
+    analizar = pasos["mocker"].patch("processor.analizar")
+
+    processor.procesar_sesion(sesion())
+
+    analizar.assert_not_called()
+    pasos["resultado"].assert_not_called()
+
+
+def test_un_409_en_el_resultado_abandona_sin_informar_fallo(pasos):
+    pasos["resultado"].return_value = RespuestaApp(ok=False, status=409)
+
+    processor.procesar_sesion(sesion())
+
+    assert pasos["resultado"].call_count == 1
+
+
+def test_el_lease_perdido_corta_el_pipeline_antes_del_paso_siguiente(pasos):
+    lease_actual = {}
+    original = processor.Lease.__enter__
+
+    def enter(self):
+        lease_actual["lease"] = self
+        return original(self)
+
+    pasos["mocker"].patch.object(processor.Lease, "__enter__", enter)
+
+    def transcribir(*a, **k):
+        # Otro reclamo se llevo la sesion mientras se transcribia.
+        lease_actual["lease"].perdido = True
+        return TRANSCRIPCION
+
+    pasos["mocker"].patch("processor.transcribir", side_effect=transcribir)
+    # El checkpoint se intenta igual (es idempotente y el 409 lo cortaria);
+    # simulamos que la app ya no lo acepta.
+    pasos["checkpoint"].return_value = RespuestaApp(ok=False, status=409)
+
+    processor.procesar_sesion(sesion())
+
+    pasos["resultado"].assert_not_called()
+
+
+def test_el_lease_se_renueva_con_ticket_intento_y_paso(pasos):
+    lease = processor.Lease(sesion(), intervalo_seg=3600)
+    lease.paso = "asr"
+    lease.renovar()
+    pasos["lease"].assert_called_once_with("s1", TICKET, 2, "asr")
+    assert lease.perdido is False
+
+    pasos["lease"].return_value = RespuestaApp(ok=False, status=409)
+    lease.renovar()
+    assert lease.perdido is True
+    with pytest.raises(LeasePerdido):
+        lease.comprobar("nota")
+
+
+def test_el_lease_se_renueva_solo_en_segundo_plano(pasos):
+    import time
+
+    with processor.Lease(sesion(), intervalo_seg=0.05):
+        time.sleep(0.3)
+    assert pasos["lease"].call_count >= 2
+
+
+def test_un_5xx_del_lease_no_lo_pierde(pasos):
+    pasos["lease"].return_value = RespuestaApp(ok=False, status=503)
+    lease = processor.Lease(sesion(), intervalo_seg=3600)
+    lease.renovar()
+    assert lease.perdido is False
+
+
+# Pasos reales ──────────────────────────────────────────────────────────────
+
+def test_descargar_concatena_los_segmentos_en_orden_y_descifra_cada_uno(mocker):
+    descargas = []
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or (key.encode(), {})))
+    mocker.patch("processor.descifrar", side_effect=lambda b64, clave, iv: f"{iv}|".encode())
+
+    audio = {
+        "clave": "clave",
+        "segmentos": [
+            {"indice": 1, "key": "org/s1/1", "iv": "iv1"},
+            {"indice": 0, "key": "org/s1/0", "iv": "iv0"},
+        ],
+    }
+    assert processor.descargar_y_descifrar("s1", audio, 1) == b"iv0|iv1|"
+    assert descargas == ["org/s1/0", "org/s1/1"]
+
+
+def test_descargar_sin_clave_o_sin_segmentos_es_definitivo():
     with pytest.raises(PipelineError) as exc:
-        processor.descargar_y_descifrar("s1", "k", "", "iv", 1)
-    assert exc.value.codigo == "audio_sin_clave"
+        processor.descargar_y_descifrar("s1", {"clave": "", "segmentos": [{"key": "k", "iv": "i"}]}, 1)
+    assert exc.value.codigo == "audio_sin_clave" and exc.value.definitivo
 
     with pytest.raises(PipelineError) as exc:
-        processor.descargar_y_descifrar("s1", "dev-no-r2", "c", "iv", 1)
-    assert exc.value.codigo == "audio_dev"
+        processor.descargar_y_descifrar("s1", {"clave": "c", "segmentos": []}, 1)
+    assert exc.value.codigo == "audio_sin_segmentos" and exc.value.definitivo
+
+
+def test_descargar_con_r2_caido_es_transitorio(mocker):
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=RuntimeError("boom"))
+    with pytest.raises(PipelineError) as exc:
+        processor.descargar_y_descifrar("s1", {"clave": "c", "segmentos": [{"indice": 0, "key": "k", "iv": "i"}]}, 1)
+    assert exc.value.codigo == "r2_error" and not exc.value.definitivo
 
 
 def test_transcribir_sin_segmentos_es_asr_vacio(mocker):
     mocker.patch("processor.asr_assemblyai.transcribir", return_value={"segments": []})
     with pytest.raises(PipelineError) as exc:
         processor.transcribir("s1", b"audio")
-    assert exc.value.codigo == "asr_vacio"
+    assert exc.value.codigo == "asr_vacio" and exc.value.definitivo
 
 
-def test_el_feedback_no_generado_viaja_en_el_payload_y_la_sesion_sigue(pasos):
-    """
-    El caso del fin de semana del 6-7/9/2026 despues del arreglo: el feedback
-    se trunco las dos veces y no salio. La sesion tiene que llegar igual a
-    revision, sin feedback inventado, y con la advertencia de clave estable
-    dentro de _pipeline.advertencias, que es lo que la app guarda.
-    """
-    mocker, callback = pasos
-    mocker.patch(
-        "processor.analizar",
-        return_value=processor.Analisis(
-            transcripcion_fmt=ANALISIS.transcripcion_fmt,
-            nota=ANALISIS.nota,
-            datos_estructurados={"temas": ["x"]},
-            prompt_nota=ANALISIS.prompt_nota,
-            prompt_feedback="therapist_feedback_gestalt_v1.1.md",
-            advertencias=["feedback_no_generado: llm_truncado"],
-        ),
-    )
-
-    _correr()
-
-    kw = callback.call_args.kwargs
-    assert kw["estado"] == "revision"
-    assert kw["nota"] == ANALISIS.nota
-    datos = kw["datos_estructurados"]
-    assert "feedbackTerapeuta" not in datos
-    assert datos["_pipeline"]["advertencias"] == ["feedback_no_generado: llm_truncado"]
-
-
-def test_analizar_no_pone_feedback_cuando_el_llm_lo_trunco_dos_veces(mocker):
-    """
-    Cableado real del paso `analizar` con la Llamada C fallando: la clave
-    feedbackTerapeuta no se crea (null antes que inventar) y la advertencia
-    del analizador se propaga tal cual.
-    """
-    from clinical_analyzer import DiagnosticoLLM
-
-    mocker.patch("processor.formatear_para_llm", return_value="[00:00] T: hola")
-    mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
-    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
-    mocker.patch(
-        "processor.clinical_analyzer.analizar",
-        return_value=(
-            {"nota": ANALISIS.nota, "datosEstructurados": {"temas": ["x"]}},
-            "clinical_note_v3.1.1.md",
-            DiagnosticoLLM(reintentos=0, advertencias=[]),
-        ),
-    )
-    mocker.patch(
-        "processor.clinical_analyzer.generar_feedback_terapeuta",
-        return_value=(
-            None,
-            "therapist_feedback_gestalt_v1.1.md",
-            DiagnosticoLLM(advertencias=["feedback_no_generado: llm_truncado"]),
-        ),
-    )
-
-    analisis = processor.analizar("s1", TRANSCRIPCION, "p1", "gestalt")
-
-    assert "feedbackTerapeuta" not in analisis.datos_estructurados
-    assert analisis.advertencias == ["feedback_no_generado: llm_truncado"]
-    assert analisis.nota == ANALISIS.nota
-
-
-def test_analizar_junta_las_advertencias_de_nota_y_feedback(mocker):
-    """
-    Cableado real del paso `analizar`: verifica que consume las tres piezas
-    que devuelven clinical_analyzer.analizar y generar_feedback_terapeuta.
-    """
-    from clinical_analyzer import DiagnosticoLLM
-
-    mocker.patch("processor.formatear_para_llm", return_value="[00:00] T: hola")
-    mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
-    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
-    mocker.patch(
-        "processor.clinical_analyzer.analizar",
-        return_value=(
-            {"nota": ANALISIS.nota, "datosEstructurados": {"temas": ["x"]}},
-            "clinical_note_v3.1.1.md",
-            DiagnosticoLLM(reintentos=1, advertencias=["duracionRealMin=-1 invalido, anulado"]),
-        ),
-    )
-    mocker.patch(
-        "processor.clinical_analyzer.generar_feedback_terapeuta",
-        return_value=(
-            {"mitiCounts": {}},
-            "therapist_feedback_v1.1.md",
-            DiagnosticoLLM(reintentos=1, advertencias=["feedback advertido"]),
-        ),
-    )
-
-    analisis = processor.analizar("s1", TRANSCRIPCION, "p1", "cbt_mi")
-
-    assert analisis.reintentos_llm == 1
-    assert analisis.advertencias == [
-        "duracionRealMin=-1 invalido, anulado",
-        "feedback advertido",
-        "feedbackTerapeuta requirio una segunda pasada",
-    ]
-    assert analisis.datos_estructurados["feedbackTerapeuta"] == {"mitiCounts": {}}
-    assert analisis.datos_estructurados["speechAnalytics"] == {
-        "ratio": 1,
-        "rolesOrigen": "asr_role",
-    }
-
-
-# HotWords: terminosAsr de la sesion reclamada ──────────────────────────────
-
-
-def test_sesion_sin_el_campo_da_lista_vacia():
-    # El caso de hoy: la app todavia no manda terminosAsr y el worker tiene
-    # que procesar igual.
-    assert processor.terminos_asr_de({"sesionClinicaId": "s1"}) == []
-
-
-def test_sesion_con_el_campo_en_null_da_lista_vacia():
-    assert processor.terminos_asr_de({"terminosAsr": None}) == []
-
-
-def test_sesion_con_terminos_los_devuelve_en_orden():
-    sesion = {"terminosAsr": ["GTFS", "alianza terapéutica", "MITI 4.2.1"]}
-    assert processor.terminos_asr_de(sesion) == [
-        "GTFS",
-        "alianza terapéutica",
-        "MITI 4.2.1",
-    ]
-
-
-def test_terminos_asr_descarta_lo_que_no_sea_texto_con_contenido():
-    sesion = {"terminosAsr": ["GTFS", "", "   ", None, 7, ["x"], "CTS-R"]}
-    assert processor.terminos_asr_de(sesion) == ["GTFS", "CTS-R"]
-
-
-def test_terminos_asr_ignora_un_campo_que_no_sea_lista():
-    # Si la app manda cualquier otra cosa, el worker no se cae por eso.
-    for valor in ("GTFS", {"a": 1}, 3, True):
-        assert processor.terminos_asr_de({"terminosAsr": valor}) == []
-
-
-def test_procesar_sesion_pasa_los_terminos_al_asr(pasos):
-    mocker, _ = pasos
-    transcribir = mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
-
-    processor.procesar_sesion(
-        sesion_clinica_id="s1",
-        audio_r2_key="audio/org/s1/t1.enc",
-        clave_cifrado="clave",
-        iv_cifrado="iv",
-        terminos_asr=["GTFS", "MITI 4.2.1"],
-    )
-
-    assert transcribir.call_args.args[2] == ["GTFS", "MITI 4.2.1"]
-
-
-def test_procesar_sesion_sin_terminos_sigue_funcionando(pasos):
-    mocker, callback = pasos
-    transcribir = mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
-
-    _correr()
-
-    assert transcribir.call_args.args[2] is None
-    assert callback.call_args.kwargs["estado"] == "revision"
-
-
-def test_paso_transcribir_le_pasa_los_terminos_a_assemblyai(mocker):
+def test_transcribir_pasa_los_terminos_y_no_los_loguea(mocker, caplog):
     asr = mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
-
-    processor.transcribir("s1", b"audio", ["GTFS"])
-
-    assert asr.call_args.args[1] == ["GTFS"]
-
-
-def test_paso_transcribir_sin_terminos_manda_lista_vacia(mocker):
-    asr = mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
-
-    processor.transcribir("s1", b"audio")
-
-    assert asr.call_args.args[1] == []
-
-
-def test_el_log_del_paso_no_nombra_los_terminos(mocker, caplog):
-    mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
-
     with caplog.at_level(logging.DEBUG):
         processor.transcribir("s1", b"audio", ["NOMBRE-SECRETO", "GTFS"])
-
+    assert asr.call_args.args[1] == ["NOMBRE-SECRETO", "GTFS"]
     mensajes = [r.getMessage() for r in caplog.records]
     assert any("2 terminos ASR" in m for m in mensajes)
     assert all("NOMBRE-SECRETO" not in m for m in mensajes)
+
+
+def test_el_checkpoint_invalido_es_definitivo():
+    with pytest.raises(PipelineError) as exc:
+        processor.desde_checkpoint({"transcripcion": "   "})
+    assert exc.value.codigo == "checkpoint_invalido" and exc.value.definitivo
+
+
+# Trabajos durables ─────────────────────────────────────────────────────────
+
+def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
+    delete = mocker.patch("processor.requests.delete")
+    for status in (200, 404):
+        delete.return_value = mocker.Mock(status_code=status)
+        assert processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}}) == {"ok": True}
+    assert delete.call_args.args[0].endswith("/transcript/tr1")
+    assert delete.call_args.kwargs["headers"] == {"authorization": config.ASSEMBLYAI_API_KEY}
+
+    delete.return_value = mocker.Mock(status_code=500)
+    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
+    assert res["ok"] is False and "500" in res["error"]
+
+    delete.side_effect = RuntimeError("red caida")
+    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
+    assert res["ok"] is False and "RuntimeError" in res["error"]
+
+
+def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):
+    generar = mocker.patch(
+        "processor.clinical_analyzer.generar_feedback_terapeuta",
+        return_value=({"mitiCounts": {}}, "therapist_feedback_v1.1.md", _diag()),
+    )
+    res = processor.ejecutar_trabajo(
+        {
+            "tipo": "generar_feedback",
+            "payload": {"sesionId": "s1", "pacienteId": "p1"},
+            "adjunto": {"transcripcionFormateada": "[00:00] T: hola", "speechAnalytics": {"ratio": 1}, "orientacionTeorica": "gestalt"},
+        }
+    )
+    assert res == {"ok": True, "feedback": {"mitiCounts": {}}, "promptVersion": "therapist_feedback_v1.1.md", "modeloLlm": LLM}
+    assert generar.call_args.args[0] == "[00:00] T: hola"
+    assert generar.call_args.kwargs == {"speech_analytics": {"ratio": 1}, "orientacion": "gestalt"}
+
+
+def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
+    mocker.patch(
+        "processor.clinical_analyzer.generar_feedback_terapeuta",
+        return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"])),
+    )
+    res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x"}})
+    assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado"}
+
+    assert processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})["ok"] is False
+
+
+def test_un_tipo_desconocido_no_lanza():
+    res = processor.ejecutar_trabajo({"tipo": "integrar_contexto"})
+    assert res["ok"] is False and "integrar_contexto" in res["error"]
