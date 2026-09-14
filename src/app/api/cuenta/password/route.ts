@@ -70,8 +70,12 @@ export async function POST(request: Request) {
 
     const cerradas = await db.$transaction(async (tx) => {
       await tomarLocks(tx, [claveUsuario(userId), `recuperar:${userId}`]);
+      // Compare-and-set sobre el hash que se verificó arriba: si entre la
+      // verificación y esta transacción alguien restableció la contraseña
+      // por correo (y cerró las sesiones), este cambio ya no está autorizado
+      // y no la pisa.
       const { count } = await tx.user.updateMany({
-        where: { id: userId, organizationId },
+        where: { id: userId, organizationId, hashedPassword: resultado.hashVerificado },
         data: { hashedPassword: hashNuevo },
       });
       if (count === 0) throw new ApiError("No autorizado", 401);

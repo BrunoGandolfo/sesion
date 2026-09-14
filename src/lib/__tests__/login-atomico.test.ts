@@ -11,9 +11,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { iniciarSesion } from "@/app/api/_lib/casos-uso/iniciar-sesion";
 import {
   claveEmail,
+  claveUsuario,
   evaluarBloqueoDe,
   procesarIntentoLogin,
 } from "@/lib/intentos-acceso";
+import { tomarLocks } from "@/lib/intentos-serializados";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { UMBRAL_INTENTOS } from "@/lib/login-intentos";
 import { BCRYPT_RONDAS } from "@/lib/password";
@@ -161,6 +163,74 @@ describe("iniciarSesion", () => {
     expect(await buscarSesionViva(estado.base.db, c.token, new Date())).not.toBeNull();
     const cerrada = await estado.base.prisma.sesionAcceso.findUniqueOrThrow({ where: { id: b.sesionId } });
     expect(cerrada.motivoCierre).toBe("salida_todas");
+  });
+});
+
+// Las dos carreras entre un login en vuelo y un cambio de contraseña. Sin el
+// lock por usuaria del login, un atacante con la contraseña comprometida podía
+// terminar de entrar DESPUÉS de que la víctima la cambiara.
+describe("login y cambio de contraseña se excluyen", () => {
+  const OPCIONES_LENTAS = { maxWait: 5_000, timeout: 20_000 };
+  const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  it("un cambio commiteado mientras el login esperaba el lock por usuaria: rechazado, sin sesión", async () => {
+    const { user, password } = await cuenta();
+    const hashNuevo = await bcrypt.hash("otra contraseña larga", BCRYPT_RONDAS);
+    let lockTomado!: () => void;
+    const conLock = new Promise<void>((r) => { lockTomado = r; });
+    let soltar!: () => void;
+    const esperando = new Promise<void>((r) => { soltar = r; });
+    // El cambio toma el lock primero y se queda con él hasta que el login
+    // esté esperando detrás.
+    const cambio = estado.base.db.$transaction(async (tx) => {
+      await tomarLocks(tx, [claveUsuario(user.id)]);
+      lockTomado();
+      await esperando;
+      await tx.user.update({ where: { id: user.id }, data: { hashedPassword: hashNuevo } });
+    }, OPCIONES_LENTAS);
+    await conLock;
+
+    const login = iniciarSesion({
+      prisma: estado.base.db, email: user.email, password, huella: HUELLA, comparar: bcrypt.compare, hashear: bcrypt.hash,
+    });
+    await dormir(300);
+    soltar();
+    await cambio;
+
+    expect(await login).toEqual({ estado: "rechazado" });
+    expect(await estado.base.prisma.sesionAcceso.count({ where: { userId: user.id } })).toBe(0);
+  });
+
+  it("un login que ya tiene el lock termina primero, y el cambio que esperaba cierra la sesión que creó", async () => {
+    const { user, password } = await cuenta();
+    const hashNuevo = await bcrypt.hash("otra contraseña larga", BCRYPT_RONDAS);
+    let enCompare!: () => void;
+    const comparando = new Promise<void>((r) => { enCompare = r; });
+    let seguir!: () => void;
+    const continuar = new Promise<void>((r) => { seguir = r; });
+
+    const login = iniciarSesion({
+      prisma: estado.base.db, email: user.email, password, huella: HUELLA, hashear: bcrypt.hash,
+      // El compare corre con el lock por usuaria ya tomado: acá se frena el login.
+      comparar: async (p, h) => { enCompare(); await continuar; return bcrypt.compare(p, h); },
+    });
+    await comparando;
+
+    const cambio = estado.base.db.$transaction(async (tx) => {
+      await tomarLocks(tx, [claveUsuario(user.id)]);
+      await tx.user.update({ where: { id: user.id }, data: { hashedPassword: hashNuevo } });
+      return cerrarTodas(tx, { userId: user.id, motivo: "cambio_password", ahora: new Date() });
+    }, OPCIONES_LENTAS);
+    // Mientras el login no suelte, el cambio no avanza.
+    expect(await Promise.race([cambio.then(() => "avanzó"), dormir(300).then(() => "espera")])).toBe("espera");
+    seguir();
+
+    const resultado = await login;
+    expect(resultado.estado).toBe("ok");
+    expect(await cambio).toBe(1);
+    if (resultado.estado === "ok") {
+      expect(await buscarSesionViva(estado.base.db, resultado.resultado.token, new Date())).toBeNull();
+    }
   });
 });
 

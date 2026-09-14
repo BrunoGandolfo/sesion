@@ -196,7 +196,9 @@ export type ResultadoCambioPassword =
   | { estado: "credencial-incorrecta" }
   | { estado: "sin-usuario" }
   | { estado: "indisponible" }
-  | { estado: "ok" };
+  /** `hashVerificado` es el hash contra el que se comprobó la actual: la
+   *  escritura de la nueva tiene que condicionarse a que siga siendo ese. */
+  | { estado: "ok"; hashVerificado: string };
 
 export interface ProcesarCambioPasswordParams {
   prisma: ClienteCifrado;
@@ -237,7 +239,9 @@ export async function procesarCambioPassword({
         });
         if (!usuario) return { estado: "sin-usuario" };
 
-        if (await verificar(usuario.hashedPassword)) return { estado: "ok" };
+        if (await verificar(usuario.hashedPassword)) {
+          return { estado: "ok", hashVerificado: usuario.hashedPassword };
+        }
 
         await registrarIntentoFallido(tx, { tipo: "password", claves, huella, ahora });
         return { estado: "credencial-incorrecta" };

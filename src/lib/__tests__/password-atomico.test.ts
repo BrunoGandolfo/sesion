@@ -76,7 +76,7 @@ describe("procesarCambioPassword", () => {
 
   it("con la contraseña bien: ok y ninguna fila", async () => {
     const c = await cuenta();
-    expect(await intentar(c, async () => true)).toEqual({ estado: "ok" });
+    expect(await intentar(c, async () => true)).toMatchObject({ estado: "ok", hashVerificado: expect.stringMatching(/^\$2/) });
     expect(await estado.base.prisma.intentoAcceso.count()).toBe(0);
   });
 
@@ -121,6 +121,44 @@ describe("rutas de sesión", () => {
     const evento = await estado.base.prisma.eventoAuditoria.findFirstOrThrow({ where: { accion: "cuenta.password_cambiada" } });
     expect(evento.detalle).toEqual({ sesionesCerradas: 3 });
     expect(JSON.stringify(evento.detalle)).not.toContain(HUELLA.ip);
+  });
+
+  it("si la contraseña cambió entre la verificación y la escritura (restablecimiento concurrente), no la pisa: 401", async () => {
+    const { userId } = await conSesiones(1);
+    const hashRestablecida = await bcrypt.hash("restablecida por correo", BCRYPT_RONDAS);
+    const hashReal = bcrypt.hash;
+    // La ruta verifica la actual, hashea la nueva y recién después escribe.
+    // Entre medio, "alguien" restablece por correo.
+    const espia = vi.spyOn(bcrypt, "hash").mockImplementationOnce((async (p: string, r: number) => {
+      await estado.base.prisma.user.update({ where: { id: userId }, data: { hashedPassword: hashRestablecida } });
+      return hashReal(p, r);
+    }) as typeof bcrypt.hash);
+    try {
+      const { POST } = await import("@/app/api/cuenta/password/route");
+      const res = await POST(new Request("http://localhost/api/cuenta/password", {
+        method: "POST", body: JSON.stringify({ actual: PASSWORD, nueva: "contraseña del atacante" }),
+      }));
+      expect(res.status).toBe(401);
+    } finally {
+      espia.mockRestore();
+    }
+    const guardado = await estado.base.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(guardado.hashedPassword).toBe(hashRestablecida);
+    expect(await estado.base.prisma.eventoAuditoria.count({ where: { accion: "cuenta.password_cambiada" } })).toBe(0);
+  });
+
+  it("POST /limpiar borra la cookie solo si no resuelve a una sesión viva", async () => {
+    const { userId, sesiones } = await conSesiones(1);
+    const { POST } = await import("@/app/api/cuenta/limpiar/route");
+    const viva = await POST();
+    expect(await viva.json()).toEqual({ data: { viva: true } });
+    expect(viva.headers.get("set-cookie")).toBeNull();
+    expect(await buscarSesionViva(estado.base.db, sesiones[0].token, new Date())).not.toBeNull();
+
+    await estado.base.prisma.sesionAcceso.updateMany({ where: { userId }, data: { cerradaEn: new Date(), motivoCierre: "salida" } });
+    const muerta = await POST();
+    expect(await muerta.json()).toEqual({ data: { viva: false } });
+    expect(muerta.headers.get("set-cookie")).toMatch(/Max-Age=0/);
   });
 
   it("POST /password con la actual equivocada: 400 y nada cambia; sin sesión: 401", async () => {

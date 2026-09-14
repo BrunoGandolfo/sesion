@@ -116,7 +116,34 @@ cuando la firma vigente es de una versión anterior a la 2.0. Las firmas 1.1
 siguen vigentes (decisión del dueño): la ficha debería mostrar "hay un texto
 nuevo, sugerí firmarlo en la próxima sesión", no bloquear la grabación.
 
-## 8. Verificación que no se pudo hacer desde esta máquina
+## 8. Auditoría de Codex (14-09-2026): lo que queda abierto
+
+Codex auditó las rutas de cuenta, el proxy, el cifrado y el mantenimiento
+como atacante. Confirmó cinco cosas; tres se cerraron en la rama (login y
+cambio de contraseña se excluyen por lock por usuaria; el cambio se escribe
+con compare-and-set sobre el hash verificado; el tope de invitaciones cuenta
+y crea bajo lock). Quedan dos, de severidad baja:
+
+1. **Logout CSRF por `/login?sesion=x`** (formularios). La pantalla de
+   entrada, al llegar con `?sesion=`, hace `POST /api/cuenta/salir`; una
+   navegación inducida a esa URL cierra una sesión viva. Ya existe
+   `POST /api/cuenta/limpiar`, que borra la cookie SOLO si no resuelve a una
+   sesión viva. El arreglo es una línea en `src/app/(auth)/login/page.tsx`:
+   en el `useEffect` de `sesionVencida`, llamar a `/api/cuenta/limpiar` en
+   vez de `/api/cuenta/salir`.
+2. **Enumeración de emails con una invitación válida** (aceptado). Quien
+   tiene una invitación puede probar un registro con un email y distinguir
+   "ya existe" (400) de "libre" (201, y consume la invitación). Las
+   invitaciones las crean solo las cuentas de `INVITACIONES_PERMITIDAS`, hay
+   dos vigentes como mucho y quien las recibe es una colega: se acepta.
+   Cerrarlo de verdad exige verificación del correo antes del alta (otro
+   diseño).
+
+Dudas que dejó y no se resolvieron en código: `x-forwarded-for` se confía
+tal cual (en Vercel lo pone la plataforma); `INVITACIONES_PERMITIDAS` solo
+debe listar cuentas ya creadas (documentado en `.env.example`).
+
+## 9. Verificación que no se pudo hacer desde esta máquina
 
 Los tests de integración del área (`password-atomico`, `login-atomico`,
 `registro-atomico`, `recuperacion-atomica`, `prisma-encryption` con el
