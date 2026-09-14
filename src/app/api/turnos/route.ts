@@ -16,6 +16,7 @@ import { toRecordatorio, toTurno, toTurnoConPaciente } from "../_lib/domain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const querySchema = z.object({
   desde: isoDateTimeSchema,

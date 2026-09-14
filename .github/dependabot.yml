@@ -1,14 +1,19 @@
 # Actualizaciones automáticas de dependencias.
 #
-# Dos ecosistemas: npm en la raíz (la app Next.js) y pip en /processor (el
-# worker Python). Semanal y no diario: con 5 PRs abiertos como tope, diario
-# solo cambia la fecha del mismo trabajo.
+# Tres ecosistemas: npm en la raíz (la app Next.js), pip en /processor (el
+# worker Python) y las propias GitHub Actions de .github/workflows. Semanal y
+# no diario: con 5 PRs abiertos como tope, diario solo cambia la fecha del
+# mismo trabajo.
 #
 # El límite de 5 es a propósito: Dependabot abre PRs que corren el CI entero,
 # y una cola de 30 PRs no se revisa, se cierra en bloque.
 #
 # Los updates de seguridad NO respetan open-pull-requests-limit: entran
 # igual aunque la cola esté llena.
+#
+# Desde que el CI usa un Postgres efímero y ningún secret, los PRs de
+# Dependabot corren la suite completa: un PR verde de Dependabot se mergea
+# sin leer el diff, que es el punto entero de tenerlo.
 
 version: 2
 updates:
@@ -40,3 +45,17 @@ updates:
         update-types: ["minor", "patch"]
     commit-message:
       prefix: "deps(processor)"
+
+  # Las acciones (checkout, setup-node, setup-python…) también son
+  # dependencias: sin esto nunca se actualizan ni se auditan.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      acciones:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"

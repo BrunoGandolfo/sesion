@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui";
-import { asegurarLineaContacto, buildSmsMessage } from "@/lib/sms-texto";
+import { asegurarLineaContacto, buildSmsMessage } from "@/lib/sms/texto";
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
 
 const FECHA_PREVIEW = new Date("2026-04-21T10:00:00-03:00");

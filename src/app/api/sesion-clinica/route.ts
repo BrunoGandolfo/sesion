@@ -9,6 +9,7 @@ import { SESION_SELECT, toSesionClinicaResponse } from "../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const createSchema = z.object({
   turnoId: z.string().cuid("Turno inválido"),

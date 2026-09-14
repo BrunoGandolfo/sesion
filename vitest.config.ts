@@ -4,8 +4,12 @@ import path from 'path'
 // Los tests se dividen en dos suites:
 //
 //   - unitarios: puros, sin red ni base. Corren en cualquier lado.
-//   - integración: los archivos de INTEGRACION, que se conectan a la rama de
-//     test de Neon (DATABASE_URL_TEST) y la vacían entre casos.
+//   - integración: los archivos de INTEGRACION, que se conectan a una base
+//     Postgres de test (DATABASE_URL_TEST) y la vacían entre casos. En CI es
+//     un contenedor efímero por corrida; en local, el de docker-compose.yml o
+//     —sin Docker— la rama `test` de Neon declarada con
+//     PERMITIR_BASE_REMOTA_DE_TEST=1 (ver .env.test.example). La guarda vive
+//     en src/lib/__tests__/db-test.ts.
 //
 // `npm test` corre las dos (es lo que corre CI). `npm run test:unit` y
 // `npm run test:integration` eligen una, vía VITEST_SUITE. La lista vive acá
@@ -45,14 +49,15 @@ const INTEGRACION = [
   'src/lib/__tests__/prisma-encryption.test.ts',
   'src/lib/__tests__/casos-uso-sesion.test.ts',
   'src/lib/__tests__/casos-uso-worker.test.ts',
-  'src/lib/__tests__/casos-uso-recordatorios.test.ts',
+  'src/lib/__tests__/despachar-sms.test.ts',
+  'src/lib/__tests__/envios-del-turno.test.ts',
+  'src/lib/__tests__/sms-callback.test.ts',
   'src/lib/__tests__/recordar-cobro.test.ts',
   'src/lib/__tests__/pendientes-terapeuta.test.ts',
   'src/lib/__tests__/cobrar-turno.test.ts',
   'src/lib/__tests__/contexto-clinico.test.ts',
   'src/lib/__tests__/multi-tenant.test.ts',
   'src/lib/__tests__/login-atomico.test.ts',
-  'src/lib/__tests__/turno-recordatorios.test.ts',
   'src/lib/__tests__/password-atomico.test.ts',
   'src/lib/__tests__/solapamiento-turnos.test.ts',
   'src/lib/__tests__/config-contrato.test.ts',
@@ -69,10 +74,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    // Los tests de integración comparten la rama `test` de Neon y la vacían en
-    // cada corrida: los archivos deben correr de a uno para no pisarse.
+    // Los tests de integración comparten UNA base y la vacían entre casos:
+    // los archivos deben correr de a uno para no pisarse. Con base exclusiva
+    // se podría dar un esquema por worker, pero es complejidad que hoy no
+    // compra nada.
     fileParallelism: false,
-    // Los de integración hablan con Neon por red; 5 s (el default) no alcanza.
+    // Cuando la base es la rama de Neon, el primer connect tarda (suspensión
+    // por inactividad); 5 s (el default) no alcanza.
     testTimeout: 30_000,
     ...(suite === 'integration' ? { include: INTEGRACION } : {}),
     ...(suite === 'unit'
