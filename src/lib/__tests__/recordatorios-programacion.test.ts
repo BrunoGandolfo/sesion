@@ -88,11 +88,13 @@ describe("calcularProgramadoEn — turno de madrugada", () => {
     );
   });
 
-  it("a las 8:00 en punto todavía es la mañana del propio día", () => {
+  it("a las 8:00 en punto el aviso de la mañana caería con la sesión empezando: tarde anterior", () => {
+    // Antes este caso avisaba a las 8:00 para un turno de las 8:00: un SMS
+    // que el despachador cancela por "turno pasado" en el mismo tick.
     const turno = mvd(2026, 4, 15, 8);
 
     expect(iso(calcularProgramadoEn(turno, "misma_manana"))).toBe(
-      iso(mvd(2026, 4, 15, 8)),
+      iso(mvd(2026, 4, 14, 20)),
     );
   });
 });
@@ -197,5 +199,28 @@ describe("dispersión por turno", () => {
   it("reparte: cien turnos no caen todos en el mismo minuto", () => {
     const minutos = new Set(Array.from({ length: 100 }, (_, i) => dispersionMinutos(`turno-${i}`)));
     expect(minutos.size).toBeGreaterThan(5);
+  });
+});
+
+describe("misma_manana con dispersión", () => {
+  it("si el aviso de la mañana no cae ANTES del turno, va la tarde anterior", () => {
+    // Un turno a las 8:05: con corrimiento de 0 minutos el aviso de las 8:00
+    // sirve; con 5 o más caería con la sesión empezada.
+    const turno = mvd(2026, 4, 15, 8, 5);
+    for (let m = 0; m < DISPERSION_MINUTOS; m += 1) {
+      // Se busca un id cuyo corrimiento sea exactamente m.
+      let id = `t-${m}`;
+      for (let i = 0; dispersionMinutos(id) !== m; i += 1) id = `t-${m}-${i}`;
+      const esperado = m < 5 ? mvd(2026, 4, 15, 8, m) : mvd(2026, 4, 14, 20, m);
+      expect(iso(calcularProgramadoEn(turno, "misma_manana", id))).toBe(iso(esperado));
+    }
+  });
+
+  it("un turno de las 8:30 sigue avisando la misma mañana con cualquier corrimiento", () => {
+    const turno = mvd(2026, 4, 15, 8, 30);
+    for (const id of ["a", "b", "c", "d", "e"]) {
+      const m = dispersionMinutos(id);
+      expect(iso(calcularProgramadoEn(turno, "misma_manana", id))).toBe(iso(mvd(2026, 4, 15, 8, m)));
+    }
   });
 });

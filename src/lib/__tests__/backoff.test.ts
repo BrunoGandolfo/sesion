@@ -9,6 +9,7 @@ import {
   limiteUtilDelTurno,
   MOTIVO_TURNO_PASADO,
   MOTIVO_VENTANA_AGOTADA,
+  MOTIVO_VENTANA_AGOTADA_SIN_TURNO,
   VENTANA_MINIMA_MS,
 } from "@/lib/sms/backoff";
 
@@ -88,5 +89,21 @@ describe("decidirTrasFalloTransitorio", () => {
     } else {
       throw new Error("las dos tenían que reintentar");
     }
+  });
+});
+
+describe("motivo de la ventana agotada", () => {
+  it("con turno habla de la sesión; sin turno (cobro), del día", () => {
+    const ahora = new Date("2026-09-03T15:00:00.000Z");
+    const conTurno = decidirTrasFalloTransitorio({
+      intentos: 1,
+      ahora,
+      limiteUtil: ahora,
+      fechaTurno: new Date(ahora.getTime() + 60 * 60_000),
+      aleatorio: 0.5,
+    });
+    const sinTurno = decidirTrasFalloTransitorio({ intentos: 1, ahora, limiteUtil: ahora, fechaTurno: null, aleatorio: 0.5 });
+    expect(conTurno).toEqual({ accion: "fallido", motivo: MOTIVO_VENTANA_AGOTADA });
+    expect(sinTurno).toEqual({ accion: "fallido", motivo: MOTIVO_VENTANA_AGOTADA_SIN_TURNO });
   });
 });

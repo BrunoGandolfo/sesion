@@ -61,6 +61,9 @@ export interface ParamsDecision {
 
 export const MOTIVO_VENTANA_AGOTADA =
   "no se pudo enviar antes de la sesión: el servicio de SMS no respondió a tiempo";
+/** Para un aviso sin turno (cobro): la ventana es un día, no "la sesión". */
+export const MOTIVO_VENTANA_AGOTADA_SIN_TURNO =
+  "no se pudo enviar en el día: el servicio de SMS no respondió a tiempo";
 export const MOTIVO_TURNO_PASADO = "el turno ya pasó";
 
 export function decidirTrasFalloTransitorio({
@@ -75,7 +78,7 @@ export function decidirTrasFalloTransitorio({
     return { accion: "cancelado", motivo: MOTIVO_TURNO_PASADO };
   }
   if (ahora.getTime() >= limiteUtil.getTime()) {
-    return { accion: "fallido", motivo: MOTIVO_VENTANA_AGOTADA };
+    return { accion: "fallido", motivo: fechaTurno ? MOTIVO_VENTANA_AGOTADA : MOTIVO_VENTANA_AGOTADA_SIN_TURNO };
   }
   const espera = esperaMs(intentos, aleatorio, jitterMayor ? JITTER * 2 : JITTER);
   const proximo = new Date(ahora.getTime() + espera);

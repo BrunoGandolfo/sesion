@@ -109,7 +109,7 @@ export interface DespacharParams {
    * vigente. Lo inyecta la ruta porque la deuda es del dominio de cobros.
    * Devuelve null si ya no hay nada que avisar → el envío se cancela.
    */
-  textoDeCobro?: (envio: { organizationId: string; pacienteId: string }) => Promise<string | null>;
+  textoDeCobro?: (envio: { organizationId: string; pacienteId: string; ahora: Date }) => Promise<string | null>;
   deadlineMs?: number;
   concurrencia?: number;
   rescateMs?: number;
@@ -284,7 +284,7 @@ export async function despacharEnvios({
       // El texto, en el momento de mandar, con la plantilla vigente.
       let texto: string;
       if (e.motivo === "recordatorio_cobro") {
-        const t = textoDeCobro ? await textoDeCobro({ organizationId: e.organizationId, pacienteId: e.pacienteId }) : null;
+        const t = textoDeCobro ? await textoDeCobro({ organizationId: e.organizationId, pacienteId: e.pacienteId, ahora }) : null;
         if (!t) {
           await cerrar(e, { estado: "cancelado", motivoNoEnvio: MOTIVO_SIN_TEXTO_DE_COBRO, cerradoEn: ahora });
           resumen.cancelados += 1;

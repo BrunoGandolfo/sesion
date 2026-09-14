@@ -99,10 +99,15 @@ export function calcularProgramadoEn(
 
   if (modo === "misma_manana") {
     // Un turno antes de las 8 no tiene mañana propia útil: se avisa la
-    // tarde anterior, como en dia_anterior.
-    return hora < HORA_MANANA
+    // tarde anterior, como en dia_anterior. Y la dispersión no puede pasar
+    // la hora del turno: uno de las 8:05 con corrimiento de 10 min caía a
+    // las 8:10, ya empezado, y el despachador lo cancelaba por "turno
+    // pasado". Si el aviso de la mañana no cae ANTES del turno, también va
+    // la tarde anterior.
+    const manana = instanteMvd(anio, mes, dia, HORA_MANANA, minutos);
+    return hora < HORA_MANANA || manana.getTime() >= fechaTurno.getTime()
       ? instanteMvd(anio, mes, dia - 1, HORA_TARDE, minutos)
-      : instanteMvd(anio, mes, dia, HORA_MANANA, minutos);
+      : manana;
   }
 
   const diasAntes = modo === "dos_dias_antes" ? 2 : 1;

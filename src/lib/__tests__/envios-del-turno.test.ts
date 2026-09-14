@@ -224,6 +224,34 @@ describe("reprogramarEnvioDelTurno", () => {
   });
 });
 
+describe("reprogramarEnvioDelTurno: movido dos veces", () => {
+  it("A → B → C: si el aviso de A llegó y el de B no, C es CAMBIO DE HORARIO igual", async () => {
+    const f = await fixture();
+    await programarEnvioDelTurno(db, { ...f, fechaTurno: MANANA, ahora: AHORA });
+    // El aviso de A salió (Twilio lo aceptó).
+    await prismaRaw.envioSms.updateMany({
+      where: { claveIdempotencia: claveDelTurno(f.turnoId, MANANA) },
+      data: { estado: "aceptado", sid: `SM${randomUUID().replaceAll("-", "")}`, aceptadoEn: AHORA },
+    });
+    // A → B: sale el cambio de horario para B... pero todavía no se mandó.
+    const t1 = new Date(AHORA.getTime() + HORA);
+    await reprogramarEnvioDelTurno(db, { ...f, fechaTurno: PASADO_MANANA, fechaTurnoPrevia: MANANA, ahora: t1 });
+    // B → C antes de que el aviso de B saliera.
+    const C = new Date(PASADO_MANANA.getTime() + 24 * HORA);
+    const t2 = new Date(t1.getTime() + HORA);
+    await reprogramarEnvioDelTurno(db, { ...f, fechaTurno: C, fechaTurnoPrevia: PASADO_MANANA, ahora: t2 });
+
+    const envios = await enviosDe(f.turnoId);
+    expect(envios.map((e) => [e.motivo, e.estado])).toEqual([
+      ["recordatorio_turno", "aceptado"],
+      ["cambio_de_horario", "cancelado"],
+      ["cambio_de_horario", "pendiente"],
+    ]);
+    expect(envios[2].programadoEn).toEqual(t2);
+    expect(envios[1].cerradoEn).toEqual(t2);
+  });
+});
+
 describe("programarEnvioDeCobro", () => {
   it("un aviso por paciente y por día de Montevideo; el segundo del día no crea otro", async () => {
     const f = await fixture();

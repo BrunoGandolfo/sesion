@@ -13,7 +13,7 @@
  *   npx vitest run src/lib/__tests__/recordar-cobro.test.ts
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
@@ -26,11 +26,15 @@ import {
   ultimoAvisoPorPaciente,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
 import { ApiError } from "@/app/api/_lib/responses";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
+
+const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
+const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
 const AHORA = new Date("2026-09-03T15:00:00.000Z");
 const TARIFA = 1200;
@@ -78,15 +82,22 @@ const enviosDe = (pacienteId: string) =>
   prismaRaw.envioSms.findMany({ where: { pacienteId }, orderBy: { creadoEn: "asc" } });
 
 beforeAll(() => {
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   ({ prisma: prismaRaw, db } = conectarBaseDeTest());
 });
 
 beforeEach(async () => {
+  process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
+  __resetLlaveroForTests();
   await vaciarTablas(prismaRaw);
 });
 
 afterAll(async () => {
   await prismaRaw.$disconnect();
+  if (ORIGINAL_KEY === undefined) delete process.env.CLAVES_CIFRADO;
+  else process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
+  __resetLlaveroForTests();
 });
 
 describe("recordarCobro", () => {

@@ -175,13 +175,18 @@ export async function cancelarEnviosDelTurno(
   tx: ClienteEnvios,
   turnoId: string,
   motivo: string = MOTIVO_TURNO_CERRADO,
+  ahora: Date = new Date(),
 ): Promise<number> {
   const { count } = await tx.envioSms.updateMany({
     where: { turnoId, estado: { in: [...ESTADOS_CON_ENVIO_PENDIENTE] } },
-    data: { estado: "cancelado", motivoNoEnvio: motivo, cerradoEn: new Date() },
+    data: { estado: "cancelado", motivoNoEnvio: motivo, cerradoEn: ahora },
   });
   return count;
 }
+
+/** Estados en los que un SMS pudo haber llegado al teléfono: Twilio lo
+ *  aceptó (o no sabemos), aunque el operador después no lo entregara. */
+export const ESTADOS_QUE_PUDIERON_LLEGAR = ["aceptado", "entregado", "no_entregado", "desconocido"] as const;
 
 export interface ReprogramarEnvioParams {
   turnoId: string;
@@ -194,10 +199,13 @@ export interface ReprogramarEnvioParams {
 
 /**
  * La fecha del turno cambió. Se apaga lo pendiente de la fecha vieja y se
- * programa el aviso de la nueva. Si para la fecha previa ya había salido un
+ * programa el aviso de la nueva. Si para ESTE TURNO ya había salido algún
  * aviso (Twilio lo aceptó, o quedó en desconocido: pudo haber salido), el
  * nuevo es un `cambio_de_horario` y sale ya; si no, es el recordatorio de
- * siempre, a su hora. Idempotente: con la misma fecha no hace nada.
+ * siempre, a su hora. Se mira cualquier fecha anterior, no sólo la inmediata:
+ * un turno movido dos veces (A → B → C) cuya paciente recibió el aviso de A
+ * y no el de B tiene que enterarse igual de que ahora es C. Idempotente: con
+ * la misma fecha no hace nada.
  */
 export async function reprogramarEnvioDelTurno(
   tx: ClienteEnvios,
@@ -205,14 +213,14 @@ export async function reprogramarEnvioDelTurno(
 ): Promise<void> {
   if (fechaTurno.getTime() === fechaTurnoPrevia.getTime()) return;
 
-  await cancelarEnviosDelTurno(tx, turnoId, MOTIVO_REPROGRAMADO);
+  await cancelarEnviosDelTurno(tx, turnoId, MOTIVO_REPROGRAMADO, ahora);
 
   const yaAviso = await tx.envioSms.findFirst({
     where: {
       turnoId,
-      claveIdempotencia: claveDelTurno(turnoId, fechaTurnoPrevia),
+      claveIdempotencia: { not: claveDelTurno(turnoId, fechaTurno) },
       OR: [
-        { estado: { in: ["aceptado", "entregado", "no_entregado", "desconocido"] } },
+        { estado: { in: [...ESTADOS_QUE_PUDIERON_LLEGAR] } },
         { aceptadoEn: { not: null } },
       ],
     },
