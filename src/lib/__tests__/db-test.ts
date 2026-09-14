@@ -2,22 +2,30 @@
 //
 // Por qué existe: siete archivos de test repetían el mismo bloque —cargar
 // .env.test, chequear DATABASE_URL_TEST, construir PrismaClient y escribir un
-// TRUNCATE ... CASCADE a mano—. Nueve tablas por copia, siete copias, ninguna
-// idéntica a la otra. Un TRUNCATE es la sentencia más destructiva del
-// repositorio y estaba escrita en siete lugares, cada uno leyendo una variable
-// de entorno que en una laptop mal configurada puede apuntar a producción.
+// TRUNCATE ... CASCADE a mano—. Un TRUNCATE es la sentencia más destructiva
+// del repositorio y estaba escrita en siete lugares, cada uno leyendo una
+// variable de entorno que en una laptop mal configurada puede apuntar a
+// producción.
 //
 // Ahora hay un solo TRUNCATE en todo el repositorio (`vaciarTablas`) y un solo
 // lugar donde se decide a qué base se conecta un test (`conectarBaseDeTest`),
-// con tres guardas antes de abrir la conexión:
+// con una guarda antes de abrir la conexión:
 //
-//   1. DATABASE_URL_TEST tiene que existir.
-//   2. Tiene que contener el identificador de la rama de test de Neon.
-//   3. NO puede contener el de la rama de producción.
+//   El host de DATABASE_URL_TEST tiene que ser LOCAL (localhost, 127.0.0.1 o
+//   ::1). Cualquier otro host aborta, salvo que exista
+//   PERMITIR_BASE_REMOTA_DE_TEST=1, y en ese caso el error —si algo sale mal—
+//   dice qué host se aceptó y que el TRUNCATE va en serio.
 //
-// La 3 es redundante con la 2 mientras los identificadores no cambien, y es a
-// propósito: si mañana alguien renombra la rama de test y afloja la guarda 2,
-// la 3 sigue tapando el caso que importa.
+// LA GUARDA ANTERIOR Y POR QUÉ CAMBIÓ
+//
+// Antes la guarda comparaba la URL con dos identificadores de ramas de Neon
+// escritos acá (el de la rama de test tenía que estar; el de producción no
+// podía estar). Dos problemas: eran identificadores de infraestructura en un
+// repositorio público, y ataban el repositorio a un proveedor. En CI ya no
+// hay Neon: cada corrida levanta un Postgres 17 propio (ver ci.yml), y en
+// local la opción por defecto es el contenedor de docker-compose.yml. La
+// rama `test` de Neon sigue sirviendo para quien no tenga Docker, pero hay
+// que pedirla explícitamente.
 //
 // Este archivo NO es un test (no matchea *.test.ts): vitest no lo colecta.
 
@@ -28,15 +36,10 @@ import { PrismaClient } from "@prisma/client";
 
 import { withEncryption } from "@/lib/prisma-encryption";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Identificadores de rama (Neon los pone en el host de la connection string).
-// ────────────────────────────────────────────────────────────────────────────
+/** Variable que habilita un host remoto. El valor tiene que ser exactamente "1". */
+export const VARIABLE_PERMISO_REMOTO = "PERMITIR_BASE_REMOTA_DE_TEST";
 
-/** Rama de Neon dedicada a los tests. Es la única que se puede vaciar. */
-const RAMA_TEST = "ep-floral-sound";
-
-/** Rama de producción. Si aparece en la URL, se aborta sin conectar. */
-const RAMA_PRODUCCION = "ep-odd-night";
+const HOSTS_LOCALES: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
 // ────────────────────────────────────────────────────────────────────────────
 // .env.test
@@ -44,8 +47,8 @@ const RAMA_PRODUCCION = "ep-odd-night";
 
 /**
  * Carga .env.test sin agregar dependencias: parser mínimo, y solo para las
- * variables que no vengan ya del ambiente (en CI vienen del secret, y ahí
- * este archivo no existe). Idempotente.
+ * variables que no vengan ya del ambiente (en CI vienen del job, y ahí este
+ * archivo no existe). Idempotente.
  */
 function cargarEnvTest(): void {
   if (process.env.DATABASE_URL_TEST) return;
@@ -67,9 +70,7 @@ function cargarEnvTest(): void {
 /**
  * True si hay una DATABASE_URL_TEST disponible (del ambiente o de .env.test).
  * Para los archivos que prefieren saltear el bloque de integración en vez de
- * fallar (contexto-clinico.test.ts, que además tiene tests puros).
- *
- * No valida la URL: eso lo hace conectarBaseDeTest antes de conectar.
+ * fallar. No valida la URL: eso lo hace conectarBaseDeTest antes de conectar.
  */
 export function hayBaseDeTest(): boolean {
   cargarEnvTest();
@@ -77,36 +78,39 @@ export function hayBaseDeTest(): boolean {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Guardas
+// Guarda
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Host de la URL, para poder decir qué se recibió sin filtrar la contraseña
- *  que viaja en el userinfo de la connection string. */
-function hostDe(url: string): string {
+/** Host de la URL (sin puerto), para poder decir qué se recibió sin filtrar
+ *  la contraseña que viaja en el userinfo de la connection string. */
+function hostDe(url: string): string | null {
   try {
-    return new URL(url).host;
+    return new URL(url).hostname;
   } catch {
-    return "(no es una URL válida)";
+    return null;
   }
 }
 
 const AYUDA = [
   "Cómo arreglarlo:",
-  "  - Local: poné DATABASE_URL_TEST en .env.test con la connection string de",
-  "    la rama de test de Neon (Neon → Branches → test → Connection string).",
-  "  - CI: el job `test` la recibe de secrets.DATABASE_URL_TEST.",
+  "  - Con Docker: `npm run db:test:up` y DATABASE_URL_TEST del .env.test.example.",
+  "  - Sin Docker: la rama `test` de Neon en DATABASE_URL_TEST, con conexión",
+  `    directa, y ${VARIABLE_PERMISO_REMOTO}=1 para declarar que es remota.`,
+  "  - CI: el job `test` levanta un Postgres propio y define la variable.",
 ].join("\n");
 
 /**
- * Valida DATABASE_URL_TEST y la devuelve. Lanza —con un mensaje que dice qué
- * pasó y cómo arreglarlo— si falta, si no es la rama de test o si es la de
- * producción. Exportada aparte de la conexión para poder testearla.
+ * La guarda, pura: recibe la URL y las variables y devuelve la URL validada
+ * o lanza con un mensaje que dice qué pasó y cómo arreglarlo. Separada de
+ * process.env para poder probarla sin tocar el ambiente del proceso.
  */
-export function urlDeBaseDeTest(): string {
-  cargarEnvTest();
-  const url = process.env.DATABASE_URL_TEST?.trim();
+export function validarUrlDeBaseDeTest(
+  url: string | undefined,
+  permisoRemoto: string | undefined,
+): string {
+  const limpia = url?.trim();
 
-  if (!url) {
+  if (!limpia) {
     throw new Error(
       [
         "DATABASE_URL_TEST no está definida.",
@@ -120,39 +124,46 @@ export function urlDeBaseDeTest(): string {
     );
   }
 
-  if (url.includes(RAMA_PRODUCCION)) {
+  const host = hostDe(limpia);
+  if (host === null) {
     throw new Error(
-      [
-        `DATABASE_URL_TEST apunta a PRODUCCIÓN (contiene "${RAMA_PRODUCCION}").`,
-        "",
-        "Los tests de integración vacían TODAS las tablas con TRUNCATE ...",
-        "CASCADE. Abortado antes de abrir la conexión: no se ejecutó nada.",
-        "",
-        `Host recibido: ${hostDe(url)}`,
-        "",
-        AYUDA,
-      ].join("\n"),
+      ["DATABASE_URL_TEST no es una URL válida.", "", AYUDA].join("\n"),
     );
   }
 
-  if (!url.includes(RAMA_TEST)) {
-    throw new Error(
-      [
-        "DATABASE_URL_TEST no apunta a la rama de test.",
-        "",
-        "Los tests de integración vacían TODAS las tablas con TRUNCATE ...",
-        `CASCADE, así que la URL tiene que contener "${RAMA_TEST}", el`,
-        "identificador de la rama de Neon dedicada a tests. Abortado antes de",
-        "abrir la conexión: no se ejecutó nada.",
-        "",
-        `Host recibido: ${hostDe(url)}`,
-        "",
-        AYUDA,
-      ].join("\n"),
+  if (HOSTS_LOCALES.has(host)) return limpia;
+
+  if (permisoRemoto === "1") {
+    // Se acepta, y se deja dicho en el log de la corrida: si el TRUNCATE
+    // cae donde no debía, que al menos quede escrito contra qué host fue.
+    console.warn(
+      `[db-test] ${VARIABLE_PERMISO_REMOTO}=1: se acepta la base REMOTA "${host}". ` +
+        "Los tests la vacían con TRUNCATE ... CASCADE entre casos; va en serio.",
     );
+    return limpia;
   }
 
-  return url;
+  throw new Error(
+    [
+      `DATABASE_URL_TEST apunta a un host que no es local: "${host}".`,
+      "",
+      "Los tests de integración vacían TODAS las tablas con TRUNCATE ...",
+      "CASCADE. Por defecto sólo se acepta localhost / 127.0.0.1 / ::1.",
+      `Si es a propósito (la rama test de Neon), poné ${VARIABLE_PERMISO_REMOTO}=1.`,
+      "Abortado antes de abrir la conexión: no se ejecutó nada.",
+      "",
+      AYUDA,
+    ].join("\n"),
+  );
+}
+
+/** Valida DATABASE_URL_TEST (del ambiente o de .env.test) y la devuelve. */
+export function urlDeBaseDeTest(): string {
+  cargarEnvTest();
+  return validarUrlDeBaseDeTest(
+    process.env.DATABASE_URL_TEST,
+    process.env[VARIABLE_PERMISO_REMOTO],
+  );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -170,15 +181,15 @@ export interface BaseDeTest {
 
 // Solo los clientes que salieron de conectarBaseDeTest pueden vaciarse. Es lo
 // que impide que un TRUNCATE futuro se ejecute sobre un PrismaClient armado a
-// mano en un test, salteando las guardas de arriba.
+// mano en un test, salteando la guarda de arriba.
 const autorizados = new WeakSet<object>();
 
 /**
  * Cliente Prisma contra la base de test, ya validada.
  *
  * Llamar desde `beforeAll`, no en el top-level del módulo: la extensión de
- * cifrado valida NOTES_ENCRYPTION_KEY al construirse, y los tests la setean
- * en ese mismo hook.
+ * cifrado valida la clave al construirse, y los tests la setean en ese mismo
+ * hook.
  */
 export function conectarBaseDeTest(): BaseDeTest {
   const url = urlDeBaseDeTest();
@@ -192,24 +203,37 @@ export function conectarBaseDeTest(): BaseDeTest {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Tablas que se vacían entre casos, en una sola sentencia. CASCADE limpia el
- * grafo entero, así que el orden no importa; la lista es la unión de las que
- * truncaba cada test por su cuenta.
+ * Todas las tablas del esquema (prisma/schema.prisma), en una sola
+ * sentencia. CASCADE limpia el grafo entero, así que el orden no importa.
  *
- * `eventos_auditoria` NO está: los casos de uso reciben la auditoría como
- * stub y ningún test escribe esa tabla.
+ * Es la lista completa a propósito, `eventos_auditoria` y `worker_estado`
+ * incluidas: la base de test nace vacía y vuelve a estar vacía antes de cada
+ * caso, sin excepciones que haya que recordar. Si aparece una tabla nueva en
+ * el schema y no está acá, el test de db-test.test.ts lo dice.
  */
-const TABLAS = [
-  "sesiones_clinicas",
-  "paciente_contexto_clinico",
-  "consentimientos_grabacion",
-  "recordatorios",
-  "turnos",
-  "hot_words",
-  "pacientes",
-  "configuraciones",
-  "usuarios",
+export const TABLAS = [
   "organizaciones",
+  "usuarios",
+  "sesiones_acceso",
+  "intentos_acceso",
+  "password_resets",
+  "invitaciones",
+  "cupos_ayuda",
+  "configuraciones",
+  "pacientes",
+  "series_turno",
+  "turnos",
+  "envios_sms",
+  "bajas_sms",
+  "consentimientos_grabacion",
+  "sesiones_clinicas",
+  "audio_segmentos",
+  "trabajos",
+  "worker_estado",
+  "hot_words",
+  "hilos",
+  "hilo_versiones",
+  "eventos_auditoria",
 ] as const;
 
 /**

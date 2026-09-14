@@ -24,6 +24,7 @@ import { toTurno } from "../../_lib/domain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 /** Las columnas cifradas sin el `id` que cifrarTurno devuelve para los create. */
 function sinId<T extends { id: string }>(columnas: T): Omit<T, "id"> {

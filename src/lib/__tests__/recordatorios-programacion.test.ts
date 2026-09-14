@@ -169,3 +169,33 @@ describe("normalizarRecordatorioModo", () => {
     );
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Dispersión: los avisos del día no salen todos a las 20:00 en punto.
+// ────────────────────────────────────────────────────────────────────────────
+
+import { DISPERSION_MINUTOS, dispersionMinutos } from "@/lib/recordatorios-programacion";
+
+describe("dispersión por turno", () => {
+  const turno = mvd(2026, 4, 15, 10);
+
+  it("sin turnoId, la hora en punto (compatibilidad)", () => {
+    expect(iso(calcularProgramadoEn(turno, "dia_anterior"))).toBe(iso(mvd(2026, 4, 14, 20)));
+  });
+
+  it("con turnoId suma entre 0 y 14 minutos, siempre los mismos para el mismo turno", () => {
+    for (const id of ["a", "b", "0f2c1e6a-1111-4222-8333-444455556666", "turno-99"]) {
+      const m = dispersionMinutos(id);
+      expect(m).toBeGreaterThanOrEqual(0);
+      expect(m).toBeLessThan(DISPERSION_MINUTOS);
+      expect(dispersionMinutos(id)).toBe(m);
+      expect(iso(calcularProgramadoEn(turno, "dia_anterior", id))).toBe(iso(mvd(2026, 4, 14, 20, m)));
+      expect(iso(calcularProgramadoEn(turno, "misma_manana", id))).toBe(iso(mvd(2026, 4, 15, 8, m)));
+    }
+  });
+
+  it("reparte: cien turnos no caen todos en el mismo minuto", () => {
+    const minutos = new Set(Array.from({ length: 100 }, (_, i) => dispersionMinutos(`turno-${i}`)));
+    expect(minutos.size).toBeGreaterThan(5);
+  });
+});

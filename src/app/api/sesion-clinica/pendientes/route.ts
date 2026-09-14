@@ -14,6 +14,7 @@ import { errorResponse } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const BATCH_SIZE = 5;
 

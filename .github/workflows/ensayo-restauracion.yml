@@ -1,0 +1,185 @@
+# ============================================================================
+# Ensayo mensual de restauración: ¿el último backup se puede volver a armar?
+#
+# Un backup que nunca se restauró es una esperanza. Una vez por mes (día 1,
+# 04:00 Montevideo) y bajo demanda, este workflow:
+#
+#   1. levanta un Postgres 17 efímero;
+#   2. baja el backup diario más reciente de R2 y lo descifra;
+#   3. lo restaura con pg_restore;
+#   4. corre scripts/ensayo/verificar-restauracion.mjs: cuenta filas por
+#      tabla contra un piso, verifica que toda columna *_encrypted sigue
+#      cifrada (prefijo ENC1/ENC2) y que no hay filas huérfanas en ninguna
+#      clave foránea; escribe resultado.json;
+#   5. publica resultado.json como artefacto y abre un issue con el acta;
+#   6. alerta por correo si cualquier paso falla.
+#
+# DECISIÓN DELIBERADA: este ensayo NO descifra ninguna nota. Hacerlo exigiría
+# la clave del cifrado clínico en GitHub Actions, es decir, la clave de todo
+# el histórico en un cuarto lugar. Lo que prueba la clave es el ensayo A MANO
+# trimestral del dueño (docs/operaciones.md §4), que deja su acta en
+# docs/operaciones/actas/ y que scripts/ci/acta-vigente.mjs reclama a los
+# 100 días.
+#
+# Secrets: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT,
+# BACKUP_ENCRYPTION_KEY, RESEND_API_KEY, ALERTA_CORREO (los mismos de
+# backup.yml). GITHUB_TOKEN para el issue.
+# ============================================================================
+
+name: Ensayo de restauración
+
+on:
+  schedule:
+    # Día 1 de cada mes, 07:00 UTC = 04:00 Montevideo, una hora después del
+    # backup de ese día.
+    - cron: "0 7 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  ensayo:
+    name: Restaurar el último backup en un Postgres efímero
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sesion_ensayo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_ensayo
+      PG_BIN: /usr/lib/postgresql/17/bin
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verificar secrets
+        run: |
+          set -euo pipefail
+          faltan=""
+          for v in R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_ENDPOINT BACKUP_ENCRYPTION_KEY RESEND_API_KEY ALERTA_CORREO; do
+            if [ -z "${!v:-}" ]; then faltan="${faltan} ${v}"; fi
+          done
+          if [ -n "${faltan}" ]; then echo "ERROR: faltan secrets:${faltan}" >&2; exit 1; fi
+
+      - name: Instalar postgresql-client-17
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          codename="$(lsb_release -cs)"
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          "${PG_BIN}/pg_restore" --version
+
+      - name: Configurar credenciales AWS CLI para R2
+        run: |
+          set -euo pipefail
+          aws configure set aws_access_key_id "${R2_ACCESS_KEY_ID}"
+          aws configure set aws_secret_access_key "${R2_SECRET_ACCESS_KEY}"
+          aws configure set default.region auto
+          aws configure set default.s3.request_checksum_calculation when_required
+          aws configure set default.s3.response_checksum_validation when_required
+
+      - name: Elegir el backup diario más reciente
+        run: |
+          set -euo pipefail
+          key="$(aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "backups/sesion-backup-" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --query 'sort_by(Contents, &LastModified)[-1].Key' --output text)"
+          if [ -z "${key}" ] || [ "${key}" = "None" ]; then
+            echo "ERROR: no hay ningún backup bajo backups/sesion-backup-." >&2
+            exit 1
+          fi
+          fecha="$(aws s3api head-object --bucket "${R2_BUCKET}" --key "${key}" \
+            --endpoint-url "${R2_ENDPOINT}" --query 'LastModified' --output text)"
+          echo "BACKUP_KEY=${key}" >> "$GITHUB_ENV"
+          echo "BACKUP_FECHA=${fecha}" >> "$GITHUB_ENV"
+          echo "Backup elegido: ${key} (${fecha})"
+
+      - name: Bajar y descifrar
+        run: |
+          set -euo pipefail
+          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_KEY}" backup.dump.gpg \
+            --endpoint-url "${R2_ENDPOINT}" --only-show-errors
+          printf '%s' "${BACKUP_ENCRYPTION_KEY}" | gpg --batch --yes --quiet \
+            --decrypt --passphrase-fd 0 --output backup.dump backup.dump.gpg
+          ls -lh backup.dump
+
+      - name: Restaurar en la base efímera
+        run: |
+          set -euo pipefail
+          inicio="$(date +%s)"
+          "${PG_BIN}/pg_restore" --no-owner --no-privileges --exit-on-error \
+            --dbname "${DATABASE_URL}" backup.dump
+          echo "RESTAURACION_SEG=$(( $(date +%s) - inicio ))" >> "$GITHUB_ENV"
+          rm -f backup.dump backup.dump.gpg
+
+      - name: Verificar la base restaurada
+        env:
+          PSQL: /usr/lib/postgresql/17/bin/psql
+          BACKUP_ARCHIVO: ${{ env.BACKUP_KEY }}
+        run: node scripts/ensayo/verificar-restauracion.mjs
+
+      - name: Publicar resultado.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ensayo-restauracion-${{ github.run_id }}
+          path: resultado.json
+          if-no-files-found: ignore
+
+      - name: Abrir el issue con el acta
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULTADO: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          fecha="$(date -u +'%Y-%m-%d')"
+          cuerpo="$(node scripts/ensayo/verificar-restauracion.mjs --acta \
+            --resultado "${RESULTADO}" \
+            --archivo "${BACKUP_KEY:-desconocido}" \
+            --fecha-backup "${BACKUP_FECHA:-desconocida}" \
+            --duracion "${RESTAURACION_SEG:-?}" \
+            --corrida "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")"
+          gh issue create \
+            --title "Acta de ensayo de restauración (automático) — ${fecha} — ${RESULTADO}" \
+            --label "operaciones" \
+            --body "${cuerpo}" || gh issue create \
+            --title "Acta de ensayo de restauración (automático) — ${fecha} — ${RESULTADO}" \
+            --body "${cuerpo}"
+
+      - name: Avisar si el ensayo falló
+        if: failure()
+        uses: ./.github/actions/alerta-correo
+        with:
+          asunto: "El ensayo de restauración falló"
+          texto: |
+            El último backup (${{ env.BACKUP_KEY }}) no se pudo restaurar o no pasó la verificación.
+            Hasta que se arregle, no hay una restauración probada.
+            Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -29,7 +29,7 @@ import { ApiError, errorResponse, ok, validationError } from "../../_lib/respons
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const bodySchema = z.object({
   actual: z.string().min(1, "Falta la contraseña actual"),

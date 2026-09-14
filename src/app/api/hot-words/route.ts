@@ -15,7 +15,7 @@ import { hotWordItemSchema, hotWordsBulkSchema, hotWordsQuerySchema } from "../_
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 const CATEGORIAS = ["termino_clinico", "modismo_rioplatense", "nombre_propio", "otro"] as const;
 type Categoria = (typeof CATEGORIAS)[number];

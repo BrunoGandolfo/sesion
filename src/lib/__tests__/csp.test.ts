@@ -5,21 +5,27 @@
 // que no hace falta ningún doble).
 //
 // Lo que estos casos protegen no es el formato del string: es que nadie
-// vuelva a poner `'unsafe-inline'` en `script-src` sin darse cuenta. Ese
-// permiso es exactamente lo que necesita un XSS para ejecutarse, y estaba
-// puesto antes de este cambio.
+// vuelva a poner `'unsafe-inline'` en `script-src` sin darse cuenta, y que
+// `connect-src` diga EXACTAMENTE los destinos declarados en
+// DESTINOS_EXTERNOS: ni uno más (política ancha) ni uno menos (el día del
+// enforce se rompe la subida del audio, que es lo que pasó con R2).
 
 import { describe, expect, it } from "vitest";
 
 import {
   cabeceraReportingEndpoints,
   construirCsp,
+  construirDestinos,
   generarNonce,
+  hostsExternos,
   NOMBRE_ENDPOINT_REPORTE,
   RUTA_REPORTE_CSP,
+  validarHostR2,
 } from "@/lib/csp";
 
 const NONCE = "abc123abc123abc123abc12=";
+const R2 = "https://sesion-audio.0123456789abcdef.r2.cloudflarestorage.com";
+const DESTINOS = construirDestinos({ R2_PUBLIC_HOST: R2 });
 
 /** Los valores de una directiva, como los ve el navegador. */
 function directiva(politica: string, nombre: string): string[] {
@@ -36,8 +42,6 @@ describe("generarNonce", () => {
   });
 
   it("son 128 bits: 16 bytes en base64 son 24 caracteres", () => {
-    // La recomendación del W3C es "al menos 128 bits". Si alguien bajara
-    // NONCE_BYTES, el nonce se volvería adivinable y la política, decorativa.
     expect(generarNonce()).toHaveLength(24);
   });
 
@@ -49,45 +53,83 @@ describe("generarNonce", () => {
 
 describe("construirCsp — script-src es lo que importa", () => {
   it("lleva el nonce", () => {
-    expect(directiva(construirCsp(NONCE), "script-src")).toContain(
-      `'nonce-${NONCE}'`,
-    );
+    expect(directiva(construirCsp(NONCE), "script-src")).toContain(`'nonce-${NONCE}'`);
   });
 
   it("NO lleva 'unsafe-inline': ése era el agujero", () => {
-    // Con 'unsafe-inline' el navegador ignora el nonce por completo y
-    // cualquier <script> inyectado corre. Es el motivo entero del cambio.
-    expect(directiva(construirCsp(NONCE), "script-src")).not.toContain(
-      "'unsafe-inline'",
-    );
+    expect(directiva(construirCsp(NONCE), "script-src")).not.toContain("'unsafe-inline'");
   });
 
   it("lleva 'strict-dynamic': los chunks de Next heredan el nonce", () => {
-    expect(directiva(construirCsp(NONCE), "script-src")).toContain(
-      "'strict-dynamic'",
-    );
+    expect(directiva(construirCsp(NONCE), "script-src")).toContain("'strict-dynamic'");
   });
 
   it("en producción NO lleva 'unsafe-eval'", () => {
-    expect(directiva(construirCsp(NONCE), "script-src")).not.toContain(
-      "'unsafe-eval'",
-    );
+    expect(directiva(construirCsp(NONCE), "script-src")).not.toContain("'unsafe-eval'");
   });
 
   it("en desarrollo sí, porque React Refresh lo necesita", () => {
-    expect(
-      directiva(construirCsp(NONCE, { desarrollo: true }), "script-src"),
-    ).toContain("'unsafe-eval'");
+    expect(directiva(construirCsp(NONCE, { desarrollo: true }), "script-src")).toContain("'unsafe-eval'");
+  });
+});
+
+describe("construirCsp — connect-src son los destinos declarados, exactamente", () => {
+  it("contiene 'self' y todos los hosts de DESTINOS_EXTERNOS, y ningún otro", () => {
+    const connect = directiva(construirCsp(NONCE, { destinos: DESTINOS }), "connect-src");
+    expect(connect[0]).toBe("'self'");
+    expect(connect.slice(1)).toEqual(hostsExternos(DESTINOS));
+  });
+
+  it("R2 está, como host exacto, cuando R2_PUBLIC_HOST está cargada", () => {
+    // El navegador hace PUT del audio cifrado directo a R2: sin esto, el día
+    // del enforce no se sube ninguna grabación.
+    const connect = directiva(construirCsp(NONCE, { destinos: DESTINOS }), "connect-src");
+    expect(connect).toContain(R2);
+    expect(connect.some((h) => h.includes("*.r2."))).toBe(false);
+  });
+
+  it("sin R2_PUBLIC_HOST, R2 queda afuera (y el validador de entorno lo reclama)", () => {
+    const sinR2 = construirDestinos({});
+    expect(sinR2.r2).toEqual([]);
+    const connect = directiva(construirCsp(NONCE, { destinos: sinR2 }), "connect-src");
+    expect(connect.some((h) => h.includes("cloudflarestorage"))).toBe(false);
+  });
+
+  it("Sentry sigue estando, en sus tres regiones", () => {
+    const connect = directiva(construirCsp(NONCE, { destinos: DESTINOS }), "connect-src");
+    for (const region of ["", "us.", "de."]) {
+      expect(connect).toContain(`https://*.ingest.${region}sentry.io`);
+    }
+  });
+});
+
+describe("validarHostR2", () => {
+  it("acepta el origen exacto de un bucket de una cuenta", () => {
+    expect(validarHostR2(R2)).toBe(R2);
+    expect(validarHostR2(`${R2}/`)).toBe(R2);
+    expect(validarHostR2(`  ${R2}  `)).toBe(R2);
+  });
+
+  it("rechaza comodines: abrirían la política a cualquier cuenta de R2", () => {
+    expect(validarHostR2("https://*.r2.cloudflarestorage.com")).toBeNull();
+  });
+
+  it("rechaza lo que no es un host de R2 por https", () => {
+    expect(validarHostR2("http://0123.r2.cloudflarestorage.com")).toBeNull();
+    expect(validarHostR2("https://r2.cloudflarestorage.com")).toBeNull();
+    expect(validarHostR2("https://evil.example.com")).toBeNull();
+    expect(validarHostR2("0123.r2.cloudflarestorage.com")).toBeNull();
+    expect(validarHostR2("https://0123.r2.cloudflarestorage.com/bucket")).toBeNull();
+    expect(validarHostR2("https://0123.r2.cloudflarestorage.com:8443")).toBeNull();
+    expect(validarHostR2("")).toBeNull();
+    expect(validarHostR2(undefined)).toBeNull();
   });
 });
 
 describe("construirCsp — el resto de la política", () => {
-  const politica = construirCsp(NONCE);
+  const politica = construirCsp(NONCE, { destinos: DESTINOS });
 
   it("style-src conserva 'unsafe-inline', y es a propósito", () => {
-    // Tailwind v4 y framer-motion escriben en el atributo `style`, que los
-    // nonces no cubren. Sacarlo es una pelea aparte (ver AGENTS.md): no
-    // bloquea el paso a enforce de script-src, que es lo que frena un XSS.
     expect(directiva(politica, "style-src")).toContain("'unsafe-inline'");
   });
 
@@ -99,32 +141,17 @@ describe("construirCsp — el resto de la política", () => {
   });
 
   it("deja pasar lo que la grabación necesita", () => {
-    // El audio se maneja como blob en el navegador antes de cifrarse.
     expect(directiva(politica, "media-src")).toContain("blob:");
     expect(directiva(politica, "worker-src")).toContain("blob:");
     expect(directiva(politica, "img-src")).toContain("blob:");
   });
 
-  it("Sentry es el único destino externo", () => {
-    const connect = directiva(politica, "connect-src");
-    expect(connect).toContain("'self'");
-    for (const destino of connect) {
-      if (destino === "'self'") continue;
-      expect(destino).toMatch(/^https:\/\/\*\.ingest\.(us\.|de\.)?sentry\.io$/);
-    }
-  });
-
   it("dice a dónde mandar los reportes, por las dos vías", () => {
-    // report-uri está deprecado pero es lo que entienden todos los
-    // navegadores; report-to es el sucesor. Durante report-only lo que
-    // importa es no perder reportes.
     expect(politica).toContain(`report-uri ${RUTA_REPORTE_CSP}`);
     expect(politica).toContain(`report-to ${NOMBRE_ENDPOINT_REPORTE}`);
   });
 
   it("no repite ninguna directiva", () => {
-    // Una directiva repetida no se suma: el navegador se queda con la
-    // primera y la segunda se ignora en silencio.
     const nombres = politica.split("; ").map((d) => d.split(" ")[0]);
     expect(new Set(nombres).size).toBe(nombres.length);
   });

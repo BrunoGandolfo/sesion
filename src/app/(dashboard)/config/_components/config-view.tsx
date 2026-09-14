@@ -28,7 +28,7 @@ import {
   RECORDATORIO_MODO_DEFAULT,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
-import { TEMPLATE_SMS_SUGERIDO } from "@/lib/sms-texto";
+import { TEMPLATE_SMS_SUGERIDO } from "@/lib/sms/texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 import { MensajeRecordatorio } from "./mensaje-recordatorio";
