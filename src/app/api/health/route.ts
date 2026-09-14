@@ -20,6 +20,8 @@ import * as Sentry from "@sentry/nextjs";
 import { db } from "@/lib/db";
 import { validarEnvOperacion } from "@/lib/env-operacion";
 
+import { verificarBase } from "../_lib/casos-uso/operacion";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
@@ -47,7 +49,7 @@ export async function GET() {
   }
 
   try {
-    await db.$queryRaw`SELECT 1`;
+    await verificarBase(db);
     return Response.json({ status: "ok", commit });
   } catch (error) {
     reportar("la base no respondió", error);

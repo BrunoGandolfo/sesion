@@ -8,11 +8,13 @@
 // GET /api/sesion-clinica/pendientes (área 2). Acá sólo se lee. Sin poll en
 // más de LATIDO_MAXIMO_SEG → 503, que es lo que el monitor entiende.
 //
-// Tiene que estar fuera del matcher de src/middleware.ts (contrato con el
-// área 3): si no, el middleware lo redirige a /login y el monitor ve un 307.
+// Está fuera del matcher de src/proxy.ts: si no, el proxy lo redirigiría a
+// /login y el monitor vería un 307.
 
 import { db } from "@/lib/db";
-import { estadoDelWorker, LATIDO_MAXIMO_SEG } from "@/lib/salud-metricas";
+import { LATIDO_MAXIMO_SEG } from "@/lib/salud-metricas";
+
+import { leerEstadoWorker } from "../_lib/casos-uso/operacion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,11 +22,7 @@ export const maxDuration = 15; // segundos; la convención está en scripts/ci/m
 
 export async function GET() {
   try {
-    const fila = await db.workerEstado.findUnique({
-      where: { id: "worker" },
-      select: { ultimoPollEn: true, version: true },
-    });
-    const estado = estadoDelWorker(fila, new Date());
+    const estado = await leerEstadoWorker(db, new Date());
     return Response.json(
       {
         status: estado.vivo ? "ok" : "error",

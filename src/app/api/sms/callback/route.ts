@@ -1,22 +1,19 @@
 // POST /api/sms/callback — el StatusCallback de Twilio.
 //
-// Público (fuera del matcher de src/middleware.ts: contrato con el área 3),
-// Node, y con la firma X-Twilio-Signature validada PRIMERO contra la URL
-// pública (src/lib/sms/firma.ts). Sin firma válida → 403 y nada más: sin
-// esto, cualquiera marca mensajes como entregados y el sistema miente sobre
-// lo único que le pedimos.
+// Público (fuera del matcher de src/proxy.ts), Node, y con la firma
+// X-Twilio-Signature validada PRIMERO contra la URL pública
+// (src/lib/sms/firma.ts). Sin firma válida → 403 y nada más: sin esto,
+// cualquiera marca mensajes como entregados y el sistema miente sobre lo
+// único que le pedimos.
 //
-// Efecto: MessageStatus `delivered` → `entregado`; `undelivered`/`failed` →
-// `no_entregado` con el ErrorCode y un motivo en castellano. El updateMany
-// condiciona por `sid` Y por estado `aceptado`: un callback tardío no reabre
-// un envío terminal, y un `sent`/`queued` intermedio no toca nada.
-//
+// Lo que se escribe está en casos-uso/sms-webhooks.ts (aplicarCallbackTwilio).
 // Referencia: https://www.twilio.com/docs/messaging/api/message-resource#twilios-request-to-the-statuscallback-url
 
 import { db } from "@/lib/db";
 import { alertar } from "@/lib/alertas";
-import { clasificarCallback } from "@/lib/sms/clasificar";
 import { firmaValida, parametrosDeFormulario, URL_CALLBACK } from "@/lib/sms/firma";
+
+import { aplicarCallbackTwilio } from "../../_lib/casos-uso/sms-webhooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,33 +38,14 @@ export async function POST(request: Request) {
   const codigo = codigoCrudo !== null && Number.isFinite(codigoCrudo) ? codigoCrudo : null;
   if (!sid) return new Response(null, { status: 204 });
 
-  const veredicto = clasificarCallback(estado, codigo);
-  if (veredicto.efecto === "ignorar") return new Response(null, { status: 204 });
-
-  const ahora = new Date();
   try {
-    if (veredicto.efecto === "entregado") {
-      await db.envioSms.updateMany({
-        where: { sid, estado: "aceptado" },
-        data: { estado: "entregado", cerradoEn: ahora },
+    const resultado = await aplicarCallbackTwilio(db, { sid, estado, codigo, ahora: new Date() });
+    if (resultado.efecto === "no_entregado" && resultado.actualizados > 0 && resultado.alerta) {
+      await alertar(resultado.alerta, "El operador está filtrando los SMS", {
+        codigo,
+        sid,
+        motivo: resultado.motivoNoEnvio,
       });
-    } else {
-      const { count } = await db.envioSms.updateMany({
-        where: { sid, estado: "aceptado" },
-        data: {
-          estado: "no_entregado",
-          codigoProveedor: codigo !== null ? String(codigo) : null,
-          motivoNoEnvio: veredicto.motivoNoEnvio,
-          cerradoEn: ahora,
-        },
-      });
-      if (count > 0 && veredicto.alerta) {
-        await alertar(veredicto.alerta, "El operador está filtrando los SMS", {
-          codigo,
-          sid,
-          motivo: veredicto.motivoNoEnvio,
-        });
-      }
     }
   } catch (error) {
     console.error("[sms-callback] no se pudo escribir el estado", error);

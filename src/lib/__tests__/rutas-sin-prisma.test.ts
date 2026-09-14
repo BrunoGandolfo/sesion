@@ -28,22 +28,13 @@ const RAIZ_API = join(process.cwd(), "src", "app", "api");
  *  src/app/api, con el área dueña. Quitar cada una al migrarla. */
 const EXCEPCIONES_TEMPORALES: Record<string, string> = {
   "cuenta/password/route.ts": "área 3 (identidad)",
-  // `SELECT 1` para saber si la base contesta: mover a casos-uso/salud.ts.
-  "health/route.ts": "área 5 (operación)",
-  "pacientes/[id]/brief/route.ts": "área 4 (recorrido)",
   "pacientes/[id]/consentimiento/route.ts": "área 3 (identidad)",
-  "pacientes/[id]/contexto-clinico/route.ts": "área 4 (recorrido)",
-  "pacientes/[id]/documentacion/route.ts": "área 1/2 (sesión clínica)",
-  "pacientes/[id]/progreso/route.ts": "área 4 (recorrido)",
-  // Las rutas del SMS durable y del latido del worker nacieron después de
-  // la regla; el área 5 las mueve a casos de uso cuando pase por acá.
-  "cron/recordatorios/route.ts": "área 5 (SMS)",
-  "estado-worker/route.ts": "área 5 (operación)",
-  "sms/callback/route.ts": "área 5 (SMS)",
-  "sms/entrante/route.ts": "área 5 (SMS)",
-  "sesion-clinica/[id]/upload-confirmar/route.ts": "área 1 (grabador)",
-  "sesion-clinica/[id]/upload-url/route.ts": "área 1 (grabador)",
-  "sesion-clinica/route.ts": "área 2 (estados)",
+  // Las dos leen sesiones para la ficha y el recorrido: se rehacen en la
+  // Ola 2 con el grabador y el Recorrido (docs/pendientes/cierre-ola-1.md).
+  "pacientes/[id]/documentacion/route.ts": "Ola 2 (sesión clínica)",
+  "pacientes/[id]/progreso/route.ts": "Ola 2 (recorrido)",
+  // Crear la sesión es del grabador: se rehace en la Ola 2.
+  "sesion-clinica/route.ts": "Ola 2 (grabador)",
 };
 
 /**
