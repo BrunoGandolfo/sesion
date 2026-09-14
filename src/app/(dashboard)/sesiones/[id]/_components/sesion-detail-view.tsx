@@ -17,7 +17,7 @@ import {
   ESTADOS_ACTIVOS,
   useSesionClinicaPolling,
 } from "@/hooks/useSesionClinicaPolling";
-import { apiDelete, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
+import { apiGet, apiPost, esAbort } from "@/lib/api-client";
 import type {
   NotaSoap,
   SesionClinicaResponse,
@@ -80,12 +80,14 @@ import {
 // barra de acciones desaparece porque ya no hay nada que firmar, y en su
 // lugar queda un aviso con el camino a "Para vos".
 
+/** La nota vigente: la aprobada si existe, si no la que escribió la IA. */
 function notaDeSesion(sesion: SesionClinicaResponse): NotaSoap {
+  const nota = sesion.notaFinal ?? sesion.notaIa;
   return {
-    subjetivo: sesion.notaSubjetivo ?? "",
-    objetivo: sesion.notaObjetivo ?? "",
-    analisis: sesion.notaAnalisis ?? "",
-    plan: sesion.notaPlan ?? "",
+    subjetivo: nota?.subjetivo ?? "",
+    objetivo: nota?.objetivo ?? "",
+    analisis: nota?.analisis ?? "",
+    plan: nota?.plan ?? "",
   };
 }
 
@@ -109,7 +111,7 @@ function mensajeDeError(error: unknown): string {
 type Edicion = { version: string; nota: NotaSoap };
 
 function versionDe(sesion: SesionClinicaResponse): string {
-  return `${sesion.id}:${sesion.updatedAt}`;
+  return `${sesion.id}:${sesion.actualizadaEn}`;
 }
 
 export function SesionDetailView({
@@ -134,7 +136,7 @@ export function SesionDetailView({
   // "Volver" con correcciones sin aprobar: pregunta antes de irse.
   const [confirmarVolver, setConfirmarVolver] = React.useState(false);
   // La nota se acaba de aprobar en esta pantalla. No es lo mismo que
-  // `estado === "aprobado"`: una nota abierta ya aprobada no muestra el
+  // `estado === "aprobada"`: una nota abierta ya aprobada no muestra el
   // aviso, porque no acaba de pasar nada.
   const [aprobadaAhora, setAprobadaAhora] = React.useState(false);
   const [toast, setToast] = React.useState({ open: false, mensaje: "" });
@@ -185,7 +187,8 @@ export function SesionDetailView({
     onSesion,
   });
 
-  const datos = sesion?.datosEstructurados ?? null;
+  const datos = sesion?.datos ?? null;
+  const feedback = sesion?.feedback;
   const clavesRiesgo = React.useMemo(
     () => clavesDeRiesgo(datos?.riesgoDetectado, datos?.flagsRiesgo),
     [datos],
@@ -239,19 +242,15 @@ export function SesionDetailView({
     }
   };
 
-  // Descartar: la sesión vuelve a "error" conservando transcripción y audio.
-  // No se navega a ningún lado — la pantalla pasa a mostrar el estado de
-  // error, con Reintentar y Eliminar.
-  //
-  // `accion` va explícita: es la misma URL que usa `eliminar`, y lo único que
-  // las distingue. Si la sesión cambió de estado mientras la pantalla estaba
-  // abierta, la API contesta 409 y no hace la otra cosa (ver la cabecera de
-  // casos-uso/eliminar-sesion.ts).
+  // Descartar: la nota se manda a escribir de nuevo (POST /reprocesar). No
+  // se borra nada y no se vuelve a transcribir; la sesión vuelve a
+  // "procesando" y la pantalla la relee. Si cambió de estado mientras la
+  // pantalla estaba abierta, la API contesta 409.
   const descartar = async () => {
     setEnviando(true);
     setErrorAccion(null);
     try {
-      await apiDelete(`/api/sesion-clinica/${id}?accion=descartar`);
+      await apiPost(`/api/sesion-clinica/${id}/reprocesar`, {});
       setIntentoCarga((n) => n + 1);
     } catch (error) {
       setErrorAccion(mensajeDeError(error));
@@ -264,9 +263,9 @@ export function SesionDetailView({
     setEnviando(true);
     setErrorAccion(null);
     try {
-      const fila = await apiPatch<SesionClinicaResponse>(
-        `/api/sesion-clinica/${id}`,
-        { estado: "procesando" },
+      const fila = await apiPost<SesionClinicaResponse>(
+        `/api/sesion-clinica/${id}/reintentar`,
+        {},
       );
       aplicar(fila);
     } catch (error) {
@@ -276,12 +275,12 @@ export function SesionDetailView({
     }
   };
 
-  // Eliminar desde "error": borrado definitivo de la sesión y su audio.
+  // Eliminar desde "fallida": borrado definitivo de la sesión y su audio.
   const eliminar = async () => {
     setEnviando(true);
     setErrorAccion(null);
     try {
-      await apiDelete(`/api/sesion-clinica/${id}?accion=eliminar`);
+      await apiPost(`/api/sesion-clinica/${id}/eliminar`, {});
       router.back();
     } catch (error) {
       setErrorAccion(mensajeDeError(error));
@@ -296,7 +295,7 @@ export function SesionDetailView({
   // La nota escrita y "Para vos" son las dos caras de la misma sesión.
   const conNota =
     sesion !== null &&
-    (sesion.estado === "revision" || sesion.estado === "aprobado");
+    (sesion.estado === "revision" || sesion.estado === "aprobada");
 
   // Correcciones escritas y todavía no aprobadas. El borrador vive acá y sólo
   // se escribe al aprobar, así que irse de la pantalla lo borra.
@@ -346,7 +345,7 @@ export function SesionDetailView({
   // lo que vino a enseñar. Estando en "Para vos" siempre se ofrece, para
   // poder salir por donde se entró.
   const selector =
-    conNota && (vista === "para-vos" || hayParaVos(datos?.feedbackTerapeuta)) ? (
+    conNota && (vista === "para-vos" || hayParaVos(feedback)) ? (
       <SelectorVista id={id} vista={vista} tieneCambios={tieneCambios} />
     ) : null;
 
@@ -418,16 +417,15 @@ export function SesionDetailView({
           </div>
         ) : null}
 
-        {sesion &&
-        (sesion.estado === "pendiente" || sesion.estado === "grabando") ? (
+        {sesion && sesion.estado === "grabando" ? (
           <p role="status" className="font-sans text-[14px] text-ink-500">
             {SIN_NOTA_TODAVIA}
           </p>
         ) : null}
 
-        {sesion && sesion.estado === "error" ? (
+        {sesion && sesion.estado === "fallida" ? (
           <div className="flex flex-col gap-4">
-            <Aviso titulo={NOTA_NO_ESCRITA} detalle={sesion.error}>
+            <Aviso titulo={NOTA_NO_ESCRITA} detalle={sesion.falloDetalle}>
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   variant="secondary"
@@ -481,7 +479,7 @@ export function SesionDetailView({
               aprobadaAhora ? (
                 <AvisoAprobada
                   id={id}
-                  conParaVos={hayParaVos(datos?.feedbackTerapeuta)}
+                  conParaVos={hayParaVos(feedback)}
                 />
               ) : null
             }

@@ -46,32 +46,43 @@ vi.mock("@/lib/api-client", () => ({
   esAbort: () => false,
 }));
 
+const NOTA = {
+  subjetivo: "Relató la semana.",
+  objetivo: "Se la vio cansada.",
+  analisis: "Sigue el mismo hilo.",
+  plan: "Retomar el trabajo.",
+};
+
 function sesionEnRevision(): SesionClinicaResponse {
+  // Sin señal de riesgo: aprobar no depende de ninguna casilla y la nota es
+  // editable de entrada.
   return {
     id: "ses_1",
     turnoId: "t_1",
     estado: "revision",
-    duracionAudioSeg: 3000,
-    audioR2Key: null,
+    audioEstado: "borrado",
     audioBorradoEn: null,
-    notaSubjetivo: "Relató la semana.",
-    notaObjetivo: "Se la vio cansada.",
-    notaAnalisis: "Sigue el mismo hilo.",
-    notaPlan: "Retomar el trabajo.",
-    notaSoapOriginal: null,
-    // Sin señal de riesgo: aprobar no depende de ninguna casilla y la nota
-    // es editable de entrada.
-    datosEstructurados: {},
-    modeloASR: null,
-    modeloLLM: null,
+    duracionAudioSeg: 3000,
+    pausas: null,
+    intento: 1,
+    generacion: 1,
+    falloCodigo: null,
+    falloDetalle: null,
+    transcripcionDisponible: true,
+    notaIa: NOTA,
+    notaFinal: null,
+    notasEdicion: null,
+    datos: {},
+    feedbackEstado: "listo",
+    feedback: null,
+    feedbackError: null,
+    modeloAsr: null,
+    modeloLlm: null,
     promptVersion: null,
-    hablanteTerapeuta: null,
-    procesadoEn: null,
-    aprobadoEn: null,
-    error: null,
-    intentos: 1,
-    createdAt: "2026-09-07T13:00:00.000Z",
-    updatedAt: "2026-09-07T13:00:00.000Z",
+    procesadaEn: null,
+    aprobadaEn: null,
+    creadaEn: "2026-09-07T13:00:00.000Z",
+    actualizadaEn: "2026-09-07T13:00:00.000Z",
     turno: {
       id: "t_1",
       fecha: "2026-09-07T13:00:00.000Z",

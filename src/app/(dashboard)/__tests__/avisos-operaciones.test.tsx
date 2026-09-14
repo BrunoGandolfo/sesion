@@ -44,7 +44,7 @@ vi.mock("../pacientes/[id]/_components/recorrido-tab", () => ({ RecorridoTab: ()
 vi.mock("../pacientes/[id]/_components/cabecera-ficha", () => ({ CabeceraFicha: () => null, CabeceraNavegacionFicha: () => null }));
 vi.mock("@/hooks/useHoy", () => ({ useHoy: () => AHORA }));
 vi.mock("@/hooks/useGrabacionSesion", () => ({
-  useGrabacionSesion: () => ({ sesionClinica: { id: "s1", estado: "aprobado" }, loading: false }),
+  useGrabacionSesion: () => ({ sesionClinica: { id: "s1", estado: "aprobada" }, loading: false }),
   subirAudioCifrado: m.subir, volverAGrabando: vi.fn(), marcarTurnoRealizado: vi.fn(),
 }));
 vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: vi.fn() }));
@@ -70,7 +70,7 @@ const AHORA = new Date("2026-09-09T15:00:00.000Z");
 const FALLO = "No se pudo completar la operación de prueba";
 const PACIENTE: PacienteConDeuda = {
   id: "p1", nombre: "Paciente", apellido: "Sintética", telefono: "+59899111222",
-  email: null, tarifa: 1500, notas: null, activo: false, creadoEn: AHORA,
+  tarifa: 1500, notas: null, activo: false, creadoEn: AHORA,
   actualizadoEn: AHORA, organizationId: "test", sesionesRealizadas: 1,
   totalCobrado: 0, sesionesImpagas: 1, deudaTotal: 1500, ultimaSesion: AHORA,
 };

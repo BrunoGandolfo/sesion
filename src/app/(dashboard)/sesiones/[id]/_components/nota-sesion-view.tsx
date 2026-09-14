@@ -60,9 +60,11 @@ export function NotaSesionView({
   selector,
   aviso,
 }: NotaSesionViewProps) {
-  const datos = sesion.datosEstructurados;
+  const datos = sesion.datos;
 
-  const original = sesion.notaSoapOriginal;
+  // El borrador original es lo que escribió la IA, y sólo tiene sentido
+  // mostrarlo aparte cuando ya hay una nota aprobada distinta.
+  const original = sesion.notaFinal ? sesion.notaIa : null;
   const hayOriginal =
     original !== null &&
     SECCIONES_SOAP.some(({ clave }) => (original[clave] ?? "").trim() !== "");

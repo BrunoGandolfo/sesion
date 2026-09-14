@@ -11,7 +11,6 @@ import {
   Archive,
   Calendar as CalendarIcon,
   ChevronDown,
-  Mail,
   Phone,
   RotateCcw,
   Wallet,
@@ -100,21 +99,6 @@ export function FichaTab({
             >
               {paciente.telefono}
             </a>
-          </DatoLinea>
-          <DatoLinea
-            icon={<Mail size={14} strokeWidth={1.6} aria-hidden="true" />}
-            label="Email"
-          >
-            {paciente.email ? (
-              <a
-                href={`mailto:${paciente.email}`}
-                className="text-ink-900 underline decoration-sage-200 underline-offset-2 hover:text-sage-600"
-              >
-                {paciente.email}
-              </a>
-            ) : (
-              <span className="text-ink-300">—</span>
-            )}
           </DatoLinea>
           <DatoLinea
             icon={<Wallet size={14} strokeWidth={1.6} aria-hidden="true" />}

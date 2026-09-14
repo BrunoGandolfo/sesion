@@ -28,7 +28,7 @@ export function CabeceraSesion({ sesion, rotulo }: CabeceraSesionProps) {
     ? `${paciente.nombre} ${paciente.apellido}`
     : NOTA_CLINICA;
   const fecha = sesion.turno ? fechaLarga(new Date(sesion.turno.fecha)) : null;
-  const aprobada = sesion.estado === "aprobado";
+  const aprobada = sesion.estado === "aprobada";
 
   return (
     <header className="flex flex-col gap-2">

@@ -9,18 +9,10 @@ import { Button, Card, Input } from "@/components/ui";
 import { apiPatch } from "@/lib/api-client";
 import { ALGO_FALLO } from "@/lib/glosario";
 
-const emailSchema = z.email("Ingresá un email válido");
-
 const editarPacienteSchema = z.object({
   nombre: z.string().trim().min(1, "Ingresá el nombre"),
   apellido: z.string().trim().min(1, "Ingresá el apellido"),
   telefono: z.string().trim().min(1, "Ingresá el teléfono"),
-  email: z
-    .string()
-    .trim()
-    .refine((value) => value === "" || emailSchema.safeParse(value).success, {
-      message: "Ingresá un email válido",
-    }),
   tarifa: z
     .number("Ingresá una tarifa")
     .int("Usá pesos sin centavos")
@@ -35,7 +27,6 @@ export interface EditarPacienteFormProps {
     nombre: string;
     apellido: string;
     telefono: string;
-    email: string | null;
     tarifa: number;
   };
   onSuccess: () => void;
@@ -59,7 +50,6 @@ export function EditarPacienteForm({
       nombre: paciente.nombre,
       apellido: paciente.apellido,
       telefono: paciente.telefono,
-      email: paciente.email ?? "",
       tarifa: paciente.tarifa,
     },
     mode: "onSubmit",
@@ -73,7 +63,6 @@ export function EditarPacienteForm({
         nombre: values.nombre.trim(),
         apellido: values.apellido.trim(),
         telefono: values.telefono.trim(),
-        email: values.email.trim() || null,
         tarifa: values.tarifa,
       });
       onSuccess();
@@ -114,14 +103,6 @@ export function EditarPacienteForm({
                 autoComplete="tel"
                 error={errors.telefono?.message}
                 {...register("telefono")}
-              />
-
-              <Input
-                label="Email"
-                type="email"
-                autoComplete="email"
-                error={errors.email?.message}
-                {...register("email")}
               />
 
               <Input

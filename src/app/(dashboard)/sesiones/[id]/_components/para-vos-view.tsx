@@ -45,7 +45,7 @@ interface ParaVosViewProps {
 }
 
 export function ParaVosView({ sesion, selector }: ParaVosViewProps) {
-  const feedback = sesion.datosEstructurados?.feedbackTerapeuta;
+  const feedback = sesion.feedback;
 
   return (
     <div className="flex flex-col gap-6">

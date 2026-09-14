@@ -136,7 +136,7 @@ export async function contarPreguntasDelDia(
       accion: ACCION_AYUDA,
       entidad: ENTIDAD_AYUDA,
       entidadId: params.userId,
-      createdAt: { gte: desde },
+      creadoEn: { gte: desde },
     },
   });
 }

@@ -349,7 +349,7 @@ describe("contarPreguntasDelDia", () => {
       ahora: new Date("2026-09-08T01:00:00.000Z"),
     });
 
-    const rango = wheres[0].createdAt as { gte: Date };
+    const rango = wheres[0].creadoEn as { gte: Date };
     expect(rango.gte).toEqual(instanteMvd(2026, 8, 7));
   });
 });

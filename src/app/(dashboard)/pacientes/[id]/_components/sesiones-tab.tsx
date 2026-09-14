@@ -37,7 +37,7 @@ import type {
   EstadoSesion,
   NotaSoap,
 } from "@/lib/sesion-clinica/schema";
-import type { SesionClinicaEnsamblada } from "@/lib/sesion-clinica-utils";
+import type { SesionClinicaEnsamblada } from "@/hooks/useSesionClinicaPolling";
 import type { EstadoProcesamiento, Modalidad, Turno } from "@/types/domain";
 
 import { BriefPreSesion } from "./brief-pre-sesion";
@@ -52,8 +52,8 @@ interface SesionesTabProps {
   onAviso: (mensaje: string, variante?: VarianteToast) => void;
 }
 
-// Ítem de GET /api/pacientes/[id]/documentacion: nota ya ensamblada y
-// datosEstructurados parseados en el servidor.
+// Ítem de GET /api/pacientes/[id]/documentacion: la nota vigente (aprobada
+// o de la IA) y el tablero parseado en el servidor; el feedback tal cual.
 type DocSesion = {
   sesionClinicaId: string;
   turnoId: string;
@@ -61,11 +61,12 @@ type DocSesion = {
   duracionMin: number;
   duracionAudioSeg: number | null;
   modalidad: Modalidad;
-  estado: Extract<EstadoSesion, "revision" | "aprobado">;
+  estado: Extract<EstadoSesion, "revision" | "aprobada">;
   nota: NotaSoap | null;
-  datosEstructurados: DatosEstructurados | null;
-  aprobadoEn: string | null;
-  procesadoEn: string | null;
+  datos: DatosEstructurados | null;
+  feedback: unknown;
+  aprobadaEn: string | null;
+  procesadaEn: string | null;
 };
 
 type DocResponse = {
@@ -118,9 +119,9 @@ function chipDeEstado(estado: EstadoProcesamiento): {
       return { variant: "gold", label: ESCRIBIENDO_NOTA };
     case "revision":
       return { variant: "gold", label: PARA_REVISAR };
-    case "aprobado":
+    case "aprobada":
       return { variant: "sage", label: NOTA_GUARDADA };
-    case "error":
+    case "fallida":
       return { variant: "terracotta", label: NOTA_NO_ESCRITA };
     default:
       return null;
@@ -360,7 +361,7 @@ function SesionDeHoy({
   let accion: React.ReactNode = null;
   if (cargando) {
     accion = <p className="font-sans text-[13px] text-ink-500">Cargando…</p>;
-  } else if (!sesion || sesion.estado === "pendiente" || sesion.estado === "grabando") {
+  } else if (!sesion || sesion.estado === "grabando") {
     accion = (
       <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
         <Mic size={16} strokeWidth={1.8} aria-hidden="true" />
@@ -384,7 +385,7 @@ function SesionDeHoy({
         {REVISAR_NOTA}
       </Link>
     );
-  } else if (sesion.estado === "aprobado") {
+  } else if (sesion.estado === "aprobada") {
     accion = cobrable ? (
       <Button variant="primary" onClick={onCobrar}>
         Cobrar
@@ -502,11 +503,9 @@ function GrupoDeMes({
 // orden.
 function FilaSesion({ sesion }: { sesion: DocSesion }) {
   const fecha = new Date(sesion.fecha);
-  const resumen =
-    resumenCorto(sesion.datosEstructurados) ||
-    temasDeLaSesion(sesion.datosEstructurados);
+  const resumen = resumenCorto(sesion.datos) || temasDeLaSesion(sesion.datos);
   const esRevision = sesion.estado === "revision";
-  const conParaVos = hayParaVos(sesion.datosEstructurados?.feedbackTerapeuta);
+  const conParaVos = hayParaVos(sesion.feedback);
 
   return (
     <div className="relative flex flex-col gap-2 rounded-lg border border-[color:var(--border-subtle)] bg-white px-4 py-4 transition-colors duration-150 focus-within:ring-[3px] focus-within:ring-sage-500/20 hover:bg-cream-50 sm:px-5">

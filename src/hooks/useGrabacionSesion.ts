@@ -10,8 +10,8 @@ import {
   useSesionClinicaPolling,
   type SesionClinicaApi,
   type SesionClinicaApiBase,
+  type SesionClinicaEnsamblada,
 } from "@/hooks/useSesionClinicaPolling";
-import type { SesionClinicaEnsamblada } from "@/lib/sesion-clinica-utils";
 import type { Turno } from "@/types/domain";
 
 export interface DatosGrabacion {

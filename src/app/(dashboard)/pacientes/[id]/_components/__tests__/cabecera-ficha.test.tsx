@@ -21,7 +21,6 @@ const PACIENTE: PacienteConDeuda = {
   nombre: "Lucía",
   apellido: "Fernández",
   telefono: "099 123 456",
-  email: null,
   tarifa: 2200,
   notas: null,
   activo: true,

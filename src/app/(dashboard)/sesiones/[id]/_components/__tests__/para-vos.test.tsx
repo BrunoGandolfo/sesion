@@ -62,6 +62,8 @@ const RIESGO = {
 /** Un tema largo, de los que el modelo escribe y desbordaban la pantalla. */
 const TEMA_LARGO = "devolución diagnóstica e inestabilidad emocional";
 
+/** `datos` es el tablero; `feedbackTerapeuta` adentro se mueve al campo
+ *  `feedback` del contrato, que es donde viaja "Para vos". */
 function sesion(
   datos: Record<string, unknown> | null = {
     feedbackTerapeuta: FEEDBACK,
@@ -69,29 +71,34 @@ function sesion(
     materialNuevo: ["mudanza"],
   },
 ): SesionClinicaResponse {
+  const { feedbackTerapeuta, ...tablero } = datos ?? {};
   return {
     id: "ses_1",
     turnoId: "t_1",
-    estado: "aprobado",
-    duracionAudioSeg: 3000,
-    audioR2Key: null,
+    estado: "aprobada",
+    audioEstado: "borrado",
     audioBorradoEn: null,
-    notaSubjetivo: "Relató la semana.",
-    notaObjetivo: "Se la vio cansada.",
-    notaAnalisis: "Sigue el mismo hilo.",
-    notaPlan: "Retomar el trabajo.",
-    notaSoapOriginal: null,
-    datosEstructurados: datos,
-    modeloASR: null,
-    modeloLLM: null,
+    duracionAudioSeg: 3000,
+    pausas: null,
+    intento: 1,
+    generacion: 1,
+    falloCodigo: null,
+    falloDetalle: null,
+    transcripcionDisponible: true,
+    notaIa: NOTA,
+    notaFinal: NOTA,
+    notasEdicion: null,
+    datos: datos ? tablero : null,
+    feedbackEstado: "listo",
+    feedback: feedbackTerapeuta ?? null,
+    feedbackError: null,
+    modeloAsr: null,
+    modeloLlm: null,
     promptVersion: null,
-    hablanteTerapeuta: null,
-    procesadoEn: null,
-    aprobadoEn: null,
-    error: null,
-    intentos: 1,
-    createdAt: "2026-09-07T13:00:00.000Z",
-    updatedAt: "2026-09-07T13:00:00.000Z",
+    procesadaEn: null,
+    aprobadaEn: null,
+    creadaEn: "2026-09-07T13:00:00.000Z",
+    actualizadaEn: "2026-09-07T13:00:00.000Z",
     turno: {
       id: "t_1",
       fecha: "2026-09-07T13:00:00.000Z",
@@ -100,18 +107,18 @@ function sesion(
   } as unknown as SesionClinicaResponse;
 }
 
-/** Los ids que React genera con useId cambian entre montajes: para comparar
- *  dos dibujos hay que sacarlos. */
-function sinIds(html: string): string {
-  return html.replace(/_r_[0-9a-z]+_/g, "_id_");
-}
-
 const NOTA = {
   subjetivo: "Relató la semana.",
   objetivo: "Se la vio cansada.",
   analisis: "Sigue el mismo hilo.",
   plan: "Retomar el trabajo.",
 };
+
+/** Los ids que React genera con useId cambian entre montajes: para comparar
+ *  dos dibujos hay que sacarlos. */
+function sinIds(html: string): string {
+  return html.replace(/_r_[0-9a-z]+_/g, "_id_");
+}
 
 describe("la nota clínica", () => {
   it("ya no lleva 'Para vos' adentro", () => {

@@ -1,7 +1,7 @@
+import type { EstadoSesion } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
-import { ensamblarNotaSOAP } from "@/lib/sesion-clinica-utils";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
@@ -40,7 +40,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const where = {
       organizationId,
-      estado: { in: ["revision", "aprobado"] },
+      estado: { in: ["revision", "aprobada"] satisfies EstadoSesion[] },
       turno: { pacienteId: id },
     };
 
@@ -55,13 +55,14 @@ export async function GET(request: Request, { params }: RouteParams) {
           id: true,
           estado: true,
           duracionAudioSeg: true,
-          procesadoEn: true,
-          aprobadoEn: true,
-          notaSubjetivo: true,
-          notaObjetivo: true,
-          notaAnalisis: true,
-          notaPlan: true,
-          datosEstructurados: true,
+          procesadaEn: true,
+          aprobadaEn: true,
+          // Campos lógicos de la extensión de cifrado (prisma-encryption.ts).
+          notaIa: true,
+          notaFinal: true,
+          datos: true,
+          feedback: true,
+          feedbackEstado: true,
           turno: {
             select: {
               id: true,
@@ -85,16 +86,15 @@ export async function GET(request: Request, { params }: RouteParams) {
       duracionAudioSeg: s.duracionAudioSeg,
       modalidad: s.turno.modalidad,
       estado: s.estado,
-      nota: ensamblarNotaSOAP({
-        subjetivo: s.notaSubjetivo,
-        objetivo: s.notaObjetivo,
-        analisis: s.notaAnalisis,
-        plan: s.notaPlan,
-      }),
+      // La nota vigente: la aprobada si existe, si no la de la IA.
+      nota: s.notaFinal ?? s.notaIa,
       // Parseo del tablero (valida el shape; fila corrupta → null).
-      datosEstructurados: parseDatosEstructurados(s.datosEstructurados),
-      aprobadoEn: s.aprobadoEn ? s.aprobadoEn.toISOString() : null,
-      procesadoEn: s.procesadoEn ? s.procesadoEn.toISOString() : null,
+      datos: parseDatosEstructurados(s.datos),
+      // Su forma la valida quien lo dibuja (hayParaVos).
+      feedback: s.feedback,
+      feedbackEstado: s.feedbackEstado,
+      aprobadaEn: s.aprobadaEn ? s.aprobadaEn.toISOString() : null,
+      procesadaEn: s.procesadaEn ? s.procesadaEn.toISOString() : null,
     }));
 
     // Este GET devuelve notas completas en lote: cuenta como exportación.

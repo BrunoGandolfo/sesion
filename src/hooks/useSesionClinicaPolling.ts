@@ -4,18 +4,15 @@ import * as React from "react";
 
 import {
   parseDatosEstructurados,
+  type DatosEstructurados,
   type EstadoSesion,
+  type NotaSoap,
   type SesionClinicaResponse as SesionClinicaApi,
 } from "@/lib/sesion-clinica/schema";
-import {
-  ensamblarNotaSOAP,
-  type SesionClinicaEnsamblada,
-} from "@/lib/sesion-clinica-utils";
-import type { DatosEstructurados } from "@/lib/sesion-clinica/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Contrato de sesión clínica hacia la UI. Este hook es el nivel más bajo que
-// lo consume: historia-tab y useGrabacionSesion importan de acá los estados
+// lo consume: sesiones-tab y useGrabacionSesion importan de acá los estados
 // activos, la forma de la fila y la normalización, sin repetirlos.
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -29,64 +26,75 @@ export const ESTADOS_ACTIVOS: ReadonlySet<EstadoSesion> = new Set<EstadoSesion>(
 ]);
 
 /** Campos del contrato que devuelven TODOS los endpoints que entregan una
- *  sesión a la UI (GET ?turnoId, GET/PATCH [id], POST, upload-confirmar).
+ *  sesión a la UI (GET ?turnoId, GET [id], POST, upload-confirmar).
  *  GET [id] devuelve el contrato completo (SesionClinicaApi). */
 export type SesionClinicaApiBase = Pick<
   SesionClinicaApi,
   | "id"
   | "turnoId"
   | "estado"
+  | "audioEstado"
   | "duracionAudioSeg"
-  | "audioR2Key"
-  | "createdAt"
-  | "notaSubjetivo"
-  | "notaObjetivo"
-  | "notaAnalisis"
-  | "notaPlan"
-  | "datosEstructurados"
-  | "modeloASR"
-  | "modeloLLM"
-  | "procesadoEn"
-  | "aprobadoEn"
-  | "error"
-  | "intentos"
+  | "intento"
+  | "generacion"
+  | "falloCodigo"
+  | "falloDetalle"
+  | "notaIa"
+  | "notaFinal"
+  | "datos"
+  | "feedback"
+  | "feedbackEstado"
+  | "modeloAsr"
+  | "modeloLlm"
+  | "procesadaEn"
+  | "aprobadaEn"
+  | "creadaEn"
 >;
 
 export type { SesionClinicaApi };
 
 /**
- * Fila del contrato → forma que consume la UI (SesionClinicaEnsamblada,
- * con `nota` ensamblada). La nota se arma con
- * ensamblarNotaSOAP y datosEstructurados se valida con el parser del
- * contrato (un shape inválido queda en null).
+ * La sesión como la consumen las pantallas: la nota vigente (la aprobada si
+ * existe, si no la de la IA), el tablero ya validado y el fallo en palabras.
+ * Antes vivía en src/lib/sesion-clinica-utils.ts (borrado).
+ */
+export interface SesionClinicaEnsamblada {
+  id: string;
+  turnoId: string;
+  estado: EstadoSesion;
+  duracionAudioSeg: number | null;
+  nota: NotaSoap | null;
+  datosEstructurados: DatosEstructurados | null;
+  /** El reporte "Para vos"; su forma la valida quien lo dibuja (hayParaVos). */
+  feedback: unknown;
+  modeloASR: string | null;
+  modeloLLM: string | null;
+  procesadoEn: string | null;
+  aprobadoEn: string | null;
+  error: string | null;
+}
+
+/**
+ * Fila del contrato → forma que consume la UI. `nota` es notaFinal si ya se
+ * aprobó, si no notaIa; `datos` se valida con el parser del contrato (un
+ * shape inválido queda en null); `error` es el detalle del fallo.
  */
 export function normalizarSesionClinica(
   fila: SesionClinicaApiBase,
 ): SesionClinicaEnsamblada {
-  // parseDatosEstructurados devuelve el tipo del contrato, con todas las
-  // propiedades opcionales. Los consumidores (NotaClinicaView,
-  // FeedbackTerapeutaView, paciente-detail-view) siguen tipados con
-  // DatosEstructurados de src/types/domain, que es un subtipo del contrato
-  // (todas sus propiedades existen ahí). Hasta que migren al contrato, el
-  // estrechamiento se hace acá, una sola vez y sobre datos ya validados.
-  const datos = parseDatosEstructurados(fila.datosEstructurados);
   return {
     id: fila.id,
     turnoId: fila.turnoId,
     estado: fila.estado,
     duracionAudioSeg: fila.duracionAudioSeg,
-    nota: ensamblarNotaSOAP({
-      subjetivo: fila.notaSubjetivo,
-      objetivo: fila.notaObjetivo,
-      analisis: fila.notaAnalisis,
-      plan: fila.notaPlan,
-    }),
-    datosEstructurados: datos as DatosEstructurados | null,
-    modeloASR: fila.modeloASR,
-    modeloLLM: fila.modeloLLM,
-    procesadoEn: fila.procesadoEn,
-    aprobadoEn: fila.aprobadoEn,
-    error: fila.error,
+    nota: fila.notaFinal ?? fila.notaIa,
+    datosEstructurados: parseDatosEstructurados(fila.datos),
+    feedback: fila.feedback,
+    modeloASR: fila.modeloAsr,
+    modeloLLM: fila.modeloLlm,
+    procesadoEn: fila.procesadaEn,
+    aprobadoEn: fila.aprobadaEn,
+    error: fila.falloDetalle,
   };
 }
 

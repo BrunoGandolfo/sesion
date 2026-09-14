@@ -95,7 +95,7 @@ function accionDe(
     return { tipo: "escribiendo" };
   }
   if (sinCobrar) return { tipo: "cobrar" };
-  if (sesion?.estado === "aprobado") return { tipo: "hecho" };
+  if (sesion?.estado === "aprobada") return { tipo: "hecho" };
   return { tipo: "grabar" };
 }
 
