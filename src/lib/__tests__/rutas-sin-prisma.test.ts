@@ -41,7 +41,6 @@ const EXCEPCIONES_TEMPORALES: Record<string, string> = {
   "estado-worker/route.ts": "área 5 (operación)",
   "sms/callback/route.ts": "área 5 (SMS)",
   "sms/entrante/route.ts": "área 5 (SMS)",
-  "sesion-clinica/[id]/route.ts": "área 2 (estados)",
   "sesion-clinica/[id]/upload-confirmar/route.ts": "área 1 (grabador)",
   "sesion-clinica/[id]/upload-url/route.ts": "área 1 (grabador)",
   "sesion-clinica/route.ts": "área 2 (estados)",
