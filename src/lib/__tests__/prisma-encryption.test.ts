@@ -399,3 +399,145 @@ describe.skipIf(!hayBaseDeTest())("extensión contra la base de test", () => {
     void cifrar;
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mantenimiento: purgas a 30 días y re-cifrado incremental (mismo archivo
+// porque está en la lista INTEGRACION y usa la misma base).
+// ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  celdasCifradas,
+  mantenimiento,
+  purgarOperativas,
+  recifrarTanda,
+  RESERVA_HUERFANA_MS,
+  RETENCION_OPERATIVA_DIAS,
+} from "@/app/api/_lib/casos-uso/mantenimiento";
+
+describe.skipIf(!hayBaseDeTest())("mantenimiento contra la base de test", () => {
+  let prisma!: PrismaClient;
+  let db!: ClienteCifrado;
+  const DIA = 24 * 60 * 60 * 1000;
+  const AHORA = new Date("2026-09-11T04:00:00.000Z");
+
+  beforeAll(() => {
+    ({ prisma, db } = conectarBaseIdentidad());
+  });
+  beforeEach(async () => {
+    llavero(CLAVES_CIFRADO_TEST);
+    await vaciarBaseIdentidad(prisma);
+  });
+  afterAll(() => prisma.$disconnect());
+
+  it("celdasCifradas enumera las trece columnas del anexo", () => {
+    expect(celdasCifradas()).toHaveLength(13);
+    expect(celdasCifradas()).toContainEqual({ tabla: "hilo_versiones", columna: "contenido_encrypted" });
+  });
+
+  it("purga lo operativo con más de 30 días y las reservas huérfanas; conserva lo vivo y lo clínico", async () => {
+    const org = await prisma.organization.create({ data: { nombre: "Org" } });
+    const user = await prisma.user.create({ data: { email: "m@test.uy", hashedPassword: "h", nombre: "M", organizationId: org.id } });
+    const viejo = new Date(AHORA.getTime() - (RETENCION_OPERATIVA_DIAS + 1) * DIA);
+    const reciente = new Date(AHORA.getTime() - 2 * DIA);
+    const futuro = new Date(AHORA.getTime() + 10 * DIA);
+
+    await prisma.intentoAcceso.createMany({
+      data: [
+        { tipo: "login", clave: "ip:1", creadoEn: viejo },
+        { tipo: "login", clave: "ip:1", creadoEn: reciente },
+      ],
+    });
+    await prisma.sesionAcceso.createMany({
+      data: [
+        { userId: user.id, tokenHash: "a".repeat(64), ultimoUsoEn: viejo, venceEn: futuro, cerradaEn: viejo, motivoCierre: "salida" },
+        { userId: user.id, tokenHash: "b".repeat(64), ultimoUsoEn: viejo, venceEn: viejo },
+        { userId: user.id, tokenHash: "c".repeat(64), ultimoUsoEn: reciente, venceEn: futuro },
+        { userId: user.id, tokenHash: "d".repeat(64), ultimoUsoEn: reciente, venceEn: futuro, cerradaEn: reciente, motivoCierre: "salida" },
+      ],
+    });
+    await prisma.passwordReset.createMany({
+      data: [
+        { userId: user.id, tokenHash: "e".repeat(64), venceEn: viejo, usadoEn: viejo, enviadoEn: viejo },
+        { userId: user.id, tokenHash: "f".repeat(64), venceEn: futuro, enviadoEn: null, creadoEn: new Date(AHORA.getTime() - RESERVA_HUERFANA_MS - 1000) },
+        { userId: user.id, tokenHash: "g".repeat(64), venceEn: futuro, enviadoEn: null, creadoEn: AHORA },
+        { userId: user.id, tokenHash: "h".repeat(64), venceEn: futuro, enviadoEn: reciente },
+      ],
+    });
+    await prisma.invitacion.createMany({
+      data: [
+        { tokenHash: "i".repeat(64), venceEn: viejo, creadaPorId: user.id },
+        { tokenHash: "j".repeat(64), venceEn: futuro, creadaPorId: user.id },
+      ],
+    });
+    await prisma.eventoAuditoria.create({
+      data: { organizationId: org.id, actorTipo: "usuario", accion: "x", entidad: "y", entidadId: "z", creadoEn: viejo },
+    });
+
+    const r = await purgarOperativas(db, AHORA);
+    expect(r).toEqual({ intentosAcceso: 1, sesionesAcceso: 2, passwordResets: 1, reservasHuerfanas: 1, invitaciones: 1 });
+    expect(await prisma.sesionAcceso.count()).toBe(2);
+    expect(await prisma.passwordReset.count()).toBe(2);
+    expect(await prisma.invitacion.count()).toBe(1);
+    // Nada clínico ni la auditoría se tocan por antigüedad.
+    expect(await prisma.eventoAuditoria.count()).toBe(1);
+  });
+
+  it("re-cifra por tandas las filas con clave vieja y deja pendientes en 0; sin la clave vieja avisa y no rompe", async () => {
+    const org = await prisma.organization.create({ data: { nombre: "Org" } });
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const id = randomUUID();
+      ids.push(id);
+      await db.paciente.create({
+        data: { nombre: "N", apellido: "A", telefono: "", tarifa: 1, organizationId: org.id, ...cifrarPaciente(id, { notas: `nota ${i}` }) },
+      });
+    }
+    const t = await prisma.turno.create({
+      data: { id: randomUUID(), fecha: AHORA, tarifaCobrada: 1, pacienteId: ids[0], organizationId: org.id },
+    });
+    await db.turno.update({ where: { id: t.id }, data: cifrarTurno(t.id, { notas: "turno" }) });
+
+    const K2 = randomBytes(32).toString("base64");
+    llavero(`${CLAVES_CIFRADO_TEST},2=${K2}`);
+
+    const primera = await recifrarTanda(db, 3);
+    expect(primera).toEqual({ recifradas: 3, pendientes: 3, errores: 0 });
+    const segunda = await recifrarTanda(db, 200);
+    expect(segunda).toEqual({ recifradas: 3, pendientes: 0, errores: 0 });
+
+    const filas = await prisma.$queryRaw<{ notas_encrypted: Buffer }[]>`SELECT notas_encrypted FROM pacientes`;
+    expect(filas.every((f) => idClaveDe(f.notas_encrypted) === 2)).toBe(true);
+    for (let i = 0; i < 5; i++) {
+      expect((await db.paciente.findUnique({ where: { id: ids[i] }, select: { notas: true } }))?.notas).toBe(`nota ${i}`);
+    }
+    expect((await db.turno.findUnique({ where: { id: t.id }, select: { notas: true } }))?.notas).toBe("turno");
+
+    // Ya se puede sacar la 1: nada pendiente.
+    llavero(`2=${K2}`);
+    expect(await recifrarTanda(db)).toEqual({ recifradas: 0, pendientes: 0, errores: 0 });
+
+    // Una fila que quedó con una clave ausente cuenta como error, se deja como
+    // está y sigue pendiente: es la señal de "no saques la clave todavía".
+    llavero(CLAVES_CIFRADO_TEST);
+    const huerfana = await db.paciente.create({
+      data: { nombre: "N", apellido: "A", telefono: "", tarifa: 1, organizationId: org.id, ...cifrarPaciente(randomUUID(), { notas: "con la 1" }) },
+    });
+    llavero(`2=${K2}`);
+    const conError = await recifrarTanda(db);
+    expect(conError).toEqual({ recifradas: 0, pendientes: 1, errores: 1 });
+    const [fila] = await prisma.$queryRaw<{ notas_encrypted: Buffer }[]>`SELECT notas_encrypted FROM pacientes WHERE id = ${huerfana.id}`;
+    expect(idClaveDe(fila.notas_encrypted)).toBe(1);
+  });
+
+  it("mantenimiento con `todo` encadena tandas hasta agotar", async () => {
+    const org = await prisma.organization.create({ data: { nombre: "Org" } });
+    for (let i = 0; i < 4; i++) {
+      await db.paciente.create({
+        data: { nombre: "N", apellido: "A", telefono: "", tarifa: 1, organizationId: org.id, ...cifrarPaciente(randomUUID(), { notas: "n" }) },
+      });
+    }
+    llavero(`${CLAVES_CIFRADO_TEST},2=${randomBytes(32).toString("base64")}`);
+    const r = await mantenimiento({ prisma: db, ahora: AHORA, todo: true });
+    expect(r.recifrado).toEqual({ recifradas: 4, pendientes: 0, errores: 0 });
+  });
+});
