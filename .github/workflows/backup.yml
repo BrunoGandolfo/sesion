@@ -109,10 +109,13 @@ jobs:
           set -euo pipefail
           stamp="$(date -u +'%Y-%m-%d-%H%M%S')"
           file="sesion-backup-${stamp}.dump"
-          echo "BACKUP_FILE=${file}" >> "$GITHUB_ENV"
-          echo "BACKUP_KEY=backups/${file}.gpg" >> "$GITHUB_ENV"
-          echo "BACKUP_KEY_MENSUAL=backups/mensuales/${file}.gpg" >> "$GITHUB_ENV"
-          if [ "$(date -u +'%d')" = "01" ]; then echo "ES_DIA_UNO=1" >> "$GITHUB_ENV"; else echo "ES_DIA_UNO=0" >> "$GITHUB_ENV"; fi
+          if [ "$(date -u +'%d')" = "01" ]; then es_dia_uno=1; else es_dia_uno=0; fi
+          {
+            echo "BACKUP_FILE=${file}"
+            echo "BACKUP_KEY=backups/${file}.gpg"
+            echo "BACKUP_KEY_MENSUAL=backups/mensuales/${file}.gpg"
+            echo "ES_DIA_UNO=${es_dia_uno}"
+          } >> "$GITHUB_ENV"
           echo "Archivo local: ${file}"
 
       # ---------------------------------------------------------------------
