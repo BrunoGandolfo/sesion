@@ -42,6 +42,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # A mano sobre cualquier rama (gh workflow run CI --ref <rama>): es como un
+  # agente demuestra el verde antes de que el orquestador fusione. No publica
+  # nada: publicar.yml sólo escucha los push a main.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
