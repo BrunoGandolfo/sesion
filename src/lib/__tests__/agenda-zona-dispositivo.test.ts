@@ -1,29 +1,11 @@
-/**
- * Los dos lugares donde la agenda todavía dejaba entrar la zona del
- * dispositivo después de pasar las fechas a Montevideo.
- *
- * POR QUÉ ESTE TEST
- *
- * Convertir un solo lado de un par es peor que no convertir ninguno. Cuando
- * el envío del formulario pasó a leer "15:15" como hora de Montevideo, los
- * dos productores de esos strings quedaron en la zona del aparato, y la
- * vuelta dejó de cerrar: desde Madrid, la propuesta "el mismo día y hora que
- * la última vez" mostraba las 20:15 de un turno de las 15:15 y lo agendaba a
- * las 20:15 de Montevideo. Lo mismo con el día que se toca en la grilla del
- * mes: MonthView arma las celdas con date-fns (medianoches locales) y
- * computeRange, que ya razonaba en Montevideo, pedía el día anterior.
- *
- * `conZona` mueve process.env.TZ dentro del proceso: Node la relee en cada
- * operación de Date, así que alcanza para poner el aparato en Madrid.
- */
+/** Ida y vuelta del formulario en la zona del consultorio.
+ * La grilla se verifica desde sus botones en calendario-consultorio.test.tsx. */
 import { describe, expect, it } from "vitest";
 
-import { anclaDelDiaTocado } from "@/app/(dashboard)/agenda/_components/agenda-view";
 import { proponerDesdeUltimoTurno } from "@/components/forms/nuevo-turno-form";
 import {
   fechaInputMvd,
   horaInputMvd,
-  inicioFinDiaMvd,
   instanteDesdeFechaHoraMvd,
 } from "@/lib/fechas-montevideo";
 
@@ -88,38 +70,8 @@ describe("la propuesta del formulario, desde un aparato en Madrid", () => {
   });
 });
 
-describe("anclaDelDiaTocado — el día que ella tocó en la grilla del mes", () => {
-  it("desde Madrid, tocar el 5 pide el 5 y no el 4", () => {
-    // Lo que entrega MonthView: medianoche local del aparato.
-    const celda = conZona(MADRID, () => new Date(2026, 8, 5));
-    expect(celda.toISOString()).toBe("2026-09-04T22:00:00.000Z");
-
-    const ancla = conZona(MADRID, () => anclaDelDiaTocado(celda));
-    const { desde, hasta } = inicioFinDiaMvd(ancla);
-
-    expect(desde.toISOString()).toBe("2026-09-05T03:00:00.000Z");
-    expect(hasta.toISOString()).toBe("2026-09-06T02:59:59.999Z");
-  });
-
-  it("sin el re-anclaje, ese mismo toque pedía el día anterior", () => {
-    const celda = conZona(MADRID, () => new Date(2026, 8, 5));
-    expect(inicioFinDiaMvd(celda).desde.toISOString()).toBe(
-      "2026-09-04T03:00:00.000Z",
-    );
-  });
-
-  it("en Montevideo no cambia nada: el día tocado sigue siendo el mismo", () => {
-    const celda = conZona("America/Montevideo", () => new Date(2026, 8, 5));
-    const ancla = conZona("America/Montevideo", () => anclaDelDiaTocado(celda));
-    expect(inicioFinDiaMvd(ancla).desde.toISOString()).toBe(
-      inicioFinDiaMvd(celda).desde.toISOString(),
-    );
-  });
-
-  it("el ancla cae al mediodía: lejos de los dos bordes del día", () => {
-    const celda = conZona(MADRID, () => new Date(2026, 8, 5));
-    expect(conZona(MADRID, () => anclaDelDiaTocado(celda)).toISOString()).toBe(
-      "2026-09-05T15:00:00.000Z",
-    );
-  });
+it("conserva la hora del consultorio al cruzar el cambio de hora de Madrid", () => {
+  const ultimo = new Date("2026-10-24T18:15:00.000Z");
+  const siguiente = conZona(MADRID, () => proponerDesdeUltimoTurno(ultimo, new Date("2026-10-25T12:00:00Z")));
+  expect(siguiente.toISOString()).toBe("2026-10-31T18:15:00.000Z");
 });

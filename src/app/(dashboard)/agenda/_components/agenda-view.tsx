@@ -3,7 +3,6 @@
 import * as React from "react";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
 import type { VarianteToast } from "@/components/ui/toast";
-import { addDays, addMonths, addWeeks, isSameDay } from "date-fns";
 import { CalendarX2 } from "lucide-react";
 
 import { Fab, Sheet, Toast } from "@/components/ui";
@@ -17,7 +16,8 @@ import {
   inicioDeMesMvd,
   inicioDeSemanaMvd,
   inicioFinDiaMvd,
-  instanteMvd,
+  agregarMesesMvd,
+  esMismoDiaMvd,
 } from "@/lib/fechas-montevideo";
 import { AGENDAR, ALGO_FALLO } from "@/lib/glosario";
 import type {
@@ -93,24 +93,6 @@ function computeRange(
   // la grilla del mes siempre dibuja 42 celdas.
   const desde = inicioDeSemanaMvd(inicioDeMesMvd(anchor));
   return { desde, hasta: finDelDiaMvd(agregarDiasMvd(desde, 41)) };
-}
-
-/**
- * El día que se tocó en la grilla del mes, re-anclado al mediodía de
- * Montevideo de esa misma fecha de calendario.
- *
- * MonthView arma sus 42 celdas con date-fns, o sea medianoches de la zona del
- * dispositivo. Desde Madrid, tocar el 5 de septiembre entrega
- * 2026-09-04T22:00Z, que en Montevideo todavía es el 4: computeRange, que
- * ahora razona en Montevideo, pediría el día anterior al que ella tocó.
- *
- * Se leen a propósito los campos LOCALES del Date (getFullYear/getMonth/
- * getDate): son exactamente el número de día que MonthView dibujó en la
- * celda. Lo que se corrige no es ese número sino el instante que lo
- * representa. El mediodía evita los dos bordes del día.
- */
-export function anclaDelDiaTocado(day: Date): Date {
-  return instanteMvd(day.getFullYear(), day.getMonth(), day.getDate(), 12);
 }
 
 type LoadState = "idle" | "loading" | "error";
@@ -243,20 +225,20 @@ export function AgendaView() {
     setAnchorUsuario((elegido) => {
       const d = elegido ?? today;
       if (!d) return elegido;
-      if (isMobile && mesAbierto) return addMonths(d, -1);
-      if (view === "día") return addDays(d, -1);
-      if (view === "semana") return addWeeks(d, -1);
-      return addMonths(d, -1);
+      if (isMobile && mesAbierto) return agregarMesesMvd(d, -1);
+      if (view === "día") return agregarDiasMvd(d, -1);
+      if (view === "semana") return agregarDiasMvd(d, -7);
+      return agregarMesesMvd(d, -1);
     });
   };
   const handleNext = () => {
     setAnchorUsuario((elegido) => {
       const d = elegido ?? today;
       if (!d) return elegido;
-      if (isMobile && mesAbierto) return addMonths(d, 1);
-      if (view === "día") return addDays(d, 1);
-      if (view === "semana") return addWeeks(d, 1);
-      return addMonths(d, 1);
+      if (isMobile && mesAbierto) return agregarMesesMvd(d, 1);
+      if (view === "día") return agregarDiasMvd(d, 1);
+      if (view === "semana") return agregarDiasMvd(d, 7);
+      return agregarMesesMvd(d, 1);
     });
   };
   const handleToday = () => {
@@ -264,7 +246,7 @@ export function AgendaView() {
     setMesAbierto(false);
   };
   const handleDayClick = (day: Date) => {
-    setAnchorUsuario(anclaDelDiaTocado(day));
+    setAnchorUsuario(day);
     setUserView("día");
     setMesAbierto(false);
   };
@@ -347,7 +329,7 @@ export function AgendaView() {
     isReady &&
     view === "día" &&
     turnos !== null &&
-    !turnos.some((t) => isSameDay(t.fecha, anchor));
+    !turnos.some((t) => esMismoDiaMvd(t.fecha, anchor));
   const mostrarFab = !diaVacio && !showFullError;
 
   return (

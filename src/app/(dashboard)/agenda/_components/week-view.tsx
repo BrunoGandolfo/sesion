@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { addDays, isSameDay, startOfWeek } from "date-fns";
+import { agregarDiasMvd, esMismoDiaMvd, inicioDeSemanaMvd, partesMvd, horaLocalMvd, minutosDelDiaMvd } from "@/lib/fechas-montevideo";
 import type { TurnoConPaciente } from "@/types/domain";
 import { hora } from "@/lib/format";
 import { ALTO_HORA, distribuirTurnos } from "./week-layout";
@@ -19,20 +19,20 @@ const END_HOUR = 21;
 const ROW_HEIGHT = ALTO_HORA;
 
 export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
-  const weekStart = startOfWeek(anchor, { weekStartsOn: 1 });
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const weekStart = inicioDeSemanaMvd(anchor);
+  const days = Array.from({ length: 7 }, (_, i) => agregarDiasMvd(weekStart, i));
   const turnosPorDia = days.map((day) =>
     turnos
-      .filter((t) => isSameDay(t.fecha, day))
+      .filter((t) => esMismoDiaMvd(t.fecha, day))
       .sort((a, b) => a.fecha.getTime() - b.fecha.getTime()),
   );
 
   // La escala es presentación: alcanza a todos los turnos visibles sin
   // cambiar sus horarios, duraciones ni la distribución de los solapes.
   const visibles = turnosPorDia.flat();
-  const horaInicial = Math.min(START_HOUR, ...visibles.map((t) => t.fecha.getHours()));
+  const horaInicial = Math.min(START_HOUR, ...visibles.map((t) => horaLocalMvd(t.fecha).hora));
   const horaFinal = Math.max(END_HOUR, ...visibles.map((t) =>
-    Math.ceil((t.fecha.getHours() * 60 + t.fecha.getMinutes() + t.duracion) / 60),
+    Math.ceil((minutosDelDiaMvd(t.fecha) + t.duracion) / 60),
   ));
   const horas = Array.from({ length: horaFinal - horaInicial }, (_, i) => horaInicial + i);
 
@@ -44,7 +44,7 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
           <div className="flex bg-cream-50">
             <div className="w-[60px] shrink-0" aria-hidden="true" />
             {days.map((day, i) => {
-              const isToday = isSameDay(day, today);
+              const isToday = esMismoDiaMvd(day, today);
               return (
                 <div
                   key={i}
@@ -59,7 +59,7 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                         isToday ? "text-sage-600" : "text-ink-900"
                       }`}
                     >
-                      {day.getDate()}
+                      {partesMvd(day).dia}
                     </span>
                     {isToday ? (
                       <span

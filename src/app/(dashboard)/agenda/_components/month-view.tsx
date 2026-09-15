@@ -1,13 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  addDays,
-  isSameDay,
-  isSameMonth,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { agregarDiasMvd, esMismoDiaMvd, esMismoMesMvd, inicioDeMesMvd, inicioDeSemanaMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { AGENDADO, MES_LEYENDA, PAGADO } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
@@ -21,8 +15,8 @@ interface Props {
 const WEEK_LABELS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"] as const;
 
 export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
-  const gridStart = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 });
-  const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  const gridStart = inicioDeSemanaMvd(inicioDeMesMvd(anchor));
+  const days = Array.from({ length: 42 }, (_, i) => agregarDiasMvd(gridStart, i));
 
   return (
     <div className="overflow-hidden rounded-lg border border-[color:var(--border-subtle)] bg-white">
@@ -40,9 +34,9 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
       </div>
       <div className="grid grid-cols-7">
         {days.map((day, idx) => {
-          const inMonth = isSameMonth(day, anchor);
-          const isToday = isSameDay(day, today);
-          const turnosDia = turnos.filter((t) => isSameDay(t.fecha, day));
+          const inMonth = esMismoMesMvd(day, anchor);
+          const isToday = esMismoDiaMvd(day, today);
+          const turnosDia = turnos.filter((t) => esMismoDiaMvd(t.fecha, day));
           const visibles = turnosDia.slice(0, 3);
           const overflow = turnosDia.length - visibles.length;
 
@@ -59,11 +53,11 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
             >
               {isToday ? (
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sage-500 font-[family-name:var(--font-display)] text-[14px] font-medium leading-none text-white">
-                  {day.getDate()}
+                  {partesMvd(day).dia}
                 </span>
               ) : (
                 <span className="text-[14px] font-medium leading-none text-ink-900">
-                  {day.getDate()}
+                  {partesMvd(day).dia}
                 </span>
               )}
               {turnosDia.length > 0 ? (

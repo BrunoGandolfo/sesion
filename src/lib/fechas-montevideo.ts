@@ -129,6 +129,20 @@ export function agregarDiasMvd(instante: Date, dias: number): Date {
   return new Date(instante.getTime() + dias * MS_POR_DIA);
 }
 
+/** Suma meses del consultorio y limita el día al último del mes de destino. */
+export function agregarMesesMvd(instante: Date, meses: number): Date {
+  const { anio, mes, dia, hora, minuto } = partesMvd(instante);
+  const ultimoDia = partesMvd(instanteMvd(anio, mes + meses + 1, 0)).dia;
+  return instanteMvd(anio, mes + meses, Math.min(dia, ultimoDia), hora, minuto, instante.getUTCSeconds(), instante.getUTCMilliseconds());
+}
+
+/** True si comparten mes y año en el consultorio. */
+export function esMismoMesMvd(a: Date, b: Date): boolean {
+  const primero = partesMvd(a);
+  const segundo = partesMvd(b);
+  return primero.anio === segundo.anio && primero.mes === segundo.mes;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Comparaciones
 // ────────────────────────────────────────────────────────────────────────────
@@ -173,6 +187,12 @@ export function horaLocalMvd(instante: Date): { hora: number; minuto: number } {
   return { hora, minuto };
 }
 
+/** Posición dentro del día del consultorio, para la escala de la agenda. */
+export function minutosDelDiaMvd(instante: Date): number {
+  const { hora, minuto } = partesMvd(instante);
+  return hora * 60 + minuto;
+}
+
 function dosDigitos(n: number): string {
   return n.toString().padStart(2, "0");
 }
@@ -199,6 +219,16 @@ function paraNombres(instante: Date): Date {
 /** "sábado 5 de septiembre". */
 export function formatearFechaLargaMvd(instante: Date): string {
   return format(paraNombres(instante), "EEEE d 'de' MMMM", { locale: es });
+}
+
+/** "septiembre" o "septiembre 2026". */
+export function formatearMesMvd(instante: Date, conAnio = false): string {
+  return format(paraNombres(instante), conAnio ? "MMMM yyyy" : "MMMM", { locale: es });
+}
+
+/** "5 de septiembre de 2026". */
+export function formatearFechaCompletaMvd(instante: Date): string {
+  return format(paraNombres(instante), "d 'de' MMMM 'de' yyyy", { locale: es });
 }
 
 /** "5 sep". */

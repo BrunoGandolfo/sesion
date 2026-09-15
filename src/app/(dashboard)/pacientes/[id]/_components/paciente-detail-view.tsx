@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import type { VarianteToast } from "@/components/ui/toast";
-import { isSameDay } from "date-fns";
+import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Segmented, Sheet, Toast } from "@/components/ui";
 import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
@@ -161,7 +161,7 @@ export function PacienteDetailView({ id }: { id: string }) {
       .filter(
         (t) =>
           (t.estado === "programado" || t.estado === "realizado") &&
-          isSameDay(t.fecha, hoy),
+          esMismoDiaMvd(t.fecha, hoy),
       )
       .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
     return deHoy[0] ?? null;

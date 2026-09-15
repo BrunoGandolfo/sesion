@@ -41,7 +41,7 @@ import {
   zonaDeuda,
   type ZonaDeuda,
 } from "@/lib/deudas";
-import { diasEnterosMvd } from "@/lib/fechas-montevideo";
+import { diasEnterosMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaCorta, fechaLarga, money } from "@/lib/format";
 import {
   ALGO_FALLO,
@@ -277,7 +277,7 @@ function Marco({
   const mesLargo = ahora
     ? capitalize(fechaLarga(ahora).split(" de ").at(-1) ?? "")
     : "";
-  const anio = ahora ? ahora.getFullYear() : "";
+  const anio = ahora ? partesMvd(ahora).anio : "";
 
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-7 px-5 py-6 lg:gap-10 lg:px-10 lg:py-10">

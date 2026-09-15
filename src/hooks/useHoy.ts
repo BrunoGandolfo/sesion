@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { fechaInputMvd, finDelDiaMvd } from "@/lib/fechas-montevideo";
 
 // El día de hoy, sin romper la hidratación.
 //
@@ -18,21 +19,37 @@ import * as React from "react";
 //
 // Cómo funciona: el store externo publica una *clave* del día (un string), no
 // el Date. React compara snapshots con Object.is, así que devolver el string
-// "Thu Sep 04 2026" en llamadas consecutivas cuenta como el mismo valor y no
+// "2026-09-04" en llamadas consecutivas cuenta como el mismo valor y no
 // hay bucle; devolver un `new Date()` no, porque cada objeto es distinto. El
 // Date se construye una sola vez por clave, en el useMemo.
 
-function suscribirNoop() {
-  // No hay a qué suscribirse: el día no emite eventos. Si en algún momento
-  // hace falta que la app reaccione al cambio de día sin recargar, este es el
-  // único lugar a tocar (un timer hasta la próxima medianoche que llame a
-  // `alCambiar`).
-  return () => {};
+function suscribir(alCambiar: () => void) {
+  let timer: ReturnType<typeof setTimeout>;
+  const programar = () => {
+    clearTimeout(timer);
+    const ahora = new Date();
+    timer = setTimeout(() => {
+      alCambiar();
+      programar();
+    }, finDelDiaMvd(ahora).getTime() - ahora.getTime() + 1);
+  };
+  const alVolver = () => { alCambiar(); programar(); };
+  const alCambiarVisibilidad = () => {
+    if (document.visibilityState === "visible") alVolver();
+  };
+  programar();
+  window.addEventListener("focus", alVolver);
+  document.addEventListener("visibilitychange", alCambiarVisibilidad);
+  return () => {
+    clearTimeout(timer);
+    window.removeEventListener("focus", alVolver);
+    document.removeEventListener("visibilitychange", alCambiarVisibilidad);
+  };
 }
 
 /** Clave estable del día: el mismo string en llamadas consecutivas. */
 function claveDelDiaEnCliente(): string {
-  return new Date().toDateString();
+  return fechaInputMvd(new Date());
 }
 
 /** En el servidor no hay día: null, y el primer render sale sin fechas. */
@@ -49,7 +66,7 @@ function claveDelDiaEnServidor(): null {
  */
 export function useHoy(): Date | null {
   const claveDelDia = React.useSyncExternalStore(
-    suscribirNoop,
+    suscribir,
     claveDelDiaEnCliente,
     claveDelDiaEnServidor,
   );

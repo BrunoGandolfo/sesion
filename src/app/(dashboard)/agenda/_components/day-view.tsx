@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { isSameDay } from "date-fns";
+import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Lupita, SessionRow } from "@/components/ui";
 import { TAMANOS_LUPITA } from "@/components/ui/lupita";
@@ -37,7 +37,7 @@ export function DayView({
   const delDia = React.useMemo(
     () =>
       turnos
-        .filter((t) => isSameDay(t.fecha, date))
+        .filter((t) => esMismoDiaMvd(t.fecha, date))
         .sort((a, b) => a.fecha.getTime() - b.fecha.getTime()),
     [turnos, date],
   );

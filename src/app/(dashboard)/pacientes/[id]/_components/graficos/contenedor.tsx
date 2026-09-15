@@ -1,5 +1,7 @@
 "use client";
 
+import { fechaCompleta } from "@/lib/format";
+
 // Contenedor del Recorrido ("Cómo va"): selector de período, carga de
 // /progreso para ese período y la secuencia de gráficos.
 //
@@ -345,11 +347,7 @@ function CardDeLaUltima({
         «{contenido}»
       </p>
       <p className="mt-2 text-[11px] tabular-nums text-ink-500">
-        {fecha.toLocaleDateString("es-UY", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })}
+        {fechaCompleta(fecha)}
       </p>
     </section>
   );

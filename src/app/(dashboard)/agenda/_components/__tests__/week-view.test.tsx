@@ -63,8 +63,8 @@ describe("agenda semanal sin tarjetas tapadas", () => {
 });
 
 it('extiende la escala para mostrar enteros los turnos antes de las 8 y después de las 21', () => {
- const temprano={...turno('Temprano',7),fecha:new Date(2026,8,7,7)};
- const tarde={...turno('Tarde',22,30,90),fecha:new Date(2026,8,7,22,30)};
+ const temprano=turno('Temprano',7);
+ const tarde=turno('Tarde',22,30,90);
  const abrir=vi.fn();
  const {container}=render(<WeekView anchor={dia} today={dia} turnos={[temprano,tarde]} onEventClick={abrir} />);
  const [a,b]=screen.getAllByRole('button');
@@ -76,11 +76,11 @@ it('extiende la escala para mostrar enteros los turnos antes de las 8 y después
  expect(container.textContent).toContain('Tarde Prueba');
  fireEvent.click(b);
  expect(abrir).toHaveBeenCalledWith(tarde);
- expect(tarde.fecha.getHours()).toBe(22);
+ expect(tarde.fecha.toISOString()).toBe('2026-09-08T01:30:00.000Z');
 });
 
 it('identifica la continuación después de medianoche sin inventar una hora 24', () => {
- render(<WeekView anchor={dia} today={dia} turnos={[{...turno('Noche',23,30,90),fecha:new Date(2026,8,7,23,30)}]} onEventClick={() => {}} />);
+ render(<WeekView anchor={dia} today={dia} turnos={[turno('Noche',23,30,90)]} onEventClick={() => {}} />);
  expect(screen.getByText('00:00 (+1 día)')).toBeTruthy();
  expect(screen.queryByText('24:00')).toBeNull();
 });

@@ -11,8 +11,7 @@ import * as React from "react";
 import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronDown, Mic } from "lucide-react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { fechaInputMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Card, Chip } from "@/components/ui";
 import { AnilloProgreso, ListaEnCascada } from "@/components/ui/movimiento";
@@ -152,7 +151,7 @@ function temasDeLaSesion(datos: DatosEstructurados | null): string {
 type GrupoMes = { clave: string; titulo: string; sesiones: DocSesion[] };
 
 function tituloDeMes(fecha: Date): string {
-  const texto = format(fecha, "LLLL yyyy", { locale: es });
+  const texto = formatearMesMvd(fecha, true);
   return texto.charAt(0).toLocaleUpperCase("es") + texto.slice(1);
 }
 
@@ -162,7 +161,7 @@ function agruparPorMes(sesiones: DocSesion[]): GrupoMes[] {
   const grupos: GrupoMes[] = [];
   for (const sesion of sesiones) {
     const fecha = new Date(sesion.fecha);
-    const clave = format(fecha, "yyyy-MM");
+    const clave = fechaInputMvd(fecha).slice(0, 7);
     const ultimo = grupos[grupos.length - 1];
     if (ultimo && ultimo.clave === clave) {
       ultimo.sesiones.push(sesion);

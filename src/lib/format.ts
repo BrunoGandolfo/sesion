@@ -1,6 +1,3 @@
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-
 import {
   diasEnterosMvd,
   esMismoDiaMvd,
@@ -10,7 +7,7 @@ import {
   formatearHoraMvd,
   horaLocalMvd,
   mesesEnterosMvd,
-  partesMvd,
+  formatearFechaCompletaMvd,
 } from "@/lib/fechas-montevideo";
 
 import { pluralizar } from "./glosario";
@@ -72,10 +69,7 @@ export function hora(d: Date): string {
  * mediodía cuyos campos LOCALES ya son los de Montevideo.
  */
 export function fechaCompleta(d: Date): string {
-  const { anio, mes, dia } = partesMvd(d);
-  return format(new Date(anio, mes, dia, 12, 0, 0, 0), "d 'de' MMMM 'de' yyyy", {
-    locale: es,
-  });
+  return formatearFechaCompletaMvd(d);
 }
 
 /**

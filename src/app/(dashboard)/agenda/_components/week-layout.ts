@@ -1,3 +1,4 @@
+import { minutosDelDiaMvd } from "@/lib/fechas-montevideo";
 import type { TurnoConPaciente } from "@/types/domain";
 
 export const ALTO_HORA = 64;
@@ -5,7 +6,7 @@ export const ALTO_HORA = 64;
 /** Distribuye los rectángulos que se cruzan, sin cambiar fechas ni duración. */
 export function distribuirTurnos(turnos: TurnoConPaciente[], horaInicial: number) {
   const ordenados = turnos.map((turno) => {
-    const minutos = turno.fecha.getHours() * 60 + turno.fecha.getMinutes();
+    const minutos = minutosDelDiaMvd(turno.fecha);
     const top = ((minutos - horaInicial * 60) / 60) * ALTO_HORA;
     const height = Math.max(32, (turno.duracion / 60) * ALTO_HORA) - 2;
     return { turno, top, height, columna: 0, columnas: 1 };

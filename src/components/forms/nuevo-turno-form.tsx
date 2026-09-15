@@ -12,7 +12,6 @@
 // cancela con márgenes negativos para ir a sangre.
 
 import * as React from "react";
-import { addDays, addWeeks } from "date-fns";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -99,9 +98,9 @@ function coincide(p: Pick<Paciente, "nombre" | "apellido">, q: string) {
 /** Una semana después del último turno, avanzando de a semanas hasta que
  *  quede en el futuro. Conserva día de la semana y hora. */
 export function proponerDesdeUltimoTurno(ultimo: Date, ahora: Date): Date {
-  let propuesta = addWeeks(ultimo, 1);
+  let propuesta = agregarDiasMvd(ultimo, 7);
   while (propuesta.getTime() <= ahora.getTime()) {
-    propuesta = addWeeks(propuesta, 1);
+    propuesta = agregarDiasMvd(propuesta, 7);
   }
   return propuesta;
 }
@@ -194,8 +193,8 @@ export function NuevoTurnoForm({
     if (!pacienteId) return;
     const controller = new AbortController();
     const ahora = new Date();
-    const desde = addDays(ahora, -180).toISOString();
-    const hasta = addDays(ahora, 180).toISOString();
+    const desde = agregarDiasMvd(ahora, -180).toISOString();
+    const hasta = agregarDiasMvd(ahora, 180).toISOString();
 
     apiGet<JsonTurno[]>(
       `/api/turnos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&pacienteId=${encodeURIComponent(pacienteId)}`,

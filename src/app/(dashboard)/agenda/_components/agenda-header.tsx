@@ -4,8 +4,7 @@ import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 
 import * as React from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { format, endOfWeek, startOfWeek } from "date-fns";
-import { es } from "date-fns/locale";
+import { agregarDiasMvd, inicioDeSemanaMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Segmented } from "@/components/ui";
 import { fechaCorta, fechaLarga } from "@/lib/format";
@@ -34,11 +33,11 @@ const VIEW_OPTIONS: { value: AgendaViewMode; label: string }[] = [
 function rangeLabelFor(view: AgendaViewMode, anchor: Date): string {
   if (view === "día") return fechaLarga(anchor);
   if (view === "semana") {
-    const start = startOfWeek(anchor, { weekStartsOn: 1 });
-    const end = endOfWeek(anchor, { weekStartsOn: 1 });
+    const start = inicioDeSemanaMvd(anchor);
+    const end = agregarDiasMvd(start, 6);
     return `${fechaCorta(start)} — ${fechaCorta(end)}`;
   }
-  return format(anchor, "MMMM yyyy", { locale: es });
+  return formatearMesMvd(anchor, true);
 }
 
 export function AgendaHeader({
