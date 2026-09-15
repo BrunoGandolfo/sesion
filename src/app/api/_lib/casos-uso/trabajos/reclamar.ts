@@ -14,13 +14,12 @@
 
 import type { EjecutorTrabajo, Prisma, TipoTrabajo } from "@prisma/client";
 
-import type { db } from "@/lib/db";
-
 import { emitirTicket } from "../../tickets";
 
 import { LEASE_TRABAJO_MS } from "./politica";
+import { bloquearHilo, type BaseHilo, type ClienteHilo } from "../hilo/base";
 
-type ClienteTrabajos = Pick<typeof db, "trabajo" | "hiloVersion">;
+type ClienteTrabajos = BaseHilo;
 
 export interface ReclamarTrabajosInput {
   prisma: ClienteTrabajos;
@@ -51,7 +50,7 @@ export interface TrabajoReclamado {
  * que ya incluye a la primera.
  */
 async function bloqueadoPorEncadenado(
-  prisma: ClienteTrabajos,
+  prisma: Pick<ClienteHilo, "trabajo" | "hiloVersion">,
   trabajo: { id: string; pacienteId: string | null; creadoEn: Date },
 ): Promise<boolean> {
   if (!trabajo.pacienteId) return false;
@@ -62,7 +61,10 @@ async function bloqueadoPorEncadenado(
         pacienteId: trabajo.pacienteId,
         estado: { in: ["pendiente", "en_curso"] },
         id: { not: trabajo.id },
-        creadoEn: { lt: trabajo.creadoEn },
+        OR: [
+          { creadoEn: { lt: trabajo.creadoEn } },
+          { creadoEn: trabajo.creadoEn, id: { lt: trabajo.id } },
+        ],
       },
     }),
     prisma.hiloVersion.count({
@@ -79,68 +81,79 @@ export async function reclamarTrabajos({
   limite,
   tipos,
 }: ReclamarTrabajosInput): Promise<TrabajoReclamado[]> {
-  const candidatos = await prisma.trabajo.findMany({
-    where: {
-      ejecutor,
-      estado: { in: ["pendiente", "en_curso"] },
-      proximoIntentoEn: { lte: ahora },
-      OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }],
-      ...(tipos && tipos.length > 0 ? { tipo: { in: [...tipos] } } : {}),
-    },
-    orderBy: { creadoEn: "asc" },
-    take: limite,
-    select: {
-      id: true,
-      tipo: true,
-      organizationId: true,
-      sesionId: true,
-      pacienteId: true,
-      payload: true,
-      intentos: true,
-      creadoEn: true,
-    },
-  });
-
-  const lease = new Date(ahora.getTime() + LEASE_TRABAJO_MS[ejecutor]);
   const reclamados: TrabajoReclamado[] = [];
-
-  for (const c of candidatos) {
-    if (
-      c.tipo === "integrar_contexto" &&
-      (await bloqueadoPorEncadenado(prisma, c))
-    ) {
-      continue;
-    }
-
-    const ticket = ejecutor === "worker" ? emitirTicket() : null;
-    const { count } = await prisma.trabajo.updateMany({
+  let cursor: string | undefined;
+  // Paginar permite saltar pacientes con una propuesta abierta sin ocultar
+  // trabajos de las demás pacientes detrás del primer lote bloqueado.
+  while (reclamados.length < limite) {
+    const candidatos = await prisma.trabajo.findMany({
       where: {
-        id: c.id,
+        ejecutor,
         estado: { in: ["pendiente", "en_curso"] },
-        intentos: c.intentos,
         proximoIntentoEn: { lte: ahora },
         OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }],
+        ...(tipos && tipos.length > 0 ? { tipo: { in: [...tipos] } } : {}),
       },
-      data: {
-        estado: "en_curso",
-        intentos: { increment: 1 },
-        leaseVenceEn: lease,
-        ticketHash: ticket?.ticketHash ?? null,
+      orderBy: [{ creadoEn: "asc" }, { id: "asc" }],
+      take: Math.max(limite, 25),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: {
+        id: true,
+        tipo: true,
+        organizationId: true,
+        sesionId: true,
+        pacienteId: true,
+        payload: true,
+        intentos: true,
+        creadoEn: true,
       },
     });
-    if (count === 0) continue;
 
-    reclamados.push({
-      id: c.id,
-      tipo: c.tipo,
-      organizationId: c.organizationId,
-      sesionId: c.sesionId,
-      pacienteId: c.pacienteId,
-      payload: c.payload,
-      intentos: c.intentos + 1,
-      ticket: ticket?.ticket ?? null,
-    });
+    const lease = new Date(ahora.getTime() + LEASE_TRABAJO_MS[ejecutor]);
+
+    for (const c of candidatos) {
+      if (reclamados.length >= limite) break;
+      const ticket = ejecutor === "worker" ? emitirTicket() : null;
+      const reclamar = async (tx: Pick<ClienteHilo, "trabajo">, payload: Prisma.JsonValue) => {
+        const { count } = await tx.trabajo.updateMany({
+          where: {
+            id: c.id,
+            estado: { in: ["pendiente", "en_curso"] },
+            intentos: c.intentos,
+            proximoIntentoEn: { lte: ahora },
+            OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }],
+          },
+          data: {
+            estado: "en_curso",
+            intentos: { increment: 1 },
+            leaseVenceEn: lease,
+            ticketHash: ticket?.ticketHash ?? null,
+            payload: payload as Prisma.InputJsonObject,
+          },
+        });
+        if (count === 0) return null;
+        return {
+          id: c.id,
+          tipo: c.tipo,
+          organizationId: c.organizationId,
+          sesionId: c.sesionId,
+          pacienteId: c.pacienteId,
+          payload,
+          intentos: c.intentos + 1,
+          ticket: ticket?.ticket ?? null,
+        };
+      };
+      const reclamado = c.tipo === "integrar_contexto" && c.pacienteId
+        ? await prisma.$transaction(async tx => {
+          const hilo = await bloquearHilo(tx, { pacienteId: c.pacienteId!, organizationId: c.organizationId });
+          if (await bloqueadoPorEncadenado(tx, c)) return null;
+          return reclamar(tx, { sesionId: c.sesionId, pacienteId: c.pacienteId, basadaEnVersion: hilo.vigente?.version ?? 0 });
+        })
+        : await reclamar(prisma, c.payload);
+      if (reclamado) reclamados.push(reclamado);
+    }
+    if (candidatos.length < Math.max(limite, 25)) break;
+    cursor = candidatos[candidatos.length - 1].id;
   }
-
   return reclamados;
 }

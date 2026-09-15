@@ -66,4 +66,4 @@ def test_el_ciclo_reclama_sesiones_y_despues_trabajos_de_los_tipos_soportados(mo
     worker._ciclo()
 
     pendientes.assert_called_once()
-    trabajos.assert_called_once_with(["borrar_transcript_asr", "generar_feedback"])
+    trabajos.assert_called_once_with(["borrar_transcript_asr", "generar_feedback", "integrar_contexto"])

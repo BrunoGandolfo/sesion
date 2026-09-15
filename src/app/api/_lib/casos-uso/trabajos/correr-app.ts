@@ -4,7 +4,7 @@
 // ejecutar; el presupuesto evita que Vercel corte la función a mitad de un
 // trabajo largo sin que el resultado quede resuelto.
 
-import type { db } from "@/lib/db";
+import type { BaseHilo } from "../hilo/base";
 
 import { reclamarTrabajos, type TrabajoReclamado } from "./reclamar";
 import { resolverTrabajo, type ResultadoEjecucion } from "./resolver";
@@ -19,7 +19,7 @@ export interface ResumenCorrida {
 }
 
 export interface CorrerTrabajosAppInput {
-  prisma: Pick<typeof db, "trabajo" | "hiloVersion">;
+  prisma: BaseHilo;
   /** Ejecuta un trabajo; lanza si falla. */
   ejecutar: (trabajo: TrabajoReclamado) => Promise<void>;
   /** Milisegundos totales de la corrida. */

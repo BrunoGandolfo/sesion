@@ -309,7 +309,7 @@ def test_feedback_gestalt_sin_items_es_bloqueante():
 def test_contexto_incompleto_es_bloqueante():
     with pytest.raises(ValueError) as exc:
         validar_estructura_contexto({"hipotesisDiagnostica": None})
-    assert "resumenAcumulativo" in str(exc.value)
+    assert "campos inválidos" in str(exc.value)
 
 
 # Saneo de los puntajes por item del feedback ───────────────────────────────

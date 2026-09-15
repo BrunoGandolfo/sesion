@@ -1,4 +1,5 @@
 import { z } from "zod";
+export { editarHiloSchema, aceptarHiloSchema, resolverHiloSchema, regenerarHiloSchema } from "@/lib/hilo/contenido";
 
 import {
   duracionSchema,

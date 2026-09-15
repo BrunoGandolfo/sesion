@@ -9,10 +9,8 @@
 //                      otro trabajo para la nota siguiente); al tope de
 //                      reintentos, feedbackEstado fallido con el error visible.
 //   borrar_transcript_asr → nada más que el trabajo.
-//   integrar_contexto → lo aplica el Área 4 (hilo). Sin aplicador registrado
-//                      la app responde 501 y NO toca el trabajo: sigue
-//                      en_curso hasta que venza el lease y se vuelva a
-//                      entregar cuando exista quien lo aplique.
+//   integrar_contexto → una propuesta cifrada, en la misma transacción que
+//                      resuelve el trabajo; nunca mueve el hilo vigente.
 
 import type { Prisma, TipoTrabajo } from "@prisma/client";
 
@@ -25,8 +23,10 @@ import { cifrarSesion } from "@/lib/prisma-encryption";
 
 import { describirError } from "./politica";
 import { resolverTrabajo, type EstadoResuelto } from "./resolver";
+import { aplicarPropuesta } from "../hilo/trabajo";
+import { bloquearHilo, type ClienteHilo } from "../hilo/base";
 
-type ClienteResultado = Pick<typeof db, "trabajo" | "sesionClinica" | "hiloVersion" | "hilo">;
+type ClienteResultado = ClienteHilo;
 
 export type Aplicador = (
   tx: ClienteResultado,
@@ -75,10 +75,11 @@ async function aplicarFeedback(
   }
 }
 
-/** Un aplicador por tipo. El Área 4 registra el de integrar_contexto. */
+/** Un aplicador por tipo. */
 export const APLICADORES: Partial<Record<TipoTrabajo, Aplicador>> = {
   generar_feedback: aplicarFeedback,
   borrar_transcript_asr: async () => {},
+  integrar_contexto: aplicarPropuesta,
 };
 
 export interface ResultadoTrabajoWorkerInput {
@@ -104,6 +105,9 @@ export async function aplicarResultadoTrabajo({
     );
   }
   return prisma.$transaction(async (tx) => {
+    if (trabajo.tipo === "integrar_contexto" && trabajo.pacienteId) {
+      await bloquearHilo(tx, { pacienteId: trabajo.pacienteId, organizationId: trabajo.organizationId });
+    }
     const resolucion = await resolverTrabajo({
       prisma: tx,
       trabajo: { id: trabajo.trabajoId, tipo: trabajo.tipo, intentos: trabajo.intentos },

@@ -346,8 +346,8 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
 
 
 def test_un_tipo_desconocido_no_lanza():
-    res = processor.ejecutar_trabajo({"tipo": "integrar_contexto"})
-    assert res["ok"] is False and "integrar_contexto" in res["error"]
+    res = processor.ejecutar_trabajo({"tipo": "desconocido"})
+    assert res["ok"] is False and "desconocido" in res["error"]
 
 
 def test_huecos_se_avisan_y_persisten_antes_del_asr_sin_perder_pausas(pasos, caplog):

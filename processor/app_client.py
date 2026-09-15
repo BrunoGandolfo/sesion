@@ -26,6 +26,7 @@ Privacidad de logs: solo ids, status y el campo `error` de la app (120
 chars). Nunca el payload: contiene transcripcion, nota y contexto.
 """
 import logging
+import json
 import os
 import socket
 from dataclasses import dataclass
@@ -33,6 +34,7 @@ from dataclasses import dataclass
 import requests
 
 import config
+from schemas_llm import validar_estructura_contexto
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +83,26 @@ def _error_del_body(response: requests.Response) -> str:
     return ""
 
 
+def _json_esperado(response: requests.Response):
+    """Una redirección, HTML o JSON inválido es un error de contrato, sin PHI."""
+    response.raise_for_status()
+    if response.status_code != 200:
+        raise requests.RequestException(f"Respuesta inesperada: HTTP {response.status_code}")
+    if response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise requests.RequestException("La app no respondió application/json")
+    try:
+        return response.json()
+    except ValueError:
+        raise requests.RequestException("La app no respondió JSON válido") from None
+
+
 def _lista(url: str) -> list[dict]:
     """GET autenticado con PROCESSING_SECRET que espera una lista JSON. Lanza requests.RequestException."""
-    response = requests.get(url, headers=_headers(), timeout=TIMEOUT_LECTURA_SEG)
-    response.raise_for_status()
-    body = response.json()
-    return body if isinstance(body, list) else []
+    response = requests.get(url, headers=_headers(), timeout=TIMEOUT_LECTURA_SEG, allow_redirects=False)
+    body = _json_esperado(response)
+    if not isinstance(body, list) or any(not isinstance(item, dict) for item in body):
+        raise requests.RequestException("La app no respondió una lista de trabajos o sesiones")
+    return body
 
 
 # Respuestas ────────────────────────────────────────────────────────────────
@@ -116,7 +132,8 @@ def _post(url: str, payload: dict, ticket: str, etiqueta: str) -> RespuestaApp:
     """POST con ticket. Nunca lanza: la clasificacion va en RespuestaApp."""
     try:
         response = requests.post(
-            url, json=payload, headers=_headers(con_json=True, ticket=ticket), timeout=TIMEOUT_ESCRITURA_SEG
+            url, json=payload, headers=_headers(con_json=True, ticket=ticket), timeout=TIMEOUT_ESCRITURA_SEG,
+            allow_redirects=False,
         )
     except requests.RequestException as e:
         logger.error(f"{etiqueta}: sin respuesta ({type(e).__name__})")
@@ -213,23 +230,28 @@ def resolver_trabajo(trabajo_id: str, ticket: str, payload: dict) -> RespuestaAp
 
 # Contexto longitudinal (lectura para el prompt de la nota) ─────────────────
 
-def obtener_contexto_clinico_llm(paciente_id: str) -> str | None:
-    """
-    Contexto longitudinal pre-formateado para el prompt de la nota. None si
-    404 o si falla la red: es best-effort, nunca frena el pipeline.
-    """
-    try:
-        response = requests.get(
-            config.contexto_clinico_url(paciente_id),
-            params={"format": "llm"},
-            headers=_headers(),
-            timeout=TIMEOUT_LECTURA_SEG,
-        )
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
-        texto = response.text.strip()
-        return texto or None
-    except Exception as e:
-        logger.warning(f"Contexto clinico (LLM) no disponible ({type(e).__name__})")
+def obtener_contexto_clinico_llm(paciente_id: str, sesion_id: str, ticket: str) -> str | None:
+    """Solo None ante un hilo explícitamente vacío; cualquier otro fallo se propaga."""
+    if not paciente_id or not sesion_id or not ticket:
+        raise requests.RequestException("Falta identidad o ticket para leer el Recorrido")
+    response = requests.get(
+        config.hilo_url(paciente_id), params={"format": "llm", "sesionId": sesion_id},
+        headers=_headers(ticket=ticket), timeout=TIMEOUT_LECTURA_SEG, allow_redirects=False,
+    )
+    body = _json_esperado(response)
+    if not isinstance(body, dict) or set(body) != {"data"}:
+        raise requests.RequestException("Envoltura de Recorrido inválida")
+    hilo = body["data"]
+    if (not isinstance(hilo, dict) or set(hilo) != {"tipo", "pacienteId", "version", "contenido"}
+            or hilo["tipo"] != "hilo_vigente" or hilo["pacienteId"] != paciente_id
+            or type(hilo["version"]) is not int or hilo["version"] < 0):
+        raise requests.RequestException("Identidad o versión de Recorrido inválida")
+    if hilo["version"] == 0 and hilo["contenido"] is None:
         return None
+    if hilo["version"] == 0 or hilo["contenido"] is None:
+        raise requests.RequestException("Versión y contenido de Recorrido incompatibles")
+    try:
+        validar_estructura_contexto(hilo["contenido"])
+    except ValueError:
+        raise requests.RequestException("Contenido de Recorrido inválido") from None
+    return json.dumps(hilo["contenido"], ensure_ascii=False)

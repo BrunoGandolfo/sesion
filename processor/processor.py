@@ -33,6 +33,8 @@ import app_client
 import asr_assemblyai
 import clinical_analyzer
 import config
+from schemas_llm import validar_estructura_contexto
+from riesgo_lexico import buscar_menciones
 from audio_entrada import armar_audio
 import speech_analytics
 from clinical_analyzer import mensaje_error_api
@@ -45,9 +47,8 @@ logger = logging.getLogger(__name__)
 # un worker muerto se detecta en ese plazo.
 LEASE_RENOVACION_SEG = 60
 
-# Tipos de trabajo que este worker sabe ejecutar. integrar_contexto lo suma
-# el Area 4 cuando enganche la Llamada B.
-TIPOS_TRABAJO = ["borrar_transcript_asr", "generar_feedback"]
+# Tipos de trabajo que este worker sabe ejecutar.
+TIPOS_TRABAJO = ["borrar_transcript_asr", "generar_feedback", "integrar_contexto"]
 
 TIMEOUT_ASR_DELETE_SEG = 30
 
@@ -198,7 +199,7 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
                     transcripcion = transcribir(etiqueta, audio.archivo, sesion.terminos_asr)
                 transcripto = registrar_checkpoint(sesion, transcripcion)
             lease.comprobar("nota")
-            analisis = analizar(etiqueta, transcripto, sesion.paciente_id)
+            analisis = analizar(etiqueta, transcripto, sesion.paciente_id, sesion.ticket)
             lease.comprobar("resultado")
             reportar_nota(sesion, analisis, modelo_llm)
         except LeasePerdido:
@@ -289,9 +290,14 @@ def desde_checkpoint(checkpoint: dict) -> Transcripto:
     )
 
 
-def analizar(etiqueta: str, transcripto: Transcripto, paciente_id: str | None) -> Analisis:
-    """Contexto longitudinal (best-effort) + nota SOAP (Llamada A). Sin feedback: es otro trabajo."""
-    contexto_llm = app_client.obtener_contexto_clinico_llm(paciente_id) if paciente_id else None
+def analizar(etiqueta: str, transcripto: Transcripto, paciente_id: str | None, ticket: str) -> Analisis:
+    """Recorrido validado + nota SOAP. Una lectura fallida impide usar historia falsa."""
+    if not paciente_id:
+        raise PipelineError("contexto_invalido", "Falta la paciente del Recorrido", definitivo=False)
+    try:
+        contexto_llm = app_client.obtener_contexto_clinico_llm(paciente_id, etiqueta, ticket)
+    except requests.RequestException:
+        raise PipelineError("contexto_no_disponible", "No se pudo leer el Recorrido vigente", definitivo=False) from None
     if contexto_llm:
         logger.info(f"[{etiqueta}] Contexto longitudinal: {len(contexto_llm)} chars")
 
@@ -305,6 +311,7 @@ def analizar(etiqueta: str, transcripto: Transcripto, paciente_id: str | None) -
     if not isinstance(nota, dict):
         raise PipelineError("llm_invalido", "El modelo no devolvio una nota")
     datos = resultado.get("datosEstructurados") or {}
+    datos["riesgoLexico"] = buscar_menciones(transcripto.transcripcion_fmt)
     datos["speechAnalytics"] = transcripto.speech_metrics
     if diag.advertencias:
         logger.info(f"[{etiqueta}] {len(diag.advertencias)} advertencia(s) de forma")
@@ -366,6 +373,8 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
             return borrar_transcript_asr(trabajo.get("payload") or {})
         if tipo == "generar_feedback":
             return generar_feedback(trabajo.get("adjunto") or {})
+        if tipo == "integrar_contexto":
+            return integrar_contexto(trabajo.get("adjunto"), trabajo.get("payload"))
         return {"ok": False, "error": f"tipo no soportado: {tipo}"}
     except Exception as e:
         return {"ok": False, "error": f"{type(e).__name__}: {_describir(e)}"[:500]}
@@ -407,6 +416,41 @@ def generar_feedback(adjunto: dict) -> dict:
         "promptVersion": prompt_feedback,
         "modeloLlm": f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}",
     }
+
+
+def integrar_contexto(adjunto: dict, payload: dict) -> dict:
+    """La app entrega una base inmutable y la nota aprobada; la IA solo propone."""
+    from datetime import date
+    campos = {"tipo", "pacienteId", "sesionId", "version", "contextoVigente", "notaFinal", "datos", "fechaSesion"}
+    if (not isinstance(adjunto, dict) or set(adjunto) != campos or not isinstance(payload, dict)
+            or adjunto["tipo"] != "integrar_contexto"
+            or adjunto["sesionId"] != payload.get("sesionId")
+            or adjunto["pacienteId"] != payload.get("pacienteId")
+            or type(adjunto["version"]) is not int or adjunto["version"] < 0
+            or adjunto["version"] != payload.get("basadaEnVersion")):
+        raise ValueError("Adjunto de Recorrido inválido")
+    contexto = adjunto["contextoVigente"]
+    if contexto is not None:
+        validar_estructura_contexto(contexto)
+    if (contexto is None) != (adjunto["version"] == 0):
+        raise ValueError("Base de Recorrido incompatible")
+    nota = adjunto["notaFinal"]
+    if not isinstance(nota, dict) or set(nota) != {"subjetivo", "objetivo", "analisis", "plan"} or any(not isinstance(v, str) for v in nota.values()):
+        raise ValueError("Nota aprobada inválida")
+    if not isinstance(adjunto["datos"], dict):
+        raise ValueError("Datos de sesión inválidos")
+    fecha = adjunto["fechaSesion"]
+    try:
+        if not isinstance(fecha, str) or len(fecha) != 10 or date.fromisoformat(fecha).isoformat() != fecha:
+            raise ValueError()
+    except ValueError:
+        raise ValueError("Día de sesión inválido") from None
+    datos = {k: v for k, v in adjunto["datos"].items() if k != "riesgoLexico"}
+    propuesta, prompt = clinical_analyzer.actualizar_contexto_clinico(
+        contexto or {}, nota, datos, adjunto["sesionId"], fecha,
+    )
+    validar_estructura_contexto(propuesta)
+    return {"ok": True, "propuesta": propuesta, "promptVersion": prompt, "modeloLlm": f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"}
 
 
 def _describir(e: Exception) -> str:

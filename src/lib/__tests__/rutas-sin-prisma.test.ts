@@ -32,7 +32,6 @@ const EXCEPCIONES_TEMPORALES: Record<string, string> = {
   // Las dos leen sesiones para la ficha y el recorrido: se rehacen en la
   // Ola 2 con el grabador y el Recorrido (docs/pendientes/cierre-ola-1.md).
   "pacientes/[id]/documentacion/route.ts": "Ola 2 (sesión clínica)",
-  "pacientes/[id]/progreso/route.ts": "Ola 2 (recorrido)",
 };
 
 /**

@@ -214,9 +214,10 @@ describe("Para vos", () => {
   it("integrar_contexto sin quien lo aplique responde 501 y el trabajo sigue reclamado", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "aprobada", notaIa: NOTA });
     await crearTrabajo({ prisma: base.db, tipo: "integrar_contexto", payload: { sesionId, pacienteId: org.pacienteId }, organizationId: org.orgId, sesionId, pacienteId: org.pacienteId });
-    const t = await entregado(sesionId);
-    expect(t.adjunto).toBeNull();
-    await expect(codigo(aplicarResultadoTrabajo({ prisma: base.db, trabajo: t.autorizado, resultado: { ok: true, propuesta: {} } }))).resolves.toBe(501);
+    const lista = await entregarTrabajos({ prisma: base.db, ahora: AHORA, limite: 50, adjuntos: {} });
+    const t = lista.find(x => (x.payload as { sesionId: string }).sesionId === sesionId)!;
+    const trabajo = await autorizarTicketTrabajo(pedidoConTicket(t.ticket), base.db, t.trabajoId);
+    await expect(codigo(aplicarResultadoTrabajo({ prisma: base.db, trabajo, resultado: { ok: true, propuesta: {} }, aplicadores: {} }))).resolves.toBe(501);
     expect((await base.prisma.trabajo.findUniqueOrThrow({ where: { id: t.trabajoId } })).estado).toBe("en_curso");
   });
 });

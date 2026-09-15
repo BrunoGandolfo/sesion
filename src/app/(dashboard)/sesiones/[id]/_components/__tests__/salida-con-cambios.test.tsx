@@ -110,6 +110,19 @@ function corregirLaS(texto: string) {
   fireEvent.blur(campo);
 }
 
+it("las menciones se leen en la nota y la aprobación envía confirmoMenciones", async () => {
+  const fila = { ...sesionEnRevision(), datos: { riesgoLexico: { coincidencias: [{ termino: "morir", timestamp: "00:10", quote: "Dijo que quería morir" }] } } } as SesionClinicaResponse;
+  vi.mocked(apiGet).mockResolvedValueOnce(fila);
+  vi.mocked(apiPost).mockResolvedValueOnce({ ...fila, estado: "aprobada", notaFinal: NOTA });
+  await abrirLaNota();
+  expect((screen.getByRole("button", { name: /Aprobar/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("Dijo que quería morir")).toBeTruthy();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Leí las menciones" }));
+  fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: /Aprobar/ }));
+  await waitFor(() => expect(vi.mocked(apiPost).mock.calls.at(-1)?.[1]).toMatchObject({ generacion: 1, confirmoMenciones: true }));
+});
+
 describe("Volver con correcciones sin aprobar", () => {
   beforeEach(() => back.mockClear());
 

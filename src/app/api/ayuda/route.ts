@@ -14,8 +14,7 @@
 // decía. detalleSeguro además tira las claves de la lista negra, pero la
 // primera línea de defensa es no mandarlo.
 //
-// El evento que se escribe acá es también el que cuenta el tope diario: una
-// fila por pregunta contestada. Ver contarPreguntasDelDia.
+// El cupo se reserva antes del proveedor; la auditoría no decide el límite.
 
 import { z } from "zod";
 import { MODELO_AYUDA } from "@/lib/anthropic-mensajes";
@@ -26,12 +25,12 @@ import { registrarAuditoria } from "../_lib/auditoria";
 import { getSessionActor } from "../_lib/auth";
 import {
   ACCION_AYUDA,
-  assertBajoElTope,
   ENTIDAD_AYUDA,
   LARGO_MAX_PREGUNTA,
   MAX_TURNOS_HISTORIAL,
   responderAyudaStreaming,
 } from "../_lib/casos-uso/responder-ayuda";
+import { reservarCupo, devolverCupo } from "../_lib/casos-uso/ayuda/reservar-cupo";
 import { errorResponse, validationError } from "../_lib/responses";
 
 export const runtime = "nodejs";
@@ -61,18 +60,24 @@ export async function POST(request: Request) {
     }
 
     // Antes de gastar una llamada al proveedor.
-    await assertBajoElTope(db, { organizationId, userId });
-
-    const flujo = await responderAyudaStreaming({
-      pregunta: parsed.data.pregunta,
-      historial: parsed.data.historial,
-    });
+    const reserva = await reservarCupo(db, userId);
+    let flujo: Awaited<ReturnType<typeof responderAyudaStreaming>>;
+    try {
+      flujo = await responderAyudaStreaming({ pregunta: parsed.data.pregunta, historial: parsed.data.historial });
+    } catch (error) {
+      await devolverCupo(db, reserva);
+      throw error;
+    }
     const codificador = new TextEncoder();
+    let recibioFragmento = false;
+    let cancelado = false;
     const cuerpo = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
           let estado: EstadoMarkdown = { pendiente: "", linea: "inicio" };
           for await (const fragmento of flujo.fragmentos) {
+            if (fragmento.length) recibioFragmento = true;
+            if (cancelado) return;
             const limpio = limpiarMarkdown(fragmento, estado);
             estado = limpio.estado;
             if (limpio.texto) controller.enqueue(codificador.encode(limpio.texto));
@@ -81,8 +86,7 @@ export async function POST(request: Request) {
           if (cierre.texto) controller.enqueue(codificador.encode(cierre.texto));
           const resultado = await flujo.resultado;
           const textoCompleto = limpiarMarkdown(resultado.texto);
-          // La pregunta sólo consume cuota cuando Anthropic cerró un mensaje
-          // completo. El stream HTTP tampoco cierra antes de dejar este rastro.
+          // El stream cierra después del rastro; el cupo ya quedó reservado.
           await registrarAuditoria({
             organizationId,
             actorTipo: "usuario",
@@ -102,11 +106,14 @@ export async function POST(request: Request) {
           });
           controller.close();
         } catch (error) {
-          console.error("[ayuda] stream interrumpido", error);
+          if (!recibioFragmento && !cancelado) await devolverCupo(db, reserva);
+          console.error("[ayuda] stream interrumpido");
+          if (cancelado) return;
           controller.error(error);
         }
       },
       cancel() {
+        cancelado = true;
         flujo.cancelar();
       },
     });

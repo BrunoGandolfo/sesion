@@ -15,6 +15,7 @@ def _resp(mocker, status: int, body=None, text: str = ""):
     r.status_code = status
     r.ok = 200 <= status < 300
     r.text = text
+    r.headers = {"Content-Type": "application/json; charset=utf-8"}
     r.json.return_value = body if body is not None else {}
     if status >= 400:
         r.raise_for_status.side_effect = requests.HTTPError(f"HTTP {status}")
@@ -41,9 +42,10 @@ def test_obtener_pendientes_manda_el_secreto_y_el_latido(mocker):
     assert get.call_args.kwargs["timeout"] == app_client.TIMEOUT_LECTURA_SEG
 
 
-def test_obtener_pendientes_ignora_cuerpos_que_no_son_lista(mocker):
+def test_obtener_pendientes_rechaza_cuerpos_que_no_son_lista(mocker):
     mocker.patch("app_client.requests.get", return_value=_resp(mocker, 200, {"data": []}))
-    assert app_client.obtener_pendientes() == []
+    with pytest.raises(requests.RequestException):
+        app_client.obtener_pendientes()
 
 
 def test_obtener_pendientes_propaga_5xx(mocker):
@@ -146,18 +148,50 @@ def test_las_escrituras_no_loguean_el_payload(mocker, caplog):
 
 # Contexto para el prompt ───────────────────────────────────────────────────
 
-def test_contexto_llm_devuelve_texto_o_none(mocker):
-    get = mocker.patch("app_client.requests.get")
+def test_contexto_llm_vacio_explicito_y_ticket(mocker):
+    get = mocker.patch("app_client.requests.get", return_value=_resp(mocker, 200, {
+        "data": {"tipo": "hilo_vigente", "pacienteId": "p1", "version": 0, "contenido": None},
+    }))
+    assert app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET) is None
+    assert get.call_args.kwargs["params"] == {"format": "llm", "sesionId": "s1"}
+    assert get.call_args.kwargs["allow_redirects"] is False
+    assert get.call_args.kwargs["headers"]["Authorization"] == f"Bearer {TICKET}"
 
-    get.return_value = _resp(mocker, 200, text="  # contexto  \n")
-    assert app_client.obtener_contexto_clinico_llm("p1") == "# contexto"
-    assert get.call_args.kwargs["params"] == {"format": "llm"}
 
-    get.return_value = _resp(mocker, 404)
-    assert app_client.obtener_contexto_clinico_llm("p1") is None
+@pytest.mark.parametrize("status", [301, 302, 307, 308, 204, 401, 404, 500])
+def test_contexto_no_confunde_http_inesperado_con_hilo_vacio(mocker, status):
+    get = mocker.patch("app_client.requests.get", return_value=_resp(mocker, status))
+    with pytest.raises(requests.RequestException):
+        app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET)
+    assert get.call_count == 1
+    assert get.call_args.kwargs["allow_redirects"] is False
 
-    get.side_effect = requests.ConnectionError("boom")
-    assert app_client.obtener_contexto_clinico_llm("p1") is None
+
+@pytest.mark.parametrize("mime", ["text/html", "text/plain", ""])
+def test_contexto_rechaza_login_aunque_sea_200(mocker, mime):
+    resp = _resp(mocker, 200, text="<html>login</html>")
+    resp.headers = {"Content-Type": mime}
+    mocker.patch("app_client.requests.get", return_value=resp)
+    with pytest.raises(requests.RequestException):
+        app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET)
+
+
+@pytest.mark.parametrize("body", [[], {}, {"data": None}, {"data": {"tipo": "hilo_vigente", "pacienteId": "otra", "version": 0, "contenido": None}}, {"data": {"tipo": "hilo_vigente", "pacienteId": "p1", "version": 1, "contenido": {}}}])
+def test_contexto_valida_forma_e_identidad(mocker, body):
+    mocker.patch("app_client.requests.get", return_value=_resp(mocker, 200, body))
+    with pytest.raises(requests.RequestException):
+        app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET)
+
+
+def test_contexto_red_y_json_roto_son_error(mocker):
+    get = mocker.patch("app_client.requests.get", side_effect=requests.ConnectionError())
+    with pytest.raises(requests.RequestException):
+        app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET)
+    get.side_effect = None
+    get.return_value = _resp(mocker, 200)
+    get.return_value.json.side_effect = ValueError("JSON roto")
+    with pytest.raises(requests.RequestException):
+        app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET)
 
 
 def test_lease_envia_huecos_con_ticket(mocker):

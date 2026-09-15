@@ -111,7 +111,7 @@ El default es claude-sonnet-5; las opciones efectivas viven en
 el checkpoint, incrementa la generación, pasa a revision y crea
 generar_feedback en la misma transacción. Para vos se procesa por separado;
 no bloquea la nota. Los tipos de trabajo que este worker ejecuta hoy son
-borrar_transcript_asr y generar_feedback.
+borrar_transcript_asr, generar_feedback e integrar_contexto.
 
 ## Revisión, aprobación y limpieza
 
@@ -132,14 +132,15 @@ Un trabajo fallido necesita seguimiento; no se promete reintento infinito.
 Destruir la clave de la fila activa no elimina una clave cifrada que ya haya
 entrado en un backup. Su alcance está en `docs/encryption.md`.
 
-## Recorrido pendiente
+## Recorrido y propuestas
 
-Aprobar encola integrar_contexto, pero `processor/processor.py` todavía no
-lo ejecuta. La lectura longitudinal de `processor/app_client.py` sigue
-apuntando a una ruta anterior ausente y tolera el 404 sin contexto.
-`processor/contexto_worker.py` conserva código previo; no constituye la
-implementación nueva. No está garantizada la actualización del hilo ni su
-inyección en la nota. Ver `docs/pendientes/cierre-ola-1.md`.
+Aprobar encola integrar_contexto. `processor/processor.py` lo ejecuta con la
+versión vigente y la nota aprobada adjuntas al trabajo; el aplicador guarda
+una propuesta cifrada sin cambiar la vigente. La profesional acepta, edita
+o rechaza. Las escrituras insertan versiones y preservan las anteriores.
+La lectura de `processor/app_client.py` exige un ticket de sesión, JSON
+validado y ausencia de redirecciones. Una lectura fallida es un error, no
+un contexto vacío. Contratos y verificación: `docs/pendientes/04-recorrido.md`.
 
 ## Verificación y operación
 

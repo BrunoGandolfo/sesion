@@ -15,6 +15,9 @@ y enums de valores fijos.
 """
 
 import json
+import re
+from datetime import date
+from uuid import UUID
 from pathlib import Path
 
 # Enums compartidos con la app ──────────────────────────────────────────────
@@ -171,7 +174,7 @@ SCHEMA_NOTA = _obj({
     }),
 })
 
-# Contexto clínico longitudinal — update_context_v2.0.md ────────────────────
+# Recorrido propuesto — update_context_v2.1.md ───────────────────────────────
 
 SCHEMA_CONTEXTO = _obj({
     "hipotesisDiagnostica": _STR_NULL,
@@ -186,7 +189,7 @@ SCHEMA_CONTEXTO = _obj({
     "intervencionesProbadas": _arr(_obj({
         "tecnica": _enum(*TIPOS_INTERVENCION),
         "eficaciaPercibida": _enum(*CONFIANZAS_MODELO),
-        "sesiones": _arr(_INT),
+        "sesiones": _arr(_STR),
     })),
     "temasRecurrentes": _arr(_obj({"tema": _STR, "conteo": _INT})),
     "riesgosHistoricos": _arr(_obj({
@@ -195,7 +198,7 @@ SCHEMA_CONTEXTO = _obj({
         "flag": _enum(*FLAGS_RIESGO),
         "detalle": _STR,
     })),
-    "ultimaSesionId": _STR,
+    "cambios": _arr(_STR),
 })
 
 # Feedback terapeuta CBT/MI — therapist_feedback_v1.0.md ────────────────────
@@ -425,18 +428,57 @@ def validar_estructura_feedback_gestalt(feedback: object) -> None:
 
 
 def validar_estructura_contexto(contexto: object) -> None:
-    _exigir_claves(
-        contexto,
-        (
-            "hipotesisDiagnostica",
-            "resumenAcumulativo",
-            "objetivosTerapeuticos",
-            "intervencionesProbadas",
-            "temasRecurrentes",
-            "riesgosHistoricos",
-        ),
-        "contexto clinico",
-    )
+    """Contrato completo: campos, tipos anidados, enums, límites y fechas civiles."""
+    def forma(valor, schema):
+        tipos = schema["type"] if isinstance(schema["type"], list) else [schema["type"]]
+        tipo = {dict: "object", list: "array", str: "string", int: "integer", type(None): "null"}.get(type(valor))
+        if tipo not in tipos or ("enum" in schema and valor not in schema["enum"]):
+            raise ValueError("Recorrido: tipo o enum inválido")
+        if tipo == "object":
+            if set(valor) != set(schema["properties"]):
+                raise ValueError("Recorrido: campos inválidos")
+            for clave, propiedad in schema["properties"].items():
+                forma(valor[clave], propiedad)
+        elif tipo == "array":
+            for item in valor:
+                forma(item, schema["items"])
+
+    def texto(valor, maximo=20_000):
+        if not valor.strip() or len(valor) > maximo:
+            raise ValueError("Recorrido: texto fuera de límite")
+
+    def dia(valor):
+        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", valor) or date.fromisoformat(valor).isoformat() != valor:
+            raise ValueError("Recorrido: día inválido")
+
+    forma(contexto, SCHEMA_CONTEXTO)
+    for campo, maximo in (("hipotesisDiagnostica", 20_000), ("resumenAcumulativo", 60_000)):
+        if contexto[campo] is not None and len(contexto[campo]) > maximo:
+            raise ValueError("Recorrido: texto fuera de límite")
+    for campo, maximo in (("objetivosTerapeuticos", 200), ("intervencionesProbadas", 200), ("temasRecurrentes", 200), ("riesgosHistoricos", 2000), ("cambios", 100)):
+        if len(contexto[campo]) > maximo:
+            raise ValueError("Recorrido: lista fuera de límite")
+    for obj in contexto["objetivosTerapeuticos"]:
+        texto(obj["id"], 120)
+        texto(obj["descripcion"])
+        dia(obj["fechaInicio"])
+        if obj["fechaCierre"] is not None:
+            dia(obj["fechaCierre"])
+    for intervencion in contexto["intervencionesProbadas"]:
+        if len(intervencion["sesiones"]) > 2000:
+            raise ValueError("Recorrido: referencias de sesión fuera de límite")
+        for sesion_id in intervencion["sesiones"]:
+            UUID(sesion_id)
+    for tema in contexto["temasRecurrentes"]:
+        texto(tema["tema"])
+        if tema["conteo"] < 1:
+            raise ValueError("Recorrido: conteo inválido")
+    for riesgo in contexto["riesgosHistoricos"]:
+        UUID(riesgo["sesionId"])
+        dia(riesgo["fecha"])
+        texto(riesgo["detalle"])
+    for cambio in contexto["cambios"]:
+        texto(cambio)
 
 
 # Saneo de escalas — no bloqueante ──────────────────────────────────────────

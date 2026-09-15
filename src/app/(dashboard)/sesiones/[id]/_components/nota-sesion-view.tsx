@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { MencionesNota, CLAVE_MENCIONES } from "@/components/clinico/MencionesNota";
 
 import { RiesgoDetectadoBanner } from "@/components/grabacion/RiesgoDetectadoBanner";
 import type {
@@ -75,6 +76,8 @@ export function NotaSesionView({
 
       {selector}
       {aviso}
+
+      <MencionesNota datos={datos} editable={editable} revisada={revisadas?.has(CLAVE_MENCIONES) ?? false} onRevisar={onRevisar} />
 
       <RiesgoDetectadoBanner
         riesgoDetectado={datos?.riesgoDetectado}

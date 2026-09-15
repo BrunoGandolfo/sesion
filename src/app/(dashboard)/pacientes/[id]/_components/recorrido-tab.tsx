@@ -8,7 +8,7 @@
 
 import * as React from "react";
 
-import { ContextoGoldenThreadView } from "@/components/clinico/ContextoGoldenThreadView";
+import { HiloView } from "@/components/clinico/HiloView";
 import { EL_HILO } from "@/lib/glosario";
 
 import { GraficosProgreso } from "./graficos/contenedor";
@@ -20,7 +20,7 @@ export function RecorridoTab({ pacienteId }: { pacienteId: string }) {
         <h2 id="el-hilo-heading" className="sr-only">
           {EL_HILO}
         </h2>
-        <ContextoGoldenThreadView pacienteId={pacienteId} />
+        <HiloView key={pacienteId} pacienteId={pacienteId} />
       </section>
 
       <React.Suspense fallback={null}>

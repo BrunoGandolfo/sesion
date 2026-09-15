@@ -11,7 +11,6 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
 
 import anthropic
 
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 PROMPTS = {
     "nota": "clinical_note_v3.1.1.md",
-    "contexto": "update_context_v2.0.md",
+    "contexto": "update_context_v2.1.md",
     "feedback_cbt_mi": "therapist_feedback_v1.1.md",
     "feedback_gestalt": "therapist_feedback_gestalt_v1.1.md",
 }
@@ -367,11 +366,10 @@ def actualizar_contexto_clinico(
     nota: dict,
     datos_estructurados: dict,
     sesion_clinica_id: str,
-    fecha: str | None = None,
-    numero_sesion: int = 0,
+    fecha: str,
 ) -> tuple[dict, str]:
     """
-    Actualiza el PacienteContextoClinico tras una nota SOAP aprobada, con el
+    Propone una nueva versión del Recorrido tras una nota SOAP aprobada, con el
     prompt de PROMPTS["contexto"] (bloques <sesion_actual>, <contexto_previo>,
     <nota_soap_aprobada>). Devuelve (contexto_actualizado, nombre_prompt).
     """
@@ -379,8 +377,7 @@ def actualizar_contexto_clinico(
     system_prompt = _cargar_prompt(nombre_prompt)
     sesion_actual = {
         "sesionClinicaId": sesion_clinica_id,
-        "fecha": fecha or date.today().isoformat(),
-        "numeroSesion": numero_sesion,
+        "fecha": fecha,
     }
     nota_soap = {"nota": nota, "datosEstructurados": datos_estructurados}
     user_content = (

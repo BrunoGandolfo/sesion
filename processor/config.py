@@ -70,12 +70,10 @@ WORKER_VERSION = os.getenv("WORKER_VERSION", "ola3")
 
 # Endpoints de la app ───────────────────────────────────────────────────────
 PENDIENTES_URL = f"{APP_BASE_URL}/api/sesion-clinica/pendientes"
-CALLBACK_URL = f"{APP_BASE_URL}/api/sesion-clinica/callback"
-APROBADAS_URL = f"{APP_BASE_URL}/api/sesion-clinica/aprobadas-sin-contexto"
 
 
-def contexto_clinico_url(paciente_id: str) -> str:
-    return f"{APP_BASE_URL}/api/pacientes/{paciente_id}/contexto-clinico"
+def hilo_url(paciente_id: str) -> str:
+    return f"{APP_BASE_URL}/api/pacientes/{paciente_id}/hilo"
 
 
 def r2_configurado() -> bool:

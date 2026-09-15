@@ -47,6 +47,8 @@ type HiloLongitudinalBrief = {
 
 type BriefResponse = {
   pacienteId: string;
+  propuestaPendiente: boolean;
+  notaPendiente: boolean;
   ultimaSesion: UltimaSesionBrief | null;
   hiloLongitudinal: HiloLongitudinalBrief | null;
   proximoTurno: {
@@ -103,6 +105,8 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
           Cuando apruebes la primera nota de sesión, acá vas a tener el hilo
           del proceso antes de cada encuentro.
         </p>
+        {brief.propuestaPendiente ? <p className="mt-3 text-sm">Hay una propuesta del Recorrido sin revisar.</p> : null}
+        {brief.notaPendiente ? <p className="mt-3 text-sm">Hay una nota pendiente de aprobación.</p> : null}
       </section>
     );
   }
@@ -148,6 +152,8 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
 
       {open ? (
         <div className="mt-4 flex flex-col gap-5">
+          {brief.propuestaPendiente ? <p className="text-sm">Hay una propuesta del Recorrido sin revisar. Este resumen usa la versión vigente.</p> : null}
+          {brief.notaPendiente ? <p className="text-sm">Hay una nota pendiente de aprobación; todavía no se incorpora a este resumen.</p> : null}
           {hayRiesgo ? (
             <div
               role="alert"
@@ -193,7 +199,7 @@ export function BriefPreSesion({ pacienteId }: { pacienteId: string }) {
           {ultimaSesion ? (
             <div className="flex flex-col gap-3">
               <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                Última sesión —{" "}
+                Última nota aprobada —{" "}
                 {fechaRelativa(new Date(ultimaSesion.fecha)).toLowerCase()}
               </p>
               {ultimaSesion.resumenSesion ? (

@@ -2,7 +2,7 @@
 //
 // Recibe la pregunta y el historial ya parseados, arma la llamada a Anthropic
 // y devuelve la respuesta con sus métricas. No lee `request`, no devuelve
-// `Response` y no toca la base salvo para contar (ver contarPreguntasDelDia).
+// `Response` y no toca la base. El cupo se reserva en reservar-cupo.ts.
 //
 // LO QUE NUNCA SALE DE ACÁ
 //
@@ -23,12 +23,9 @@ import {
   type FlujoMensajes,
 } from "@/lib/anthropic-mensajes";
 import { systemPromptAyuda } from "@/lib/ayuda-corpus";
-import type { db } from "@/lib/db";
-import { inicioDelDiaMvd } from "@/lib/fechas-montevideo";
 
 import { ApiError } from "../responses";
 
-type ClientePrisma = typeof db;
 
 /** Largo máximo de una pregunta. Mide caracteres, no tokens: es un tope
  *  contra el pegado accidental de media pantalla, no un control de gasto. */
@@ -46,8 +43,7 @@ export const MAX_TOKENS_RESPUESTA = 1024;
 /** Cuántas preguntas por usuaria por día. */
 export const TOPE_PREGUNTAS_DIA = 40;
 
-/** La acción con la que se auditan las preguntas. Es también la que cuenta
- *  el límite diario: si cambia acá, cambia el conteo. */
+/** La acción con la que se auditan las preguntas, independiente del cupo. */
 export const ACCION_AYUDA = "ayuda.pregunta";
 export const ENTIDAD_AYUDA = "usuario";
 
@@ -113,50 +109,6 @@ export function historialAMensajes(
       role: turno.rol === "usuaria" ? ("user" as const) : ("assistant" as const),
       content: turno.texto.trim(),
     }));
-}
-
-/**
- * Cuántas preguntas lleva hoy esta usuaria, contando los eventos de
- * auditoría del día de Montevideo. No hay tabla de cuotas: la auditoría ya
- * escribe una fila por pregunta contestada, y una fila más sería otra cosa
- * que puede quedar desincronizada.
- *
- * Consecuencia deliberada: solo cuentan las preguntas CONTESTADAS. Una
- * llamada que falló no gasta cuota — la usuaria no recibió nada por ella.
- */
-export async function contarPreguntasDelDia(
-  prisma: ClientePrisma,
-  params: { organizationId: string; userId: string; ahora?: Date },
-): Promise<number> {
-  const desde = inicioDelDiaMvd(params.ahora ?? new Date());
-
-  return prisma.eventoAuditoria.count({
-    where: {
-      organizationId: params.organizationId,
-      accion: ACCION_AYUDA,
-      entidad: ENTIDAD_AYUDA,
-      entidadId: params.userId,
-      creadoEn: { gte: desde },
-    },
-  });
-}
-
-/**
- * Lanza ApiError 429 si la usuaria ya llegó al tope del día.
- *
- * El conteo y la escritura del evento no son atómicos: dos pedidos
- * simultáneos en el borde pueden dejar pasar uno de más. Con una usuaria y
- * un tope de 40 no vale una transacción; el tope es contra el uso distraído,
- * no contra un atacante (que además necesita sesión).
- */
-export async function assertBajoElTope(
-  prisma: ClientePrisma,
-  params: { organizationId: string; userId: string; ahora?: Date },
-): Promise<void> {
-  const usadas = await contarPreguntasDelDia(prisma, params);
-  if (usadas >= TOPE_PREGUNTAS_DIA) {
-    throw new ApiError(MENSAJE_TOPE_DIARIO, 429);
-  }
 }
 
 /**

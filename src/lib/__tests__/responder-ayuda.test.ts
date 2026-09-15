@@ -1,41 +1,17 @@
-// Unitario — el caso de uso de la ayuda y el tope diario.
-//
-// Sin red y sin base: la llamada a Anthropic entra como parámetro y el
-// cliente Prisma es un doble que solo sabe contar (mismo patrón que
-// salud.test.ts). Lo que se prueba son las decisiones:
-//
-//   - sin clave configurada, 503 con un mensaje para la usuaria;
-//   - si el proveedor falla, 502 y NADA del error interno en el mensaje;
-//   - el historial se recorta a los últimos 6 turnos;
-//   - el corpus va en el system, cacheado, y la pregunta después;
-//   - el tope diario se cuenta sobre eventos_auditoria del día de Montevideo.
-//
-// El tope no necesita base: lo que hay que verificar es el WHERE que se le
-// pide a Prisma —accion, entidad, entidadId y el borde del día—, y eso se ve
-// mejor con un doble que contra una tabla vacía. El tipo del parámetro es el
-// cliente real, así que tsc igual chequea que la consulta exista.
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { crearMensaje, PedidoMensajes } from "@/lib/anthropic-mensajes";
 import { MODELO_AYUDA } from "@/lib/anthropic-mensajes";
-import { instanteMvd } from "@/lib/fechas-montevideo";
 
 import { ApiError } from "@/app/api/_lib/responses";
 import {
-  ACCION_AYUDA,
-  assertBajoElTope,
-  contarPreguntasDelDia,
-  ENTIDAD_AYUDA,
   historialAMensajes,
   LARGO_MAX_PREGUNTA,
   MAX_TOKENS_RESPUESTA,
   MAX_TURNOS_HISTORIAL,
   MENSAJE_PROVEEDOR_CAIDO,
   MENSAJE_SIN_CLAVE,
-  MENSAJE_TOPE_DIARIO,
   responderAyuda,
-  TOPE_PREGUNTAS_DIA,
   type TurnoAyuda,
 } from "@/app/api/_lib/casos-uso/responder-ayuda";
 
@@ -295,84 +271,3 @@ describe("responderAyuda — el pedido que arma", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// El tope diario
-// ────────────────────────────────────────────────────────────────────────────
-
-type WhereContado = Record<string, unknown>;
-
-/** Doble de Prisma que solo cuenta y guarda el where que le pidieron. */
-function prismaQueCuenta(cantidad: number) {
-  const wheres: WhereContado[] = [];
-  const prisma = {
-    eventoAuditoria: {
-      count: async ({ where }: { where: WhereContado }) => {
-        wheres.push(where);
-        return cantidad;
-      },
-    },
-  };
-  return {
-    // El caso de uso pide el cliente entero; acá solo se usa una consulta.
-    prisma: prisma as unknown as Parameters<typeof contarPreguntasDelDia>[0],
-    wheres,
-  };
-}
-
-describe("contarPreguntasDelDia", () => {
-  it("cuenta la acción, la entidad y la usuaria correctas", async () => {
-    const { prisma, wheres } = prismaQueCuenta(3);
-    const total = await contarPreguntasDelDia(prisma, {
-      organizationId: "org1",
-      userId: "u1",
-      ahora: new Date("2026-09-07T15:00:00.000Z"),
-    });
-
-    expect(total).toBe(3);
-    expect(wheres[0]).toMatchObject({
-      organizationId: "org1",
-      accion: ACCION_AYUDA,
-      entidad: ENTIDAD_AYUDA,
-      entidadId: "u1",
-    });
-    expect(ACCION_AYUDA).toBe("ayuda.pregunta");
-    expect(ENTIDAD_AYUDA).toBe("usuario");
-  });
-
-  it("el día empieza a la medianoche de MONTEVIDEO, no de UTC", async () => {
-    const { prisma, wheres } = prismaQueCuenta(0);
-    // 01:00 UTC del 8 son las 22:00 del 7 en Montevideo: el día que cuenta
-    // es el 7, no el 8. Con `new Date().setHours(0)` esto daría el 8 y el
-    // tope se reiniciaría a las 21:00 de la noche.
-    await contarPreguntasDelDia(prisma, {
-      organizationId: "org1",
-      userId: "u1",
-      ahora: new Date("2026-09-08T01:00:00.000Z"),
-    });
-
-    const rango = wheres[0].creadoEn as { gte: Date };
-    expect(rango.gte).toEqual(instanteMvd(2026, 8, 7));
-  });
-});
-
-describe("assertBajoElTope", () => {
-  const params = { organizationId: "org1", userId: "u1" };
-
-  it("deja pasar con 39 preguntas", async () => {
-    const { prisma } = prismaQueCuenta(TOPE_PREGUNTAS_DIA - 1);
-    await expect(assertBajoElTope(prisma, params)).resolves.toBeUndefined();
-  });
-
-  it("429 amable justo en el tope", async () => {
-    const { prisma } = prismaQueCuenta(TOPE_PREGUNTAS_DIA);
-    const error = await atrapar<ApiError>(assertBajoElTope(prisma, params));
-
-    expect(error).toBeInstanceOf(ApiError);
-    expect(error.status).toBe(429);
-    expect(error.message).toBe(MENSAJE_TOPE_DIARIO);
-    expect(error.message).toContain("Mañana se renueva");
-  });
-
-  it("el tope son 40", () => {
-    expect(TOPE_PREGUNTAS_DIA).toBe(40);
-  });
-});

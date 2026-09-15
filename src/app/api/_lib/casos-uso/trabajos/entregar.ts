@@ -4,16 +4,17 @@
 //   generar_feedback   → { transcripcionFormateada, speechAnalytics,
 //                          orientacionTeorica }
 //   borrar_transcript_asr → nada (el payload ya trae el transcriptId)
-//   integrar_contexto  → lo define el Área 4 (hilo): acá va `null`; ver
-//                        ADJUNTOS para engancharlo sin tocar este archivo.
+//   integrar_contexto  → versión de origen inmutable y nota aprobada.
 
 import type { Prisma, TipoTrabajo } from "@prisma/client";
 
 import type { db } from "@/lib/db";
 
 import { reclamarTrabajos, type TrabajoReclamado } from "./reclamar";
+import { adjuntoContexto } from "../hilo/trabajo";
+import type { BaseHilo } from "../hilo/base";
 
-type ClienteEntrega = Pick<typeof db, "trabajo" | "hiloVersion" | "sesionClinica" | "configuracion">;
+type ClienteEntrega = BaseHilo & Pick<typeof db, "configuracion">;
 
 /** Arma el adjunto de un tipo; null si no hay nada que adjuntar. */
 export type Adjuntador = (
@@ -45,9 +46,10 @@ async function adjuntoFeedback(prisma: ClienteEntrega, trabajo: TrabajoReclamado
   };
 }
 
-/** Un adjuntador por tipo. El Área 4 registra el de integrar_contexto. */
+/** Un adjuntador por tipo. */
 export const ADJUNTOS: Partial<Record<TipoTrabajo, Adjuntador>> = {
   generar_feedback: adjuntoFeedback,
+  integrar_contexto: adjuntoContexto,
 };
 
 export interface TrabajoEntregado {

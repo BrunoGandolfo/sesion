@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ChevronLeft } from "lucide-react";
 
 import { EsqueletoNotaCuerpo } from "@/components/esqueletos";
+import { exigeConfirmarMenciones, CLAVE_MENCIONES } from "@/components/clinico/MencionesNota";
 import { Button, Confirmar, Toast } from "@/components/ui";
 import { AnilloProgreso } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
@@ -197,7 +198,8 @@ export function SesionDetailView({
   // Aprobar no se habilita hasta que TODAS las casillas estén marcadas: una
   // por flag activo más la de la señal graduada. Sin señales, la lista está
   // vacía y `every` es true.
-  const puedeAprobar = !conflictoAprobacion && clavesRiesgo.every((clave) => revisadas.has(clave));
+  const requiereMenciones = exigeConfirmarMenciones(datos);
+  const puedeAprobar = !conflictoAprobacion && clavesRiesgo.every((clave) => revisadas.has(clave)) && (!requiereMenciones || revisadas.has(CLAVE_MENCIONES));
   const exigeConfirmarRiesgo = clavesRiesgo.includes(CLAVE_RIESGO_GRADUADO);
 
   const marcarRevisada = React.useCallback((clave: string, marcada: boolean) => {
@@ -249,6 +251,7 @@ export function SesionDetailView({
           generacion: edicion.generacion,
           notaEditada: edicion.nota,
           ...(exigeConfirmarRiesgo ? { confirmoRiesgo: true } : {}),
+          ...(requiereMenciones ? { confirmoMenciones: true } : {}),
         },
       );
       aplicar(fila);
