@@ -220,7 +220,8 @@ jobs:
 
   worker-tests:
     name: Worker tests
-    runs-on: ubuntu-latest
+    # La versión de ffmpeg de abajo corresponde a Ubuntu 24.04 (Noble).
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -235,6 +236,12 @@ jobs:
           cache-dependency-path: processor/requirements-dev.txt
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt pip-audit
+      - name: Instalar ffmpeg y ffprobe
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg=7:6.1.1-3ubuntu5
+          ffmpeg -version
+          ffprobe -version
       - name: Ejecutar pytest
         run: python -m pytest tests -q
       # Nadie auditaba las dependencias de Python. Bloqueante desde el primer
