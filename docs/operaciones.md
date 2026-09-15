@@ -85,6 +85,12 @@ Backup (`.github/workflows/backup.yml`): todos los días a las 06:00 UTC
 --cipher-algo AES256`, subida a `s3://$R2_BUCKET/backups/sesion-backup-<UTC>.dump.gpg`,
 verificación con `head-object`, retención 30 días.
 
+Ese «30 días» vale para las copias **diarias**. Las **mensuales** (día 1 de
+cada mes, prefijo `backups/mensuales/`) viven 366 días, y la limpieza diaria
+no las toca. La medición completa, y la discrepancia que eso abre con lo que
+declara el consentimiento, están en
+`docs/operaciones/retencion-respaldos.md`.
+
 Restauración (pasos que ya se ejecutaron con éxito contra una rama de prueba
 de Neon):
 

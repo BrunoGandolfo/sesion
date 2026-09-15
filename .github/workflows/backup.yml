@@ -67,20 +67,52 @@ jobs:
       - uses: actions/checkout@v5
 
       # ---------------------------------------------------------------------
-      # 0. Secretos primero. Si falta uno, se sabe acá y no en el paso 6.
+      # 0. Secretos primero, en DOS grupos, y el orden importa.
+      #
+      #    Antes los ocho eran obligatorios en el mismo bucle. Eso hacía que
+      #    la falta de una credencial de CORREO abortara el respaldo entero:
+      #    el 15/09/2026 las seis credenciales de respaldo estaban cargadas,
+      #    la base se podía copiar perfectamente, y no se copió porque
+      #    faltaban RESEND_API_KEY y ALERTA_CORREO (corrida 34963708935, el
+      #    job murió a los 8 segundos en este paso). Un problema del canal de
+      #    aviso se convertía en un día sin respaldo: el aviso pasaba a ser
+      #    más importante que el dato, que es exactamente al revés.
+      #
+      #    Ahora:
+      #      - grupo RESPALDO: sin esto no hay copia posible → abortar.
+      #      - grupo AVISO: sin esto la copia se hace igual, pero la corrida
+      #        termina en rojo al final (paso 10), porque un respaldo que no
+      #        puede avisar cuando se rompe es la mitad de un respaldo. El
+      #        rojo de la corrida es el canal de aviso de reemplazo: GitHub
+      #        le escribe al dueño cuando un workflow programado falla.
       # ---------------------------------------------------------------------
       - name: Verificar secrets
         run: |
           set -euo pipefail
-          faltan=""
-          for v in DATABASE_URL R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_ENDPOINT BACKUP_ENCRYPTION_KEY RESEND_API_KEY ALERTA_CORREO; do
-            if [ -z "${!v:-}" ]; then faltan="${faltan} ${v}"; fi
+
+          # El grupo de AVISO se evalúa PRIMERO y siempre deja escrita la
+          # bandera, para que los pasos de más abajo puedan leerla aunque el
+          # grupo de respaldo aborte en este mismo paso.
+          faltan_aviso=""
+          for v in RESEND_API_KEY ALERTA_CORREO; do
+            if [ -z "${!v:-}" ]; then faltan_aviso="${faltan_aviso} ${v}"; fi
           done
-          if [ -n "${faltan}" ]; then
-            echo "ERROR: faltan secrets:${faltan}" >&2
+          if [ -n "${faltan_aviso}" ]; then
+            echo "AVISO_CONFIGURADO=0" >> "$GITHUB_ENV"
+            echo "::warning::Sin canal de aviso (faltan:${faltan_aviso}). El respaldo se hace igual; la corrida va a terminar en rojo para que el fallo del aviso no pase inadvertido."
+          else
+            echo "AVISO_CONFIGURADO=1" >> "$GITHUB_ENV"
+          fi
+
+          faltan_respaldo=""
+          for v in DATABASE_URL R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_ENDPOINT BACKUP_ENCRYPTION_KEY; do
+            if [ -z "${!v:-}" ]; then faltan_respaldo="${faltan_respaldo} ${v}"; fi
+          done
+          if [ -n "${faltan_respaldo}" ]; then
+            echo "ERROR: faltan secrets del respaldo:${faltan_respaldo}" >&2
             exit 1
           fi
-          echo "Secrets presentes."
+          echo "Secrets del respaldo presentes."
 
       # ---------------------------------------------------------------------
       # 1. postgresql-client-17 (ubuntu-latest no lo trae). pg_dump debe ser
@@ -243,13 +275,33 @@ jobs:
           borrar_anteriores_a "backups/mensuales/"     "$(date -u -d '366 days ago' +'%Y-%m-%dT%H:%M:%SZ')"
 
       # ---------------------------------------------------------------------
-      # 9. Alerta por correo si cualquier paso previo falló.
+      # 9. Alerta por correo si cualquier paso previo falló. Sólo se intenta
+      #    si hay canal: si no lo hay, la acción fallaría por su cuenta y el
+      #    error visible sería "no se pudo mandar el correo", tapando el
+      #    error real del respaldo. Sin canal avisa el paso 10.
       # ---------------------------------------------------------------------
       - name: Avisar falla por correo
-        if: failure()
+        if: failure() && env.AVISO_CONFIGURADO == '1'
         uses: ./.github/actions/alerta-correo
         with:
           asunto: "Backup diario de la base falló"
           texto: |
             El backup de hoy no se completó. Hasta que se arregle, el último backup válido es el del día anterior.
             Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      # ---------------------------------------------------------------------
+      # 10. Sin canal de aviso la corrida termina en rojo A PROPÓSITO, haya
+      #     salido bien o mal el respaldo. No es que la copia falló: es que
+      #     este workflow no puede cumplir la segunda mitad de su trabajo,
+      #     que es avisar el día que se rompa. El rojo hace que GitHub le
+      #     escriba al dueño, y ése es el único canal que queda.
+      #
+      #     Para volver a verde: cargar RESEND_API_KEY y ALERTA_CORREO en
+      #     Settings → Secrets and variables → Actions.
+      # ---------------------------------------------------------------------
+      - name: Sin canal de aviso configurado
+        if: always() && env.AVISO_CONFIGURADO == '0'
+        run: |
+          set -euo pipefail
+          echo "::error::Faltan RESEND_API_KEY y/o ALERTA_CORREO. Si los pasos de arriba están en verde, la copia de hoy SE HIZO y está verificada en R2; lo que falta es el canal que avisa cuando el respaldo se rompe. Cargar los secrets en Settings → Secrets and variables → Actions."
+          exit 1
