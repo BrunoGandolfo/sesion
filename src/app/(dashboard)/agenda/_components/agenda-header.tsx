@@ -105,7 +105,7 @@ export function AgendaHeader({
               size={16}
               strokeWidth={1.8}
               aria-hidden="true"
-              className={`shrink-0 text-ink-500 transition-transform duration-150 ${
+              className={`shrink-0 text-ink-500 transition-transform duration-[var(--duration-fast)] ${
                 mesAbierto ? "rotate-180" : ""
               }`}
             />

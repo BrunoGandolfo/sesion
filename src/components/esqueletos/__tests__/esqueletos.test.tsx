@@ -113,8 +113,8 @@ describe("los esqueletos están quietos", () => {
     const css = leer("src/app/globals.css");
     const bloque = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
 
-    expect(bloque).toContain(".animate-pulse");
-    expect(bloque).toContain(".animate-spin");
+    expect(css).toMatch(/\.animate-pulse, \.animate-spin \{ animation: none; \}/);
+    expect(bloque).toContain("*, *::before, *::after");
     expect(bloque).toContain("animation: none");
   });
 });

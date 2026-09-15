@@ -76,7 +76,7 @@ export function Plegable({
             size={18}
             strokeWidth={1.8}
             aria-hidden="true"
-            className={`text-ink-500 transition-transform duration-150 ${
+            className={`text-ink-500 transition-transform duration-[var(--duration-fast)] ${
               abierto ? "rotate-180" : ""
             }`}
           />

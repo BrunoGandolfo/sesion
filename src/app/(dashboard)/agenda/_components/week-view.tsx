@@ -110,7 +110,7 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                       onClick={() => onEventClick(turno)}
                       style={{ top, height, left: `calc(${(columna / columnas) * 100}% + 2px)`, width: `calc(${100 / columnas}% - 4px)` }}
                       title={`${turno.paciente.nombre} ${turno.paciente.apellido} · ${hora(turno.fecha)}`}
-                      className={`absolute min-w-0 overflow-hidden rounded-sm border-l-[3px] px-1 py-0.5 text-left text-[11px] transition-[box-shadow] duration-150 hover:ring-2 hover:ring-sage-300 ${
+                      className={`absolute min-w-0 overflow-hidden rounded-sm border-l-[3px] px-1 py-0.5 text-left text-[11px] transition-[box-shadow] duration-[var(--duration-fast)] hover:ring-2 hover:ring-sage-300 ${
                         isPresencial
                           ? "bg-sage-100 border-l-sage-500"
                           : "bg-gold-50 border-l-gold-500"

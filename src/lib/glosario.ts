@@ -665,7 +665,7 @@ export const AYUDA_PANEL = "Ayuda de la app";
  *  misma respiración, lo que Lupita no ve: es la promesa de privacidad de la
  *  app, y se hace antes de que ella escriba nada. */
 export const AYUDA_BIENVENIDA =
-  "Soy la que sabe dónde quedó cada cosa. Vos preguntá, que yo busco.";
+  "Preguntame cómo usar Sesión.";
 
 export const AYUDA_PRIVACIDAD =
   "No veo pacientes ni montos. Solo conozco la ayuda de Sesión.";

@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Home, Calendar, Users, Wallet } from "lucide-react";
 
 import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
@@ -31,7 +32,7 @@ const INDICADOR = "nav-activo";
 
 export function BottomNav() {
   const pathname = usePathname();
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
   const [toquesLupita, setToquesLupita] = React.useState(0);
   const [ayudaAbierta, setAyudaAbierta] = React.useState(false);
 

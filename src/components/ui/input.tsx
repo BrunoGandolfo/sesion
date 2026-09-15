@@ -38,7 +38,7 @@ export function Input({
         </label>
       )}
       <div
-        className={`flex items-center bg-cream-50 border rounded-sm transition-colors duration-150 focus-within:bg-white focus-within:ring-[3px] focus-within:ring-sage-500/20 ${wrapperBorder}`}
+        className={`flex items-center bg-cream-50 border rounded-sm transition-colors duration-[var(--duration-fast)] focus-within:bg-white focus-within:ring-[3px] focus-within:ring-sage-500/20 ${wrapperBorder}`}
       >
         {prefix && (
           <span className="pl-[14px] text-[15px] text-ink-500 font-sans pointer-events-none select-none">

@@ -83,9 +83,8 @@
    Motion tokens
    ============================================ */
 :root {
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --duration-fast: 150ms;
-  --duration-normal: 220ms;
+  /* Los valores de movimiento llegan desde lib/movimiento.ts en el layout. */
+
 
   /* Borders */
   --border-subtle: var(--color-cream-200);
@@ -146,10 +145,16 @@ body {
    capa `utilities` y una regla sin capa le gana a cualquiera de ellas sin
    pelear por especificidad ni por !important.
    ============================================ */
+/* Los indicadores de carga permanecen quietos, en toda la app. */
+.animate-pulse, .animate-spin { animation: none; }
+
+*, *::before, *::after { transition-timing-function: var(--ease-out); }
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-pulse,
-  .animate-spin {
-    animation: none;
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }
 

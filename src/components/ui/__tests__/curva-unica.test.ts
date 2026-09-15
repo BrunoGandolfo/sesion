@@ -16,16 +16,18 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { SUAVE } from "@/components/ui/movimiento";
+import { SUAVE, VARIABLES_MOVIMIENTO } from "@/lib/movimiento";
 
 const RAIZ = path.resolve(__dirname, "../../../..");
 
 /** Donde vive la constante. Es el único archivo que puede escribirla. */
-const FUENTE = "src/components/ui/movimiento.tsx";
+const FUENTE = "src/lib/movimiento.ts";
 
 /** Todo lo que anima con framer-motion en la app. */
 const ARCHIVOS_QUE_ANIMAN = [
   FUENTE,
+  "src/components/ui/movimiento.tsx",
+  "src/components/ui/lupita.tsx",
   "src/components/ui/sheet.tsx",
   "src/components/ui/toast.tsx",
   "src/components/ui/confirmar.tsx",
@@ -45,14 +47,14 @@ function leer(relativo: string): string {
 }
 
 describe("la curva --ease-out", () => {
-  it("es la que declara globals.css", () => {
+  it("publica la misma curva para CSS y para Framer", () => {
     expect([...SUAVE]).toEqual([0.16, 1, 0.3, 1]);
-    expect(leer("src/app/globals.css")).toContain(
-      "--ease-out: cubic-bezier(0.16, 1, 0.3, 1)",
-    );
+    expect(VARIABLES_MOVIMIENTO["--ease-out"]).toBe("cubic-bezier(0.16, 1, 0.3, 1)");
+    expect(leer("src/app/layout.tsx")).toContain("style={VARIABLES_MOVIMIENTO");
+    expect(leer("src/app/globals.css")).toContain("transition-timing-function: var(--ease-out)");
   });
 
-  it("se escribe una sola vez, en movimiento.tsx", () => {
+  it("se escribe una sola vez, en lib/movimiento.ts", () => {
     const copias = ARCHIVOS_QUE_ANIMAN.filter((archivo) => {
       if (archivo === FUENTE) return false;
       const fuente = leer(archivo);

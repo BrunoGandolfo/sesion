@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+import { VARIABLES_MOVIMIENTO } from "@/lib/movimiento";
 import type { Metadata, Viewport } from "next";
 import { fraunces, jakarta } from "@/lib/fonts";
 import "./globals.css";
@@ -31,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es" className={`${fraunces.variable} ${jakarta.variable}`}>
+    <html style={VARIABLES_MOVIMIENTO as CSSProperties} lang="es" className={`${fraunces.variable} ${jakarta.variable}`}>
       <body>{children}</body>
     </html>
   );

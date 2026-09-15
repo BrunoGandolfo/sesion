@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useReducedMotion } from "framer-motion";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 
 import { Button } from "./button";
 import { AlturaAnimada, MS_PLIEGUE } from "./movimiento";
@@ -72,7 +72,7 @@ export function Confirmar({
   // hace que el navegador scrollee hacia una posición que en 220 ms ya no es
   // la misma. Con movimiento reducido no hay despliegue que esperar y el
   // foco entra en el acto, como antes.
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
   React.useEffect(() => {
     if (reducido) {
       cancelarRef.current?.focus();

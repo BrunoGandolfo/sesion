@@ -36,7 +36,7 @@ export function Textarea({
         </label>
       )}
       <div
-        className={`flex bg-cream-50 border rounded-sm transition-colors duration-150 focus-within:bg-white focus-within:ring-[3px] focus-within:ring-sage-500/20 ${wrapperBorder}`}
+        className={`flex bg-cream-50 border rounded-sm transition-colors duration-[var(--duration-fast)] focus-within:bg-white focus-within:ring-[3px] focus-within:ring-sage-500/20 ${wrapperBorder}`}
       >
         <textarea
           ref={ref}

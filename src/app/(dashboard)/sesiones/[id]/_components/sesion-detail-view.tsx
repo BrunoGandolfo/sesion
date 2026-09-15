@@ -369,7 +369,7 @@ export function SesionDetailView({
               }
               router.back();
             }}
-            className="inline-flex min-h-[44px] items-center gap-1 self-start font-sans text-[13px] text-ink-500 transition-colors duration-150 hover:text-ink-700"
+            className="inline-flex min-h-[44px] items-center gap-1 self-start font-sans text-[13px] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:text-ink-700"
           >
             <ChevronLeft size={16} strokeWidth={1.6} aria-hidden="true" />
             <span>{VOLVER}</span>
@@ -545,7 +545,7 @@ function AvisoAprobada({
       {conParaVos ? (
         <Link
           href={hrefDeVista(id, "para-vos")}
-          className="inline-flex min-h-[44px] items-center font-sans text-[14px] font-semibold text-sage-600 transition-colors duration-150 hover:text-sage-700"
+          className="inline-flex min-h-[44px] items-center font-sans text-[14px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:text-sage-700"
         >
           {LEER_PARA_VOS}
         </Link>

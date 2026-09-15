@@ -43,7 +43,7 @@ export function TeDeben({ deudores }: { deudores: DeudaPaciente[] }) {
               <Link
                 key={deudor.pacienteId}
                 href={`/pacientes/${deudor.pacienteId}`}
-                className="flex items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-cream-50"
+                className="flex items-center gap-3 px-4 py-3 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50"
               >
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-900">
                   {deudor.nombre} {deudor.apellido}

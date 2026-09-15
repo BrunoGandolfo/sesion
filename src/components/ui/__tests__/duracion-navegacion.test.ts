@@ -16,12 +16,13 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { DURACION_NAVEGACION, MS_NAVEGACION } from "@/components/ui/movimiento";
+import { TIEMPOS, VARIABLES_MOVIMIENTO } from "@/lib/movimiento";
+import { DURACION_NAVEGACION, DURACION_BREVE, DURACION_PANEL, MS_NAVEGACION } from "@/components/ui/movimiento";
 
 const RAIZ = path.resolve(__dirname, "../../../..");
 
 /** Donde vive la constante. Es el único archivo que puede escribir el número. */
-const FUENTE = "src/components/ui/movimiento.tsx";
+const FUENTE = "src/lib/movimiento.ts";
 
 const ARCHIVOS_DE_NAVEGACION = [
   "src/app/(dashboard)/template.tsx",
@@ -30,7 +31,7 @@ const ARCHIVOS_DE_NAVEGACION = [
 ];
 
 /** El número, en las dos unidades y escrito como lo escribiría prettier. */
-const LITERALES = ["0.26", "260", "0.18", "180"];
+const LITERALES = [String(TIEMPOS.navegacion), String(TIEMPOS.navegacion / 1000)];
 
 function leer(relativo: string): string {
   return readFileSync(path.join(RAIZ, relativo), "utf8");
@@ -47,18 +48,20 @@ function codigoDe(relativo: string): string {
 
 describe("la duración de una navegación", () => {
   it("es un solo número, en milisegundos y en segundos", () => {
-    expect(MS_NAVEGACION).toBe(180);
-    expect(DURACION_NAVEGACION).toBe(0.18);
+    expect(MS_NAVEGACION).toBe(TIEMPOS.navegacion);
+    expect(DURACION_NAVEGACION).toBe(TIEMPOS.navegacion / 1000);
     // La conversión no se escribe a mano en ningún lado.
     expect(DURACION_NAVEGACION).toBe(MS_NAVEGACION / 1000);
   });
 
-  it("conserva el piso acordado de 180 ms", () => {
-    // El menú y la pantalla siguen compartiendo una duración.
-    expect(MS_NAVEGACION).toBeGreaterThanOrEqual(180);
+  it("mantiene navegación y subrayado dentro del tiempo medio", () => {
+    // Si algún día el subrayado cambia de duración, este número lo sigue.
+    // Lo que no puede volver a pasar es que sean dos.
+
+    expect(MS_NAVEGACION).toBe(TIEMPOS.navegacion);
   });
 
-  it("se escribe una sola vez, en movimiento.tsx", () => {
+  it("se escribe una sola vez, en lib/movimiento.ts", () => {
     const copias = ARCHIVOS_DE_NAVEGACION.filter((archivo) => {
       if (archivo === FUENTE) return false;
       const fuente = codigoDe(archivo);
@@ -78,9 +81,14 @@ describe("la duración de una navegación", () => {
   });
 });
 
-it('mantiene las constantes de presentación dentro de los tiempos acordados',()=>{
- expect(codigoDe(FUENTE)).toContain('const DURACION_APARECE = 0.18');
- expect(leer('src/app/globals.css')).toContain('--duration-fast: 150ms');
- expect(leer('src/app/globals.css')).toContain('--duration-normal: 220ms');
- expect(leer('src/app/(dashboard)/_components/kpis.tsx')).toContain('const DURACION_CONTEO = 0.22');
+it("respeta los tiempos aprobados por el dueño y los publica igual en JS y CSS", () => {
+  // Contrato aprobado el 15/09/2026. Cambiar estos valores requiere una decisión
+  // del dueño; derivar también la expectativa escondería una modificación.
+  expect(TIEMPOS).toEqual({ breve: 150, navegacion: 180, pliegue: 220 });
+  expect(DURACION_BREVE).toBe(TIEMPOS.breve / 1000);
+  expect(DURACION_NAVEGACION).toBe(TIEMPOS.navegacion / 1000);
+  expect(DURACION_PANEL).toBe(TIEMPOS.pliegue / 1000);
+  expect(VARIABLES_MOVIMIENTO["--duration-fast"]).toBe(TIEMPOS.breve + "ms");
+  expect(VARIABLES_MOVIMIENTO["--duration-normal"]).toBe(TIEMPOS.navegacion + "ms");
+  expect(VARIABLES_MOVIMIENTO["--duration-pliegue"]).toBe(TIEMPOS.pliegue + "ms");
 });

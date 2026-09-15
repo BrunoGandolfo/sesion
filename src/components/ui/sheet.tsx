@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
-import { SUAVE } from "./movimiento";
+import { SUAVE, DURACION_BREVE, DURACION_PANEL } from "./movimiento";
 import estilosFormulario from "./sheet-formulario.module.css";
 
 /**
@@ -177,7 +178,7 @@ export function Sheet({
   // Lo que NO cambia es el foco: el panel se sigue enfocando al abrir, la
   // trampa de Tab sigue igual y el foco vuelve al disparador al cerrar. Eso
   // es lo que hace que el sheet sea un diálogo, y no depende de que se mueva.
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
 
   const entradaOverlay = reducido
     ? {}
@@ -185,7 +186,7 @@ export function Sheet({
         initial: { opacity: 0 },
         animate: { opacity: 1 },
         exit: { opacity: 0 },
-        transition: { duration: 0.2 },
+        transition: { duration: DURACION_BREVE, ease: SUAVE },
       };
 
   const entradaMobile = reducido
@@ -194,7 +195,7 @@ export function Sheet({
         initial: { y: "100%" },
         animate: { y: 0 },
         exit: { y: "100%" },
-        transition: { duration: 0.28, ease: SUAVE },
+        transition: { duration: DURACION_PANEL, ease: SUAVE },
       };
 
   // El panel lateral es una columna de alto completo: no scrollea entero
@@ -215,7 +216,7 @@ export function Sheet({
               animate: { opacity: 1, scale: 1 },
               exit: { opacity: 0, scale: 0.96 },
             }),
-        transition: { duration: lateral ? 0.28 : 0.2, ease: SUAVE },
+        transition: { duration: lateral ? DURACION_PANEL : DURACION_BREVE, ease: SUAVE },
       };
 
   if (!montado) return null;
