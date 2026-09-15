@@ -1,6 +1,6 @@
 # Cifrado en reposo de datos clínicos y personales
 
-Qué se cifra, cómo, y qué hacer con las claves. Describe el estado vigente
+Base: main e247d8b, 15 de septiembre de 2026. Qué se cifra, cómo, y qué hacer con las claves. Describe el estado vigente
 tras la reconstrucción (esquema nuevo, formato `ENC2`). El formato anterior
 (`ENC1`, una sola clave, sin rótulo por fila) no tiene datos que leer: la base
 se creó desde cero.
@@ -10,7 +10,7 @@ se creó desde cero.
 Extensión de Prisma Client `withEncryption` (`src/lib/prisma-encryption.ts`),
 aplicada al único cliente de `src/lib/db.ts`. Cada campo lógico vive en una
 columna `Bytes` (`*_encrypted`). Los campos lógicos no existen en
-`prisma/schema.prisma`: los define la tabla `CAMPOS_CIFRADOS` de la extensión,
+`prisma/schema.prisma`: los define la tabla CAMPOS_CIFRADOS de la extensión,
 que es el contrato del anexo de `docs/esquema.md`.
 
 | Modelo (tabla) | Campo lógico | Columna | Tipo al leer |
@@ -35,12 +35,12 @@ que es el contrato del anexo de `docs/esquema.md`.
 Quedan en claro, a propósito: nombre, apellido y teléfono de la paciente (la
 búsqueda, el orden de la agenda y el envío de SMS los necesitan en SQL),
 fechas y montos, `speech_analytics` (números), IP y navegador en
-`sesiones_acceso` e `intentos_acceso` (30 días). La lista completa está en
+`sesiones_acceso` e `intentos_acceso` (purgas según fecha y estado; no son treinta días desde la creación en todos los casos). La lista completa está en
 `docs/esquema.md`.
 
-El audio se cifra aparte, en el teléfono, con una clave por sesión (columna
-`audio_clave_encrypted`) y un IV por segmento (`audio_segmentos.iv`). Los
-backups de la base se cifran con gpg (`docs/operaciones.md`).
+El esquema PREVÉ audio cifrado por sesión (audio_clave_encrypted) y un IV por segmento (audio_segmentos.iv). La captura de main todavía guarda fragmentos locales sin cifrar y cifra el blob al terminar; no cumple la promesa de cifrado durante la grabación del consentimiento 2.0. La subida nueva está pendiente: ver `docs/pipeline.md`.
+
+Los backups de la base se cifran con gpg (`docs/operaciones.md`). El workflow retiene diarios treinta días y mensuales 366 días; el consentimiento sólo informa treinta. Además, una copia puede conservar la clave de un audio todavía no aprobado. Destruir la clave en la fila activa no vuelve inaccesibles esas copias si se conservan las claves necesarias para descifrarlas.
 
 ## 2. Cómo funciona
 
@@ -129,21 +129,23 @@ Sin ventana de mantenimiento:
 2. El cron diario de mantenimiento (`/api/cron/mantenimiento`) re-cifra hasta
    200 filas por corrida cuyo id de clave no sea el activo, en todas las
    columnas de §1. Para apurar: `GET /api/cron/mantenimiento?recifrar=todo`
-   con el `CRON_SECRET` corre hasta agotar o hasta 50 s. Devuelve
-   `{ recifradas, pendientes }`.
-3. Cuando `pendientes` da 0 y la consulta de §4 no muestra filas con id 1,
+   con el `CRON_SECRET` corre hasta agotar o hasta 50 s. Devuelve el objeto recifrado con recifradas, pendientes y errores.
+3. Cuando pendientes y errores dan 0 en TODAS las columnas,
    sacar `1=…` de la variable. Deploy. Si quedara una fila con una clave
    ausente, su lectura falla con `clave 1 ausente del llavero` (nunca un
    texto vacío): el paso 3 no se hace hasta que dé 0.
 4. Guardar la clave nueva en el gestor de contraseñas con fecha; la vieja se
-   conserva 30 días más (mientras haya backups que la necesiten) y se
-   destruye después.
+   conserva protegida mientras haya backups que la necesiten, incluidas las
+   copias mensuales de hasta 366 días y las que una limpieza fallida no haya
+   eliminado. Retirarla de la app activa no significa destruirla del archivo
+   de claves de recuperación.
 
-Incidentes ("creo que se filtró la clave"): `docs/operaciones.md` §3.
+Incidentes ("creo que se filtró la clave"): `docs/operaciones.md` §5.
 
 ## 4. Verificación rápida
 
-Prefijo y distribución por id de clave, por tabla:
+Muestra de distribución por id de clave en tres columnas (no certifica que
+el resto del esquema ya terminó de recifrarse):
 
 ```sql
 SELECT 'pacientes' AS tabla, get_byte(notas_encrypted, 4) AS id_clave, count(*)
@@ -165,13 +167,13 @@ hex) es un problema: la extensión falla al leer esa fila.
 - Cargar en Vercel con `printf 'CLAVES_CIFRADO=…'`, no `echo` (agrega un
   salto de línea).
 - CI usa `1=<32 bytes en cero en base64>` solo para pasar la validación al
-  importar `db.ts`; los tests de cifrado generan claves propias.
+  importar `src/lib/db.ts`; los tests de cifrado generan claves propias.
 - Sin la clave, las notas no se recuperan. Copia en el gestor de contraseñas,
   con fecha.
 
 ## 6. Tests
 
-- `src/lib/__tests__/llavero.test.ts`, `encryption.test.ts`: unitarios.
+- `src/lib/__tests__/llavero.test.ts`, `src/lib/__tests__/encryption.test.ts`: unitarios.
 - `src/lib/__tests__/prisma-encryption.test.ts`: unitario (cifrarX, guardas)
   e integración contra la base de test (`DATABASE_URL_TEST`, esquema nuevo),
   incluidos "blob movido de fila no descifra" y la rotación.

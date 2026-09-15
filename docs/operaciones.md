@@ -1,285 +1,238 @@
-# Operaciones
+# Operación de Sesión
 
-Dónde vive cada pieza, qué secretos existen, cómo se rotan, cómo se restaura
-un backup y qué trampas ya nos mordieron. Solo nombres de variables, nunca
-valores.
+Base: main e247d8b, 15 de septiembre de 2026. Los archivos citados describen
+automatismos del repositorio. No demuestran que una corrida, entrega o ajuste
+de consola haya ocurrido. Grabador y Recorrido siguen pendientes según
+`docs/pipeline.md`.
 
-## 1. Dónde vive cada pieza
+## 1. Servicios y publicación
 
-| Pieza | Servicio | Cómo se despliega |
-| --- | --- | --- |
-| App Next.js 16 (UI + API + crons) | Vercel | Vercel publica desde la rama `release` (Production Branch en el panel; el deploy desde `main` está apagado en `vercel.json`). `release` la mueve sólo `.github/workflows/publicar.yml`, cuando el CI de `main` terminó en verde y las migraciones se aplicaron a producción. Crons en `vercel.json`: `/api/cron/recordatorios` cada 5 min, `/api/cron/salud` cada hora, `/api/cron/trabajos` cada 10 min, `/api/cron/mantenimiento` a las 04:00 UTC. |
-| Postgres 17 | Neon | Rama `production` (la app). Los tests de integración NO usan Neon: el CI levanta un Postgres 17 efímero por corrida y en local se usa el contenedor de `docker-compose.yml` (o cualquier `postgres:17` en localhost). La rama `test` de Neon queda como alternativa explícita sin Docker, y agotó la cuota una vez (septiembre de 2026). |
-| Audio cifrado | Cloudflare R2, bucket `sesion-audio` | Sin deploy. CORS del bucket debe permitir el PUT desde el dominio de la app. |
-| Backups cifrados de la base | Cloudflare R2, prefijo `backups/` del bucket del secret `R2_BUCKET` | Los escribe GitHub Actions. |
-| Worker Python | Railway, servicio con `python worker.py` (`processor/railway.json`, reinicio `ON_FAILURE` hasta 10 veces) | Deploy desde el repo. |
-| ASR | AssemblyAI | Cuenta con API key. |
-| LLM | Anthropic | Workspace dedicado, con retención de datos deshabilitada (configuración de la consola, no del repo). Clave "identity-linked": exige `anthropic-workspace-id`. |
-| SMS | Twilio, subcuenta dedicada | Número emisor en E.164. La app le pasa a Twilio el `StatusCallback` (`https://sesionapp.app/api/sms/callback`) en cada mensaje; el webhook de mensajes entrantes (`https://sesionapp.app/api/sms/entrante`) se configura en el número, en la consola. Ver §7. |
-| Correo | Resend | API HTTP, sin SDK. Verificar el dominio antes de probar entregas reales. |
-| CI, publicación, backups y latido | GitHub Actions | `ci.yml` (cada push/PR a `main`), `publicar.yml` (main → release), `backup.yml` (diario), `ensayo-restauracion.yml` (mensual), `latido.yml` (cada 15 min). Todos avisan por correo con `.github/actions/alerta-correo`. |
-
-## 2. Secretos: qué existen y dónde
-
-Vercel (app):
-
-| Variable | Para qué |
+| Servicio | Código o configuración comprobable |
 | --- | --- |
-| `DATABASE_URL` | Rama `production` de Neon. |
-| `RESEND_API_KEY` | Correo transaccional por Resend. Dominio `sesionapp.app` verificado; remitente `no-responder@sesionapp.app`. Sin clave se registra el fallo sin revelar si existe la cuenta. |
-| `CLAVES_CIFRADO` | Llavero del cifrado en reposo, `"1=<base64>,2=<base64>"` (`docs/encryption.md`). No hay secreto de sesión: las sesiones son filas de `sesiones_acceso`. |
-| `INVITACIONES_PERMITIDAS` | TEMPORAL. Emails de las cuentas que pueden crear invitaciones (tope de 2 vigentes por cuenta, constante `MAX_INVITACIONES_VIGENTES`). Sin la variable nadie invita. |
-| `PROCESSING_SECRET` | Bearer con el que el worker reclama trabajo. Acepta lista separada por comas. Mismo valor en Railway. |
-| `CRON_SECRET` | Bearer de los crons. Acepta lista separada por comas. |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | URL prefirmada, HeadObject y borrado del audio. |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` | SMS. Sin `TWILIO_SMS_FROM` el cron no toca ningún envío (quedan pendientes). `TWILIO_AUTH_TOKEN` además valida la firma de los dos webhooks. Obligatorias en producción. |
-| `ALERTA_CORREO` | A dónde llega TODA alerta (cron de salud, despacho de SMS, health). Un solo canal, correo por Resend. Obligatoria en producción. |
-| `R2_PUBLIC_HOST` | Origen exacto de la URL prefirmada de R2 (`https://<bucket>.<accountId>.r2.cloudflarestorage.com`), para el `connect-src` de la CSP. Obligatoria en producción. |
-| `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` (opcionales) | Errores. |
-| `LEASE_MINUTES`, `MAX_INTENTOS_PROCESAMIENTO`, `CONTEXTO_DESDE` (opcionales) | Lease del worker y fecha de corte del contexto longitudinal. |
-| `SEED_SECRET`, `SEED_USER_PASSWORD` | Ya no las lee nadie: `/api/seed` se borró; el seed es `prisma/seed.ts` a mano en local. Se pueden quitar. |
+| Vercel | Next y API. `vercel.json` deshabilita deploys de main; la rama de producción debe estar configurada como release en el panel. |
+| Postgres | Prisma y esquema de `prisma/schema.prisma`. CI utiliza Postgres 17 efímero; local usa un contenedor propio por rama. |
+| R2 | Audio cifrado y backups. La app usa `src/lib/r2.ts`; el worker, `processor/r2_client.py`. |
+| Railway | Worker Python: `processor/railway.json` y `processor/worker.py`. |
+| AssemblyAI / Anthropic | Configuración del worker en `processor/config.py`. Lupita es una llamada aparte de la app, con `src/lib/anthropic-mensajes.ts`. |
+| Twilio / Resend | `src/lib/sms/` y `src/lib/correo.ts`. Requieren configuración de cuenta, número y dominio fuera de Git. |
 
-Las marcadas "obligatoria en producción" están en `src/lib/env-operacion.ts`: si falta alguna, `/api/health` contesta 503 (el monitor externo y `latido.yml` lo ven en el primer deploy) y el cron de salud lo cuenta como métrica crítica.
+`src/lib/consentimiento-hechos.ts` registra una verificación de retención
+cero de Anthropic fechada el 4 de septiembre. Ese dato no verifica por sí solo
+la consola actual, todas las claves ni ambos entornos. Revisarlo antes de
+habilitar datos reales.
 
-Railway (worker): ver `processor/.env.example`. Incluye `PROCESSING_SECRET`,
-credenciales R2 (`R2_ENDPOINT` con la URL del account), `ASSEMBLYAI_API_KEY`,
-`ANTHROPIC_API_KEY`, `ANTHROPIC_WORKSPACE_ID`.
+`.github/workflows/ci.yml` corre tipos, build, lint, tests con base efímera,
+guardias, auditoría de dependencias y tests del worker. Se puede ejecutar a mano
+sobre una rama. La publicación escucha un CI exitoso originado por push a main:
+`.github/workflows/publicar.yml` toma el SHA exacto, aplica migraciones con
+la conexión directa y recién después avanza release por fast-forward.
+Una corrida manual sobre una rama no publica.
 
-GitHub Actions (Settings → Secrets and variables → Actions):
+No hay que avanzar release a mano ni resolver una divergencia con force.
+Los pasos operativos de publicación están en el workflow; el CI verde no es
+una prueba de teléfono ni una confirmación de entrega de SMS.
 
-| Secret | Quién lo usa |
+### Crons declarados
+
+| HTTP | Frecuencia de `vercel.json` |
 | --- | --- |
-| `DATABASE_URL_PRODUCCION_DIRECTA` | `publicar.yml`: `prisma migrate deploy` contra producción antes de avanzar `release`. Conexión DIRECTA de Neon, sin `-pooler` (el workflow lo verifica). |
-| `DATABASE_URL` | `backup.yml`: origen del `pg_dump` (Neon `production`). |
-| `RESEND_API_KEY`, `ALERTA_CORREO` | Los cinco workflows, para avisar por correo cuando algo falla (CI en rojo, publicación fallida, backup fallido, ensayo fallido, latido caído). Sin ellos el step de alerta falla en rojo, a propósito. |
-| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT` | `backup.yml` y `ensayo-restauracion.yml`: subir y bajar el backup. |
-| `BACKUP_ENCRYPTION_KEY` | Passphrase gpg del backup. Guardar copia offline. |
+| `GET /api/cron/recordatorios` | Cada cinco minutos: despacho de envíos pendientes. |
+| `GET /api/cron/trabajos` | Cada diez minutos: trabajos que ejecuta la app. |
+| `GET /api/cron/salud` | Cada hora: métricas y alertas. |
+| `GET /api/cron/mantenimiento` | 04:00 UTC: purgas operativas y recifrado. |
 
-Variables de repositorio: `APP_URL` (opcional, default `https://sesionapp.app`) para `latido.yml`.
+Todos usan `CRON_SECRET`. `GET /api/health` comprueba salud y
+configuración operativa; `GET /api/estado-worker` expone el estado del worker.
+El latido externo corre cada quince minutos según
+`.github/workflows/latido.yml`. Un health verde no prueba el micrófono,
+el PUT del navegador ni la entrega de una nota.
 
-Ya no se usan y se pueden borrar: `DATABASE_URL_TEST` (el CI levanta su propio Postgres) y `BACKUP_ALERT_WEBHOOK` (las alertas van por correo).
+## 2. Variables y secretos por entorno
 
-Neon: contraseñas de los roles de cada rama (viven en las connection strings).
+`.env.example` es el catálogo de los nombres citados aquí. Las secciones
+de Actions y tests son un inventario: sus secretos se cargan en esos entornos,
+no en el navegador ni necesariamente en la app. El catálogo del worker
+permanece en `processor/.env.example`.
 
-## 3. Cómo se rota cada uno
-
-| Secreto | Pasos |
+| App (Vercel / local) | Uso |
 | --- | --- |
-| `PROCESSING_SECRET` | Sin ventana de 401: en Vercel `"viejo,nuevo"` y deploy; en Railway `"nuevo"` y redeploy; en Vercel `"nuevo"` y deploy. |
-| `CRON_SECRET` | Igual que `PROCESSING_SECRET` (lista). Vercel Cron manda el valor vigente de la variable. |
-| `CLAVES_CIFRADO` | En caliente: agregar `,2=<nueva>` con `printf`, deploy; el cron de mantenimiento re-cifra 200 filas por corrida (`GET /api/cron/mantenimiento?recifrar=todo` con el `CRON_SECRET` para apurar); cuando `pendientes` da 0, sacar `1=…` y deploy. Procedimiento completo en `docs/encryption.md` §3. |
-| Sesiones de la profesional | No hay secreto que rotar. Desde Configuración, "Cerrar sesión en los demás dispositivos"; o cambiar la contraseña, que cierra todas. Ver §7. |
-| Credenciales R2 | Crear token nuevo en Cloudflare, cargar en Vercel, Railway y GitHub Actions, borrar el viejo después. |
-| `ASSEMBLYAI_API_KEY` | Nueva key en AssemblyAI, cargar en Railway, redeploy. |
-| `ANTHROPIC_API_KEY` | Nueva key en el mismo workspace (o cambiar también `ANTHROPIC_WORKSPACE_ID`), cargar en Railway, redeploy. |
-| Twilio | Rotar el auth token de la subcuenta, cargar en Vercel, redeploy. El token también valida la firma de los webhooks: entre la rotación y el redeploy, los callbacks de estado devuelven 403 y los envíos de ese rato quedan en `aceptado` sin pasar a `entregado`; una respuesta "BAJA" de ese rato se pierde (la paciente puede mandarla de nuevo). |
-| `BACKUP_ENCRYPTION_KEY` | Cambiar el secret; los backups anteriores siguen cifrados con la passphrase vieja: conservarla hasta que expiren (30 días). |
-| Contraseña de Neon | Reset desde la consola de Neon, actualizar `DATABASE_URL` en Vercel y GitHub, `DATABASE_URL_TEST` si es la rama `test`. |
+| `DATABASE_URL` | Conexión a la base de la app. |
+| `CLAVES_CIFRADO` | Llavero ENC2. Conservar aparte las claves que necesitan los backups. |
+| `INVITACIONES_PERMITIDAS` | Cuentas habilitadas para invitar; sin lista no se crean invitaciones. |
+| `PROCESSING_SECRET` | Autoriza reclamos del worker; las escrituras posteriores usan tickets. |
+| `CRON_SECRET` | Autoriza crons. |
+| `ANTHROPIC_API_KEY` | Lupita. El worker carga su propia copia en su entorno. |
+| `RESEND_API_KEY`, `ALERTA_CORREO` | Correo y alertas. |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Acceso a objetos de audio. |
+| `R2_PUBLIC_HOST` | Origen exacto de R2 usado por el navegador, para la CSP. |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` | Despacho y firma de webhooks SMS. |
+| `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Reporte opcional de errores. |
+
+`src/lib/env-operacion.ts` exige en producción las variables de correo,
+cron, origen R2 y SMS que enumera. Su ausencia hace fallar health.
+Que exista una cadena no demuestra que el proveedor la acepte.
+
+| Tests / GitHub Actions | Uso |
+| --- | --- |
+| `DATABASE_URL_TEST` | Base local exclusiva, en el entorno de tests o su archivo de configuración. La suite la vacía. |
+| `DATABASE_URL_PRODUCCION_DIRECTA` | Publicación: migraciones antes de avanzar release; sin pooler. |
+| `DATABASE_URL` | Backup: origen del dump. |
+| `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Subida y lectura de backups. El endpoint también existe en el catálogo del worker. |
+| `BACKUP_ENCRYPTION_KEY` | Passphrase de gpg; guardar copia offline. |
+| `RESEND_API_KEY`, `ALERTA_CORREO` | Alertas de workflows. |
+| `APP_URL` | Variable opcional del repositorio para el latido; default del workflow: dominio público de Sesión. |
+
+El seed se ejecuta con `prisma/seed.ts` en local; no hay que configurar
+secretos de una ruta HTTP de seed eliminada. Los tiempos de lease y reintento
+de la sesión son constantes de `src/lib/sesion-clinica/estados.ts`.
+
+## 3. Rotación y sesiones
+
+- `PROCESSING_SECRET` acepta una lista separada por comas. Cargar viejo y
+  nuevo en la app, desplegar; cambiar el worker al nuevo; retirar el viejo
+  de la app después de verificar reclamos. Los tickets vigentes son credenciales
+  distintas: rotar el secreto de reclamo no los revoca automáticamente.
+- `CRON_SECRET` también admite lista. Coordinar el valor que envía el
+  programador con el que acepta el despliegue.
+- Para `CLAVES_CIFRADO`, seguir `docs/encryption.md`: agregar una clave,
+  recifrar, comprobar pendientes y errores, retirar la vieja del servicio activo.
+  Conservarla de forma protegida mientras haya backups que la requieran.
+- R2 y claves de proveedores: crear el reemplazo, actualizar todos los
+  entornos consumidores y comprobarlos antes de revocar el anterior.
+  Para Anthropic son dos consumidores: app y worker.
+- La sesión de acceso es un token opaco cuyo hash vive en sesiones_acceso.
+  Cambiar o restablecer la contraseña cierra todas las sesiones, incluida la
+  actual. Configuración permite cerrar otros dispositivos; no hay un secreto
+  de firma de sesión que rotar.
 
 ## 4. Backup y restauración
 
-Backup (`.github/workflows/backup.yml`): todos los días a las 06:00 UTC
-(03:00 Montevideo) y bajo demanda. `pg_dump --format=custom --no-owner
---no-privileges` con el cliente 17 por ruta completa
-(`/usr/lib/postgresql/17/bin/pg_dump`), cifrado `gpg --symmetric
---cipher-algo AES256`, subida a `s3://$R2_BUCKET/backups/sesion-backup-<UTC>.dump.gpg`,
-verificación con `head-object`, retención 30 días.
+`.github/workflows/backup.yml` declara backup diario a las 06:00 UTC
+y ejecución manual. Hace dump custom con cliente Postgres 17, verifica el índice
+con pg_restore, cifra con gpg AES-256, sube a R2 y compara tamaño remoto/local.
+El día 1 guarda además una copia mensual.
 
-Restauración (pasos que ya se ejecutaron con éxito contra una rama de prueba
-de Neon):
+**Retención real:** diarios, 30 días; mensuales, 366 días (el workflow los
+describe como doce meses). La limpieza se ejecuta cuando llega a ese paso
+una corrida: no garantiza borrado puntual si el workflow está fallando.
+El consentimiento de `src/lib/consentimiento.ts`, generado desde
+`src/lib/consentimiento-hechos.ts`, sólo declara 30 días. Esta diferencia
+queda pendiente de decisión; no se modifica aquí ni la política ni el texto.
 
-1. Bajar el archivo:
-   `aws s3 cp s3://<bucket>/backups/<archivo>.dump.gpg . --endpoint-url <R2_ENDPOINT>`
-2. Descifrar:
-   `gpg --decrypt --output <archivo>.dump <archivo>.dump.gpg` (pide la
-   passphrase de `BACKUP_ENCRYPTION_KEY`).
-3. Restaurar en una base vacía, usando la conexión **directa** (sin
-   `-pooler`) y el cliente 17:
-   `/usr/lib/postgresql/17/bin/pg_restore --no-owner --no-privileges --dbname "<DATABASE_URL de la rama destino>" <archivo>.dump`
-4. Verificar: contar filas de `sesiones_clinicas`, `pacientes`, `turnos`;
-   correr la consulta por id de clave de `docs/encryption.md` §4.
-5. Apuntar la app a esa rama solo si el objetivo es reemplazar producción.
-   `CLAVES_CIFRADO` tiene que contener todas las claves con las que se
-   cifraron los datos del dump (por eso una clave rotada se conserva 30 días
-   más, lo que duran los backups).
+El dump no incluye los archivos de audio, pero sí puede incluir la clave cifrada
+de una sesión que todavía no estaba aprobada. Destruir la clave de la fila actual
+no elimina esa copia. Para restaurar hacen falta la passphrase del backup y
+todas las claves ENC2 usadas por ese dump: conservarlas hasta que no quede
+ninguna copia que las necesite, incluidas mensuales y copias retenidas por fallos.
 
-## 5. Trampas conocidas
+Restaurar siempre primero en una base aislada y vacía:
 
-- **Pooler vs directo.** Las migraciones (`prisma migrate deploy`) y
-  `pg_restore` van por la conexión directa de Neon. El pooler (`-pooler` en el
-  host) no soporta todo lo que Prisma Migrate necesita.
-- **`DATABASE_URL_TEST` sin `-pooler`.** Los tests de integración hacen
-  `TRUNCATE ... CASCADE` y abren transacciones largas; con pooler fallan de
-  forma intermitente.
-- **`connect_timeout=15`.** Neon suspende el cómputo de la rama cuando está
-  ociosa y el primer connect tarda varios segundos. Sin ese parámetro en la
-  connection string, el primer request o el primer test fallan por timeout.
-- **Recargar la PWA tras cada deploy.** La app instalada en el teléfono
-  conserva la versión anterior hasta que se recarga. Después de un deploy,
-  cerrar y volver a abrir (o recargar) antes de probar.
-- **`prisma migrate dev` nunca contra producción.** Ese comando puede
-  resetear la base. Contra `production` solo `prisma migrate deploy`. Para
-  desarrollar migraciones usar una rama de Neon o la rama `test`.
-- **`printf`, no `echo`, al cargar claves en Vercel.** `echo` agrega `\n` y
-  la clave base64 deja de decodificar a 32 bytes; la app no arranca.
-- **Tests secuenciales.** `vitest.config.ts` tiene `fileParallelism: false`
-  porque todos los archivos de integración comparten la misma base (la
-  efímera del CI o el contenedor local) y la vacían con TRUNCATE. No volver
-  a activar el paralelismo.
-- **Tests de integración nunca contra Neon.** `src/lib/__tests__/db-test.ts`
-  sólo acepta un host local para `DATABASE_URL_TEST`; la rama `test` de Neon
-  agotó la cuota y tiró producción un fin de semana (septiembre de 2026).
-  Si el puerto 5433 de `docker-compose.yml` está ocupado por otro proyecto,
-  `docker run -d -e POSTGRES_PASSWORD=… -e POSTGRES_DB=sesion_test -p 127.0.0.1:5434:5432 --tmpfs /var/lib/postgresql/data postgres:17`
-  y `prisma migrate deploy` contra ese puerto.
-- **Si el borrado del audio en R2 falla al aprobar**, la sesión igual se
-  aprueba y `audioR2Key` se conserva para reintentar. La clave temporal se
-  destruye siempre, así que el blob remanente es inaccesible.
-- **CORS de R2.** Un 403 en el PUT del navegador casi siempre es CORS del
-  bucket, no credenciales.
+1. Descargar el backup elegido de R2 usando el endpoint y credenciales del
+   entorno de backups.
+2. Descifrar el archivo gpg sin publicar la passphrase; verificar el índice
+   del dump con pg_restore.
+3. Restaurar con pg_restore de Postgres 17, sin owner ni privilegios, con
+   exit-on-error y conexión directa a la base de destino.
+4. Ejecutar `scripts/ensayo/verificar-restauracion.mjs` contra esa base:
+   cantidades, columnas cifradas y claves foráneas.
+5. Probar además el descifrado de una nota con el llavero correspondiente.
+   El ensayo automático no hace este paso.
+6. Sólo después decidir si se reemplaza la conexión de la app. Los efectos
+   externos pendientes del dump también requieren revisión antes de activar
+   crons y worker contra la base restaurada.
 
+`.github/workflows/ensayo-restauracion.yml` restaura mensualmente el último
+backup diario en un Postgres efímero y publica el resultado. No valida el
+llavero clínico. El ensayo manual trimestral deja acta en
+`docs/operaciones/actas/`; `scripts/ci/acta-vigente.mjs` exige un acta
+con antigüedad máxima de cien días cuando ya existe alguna. Mientras no
+haya ninguna, sólo advierte hasta el 20 de diciembre de 2026 y luego falla.
+En esta base no hay un acta: un verde hoy no acredita restauración ni
+descifrado de una nota. La existencia del workflow tampoco prueba una corrida.
 
-## 6. Migraciones
+## 5. Incidentes y límites conocidos
 
-Las aplica `publicar.yml`, con `DATABASE_URL_PRODUCCION_DIRECTA`, ANTES de
-avanzar `release`: el código nuevo nunca se encuentra con un esquema viejo.
-Por eso una migración que viaja con código tiene que ser aditiva; una
-destructiva va en el despliegue siguiente (lo verifica
-`scripts/ci/migraciones.mjs`). Nadie aplica migraciones a mano como rutina.
+**Base caída.** Ver la conexión y disponibilidad de Postgres, health, latido
+y los logs del servidor. Un mensaje de acceso rechazado no descarta una caída
+de la base. Los tests de integración usan un contenedor local, separado del
+servicio desplegado.
 
-Si `publicar.yml` avisó que la migración falló, la base puede haber quedado a
-medias. En una terminal del dueño, con la URL directa (sin `-pooler`) cargada
-en `DATABASE_URL_PRODUCCION_DIRECTA` sin imprimirla:
+**Migración fallida.** Mirar el paso y el SHA en Publicar; ejecutar migrate
+status con la conexión directa antes de decidir cómo recuperar. No ejecutar
+migrate dev sobre producción. La guarda de
+`scripts/ci/migraciones.mjs` inspecciona cambios destructivos y drift;
+no sustituye evaluar el efecto de una migración.
 
-```sh
-DATABASE_URL="$DATABASE_URL_PRODUCCION_DIRECTA" npx prisma migrate status
-```
+**PUT a R2 rechazado.** En main aún falta la subida nueva. Para diagnosticar
+un despliegue que sí la implemente, comparar la petición real del navegador,
+el preflight y una petición equivalente fuera del navegador. Registrar status,
+cabeceras y código XML del proveedor, redactando firmas. No clasificar cualquier
+403 como CORS: revisar origen/métodos/headers del bucket, credenciales, expiración
+y headers firmados según la evidencia.
 
-y recién con eso leído, decidir si `migrate deploy` de nuevo o `migrate
-resolve`. Nunca `migrate dev` contra producción.
+**Audio pendiente de borrado.** La aprobación destruye audioClave y encola el
+borrado después de confirmar la base. Mirar trabajos, intentos y último error;
+no buscar una columna de key del audio del esquema anterior. El payload conserva
+prefijo e índices. Las políticas son acotadas, en
+`src/app/api/_lib/casos-uso/trabajos/politica.ts`.
 
-### Tablas de cuentas, en el esquema nuevo
+**Sesión de acceso filtrada.** Cerrar dispositivos y cambiar contraseña.
+Revisar sesiones_acceso e intentos_acceso. Un dump de hashes de tokens no
+equivale a las cookies en claro. Las purgas tienen condiciones por fecha y
+estado en `src/app/api/_lib/casos-uso/mantenimiento.ts`; no todo registro
+desaparece treinta días después de crearse.
 
+**Llavero filtrado.** Rotar protege escrituras futuras, no una copia que ya salió.
+Revisar alcance, backups, acceso a la base y credenciales relacionadas. No destruir
+la única clave de backups que deban conservarse antes de definir la recuperación.
 
-- `sesiones_acceso`: una fila por dispositivo entrado (hash del token de la
-  cookie, creación, último uso, vencimiento, cierre y motivo, IP y navegador
-  de la creación). Cerrar sesión cierra la fila; cambiar o restablecer la
-  contraseña cierra todas. Vigente = no cerrada, no vencida (30 días) y con
-  uso en los últimos 14 días.
-- `intentos_acceso`: solo intentos fallidos (login, contraseña, recuperación)
-  con IP; es el contador de bloqueo. Purga a 30 días.
-- `password_resets`: hash del enlace, vencimiento, uso y `enviado_en`; una
-  fila cuyo correo no salió no vale ni cuenta para el cupo de 3 por hora.
-- `invitaciones`: hash, vencimiento (7 días), uso y creadora. Solo las
-  cuentas de `INVITACIONES_PERMITIDAS`, con tope de 2 vigentes (TEMPORAL).
-- La aceptación de términos queda en el evento `cuenta.registro`, con su
-  versión, dentro de la transacción de alta. No se registra el email ni el
-  token. `eventos_auditoria` no lleva IP ni navegador: eso vive en las dos
-  tablas de arriba, con purga.
+**PWA antigua.** En esta base todavía requiere recargar manualmente. El aviso de
+versión se entrega en una rama independiente de Fase 4 y no se da por fusionado.
 
-Antes de ofrecer el acceso, el dueño debe terminar la verificación del dominio
-`sesionapp.app` en Resend y revisar el texto de `/terminos` (constantes
-`TERMINOS_*` de `glosario.ts`, actualizando también `TERMINOS_VERSION`). Con el
-dominio verificado, probar un correo real y una recuperación completa.
+## 6. SMS
 
-## 7. Incidentes de identidad y cifrado
+El código está en `src/app/api/_lib/casos-uso/despachar-sms.ts`,
+`src/lib/sms/` y `src/lib/recordatorios-programacion.ts`.
 
-### "Creo que se filtró un token de sesión"
+En Twilio, configurar el webhook entrante para `POST /api/sms/entrante`
+en el dominio público y habilitar Uruguay. La app manda la URL de
+`POST /api/sms/callback` como StatusCallback. Ambos validan firma.
+El origen público usado para firmar está en `src/lib/sms/firma.ts`;
+un cambio de dominio debe coordinarse con esa configuración.
 
-No hay un secreto que firme sesiones: lo que se puede filtrar es la cookie de
-un dispositivo. Un volcado de `sesiones_acceso` no sirve para entrar (solo
-hashes).
+Los recordatorios se programan para la tarde anterior, dos tardes antes o la
+misma mañana, en hora de Montevideo, con dispersión de 0–14 minutos.
+Si la mañana no cae antes del turno, se usa la tarde anterior.
+No se describe un esquema antiguo de horas de anticipación.
 
-1. Desde Configuración: "Cerrar sesión en los demás dispositivos". Si no se
-   puede entrar, en Neon:
-   `UPDATE sesiones_acceso SET cerrada_en = now(), motivo_cierre = 'incidente' WHERE cerrada_en IS NULL;`
-2. Cambiar la contraseña (cierra todo otra vez, incluida la propia).
-3. Mirar `sesiones_acceso` de los últimos 30 días: IPs y navegadores que no
-   sean de ella.
-4. Fuera de servicio: nada. Ella entra de nuevo una vez.
+| Estado | Significado operativo |
+| --- | --- |
+| pendiente | Espera su hora o un reintento. |
+| enviando | Reservado por una corrida; el despachador recupera reservas vencidas. |
+| aceptado | El proveedor aceptó el SMS; todavía no prueba entrega. |
+| entregado | Llegó la confirmación de entrega. |
+| no_entregado | El proveedor informó que no llegó; consultar el código. |
+| cancelado | El envío dejó de corresponder. Si ya había sido aceptado, pudo haber salido. |
+| fallido | Rechazo definitivo o ventana de envío agotada. |
+| desconocido | Hubo una llamada con resultado incierto; no se reenvía automáticamente. |
 
-### "Creo que se filtró CLAVES_CIFRADO"
+Ante desconocido, buscar el mensaje en los logs de Twilio por hora y destino
+antes de decidir una corrección. No hay pantalla de conciliación en main;
+no hacer una escritura manual que pueda duplicar el SMS sin verificar evidencia.
+El estado por turno se consulta por `GET /api/sms/envios`.
 
-Lo que ya se copió de la base no se puede des-filtrar: rotar protege lo que
-venga. Por eso hay que actuar rápido y averiguar si también se filtró la base.
+Recordar cobro usa `POST /api/pacientes/[id]/recordar-cobro` y crea o
+reutiliza un envío SMS persistido. Confirmar la cola no significa que el SMS
+haya sido entregado. Las alertas se envían por correo con
+`src/lib/alertas.ts`; si se agotan sus intentos, quedan logs y Sentry si
+está configurado.
 
-1. Generar clave nueva (`openssl rand -base64 32`), agregar `,N+1=…` a
-   `CLAVES_CIFRADO` en Vercel con `printf`, deploy. Nada queda fuera de
-   servicio.
-2. Forzar el re-cifrado: `GET /api/cron/mantenimiento?recifrar=todo` con el
-   `CRON_SECRET`, repetir hasta `pendientes: 0`. Verificar con la consulta de
-   `docs/encryption.md` §4.
-3. Sacar la clave vieja de la variable, deploy. Destruirla del gestor.
-4. Backups: si solo se filtró la clave, los backups siguen protegidos por
-   `BACKUP_ENCRYPTION_KEY`. Si hay sospecha de que también se filtró la
-   passphrase gpg o el acceso a R2: borrar los backups anteriores al paso 3,
-   tomar uno nuevo a mano, rotar `BACKUP_ENCRYPTION_KEY` y las credenciales
-   de R2.
-5. Si el vector fue Vercel entero, rotar también `PROCESSING_SECRET`,
-   `CRON_SECRET` y las credenciales de R2.
-6. Registrar acá fecha, alcance y qué se rotó. Si hay indicios de que la base
-   también se copió, es una brecha de datos sensibles y aplica la obligación
-   de notificar (Ley 18.331 / URCDP); lo decide el abogado.
+## 7. Comprobación documental
 
-### "Creo que se filtró PROCESSING_SECRET"
+~~~bash
+node scripts/ci/documentacion-vigente.mjs
+~~~
 
-Con el secreto solo se reclama trabajo: sesiones en `procesando` (clave del
-audio, inútil sin R2) y los tickets con los que sí se puede escribir un
-resultado falso en esas sesiones. No se lee ni escribe nada más.
-
-1. Rotar sin ventana (§3). Fuera de servicio: nada.
-2. Buscar en `eventos_auditoria` los resultados del worker del período
-   sospechoso con versión de worker o de prompt desconocida: esas sesiones
-   pueden tener notas falsas. Las que estén en `revision` se descartan y
-   reprocesan; las ya aprobadas se revisan a mano con la profesional.
-3. Si el vector fue Railway (variables juntas): rotar también
-   `ASSEMBLYAI_API_KEY`, `ANTHROPIC_API_KEY` y las credenciales de R2.
-
-## 8. SMS: qué configurar en Twilio y qué mirar
-
-El sistema de envío está descrito en el código
-(`src/app/api/_lib/casos-uso/despachar-sms.ts` y `src/lib/sms/`). Lo que hay
-que saber para operarlo:
-
-**En la consola de Twilio, una sola vez.**
-
-- En el número emisor (Phone Numbers → Manage → Active numbers → el número →
-  Messaging): "A message comes in" = Webhook, `POST`,
-  `https://sesionapp.app/api/sms/entrante`. Es lo que hace que una paciente
-  que responde "BAJA" (o "STOP", "CANCELAR", con o sin tildes) no reciba más
-  nada de este número. Sin esto, la respuesta no llega a ningún lado.
-- El `StatusCallback` NO se configura en la consola: la app lo manda en cada
-  mensaje (`https://sesionapp.app/api/sms/callback`). Si cambia el dominio,
-  cambian `ORIGEN_PUBLICO` en `src/lib/sms/firma.ts` y el webhook entrante.
-- Geo Permissions (Messaging → Settings → Geo permissions): Uruguay
-  habilitado. Si no, todo envío termina `fallido` con el código 21408 y una
-  alerta crítica.
-- Los dos webhooks validan `X-Twilio-Signature` con `TWILIO_AUTH_TOKEN`
-  contra la URL pública. Sin firma válida contestan 403 y no escriben nada.
-
-**Qué significa cada estado de un envío** (`envios_sms.estado`):
-
-| Estado | Qué pasó | Qué hacer |
-| --- | --- | --- |
-| `pendiente` | Espera su hora o el próximo intento (`proximo_intento_en`). | Nada. |
-| `enviando` | Una corrida del cron lo reservó. Si lleva más de 5 min, la corrida murió y la siguiente lo rescata. | Nada; si lleva más de 30 min, el cron de salud avisa. |
-| `aceptado` | Twilio devolvió 2xx: lo tiene en cola. **No es "llegó".** | Esperar el callback. Sin webhook configurado, se queda acá. |
-| `entregado` | El operador confirmó la entrega. | Nada. |
-| `no_entregado` | El operador dijo que no llegó (`codigo_proveedor`, `motivo_no_envio`). | Ver el motivo; 30007 = el operador filtra el contenido, avisa por correo. |
-| `cancelado` | Dejó de tener sentido: turno cerrado o reprogramado, turno ya pasado, paciente dada de baja. Si tiene `aceptado_en`, el SMS SALIÓ y después se cerró el turno: hay que llamar a la paciente (avisa por correo). | Sólo en ese último caso. |
-| `fallido` | Se agotó la ventana útil (2 h antes del turno) sin poder mandarlo, o Twilio lo rechazó de forma definitiva (teléfono inválido, etc.). | El motivo está en `motivo_no_envio`. No hay reintento: ya se intentó todo. |
-| `desconocido` | Se llamó a Twilio y no hubo respuesta legible: pudo haber salido. **Nunca se reenvía solo.** | Mirar en la consola de Twilio (Monitor → Logs → Messaging, por el teléfono y la hora) si el mensaje existe. Hoy no hay pantalla para resolverlo: si salió, `UPDATE envios_sms SET estado='aceptado', sid='<SM…>' WHERE id=…`; si no salió y el turno todavía sirve, `SET estado='pendiente', proximo_intento_en=now()`. |
-
-**Backoff.** Un fallo transitorio (Twilio caído, 429, 5xx) espera
-2, 4, 8, 16, 30, 30… minutos, sin tope de intentos, hasta 2 horas antes del
-turno; ahí, un último intento y `fallido`. Un aviso de cobro tiene 24 h.
-
-**Alertas que este sistema manda por correo:** credenciales rechazadas
-(20003), número emisor mal configurado (21212, 21606), país no habilitado
-(21408), cuenta suspendida (30002), contenido filtrado por el operador
-(30007), un SMS que salió con el turno ya cerrado, y las métricas del cron
-de salud (fallidos, desconocidos ≥ 3, trabados en `enviando`).
-
-**Lo que NO se guarda:** el texto del mensaje (decisión del dueño). Queda
-`segmentos` para el conteo mensual por consultorio, que el cron de salud
-informa y no limita.
+Valida los cuatro documentos de esta tanda contra archivos, exports HTTP y
+el catálogo de variables. No conecta a proveedores, no ejecuta migraciones
+remotas, no manda mensajes y no acredita disponibilidad de funciones pendientes.
