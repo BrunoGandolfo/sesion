@@ -1,229 +1,154 @@
-# Pipeline de una sesión — de la grabación al contexto longitudinal
+# Pipeline clínico: implementación y límites de main
 
-Cómo viaja una sesión hoy, con los nombres reales de rutas, casos de uso y
-módulos. Verificado contra el código el 2026-09-04. La versión anterior
-(WhisperX + Ollama en Atlas) está en `docs/historico/pipeline-whisperx-atlas.md`.
+Base verificada: main e247d8b, 15 de septiembre de 2026. Hay código del
+grabador anterior y un backend nuevo. El recorrido desde una grabación nueva
+hasta la nota **todavía no está conectado de punta a punta**.
 
-## 1. Piezas
+## Captura y subida pendientes
 
-| Pieza | Dónde corre | Qué hace |
-| --- | --- | --- |
-| App Next.js 16 | Vercel | UI, API, cifrado en reposo, crons. |
-| Postgres 17 | Neon | Base. Ramas `production` y `test`. |
-| Audio cifrado | Cloudflare R2, bucket `sesion-audio` | Objetos `audio/{org}/{sesion}/{turno}.enc`. |
-| Worker Python (`processor/`) | Railway (`python worker.py`) | Descarga, descifra, transcribe, genera nota y feedback, devuelve por callback. Integra el contexto longitudinal. |
-| ASR | AssemblyAI | `universal-3-5-pro` con fallback `universal-2`, diarización con roles. |
-| LLM | Anthropic | `claude-sonnet-5`, structured outputs. |
+La pantalla `src/app/(dashboard)/grabar/[turnoId]/page.tsx` y el hook
+`src/hooks/useGrabacionSesion.ts` siguen en el repositorio. El respaldo de
+`src/lib/grabacion-storage.ts` conserva fragmentos sin cifrar mientras se
+graba; `src/lib/grabacion-cifrado.ts` cifra el blob al terminar.
 
-## 2. Estados de `SesionClinica`
+La creación actual es `POST /api/sesion-clinica`, con turnoId UUID y
+consentimiento vigente; crea la sesión en grabando. La consulta por turno es
+`GET /api/sesion-clinica`. La ruta
+`src/app/api/sesion-clinica/route.ts` sigue como excepción pendiente de
+migrar a casos de uso.
 
-`pendiente → grabando → subiendo → procesando → revision → aprobado`, más
-`error`. La tabla de transiciones válidas es única y vive en
-`src/lib/sesion-clinica-utils.ts` (`TRANSICIONES_PERMITIDAS`). El navegador
-solo puede pedir por PATCH `pendiente→grabando`, `grabando→error`,
-`subiendo→grabando` y `error→procesando` (`TRANSICIONES_CLIENTE`); el resto
-lo hacen rutas con efectos propios.
+Los endpoints antiguos de URL de subida y confirmación fueron eliminados.
+Los consumidores existentes siguen llamándolos y no son una implementación
+vigente de subida. Tampoco hay una operación HTTP genérica para cambiar el
+estado de la sesión. El contrato nuevo de audio exige segmentos, pero todavía
+falta reconstruir su captura/subida. No simular éxito ni recomendar esos
+endpoints como procedimiento de operación.
 
-## 3. Flujo paso a paso
+El esquema guarda una clave por sesión y un IV por segmento. Las keys de R2 se
+calculan como organización/sesión/índice, sin persistir una key enviada por el
+cliente: `src/lib/sesion-clinica/estados.ts`. Que el esquema lo prevea no
+demuestra que la captura lo cumpla. El consentimiento 2.0 sí lo promete:
+diferencia pendiente en `src/lib/consentimiento-hechos.ts`.
 
-### 3.1 Grabación en el navegador
+## Estados y operaciones existentes
 
-- Pantalla: `/grabar/[turnoId]`
-  (`src/app/(dashboard)/grabar/[turnoId]/page.tsx` +
-  `_components/grabar-view.tsx`). Se llega desde Hoy, desde el sheet del turno
-  en la agenda o desde el botón flotante de la ficha
-  (`paciente-detail-view.tsx`). Hace falta consentimiento vigente —la página
-  lo verifica en el servidor con `consentimientoVigenteDe`, la misma función
-  que usa la API—; el turno no: `/grabar/nuevo?pacienteId=…` lo crea al
-  empezar.
-  (La pestaña Historia y su `historia-tab.tsx` ya no existen: la grabación se
-  mudó a esta ruta y la revisión de la nota a `/sesiones/[id]`.)
-- `POST /api/sesion-clinica { turnoId }` crea la fila en `pendiente` (exige
-  turno programado o realizado y consentimiento sin revocar). Después
-  `PATCH /api/sesion-clinica/[id] { estado: "grabando" }`.
-- `GrabadorSesion` graba con `MediaRecorder`. Los chunks se respaldan en
-  IndexedDB (`src/lib/grabacion-storage.ts`) hasta que la subida confirma.
+La tabla única es `src/lib/sesion-clinica/estados.ts`; el contrato de datos
+está en `src/lib/sesion-clinica/schema.ts`.
 
-### 3.2 Cifrado en el cliente
+Flujo previsto: grabando → subiendo → procesando → revision → aprobada.
+fallida permite reintentar o eliminar. aprobada es terminal para la nota.
 
-- Al terminar, el navegador genera una clave AES-256-GCM y un IV por sesión y
-  cifra el blob (`src/lib/crypto.ts`). El audio en claro nunca sale del
-  dispositivo.
-- Esta clave es distinta de `NOTES_ENCRYPTION_KEY` (que cifra columnas en la
-  base, ver `docs/encryption.md`).
-
-### 3.3 Subida directa a R2 (tres pasos, `subirAudioCifrado` en `useGrabacionSesion.ts`)
-
-1. `POST /api/sesion-clinica/[id]/upload-url` con `claveCifrado`, `iv`,
-   `tamanoBytes`, `mime`. La ruta guarda clave e IV en
-   `datosEstructurados._audioCifradoTemporal` (cifrado en reposo por la
-   extensión Prisma), emite una URL prefirmada PUT de R2 válida 60 minutos
-   con `Content-Type` y `Content-Length` firmados, y pasa la sesión a
-   `subiendo`. La key es determinística (`keyAudioEsperada`).
-2. El navegador hace `PUT` directo a R2 (XHR con progreso). El audio no pasa
-   por Vercel.
-3. `POST /api/sesion-clinica/[id]/upload-confirmar { key, duracionAudioSeg }`.
-   La ruta recalcula la key, verifica con `HeadObject` que el objeto existe y
-   pasa a `procesando` con `intentos = 0`. Si el objeto no está, vuelve a
-   `grabando` y responde 409.
-
-Si fallan el PUT o la confirmación, el cliente vuelve la sesión a `grabando`
-y repite desde el paso 1 con el mismo blob.
-
-### 3.4 Entrega al worker con lease
-
-- El worker hace `GET /api/sesion-clinica/pendientes` cada
-  `POLL_INTERVAL_SECONDS` (30 s) con `Authorization: Bearer PROCESSING_SECRET`
-  (`requireM2M`).
-- Caso de uso `reclamarPendientes` (`src/app/api/_lib/casos-uso/reclamar-pendientes.ts`):
-  toma hasta 5 sesiones en `procesando` con `intentos = 0` o `updatedAt`
-  anterior a `LEASE_MINUTES` (45). Cada entrega incrementa `intentos` con un
-  `updateMany` condicionado (claim atómico). Al superar
-  `MAX_INTENTOS_PROCESAMIENTO` (3) la sesión pasa a `error`.
-- Payload por sesión: `sesionClinicaId`, `turnoId`, `audioR2Key`,
-  `duracionAudioSeg`, `pacienteId`, `claveCifrado`, `iv`, `createdAt`,
-  `orientacionTeorica` (de `Configuracion`, default `cbt_mi`), `intento`,
-  `terminosAsr`.
-- `terminosAsr` es el vocabulario clínico de esa sesión (hot words activas de
-  scope `global` y `profesional` de la organización, más las de scope
-  `paciente` de esa paciente), deduplicado y ordenado; `[]` si no hay ninguna.
-  Sale de `_lib/casos-uso/terminos-asr.ts`. Es lo que el worker pasa a
-  AssemblyAI como `keyterms_prompt`; de ahí el máximo de seis palabras por
-  término que valida el POST de hot-words.
-- Si esa consulta falla, la sesión se entrega igual con `terminosAsr: []` y
-  queda un `console.warn` con el id: el vocabulario mejora la transcripción,
-  no la habilita, y la sesión ya tiene el claim puesto.
-
-### 3.5 Worker: descarga, descifrado, ASR (`processor/processor.py`)
-
-1. `r2_client.descargar_audio` baja el objeto.
-2. `crypto.descifrar` lo descifra en memoria (AES-256-GCM, tag de 16 bytes al
-   final). Nada se escribe a disco.
-3. `asr_assemblyai.transcribir` (`processor/asr_assemblyai.py`, REST sin SDK):
-   - `POST /v2/upload` con el audio crudo.
-   - `POST /v2/transcript` con `speech_models: [ASR_MODEL_ID, ASR_MODEL_FALLBACK]`
-     (`universal-3-5-pro`, `universal-2`), `language_code: "es"`,
-     `speaker_labels: true`, `speaker_options` min=max=2, identificación de
-     hablantes por rol (`Terapeuta` / `Paciente`) y `prompt` de escenario
-     (`ASR_PROMPT_ESCENARIO`).
-   - Polling cada `ASR_POLL_SECONDS` (10 s) hasta `ASR_TIMEOUT_SECONDS` (1800 s).
-   - `DELETE /v2/transcript/{id}` siempre, en `finally`: el transcript y el
-     archivo subido no quedan en AssemblyAI.
-   - Normaliza a segmentos `S0` (terapeuta) / `S1` (paciente). Si AssemblyAI
-     devolvió roles, `roles_origen = "asr_role"`; si no, `posicional` (el
-     primer hablante se asume terapeuta). `speech_model` es el modelo que
-     efectivamente procesó el audio y se reporta como `modeloASR`.
-4. `speech_analytics.compute`: ratios de habla, silencios > 3 s, duración.
-
-### 3.6 Worker: nota y feedback (`processor/clinical_analyzer.py`)
-
-- Contexto longitudinal: `GET /api/pacientes/{id}/contexto-clinico?format=llm`
-  (Bearer M2M) devuelve Markdown con hipótesis, objetivos, temas, riesgos y
-  análisis + plan de las últimas 3 sesiones aprobadas. Best-effort.
-- Llamada A (nota SOAP): prompt `prompts/clinical_note_v3.1.1.md`, schema
-  `SCHEMA_NOTA`, modelo `LLM_MODEL_ID` (`claude-sonnet-5`), `max_tokens`
-  8192, `effort` `medium`, timeout 300 s, 3 reintentos del SDK. Cabecera
-  `anthropic-workspace-id` si `ANTHROPIC_WORKSPACE_ID` está seteada. Se validan
-  rangos (`intensidadEmocional` 1..10, `duracionRealMin` >= 0).
-- Llamada C (feedback de auto-supervisión): prompt según `orientacionTeorica`
-  (ver `docs/contrato-multi-orientacion.md`). Best-effort: si falla, la nota
-  sale sin feedback.
-- `datosEstructurados` se completa con `speechAnalytics` (incluye
-  `rolesOrigen`), `feedbackTerapeuta` y `_pipeline` (prompts, modelos,
-  `asrId`, `intento`, `workerVersion`).
-
-### 3.7 Callback
-
-- `POST /api/sesion-clinica/callback` (Bearer M2M) con `sesionClinicaId`,
-  `estado` (`revision` | `error`), `transcripcion`, `nota`,
-  `datosEstructurados`, `modeloASR`, `modeloLLM`, `promptVersion`, `error`.
-  La ruta valida con `notaSoapSchema` y `datosEstructuradosSchema`
-  (`src/lib/sesion-clinica/schema.ts`, única definición del contrato).
-- Caso de uso `procesarCallback`: escribe solo si la sesión sigue en
-  `procesando` (409 si no). Guarda `notaSoapOriginal` una sola vez (la primera
-  nota que llega), re-adjunta `_audioCifradoTemporal` desde la fila previa,
-  fija `hablanteTerapeuta = "S0"`. Un callback de error incrementa `intentos`.
-- Semántica para el worker (`processor/callback.py`): 2xx ok; 409 y otros
-  4xx terminan el ciclo sin reintento; 5xx o sin respuesta dejan que el lease
-  reintente.
-
-### 3.8 Revisión
-
-- La nota queda en `revision`. La UI (`NotaClinicaView`) muestra la nota,
-  los flags de riesgo, la señal graduada `riesgoDetectado`
-  (`docs/contrato-riesgo-clinico.md`) y el feedback. La terapeuta puede
-  editar el texto.
-- Descartar: `DELETE /api/sesion-clinica/[id]` → caso de uso `eliminarSesion`,
-  rama `descartarNotaEnRevision`: borra nota y datos generados, conserva
-  transcripción, audio y clave temporal, deja la sesión en `error`
-  (reprocesable).
-- Reintentar: `PATCH { estado: "procesando" }` → caso de uso
-  `reintentarSesion`: exige audio en R2, limpia `error`, `intentos = 0`.
-
-### 3.9 Aprobación
-
-- `POST /api/sesion-clinica/[id]/aprobar` → caso de uso `aprobarSesion`
-  (`src/app/api/_lib/casos-uso/aprobar-sesion.ts`):
-  1. Solo desde `revision`.
-  2. Si `riesgoDetectado.nivel` es `alto` o `moderado`, exige
-     `confirmoRiesgo: true`.
-  3. Borra el audio de R2 (`borrarAudioBestEffort`). Si el borrado funciona,
-     `audioR2Key = null` y `audioBorradoEn = ahora`. Si falla, la key se
-     conserva para reintentar el borrado.
-  4. Elimina `_audioCifradoTemporal` de `datosEstructurados` **siempre**: sin
-     la clave, un blob remanente es inaccesible (crypto-shredding).
-  5. Guarda la nota editada y `notasEdicion`, pasa a `aprobado`, audita con
-     el hash de la nota final (sin texto clínico).
-- Después de aprobar, la transcripción y la nota siguen en la base, cifradas.
-
-### 3.10 Contexto longitudinal (Golden Thread, Llamada B)
-
-- En cada ciclo del worker, `processor/contexto_worker.py` hace
-  `GET /api/sesion-clinica/aprobadas-sin-contexto` (Bearer M2M). Caso de uso
-  `sesionesSinContexto`: sesiones aprobadas desde `CONTEXTO_DESDE` (si falta,
-  desde hoy), máximo 5, una por paciente, que el contexto todavía no integró
-  (`ultimaSesionId`).
-- Prompt `prompts/update_context_v2.0.md`, schema `SCHEMA_CONTEXTO`. El
-  resultado va por `PATCH /api/pacientes/{id}/contexto-clinico`. Como el
-  caller es M2M, la fila queda con `aprobadoPorTerapeutaEn = null`: es una
-  sugerencia hasta que la terapeuta la revisa en la pestaña Progreso.
-- Backoff en memoria del worker: 5 min, 30 min, y al tercer fallo no
-  reintenta hasta reiniciar el proceso.
-
-## 4. Vigilancia
-
-- `GET /api/cron/salud` (cada hora, `vercel.json`, Bearer `CRON_SECRET`):
-  cuenta sesiones en `procesando` con más de 2 h sin cambios y recordatorios
-  fallidos en 24 h; avisa por `ALERTA_WEBHOOK_URL` o `console.warn`.
-- Sesión huérfana (`esSesionHuerfana`): en `error`, o en `grabando` más de 4 h
-  sin cambios. La UI ofrece descartar o reintentar.
-
-## 5. Variables que tocan el pipeline
-
-App (Vercel): `PROCESSING_SECRET`, `NOTES_ENCRYPTION_KEY`, `R2_ACCOUNT_ID`,
-`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, opcionales
-`LEASE_MINUTES`, `MAX_INTENTOS_PROCESAMIENTO`, `CONTEXTO_DESDE`.
-
-Worker (Railway, ver `processor/.env.example`): `APP_BASE_URL`,
-`PROCESSING_SECRET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
-`R2_BUCKET_NAME`, `ASSEMBLYAI_API_KEY`, `ASR_MODEL_ID`, `ASR_MODEL_FALLBACK`,
-`ASR_PROMPT_ESCENARIO`, `ASR_POLL_SECONDS`, `ASR_TIMEOUT_SECONDS`,
-`ANTHROPIC_API_KEY`, `ANTHROPIC_WORKSPACE_ID`, `LLM_BACKEND`, `LLM_MODEL_ID`,
-`LLM_EFFORT`, `LLM_MAX_TOKENS`, `LLM_TIMEOUT_SECONDS`, `POLL_INTERVAL_SECONDS`,
-`WORKER_VERSION`.
-
-## 6. Archivos clave
-
-| Path | Rol |
+| HTTP | Precondición y efecto |
 | --- | --- |
-| `src/hooks/useGrabacionSesion.ts` | Subida en tres pasos y estado de la sesión de hoy. |
-| `src/app/api/sesion-clinica/**/route.ts` | Rutas: auth, validación, respuesta. |
-| `src/app/api/_lib/casos-uso/*.ts` | Reglas: reclamar-pendientes, procesar-callback, aprobar-sesion, eliminar-sesion, reintentar-sesion, sesiones-sin-contexto. |
-| `src/lib/sesion-clinica/schema.ts` | Contrato Zod de sesión y datos estructurados. |
-| `src/lib/sesion-clinica-utils.ts` | Máquina de estados, key de audio, sesión huérfana. |
-| `processor/worker.py` | Loop de polling y modo manual. |
-| `processor/processor.py` | Orquestación por sesión. |
-| `processor/asr_assemblyai.py` | Cliente AssemblyAI y normalización de hablantes. |
-| `processor/clinical_analyzer.py` | Llamadas A, B y C a Anthropic. |
-| `processor/contexto_worker.py` | Integración del contexto longitudinal. |
-| `processor/prompts/*.md` | Prompts versionados. |
+| `GET /api/sesion-clinica/[id]` | Lectura de la sesión de la organización. |
+| `POST /api/sesion-clinica/[id]/aprobar` | revision → aprobada; nota final, clave destruida y trabajos creados en una transacción. |
+| `POST /api/sesion-clinica/[id]/reprocesar` | revision → procesando; conserva la generación previa mientras espera otra. |
+| `POST /api/sesion-clinica/[id]/reintentar` | fallida → procesando; exige transcripción o audio utilizable. |
+| `POST /api/sesion-clinica/[id]/eliminar` | Sólo fallida; elimina la sesión y deja un trabajo de borrado de audio cuando corresponde. |
+| `GET /api/sesion-clinica/[id]/transcripcion` | Lectura autorizada de la transcripción. |
+| `POST /api/sesion-clinica/[id]/feedback/reintentar` | revision o aprobada; pide Para vos de nuevo sin alterar la nota. |
+
+Cada transición condiciona organización, estado y, para el worker, intento.
+Una escritura de un intento viejo se rechaza. La existencia de un endpoint
+no implica que su control esté cableado en la pantalla: confirmación de
+menciones, enlace de transcripción y reintento de Para vos siguen pendientes
+de integración de UI en esta base.
+
+## Reclamo del procesamiento
+
+`GET /api/sesion-clinica/pendientes` usa `PROCESSING_SECRET` para
+reclamar sesiones. `src/app/api/_lib/casos-uso/sesion/reclamar.ts` entrega
+una por defecto, hasta cinco si se solicita el límite. El claim es atómico;
+incrementa intento, genera un ticket y da un lease de cinco minutos.
+
+El payload incluye sesión, paciente, intento, ticket, orientación, vocabulario
+ASR, duración y uno de estos recursos:
+
+- audio: clave descifrada y segmentos ordenados con índice, key, IV y bytes;
+- checkpoint: transcripción ya guardada, métricas y modelo ASR.
+
+Con checkpoint no se vuelve a descargar ni a transcribir. El vocabulario es
+best-effort: si falla su consulta se entrega una lista vacía y se registra el
+tipo de error, sin publicar los términos.
+
+El worker renueva el lease cada 60 segundos. Las escrituras llevan el ticket
+del reclamo y el intento, no el secreto general:
+
+| HTTP | Uso |
+| --- | --- |
+| `POST /api/sesion-clinica/[id]/lease` | Renovar el reclamo vigente. |
+| `POST /api/sesion-clinica/[id]/asr` | Registrar el id del transcript y su trabajo de borrado. |
+| `POST /api/sesion-clinica/[id]/transcripcion` | Persistir el checkpoint antes del modelo. |
+| `POST /api/sesion-clinica/[id]/resultado` | Entregar nota o fallo. |
+
+Cliente: `processor/app_client.py`. Un 401/409 invalida el intento;
+otros 4xx son terminales para ese envío, y 5xx o falta de respuesta dejan
+que el lease permita recuperación. Hay cinco fallos transitorios seguidos
+antes de agotar la sesión; el backoff está en la tabla de estados, no en
+las antiguas variables de entorno de lease.
+
+## Worker, ASR y nota
+
+`processor/worker.py` ejecuta `processor/processor.py`. Descarga R2 y
+descifra en memoria. El código actual une los bytes descifrados en orden
+con join: no realiza una unión de contenedores multimedia ni recorta solapes.
+La viabilidad de ese pegado con segmentos independientes sigue pendiente de
+integración; este documento no la da por resuelta.
+
+`processor/asr_assemblyai.py` usa la API REST de AssemblyAI. Los defaults
+de `processor/config.py` son universal-3-5-pro con fallback universal-2,
+español y diarización. Normaliza los roles y calcula métricas con
+`processor/speech_analytics.py`.
+
+**Límite del borrado ASR:** el módulo intenta borrar en finally. El registro
+durable del id en la app sucede al volver del ASR, en registrar_checkpoint;
+todavía existe una ventana si el proceso muere antes de ese registro.
+El código no garantiza persistir el id en cuanto el proveedor lo crea.
+
+Después del checkpoint, `processor/clinical_analyzer.py` pide la nota SOAP
+con el prompt `processor/prompts/clinical_note_v3.1.1.md`.
+El default es claude-sonnet-5; las opciones efectivas viven en
+`processor/config.py`. Los enums compartidos salen de
+`processor/contrato/enums-clinicos.json`.
+
+`src/app/api/_lib/casos-uso/sesion/resultado.ts` acepta la nota sólo tras
+el checkpoint, incrementa la generación, pasa a revision y crea
+generar_feedback en la misma transacción. Para vos se procesa por separado;
+no bloquea la nota. Los tipos de trabajo que este worker ejecuta hoy son
+borrar_transcript_asr y generar_feedback.
+
+## Revisión, aprobación y limpieza
+
+`src/app/api/_lib/casos-uso/sesion/aprobar.ts` exige confirmar un riesgo
+moderado/alto o las menciones léxicas que correspondan. Dentro de una
+transacción guarda la nota final, anula audioClave, pasa a aprobada y crea
+los trabajos borrar_audio_r2 (si hay audio) e integrar_contexto.
+No llama a R2 antes de confirmar la base. El evento de auditoría se registra
+después de esa transacción, con hash de nota y sin texto clínico.
+
+El cron `GET /api/cron/trabajos` ejecuta los borrados de R2 en la app;
+el worker reclama sus trabajos mediante `GET /api/trabajos/pendientes`
+y responde por `POST /api/trabajos/[id]/resultado`.
+La política en `src/app/api/_lib/casos-uso/trabajos/politica.ts` tiene
+topes: 20 intentos para borrados, cinco para feedback y seis para contexto.
+Un trabajo fallido necesita seguimiento; no se promete reintento infinito.
+
+Destruir la clave de la fila activa no elimina una clave cifrada que ya haya
+entrado en un backup. Su alcance está en `docs/encryption.md`.
+
+## Recorrido pendiente
+
+Aprobar encola integrar_contexto, pero `processor/processor.py` todavía no
+lo ejecuta. La lectura longitudinal de `processor/app_client.py` sigue
+apuntando a una ruta anterior ausente y tolera el 404 sin contexto.
+`processor/contexto_worker.py` conserva código previo; no constituye la
+implementación nueva. No está garantizada la actualización del hilo ni su
+inyección en la nota. Ver `docs/pendientes/cierre-ola-1.md`.
+
+## Verificación y operación
+
+Los tests de estados, transiciones, reclamos, checkpoint, resultado y trabajos
+viven en `src/lib/__tests__/`; los del worker en `processor/tests/`.
+Cubren contratos y persistencia, no captura real en un teléfono ni entrega
+real de los proveedores. Operación y variables: `docs/operaciones.md`,
+`.env.example` y `processor/.env.example`.
