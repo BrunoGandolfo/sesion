@@ -17,7 +17,8 @@
     "postinstall": "prisma generate",
     "db:test:up": "docker compose up -d --wait postgres-test && DATABASE_URL=postgresql://postgres:postgres@localhost:5433/sesion_test prisma migrate deploy",
     "db:test:down": "docker compose down -v",
-    "guardias": "node scripts/ci/max-duration.mjs && node scripts/ci/acta-vigente.mjs && node scripts/ci/migraciones.mjs --sin-drift"
+    "guardias": "node scripts/ci/max-duration.mjs && node scripts/ci/acta-vigente.mjs && node scripts/ci/migraciones.mjs --sin-drift",
+    "e2e": "node pruebas/e2e/recorrido.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
@@ -48,6 +49,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
     "jsdom": "^30.0.1",
+    "playwright": "1.58.2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"

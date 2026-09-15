@@ -21,7 +21,6 @@ import {
   camposTurnoSchema,
   type CamposTurnoValores,
 } from "@/components/forms/turno-editar-campos";
-import { useHoy } from "@/hooks/useHoy";
 import {
   fechaInputMvd,
   horaInputMvd,
@@ -52,11 +51,6 @@ import {
   PAGADO,
   PENDIENTE,
   RECORDATORIO,
-  RECORDATORIO_ESTADO,
-  REINTENTANDO_RECORDATORIO,
-  REINTENTAR_RECORDATORIO,
-  REINTENTAR_RECORDATORIO_MENSAJE,
-  REINTENTAR_RECORDATORIO_TITULO,
   REVISAR_NOTA,
 } from "@/lib/glosario";
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
@@ -84,7 +78,6 @@ type Modo =
   | "confirmar-no-vino"
   | "confirmar-cancelar"
   | "confirmar-cancelar-serie"
-  | "confirmar-reintento"
   | "confirmar-deshacer-cobro";
 
 /** El recordatorio tal como viaja por la red: las fechas son ISO. */
@@ -92,9 +85,9 @@ type RecordatorioJson = {
   id: string;
   estado: string;
   programadoEn: string;
-  enviadoEn: string | null;
+  aceptadoEn: string | null;
   intentos: number;
-  error: string | null;
+  motivoNoEnvio: string | null;
 };
 
 interface Props {
@@ -154,10 +147,6 @@ export function TurnoDetailSheet({
   const [recordatorio, setRecordatorio] = React.useState<
     RecordatorioJson | null | "sin-dato"
   >("sin-dato");
-  // Se incrementa después de reintentar: releer es más honesto que ajustar
-  // la fila a mano y suponer en qué estado quedó.
-  const [recordatorioKey, setRecordatorioKey] = React.useState(0);
-  const hoy = useHoy();
 
   const metodos = useForm<EditValues>({
     resolver: zodResolver(camposTurnoSchema),
@@ -187,12 +176,12 @@ export function TurnoDetailSheet({
   }, [turnoId, turnoEstado]);
 
   // Sólo tiene sentido en un turno programado: en uno cancelado, ausente o
-  // ya realizado el recordatorio no se manda ni se reintenta.
+  // ya realizado no se programa otro recordatorio.
   React.useEffect(() => {
     if (!turnoId || turnoEstado !== "programado") return;
 
     const controller = new AbortController();
-    apiGet<RecordatorioJson[]>(`/api/recordatorios?turnoId=${turnoId}`, {
+    apiGet<RecordatorioJson[]>(`/api/sms/envios?turnoId=${turnoId}`, {
       signal: controller.signal,
     })
       .then((lista) => setRecordatorio(lista[0] ?? null))
@@ -203,7 +192,7 @@ export function TurnoDetailSheet({
         setRecordatorio(null);
       });
     return () => controller.abort();
-  }, [turnoId, turnoEstado, recordatorioKey]);
+  }, [turnoId, turnoEstado]);
 
   const abrirReprogramar = () => {
     if (!turno) return;
@@ -239,18 +228,6 @@ export function TurnoDetailSheet({
   const puedeGrabarORevisar = esProgramado || esRealizado;
   const sesionId = sesion !== "sin-dato" && sesion ? sesion.id : null;
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
-  // El reintento sólo existe si el envío falló y el turno todavía no pasó:
-  // las mismas tres condiciones que valida POST /reintentar, para no ofrecer
-  // un botón que la API va a rechazar.
-  const puedeReintentarAviso =
-    aviso !== null &&
-    aviso.estado === "fallido" &&
-    esProgramado &&
-    // `hoy` viene de useHoy: null en el render del servidor (y por eso el
-    // botón no aparece hasta hidratar) y un Date estable después. Un
-    // `Date.now()` acá sería una llamada impura en render.
-    hoy !== null &&
-    turno.fecha.getTime() > hoy.getTime();
 
   async function patchTurno(payload: Record<string, unknown>, mensaje: string) {
     if (!turno) return;
@@ -324,27 +301,6 @@ export function TurnoDetailSheet({
       setError(m);
       onError(m);
       setModo("ver");
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  async function reintentarRecordatorio() {
-    if (!aviso) return;
-    setEnviando(true);
-    setError(null);
-    try {
-      await apiPost(`/api/recordatorios/${aviso.id}/reintentar`, {});
-      setModo("ver");
-      // Se relee en vez de suponer: la fila la termina de mover el cron.
-      setRecordatorioKey((k) => k + 1);
-      onUpdated("Recordatorio en cola");
-    } catch (err) {
-      const m = mensajeDe(err);
-      setError(m);
-      onError(m);
-      setModo("ver");
-      setRecordatorioKey((k) => k + 1);
     } finally {
       setEnviando(false);
     }
@@ -436,29 +392,16 @@ export function TurnoDetailSheet({
                         : "text-ink-900"
                     }`}
                   >
-                    {RECORDATORIO_ESTADO[aviso.estado] ?? aviso.estado}
+                    {({pendiente:"Programado",enviando:"Enviando",aceptado:"En camino",entregado:"Entregado",no_entregado:"No llegó",cancelado:"Cancelado",fallido:"No salió",desconocido:"No sabemos si salió"} as Record<string,string>)[aviso.estado] ?? aviso.estado}
                   </span>
                   <span className="text-[13px] tabular-nums text-ink-500">
                     ·{" "}
-                    {aviso.enviadoEn
-                      ? `${fechaCorta(new Date(aviso.enviadoEn))} ${hora(new Date(aviso.enviadoEn))}`
+                    {aviso.aceptadoEn
+                      ? `${fechaCorta(new Date(aviso.aceptadoEn))} ${hora(new Date(aviso.aceptadoEn))}`
                       : `${fechaCorta(new Date(aviso.programadoEn))} ${hora(new Date(aviso.programadoEn))}`}
                   </span>
                 </div>
-                {puedeReintentarAviso ? (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => {
-                      setError(null);
-                      setModo("confirmar-reintento");
-                    }}
-                    disabled={enviando}
-                  >
-                    {REINTENTAR_RECORDATORIO}
-                  </Button>
-                ) : null}
+                {aviso.motivoNoEnvio ? <p className="mt-2 text-[13px] text-ink-700">{aviso.motivoNoEnvio}</p> : null}
               </div>
             ) : null}
 
@@ -672,17 +615,6 @@ export function TurnoDetailSheet({
           />
         ) : null}
 
-        {modo === "confirmar-reintento" ? (
-          <Confirmar
-            titulo={REINTENTAR_RECORDATORIO_TITULO}
-            mensaje={REINTENTAR_RECORDATORIO_MENSAJE}
-            accion={REINTENTAR_RECORDATORIO}
-            enviando={enviando}
-            enviandoLabel={REINTENTANDO_RECORDATORIO}
-            onConfirmar={() => void reintentarRecordatorio()}
-            onCancelar={() => setModo("ver")}
-          />
-        ) : null}
 
         {/* Reprogramar */}
         {modo === "reprogramar" ? (

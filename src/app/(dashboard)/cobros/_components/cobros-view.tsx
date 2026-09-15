@@ -65,7 +65,6 @@ import {
   SIN_COBROS_ESTE_MES_LINEAS,
   SIN_METODO,
   SMS_DESTINO,
-  SMS_ENVIADO,
   SMS_SIN_CONFIGURAR,
   TE_DEBEN,
   VER_COBROS_DEL_MES,
@@ -90,9 +89,6 @@ type DeudorItem = DeudaPaciente & {
   /** ISO del último aviso que salió; null si nunca se le avisó. */
   ultimoAvisoEn: string | null;
 };
-
-/** Lo que contesta GET /api/sms/estado. */
-type SmsEstado = { ok: true } | { ok: false; motivo: string };
 
 type JsonTurno = Omit<
   TurnoConPaciente,
@@ -127,7 +123,7 @@ type DatosCobros = {
 };
 
 async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
-  const [dashboard, deudores, cobros, config, sms] = await Promise.all([
+  const [dashboard, deudores, cobros, config] = await Promise.all([
     apiGet<{ kpis: KPIsDashboard }>("/api/dashboard", { signal }),
     apiGet<DeudorItem[]>("/api/deudores", { signal }),
     apiGet<JsonTurno[]>("/api/turnos/cobros", { signal }),
@@ -137,14 +133,6 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
       if (esAbort(err)) throw err;
       return null;
     }),
-    // Si esta consulta falla no se puede saber si el canal está bien, y
-    // esconder el botón por las dudas sería apagar algo que quizá funciona:
-    // se ofrece igual y, si el SMS no está configurado, el servidor lo dice
-    // con todas las letras al confirmar.
-    apiGet<SmsEstado>("/api/sms/estado", { signal }).catch((err: unknown) => {
-      if (esAbort(err)) throw err;
-      return { ok: true } as SmsEstado;
-    }),
   ]);
 
   return {
@@ -152,7 +140,7 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
     deudores,
     cobros: cobros.map(parseTurno),
     nombreProfesional: config?.nombreProfesional ?? "",
-    smsOk: sms.ok,
+    smsOk: true,
   };
 }
 
@@ -164,26 +152,6 @@ export function CobrosView() {
   const [carga, setCarga] = React.useState<Carga>("cargando");
   const [reloadKey, setReloadKey] = React.useState(0);
   const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>({ open: false, message: "", variante: "aviso" });
-
-  // El aviso que acaba de salir se pega en la fila sin recargar la pantalla:
-  // la lista ya está en pantalla y lo único que cambió es esa fecha.
-  const marcarAvisado = React.useCallback(
-    (pacienteId: string, enviadoEn: string) => {
-      setDatos((previo) =>
-        previo
-          ? {
-              ...previo,
-              deudores: previo.deudores.map((d) =>
-                d.pacienteId === pacienteId
-                  ? { ...d, ultimoAvisoEn: enviadoEn }
-                  : d,
-              ),
-            }
-          : previo,
-      );
-    },
-    [],
-  );
 
   // "cargando" es el estado inicial y el reintento lo vuelve a poner en su
   // propio handler: el efecto no toca estado antes de que responda la red.
@@ -273,9 +241,8 @@ export function CobrosView() {
           nombreProfesional={nombreProfesional}
           ahora={ahora}
           smsOk={smsOk}
-          onAvisado={(pacienteId, enviadoEn) => {
-            marcarAvisado(pacienteId, enviadoEn);
-            setToast({ open: true, message: SMS_ENVIADO, variante: "confirmacion" });
+          onAvisado={(creado) => {
+            setToast({ open: true, message: creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.", variante: "confirmacion" });
           }}
           onError={(mensaje) => setToast({ open: true, message: mensaje, variante: "aviso" })}
           onVerCobros={() => setPestana("cobros")}
@@ -432,7 +399,7 @@ function TeDeben({
   nombreProfesional: string;
   ahora: Date;
   smsOk: boolean;
-  onAvisado: (pacienteId: string, enviadoEn: string) => void;
+  onAvisado: (creado: boolean) => void;
   onError: (mensaje: string) => void;
   onVerCobros: () => void;
 }) {
@@ -521,7 +488,7 @@ function FilaDeudor({
   nombreProfesional: string;
   ahora: Date;
   smsOk: boolean;
-  onAvisado: (pacienteId: string, enviadoEn: string) => void;
+  onAvisado: (creado: boolean) => void;
   onError: (mensaje: string) => void;
 }) {
   const [confirmando, setConfirmando] = React.useState(false);
@@ -542,15 +509,14 @@ function FilaDeudor({
   async function enviar() {
     setEnviando(true);
     try {
-      const resultado = await apiPost<{ enviadoEn: string }>(
+      const resultado = await apiPost<{ envioId: string; creado: boolean; programadoEn: string }>(
         `/api/pacientes/${deudor.pacienteId}/recordar-cobro`,
         {},
       );
       setConfirmando(false);
-      onAvisado(deudor.pacienteId, resultado.enviadoEn);
+      onAvisado(resultado.creado);
     } catch (error) {
-      // El mensaje viene del servidor: si Twilio rechazó el envío, dice por
-      // qué. Solo se cae al genérico si no hubo respuesta.
+      // El servidor rechazó programarlo. El envío lo resuelve el despachador.
       setConfirmando(false);
       onError(error instanceof ApiClientError ? error.mensaje : ALGO_FALLO);
     } finally {

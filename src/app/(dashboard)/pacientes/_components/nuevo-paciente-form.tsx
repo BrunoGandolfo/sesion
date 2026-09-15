@@ -14,17 +14,6 @@ const schema = z.object({
   nombre: z.string().trim().min(1, "Ingresá el nombre"),
   apellido: z.string().trim().min(1, "Ingresá el apellido"),
   telefono: z.string().trim().min(8, "Ingresá el teléfono"),
-  email: z
-    .string()
-    .trim()
-    .optional()
-    .refine(
-      (value) =>
-        !value ||
-        value.length === 0 ||
-        z.string().email().safeParse(value).success,
-      { message: "Email inválido" },
-    ),
   tarifa: z
     .number({ error: "Ingresá la tarifa" })
     .positive("La tarifa debe ser mayor a 0"),
@@ -60,7 +49,6 @@ export function NuevoPacienteForm({
       nombre: "",
       apellido: "",
       telefono: "",
-      email: "",
       tarifa: tarifaDefault ?? undefined,
       notas: "",
     },
@@ -74,10 +62,6 @@ export function NuevoPacienteForm({
         nombre: values.nombre.trim(),
         apellido: values.apellido.trim(),
         telefono: values.telefono.trim(),
-        email:
-          values.email && values.email.trim().length > 0
-            ? values.email.trim()
-            : null,
         tarifa: values.tarifa,
         notas:
           values.notas && values.notas.trim().length > 0
@@ -129,14 +113,6 @@ export function NuevoPacienteForm({
               placeholder="+598 99 123 456"
               error={errors.telefono?.message}
               {...register("telefono")}
-            />
-            <Input
-              label="Email (opcional)"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              error={errors.email?.message}
-              {...register("email")}
             />
 
             <div>

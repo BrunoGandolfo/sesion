@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import type { DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import type { PacienteConDeuda, Turno } from "@/types/domain";
 import { ApiClientError } from "@/lib/api-client";
-import { COBRO_DESHECHO, SMS_ENVIADO } from "@/lib/glosario";
+import { COBRO_DESHECHO } from "@/lib/glosario";
 
 import { CobrosView } from "../cobros/_components/cobros-view";
 import { GrabarView } from "../grabar/[turnoId]/_components/grabar-view";
@@ -100,7 +100,6 @@ beforeEach(() => {
     if (url === "/api/deudores") return [{ pacienteId: "p1", nombre: "Paciente", apellido: "Sintética", telefono: PACIENTE.telefono,
       minutosTotales: 50, ultimoAvisoEn: null, sesionesImpagas: 1, montoTotal: 1500, diasAtraso: 1 }];
     if (url === "/api/turnos/cobros") return [];
-    if (url === "/api/sms/estado") return { ok: true };
     if (url.includes("/documentacion?")) return { sesiones: [], totalSesiones: 0, totalPages: 0, page: 1 };
     if (url.endsWith("/consentimiento")) return { consentimiento: null };
     if (url === "/api/pacientes/p1") return { paciente: PACIENTE, turnos: [jsonTurno()] };
@@ -127,13 +126,25 @@ async function cobrar() {
 
 describe("los avisos distinguen un rechazo de una operación confirmada", () => {
   it.each([false, true])("SMS de cobro: éxito=%s", async (exito) => {
-    if (exito) m.post.mockResolvedValue({ enviadoEn: AHORA.toISOString() });
+    if (exito) m.post.mockResolvedValue({ envioId: "sms1", creado: true, programadoEn: AHORA.toISOString() });
     else m.post.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<CobrosView />);
     fireEvent.click(await screen.findByRole("button", { name: /Recordar cobro a/ }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar SMS" }));
-    await verificarAviso(exito ? SMS_ENVIADO : FALLO, exito);
+    await verificarAviso(exito ? "Aviso programado. Sale en los próximos minutos." : FALLO, exito);
     expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", {});
+    expect(m.get.mock.calls.some(([url]) => url === "/api/sms/estado")).toBe(false);
+    expect(screen.queryByText(/Avisado hace/)).toBeNull();
+  });
+
+  it("no promete un SMS nuevo cuando ya se pidió hoy", async () => {
+    m.post.mockResolvedValue({envioId:"sms1",creado:false,programadoEn:AHORA.toISOString()});
+    render(<CobrosView />);
+    fireEvent.click(await screen.findByRole("button", {name:/Recordar cobro a/}));
+    fireEvent.click(screen.getByRole("button", {name:"Enviar SMS"}));
+    await verificarAviso("Ya pediste este aviso hoy. No se programó otro.", true);
+    expect(screen.queryByText("Aviso programado. Sale en los próximos minutos.")).toBeNull();
+    expect(screen.queryByText(/Avisado hace/)).toBeNull();
   });
 
   it.each([false, true])("reactivar desde la lista: éxito=%s", async (exito) => {
