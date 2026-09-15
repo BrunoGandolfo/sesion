@@ -74,6 +74,7 @@ export function tokenDeCookieHeader(
 // ────────────────────────────────────────────────────────────────────────────
 
 export const RUTAS_PUBLICAS: readonly string[] = [
+  "/api/version",
   "/login",
   "/registro",
   "/terminos",

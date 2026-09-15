@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { buscarActor } from "@/app/api/_lib/auth";
+import { AvisoVersion } from "@/components/layout/aviso-version";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { Providers } from "@/components/layout/providers";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -67,6 +68,7 @@ export default async function DashboardLayout({
           <Sidebar />
         </div>
         <main className="min-w-0 flex-1 overflow-x-clip pb-20 lg:pb-0">
+          <AvisoVersion />
           {children}
         </main>
         <BottomNav />

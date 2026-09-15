@@ -50,8 +50,9 @@ describe("la cookie", () => {
 });
 
 describe("rutas públicas", () => {
-  it("son exactamente las de entrar, registrarse y recuperar", () => {
+  it("son exactamente las de cuenta, términos y metadatos de versión", () => {
     expect(RUTAS_PUBLICAS).toEqual([
+      "/api/version",
       "/login", "/registro", "/terminos", "/recuperar", "/restablecer",
       "/api/cuenta/entrar", "/api/cuenta/registro", "/api/cuenta/recuperar", "/api/cuenta/restablecer",
     ]);

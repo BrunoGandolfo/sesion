@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
@@ -49,6 +50,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Identificador público congelado en ambos bundles; no contiene secretos.
+  env: { NEXT_PUBLIC_VERSION_APP: randomUUID() },
   async headers() {
     return [
       {
