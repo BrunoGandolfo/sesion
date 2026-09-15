@@ -149,10 +149,12 @@ def obtener_pendientes(limite: int = 1) -> list[dict]:
     return _lista(f"{config.PENDIENTES_URL}?limite={int(limite)}")
 
 
-def renovar_lease(sesion_id: str, ticket: str, intento: int, paso: str | None = None) -> RespuestaApp:
+def renovar_lease(sesion_id: str, ticket: str, intento: int, paso: str | None = None, pausas_audio: list[dict] | None = None) -> RespuestaApp:
     payload: dict = {"intento": intento}
     if paso:
         payload["paso"] = paso[:40]
+    if pausas_audio is not None:
+        payload["pausasAudio"] = pausas_audio
     return _post(url_sesion(sesion_id, "lease"), payload, ticket, f"Lease {sesion_id}")
 
 

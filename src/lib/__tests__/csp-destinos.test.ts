@@ -152,11 +152,15 @@ describe("destinos externos del código", () => {
     process.env.R2_ACCESS_KEY_ID = "AKIAFALSA";
     process.env.R2_SECRET_ACCESS_KEY = "falsa";
     process.env.R2_BUCKET_NAME = "sesion-audio";
-    const { generarUrlSubida } = await import("@/lib/r2");
-    const { url } = await generarUrlSubida("org/sesion/0", {
-      contentType: "application/octet-stream",
-      contentLength: 10,
+    const { objetosAudio } = await import("@/lib/r2");
+    const { url } = await objetosAudio.firmar("org/sesion/0", {
+      indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 20, sha256: "a".repeat(64),
     });
+    expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toContain("if-none-match");
+    expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toContain("x-amz-meta-sha256");
+    // El firmador no recibe el audio: no debe exigir el CRC32 de cero bytes.
+    expect(new URL(url).searchParams.get("x-amz-checksum-crc32")).toBeNull();
+    expect(new URL(url).searchParams.get("x-amz-sdk-checksum-algorithm")).toBeNull();
     const origen = new URL(url).origin;
 
     expect(origen).toBe(`https://sesion-audio.0123456789abcdef${SUFIJO_HOST_R2}`);

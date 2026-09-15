@@ -21,15 +21,17 @@ def _get_client():
             aws_access_key_id=config.R2_ACCESS_KEY_ID,
             aws_secret_access_key=config.R2_SECRET_ACCESS_KEY,
             region_name="auto",
-            config=BotoConfig(signature_version="s3v4"),
+            config=BotoConfig(signature_version="s3v4", connect_timeout=5, read_timeout=30, retries={"max_attempts": 3}),
         )
     return _client
 
-def descargar_audio(key: str) -> tuple[bytes, dict]:
+def descargar_segmento(key: str, bytes_esperados: int) -> bytes:
+    response = _get_client().get_object(Bucket=config.R2_BUCKET_NAME, Key=key)
+    body = response["Body"]
     try:
-        response = _get_client().get_object(Bucket=config.R2_BUCKET_NAME, Key=key)
-        datos = response["Body"].read()
-        metadata = response.get("Metadata", {})
-        return datos, metadata
-    except Exception as e:
-        raise RuntimeError(f"Error descargando {key} de R2: {e}")
+        datos = body.read(bytes_esperados + 1)
+        if len(datos) != bytes_esperados:
+            raise ValueError("El tamaño del segmento no coincide")
+        return datos
+    finally:
+        body.close()

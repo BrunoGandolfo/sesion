@@ -169,6 +169,10 @@ def procesar_modo_manual(ruta_item: str) -> bool:
 
 
 def main() -> None:
+    # No reclamar una sesión si el entorno no puede decodificarla.
+    import shutil
+    if any(shutil.which(binario) is None for binario in ("ffmpeg", "ffprobe")):
+        raise RuntimeError("El worker necesita ffmpeg y ffprobe antes de aceptar sesiones")
     config.validar_config()
     if len(sys.argv) > 1 and sys.argv[1] == "manual":
         if len(sys.argv) < 3:

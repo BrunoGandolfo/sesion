@@ -26,7 +26,7 @@ export const ESTADOS_ACTIVOS: ReadonlySet<EstadoSesion> = new Set<EstadoSesion>(
 ]);
 
 /** Campos del contrato que devuelven TODOS los endpoints que entregan una
- *  sesión a la UI (GET ?turnoId, GET [id], POST, upload-confirmar).
+ *  sesión a la UI (GET ?turnoId, GET [id], POST).
  *  GET [id] devuelve el contrato completo (SesionClinicaApi). */
 export type SesionClinicaApiBase = Pick<
   SesionClinicaApi,

@@ -24,6 +24,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       sesionId: sesion.sesionId,
       organizationId: sesion.organizationId,
       intento: parsed.data.intento,
+      pausasAudio: parsed.data.pausasAudio,
     });
     await registrarLatido({ prisma: db, ...identidadWorker(request), ahora: new Date(), tipo: "trabajo" });
     return ok({ leaseVenceEn: leaseVenceEn.toISOString() });

@@ -704,6 +704,9 @@ model AudioSegmento {
   iv             Bytes
   bytes          Int
   sha256         String    @db.Char(64)
+  /// Inicio en el reloj monotónico de captura, en milisegundos. Primero cero;
+  /// null en registros anteriores cuya medida se desconoce.
+  inicioMs       Float?    @map("inicio_ms")
   confirmadoEn   DateTime? @map("confirmado_en")
 
   sesion       SesionClinica @relation(fields: [sesionId], references: [id], onDelete: Cascade)

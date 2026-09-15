@@ -1,34 +1,23 @@
 # Pipeline clínico: implementación y límites de main
 
-Base verificada: main e247d8b, 15 de septiembre de 2026. Hay código del
-grabador anterior y un backend nuevo. El recorrido desde una grabación nueva
-hasta la nota **todavía no está conectado de punta a punta**.
+La rama `audio`, desde `34187da`, reconstruye captura, subida y ensamblado por
+fronteras medidas. Estado, API, evidencia y límites:
+`docs/pendientes/01-audio.md`. No se da por habilitada para uso clínico.
 
-## Captura y subida pendientes
+## Captura y subida
 
-La pantalla `src/app/(dashboard)/grabar/[turnoId]/page.tsx` y el hook
-`src/hooks/useGrabacionSesion.ts` siguen en el repositorio. El respaldo de
-`src/lib/grabacion-storage.ts` conserva fragmentos sin cifrar mientras se
-graba; `src/lib/grabacion-cifrado.ts` cifra el blob al terminar.
-
-La creación actual es `POST /api/sesion-clinica`, con turnoId UUID y
-consentimiento vigente; crea la sesión en grabando. La consulta por turno es
-`GET /api/sesion-clinica`. La ruta
-`src/app/api/sesion-clinica/route.ts` sigue como excepción pendiente de
-migrar a casos de uso.
-
-Los endpoints antiguos de URL de subida y confirmación fueron eliminados.
-Los consumidores existentes siguen llamándolos y no son una implementación
-vigente de subida. Tampoco hay una operación HTTP genérica para cambiar el
-estado de la sesión. El contrato nuevo de audio exige segmentos, pero todavía
-falta reconstruir su captura/subida. No simular éxito ni recomendar esos
-endpoints como procedimiento de operación.
+La pantalla `src/app/(dashboard)/grabar/[turnoId]/page.tsx` usa
+`src/hooks/useAudioGrabacion.ts`. `src/lib/audio/cifrado.ts` cifra cada segmento
+comprimido antes de que `src/lib/audio/almacen.ts` lo escriba en IndexedDB.
+`src/lib/audio/sincronizar.ts` reconcilia la subida por las rutas `/api/audio`.
+`src/app/api/_lib/casos-uso/audio.ts` conserva la identidad de sesión y realiza
+el cierre mediante `audio_listo`. La ruta compatible de sesión por turno también
+delega en casos de uso; ya no es excepción del guardián de Prisma.
 
 El esquema guarda una clave por sesión y un IV por segmento. Las keys de R2 se
 calculan como organización/sesión/índice, sin persistir una key enviada por el
-cliente: `src/lib/sesion-clinica/estados.ts`. Que el esquema lo prevea no
-demuestra que la captura lo cumpla. El consentimiento 2.0 sí lo promete:
-diferencia pendiente en `src/lib/consentimiento-hechos.ts`.
+cliente: `src/lib/sesion-clinica/estados.ts`. Se agregó únicamente `audio_segmentos.inicio_ms`, nullable y sin default, para el inicio
+medido con reloj monotónico. No se modificó el consentimiento.
 
 ## Estados y operaciones existentes
 
@@ -64,7 +53,7 @@ incrementa intento, genera un ticket y da un lease de cinco minutos.
 El payload incluye sesión, paciente, intento, ticket, orientación, vocabulario
 ASR, duración y uno de estos recursos:
 
-- audio: clave descifrada y segmentos ordenados con índice, key, IV y bytes;
+- audio: organización, clave descifrada, pausas y segmentos ordenados con índice, key, IV, bytes, SHA-256 e inicio medido (`inicioMs`);
 - checkpoint: transcripción ya guardada, métricas y modelo ASR.
 
 Con checkpoint no se vuelve a descargar ni a transcribir. El vocabulario es
@@ -89,11 +78,18 @@ las antiguas variables de entorno de lease.
 
 ## Worker, ASR y nota
 
-`processor/worker.py` ejecuta `processor/processor.py`. Descarga R2 y
-descifra en memoria. El código actual une los bytes descifrados en orden
-con join: no realiza una unión de contenedores multimedia ni recorta solapes.
-La viabilidad de ese pegado con segmentos independientes sigue pendiente de
-integración; este documento no la da por resuelta.
+`processor/worker.py` ejecuta `processor/processor.py`.
+`processor/audio_entrada.py` verifica y descifra un segmento a la vez, lo decodifica
+con ffmpeg y arma un archivo temporal en disco para subirlo al ASR. La imagen
+`processor/Dockerfile` incluye ffmpeg/ffprobe. Se mide cada archivo decodificado
+(eliminando el padding final de AAC según MP4). Su inicio más esa duración indica
+hasta dónde llegó. El siguiente se recorta solamente por la diferencia positiva
+entre esa cobertura y su inicio; un hueco se conserva como interrupción, sin
+recortar el siguiente ni rellenar silencio. La duración final se compara con la
+suma exacta de muestras medidas menos las recortadas, nunca con segundos redondeados.
+La renovación del lease admite `pausasAudio`: antes del ASR conserva las pausas
+de captura y los huecos medidos en la columna existente `pausas`. La pantalla de sesión avisa si hay
+interrupciones. Ver evidencia y límites en `docs/pendientes/01-audio.md`.
 
 `processor/asr_assemblyai.py` usa la API REST de AssemblyAI. Los defaults
 de `processor/config.py` son universal-3-5-pro con fallback universal-2,

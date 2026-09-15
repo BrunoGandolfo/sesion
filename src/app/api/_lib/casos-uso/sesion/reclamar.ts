@@ -50,9 +50,13 @@ export interface SegmentoEntregado {
   /** IV del segmento, base64. */
   iv: string;
   bytes: number;
+  sha256: string;
+  inicioMs: number | null;
 }
 
 export interface AudioEntregado {
+  organizationId: string;
+  pausas: unknown;
   /** Clave AES-256 del audio, base64. */
   clave: string;
   segmentos: SegmentoEntregado[];
@@ -143,6 +147,7 @@ export async function reclamarSesiones({
       select: {
         organizationId: true,
         duracionAudioSeg: true,
+        pausas: true,
         modeloAsr: true,
         speechAnalytics: true,
         audioEstado: true,
@@ -151,7 +156,7 @@ export async function reclamarSesiones({
         transcripcion: true,
         turno: { select: { pacienteId: true } },
         segmentos: {
-          select: { indice: true, iv: true, bytes: true },
+          select: { indice: true, iv: true, bytes: true, sha256: true, inicioMs: true },
           orderBy: { indice: "asc" },
         },
         organization: {
@@ -174,11 +179,15 @@ export async function reclamarSesiones({
       !checkpoint && fila.audioEstado === "en_r2" && fila.audioClave
         ? {
             clave: fila.audioClave,
+            organizationId: fila.organizationId,
+            pausas: fila.pausas ?? [],
             segmentos: fila.segmentos.map((s) => ({
               indice: s.indice,
               key: keyAudio(fila.organizationId, c.id, s.indice),
               iv: Buffer.from(s.iv).toString("base64"),
               bytes: s.bytes,
+              sha256: s.sha256,
+              inicioMs: s.inicioMs,
             })),
           }
         : null;

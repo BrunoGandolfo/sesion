@@ -54,7 +54,7 @@ def test_fallback_de_modelo_reportado(http):
     mocker, post, get, delete = http
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
-    out = asr_assemblyai.transcribir(b"audio")
+    out = asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     # Se pidieron ambos modelos en orden y se reporta el que proceso de verdad.
     payload = post.call_args_list[1].kwargs["json"]
@@ -72,7 +72,7 @@ def test_4xx_en_polling_corta_sin_reintentar(http):
     get.return_value = _resp(mocker, 401, {"error": "unauthorized"})
 
     with pytest.raises(PipelineError) as exc:
-        asr_assemblyai.transcribir(b"audio")
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     assert exc.value.codigo == "asr_error"
     assert get.call_count == 1
@@ -83,7 +83,7 @@ def test_5xx_en_polling_reintenta(http):
     mocker, _, get, _ = http
     get.side_effect = [_resp(mocker, 503), _resp(mocker, 200, COMPLETADO)]
 
-    out = asr_assemblyai.transcribir(b"audio")
+    out = asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     assert get.call_count == 2
     assert out["speech_model"] == MODELO_FALLBACK
@@ -94,7 +94,7 @@ def test_5xx_persistente_agota_los_fallos(http):
     get.return_value = _resp(mocker, 503)
 
     with pytest.raises(PipelineError) as exc:
-        asr_assemblyai.transcribir(b"audio")
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     assert exc.value.codigo == "asr_error"
     assert get.call_count == asr_assemblyai.MAX_FALLOS_POLLING_CONSECUTIVOS
@@ -105,7 +105,7 @@ def test_timeout_de_polling(http):
     mocker.patch.object(asr_assemblyai.config, "ASR_TIMEOUT_SECONDS", 0)
 
     with pytest.raises(PipelineError) as exc:
-        asr_assemblyai.transcribir(b"audio")
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     assert exc.value.codigo == "asr_timeout"
     get.assert_not_called()
@@ -117,7 +117,7 @@ def test_error_de_red_en_upload(http):
     post.side_effect = requests.ConnectionError("boom")
 
     with pytest.raises(PipelineError) as exc:
-        asr_assemblyai.transcribir(b"audio")
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     assert exc.value.codigo == "asr_error"
     delete.assert_not_called()  # no hay transcript que borrar
@@ -129,7 +129,7 @@ def test_borra_el_transcript_aunque_falle_el_parseo(http):
     mocker.patch("asr_assemblyai._normalizar", side_effect=ValueError("parseo roto"))
 
     with pytest.raises(ValueError):
-        asr_assemblyai.transcribir(b"audio")
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     delete.assert_called_once()
     assert delete.call_args.args[0].endswith("/transcript/tr1")
@@ -141,7 +141,7 @@ def test_sin_speech_model_used_asume_el_solicitado(http, caplog):
     get.return_value = _resp(mocker, 200, data)
 
     with caplog.at_level(logging.WARNING, logger="asr_assemblyai"):
-        out = asr_assemblyai.transcribir(b"audio")
+        out = asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     assert out["speech_model"] == MODELO_PRINCIPAL
     assert any("speech_model_used" in r.getMessage() for r in caplog.records)
@@ -156,7 +156,7 @@ def test_los_logs_no_contienen_texto_de_la_transcripcion(http, caplog):
     get.return_value = _resp(mocker, 200, data)
 
     with caplog.at_level(logging.DEBUG):
-        asr_assemblyai.transcribir(b"audio")
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     assert all("FRASE-SECRETA" not in r.getMessage() for r in caplog.records)
 
@@ -177,7 +177,7 @@ def test_sin_keyterms_el_payload_sale_igual_que_antes(http):
     mocker, post, get, _ = http
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
-    asr_assemblyai.transcribir(b"audio")
+    asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
     # No se manda la clave vacia: la request es identica a la de antes de HotWords.
     assert "keyterms_prompt" not in _payload_transcript(post)
@@ -187,7 +187,7 @@ def test_lista_vacia_tampoco_manda_la_clave(http):
     mocker, post, get, _ = http
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
-    asr_assemblyai.transcribir(b"audio", [])
+    asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), [])
 
     assert "keyterms_prompt" not in _payload_transcript(post)
 
@@ -196,7 +196,7 @@ def test_none_es_lo_mismo_que_no_pasar_nada(http):
     mocker, post, get, _ = http
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
-    asr_assemblyai.transcribir(b"audio", None)
+    asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), None)
 
     assert "keyterms_prompt" not in _payload_transcript(post)
 
@@ -208,7 +208,7 @@ def test_los_terminos_viajan_en_keyterms_prompt_junto_al_prompt(http):
     )
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
-    asr_assemblyai.transcribir(b"audio", ["MITI 4.2.1", "alianza terapéutica"])
+    asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), ["MITI 4.2.1", "alianza terapéutica"])
 
     payload = _payload_transcript(post)
     assert payload["keyterms_prompt"] == ["MITI 4.2.1", "alianza terapéutica"]
@@ -224,7 +224,7 @@ def test_sin_prompt_configurado_los_keyterms_igual_salen(http):
     mocker.patch.object(asr_assemblyai.config, "ASR_PROMPT_ESCENARIO", "")
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
-    asr_assemblyai.transcribir(b"audio", ["disociación"])
+    asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), ["disociación"])
 
     payload = _payload_transcript(post)
     assert payload["keyterms_prompt"] == ["disociación"]
@@ -235,7 +235,7 @@ def test_saneamiento_llega_al_payload(http):
     mocker, post, get, _ = http
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
-    asr_assemblyai.transcribir(b"audio", ["  ", "GTFS", "GTFS", "", "CTS-R"])
+    asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), ["  ", "GTFS", "GTFS", "", "CTS-R"])
 
     assert _payload_transcript(post)["keyterms_prompt"] == ["GTFS", "CTS-R"]
 
@@ -245,7 +245,7 @@ def test_el_log_dice_cuantos_terminos_pero_no_cuales(http, caplog):
     get.return_value = _resp(mocker, 200, COMPLETADO)
 
     with caplog.at_level(logging.DEBUG):
-        asr_assemblyai.transcribir(b"audio", ["Mariana", "NOMBRE-SECRETO"])
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), ["Mariana", "NOMBRE-SECRETO"])
 
     mensajes = [r.getMessage() for r in caplog.records]
     assert any("2 keyterms" in m for m in mensajes)

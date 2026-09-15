@@ -1,5 +1,5 @@
 import { RESPALDO_LOCAL_CIFRADO, ASR_BORRADO_CON_REINTENTO, LIMPIEZA_AUDIO_REINTENTA, RETENCION_BACKUPS_DIAS, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
-import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
+import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/audio/contrato";
 
 import { beforeEach, describe, expect, it } from "vitest";
 

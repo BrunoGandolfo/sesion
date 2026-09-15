@@ -4,6 +4,9 @@ resultado nota, fallos transitorios/definitivos, lease perdido, y los
 trabajos durables. Sin red.
 """
 import logging
+from contextlib import nullcontext
+from pathlib import Path
+from audio_entrada import AudioPreparado
 
 import pytest
 
@@ -45,7 +48,7 @@ def sesion(**extra) -> SesionReclamada:
 def pasos(mocker):
     """Pasos exitosos por defecto; cada test rompe el que le interesa."""
     mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
-    mocker.patch("processor.descargar_y_descifrar", return_value=b"audio")
+    mocker.patch("processor.armar_audio", side_effect=lambda *a: nullcontext(AudioPreparado(Path("audio.wav"), 120000, [])))
     mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
     mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
     mocker.patch("processor.formatear_para_llm", return_value="[00:00] Terapeuta: hola")
@@ -115,7 +118,7 @@ def test_analizar_no_genera_feedback_y_suma_speech_analytics(pasos):
 
 
 def test_con_checkpoint_no_descarga_ni_transcribe(pasos):
-    descargar = pasos["mocker"].patch("processor.descargar_y_descifrar")
+    descargar = pasos["mocker"].patch("processor.armar_audio")
     transcribir = pasos["mocker"].patch("processor.transcribir")
 
     processor.procesar_sesion(
@@ -150,7 +153,7 @@ def test_fallo_transitorio_en_asr_se_informa_como_no_definitivo_con_el_paso(paso
 
 
 def test_fallo_definitivo_en_descifrado(pasos):
-    pasos["mocker"].patch("processor.descargar_y_descifrar", side_effect=PipelineError("descifrado_error", "No se pudo descifrar el audio"))
+    pasos["mocker"].patch("processor.armar_audio", side_effect=PipelineError("descifrado_error", "No se pudo descifrar el audio"))
 
     processor.procesar_sesion(sesion())
 
@@ -268,50 +271,21 @@ def test_un_5xx_del_lease_no_lo_pierde(pasos):
 
 # Pasos reales ──────────────────────────────────────────────────────────────
 
-def test_descargar_concatena_los_segmentos_en_orden_y_descifra_cada_uno(mocker):
-    descargas = []
-    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or (key.encode(), {})))
-    mocker.patch("processor.descifrar", side_effect=lambda b64, clave, iv: f"{iv}|".encode())
-
-    audio = {
-        "clave": "clave",
-        "segmentos": [
-            {"indice": 1, "key": "org/s1/1", "iv": "iv1"},
-            {"indice": 0, "key": "org/s1/0", "iv": "iv0"},
-        ],
-    }
-    assert processor.descargar_y_descifrar("s1", audio, 1) == b"iv0|iv1|"
-    assert descargas == ["org/s1/0", "org/s1/1"]
-
-
-def test_descargar_sin_clave_o_sin_segmentos_es_definitivo():
-    with pytest.raises(PipelineError) as exc:
-        processor.descargar_y_descifrar("s1", {"clave": "", "segmentos": [{"key": "k", "iv": "i"}]}, 1)
-    assert exc.value.codigo == "audio_sin_clave" and exc.value.definitivo
-
-    with pytest.raises(PipelineError) as exc:
-        processor.descargar_y_descifrar("s1", {"clave": "c", "segmentos": []}, 1)
-    assert exc.value.codigo == "audio_sin_segmentos" and exc.value.definitivo
-
-
-def test_descargar_con_r2_caido_es_transitorio(mocker):
-    mocker.patch("processor.r2_client.descargar_audio", side_effect=RuntimeError("boom"))
-    with pytest.raises(PipelineError) as exc:
-        processor.descargar_y_descifrar("s1", {"clave": "c", "segmentos": [{"indice": 0, "key": "k", "iv": "i"}]}, 1)
-    assert exc.value.codigo == "r2_error" and not exc.value.definitivo
-
-
-def test_transcribir_sin_segmentos_es_asr_vacio(mocker):
+def test_transcribir_sin_segmentos_es_asr_vacio(mocker, tmp_path):
+    archivo = tmp_path / "audio.wav"
+    archivo.write_bytes(b"audio")
     mocker.patch("processor.asr_assemblyai.transcribir", return_value={"segments": []})
     with pytest.raises(PipelineError) as exc:
-        processor.transcribir("s1", b"audio")
+        processor.transcribir("s1", archivo)
     assert exc.value.codigo == "asr_vacio" and exc.value.definitivo
 
 
-def test_transcribir_pasa_los_terminos_y_no_los_loguea(mocker, caplog):
+def test_transcribir_pasa_los_terminos_y_no_los_loguea(mocker, caplog, tmp_path):
+    archivo = tmp_path / "audio.wav"
+    archivo.write_bytes(b"audio")
     asr = mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
     with caplog.at_level(logging.DEBUG):
-        processor.transcribir("s1", b"audio", ["NOMBRE-SECRETO", "GTFS"])
+        processor.transcribir("s1", archivo, ["NOMBRE-SECRETO", "GTFS"])
     assert asr.call_args.args[1] == ["NOMBRE-SECRETO", "GTFS"]
     mensajes = [r.getMessage() for r in caplog.records]
     assert any("2 terminos ASR" in m for m in mensajes)
@@ -374,3 +348,25 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
 def test_un_tipo_desconocido_no_lanza():
     res = processor.ejecutar_trabajo({"tipo": "integrar_contexto"})
     assert res["ok"] is False and "integrar_contexto" in res["error"]
+
+
+def test_huecos_se_avisan_y_persisten_antes_del_asr_sin_perder_pausas(pasos, caplog):
+    hueco = {"inicio": 59800, "fin": 60000, "siguienteIndice": 1, "motivo": "interrupcion"}
+    pausa = {"inicio": 118000, "fin": None, "siguienteIndice": 2, "motivo": "manual"}
+    pasos["mocker"].patch("processor.armar_audio", side_effect=lambda *a: nullcontext(AudioPreparado(Path("audio.wav"), 117800, [hueco])))
+    s = sesion()
+    s.audio["pausas"] = [pausa]
+    with caplog.at_level(logging.WARNING):
+        processor.procesar_sesion(s)
+    assert "Audio posiblemente incompleto" in caplog.text
+    assert pasos["lease"].call_args.kwargs["pausas_audio"] == [pausa, hueco]
+
+
+@pytest.mark.parametrize("status", [409, 503])
+def test_no_transcribe_si_no_se_pudo_guardar_el_aviso_de_hueco(pasos, status):
+    hueco = {"inicio": 59800, "fin": 60000, "siguienteIndice": 1, "motivo": "interrupcion"}
+    pasos["mocker"].patch("processor.armar_audio", side_effect=lambda *a: nullcontext(AudioPreparado(Path("audio.wav"), 117800, [hueco])))
+    pasos["lease"].return_value = RespuestaApp(ok=False, status=status)
+    asr = pasos["mocker"].patch("processor.transcribir")
+    processor.procesar_sesion(sesion())
+    asr.assert_not_called()

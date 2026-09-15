@@ -97,67 +97,25 @@ describe("R2 client", () => {
     });
   });
 
-  // Los tests de subirAudioCifrado y descargarAudioCifrado se fueron con
-  // esas funciones: el audio no viaja por el servidor desde que el
-  // navegador hace PUT a la URL prefirmada. Lo que cubrían —"lanza si R2 no
-  // está configurado" y "el error trae la key"— lo cubren igual los tests
-  // de generarUrlSubida y existeAudio, que sí tienen consumidores.
-
-  describe("generarUrlSubida (PUT prefirmado para el navegador)", () => {
-    it("firma un PutObject con bucket, key, Content-Type y Content-Length", async () => {
+  describe("segmentos inmutables", () => {
+    const descriptor = { indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 12345, sha256: "a".repeat(64) };
+    it("firma el tamaño, la huella y la prohibición de sobrescribir durante cinco minutos", async () => {
       setR2Env();
-      const { generarUrlSubida } = await import("@/lib/r2");
-
-      const antes = Date.now();
-      const result = await generarUrlSubida("audio/o/s/t.enc", {
-        contentType: "audio/webm",
-        contentLength: 12345,
-        expiraEnSegundos: 3600,
-      });
-
-      expect(result.url).toMatch(/^https:\/\/r2\.example\/firmada/);
-      expect(getSignedUrlMock).toHaveBeenCalledTimes(1);
-      const [, cmd, opts] = getSignedUrlMock.mock.calls[0] as [
-        unknown,
-        { __cmd: "Put"; input: S3CommandInput },
-        { expiresIn: number },
-      ];
-      expect(cmd.__cmd).toBe("Put");
-      expect(cmd.input.Bucket).toBe("bucket-test");
-      expect(cmd.input.Key).toBe("audio/o/s/t.enc");
-      expect(cmd.input.ContentType).toBe("audio/webm");
-      expect(cmd.input.ContentLength).toBe(12345);
-      expect(opts.expiresIn).toBe(3600);
-      // expiraEn ≈ ahora + 3600 s (tolerancia de 5 s)
-      const delta = result.expiraEn.getTime() - antes;
-      expect(delta).toBeGreaterThanOrEqual(3600 * 1000 - 5000);
-      expect(delta).toBeLessThanOrEqual(3600 * 1000 + 5000);
+      const { objetosAudio } = await import("@/lib/r2");
+      const resultado = await objetosAudio.firmar("org/sesion/0", descriptor);
+      const [, comando, opciones] = getSignedUrlMock.mock.calls[0];
+      expect(comando.input).toMatchObject({ Key: "org/sesion/0", ContentType: "application/octet-stream", ContentLength: 12345, IfNoneMatch: "*", Metadata: { sha256: descriptor.sha256 } });
+      expect(opciones.expiresIn).toBe(300);
+      expect(resultado.headers["If-None-Match"]).toBe("*");
     });
-
-    it("usa 60 minutos por defecto", async () => {
-      setR2Env();
-      const { generarUrlSubida } = await import("@/lib/r2");
-      await generarUrlSubida("audio/k.enc", {
-        contentType: "application/octet-stream",
-        contentLength: 1,
-      });
-      const [, , opts] = getSignedUrlMock.mock.calls[0] as [
-        unknown,
-        unknown,
-        { expiresIn: number },
-      ];
-      expect(opts.expiresIn).toBe(3600);
+    it("verifica el tamaño y la huella declarada sin descargar el audio", async () => {
+      setR2Env(); sendMock.mockResolvedValueOnce({ ContentLength: 12345, Metadata: { sha256: descriptor.sha256 } });
+      const { objetosAudio } = await import("@/lib/r2");
+      expect(await objetosAudio.comprobar("org/sesion/0")).toEqual({ existe: true, bytes: 12345, sha256: descriptor.sha256 });
     });
-
-    it("lanza si R2 no está configurado", async () => {
-      unsetR2Env();
-      const { generarUrlSubida } = await import("@/lib/r2");
-      await expect(
-        generarUrlSubida("audio/k.enc", {
-          contentType: "audio/webm",
-          contentLength: 1,
-        }),
-      ).rejects.toThrow(/R2 no está configurado/);
+    it("no firma si R2 no está configurado", async () => {
+      unsetR2Env(); const { objetosAudio } = await import("@/lib/r2");
+      await expect(objetosAudio.firmar("org/sesion/0", descriptor)).rejects.toThrow(/R2 no está configurado/);
     });
   });
 

@@ -21,6 +21,7 @@ sumo los primeros 80 caracteres (es un codigo tecnico).
 """
 import logging
 import time
+from typing import BinaryIO
 
 import requests
 
@@ -168,7 +169,7 @@ def _sanear_keyterms(keyterms: list[str] | None) -> list[str]:
 
 # Etapas ────────────────────────────────────────────────────────────────────
 
-def _subir(audio_bytes: bytes) -> str:
+def _subir(audio: BinaryIO) -> str:
     # Cuerpo binario crudo (no multipart) con content-type
     # application/octet-stream; responde {"upload_url": ...}:
     #   https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/files/upload
@@ -176,7 +177,7 @@ def _subir(audio_bytes: bytes) -> str:
         response = requests.post(
             f"{API_BASE}/upload",
             headers=_headers({"content-type": "application/octet-stream"}),
-            data=audio_bytes,
+            data=audio,
             timeout=TIMEOUT_UPLOAD_SEG,
         )
     except requests.RequestException as e:
@@ -442,7 +443,7 @@ def _normalizar(data: dict, transcript_id: str, modelo_solicitado: str) -> dict:
 
 # API publica ───────────────────────────────────────────────────────────────
 
-def transcribir(audio_bytes: bytes, keyterms: list[str] | None = None) -> dict:
+def transcribir(audio: BinaryIO, keyterms: list[str] | None = None) -> dict:
     """
     Transcribe y diariza el audio (bytes ya descifrados) via AssemblyAI.
     El endpoint de upload recibe el audio como application/octet-stream y
@@ -453,8 +454,10 @@ def transcribir(audio_bytes: bytes, keyterms: list[str] | None = None) -> dict:
     los llamadores que no lo usan no cambian. Lo que llega se sanea en
     _sanear_keyterms antes de salir a la red.
     """
-    logger.info(f"AssemblyAI: subiendo {len(audio_bytes)} bytes")
-    upload_url = _subir(audio_bytes)
+    audio.seek(0, 2)
+    logger.info(f"AssemblyAI: subiendo {audio.tell()} bytes")
+    audio.seek(0)
+    upload_url = _subir(audio)
     transcript_id = _crear_transcript(upload_url, keyterms)
     logger.info(f"AssemblyAI: transcript {transcript_id} creado, esperando...")
     # Principal de `speech_models`: es lo que se asume si la respuesta no

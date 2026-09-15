@@ -22,7 +22,7 @@ Reglas con la app (contrato Area 2, src/app/api/_lib/casos-uso/sesion/*):
 Privacidad de logs: solo ids, conteos, codigos y status. Nunca clave, iv,
 texto de transcripcion/nota ni datos del paciente.
 """
-import base64
+from pathlib import Path
 import logging
 import threading
 from dataclasses import dataclass, field
@@ -33,10 +33,9 @@ import app_client
 import asr_assemblyai
 import clinical_analyzer
 import config
-import r2_client
+from audio_entrada import armar_audio
 import speech_analytics
 from clinical_analyzer import mensaje_error_api
-from crypto import descifrar
 from errores import LeasePerdido, PipelineError
 from transcripcion import formatear_para_llm
 
@@ -185,10 +184,18 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
                 transcripto = desde_checkpoint(sesion.checkpoint)
             else:
                 lease.comprobar("audio")
-                audio = descargar_y_descifrar(etiqueta, sesion.audio, sesion.intento)
-                lease.comprobar("asr")
-                transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr)
-                del audio
+                with armar_audio(etiqueta, sesion.audio) as audio:
+                    if audio.huecos:
+                        logger.warning(f"[{etiqueta}] Audio posiblemente incompleto: {len(audio.huecos)} hueco(s); sin relleno")
+                        pausas = list(sesion.audio.get("pausas") or [])
+                        pausas.extend(h for h in audio.huecos if h not in pausas)
+                        recibo = app_client.renovar_lease(etiqueta, sesion.ticket, sesion.intento, "audio", pausas_audio=pausas)
+                        if recibo.rechazado:
+                            raise LeasePerdido()
+                        if not recibo.ok:
+                            raise PipelineError("app_error", "No se pudo guardar el aviso de audio incompleto", definitivo=False)
+                    lease.comprobar("asr")
+                    transcripcion = transcribir(etiqueta, audio.archivo, sesion.terminos_asr)
                 transcripto = registrar_checkpoint(sesion, transcripcion)
             lease.comprobar("nota")
             analisis = analizar(etiqueta, transcripto, sesion.paciente_id)
@@ -208,51 +215,16 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
 
 # Pasos ─────────────────────────────────────────────────────────────────────
 
-def descargar_y_descifrar(etiqueta: str, audio: dict | None, intento: int) -> bytes:
-    """
-    R2 -> bytes de audio en claro, todo en memoria. Cada segmento (~60 s,
-    cifrado en el telefono con la clave de la sesion y su propio IV) se
-    descarga por la key que calculo la app y se descifra; el audio es la
-    concatenacion en orden de indice.
-    """
-    if not audio or not audio.get("clave"):
-        raise PipelineError("audio_sin_clave", "Falta la clave para descifrar el audio")
-    segmentos = audio.get("segmentos") or []
-    if not segmentos:
-        raise PipelineError("audio_sin_segmentos", "La sesion no tiene segmentos de audio")
-    if any(not s.get("key") or not s.get("iv") for s in segmentos):
-        raise PipelineError("audio_sin_clave", "Un segmento no tiene key o iv")
-    if any(str(s.get("key")).endswith("dev-no-r2") for s in segmentos):
-        raise PipelineError("audio_dev", "Audio en modo dev, no hay audio real")
-
-    partes: list[bytes] = []
-    logger.info(f"[{etiqueta}] Intento {intento}. Descargando {len(segmentos)} segmento(s) de R2")
-    for seg in sorted(segmentos, key=lambda s: int(s.get("indice", 0))):
-        try:
-            cifrado, _ = r2_client.descargar_audio(seg["key"])
-        except Exception as e:
-            logger.error(f"[{etiqueta}] R2 fallo en {seg['key']} ({type(e).__name__}): {str(e)[:300]}")
-            raise PipelineError("r2_error", "No se pudo descargar el audio de R2") from e
-        try:
-            partes.append(descifrar(base64.b64encode(cifrado).decode(), audio["clave"], seg["iv"]))
-        except ValueError as e:
-            # Los mensajes de crypto.descifrar son de forma (largos, tag), sin material de clave.
-            logger.error(f"[{etiqueta}] Descifrado fallo en el segmento {seg.get('indice')}: {str(e)[:120]}")
-            raise PipelineError("descifrado_error", "No se pudo descifrar el audio") from e
-    total = sum(len(p) for p in partes)
-    logger.info(f"[{etiqueta}] Descargado y descifrado: {total} bytes")
-    return b"".join(partes)
-
-
-def transcribir(etiqueta: str, audio_bytes: bytes, terminos_asr: list[str] | None = None) -> dict:
+def transcribir(etiqueta: str, archivo: Path, terminos_asr: list[str] | None = None) -> dict:
     """AssemblyAI: transcripcion diarizada normalizada (ver asr_assemblyai)."""
     terminos = terminos_asr or []
     logger.info(
-        f"[{etiqueta}] Transcribiendo ({len(audio_bytes)} bytes, "
+        f"[{etiqueta}] Transcribiendo ({archivo.stat().st_size} bytes, "
         # Solo la cantidad: los terminos pueden ser nombres propios de la paciente.
         f"{len(terminos)} terminos ASR)..."
     )
-    transcripcion = asr_assemblyai.transcribir(audio_bytes, terminos)
+    with archivo.open("rb") as audio:
+        transcripcion = asr_assemblyai.transcribir(audio, terminos)
     segments = transcripcion.get("segments") or []
     if not segments:
         raise PipelineError("asr_vacio", "La transcripcion no contiene segmentos")

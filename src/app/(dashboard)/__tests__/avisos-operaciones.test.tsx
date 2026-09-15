@@ -1,15 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import type { DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import type { PacienteConDeuda, Turno } from "@/types/domain";
 import { ApiClientError } from "@/lib/api-client";
 import { COBRO_DESHECHO } from "@/lib/glosario";
 
 import { CobrosView } from "../cobros/_components/cobros-view";
-import { GrabarView } from "../grabar/[turnoId]/_components/grabar-view";
 import { PacientesView } from "../pacientes/_components/pacientes-view";
 import { FichaTab } from "../pacientes/[id]/_components/ficha-tab";
 import { TurnosPagosTab } from "../pacientes/[id]/_components/turnos-pagos-tab";
@@ -20,7 +18,6 @@ const m = vi.hoisted(() => ({
   get: vi.fn<(url: string) => Promise<unknown>>(),
   post: vi.fn(), patch: vi.fn(), borrar: vi.fn(), subir: vi.fn(), iniciar: vi.fn(),
   router: { push: vi.fn() },
-  grabador: null as null | { onError: (mensaje: string) => void; onListo: (datos: DatosGrabacion) => void },
 }));
 vi.mock("@/lib/api-client", async (original) => ({
   ...await original<typeof import("@/lib/api-client")>(),
@@ -46,14 +43,6 @@ vi.mock("@/hooks/useHoy", () => ({ useHoy: () => AHORA }));
 vi.mock("@/hooks/useGrabacionSesion", () => ({
   useGrabacionSesion: () => ({ sesionClinica: { id: "s1", estado: "aprobada" }, loading: false }),
   subirAudioCifrado: m.subir, volverAGrabando: vi.fn(), marcarTurnoRealizado: vi.fn(),
-}));
-vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: vi.fn() }));
-vi.mock("@/components/grabacion/GrabadorSesion", () => ({
-  useGrabador: (opciones: NonNullable<typeof m.grabador>) => {
-    m.grabador = opciones;
-    return { estado: "inactivo", pendiente: null, iniciar: m.iniciar };
-  },
-  formatearDuracion: () => "00:00",
 }));
 // Se ejercita la conexión real entre el detalle de agenda y su aviso. Las
 // operaciones del sheet tienen sus propias pruebas: acá inyectamos su resultado.
@@ -87,7 +76,6 @@ function jsonTurno(pagado = false) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
-  m.grabador = null;
   m.post.mockResolvedValue(jsonTurno(true));
   m.patch.mockResolvedValue({});
   m.borrar.mockResolvedValue(jsonTurno());
@@ -198,23 +186,4 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
     await verificarAviso("Turno actualizado", true);
   });
 
-  it("la pantalla de grabar avisa un error y confirma solo la subida aceptada", async () => {
-    render(<GrabarView turnoId="t1" turnoProgramado={false} horaTexto="12:00" pacienteId="p1" pacienteNombre="Paciente Sintética" autorizacionVigente />);
-    act(() => m.grabador?.onError(FALLO));
-    await verificarAviso(FALLO, false);
-    fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
-    await waitFor(() => expect(m.iniciar).toHaveBeenCalledWith("t1"));
-    const datos: DatosGrabacion = { audioBlob: new Blob(["audio sintético"]), claveCifrado: "clave-de-prueba", ivCifrado: "iv-de-prueba", duracionSegundos: 5, pausas: [] };
-    await act(async () => { m.grabador?.onListo(datos); });
-    await verificarAviso("Te avisamos cuando la nota esté lista", true);
-    expect(m.subir).toHaveBeenCalledWith("s1", datos, expect.any(Function));
-  });
-
-  it("un inicio rechazado no muestra una confirmación", async () => {
-    m.get.mockRejectedValue(new Error(FALLO));
-    render(<GrabarView turnoId="t1" turnoProgramado={false} horaTexto="12:00" pacienteId="p1" pacienteNombre="Paciente Sintética" autorizacionVigente />);
-    fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
-    await verificarAviso(FALLO, false);
-    expect(m.iniciar).not.toHaveBeenCalled();
-  });
 });

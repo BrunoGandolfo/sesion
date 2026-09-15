@@ -72,7 +72,7 @@ export function generarNonce(): string {
 // nuevo que no esté declarado en ningún lado.
 //
 // R2: el navegador hace PUT del audio cifrado DIRECTO al bucket (la URL la
-// firma /api/sesion-clinica/[id]/upload-url). Va como host EXACTO, de la
+// firma /api/audio/[id]/segmentos). Va como host EXACTO, de la
 // variable R2_PUBLIC_HOST. OJO con la forma: el SDK de S3 firma en estilo
 // "virtual-hosted", así que la URL prefirmada tiene el BUCKET como primer
 // subdominio y el origen es
