@@ -34,6 +34,7 @@
 // /grabar/nuevo crea el turno con `fecha: ahora`. Un recordatorio de algo
 // que está pasando no es un recordatorio: no se crea.
 
+import { MOTIVO_SIN_TELEFONO, MOTIVO_TURNO_CERRADO, MOTIVO_REPROGRAMADO } from "@/lib/glosario";
 import type { EstadoEnvioSms, MotivoSms } from "@prisma/client";
 
 import type { db } from "@/lib/db";
@@ -53,9 +54,9 @@ export type ClienteEnvios = Pick<typeof db, "envioSms" | "paciente" | "configura
 /** Estados desde los que un envío TODAVÍA puede terminar mandando un SMS. */
 export const ESTADOS_CON_ENVIO_PENDIENTE = ["pendiente", "enviando"] as const;
 
-export const MOTIVO_SIN_TELEFONO = "la paciente no tiene teléfono cargado";
-export const MOTIVO_TURNO_CERRADO = "el turno dejó de estar programado";
-export const MOTIVO_REPROGRAMADO = "el turno se reprogramó: sale un aviso nuevo";
+export { MOTIVO_SIN_TELEFONO } from "@/lib/glosario";
+export { MOTIVO_TURNO_CERRADO } from "@/lib/glosario";
+export { MOTIVO_REPROGRAMADO } from "@/lib/glosario";
 
 export function claveDelTurno(turnoId: string, fechaTurno: Date): string {
   return `turno:${turnoId}:${fechaTurno.toISOString()}`;

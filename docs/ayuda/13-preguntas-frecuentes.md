@@ -18,8 +18,9 @@ accesos o la retención de los proveedores. Hay que verificar sus condiciones
 vigentes. → `12-camino-del-audio-y-privacidad.md`
 
 **4. ¿Cuándo se borra el audio?**
-Al aprobar, la app intenta borrar el audio remoto y quita la clave del registro
-activo. Eso no confirma la eliminación de todas las copias.
+Al aprobar se destruye la clave activa y se programa el borrado del audio
+remoto, con reintentos hasta su confirmación. Los respaldos anteriores se
+conservan 30 días; no contienen audio, pero pueden conservar su clave cifrada.
 → `12-camino-del-audio-y-privacidad.md`
 
 **5. ¿La transcripción también se borra?**
@@ -37,7 +38,7 @@ Mientras está pausada no se captura audio y el cronómetro se detiene.
 
 **8. Entró una llamada y se cortó el micrófono.**
 Revisá el estado y las opciones **Reanudar** o **Terminar la sesión**.
-La recuperación completa no está garantizada; no cierres ni descartes el audio. → `14-cuando-algo-falla.md`
+La recuperación completa no está garantizada; no cierres ni borres el audio. → `14-cuando-algo-falla.md`
 
 **9. ¿Cuánto tarda la nota?**
 No hay un tiempo fijo. Mientras se escribe ves **"Escribiendo la nota…"**; cuando
@@ -52,12 +53,13 @@ pendientes. → `02-pantalla-hoy.md`
 No. La nota se guarda una sola vez, al aprobar. → `08-la-nota-clinica.md`
 
 **12. ¿Puedo desaprobar una nota?**
-No. La app no ofrece deshacer la aprobación y al aprobar intenta borrar el
-audio remoto. No cuentes con ese audio para volver atrás. → `08-la-nota-clinica.md`
+No. La app no ofrece deshacer la aprobación y al aprobar se destruye la
+clave activa y se reintenta el borrado remoto. No cuentes con ese audio para volver atrás. → `08-la-nota-clinica.md`
 
 **13. El botón "Aprobar nota" está apagado.**
-Hay una señal de riesgo sin marcar. Marcá todas las casillas **"Revisé esta
-señal"**. → `08-la-nota-clinica.md`
+Revisá la casilla de señal de riesgo después de leer el material indicado.
+**Leí las menciones todavía no está disponible en la pantalla**: si el servidor
+pide esa confirmación, avisale a quien administra Sesión. → `08-la-nota-clinica.md`
 
 **14. La app marcó riesgo y yo no veo riesgo.**
 Es una señal, no un diagnóstico: *"evaluá con tu criterio clínico"*. Marcás la
@@ -83,12 +85,14 @@ del turno, según lo que elijas. Si el turno es antes de las 8:00, sale igual la
 tarde anterior. → `06-recordatorios-sms.md`
 
 **19. Mi paciente contestó el SMS y no me llegó nada.**
-El SMS sale de un número de servicio: las respuestas no llegan a ningún lado. Por
-eso todo mensaje termina diciendo a quién y a qué número escribir.
+Las respuestas comunes no llegan a tu consulta. **BAJA**, **STOP** o
+**CANCELAR** sí se procesan para dejar de enviar al número. El mensaje indica
+tu teléfono para comunicarse con vos.
 → `06-recordatorios-sms.md`
 
 **20. Cancelé un turno. ¿Le llega el recordatorio igual?**
-No. Cancelar, reprogramar, cobrar o marcar "No vino" apaga el recordatorio.
+Se cancelan los avisos pendientes. Uno que ya salió no se puede retirar. Si
+reprogramás después de un aviso enviado, se programa un cambio de horario.
 → `03-agenda-y-turnos.md`
 
 **21. Cobré un turno por error. ¿Cómo lo deshago?**
@@ -127,11 +131,8 @@ src/lib/glosario.ts
 src/lib/login-intentos.ts
 src/lib/consentimiento.ts
 src/lib/recordatorios-programacion.ts
-src/lib/sms-texto.ts
 src/app/api/sesion-clinica/route.ts
 src/app/api/_lib/casos-uso/cobrar-turno.ts
-src/app/api/_lib/casos-uso/aprobar-sesion.ts
-src/app/api/_lib/casos-uso/recordatorios-del-turno.ts
 src/app/api/turnos/[id]/cobrar/route.ts
 src/app/api/config/route.ts
 src/app/api/turnos/route.ts

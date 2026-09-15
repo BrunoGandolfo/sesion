@@ -5,6 +5,7 @@
 // /api/turnos/[id]. Las rutas ahora solo validan y llaman. Sin request ni
 // Response: reciben prisma como parámetro, como el resto de casos-uso/.
 
+import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
 import type { Prisma } from "@prisma/client";
 
 import type { Duracion, EstadoTurno, Modalidad } from "@/lib/constantes-turno";
@@ -125,9 +126,8 @@ export interface ActualizarTurnoInput {
   ahora: Date;
 }
 
-export const MENSAJE_NO_REABRIR = "No se puede reabrir un turno cancelado";
-export const MENSAJE_SOLO_PROGRAMADOS =
-  "Solo se pueden editar datos de turnos programados";
+export { MENSAJE_NO_REABRIR } from "@/lib/glosario";
+export { MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
 
 function ocupa(estado: string): boolean {
   return ESTADOS_QUE_OCUPAN.includes(

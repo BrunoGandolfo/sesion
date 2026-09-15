@@ -12,6 +12,7 @@
 // Referencia del webhook entrante:
 // https://www.twilio.com/docs/messaging/guides/webhook-request
 
+import { SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
 import { db } from "@/lib/db";
 import { firmaValida, parametrosDeFormulario, URL_ENTRANTE } from "@/lib/sms/firma";
 
@@ -26,7 +27,7 @@ export const maxDuration = 15; // segundos; la convención está en scripts/ci/m
 const MAX_BYTES = 16 * 1024;
 
 const TWIML_BAJA =
-  '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Listo: no vas a recibir más mensajes de este número.</Message></Response>';
+  '<?xml version="1.0" encoding="UTF-8"?><Response><Message>' + SMS_BAJA_CONFIRMADA + '</Message></Response>';
 
 export async function POST(request: Request) {
   const token = process.env.TWILIO_AUTH_TOKEN;

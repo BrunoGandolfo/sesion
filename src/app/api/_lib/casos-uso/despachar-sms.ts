@@ -62,6 +62,7 @@
 //
 // Sin request, Response ni console: todo vuelve en el resumen.
 
+import { SMS_MOTIVOS, MOTIVO_BAJA, MOTIVO_TURNO_PASADO, MOTIVO_RESERVA_HUERFANA, MOTIVO_SIN_TEXTO_DE_COBRO, MENSAJE_ENVIADO_TRAS_CANCELACION } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 import { decidirTrasFalloTransitorio, limiteUtilDelTurno } from "@/lib/sms/backoff";
 import { URL_CALLBACK } from "@/lib/sms/firma";
@@ -86,13 +87,11 @@ export const LOTE = 100;
 /** Ventana útil de un aviso sin turno (cobro): un día desde que se pidió. */
 export const VENTANA_COBRO_MS = 24 * 60 * 60_000;
 
-export const MOTIVO_BAJA = "la paciente pidió no recibir más mensajes";
-export const MOTIVO_TURNO_PASADO = "el turno ya pasó";
-export const MOTIVO_RESERVA_HUERFANA =
-  "una corrida se cortó después de llamar al servicio de SMS: no se sabe si el mensaje salió";
-export const MOTIVO_SIN_TEXTO_DE_COBRO = "no hay deuda vigente para avisar";
-export const MENSAJE_ENVIADO_TRAS_CANCELACION =
-  "El SMS salió, pero el turno se cerró mientras se enviaba: la paciente recibió un aviso de una sesión que ya no está programada";
+export { MOTIVO_BAJA } from "@/lib/glosario";
+export { MOTIVO_TURNO_PASADO } from "@/lib/glosario";
+export { MOTIVO_RESERVA_HUERFANA } from "@/lib/glosario";
+export { MOTIVO_SIN_TEXTO_DE_COBRO } from "@/lib/glosario";
+export { MENSAJE_ENVIADO_TRAS_CANCELACION } from "@/lib/glosario";
 
 export interface AlertaDespacho {
   nivel: NivelAlerta;
@@ -401,7 +400,7 @@ export async function despacharEnvios({
           await cerrar(e, {
             estado: "fallido",
             codigoProveedor: codigo,
-            motivoNoEnvio: resultado.clasificacion.motivoNoEnvio ?? "el servicio de SMS rechazó el envío",
+            motivoNoEnvio: resultado.clasificacion.motivoNoEnvio ?? SMS_MOTIVOS.RECHAZADO,
             cerradoEn: ahora,
           });
           resumen.fallidos += 1;

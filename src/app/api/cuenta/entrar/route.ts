@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
-import { ENTRADA_ERROR } from "@/lib/glosario";
+import { CUENTA_ENTRADA_NO_DISPONIBLE, ENTRADA_ERROR } from "@/lib/glosario";
 import { huellaDeRequest } from "@/lib/request-huella";
 import { cookieDeSesion } from "@/lib/sesion-cookie";
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     });
 
     if (resultado.estado === "indisponible") {
-      throw new ApiError("No pudimos procesar la entrada en este momento. Probá de nuevo.", 503);
+      throw new ApiError(CUENTA_ENTRADA_NO_DISPONIBLE, 503);
     }
     if (resultado.estado === "rechazado") {
       throw new ApiError(ENTRADA_ERROR, 401);

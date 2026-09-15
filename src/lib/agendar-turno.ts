@@ -7,7 +7,7 @@
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import { fechaCorta } from "@/lib/format";
-import { TURNO_AGENDADO } from "@/lib/glosario";
+import { SERIE_AGENDADA, SERIE_OMITIDAS, TURNO_AGENDADO } from "@/lib/glosario";
 import type { FrecuenciaTurno, TurnoCreado } from "@/types/domain";
 
 export interface PayloadNuevoTurno {
@@ -42,11 +42,8 @@ type TurnoCreadoJson = Partial<
 // Textos nuevos de pantalla (pendientes de glosario.ts: ver
 // docs/pendientes/06-estructura.md). Se quedan acá hasta que quien integra
 // el glosario los mueva.
-const SERIE_AGENDADA = (n: number) => `${n} turnos agendados`;
-const SERIE_OMITIDAS = (fechas: string[]) =>
-  fechas.length === 1
-    ? `No se agendó el ${fechas[0]}: ya había un turno a esa hora.`
-    : `No se agendaron ${fechas.length} fechas por choque de horario: ${fechas.join(", ")}.`;
+
+
 
 /**
  * "Turno agendado" para un turno suelto. Para una serie, cuántos quedaron y,

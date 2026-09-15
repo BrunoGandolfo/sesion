@@ -22,6 +22,7 @@ import { Avatar, Button, Input, Segmented } from "@/components/ui";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
 import {
   frecuenciaTurnoSchema,
+  FRECUENCIAS_TURNO,
   type FrecuenciaTurno,
 } from "@/lib/constantes-turno";
 // Los inputs se llenan con el reloj de Montevideo porque así los lee después
@@ -35,7 +36,7 @@ import {
   horaInputMvd,
 } from "@/lib/fechas-montevideo";
 import { fechaLarga, hora as formatHora, money } from "@/lib/format";
-import { ALGO_FALLO } from "@/lib/glosario";
+import { FRECUENCIA_LABEL, SE_REPITE, AYUDA_SERIE, ALGO_FALLO } from "@/lib/glosario";
 import type { Duracion, Modalidad, Paciente } from "@/types/domain";
 
 import {
@@ -64,13 +65,8 @@ export interface NuevoTurnoData {
 
 // Texto nuevo de pantalla (pendiente de glosario.ts, ver
 // docs/pendientes/06-estructura.md).
-const OPCIONES_FRECUENCIA: { value: FrecuenciaTurno; label: string }[] = [
-  { value: "unico", label: "Una vez" },
-  { value: "semanal", label: "Cada semana" },
-  { value: "quincenal", label: "Cada 15 días" },
-];
-const AYUDA_SERIE =
-  "Se agendan tres meses de turnos, cada uno independiente: podés mover o cancelar cualquiera sin tocar el resto.";
+const OPCIONES_FRECUENCIA = FRECUENCIAS_TURNO.map((value) => ({ value, label: FRECUENCIA_LABEL[value] }));
+
 
 type PacienteOpcion = Pick<Paciente, "id" | "nombre" | "apellido" | "tarifa">;
 
@@ -570,10 +566,10 @@ export function NuevoTurnoForm({
           <div className="space-y-2">
             <input type="hidden" {...register("frecuencia")} />
             <span className="block font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-              Se repite
+              {SE_REPITE}
             </span>
             <Segmented
-              ariaLabel="Se repite"
+              ariaLabel={SE_REPITE}
               value={frecuencia}
               onChange={(valor: FrecuenciaTurno) =>
                 setValue("frecuencia", valor, {

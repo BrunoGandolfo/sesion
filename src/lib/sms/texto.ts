@@ -12,6 +12,7 @@
 // de mandar, con la plantilla vigente de la organización, y de él sólo
 // queda `segmentos` en envios_sms para el conteo mensual.
 
+import { LINEA_CONTACTO, PLANTILLA_CAMBIO_DE_HORARIO } from "@/lib/glosario";
 import {
   formatearFechaLargaMvd,
   formatearHoraMvd,
@@ -20,15 +21,14 @@ import {
 /** Línea de contacto OBLIGATORIA por diseño: todo SMS termina indicando a
  *  quién y a qué número escribir para cambios. El despachador la agrega si
  *  la plantilla guardada por la usuaria no la contiene. */
-export const LINEA_CONTACTO =
-  "Para cambios, comunicate con {{profesional}} al {{telefonoConsultorio}}";
+export { LINEA_CONTACTO } from "@/lib/glosario";
 
 /** Plantilla sugerida del recordatorio (es también el valor por defecto del
  *  formulario de configuración). Con datos realistas rinde 133 caracteres;
  *  como el español lleva tildes ("sesión", "Lucía") viaja en UCS-2 →
  *  2 segmentos. Quitar las tildes de la plantilla no alcanza: los nombres
  *  propios las traen. */
-export const TEMPLATE_SMS_SUGERIDO = `Hola {{nombre}}, te recordamos tu sesión el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+export { TEMPLATE_SMS_SUGERIDO } from "@/lib/glosario";
 
 /**
  * Plantilla del aviso de CAMBIO DE HORARIO. No es configurable: cuando la
@@ -37,7 +37,7 @@ export const TEMPLATE_SMS_SUGERIDO = `Hola {{nombre}}, te recordamos tu sesión 
  * mensaje que dice "cambió" es lo que evita que se presente al horario
  * viejo; por eso el texto es fijo y dice eso primero.
  */
-export const PLANTILLA_CAMBIO_DE_HORARIO = `Hola {{nombre}}, cambió el horario de tu sesión: ahora es el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+export { PLANTILLA_CAMBIO_DE_HORARIO } from "@/lib/glosario";
 
 export interface SmsTemplateData {
   nombre: string;

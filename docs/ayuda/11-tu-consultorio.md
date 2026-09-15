@@ -61,7 +61,10 @@ El detalle completo está en `06-recordatorios-sms.md`.
 
 ## Cuenta
 
-Tu nombre, tu email, **Cambiar contraseña** y **Cerrar sesión**. Ver
+Tu nombre, tu email, **Cambiar contraseña**, **Cerrar sesión** y
+**Cerrar sesión en los demás dispositivos**. Al cambiar la contraseña se
+cierran todos los accesos, incluido este. Cerrar solo las otras sesiones
+mantiene abierta la actual. Ver
 `01-entrar-y-cuenta.md`.
 
 ## Qué hace la app por detrás
@@ -80,17 +83,18 @@ se ven en la computadora.
 - **No cambia el momento del recordatorio por paciente**: es uno para todos.
 - **No cambia el texto de "Recordar cobro"** de Cobros: ese no es configurable.
 - **No cambia el texto de la autorización** de grabación.
-- **No hay segunda usuaria** ni permisos que repartir.
+- Cada cuenta tiene su propio consultorio; invitar no comparte el tuyo.
 
 ## Invitar a una colega
 
-1. En **Tu consultorio**, buscá **Invitar a una colega** y tocá **Generar enlace**.
-2. Usá **Copiar** o **Compartir por WhatsApp**. La app abre WhatsApp con el texto;
-   vos elegís a quién mandarlo y confirmás el envío.
+1. Si tu cuenta tiene permiso, en **Tu consultorio** buscá **Invitar a una colega**
+   y tocá **Generar enlace**.
+2. Usá **Copiar** y compartí el enlace de forma privada con tu colega.
 3. Tu colega abre el enlace, completa su nombre, email y contraseña dos veces,
    acepta los términos y la política de privacidad y toca **Crear mi cuenta**.
 
-El enlace vence en **7 días** y se usa una sola vez. Si venció o ya se usó,
+Podés tener hasta **2 invitaciones vigentes**. Si llegaste al límite, esperá
+a que se usen o venzan. El enlace vence en **7 días** y se usa una sola vez. Si venció o ya se usó,
 tu colega necesita pedirte otro. Compartilo sólo con ella.
 
 La invitada tiene **un consultorio nuevo y separado**, con configuración vacía
@@ -104,7 +108,6 @@ src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/config/_components/editor-recordatorio.tsx
 src/app/api/config/route.ts
 src/lib/recordatorios-programacion.ts
-src/lib/sms-texto.ts
 src/lib/consentimiento.ts
 src/lib/deudas.ts
 src/app/api/turnos/route.ts

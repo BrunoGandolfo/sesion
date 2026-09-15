@@ -11,7 +11,7 @@ también lo que la app **no** hace.
 - [05 · Cobros](05-cobros.md) — cobrar, métodos de pago, "Te deben", zonas de atraso y "Recordar cobro".
 - [06 · El recordatorio por SMS](06-recordatorios-sms.md) — cuándo sale, los tres momentos, el mensaje y sus fichas, y qué hacer si no salió.
 - [07 · Grabar una sesión](07-grabar-una-sesion.md) — la autorización primero, grabar, pausar, mantener la pantalla encendida, terminar y qué pasa si se corta.
-- [08 · La nota clínica](08-la-nota-clinica.md) — S/O/A/P, la señal de riesgo, "Revisé esta señal", aprobar, descartar y el borrador original.
+- [08 · La nota clínica](08-la-nota-clinica.md) — S/O/A/P, la señal de riesgo, "Revisé esta señal", aprobar, volver a escribirla y el borrador original.
 - [09 · "Para vos": la auto-supervisión](09-para-vos-feedback.md) — GTFS, MITI 4.2.1 y CTS-R: qué son, cómo leerlos y qué no son.
 - [10 · El hilo y el Recorrido](10-el-hilo-y-el-recorrido.md) — el contexto longitudinal, el brief antes de la sesión y los gráficos por período.
 - [11 · Tu consultorio](11-tu-consultorio.md) — cada ajuste y su efecto real.

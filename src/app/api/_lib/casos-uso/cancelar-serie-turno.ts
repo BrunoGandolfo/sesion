@@ -13,6 +13,7 @@
 // Cancelar UN turno de la serie sigue siendo el PATCH de siempre; esto es
 // una acción aparte, no una variante.
 
+import { MENSAJE_SIN_SERIE } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 
 import { ApiError } from "../responses";
@@ -21,7 +22,7 @@ import { tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
 
-export const MENSAJE_SIN_SERIE = "Este turno no es parte de una serie";
+export { MENSAJE_SIN_SERIE } from "@/lib/glosario";
 
 export interface CancelarRestoDeSerieInput {
   prisma: ClientePrisma;

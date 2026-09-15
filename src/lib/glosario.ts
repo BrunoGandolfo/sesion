@@ -24,7 +24,7 @@
 
 // El único import del módulo, y es de tipos: `MetodoPago` no existe en
 // tiempo de ejecución, así que el glosario sigue siendo sólo strings.
-import type { MetodoPago } from "@/types/domain";
+import type { FrecuenciaTurno, MetodoPago } from "@/types/domain";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Navegación
@@ -261,11 +261,9 @@ export const RECORDATORIO = "Recordatorio";
 /** Cómo se dice cada estado del recordatorio en la pantalla del turno.
  *  "enviando" es la reserva interna del cron: para ella es "saliendo". */
 export const RECORDATORIO_ESTADO: Readonly<Record<string, string>> = {
-  pendiente: "Todavía no salió",
-  enviando: "Saliendo",
-  enviado: "Enviado",
-  fallido: "No se pudo enviar",
-  cancelado: "Cancelado",
+  pendiente: "Programado", enviando: "Enviando", aceptado: "En camino",
+  entregado: "Entregado", no_entregado: "No llegó", cancelado: "Cancelado",
+  fallido: "No salió", desconocido: "No sabemos si salió",
 };
 
 /** Acción de volver a poner en cola un recordatorio que falló. */
@@ -445,7 +443,7 @@ export const EDITAR = "Editar";
 /** Abre los ítems de un instrumento de auto-supervisión. */
 export const VER_DETALLE = "Ver detalle";
 
-export const DESCARTAR = "Descartar";
+export const VOLVER_A_ESCRIBIR = "Volver a escribirla";
 export const APROBAR_NOTA = "✓ Aprobar nota";
 export const APROBANDO = "Aprobando…";
 export const REINTENTAR = "Reintentar";
@@ -455,20 +453,20 @@ export const ELIMINANDO = "Eliminando…";
 export const VOLVER = "Volver";
 
 /** Confirmación de descarte: dice qué se pierde y qué se conserva. */
-export const DESCARTAR_TITULO = "¿Descartar esta nota?";
-export const DESCARTAR_MENSAJE =
-  "Se puede deshacer: la sesión vuelve a error y la podés volver a escribir. Se descarta la nota generada; la transcripción y el audio se conservan.";
-export const DESCARTANDO = "Descartando…";
+export const VOLVER_A_ESCRIBIR_TITULO = "¿Volver a escribir esta nota?";
+export const VOLVER_A_ESCRIBIR_MENSAJE =
+  "Se pide una nueva nota con la transcripción guardada. No se vuelve a transcribir.";
+export const PIDIENDO_NUEVA_NOTA = "Pidiendo otra nota…";
 
 /** Confirmación de aprobación: el audio se va para siempre. */
 export const APROBAR_TITULO = "¿Aprobar esta nota?";
 export const APROBAR_MENSAJE =
-  "El audio de la sesión se borra definitivamente y la nota queda como registro. Esto no se puede deshacer.";
+  "La nota queda aprobada. Se destruye la clave del audio y su borrado sigue en segundo plano, con reintentos. La aprobación no se puede deshacer.";
 
 /** Confirmación de borrado definitivo desde el estado de error. */
 export const ELIMINAR_TITULO = "¿Eliminar esta sesión?";
 export const ELIMINAR_MENSAJE =
-  "Se borran la sesión y su audio. No queda registro y no se puede deshacer.";
+  "Se borran la sesión, la transcripción y lo generado; el audio se manda a borrar. El turno queda libre para volver a grabar. No se puede deshacer.";
 
 /** Por qué "Aprobar nota" está deshabilitado. */
 export const FALTA_REVISAR_RIESGO =
@@ -982,7 +980,7 @@ export const LEER_PARA_VOS = "Leer Para vos";
  * Es una confirmación, no una celebración: la nota clínica no lleva
  * personaje (docs/diseno/04-personaje.md).
  */
-export const NOTA_APROBADA_AVISO = "Nota aprobada. Queda guardada así.";
+export const NOTA_APROBADA_AVISO = "Nota aprobada. El audio se borra en segundo plano.";
 
 /**
  * Salir de la nota en revisión con correcciones sin aprobar.
@@ -1167,3 +1165,112 @@ export const TERMINOS_SECCIONES = [
   { titulo: "Cómo pedir la baja", texto: "Para pedir la baja de tu cuenta, contactá a quien administra Sesión por el canal con el que recibiste acceso. Hoy no hay una baja automática en la app. Quedan pendientes de definir y publicar el canal de contacto definitivo, los pasos para entregar o eliminar la información y el tratamiento de las copias de respaldo." },
   { titulo: "Texto pendiente", texto: "Este contenido es un borrador de trabajo para que el responsable de Sesión lo reescriba y lo revise con asesoramiento legal. No presenta condiciones jurídicas definitivas ni certifica cumplimiento de una norma." },
 ] as const;
+
+// Textos integrados de las áreas de Fase 3.
+export const PASSWORD_AVISO_CIERRE =
+  "Al cambiarla te vamos a pedir que entres de nuevo en todos tus dispositivos, este incluido.";
+export const PASSWORD_CAMBIADA_REINGRESO = "Contraseña cambiada. Entrá de nuevo.";
+export const OTRAS_SESIONES_BOTON = "Cerrar sesión en los demás dispositivos";
+export const OTRAS_SESIONES_DESCRIPCION =
+  "Si perdiste un teléfono o entraste desde una computadora ajena, esto cierra todas las demás sesiones. Esta sigue abierta.";
+export const OTRAS_SESIONES_CERRANDO = "Cerrando…";
+export function otrasSesionesCerradas(n: number): string {
+  if (n === 0) return "No había otras sesiones abiertas.";
+  return n === 1 ? "Cerramos 1 sesión en otro dispositivo." : `Cerramos ${n} sesiones en otros dispositivos.`;
+}
+export const SERIE_AGENDADA = (n: number) => `${n} turnos agendados`;
+export const SERIE_OMITIDAS = (fechas: string[]) =>
+  fechas.length === 1
+    ? `No se agendó el ${fechas[0]}: ya había un turno a esa hora.`
+    : `No se agendaron ${fechas.length} fechas por choque de horario: ${fechas.join(", ")}.`;
+export const CANCELAR_SERIE = "Cancelar el resto de la serie";
+export const CANCELAR_SERIE_TITULO = "¿Cancelar este turno y los que siguen?";
+export const CANCELAR_SERIE_MENSAJE =
+  "Se cancelan este turno y todos los siguientes de la serie que todavía estén programados, con sus recordatorios. Los ya realizados y los anteriores quedan como están.";
+export const CANCELAR_SERIE_ACCION = "Cancelar el resto";
+export const SERIE_CANCELADA = (n: number) =>
+  n === 1 ? "Se canceló 1 turno de la serie" : `Se cancelaron ${n} turnos de la serie`;
+export const AYUDA_SERIE =
+  "Se agendan tres meses de turnos, cada uno independiente: podés mover o cancelar cualquiera sin tocar el resto.";
+export const MENSAJE_SIN_SERIE = "Este turno no es parte de una serie";
+export const MENSAJE_NO_REABRIR = "No se puede reabrir un turno cancelado";
+export const MENSAJE_SOLO_PROGRAMADOS =
+  "Solo se pueden editar datos de turnos programados";
+export const MENSAJE_HOT_WORD_DUPLICADA = "Hot word duplicado";
+export const MENSAJE_FALTA_PACIENTE =
+  "pacienteId es obligatorio cuando scope === 'paciente'";
+
+export const SE_REPITE = "Se repite";
+export const NOTA_ESCRIBIENDO_DE_NUEVO = "Se está escribiendo de nuevo.";
+export const NOTA_REINTENTAR_AYUDA = "Vuelve a intentar con lo que ya hay: si la transcripción está hecha, no se transcribe de nuevo.";
+export const SESION_FALLO_GENERICO = "No se pudo procesar.";
+export const PEDIR_FEEDBACK_DE_NUEVO = "Pedir de nuevo";
+export const VER_TRANSCRIPCION = "Ver transcripción";
+export const TRANSCRIPCION_LECTURA_REGISTRADA = "Cada lectura queda registrada.";
+export const LEI_LAS_MENCIONES = "Leí las menciones";
+export const MENCIONES_AYUDA = "La transcripción tiene frases a revisar y el modelo no graduó riesgo.";
+export const SUBIDA_NO_TERMINO = "La subida no terminó.";
+export const CONSENTIMIENTO_NUEVO_TEXTO = "Hay un texto nuevo. Sugerí firmarlo en la próxima sesión.";
+export const CUENTA_INVITAR_NO_PERMITIDO = "No podés invitar desde esta cuenta.";
+export const CUENTA_PASSWORD_INCORRECTA = "La contraseña actual no es correcta";
+export const CUENTA_PASSWORD_NO_DISPONIBLE = "No se pudo procesar el cambio de contraseña en este momento. Probá de nuevo.";
+export const CUENTA_ENTRADA_NO_DISPONIBLE = "No pudimos procesar la entrada en este momento. Probá de nuevo.";
+export const FRECUENCIA_LABEL: Readonly<Record<FrecuenciaTurno, string>> = {unico:"Una vez",semanal:"Cada semana",quincenal:"Cada 15 días"};
+export const SESION_FALLO_LABEL: Readonly<Record<string, string>> = {intentos_agotados:"Se intentó cinco veces seguidas y no salió.",grabacion_abandonada:"La grabación quedó a medias."};
+export const FEEDBACK_ESTADO_LABEL = {no_pedido:"Todavía no se pidió.",pendiente:"Se está generando…",listo:"Listo",fallido:"No se pudo generar."} as const;
+export const CUENTA_TOPE_INVITACIONES = (n: number) => "Ya tenés " + n + " invitaciones vigentes. Esperá a que se usen o venzan.";
+
+export const SMS_MOTIVOS = {
+  "CREDENCIALES": "el servicio de SMS rechazó las credenciales",
+  "TELEFONO_INVALIDO": "el teléfono no es válido",
+  "EMISOR_INVALIDO": "el número emisor no está bien configurado",
+  "INALCANZABLE": "el teléfono no se puede alcanzar",
+  "PAIS_NO_HABILITADO": "el servicio de SMS no tiene habilitado el país de destino",
+  "EMISOR_SIN_SMS": "el número emisor no puede mandar SMS",
+  "BAJA": "la paciente pidió no recibir más mensajes",
+  "NO_CELULAR": "el teléfono no es un celular",
+  "SIN_SENAL": "el teléfono estaba apagado o sin señal",
+  "INEXISTENTE": "el número no existe o ya no está en servicio",
+  "LINEA_FIJA": "el número es una línea fija o el operador no lo recibe",
+  "BLOQUEADO": "el operador bloqueó el mensaje",
+  "RECHAZADO": "el servicio de SMS rechazó el envío",
+  "NO_ENTREGADO": "el operador no lo entregó"
+} as const;
+export const SMS_BAJA_CONFIRMADA = "Listo: no vas a recibir más mensajes de este número.";
+export const SMS_CON_CODIGO = (texto: string, codigo: number | null) => codigo === null ? texto : texto + " (" + codigo + ")";
+
+export const ENTRADA_REINGRESO =
+  "Cambiaste la contraseña: entrá de nuevo en todos tus dispositivos.";
+
+export const MOTIVO_SIN_TELEFONO = "la paciente no tiene teléfono cargado";
+
+export const MOTIVO_TURNO_CERRADO = "el turno dejó de estar programado";
+
+export const MOTIVO_REPROGRAMADO = "el turno se reprogramó: sale un aviso nuevo";
+
+export const MOTIVO_BAJA = "la paciente pidió no recibir más mensajes";
+
+export const MOTIVO_TURNO_PASADO = "el turno ya pasó";
+
+export const MOTIVO_RESERVA_HUERFANA =
+  "una corrida se cortó después de llamar al servicio de SMS: no se sabe si el mensaje salió";
+
+export const MOTIVO_SIN_TEXTO_DE_COBRO = "no hay deuda vigente para avisar";
+
+export const MENSAJE_ENVIADO_TRAS_CANCELACION =
+  "El SMS salió, pero el turno se cerró mientras se enviaba: la paciente recibió un aviso de una sesión que ya no está programada";
+
+export const MOTIVO_PACIENTE_DADA_DE_BAJA = "La paciente pidió no recibir más mensajes";
+
+export const MOTIVO_VENTANA_AGOTADA =
+  "no se pudo enviar antes de la sesión: el servicio de SMS no respondió a tiempo";
+
+export const MOTIVO_VENTANA_AGOTADA_SIN_TURNO =
+  "no se pudo enviar en el día: el servicio de SMS no respondió a tiempo";
+
+export const LINEA_CONTACTO =
+  "Para cambios, comunicate con {{profesional}} al {{telefonoConsultorio}}";
+
+export const TEMPLATE_SMS_SUGERIDO = `Hola {{nombre}}, te recordamos tu sesión el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+
+export const PLANTILLA_CAMBIO_DE_HORARIO = `Hola {{nombre}}, cambió el horario de tu sesión: ahora es el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;

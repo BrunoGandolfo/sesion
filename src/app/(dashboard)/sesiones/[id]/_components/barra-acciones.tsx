@@ -9,10 +9,10 @@ import {
   APROBAR_MENSAJE,
   APROBAR_NOTA,
   APROBAR_TITULO,
-  DESCARTANDO,
-  DESCARTAR,
-  DESCARTAR_MENSAJE,
-  DESCARTAR_TITULO,
+  PIDIENDO_NUEVA_NOTA,
+  VOLVER_A_ESCRIBIR,
+  VOLVER_A_ESCRIBIR_MENSAJE,
+  VOLVER_A_ESCRIBIR_TITULO,
   FALTA_REVISAR_RIESGO,
 } from "./textos";
 
@@ -60,12 +60,12 @@ export function BarraAcciones({
       <div className="mx-auto flex max-w-[1120px] flex-col gap-3 px-5 py-3 lg:px-10">
         {pendiente === "descartar" ? (
           <Confirmar
-            titulo={DESCARTAR_TITULO}
-            mensaje={DESCARTAR_MENSAJE}
-            accion={DESCARTAR}
+            titulo={VOLVER_A_ESCRIBIR_TITULO}
+            mensaje={VOLVER_A_ESCRIBIR_MENSAJE}
+            accion={VOLVER_A_ESCRIBIR}
             variante="peligro"
             enviando={enviando}
-            enviandoLabel={DESCARTANDO}
+            enviandoLabel={PIDIENDO_NUEVA_NOTA}
             onConfirmar={onDescartar}
             onCancelar={() => setPendiente(null)}
           />
@@ -98,7 +98,7 @@ export function BarraAcciones({
               disabled={enviando}
               className="!text-terracotta-500"
             >
-              {DESCARTAR}
+              {VOLVER_A_ESCRIBIR}
             </Button>
             <Button
               variant="primary"

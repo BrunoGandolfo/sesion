@@ -36,7 +36,7 @@ import {
   esAbort,
 } from "@/lib/api-client";
 import { fechaCorta, fechaLarga, hora, money } from "@/lib/format";
-import {
+import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR_SERIE_ACCION, SERIE_CANCELADA,
   AGENDADO,
   ALGO_FALLO,
   CANCELADO,
@@ -69,13 +69,11 @@ type EditValues = CamposTurnoValores;
 
 // Textos nuevos de pantalla (pendientes de glosario.ts: ver
 // docs/pendientes/06-estructura.md).
-const CANCELAR_SERIE = "Cancelar el resto de la serie";
-const CANCELAR_SERIE_TITULO = "¿Cancelar este turno y los que siguen?";
-const CANCELAR_SERIE_MENSAJE =
-  "Se cancelan este turno y todos los siguientes de la serie que todavía estén programados, con sus recordatorios. Los ya realizados y los anteriores quedan como están.";
-const CANCELAR_SERIE_ACCION = "Cancelar el resto";
-const SERIE_CANCELADA = (n: number) =>
-  n === 1 ? "Se canceló 1 turno de la serie" : `Se cancelaron ${n} turnos de la serie`;
+
+
+
+
+
 
 type Modo =
   | "ver"
