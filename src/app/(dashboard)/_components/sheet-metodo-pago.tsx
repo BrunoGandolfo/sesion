@@ -59,7 +59,7 @@ export function SheetMetodoPago({
             type="button"
             disabled={bloqueado}
             onClick={() => void elegir(metodo.value)}
-            className={`flex w-full items-center justify-between gap-3 bg-cream-50 px-4 py-3 text-left text-[14px] text-ink-900 transition-colors duration-150 hover:bg-cream-100 disabled:hover:bg-cream-50 ${
+            className={`flex w-full items-center justify-between gap-3 bg-cream-50 px-4 py-3 text-left text-[14px] text-ink-900 transition-colors duration-[var(--duration-fast)] hover:bg-cream-100 disabled:hover:bg-cream-50 ${
               i !== METODOS_PAGO.length - 1
                 ? "border-b border-[color:var(--border-subtle)]"
                 : ""

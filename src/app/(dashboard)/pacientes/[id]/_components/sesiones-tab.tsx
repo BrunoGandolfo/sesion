@@ -174,9 +174,9 @@ function agruparPorMes(sesiones: DocSesion[]): GrupoMes[] {
 }
 
 const ENLACE_PRIMARIO =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-sage-500 px-5 font-sans text-[14px] font-semibold text-white transition-colors duration-150 hover:bg-sage-600 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-sage-500 px-5 font-sans text-[14px] font-semibold text-white transition-colors duration-[var(--duration-fast)] hover:bg-sage-600 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30";
 const ENLACE_SECUNDARIO =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-[color:var(--border-subtle)] bg-white px-5 font-sans text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:bg-cream-50 focus:outline-none focus:ring-[3px] focus:ring-sage-500/20";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-[color:var(--border-subtle)] bg-white px-5 font-sans text-[14px] font-semibold text-ink-900 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 focus:outline-none focus:ring-[3px] focus:ring-sage-500/20";
 
 export function SesionesTab({
   pacienteId,
@@ -460,7 +460,7 @@ function GrupoDeMes({
           size={16}
           strokeWidth={1.8}
           aria-hidden="true"
-          className={`shrink-0 text-ink-500 transition-transform duration-150 ${
+          className={`shrink-0 text-ink-500 transition-transform duration-[var(--duration-fast)] ${
             abierto ? "rotate-180" : ""
           }`}
         />
@@ -508,7 +508,7 @@ function FilaSesion({ sesion }: { sesion: DocSesion }) {
   const conParaVos = hayParaVos(sesion.feedback);
 
   return (
-    <div className="relative flex flex-col gap-2 rounded-lg border border-[color:var(--border-subtle)] bg-white px-4 py-4 transition-colors duration-150 focus-within:ring-[3px] focus-within:ring-sage-500/20 hover:bg-cream-50 sm:px-5">
+    <div className="relative flex flex-col gap-2 rounded-lg border border-[color:var(--border-subtle)] bg-white px-4 py-4 transition-colors duration-[var(--duration-fast)] focus-within:ring-[3px] focus-within:ring-sage-500/20 hover:bg-cream-50 sm:px-5">
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <span className="font-display text-[15px] font-medium text-ink-900">
@@ -536,7 +536,7 @@ function FilaSesion({ sesion }: { sesion: DocSesion }) {
       {conParaVos ? (
         <Link
           href={`/sesiones/${sesion.sesionClinicaId}/para-vos`}
-          className="relative inline-flex min-h-[44px] items-center self-start font-sans text-[13px] font-semibold text-sage-600 transition-colors duration-150 hover:text-sage-700"
+          className="relative inline-flex min-h-[44px] items-center self-start font-sans text-[13px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:text-sage-700"
         >
           {PARA_VOS}
         </Link>

@@ -78,7 +78,7 @@ function Fila({
 }
 
 const ITEM =
-  "flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left transition-colors duration-150 hover:bg-cream-50";
+  "flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left transition-colors duration-[var(--duration-fast)] hover:bg-cream-50";
 
 export function Pendientes({ pendientes, inicio }: PendientesProps) {
   const { notasParaRevisar, sinCobrar, sinAutorizacion, totalSinCobrar } =

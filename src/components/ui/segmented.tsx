@@ -63,7 +63,7 @@ export function Segmented<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(opt.value)}
-            className={`inline-flex min-h-[44px] min-w-0 shrink items-center justify-center rounded-[6px] px-2 py-[6px] font-sans text-[13px] leading-none transition-[background-color,color,box-shadow] duration-150 sm:px-3 ${
+            className={`inline-flex min-h-[44px] min-w-0 shrink items-center justify-center rounded-[6px] px-2 py-[6px] font-sans text-[13px] leading-none transition-[background-color,color,box-shadow] duration-[var(--duration-fast)] sm:px-3 ${
               active
                 ? "bg-white font-semibold text-ink-900 shadow-subtle"
                 : "text-ink-500 hover:text-ink-700"

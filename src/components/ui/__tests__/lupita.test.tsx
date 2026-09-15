@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 
+import { SUAVE, TIEMPOS } from "@/lib/movimiento";
 import { Lupita, LupitaMenu, TAMANOS_LUPITA, type PoseLupita } from "@/components/ui/lupita";
 
 const preferencias = vi.hoisted(() => ({ reducido: false }));
@@ -96,14 +97,14 @@ describe("Lupita", () => {
 
 const MOVIMIENTOS = ["brota", "respira", "piensa", "habla", "celebra", "quieta"] as const;
 
-it("cada movimiento tiene un animate distinto en motion.span", () => {
-  const animaciones = MOVIMIENTOS.map((movimiento) => {
-    const { container } = render(<Lupita pose="saluda" movimiento={movimiento} />);
-    const span = container.querySelector("[data-motion-span]");
-    expect(span).not.toBeNull();
-    return span!.getAttribute("data-animate");
-  });
-  expect(new Set(animaciones).size).toBe(MOVIMIENTOS.length);
+it.each(["quieta", "respira", "piensa", "habla"] as const)("el estado %s no activa movimiento continuo", (movimiento) => {
+  const { container } = render(<Lupita pose="saluda" movimiento={movimiento} />);
+  expect(container.querySelector("[data-motion-span]")).toBeNull();
+});
+it.each(["brota", "celebra"] as const)("el gesto %s termina con la curva y duración compartidas", (movimiento) => {
+  const { container } = render(<Lupita pose="saluda" movimiento={movimiento} />);
+  const transicion = JSON.parse(container.querySelector("[data-motion-span]")!.getAttribute("data-transition")!);
+  expect(transicion).toEqual({ duration: TIEMPOS.pliegue / 1000, ease: [...SUAVE] });
 });
 
 it.each(MOVIMIENTOS)("con movimiento reducido %s muestra sólo la pose fija", (movimiento) => {
@@ -115,13 +116,12 @@ it.each(MOVIMIENTOS)("con movimiento reducido %s muestra sólo la pose fija", (m
   );
 });
 
-it("cada fragmento reinicia el bob de habla sin activar un loop", () => {
+it("recibir otro fragmento conserva el dibujo quieto", () => {
   const { container, rerender } = render(<Lupita pose="saluda" movimiento="habla" pulso={1} />);
-  const primero = container.querySelector("[data-motion-span]");
-  expect(JSON.parse(primero!.getAttribute("data-animate")!)).toEqual({ scale: 1, rotate: 0, y: [0, -2, 0] });
-  expect(JSON.parse(primero!.getAttribute("data-transition")!)).toEqual({ duration: 0.15, ease: "easeInOut" });
+  const primero = container.querySelector("svg");
   rerender(<Lupita pose="saluda" movimiento="habla" pulso={2} />);
-  expect(container.querySelector("[data-motion-span]")).not.toBe(primero);
+  expect(container.querySelector("svg")).toBe(primero);
+  expect(container.querySelector("[data-motion-span]")).toBeNull();
 });
 
 it("el menú hace un bob de 3 px por toque, sin loop ni movimiento reducido", () => {
@@ -131,7 +131,7 @@ it("el menú hace un bob de 3 px por toque, sin loop ni movimiento reducido", ()
   rerender(<LupitaMenu toque={1} />);
   expect(container.firstElementChild).not.toBe(antes);
   expect(JSON.parse(container.firstElementChild!.getAttribute("data-animate")!)).toEqual({ y: [0, -3, 0] });
-  expect(JSON.parse(container.firstElementChild!.getAttribute("data-transition")!)).toEqual({ duration: 0.15, ease: "easeInOut" });
+  expect(JSON.parse(container.firstElementChild!.getAttribute("data-transition")!)).toEqual({ duration: 0.15, ease: [...SUAVE] });
   preferencias.reducido = true;
   rerender(<LupitaMenu toque={2} />);
   expect(container.querySelector("span")).toBeNull();

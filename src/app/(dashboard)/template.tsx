@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
+import { motion } from "framer-motion";
 
 import { DURACION_NAVEGACION, SUAVE } from "@/components/ui/movimiento";
 
@@ -40,17 +41,13 @@ export default function TemplateDashboard({
 }: {
   children: React.ReactNode;
 }) {
-  const reducido = useReducedMotion();
-
-  if (reducido) {
-    return <div className="min-h-full">{children}</div>;
-  }
+  const reducido = useMovimientoReducido();
 
   return (
     <motion.div
       className="min-h-full"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      initial={reducido ? false : { opacity: 0 }}
+      animate={reducido ? undefined : { opacity: 1 }}
       transition={{ duration: DURACION_NAVEGACION, ease: SUAVE }}
     >
       {children}

@@ -79,7 +79,7 @@ function SinAnalisis({ sesionId }: { sesionId: string }) {
       </p>
       <Link
         href={`/sesiones/${sesionId}`}
-        className="inline-flex min-h-[44px] items-center font-sans text-[14px] font-semibold text-sage-600 transition-colors duration-150 hover:text-sage-700"
+        className="inline-flex min-h-[44px] items-center font-sans text-[14px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:text-sage-700"
       >
         {VISTA_NOTA}
       </Link>

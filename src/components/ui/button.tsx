@@ -38,7 +38,7 @@ export function Button({
   ref,
   ...rest
 }: ButtonProps & { ref?: React.Ref<HTMLButtonElement> }) {
-  const classes = `inline-flex items-center justify-center gap-2 rounded-md font-sans font-semibold leading-none transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
+  const classes = `inline-flex items-center justify-center gap-2 rounded-md font-sans font-semibold leading-none transition-colors duration-[var(--duration-fast)] disabled:opacity-50 disabled:cursor-not-allowed ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
 
   if (asChild && React.isValidElement(children)) {
     const child = children as React.ReactElement<{

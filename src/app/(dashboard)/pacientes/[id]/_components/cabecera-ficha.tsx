@@ -128,7 +128,7 @@ export function CabeceraNavegacionFicha() {
     <div className="mb-4 flex items-center justify-between gap-3">
       <Link
         href="/pacientes"
-        className="inline-flex items-center gap-1 text-[13px] text-ink-500 transition-colors duration-150 hover:text-ink-700"
+        className="inline-flex items-center gap-1 text-[13px] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:text-ink-700"
       >
         <ChevronLeft size={16} strokeWidth={1.6} aria-hidden="true" />
         <span>Pacientes</span>

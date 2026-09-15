@@ -453,7 +453,7 @@ export function NuevoTurnoForm({
                       onMouseEnter={() => setIndiceActivo(index)}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => elegirPaciente(p)}
-                      className={`flex w-full items-center gap-3 px-[14px] py-[10px] text-left transition-colors duration-150 ${
+                      className={`flex w-full items-center gap-3 px-[14px] py-[10px] text-left transition-colors duration-[var(--duration-fast)] ${
                         activo ? "bg-cream-50" : "bg-white hover:bg-cream-50"
                       }`}
                     >
@@ -479,7 +479,7 @@ export function NuevoTurnoForm({
                     onMouseEnter={() => setIndiceActivo(cantidadOpciones - 1)}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={empezarACrear}
-                    className={`flex w-full items-center gap-2 px-[14px] py-[10px] text-left transition-colors duration-150 ${
+                    className={`flex w-full items-center gap-2 px-[14px] py-[10px] text-left transition-colors duration-[var(--duration-fast)] ${
                       indiceEfectivo === cantidadOpciones - 1
                         ? "bg-cream-50"
                         : "bg-white hover:bg-cream-50"

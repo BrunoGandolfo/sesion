@@ -14,22 +14,15 @@
 // deben". Antes salía de `deudores.length`, que es una lista con tope 10:
 // arriba decía 11 y acá 10.
 //
-// MOVIMIENTO (delta D5). Cuentan los dos que son cifras —"Por cobrar" y
-// "Este mes"—, y cuentan en 360 ms, no en 600: lo que hace falta para leer
-// "$ 12,4k" y ni un cuadro más. "Sesiones hoy" se escribe directo: es un
-// dígito, y mientras sube no hay nada que leer, hay un número ilegible
-// durante medio segundo.
+// Los importes se muestran completos desde el primer cuadro.
 
 import Link from "next/link";
 
 import { Card } from "@/components/ui";
-import { Contador } from "@/components/ui/movimiento";
 import { fechaLarga, moneyShort } from "@/lib/format";
 import { ESTE_MES, POR_COBRAR, SESIONES_HOY, pluralizar } from "@/lib/glosario";
 import type { DashboardData } from "@/types/domain";
 
-/** Segundos del conteo. El default del primitivo son 600 ms. */
-const DURACION_CONTEO = 0.36;
 
 export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
   const mes = fechaLarga(ahora).split(" de ").at(-1) ?? "";
@@ -42,7 +35,6 @@ export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
       label: POR_COBRAR,
       valor: data.kpis.deudaAcumulada,
       formato: moneyShort,
-      contar: true,
       pie: pluralizar(
         data.pendientes.totalSinCobrar.pacientes,
         "paciente",
@@ -58,7 +50,6 @@ export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
       label: SESIONES_HOY,
       valor: data.kpis.sesionesHoy,
       formato: (n: number) => String(n),
-      contar: false,
       pie: pluralizar(pagas, "paga", "pagas"),
       acento: false,
       href: null as string | null,
@@ -69,7 +60,6 @@ export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
       label: ESTE_MES,
       valor: data.kpis.ingresosMes,
       formato: moneyShort,
-      contar: true,
       pie: `cobrado ${mes}`,
       acento: false,
       href: null as string | null,
@@ -93,16 +83,7 @@ export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
               <span className="block text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500">
                 {item.label}
               </span>
-              {item.contar ? (
-                <Contador
-                  valor={item.valor}
-                  formato={item.formato}
-                  duracion={DURACION_CONTEO}
-                  className={numero}
-                />
-              ) : (
-                <span className={numero}>{item.formato(item.valor)}</span>
-              )}
+              <span className={numero}>{item.formato(item.valor)}</span>
               <span className="mt-1.5 block text-[12px] text-ink-500">
                 {item.pie}
               </span>
@@ -112,7 +93,7 @@ export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
             <Link
               key={item.label}
               href={item.href}
-              className={`${clases} block transition-colors duration-150 hover:bg-cream-50`}
+              className={`${clases} block transition-colors duration-[var(--duration-fast)] hover:bg-cream-50`}
             >
               {cuerpo}
             </Link>

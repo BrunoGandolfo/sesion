@@ -163,7 +163,7 @@ export function FichaTab({
             size={16}
             strokeWidth={1.8}
             aria-hidden="true"
-            className={`shrink-0 text-ink-500 transition-transform duration-150 ${vocabularioAbierto ? "rotate-180" : ""}`}
+            className={`shrink-0 text-ink-500 transition-transform duration-[var(--duration-fast)] ${vocabularioAbierto ? "rotate-180" : ""}`}
           />
         </button>
         {vocabularioAbierto ? (
@@ -202,7 +202,7 @@ export function FichaTab({
               size={16}
               strokeWidth={1.8}
               aria-hidden="true"
-              className={`transition-transform duration-150 ${turnosAbiertos ? "rotate-180" : ""}`}
+              className={`transition-transform duration-[var(--duration-fast)] ${turnosAbiertos ? "rotate-180" : ""}`}
             />
           </span>
         </button>
@@ -305,7 +305,7 @@ function DatoLinea({
   );
 }
 
-function NotasEditor({
+export function NotasEditor({
   pacienteId,
   initial,
   onSaved,
@@ -314,6 +314,7 @@ function NotasEditor({
   initial: string;
   onSaved: () => void;
 }) {
+  const estadoId = React.useId();
   const [value, setValue] = React.useState(initial);
   const [savedValue, setSavedValue] = React.useState(initial);
   const [status, setStatus] = React.useState<"idle" | "saving" | "saved" | "error">(
@@ -354,19 +355,22 @@ function NotasEditor({
         ? "Guardado."
         : status === "error"
           ? ALGO_FALLO
-          : "Se guarda solo. Solo vos las ves.";
+          : value !== savedValue ? "Sin guardar todavía." : "Se guarda solo. Solo vos las ves.";
 
   return (
     <div>
       <Textarea
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => { setValue(e.target.value); setStatus("idle"); }}
         placeholder="Notas breves, visibles solo para vos."
         aria-label="Notas privadas del paciente"
+        aria-describedby={estadoId}
       />
       <p
-        className={`mt-2 font-sans text-[11px] ${
-          status === "error" ? "text-[color:var(--color-error)]" : "text-ink-300"
+        id={estadoId}
+        role="status"
+        className={`mt-2 font-sans text-[13px] ${
+          status === "error" ? "text-[color:var(--color-error)]" : "text-ink-500"
         }`}
       >
         {hint}

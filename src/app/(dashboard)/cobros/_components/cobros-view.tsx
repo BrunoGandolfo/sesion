@@ -563,7 +563,7 @@ function FilaDeudor({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
         <Link
           href={`/pacientes/${deudor.pacienteId}`}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition-colors duration-150 active:bg-cream-50"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition-colors duration-[var(--duration-fast)] active:bg-cream-50"
           aria-label={`Abrir ficha de ${nombreCompleto}`}
         >
           <Avatar nombre={deudor.nombre} apellido={deudor.apellido} size={40} />
@@ -610,7 +610,7 @@ function FilaDeudor({
               type="button"
               onClick={() => setConfirmando(true)}
               aria-label={`${RECORDAR_COBRO} a ${nombreCompleto} por SMS`}
-              className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-sage-500 px-4 text-[13px] font-semibold text-sage-600 transition-colors duration-150 hover:bg-sage-50 lg:min-h-[36px] lg:w-auto"
+              className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-sage-500 px-4 text-[13px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:bg-sage-50 lg:min-h-[36px] lg:w-auto"
             >
               <Send size={14} strokeWidth={1.8} aria-hidden="true" />
               {RECORDAR_COBRO}

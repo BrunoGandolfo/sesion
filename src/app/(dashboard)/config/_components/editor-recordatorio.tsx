@@ -224,14 +224,14 @@ export function EditorRecordatorio({ template, onChange, fichas }: Props) {
             onClick={() => insertarFicha(clave)}
             aria-label={`Agregar ficha ${FICHAS[clave]}`}
             aria-controls={editorId}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-sage-500/40 bg-sage-50 px-3 text-[13px] font-semibold text-sage-700 transition-colors duration-150 hover:bg-sage-100 lg:min-h-[36px]"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-sage-500/40 bg-sage-50 px-3 text-[13px] font-semibold text-sage-700 transition-colors duration-[var(--duration-fast)] hover:bg-sage-100 lg:min-h-[36px]"
           >
             <span aria-hidden="true">+</span>
             {FICHAS[clave]}
           </button>
         ))}
       </div>
-      <div className="flex rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 transition-colors duration-150 focus-within:border-sage-500 focus-within:bg-white focus-within:ring-[3px] focus-within:ring-sage-500/20">
+      <div className="flex rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 transition-colors duration-[var(--duration-fast)] focus-within:border-sage-500 focus-within:bg-white focus-within:ring-[3px] focus-within:ring-sage-500/20">
         <div
           ref={editorRef}
           id={editorId}

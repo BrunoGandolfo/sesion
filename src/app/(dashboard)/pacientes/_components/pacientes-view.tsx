@@ -384,7 +384,7 @@ function DesktopTable({
           <Link
             key={p.id}
             href={`/pacientes/${p.id}`}
-            className="grid items-center pl-5 pr-5 py-[14px] gap-4 text-left transition-colors duration-150 border-l-[2px] border-l-transparent hover:bg-cream-50 hover:border-l-sage-500"
+            className="grid items-center pl-5 pr-5 py-[14px] gap-4 text-left transition-colors duration-[var(--duration-fast)] border-l-[2px] border-l-transparent hover:bg-cream-50 hover:border-l-sage-500"
             style={{ gridTemplateColumns: cols }}
           >
             <span className="flex items-center gap-3 min-w-0">
@@ -461,7 +461,7 @@ function MobileList({
           <Link
             key={p.id}
             href={`/pacientes/${p.id}`}
-            className="grid items-center gap-4 px-5 py-[14px] transition-colors duration-150 active:bg-cream-50"
+            className="grid items-center gap-4 px-5 py-[14px] transition-colors duration-[var(--duration-fast)] active:bg-cream-50"
             style={{ gridTemplateColumns: "auto minmax(0, 1fr) auto" }}
           >
             <Avatar nombre={p.nombre} apellido={p.apellido} size={40} />

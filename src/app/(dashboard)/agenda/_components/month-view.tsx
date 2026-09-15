@@ -8,6 +8,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
+import { fechaLarga } from "@/lib/format";
 import { AGENDADO, MES_LEYENDA, PAGADO } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
@@ -44,14 +45,15 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
           const isToday = isSameDay(day, today);
           const turnosDia = turnos.filter((t) => isSameDay(t.fecha, day));
           const visibles = turnosDia.slice(0, 3);
-          const overflow = turnosDia.length - visibles.length;
+
 
           return (
             <button
               key={idx}
               type="button"
               onClick={() => onDayClick(day)}
-              className={`flex min-h-[48px] flex-col gap-1 border-t border-[color:var(--border-subtle)] p-2 text-left transition-colors duration-150 hover:bg-cream-50 lg:min-h-[56px] ${
+              aria-label={fechaLarga(day) + ": " + turnosDia.length + (turnosDia.length === 1 ? " turno" : " turnos")}
+              className={`flex min-h-[48px] flex-col gap-1 border-t border-[color:var(--border-subtle)] p-2 text-left transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 lg:min-h-[56px] ${
                 idx % 7 !== 0
                   ? "border-l border-[color:var(--border-subtle)]"
                   : ""
@@ -67,7 +69,8 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
                 </span>
               )}
               {turnosDia.length > 0 ? (
-                <div className="mt-auto flex items-center gap-1">
+                <div className="mt-auto flex flex-wrap items-center gap-1">
+                  <span className="text-[12px] font-semibold leading-none text-ink-700">{turnosDia.length}</span>
                   {visibles.map((t) => (
                     <span
                       key={t.id}
@@ -79,11 +82,7 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
                       }`}
                     />
                   ))}
-                  {overflow > 0 ? (
-                    <span className="text-[9px] leading-none text-ink-500">
-                      +{overflow}
-                    </span>
-                  ) : null}
+
                 </div>
               ) : null}
             </button>

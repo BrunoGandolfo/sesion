@@ -4,12 +4,15 @@
 // sheet de cobro, que también usa la card de la sesión de hoy en Sesiones.
 
 import * as React from "react";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import type { VarianteToast } from "@/components/ui/toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 
 import { Button, Chip, Confirmar, Sheet, Toast } from "@/components/ui";
 import {
+  DURACION_BREVE,
+  SUAVE,
   CheckDibujado,
   useConfirmacionDibujada,
 } from "@/components/ui/movimiento";
@@ -318,6 +321,7 @@ function TurnoRow({
   onDeshecho: (turno: Turno) => void;
   onError: (mensaje: string) => void;
 }) {
+  const reducido = useMovimientoReducido();
   const mostrarCobrar = esDeudaPendiente(turno);
   const mostrarPagado = turno.estado === "realizado" && turno.pagoEstado === "pagado";
 
@@ -392,12 +396,12 @@ function TurnoRow({
                 key="cobrar"
                 type="button"
                 onClick={onCobrar}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                whileTap={{ scale: 0.96 }}
-                className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-gold-50 px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-gold-500 transition-colors duration-150 hover:bg-gold-50/80 lg:min-h-[36px]"
+                initial={reducido ? false : { opacity: 0, scale: 0.9 }}
+                animate={reducido ? undefined : { opacity: 1, scale: 1 }}
+                exit={reducido ? undefined : { opacity: 0, scale: 0.9 }}
+                transition={{ duration: DURACION_BREVE, ease: SUAVE }}
+                whileTap={reducido ? undefined : { scale: 0.96 }}
+                className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-gold-50 px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-gold-500 transition-colors duration-[var(--duration-fast)] hover:bg-gold-50/80 lg:min-h-[36px]"
               >
                 Cobrar
               </motion.button>
@@ -406,12 +410,12 @@ function TurnoRow({
                 key="deshacer"
                 type="button"
                 onClick={() => setConfirmando(true)}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                whileTap={{ scale: 0.96 }}
-                className="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500 transition-colors duration-150 hover:bg-cream-100 hover:text-ink-700 lg:min-h-[36px]"
+                initial={reducido ? false : { opacity: 0, scale: 0.9 }}
+                animate={reducido ? undefined : { opacity: 1, scale: 1 }}
+                exit={reducido ? undefined : { opacity: 0, scale: 0.9 }}
+                transition={{ duration: DURACION_BREVE, ease: SUAVE }}
+                whileTap={reducido ? undefined : { scale: 0.96 }}
+                className="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-100 hover:text-ink-700 lg:min-h-[36px]"
               >
                 {DESHACER_COBRO}
               </motion.button>
@@ -471,7 +475,7 @@ function MetodoPagoSelector({
             type="button"
             disabled={deshabilitado}
             onClick={() => onSelect(metodo.value)}
-            className={`flex min-h-[44px] items-center justify-between gap-3 rounded-md border bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-150 hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:opacity-60 ${
+            className={`flex min-h-[44px] items-center justify-between gap-3 rounded-md border bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-[var(--duration-fast)] hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:opacity-60 ${
               confirmado === metodo.value
                 ? "border-sage-500 bg-white !opacity-100"
                 : "border-[color:var(--border-subtle)]"

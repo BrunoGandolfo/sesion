@@ -47,13 +47,13 @@ function codigoDe(relativo: string): string {
 
 describe("la duración de una navegación", () => {
   it("es un solo número, en milisegundos y en segundos", () => {
-    expect(MS_NAVEGACION).toBe(260);
-    expect(DURACION_NAVEGACION).toBe(0.26);
+    expect(MS_NAVEGACION).toBe(180);
+    expect(DURACION_NAVEGACION).toBe(0.18);
     // La conversión no se escribe a mano en ningún lado.
     expect(DURACION_NAVEGACION).toBe(MS_NAVEGACION / 1000);
   });
 
-  it("iguala al subrayado del menú, que es el más largo de los dos", () => {
+  it("mantiene navegación y subrayado dentro del tiempo medio", () => {
     // Si algún día el subrayado cambia de duración, este número lo sigue.
     // Lo que no puede volver a pasar es que sean dos.
     expect(MS_NAVEGACION).toBeGreaterThanOrEqual(180);

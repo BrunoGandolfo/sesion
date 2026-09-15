@@ -18,6 +18,7 @@ import { LogOut } from "lucide-react";
 import { useSesionActual } from "@/components/layout/providers";
 import { cerrarSesion } from "@/lib/sesion-cliente";
 
+import { GuardadoCampo, type EstadoCampo } from "@/components/ui/guardado-campo";
 import { Button, Card, Input } from "@/components/ui";
 import { CheckDibujado } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
@@ -162,6 +163,8 @@ export function ConfigView() {
   const [reloadKey, setReloadKey] = React.useState(0);
   const [estadoGuardado, setEstadoGuardado] =
     React.useState<EstadoGuardado>("idle");
+  const [camposAvisados, setCamposAvisados] = React.useState<CampoConfig[]>([]);
+  const [camposPendientes, setCamposPendientes] = React.useState<CampoConfig[]>([]);
   const emailSesion = useSesionActual()?.email ?? null;
 
   const formRef = React.useRef(form);
@@ -209,6 +212,7 @@ export function ConfigView() {
 
     const campos = Array.from(camposSuciosRef.current);
     if (campos.length === 0) return;
+    setCamposAvisados(campos);
 
     const { patch, campos: enviados, invalido } = patchDesdeCampos(
       formRef.current,
@@ -222,6 +226,7 @@ export function ConfigView() {
     if (enviados.length === 0) return;
 
     for (const campo of enviados) camposSuciosRef.current.delete(campo);
+    setCamposPendientes(Array.from(camposSuciosRef.current));
 
     enVueloRef.current = true;
     limpiarAviso();
@@ -233,7 +238,10 @@ export function ConfigView() {
       guardado = true;
     } catch {
       for (const campo of enviados) camposSuciosRef.current.add(campo);
-      if (montadoRef.current) setEstadoGuardado("error");
+      if (montadoRef.current) {
+        setCamposPendientes(Array.from(camposSuciosRef.current));
+        setEstadoGuardado("error");
+      }
     } finally {
       enVueloRef.current = false;
       const volver = volverAGuardarRef.current;
@@ -263,6 +271,7 @@ export function ConfigView() {
         const siguiente = formDesdeConfig(config);
         formRef.current = siguiente;
         camposSuciosRef.current.clear();
+        setCamposPendientes([]);
         setForm(siguiente);
         setEstadoGuardado("idle");
         setCargando(false);
@@ -297,6 +306,7 @@ export function ConfigView() {
         return siguiente;
       });
       camposSuciosRef.current.add(campo);
+      setCamposPendientes(actual => actual.includes(campo) ? actual : [...actual, campo]);
       limpiarAviso();
       setEstadoGuardado((estado) =>
         estado === "guardado" || estado === "error" ? "idle" : estado,
@@ -313,6 +323,14 @@ export function ConfigView() {
     }
     void guardarPendientes();
   }, [guardarPendientes]);
+
+  // No atribuir un guardado a otro campo, ni al valor nuevo escrito mientras
+  // viajaba el anterior. Un campo inválido sigue rechazando el lote completo.
+  function estadoDelCampo(campo: CampoConfig): EstadoCampo {
+    if (estadoGuardado === "error" && camposAvisados.includes(campo)) return "error";
+    if (camposPendientes.includes(campo)) return "pendiente";
+    return camposAvisados.includes(campo) ? estadoGuardado : "idle";
+  }
 
   if (cargando) {
     return (
@@ -352,39 +370,48 @@ export function ConfigView() {
           <TituloSeccion>Vos</TituloSeccion>
           <Card>
             <div className="flex flex-col gap-4">
-              <Input
-                label="Nombre"
-                autoComplete="name"
-                placeholder="Como querés que te nombren los pacientes"
-                value={form.nombreProfesional}
-                error={
-                  form.nombreProfesional.trim() === ""
-                    ? "Falta tu nombre"
-                    : undefined
-                }
-                onChange={(e) =>
-                  actualizarCampo("nombreProfesional", e.target.value)
-                }
-              />
-              <Input
-                label="Dirección del consultorio"
-                autoComplete="street-address"
-                placeholder="Calle y número, ciudad"
-                value={form.direccion}
-                onChange={(e) => actualizarCampo("direccion", e.target.value)}
-              />
+              <div>
+                <Input
+                  label="Nombre"
+                  autoComplete="name"
+                  placeholder="Como querés que te nombren los pacientes"
+                  value={form.nombreProfesional}
+                  error={
+                    form.nombreProfesional.trim() === ""
+                      ? "Falta tu nombre"
+                      : undefined
+                  }
+                  onChange={(e) =>
+                    actualizarCampo("nombreProfesional", e.target.value)
+                  }
+                />
+                <GuardadoCampo estado={estadoDelCampo("nombreProfesional")} />
+              </div>
+              <div>
+                <Input
+                  label="Dirección del consultorio"
+                  autoComplete="street-address"
+                  placeholder="Calle y número, ciudad"
+                  value={form.direccion}
+                  onChange={(e) => actualizarCampo("direccion", e.target.value)}
+                />
+                <GuardadoCampo estado={estadoDelCampo("direccion")} />
+              </div>
               {/* La columna conserva el nombre whatsappOrigen hasta la próxima migración. */}
-              <Input
-                label="Teléfono"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="+598 99 123 456"
-                value={form.whatsappOrigen}
-                onChange={(e) =>
-                  actualizarCampo("whatsappOrigen", e.target.value)
-                }
-              />
+              <div>
+                <Input
+                  label="Teléfono"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="+598 99 123 456"
+                  value={form.whatsappOrigen}
+                  onChange={(e) =>
+                    actualizarCampo("whatsappOrigen", e.target.value)
+                  }
+                />
+                <GuardadoCampo estado={estadoDelCampo("whatsappOrigen")} />
+              </div>
               <p className="text-[12px] leading-[1.5] text-ink-500">
                 Tu nombre y tu teléfono van al final de cada recordatorio,
                 para que la paciente sepa a quién escribirle.
@@ -398,27 +425,25 @@ export function ConfigView() {
           <TituloSeccion>Lo que cobrás por sesión</TituloSeccion>
           <Card>
             <div className="relative">
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute left-[14px] top-1/2 z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
-              >
-                $UYU
-              </span>
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={form.tarifaDefault}
-                onChange={(e) => actualizarCampo("tarifaDefault", e.target.value)}
-                aria-label="Lo que cobrás por sesión"
-                className="pl-[56px] tabular-nums"
-                error={
-                  form.tarifaDefault.trim() === ""
-                    ? "Falta la tarifa"
-                    : undefined
-                }
-              />
+              <div>
+                <Input
+                  prefix="$UYU"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  value={form.tarifaDefault}
+                  onChange={(e) => actualizarCampo("tarifaDefault", e.target.value)}
+                  aria-label="Lo que cobrás por sesión"
+                  className="tabular-nums"
+                  error={
+                    form.tarifaDefault.trim() === ""
+                      ? "Falta la tarifa"
+                      : undefined
+                  }
+                />
+                <GuardadoCampo estado={estadoDelCampo("tarifaDefault")} />
+              </div>
             </div>
             <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
               Es la tarifa que se propone al crear un paciente. Cada paciente
@@ -431,10 +456,13 @@ export function ConfigView() {
         <section>
           <TituloSeccion>Tu enfoque</TituloSeccion>
           <Card>
-            <SelectorEnfoque
-              value={form.orientacionTeorica}
-              onChange={(valor) => actualizarCampo("orientacionTeorica", valor)}
-            />
+            <div>
+              <SelectorEnfoque
+                value={form.orientacionTeorica}
+                onChange={(valor) => actualizarCampo("orientacionTeorica", valor)}
+              />
+              <GuardadoCampo estado={estadoDelCampo("orientacionTeorica")} />
+            </div>
             <p className="mt-3 text-[12px] leading-[1.5] text-ink-500">
               Es una decisión clínica: define con qué instrumento se lee tu
               práctica en cada sesión. Podés cambiarla cuando quieras; las
@@ -451,20 +479,26 @@ export function ConfigView() {
           <TituloSeccion>Recordatorio</TituloSeccion>
           <Card>
             <div className="flex flex-col gap-6">
-              <CuandoAvisar
-                value={form.recordatorioModo}
-                onChange={(valor) => actualizarCampo("recordatorioModo", valor)}
-              />
+              <div>
+                <CuandoAvisar
+                  value={form.recordatorioModo}
+                  onChange={(valor) => actualizarCampo("recordatorioModo", valor)}
+                />
+                <GuardadoCampo estado={estadoDelCampo("recordatorioModo")} />
+              </div>
 
-              <MensajeRecordatorio
-                  template={form.templateRecordatorio}
-                  profesional={form.nombreProfesional}
-                  direccion={form.direccion}
-                  telefono={form.whatsappOrigen}
-                  onChange={(valor) =>
-                    actualizarCampo("templateRecordatorio", valor)
-                  }
-              />
+              <div>
+                <MensajeRecordatorio
+                    template={form.templateRecordatorio}
+                    profesional={form.nombreProfesional}
+                    direccion={form.direccion}
+                    telefono={form.whatsappOrigen}
+                    onChange={(valor) =>
+                      actualizarCampo("templateRecordatorio", valor)
+                    }
+                />
+                <GuardadoCampo estado={estadoDelCampo("templateRecordatorio")} />
+              </div>
             </div>
           </Card>
         </section>
@@ -824,7 +858,7 @@ function SelectorEnfoque({
         return (
           <label
             key={opcion.value}
-            className={`flex cursor-pointer items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-150 ${
+            className={`flex cursor-pointer items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-[var(--duration-fast)] ${
               activo
                 ? "border-sage-500 bg-sage-50"
                 : "border-[color:var(--border-subtle)] bg-cream-50 hover:bg-cream-100"
@@ -900,7 +934,7 @@ function CuandoAvisar({
           return (
             <label
               key={modo}
-              className={`flex flex-1 cursor-pointer items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-150 ${
+              className={`flex flex-1 cursor-pointer items-start gap-3 rounded-md border px-4 py-3 transition-colors duration-[var(--duration-fast)] ${
                 activo
                   ? "border-sage-500 bg-sage-50"
                   : "border-[color:var(--border-subtle)] bg-cream-50 hover:bg-cream-100"

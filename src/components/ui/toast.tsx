@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
+import { AnimatePresence, motion } from "framer-motion";
 
-import { CheckDibujado, SUAVE } from "./movimiento";
+import { CheckDibujado, SUAVE, DURACION_BREVE } from "./movimiento";
 
 // Posición: por encima del botón flotante, nunca sobre él.
 //
@@ -60,7 +61,7 @@ export function Toast({
   // Entra y sale sin desplazamiento con la preferencia declarada: aparece y
   // desaparece, que es lo que pide 03-plan-de-movimiento.md (D2). El texto y
   // el aria-live no cambian.
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
 
   const entrada = reducido
     ? {}
@@ -68,7 +69,7 @@ export function Toast({
         initial: { opacity: 0, y: 16 },
         animate: { opacity: 1, y: 0 },
         exit: { opacity: 0, y: 16 },
-        transition: { duration: 0.24, ease: SUAVE },
+        transition: { duration: DURACION_BREVE, ease: SUAVE },
       };
 
   React.useEffect(() => {

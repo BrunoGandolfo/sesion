@@ -17,11 +17,12 @@
 // aria-hidden fijo, sin escape: acompaña a un texto que ya dice todo. Si
 // alguna vez Lupita queda sola, sin texto al lado, está mal puesta.
 //
-// El panel decide la secuencia. Sólo su encabezado respira en reposo;
-// menú y estados vacíos nunca repiten animaciones.
+// El panel decide la secuencia; reposo, espera y texto se muestran quietos.
 
 import * as React from "react";
-import { motion, useReducedMotion, type TargetAndTransition, type Transition } from "framer-motion";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
+import { SUAVE, TIEMPOS } from "@/lib/movimiento";
+import { motion, type TargetAndTransition, type Transition } from "framer-motion";
 
 
 /** Las tres poses, y no hay una cuarta. */
@@ -92,38 +93,19 @@ const FORMAS: Record<PoseLupita, FormaPose> = {
   },
 };
 
-/** Duraciones en segundos: el panel comparte las de los gestos finitos. */
-export const DURACION_BROTA = 0.5; // 500 ms para crecer desde el tallo.
-export const DURACION_RESPIRA = 3.5; // Reposo visible, sólo en la ayuda abierta.
-export const DURACION_PIENSA = 1.2; // Búsqueda hasta el primer fragmento.
-export const DURACION_HABLA = 0.15; // Un bob de 150 ms por fragmento.
-export const DURACION_CELEBRA = 0.45; // Salto completo: subida y regreso.
-export const DURACION_TOQUE_MENU = 0.15; // Respuesta breve al toque, sin loop.
+/** Gestos finitos; el panel usa las mismas duraciones para su secuencia. */
+export const DURACION_BROTA = TIEMPOS.pliegue / 1000;
+export const DURACION_CELEBRA = TIEMPOS.pliegue / 1000;
+export const DURACION_TOQUE_MENU = TIEMPOS.breve / 1000;
 
 export type MovimientoLupita = "brota" | "respira" | "piensa" | "habla" | "celebra" | "quieta";
 
-const ANIMACIONES: Record<MovimientoLupita, TargetAndTransition> = {
-  brota: { scale: [0.4, 1], rotate: [-12, 0], y: 0 },
-  respira: { scale: [1, 1.04, 1], rotate: [-2, 2, -2], y: 0 },
-  piensa: { scale: 1, rotate: [-10, 10, -10], y: 0 },
-  habla: { scale: 1, rotate: 0, y: [0, -2, 0] },
-  // El spring admite dos keyframes: reverse hace el regreso una sola vez.
-  celebra: { scale: [1, 1.15], rotate: 0, y: [0, -10] },
-  quieta: { scale: 1, rotate: 0, y: 0 },
+// Esperar y recibir texto se expresan con una pose, sin pulsos ni loops.
+const ANIMACIONES: Partial<Record<MovimientoLupita, TargetAndTransition>> = {
+  brota: { opacity: 1, y: 0 },
+  celebra: { opacity: 1, y: 0 },
 };
-
-const TRANSICIONES: Record<MovimientoLupita, Transition> = {
-  // El panel da paso al reposo a los 500 ms; la física aporta el sobreimpulso.
-  brota: { type: "spring", stiffness: 220, damping: 14 },
-  respira: { duration: DURACION_RESPIRA, repeat: Infinity, ease: "easeInOut" },
-  piensa: { duration: DURACION_PIENSA, repeat: Infinity, ease: "easeInOut" },
-  habla: { duration: DURACION_HABLA, ease: "easeInOut" },
-  celebra: {
-    type: "spring", duration: DURACION_CELEBRA / 2, bounce: 0.2,
-    repeat: 1, repeatType: "reverse",
-  },
-  quieta: { duration: 0 },
-};
+const TRANSICION: Transition = { duration: DURACION_CELEBRA, ease: SUAVE };
 
 export interface LupitaProps {
   pose: PoseLupita;
@@ -131,7 +113,7 @@ export interface LupitaProps {
   tamano?: number;
   className?: string;
   movimiento?: MovimientoLupita;
-  /** El panel incrementa el pulso por fragmento para reiniciar el bob. */
+  /** Se conserva la prop del panel; recibir texto ya no reinicia un gesto. */
   pulso?: number;
 }
 
@@ -147,10 +129,9 @@ export function Lupita({
   tamano = 32,
   className,
   movimiento = "quieta",
-  pulso = 0,
 }: LupitaProps) {
-  const reducido = useReducedMotion();
-  const poseVisible = reducido && movimiento === "piensa" ? "senala"
+  const reducido = useMovimientoReducido();
+  const poseVisible = movimiento === "piensa" ? "senala"
     : movimiento === "celebra" ? "celebra" : pose;
   const forma = FORMAS[poseVisible];
   const conBrote = tamano >= TAMANO_CON_DETALLE;
@@ -184,7 +165,7 @@ export function Lupita({
             {...atributos}
             initial={{ d: FORMAS.saluda[hoja] }}
             animate={{ d: FORMAS.celebra[hoja] }}
-            transition={{ duration: DURACION_CELEBRA, ease: "easeInOut" }}
+            transition={{ duration: DURACION_CELEBRA, ease: SUAVE }}
           />
         ) : <path key={hoja} {...atributos} d={forma[hoja]} />;
       })}
@@ -200,18 +181,17 @@ export function Lupita({
     </svg>
   );
 
-  if (reducido) return dibujo;
+  if (reducido || (movimiento !== "brota" && movimiento !== "celebra")) return dibujo;
 
   return (
     <motion.span
-      key={`${movimiento}-${movimiento === "habla" ? pulso : 0}`}
+      key={movimiento}
       aria-hidden="true"
       data-movimiento={movimiento}
       className="inline-flex origin-bottom"
-      initial={movimiento === "brota" ? { scale: 0.4, rotate: -12, y: 0 }
-        : movimiento === "quieta" ? false : { scale: 1, rotate: 0, y: 0 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={ANIMACIONES[movimiento]}
-      transition={TRANSICIONES[movimiento]}
+      transition={TRANSICION}
     >
       {dibujo}
     </motion.span>
@@ -221,7 +201,7 @@ export function Lupita({
 /** Única reacción del menú: el botón incrementa toque, también con teclado.
  * No cambia estados del panel ni activa sus loops. */
 export function LupitaMenu({ toque }: { toque: number }) {
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
   const dibujo = <Lupita pose="saluda" tamano={TAMANOS_LUPITA.inline} />;
   if (reducido) return dibujo;
   return (
@@ -231,7 +211,7 @@ export function LupitaMenu({ toque }: { toque: number }) {
       className="inline-flex"
       initial={{ y: 0 }}
       animate={{ y: toque === 0 ? 0 : [0, -3, 0] }}
-      transition={{ duration: DURACION_TOQUE_MENU, ease: "easeInOut" }}
+      transition={{ duration: DURACION_TOQUE_MENU, ease: SUAVE }}
     >
       {dibujo}
     </motion.span>

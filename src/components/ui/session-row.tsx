@@ -183,7 +183,7 @@ export function SessionRow(props: SessionRowProps) {
     : sesion?.estado === "aprobado" ? VER_NOTA : null;
   const procesando = sesion && ESTADOS_PROCESANDO.includes(sesion.estado);
 
-  const base = `w-full flex flex-wrap items-center gap-3 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-150 border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
+  const base = `w-full flex flex-wrap items-center gap-3 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-[var(--duration-fast)] border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
 
   const content = (
     <>
@@ -250,7 +250,7 @@ export function SessionRow(props: SessionRowProps) {
               className="group inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-1"
             >
               <span
-                className={`rounded-full px-[10px] py-[3px] text-[12px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap transition-colors duration-150 ${TONO[accion.tono]}`}
+                className={`rounded-full px-[10px] py-[3px] text-[12px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap transition-colors duration-[var(--duration-fast)] ${TONO[accion.tono]}`}
               >
                 {accion.label}
               </span>

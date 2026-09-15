@@ -1,71 +1,22 @@
 "use client";
 
 import * as React from "react";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import {
   AnimatePresence,
-  animate,
   motion,
-  useMotionValue,
-  useReducedMotion,
-  useTransform,
 } from "framer-motion";
 
-// Primitivos de movimiento de la app. Siete, y ninguno decorativo:
-//
-//   Aparece         algo entró a la pantalla
-//   ListaEnCascada  entró una lista, y se lee de arriba abajo
-//   AlturaAnimada   esto se abrió (o se cerró) acá mismo
-//   Contador        este número se acaba de calcular
-//   Latido          esto está pasando ahora
-//   CheckDibujado   lo que pediste se hizo
-//   AnilloProgreso  esto está trabajando y no sabemos cuánto falta
-//
-// Duraciones entre 150 y 280 ms, salvo el Contador (600 ms, porque el
-// número tiene que poder leerse mientras sube) y los dos indicadores
-// continuos, que no son transiciones sino estado.
-//
-// La curva es siempre la misma, la que ya usa el resto de la app
-// (--ease-out en globals.css). Sin rebotes: esto es la pantalla de una
-// psicóloga entre sesión y sesión, no una app de fitness.
-//
-// prefers-reduced-motion: todos degradan a estático. No a "más rápido" ni a
-// "un poquito menos": a estático. Quien pide menos movimiento por vértigo o
-// migraña no quiere un fundido corto, quiere que no se mueva.
+import { SUAVE, TIEMPOS } from "@/lib/movimiento";
+export { SUAVE } from "@/lib/movimiento";
 
-/**
- * La misma curva que --ease-out (globals.css). Es la única del proyecto: no
- * hay una curva "de entrada" y otra "de salida", ni una con rebote.
- *
- * Se exporta porque vivía copiada como literal en cinco archivos —el
- * template de página, el sheet, el toast y los dos menús—, y una curva
- * duplicada es una curva que en algún momento deja de ser la misma. Quien
- * necesite animar fuera de estos primitivos la importa de acá.
- */
-export const SUAVE = [0.16, 1, 0.3, 1] as const;
-
-/**
- * Lo que dura una navegación entre pantallas, en milisegundos.
- *
- * Es UN solo número para las dos cosas que se mueven cuando ella toca el
- * menú: el subrayado que se desliza a la pestaña nueva (bottom-nav.tsx, y su
- * equivalente vertical en sidebar.tsx) y el fundido con el que entra la
- * pantalla (template.tsx). Los dos arrancan en el mismo instante —el commit
- * de la ruta—, así que si duran distinto la pantalla se asienta dos veces:
- * primero deja de aparecer el contenido y después sigue viajando el
- * subrayado, o al revés. Eran 180 y 260; ahora son 260 las dos y terminan
- * juntas.
- *
- * Se elige el número más largo de los dos a propósito: acortar el subrayado
- * a 180 lo haría saltar entre pestañas que están a media pantalla de
- * distancia, y el fundido no cuesta espera —lo que entra ya se lee mientras
- * termina de opacar—.
- */
-export const MS_NAVEGACION = 260;
-
-/** Lo mismo en segundos, que es como lo pide framer-motion. */
+// Tres duraciones. La preferencia reducida deja la interfaz estática.
+// Totales e indicadores no animan, tampoco con movimiento habilitado.
+export const MS_NAVEGACION = TIEMPOS.navegacion;
 export const DURACION_NAVEGACION = MS_NAVEGACION / 1000;
-
-const DURACION_APARECE = 0.24;
+export const DURACION_BREVE = TIEMPOS.breve / 1000;
+export const DURACION_PANEL = TIEMPOS.pliegue / 1000;
+const DURACION_APARECE = DURACION_NAVEGACION;
 const DESPLAZAMIENTO = 6;
 
 /** Milisegundos entre un hijo y el siguiente en una cascada. */
@@ -118,7 +69,7 @@ export function Aparece({
   animar = true,
   className,
 }: ApareceProps) {
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
   const Elemento = ELEMENTOS[como];
   const quieto = reducido || !animar;
 
@@ -194,7 +145,7 @@ export function ListaEnCascada({
 /** Lo que tarda un bloque en abrirse o cerrarse, en milisegundos. Se
  *  exporta para que quien tenga que esperar al despliegue —el foco de
  *  Confirmar, sin ir más lejos— no lo copie. */
-export const MS_PLIEGUE = 220;
+export const MS_PLIEGUE = TIEMPOS.pliegue;
 
 /** Lo mismo en segundos, que es como lo pide framer-motion. */
 const DURACION_PLIEGUE = MS_PLIEGUE / 1000;
@@ -240,27 +191,19 @@ export function AlturaAnimada({
   id,
   className,
 }: AlturaAnimadaProps) {
-  const reducido = useReducedMotion();
-
-  if (reducido) {
-    return abierto ? (
-      <div id={id} className={className}>
-        {children}
-      </div>
-    ) : null;
-  }
+  const reducido = useMovimientoReducido();
 
   return (
-    <AnimatePresence initial={alMontar}>
+    <AnimatePresence initial={!reducido && alMontar}>
       {abierto ? (
         <motion.div
           id={id}
           key="panel"
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
+          initial={reducido ? false : { height: 0, opacity: 0 }}
+          animate={reducido ? undefined : { height: "auto", opacity: 1 }}
+          exit={reducido ? undefined : { height: 0, opacity: 0 }}
           transition={{ duration: DURACION_PLIEGUE, ease: SUAVE }}
-          style={{ overflow: "hidden" }}
+          style={{ overflow: reducido ? undefined : "hidden" }}
         >
           <div className={className}>{children}</div>
         </motion.div>
@@ -278,44 +221,14 @@ export interface ContadorProps {
   valor: number;
   /** Cómo se escribe cada paso. Recibe el valor ya redondeado. */
   formato?: (n: number) => string;
-  /** Segundos que tarda en llegar. */
+  /** Compatibilidad con consumidores: el número ya no se anima. */
   duracion?: number;
   className?: string;
 }
 
-/**
- * Cuenta de 0 al valor. Sirve para los tres números de Hoy: que suban dice
- * "esto se acaba de calcular", y de paso el ojo se apoya en ellos antes de
- * seguir bajando.
- *
- * Con la preferencia de movimiento reducido muestra el número final y listo.
- */
-export function Contador({
-  valor,
-  formato = (n) => String(n),
-  duracion = 0.6,
-  className,
-}: ContadorProps) {
-  const reducido = useReducedMotion();
-  const progreso = useMotionValue(0);
-  const texto = useTransform(progreso, (n) => formato(Math.round(n)));
-
-  React.useEffect(() => {
-    if (reducido) {
-      progreso.set(valor);
-      return;
-    }
-    // `animate` escribe en un MotionValue, no en el estado de React: el
-    // componente no re-renderiza en cada cuadro.
-    const control = animate(progreso, valor, { duration: duracion, ease: SUAVE });
-    return () => control.stop();
-  }, [valor, duracion, reducido, progreso]);
-
-  if (reducido) {
-    return <span className={className}>{formato(valor)}</span>;
-  }
-
-  return <motion.span className={className}>{texto}</motion.span>;
+/** Los totales se leen completos desde el primer cuadro. */
+export function Contador({ valor, formato = (n) => String(n), className }: ContadorProps) {
+  return <span className={className}>{formato(valor)}</span>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -331,41 +244,12 @@ export interface LatidoProps {
   etiqueta?: string;
 }
 
-/**
- * Punto que pulsa despacio: "esto está pasando ahora". Se usa en la sesión
- * en curso y en el indicador REC de la grabación.
- *
- * El ciclo es de 1,8 s y la opacidad no baja de 0,45: un parpadeo marcado
- * a un metro de distancia se lee como alarma, y esto no es una alarma.
- */
+/** Indicador de estado quieto; el texto explica qué está pasando. */
 export function Latido({ tamano = 8, className = "", etiqueta }: LatidoProps) {
-  const reducido = useReducedMotion();
-  const estilo = { width: tamano, height: tamano };
-  const clases = `inline-block shrink-0 rounded-full ${className}`;
-
-  if (reducido) {
-    return (
-      <span
-        className={clases}
-        style={estilo}
-        role={etiqueta ? "img" : undefined}
-        aria-label={etiqueta}
-        aria-hidden={etiqueta ? undefined : true}
-      />
-    );
-  }
-
-  return (
-    <motion.span
-      className={clases}
-      style={estilo}
-      role={etiqueta ? "img" : undefined}
-      aria-label={etiqueta}
-      aria-hidden={etiqueta ? undefined : true}
-      animate={{ opacity: [1, 0.45, 1], scale: [1, 1.18, 1] }}
-      transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-    />
-  );
+  return <span className={"inline-block shrink-0 rounded-full " + className}
+    style={{ width: tamano, height: tamano }}
+    role={etiqueta ? "img" : undefined} aria-label={etiqueta}
+    aria-hidden={etiqueta ? undefined : true} />;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -378,13 +262,13 @@ export interface CheckDibujadoProps {
 }
 
 /**
- * El check se traza en 300 ms en vez de aparecer de golpe. Es la
+ * El check se traza en el tiempo breve del sistema en vez de aparecer de golpe. Es la
  * confirmación de que algo se guardó: cobrar, aprobar una nota. El trazo
  * dura lo justo para que el ojo lo siga y entienda que pasó algo, sin
  * retrasar la lectura del texto que lo acompaña.
  */
 export function CheckDibujado({ tamano = 16, className }: CheckDibujadoProps) {
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
 
   return (
     <svg
@@ -403,17 +287,17 @@ export function CheckDibujado({ tamano = 16, className }: CheckDibujadoProps) {
         strokeLinejoin="round"
         initial={reducido ? false : { pathLength: 0, opacity: 0 }}
         animate={reducido ? undefined : { pathLength: 1, opacity: 1 }}
-        transition={{ duration: 0.3, ease: SUAVE }}
+        transition={{ duration: DURACION_BREVE, ease: SUAVE }}
       />
     </svg>
   );
 }
 
 /** Lo que tarda el trazo del check, en milisegundos. */
-export const MS_CHECK_DIBUJADO = 300;
+export const MS_CHECK_DIBUJADO = TIEMPOS.breve;
 
 /** Un respiro después del trazo, para que el ojo lo termine de leer. */
-const MS_RESPIRO = 120;
+const MS_RESPIRO = 0;
 
 /**
  * "Lo que pediste se hizo, acá donde lo pediste."
@@ -434,7 +318,7 @@ export function useConfirmacionDibujada<T>(
   alTerminar: () => void,
 ): readonly [T | null, (valor: T) => void] {
   const [confirmado, setConfirmado] = React.useState<T | null>(null);
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
 
   // El callback se guarda en un ref y no en las dependencias del efecto:
   // los consumidores lo pasan inline (`() => setCobroTarget(null)`), así que
@@ -470,7 +354,7 @@ export interface AnilloProgresoProps {
 }
 
 /**
- * Indeterminado: gira mientras el worker escribe la nota. No promete un
+ * Indicador indeterminado quieto mientras el worker escribe la nota. No promete un
  * porcentaje que no tenemos —la transcripción y el modelo no informan
  * avance— así que no dibuja una barra que se llena sola.
  *
@@ -482,10 +366,9 @@ export function AnilloProgreso({
   className,
   etiqueta,
 }: AnilloProgresoProps) {
-  const reducido = useReducedMotion();
 
   return (
-    <motion.svg
+    <svg
       width={tamano}
       height={tamano}
       viewBox="0 0 24 24"
@@ -494,8 +377,6 @@ export function AnilloProgreso({
       role={etiqueta ? "img" : undefined}
       aria-label={etiqueta}
       aria-hidden={etiqueta ? undefined : true}
-      animate={reducido ? undefined : { rotate: 360 }}
-      transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
     >
       <circle
         cx="12"
@@ -511,6 +392,6 @@ export function AnilloProgreso({
         strokeWidth={2.2}
         strokeLinecap="round"
       />
-    </motion.svg>
+    </svg>
   );
 }

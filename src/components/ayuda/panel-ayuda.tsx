@@ -245,7 +245,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
             onClick={alCerrar}
             aria-label={AYUDA_CERRAR}
             title={AYUDA_CERRAR}
-            className="-mr-2 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-500 transition-colors duration-150 hover:bg-cream-100 hover:text-ink-900"
+            className="-mr-2 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-100 hover:text-ink-900"
           >
             <X size={18} strokeWidth={1.8} aria-hidden="true" />
           </button>
@@ -265,7 +265,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
                   key={pregunta}
                   type="button"
                   onClick={() => void preguntar(pregunta)}
-                  className="min-h-11 rounded-md border border-[color:var(--border-subtle)] bg-white px-3.5 py-2.5 text-left font-sans text-[14px] leading-[1.45] text-ink-700 transition-colors duration-150 hover:bg-cream-100"
+                  className="min-h-11 rounded-md border border-[color:var(--border-subtle)] bg-white px-3.5 py-2.5 text-left font-sans text-[14px] leading-[1.45] text-ink-700 transition-colors duration-[var(--duration-fast)] hover:bg-cream-100"
                 >
                   {pregunta}
                 </button>
@@ -338,12 +338,12 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
               placeholder={AYUDA_PLACEHOLDER}
               aria-label={AYUDA_PLACEHOLDER}
               autoComplete="off"
-              className="min-h-[44px] min-w-0 flex-1 rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-150 placeholder:text-ink-300 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
+              className="min-h-[44px] min-w-0 flex-1 rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-[var(--duration-fast)] placeholder:text-ink-300 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
             />
             <button
               type="submit"
               disabled={esperando || borrador.trim() === ""}
-              className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-md bg-sage-500 px-4 font-sans text-[14px] font-semibold leading-none text-white transition-colors duration-150 hover:bg-sage-600 active:bg-sage-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-md bg-sage-500 px-4 font-sans text-[14px] font-semibold leading-none text-white transition-colors duration-[var(--duration-fast)] hover:bg-sage-600 active:bg-sage-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {AYUDA_ENVIAR}
             </button>
