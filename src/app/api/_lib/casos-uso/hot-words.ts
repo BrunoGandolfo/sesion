@@ -14,6 +14,7 @@
 // `hashTermino(termino)` de @/lib/hot-words; el campo lógico `termino` lo
 // descifra la extensión al leer.
 
+import { MENSAJE_HOT_WORD_DUPLICADA, MENSAJE_FALTA_PACIENTE } from "@/lib/glosario";
 import { Prisma } from "@prisma/client";
 
 import type { db } from "@/lib/db";
@@ -62,9 +63,8 @@ function aRespuesta(fila: {
   };
 }
 
-export const MENSAJE_HOT_WORD_DUPLICADA = "Hot word duplicado";
-export const MENSAJE_FALTA_PACIENTE =
-  "pacienteId es obligatorio cuando scope === 'paciente'";
+export { MENSAJE_HOT_WORD_DUPLICADA } from "@/lib/glosario";
+export { MENSAJE_FALTA_PACIENTE } from "@/lib/glosario";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Lectura

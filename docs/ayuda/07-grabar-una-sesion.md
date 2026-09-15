@@ -29,9 +29,9 @@ garantiza que el teléfono siga capturando cuando cambiás de app.
 
 ### Pausar
 
-**Pausar** detiene la grabación: el punto deja de latir y aparece **En pausa**.
+**Pausar** detiene la captura y aparece **En pausa**.
 **El cronómetro se detiene**, el tiempo en pausa no cuenta, y **Reanudar** sigue
-en el mismo archivo.
+la captura de audio.
 
 ### Bloquear la pantalla
 
@@ -44,18 +44,13 @@ volvé a Sesión y revisá su estado antes de seguir.
 Una llamada u otra app puede interrumpir el micrófono. La pantalla ofrece
 **Reanudar** o **Terminar la sesión** con lo que haya capturado. Durante la
 interrupción no se graba. La recuperación completa no está garantizada: no
-cierres la pantalla ni descartes el audio mientras intentás guardarlo.
-
-### Descartar
-
-**Descartar grabación** pregunta: *"¿Descartar la grabación? Se borra el audio de
-este teléfono. No se puede recuperar."*
+cierres la pantalla ni borres el audio mientras intentás guardarlo.
 
 ## Terminar
 
 1. Tocá **Terminar la sesión** (el botón rojo). No hay pantalla intermedia.
-2. Aparece **Guardando…** con una barra: ahí adentro pasan el cifrado, la subida
-   y la confirmación.
+2. Aparece **Guardando…**: el grabador actual cifra el archivo al terminar
+   e intenta completar la subida.
 3. Al terminar aparece **"Te avisamos cuando la nota esté lista"**, la app vuelve
    sola a la ficha y el turno queda marcado como **realizado**.
 
@@ -70,17 +65,19 @@ un mensaje de respaldo como garantía de que todo quedó guardado: mantené
 la pantalla abierta y comprobá que la subida se confirme.
 
 Si el navegador se cerró, al volver al mismo turno puede aparecer un pendiente
-con **Guardarla ahora** y **Descartarla**. La recuperación puede fallar. Si hay
-audio pendiente, no empieces otra grabación del mismo turno ni lo descartes
+que permite intentar recuperarlo. La recuperación puede fallar. Si hay
+audio pendiente, no empieces otra grabación del mismo turno ni lo borres
 mientras intentás recuperarlo; puede reemplazarse la copia anterior.
 
 ## Qué hace la app por detrás
 
-Durante la captura, la app intenta guardar fragmentos en el navegador.
-**La copia local previa no está cifrada** y puede faltar si el almacenamiento
-no estuvo disponible. Al terminar, el navegador genera una clave y cifra el
-audio antes de subirlo a R2. La app intenta limpiar la copia local cuando la
-subida se confirma; no hay garantía de recuperación después de cerrar la página.
+El consentimiento 2.0 exige cifrar el audio por tramos mientras se graba.
+**Todavía no está implementado en este grabador:** la copia local previa no está cifrada.
+El grabador actual cifra el archivo al terminar, antes de subir. La captura por
+tramos cifrados y su conexión con la subida siguen pendientes de reconstrucción.
+No des por guardada una sesión hasta que la app confirme la subida completa.
+La copia local depende del almacenamiento disponible y no garantiza recuperar
+una interrupción ni lo que no llegó a capturarse.
 
 ## Lo que NO hace
 
@@ -89,7 +86,7 @@ subida se confirma; no hay garantía de recuperación después de cerrar la pág
 - **No graba dos sesiones a la vez**: un turno tiene una sola sesión clínica.
 - **No graba sin autorización vigente.**
 - **No te avisa al teléfono** cuando la nota está lista.
-- **No se recupera** una grabación descartada.
+- **No se recupera** una grabación borrada.
 
 <!-- fuentes:
 src/app/(dashboard)/grabar/[turnoId]/page.tsx

@@ -14,6 +14,21 @@ Si al análisis le faltó una parte, se muestra igual lo que llegó, con un avis
 que dice *"Parte del análisis no llegó."* Antes, cuando faltaba algo, el bloque
 entero desaparecía sin avisar.
 
+## Si todavía no está listo
+
+El servidor guarda un estado del análisis separado de la nota. La pantalla
+todavía no muestra estos cuatro estados de forma completa; los textos previstos son:
+
+- **Todavía no se pidió**: no se generó un pedido.
+- **Se está generando…**: está pendiente.
+- **Listo**: se muestra el reporte.
+- **No se pudo generar**: el pedido falló.
+
+**Pedir de nuevo todavía no está disponible en la pantalla**. El servidor permite
+reintentarlo sin volver a transcribir ni rehacer la nota, incluso aunque la nota ya
+esté aprobada. Hasta que se conecte ese control, avisale a quien administra Sesión;
+abrir la vista no genera un análisis nuevo.
+
 ## Qué instrumento te toca
 
 Depende de lo que elegiste en **Tu consultorio → Tu enfoque**:

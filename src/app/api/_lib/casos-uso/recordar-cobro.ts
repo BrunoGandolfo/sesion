@@ -24,6 +24,7 @@
 // no entregado…). El evento de auditoría queda para lo único que la fila no
 // dice: QUIÉN lo pidió. Ni el texto ni el teléfono entran al evento.
 
+import { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 
 import type { EventoAuditoriaInput } from "../auditoria-pura";
@@ -62,7 +63,7 @@ export interface RecordarCobroResultado {
   monto: number;
 }
 
-export const MOTIVO_PACIENTE_DADA_DE_BAJA = "La paciente pidió no recibir más mensajes";
+export { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 
 /**
  * Valida y crea el envío del aviso de cobro.

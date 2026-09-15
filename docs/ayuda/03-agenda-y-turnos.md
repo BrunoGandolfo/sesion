@@ -13,16 +13,30 @@ lo que estés mirando, y hay un botón para volver a hoy.
 
 ## Agendar un turno
 
-1. Tocá **Agendar** (el botón redondo abajo a la derecha), o **Turno** desde
-   **Hoy**.
+1. Tocá **Agendar** en Agenda o en **Hoy**.
 2. Elegí la paciente, la **Fecha** y la **Hora**.
 3. Elegí la **Duración**: 30, 45, 50, 60 o 90 minutos.
 4. Elegí la **Modalidad**: **Presencial** u **Online**.
-5. Opcional: **Notas** ("Algo para recordar del turno.").
-6. Guardá. Aparece **"Turno agendado"**.
+5. En **Se repite**, elegí **Una vez**, **Cada semana** o **Cada 15 días**.
+6. Opcional: **Notas** ("Algo para recordar del turno.").
+7. Guardá. Para un turno suelto aparece **"Turno agendado"**.
 
 La tarifa del turno se copia de la tarifa de esa paciente en el momento de
 crearlo. El turno nace **Agendado** y **Pendiente** de pago.
+
+## Turnos que se repiten
+
+Podés repetir cada semana o cada 15 días. Se agendan **tres meses** de turnos.
+Cada turno es independiente: moverlo, cobrarlo o cancelarlo no cambia el resto.
+
+Si una fecha posterior choca con otro turno, no se agenda y el aviso muestra
+cuáles se omitieron. Podés agendarlas a mano en otro horario. Si choca la primera
+fecha, no se crea la serie: elegí otro comienzo.
+
+Desde un turno de la serie, **Cancelar el resto de la serie** pide confirmación:
+se cancelan ese turno y los siguientes que sigan programados, junto con sus
+avisos pendientes. Los anteriores y los ya realizados quedan como están.
+Cuando se acaban los tres meses no se agrega nada solo: agendá una serie nueva.
 
 ## Abrir un turno
 
@@ -51,7 +65,8 @@ estado, la duración, la modalidad, la tarifa, el pago, tus notas y el estado de
 - **Reprogramar** — cambiás fecha, hora, duración, modalidad y notas. Si
   cambiaste la fecha, **el recordatorio viejo se cancela y se programa uno
   nuevo** para la fecha nueva. Si solo cambiaste la duración o la modalidad, el
-  recordatorio queda como estaba.
+  recordatorio queda como estaba. Si el aviso anterior ya había salido, se
+  programa un **cambio de horario** con la fecha nueva.
 - **No vino** — pregunta *"¿[Nombre] no vino?"* y avisa: *"El turno queda
   registrado como ausencia. No se cobra y no se puede grabar."*
   **El recordatorio se cancela.**
@@ -79,7 +94,6 @@ ningún recordatorio**.
 - **No permite superponer turnos** con otro turno agendado o realizado.
   Si se pisan los horarios, no se guarda el cambio: elegí otra hora o duración.
   Un turno puede empezar justo cuando termina el anterior.
-- **No hay turnos que se repitan solos** cada semana.
 - **No se borran turnos.**
 
 <!-- fuentes:
@@ -89,7 +103,6 @@ src/app/api/turnos/route.ts
 src/app/api/turnos/[id]/route.ts
 src/app/api/turnos/[id]/cobrar/route.ts
 src/app/api/_lib/casos-uso/cobrar-turno.ts
-src/app/api/_lib/casos-uso/recordatorios-del-turno.ts
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
 src/lib/glosario.ts
 -->

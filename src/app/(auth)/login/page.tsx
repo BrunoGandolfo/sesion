@@ -18,7 +18,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button, Card, Input } from "@/components/ui";
 import { apiPost } from "@/lib/api-client";
-import {
+import { ENTRADA_REINGRESO,
   ENTRADA_CONTRASENA,
   ENTRADA_EMAIL,
   ENTRADA_ERROR,
@@ -33,8 +33,7 @@ import { Presencia } from "./_components/presencia";
 
 // Texto nuevo de esta pantalla; va al glosario cuando el área 6 lo integre
 // (docs/pendientes/03-identidad.md).
-const ENTRADA_REINGRESO =
-  "Cambiaste la contraseña: entrá de nuevo en todos tus dispositivos.";
+
 
 export default function LoginPage() {
   const router = useRouter();

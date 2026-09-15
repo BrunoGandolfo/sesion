@@ -51,12 +51,14 @@ número rojo con cuántas personas están en esa última zona.
 ## "Recordar cobro"
 
 En **Te deben**, cada persona con teléfono cargado tiene el botón **Recordar
-cobro**. Revisá el mensaje y confirmá: se envía un **SMS**, sin abrir WhatsApp.
+cobro**. Revisá el mensaje y confirmá: se programa un **SMS**.
 
 El recordatorio de cobro **sale solo cuando vos confirmás el envío**; el del
 turno se programa automáticamente. El texto del cobro no es configurable.
-Si no se puede enviar, la pantalla muestra el error. Si figura enviado, eso
-indica que el servicio aceptó el SMS: no confirma que la paciente lo leyó.
+La confirmación indica que quedó programado, no que ya llegó. Se admite un
+pedido por paciente y por día: si ya lo pediste, no se programa otro.
+**Avisado** se cuenta desde que el servicio aceptó el mensaje; no significa
+que la paciente lo leyó. Si pidió la baja, la app no programa el cobro.
 
 ## Qué hace la app por detrás
 
@@ -75,7 +77,6 @@ turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
 - **No cobra plata ni emite factura ni recibo.**
 - **No cobra parcial**: se cobra la tarifa completa del turno, no un monto libre.
 - **No cambia el mensaje de "Recordar cobro"**: no es configurable.
-- **No manda WhatsApp por su cuenta.**
 - Deshacer un cobro **no vuelve el turno a "Agendado"**: haber cobrado por error
   no significa que la sesión no ocurrió.
 

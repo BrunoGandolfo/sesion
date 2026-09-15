@@ -14,11 +14,10 @@ teléfono, una fila por persona con la deuda en un chip terracotta.
 
 1. Tocá **Nuevo paciente**.
 2. Completá **Nombre**, **Apellido** y **Teléfono** (obligatorios).
-3. Opcional: **Email (opcional)**.
-4. **Tarifa por sesión** — viene propuesta la de "Tu consultorio"; podés
+3. **Tarifa por sesión** — viene propuesta la de "Tu consultorio"; podés
    cambiarla. Tiene que ser mayor a 0.
-5. Opcional: **Notas (opcional)**.
-6. Tocá **Crear paciente**. Aparece **"Paciente creado"**.
+4. Opcional: **Notas (opcional)**.
+5. Tocá **Crear paciente**. Aparece **"Paciente creado"**.
 
 El teléfono se guarda normalizado para que el SMS salga bien.
 
@@ -48,7 +47,7 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 
 ### Pestaña **Ficha**
 
-- **Datos de contacto** — teléfono (se puede tocar para llamar), email, tarifa
+- **Datos de contacto** — teléfono (se puede tocar para llamar), tarifa
   por sesión y fecha de alta.
 - **Notas privadas** — se guardan solas: *"Se guarda solo. Solo vos las ves."*
 - **Autorización para grabar las sesiones** — ver abajo.
@@ -60,8 +59,9 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 
 1. En la ficha, tocá **Firmar autorización**.
 2. Se abre **Autorización para grabar las sesiones**. **La lee la paciente**:
-   qué se graba, para qué, quién lo escucha (nadie), que el audio pasa por
-   AssemblyAI y Anthropic en Estados Unidos, cómo viaja cifrado, cuándo se borra,
+   qué se graba, para qué y qué reciben los proveedores: AssemblyAI recibe
+   audio y vocabulario; Anthropic, transcripción e hilo. También explica el
+   cifrado por tramos, el borrado con reintentos, los respaldos de 30 días,
    qué queda guardado (nota y transcripción), que puede revocarla cuando quiera y
    que aceptar no es obligatorio. Se enmarca en la **Ley 18.331**.
 3. La paciente marca **"Leí y entiendo la información anterior"**.
@@ -69,6 +69,9 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 5. Tocá **Firmar**.
 
 Firmada, aparece el chip verde **Grabación autorizada** y la fecha de firma.
+La versión vigente del texto es **2.0**. Las firmas anteriores siguen vigentes:
+podés sugerir firmar el texto nuevo en la próxima sesión; no hace falta
+revocar la firma anterior ni bloquear la grabación.
 
 **Revocar**: el botón **Revocar** avisa *"Las próximas sesiones no se van a
 grabar. Lo ya grabado y sus notas se conservan."*
@@ -102,3 +105,7 @@ src/lib/consentimiento.ts
 src/app/api/pacientes/route.ts
 src/app/api/sesion-clinica/route.ts
 -->
+
+La promesa de cifrado durante la grabación del consentimiento 2.0 todavía no
+está implementada en el grabador actual: la copia local previa no está cifrada.
+Ver `12-camino-del-audio-y-privacidad.md`.

@@ -1,3 +1,4 @@
+import { MOTIVO_TURNO_PASADO, MOTIVO_VENTANA_AGOTADA, MOTIVO_VENTANA_AGOTADA_SIN_TURNO } from "@/lib/glosario";
 // Cuándo se vuelve a intentar un SMS que falló de forma transitoria, y
 // cuándo se deja de intentar. Puro.
 //
@@ -59,12 +60,10 @@ export interface ParamsDecision {
   jitterMayor?: boolean;
 }
 
-export const MOTIVO_VENTANA_AGOTADA =
-  "no se pudo enviar antes de la sesión: el servicio de SMS no respondió a tiempo";
+export { MOTIVO_VENTANA_AGOTADA } from "@/lib/glosario";
 /** Para un aviso sin turno (cobro): la ventana es un día, no "la sesión". */
-export const MOTIVO_VENTANA_AGOTADA_SIN_TURNO =
-  "no se pudo enviar en el día: el servicio de SMS no respondió a tiempo";
-export const MOTIVO_TURNO_PASADO = "el turno ya pasó";
+export { MOTIVO_VENTANA_AGOTADA_SIN_TURNO } from "@/lib/glosario";
+export { MOTIVO_TURNO_PASADO } from "@/lib/glosario";
 
 export function decidirTrasFalloTransitorio({
   intentos,

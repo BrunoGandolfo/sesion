@@ -1,70 +1,71 @@
 # El camino del audio y la privacidad
 
-**Para qué sirve.** Distinguir qué hace la app de lo que todavía necesita
-verificación sobre las copias y los proveedores.
+**Para qué sirve.** Entender el tratamiento informado en el consentimiento 2.0,
+qué queda guardado y qué necesita verificación de quien administra Sesión.
 
-## El camino, paso a paso
+## Una diferencia pendiente en el grabador
 
-1. Durante la grabación, la app intenta guardar fragmentos en el navegador.
-   **La copia local previa no está cifrada.** Puede faltar si el almacenamiento
-   no estuvo disponible; no es una garantía de recuperación.
-2. **Al terminar**, el navegador cifra el audio antes de subirlo a R2.
-3. El proceso de transcripción baja ese audio y lo descifra. **AssemblyAI**
-   recibe el audio descifrado; **Anthropic** recibe la transcripción para
-   redactar la nota y el análisis para vos.
-4. Al terminar la transcripción, la app **pide eliminar** ese material del
-   proveedor. Una solicitud de borrado no confirma que se hayan eliminado
-   todas las copias.
-5. Al aprobar la nota, la app **intenta borrar el audio remoto** y quita la
-   clave del registro activo. La limpieza puede fallar; los respaldos previos
-   y las copias de proveedores requieren verificación aparte.
+El consentimiento 2.0 exige cifrar el audio por tramos durante la grabación.
+**Todavía no está implementado en este grabador:** la copia local previa no está cifrada.
+Actualmente se cifra al terminar, antes de subir. La captura y subida se están
+reconstruyendo; el texto firmado no demuestra que esa protección ya esté funcionando.
 
-## Qué información reciben los proveedores
+## Tratamiento del audio subido
 
-El audio y su transcripción pueden contener nombres y otros datos que se
-digan durante la sesión. El vocabulario que cargás también se envía al servicio
-de transcripción y puede contener nombres propios. No se envía automáticamente
-la ficha de contacto completa por ese camino.
+1. El archivo se envía cifrado a **Cloudflare R2**. La subida por segmentos
+   independientes todavía está pendiente.
+2. El proceso que corre en **Railway** descarga el archivo y lo descifra para
+   transcribir. **AssemblyAI** recibe el audio sin cifrar y el vocabulario.
+3. Al terminar la transcripción se programa su borrado en AssemblyAI. El pedido
+   se reintenta hasta que el proveedor confirma el borrado.
+4. **Anthropic** recibe la transcripción y el hilo del paciente para redactar
+   la nota y el análisis de tu trabajo.
+5. Al aprobar, la clave del audio se destruye en el registro activo y se
+   programa el borrado de los archivos de R2. Si falla, se reintenta hasta
+   confirmar la eliminación. La transcripción y la nota se conservan.
 
-La retención, los accesos humanos y el uso para entrenamiento dependen de las
-condiciones y de la configuración vigente de los proveedores. Esta ayuda no
-puede certificar que nunca acceda una persona ni que todas las copias se borren.
-Si necesitás confirmar esas condiciones, pedí que se verifiquen antes de usarlas
-como garantía frente a una paciente.
+## Nombres y proveedores
 
-## Qué queda guardado
+El vocabulario que cargás también se envía a AssemblyAI y puede incluir nombres
+propios, incluso el de la paciente. El audio y su transcripción pueden contener
+lo que se diga en sesión. Por este camino no se manda automáticamente el teléfono
+ni el documento de la ficha.
 
-La nota clínica, el borrador original, la transcripción y los datos estructurados
-de la sesión se cifran en la base. En el contexto longitudinal se cifran la
-hipótesis, el resumen acumulado y los riesgos históricos.
+La configuración registrada de Anthropic indica retención deshabilitada y
+contenido sin uso para entrenamiento, verificada por el dueño el **2026-09-04**.
+Esa configuración debe volver a comprobarse si cambia la cuenta o el proveedor.
+Los accesos humanos y las copias del proveedor dependen de sus condiciones:
+esta app no puede verificar por sí sola que nunca acceda una persona.
 
-**No todo dato clínico tiene ese cifrado:** las notas privadas de la ficha,
-las notas del turno, los objetivos, las intervenciones y los temas del contexto
-quedan fuera de ese cifrado de la aplicación. No los describas como si tuvieran
-la misma protección que la nota clínica.
+## Qué se cifra en la base
 
-Hay un registro de auditoría y un proceso de respaldo diario cifrado. La
-existencia de esos mecanismos no confirma que cada evento o respaldo se haya
-completado: su funcionamiento y recuperación requieren comprobación.
+La nota, la transcripción, el análisis para vos, el hilo, las notas privadas de
+la ficha, las notas del turno, el vocabulario y el consentimiento con su firma
+se guardan cifrados. También se cifra la clave del audio mientras debe conservarse.
 
-## Después de aprobar
+Eso no convierte todos los campos de la base en secretos cifrados: datos de
+contacto, fechas, estados e importes administrativos siguen disponibles para
+organizar el consultorio. Hay un registro de auditoría; no es una copia de las notas.
+Cada lectura de la transcripción queda registrada.
 
-La transcripción y la nota se conservan. Aprobar no permite volver a grabar el
-audio original ni garantiza recuperar una copia perdida. Tampoco hay que
-confundir quitar una clave del registro activo con eliminar todas las copias
-previas que pudieran conservarla.
+## Respaldos y eliminación
+
+Los respaldos de la base se conservan **30 días**. No contienen audio, pero sí
+pueden contener cifrada la clave de una sesión que todavía no estaba aprobada
+cuando se hizo la copia. Aprobar hoy no cambia los respaldos anteriores.
+
+Quitar la clave activa no garantiza que hayan desaparecido todas las copias.
+Los pedidos de borrado se siguen hasta su confirmación; el funcionamiento y
+la restauración de los respaldos requieren comprobación.
+
+Revocar la autorización impide grabaciones futuras. No borra la historia que
+ya quedó guardada. Las firmas de versiones anteriores siguen vigentes; se puede
+sugerir firmar la versión 2.0 en la próxima sesión.
 
 <!-- fuentes:
-src/components/grabacion/GrabadorSesion.tsx
-src/lib/crypto.ts
-src/lib/grabacion-storage.ts
-src/hooks/useGrabacionSesion.ts
-src/app/api/_lib/casos-uso/aprobar-sesion.ts
+src/lib/consentimiento-hechos.ts
 src/lib/consentimiento.ts
-docs/pipeline.md
-docs/encryption.md
-README.md
-processor/processor.py
-processor/asr_assemblyai.py
-processor/crypto.py
+src/lib/prisma-encryption.ts
+src/app/api/_lib/casos-uso/sesion/aprobar.ts
+.github/workflows/backup.yml
 -->

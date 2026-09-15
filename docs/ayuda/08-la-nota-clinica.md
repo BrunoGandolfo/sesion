@@ -25,7 +25,7 @@ a **Para revisar**.
    a aparecer**, **Se llevó**, **Intensidad emocional** (1 a 10) y **Alianza
    terapéutica** (frágil, inestable, estable, fuerte).
 6. **Ver el borrador original** (plegado) — la nota tal como la escribió el
-   modelo, antes de que la tocaras. Queda ahí para siempre.
+   modelo, antes de que la tocaras. Se conserva al aprobar; pedir una nueva generación reemplaza el borrador de esa generación.
 
 **Para vos** tiene una vista separada, con dirección propia. Cuando hay análisis
 disponible, el selector de arriba permite pasar de **Nota clínica** a
@@ -49,31 +49,48 @@ suicida**, **Autolesión**, **Violencia hacia terceros**, **Síntomas psicótico
 cita textual la señal no se gradúa— y una nota breve para vos. Al pie, siempre:
 *"Detectado desde la transcripción — evaluá con tu criterio clínico."*
 
-### La casilla "Revisé esta señal"
+### Confirmar lo que revisaste
 
-Por cada indicador marcado, y por la señal graduada, hay una casilla **Revisé
-esta señal**. **Hay que marcarlas todas para poder aprobar.** Mientras falte
-alguna, el botón queda apagado: *"Marcá cada señal de riesgo antes de aprobar la
-nota."* Nunca viene pre-marcada.
+Con riesgo moderado o alto, marcá que revisaste la señal antes de aprobar.
+El servidor también exige confirmar las menciones sin riesgo graduado, pero
+**Leí las menciones todavía no está disponible en la pantalla**. Si ese requisito
+impide aprobar, avisale a quien administra Sesión; no hay una casilla que puedas
+marcar en esta versión para resolverlo.
 
 ## Aprobar
 
-Tocá **✓ Aprobar nota**: *"El audio de la sesión se borra definitivamente y la
-nota queda como registro. Esto no se puede deshacer."* Al confirmar aparece
-**Nota guardada** y permanecés en la nota. Si hay análisis disponible, podés
-tocar **Leer Para vos**; la app no te cambia de pantalla sola.
+Tocá **✓ Aprobar nota** y revisá la confirmación. Guarda la nota editada y
+la aprobación no se puede deshacer. Aparece **Nota guardada** y permanecés en la nota.
+La clave que abre el audio se destruye en ese momento; el borrado remoto queda
+en segundo plano y se reintenta hasta su confirmación. No equivale a borrar los
+respaldos anteriores. Ver `12-camino-del-audio-y-privacidad.md`.
 
-Aprobar guarda tu nota editada, intenta borrar el audio remoto, quita su clave
-del registro activo y deja la sesión disponible para actualizar el hilo.
-No confirma la eliminación de todas las copias; ver
-`12-camino-del-audio-y-privacidad.md`.
+La nota aprobada no se puede volver a escribir ni eliminar desde estas acciones.
+El reintento de **Para vos** después de aprobar está previsto en el servidor,
+pero todavía no está disponible en la pantalla.
 
-## Descartar
+## Volver a escribirla
 
-**Descartar** avisa: *"Se puede deshacer: la sesión vuelve a error y la podés
-volver a escribir. Se descarta la nota generada; la transcripción y el audio se
-conservan."* Después la pantalla ofrece **Reintentar** o **Eliminar** (*"Se
-borran la sesión y su audio. No queda registro y no se puede deshacer."*).
+Mientras está **Para revisar**, **Volver a escribirla** pide una nueva redacción
+usando la transcripción guardada. No vuelve a transcribir. Los datos de la nota anterior se conservan mientras llega la nueva; la pantalla
+puede mostrar solo el aviso de procesamiento. No se guarda una biblioteca
+de todas las generaciones anteriores. Guardá aparte cualquier texto que necesites conservar.
+
+## Si falló
+
+**Reintentar** usa lo que ya quedó guardado: si hay transcripción, no vuelve a
+transcribir. **Eliminar** borra la sesión, su transcripción y lo generado;
+el audio se manda a borrar y el turno queda libre para volver a grabar.
+La eliminación no se puede deshacer y queda registrada en la auditoría.
+
+Si se agotaron los intentos, se informa que se intentó cinco veces seguidas.
+Una grabación que quedó a medias se distingue de un fallo de procesamiento.
+
+## Ver transcripción
+
+La transcripción se conserva cifrada. **Ver transcripción todavía no está disponible
+en la pantalla**. El servidor ya permite la consulta autorizada con la nota en
+revisión o aprobada y cada lectura queda registrada; falta conectar ese acceso.
 
 ## Qué hace la app por detrás
 
@@ -88,7 +105,7 @@ que cada afirmación sea correcta.
 - **No aprueba sola** ni con el tiempo.
 - **No se puede desaprobar** una nota, ni recuperar el audio.
 - **No diagnostica.**
-- **No borra el borrador original** cuando editás: queda plegado abajo.
+- **Editar no cambia el borrador de la generación actual**: queda plegado abajo.
 
 <!-- fuentes:
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
@@ -97,7 +114,6 @@ src/app/(dashboard)/sesiones/[id]/_components/mas-de-esta-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/seccion-soap.tsx
 src/app/(dashboard)/sesiones/[id]/_components/barra-acciones.tsx
 src/components/grabacion/RiesgoDetectadoBanner.tsx
-src/app/api/_lib/casos-uso/aprobar-sesion.ts
 src/lib/glosario.ts
 processor/prompts/clinical_note_v3.1.1.md
 docs/pipeline.md

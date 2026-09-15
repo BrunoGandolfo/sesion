@@ -21,7 +21,7 @@ import { cerrarSesion } from "@/lib/sesion-cliente";
 import { Button, Card, Input } from "@/components/ui";
 import { CheckDibujado } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
-import { ALGO_FALLO, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
+import { otrasSesionesCerradas, PASSWORD_AVISO_CIERRE, PASSWORD_CAMBIADA_REINGRESO, OTRAS_SESIONES_BOTON, OTRAS_SESIONES_DESCRIPCION, OTRAS_SESIONES_CERRANDO, ALGO_FALLO, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
 import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
 import {
   RECORDATORIO_MODOS,
@@ -680,17 +680,12 @@ function CambiarPassword() {
 
 // Textos nuevos de esta pantalla; van al glosario cuando el área 6 los
 // integre (docs/pendientes/03-identidad.md).
-const PASSWORD_AVISO_CIERRE =
-  "Al cambiarla te vamos a pedir que entres de nuevo en todos tus dispositivos, este incluido.";
-const PASSWORD_CAMBIADA_REINGRESO = "Contraseña cambiada. Entrá de nuevo.";
-const OTRAS_SESIONES_BOTON = "Cerrar sesión en los demás dispositivos";
-const OTRAS_SESIONES_DESCRIPCION =
-  "Si perdiste un teléfono o entraste desde una computadora ajena, esto cierra todas las demás sesiones. Esta sigue abierta.";
-const OTRAS_SESIONES_CERRANDO = "Cerrando…";
-function otrasSesionesCerradas(n: number): string {
-  if (n === 0) return "No había otras sesiones abiertas.";
-  return n === 1 ? "Cerramos 1 sesión en otro dispositivo." : `Cerramos ${n} sesiones en otros dispositivos.`;
-}
+
+
+
+
+
+
 
 // ────────────────────────────────────────────────────────────────────────────
 // Cerrar sesión en los demás dispositivos

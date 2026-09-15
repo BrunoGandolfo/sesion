@@ -36,13 +36,13 @@ Pasa cuando entra una llamada o cuando otra app se lleva el micrófono.
 
 **Qué hacer:** revisá si podés **Reanudar** o **Terminar la sesión** con lo
 capturado. Durante el corte no se graba. La recuperación completa no está
-garantizada; no cierres ni descartes el audio mientras intentás guardarlo.
+garantizada; no cierres ni borres el audio mientras intentás guardarlo.
 
 ### Se cerró el navegador o se apagó el teléfono
 
 **Qué hacer:** volvé a entrar a la pantalla de grabar de **ese mismo turno**. Si
-quedó algo, la app te ofrece: *"Quedó una grabación de ~N min sin enviar"*, con
-**Guardarla ahora** y **Descartarla**.
+aparece audio pendiente, conservá esa copia e intentá recuperarla con las
+opciones disponibles. No empieces otra grabación mientras quede pendiente.
 
 ### No se pudo guardar el audio
 
@@ -85,21 +85,26 @@ en el bloque de pendientes, y en la ficha con el chip **Para revisar**.
 
 ### Dice "No pudimos escribir la nota"
 
-La sesión quedó en error. Si el audio sigue disponible, se puede reintentar.
-La pantalla ofrece estas acciones:
+La sesión quedó **fallida**. **Reintentar** usa lo que ya hay: si la transcripción
+está guardada, no se vuelve a transcribir. **Eliminar** borra la sesión y lo
+generado, y programa el borrado del audio; el turno queda libre para grabar otra
+vez. No se puede deshacer y queda un registro de auditoría.
 
-- **Reintentar** — vuelve a escribir la nota con el mismo audio. Es lo primero
-  que hay que probar.
-- **Eliminar** — *"Se borran la sesión y su audio. No queda registro y no se
-  puede deshacer."* Solo si ya no querés esa sesión.
+Si se intentó cinco veces seguidas, lo indica. Una grabación que quedó a medias
+se informa de forma distinta a un fallo al escribir la nota.
 
 ### La nota llegó rara, corta o equivocada
 
-**Qué hacer:** tocá **Descartar**. Avisa: *"Se puede deshacer: la sesión vuelve a
-error y la podés volver a escribir. Se descarta la nota generada; la
-transcripción y el audio se conservan."* Después usá **Reintentar**.
+Mientras está en revisión, **Volver a escribirla** pide otra redacción con la
+transcripción guardada. Los datos anteriores se conservan durante el proceso;
+la pantalla puede mostrar solo el aviso de procesamiento. Si el problema es puntual, podés editar la sección antes de aprobar.
+Una nota aprobada no admite esa acción.
 
-Si el problema es puntual, es más rápido **editar la sección** a mano y aprobar.
+### No llegó Para vos
+
+**Pedir de nuevo todavía no está disponible en la pantalla**. El servidor permite
+el reintento independiente sin rehacer la nota ni la transcripción, incluso después
+de aprobar. Hasta que se conecte ese control, avisale a quien administra Sesión.
 
 ### Dice "Esta sesión todavía no tiene nota"
 
@@ -113,24 +118,18 @@ ficha y grabá.
 **Dónde mirar:** abrí el turno en la agenda. En un turno agendado aparece el
 bloque **Recordatorio** con su estado.
 
-| Lo que dice | Qué pasa | Qué hacer |
-| --- | --- | --- |
-| **Todavía no salió** | Está en cola, esperando su hora | Nada: la app lo manda a la hora |
-| **Saliendo** | Se está enviando ahora | Esperar unos minutos y volver a mirar |
-| **Enviado** | Salió, con fecha y hora | Nada |
-| **No se pudo enviar** | Falló las tres veces que tenía | **Volver a intentarlo** |
-| **Cancelado** | El turno se canceló, se reprogramó, se cobró o se marcó "No vino" | Es lo correcto: no hay que avisar de un turno que ya no es |
+**Programado** espera su hora; **Enviando** está intentando salir. **En camino**
+indica aceptación del servicio, no entrega. **Entregado** confirma entrega del
+operador, no lectura; **No llegó** informa un rechazo posterior.
 
-**Volver a intentarlo** avisa: *"Se pone otra vez en la cola y sale en la próxima
-pasada, en unos minutos. Si vuelve a fallar, lo vas a ver acá."*
+Con **No salió**, mirá el motivo. Los problemas transitorios ya se reintentan
+con esperas mientras el aviso sea útil; no hay botón de reintento manual.
+**No sabemos si salió** necesita revisión de quien administra Sesión: no se
+reenvía solo. Si el turno está por empezar, comunicate con la paciente por tu cuenta.
 
-Ese botón **solo aparece** si el recordatorio falló, el turno sigue agendado y la
-hora todavía no pasó. Si no aparece y el turno es hoy en un rato, es más rápido
-llamarla.
-
-**Si no aparece el bloque Recordatorio:** el turno puede haberse creado con la
-fecha ya pasada (una sesión que empezó sin turno previo), y en ese caso nunca
-hubo recordatorio que mandar.
+**Cancelado** indica que el aviso pendiente se apagó. Si moviste un turno cuyo
+aviso ya salió, se programa un cambio de horario. Un turno creado con fecha ya
+pasada no genera recordatorio. Detalle en `06-recordatorios-sms.md`.
 
 ---
 
@@ -157,9 +156,9 @@ hubo recordatorio que mandar.
 ## Una regla general
 
 No confundas una opción de reintento con una garantía de recuperación.
-Podés perder una grabación si falló el almacenamiento local o la descartaste;
+Podés perder una grabación si falló el almacenamiento local o la borraste;
 también las correcciones de una nota si salís sin aprobar. Si hay audio
-pendiente, no empieces otra grabación del mismo turno ni lo descartes.
+pendiente, no empieces otra grabación del mismo turno ni lo borres.
 Comprobá el estado guardado antes de salir y pedí ayuda si sigue fallando.
 
 <!-- fuentes:
@@ -175,9 +174,6 @@ src/app/(dashboard)/cobros/_components/cobros-view.tsx
 src/app/(dashboard)/pacientes/[id]/_components/paciente-detail-view.tsx
 src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/_components/dashboard.tsx
-src/app/api/recordatorios/[id]/reintentar/route.ts
-src/app/api/_lib/casos-uso/enviar-recordatorios.ts
-src/app/api/_lib/casos-uso/recordatorios-del-turno.ts
 src/app/api/_lib/casos-uso/cobrar-turno.ts
 src/lib/glosario.ts
 -->

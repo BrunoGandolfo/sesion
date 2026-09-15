@@ -32,63 +32,57 @@ ejemplo (Lucía, martes 21 de abril, 10:00) y tus datos reales.
 **La línea de contacto es obligatoria**: si la borrás, la app la vuelve a agregar
 al final antes de enviar. Y el mensaje no puede quedar vacío.
 
-## Por qué la paciente no puede contestar
+## Si la paciente responde
 
-El SMS sale de un número de servicio, no de tu teléfono. **Si responde, esa
-respuesta no llega a ninguna parte y vos no la ves.** Por eso todo mensaje
-termina diciendo a quién y a qué número escribir: ese es el camino de vuelta.
+El SMS sale de un número de servicio. Las respuestas comunes no llegan a tu
+consulta: el mensaje indica tu teléfono para los cambios.
+**BAJA**, **STOP** o **CANCELAR** sí se procesan: dejan de mandarse mensajes a
+ese número y se responde: *"Listo: no vas a recibir más mensajes de este número."*
 
-## Ver el estado de un recordatorio
+## Ver el estado
 
-Abrí el turno en la agenda. En un turno **agendado** aparece el bloque
-**Recordatorio** con la fecha y uno de estos estados:
+Abrí el turno en Agenda. El recordatorio más reciente puede mostrar:
 
-- **Todavía no salió** — está en cola, esperando su hora.
-- **Saliendo** — se está enviando en este momento.
-- **Enviado** — salió, con la fecha y hora de envío.
-- **No se pudo enviar** — falló todas las veces que tenía (en terracotta).
-- **Cancelado** — el turno dejó de estar programado, o se reprogramó.
+| Estado | Qué significa |
+| --- | --- |
+| **Programado** | Espera el momento de salir. |
+| **Enviando** | Se está intentando enviar. |
+| **En camino** | El servicio lo aceptó; aceptado no es entregado. |
+| **Entregado** | El operador confirmó la entrega; no confirma lectura. |
+| **No llegó** | El operador informó que no lo entregó. |
+| **Cancelado** | El aviso pendiente se canceló. |
+| **No salió** | No se pudo enviar; mirá el motivo. |
+| **No sabemos si salió** | Se perdió la confirmación y no se puede asegurar el resultado. |
 
-## Si no salió
+Puede aparecer el motivo: teléfono inválido, línea fija, falta de señal, baja
+solicitada o un problema del servicio. Si no queda tiempo para avisar, comunicate
+por tu cuenta con la paciente. No hay reintento manual de SMS.
 
-Con el estado **No se pudo enviar**, y solo si el turno **sigue agendado y
-todavía no pasó**, aparece **Volver a intentarlo**: *"Se pone otra vez en la cola
-y sale en la próxima pasada, en unos minutos. Si vuelve a fallar, lo vas a ver
-acá."*
+## Reintentos y cambios de horario
 
-Si el turno ya pasó, o está cancelado o marcado "No vino", el botón no aparece:
-avisar de una sesión que ya no existe es peor que no avisar.
+Los problemas transitorios se reintentan con esperas crecientes mientras el
+aviso todavía es útil. No hay un límite fijo de tres intentos. Un resultado
+**No sabemos si salió** requiere revisión de quien administra Sesión y **no se
+reenvía solo**, para evitar duplicados.
 
-## Qué hace la app por detrás
+Si movés un turno y un aviso anterior ya había salido, se programa un **cambio de horario** que dice
+**cambió el horario de tu sesión**, con la fecha y hora nuevas. Es intencional,
+aunque los dos mensajes sean del mismo día. Su texto es fijo.
 
-Cada **5 minutos** la app manda los recordatorios que llegaron a su hora, por
-Twilio. Cada uno tiene hasta **3 intentos**; si los agota queda en "No se pudo
-enviar". Si una corrida se corta, la siguiente lo retoma sin gastarle un intento.
+Cancelar, cobrar o marcar **No vino** cancela los avisos pendientes. Un SMS que
+ya salió no puede retirarse del teléfono de la paciente. Un turno creado para
+una sesión que ya empezó no genera recordatorio.
 
-## Lo que NO hace
-
-- **No manda WhatsApp.** El canal es SMS, también en **Recordar cobro**.
-  El recordatorio de cobro sale solo cuando vos confirmás el envío en Cobros.
-- **No recibe respuestas.**
-- **No manda mails** ni notificaciones.
-- **No hay un recordatorio distinto por paciente**: el momento y el texto son los
-  mismos para todos.
-- **No avisa de un turno creado para una sesión que ya está empezando**: esos no
-  generan recordatorio.
-- **No manda un segundo aviso** el mismo día si ya salió uno.
+**Recordar cobro** usa SMS y sale solo cuando vos confirmás el envío en Cobros:
+primero se programa, después se intenta mandar. No cambia el momento ni el
+texto de los recordatorios de turno.
 
 <!-- fuentes:
 src/lib/recordatorios-programacion.ts
-src/lib/sms-texto.ts
-src/lib/recordatorios-sms.ts
-src/lib/fechas-montevideo.ts
-src/app/(dashboard)/config/_components/config-view.tsx
-src/app/(dashboard)/config/_components/editor-recordatorio.tsx
-src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
-src/app/api/cron/recordatorios/route.ts
-src/app/api/_lib/casos-uso/enviar-recordatorios.ts
-src/app/api/_lib/casos-uso/recordatorios-del-turno.ts
-src/app/api/recordatorios/[id]/reintentar/route.ts
-src/lib/glosario.ts
-vercel.json
+src/lib/sms/texto.ts
+src/lib/sms/clasificar.ts
+src/app/api/_lib/casos-uso/envios-del-turno.ts
+src/app/api/_lib/casos-uso/despachar-sms.ts
+src/app/api/_lib/casos-uso/recordar-cobro.ts
+src/app/api/sms/envios/route.ts
 -->

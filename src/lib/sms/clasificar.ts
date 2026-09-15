@@ -15,6 +15,7 @@
 // Para los StatusCallback hay otra función: ahí el mensaje YA salió y lo que
 // llega es el veredicto del operador.
 
+import { SMS_MOTIVOS, SMS_CON_CODIGO } from "@/lib/glosario";
 import type { MotivoBajaSms } from "@prisma/client";
 
 export type ClaseRespuesta = "transitorio" | "definitivo";
@@ -41,7 +42,7 @@ const POR_CODIGO: Record<number, Clasificacion> = {
   20003: {
     clase: "definitivo",
     alerta: "critico",
-    motivoNoEnvio: "el servicio de SMS rechazó las credenciales",
+    motivoNoEnvio: SMS_MOTIVOS.CREDENCIALES,
     referencia: `${ERRORES}/20003`,
   },
   // Demasiadas solicitudes concurrentes: seguro de reintentar con espera.
@@ -49,47 +50,47 @@ const POR_CODIGO: Record<number, Clasificacion> = {
   // 'To' no es un número válido (no cumple E.164).
   21211: {
     clase: "definitivo",
-    motivoNoEnvio: "el teléfono no es válido",
+    motivoNoEnvio: SMS_MOTIVOS.TELEFONO_INVALIDO,
     referencia: `${ERRORES}/21211`,
   },
   // 'From' no es un número válido ni un sender ID aprobado: configuración.
   21212: {
     clase: "definitivo",
     alerta: "critico",
-    motivoNoEnvio: "el número emisor no está bien configurado",
+    motivoNoEnvio: SMS_MOTIVOS.EMISOR_INVALIDO,
     referencia: `${ERRORES}/21212`,
   },
   // 'To' no se puede alcanzar.
   21214: {
     clase: "definitivo",
-    motivoNoEnvio: "el teléfono no se puede alcanzar",
+    motivoNoEnvio: SMS_MOTIVOS.INALCANZABLE,
     referencia: `${ERRORES}/21214`,
   },
   // Permisos geográficos: el destino está deshabilitado para la cuenta.
   21408: {
     clase: "definitivo",
     alerta: "critico",
-    motivoNoEnvio: "el servicio de SMS no tiene habilitado el país de destino",
+    motivoNoEnvio: SMS_MOTIVOS.PAIS_NO_HABILITADO,
     referencia: `${ERRORES}/21408`,
   },
   // 'From' no es un número con capacidad de SMS de esta cuenta.
   21606: {
     clase: "definitivo",
     alerta: "critico",
-    motivoNoEnvio: "el número emisor no puede mandar SMS",
+    motivoNoEnvio: SMS_MOTIVOS.EMISOR_SIN_SMS,
     referencia: `${ERRORES}/21606`,
   },
   // El destinatario respondió STOP a un mensaje anterior.
   21610: {
     clase: "definitivo",
-    motivoNoEnvio: "la paciente pidió no recibir más mensajes",
+    motivoNoEnvio: SMS_MOTIVOS.BAJA,
     baja: "twilio_21610",
     referencia: `${ERRORES}/21610`,
   },
   // 'To' no es un número móvil (fijo, o formato inválido).
   21614: {
     clase: "definitivo",
-    motivoNoEnvio: "el teléfono no es un celular",
+    motivoNoEnvio: SMS_MOTIVOS.NO_CELULAR,
     referencia: `${ERRORES}/21614`,
   },
   // Cola desbordada: demasiados mensajes en poco tiempo.
@@ -119,7 +120,7 @@ export function clasificarRespuesta(
   // Cualquier 4xx no listado: definitivo, con el código guardado en la fila.
   return {
     clase: "definitivo",
-    motivoNoEnvio: codigo !== null ? `el servicio de SMS rechazó el envío (${codigo})` : "el servicio de SMS rechazó el envío",
+    motivoNoEnvio: SMS_CON_CODIGO(SMS_MOTIVOS.RECHAZADO, codigo),
     referencia: codigo !== null ? `${ERRORES}/${codigo}` : "https://www.twilio.com/docs/usage/twilios-response",
   };
 }
@@ -136,13 +137,13 @@ export type VeredictoCallback =
 
 const NO_ENTREGADO: Record<number, { motivoNoEnvio: string; alerta?: "aviso" }> = {
   // Teléfono apagado, sin señal o que no recibe SMS.
-  30003: { motivoNoEnvio: "el teléfono estaba apagado o sin señal" },
+  30003: { motivoNoEnvio: SMS_MOTIVOS.SIN_SENAL },
   // El número no existe o ya no existe.
-  30005: { motivoNoEnvio: "el número no existe o ya no está en servicio" },
+  30005: { motivoNoEnvio: SMS_MOTIVOS.INEXISTENTE },
   // Línea fija o el operador no es alcanzable.
-  30006: { motivoNoEnvio: "el número es una línea fija o el operador no lo recibe" },
+  30006: { motivoNoEnvio: SMS_MOTIVOS.LINEA_FIJA },
   // Filtrado por Twilio o por el operador: el CONTENIDO está siendo bloqueado.
-  30007: { motivoNoEnvio: "el operador bloqueó el mensaje", alerta: "aviso" },
+  30007: { motivoNoEnvio: SMS_MOTIVOS.BLOQUEADO, alerta: "aviso" },
 };
 
 /** Referencias de los códigos de callback, para el que lea el código. */
@@ -173,7 +174,7 @@ export function clasificarCallback(
       return {
         efecto: "no_entregado",
         motivoNoEnvio:
-          codigo !== null ? `el operador no lo entregó (${codigo})` : "el operador no lo entregó",
+          SMS_CON_CODIGO(SMS_MOTIVOS.NO_ENTREGADO, codigo),
       };
     }
     default:

@@ -19,22 +19,24 @@ recordatorios por SMS y la nota clínica de cada sesión grabada.
 
 ## Qué pasa con tus datos y los de tus pacientes
 
-- **Al terminar**, el audio se cifra antes de subirse. **La copia local previa
-  no está cifrada.** Su conservación depende del almacenamiento del navegador.
-- Al aprobar, la app **intenta borrar el audio remoto** y quita la clave del
-  registro activo. Esto no confirma la eliminación de todas las copias.
-- La nota clínica y la transcripción se cifran en la base. El contexto tiene
-  campos cifrados y otros sin ese cifrado: no todo el historial está protegido
-  de la misma manera. Ver `12-camino-del-audio-y-privacidad.md`.
-- **AssemblyAI** transcribe y **Anthropic** redacta. La app pide eliminar el
-  material de transcripción al terminar; la retención y los accesos de los
-  proveedores requieren verificación, no se garantizan desde esta ayuda.
-- Hay un registro de auditoría de acciones. No debe contener texto clínico;
-  no equivale a una copia de respaldo.
+- El consentimiento 2.0 exige cifrar el audio por tramos durante la grabación.
+  **Todavía no está implementado en este grabador:** la copia local previa no está cifrada.
+  El cifrado actual ocurre al terminar, antes de subir. Esta diferencia sigue pendiente.
+- Al aprobar, la clave se destruye en el registro activo y el borrado del audio
+  remoto se reintenta hasta confirmar la eliminación.
+- La nota, la transcripción, las notas privadas, las notas del turno y el hilo
+  se guardan cifrados. Los datos administrativos tienen otro tratamiento.
+- **AssemblyAI** recibe audio y vocabulario, que puede incluir nombres propios.
+  **Anthropic** recibe la transcripción y el hilo para redactar. El borrado en
+  AssemblyAI se reintenta hasta su confirmación.
+- Los respaldos se conservan **30 días**. No contienen audio, pero pueden
+  conservar cifrada la clave de una sesión todavía no aprobada.
+- Ver el alcance y la configuración de proveedores en
+  `12-camino-del-audio-y-privacidad.md`.
 
 ## Lo que NO hace
 
-- **No manda WhatsApp.** Los recordatorios de turno salen por SMS.
+- Los recordatorios de turno salen por SMS.
   **Recordar cobro** también manda un SMS, pero solo cuando vos confirmás
   el envío desde Cobros.
 - **No graba video.** Solo audio.
@@ -43,7 +45,7 @@ recordatorios por SMS y la nota clínica de cada sesión grabada.
 - **No decide por vos.** Ninguna nota entra a la historia clínica sin que la
   apruebes. La señal de riesgo y el feedback son orientativos.
 - **No emite facturas** ni cobra plata: registra que cobraste y con qué método.
-- **No comparte la cuenta.** Hoy es una sola usuaria.
+- Cada profesional usa su propia cuenta y su propio consultorio.
 
 <!-- fuentes:
 README.md
@@ -55,9 +57,7 @@ src/components/layout/bottom-nav.tsx
 src/app/(dashboard)/pacientes/[id]/_components/paciente-detail-view.tsx
 src/app/(dashboard)/cobros/_components/cobros-view.tsx
 src/lib/deudas.ts
-src/lib/recordatorios-sms.ts
 src/components/grabacion/GrabadorSesion.tsx
-src/app/api/_lib/casos-uso/aprobar-sesion.ts
 docs/pipeline.md
 docs/encryption.md
 processor/prompts/clinical_note_v3.1.1.md

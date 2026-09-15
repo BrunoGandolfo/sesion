@@ -13,7 +13,7 @@ se usó, pedile otro. Más detalles en `11-tu-consultorio.md`.
 
 ## Entrar
 
-1. Abrí la app. Vas a ver el título **Sesión** y abajo *Tu consulta, organizada.*
+1. Abrí la app. Vas a ver el título **Sesión** y abajo *Convertí tu trabajo en un flujo enriquecedor*
 2. Escribí tu **Email** y tu **Contraseña**.
 3. Tocá **Entrar** (mientras carga dice *Entrando…*).
 
@@ -51,7 +51,8 @@ Se pueden pedir hasta **tres enlaces por hora** para una cuenta. Si no llega,
 esperá antes de pedir otro y avisale a quien administra Sesión si el problema sigue.
 La contraseña necesita al menos 10 caracteres, hasta 72 bytes (las letras con
 tilde pueden ocupar más de uno), no puede ser sólo espacios ni igual a la anterior.
-Los accesos ya abiertos y el bloqueo por intentos de login conservan su duración.
+Al restablecerla se cierran todas las sesiones abiertas, incluida la actual.
+Entrá de nuevo en cada dispositivo.
 
 ## Cambiar la contraseña
 
@@ -62,13 +63,20 @@ Los accesos ya abiertos y el bloqueo por intentos de login conservan su duració
 4. Tocá **Cambiar contraseña** (mientras trabaja dice *Cambiando…*).
 
 La contraseña nueva necesita **al menos 10 caracteres**, tiene que ser distinta
-de la actual y no puede ser solo espacios. Al terminar aparece: *"Contraseña
-cambiada. Seguís con la sesión abierta acá."*
+de la actual y no puede ser solo espacios. Al terminar aparece:
+*"Contraseña cambiada. Entrá de nuevo."* Se cierran todas las sesiones abiertas,
+este dispositivo incluido.
 
 ## Cerrar sesión
 
 En **Tu consultorio** → **Cuenta** → **Cerrar sesión**. En la computadora
 también está al pie del menú lateral.
+
+## Cerrar las otras sesiones
+
+En **Tu consultorio → Cuenta**, tocá **Cerrar sesión en los demás dispositivos**.
+Sirve si perdiste un teléfono o entraste desde una computadora ajena. Esta
+sesión sigue abierta; el aviso dice cuántas se cerraron, o que no había otras.
 
 ## Qué hace la app por detrás
 
@@ -82,18 +90,16 @@ para adivinarla a fuerza de probar.
 ## Lo que NO hace
 
 - **No te dice cuál de los dos datos está mal**, ni si ese email existe.
-- **No te cierra la sesión** cuando cambiás la contraseña, ni en este dispositivo
-  ni en otros: los accesos ya abiertos siguen abiertos hasta que venzan.
+- Cambiar o restablecer la contraseña también invalida los enlaces anteriores
+  de recuperación.
 - **No hay segundo factor** ni código por SMS para entrar.
 
 <!-- fuentes:
 src/app/(auth)/login/page.tsx
 src/lib/login-intentos.ts
-src/lib/auth.ts
 src/lib/password.ts
 src/app/api/cuenta/password/route.ts
 src/app/(dashboard)/config/_components/config-view.tsx
 src/components/layout/sidebar.tsx
 src/components/layout/cabecera-usuario.tsx
-src/middleware.ts
 -->

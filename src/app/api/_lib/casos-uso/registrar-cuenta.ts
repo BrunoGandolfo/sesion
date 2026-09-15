@@ -9,7 +9,7 @@ import {
   TOKEN_CUENTA,
   tokenVigente,
 } from "@/lib/cuenta-tokens";
-import {
+import { CUENTA_TOPE_INVITACIONES, CUENTA_INVITAR_NO_PERMITIDO,
   ENTRADA_INVITACION_INVALIDA,
   ENTRADA_REGISTRO_ERROR,
   ENTRADA_TERMINOS_REQUERIDOS,
@@ -101,7 +101,7 @@ export async function crearInvitacion(
   repo: RepositorioRegistro,
   ahora = new Date(),
 ): Promise<{ enlace: string; vence: string; invitacionId: string }> {
-  if (!puedeInvitar(actor)) throw new ApiError("No podés invitar desde esta cuenta.", 403);
+  if (!puedeInvitar(actor)) throw new ApiError(CUENTA_INVITAR_NO_PERMITIDO, 403);
   const token = nuevoTokenCuenta();
   const venceEn = new Date(ahora.getTime() + VIGENCIA_INVITACION_MS);
   const creada = await repo.crearInvitacion({
@@ -113,7 +113,7 @@ export async function crearInvitacion(
   });
   if (!creada) {
     throw new ApiError(
-      `Ya tenés ${MAX_INVITACIONES_VIGENTES} invitaciones vigentes. Esperá a que se usen o venzan.`,
+      CUENTA_TOPE_INVITACIONES(MAX_INVITACIONES_VIGENTES),
       429,
     );
   }

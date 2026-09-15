@@ -8,6 +8,7 @@
 // perdido o una sesión robada no sobrevivan al cambio. La respuesta borra la
 // cookie y dice `reingresar: true`; la pantalla la manda a /login con aviso.
 
+import { CUENTA_PASSWORD_NO_DISPONIBLE, CUENTA_PASSWORD_INCORRECTA } from "@/lib/glosario";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
@@ -57,10 +58,10 @@ export async function POST(request: Request) {
     if (resultado.estado === "bloqueado") throw new ApiError(MENSAJE_DEMASIADOS_INTENTOS, 429);
     if (resultado.estado === "sin-usuario") throw new ApiError("No autorizado", 401);
     if (resultado.estado === "indisponible") {
-      throw new ApiError("No se pudo procesar el cambio de contraseña en este momento. Probá de nuevo.", 503);
+      throw new ApiError(CUENTA_PASSWORD_NO_DISPONIBLE, 503);
     }
     if (resultado.estado === "credencial-incorrecta") {
-      throw new ApiError("La contraseña actual no es correcta", 400);
+      throw new ApiError(CUENTA_PASSWORD_INCORRECTA, 400);
     }
 
     const validacion = validarPasswordNueva(nueva, actual);
