@@ -292,7 +292,7 @@ export function TurnoDetailSheet({
     setEnviando(true);
     setError(null);
     try {
-      await apiDelete<Turno>(`/api/turnos/${turno.id}/cobrar`);
+      await apiDelete<Turno>(`/api/turnos/${turno.id}/cobrar`, { actualizadoEn: turno.actualizadoEn });
       onUpdated(COBRO_DESHECHO);
     } catch (err) {
       const m = mensajeDe(err);

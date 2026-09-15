@@ -43,12 +43,17 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: RouteParams) {
+const deshacerSchema = z.object({ actualizadoEn: z.iso.datetime() });
+
+export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();
     const { id } = await params;
 
+    const parsed = deshacerSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) return validationError(parsed.error);
     const turno = await descobrarTurno({
+      actualizadoEn: new Date(parsed.data.actualizadoEn),
       prisma: db,
       turnoId: id,
       organizationId,

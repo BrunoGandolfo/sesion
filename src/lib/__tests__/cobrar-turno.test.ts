@@ -306,7 +306,7 @@ describe("descobrarTurno", () => {
       pagoFecha: AHORA,
     });
 
-    const resultado = await descobrarTurno({
+    const resultado = await descobrarTurno({ actualizadoEn: (await leerTurno(turnoId)).actualizadoEn,
       prisma: db,
       turnoId,
       organizationId: orgId,
@@ -327,7 +327,7 @@ describe("descobrarTurno", () => {
     const { orgId, turnoId } = await crearTurno({ estado: "realizado" });
 
     const error = await esperarApiError(
-      descobrarTurno({ prisma: db, turnoId, organizationId: orgId }),
+      descobrarTurno({ actualizadoEn: (await leerTurno(turnoId)).actualizadoEn, prisma: db, turnoId, organizationId: orgId }),
       400,
     );
     expect(error.message).toBe(MENSAJE_NO_COBRADO);
@@ -340,7 +340,7 @@ describe("descobrarTurno", () => {
     });
 
     await esperarApiError(
-      descobrarTurno({ prisma: db, turnoId, organizationId: "otra-org" }),
+      descobrarTurno({ actualizadoEn: (await leerTurno(turnoId)).actualizadoEn, prisma: db, turnoId, organizationId: "otra-org" }),
       404,
     );
 
@@ -360,7 +360,7 @@ describe("descobrarTurno", () => {
       metodo: "efectivo",
       fecha: AHORA,
     });
-    await descobrarTurno({ prisma: db, turnoId, organizationId: orgId });
+    await descobrarTurno({ actualizadoEn: (await leerTurno(turnoId)).actualizadoEn, prisma: db, turnoId, organizationId: orgId });
 
     // Quedó "realizado" del primer cobro, así que el segundo entra por la
     // rama que no cierra el turno.

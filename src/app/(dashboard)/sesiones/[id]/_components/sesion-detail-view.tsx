@@ -17,7 +17,7 @@ import {
   ESTADOS_ACTIVOS,
   useSesionClinicaPolling,
 } from "@/hooks/useSesionClinicaPolling";
-import { apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { apiGet, apiPost, ApiClientError, esAbort } from "@/lib/api-client";
 import type {
   NotaSoap,
   SesionClinicaResponse,
@@ -108,10 +108,10 @@ function mensajeDeError(error: unknown): string {
 /** Edición atada a la versión de la fila que la originó: si la sesión se
  *  reescribe (descarte, reproceso), el borrador viejo deja de aplicar sin
  *  necesidad de un efecto que lo resetee. */
-type Edicion = { version: string; nota: NotaSoap };
+type Edicion = { version: string; generacion: number; nota: NotaSoap };
 
 function versionDe(sesion: SesionClinicaResponse): string {
-  return `${sesion.id}:${sesion.actualizadaEn}`;
+  return `${sesion.id}:${sesion.generacion}:${sesion.estado}`;
 }
 
 export function SesionDetailView({
@@ -127,9 +127,10 @@ export function SesionDetailView({
   const [cargando, setCargando] = React.useState(true);
   const [errorCarga, setErrorCarga] = React.useState<string | null>(null);
   const [edicion, setEdicion] = React.useState<Edicion | null>(null);
-  const [revisadas, setRevisadas] = React.useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
+  const [revision, setRevision] = React.useState<{ version: string; claves: ReadonlySet<string> } | null>(null);
+  const revisadas = revision && revision.version === edicion?.version ? revision.claves : new Set<string>();
+  const [conflictoAprobacion, setConflictoAprobacion] = React.useState(false);
+  const [borradorAnterior, setBorradorAnterior] = React.useState<NotaSoap | null>(null);
   const [enviando, setEnviando] = React.useState(false);
   const [errorAccion, setErrorAccion] = React.useState<string | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = React.useState(false);
@@ -147,7 +148,7 @@ export function SesionDetailView({
       const version = versionDe(fila);
       return previa && previa.version === version
         ? previa
-        : { version, nota: notaDeSesion(fila) };
+        : { version, generacion: fila.generacion, nota: notaDeSesion(fila) };
     });
   }, []);
 
@@ -196,17 +197,34 @@ export function SesionDetailView({
   // Aprobar no se habilita hasta que TODAS las casillas estén marcadas: una
   // por flag activo más la de la señal graduada. Sin señales, la lista está
   // vacía y `every` es true.
-  const puedeAprobar = clavesRiesgo.every((clave) => revisadas.has(clave));
+  const puedeAprobar = !conflictoAprobacion && clavesRiesgo.every((clave) => revisadas.has(clave));
   const exigeConfirmarRiesgo = clavesRiesgo.includes(CLAVE_RIESGO_GRADUADO);
 
   const marcarRevisada = React.useCallback((clave: string, marcada: boolean) => {
-    setRevisadas((previas) => {
-      const siguiente = new Set(previas);
-      if (marcada) siguiente.add(clave);
-      else siguiente.delete(clave);
-      return siguiente;
+    if (!edicion) return;
+    setRevision((previa) => {
+      const claves = new Set(previa?.version === edicion.version ? previa.claves : []);
+      if (marcada) claves.add(clave);
+      else claves.delete(clave);
+      return { version: edicion.version, claves };
     });
-  }, []);
+  }, [edicion]);
+
+  const revisarNotaActual = async () => {
+    setEnviando(true);
+    try {
+      const fila = await apiGet<SesionClinicaResponse>(`/api/sesion-clinica/${id}`);
+      if (edicion) setBorradorAnterior(edicion.nota);
+      aplicar(fila);
+      setRevision(null);
+      setConflictoAprobacion(false);
+      setErrorAccion(null);
+    } catch (error) {
+      setErrorAccion(mensajeDeError(error));
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   const editarSeccion = React.useCallback(
     (clave: keyof NotaSoap, valor: string) => {
@@ -228,6 +246,7 @@ export function SesionDetailView({
       const fila = await apiPost<SesionClinicaResponse>(
         `/api/sesion-clinica/${id}/aprobar`,
         {
+          generacion: edicion.generacion,
           notaEditada: edicion.nota,
           ...(exigeConfirmarRiesgo ? { confirmoRiesgo: true } : {}),
         },
@@ -237,6 +256,7 @@ export function SesionDetailView({
       setEnviando(false);
       setToast({ open: true, mensaje: NOTA_GUARDADA });
     } catch (error) {
+      if (error instanceof ApiClientError && error.status === 409) setConflictoAprobacion(true);
       setErrorAccion(mensajeDeError(error));
       setEnviando(false);
     }
@@ -303,7 +323,7 @@ export function SesionDetailView({
   // Se compara contra la nota de la fila, que es de donde salió el borrador
   // (`aplicar`): así, deshacer a mano una corrección vuelve a dejar la nota
   // sin cambios y el aviso no aparece por nada.
-  const tieneCambios =
+  const tieneCambios = (editable && borradorAnterior !== null) ||
     editable &&
     sesion !== null &&
     edicion !== null &&
@@ -486,6 +506,21 @@ export function SesionDetailView({
           />
         ) : null}
 
+        {borradorAnterior ? (
+          <details className="mt-4 rounded-lg border border-ink-200 p-4">
+            <summary>Tu borrador anterior</summary>
+            <p>Lo conservamos acá para que puedas recuperar tus correcciones mientras revisás la nota actual.</p>
+            {Object.entries(borradorAnterior).map(([seccion, texto]) => (
+              <p key={seccion} className="mt-3 whitespace-pre-wrap">{texto}</p>
+            ))}
+          </details>
+        ) : null}
+        {conflictoAprobacion ? (
+          <Button variant="secondary" disabled={enviando} onClick={() => void revisarNotaActual()}>
+            Revisar nota actual
+          </Button>
+        ) : null}
+
         {errorAccion !== null ? (
           <p
             role="alert"
@@ -498,6 +533,7 @@ export function SesionDetailView({
 
       {editable ? (
         <BarraAcciones
+          key={edicion?.version}
           puedeAprobar={puedeAprobar}
           enviando={enviando}
           onAprobar={() => void aprobar()}

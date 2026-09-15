@@ -66,11 +66,12 @@ describe("deshacerCobroTurno", () => {
       data: TURNO_SIN_COBRO,
     }) as unknown as typeof fetch;
 
-    await deshacerCobroTurno(TURNO_ID);
+    await deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn));
 
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].url).toBe(`/api/turnos/${TURNO_ID}/cobrar`);
     expect(llamadas[0].init?.method).toBe("DELETE");
+    expect(JSON.parse(llamadas[0].init!.body as string)).toEqual({ actualizadoEn: TURNO_SIN_COBRO.actualizadoEn });
   });
 
   it("devuelve el turno ya sin cobro, con las fechas como Date", async () => {
@@ -78,7 +79,7 @@ describe("deshacerCobroTurno", () => {
       data: TURNO_SIN_COBRO,
     }) as unknown as typeof fetch;
 
-    const turno = await deshacerCobroTurno(TURNO_ID);
+    const turno = await deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn));
 
     expect(turno.pagoEstado).toBe("pendiente");
     expect(turno.pagoMetodo).toBeNull();
@@ -94,7 +95,7 @@ describe("deshacerCobroTurno", () => {
       error: "El turno no está cobrado",
     }) as unknown as typeof fetch;
 
-    await expect(deshacerCobroTurno(TURNO_ID)).rejects.toThrow(
+    await expect(deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn))).rejects.toThrow(
       "El turno no está cobrado",
     );
   });
@@ -104,7 +105,7 @@ describe("deshacerCobroTurno", () => {
       error: "Turno no encontrado",
     }) as unknown as typeof fetch;
 
-    await expect(deshacerCobroTurno(TURNO_ID)).rejects.toThrow(
+    await expect(deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn))).rejects.toThrow(
       "Turno no encontrado",
     );
   });

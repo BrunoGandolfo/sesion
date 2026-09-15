@@ -37,6 +37,8 @@ export interface DescobrarTurnoInput {
   prisma: ClientePrisma;
   turnoId: string;
   organizationId: string;
+  /** Versión del turno pagado que la profesional pretende deshacer. */
+  actualizadoEn: Date;
 }
 
 export const MENSAJE_YA_COBRADO = "El turno ya está cobrado";
@@ -69,7 +71,7 @@ export async function cobrarTurno({
 }: CobrarTurnoInput): Promise<Turno> {
   const existente = await prisma.turno.findFirst({
     where: { id: turnoId, organizationId },
-    select: { id: true, estado: true, pagoEstado: true, fecha: true },
+    select: { id: true, estado: true, pagoEstado: true, fecha: true, actualizadoEn: true },
   });
 
   if (!existente) {
@@ -106,12 +108,16 @@ export async function cobrarTurno({
         id: turnoId,
         organizationId,
         estado: existente.estado,
+        fecha: existente.fecha,
+        actualizadoEn: existente.actualizadoEn,
         pagoEstado: "pendiente",
       },
       data: {
         ...(cierraElTurno ? { estado: "realizado" } : {}),
         pagoEstado: "pagado",
         pagoFecha: fecha,
+        // La versión debe avanzar incluso si dos operaciones caen en el mismo ms.
+        actualizadoEn: new Date(Math.max(Date.now(), existente.actualizadoEn.getTime() + 1)),
         pagoMetodo: metodo,
       },
     });
@@ -145,10 +151,11 @@ export async function descobrarTurno({
   prisma,
   turnoId,
   organizationId,
+  actualizadoEn,
 }: DescobrarTurnoInput): Promise<Turno> {
   const existente = await prisma.turno.findFirst({
     where: { id: turnoId, organizationId },
-    select: { id: true, pagoEstado: true },
+    select: { id: true, pagoEstado: true, actualizadoEn: true },
   });
 
   if (!existente) {
@@ -159,25 +166,20 @@ export async function descobrarTurno({
     throw new ApiError(MENSAJE_NO_COBRADO, 400);
   }
 
-  // La organización va en el WHERE de la escritura, igual que en cobrarTurno:
-  // `update({ where: { id } })` deshace el cobro aunque el turno sea de otra
-  // organización, y entre el findFirst de arriba y esta línea hay una
-  // ventana. Con updateMany la pertenencia es parte de la operación.
-  //
-  // No se le agrega `pagoEstado: "pagado"` como hace cobrarTurno: descobrar
-  // dos veces deja el mismo resultado, así que convertir un doble clic en un
-  // 409 sería cambiar el comportamiento sin ganar nada.
+  // La versión viaja desde la pantalla: un pedido demorado no puede borrar
+  // otro cobro, aunque el turno haya vuelto a estar pagado con el mismo método.
   const { count } = await prisma.turno.updateMany({
-    where: { id: turnoId, organizationId },
+    where: { id: turnoId, organizationId, pagoEstado: "pagado", actualizadoEn },
     data: {
       pagoEstado: "pendiente",
       pagoFecha: null,
       pagoMetodo: null,
+      actualizadoEn: new Date(Math.max(Date.now(), existente.actualizadoEn.getTime() + 1)),
     },
   });
 
   if (count === 0) {
-    throw new ApiError("Turno no encontrado", 404);
+    throw new ApiError("El cobro cambió. Revisá el pago actual antes de deshacerlo.", 409);
   }
 
   const turno = await prisma.turno.findFirstOrThrow({

@@ -90,8 +90,8 @@ export async function cobrarTurno(
  * monto vuelve a la deuda. No toca el estado del turno (sigue realizado) y no
  * borra nada, así que se puede volver a cobrar enseguida.
  */
-export async function deshacerCobroTurno(turnoId: string): Promise<Turno> {
-  const json = await apiDelete<TurnoJson>(`/api/turnos/${turnoId}/cobrar`);
+export async function deshacerCobroTurno(turnoId: string, actualizadoEn: Date): Promise<Turno> {
+  const json = await apiDelete<TurnoJson>(`/api/turnos/${turnoId}/cobrar`, { actualizadoEn });
   return parseTurno(json);
 }
 
@@ -334,7 +334,7 @@ function TurnoRow({
   async function deshacer() {
     setDeshaciendo(true);
     try {
-      const actualizado = await deshacerCobroTurno(turno.id);
+      const actualizado = await deshacerCobroTurno(turno.id, turno.actualizadoEn);
       setConfirmando(false);
       onDeshecho(actualizado);
     } catch (err) {

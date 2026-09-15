@@ -118,7 +118,7 @@ async function limpiarPacientes() {
     for (const t of ficha.turnos) {
       assert.equal(t.notas, marca, 'El paciente recibió un turno ajeno al recorrido');
       if (t.pagoEstado === 'pagado') {
-        const r = await context.request.delete(origen + '/api/turnos/' + t.id + '/cobrar', {timeout:7000});
+        const r = await context.request.delete(origen + '/api/turnos/' + t.id + '/cobrar', {timeout:7000, data: { actualizadoEn: t.actualizadoEn }});
         assert(r.ok(), 'No se pudo deshacer el pago de prueba');
       }
       if (t.estado !== 'cancelado') await patchReal('/api/turnos/' + t.id, {estado:'cancelado'});
@@ -155,7 +155,10 @@ async function restaurar() {
     assert(actual.estado === cobro.antes.estado && actual.tarifaCobrada === cobro.antes.tarifaCobrada && actual.pagoEstado === 'pagado' && actual.pagoMetodo === 'efectivo', 'El pago cambió fuera de la prueba; requiere revisión manual');
     if (cobro.despues) assert.equal(actual.pagoFecha, cobro.despues.pagoFecha, 'Otro cobro reemplazó al de la prueba');
     else assert(Date.parse(actual.pagoFecha) >= cobro.iniciado - 1000, 'El pago no corresponde a esta ejecución');
-    const r = await context.request.delete(origen + '/api/turnos/' + cobro.antes.id + '/cobrar', { timeout: 7000 });
+    const ficha = await get('/api/pacientes/' + cobro.pacienteId);
+    const visto = ficha.turnos.find(t => t.id === cobro.antes.id);
+    assert.deepEqual(pago(visto), actual, 'El pago cambió antes de deshacerlo');
+    const r = await context.request.delete(origen + '/api/turnos/' + cobro.antes.id + '/cobrar', { timeout: 7000, data: { actualizadoEn: visto.actualizadoEn } });
     assert(r.ok(), 'No se pudo revertir el cobro: HTTP ' + r.status());
     actual = await leerCobro();
   }

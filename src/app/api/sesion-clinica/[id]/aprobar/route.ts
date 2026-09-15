@@ -15,6 +15,7 @@ export const maxDuration = 30; // segundos; la convención está en scripts/ci/m
 type RouteParams = { params: Promise<{ id: string }> };
 
 const aprobarSchema = z.object({
+  generacion: z.number().int().positive(),
   notaEditada: notaSoapSchema.optional(),
   notasEdicion: z.string().max(5000).optional(),
   /** Riesgo graduado moderado/alto: la profesional declara que lo vio. */

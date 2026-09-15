@@ -11,8 +11,9 @@
 // que el aviso del navegador se registre y se dé de baja con los cambios.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
+import { apiGet, apiPost, ApiClientError } from "@/lib/api-client";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 import {
   CAMBIOS_SIN_APROBAR_TITULO,
@@ -38,7 +39,8 @@ vi.mock("@/hooks/useSesionClinicaPolling", () => ({
   useSesionClinicaPolling: () => undefined,
 }));
 
-vi.mock("@/lib/api-client", () => ({
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/api-client")>(),
   apiGet: vi.fn(() => Promise.resolve(sesionEnRevision())),
   apiPost: vi.fn(),
   apiPatch: vi.fn(),
@@ -199,4 +201,61 @@ describe("cerrar la pestaña o recargar", () => {
     agregar.mockRestore();
     quitar.mockRestore();
   });
+});
+
+describe("aprobación de una generación obsoleta", () => {
+  beforeEach(() => { vi.mocked(apiGet).mockReset().mockResolvedValue(sesionEnRevision()); vi.mocked(apiPost).mockReset(); vi.spyOn(window, "scrollTo").mockImplementation(() => {}); });
+  it("envía la generación vista y permite revisar la actual conservando el borrador", async () => {
+    vi.mocked(apiPost).mockRejectedValueOnce(new ApiClientError("La nota cambió. Revisá la nota actual.", 409));
+    await abrirLaNota();
+    corregirLaS("Mi corrección anterior");
+    fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: /Aprobar/ }));
+    await screen.findByRole("button", { name: "Revisar nota actual" });
+    expect(vi.mocked(apiPost).mock.calls.at(-1)?.[1]).toMatchObject({ generacion: 1, notaEditada: { subjetivo: "Mi corrección anterior" } });
+    expect(screen.getByText("Mi corrección anterior")).toBeTruthy();
+    vi.mocked(apiGet).mockResolvedValueOnce({ ...sesionEnRevision(), generacion: 2, notaIa: { ...NOTA, subjetivo: "Nota actual nueva" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar nota actual" }));
+    await screen.findByText("Nota actual nueva");
+    expect(screen.getByText("Mi corrección anterior")).toBeTruthy();
+    expect(screen.getByText("Tu borrador anterior")).toBeTruthy();
+    vi.mocked(apiPost).mockResolvedValueOnce({ ...sesionEnRevision(), estado: "aprobada", generacion: 2 });
+    fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: /Aprobar/ }));
+    await waitFor(() => expect(vi.mocked(apiPost).mock.calls.at(-1)?.[1]).toMatchObject({ generacion: 2, notaEditada: { subjetivo: "Nota actual nueva" } }));
+  });
+});
+
+it("las confirmaciones de riesgo de una generación no habilitan la siguiente", async () => {
+  const fila = { ...sesionEnRevision(), datos: { riesgoDetectado: { nivel: "moderado", indicadores: [], evidencia: [], notaParaTerapeuta: null } } } as SesionClinicaResponse;
+  vi.mocked(apiGet).mockReset().mockResolvedValue(fila);
+  vi.mocked(apiPost).mockReset().mockRejectedValueOnce(new ApiClientError("Revisá la nota actual", 409));
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  await abrirLaNota();
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: /Aprobar/ }));
+  await screen.findByRole("button", { name: "Revisar nota actual" });
+  expect(vi.mocked(apiPost).mock.calls[0][1]).toMatchObject({ generacion: 1, confirmoRiesgo: true });
+  vi.mocked(apiGet).mockResolvedValueOnce({ ...fila, generacion: 2 });
+  fireEvent.click(screen.getByRole("button", { name: "Revisar nota actual" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Revisar nota actual" })).toBeNull());
+  expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+  expect((screen.getByRole("button", { name: /Aprobar/ }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("si otra pestaña aprobó la misma generación, muestra la nota realmente aprobada", async () => {
+  vi.mocked(apiGet).mockReset().mockResolvedValue(sesionEnRevision());
+  vi.mocked(apiPost).mockReset().mockRejectedValueOnce(new ApiClientError("La nota ya fue aprobada", 409));
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  await abrirLaNota();
+  corregirLaS("Borrador local sin aprobar");
+  fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: /Aprobar/ }));
+  await screen.findByRole("button", { name: "Revisar nota actual" });
+  vi.mocked(apiGet).mockResolvedValueOnce({ ...sesionEnRevision(), estado: "aprobada", notaFinal: { ...NOTA, subjetivo: "Texto aprobado por la otra pestaña" } });
+  fireEvent.click(screen.getByRole("button", { name: "Revisar nota actual" }));
+  await screen.findByText("Texto aprobado por la otra pestaña");
+  expect(screen.getByText("Borrador local sin aprobar").closest("details")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /Aprobar/ })).toBeNull();
 });

@@ -350,12 +350,20 @@ describe("POST /api/sesion-clinica — el consentimiento es de la organización"
 });
 
 describe("DELETE /api/turnos/[id]/cobrar — aislamiento entre organizaciones", () => {
+  it("sin versión rechaza el pedido y conserva el pago", async () => {
+    const a = await crearOrg();
+    const turnoId = await crearTurnoCobrado(a);
+    como(a);
+    const res = await descobrarTurno(pedidoSinCuerpo("DELETE"), { params: Promise.resolve({ id: turnoId }) });
+    expect(res.status).toBe(400);
+    expect((await prismaRaw.turno.findUniqueOrThrow({ where: { id: turnoId } })).pagoEstado).toBe("pagado");
+  });
   it("la organización dueña puede descobrar su turno", async () => {
     const a = await crearOrg();
     const turnoId = await crearTurnoCobrado(a);
     como(a);
 
-    const res = await descobrarTurno(pedidoSinCuerpo("DELETE"), {
+    const res = await descobrarTurno(pedido({ actualizadoEn: (await prismaRaw.turno.findUniqueOrThrow({ where: { id: turnoId } })).actualizadoEn.toISOString() }, "DELETE"), {
       params: Promise.resolve({ id: turnoId }),
     });
 
@@ -374,7 +382,7 @@ describe("DELETE /api/turnos/[id]/cobrar — aislamiento entre organizaciones", 
     const b = await crearOrg();
     como(b);
 
-    const res = await descobrarTurno(pedidoSinCuerpo("DELETE"), {
+    const res = await descobrarTurno(pedido({ actualizadoEn: (await prismaRaw.turno.findUniqueOrThrow({ where: { id: turnoId } })).actualizadoEn.toISOString() }, "DELETE"), {
       params: Promise.resolve({ id: turnoId }),
     });
 

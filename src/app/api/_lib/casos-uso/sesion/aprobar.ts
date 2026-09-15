@@ -33,6 +33,7 @@ export interface AprobarSesionInput {
   sesionId: string;
   organizationId: string;
   usuarioId: string;
+  generacion: number;
   notaEditada?: NotaSoap;
   notasEdicion?: string;
   confirmoRiesgo?: boolean;
@@ -51,6 +52,7 @@ export async function aprobarSesion({
   sesionId,
   organizationId,
   usuarioId,
+  generacion,
   notaEditada,
   notasEdicion,
   confirmoRiesgo,
@@ -63,6 +65,7 @@ export async function aprobarSesion({
     select: {
       id: true,
       estado: true,
+      generacion: true,
       audioEstado: true,
       // Campos lógicos: la extensión los descifra al leer.
       notaIa: true,
@@ -74,6 +77,10 @@ export async function aprobarSesion({
   if (!existente) throw new ApiError("Sesión clínica no encontrada", 404);
   if (existente.estado !== "revision") {
     throw new ApiError("Solo se puede aprobar una nota en revisión", 409);
+  }
+
+  if (existente.generacion !== generacion) {
+    throw new ApiError("La nota cambió. Revisá la nota actual antes de aprobar; tu borrador se conserva en esta pantalla.", 409);
   }
 
   const notaFinal = notaEditada ?? existente.notaIa;
@@ -107,6 +114,8 @@ export async function aprobarSesion({
     await transicionar({
       prisma: tx,
       operacion: "aprobar",
+      condiciones: { generacion },
+      conflicto: "La nota cambió. Revisá la nota actual antes de aprobar; tu borrador se conserva en esta pantalla.",
       sesionId,
       organizationId,
       data: {

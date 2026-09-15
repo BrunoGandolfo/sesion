@@ -76,7 +76,7 @@ describe("aprobar", () => {
     const { sesionId } = await enRevision();
     const auditoria = auditoriaEnMemoria();
 
-    const respuesta = await aprobarSesion({
+    const respuesta = await aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
@@ -116,7 +116,7 @@ describe("aprobar", () => {
   it("la nota editada es la final; la de la IA no se toca", async () => {
     const { sesionId } = await enRevision();
     const editada = { ...NOTA, plan: "Plan editado" };
-    await aprobarSesion({
+    await aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
@@ -131,7 +131,7 @@ describe("aprobar", () => {
 
   it("sin audio no crea borrar_audio_r2 pero sí integrar_contexto", async () => {
     const { sesionId } = await enRevision({ audio: false });
-    await aprobarSesion({
+    await aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
@@ -145,7 +145,7 @@ describe("aprobar", () => {
     const { sesionId } = await enRevision({
       datos: { riesgoDetectado: { nivel: "moderado", indicadores: [], evidencia: [], notaParaTerapeuta: null } },
     });
-    const sinConfirmar = aprobarSesion({
+    const sinConfirmar = aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
@@ -156,7 +156,7 @@ describe("aprobar", () => {
     expect((await filaDe(base.prisma, sesionId))?.estado).toBe("revision");
     expect(await trabajosDe(base.prisma, sesionId)).toEqual([]);
 
-    await aprobarSesion({
+    await aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
@@ -174,7 +174,7 @@ describe("aprobar", () => {
         riesgoLexico: { version: "1", coincidencias: [{ termino: "x", timestamp: "00:10", quote: "…" }] },
       },
     });
-    const sin = aprobarSesion({
+    const sin = aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
@@ -183,7 +183,7 @@ describe("aprobar", () => {
     });
     await expect(codigo(sin)).resolves.toBe(400);
     const auditoria = auditoriaEnMemoria();
-    await aprobarSesion({
+    await aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
@@ -198,7 +198,7 @@ describe("aprobar", () => {
     const { sesionId } = await enRevision();
     const comun = { sesionId, organizationId: org.orgId, usuarioId: org.userId, registrarAuditoria: auditoriaEnMemoria().registrar };
     const [a, r] = await Promise.all([
-      codigo(aprobarSesion({ prisma: base.db, ...comun })),
+      codigo(aprobarSesion({ generacion: 1, prisma: base.db, ...comun })),
       codigo(reprocesarSesion({ prisma: base.db, ...comun })),
     ]);
     expect([a, r].sort()).toEqual([200, 409]);
@@ -240,7 +240,7 @@ describe("aprobar", () => {
     }) as ClienteTransaccional;
 
     await expect(
-      aprobarSesion({
+      aprobarSesion({ generacion: 1,
         prisma: roto,
         sesionId,
         organizationId: org.orgId,
@@ -260,7 +260,7 @@ describe("aprobar", () => {
     const { sesionId } = await enRevision();
     await expect(
       codigo(
-        aprobarSesion({
+        aprobarSesion({ generacion: 1,
           prisma: base.db,
           sesionId,
           organizationId: otra.orgId,
@@ -275,9 +275,9 @@ describe("aprobar", () => {
   it("aprobada es terminal: aprobar, reprocesar, reintentar y eliminar responden 409", async () => {
     const { sesionId } = await enRevision();
     const comun = { sesionId, organizationId: org.orgId, usuarioId: org.userId, registrarAuditoria: auditoriaEnMemoria().registrar };
-    await aprobarSesion({ prisma: base.db, ...comun });
+    await aprobarSesion({ generacion: 1, prisma: base.db, ...comun });
 
-    await expect(codigo(aprobarSesion({ prisma: base.db, ...comun }))).resolves.toBe(409);
+    await expect(codigo(aprobarSesion({ generacion: 1, prisma: base.db, ...comun }))).resolves.toBe(409);
     await expect(codigo(reprocesarSesion({ prisma: base.db, ...comun }))).resolves.toBe(409);
     await expect(codigo(reintentarSesion({ prisma: base.db, ...comun }))).resolves.toBe(409);
     await expect(codigo(eliminarSesion({ prisma: base.db, ...comun }))).resolves.toBe(409);

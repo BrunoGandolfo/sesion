@@ -141,6 +141,10 @@ if (base) {
   archivos = git("ls-files", "prisma/migrations").split("\n").filter((f) => f.endsWith(".sql"));
 }
 
+if (!base && archivos.length === 0) {
+  fallar("No se encontró ninguna migración SQL en prisma/migrations y no hay rama base: el guardián no miró nada.");
+}
+
 let destructivasMarcadas = 0;
 for (const archivo of archivos) {
   if (!existsSync(archivo)) continue;
