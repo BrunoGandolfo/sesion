@@ -37,7 +37,7 @@ jobs:
     env:
       APP_URL: ${{ vars.APP_URL || 'https://sesionapp.app' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: /api/health
         id: health
