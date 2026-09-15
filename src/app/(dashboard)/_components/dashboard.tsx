@@ -10,6 +10,7 @@ import * as React from "react";
 
 import { EsqueletoHoy } from "@/components/esqueletos";
 import { Toast } from "@/components/ui";
+import { ResultadoSerie } from "@/components/forms/resultado-serie";
 import type { VarianteToast } from "@/components/ui/toast";
 import { ListaEnCascada, MS_CHECK_DIBUJADO } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
@@ -51,6 +52,7 @@ export function Dashboard() {
   const [estado, setEstado] = React.useState<EstadoHoy | null>(null);
   const [fallo, setFallo] = React.useState(false);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [resultadoSerie, setResultadoSerie] = React.useState<TurnoCreado["serie"]>(null);
   const [toast, setToast] = React.useState<{
     open: boolean;
     message: string;
@@ -177,11 +179,8 @@ export function Dashboard() {
         throw new ApiClientError(NO_SE_PUDO_AGENDAR, 0);
       }
       setTurnoSheet(false);
-      setToast({
-        open: true,
-        message: mensajeTurnoAgendado(creado),
-        variante: "confirmacion",
-      });
+      if (creado.serie) setResultadoSerie(creado.serie);
+      else setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
       recargar();
     },
     [recargar],
@@ -268,6 +267,8 @@ export function Dashboard() {
         onClose={() => setCobrando(null)}
         onElegir={cobrar}
       />
+
+      <ResultadoSerie serie={resultadoSerie} onClose={() => setResultadoSerie(null)} />
 
       <Toast
         open={toast.open}

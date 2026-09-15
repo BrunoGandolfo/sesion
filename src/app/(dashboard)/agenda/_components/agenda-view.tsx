@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ResultadoSerie } from "@/components/forms/resultado-serie";
 import type { VarianteToast } from "@/components/ui/toast";
 import { addDays, addMonths, addWeeks, isSameDay } from "date-fns";
 import { CalendarX2 } from "lucide-react";
@@ -148,6 +149,7 @@ export function AgendaView() {
     useConfirmacionDibujada<string>(SIN_NADA_QUE_HACER);
   // Mobile: el mes se despliega detrás del título de la fecha.
   const [mesAbierto, setMesAbierto] = React.useState(false);
+  const [resultadoSerie, setResultadoSerie] = React.useState<TurnoCreado["serie"]>(null);
   const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>(
     { open: false, message: "", variante: "aviso" },
   );
@@ -314,7 +316,8 @@ export function AgendaView() {
       throw new ApiClientError(ALGO_FALLO, 0);
     }
     setSheetOpen(false);
-    setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
+    if (creado.serie) setResultadoSerie(creado.serie);
+    else setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
     // Si se creó un paciente en el camino, la lista tiene que reflejarlo.
     setPacientes(null);
     refetchTurnos();
@@ -462,6 +465,8 @@ export function AgendaView() {
         onError={handleTurnoError}
         onCobrado={marcarCobrado}
       />
+
+      <ResultadoSerie serie={resultadoSerie} onClose={() => setResultadoSerie(null)} />
 
       <Toast
         open={toast.open}

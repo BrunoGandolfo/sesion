@@ -7,6 +7,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { ApiClientError } from "@/lib/api-client";
 import { NuevoTurnoForm } from "@/components/forms/nuevo-turno-form";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -49,13 +50,13 @@ describe("NuevoTurnoForm: se repite", () => {
     expect(onSubmit.mock.calls[0][0]).toMatchObject({ pacienteId: "p1", frecuencia: "unico" });
   });
 
-  it("elegir 'Cada semana' explica la serie y viaja en los datos", async () => {
+  it.each([["Cada semana", "semanal"], ["Cada 15 días", "quincenal"]])("elegir %s explica la serie y viaja en los datos", async (label, frecuencia) => {
     api.get.mockResolvedValue([]);
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(<NuevoTurnoForm pacientes={PACIENTES} onSubmit={onSubmit} onCancel={vi.fn()} />);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("tab", { name: "Cada semana" }));
+      fireEvent.click(screen.getByRole("tab", { name: label }));
     });
     expect(screen.getByText(/tres meses de turnos, cada uno independiente/)).toBeTruthy();
 
@@ -65,6 +66,20 @@ describe("NuevoTurnoForm: se repite", () => {
     });
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    expect(onSubmit.mock.calls[0][0]).toMatchObject({ frecuencia: "semanal" });
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ frecuencia });
   });
+});
+
+it("un choque en la primera fecha conserva el formulario y la frecuencia elegida", async () => {
+  api.get.mockResolvedValue([]);
+  const onSubmit = vi.fn().mockRejectedValue(new ApiClientError("Ya hay un turno a esa hora", 409));
+  const onCancel = vi.fn();
+  render(<NuevoTurnoForm pacientes={PACIENTES} onSubmit={onSubmit} onCancel={onCancel} />);
+  await elegirPaciente();
+  fireEvent.click(screen.getByRole("tab", { name: "Cada 15 días" }));
+  fireEvent.click(screen.getByRole("button", { name: "Agendar" }));
+  await screen.findByRole("alert");
+  expect(screen.getByText("Ya hay un turno a esa hora")).toBeTruthy();
+  expect(screen.getByRole("tab", { name: "Cada 15 días", selected: true })).toBeTruthy();
+  expect(onCancel).not.toHaveBeenCalled();
 });
