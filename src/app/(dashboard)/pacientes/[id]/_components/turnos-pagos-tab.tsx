@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/movimiento";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiDelete, apiPost } from "@/lib/api-client";
-import { fechaCorta, hora, money, moneyShort } from "@/lib/format";
+import { fechaCorta, hora, money } from "@/lib/format";
 import {
   AGENDADO,
   ALGO_FALLO,
@@ -28,6 +28,7 @@ import {
   METODOS_PAGO,
   METODO_PAGO_LABEL,
   NO_VINO,
+  PENDIENTE,
   pluralizar,
 } from "@/lib/glosario";
 import type {
@@ -265,7 +266,7 @@ function DeudaBanner({ monto, cantidad }: { monto: number; cantidad: number }) {
         </p>
       </div>
       <span className="font-display text-[18px] font-medium tabular-nums text-terracotta-500 sm:text-[20px]">
-        {moneyShort(monto)}
+        {money(monto)}
       </span>
     </div>
   );
@@ -346,7 +347,7 @@ function TurnoRow({
           <span className="font-sans text-[13px] font-medium text-ink-700 tabular-nums">
             {fechaCorta(turno.fecha)}
           </span>
-          <span className="font-sans text-[11px] text-ink-300 tabular-nums">
+          <span className="font-sans text-[12px] text-ink-500 tabular-nums">
             {hora(turno.fecha)}
           </span>
         </div>
@@ -369,7 +370,7 @@ function TurnoRow({
             </Chip>
           ) : turno.estado === "realizado" ? (
             <Chip variant="terracotta" size="sm">
-              Pendiente
+              {PENDIENTE}
             </Chip>
           ) : (
             <span className="font-sans text-[11px] text-ink-300">—</span>

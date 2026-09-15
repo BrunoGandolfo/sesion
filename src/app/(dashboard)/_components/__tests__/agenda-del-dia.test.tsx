@@ -80,7 +80,7 @@ function diaVacio(riesgoEnElDia: boolean) {
 }
 
 describe("Hoy sin turnos", () => {
-  it("dibuja a Lupita a 96 px con el texto del personaje", () => {
+  it("mantiene el texto y reduce a 72 px el dibujo del estado vacío", () => {
     const { container } = diaVacio(false);
 
     expect(screen.getByText(HOY_SIN_TURNOS_TITULO)).toBeTruthy();
@@ -88,7 +88,7 @@ describe("Hoy sin turnos", () => {
 
     const lupita = container.querySelector("svg[data-pose]");
     expect(lupita).not.toBeNull();
-    expect(lupita?.getAttribute("width")).toBe("96");
+    expect(lupita?.getAttribute("width")).toBe("72");
     // Decoración de un texto que ya dice todo.
     expect(lupita?.getAttribute("aria-hidden")).toBe("true");
   });

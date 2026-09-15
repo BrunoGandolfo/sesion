@@ -53,8 +53,8 @@ export function BottomNav() {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors duration-[var(--duration-fast)] ${
-                active ? "text-sage-600" : "text-ink-300"
+              className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[12px] leading-[15px] font-semibold transition-colors duration-[var(--duration-fast)] ${
+                active ? "text-sage-600" : "text-ink-500"
               }`}
             >
               {active ? (
@@ -86,7 +86,7 @@ export function BottomNav() {
             setToquesLupita((toques) => toques + 1);
             setAyudaAbierta(true);
           }}
-          className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold text-ink-300 transition-colors duration-[var(--duration-fast)]"
+          className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[12px] leading-[15px] font-semibold text-ink-500 transition-colors duration-[var(--duration-fast)]"
         >
           <LupitaMenu toque={toquesLupita} />
           {LUPITA}

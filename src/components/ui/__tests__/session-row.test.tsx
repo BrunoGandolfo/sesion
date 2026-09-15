@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { TurnosPagosTab } from "@/app/(dashboard)/pacientes/[id]/_components/turnos-pagos-tab";
 import { SessionRow } from "../session-row";
 import type { TurnoConPaciente } from "@/types/domain";
 
@@ -78,4 +79,24 @@ it("con la nota en revisión ya no ofrece grabar", () => {
   );
   expect(screen.queryByRole("button", { name: "Grabar sesión" })).toBeNull();
   expect(screen.getByRole("link", { name: "Revisar nota" })).toBeTruthy();
+});
+
+it("llama Sin cobrar al pago pendiente sin cambiar el estado del turno", () => {
+  render(<SessionRow turno={TURNO} />);
+  expect(screen.getByText("Sin cobrar")).toBeTruthy();
+  expect(screen.queryByText("Pendiente")).toBeNull();
+  expect(TURNO.pagoEstado).toBe("pendiente");
+});
+
+it("usa Sin cobrar también en los turnos de la ficha", () => {
+  render(<TurnosPagosTab turnos={[TURNO]} />);
+  expect(screen.getByText("Sin cobrar")).toBeTruthy();
+  expect(screen.queryByText("Pendiente")).toBeNull();
+});
+
+it('permite leer la duración de la sesión como texto secundario',()=>{
+ render(<SessionRow turno={TURNO}/>);
+ const duracion=screen.getByText('50 min');
+ expect(duracion.classList.contains('text-ink-500')).toBe(true);
+ expect(duracion.classList.contains('text-[12px]')).toBe(true);
 });

@@ -174,7 +174,7 @@ describe("glosario — constantes de texto", () => {
     // "Cobrado"/"Sin cobrar" para el mismo turno. Ninguna pantalla vuelve a
     // inventar una palabra: si estos nombres cambian, cambian en los dos.
     expect(glosario.PAGADO).toBe("Pagado");
-    expect(glosario.PENDIENTE).toBe("Pendiente");
+    expect(glosario.PENDIENTE).toBe("Sin cobrar");
     expect(glosario.CANCELADO).toBe("Cancelado");
   });
 

@@ -47,15 +47,14 @@ function codigoDe(relativo: string): string {
 
 describe("la duración de una navegación", () => {
   it("es un solo número, en milisegundos y en segundos", () => {
-    expect(MS_NAVEGACION).toBe(260);
-    expect(DURACION_NAVEGACION).toBe(0.26);
+    expect(MS_NAVEGACION).toBe(180);
+    expect(DURACION_NAVEGACION).toBe(0.18);
     // La conversión no se escribe a mano en ningún lado.
     expect(DURACION_NAVEGACION).toBe(MS_NAVEGACION / 1000);
   });
 
-  it("iguala al subrayado del menú, que es el más largo de los dos", () => {
-    // Si algún día el subrayado cambia de duración, este número lo sigue.
-    // Lo que no puede volver a pasar es que sean dos.
+  it("conserva el piso acordado de 180 ms", () => {
+    // El menú y la pantalla siguen compartiendo una duración.
     expect(MS_NAVEGACION).toBeGreaterThanOrEqual(180);
   });
 
@@ -77,4 +76,11 @@ describe("la duración de una navegación", () => {
       );
     }
   });
+});
+
+it('mantiene las constantes de presentación dentro de los tiempos acordados',()=>{
+ expect(codigoDe(FUENTE)).toContain('const DURACION_APARECE = 0.18');
+ expect(leer('src/app/globals.css')).toContain('--duration-fast: 150ms');
+ expect(leer('src/app/globals.css')).toContain('--duration-normal: 220ms');
+ expect(leer('src/app/(dashboard)/_components/kpis.tsx')).toContain('const DURACION_CONTEO = 0.22');
 });

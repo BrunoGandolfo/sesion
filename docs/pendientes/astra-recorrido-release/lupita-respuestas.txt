@@ -1,0 +1,43 @@
+Lupita
+
+Soy la que sabe dónde quedó cada cosa. Vos preguntá, que yo busco.
+
+No veo pacientes ni montos. Solo conozco la ayuda de Sesión.
+
+Vos:
+cómo cobro
+
+Lupita:
+Fácil, se cobra desde el turno, no hay un botón mágico en otro lado.
+
+Podés abrirlo desde "Hoy" (el botón "Cobrar" de la tarjeta de ahora o de la fila), desde el turno en la "Agenda", o desde la ficha del paciente en "Turnos y pagos".
+
+Ahí elegís el método de pago: Efectivo, Transferencia, MercadoPago, Débito, Crédito u Otro. Tocás uno y listo, queda "Cobrado".
+
+Un detalle: si el turno todavía figuraba Agendado pero la hora ya pasó, al cobrar se cierra solo y pasa a realizado.
+
+Vos:
+cómo archivo una paciente
+
+Lupita:
+Se hace desde la ficha de esa paciente, en la pestaña "Ficha", bajás hasta "Archivo" y tocás "Archivar paciente".
+
+Te va a preguntar para confirmar, y ahí te avisa: deja de aparecer en la lista de Activos, pero las sesiones, notas y pagos quedan todos guardados. La podés reactivar cuando quieras desde la solapa "Archivados".
+
+Tranquila que no se borra nada, es solo para que no te ensucie la lista de todos los días.
+
+Vos:
+qué pasa si se corta la grabación
+
+Lupita:
+Mirá el estado que te muestra la pantalla en ese momento.
+
+Si se cortó el micrófono (por una llamada u otra app), vas a ver "Cortado" y te avisa "Se cortó el micrófono. Lo grabado está a salvo." Ahí tenés dos opciones: "Reanudar" o "Terminar la sesión" con lo que ya se capturó.
+
+Ojo con algo importante: mientras dura el corte, no se graba nada. Y la recuperación no está garantizada del todo, así que no cierres la pantalla ni descartes el audio mientras estás tratando de guardarlo.
+
+Si en cambio se te cerró el navegador o se apagó el teléfono, volvé a entrar a la pantalla de grabar de ese mismo turno: si quedó algo, te va a ofrecer "Guardarla ahora" o "Descartarla".
+
+Preguntar
+
+Cuando cerrás, esta conversación no queda.

@@ -1,16 +1,15 @@
 "use client";
 
-// La pantalla de entrada.
-//
-// Es la única pantalla que ve alguien que todavía no usa Sesión: dice qué es
-// esto (presencia, una frase, tres afirmaciones, la confidencialidad) y
-// recién ahí el formulario. El texto vive en glosario.ts, sección Entrada.
+// En móvil, el formulario va antes de la explicación. En escritorio se
+// conserva la presencia a la izquierda mediante el orden visual de las columnas.
+// Los textos viven en glosario.ts.
 //
 // Entrar es un POST a /api/cuenta/entrar: el servidor verifica, abre la
 // sesión en la base y deja la cookie. Si llegamos acá con ?sesion=vencida
 // (el layout del dashboard encontró una cookie que ya no resuelve a una
 // sesión viva), primero se le pide al servidor que la borre, así el proxy no
 // nos manda de vuelta a / con una cookie muerta.
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -71,9 +70,7 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-cream-50">
       <div className="mx-auto flex min-h-screen w-full max-w-[420px] flex-col justify-center px-6 py-12 lg:max-w-[1020px] lg:flex-row lg:items-center lg:justify-center lg:gap-20 lg:px-12">
-        <Presencia />
-
-        <div className="mt-10 flex w-full flex-col lg:mt-0 lg:w-[380px] lg:shrink-0">
+        <div className="flex w-full flex-col lg:w-[380px] lg:shrink-0">
           <Card className="p-7 shadow-subtle">
             {aviso && (
               <p role="status" className="mb-4 text-sm text-sage-600">
@@ -118,7 +115,13 @@ export default function LoginPage() {
             </form>
           </Card>
 
-          <p className="mt-6 text-center text-[11px] text-ink-300">v1.0 · hecho con cuidado</p>
+          <p className="mt-6 text-center text-[12px] text-ink-500">
+            v1.0 · hecho con cuidado
+          </p>
+
+        </div>
+        <div className="mt-8 w-full lg:order-first lg:mt-0 lg:min-w-0">
+          <Presencia />
         </div>
       </div>
     </main>

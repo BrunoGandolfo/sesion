@@ -1,0 +1,16 @@
+{
+  "failures": [],
+  "blockedWrites": [],
+  "charges": {
+    "id": "cmo7oi0rv002rp0lfjrljwldc",
+    "post": 200,
+    "delete": 200,
+    "restituido": true
+  },
+  "viewports": [
+    1280,
+    390
+  ],
+  "reducedHeight": 500,
+  "deviceKeyboard": false
+}

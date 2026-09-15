@@ -400,7 +400,7 @@ export function ConfigView() {
             <div className="relative">
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute left-[14px] top-1/2 z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
+                className="pointer-events-none absolute left-[14px] top-[22px] z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
               >
                 $UYU
               </span>
@@ -416,7 +416,9 @@ export function ConfigView() {
                 error={
                   form.tarifaDefault.trim() === ""
                     ? "Falta la tarifa"
-                    : undefined
+                    : !Number.isInteger(Number(form.tarifaDefault)) || Number(form.tarifaDefault) < 0
+                      ? "Usá un importe entero, de cero en adelante."
+                      : undefined
                 }
               />
             </div>
@@ -583,6 +585,8 @@ function CambiarPassword() {
       setListo(true);
       // El servidor cerró todas las sesiones, incluida esta: la cookie ya no
       // vale. A /login con el aviso, sin pasar por el proxy con cookie muerta.
+      // Recargar descarta el estado privado en memoria tras revocar la sesión.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- El cierre de sesión requiere una navegación completa.
       window.location.assign("/login?aviso=password-cambiada");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
@@ -768,7 +772,7 @@ function IndicadorGuardado({
       {estado === "error" ? (
         <div className="flex items-center gap-2">
           <span className="text-[12px] font-semibold text-[color:var(--color-error)]">
-            No se pudo guardar. Revisá los campos marcados.
+            Hay cambios sin guardar. Revisá los datos y reintentá.
           </span>
           <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
             Reintentar

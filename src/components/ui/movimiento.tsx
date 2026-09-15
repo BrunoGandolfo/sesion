@@ -44,28 +44,16 @@ import {
 export const SUAVE = [0.16, 1, 0.3, 1] as const;
 
 /**
- * Lo que dura una navegación entre pantallas, en milisegundos.
- *
- * Es UN solo número para las dos cosas que se mueven cuando ella toca el
- * menú: el subrayado que se desliza a la pestaña nueva (bottom-nav.tsx, y su
- * equivalente vertical en sidebar.tsx) y el fundido con el que entra la
- * pantalla (template.tsx). Los dos arrancan en el mismo instante —el commit
- * de la ruta—, así que si duran distinto la pantalla se asienta dos veces:
- * primero deja de aparecer el contenido y después sigue viajando el
- * subrayado, o al revés. Eran 180 y 260; ahora son 260 las dos y terminan
- * juntas.
- *
- * Se elige el número más largo de los dos a propósito: acortar el subrayado
- * a 180 lo haría saltar entre pestañas que están a media pantalla de
- * distancia, y el fundido no cuesta espera —lo que entra ya se lee mientras
- * termina de opacar—.
+ * La navegación y el indicador del menú terminan juntos, en 180 ms.
+ * Es la duración acordada para esta tanda de presentación; los destinos
+ * y la preferencia de movimiento reducido no cambian.
  */
-export const MS_NAVEGACION = 260;
+export const MS_NAVEGACION = 180;
 
 /** Lo mismo en segundos, que es como lo pide framer-motion. */
 export const DURACION_NAVEGACION = MS_NAVEGACION / 1000;
 
-const DURACION_APARECE = 0.24;
+const DURACION_APARECE = 0.18;
 const DESPLAZAMIENTO = 6;
 
 /** Milisegundos entre un hijo y el siguiente en una cascada. */

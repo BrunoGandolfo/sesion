@@ -151,7 +151,7 @@ export function CardAhora({
 
   return (
     <Card className="rounded-[8px] border-l-2 border-l-sage-500 p-5 lg:p-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar
             nombre={turno.paciente.nombre}
@@ -159,10 +159,10 @@ export function CardAhora({
             size={44}
           />
           <div className="min-w-0">
-            <h2 className="truncate font-[family-name:var(--font-display)] text-[22px] font-medium leading-tight text-ink-900 lg:text-[26px]">
+            <h2 className="break-words font-[family-name:var(--font-display)] text-[22px] font-medium leading-tight text-ink-900 lg:text-[26px]">
               {nombre}
             </h2>
-            <p className="mt-1 flex items-center gap-1.5 font-sans text-[13px] text-ink-500">
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 font-sans text-[13px] text-ink-500">
               <ModalityIcon size={14} strokeWidth={1.8} aria-hidden="true" />
               {turno.modalidad === "online" ? "Online" : "Presencial"} ·{" "}
               {turno.duracion}′ · {money(turno.tarifaCobrada)}
@@ -170,7 +170,7 @@ export function CardAhora({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex shrink-0 items-center justify-between gap-1.5 lg:flex-col lg:items-end">
           <time className="font-[family-name:var(--font-display)] text-[32px] font-medium leading-none tabular-nums text-ink-900 lg:text-[38px]">
             {hora(turno.fecha)}
           </time>
