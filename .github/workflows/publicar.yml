@@ -1,27 +1,24 @@
 # ============================================================================
-# Publicación: main → release, sólo con CI en verde y migraciones aplicadas.
+# Publicación manual: main → release, eligiendo un SHA completo con CI verde.
 #
-# Vercel publica desde la rama `release` (Production Branch en el panel; el
-# deploy automático desde main está apagado en vercel.json). Esta rama la
-# mueve ÚNICAMENTE este workflow, y sólo cuando:
+# Un push a main o un CI exitoso NO publica. Bruno ejecuta Publicar desde main
+# por workflow_dispatch y escribe el SHA que quiere publicar, después de probar
+# en el teléfono. Hoy el workflow está deshabilitado en GitHub: debe habilitarlo
+# antes del día de publicación (docs/operaciones.md).
 #
-#   1. el workflow CI terminó en verde para un push a main, y
-#   2. `prisma migrate deploy` corrió contra producción sin error.
+# Antes de migrar se exige que el SHA pertenezca a main, contenga release y
+# tenga su última corrida de CI de push en verde. Se verifica la conexión
+# directa; después se aplican migraciones y recién entonces se avanza release.
+# Vercel publica desde release; vercel.json mantiene apagado el deploy de main.
 #
-# El orden es deliberado: migraciones ANTES de avanzar release. El código
-# nuevo nunca se encuentra con un esquema viejo. Lo que sí puede pasar es que
-# el código viejo vea, durante unos segundos, un esquema más nuevo; por eso
-# las migraciones que se aplican junto con código tienen que ser aditivas, y
-# una destructiva va en el despliegue siguiente (lo verifica
-# scripts/ci/migraciones.mjs en el CI).
+# Migraciones ANTES de avanzar release. Durante ese intervalo el código
+# anterior puede ver un esquema más nuevo: las migraciones junto con código
+# deben ser aditivas; las destructivas van en el despliegue siguiente, según
+# scripts/ci/migraciones.mjs.
 #
-# El push a release es FAST-FORWARD, sin --force. Si falla, release divergió
-# (alguien empujó a mano) y eso es una alerta, no algo que se resuelva
-# pisando.
-#
-# Si el CI de main termina en rojo, no se publica nada y se avisa con el sha
-# y quién lo empujó: main roja bloquea a todos, y romperla tiene que tener
-# dueño.
+# El push es FAST-FORWARD, sin --force. Una divergencia se investiga, no se pisa.
+# Los fallos de publicación siguen avisando. El aviso de CI rojo se conserva
+# en avisar-ci.yml, separado y sin capacidad para migrar ni avanzar release.
 #
 # Secrets (Settings → Secrets and variables → Actions):
 #   DATABASE_URL_PRODUCCION_DIRECTA  conexión DIRECTA de Neon (sin -pooler)
@@ -31,10 +28,12 @@
 name: Publicar
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "SHA completo de main que pasó CI"
+        required: true
+        type: string
 
 # Una publicación por vez, en orden. Nunca cancelar una a medias: podría
 # quedar la migración aplicada y release sin avanzar.
@@ -44,6 +43,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: read
 
 env:
   DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
@@ -51,17 +51,45 @@ env:
 jobs:
   publicar:
     name: Migrar producción y avanzar release
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
-          # El sha exacto que pasó el CI, no "lo último de main".
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # El SHA pedido por el dueño; la guarda exige CI verde para ese SHA.
+          ref: ${{ inputs.sha }}
           fetch-depth: 0
+
+      - name: Verificar SHA y CI
+        env:
+          SHA: ${{ inputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" || ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: ejecutá desde main e indicá un SHA completo de 40 caracteres." >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse HEAD)" != "$SHA" ]]; then
+            echo "ERROR: el checkout no coincide con el SHA solicitado." >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "$SHA" origin/main || {
+            echo "ERROR: el SHA no pertenece a main." >&2; exit 1;
+          }
+          git merge-base --is-ancestor origin/release "$SHA" || {
+            echo "ERROR: release no es antecesora del SHA; reconciliar antes de publicar." >&2; exit 1;
+          }
+          # La última corrida de CI para ese push debe haber terminado en verde.
+          # Sin corrida, con API fallida o con una repetición pendiente, no se migra.
+          CI=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+            -f head_sha="$SHA" -f event=push -f branch=main -f per_page=1 \
+            --jq '.workflow_runs[0] | [.head_sha, .status, .conclusion] | @tsv')
+          if [[ "$CI" != "$SHA"$'\tcompleted\tsuccess' ]]; then
+            echo "ERROR: el SHA solicitado no tiene su última corrida de CI de main en verde." >&2
+            exit 1
+          fi
+          echo "SHA de main verificado, con CI verde y avance de release compatible."
 
       - name: Verificar secrets
         env:
@@ -99,7 +127,7 @@ jobs:
 
       - name: Avanzar release (fast-forward, sin force)
         env:
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           git push origin "${SHA}:refs/heads/release"
@@ -111,31 +139,10 @@ jobs:
         with:
           asunto: "La publicación de main a release falló"
           texto: |
-            No se publicó ${{ github.event.workflow_run.head_sha }} (${{ github.event.workflow_run.head_commit.message }}).
+            No se publicó ${{ inputs.sha }} (${{ github.actor }}).
             Si falló la migración, la base puede haber quedado a medias: revisar `prisma migrate status` antes de reintentar.
             Si falló el push, release divergió de main: no pisar, mirar quién empujó.
             Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
-
-  ci-rojo:
-    name: Avisar que main está roja
-    if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
-      github.event.workflow_run.event == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v5
-      - uses: ./.github/actions/alerta-correo
-        with:
-          asunto: "CI de main en rojo: no se publica"
-          texto: |
-            El CI falló en ${{ github.event.workflow_run.head_sha }}, empujado por ${{ github.event.workflow_run.head_commit.author.name }}:
-            ${{ github.event.workflow_run.head_commit.message }}
-            Mientras main esté roja nada llega a producción.
-            Corrida del CI: ${{ github.event.workflow_run.html_url }}
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}

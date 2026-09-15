@@ -1,0 +1,34 @@
+# Conserva el aviso de CI rojo aunque la publicación requiera un acto manual.
+# Este workflow sólo notifica: no tiene permiso de escritura ni acceso a la base.
+name: Avisar CI rojo
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci-rojo:
+    name: Avisar que main está roja
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/alerta-correo
+        with:
+          asunto: "CI de main en rojo: no se publica"
+          texto: |
+            El CI falló en ${{ github.event.workflow_run.head_sha }}, empujado por ${{ github.event.workflow_run.head_commit.author.name }}:
+            ${{ github.event.workflow_run.head_commit.message }}
+            Este SHA no se puede publicar. Publicar exige elegir a mano un SHA con CI verde.
+            Corrida del CI: ${{ github.event.workflow_run.html_url }}
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}

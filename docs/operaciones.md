@@ -1,6 +1,6 @@
 # Operación de Sesión
 
-Base: main e247d8b, 15 de septiembre de 2026. Los archivos citados describen
+Base: main con las seis ramas de Fase 4, 15 de septiembre de 2026. Los archivos citados describen
 automatismos del repositorio. No demuestran que una corrida, entrega o ajuste
 de consola haya ocurrido. Grabador y Recorrido siguen pendientes según
 `docs/pipeline.md`.
@@ -23,14 +23,35 @@ habilitar datos reales.
 
 `.github/workflows/ci.yml` corre tipos, build, lint, tests con base efímera,
 guardias, auditoría de dependencias y tests del worker. Se puede ejecutar a mano
-sobre una rama. La publicación escucha un CI exitoso originado por push a main:
-`.github/workflows/publicar.yml` toma el SHA exacto, aplica migraciones con
-la conexión directa y recién después avanza release por fast-forward.
-Una corrida manual sobre una rama no publica.
+sobre una rama. Un CI verde o un push a main no publica nada.
+`.github/workflows/publicar.yml` sólo acepta ejecución manual
+(workflow_dispatch) desde main, con el SHA completo como campo obligatorio.
+
+Antes de migrar, Publicar comprueba que ese SHA pertenezca a main, contenga
+release y tenga su última corrida de CI de push en verde. Después verifica
+la conexión directa, aplica migraciones y recién entonces avanza release por
+fast-forward, sin force. Conserva el aviso de fallo de publicación.
+`.github/workflows/avisar-ci.yml` mantiene separado el aviso automático de
+CI rojo; ese workflow no migra ni tiene permiso para avanzar release.
+
+### El día de publicación es un acto manual
+
+Al cierre de Fase 4, Publicar está **deshabilitado desde la interfaz de GitHub**.
+Cambiar su archivo no lo habilita. **Bruno debe volver a habilitarlo antes del
+día de publicación**; esa acción quedó pendiente y no la hizo el agente.
+
+1. Elegir un SHA completo de main cuya última corrida de CI de push esté verde.
+2. Probar ese cambio en el teléfono y aprobar su publicación.
+3. En GitHub → Actions → Publicar, Bruno habilita el workflow si sigue
+   deshabilitado. Habilitarlo no publica.
+4. Elegir Run workflow, rama main, y escribir el SHA completo en el campo sha.
+   Esa ejecución manual sí inicia las migraciones a producción y después
+   avanza release.
+5. Comprobar la corrida, el SHA de release y el despliegue de Vercel. Si algo
+   falla, leer el aviso y los logs antes de reintentar.
 
 No hay que avanzar release a mano ni resolver una divergencia con force.
-Los pasos operativos de publicación están en el workflow; el CI verde no es
-una prueba de teléfono ni una confirmación de entrega de SMS.
+El CI verde no sustituye la prueba de teléfono ni confirma entrega de SMS.
 
 ### Crons declarados
 
@@ -186,8 +207,9 @@ desaparece treinta días después de crearse.
 Revisar alcance, backups, acceso a la base y credenciales relacionadas. No destruir
 la única clave de backups que deban conservarse antes de definir la recuperación.
 
-**PWA antigua.** En esta base todavía requiere recargar manualmente. El aviso de
-versión se entrega en una rama independiente de Fase 4 y no se da por fusionado.
+**PWA antigua.** `src/components/layout/aviso-version.tsx` consulta la versión
+al volver a primer plano y muestra un aviso para actualizar con un toque.
+No recarga sola y espera mientras la ruta sea de grabación.
 
 ## 6. SMS
 

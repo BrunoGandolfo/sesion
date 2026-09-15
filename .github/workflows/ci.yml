@@ -2,9 +2,9 @@
 # CI de Sesión.
 #
 # Corre en cada push a main y en cada PR contra main. Vercel NO mira main:
-# publica desde la rama `release`, que sólo avanza cuando este workflow
-# terminó en verde y las migraciones se aplicaron (ver publicar.yml). Por eso
-# el verde de acá significa "esto va a producción", no "esto ya está".
+# publica desde la rama `release`. Publicar requiere elegir a mano un SHA de
+# main con CI verde y aplicar primero las migraciones (ver publicar.yml).
+# El verde de acá habilita esa decisión; por sí solo no publica nada.
 #
 # Jobs, todos en paralelo:
 #   - typecheck: tsc --noEmit
@@ -44,7 +44,7 @@ on:
     branches: [main]
   # A mano sobre cualquier rama (gh workflow run CI --ref <rama>): es como un
   # agente demuestra el verde antes de que el orquestador fusione. No publica
-  # nada: publicar.yml sólo escucha los push a main.
+  # nada: publicar.yml exige un pedido manual y CI verde de un push a main.
   workflow_dispatch:
 
 concurrency:
