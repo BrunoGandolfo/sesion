@@ -1,4 +1,5 @@
 "use client";
+import { useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 
 // Ficha del paciente: carga, cabecera, tres pestañas (Sesiones, Recorrido,
 // Ficha) y un solo sheet de edición.
@@ -61,6 +62,7 @@ export function PacienteDetailView({ id }: { id: string }) {
     vigente: boolean;
   } | null>(null);
   const [activeTab, setActiveTab] = React.useState<TabKey>("sesiones");
+  const confirmarSalida = useSalidaProtegida();
   const [reloadKey, setReloadKey] = React.useState(0);
   const [editarOpen, setEditarOpen] = React.useState(false);
   const [toast, setToast] = React.useState<ToastState>({ open: false, message: "", variante: "aviso" });
@@ -232,7 +234,7 @@ export function PacienteDetailView({ id }: { id: string }) {
               <Segmented
                 options={TAB_OPTIONS}
                 value={activeTab}
-                onChange={setActiveTab}
+                onChange={(tab) => { if (tab !== activeTab) confirmarSalida(() => setActiveTab(tab)); }}
                 ariaLabel="Secciones del paciente"
               />
             </div>

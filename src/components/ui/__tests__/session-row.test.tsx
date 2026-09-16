@@ -29,7 +29,7 @@ const TURNO: TurnoConPaciente = {
   },
 };
 
-it.each([["revision", "Revisar nota"], ["aprobado", "Ver nota"]])("enlaza la nota %s aunque haya un cobro pendiente", (estado, label) => {
+it.each([["revision", "Revisar nota"], ["aprobada", "Ver nota"]])("enlaza la nota %s aunque haya un cobro pendiente", (estado, label) => {
   const abrirTurno = vi.fn();
   const cobrar = vi.fn();
   render(<SessionRow turno={{ ...TURNO, sesionClinica: { id: "nota-1", estado } }} onClick={abrirTurno} onCobrar={cobrar} />);

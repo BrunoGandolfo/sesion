@@ -2,6 +2,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { GrabarView } from "@/app/(dashboard)/grabar/[turnoId]/_components/grabar-view";
+import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
+import { QUEDARME, PREPARANDO_GRABACION } from "@/lib/glosario";
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("@/components/ui/sheet", () => ({ Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null }));
 const m = vi.hoisted(() => ({ vista: {} as Record<string, unknown>, iniciar: vi.fn(), terminar: vi.fn(), reenviar: vi.fn() }));
 vi.mock("@/hooks/useAudioGrabacion", () => ({ useAudioGrabacion: () => ({ lista: true, ocupada: false, segundos: 60, mensaje: "", error: null, ...m.vista, iniciar: m.iniciar, terminar: m.terminar, reenviar: m.reenviar }) }));
 const props = { turnoId: "t", cuenta: "c", organizationId: "o", pacienteId: "p", pacienteNombre: "Paciente sintética", autorizacionVigente: true, horaTexto: "12:00" };
@@ -28,4 +32,21 @@ test("al límite espera la decisión de la profesional", () => {
   expect(m.terminar).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Terminar y enviar" }));
   expect(m.terminar).toHaveBeenCalledOnce();
+});
+
+test("explica por qué todavía no se puede empezar", () => {
+  m.vista = { lista: false };
+  render(<GrabarView {...props} />);
+  expect(screen.getByText(PREPARANDO_GRABACION)).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Grabar sesión" }) as HTMLButtonElement).disabled).toBe(true);
+});
+test("salir durante la captura pregunta; quedarse no termina ni reenvía", () => {
+  m.vista = { grabacion: { estado: "capturando", sesionId: "s" } };
+  render(<ProteccionTrabajo><GrabarView {...props} /></ProteccionTrabajo>);
+  fireEvent.click(screen.getByRole("link", { name: "Volver a la ficha" }));
+  expect(screen.getByRole("alertdialog").textContent).toContain("la captura se pausa");
+  fireEvent.click(screen.getByRole("button", { name: QUEDARME }));
+  expect(screen.getByRole("button", { name: "Pausar" })).toBeTruthy();
+  expect(m.terminar).not.toHaveBeenCalled();
+  expect(m.reenviar).not.toHaveBeenCalled();
 });

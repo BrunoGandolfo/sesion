@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { APROBAR_DESCARTA_ANTERIOR } from "@/lib/glosario";
 import { Button, Confirmar } from "@/components/ui";
 
 import {
@@ -13,7 +14,6 @@ import {
   VOLVER_A_ESCRIBIR,
   VOLVER_A_ESCRIBIR_MENSAJE,
   VOLVER_A_ESCRIBIR_TITULO,
-  FALTA_REVISAR_RIESGO,
 } from "./textos";
 
 // Barra fija de la nota en revisión: las dos únicas acciones que cierran la
@@ -40,6 +40,8 @@ import {
 interface BarraAccionesProps {
   /** false mientras falte marcar alguna casilla de señal de riesgo. */
   puedeAprobar: boolean;
+  motivo?: string | null;
+  borradorAnterior?: boolean;
   enviando: boolean;
   onAprobar: () => void;
   onDescartar: () => void;
@@ -49,6 +51,8 @@ type Pendiente = "aprobar" | "descartar" | null;
 
 export function BarraAcciones({
   puedeAprobar,
+  motivo,
+  borradorAnterior = false,
   enviando,
   onAprobar,
   onDescartar,
@@ -74,7 +78,7 @@ export function BarraAcciones({
         {pendiente === "aprobar" ? (
           <Confirmar
             titulo={APROBAR_TITULO}
-            mensaje={APROBAR_MENSAJE}
+            mensaje={<>{APROBAR_MENSAJE}{borradorAnterior && <p className="mt-2">{APROBAR_DESCARTA_ANTERIOR}</p>}</>}
             accion={APROBAR_NOTA}
             variante="peligro"
             enviando={enviando}
@@ -86,7 +90,7 @@ export function BarraAcciones({
 
         {!puedeAprobar && pendiente === null ? (
           <p className="font-sans text-[13px] leading-[1.5] text-terracotta-600">
-            {FALTA_REVISAR_RIESGO}
+            {motivo}
           </p>
         ) : null}
 

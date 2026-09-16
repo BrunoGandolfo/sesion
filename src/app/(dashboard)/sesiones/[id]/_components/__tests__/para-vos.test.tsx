@@ -205,7 +205,7 @@ describe("ParaVosView", () => {
   });
 
   it("sin análisis lo dice y ofrece la vuelta a la nota", () => {
-    render(<ParaVosView sesion={sesion({})} />);
+    render(<ParaVosView sesion={{ ...sesion({}), feedbackEstado: "no_pedido" }} />);
 
     expect(screen.getByText(PARA_VOS_SIN_ANALISIS)).toBeTruthy();
     expect(

@@ -16,12 +16,12 @@ export const MS_NAVEGACION = TIEMPOS.navegacion;
 export const DURACION_NAVEGACION = MS_NAVEGACION / 1000;
 export const DURACION_BREVE = TIEMPOS.breve / 1000;
 export const DURACION_PANEL = TIEMPOS.pliegue / 1000;
-const DURACION_APARECE = DURACION_NAVEGACION;
+const DURACION_APARECE = DURACION_BREVE;
 
-const DESPLAZAMIENTO = 6;
+const DESPLAZAMIENTO = 3;
 
-/** Milisegundos entre un hijo y el siguiente en una cascada. */
-export const PASO_CASCADA_MS = 40;
+/** Sin espera entre filas: se pueden leer y tocar desde el primer cuadro. */
+export const PASO_CASCADA_MS = 0;
 
 /**
  * Cuántos elementos animan como máximo. A partir del noveno la lista entra
@@ -60,7 +60,7 @@ export interface ApareceProps {
 }
 
 /**
- * Fundido con 6 px de desplazamiento hacia arriba. Es la entrada por
+ * Desplazamiento breve de 3 px, con el contenido visible desde el primer cuadro. Es la entrada por
  * defecto de cualquier bloque que aparece después de una carga.
  */
 export function Aparece({
@@ -77,7 +77,7 @@ export function Aparece({
   return (
     <Elemento
       className={className}
-      initial={quieto ? false : { opacity: 0, y: DESPLAZAMIENTO }}
+      initial={quieto ? false : { opacity: 1, y: DESPLAZAMIENTO }}
       animate={quieto ? undefined : { opacity: 1, y: 0 }}
       transition={{ duration: DURACION_APARECE, ease: SUAVE, delay: retraso }}
     >

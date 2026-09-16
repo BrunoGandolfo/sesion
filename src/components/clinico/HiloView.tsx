@@ -8,6 +8,8 @@ import { formatearFechaCompletaMvd, formatearHoraMvd } from "@/lib/fechas-montev
 import { contenidoHiloSchema, hiloVacio, type ContenidoHilo, type Recorrido, type VersionHilo } from "@/lib/hilo/contenido";
 import { HiloContenido } from "./HiloContenido";
 import { HiloEditor } from "./HiloEditor";
+import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
+import { SALIDA_RECORRIDO, DESCARTAR_BORRADOR, DESCARTAR_PROPUESTA, DESCARTAR_BORRADOR_ACCION } from "@/lib/glosario";
 
 type Borrador = { basadaEnVersion: number; contenido: ContenidoHilo; propuestaId?: string };
 const fecha = (iso: string) => `${formatearFechaCompletaMvd(new Date(iso))}, ${formatearHoraMvd(new Date(iso))}`;
@@ -22,6 +24,8 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
   const [conflicto, setConflicto] = useState(false);
   const [comparar, setComparar] = useState(false);
   const [historica, setHistorica] = useState<VersionHilo | null>(null);
+  useProtegerTrabajo(borrador !== null, SALIDA_RECORRIDO);
+  const confirmarSalida = useSalidaProtegida();
   const cargar = useCallback(async (signal?: AbortSignal) => {
     const r = await apiGet<Recorrido>(url, { signal });
     if (!signal?.aborted) setDatos(r);
@@ -41,12 +45,6 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
     const id = setInterval(() => cargar(controller.signal).catch(e => { if (!esAbort(e)) setError(mensaje(e)); }), 12_000);
     return () => { clearInterval(id); controller.abort(); };
   }, [esperando, cargar]);
-  useEffect(() => {
-    if (!borrador) return;
-    const avisar = (e: BeforeUnloadEvent) => { e.preventDefault(); };
-    window.addEventListener("beforeunload", avisar);
-    return () => window.removeEventListener("beforeunload", avisar);
-  }, [borrador]);
 
   async function accion(ruta: string, cuerpo: unknown) {
     setOcupado(true); setError(null);
@@ -88,8 +86,8 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
     void accion(borrador.propuestaId ? `/propuestas/${borrador.propuestaId}/aceptar` : "/versiones", { basadaEnVersion: borrador.basadaEnVersion, contenido: validacion.data });
   }
   return <div className="space-y-6">
-    {error ? <div role="alert" className="rounded border border-terracotta-300 p-4"><p>{error}</p>{!datos ? <Button onClick={() => cargar().then(() => setError(null)).catch(e => setError(mensaje(e)))}>Volver a intentar</Button> : null}</div> : null}
-    {!datos ? <p role="status">Cargando Recorrido…</p> : <>
+    {error ? <div role="alert" className="rounded-md border border-terracotta-500/30 p-4"><p>{error}</p>{!datos ? <Button onClick={() => cargar().then(() => setError(null)).catch(e => setError(mensaje(e)))}>Volver a intentar</Button> : null}</div> : null}
+    {!datos ? (!error ? <p role="status">Cargando Recorrido…</p> : null) : <>
       <Card className="space-y-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-display text-2xl">El Recorrido</h3>
           <p className="mt-1 text-sm text-ink-500">{vigente ? `${vigente.actor === "ia" ? "Propuesta aceptada" : "Revisado por vos"} el ${fecha(vigente.resueltaEn ?? vigente.creadaEn)}` : "Todavía no hay un Recorrido revisado."}</p></div>
@@ -103,16 +101,19 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
         {propuesta.sesionOrigenId ? <Link className="underline" href={`/sesiones/${propuesta.sesionOrigenId}`}>Ver nota de origen</Link> : null}
         <ul className="list-inside list-disc">{propuesta.contenido.cambios.map((c, i) => <li key={i}>{c}</li>)}</ul>
         <Button variant="secondary" onClick={() => setComparar(!comparar)}>{comparar ? "Cerrar comparación" : "Ver propuesta"}</Button>
-        {comparar ? <div className="grid gap-6 md:grid-cols-2"><section><h3 className="mb-4 font-semibold">Vigente</h3><HiloContenido contenido={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section><section><h3 className="mb-4 font-semibold">Propuesta</h3><HiloContenido contenido={propuesta.contenido} anterior={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section></div> : null}
+        {comparar ? <div className="space-y-5">{(["hipotesisDiagnostica", "resumenAcumulativo", "objetivosTerapeuticos", "intervencionesProbadas", "temasRecurrentes", "riesgosHistoricos"] as const).map(campo => <div key={campo} className="grid gap-4 border-t border-[color:var(--border-subtle)] pt-4 md:grid-cols-2">
+          <section><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Vigente</p><HiloContenido solo={campo} contenido={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section>
+          <section className="rounded-md bg-sage-50 p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sage-700">Propuesta</p><HiloContenido solo={campo} contenido={propuesta.contenido} anterior={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section>
+        </div>)}</div> : null}
         <div className="flex flex-wrap gap-3">
           <Button disabled={ocupado || !!borrador} onClick={() => accion(`/propuestas/${propuesta.id}/aceptar`, { basadaEnVersion: base })}>Aceptar</Button>
           <Button variant="secondary" disabled={ocupado || !!borrador} onClick={() => editar(propuesta.contenido, propuesta.id)}>Editar y aceptar</Button>
-          <Button variant="ghost" disabled={ocupado || !!borrador} onClick={() => accion(`/propuestas/${propuesta.id}/rechazar`, { basadaEnVersion: base })}>Descartar propuesta</Button>
+          <Button variant="ghost" disabled={ocupado || !!borrador} onClick={() => confirmarSalida(() => void accion(`/propuestas/${propuesta.id}/rechazar`, { basadaEnVersion: base }), { mensaje: DESCARTAR_PROPUESTA, etiqueta: "Descartar propuesta" })}>Descartar propuesta</Button>
         </div>
       </Card> : null}
       {datos.desactualizadas.map(p => <Card key={p.id} className="space-y-3 p-4"><h3 className="font-semibold">Hay una propuesta vieja: el Recorrido cambió después</h3><div className="flex flex-wrap gap-2">
         <Button variant="secondary" disabled={ocupado} onClick={() => ver(p.version)}>Ver propuesta vieja</Button>
-        <Button variant="ghost" disabled={ocupado || !!borrador} onClick={() => accion(`/propuestas/${p.id}/rechazar`, { basadaEnVersion: base })}>Descartar</Button>
+        <Button variant="ghost" disabled={ocupado || !!borrador} onClick={() => confirmarSalida(() => void accion(`/propuestas/${p.id}/rechazar`, { basadaEnVersion: base }), { mensaje: DESCARTAR_PROPUESTA, etiqueta: "Descartar propuesta" })}>Descartar</Button>
         <Button variant="secondary" disabled={ocupado || !!borrador} onClick={() => accion("/regenerar", { basadaEnVersion: base, propuestaId: p.id })}>Volver a generar sobre el Recorrido actual</Button>
       </div></Card>)}
       {datos.trabajos.map(t => <p key={t.id} className="text-sm" role="status">{t.estado === "fallido" ? <>No se pudo preparar una propuesta. <Button variant="ghost" disabled={ocupado || !!borrador} onClick={() => accion("/regenerar", { basadaEnVersion: base, trabajoId: t.id })}>Volver a intentar</Button></> : propuesta ? "Hay otra sesión esperando que resuelvas la propuesta anterior." : "Preparando una propuesta…"}{t.sesionId ? <> <Link className="underline" href={`/sesiones/${t.sesionId}`}>Ver sesión</Link></> : null}</p>)}
@@ -122,9 +123,9 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
         {propuesta && !borrador.propuestaId ? <p>Guardar tu edición dejará desactualizada la propuesta abierta.</p> : null}
         {conflicto ? <div role="alert"><p>El Recorrido cambió en otra pantalla. Tu borrador se conserva abajo. Revisá la versión vigente antes de continuar.</p><Button variant="secondary" onClick={() => { setBorrador({ ...borrador, basadaEnVersion: base, propuestaId: undefined }); setConflicto(false); }}>Ya leí la versión actual; continuar con mi borrador</Button></div> : null}
         <HiloEditor valor={borrador.contenido} cambiar={contenido => setBorrador({ ...borrador, contenido })} disabled={ocupado} sesiones={datos.sesionesAprobadas} />
-        <div className="flex gap-3"><Button disabled={ocupado || conflicto} onClick={guardar}>{borrador.propuestaId ? "Guardar y aceptar" : "Guardar nueva versión"}</Button><Button variant="ghost" disabled={ocupado} onClick={() => setBorrador(null)}>Cancelar edición</Button></div>
+        <div className="flex flex-wrap gap-3"><Button disabled={ocupado || conflicto} onClick={guardar}>{borrador.propuestaId ? "Guardar y aceptar" : "Guardar nueva versión"}</Button><Button variant="ghost" disabled={ocupado} onClick={() => confirmarSalida(() => setBorrador(null), { mensaje: DESCARTAR_BORRADOR, etiqueta: DESCARTAR_BORRADOR_ACCION })}>Cancelar edición</Button></div>
       </Card> : null}
-      <details className="rounded border border-cream-300 p-4"><summary className="cursor-pointer font-semibold">Historial de versiones ({datos.historial.length}{datos.hayMas ? "+" : ""})</summary>
+      <details className="rounded-md border border-[color:var(--border-subtle)] p-4"><summary className="cursor-pointer font-semibold">Historial de versiones ({datos.historial.length}{datos.hayMas ? "+" : ""})</summary>
         <ul className="mt-4 space-y-3">{datos.historial.map(v => <li key={v.id}><Button variant="ghost" disabled={ocupado} onClick={() => ver(v.version)}>Versión {v.version} · {v.actor === "ia" ? "Propuesta de IA" : "Edición profesional"} · {v.estado}</Button><p className="text-xs text-ink-500">{fecha(v.creadaEn)}{v.resueltaEn ? ` · Resuelta el ${fecha(v.resueltaEn)}` : ""}</p></li>)}</ul>
         {datos.hayMas ? <Button variant="secondary" disabled={ocupado} onClick={masHistoria}>Ver versiones anteriores</Button> : null}
       </details>

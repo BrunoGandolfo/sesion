@@ -77,7 +77,7 @@ const ESTADOS_PROCESANDO: ReadonlyArray<string> = ["procesando", "transcribiendo
 const ESTADOS_PASADA_LA_GRABACION: ReadonlyArray<string> = [
   ...ESTADOS_PROCESANDO,
   "revision",
-  "aprobado",
+  "aprobada",
 ];
 
 function statusFor(turno: TurnoConPaciente): Status {
@@ -180,7 +180,7 @@ export function SessionRow(props: SessionRowProps) {
   const accion = accionDe(props);
   const sesion = turno.sesionClinica;
   const nota = sesion?.estado === "revision" ? REVISAR_NOTA
-    : sesion?.estado === "aprobado" ? VER_NOTA : null;
+    : sesion?.estado === "aprobada" ? VER_NOTA : null;
   const procesando = sesion && ESTADOS_PROCESANDO.includes(sesion.estado);
 
   const base = `w-full flex flex-wrap items-center gap-3 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-[var(--duration-fast)] border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
@@ -203,10 +203,10 @@ export function SessionRow(props: SessionRowProps) {
           size={28}
         />
         <div className="flex flex-col min-w-0">
-          <span className="text-[15px] font-semibold text-ink-900 truncate">
+          <span className="text-[15px] font-semibold text-ink-900 break-words">
             {turno.paciente.nombre} {turno.paciente.apellido}
           </span>
-          <span className="text-[12px] text-ink-500 truncate">
+          <span className="text-[12px] text-ink-500">
             {turno.modalidad === "online" ? "Online" : "Presencial"} ·{" "}
             {money(turno.tarifaCobrada)}
           </span>
@@ -219,11 +219,11 @@ export function SessionRow(props: SessionRowProps) {
   return (
     <div className={base}>
       {onClick ? (
-        <button type="button" onClick={onClick} className="flex min-h-11 min-w-0 flex-1 basis-[180px] items-center gap-4 text-left">
+        <button type="button" onClick={onClick} className="flex min-h-11 min-w-0 flex-1 basis-full sm:basis-[240px] items-center gap-4 text-left">
           {content}
         </button>
       ) : (
-        <div className="flex min-w-0 flex-1 basis-[180px] items-center gap-4">{content}</div>
+        <div className="flex min-w-0 flex-1 basis-full sm:basis-[240px] items-center gap-4">{content}</div>
       )}
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {nota && sesion ? (

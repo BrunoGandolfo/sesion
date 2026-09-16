@@ -4,9 +4,9 @@ import { formatearFechaCompletaMvd, instanteDesdeFechaHoraMvd } from "@/lib/fech
 import type { ContenidoHilo } from "@/lib/hilo/contenido";
 
 const dia = (valor: string) => formatearFechaCompletaMvd(instanteDesdeFechaHoraMvd(valor, "12:00"));
-export function HiloContenido({ contenido, anterior, sesiones = [] }: { contenido: ContenidoHilo; anterior?: ContenidoHilo; sesiones?: { id: string; fecha: string }[] }) {
+export function HiloContenido({ contenido, anterior, sesiones = [], solo }: { contenido: ContenidoHilo; anterior?: ContenidoHilo; solo?: keyof ContenidoHilo; sesiones?: { id: string; fecha: string }[] }) {
   const cambiado = (campo: keyof ContenidoHilo) => anterior && JSON.stringify(contenido[campo]) !== JSON.stringify(anterior[campo]);
-  const seccion = (campo: keyof ContenidoHilo, titulo: string, cuerpo: React.ReactNode) => <section className="space-y-2">
+  const seccion = (campo: keyof ContenidoHilo, titulo: string, cuerpo: React.ReactNode) => solo && solo !== campo ? null : <section className="space-y-2">
     <h4 className="font-semibold">{titulo}{cambiado(campo) ? <span className="ml-2 text-xs text-sage-700">Con cambios</span> : null}</h4>{cuerpo}
   </section>;
   return <div className="space-y-5 text-sm leading-relaxed">

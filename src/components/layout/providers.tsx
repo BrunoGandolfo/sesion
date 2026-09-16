@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ProteccionTrabajo } from "./proteccion-trabajo";
 
 // Quién está entrada, para los componentes cliente del dashboard (sidebar,
 // configuración). Lo alimenta el layout del dashboard, que es un componente
@@ -21,7 +22,7 @@ export function Providers({
   usuaria: UsuariaActual;
   children: React.ReactNode;
 }) {
-  return <SesionContext.Provider value={usuaria}>{children}</SesionContext.Provider>;
+  return <SesionContext.Provider value={usuaria}><ProteccionTrabajo>{children}</ProteccionTrabajo></SesionContext.Provider>;
 }
 
 /** La usuaria de la sesión, o null fuera del dashboard. */

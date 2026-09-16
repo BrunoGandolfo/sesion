@@ -23,6 +23,8 @@
 //     esa ausencia es la implementación de la regla.
 
 import Link from "next/link";
+import { Button } from "@/components/ui";
+import { FEEDBACK_ESTADO_LABEL, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, FEEDBACK_PIDIENDO, FEEDBACK_ESPERA, FEEDBACK_NO_DISPONIBLE } from "@/lib/glosario";
 
 import {
   FeedbackTerapeutaView,
@@ -42,9 +44,13 @@ interface ParaVosViewProps {
   sesion: SesionClinicaResponse;
   /** El selector de vista, armado por el contenedor. */
   selector?: React.ReactNode;
+  onReintentar?: () => void;
+  pidiendo?: boolean;
+  error?: string | null;
+  onActualizar?: () => void;
 }
 
-export function ParaVosView({ sesion, selector }: ParaVosViewProps) {
+export function ParaVosView({ sesion, selector, onReintentar, pidiendo = false, error, onActualizar }: ParaVosViewProps) {
   const feedback = sesion.feedback;
 
   return (
@@ -57,32 +63,27 @@ export function ParaVosView({ sesion, selector }: ParaVosViewProps) {
         {PARA_VOS_SUBTITULO}
       </p>
 
-      {/* Sin análisis no queda nada abajo del subtítulo. Se dice, con el
-          camino de vuelta a mano: llegar por el selector y encontrar una
-          pantalla en blanco se lee como que la app se rompió. El criterio es
-          el mismo que usa el componente para decidir si dibuja, así no hay
-          forma de que una rama diga que hay y la otra que no. */}
       {hayParaVos(feedback) ? (
         <FeedbackTerapeutaView feedbackTerapeuta={feedback} />
       ) : (
-        <SinAnalisis sesionId={sesion.id} />
+        <SinAnalisis sesion={sesion} onReintentar={onReintentar} pidiendo={pidiendo} error={error} onActualizar={onActualizar} />
       )}
     </div>
   );
 }
 
-function SinAnalisis({ sesionId }: { sesionId: string }) {
+function SinAnalisis({ sesion, onReintentar, pidiendo, error, onActualizar }: ParaVosViewProps) {
+  const estado = sesion.feedbackEstado;
+  const pendiente = estado === "pendiente";
+  const puedePedir = (estado === "no_pedido" || estado === "fallido") && sesion.modeloAsr !== null;
   return (
-    <div className="flex flex-col items-start gap-3 rounded-lg border border-[color:var(--border-subtle)] bg-white px-5 py-6">
-      <p className="font-sans text-[14px] leading-[1.6] text-ink-700">
-        {PARA_VOS_SIN_ANALISIS}
-      </p>
-      <Link
-        href={`/sesiones/${sesionId}`}
-        className="inline-flex min-h-[44px] items-center font-sans text-[14px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:text-sage-700"
-      >
-        {VISTA_NOTA}
-      </Link>
-    </div>
+    <section className="flex flex-col items-start gap-4 rounded-lg border border-[color:var(--border-subtle)] border-t-2 border-t-sage-500 bg-white px-5 py-6" aria-label={PARA_VOS}>
+      <p className="font-display text-xl text-ink-900" role="status">{FEEDBACK_ESTADO_LABEL[estado]}</p>
+      <p className="text-sm leading-relaxed text-ink-700">{pendiente ? FEEDBACK_ESPERA : estado === "listo" ? FEEDBACK_NO_DISPONIBLE : PARA_VOS_SIN_ANALISIS}</p>
+      {error && <p role="alert" className="text-sm text-terracotta-600">{error}</p>}
+      {puedePedir && onReintentar && <Button onClick={onReintentar} disabled={pidiendo}>{pidiendo ? FEEDBACK_PIDIENDO : estado === "fallido" ? FEEDBACK_REINTENTAR : FEEDBACK_PEDIR}</Button>}
+      {pendiente && error && onActualizar && <Button variant="secondary" onClick={onActualizar}>Actualizar estado</Button>}
+      <Link href={`/sesiones/${sesion.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-sage-700 hover:underline">{VISTA_NOTA}</Link>
+    </section>
   );
 }

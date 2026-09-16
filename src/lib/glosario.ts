@@ -471,6 +471,18 @@ export const ELIMINAR_MENSAJE =
 /** Por qué "Aprobar nota" está deshabilitado. */
 export const FALTA_REVISAR_RIESGO =
   "Marcá cada señal de riesgo antes de aprobar la nota.";
+export const FALTA_REVISAR_MENCIONES = "Leé las frases para revisar y marcá «Leí las menciones» antes de aprobar.";
+export const FALTA_REVISAR_AMBAS = "Revisá las señales y las menciones de la transcripción antes de aprobar.";
+export const FALTA_REVISAR_VERSION = "La nota cambió. Revisá la versión actual antes de aprobar.";
+export const SALIDA_TRABAJO_TITULO = "Tenés trabajo en curso";
+export const SALIDA_RECORRIDO = "Tenés un borrador del Recorrido sin guardar. Si seguís, se descartan tus cambios.";
+export const SALIDA_CAPTURA = "La sesión se está grabando. Si salís, la captura se pausa. Lo grabado se conserva, pero necesitás volver y reanudar para seguir grabando.";
+export const DESCARTAR_BORRADOR = "Se descarta este borrador sin guardar. Las versiones guardadas del Recorrido se conservan.";
+export const PREPARANDO_GRABACION = "Preparando la grabación y comprobando si hay una copia para recuperar…";
+export const FEEDBACK_REINTENTAR_ERROR = "No pudimos confirmar el pedido. Probá de nuevo; la nota se conserva.";
+export const FEEDBACK_PEDIR = "Preparar Para vos";
+export const FEEDBACK_REINTENTAR = "Volver a pedir Para vos";
+export const FEEDBACK_PIDIENDO = "Pidiendo el análisis…";
 
 /** La sesión existe pero todavía no llegó a tener nota (pendiente, grabando). */
 export const SIN_NOTA_TODAVIA = "Esta sesión todavía no tiene nota.";
@@ -1058,18 +1070,11 @@ export const CARGANDO_COBROS = "Cargando tus cobros…";
  * `src/app/manifest.ts`.
  */
 export const NOMBRE_PRODUCTO = "Sesión";
-export const ESLOGAN = "Convertí tu trabajo en un flujo enriquecedor";
+export const ESLOGAN = "Un lugar para tu trabajo clínico";
 
-/**
- * Qué hace, en una frase. No es un párrafo a propósito: quien llega acá
- * está por escribir su contraseña, no por leer una landing.
- *
- * Dice el beneficio y no la tecnología —no aparece "IA" ni "transcripción"—
- * porque lo que se promete es el rato que le queda libre, que es lo que ella
- * mide.
- */
+/** Una frase concreta de entrada, centrada en el trabajo clínico. */
 export const ENTRADA_QUE_HACE =
-  "El trabajo de después de la sesión, hecho antes de que entre la próxima.";
+  "Sesión acompaña tu trabajo clínico: las notas de cada encuentro, el recorrido de tus pacientes y la organización del consultorio, en un mismo lugar.";
 
 /**
  * Las tres cosas que hace, una línea cada una y en este orden: la nota
@@ -1281,3 +1286,16 @@ export const TEMPLATE_SMS_CON_DIRECCION = `${REMITENTE_SMS}\n{{nombre}}, tu turn
 export const PLANTILLA_CAMBIO_DE_HORARIO = `${REMITENTE_SMS}\n{{nombre}}, tu turno cambió al {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
 
 export const TEMPLATE_COBRO_DEFAULT = `${REMITENTE_SMS}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.`;
+
+export const FEEDBACK_ESPERA = "El análisis está en preparación. Podés seguir trabajando; lo vas a encontrar acá cuando esté listo.";
+export const FEEDBACK_NO_DISPONIBLE = "El análisis figura listo, pero no pudimos mostrar su contenido. Volvé a abrir la sesión para comprobarlo.";
+
+export const SALIDA_NOTAS_PRIVADAS = "Las notas privadas todavía no se guardaron. Quedate hasta que aparezca «Guardado» o salí descartando estos cambios.";
+export const DESCARTAR_PROPUESTA = "Esta propuesta queda descartada. El Recorrido vigente y las versiones anteriores se conservan.";
+export const GRABACION_ROTULO = "Sesión clínica";
+export const GRABACION_ESTADOS = { capturando: "Grabando", pausada: "En pausa", cerrada: "Pendiente de envío", entregada: "Audio recibido", preparada: "Todo listo para empezar" } as const;
+
+export const DESCARTAR_BORRADOR_ACCION = "Descartar borrador";
+export const QUITAR_ELEMENTO_BORRADOR = "Se quita este elemento del borrador. Las versiones guardadas del Recorrido se conservan.";
+
+export const APROBAR_DESCARTA_ANTERIOR = "Al aprobar esta nota se descarta la copia de tu borrador anterior. Si querés conservar alguno de esos cambios, incorporalo a esta nota antes de aprobar.";

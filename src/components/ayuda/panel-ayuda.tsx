@@ -236,7 +236,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
             <p className="mt-1 font-sans text-[13px] leading-[1.5] text-ink-500">
               {AYUDA_BIENVENIDA}
             </p>
-            <p className="mt-1 font-sans text-[12px] leading-[1.5] text-ink-300">
+            <p className="mt-1 font-sans text-[12px] leading-[1.5] text-ink-500">
               {AYUDA_PRIVACIDAD}
             </p>
           </div>
@@ -338,7 +338,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
               placeholder={AYUDA_PLACEHOLDER}
               aria-label={AYUDA_PLACEHOLDER}
               autoComplete="off"
-              className="min-h-[44px] min-w-0 flex-1 rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-[var(--duration-fast)] placeholder:text-ink-300 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
+              className="min-h-[44px] min-w-0 flex-1 rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-[var(--duration-fast)] placeholder:text-ink-500 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
             />
             <button
               type="submit"
@@ -348,7 +348,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
               {AYUDA_ENVIAR}
             </button>
           </div>
-          <p className="mt-2 font-sans text-[12px] leading-[1.4] text-ink-300">
+          <p className="mt-2 font-sans text-[12px] leading-[1.4] text-ink-500">
             {AYUDA_NO_SE_GUARDA}
           </p>
         </form>
