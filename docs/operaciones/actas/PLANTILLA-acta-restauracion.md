@@ -28,9 +28,9 @@ sí / no — otros: (número; tiene que ser 0)
 
 ## Nota clínica descifrada y leída
 
-Es lo único que el ensayo automático NO hace, y es el motivo de que exista
-este ensayo a mano: prueba que la clave vigente (`CLAVES_CIFRADO`) todavía
-abre lo que está en el backup.
+El ensayo automático también descifra (con el secret `CLAVES_CIFRADO_ENSAYO`);
+este ensayo a mano lo repite con una persona mirando y con el llavero de la
+app (`CLAVES_CIFRADO`), que es el que abre la base de producción.
 
 - ¿Se descifró una nota? sí / no
 - Sesión: `<id>`

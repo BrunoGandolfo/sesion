@@ -136,6 +136,10 @@ jobs:
       # Local al runner. src/lib/__tests__/db-test.ts sólo acepta localhost
       # salvo PERMITIR_BASE_REMOTA_DE_TEST=1, que acá no está.
       DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/sesion_test
+      # Para src/lib/__tests__/ensayo-restauracion.test.ts: pg_dump y
+      # pg_restore de la misma versión que el servidor (el runner trae el
+      # cliente 16, que no puede volcar un Postgres 17).
+      PG_BIN: /usr/lib/postgresql/17/bin
     steps:
       - uses: actions/checkout@v5
       - name: Setup Node 22
@@ -147,6 +151,19 @@ jobs:
         run: npm ci
       - name: Generar Prisma Client
         run: npx prisma generate
+      - name: Instalar postgresql-client-17
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          codename="$(lsb_release -cs)"
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          "${PG_BIN}/pg_dump" --version
       - name: Aplicar migraciones a la base efímera
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_test

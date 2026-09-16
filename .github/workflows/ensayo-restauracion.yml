@@ -1,29 +1,35 @@
 # ============================================================================
-# Ensayo mensual de restauración: ¿el último backup se puede volver a armar?
+# Ensayo mensual de restauración: ¿los respaldos sirven para volver a atender?
 #
 # Un backup que nunca se restauró es una esperanza. Una vez por mes (día 1,
-# 04:00 Montevideo) y bajo demanda, este workflow:
+# 04:00 Montevideo) y bajo demanda, este workflow, para DOS copias:
 #
-#   1. levanta un Postgres 17 efímero;
-#   2. baja el backup diario más reciente de R2 y lo descifra;
-#   3. lo restaura con pg_restore;
-#   4. corre scripts/ensayo/verificar-restauracion.mjs: cuenta filas por
-#      tabla contra un piso, verifica que toda columna *_encrypted sigue
-#      cifrada (prefijo ENC1/ENC2) y que no hay filas huérfanas en ninguna
-#      clave foránea; escribe resultado.json;
-#   5. publica resultado.json como artefacto y abre un issue con el acta;
-#   6. alerta por correo si cualquier paso falla.
+#   - la copia diaria más reciente (backups/sesion-backup-…), y
+#   - la copia mensual MÁS VIEJA (backups/mensuales/…): es la que más
+#     probablemente esté cifrada con una clave que la app ya retiró, y la
+#     que nadie tocaría si no fuera por este ensayo;
 #
-# DECISIÓN DELIBERADA: este ensayo NO descifra ninguna nota. Hacerlo exigiría
-# la clave del cifrado clínico en GitHub Actions, es decir, la clave de todo
-# el histórico en un cuarto lugar. Lo que prueba la clave es el ensayo A MANO
-# trimestral del dueño (docs/operaciones.md §4), que deja su acta en
-# docs/operaciones/actas/ y que scripts/ci/acta-vigente.mjs reclama a los
-# 100 días.
+#   1. levanta un Postgres 17 efímero y crea una base vacía por copia;
+#   2. baja cada copia de R2 y la descifra con BACKUP_ENCRYPTION_KEY, la
+#      restaura con pg_restore --exit-on-error (scripts/ensayo/restaurar.sh);
+#   3. corre scripts/ensayo/verificar-restauracion.mjs: filas mínimas por
+#      tabla (una base vacía falla), blobs ENC2 con su id de clave, DESCIFRA
+#      la nota clínica y la versión del Recorrido más vieja y más nueva con
+#      el llavero del ensayo, y cuenta filas huérfanas por clave foránea;
+#   4. publica resultado-diario.json y resultado-mensual.json como artefacto
+#      y abre un issue con el acta (sin texto clínico: ids y sí/no);
+#   5. alerta por correo si cualquier paso falla.
+#
+# Si una copia no descifra porque su clave ya no está en el llavero, el acta
+# lo dice como CLAVE AUSENTE (y qué id agregar), no como corrupción.
 #
 # Secrets: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT,
 # BACKUP_ENCRYPTION_KEY, RESEND_API_KEY, ALERTA_CORREO (los mismos de
-# backup.yml). GITHUB_TOKEN para el issue.
+# backup.yml), y CLAVES_CIFRADO_ENSAYO: el llavero clínico con el formato de
+# CLAVES_CIFRADO ("1=<base64>,2=…") y TODAS las claves con que alguna vez se
+# cifró, incluidas las que la app retiró después de re-cifrar. Es una copia
+# más de la clave, a sabiendas: sin ella el ensayo solo probaría que los
+# bytes vuelven, no que se leen. GITHUB_TOKEN para el issue.
 # ============================================================================
 
 name: Ensayo de restauración
@@ -41,16 +47,15 @@ permissions:
 
 jobs:
   ensayo:
-    name: Restaurar el último backup en un Postgres efímero
+    name: Restaurar la última copia diaria y la mensual más vieja
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     services:
       postgres:
         image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: sesion_ensayo
         ports:
           - 5432:5432
         options: >-
@@ -65,9 +70,10 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+      CLAVES_CIFRADO: ${{ secrets.CLAVES_CIFRADO_ENSAYO }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_ensayo
+      PG_URL: postgresql://postgres:postgres@localhost:5432
       PG_BIN: /usr/lib/postgresql/17/bin
 
     steps:
@@ -80,6 +86,8 @@ jobs:
           for v in R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_ENDPOINT BACKUP_ENCRYPTION_KEY RESEND_API_KEY ALERTA_CORREO; do
             if [ -z "${!v:-}" ]; then faltan="${faltan} ${v}"; fi
           done
+          # El llavero llega como CLAVES_CIFRADO; el secret se llama CLAVES_CIFRADO_ENSAYO.
+          if [ -z "${CLAVES_CIFRADO:-}" ]; then faltan="${faltan} CLAVES_CIFRADO_ENSAYO"; fi
           if [ -n "${faltan}" ]; then echo "ERROR: faltan secrets:${faltan}" >&2; exit 1; fi
 
       - name: Instalar postgresql-client-17
@@ -105,52 +113,79 @@ jobs:
           aws configure set default.s3.request_checksum_calculation when_required
           aws configure set default.s3.response_checksum_validation when_required
 
-      - name: Elegir el backup diario más reciente
+      - name: "Elegir las copias: la diaria más reciente y la mensual más vieja"
         run: |
           set -euo pipefail
-          key="$(aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "backups/sesion-backup-" \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --query 'sort_by(Contents, &LastModified)[-1].Key' --output text)"
-          if [ -z "${key}" ] || [ "${key}" = "None" ]; then
-            echo "ERROR: no hay ningún backup bajo backups/sesion-backup-." >&2
+          elegir() { # <prefijo> <índice en la lista ordenada por fecha: -1 última, 0 primera>
+            aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "$1" \
+              --endpoint-url "${R2_ENDPOINT}" \
+              --query "sort_by(Contents, &LastModified)[$2].Key" --output text
+          }
+          fecha() {
+            aws s3api head-object --bucket "${R2_BUCKET}" --key "$1" \
+              --endpoint-url "${R2_ENDPOINT}" --query 'LastModified' --output text
+          }
+          diario="$(elegir backups/sesion-backup- -1)"
+          if [ -z "${diario}" ] || [ "${diario}" = "None" ]; then
+            echo "ERROR: no hay ninguna copia diaria bajo backups/sesion-backup-." >&2
             exit 1
           fi
-          fecha="$(aws s3api head-object --bucket "${R2_BUCKET}" --key "${key}" \
-            --endpoint-url "${R2_ENDPOINT}" --query 'LastModified' --output text)"
-          echo "BACKUP_KEY=${key}" >> "$GITHUB_ENV"
-          echo "BACKUP_FECHA=${fecha}" >> "$GITHUB_ENV"
-          echo "Backup elegido: ${key} (${fecha})"
+          mensual="$(elegir backups/mensuales/ 0)"
+          if [ -z "${mensual}" ] || [ "${mensual}" = "None" ]; then
+            echo "ERROR: no hay ninguna copia mensual bajo backups/mensuales/: el backup del día 1 tendría que haberla dejado." >&2
+            exit 1
+          fi
+          {
+            echo "BACKUP_DIARIO=${diario}"
+            echo "BACKUP_DIARIO_FECHA=$(fecha "${diario}")"
+            echo "BACKUP_MENSUAL=${mensual}"
+            echo "BACKUP_MENSUAL_FECHA=$(fecha "${mensual}")"
+          } >> "$GITHUB_ENV"
+          echo "Diaria: ${diario}"
+          echo "Mensual: ${mensual}"
 
-      - name: Bajar y descifrar
+      - name: Bajar las dos copias
         run: |
           set -euo pipefail
-          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_KEY}" backup.dump.gpg \
-            --endpoint-url "${R2_ENDPOINT}" --only-show-errors
-          printf '%s' "${BACKUP_ENCRYPTION_KEY}" | gpg --batch --yes --quiet \
-            --decrypt --passphrase-fd 0 --output backup.dump backup.dump.gpg
-          ls -lh backup.dump
+          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_DIARIO}" diario.dump.gpg --endpoint-url "${R2_ENDPOINT}" --only-show-errors
+          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_MENSUAL}" mensual.dump.gpg --endpoint-url "${R2_ENDPOINT}" --only-show-errors
+          ls -lh diario.dump.gpg mensual.dump.gpg
 
-      - name: Restaurar en la base efímera
-        run: |
-          set -euo pipefail
-          inicio="$(date +%s)"
-          "${PG_BIN}/pg_restore" --no-owner --no-privileges --exit-on-error \
-            --dbname "${DATABASE_URL}" backup.dump
-          echo "RESTAURACION_SEG=$(( $(date +%s) - inicio ))" >> "$GITHUB_ENV"
-          rm -f backup.dump backup.dump.gpg
-
-      - name: Verificar la base restaurada
+      - name: Restaurar y verificar la copia diaria
         env:
-          PSQL: /usr/lib/postgresql/17/bin/psql
-          BACKUP_ARCHIVO: ${{ env.BACKUP_KEY }}
-        run: node scripts/ensayo/verificar-restauracion.mjs
+          BACKUP_ARCHIVO: ${{ env.BACKUP_DIARIO }}
+          BACKUP_FECHA: ${{ env.BACKUP_DIARIO_FECHA }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ensayo_diario
+        run: |
+          set -euo pipefail
+          "${PG_BIN}/psql" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ensayo_diario' "${PG_URL}/postgres"
+          scripts/ensayo/restaurar.sh diario.dump.gpg "${DATABASE_URL}"
+          node scripts/ensayo/verificar-restauracion.mjs --etiqueta diario
 
-      - name: Publicar resultado.json
+      # Corre aunque la diaria haya fallado: son dos preguntas distintas y el
+      # acta tiene que contestar las dos.
+      - name: Restaurar y verificar la copia mensual
+        if: ${{ !cancelled() && env.BACKUP_MENSUAL != '' }}
+        env:
+          BACKUP_ARCHIVO: ${{ env.BACKUP_MENSUAL }}
+          BACKUP_FECHA: ${{ env.BACKUP_MENSUAL_FECHA }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ensayo_mensual
+        run: |
+          set -euo pipefail
+          "${PG_BIN}/psql" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ensayo_mensual' "${PG_URL}/postgres"
+          scripts/ensayo/restaurar.sh mensual.dump.gpg "${DATABASE_URL}"
+          node scripts/ensayo/verificar-restauracion.mjs --etiqueta mensual
+
+      - name: Borrar los archivos descifrables
+        if: always()
+        run: rm -f diario.dump.gpg mensual.dump.gpg
+
+      - name: Publicar los resultados
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ensayo-restauracion-${{ github.run_id }}
-          path: resultado.json
+          path: resultado-*.json
           if-no-files-found: ignore
 
       - name: Abrir el issue con el acta
@@ -163,16 +198,12 @@ jobs:
           fecha="$(date -u +'%Y-%m-%d')"
           cuerpo="$(node scripts/ensayo/verificar-restauracion.mjs --acta \
             --resultado "${RESULTADO}" \
-            --archivo "${BACKUP_KEY:-desconocido}" \
-            --fecha-backup "${BACKUP_FECHA:-desconocida}" \
-            --duracion "${RESTAURACION_SEG:-?}" \
+            --diario "${BACKUP_DIARIO:-desconocido}" \
+            --mensual "${BACKUP_MENSUAL:-desconocido}" \
             --corrida "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")"
-          gh issue create \
-            --title "Acta de ensayo de restauración (automático) — ${fecha} — ${RESULTADO}" \
-            --label "operaciones" \
-            --body "${cuerpo}" || gh issue create \
-            --title "Acta de ensayo de restauración (automático) — ${fecha} — ${RESULTADO}" \
-            --body "${cuerpo}"
+          titulo="Acta de ensayo de restauración (automático) — ${fecha} — ${RESULTADO}"
+          gh issue create --title "${titulo}" --label "operaciones" --body "${cuerpo}" \
+            || gh issue create --title "${titulo}" --body "${cuerpo}"
 
       - name: Avisar si el ensayo falló
         if: failure()
@@ -180,6 +211,7 @@ jobs:
         with:
           asunto: "El ensayo de restauración falló"
           texto: |
-            El último backup (${{ env.BACKUP_KEY }}) no se pudo restaurar o no pasó la verificación.
+            Alguna de las dos copias (diaria ${{ env.BACKUP_DIARIO }}, mensual ${{ env.BACKUP_MENSUAL }}) no se pudo restaurar, no tiene datos o su contenido clínico no se descifra.
+            El acta del issue dice cuál y por qué; si dice "clave ausente", falta una clave en CLAVES_CIFRADO_ENSAYO, no es corrupción.
             Hasta que se arregle, no hay una restauración probada.
             Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

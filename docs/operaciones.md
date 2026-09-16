@@ -154,22 +154,37 @@ Restaurar siempre primero en una base aislada y vacía:
    del dump con pg_restore.
 3. Restaurar con pg_restore de Postgres 17, sin owner ni privilegios, con
    exit-on-error y conexión directa a la base de destino.
-4. Ejecutar `scripts/ensayo/verificar-restauracion.mjs` contra esa base:
-   cantidades, columnas cifradas y claves foráneas.
-5. Probar además el descifrado de una nota con el llavero correspondiente.
-   El ensayo automático no hace este paso.
-6. Sólo después decidir si se reemplaza la conexión de la app. Los efectos
+4. Ejecutar `scripts/ensayo/verificar-restauracion.mjs` contra esa base con
+   `CLAVES_CIFRADO` cargada con todas las claves de la época del respaldo:
+   filas mínimas por tabla (una base vacía falla), blobs ENC2 con su id de
+   clave, descifrado real de una nota clínica y de una versión del Recorrido,
+   y claves foráneas. Si el script dice "falta la clave N en el llavero del
+   ensayo", el respaldo no está corrupto: es de una época cuya clave se
+   retiró, y hay que agregarla al llavero y repetir.
+5. Sólo después decidir si se reemplaza la conexión de la app. Los efectos
    externos pendientes del dump también requieren revisión antes de activar
    crons y worker contra la base restaurada.
 
-`.github/workflows/ensayo-restauracion.yml` restaura mensualmente el último
-backup diario en un Postgres efímero y publica el resultado. No valida el
-llavero clínico. El ensayo manual trimestral deja acta en
+`.github/workflows/ensayo-restauracion.yml` hace eso mismo el día 1 de cada
+mes, con dos copias: la diaria más reciente y la mensual más vieja (la que
+más probablemente necesite una clave ya retirada). Descifra con el secret
+`CLAVES_CIFRADO_ENSAYO`, que tiene el formato de `CLAVES_CIFRADO` y debe
+contener TODAS las claves con que alguna vez se cifró, también las que la app
+retiró después de re-cifrar; sin ese secret el workflow falla antes de bajar
+nada. Es una copia más de la clave clínica, aceptada a cambio de que el
+ensayo pruebe lectura y no sólo bytes. Los pasos están en
+`scripts/ensayo/restaurar.sh` (gpg + pg_restore) y en el script de
+verificación, y `src/lib/__tests__/ensayo-restauracion.test.ts` los ejerce con
+respaldos generados contra la base de test: bueno, vacío, corrupto, truncado y
+uno leído con un llavero al que se le retiró la clave.
+
+El ensayo manual trimestral sigue siendo obligatorio y deja acta en
 `docs/operaciones/actas/`; `scripts/ci/acta-vigente.mjs` exige un acta
 con antigüedad máxima de cien días cuando ya existe alguna. Mientras no
 haya ninguna, sólo advierte hasta el 20 de diciembre de 2026 y luego falla.
 En esta base no hay un acta: un verde hoy no acredita restauración ni
-descifrado de una nota. La existencia del workflow tampoco prueba una corrida.
+descifrado de una nota. La existencia del workflow tampoco prueba una corrida:
+al 15 de septiembre de 2026 el ensayo automático nunca se ejecutó.
 
 ## 5. Incidentes y límites conocidos
 
