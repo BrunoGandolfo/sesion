@@ -44,6 +44,7 @@ import path from 'path'
 //   src/components/ayuda/__tests__/panel-ayuda.test.tsx
 
 const INTEGRACION = [
+  'src/lib/__tests__/casos-huerfanos.test.ts',
   'src/lib/__tests__/endurecer-integracion.test.ts',
   'src/lib/__tests__/cupo-ayuda-integracion.test.ts',
   'src/lib/__tests__/hilo-integracion.test.ts',

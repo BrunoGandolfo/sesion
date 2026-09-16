@@ -31,6 +31,7 @@ import {
   type DespacharParams,
 } from "@/app/api/_lib/casos-uso/despachar-sms";
 import { MOTIVO_TURNO_CERRADO } from "@/app/api/_lib/casos-uso/envios-del-turno";
+import { textoDeCobro } from "@/app/api/_lib/casos-uso/texto-de-cobro";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { MOTIVO_VENTANA_AGOTADA } from "@/lib/sms/backoff";
 import { URL_CALLBACK } from "@/lib/sms/firma";
@@ -498,18 +499,25 @@ describe("presupuesto de la corrida", () => {
 });
 
 describe("aviso de cobro", () => {
-  it("usa el texto que devuelve el gancho y sale como cualquier otro", async () => {
-    const { envioId } = await crearEnvio({ motivo: "recordatorio_cobro" });
+  it("envía el texto real con la suma de la deuda vigente", async () => {
+    const { envioId, orgId, pacienteId } = await crearEnvio({ motivo: "recordatorio_cobro" });
+    await prismaRaw.turno.createMany({
+      data: [1200, 2300].map(tarifaCobrada => ({
+        organizationId: orgId, pacienteId, tarifaCobrada,
+        fecha: new Date("2026-08-01T15:00:00Z"), estado: "realizado", pagoEstado: "pendiente",
+      })),
+    });
     const stub = vi.fn(aceptaOk);
-    await correr(stub, { textoDeCobro: async () => "Hola Lucía, tenés 2 sesiones sin pagar." });
-    expect(stub.mock.calls[0][0].texto).toContain("sin pagar");
+    await correr(stub, { textoDeCobro: parametros => textoDeCobro(db, parametros) });
+    expect(stub).toHaveBeenCalledTimes(1);
+    expect(stub.mock.calls[0][0].texto).toBe("Hola Lucía, ¿cómo estás? Te escribo para recordarte que tenés 2 sesiones pendientes de pago por un total de $ 3.500. Cualquier duda estoy a disposición. Mariana Roldán");
     expect((await leer(envioId)).estado).toBe("aceptado");
   });
 
-  it("sin deuda vigente (el gancho devuelve null) se cancela sin llamar", async () => {
+  it("sin deuda vigente el módulo real cancela el aviso sin llamar", async () => {
     const { envioId } = await crearEnvio({ motivo: "recordatorio_cobro" });
     const stub = vi.fn(aceptaOk);
-    await correr(stub, { textoDeCobro: async () => null });
+    await correr(stub, { textoDeCobro: parametros => textoDeCobro(db, parametros) });
     expect(stub).not.toHaveBeenCalled();
     expect((await leer(envioId)).estado).toBe("cancelado");
   });
