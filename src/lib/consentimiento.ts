@@ -101,7 +101,7 @@ export function generarTextoConsentimiento(params: {
     : "lo descifra solo en memoria y lo manda a transcribir";
 
   const exportacion = RECORRIDO_EXPORTABLE
-    ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La aplicación registra cada vez que lo hace.`
+    ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La preparación de esa copia queda registrada por la aplicación.`
     : "";
 
   const revocar = REVOCAR_BORRA_HISTORIA

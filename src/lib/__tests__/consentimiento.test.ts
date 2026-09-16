@@ -148,14 +148,15 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).not.toContain("El audio no queda.");
   });
 
-  it("el resumen del proceso se puede imprimir, sale sin cifrar y cada vez queda registrado", () => {
+  it("el resumen del proceso se puede imprimir, sale sin cifrar y su preparación queda registrada", () => {
     expect(hechos.RECORRIDO_EXPORTABLE).toBe(true);
     // La acción que el caso de uso escribe (hilo-integracion.test.ts lo comprueba contra la base).
     expect(hechos.ACCION_EXPORTAR_RECORRIDO).toBe("hilo.exportar_pdf");
     expect(texto).toContain("Lic. Ana Pérez puede imprimir el resumen de tu proceso, o guardarlo como archivo");
     expect(texto).toContain("para su propio archivo profesional");
     expect(texto).toContain("ya no está dentro de la aplicación ni cifrada");
-    expect(texto).toContain("La aplicación registra cada vez que lo hace.");
+    expect(texto).toContain("La preparación de esa copia queda registrada por la aplicación.");
+    expect(texto).not.toContain("La aplicación registra cada vez que lo hace.");
   });
 
   it("revocar no borra la historia clínica, y se puede revocar cuando quiera", () => {
