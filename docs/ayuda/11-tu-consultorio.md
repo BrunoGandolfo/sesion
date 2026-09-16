@@ -4,24 +4,26 @@
 enfoque trabajás, qué recordatorio reciben tus pacientes y tu cuenta.
 
 **Cómo llegar.** En la computadora, **Tu consultorio** en el menú de la
-izquierda. En el teléfono, tocando tu avatar y tu nombre arriba en **Hoy** o en
-**Cobros**.
+izquierda. En el teléfono, con el **engranaje** de arriba a la derecha, que está
+en Hoy, Agenda, Pacientes, Cobros y la ficha. Tocar tu nombre no lleva a ningún
+lado.
 
 Los cambios válidos se guardan un segundo y medio después de que dejás de escribir.
 Esperá a ver **Guardado** antes de salir; salir antes puede cancelar lo pendiente.
 Arriba a la derecha aparece *Guardando…* y después *Guardado.* Si algo falla:
-*"No se pudo guardar. Revisá los campos marcados."*, con **Reintentar**.
+*"Hay cambios sin guardar. Revisá los datos y reintentá."*, con **Reintentar**.
 
 ## Vos
 
 | Campo | Qué hace |
 | --- | --- |
-| **Nombre** | *"Como querés que te nombren los pacientes"*. Va al final de cada recordatorio y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
+| **Nombre** | *"Como querés que te nombren los pacientes"*. Va **al principio** de cada recordatorio, después de "Consultorio", y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
 | **Dirección del consultorio** | Aparece en la autorización que firma la paciente, y en el recordatorio si insertás la ficha **Dirección**. |
-| **Teléfono** | El número al que la paciente escribe para cambios. Va al final de cada recordatorio. |
+| **Teléfono** | El número al que la paciente llama para cambios. Va al final de cada recordatorio: *"Cambios: llamar al …"*. |
 
-Debajo lo dice la app: *"Tu nombre y tu teléfono van al final de cada
-recordatorio, para que la paciente sepa a quién escribirle."*
+Debajo lo dice la app: *"Tu nombre y «Consultorio» van al principio de cada
+recordatorio. Para cambios, el mensaje indica que te llamen al teléfono
+configurado."*
 
 ## Lo que cobrás por sesión
 
@@ -53,11 +55,30 @@ escribe igual con los dos enfoques.
   **La misma mañana** (8:00). Vale para todos los turnos, y afecta a los turnos
   que agendes o reprogrames de ahí en adelante.
 - **Mensaje** — el texto con fichas (**+ Nombre**, **+ Fecha**, **+ Hora**,
-  **+ Dirección**). No puede quedar vacío.
+  **+ Dirección**). No puede quedar vacío. El consultorio y tu nombre van al
+  principio y la línea para llamar al final; si los borrás, se agregan solos.
+  La pantalla advierte: *"No pidas respuestas por SMS: no llegan."*
 - **Así lo recibe la paciente** — la vista previa, con datos de ejemplo y tus
   datos reales.
 
-El detalle completo está en `06-recordatorios-sms.md`.
+Los avisos no salen a la hora en punto sino con unos minutos de corrimiento. El
+detalle completo está en `06-recordatorios-sms.md`.
+
+## Vocabulario
+
+*"Palabras que la transcripción tiene que escuchar bien: términos clínicos,
+modismos y nombres propios."* Hay dos listas:
+
+- **De todas tus sesiones** — *"Se usa en cada sesión que grabes, de cualquier
+  paciente."*
+- **Tuyo** — *"Las palabras de tu enfoque y tu manera de escribir."*
+
+Con **Carga masiva** pegás una lista separada por comas o saltos de línea, y
+**Quitar** saca una palabra. Cada ficha de paciente tiene además su propio
+**Vocabulario de esta persona**.
+
+El vocabulario viaja a AssemblyAI junto con el audio y puede incluir nombres
+propios. Ver `12-camino-del-audio-y-privacidad.md`.
 
 ## Cuenta
 
@@ -87,21 +108,23 @@ se ven en la computadora.
 
 ## Invitar a una colega
 
-1. Si tu cuenta tiene permiso, en **Tu consultorio** buscá **Invitar a una colega**
-   y tocá **Generar enlace**.
-2. Usá **Copiar** y compartí el enlace de forma privada con tu colega.
+1. En **Tu consultorio** buscá **Invitar a una colega** y tocá **Generar enlace**.
+   La sección aparece siempre, pero solo algunas cuentas tienen permiso para
+   invitar: si la tuya no, dice *"No podés invitar desde esta cuenta."*
+2. Usá **Copiar** o **Compartir por WhatsApp** y compartí el enlace de forma
+   privada con tu colega.
 3. Tu colega abre el enlace, completa su nombre, email y contraseña dos veces,
    acepta los términos y la política de privacidad y toca **Crear mi cuenta**.
 
-Podés tener hasta **2 invitaciones vigentes**. Si llegaste al límite, esperá
-a que se usen o venzan. El enlace vence en **7 días** y se usa una sola vez. Si venció o ya se usó,
+Podés tener hasta **2 invitaciones vigentes**. Si llegaste al límite, dice *"Ya
+tenés 2 invitaciones vigentes. Esperá a que se usen o venzan."* El enlace vence en **7 días** y se usa una sola vez. Si venció o ya se usó,
 tu colega necesita pedirte otro. Compartilo sólo con ella.
 
 La invitada tiene **un consultorio nuevo y separado**, con configuración vacía
 y tarifa inicial 0. No ve tus pacientes, turnos ni notas, y vos no ves los suyos.
-Al terminar entra a **Hoy**, donde Pendientes le muestra los primeros pasos.
-Si la cuenta se creó pero el acceso quedó bloqueado por intentos, puede entrar
-más tarde desde la pantalla de entrada: no necesita registrarse otra vez.
+Al crear la cuenta ya queda adentro y entra a **Hoy**, donde Pendientes le
+muestra los primeros pasos, empezando por *"Cargá tu tarifa"*. Mientras la
+tarifa sea 0, el alta de paciente la propone en 0 y hay que escribir una mayor.
 
 <!-- fuentes:
 src/app/(dashboard)/config/_components/config-view.tsx
@@ -114,5 +137,11 @@ src/app/api/turnos/route.ts
 src/app/(dashboard)/pacientes/_components/nuevo-paciente-form.tsx
 src/components/layout/cabecera-usuario.tsx
 src/components/layout/sidebar.tsx
+src/app/(dashboard)/config/_components/mensaje-recordatorio.tsx
+src/app/(dashboard)/config/_components/vocabulario-seccion.tsx
+src/app/(dashboard)/config/_components/invitar-colega.tsx
+src/app/api/_lib/casos-uso/registrar-cuenta.ts
+src/app/api/cuenta/registro/route.ts
+src/lib/sms/texto.ts
 src/lib/glosario.ts
 -->

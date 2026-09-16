@@ -7,14 +7,18 @@ recordatorio en cada caso.
 ## Cómo se ve
 
 **En el teléfono** siempre se mira **un día**; tocando el título de la fecha se
-despliega el mes, con un punto en los días con turnos. **En la computadora**
-elegís **día**, **semana** (empieza el lunes) o **mes**. Las flechas mueven según
-lo que estés mirando, y hay un botón para volver a hoy.
+despliega el mes, con un punto y la cantidad de turnos en cada día. **En la
+computadora** elegís **Día**, **Semana** (empieza el lunes) o **Mes**. Las flechas
+mueven según lo que estés mirando, y **Hoy** vuelve al día de hoy.
+
+Un día sin turnos dice *"Nada agendado este día"*. **Los turnos cancelados no se
+muestran en la agenda.**
 
 ## Agendar un turno
 
 1. Tocá **Agendar** en Agenda o en **Hoy**.
-2. Elegí la paciente, la **Fecha** y la **Hora**.
+2. Elegí la paciente, la **Fecha** y la **Hora**. Si la paciente ya tuvo turnos,
+   la app propone el mismo día y hora de la última vez.
 3. Elegí la **Duración**: 30, 45, 50, 60 o 90 minutos.
 4. Elegí la **Modalidad**: **Presencial** u **Online**.
 5. En **Se repite**, elegí **Una vez**, **Cada semana** o **Cada 15 días**.
@@ -29,9 +33,11 @@ crearlo. El turno nace **Agendado** y **Pendiente** de pago.
 Podés repetir cada semana o cada 15 días. Se agendan **tres meses** de turnos.
 Cada turno es independiente: moverlo, cobrarlo o cancelarlo no cambia el resto.
 
-Si una fecha posterior choca con otro turno, no se agenda y el aviso muestra
-cuáles se omitieron. Podés agendarlas a mano en otro horario. Si choca la primera
-fecha, no se crea la serie: elegí otro comienzo.
+Al guardar una serie aparece **Serie agendada**, con cuántos turnos se agendaron,
+y queda abierta hasta que tocás **Entendido**. Si una fecha posterior choca con
+otro turno, no se agenda y el aviso muestra cuáles se omitieron: *"Podés
+agendarlas por separado en otro horario."* Si choca la primera fecha, no se crea
+la serie: elegí otro comienzo.
 
 Desde un turno de la serie, **Cancelar el resto de la serie** pide confirmación:
 se cancelan ese turno y los siguientes que sigan programados, junto con sus
@@ -40,9 +46,11 @@ Cuando se acaban los tres meses no se agrega nada solo: agendá una serie nueva.
 
 ## Abrir un turno
 
-Tocá el turno. Se abre una ficha con el brief **"Para retomar"**, el chip de
-estado, la duración, la modalidad, la tarifa, el pago, tus notas y el estado del
-**Recordatorio**.
+Tocá el turno. Se abre una ficha con el chip de estado, la duración, la
+modalidad, la tarifa, el pago y tus notas. En un turno agendado o realizado
+aparece además el brief **"Para retomar"**. El estado del **Recordatorio** se
+muestra solo mientras el turno sigue agendado. Un turno ausente dice *"La
+paciente no vino a este turno."*
 
 ## Estados del turno
 
@@ -50,23 +58,24 @@ estado, la duración, la modalidad, la tarifa, el pago, tus notas y el estado de
 | --- | --- |
 | **Agendado** (dorado) | Programado, todavía no pasó nada. |
 | **Sin cobrar** (terracotta) | La sesión se hizo y falta el pago. |
-| **Cobrado** (verde) | Pagado. |
+| **Pagado** (verde) | Cobrado. |
 | **No vino** (gris) | La paciente faltó. |
-| **Cancelado** (gris) | El turno se anuló. |
+| **Cancelado** (gris) | El turno se anuló. No aparece en la agenda, pero sí en la ficha de la paciente. |
 
 ## Las acciones y el recordatorio
 
-- **Cobrar** — registra el pago. Si el turno todavía figuraba *Agendado* y la
-  hora ya pasó, **cobrar lo cierra**: pasa a realizado. Dice, en el propio
-  sheet: *"al cobrar, el turno queda como realizado"*. **El recordatorio se
-  cancela.**
-- **Grabar sesión** / **Revisar nota** — según el turno tenga o no una sesión
-  clínica ya empezada.
+- **Cobrar** — abre *"¿Cómo pagó?"* con los métodos de pago. Si el turno todavía
+  figuraba *Agendado* y la hora ya pasó, **cobrar lo cierra**: pasa a realizado.
+  Mientras el turno está agendado, el propio sheet lo dice: *"al cobrar, el
+  turno queda como realizado"*. **El recordatorio se cancela.**
+- **Grabar sesión** / **Revisar nota** — **Grabar sesión** si el turno todavía no
+  tiene sesión clínica; si ya la tiene, **Revisar nota** lleva a la nota, aunque
+  ya esté aprobada.
 - **Reprogramar** — cambiás fecha, hora, duración, modalidad y notas. Si
-  cambiaste la fecha, **el recordatorio viejo se cancela y se programa uno
-  nuevo** para la fecha nueva. Si solo cambiaste la duración o la modalidad, el
-  recordatorio queda como estaba. Si el aviso anterior ya había salido, se
-  programa un **cambio de horario** con la fecha nueva.
+  cambiaste la fecha o la hora, **el recordatorio viejo se cancela y se programa
+  uno nuevo** para el horario nuevo. Si solo cambiaste la duración o la
+  modalidad, el recordatorio queda como estaba. Si el aviso anterior ya había
+  salido, se manda **enseguida** un **cambio de horario** con la fecha nueva.
 - **No vino** — pregunta *"¿[Nombre] no vino?"* y avisa: *"El turno queda
   registrado como ausencia. No se cobra y no se puede grabar."*
   **El recordatorio se cancela.**
@@ -74,8 +83,8 @@ estado, la duración, la modalidad, la tarifa, el pago, tus notas y el estado de
   el recordatorio por SMS. El turno queda en la ficha como cancelado y no se
   puede reabrir."* **El recordatorio se cancela.**
 
-Al terminar de grabar, la app también marca el turno como realizado, y con eso
-el recordatorio se cancela.
+Cuando la grabación llega completa al servidor, la app marca el turno como
+realizado, y con eso el recordatorio pendiente se cancela.
 
 ## Qué hace la app por detrás
 
@@ -103,6 +112,13 @@ src/app/api/turnos/route.ts
 src/app/api/turnos/[id]/route.ts
 src/app/api/turnos/[id]/cobrar/route.ts
 src/app/api/_lib/casos-uso/cobrar-turno.ts
-src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/agenda/_components/agenda-header.tsx
+src/app/(dashboard)/agenda/_components/month-view.tsx
+src/components/forms/nuevo-turno-form.tsx
+src/components/forms/resultado-serie.tsx
+src/app/api/_lib/casos-uso/crear-turno.ts
+src/app/api/_lib/casos-uso/turnos.ts
+src/app/api/_lib/casos-uso/envios-del-turno.ts
+src/app/api/_lib/casos-uso/audio.ts
 src/lib/glosario.ts
 -->

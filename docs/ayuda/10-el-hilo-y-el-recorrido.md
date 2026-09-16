@@ -1,78 +1,135 @@
-# El hilo y el Recorrido
+# El Recorrido
 
-**Para qué sirve.** El hilo es la memoria del proceso de cada paciente; el
-Recorrido, cómo se ve ese proceso en el tiempo.
+**Para qué sirve.** El Recorrido es la memoria del proceso de cada paciente: la
+hipótesis, lo que pasó sesión tras sesión, los objetivos, lo que probaste y las
+señales. También muestra cómo va ese proceso en el tiempo.
 
-## El hilo
+## Dónde está
 
-Está en la ficha, pestaña **Recorrido**, arriba de todo. Un proceso automático
-intenta incorporar las notas aprobadas. Aprobar no confirma que el hilo ya esté
-actualizado: esa tarea puede quedar pendiente o fallar. Seis bloques:
+En la ficha, pestaña **Recorrido**. Arriba está **Exportar PDF**; debajo, la
+tarjeta **El Recorrido**; más abajo, **Cómo va**.
 
-- **Hipótesis diagnóstica** — podés editarla. El modelo recibe instrucciones
-  para respetar lo que formulaste; revisá que la actualización las cumpla.
-- **Objetivos terapéuticos** — con su fecha de inicio y su estado: **Activo**,
-  **Pausado** o **Cerrado**. Editando los agregás y cambiás su estado.
-- **Intervenciones probadas** — se acumulan solas: técnica, eficacia percibida
-  (alta / media / baja) y en cuántas sesiones apareció.
-- **Temas recurrentes** — cada uno con su cuenta.
-- **El recorrido hasta hoy** — el resumen acumulado, con el chip *Generado por
-  IA*. Se agrega un párrafo por sesión aprobada, que empieza con *"Sesión del …:
-  "*. La conservación de los párrafos anteriores depende de la actualización.
-- **Señales anteriores** — todas, con su fecha, de la más reciente a la más
-  vieja.
+## El Recorrido vigente
 
-El hilo no es un historial inmutable: una actualización automática puede
-reemplazar contenido y pisar una corrección. Revisá los objetivos, temas y
-señales después de una actualización; no des por preservado todo lo anterior.
+La tarjeta **El Recorrido** muestra la versión vigente y, debajo del título,
+quién la dejó así: *"Revisado por vos el …"* o *"Propuesta aceptada el …"*. Si
+todavía no hay ninguna: *"Todavía no hay un Recorrido revisado."* y *"Podés
+escribirlo o esperar una propuesta después de aprobar una nota."*
 
-Arriba hay un chip: **Revisado** (verde) o **"Actualizado tras la última sesión ·
-revisalo"** (dorado). Con el dorado aparece además: *"Lo escribió la IA después
-de la última sesión. Revisalo y guardalo."* Con **Editar** y después
-**Guardar**, queda revisado por vos.
+Tiene seis secciones:
+
+- **Hipótesis clínica.**
+- **El recorrido hasta hoy** — el resumen acumulado, un párrafo por sesión.
+- **Objetivos** — cada uno con su estado (activo, pausado o cerrado), desde qué
+  fecha y, si se cerró, cuándo.
+- **Intervenciones** — la técnica, la eficacia registrada (alta, media o baja) y
+  las notas en las que apareció, como enlaces *"Nota del …"* con su fecha.
+- **Temas recurrentes** — cada uno con en cuántas sesiones apareció.
+- **Señales anteriores** — la fecha, la señal y su detalle.
+
+## Cómo cambia: la IA propone, vos decidís
+
+Cuando aprobás una nota, la app le pide a la IA una **propuesta** de Recorrido
+que incorpore esa sesión. **La propuesta no cambia nada por sí sola.** Mientras
+la prepara dice *"Preparando una propuesta…"*. Esa tarea puede quedar pendiente o
+fallar: si falla, dice *"No se pudo preparar una propuesta."* con **Volver a
+intentar**.
+
+Cuando llega, aparece **Hay una propuesta nueva**: *"La IA la preparó a partir de
+una nota aprobada. Se incorpora al Recorrido cuando vos la aceptás."* Ahí podés:
+
+- **Ver nota de origen** y leer la lista de cambios que propone.
+- **Ver propuesta** — compara, sección por sección, la versión vigente y la
+  propuesta, y marca **Con cambios** donde difieren.
+- **Aceptar** — la propuesta pasa a ser la versión vigente.
+- **Editar y aceptar** — la corregís antes y se guarda tu versión.
+- **Descartar propuesta** — pide confirmación. El Recorrido vigente y las
+  versiones anteriores se conservan.
+
+Solo hay una propuesta abierta a la vez. Si aprobás otra nota mientras tanto,
+dice *"Hay otra sesión esperando que resuelvas la propuesta anterior."*
+
+Si el Recorrido cambió después de que se preparó una propuesta, queda como
+**Hay una propuesta vieja: el Recorrido cambió después**, con **Ver propuesta
+vieja**, **Descartar** y **Volver a generar sobre el Recorrido actual**.
+
+## Editar el Recorrido
+
+Tocá **Editar Recorrido**, corregí lo que haga falta y tocá **Guardar nueva
+versión**, o **Cancelar edición**. La pantalla lo dice: *"Al guardar se agrega
+una versión; las anteriores se conservan."* Si hay una propuesta abierta,
+guardar tu edición la deja desactualizada.
+
+Podés agregar objetivos y cambiar su estado, corregir o quitar señales y elegir
+por fecha las notas de cada intervención. Solo se pueden citar notas aprobadas
+de esa paciente.
+
+Si el Recorrido cambió en otra pantalla mientras editabas, dice *"El Recorrido
+cambió en otra pantalla. Tu borrador se conserva abajo. Revisá la versión
+vigente antes de continuar."* Si querés salir con un borrador sin guardar, la
+app pregunta antes.
+
+## El historial de versiones
+
+**Nada de lo guardado se pierde.** Cada cambio agrega una versión nueva; las
+anteriores no se pueden modificar ni borrar, y la base de datos también lo
+impide. Una propuesta de la IA nunca reemplaza tu versión sin que la aceptes.
+
+En **Historial de versiones** ves cada una con su número, si es una propuesta de
+IA o una edición tuya, su estado y sus fechas. Abrí una para leerla y, si
+querés, **Usar como borrador de una versión nueva**. En el historial el estado
+aparece con la palabra técnica: *aplicada* (fue o es la vigente), *propuesta*,
+*desactualizada* o *rechazada* (descartada).
 
 ## El brief antes de la sesión
 
 - **"Para retomar"**, en la pestaña **Sesiones**: la señal de riesgo, qué pasó la
   última vez, el **Progreso percibido**, **Para la próxima** y un extracto del
-  hilo. Si la última nota está sin aprobar, avisa que *"lo de arriba puede
-  cambiar cuando la apruebes"*.
-- **La versión corta**, en la tarjeta de **Hoy** y en el turno de la agenda: dos
-  líneas para leer de pie.
+  Recorrido vigente.
+- **La versión corta**, en la tarjeta de **Hoy** y en el turno de la agenda: la
+  señal, si la hay, *"Última vez (…):"* y *"Para la próxima:"*.
 
-El brief toma la última nota aprobada disponible, aunque haya una revisión más
-reciente. Si no hay aprobadas, puede usar un borrador. La advertencia de falta
-de aprobación no aparece en todas las vistas: comprobá la nota de origen si
-necesitás saber qué fue revisado. Abrir el brief no genera una nota nueva.
+El brief usa **solo la última nota aprobada** y la versión vigente del Recorrido.
+Si hay una nota sin aprobar, avisa: *"Hay una nota pendiente de aprobación;
+todavía no se incorpora a este resumen."* Si hay una propuesta sin revisar:
+*"Hay una propuesta del Recorrido sin revisar. Este resumen usa la versión
+vigente."* Estos avisos no aparecen en la versión corta. Abrir el brief no genera
+una nota nueva.
 
-## El Recorrido ("Cómo va")
+## Cómo va
 
-Debajo del hilo, plegable. **Los gráficos aparecen a partir de la tercera sesión
-grabada y aprobada**; antes dice *"Todavía no hay suficiente recorrido."*
+Debajo de la tarjeta, plegable. Se abre solo a partir de la **tercera sesión con
+nota**, contando las aprobadas y las que están para revisar; antes dice
+*"Todavía no hay suficiente recorrido."*
 
 El selector de período ofrece **Últimas 10** (el default), **3 meses**, **6
 meses** y **Todo**, y queda guardado en la dirección de la página.
 
 ### Los gráficos
 
-- **Señales de riesgo** — todas, por fecha: *"No se agrupan ni se ocultan."*
+- **Señales de riesgo** — una fila por señal marcada, de la más reciente a la más
+  vieja, con **Lo que dijo** y **Ver la sesión**.
 - **Intensidad emocional** — *"Cómo llegó a cada sesión, del 1 al 10."* Los
   puntos en terracotta son sesiones con señal de riesgo.
-- **Alianza terapéutica** — *"Calidad del vínculo."* Las caídas en terracotta son
-  posibles rupturas.
-- **Temas** — *"Qué se repite en el período elegido."* Cada uno con su tendencia
+- **Alianza terapéutica** — *"Calidad del vínculo en cada sesión. Las caídas en
+  terracotta son posibles rupturas."*
+- **Temas** — cada uno con en cuántas sesiones apareció, su tendencia
   (**nuevo**, **↑ sube**, **↓ baja**, **= estable**) y *"desde 4 mar"*.
 - **Intervenciones** — cantidad y tipo por sesión.
 - **Progreso percibido** y **Observación IA** — de la **última sesión del
   período**, con su fecha y el enlace **Ver la sesión**.
+
+Cada gráfico puede traer una lectura breve escrita por la app sobre la
+tendencia. Es orientativa: leela con tu criterio.
 
 ### Los huecos y los alcances
 
 Donde la sesión no registró el dato, la línea **se corta**: *"no se completa por
 interpolación"*. El hueco es un dato que no se pudo evaluar, no un cero.
 
-Intensidad, alianza e intervenciones muestran el período elegido; **los temas y
-las señales de riesgo se cuentan sobre todas las sesiones**.
+Intensidad, alianza e intervenciones muestran el período elegido. **Los temas y
+las señales de riesgo se cuentan sobre todas las sesiones**, aunque sus
+subtítulos hablen del período.
 
 ## Exportar el Recorrido a PDF
 
@@ -83,41 +140,50 @@ guardar PDF** lo vuelve a abrir.
 
 La hoja lleva:
 
-- **El Recorrido vigente**, completo.
-- **Cómo va**, con todas las sesiones con nota.
+- **El Recorrido vigente**, completo, con sus señales anteriores y su detalle.
+- **Cómo va**, con todas las sesiones con nota, también las que están para
+  revisar.
 - **El historial de versiones**: cada una con su fecha, quién la escribió, su
   estado y la nota que la motivó.
 - **Las versiones que estuvieron vigentes antes**, completas.
 
 De las propuestas de la IA que no adoptaste (sin revisar, desactualizadas o
-descartadas) queda solo la fila del historial, sin su texto. Las citas de las
-señales de riesgo no se imprimen: están en cada nota.
+descartadas) queda solo la fila del historial, sin su texto. En **Cómo va** no se
+imprimen las citas de **Lo que dijo**.
 
 El archivo sale de la aplicación **sin cifrar**: queda bajo tu cuidado, como
-cualquier registro en papel. Cada exportación queda registrada con quién la
-hizo y cuándo. El consentimiento 2.1 se lo cuenta a la paciente; si firmó una
-versión anterior, conviene que firme la nueva.
+cualquier registro en papel. **Abrir la hoja ya cuenta como exportación**: queda
+registrado quién la abrió y cuándo, aunque después no imprimas. El
+consentimiento 2.1 se lo cuenta a la paciente; si firmó una versión anterior,
+conviene que firme la nueva.
 
 ## Lo que NO hace
 
-- **No proyecta ni pronostica**: no dice "va mejorando" salvo que la nota lo diga.
-- **No borra ni condensa** el resumen acumulado.
-- **No cuenta sesiones sin aprobar**: el hilo se mueve al aprobar.
+- **No cambia el Recorrido sin vos**: la IA solo propone.
+- **No borra versiones**: corregir agrega una versión nueva.
+- **No incorpora al Recorrido sesiones sin aprobar.**
 - **No muestra el ratio de habla**: el dato existe, pero no se grafica.
 - **No compara pacientes.**
 
 <!-- fuentes:
 src/app/(dashboard)/pacientes/[id]/_components/recorrido-tab.tsx
-src/app/(impresion)/pacientes/[id]/recorrido/imprimir/_components/recorrido-imprimible.tsx
+src/components/clinico/HiloView.tsx
+src/components/clinico/HiloContenido.tsx
+src/components/clinico/HiloEditor.tsx
+src/app/api/_lib/casos-uso/hilo/trabajo.ts
+src/app/api/_lib/casos-uso/hilo/escribir.ts
+src/app/api/_lib/casos-uso/hilo/base.ts
+src/app/api/_lib/casos-uso/hilo/brief.ts
+src/app/api/_lib/casos-uso/hilo/progreso.ts
 src/app/api/_lib/casos-uso/hilo/exportar.ts
-src/lib/consentimiento.ts
-src/components/clinico/ContextoGoldenThreadView.tsx
+src/app/(impresion)/pacientes/[id]/recorrido/imprimir/_components/recorrido-imprimible.tsx
 src/app/(dashboard)/pacientes/[id]/_components/brief-pre-sesion.tsx
 src/components/clinico/brief-corto.tsx
 src/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor.tsx
 src/app/(dashboard)/pacientes/[id]/_components/graficos/selector-rango.tsx
 src/app/api/_lib/casos-uso/progreso-clinico.ts
+prisma/migrations/20260916013000_inmutabilidad/migration.sql
+src/lib/consentimiento.ts
 src/lib/glosario.ts
-processor/prompts/update_context_v2.0.md
-docs/pipeline.md
+processor/prompts/update_context_v2.1.md
 -->

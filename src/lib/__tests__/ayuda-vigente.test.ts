@@ -1,9 +1,26 @@
-import { RESPALDO_LOCAL_CIFRADO, ASR_BORRADO_CON_REINTENTO, LIMPIEZA_AUDIO_REINTENTA, RETENCION_BACKUPS_DIAS, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+import { RESPALDO_LOCAL_CIFRADO, RETENCION_BACKUPS_DIAS, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/audio/contrato";
+import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
+import { DISPERSION_MINUTOS } from "@/lib/recordatorios-programacion";
+import { ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { leerCorpus, olvidarCorpus, systemPromptAyuda } from "@/lib/ayuda-corpus";
+
+/** El código que respalda una afirmación de la ayuda, leído del disco. */
+const codigo = (ruta: string) => readFileSync(join(process.cwd(), ruta), "utf8");
+
+function componentes(dir: string): string[] {
+  return readdirSync(dir).flatMap((nombre) => {
+    const ruta = join(dir, nombre);
+    if (statSync(ruta).isDirectory()) return nombre === "__tests__" ? [] : componentes(ruta);
+    return ruta.endsWith(".tsx") ? [ruta] : [];
+  });
+}
 
 // Se prueba el material que recibe Lupita, no una copia de los documentos.
 // Estas restricciones editoriales no certifican la respuesta del modelo.
@@ -60,7 +77,7 @@ it("los minutos que enseña la ayuda coinciden con los límites de captura", () 
   const texto = documento("07-grabar-una-sesion.md");
   expect(texto).toContain(`**${LIMITE_SEGUNDOS / 60} minutos**`);
   expect(texto).toContain(`**${AVISO_LIMITE_SEGUNDOS / 60} minutos**`);
-  expect(texto).toContain("todavía tenés que terminar y guardar");
+  expect(texto).toContain("todavía tenés que terminar");
   expect(texto).not.toContain("hora y media");
 });
 
@@ -78,7 +95,7 @@ it("la ayuda lleva a la vista separada de Para vos y no promete salir al aprobar
   expect(nota).toContain("permanecés en la nota");
   expect(nota).not.toContain("**Para vos** (plegado)");
   expect(nota).not.toContain("pantalla vuelve sola");
-  expect(documento("09-para-vos-feedback.md")).toContain("abrir la vista no genera un análisis nuevo");
+  expect(documento("09-para-vos-feedback.md")).toContain("Abrir la vista no genera un análisis nuevo");
 });
 
 it("la ayuda avisa que un campo inválido frena el lote de configuración", () => {
@@ -89,22 +106,52 @@ it("la ayuda avisa que un campo inválido frena el lote de configuración", () =
   expect(texto).not.toMatch(/lo demás se guarda igual|Cada campo se guarda por separado|Todo se guarda solo/);
 });
 
-it("la ayuda distingue el consentimiento 2.0 de la protección todavía pendiente", () => {
-  // Verifica el texto informado, no certifica la implementación del grabador.
+it("la ayuda describe el cifrado por tramos que hace el grabador, no una protección pendiente", () => {
+  // El grabador cifra cada segmento antes de guardarlo en el teléfono.
   expect(RESPALDO_LOCAL_CIFRADO).toBe(true);
-  expect(ASR_BORRADO_CON_REINTENTO).toBe(true);
-  expect(LIMPIEZA_AUDIO_REINTENTA).toBe(true);
+  const grabadora = codigo("src/lib/audio/grabadora.ts");
+  expect(grabadora.indexOf("cifrarSegmento(")).toBeGreaterThan(-1);
+  expect(grabadora.indexOf("cifrarSegmento(")).toBeLessThan(grabadora.indexOf("guardarSegmento("));
   expect(VOCABULARIO_A_ASR && VOCABULARIO_INCLUYE_NOMBRES).toBe(true);
   for (const archivo of ["00-que-es-sesion.md", "07-grabar-una-sesion.md", "12-camino-del-audio-y-privacidad.md"]) {
-    expect(documento(archivo)).toContain("El consentimiento 2.0 exige cifrar el audio por tramos");
-    expect(documento(archivo)).toContain("la copia local previa no está cifrada");
-    expect(documento(archivo)).toContain("Todavía no está implementado en este grabador");
+    expect(documento(archivo)).toMatch(/se cifra(n)? en el teléfono/);
+    expect(documento(archivo)).not.toContain("Todavía no está implementado en este grabador");
+    expect(documento(archivo)).not.toMatch(/se cifra al terminar|cifra el archivo al terminar|subida por segmentos independientes todavía está pendiente/);
+  }
+  // Mientras la pantalla de entrada conserve el texto viejo, la ayuda lo desmiente.
+  if (ENTRADA_CONFIDENCIALIDAD.includes("no está cifrada")) {
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("Ese texto quedó de la versión anterior del grabador");
+    expect(documento("01-entrar-y-cuenta.md")).toContain("Esa frase quedó vieja");
   }
   const texto = documento("12-camino-del-audio-y-privacidad.md");
   expect(texto).toContain("**" + RETENCION_BACKUPS_DIAS + " días**");
+  // Los mensuales: 12 meses en backup.yml.
+  expect(codigo(".github/workflows/backup.yml")).toContain("366 days ago");
+  expect(texto).toContain("**12 meses**");
   expect(texto).toContain(ANTHROPIC_RETENCION_VERIFICADA_EL);
-  expect(texto).toContain("hasta que el proveedor confirma");
+  for (const tipo of ["borrar_audio_r2", "borrar_transcript_asr"] as const) {
+    expect(texto).toContain(`hasta ${POLITICA_POR_TIPO[tipo].tope} veces`);
+  }
+  expect(texto).not.toContain("hasta que el proveedor confirma");
   expect(texto).toContain("pueden contener cifrada la clave");
+});
+
+it("la ayuda describe los botones del grabador que existen", () => {
+  const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+  const texto = documento("07-grabar-una-sesion.md");
+  for (const boton of ["Grabar sesión", "Reanudar grabación", "Pausar", "Terminar y enviar", "Enviar grabación pendiente", "Comprobar y reintentar envío", "Conservar copia y habilitar otra grabación"]) {
+    expect(vista).toContain(boton);
+    expect(texto).toContain(boton);
+  }
+  // /grabar/nuevo no crea un turno: manda a agendarlo.
+  expect(codigo("src/app/(dashboard)/grabar/[turnoId]/page.tsx")).toContain("Agendá el turno para grabar la sesión");
+  expect(texto).toContain("Agendá el turno para grabar la sesión");
+  // La base local tiene una grabación por turno: volver a grabar no reemplaza.
+  expect(codigo("src/lib/audio/almacen.ts")).toContain('createIndex("turno", ["cuenta", "turnoId"], { unique: true })');
+  expect(texto).toContain("Volver a grabar no reemplaza la copia anterior");
+  for (const archivo of ["07-grabar-una-sesion.md", "13-preguntas-frecuentes.md", "14-cuando-algo-falla.md"]) {
+    expect(documento(archivo)).not.toMatch(/Terminar la sesión|y un medidor de sonido|Se cortó el micrófono|Cortado|crea uno de 50 minutos|puede reemplazarse la copia/);
+  }
 });
 
 it("no convierte borrado, cifrado parcial y proveedores en garantías absolutas", () => {
@@ -121,12 +168,38 @@ it("no convierte borrado, cifrado parcial y proveedores en garantías absolutas"
   expect(documento("13-preguntas-frecuentes.md")).not.toContain("Al aprobar se borra el audio");
 });
 
-it("no promete un hilo inmutable ni un brief siempre aprobado", () => {
+it("describe el Recorrido como versiones que la IA propone y no reemplaza", () => {
+  // Las versiones no se modifican ni se borran: lo impide la base.
+  expect(codigo("prisma/migrations/20260916013000_inmutabilidad/migration.sql")).toContain("hilo_versiones es inmutable");
+  // El trabajo de la IA deja una propuesta; no aplica la versión vigente.
+  expect(codigo("src/app/api/_lib/casos-uso/hilo/trabajo.ts")).not.toContain("aplicarVigente");
+  // El brief lee solo notas aprobadas.
+  expect(codigo("src/app/api/_lib/casos-uso/hilo/brief.ts")).toContain('estado: "aprobada"');
   const texto = documento("10-el-hilo-y-el-recorrido.md");
-  expect(texto).toContain("una actualización automática puede reemplazar contenido");
-  expect(texto).toContain("puede usar un borrador");
-  expect(texto).toContain("esa tarea puede quedar pendiente o fallar");
-  expect(texto).not.toMatch(/Nunca se reinician|Nunca se borran|no se reescriben nunca|Todo se compone de notas ya aprobadas/);
+  expect(texto).toContain("La propuesta no cambia nada por sí sola");
+  expect(texto).toContain("las anteriores no se pueden modificar ni borrar");
+  expect(texto).toContain("Esa tarea puede quedar pendiente o fallar");
+  expect(texto).toContain("usa **solo la última nota aprobada**");
+  expect(texto).not.toMatch(/puede reemplazar contenido|pisar una corrección|puede usar un borrador|Generado por IA|Actualizado tras la última sesión/);
+});
+
+it("la pantalla de Hoy tiene dos números y ningún bloque Te deben", () => {
+  const kpis = codigo("src/app/(dashboard)/_components/kpis.tsx");
+  expect(kpis).toContain("SESIONES_HOY");
+  expect(kpis).toContain("ESTE_MES");
+  expect(kpis).not.toContain("POR_COBRAR");
+  const texto = documento("02-pantalla-hoy.md");
+  expect(texto).toContain("**Los dos números**");
+  expect(texto).not.toMatch(/Por cobrar|Día prolijo|Hoy tu agenda está libre|Tocarla te lleva/);
+});
+
+it("los recordatorios se dispersan y el mensaje dice lo que arma el código", () => {
+  const texto = documento("06-recordatorios-sms.md");
+  expect(texto).toContain(`**0 a ${DISPERSION_MINUTOS - 1} minutos**`);
+  expect(texto).toContain(LINEA_CONTACTO.replace(" {{telefonoConsultorio}}", ""));
+  expect(REMITENTE_SMS.startsWith("Consultorio")).toBe(true);
+  expect(texto).toContain(SMS_BAJA_CONFIRMADA);
+  expect(texto).not.toMatch(/te recordamos tu sesión|cambió el horario de tu sesión|Listo: no vas a recibir/);
 });
 
 it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
@@ -137,7 +210,11 @@ it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
 });
 
 it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar la contraseña", () => {
-  const corpus = leerCorpus();
+  // Los únicos usos vigentes de esas palabras son botones que existen hoy.
+  const vigentes = [INVITAR_WHATSAPP, "Descartar propuesta", "**Descartar**"];
+  expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Descartar propuesta");
+  let corpus = leerCorpus();
+  for (const texto of vigentes) corpus = corpus.replaceAll(texto, "");
   expect(corpus).not.toMatch(/WhatsApp|Descartar|Descartarla|Volver a intentarlo/i);
   expect(corpus).not.toMatch(/No recibe respuestas|hasta \*\*3 intentos|Seguís con la sesión abierta acá/);
   expect(documento("01-entrar-y-cuenta.md")).toContain("se cierran todas las sesiones abiertas");
@@ -162,19 +239,34 @@ it("la ayuda distingue rehacer la nota, reintentar y pedir Para vos", () => {
   expect(nota).toContain("No vuelve a transcribir");
   expect(nota).toContain("Leí las menciones");
   expect(nota).toContain("cada lectura queda registrada");
-  expect(documento("09-para-vos-feedback.md")).toContain("Pedir de nuevo");
+  expect(documento("09-para-vos-feedback.md")).toContain(FEEDBACK_REINTENTAR);
+  expect(documento("09-para-vos-feedback.md")).toContain(FEEDBACK_PEDIR);
   expect(documento("09-para-vos-feedback.md")).toContain("aunque la nota ya esté aprobada");
 });
 
-// Regresión P2: el corpus de Lupita no debe ofrecer controles que sólo existen en el servidor.
-it("declara indisponibles los controles clínicos que todavía no tienen interfaz", () => {
+// Regresión P2: el corpus de Lupita no debe ofrecer controles que sólo existen
+// en el servidor, ni negar los que la pantalla ya ofrece.
+it("describe los controles clínicos según lo que la pantalla ofrece hoy", () => {
+  // Leí las menciones y el nuevo pedido de Para vos tienen interfaz.
+  expect(codigo("src/components/clinico/MencionesNota.tsx")).toContain("{LEI_LAS_MENCIONES}");
+  expect(codigo("src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx")).toContain("FEEDBACK_REINTENTAR");
   for (const [archivo, control] of [
-    ["08-la-nota-clinica.md", "Leí las menciones"],
-    ["08-la-nota-clinica.md", "Ver transcripción"],
-    ["09-para-vos-feedback.md", "Pedir de nuevo"],
-    ["13-preguntas-frecuentes.md", "Leí las menciones"],
-    ["14-cuando-algo-falla.md", "Pedir de nuevo"],
+    ["08-la-nota-clinica.md", LEI_LAS_MENCIONES],
+    ["13-preguntas-frecuentes.md", LEI_LAS_MENCIONES],
+    ["14-cuando-algo-falla.md", LEI_LAS_MENCIONES],
+    ["09-para-vos-feedback.md", FEEDBACK_REINTENTAR],
+    ["14-cuando-algo-falla.md", FEEDBACK_REINTENTAR],
   ]) {
-    expect(documento(archivo)).toContain(control + " todavía no está disponible en la pantalla");
+    expect(documento(archivo)).toContain(control);
+    expect(documento(archivo)).not.toContain(control + " todavía no está disponible");
+  }
+  expect(leerCorpus()).not.toContain("Pedir de nuevo todavía no está disponible");
+  // Ver la transcripción sigue sin pantalla: ningún componente llama a su ruta.
+  const conTranscripcion = [...componentes(join(process.cwd(), "src/app")), ...componentes(join(process.cwd(), "src/components"))]
+    .filter((ruta) => readFileSync(ruta, "utf8").includes("/transcripcion"));
+  if (conTranscripcion.length === 0) {
+    expect(documento("08-la-nota-clinica.md")).toContain("Ver transcripción todavía no está disponible en la pantalla");
+  } else {
+    expect(documento("08-la-nota-clinica.md")).not.toContain("Ver transcripción todavía no está disponible");
   }
 });

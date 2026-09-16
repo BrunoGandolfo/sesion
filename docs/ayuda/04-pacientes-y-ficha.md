@@ -7,7 +7,8 @@ sesiones, recorrido, datos, autorización y archivo.
 
 Dos solapas, **Activos** y **Archivados**, y un buscador (*"Buscar por
 nombre..."*, busca por nombre o apellido). Ordenada por apellido. En la
-computadora hay columnas —Nombre, Teléfono, Tarifa, Última sesión, Deuda—; en el
+computadora hay columnas —Nombre, Teléfono, Tarifa, Última sesión, Deuda—; en
+**Archivados**, la última columna es el estado, con **Reactivar**. En el
 teléfono, una fila por persona con la deuda en un chip terracotta.
 
 ## Dar de alta un paciente
@@ -24,17 +25,20 @@ El teléfono se guarda normalizado para que el SMS salga bien.
 ## La ficha
 
 Arriba: el nombre, un chip **Archivado** si corresponde, *"Debe $ …"* si hay
-deuda, *"Próxima: …"* o *"Sin próximo turno"*, y **Editar**. Si falta la
+deuda, *"Próxima: …"* o *"Sin próximo turno"*, y **Editar datos**. Si falta la
 autorización, ahí mismo aparece un aviso dorado —**"Falta la autorización** para
 grabar las sesiones. La paciente la firma acá mismo."*— con el botón **Firmar
 autorización**. El botón **Grabar** está en la cabecera de la ficha, junto
-a las acciones del paciente; no es un botón flotante.
+a las acciones del paciente; no es un botón flotante. Si la paciente no tiene
+turno hoy, **Grabar** lleva a *"Agendá el turno para grabar la sesión"* con el
+enlace **Ir a la agenda**: primero hay que agendar.
 
 ### Pestaña **Sesiones**
 
-- **La sesión de hoy**, si hay turno hoy: la hora, la duración, la modalidad y un
-  botón según el momento (**Grabar sesión**, *Escribiendo la nota…*,
-  **Revisar nota**, **Cobrar** o **Ver nota**).
+- **Hoy**, si hay turno hoy: la hora, la duración, la modalidad y un botón según
+  el momento (**Grabar sesión**, *Escribiendo la nota…*, **Revisar nota**,
+  **Cobrar** o **Ver nota**). Si la grabación quedó sin terminar, **Grabar
+  sesión** sirve para retomarla. Si la sesión falló, el enlace dice **Ver**.
 - **Para retomar** — el brief antes de la sesión (ver `10-el-hilo-y-el-recorrido.md`).
 - **Sesiones** — todas las sesiones documentadas, agrupadas por mes (el más
   reciente abierto, los anteriores plegados). Cada fila: fecha, hora, duración,
@@ -49,34 +53,44 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 
 - **Datos de contacto** — teléfono (se puede tocar para llamar), tarifa
   por sesión y fecha de alta.
-- **Notas privadas** — se guardan solas: *"Se guarda solo. Solo vos las ves."*
+- **Notas privadas** — se guardan solas: *"Se guarda solo. Solo vos las ves."* Si
+  intentás salir antes de que se guarden, la app avisa.
 - **Autorización para grabar las sesiones** — ver abajo.
+- **Vocabulario de esta persona** — *"Nombres y palabras que aparecen solo en las
+  sesiones de este paciente. Se suman a las de toda la cuenta."* Ver
+  `11-tu-consultorio.md`.
 - **Turnos y pagos** — plegado; muestra cuántas sesiones hay sin cobrar y el
-  historial completo de turnos con su estado, método y monto.
+  historial completo de turnos con su estado, método y monto. Desde ahí se
+  cobran los turnos realizados y se deshace un cobro.
 - **Archivo** — archivar o reactivar.
 
 ## La autorización de grabación (consentimiento)
 
 1. En la ficha, tocá **Firmar autorización**.
 2. Se abre **Autorización para grabar las sesiones**. **La lee la paciente**:
-   qué se graba, para qué y qué reciben los proveedores: AssemblyAI recibe
-   audio y vocabulario; Anthropic, transcripción e hilo. También explica el
-   cifrado por tramos, el borrado con reintentos, los respaldos de 30 días,
-   qué queda guardado (nota y transcripción), que puede revocarla cuando quiera y
-   que aceptar no es obligatorio. Se enmarca en la **Ley 18.331**.
+   qué se graba, para qué y por dónde pasa: el cifrado por tramos en el
+   teléfono, el almacenamiento en Cloudflare R2, el proceso en Railway, la base
+   en Neon, que AssemblyAI recibe audio y vocabulario y Anthropic la
+   transcripción y el resumen del proceso. También explica el borrado con
+   reintentos, los respaldos de 30 días, qué queda guardado (nota,
+   transcripción, resumen del proceso, autorización y firma), que podés imprimir
+   el resumen del proceso para tu propio archivo, que puede revocarla cuando
+   quiera y que aceptar no es obligatorio. Se enmarca en la **Ley 18.331**.
 3. La paciente marca **"Leí y entiendo la información anterior"**.
 4. Firma con el dedo donde dice **Firmá acá**.
 5. Tocá **Firmar**.
 
-Firmada, aparece el chip verde **Grabación autorizada** y la fecha de firma.
-La versión vigente del texto es **2.0**. Las firmas anteriores siguen vigentes:
-podés sugerir firmar el texto nuevo en la próxima sesión; no hace falta
-revocar la firma anterior ni bloquear la grabación.
+Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
+La versión vigente del texto es **2.1**. Las firmas anteriores siguen vigentes
+para grabar y no hace falta revocarlas. Pero no cuentan que el Recorrido se puede
+exportar a PDF: conviene que la paciente firme la 2.1 en la próxima sesión. La
+app no te lo sugiere en pantalla; depende de que lo pidas vos.
 
 **Revocar**: el botón **Revocar** avisa *"Las próximas sesiones no se van a
 grabar. Lo ya grabado y sus notas se conservan."*
 
-**Sin autorización vigente no se puede grabar**: la app no deja crear la sesión.
+**Sin autorización vigente no se puede grabar** ni reanudar una grabación: la app
+no deja crear la sesión.
 
 ## Archivar
 
@@ -103,9 +117,7 @@ src/components/grabacion/ConsentimientoBadge.tsx
 src/components/grabacion/ConsentimientoForm.tsx
 src/lib/consentimiento.ts
 src/app/api/pacientes/route.ts
-src/app/api/sesion-clinica/route.ts
+src/app/api/_lib/casos-uso/audio.ts
+src/app/(dashboard)/grabar/[turnoId]/page.tsx
+src/lib/glosario.ts
 -->
-
-La promesa de cifrado durante la grabación del consentimiento 2.0 todavía no
-está implementada en el grabador actual: la copia local previa no está cifrada.
-Ver `12-camino-del-audio-y-privacidad.md`.

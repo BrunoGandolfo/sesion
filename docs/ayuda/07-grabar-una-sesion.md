@@ -3,100 +3,145 @@
 **Para qué sirve.** Grabar el audio de la sesión para que la app escriba después
 el borrador de la nota clínica.
 
-## Antes de nada: la autorización
+## Antes de nada: el turno y la autorización
 
-Si la paciente **no firmó la autorización**, la pantalla muestra **"Falta la
-autorización"** y un botón **Firmar autorización** que lleva a la ficha. No hay
-forma de grabar sin eso. Ver `04-pacientes-y-ficha.md`.
+- **Se graba siempre un turno agendado.** Si tocás **Grabar** en la cabecera de
+  la ficha y la paciente no tiene turno hoy, la app dice *"Agendá el turno para
+  grabar la sesión"* y ofrece **Ir a la agenda**. No crea un turno sola.
+- **Sin autorización vigente no se graba.** La pantalla muestra **Falta la
+  autorización** y *"Para iniciar o reanudar necesitás la autorización vigente
+  de la paciente."* El botón para grabar queda apagado. Volvé con **Volver a la
+  ficha** y firmala ahí. Ver `04-pacientes-y-ficha.md`.
 
 ## Grabar
 
 1. Entrá desde **Hoy** (**Grabar sesión**), desde el turno en la agenda, o desde
-   la ficha con el botón **Grabar** de la cabecera. Si hay turno hoy, se
-   graba ese turno; si no hay, la app **crea uno de 50 minutos, presencial, con
-   la hora de ahora** recién cuando tocás el botón (y ese turno no genera
-   recordatorio).
-2. Tocá el botón redondo verde **Grabar sesión**.
-3. La primera vez, el navegador te pide permiso para usar el micrófono.
+   la ficha con el botón **Grabar** de la cabecera.
+2. Mientras se prepara dice *"Preparando la grabación y comprobando si hay una
+   copia para recuperar…"*.
+3. Tocá **Grabar sesión**.
+4. La primera vez, el navegador te pide permiso para usar el micrófono.
+
+Arriba ves **Sesión clínica**, el nombre de la paciente y la hora del turno. El
+estado dice **Grabando** y el cronómetro cuenta el tiempo grabado. No hay medidor
+de sonido.
 
 ## Mientras grabás
 
-La pantalla muestra el tiempo de grabación y un medidor de sonido.
-Mantené la pantalla encendida y Sesión abierta. Si deja de entrar sonido,
-la app avisa a los 2 minutos y pasa a interrumpida a los 5 minutos; si la
-pantalla está oculta, el umbral de interrupción es de 1 minuto. Eso no
-garantiza que el teléfono siga capturando cuando cambiás de app.
+La app corta el audio en **tramos de un minuto**. Cada tramo **se cifra en el
+teléfono antes de guardarse** y se envía mientras seguís grabando. Mientras
+tanto dice: *"Grabando. Cada segmento se guarda cifrado y se envía mientras
+seguís."*
+
+**No bloquees la pantalla mientras grabás** y no cambies de app. Si la pantalla
+se apaga, se bloquea o pasás a otra app, **la captura se pausa en ese momento**.
+La app no mantiene la pantalla encendida por vos. Al pie lo recuerda: *"Mantené
+la pantalla encendida. Si se bloquea o se interrumpe el micrófono, el tramo
+puede quedar incompleto y habrá que reanudar."*
+
+Si intentás salir de la pantalla mientras grabás, la app pregunta antes: si
+salís, la captura se pausa y lo grabado se conserva.
 
 ### Pausar
 
-**Pausar** detiene la captura y aparece **En pausa**.
-**El cronómetro se detiene**, el tiempo en pausa no cuenta, y **Reanudar** sigue
-la captura de audio.
+**Pausar** detiene la captura y el estado pasa a **En pausa**. El cronómetro se
+detiene y el tiempo en pausa no cuenta. Para seguir, tocá **Reanudar grabación**:
+la app vuelve a comprobar la autorización y a pedir el micrófono.
 
-### Bloquear la pantalla
+### Si se corta el micrófono o se interrumpe la captura
 
-**No bloquees la pantalla mientras grabás.** La app intenta mantenerla
-encendida, pero el sistema puede suspender el micrófono o la página. Si pasa,
-volvé a Sesión y revisá su estado antes de seguir.
+Una llamada, otra app o la pantalla bloqueada interrumpen la captura. El estado
+pasa a **En pausa** y aparece: *"La captura se interrumpió. Este tramo puede estar
+incompleto; revisá el micrófono antes de reanudar."*
 
-### Si se corta el micrófono
-
-Una llamada u otra app puede interrumpir el micrófono. La pantalla ofrece
-**Reanudar** o **Terminar la sesión** con lo que haya capturado. Durante la
-interrupción no se graba. La recuperación completa no está garantizada: no
-cierres la pantalla ni borres el audio mientras intentás guardarlo.
+Lo que ya estaba guardado se conserva. El tramo que se estaba grabando en ese
+momento puede quedar incompleto. Elegí **Reanudar grabación** o **Terminar y
+enviar**. Durante la interrupción no se graba nada. La recuperación completa no
+está garantizada: lo que el teléfono no llegó a capturar no se puede recuperar.
 
 ## Terminar
 
-1. Tocá **Terminar la sesión** (el botón rojo). No hay pantalla intermedia.
-2. Aparece **Guardando…**: el grabador actual cifra el archivo al terminar
-   e intenta completar la subida.
-3. Al terminar aparece **"Te avisamos cuando la nota esté lista"**, la app vuelve
-   sola a la ficha y el turno queda marcado como **realizado**.
+1. Tocá **Terminar y enviar**. No hay pantalla intermedia.
+2. La app guarda lo pendiente y termina de enviar los tramos.
+3. Cuando el servidor tiene todo, el estado pasa a **Audio recibido**, aparece
+   *"El servidor recibió la grabación. La nota está en camino."* y el enlace
+   **Ver la sesión**. La app no vuelve sola a la ficha.
 
-El límite es de **150 minutos** de grabación, con un aviso a los **135 minutos**.
-Al alcanzar el límite, la captura se interrumpe; todavía tenés que terminar
-y guardar la sesión. No se sube ni se aprueba sola.
+En ese momento el turno queda marcado como **realizado** y su recordatorio
+pendiente se cancela.
 
-## Si la subida falla
+El límite es de **150 minutos** de grabación, con un aviso a los **135
+minutos**: *"Llevás 135 minutos. La captura se pausará al llegar a 150."* Al
+llegar al límite la captura queda pausada: *"Llegaste al límite. Elegí Terminar
+para procesar lo guardado."* Los tramos ya se enviaron, pero todavía tenés que
+terminar para que se procese. No se procesa sola.
 
-La pantalla ofrece **Reintentar** si no pudo completar el guardado. No tomes
-un mensaje de respaldo como garantía de que todo quedó guardado: mantené
-la pantalla abierta y comprobá que la subida se confirme.
+## Si el envío falla
 
-Si el navegador se cerró, al volver al mismo turno puede aparecer un pendiente
-que permite intentar recuperarlo. La recuperación puede fallar. Si hay
-audio pendiente, no empieces otra grabación del mismo turno ni lo borres
-mientras intentás recuperarlo; puede reemplazarse la copia anterior.
+La app reintenta sola, cada vez más espaciado y apenas vuelve la conexión.
+Mientras no confirma, dice: *"No pudimos confirmar el envío. La copia cifrada se
+conserva y se reintentará."* con el botón **Comprobar y reintentar envío**.
+
+Si terminaste pero el cierre no se confirmó, el estado dice **Pendiente de
+envío** y aparece **Enviar grabación pendiente**. No des por guardada una sesión
+hasta ver **Audio recibido**.
+
+## Si se cerró la app o el navegador
+
+Volvé a la pantalla de grabar de **ese mismo turno**, en el mismo teléfono. La
+app recupera lo guardado: *"Se recuperó lo guardado. El tramo que estaba en
+captura al cerrarse la app puede estar incompleto."* y *"Hay una grabación de
+este turno. Podés recuperar y enviar lo guardado o reanudarla."* Podés
+**Reanudar grabación** o **Terminar y enviar**.
+
+**Volver a grabar no reemplaza la copia anterior.** La app retoma la grabación
+que ya existe para ese turno. Si el servidor ya tiene audio de ese turno y lo
+intentás desde otro dispositivo, dice: *"Ya existe audio en el servidor para este
+turno. Volvé al dispositivo que conserva la grabación; no se reemplazó nada."*
+
+Si el servidor ya no conoce esa grabación (por ejemplo, porque eliminaste la
+sesión), aparece **Conservar copia y habilitar otra grabación**. Guarda la copia
+anterior aparte, sin borrarla, y deja grabar de nuevo ese turno.
 
 ## Qué hace la app por detrás
 
-El consentimiento 2.0 exige cifrar el audio por tramos mientras se graba.
-**Todavía no está implementado en este grabador:** la copia local previa no está cifrada.
-El grabador actual cifra el archivo al terminar, antes de subir. La captura por
-tramos cifrados y su conexión con la subida siguen pendientes de reconstrucción.
-No des por guardada una sesión hasta que la app confirme la subida completa.
-La copia local depende del almacenamiento disponible y no garantiza recuperar
-una interrupción ni lo que no llegó a capturarse.
+- Cada sesión tiene una clave propia. Los tramos se cifran en el teléfono con esa
+  clave antes de guardarse en el almacenamiento del navegador. En el teléfono no
+  queda audio sin cifrar; el tramo en curso existe sin cifrar solo en la memoria
+  mientras se graba, hasta un minuto.
+- Los tramos viajan ya cifrados, uno por uno, y el servidor comprueba que llegue
+  cada uno completo y en orden.
+- Si la misma grabación está abierta en otra pestaña, la app no deja grabar en
+  las dos: *"Esta grabación está abierta en otra pestaña"*.
+- Si abrís la pantalla de grabar en un navegador que tenía grabaciones de prueba
+  de la versión anterior, sin cifrar, la app las borra y avisa: *"Se retiraron
+  las grabaciones de prueba anteriores, que estaban sin cifrar."*
+- La copia cifrada queda guardada en el navegador aunque la nota ya esté
+  aprobada. Sin la clave, que se destruye al aprobar, no se puede abrir.
+- Si hubo una interrupción, la nota lo avisa: **Audio posiblemente incompleto**.
 
 ## Lo que NO hace
 
 - **No graba video.**
 - **No transcribe en vivo**: no ves texto mientras grabás.
-- **No graba dos sesiones a la vez**: un turno tiene una sola sesión clínica.
-- **No graba sin autorización vigente.**
+- **No graba sin turno** ni **sin autorización vigente**.
+- **No graba dos veces el mismo turno**: un turno tiene una sola sesión clínica.
+- **No sigue grabando con la pantalla bloqueada** ni en segundo plano.
 - **No te avisa al teléfono** cuando la nota está lista.
-- **No se recupera** una grabación borrada.
+- **No traduce todos los errores del micrófono**: si el navegador niega el
+  permiso, puede mostrar su propio mensaje, a veces en inglés.
 
 <!-- fuentes:
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
-src/app/(dashboard)/grabar/[turnoId]/_components/medidor-audio.tsx
-src/components/grabacion/GrabadorSesion.tsx
-src/hooks/useGrabacionSesion.ts
-src/lib/grabacion-storage.ts
-src/lib/crypto.ts
-src/app/api/sesion-clinica/route.ts
+src/hooks/useAudioGrabacion.ts
+src/lib/audio/grabadora.ts
+src/lib/audio/captura.ts
+src/lib/audio/cifrado.ts
+src/lib/audio/almacen.ts
+src/lib/audio/sincronizar.ts
+src/lib/audio/contrato.ts
+src/app/api/_lib/casos-uso/audio.ts
+src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/lib/glosario.ts
-docs/pipeline.md
 -->
