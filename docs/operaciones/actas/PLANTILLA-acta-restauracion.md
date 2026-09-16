@@ -26,16 +26,21 @@ sí / no — otros: (número; tiene que ser 0)
 
 (constraints verificadas / violaciones; tiene que ser 0)
 
-## Nota clínica descifrada y leída
+## Descifrado manual (`scripts/ensayo/ensayo-manual.sh`)
 
-El ensayo automático también descifra (con el secret `CLAVES_CIFRADO_ENSAYO`);
-este ensayo a mano lo repite con una persona mirando y con el llavero de la
-app (`CLAVES_CIFRADO`), que es el que abre la base de producción.
+Es lo único que el ensayo automático NO hace, y es el motivo de que exista
+este ensayo a mano: el automático no tiene ninguna clave clínica. Acá se corre
+el guion con el llavero completo de la época del respaldo (`CLAVES_CIFRADO`) y
+se pega su salida: descifra la nota clínica más vieja y más nueva y la versión
+del Recorrido más vieja y más nueva, y dice sí/no por cada una.
 
-- ¿Se descifró una nota? sí / no
-- Sesión: `<id>`
-- ¿Las primeras palabras del campo *subjetivo* se leen? sí / no (no se transcriben)
-- Clave usada: id `<n>` del llavero (nunca el valor)
+- Ids de clave conocidos (del llavero, nunca los valores):
+- Nota clínica más vieja descifrada y leída: sí / no — sesión `<id>`, clave `<n>`
+- Nota clínica más nueva descifrada y leída: sí / no — sesión `<id>`, clave `<n>`
+- Versión del Recorrido más vieja descifrada y leída: sí / no — versión `<id>`, clave `<n>`
+- Versión del Recorrido más nueva descifrada y leída: sí / no — versión `<id>`, clave `<n>`
+- Si alguna dijo NO: ¿el guion habló de clave ausente (falta una clave del
+  llavero) o de dato corrupto? (copiar el motivo, sin texto clínico)
 
 ## Problemas encontrados
 

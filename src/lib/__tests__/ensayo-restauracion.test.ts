@@ -2,11 +2,12 @@
 // Postgres local de test: uno bueno, uno vacío, uno corrupto, uno truncado, y
 // el bueno leído con un llavero al que se le retiró la clave de su época.
 //
-// Corre los mismos archivos que el workflow: scripts/ensayo/restaurar.sh y
-// scripts/ensayo/verificar-restauracion.mjs. Lo único simulado es `aws`, en
-// el test del paso que elige las copias. Necesita pg_dump/pg_restore/psql 17
-// (PG_BIN o el PATH) y gpg, además de DATABASE_URL_TEST (superusuario: crea
-// y borra bases ensayo_*).
+// Corre los mismos archivos que el workflow y que el ensayo manual:
+// scripts/ensayo/restaurar.sh, scripts/ensayo/verificar-restauracion.mjs y
+// scripts/ensayo/ensayo-manual.sh. Lo único simulado es `aws`, en el test del
+// paso que elige las copias. Necesita pg_dump/pg_restore/psql 17 (PG_BIN o el
+// PATH) y gpg, además de DATABASE_URL_TEST (superusuario: crea y borra bases
+// ensayo_*).
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -25,7 +26,9 @@ import { crearOrg, crearSesion, NOTA } from "./estados-fixtures";
 
 const RESTAURAR = resolve("scripts/ensayo/restaurar.sh");
 const VERIFICAR = resolve("scripts/ensayo/verificar-restauracion.mjs");
+const MANUAL = resolve("scripts/ensayo/ensayo-manual.sh");
 const WORKFLOW = resolve(".github/workflows/ensayo-restauracion.yml");
+const IDS = "CLAVES_CIFRADO_IDS";
 const PASSPHRASE = "passphrase-de-prueba";
 const bin = (nombre: string) => (process.env.PG_BIN ? join(process.env.PG_BIN, nombre) : nombre);
 
@@ -65,10 +68,10 @@ function restaurar(archivo: string, nombreBase: string) {
   });
   return { ...r, url: urlDe(nombreBase) };
 }
-function verificar(url: string, llavero: string | undefined, etiqueta: string) {
-  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, DATABASE_URL: url, BACKUP_ARCHIVO: `${etiqueta}.dump.gpg` };
+/** `claves`: { CLAVES_CIFRADO_IDS } es el modo del workflow; { CLAVES_CIFRADO } el manual. */
+function verificar(url: string, claves: Record<string, string>, etiqueta: string) {
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, DATABASE_URL: url, BACKUP_ARCHIVO: `${etiqueta}.dump.gpg`, ...claves };
   if (process.env.PG_BIN) env.PG_BIN = process.env.PG_BIN;
-  if (llavero !== undefined) env[VARIABLE_LLAVERO] = llavero;
   const r = spawnSync(process.execPath, [VERIFICAR, "--etiqueta", etiqueta, "--salida", carpeta], { encoding: "utf8", env });
   const ruta = join(carpeta, `resultado-${etiqueta}.json`);
   return { ...r, resultado: existsSync(ruta) ? JSON.parse(readFileSync(ruta, "utf8")) : null };
@@ -117,7 +120,7 @@ afterAll(async () => {
 it("un respaldo restaurado con tablas vacías hace fallar el ensayo", () => {
   const r = restaurar("vacio.dump.gpg", "ensayo_vacio");
   expect(r.status, r.stderr).toBe(0);
-  const v = verificar(r.url, `1=${K1}`, "vacio");
+  const v = verificar(r.url, { [IDS]: "1" }, "vacio");
   expect(v.status).toBe(1);
   expect(v.stderr).toContain("tabla pacientes vacía: 0 filas");
   expect(v.stderr).toContain("tabla sesiones_clinicas vacía: 0 filas");
@@ -133,39 +136,59 @@ describe("el respaldo bueno", () => {
     url = r.url;
   });
 
-  it("descifra al menos una nota clínica y una versión del Recorrido con la clave de su época", () => {
-    const v = verificar(url, `1=${K1}`, "diario");
+  it("modo workflow: pasa con solo los ids conocidos y no descifra nada", () => {
+    const v = verificar(url, { [IDS]: "1" }, "diario");
     expect(v.status, v.stderr).toBe(0);
     expect(v.resultado.ok).toBe(true);
-    const muestras = v.resultado.descifrado.muestras as { rotulo: string; tabla: string; id: string; claveId: number; ok: boolean }[];
-    expect(muestras.filter((m) => m.rotulo === "nota clínica" && m.ok && m.tabla === "sesiones_clinicas" && m.id === sesionId && m.claveId === 1).length).toBeGreaterThan(0);
-    expect(muestras.filter((m) => m.rotulo === "versión del Recorrido" && m.ok && m.tabla === "hilo_versiones" && m.id === versionId).length).toBeGreaterThan(0);
+    expect(v.resultado.descifrado.modo).toBe("ids");
+    const muestras = v.resultado.descifrado.muestras as { descifrada: boolean | null; ok: boolean; claveId: number }[];
+    expect(muestras.length).toBe(4);
+    expect(muestras.every((m) => m.descifrada === null && m.ok && m.claveId === 1)).toBe(true);
+    expect(v.stdout).toContain("sin descifrar");
     expect(v.resultado.cifrado.clavesAusentes).toEqual([]);
     expect(v.resultado.tablas.problemas).toEqual([]);
+  });
+
+  it("modo manual: descifra al menos una nota clínica y una versión del Recorrido con la clave de su época", () => {
+    const v = verificar(url, { [VARIABLE_LLAVERO]: `1=${K1}` }, "manual-ok");
+    expect(v.status, v.stderr).toBe(0);
+    expect(v.resultado.ok).toBe(true);
+    const muestras = v.resultado.descifrado.muestras as { rotulo: string; tabla: string; id: string; claveId: number; descifrada: boolean | null }[];
+    expect(muestras.filter((m) => m.rotulo === "nota clínica" && m.descifrada === true && m.tabla === "sesiones_clinicas" && m.id === sesionId && m.claveId === 1).length).toBeGreaterThan(0);
+    expect(muestras.filter((m) => m.rotulo === "versión del Recorrido" && m.descifrada === true && m.tabla === "hilo_versiones" && m.id === versionId).length).toBeGreaterThan(0);
     // Nada clínico sale del script: ni en el log ni en el resultado.
     expect(v.stdout + v.stderr + JSON.stringify(v.resultado)).not.toContain("Solo debe existir cifrado");
     expect(JSON.stringify(v.resultado)).not.toContain('"subjetivo"');
   });
 
-  it("falla si no puede descifrar: sin llavero no hay ensayo", () => {
-    const v = verificar(url, undefined, "sin-llavero");
+  it("sin ids conocidos ni llavero no hay ensayo", () => {
+    const v = verificar(url, {}, "sin-nada");
     expect(v.status).toBe(1);
-    expect(v.stderr).toContain("falta CLAVES_CIFRADO");
+    expect(v.stderr).toContain(`falta ${IDS}`);
     expect(v.resultado).toBeNull();
   });
 
-  it("si falta la clave de esa época lo dice así, y no como corrupción", () => {
-    const v = verificar(url, `2=${K2}`, "mensual");
+  it("modo workflow: un dato cifrado con una clave desconocida lo hace fallar, y no como corrupción", () => {
+    const v = verificar(url, { [IDS]: "2" }, "mensual");
     expect(v.status).toBe(1);
-    expect(v.stderr).toContain("falta la clave 1 en el llavero del ensayo");
-    expect(v.stderr).toContain("agregar la clave 1 a CLAVES_CIFRADO_ENSAYO");
+    expect(v.stderr).toContain(`hay datos cifrados con la clave 1, que no figura en ${IDS}`);
+    expect(v.stderr).toContain("clave retirada o desconocida");
+    expect(v.stderr).not.toContain("dato corrupto");
+    expect(v.resultado.cifrado.clavesAusentes).toEqual([1]);
+    expect(v.resultado.descifrado.muestras.every((m: { ok: boolean; descifrada: null }) => !m.ok && m.descifrada === null)).toBe(true);
+  });
+
+  it("modo manual: si falta la clave de esa época lo dice así, y no como corrupción", () => {
+    const v = verificar(url, { [VARIABLE_LLAVERO]: `2=${K2}` }, "sin-clave");
+    expect(v.status).toBe(1);
+    expect(v.stderr).toContain("falta la clave 1 en el llavero");
     expect(v.stderr).not.toContain("dato corrupto");
     expect(v.resultado.cifrado.clavesAusentes).toEqual([1]);
     expect(v.resultado.descifrado.muestras.every((m: { codigo: string }) => m.codigo === "clave_ausente")).toBe(true);
   });
 
-  it("con la clave equivocada bajo el mismo id no habla de clave ausente", () => {
-    const v = verificar(url, `1=${K3}`, "equivocada");
+  it("modo manual: con la clave equivocada bajo el mismo id no habla de clave ausente", () => {
+    const v = verificar(url, { [VARIABLE_LLAVERO]: `1=${K3}` }, "equivocada");
     expect(v.status).toBe(1);
     expect(v.stderr).toContain("no descifra con la clave 1");
     expect(v.stderr).not.toContain("falta la clave");
@@ -173,12 +196,34 @@ describe("el respaldo bueno", () => {
   });
 });
 
+it("el guion manual restaura, descifra y verifica en una base local", () => {
+  basesCreadas.push("ensayo_manual");
+  const r = spawnSync("bash", [MANUAL, join(carpeta, "bueno.dump.gpg")], {
+    cwd: carpeta, encoding: "utf8",
+    env: { NODE_ENV: "test", PATH: process.env.PATH, PG_BIN: process.env.PG_BIN ?? "", DATABASE_URL: urlDeBaseDeTest(), BACKUP_ENCRYPTION_KEY: PASSPHRASE, [VARIABLE_LLAVERO]: `1=${K1}`, GNUPGHOME: join(carpeta, "gnupg") },
+  });
+  expect(r.status, r.stderr).toBe(0);
+  expect(r.stdout).toContain("descifrada y leída");
+  expect(r.stdout).toContain("restauración verificada: OK");
+  const resultado = JSON.parse(readFileSync(join(carpeta, "resultado-manual.json"), "utf8"));
+  expect(resultado.ok).toBe(true);
+  expect(resultado.descifrado.modo).toBe("llavero");
+  expect(resultado.descifrado.muestras.every((m: { descifrada: boolean }) => m.descifrada === true)).toBe(true);
+  // Se niega a restaurar sobre un servidor que no sea local.
+  const remoto = spawnSync("bash", [MANUAL, join(carpeta, "bueno.dump.gpg")], {
+    cwd: carpeta, encoding: "utf8",
+    env: { NODE_ENV: "test", PATH: process.env.PATH, DATABASE_URL: "postgresql://u:p@ep-algo.neon.tech/neondb", BACKUP_ENCRYPTION_KEY: PASSPHRASE, [VARIABLE_LLAVERO]: `1=${K1}` },
+  });
+  expect(remoto.status).toBe(1);
+  expect(remoto.stderr).toContain("solo restaura en una base local");
+});
+
 it("una nota alterada en la copia hace fallar el ensayo como corrupción", () => {
   const r = restaurar("bueno.dump.gpg", "ensayo_alterado");
   expect(r.status, r.stderr).toBe(0);
   // Se cambia el último byte del ciphertext: el prefijo y el id de clave quedan intactos.
   psql(r.url, `UPDATE sesiones_clinicas SET nota_final_encrypted = overlay(nota_final_encrypted PLACING '\\x00'::bytea FROM length(nota_final_encrypted)) WHERE id = '${sesionId}'`);
-  const v = verificar(r.url, `1=${K1}`, "alterado");
+  const v = verificar(r.url, { [VARIABLE_LLAVERO]: `1=${K1}` }, "alterado");
   expect(v.status).toBe(1);
   expect(v.stderr).toContain(`(sesiones_clinicas.nota_final_encrypted ${sesionId}): no descifra con la clave 1: dato corrupto`);
   expect(v.stderr).not.toContain("falta la clave");
@@ -198,7 +243,7 @@ describe("un archivo corrupto o truncado hace fallar el ensayo", () => {
   });
 });
 
-describe("el workflow prueba también una copia mensual", () => {
+describe("el workflow prueba también una copia mensual y no pide ninguna clave clínica", () => {
   type Paso = { name?: string; run?: string; if?: string; env?: Record<string, string> };
   const { load } = createRequire(import.meta.url)("js-yaml") as { load: (s: string) => { jobs: { ensayo: { steps: Paso[] } } } };
   const pasos = load(readFileSync(WORKFLOW, "utf8")).jobs.ensayo.steps;
@@ -244,6 +289,13 @@ describe("el workflow prueba también una copia mensual", () => {
     const mensual = paso("Restaurar y verificar la copia mensual");
     expect(mensual.run).toContain("--etiqueta mensual");
     expect(mensual.if).toContain("!cancelled()");
-    expect(paso("Verificar secrets").run).toContain("CLAVES_CIFRADO_ENSAYO");
+    expect(paso("Verificar secrets").run).toContain(IDS);
+  });
+  it("no recibe ninguna clave clínica: solo ids, y solo los secrets del respaldo y del aviso", () => {
+    const texto = readFileSync(WORKFLOW, "utf8");
+    const secrets = new Set([...texto.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]));
+    expect([...secrets].sort()).toEqual(["ALERTA_CORREO", "BACKUP_ENCRYPTION_KEY", "GITHUB_TOKEN", "R2_ACCESS_KEY_ID", "R2_BUCKET", "R2_ENDPOINT", "R2_SECRET_ACCESS_KEY", "RESEND_API_KEY"]);
+    expect(texto).not.toMatch(/^\s+CLAVES_CIFRADO:/m);
+    expect(texto).toContain(`${IDS}: \${{ vars.${IDS} }}`);
   });
 });

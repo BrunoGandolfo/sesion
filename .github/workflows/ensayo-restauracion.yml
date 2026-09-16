@@ -13,23 +13,30 @@
 #   2. baja cada copia de R2 y la descifra con BACKUP_ENCRYPTION_KEY, la
 #      restaura con pg_restore --exit-on-error (scripts/ensayo/restaurar.sh);
 #   3. corre scripts/ensayo/verificar-restauracion.mjs: filas mínimas por
-#      tabla (una base vacía falla), blobs ENC2 con su id de clave, DESCIFRA
-#      la nota clínica y la versión del Recorrido más vieja y más nueva con
-#      el llavero del ensayo, y cuenta filas huérfanas por clave foránea;
+#      tabla (una base vacía falla), blobs ENC2 y censo del id de clave de
+#      cada uno contra la lista de ids conocidos (un id que no está = datos
+#      cifrados con una clave retirada o desconocida, y el ensayo falla
+#      diciéndolo así, no como corrupción), filas huérfanas por clave foránea;
 #   4. publica resultado-diario.json y resultado-mensual.json como artefacto
-#      y abre un issue con el acta (sin texto clínico: ids y sí/no);
+#      y abre un issue con el acta;
 #   5. alerta por correo si cualquier paso falla.
 #
-# Si una copia no descifra porque su clave ya no está en el llavero, el acta
-# lo dice como CLAVE AUSENTE (y qué id agregar), no como corrupción.
+# DECISIÓN DELIBERADA: este ensayo NO descifra ninguna nota y no recibe
+# ninguna clave clínica. Hacerlo exigiría el llavero en GitHub Actions, es
+# decir, la clave de todo el histórico en un lugar más. El censo de ids no
+# necesita la clave y detecta lo que importa: si hay datos que ningún
+# llavero conocido abre. Lo que prueba la clave es el ensayo A MANO
+# trimestral del dueño (scripts/ensayo/ensayo-manual.sh, docs/operaciones.md
+# §4), que deja su acta en docs/operaciones/actas/ y que
+# scripts/ci/acta-vigente.mjs reclama a los 100 días.
 #
 # Secrets: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT,
 # BACKUP_ENCRYPTION_KEY, RESEND_API_KEY, ALERTA_CORREO (los mismos de
-# backup.yml), y CLAVES_CIFRADO_ENSAYO: el llavero clínico con el formato de
-# CLAVES_CIFRADO ("1=<base64>,2=…") y TODAS las claves con que alguna vez se
-# cifró, incluidas las que la app retiró después de re-cifrar. Es una copia
-# más de la clave, a sabiendas: sin ella el ensayo solo probaría que los
-# bytes vuelven, no que se leen. GITHUB_TOKEN para el issue.
+# backup.yml). GITHUB_TOKEN para el issue.
+# Variable (Settings → Variables, no es secreta): CLAVES_CIFRADO_IDS="1,2":
+# los ids de TODAS las claves que existen guardadas (la del llavero de la app
+# y las retiradas que el dueño conserva para los respaldos). Solo ids, nunca
+# valores.
 # ============================================================================
 
 name: Ensayo de restauración
@@ -70,7 +77,7 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
-      CLAVES_CIFRADO: ${{ secrets.CLAVES_CIFRADO_ENSAYO }}
+      CLAVES_CIFRADO_IDS: ${{ vars.CLAVES_CIFRADO_IDS }}
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
       PG_URL: postgresql://postgres:postgres@localhost:5432
@@ -86,9 +93,9 @@ jobs:
           for v in R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_ENDPOINT BACKUP_ENCRYPTION_KEY RESEND_API_KEY ALERTA_CORREO; do
             if [ -z "${!v:-}" ]; then faltan="${faltan} ${v}"; fi
           done
-          # El llavero llega como CLAVES_CIFRADO; el secret se llama CLAVES_CIFRADO_ENSAYO.
-          if [ -z "${CLAVES_CIFRADO:-}" ]; then faltan="${faltan} CLAVES_CIFRADO_ENSAYO"; fi
-          if [ -n "${faltan}" ]; then echo "ERROR: faltan secrets:${faltan}" >&2; exit 1; fi
+          # Variable, no secret: solo ids de clave. Sin ella el censo no puede juzgar.
+          if [ -z "${CLAVES_CIFRADO_IDS:-}" ]; then faltan="${faltan} CLAVES_CIFRADO_IDS(variable)"; fi
+          if [ -n "${faltan}" ]; then echo "ERROR: faltan secrets o variables:${faltan}" >&2; exit 1; fi
 
       - name: Instalar postgresql-client-17
         run: |
@@ -211,7 +218,7 @@ jobs:
         with:
           asunto: "El ensayo de restauración falló"
           texto: |
-            Alguna de las dos copias (diaria ${{ env.BACKUP_DIARIO }}, mensual ${{ env.BACKUP_MENSUAL }}) no se pudo restaurar, no tiene datos o su contenido clínico no se descifra.
-            El acta del issue dice cuál y por qué; si dice "clave ausente", falta una clave en CLAVES_CIFRADO_ENSAYO, no es corrupción.
+            Alguna de las dos copias (diaria ${{ env.BACKUP_DIARIO }}, mensual ${{ env.BACKUP_MENSUAL }}) no se pudo restaurar, no tiene datos o tiene datos cifrados con una clave que no figura en CLAVES_CIFRADO_IDS.
+            El acta del issue dice cuál y por qué; "clave retirada o desconocida" no es corrupción: es que ningún llavero conocido la abre.
             Hasta que se arregle, no hay una restauración probada.
             Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

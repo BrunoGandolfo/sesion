@@ -2,22 +2,28 @@
 //
 // Lo corre .github/workflows/ensayo-restauracion.yml contra un Postgres
 // efímero recién restaurado por scripts/ensayo/restaurar.sh (DATABASE_URL),
-// una vez por copia (diaria y mensual). Cuatro comprobaciones:
+// una vez por copia (diaria y mensual), y scripts/ensayo/ensayo-manual.sh en
+// la máquina del dueño. Comprobaciones:
 //
 //   1. Filas por tabla. La lista de tablas sale de prisma/schema.prisma (cada
 //      `@@map` de un model). Las tablas de MINIMOS tienen que tener al menos
 //      esa cantidad de filas: una base restaurada sin pacientes ni sesiones
 //      no es una restauración, es una base vacía con el esquema puesto.
 //   2. Cifrado en reposo. Toda columna *_encrypted no nula tiene que ser un
-//      blob ENC2, y el id de clave de cada blob (byte 4) tiene que estar en
-//      el llavero del ensayo. Un id ausente es LA señal de "esta copia es de
-//      una época cuya clave se retiró": se informa como clave ausente, no
-//      como corrupción, y se dice qué clave hay que agregar.
-//   3. Descifrado. Se descifran de verdad, con AES-256-GCM y el AAD de su
-//      celda, la nota clínica más vieja y la más nueva (nota_final o, si no
-//      hay ninguna aprobada, nota_ia) y la versión del Recorrido más vieja y
-//      la más nueva, y se comprueba que lo descifrado es el JSON esperado.
-//      Nada del texto se imprime ni se guarda: solo ids y sí/no.
+//      blob ENC2, y el id de clave de cada blob (byte 4) tiene que estar
+//      entre los ids CONOCIDOS. Un id que no está es LA señal de "hay datos
+//      cifrados con una clave retirada o desconocida, y ningún llavero la
+//      abre": se informa así, no como corrupción. Esto no necesita ninguna
+//      clave: solo la lista de ids, que no es secreta.
+//   3. Muestras: la nota clínica más vieja y la más nueva (nota_final o, si
+//      no hay ninguna aprobada, nota_ia) y la versión del Recorrido más vieja
+//      y la más nueva. Si no hay ninguna, falla: no hay nada que leer.
+//      - Ensayo AUTOMÁTICO (CLAVES_CIFRADO_IDS): no se descifra nada. La
+//        clave clínica no vive en GitHub Actions, a propósito.
+//      - Ensayo MANUAL (CLAVES_CIFRADO, en la máquina del dueño): se
+//        descifran de verdad, con AES-256-GCM y el AAD de su celda, y se
+//        comprueba que lo descifrado es el JSON esperado. Nada del texto se
+//        imprime ni se guarda: solo ids y sí/no.
 //   4. Integridad referencial. Para cada clave foránea se cuentan las filas
 //      hijas sin padre. pg_restore ya fallaría, pero deja el número en el acta.
 //
@@ -27,10 +33,11 @@
 // Con --acta arma el texto del issue a partir de los resultado-*.json y de
 // los argumentos; no toca la base.
 //
-// Llavero: CLAVES_CIFRADO con el mismo formato que la app ("1=<base64>,2=…").
-// En el workflow sale del secret CLAVES_CIFRADO_ENSAYO, que tiene que tener
-// TODAS las claves con que alguna vez se cifró, también las que la app ya
-// retiró: una copia mensual de hace once meses puede necesitarlas.
+// Entorno (uno de los dos; si están ambos manda el llavero):
+//   CLAVES_CIFRADO_IDS="1,2"   ids de TODAS las claves que existen guardadas
+//                              (la del llavero de la app y las retiradas que
+//                              el dueño conserva para los respaldos).
+//   CLAVES_CIFRADO="1=<base64>,2=…"  el llavero completo, formato de la app.
 //
 // Usa `psql` (PSQL, o PG_BIN/psql, o el del PATH) y no Prisma: así el ensayo
 // no depende de `npm ci` ni del cliente generado, y corre contra cualquier base.
@@ -44,7 +51,7 @@ import { fileURLToPath } from "node:url";
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PSQL = process.env.PSQL ?? (process.env.PG_BIN ? join(process.env.PG_BIN, "psql") : "psql");
 const VARIABLE_LLAVERO = "CLAVES_CIFRADO";
-const SECRET_LLAVERO = "CLAVES_CIFRADO_ENSAYO";
+const VARIABLE_IDS = "CLAVES_CIFRADO_IDS";
 
 /** Filas mínimas por tabla. Una copia con menos no sirve para volver a
  *  atender: no hay a quién ni qué. */
@@ -121,11 +128,6 @@ function tablasDelSchema() {
 
 /** Mismas reglas que src/lib/llavero.ts. Devuelve Map<id, Buffer>. */
 function parsearLlavero(texto) {
-  if (typeof texto !== "string" || texto.trim() === "") {
-    throw new Error(
-      `falta ${VARIABLE_LLAVERO} (en el workflow, el secret ${SECRET_LLAVERO}): sin llavero el ensayo no puede demostrar que el contenido clínico se lee.`,
-    );
-  }
   const claves = new Map();
   for (const cruda of texto.split(",")) {
     const entrada = cruda.trim();
@@ -146,6 +148,19 @@ function parsearLlavero(texto) {
   return claves;
 }
 
+/** "1,2" → Set de ids. Solo ids: acá no hay ningún valor de clave. */
+function parsearIds(texto) {
+  const ids = new Set();
+  for (const cruda of texto.split(",")) {
+    const e = cruda.trim();
+    if (e === "") continue;
+    if (!/^\d+$/.test(e) || Number(e) < 1 || Number(e) > 255) throw new Error(`${VARIABLE_IDS}: id "${e}" fuera de rango (1..255)`);
+    ids.add(Number(e));
+  }
+  if (ids.size === 0) throw new Error(`${VARIABLE_IDS}: no tiene ningún id`);
+  return ids;
+}
+
 class ErrorDescifrado extends Error {
   constructor(codigo, mensaje) {
     super(mensaje);
@@ -153,9 +168,13 @@ class ErrorDescifrado extends Error {
   }
 }
 
-const mensajeClaveAusente = (id) =>
-  `falta la clave ${id} en el llavero del ensayo: el dato es de una época cuya clave ya no está. ` +
-  `No es corrupción: agregar la clave ${id} a ${SECRET_LLAVERO} y repetir el ensayo.`;
+/** Depende de con qué se corre: con el llavero (manual) o solo con ids (automático). */
+const mensajeClaveAusente = (id, modo) =>
+  modo === "llavero"
+    ? `falta la clave ${id} en el llavero (${VARIABLE_LLAVERO}): el dato es de una época cuya clave ya no está. ` +
+      `No es corrupción: agregar la clave ${id} al llavero y repetir.`
+    : `hay datos cifrados con la clave ${id}, que no figura en ${VARIABLE_IDS}: es una clave retirada o desconocida y ningún llavero conocido la abre. ` +
+      `No es corrupción: si la clave ${id} existe guardada aparte, agregar su id a ${VARIABLE_IDS}; si no existe, esos datos no se pueden recuperar.`;
 
 function descifrar(blob, aad, llavero) {
   if (blob.length < POS_CT || !blob.subarray(0, 4).equals(MAGIC)) {
@@ -163,7 +182,7 @@ function descifrar(blob, aad, llavero) {
   }
   const id = blob[POS_ID];
   const clave = llavero.get(id);
-  if (!clave) throw new ErrorDescifrado("clave_ausente", mensajeClaveAusente(id));
+  if (!clave) throw new ErrorDescifrado("clave_ausente", mensajeClaveAusente(id, "llavero"));
   const decipher = createDecipheriv("aes-256-gcm", clave, blob.subarray(POS_IV, POS_TAG), { authTagLength: 16 });
   decipher.setAAD(Buffer.from(aad, "utf8"));
   decipher.setAuthTag(blob.subarray(POS_TAG, POS_CT));
@@ -200,7 +219,7 @@ function contarFilas(tablas) {
 
 // ─── 2. Cifrado en reposo: prefijo e ids de clave ───────────────────────────
 
-function verificarCifrado(llavero) {
+function verificarCifrado(idsConocidos, modo) {
   const columnas = sql(
     `SELECT table_name || '.' || column_name FROM information_schema.columns
      WHERE table_schema = 'public' AND column_name LIKE '%\\_encrypted' AND data_type = 'bytea'
@@ -231,9 +250,9 @@ function verificarCifrado(llavero) {
     if (Number(malos) > 0) problemas.push(`${col}: ${malos} valor(es) sin prefijo ENC2: dato corrupto o sin cifrar`);
     for (const [id, n] of Object.entries(porClaveCol)) {
       porClave[id] = (porClave[id] ?? 0) + n;
-      if (!llavero.has(Number(id))) {
+      if (!idsConocidos.has(Number(id))) {
         clavesAusentes.add(Number(id));
-        problemas.push(`${col}: ${n} valor(es) cifrados con la clave ${id}; ${mensajeClaveAusente(id)}`);
+        problemas.push(`${col}: ${n} valor(es): ${mensajeClaveAusente(id, modo)}`);
       }
     }
   }
@@ -241,9 +260,9 @@ function verificarCifrado(llavero) {
   return { columnas: columnas.length, porClave, otros, clavesAusentes: [...clavesAusentes].sort(), detalle, problemas };
 }
 
-// ─── 3. Descifrado de muestras ──────────────────────────────────────────────
+// ─── 3. Muestras: elegir siempre, descifrar solo con llavero ──────────────────────────────────────────────
 
-function descifrarMuestras(llavero) {
+function elegirMuestras(llavero, idsConocidos) {
   const muestras = [];
   const problemas = [];
 
@@ -268,8 +287,15 @@ function descifrarMuestras(llavero) {
         id,
         cual: orden === "ASC" ? "más vieja" : "más nueva",
         claveId: blob.length > POS_ID && blob.subarray(0, 4).equals(MAGIC) ? blob[POS_ID] : null,
+        /** true/false si se intentó descifrar; null en el ensayo automático. */
+        descifrada: null,
         ok: false,
       };
+      muestra.ok = muestra.claveId !== null && idsConocidos.has(muestra.claveId);
+      if (!llavero) {
+        muestras.push(muestra);
+        continue;
+      }
       try {
         const texto = descifrar(blob, `${def.tabla}:${columna}:${id}`, llavero);
         let valor;
@@ -279,9 +305,12 @@ function descifrarMuestras(llavero) {
           throw new ErrorDescifrado("contenido", "descifra, pero el texto no es JSON");
         }
         if (!def.valida(valor)) throw new ErrorDescifrado("contenido", "descifra, pero el JSON no tiene la forma esperada");
+        muestra.descifrada = true;
         muestra.ok = true;
       } catch (error) {
         if (!(error instanceof ErrorDescifrado)) throw error;
+        muestra.descifrada = false;
+        muestra.ok = false;
         muestra.codigo = error.codigo;
         muestra.error = error.message;
         problemas.push(`${def.rotulo} ${muestra.cual} (${def.tabla}.${columna} ${id}): ${error.message}`);
@@ -289,7 +318,7 @@ function descifrarMuestras(llavero) {
       muestras.push(muestra);
     }
   }
-  return { llavero: [...llavero.keys()].sort((a, b) => a - b), muestras, problemas };
+  return { modo: llavero ? "llavero" : "ids", idsConocidos: [...idsConocidos].sort((a, b) => a - b), muestras, problemas };
 }
 
 // ─── 4. Claves foráneas ─────────────────────────────────────────────────────
@@ -348,12 +377,16 @@ function seccionCopia(etiqueta, archivo) {
     "",
     `- **Cifrado:** ${r.cifrado.columnas} columnas \`*_encrypted\`; blobs por clave: ${claves}; sin prefijo ENC2: ${r.cifrado.otros}` +
       (r.cifrado.clavesAusentes.length ? `; **claves que faltan en el llavero: ${r.cifrado.clavesAusentes.join(", ")}**` : ""),
-    `- **Llavero del ensayo:** ids ${r.descifrado.llavero.join(", ")} (nunca los valores)`,
+    `- **Ids de clave conocidos (${r.descifrado.modo === "llavero" ? "del llavero" : VARIABLE_IDS}):** ${r.descifrado.idsConocidos.join(", ")} (nunca los valores)`,
   );
   for (const m of r.descifrado.muestras) {
-    lineas.push(
-      `- **${m.rotulo[0].toUpperCase()}${m.rotulo.slice(1)} ${m.cual} descifrada y leída:** ${m.ok ? "sí" : "NO"} (${m.tabla} \`${m.id}\`, clave ${m.claveId ?? "?"}${m.ok ? "" : `; ${m.codigo}: ${m.error}`})`,
-    );
+    const nombre = `${m.rotulo[0].toUpperCase()}${m.rotulo.slice(1)} ${m.cual}`;
+    const donde = `${m.tabla} \`${m.id}\`, clave ${m.claveId ?? "?"}`;
+    if (m.descifrada === null) {
+      lineas.push(`- **${nombre}:** ${donde}; clave ${m.ok ? "conocida" : "DESCONOCIDA"}. No se descifra en el ensayo automático: lo hace el trimestral a mano.`);
+    } else {
+      lineas.push(`- **${nombre} descifrada y leída:** ${m.descifrada ? "sí" : "NO"} (${donde}${m.descifrada ? "" : `; ${m.codigo}: ${m.error}`})`);
+    }
   }
   lineas.push(`- **Claves foráneas:** ${r.fk.constraints} verificadas, ${r.fk.violaciones} violaciones`, "");
   lineas.push("**Problemas:**", "", ...(r.problemas.length ? r.problemas.map((p) => `- ${p}`) : ["Ninguno."]), "");
@@ -372,8 +405,9 @@ function armarActa() {
     "",
     ...seccionCopia("diario", flag("--diario")),
     ...seccionCopia("mensual", flag("--mensual")),
-    "Este ensayo descifra una nota clínica y una versión del Recorrido con el llavero del secret " +
-      `${SECRET_LLAVERO}. El ensayo A MANO trimestral (docs/operaciones.md §4) sigue siendo obligatorio y deja su acta en docs/operaciones/actas/.`,
+    "Este ensayo NO descifra nada: la clave clínica no está en GitHub Actions, a propósito. Prueba que la copia se " +
+      "restaura, tiene datos y que todo lo cifrado usa claves conocidas. Leer una nota y una versión del Recorrido con el " +
+      "llavero es el ensayo A MANO trimestral (scripts/ensayo/ensayo-manual.sh, docs/operaciones.md §4), con acta en docs/operaciones/actas/.",
     "",
     "### Próximo ensayo automático: el día 1 del mes que viene.",
     "",
@@ -382,9 +416,19 @@ function armarActa() {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-let llavero;
+let llavero = null;
+let idsConocidos;
 try {
-  llavero = parsearLlavero(process.env[VARIABLE_LLAVERO]);
+  if (process.env[VARIABLE_LLAVERO]?.trim()) {
+    llavero = parsearLlavero(process.env[VARIABLE_LLAVERO]);
+    idsConocidos = new Set(llavero.keys());
+  } else if (process.env[VARIABLE_IDS]?.trim()) {
+    idsConocidos = parsearIds(process.env[VARIABLE_IDS]);
+  } else {
+    throw new Error(
+      `falta ${VARIABLE_IDS} (ensayo automático: ids de las claves conocidas, sin valores) o ${VARIABLE_LLAVERO} (ensayo manual: el llavero, que además descifra).`,
+    );
+  }
 } catch (error) {
   console.error(error.message);
   process.exit(1);
@@ -397,8 +441,8 @@ if (tablas.length === 0) {
 }
 
 const filas = contarFilas(tablas);
-const cifrado = verificarCifrado(llavero);
-const descifrado = descifrarMuestras(llavero);
+const cifrado = verificarCifrado(idsConocidos, llavero ? "llavero" : "ids");
+const descifrado = elegirMuestras(llavero, idsConocidos);
 const fk = verificarClavesForaneas();
 const problemas = [...filas.problemas, ...cifrado.problemas, ...descifrado.problemas, ...fk.problemas];
 
@@ -418,10 +462,16 @@ writeFileSync(join(SALIDA, `resultado-${ETIQUETA}.json`), JSON.stringify(resulta
 
 console.log(
   `[${ETIQUETA}] tablas: ${tablas.length}; columnas cifradas: ${cifrado.columnas} (por clave ${JSON.stringify(cifrado.porClave)}, sin ENC2 ${cifrado.otros}); ` +
-    `muestras descifradas: ${descifrado.muestras.filter((m) => m.ok).length}/${descifrado.muestras.length}; FK: ${fk.constraints}, violaciones ${fk.violaciones}`,
+    (llavero
+      ? `muestras descifradas: ${descifrado.muestras.filter((m) => m.descifrada).length}/${descifrado.muestras.length}`
+      : `muestras con clave conocida: ${descifrado.muestras.filter((m) => m.ok).length}/${descifrado.muestras.length} (sin descifrar)`) +
+    `; FK: ${fk.constraints}, violaciones ${fk.violaciones}`,
 );
 for (const [t, n] of Object.entries(filas.conteos)) console.log(`  ${t}: ${n ?? "NO EXISTE"}`);
-for (const m of descifrado.muestras) console.log(`  ${m.rotulo} ${m.cual} (${m.tabla} ${m.id}, clave ${m.claveId ?? "?"}): ${m.ok ? "descifrada y leída" : m.codigo}`);
+for (const m of descifrado.muestras) {
+  const estado = m.descifrada === null ? (m.ok ? "clave conocida, sin descifrar" : "clave DESCONOCIDA") : m.descifrada ? "descifrada y leída" : m.codigo;
+  console.log(`  ${m.rotulo} ${m.cual} (${m.tabla} ${m.id}, clave ${m.claveId ?? "?"}): ${estado}`);
+}
 
 if (problemas.length > 0) {
   console.error("\nProblemas:");
