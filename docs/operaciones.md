@@ -146,30 +146,62 @@ no elimina esa copia. Para restaurar hacen falta la passphrase del backup y
 todas las claves ENC2 usadas por ese dump: conservarlas hasta que no quede
 ninguna copia que las necesite, incluidas mensuales y copias retenidas por fallos.
 
-Restaurar siempre primero en una base aislada y vacía:
+Restaurar siempre primero en una base aislada y vacía. El ensayo a mano
+trimestral es exactamente esto, en la máquina del dueño y con su llavero:
 
-1. Descargar el backup elegido de R2 usando el endpoint y credenciales del
-   entorno de backups.
-2. Descifrar el archivo gpg sin publicar la passphrase; verificar el índice
-   del dump con pg_restore.
-3. Restaurar con pg_restore de Postgres 17, sin owner ni privilegios, con
-   exit-on-error y conexión directa a la base de destino.
-4. Ejecutar `scripts/ensayo/verificar-restauracion.mjs` contra esa base:
-   cantidades, columnas cifradas y claves foráneas.
-5. Probar además el descifrado de una nota con el llavero correspondiente.
-   El ensayo automático no hace este paso.
-6. Sólo después decidir si se reemplaza la conexión de la app. Los efectos
+1. Descargar el respaldo elegido de R2 (conviene alternar: una vez la diaria
+   más reciente, otra la mensual más vieja):
+
+   ```
+   aws s3 cp "s3://$R2_BUCKET/backups/mensuales/<archivo>.dump.gpg" . --endpoint-url "$R2_ENDPOINT"
+   ```
+
+2. Cargar la passphrase del respaldo y el llavero completo de la época (todas
+   las claves ENC2 que alguna vez cifraron, incluidas las que la app retiró)
+   sin dejarlos en el historial de la terminal, y correr el guion:
+
+   ```
+   read -rs BACKUP_ENCRYPTION_KEY && export BACKUP_ENCRYPTION_KEY
+   read -rs CLAVES_CIFRADO && export CLAVES_CIFRADO
+   scripts/ensayo/ensayo-manual.sh ./<archivo>.dump.gpg
+   ```
+
+   `scripts/ensayo/ensayo-manual.sh` levanta un Postgres 17 efímero en Docker
+   (o usa `DATABASE_URL` si apunta a un servidor local), descifra el archivo,
+   verifica el índice, restaura con `pg_restore --exit-on-error`
+   (`scripts/ensayo/restaurar.sh`) y corre
+   `scripts/ensayo/verificar-restauracion.mjs`: filas mínimas por tabla, blobs
+   ENC2 con su id de clave, descifrado real de la nota clínica y de la versión
+   del Recorrido más vieja y más nueva, y claves foráneas. Deja
+   `resultado-manual.json`. Si dice "falta la clave N en el llavero", el
+   respaldo no está corrupto: es de una época cuya clave se retiró, y hay que
+   agregarla al llavero y repetir.
+3. Copiar la salida al acta (`docs/operaciones/actas/`, plantilla al lado),
+   sin texto clínico: ids y sí/no.
+4. Sólo después decidir si se reemplaza la conexión de la app. Los efectos
    externos pendientes del dump también requieren revisión antes de activar
    crons y worker contra la base restaurada.
 
-`.github/workflows/ensayo-restauracion.yml` restaura mensualmente el último
-backup diario en un Postgres efímero y publica el resultado. No valida el
-llavero clínico. El ensayo manual trimestral deja acta en
+`.github/workflows/ensayo-restauracion.yml` hace lo mismo el día 1 de cada
+mes, con dos copias (la diaria más reciente y la mensual más vieja) y SIN
+descifrar: no recibe ninguna clave clínica, a propósito, para no tener el
+llavero en GitHub Actions. En su lugar censa el id de clave de cada blob
+contra la variable `CLAVES_CIFRADO_IDS` (Settings → Variables; solo ids, por
+ejemplo `1,2`: la clave del llavero de la app más las retiradas que se
+conservan para los respaldos). Un id que no figura hace fallar el ensayo
+avisando que hay datos cifrados con una clave retirada o desconocida, que no
+es corrupción. Sin esa variable, el workflow falla antes de bajar nada.
+`src/lib/__tests__/ensayo-restauracion.test.ts` ejerce los dos guiones con
+respaldos generados contra la base de test: bueno, vacío, corrupto, truncado y
+uno leído con un llavero al que se le retiró la clave.
+
+El ensayo manual trimestral deja acta en
 `docs/operaciones/actas/`; `scripts/ci/acta-vigente.mjs` exige un acta
 con antigüedad máxima de cien días cuando ya existe alguna. Mientras no
 haya ninguna, sólo advierte hasta el 20 de diciembre de 2026 y luego falla.
 En esta base no hay un acta: un verde hoy no acredita restauración ni
-descifrado de una nota. La existencia del workflow tampoco prueba una corrida.
+descifrado de una nota. La existencia del workflow tampoco prueba una corrida:
+al 15 de septiembre de 2026 el ensayo automático nunca se ejecutó.
 
 ## 5. Incidentes y límites conocidos
 

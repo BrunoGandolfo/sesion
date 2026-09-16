@@ -2,8 +2,10 @@
 //
 // Un backup que nunca se restauró no es un backup, es una esperanza. El
 // ensayo automático mensual (.github/workflows/ensayo-restauracion.yml)
-// prueba que el dump se restaura y sigue cifrado; el ensayo A MANO,
-// trimestral, prueba que la clave todavía abre una nota, y deja un acta en
+// prueba que el dump se restaura, tiene datos y que todo lo cifrado usa
+// claves conocidas, sin tener ninguna clave; el ensayo A MANO, trimestral,
+// (scripts/ensayo/ensayo-manual.sh) es el que descifra una nota y una
+// versión del Recorrido con el llavero del dueño, y deja un acta en
 // docs/operaciones/actas/AAAA-MM-DD-<lo que sea>.md (la plantilla está al
 // lado). Este guardián falla si el acta más reciente tiene más de MAX_DIAS:
 // es la única forma de que "se repite en calendario" no dependa de que
