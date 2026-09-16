@@ -35,7 +35,7 @@ export function FlagsRiesgoTimeline({ riesgos }: { riesgos: RiesgoProgreso[] }) 
 
   return (
     <section className="rounded-lg border border-terracotta-100 bg-terracotta-50/40 p-4 lg:p-5">
-      <header className="mb-4 flex items-start gap-2">
+      <header className="mb-4 flex break-after-avoid items-start gap-2">
         <AlertTriangle
           size={18}
           strokeWidth={1.9}
@@ -72,7 +72,7 @@ function FilaSenal({ riesgo }: { riesgo: RiesgoProgreso }) {
   const cita = riesgo.cita?.trim();
 
   return (
-    <li className="rounded-md border border-terracotta-100 bg-white/70 px-3 py-3">
+    <li className="break-inside-avoid rounded-md border border-terracotta-100 bg-white/70 px-3 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-sans text-[13px] font-semibold tabular-nums text-ink-900">
           {Number.isNaN(fecha.getTime())
@@ -89,7 +89,7 @@ function FilaSenal({ riesgo }: { riesgo: RiesgoProgreso }) {
         ) : null}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 print:hidden">
         {cita ? (
           <button
             type="button"

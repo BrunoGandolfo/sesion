@@ -1,0 +1,22 @@
+/* Hoja de impresión. Solo lo que Tailwind no puede decir desde una clase:
+   el tamaño y los márgenes del papel, y el número de página.
+
+   Los colores y las fuentes salen de los tokens de globals.css; acá no se
+   escribe ningún valor de la paleta. El ancho de la hoja en pantalla
+   (178 mm, en la página) es el ancho útil de un A4 con estos márgenes: así
+   los gráficos, que se miden en pantalla, no cambian de escala al imprimir. */
+
+@page {
+  size: A4;
+  margin: 14mm 16mm 12mm;
+
+  /* El número de página va en el margen porque es lo único que el papel sabe
+     y la página no. Chrome lo dibuja; Safari y Firefox lo ignoran, y el
+     encabezado y el pie de la hoja siguen estando. */
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: var(--font-sans);
+    font-size: 8pt;
+    color: var(--color-ink-500);
+  }
+}

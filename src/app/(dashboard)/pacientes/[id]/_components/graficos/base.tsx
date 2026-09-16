@@ -161,7 +161,7 @@ export function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-[color:var(--border-subtle)] bg-white p-4 lg:p-5">
+    <section className="break-inside-avoid rounded-lg border border-[color:var(--border-subtle)] bg-white p-4 lg:p-5">
       <header className="mb-4">
         <h3 className="font-[family-name:var(--font-display)] text-[18px] font-medium leading-tight tracking-[-0.01em] text-ink-900">
           {title}

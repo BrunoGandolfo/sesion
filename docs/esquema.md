@@ -113,7 +113,7 @@ abrir.
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `eventos_auditoria` | Quién hizo qué, cuándo, sobre qué; un detalle sin texto clínico, sin datos personales, **sin IP ni navegador**. | Rastro clínico, append-only, sin relaciones que puedan borrarlo en cascada. Vuelve a ser solo eso: los intentos de acceso se fueron a su tabla. Cada exportación a PDF (nota, ficha, estado de cuenta) deja su acción (`sesion.exportar_pdf`, `paciente.exportar_ficha_pdf`, `paciente.exportar_estado_cuenta_pdf`): no hace falta una tabla nueva. | Toda operación relevante. | El administrador; la ficha (historia de una entidad). |
+| `eventos_auditoria` | Quién hizo qué, cuándo, sobre qué; un detalle sin texto clínico, sin datos personales, **sin IP ni navegador**. | Rastro clínico, append-only, sin relaciones que puedan borrarlo en cascada. Vuelve a ser solo eso: los intentos de acceso se fueron a su tabla. Cada exportación a PDF (nota, ficha, estado de cuenta, Recorrido) deja su acción (`sesion.exportar_pdf`, `paciente.exportar_ficha_pdf`, `paciente.exportar_estado_cuenta_pdf`, `hilo.exportar_pdf`): no hace falta una tabla nueva. La del Recorrido se escribe en la misma transacción que lee los datos, y su detalle solo lleva números de versión y cantidades. | Toda operación relevante. | El administrador; la ficha (historia de una entidad). |
 
 ### Lo que ya no existe
 

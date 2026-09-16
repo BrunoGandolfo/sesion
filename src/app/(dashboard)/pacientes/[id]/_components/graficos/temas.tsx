@@ -87,7 +87,7 @@ export function TemasTable({
         ))}
       </ul>
 
-      <div className="mt-4">
+      <div className="mt-4 print:hidden">
         <Plegable
           titulo={VER_DETALLE}
           detalle={

@@ -1,4 +1,4 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.0.
+// Texto del consentimiento informado para grabar sesiones, versión 2.1.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
@@ -7,8 +7,14 @@
 // comprobarlo, que "cualquier copia sería imposible de abrir") acá se dice
 // como es.
 //
-// Las firmas de la 1.1 siguen vigentes; la app sugiere firmar la 2.0 en la
-// próxima sesión (sugiereRefirmar), no obliga. Decisión del dueño.
+// La 2.1 agrega que la profesional puede imprimir o guardar como archivo el
+// resumen del proceso para su propio archivo (RECORRIDO_EXPORTABLE). Una
+// firma anterior no cubre esa salida: hay que volver a firmar.
+//
+// Las firmas anteriores siguen vigentes para grabar; no obliga a firmar de
+// nuevo (decisión del dueño). La API del consentimiento devuelve
+// sugiereRefirmar, pero hoy ninguna pantalla lo muestra: la refirma depende
+// de que la profesional la pida.
 
 import type { db } from "@/lib/db";
 
@@ -23,13 +29,14 @@ import {
   MEDIOS_CAPTURA,
   PROVEEDORES,
   RESPALDO_LOCAL_CIFRADO,
+  RECORRIDO_EXPORTABLE,
   RETENCION_BACKUPS_DIAS,
   REVOCAR_BORRA_HISTORIA,
   VOCABULARIO_A_ASR,
   VOCABULARIO_INCLUYE_NOMBRES,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.0";
+export const CONSENTIMIENTO_VERSION = "2.1";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
@@ -76,6 +83,10 @@ export function generarTextoConsentimiento(params: {
     ? ` Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días y no contienen el audio, pero sí pueden contener, cifrada, la clave de un audio que todavía no se había borrado.`
     : ` Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días y no contienen el audio ni su clave.`;
 
+  const exportacion = RECORRIDO_EXPORTABLE
+    ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La aplicación registra cada vez que lo hace.`
+    : "";
+
   const revocar = REVOCAR_BORRA_HISTORIA
     ? "Lo ya guardado se elimina de tu historia clínica."
     : "Lo ya guardado sigue formando parte de tu historia clínica.";
@@ -113,7 +124,7 @@ En la base de datos de la aplicación (${neon.nombre}), cifrado, y accesible sol
 - La transcripción de la sesión.
 - El resumen de tu proceso que ella mantiene.
 - Este consentimiento y tu firma.
-El audio no queda.
+El audio no queda.${exportacion}
 
 ¿Podés cambiar de opinión?
 Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a ${nombreProfesional}. A partir de ese momento no se graban más sesiones. ${revocar} Esto no afecta tu tratamiento ni tu relación con ella.

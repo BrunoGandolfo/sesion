@@ -74,6 +74,30 @@ interpolación"*. El hueco es un dato que no se pudo evaluar, no un cero.
 Intensidad, alianza e intervenciones muestran el período elegido; **los temas y
 las señales de riesgo se cuentan sobre todas las sesiones**.
 
+## Exportar el Recorrido a PDF
+
+Arriba de la pestaña **Recorrido** está **Exportar PDF**. Abre una hoja lista
+para imprimir y, enseguida, el diálogo de impresión del navegador: elegí
+**Guardar como PDF** o una impresora. Si lo cerraste, el botón **Imprimir o
+guardar PDF** lo vuelve a abrir.
+
+La hoja lleva:
+
+- **El Recorrido vigente**, completo.
+- **Cómo va**, con todas las sesiones con nota.
+- **El historial de versiones**: cada una con su fecha, quién la escribió, su
+  estado y la nota que la motivó.
+- **Las versiones que estuvieron vigentes antes**, completas.
+
+De las propuestas de la IA que no adoptaste (sin revisar, desactualizadas o
+descartadas) queda solo la fila del historial, sin su texto. Las citas de las
+señales de riesgo no se imprimen: están en cada nota.
+
+El archivo sale de la aplicación **sin cifrar**: queda bajo tu cuidado, como
+cualquier registro en papel. Cada exportación queda registrada con quién la
+hizo y cuándo. El consentimiento 2.1 se lo cuenta a la paciente; si firmó una
+versión anterior, conviene que firme la nueva.
+
 ## Lo que NO hace
 
 - **No proyecta ni pronostica**: no dice "va mejorando" salvo que la nota lo diga.
@@ -84,6 +108,9 @@ las señales de riesgo se cuentan sobre todas las sesiones**.
 
 <!-- fuentes:
 src/app/(dashboard)/pacientes/[id]/_components/recorrido-tab.tsx
+src/app/(impresion)/pacientes/[id]/recorrido/imprimir/_components/recorrido-imprimible.tsx
+src/app/api/_lib/casos-uso/hilo/exportar.ts
+src/lib/consentimiento.ts
 src/components/clinico/ContextoGoldenThreadView.tsx
 src/app/(dashboard)/pacientes/[id]/_components/brief-pre-sesion.tsx
 src/components/clinico/brief-corto.tsx

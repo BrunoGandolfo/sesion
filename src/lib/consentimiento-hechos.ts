@@ -71,6 +71,16 @@ export const REVOCAR_BORRA_HISTORIA = false;
 /** Cada lectura de una nota queda registrada (eventos_auditoria). */
 export const ACCION_VER_SESION = "sesion.ver";
 
+/**
+ * La profesional puede imprimir el Recorrido o guardarlo como PDF para su
+ * archivo: la hoja de impresión de /pacientes/[id]/recorrido/imprimir. Esa
+ * copia sale de la aplicación sin cifrar. Cada exportación queda registrada
+ * con esta acción (casos-uso/hilo/exportar.ts la escribe en la misma
+ * transacción que lee el Recorrido: sin registro no hay datos).
+ */
+export const RECORRIDO_EXPORTABLE = true;
+export const ACCION_EXPORTAR_RECORRIDO = "hilo.exportar_pdf";
+
 export const MARCO_LEGAL = {
   ley: "Ley 18.331 de Protección de Datos Personales (Uruguay)",
   transferenciaInternacional: true,

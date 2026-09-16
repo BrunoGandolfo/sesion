@@ -967,7 +967,9 @@ enum ActorAuditoria {
 /// `accion` es texto abierto (ej. sesion.ver, sesion.ver_transcripcion,
 /// hilo.aceptar, cuenta.invitacion_usada). Toda exportación a PDF deja su
 /// acción: sesion.exportar_pdf, paciente.exportar_ficha_pdf,
-/// paciente.exportar_estado_cuenta_pdf.
+/// paciente.exportar_estado_cuenta_pdf, hilo.exportar_pdf (el Recorrido;
+/// entidadId es la paciente, y el detalle solo lleva números de versión y
+/// cantidades).
 model EventoAuditoria {
   id             String         @id @default(uuid())
   organizationId String         @map("organization_id")

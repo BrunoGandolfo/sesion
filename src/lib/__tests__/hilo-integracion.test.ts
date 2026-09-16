@@ -4,6 +4,7 @@ import { editarHilo, aceptarPropuesta, rechazarPropuesta } from "@/app/api/_lib/
 import { leerRecorrido, leerHiloParaWorker } from "@/app/api/_lib/casos-uso/hilo/leer";
 import { leerBrief } from "@/app/api/_lib/casos-uso/hilo/brief";
 import { regenerarHilo } from "@/app/api/_lib/casos-uso/hilo/regenerar";
+import { exportarRecorrido } from "@/app/api/_lib/casos-uso/hilo/exportar";
 import { crearTrabajo } from "@/app/api/_lib/casos-uso/trabajos/crear";
 import { aprobarSesion } from "@/app/api/_lib/casos-uso/sesion/aprobar";
 import { entregarTrabajos } from "@/app/api/_lib/casos-uso/trabajos/entregar";
@@ -212,5 +213,54 @@ it("no permite guardar referencias clínicas de otra paciente", async () => {
     const { sesionId } = await crearSesion(base.prisma, otra, { estado: "aprobada", audio: false });
     await expect(editarHilo({ ...escritura(), contenido: { ...contenido(), intervencionesProbadas: [{ tecnica: "validacion", eficaciaPercibida: "media", sesiones: [sesionId] }] } })).rejects.toMatchObject({ status: 400 });
     expect(await base.prisma.hiloVersion.count({ where: identidad() })).toBe(0);
+  } finally { await limpiarOrg(base.prisma, otra.orgId); }
+});
+
+it("exportar lleva completas la vigente y las que estuvieron vigentes, del resto solo el registro, y lo audita sin contenido", async () => {
+  // v1 propuesta de la IA, aceptada con ediciones → v2 vigente (v1 queda aplicada, pero nunca fue vigente).
+  const primera = await proponer();
+  const sesionId = primera.sesionOrigenId!;
+  const conIntervencion = { ...contenido(), resumenAcumulativo: "Versión dos", intervencionesProbadas: [{ tecnica: "validacion" as const, eficaciaPercibida: "alta" as const, sesiones: [sesionId] }] };
+  const v2 = await aceptarPropuesta({ ...escritura(), propuestaId: primera.id, contenido: conIntervencion });
+  // v3 edición propia.
+  const v3 = await editarHilo({ ...escritura(v2.version), contenido: { ...conIntervencion, resumenAcumulativo: "Versión tres" } });
+  // v4 propuesta que se desactualiza cuando ella edita (v5).
+  await proponer();
+  const v5 = await editarHilo({ ...escritura(v3.version), contenido: { ...conIntervencion, resumenAcumulativo: "Versión cinco" } });
+  // v6 propuesta abierta, sin revisar.
+  await proponer();
+
+  const exportadoEn = new Date("2026-09-16T17:30:00Z");
+  const r = await exportarRecorrido(base.db, identidad(), org.userId, exportadoEn);
+
+  expect(r.paciente).toEqual({ nombre: "Ana", apellido: "Pérez" });
+  expect(r.nombreProfesional).toBe("Lic. Prueba");
+  expect(r.vigente).toMatchObject({ version: v5.version, contenido: { resumenAcumulativo: "Versión cinco" } });
+  expect(r.anteriores.map(v => [v.version, v.contenido.resumenAcumulativo])).toEqual([[3, "Versión tres"], [2, "Versión dos"]]);
+  expect(r.versiones.map(v => [v.version, v.estado])).toEqual([[6, "propuesta"], [5, "aplicada"], [4, "desactualizada"], [3, "aplicada"], [2, "aplicada"], [1, "aplicada"]]);
+  expect(r.versiones.find(v => v.version === 2)?.propuestaOrigenId).toBe(primera.id);
+  // Lo que la IA escribió y ella no adoptó no viaja: ni en la versión reemplazada ni en las propuestas.
+  expect(JSON.stringify(r)).not.toContain(contenido().resumenAcumulativo);
+  // Cada sesión referenciada tiene su fecha: la hoja no necesita mostrar un id.
+  const fechas = new Map(r.sesiones.map(s => [s.id, s.fecha]));
+  expect(fechas.get(sesionId)).toBe("2026-09-01T14:00:00.000Z");
+  for (const v of [r.vigente!, ...r.anteriores]) {
+    for (const i of v.contenido.intervencionesProbadas) for (const id of i.sesiones) expect(fechas.has(id)).toBe(true);
+  }
+  expect(r.progreso).toMatchObject({ rango: "todo", totalSesiones: 3 });
+
+  const eventos = await base.prisma.eventoAuditoria.findMany({ where: { organizationId: org.orgId, accion: "hilo.exportar_pdf" } });
+  expect(eventos).toHaveLength(1);
+  expect(eventos[0]).toMatchObject({ actorTipo: "usuario", actorId: org.userId, entidad: "hilo", entidadId: org.pacienteId, creadoEn: exportadoEn });
+  expect(eventos[0].detalle).toEqual({ vigente: 5, versiones: 6, conContenido: [5, 3, 2], sesiones: 3 });
+  expect(JSON.stringify(eventos[0].detalle)).not.toMatch(/Versión|Historia|Ana|Pérez|Prueba/);
+});
+
+it("exportar una paciente de otra organización es 404 y no deja registro", async () => {
+  const otra = await crearOrg(base.prisma);
+  try {
+    await editarHilo({ ...escritura(), contenido: contenido() });
+    await expect(exportarRecorrido(base.db, { pacienteId: org.pacienteId, organizationId: otra.orgId }, otra.userId)).rejects.toMatchObject({ status: 404 });
+    expect(await base.prisma.eventoAuditoria.count({ where: { accion: "hilo.exportar_pdf" } })).toBe(0);
   } finally { await limpiarOrg(base.prisma, otra.orgId); }
 });

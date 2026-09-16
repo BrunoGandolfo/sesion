@@ -3,10 +3,12 @@ import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { config } from "@/proxy";
 import { GET } from "@/app/api/pacientes/[id]/hilo/route";
 import { POST } from "@/app/api/pacientes/[id]/hilo/versiones/route";
+import { POST as EXPORTAR } from "@/app/api/pacientes/[id]/hilo/exportar/route";
 import { getSessionActor } from "@/app/api/_lib/auth";
 import { autorizarTicketSesion } from "@/app/api/_lib/tickets";
 import { leerHiloParaWorker, leerRecorrido } from "@/app/api/_lib/casos-uso/hilo/leer";
 import { editarHilo } from "@/app/api/_lib/casos-uso/hilo/escribir";
+import { exportarRecorrido } from "@/app/api/_lib/casos-uso/hilo/exportar";
 import { ApiError } from "@/app/api/_lib/responses";
 import { hiloVacio } from "@/lib/hilo/contenido";
 
@@ -15,6 +17,7 @@ vi.mock("@/app/api/_lib/auth", () => ({ getSessionActor: vi.fn() }));
 vi.mock("@/app/api/_lib/tickets", () => ({ autorizarTicketSesion: vi.fn() }));
 vi.mock("@/app/api/_lib/casos-uso/hilo/leer", () => ({ leerRecorrido: vi.fn(), leerHiloParaWorker: vi.fn() }));
 vi.mock("@/app/api/_lib/casos-uso/hilo/escribir", () => ({ editarHilo: vi.fn() }));
+vi.mock("@/app/api/_lib/casos-uso/hilo/exportar", () => ({ exportarRecorrido: vi.fn() }));
 const params = { params: Promise.resolve({ id: "paciente" }) };
 const url = "https://app.test/api/pacientes/paciente/hilo";
 beforeEach(() => {
@@ -56,4 +59,19 @@ it("una edición inválida no llega al caso de uso", async () => {
   const r = await POST(new Request(`${url}/versiones`, { method: "POST", headers: { origin: "https://app.test" }, body: JSON.stringify({ basadaEnVersion: 0, contenido: {} }) }), params);
   expect(r.status).toBe(400);
   expect(editarHilo).not.toHaveBeenCalled();
+});
+
+it("exportar es un POST del propio sitio con sesión, sin caché, y el caso de uso sabe quién exporta", async () => {
+  expect(unstable_doesMiddlewareMatch({ config, url: `${url}/exportar` })).toBe(false);
+  const ajeno = await EXPORTAR(new Request(`${url}/exportar`, { method: "POST", headers: { origin: "https://otro.test" } }), params);
+  expect(ajeno.status).toBe(403);
+  vi.mocked(getSessionActor).mockRejectedValueOnce(new ApiError("No autorizado", 401));
+  expect((await EXPORTAR(new Request(`${url}/exportar`, { method: "POST", headers: { origin: "https://app.test" } }), params)).status).toBe(401);
+  expect(exportarRecorrido).not.toHaveBeenCalled();
+
+  vi.mocked(exportarRecorrido).mockResolvedValue({ vigente: null } as Awaited<ReturnType<typeof exportarRecorrido>>);
+  const r = await EXPORTAR(new Request(`${url}/exportar`, { method: "POST", headers: { origin: "https://app.test" } }), params);
+  expect(r.status).toBe(200);
+  expect(r.headers.get("cache-control")).toBe("no-store");
+  expect(exportarRecorrido).toHaveBeenCalledWith({}, { pacienteId: "paciente", organizationId: "org" }, "u");
 });

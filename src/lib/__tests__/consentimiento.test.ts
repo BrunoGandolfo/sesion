@@ -18,15 +18,17 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 2.0 y sugiere re-firmar las anteriores", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("2.0");
+  it("la versión vigente del texto es la 2.1 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.1");
     expect(sugiereRefirmar("1.1")).toBe(true);
-    expect(sugiereRefirmar("2.0")).toBe(false);
+    // La 2.0 no decía que el resumen del proceso se puede imprimir.
+    expect(sugiereRefirmar("2.0")).toBe(true);
+    expect(sugiereRefirmar("2.1")).toBe(false);
   });
 
   it("interpola los tres datos y lleva la versión", () => {
     const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("Versión 2.0");
+    expect(texto).toContain("Versión 2.1");
     expect(texto).toContain("Hola María González.");
     expect(texto).toContain("con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo");
   });
@@ -106,6 +108,16 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).toContain("El resumen de tu proceso que ella mantiene.");
     expect(texto).toContain("Este consentimiento y tu firma.");
     expect(texto).toContain("El audio no queda.");
+  });
+
+  it("el resumen del proceso se puede imprimir, sale sin cifrar y cada vez queda registrado", () => {
+    expect(hechos.RECORRIDO_EXPORTABLE).toBe(true);
+    // La acción que el caso de uso escribe (hilo-integracion.test.ts lo comprueba contra la base).
+    expect(hechos.ACCION_EXPORTAR_RECORRIDO).toBe("hilo.exportar_pdf");
+    expect(texto).toContain("Lic. Ana Pérez puede imprimir el resumen de tu proceso, o guardarlo como archivo");
+    expect(texto).toContain("para su propio archivo profesional");
+    expect(texto).toContain("ya no está dentro de la aplicación ni cifrada");
+    expect(texto).toContain("La aplicación registra cada vez que lo hace.");
   });
 
   it("revocar no borra la historia clínica, y se puede revocar cuando quiera", () => {
@@ -235,7 +247,7 @@ describe("la ruta de consentimiento", () => {
     const { descifrar, aadDe } = await import("@/lib/encryption");
     const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
     expect(texto).toContain("Hola María González.");
-    expect(texto).toContain("Versión 2.0");
+    expect(texto).toContain("Versión 2.1");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
   });

@@ -46,7 +46,8 @@ import {
   VER_LA_SESION,
 } from "./textos";
 
-const SESIONES_PARA_GRAFICOS = 3;
+/** Desde cuántas sesiones con nota hay gráficos. Lo usa también la hoja de impresión. */
+export const SESIONES_PARA_GRAFICOS = 3;
 const RANGO_POR_DEFECTO: RangoProgreso = "10s";
 
 // Resultado atado al paciente y al período que lo pidieron: si cambia
@@ -308,7 +309,7 @@ function EmptyState({ variante }: { variante: keyof typeof EMPTY_STATE_TEXTOS })
 // sesiones con un gráfico de hoy.
 // ────────────────────────────────────────────────────────────────────────────
 
-function CardDeLaUltima({
+export function CardDeLaUltima({
   rotulo,
   texto,
   sesionId,
@@ -328,8 +329,8 @@ function CardDeLaUltima({
     <section
       className={
         alerta
-          ? "rounded-lg border border-terracotta-100 border-l-2 border-l-terracotta-500 bg-terracotta-50/40 p-4 lg:p-5"
-          : "rounded-lg border border-[color:var(--border-subtle)] border-l-2 border-l-sage-500 bg-cream-50 p-4 lg:p-5"
+          ? "break-inside-avoid rounded-lg border border-terracotta-100 border-l-2 border-l-terracotta-500 bg-terracotta-50/40 p-4 lg:p-5"
+          : "break-inside-avoid rounded-lg border border-[color:var(--border-subtle)] border-l-2 border-l-sage-500 bg-cream-50 p-4 lg:p-5"
       }
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -338,7 +339,7 @@ function CardDeLaUltima({
         </p>
         <Link
           href={`/sesiones/${sesionId}`}
-          className="font-sans text-[12px] text-sage-600 underline-offset-2 hover:underline"
+          className="font-sans text-[12px] text-sage-600 underline-offset-2 hover:underline print:hidden"
         >
           {VER_LA_SESION}
         </Link>

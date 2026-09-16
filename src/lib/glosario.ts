@@ -214,6 +214,17 @@ export const EL_RECORRIDO_HASTA_HOY = "El recorrido hasta hoy";
 /** Reemplaza a "Evolución clínica". */
 export const COMO_VA = "Cómo va";
 
+/** Botón del Recorrido que abre la hoja de impresión. */
+export const EXPORTAR_PDF = "Exportar PDF";
+
+/** Botón de la hoja de impresión: el diálogo del navegador ofrece las dos cosas. */
+export const IMPRIMIR_O_GUARDAR_PDF = "Imprimir o guardar PDF";
+
+/** Pie de cada página del PDF del Recorrido. */
+export function pieRecorridoPdf(nombreProfesional: string | null): string {
+  return `Archivo personal de ${nombreProfesional ?? "la profesional"}. Contiene información clínica confidencial.`;
+}
+
 /** Card de preparación antes de la sesión. Ya se llama así en la app. */
 export const PARA_RETOMAR = "Para retomar";
 
