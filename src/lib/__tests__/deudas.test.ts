@@ -87,9 +87,7 @@ describe("interpolarTemplateCobro — la plantilla por defecto", () => {
       sesiones: 1,
     });
     expect(mensaje).toBe(
-      "Hola Ana, ¿cómo estás? Te escribo para recordarte que tenés 1 sesión " +
-        "pendiente de pago por un total de $ 4.200. Cualquier duda estoy a " +
-        "disposición. Lic. Marta Sosa",
+      "Consultorio Lic. Marta Sosa\nAna, tenés 1 sesión pendiente de pago: $ 4.200.",
     );
   });
 
@@ -112,13 +110,12 @@ describe("interpolarTemplateCobro — la plantilla por defecto", () => {
     }
   });
 
-  it("sin firma configurada el mensaje no termina con un espacio colgando", () => {
-    // El caso real: /api/config todavía no existe y cobros-view manda "".
+  it("sin firma configurada el interpolador no inventa una profesional", () => {
     const mensaje = interpolarTemplateCobro(TEMPLATE_COBRO_DEFAULT, {
       ...VARS,
       profesional: "",
     });
-    expect(mensaje.endsWith("Cualquier duda estoy a disposición.")).toBe(true);
+    expect(mensaje).toBe("Consultorio \nAna, tenés 2 sesiones pendientes de pago: $ 4.200.");
     expect(mensaje).toBe(mensaje.trim());
   });
 

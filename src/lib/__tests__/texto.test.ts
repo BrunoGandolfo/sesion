@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  asegurarLineaContacto,
+  prepararPlantillaRecordatorio,
   buildSmsMessage,
   contarLongitudSms,
   LINEA_CONTACTO,
@@ -40,7 +40,7 @@ describe("buildSmsMessage", () => {
 
   it("reemplaza todas las variables de la plantilla completa", () => {
     const out = buildSmsMessage(TEMPLATE_SMS_SUGERIDO, baseData);
-    expect(out).toContain("Hola Ana");
+    expect(out).toContain("Ana, tu turno");
     expect(out).toContain("lunes 20 de abril");
     expect(out).toContain("09:00");
     expect(out).toContain("Lic. María García");
@@ -75,17 +75,17 @@ describe("buildSmsMessage", () => {
 
 describe("plantillas y línea de contacto", () => {
   it("la sugerida termina con la línea de contacto exacta", () => {
-    expect(LINEA_CONTACTO).toBe("Para cambios, comunicate con {{profesional}} al {{telefonoConsultorio}}");
+    expect(LINEA_CONTACTO).toBe("Cambios: llamar al {{telefonoConsultorio}}");
     expect(TEMPLATE_SMS_SUGERIDO.endsWith(LINEA_CONTACTO)).toBe(true);
   });
 
-  it("asegurarLineaContacto agrega la línea si falta y no duplica si está", () => {
-    expect(asegurarLineaContacto("Hola {{nombre}}.  ")).toBe(`Hola {{nombre}}.\n${LINEA_CONTACTO}`);
-    expect(asegurarLineaContacto(TEMPLATE_SMS_SUGERIDO)).toBe(TEMPLATE_SMS_SUGERIDO);
-    expect(asegurarLineaContacto("")).toBe(LINEA_CONTACTO);
+  it("prepararPlantillaRecordatorio agrega la línea si falta y no duplica si está", () => {
+    expect(prepararPlantillaRecordatorio("Hola {{nombre}}.  ")).toBe(`Consultorio {{profesional}}\nHola {{nombre}}.\n${LINEA_CONTACTO}`);
+    expect(prepararPlantillaRecordatorio(TEMPLATE_SMS_SUGERIDO)).toBe(TEMPLATE_SMS_SUGERIDO);
+    expect(prepararPlantillaRecordatorio("")).toBe(`Consultorio {{profesional}}\n${LINEA_CONTACTO}`);
   });
 
-  it("con datos realistas la sugerida mide 133 caracteres en UCS-2 (2 segmentos)", () => {
+  it("con datos realistas la sugerida mide 115 caracteres en UCS-2 (2 segmentos)", () => {
     const out = buildSmsMessage(TEMPLATE_SMS_SUGERIDO, {
       nombre: "Lucía",
       apellido: "Fernández",
@@ -95,22 +95,22 @@ describe("plantillas y línea de contacto", () => {
       telefonoConsultorio: "+598 99 876 543",
     });
     expect(out).toBe(
-      "Hola Lucía, te recordamos tu sesión el martes 21 de abril a las 10:00. Para cambios, comunicate con Mariana Roldán al +598 99 876 543",
+      "Consultorio Mariana Roldán\nLucía, tu turno es el martes 21 de abril a las 10:00. Cambios: llamar al +598 99 876 543",
     );
-    expect(contarLongitudSms(out)).toEqual({ caracteres: 133, segmentos: 2, gsm7: false });
+    expect(contarLongitudSms(out)).toEqual({ caracteres: 115, segmentos: 2, gsm7: false });
   });
 });
 
 describe("textoDelEnvio", () => {
   it("el recordatorio usa la plantilla de la organización, con la línea de contacto asegurada", () => {
     const out = textoDelEnvio("recordatorio_turno", "Hola {{nombre}}, tu sesión es el {{fecha}}.", baseData);
-    expect(out).toBe(`Hola Ana, tu sesión es el lunes 20 de abril.\nPara cambios, comunicate con Lic. María García al +598 99 876 543`);
+    expect(out).toBe(`Consultorio Lic. María García\nHola Ana, tu sesión es el lunes 20 de abril.\nCambios: llamar al +598 99 876 543`);
   });
 
-  it("el cambio de horario usa la plantilla fija y dice que cambió, antes que nada", () => {
+  it("el cambio de horario usa la plantilla fija y identifica al consultorio antes de anunciar el cambio", () => {
     const out = textoDelEnvio("cambio_de_horario", "Hola {{nombre}}, te recordamos tu sesión.", baseData);
-    expect(out.startsWith("Hola Ana, cambió el horario de tu sesión: ahora es el lunes 20 de abril a las 09:00.")).toBe(true);
-    expect(out).toContain("comunicate con Lic. María García");
+    expect(out.startsWith("Consultorio Lic. María García\nAna, tu turno cambió al lunes 20 de abril a las 09:00.")).toBe(true);
+    expect(out).toContain("Cambios: llamar al +598 99 876 543");
     expect(out).not.toContain("te recordamos");
     expect(PLANTILLA_CAMBIO_DE_HORARIO).toContain(LINEA_CONTACTO);
   });

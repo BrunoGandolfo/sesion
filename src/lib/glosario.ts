@@ -1236,7 +1236,9 @@ export const SMS_MOTIVOS = {
   "RECHAZADO": "el servicio de SMS rechazó el envío",
   "NO_ENTREGADO": "el operador no lo entregó"
 } as const;
-export const SMS_BAJA_CONFIRMADA = "Listo: no vas a recibir más mensajes de este número.";
+// La baja abarca todas las cuentas que envían a ese teléfono: no tiene una
+// única profesional a la cual atribuir este acuse.
+export const SMS_BAJA_CONFIRMADA = "Consultorio: no vas a recibir más SMS";
 export const SMS_CON_CODIGO = (texto: string, codigo: number | null) => codigo === null ? texto : texto + " (" + codigo + ")";
 
 export const ENTRADA_REINGRESO =
@@ -1268,9 +1270,14 @@ export const MOTIVO_VENTANA_AGOTADA =
 export const MOTIVO_VENTANA_AGOTADA_SIN_TURNO =
   "no se pudo enviar en el día: el servicio de SMS no respondió a tiempo";
 
-export const LINEA_CONTACTO =
-  "Para cambios, comunicate con {{profesional}} al {{telefonoConsultorio}}";
+export const REMITENTE_SMS = "Consultorio {{profesional}}";
 
-export const TEMPLATE_SMS_SUGERIDO = `Hola {{nombre}}, te recordamos tu sesión el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+export const LINEA_CONTACTO = "Cambios: llamar al {{telefonoConsultorio}}";
 
-export const PLANTILLA_CAMBIO_DE_HORARIO = `Hola {{nombre}}, cambió el horario de tu sesión: ahora es el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+export const TEMPLATE_SMS_SUGERIDO = `${REMITENTE_SMS}\n{{nombre}}, tu turno es el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+
+export const TEMPLATE_SMS_CON_DIRECCION = `${REMITENTE_SMS}\n{{nombre}}, tu turno es el {{fecha}} a las {{hora}}.\n{{direccion}}\n${LINEA_CONTACTO}`;
+
+export const PLANTILLA_CAMBIO_DE_HORARIO = `${REMITENTE_SMS}\n{{nombre}}, tu turno cambió al {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+
+export const TEMPLATE_COBRO_DEFAULT = `${REMITENTE_SMS}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.`;

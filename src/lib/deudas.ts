@@ -35,8 +35,7 @@ export function textoAtraso(diasAtraso: number): string {
  *   {{monto}}         — monto formateado en moneda
  *   {{profesional}}   — nombre de la profesional (firma)
  */
-export const TEMPLATE_COBRO_DEFAULT =
-  "Hola {{nombre}}, ¿cómo estás? Te escribo para recordarte que tenés {{sesiones}} sesión/es pendiente/s de pago por un total de {{monto}}. Cualquier duda estoy a disposición. {{profesional}}";
+export { TEMPLATE_COBRO_DEFAULT } from "@/lib/glosario";
 
 export interface InterpolarTemplateCobroVars {
   nombre: string;

@@ -150,7 +150,7 @@ describe("POST /api/sms/entrante", () => {
     const r = await entrante(pedido(URL_ENTRANTE, { From: TELEFONO, To: "+59890000000", Body: "  Baja.  " }));
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toContain("text/xml");
-    expect(await r.text()).toContain("<Message>");
+    expect(await r.text()).toBe('<?xml version="1.0" encoding="UTF-8"?><Response><Message>Consultorio: no vas a recibir más SMS</Message></Response>');
 
     expect(await prismaRaw.bajaSms.findUnique({ where: { telefono: TELEFONO } })).toMatchObject({ motivo: "respuesta_baja" });
     expect(await leer(pendiente.id)).toMatchObject({ estado: "cancelado", motivoNoEnvio: MOTIVO_BAJA });

@@ -12,22 +12,18 @@
 // de mandar, con la plantilla vigente de la organización, y de él sólo
 // queda `segmentos` en envios_sms para el conteo mensual.
 
-import { LINEA_CONTACTO, PLANTILLA_CAMBIO_DE_HORARIO } from "@/lib/glosario";
+import { LINEA_CONTACTO, PLANTILLA_CAMBIO_DE_HORARIO, REMITENTE_SMS, TEMPLATE_SMS_CON_DIRECCION, TEMPLATE_SMS_SUGERIDO } from "@/lib/glosario";
 import {
   formatearFechaLargaMvd,
   formatearHoraMvd,
 } from "@/lib/fechas-montevideo";
 
-/** Línea de contacto OBLIGATORIA por diseño: todo SMS termina indicando a
- *  quién y a qué número escribir para cambios. El despachador la agrega si
- *  la plantilla guardada por la usuaria no la contiene. */
+/** El encabezado identifica al consultorio; el contacto indica cómo llamar.
+ *  Se preparan igual para la vista previa y para el envío. */
 export { LINEA_CONTACTO } from "@/lib/glosario";
 
-/** Plantilla sugerida del recordatorio (es también el valor por defecto del
- *  formulario de configuración). Con datos realistas rinde 133 caracteres;
- *  como el español lleva tildes ("sesión", "Lucía") viaja en UCS-2 →
- *  2 segmentos. Quitar las tildes de la plantilla no alcanza: los nombres
- *  propios las traen. */
+/** Plantilla sugerida, también usada como valor inicial del formulario.
+ *  Los nombres propios pueden forzar UCS-2 aunque la plantilla use GSM-7. */
 export { TEMPLATE_SMS_SUGERIDO } from "@/lib/glosario";
 
 /**
@@ -35,7 +31,7 @@ export { TEMPLATE_SMS_SUGERIDO } from "@/lib/glosario";
  * profesional mueve un turno cuyo recordatorio ya salió, la paciente tiene
  * que enterarse de que cambió, no recibir un segundo "te recordamos". Un
  * mensaje que dice "cambió" es lo que evita que se presente al horario
- * viejo; por eso el texto es fijo y dice eso primero.
+ * viejo; por eso el texto es fijo y lo dice después del remitente.
  */
 export { PLANTILLA_CAMBIO_DE_HORARIO } from "@/lib/glosario";
 
@@ -77,12 +73,26 @@ export function buildSmsMessage(
   return out;
 }
 
-/** Garantiza que la plantilla termine con la línea de contacto obligatoria.
- *  Si ya la contiene, la devuelve tal cual. */
-export function asegurarLineaContacto(template: string): string {
-  if (template.includes(LINEA_CONTACTO)) return template;
-  const base = template.trimEnd();
-  return base.length === 0 ? LINEA_CONTACTO : `${base}\n${LINEA_CONTACTO}`;
+// Compatibilidad con plantillas ya guardadas: se reemplaza la firma vieja
+// al preparar el texto, sin modificar la configuración ni duplicar el nombre.
+const CONTACTO_ANTERIOR = "Para cambios, comunicate con {{profesional}} al {{telefonoConsultorio}}";
+const SUGERIDA_ANTERIOR = `Hola {{nombre}}, te recordamos tu sesión el {{fecha}} a las {{hora}}. ${CONTACTO_ANTERIOR}`;
+// Sigue siendo el default de la base. Se reconoce al leer, sin migrar filas.
+const SUGERIDA_INICIAL = "Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.";
+
+/** Identifica al remitente en la primera línea y da un canal para cambios.
+ *  Conserva el cuerpo personalizado; sólo actualiza la antigua sugerencia
+ *  cuando coincide completa. No intenta reinterpretar texto libre. */
+export function prepararPlantillaRecordatorio(template: string): string {
+  if (template.trim() === SUGERIDA_ANTERIOR) return TEMPLATE_SMS_SUGERIDO;
+  if (template.replaceAll(CONTACTO_ANTERIOR, "").trim() === SUGERIDA_INICIAL) return TEMPLATE_SMS_CON_DIRECCION;
+  // Reemplazar el contacto en su lugar preserva aclaraciones como «de 9 a
+  // 17». El remitente se agrega sólo al principio, sin borrar menciones al
+  // consultorio que formen parte de una oración del cuerpo.
+  let preparada = template.trim().replaceAll(CONTACTO_ANTERIOR, LINEA_CONTACTO);
+  if (!preparada.startsWith(REMITENTE_SMS)) preparada = `${REMITENTE_SMS}\n${preparada}`;
+  if (!preparada.includes(LINEA_CONTACTO)) preparada = `${preparada.trimEnd()}\n${LINEA_CONTACTO}`;
+  return preparada;
 }
 
 /** Los motivos de SMS que tienen plantilla acá (el de cobro vive en
@@ -102,7 +112,7 @@ export function textoDelEnvio(
   const plantilla =
     motivo === "cambio_de_horario"
       ? PLANTILLA_CAMBIO_DE_HORARIO
-      : asegurarLineaContacto(plantillaRecordatorio);
+      : prepararPlantillaRecordatorio(plantillaRecordatorio);
   return buildSmsMessage(plantilla, data);
 }
 

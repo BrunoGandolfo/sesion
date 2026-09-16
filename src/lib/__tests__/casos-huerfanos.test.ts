@@ -93,15 +93,15 @@ describe("textoDeCobro", () => {
     await turno(9000, await otraPaciente());
     await turno(9000, await crearOrg(base.prisma));
 
-    expect(await cobrar()).toBe("Hola Ana, ¿cómo estás? Te escribo para recordarte que tenés 2 sesiones pendientes de pago por un total de $ 3.500. Cualquier duda estoy a disposición. Lic. Prueba");
+    expect(await cobrar()).toBe("Consultorio Lic. Prueba\nAna, tenés 2 sesiones pendientes de pago: $ 3.500.");
   });
 
   it("recalcula la deuda al pagar y devuelve null cuando ya no queda deuda", async () => {
     const primero = await turno(1200);
     const segundo = await turno(2300);
-    expect(await cobrar()).toContain("2 sesiones pendientes de pago por un total de $ 3.500");
+    expect(await cobrar()).toContain("2 sesiones pendientes de pago: $ 3.500");
     await base.prisma.turno.update({ where: { id: primero.id }, data: { pagoEstado: "pagado" } });
-    expect(await cobrar()).toContain("1 sesión pendiente de pago por un total de $ 2.300");
+    expect(await cobrar()).toContain("1 sesión pendiente de pago: $ 2.300");
     await base.prisma.turno.update({ where: { id: segundo.id }, data: { pagoEstado: "pagado" } });
     expect(await cobrar()).toBeNull();
   });
@@ -118,7 +118,7 @@ describe("textoDeCobro", () => {
     await base.prisma.configuracion.delete({ where: { organizationId: org.orgId } });
     await base.prisma.paciente.update({ where: { id: org.pacienteId }, data: { nombre: "Ana $&" } });
     await turno(1250);
-    expect(await cobrar()).toBe("Hola Ana $&, ¿cómo estás? Te escribo para recordarte que tenés 1 sesión pendiente de pago por un total de $ 1.250. Cualquier duda estoy a disposición.");
+    expect(await cobrar()).toBe("Consultorio \nAna $&, tenés 1 sesión pendiente de pago: $ 1.250.");
   });
 });
 

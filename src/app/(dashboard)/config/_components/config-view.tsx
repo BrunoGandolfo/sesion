@@ -413,8 +413,8 @@ export function ConfigView() {
                 <GuardadoCampo estado={estadoDelCampo("whatsappOrigen")} />
               </div>
               <p className="text-[12px] leading-[1.5] text-ink-500">
-                Tu nombre y tu teléfono van al final de cada recordatorio,
-                para que la paciente sepa a quién escribirle.
+                Tu nombre y «Consultorio» van al principio de cada recordatorio.
+                Para cambios, el mensaje indica que te llamen al teléfono configurado.
               </p>
             </div>
           </Card>

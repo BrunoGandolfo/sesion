@@ -2,14 +2,14 @@
 import * as React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { asegurarLineaContacto, buildSmsMessage, LINEA_CONTACTO } from "@/lib/sms/texto";
+import { prepararPlantillaRecordatorio, buildSmsMessage, LINEA_CONTACTO } from "@/lib/sms/texto";
 import { htmlATemplate } from "../editor-recordatorio";
 import { MensajeRecordatorio } from "../mensaje-recordatorio";
 
 const datos = { profesional: "Mariana Roldán", direccion: "Calle 123", telefono: "+59899123456" };
 const templatePegado = "{{profesional}}Hola {{nombre}}, tu sesión es el {{fecha}} a las {{hora}}.";
 function ejemplo(template: string) {
-  return buildSmsMessage(asegurarLineaContacto(template), {
+  return buildSmsMessage(prepararPlantillaRecordatorio(template), {
     ...datos, telefonoConsultorio: datos.telefono, nombre: "Lucía", apellido: "Fernández",
     fecha: new Date("2026-04-21T10:00:00-03:00"),
   });
@@ -53,7 +53,7 @@ describe("vista previa fiel del recordatorio", () => {
     render(<MensajeRecordatorio {...datos} template={`Hola {{nombre}}, {{hora}}. ${LINEA_CONTACTO}`} onChange={vi.fn()} />);
     const texto = screen.getByRole("region").textContent ?? "";
     expect(texto).toContain("10:00");
-    expect(texto.split("Para cambios, comunicate")).toHaveLength(2);
+    expect(texto.split("Cambios: llamar al")).toHaveLength(2);
     expect(texto).toContain(datos.telefono);
   });
 });

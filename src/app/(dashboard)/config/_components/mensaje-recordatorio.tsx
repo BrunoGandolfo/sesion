@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui";
-import { asegurarLineaContacto, buildSmsMessage } from "@/lib/sms/texto";
+import { prepararPlantillaRecordatorio, buildSmsMessage } from "@/lib/sms/texto";
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
 
 const FECHA_PREVIEW = new Date("2026-04-21T10:00:00-03:00");
@@ -20,7 +20,7 @@ export function MensajeRecordatorio({
   const templateSeparado = template.replace(/\{\{profesional\}\}(?=\p{L})/gu, "{{profesional}}\n");
   const nombrePegado = templateSeparado !== template;
   // La misma preparación que usa el envío, incluida su línea de contacto.
-  const vistaPrevia = buildSmsMessage(asegurarLineaContacto(template), {
+  const vistaPrevia = buildSmsMessage(prepararPlantillaRecordatorio(template), {
     nombre: "Lucía", apellido: "Fernández", fecha: FECHA_PREVIEW,
     direccion, profesional, telefonoConsultorio: telefono,
   });
@@ -47,7 +47,7 @@ export function MensajeRecordatorio({
           </div>
         ) : null}
         <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
-          Tocá una ficha para agregarla donde está el cursor. La línea de contacto con tu nombre y tu teléfono se agrega sola si la borrás.
+          Tocá una ficha para agregarla donde está el cursor. El consultorio y tu nombre van al principio; al final se indica a qué teléfono llamar para cambios. Se agregan solos si los borrás. No pidas respuestas por SMS: no llegan.
         </p>
       </div>
       <div>

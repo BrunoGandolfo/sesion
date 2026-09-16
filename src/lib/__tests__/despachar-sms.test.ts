@@ -160,7 +160,8 @@ describe("aceptado", () => {
     const pedido = stub.mock.calls[0][0];
     expect(pedido.destino).toBe(TELEFONO);
     expect(pedido.texto).toContain("Hola Lucía");
-    expect(pedido.texto).toContain("comunicate con Mariana Roldán");
+    expect(pedido.texto.split("\n")[0]).toBe("Consultorio Mariana Roldán");
+    expect(pedido.texto).toContain("Cambios: llamar al +598 99 876 543");
     expect(pedido.statusCallback).toBe(URL_CALLBACK);
 
     const fila = await leer(envioId);
@@ -510,7 +511,7 @@ describe("aviso de cobro", () => {
     const stub = vi.fn(aceptaOk);
     await correr(stub, { textoDeCobro: parametros => textoDeCobro(db, parametros) });
     expect(stub).toHaveBeenCalledTimes(1);
-    expect(stub.mock.calls[0][0].texto).toBe("Hola Lucía, ¿cómo estás? Te escribo para recordarte que tenés 2 sesiones pendientes de pago por un total de $ 3.500. Cualquier duda estoy a disposición. Mariana Roldán");
+    expect(stub.mock.calls[0][0].texto).toBe("Consultorio Mariana Roldán\nLucía, tenés 2 sesiones pendientes de pago: $ 3.500.");
     expect((await leer(envioId)).estado).toBe("aceptado");
   });
 
