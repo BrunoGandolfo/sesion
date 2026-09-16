@@ -30,8 +30,8 @@
 // Escribe resultado-<etiqueta>.json en --salida (default: cwd) y sale con 1
 // si algo falló.
 //
-// Con --acta arma el texto del issue a partir de los resultado-*.json y de
-// los argumentos; no toca la base.
+// Con --acta arma el texto del issue a partir de los resultado-*.json,
+// los estado-*.json del workflow y los argumentos; no toca la base.
 //
 // Entorno (uno de los dos; si están ambos manda el llavero):
 //   CLAVES_CIFRADO_IDS="1,2"   ids de TODAS las claves que existen guardadas
@@ -364,10 +364,24 @@ function verificarClavesForaneas() {
 function seccionCopia(etiqueta, archivo) {
   const ruta = join(SALIDA, `resultado-${etiqueta}.json`);
   const r = existsSync(ruta) ? JSON.parse(readFileSync(ruta, "utf8")) : null;
+  const rutaEstado = join(SALIDA, `estado-${etiqueta}.json`);
+  const estado = existsSync(rutaEstado) ? JSON.parse(readFileSync(rutaEstado, "utf8")) : null;
   const titulo = { diario: "Copia diaria (la más reciente)", mensual: "Copia mensual (la más vieja)" }[etiqueta] ?? `Copia ${etiqueta}`;
-  const lineas = [`### ${titulo}: \`${archivo ?? r?.archivo ?? "?"}\``, ""];
+  const lineas = [`### ${titulo}: \`${archivo ?? r?.archivo ?? estado?.archivo ?? "no identificada"}\``, ""];
   if (!r) {
-    lineas.push("_No hay resultado: el ensayo de esta copia falló antes de verificar (descifrado gpg, índice o pg_restore; ver la corrida)._", "");
+    const etapas = {
+      no_existe: "No existe la copia bajo el prefijo consultado. No se descargó ni se abrió.",
+      listado: "Falló el listado de copias. No se pudo determinar si existe la copia.",
+      metadatos: "Falló la lectura de la fecha de la copia. No se descargó ni se abrió.",
+      descarga: "Falló la descarga de la copia. No se intentó abrirla.",
+      base: "Falló la preparación de la base destino. No se intentó abrir la copia.",
+      apertura: "La copia falló al abrirse o restaurarse. El registro no distingue aquí entre descifrado, índice y restauración: ver el error de la corrida.",
+      verificacion: "Falló la verificación después de restaurar la copia, sin generar un resultado detallado. Ver el error de la corrida.",
+    };
+    const mensaje = Number.isInteger(estado?.codigo) && estado.codigo !== 0
+      ? etapas[estado.etapa]
+      : null;
+    lineas.push(`_${mensaje ?? "No hay resultado ni un fallo registrado que explique su ausencia. La causa es desconocida; ver la corrida."}_`, "");
     return lineas;
   }
   lineas.push(`- **Fecha del respaldo:** ${r.fechaArchivo ?? "?"}`, `- **Resultado de la verificación:** ${r.ok ? "OK" : "FALLÓ"}`, "", "| Tabla | Filas |", "| --- | --- |");

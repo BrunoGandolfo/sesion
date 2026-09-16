@@ -12,7 +12,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -253,12 +253,80 @@ describe("el workflow prueba también una copia mensual y no pide ninguna clave 
     if (!p) throw new Error(`Falta el paso "${nombre}"`);
     return p;
   };
-  it("restaura y verifica las dos copias, y la mensual corre aunque la diaria haya fallado", () => {
-    expect(paso("Restaurar y verificar la copia diaria").run).toContain("--etiqueta diario");
-    const mensual = paso("Restaurar y verificar la copia mensual");
-    expect(mensual.run).toContain("--etiqueta mensual");
-    expect(mensual.if).toContain("!cancelled()");
-    expect(paso("Verificar secrets").run).toContain(IDS);
+  it.each([
+    { falta: "mensual", noAbre: "" },
+    { falta: "diario", noAbre: "" },
+    { falta: "", noAbre: "" },
+    { falta: "", noAbre: "diario" },
+    { falta: "", noAbre: "mensual" },
+  ])("YAML con aws simulado y restauración real: falta=$falta, noAbre=$noAbre", ({ falta, noAbre }) => {
+    const trabajo = mkdtempSync(join(carpeta, "workflow-"));
+    symlinkSync(resolve("scripts"), join(trabajo, "scripts"));
+    const binarios = join(trabajo, "bin");
+    mkdirSync(binarios);
+    // Solo R2 es simulado. El guion, gpg, Postgres y el verificador son reales.
+    writeFileSync(join(binarios, "aws"), `#!${process.execPath}
+const { copyFileSync, appendFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+const opcion = (n) => args[args.indexOf(n) + 1];
+const etiqueta = process.env.ETIQUETA;
+appendFileSync("aws.jsonl", JSON.stringify({ etiqueta, args }) + "\\n");
+if (args[0] === "s3api" && args[1] === "list-objects-v2") {
+  console.log(etiqueta === process.env.FALTA ? "None" : opcion("--prefix") + "prueba.dump.gpg");
+} else if (args[0] === "s3api" && args[1] === "head-object") {
+  console.log("2026-09-16T06:00:00+00:00");
+} else if (args[0] === "s3" && args[1] === "cp") {
+  copyFileSync(etiqueta === process.env.NO_ABRE ? process.env.TRUNCADO : process.env.BUENO, args[3]);
+} else {
+  throw new Error("Operación inesperada: " + args.join(" "));
+}
+`, { mode: 0o755 });
+    for (const etiqueta of ["diario", "mensual"]) {
+      const nombre = `ensayo_${etiqueta}`;
+      psql(urlDeBaseDeTest(), `DROP DATABASE IF EXISTS ${nombre}`);
+      if (!basesCreadas.includes(nombre)) basesCreadas.push(nombre);
+    }
+    const servidor = new URL(urlDeBaseDeTest());
+    servidor.pathname = "";
+    const r = spawnSync("bash", ["-euo", "pipefail", "-c", paso("Ensayar las dos copias por separado").run!], {
+      cwd: trabajo, encoding: "utf8",
+      env: {
+        NODE_ENV: "test",
+        PATH: `${binarios}:${process.env.PATH}`, PG_BIN: process.env.PG_BIN ?? "/usr/bin",
+        PG_URL: servidor.toString().replace(/\/$/, ""),
+        BACKUP_ENCRYPTION_KEY: PASSPHRASE, GNUPGHOME: join(carpeta, "gnupg"), [IDS]: "1",
+        R2_BUCKET: "bucket-simulado", R2_ENDPOINT: "https://r2.invalid",
+        FALTA: falta, NO_ABRE: noAbre,
+        BUENO: join(carpeta, "bueno.dump.gpg"), TRUNCADO: join(carpeta, "truncado.dump.gpg"),
+      },
+    });
+    expect(r.status, r.stderr).toBe(falta || noAbre ? 1 : 0);
+    const llamadas = readFileSync(join(trabajo, "aws.jsonl"), "utf8").trim().split("\n")
+      .map((l) => JSON.parse(l) as { etiqueta: string; args: string[] });
+    for (const etiqueta of ["diario", "mensual"]) {
+      const estado = JSON.parse(readFileSync(join(trabajo, `estado-${etiqueta}.json`), "utf8"));
+      const ruta = join(trabajo, `resultado-${etiqueta}.json`);
+      if (etiqueta === falta || etiqueta === noAbre) {
+        expect(estado.etapa).toBe(etiqueta === falta ? "no_existe" : "apertura");
+        expect(estado.codigo).toBe(1);
+        expect(existsSync(ruta)).toBe(false);
+      } else {
+        expect(estado.etapa).toBe("completado");
+        expect(estado.codigo).toBe(0);
+        const resultado = JSON.parse(readFileSync(ruta, "utf8"));
+        expect(resultado.ok).toBe(true);
+        expect(resultado.tablas.conteos.sesiones_clinicas).toBe(1);
+        expect(resultado.tablas.conteos.hilo_versiones).toBe(1);
+        expect(resultado.descifrado.muestras).toHaveLength(4);
+      }
+      expect(llamadas.filter((l) => l.etiqueta === etiqueta && l.args[0] === "s3")).toHaveLength(etiqueta === falta ? 0 : 1);
+    }
+    const acta = execFileSync(process.execPath, [VERIFICAR, "--acta", "--salida", trabajo], { encoding: "utf8" });
+    expect(acta.match(/\*\*Resultado de la verificación:\*\* OK/g)).toHaveLength(falta || noAbre ? 1 : 2);
+    if (falta) expect(acta).toContain("No existe la copia bajo el prefijo consultado");
+    if (noAbre) expect(acta).toContain("La copia falló al abrirse o restaurarse");
+    expect(acta).not.toContain("descifrado gpg");
+    expect(acta).not.toContain("La causa es desconocida");
   });
   it("no recibe ninguna clave clínica: solo ids, y solo los secrets del respaldo y del aviso", () => {
     const texto = readFileSync(WORKFLOW, "utf8");

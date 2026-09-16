@@ -17,8 +17,8 @@
 #      cada uno contra la lista de ids conocidos (un id que no está = datos
 #      cifrados con una clave retirada o desconocida, y el ensayo falla
 #      diciéndolo así, no como corrupción), filas huérfanas por clave foránea;
-#   4. publica resultado-diario.json y resultado-mensual.json como artefacto
-#      y abre un issue con el acta;
+#   4. publica los resultados y la etapa/código de salida de cada intento
+#      como artefactos y abre un issue con el acta;
 #   5. alerta por correo si cualquier paso falla.
 #
 # DECISIÓN DELIBERADA: este ensayo NO descifra ninguna nota y no recibe
@@ -120,72 +120,74 @@ jobs:
           aws configure set default.s3.request_checksum_calculation when_required
           aws configure set default.s3.response_checksum_validation when_required
 
-      - name: "Elegir las copias: la diaria más reciente y la mensual más vieja"
+      - name: Ensayar las dos copias por separado
         run: |
           set -euo pipefail
-          elegir() { # <prefijo> <índice en la lista ordenada por fecha: -1 última, 0 primera>
-            # Un prefijo vacío puede no traer Contents; sort_by necesita una lista.
-            if ! aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "$1" \
-              --endpoint-url "${R2_ENDPOINT}" \
-              --query "sort_by(Contents || \`[]\`, &LastModified)[$2].Key" --output text; then
-              echo "ERROR: no se pudo listar el prefijo $1." >&2
-              return 1
+          fallo=0
+          for etiqueta in diario mensual; do
+            # Un Bash por copia: conserva errexit dentro del intento aunque
+            # el padre capture su fallo para seguir con la otra copia.
+            if ETIQUETA="$etiqueta" bash -euo pipefail <<'COPIA'
+          etapa=listado
+          export BACKUP_ARCHIVO="" BACKUP_FECHA=""
+          registrar() {
+            codigo=$?
+            node --input-type=module - "$ETIQUETA" "$etapa" "$codigo" <<'ESTADO'
+          import { writeFileSync } from 'node:fs';
+          const [etiqueta, etapa, codigo] = process.argv.slice(2);
+          writeFileSync(`estado-${etiqueta}.json`, JSON.stringify({
+            etapa, codigo: Number(codigo),
+            archivo: process.env.BACKUP_ARCHIVO || null,
+            fechaArchivo: process.env.BACKUP_FECHA || null,
+          }));
+          ESTADO
+          }
+          trap registrar EXIT
+          if [ "$ETIQUETA" = diario ]; then
+            prefijo=backups/sesion-backup-
+            indice=-1
+            nombre=diaria
+          else
+            prefijo=backups/mensuales/
+            indice=0
+            nombre=mensual
+          fi
+          # Un prefijo vacío puede no traer Contents; sort_by necesita una lista.
+          if ! BACKUP_ARCHIVO="$(aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "$prefijo" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --query "sort_by(Contents || \`[]\`, &LastModified)[$indice].Key" --output text)"; then
+            echo "ERROR: no se pudo listar el prefijo $prefijo." >&2
+            exit 1
+          fi
+          if [ -z "$BACKUP_ARCHIVO" ] || [ "$BACKUP_ARCHIVO" = None ]; then
+            BACKUP_ARCHIVO=""
+            etapa=no_existe
+            echo "ERROR: no hay ninguna copia $nombre bajo $prefijo." >&2
+            exit 1
+          fi
+          echo "Copia $nombre: $BACKUP_ARCHIVO"
+          etapa=metadatos
+          BACKUP_FECHA="$(aws s3api head-object --bucket "${R2_BUCKET}" --key "$BACKUP_ARCHIVO" \
+            --endpoint-url "${R2_ENDPOINT}" --query LastModified --output text)"
+          etapa=descarga
+          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_ARCHIVO}" "$ETIQUETA.dump.gpg" --endpoint-url "${R2_ENDPOINT}" --only-show-errors
+          etapa=base
+          export DATABASE_URL="${PG_URL}/ensayo_${ETIQUETA}"
+          "${PG_BIN}/psql" -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE ensayo_${ETIQUETA}" "${PG_URL}/postgres"
+          etapa=apertura
+          scripts/ensayo/restaurar.sh "$ETIQUETA.dump.gpg" "${DATABASE_URL}"
+          etapa=verificacion
+          node scripts/ensayo/verificar-restauracion.mjs --etiqueta "$ETIQUETA"
+          etapa=completado
+          COPIA
+            then
+              echo "Copia $etiqueta: ensayo completo."
+            else
+              fallo=1
+              echo "ERROR: el ensayo de la copia $etiqueta no se completó; su fallo no impide los demás intentos." >&2
             fi
-          }
-          fecha() {
-            aws s3api head-object --bucket "${R2_BUCKET}" --key "$1" \
-              --endpoint-url "${R2_ENDPOINT}" --query 'LastModified' --output text
-          }
-          diario="$(elegir backups/sesion-backup- -1)"
-          if [ -z "${diario}" ] || [ "${diario}" = "None" ]; then
-            echo "ERROR: no hay ninguna copia diaria bajo backups/sesion-backup-." >&2
-            exit 1
-          fi
-          mensual="$(elegir backups/mensuales/ 0)"
-          if [ -z "${mensual}" ] || [ "${mensual}" = "None" ]; then
-            echo "ERROR: no hay ninguna copia mensual bajo backups/mensuales/: el backup del día 1 tendría que haberla dejado." >&2
-            exit 1
-          fi
-          {
-            echo "BACKUP_DIARIO=${diario}"
-            echo "BACKUP_DIARIO_FECHA=$(fecha "${diario}")"
-            echo "BACKUP_MENSUAL=${mensual}"
-            echo "BACKUP_MENSUAL_FECHA=$(fecha "${mensual}")"
-          } >> "$GITHUB_ENV"
-          echo "Diaria: ${diario}"
-          echo "Mensual: ${mensual}"
-
-      - name: Bajar las dos copias
-        run: |
-          set -euo pipefail
-          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_DIARIO}" diario.dump.gpg --endpoint-url "${R2_ENDPOINT}" --only-show-errors
-          aws s3 cp "s3://${R2_BUCKET}/${BACKUP_MENSUAL}" mensual.dump.gpg --endpoint-url "${R2_ENDPOINT}" --only-show-errors
-          ls -lh diario.dump.gpg mensual.dump.gpg
-
-      - name: Restaurar y verificar la copia diaria
-        env:
-          BACKUP_ARCHIVO: ${{ env.BACKUP_DIARIO }}
-          BACKUP_FECHA: ${{ env.BACKUP_DIARIO_FECHA }}
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ensayo_diario
-        run: |
-          set -euo pipefail
-          "${PG_BIN}/psql" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ensayo_diario' "${PG_URL}/postgres"
-          scripts/ensayo/restaurar.sh diario.dump.gpg "${DATABASE_URL}"
-          node scripts/ensayo/verificar-restauracion.mjs --etiqueta diario
-
-      # Corre aunque la diaria haya fallado: son dos preguntas distintas y el
-      # acta tiene que contestar las dos.
-      - name: Restaurar y verificar la copia mensual
-        if: ${{ !cancelled() && env.BACKUP_MENSUAL != '' }}
-        env:
-          BACKUP_ARCHIVO: ${{ env.BACKUP_MENSUAL }}
-          BACKUP_FECHA: ${{ env.BACKUP_MENSUAL_FECHA }}
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ensayo_mensual
-        run: |
-          set -euo pipefail
-          "${PG_BIN}/psql" -X -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ensayo_mensual' "${PG_URL}/postgres"
-          scripts/ensayo/restaurar.sh mensual.dump.gpg "${DATABASE_URL}"
-          node scripts/ensayo/verificar-restauracion.mjs --etiqueta mensual
+          done
+          exit "$fallo"
 
       - name: Borrar los archivos descifrables
         if: always()
@@ -196,7 +198,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ensayo-restauracion-${{ github.run_id }}
-          path: resultado-*.json
+          path: |
+            resultado-*.json
+            estado-*.json
           if-no-files-found: ignore
 
       - name: Abrir el issue con el acta
@@ -209,8 +213,6 @@ jobs:
           fecha="$(date -u +'%Y-%m-%d')"
           cuerpo="$(node scripts/ensayo/verificar-restauracion.mjs --acta \
             --resultado "${RESULTADO}" \
-            --diario "${BACKUP_DIARIO:-desconocido}" \
-            --mensual "${BACKUP_MENSUAL:-desconocido}" \
             --corrida "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")"
           titulo="Acta de ensayo de restauración (automático) — ${fecha} — ${RESULTADO}"
           gh issue create --title "${titulo}" --label "operaciones" --body "${cuerpo}" \
@@ -222,7 +224,5 @@ jobs:
         with:
           asunto: "El ensayo de restauración falló"
           texto: |
-            Alguna de las dos copias (diaria ${{ env.BACKUP_DIARIO }}, mensual ${{ env.BACKUP_MENSUAL }}) no se pudo restaurar, no tiene datos o tiene datos cifrados con una clave que no figura en CLAVES_CIFRADO_IDS.
-            El acta del issue dice cuál y por qué; "clave retirada o desconocida" no es corrupción: es que ningún llavero conocido la abre.
-            Hasta que se arregle, no hay una restauración probada.
+            El ensayo no pudo completar ambas copias. El acta registra por separado lo que ocurrió con la diaria y con la mensual, y los resultados de las que sí se verificaron.
             Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
