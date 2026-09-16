@@ -9,12 +9,25 @@
 //
 // Ahora hay un solo TRUNCATE en todo el repositorio (`vaciarTablas`) y un solo
 // lugar donde se decide a qué base se conecta un test (`conectarBaseDeTest`),
-// con una guarda antes de abrir la conexión:
+// con una guarda antes de abrir la conexión. Dos condiciones, las dos:
 //
-//   El host de DATABASE_URL_TEST tiene que ser LOCAL (localhost, 127.0.0.1 o
-//   ::1). Cualquier otro host aborta, salvo que exista
-//   PERMITIR_BASE_REMOTA_DE_TEST=1, y en ese caso el error —si algo sale mal—
-//   dice qué host se aceptó y que el TRUNCATE va en serio.
+//   1. La base se llama exactamente `sesion_test`. Es lo único que distingue
+//      la base de pruebas de este proyecto de cualquier otra del mismo
+//      servidor o de otro servidor local: la base de desarrollo, la de otro
+//      proyecto que escucha en un puerto parecido, una restauración.
+//   2. El host es LOCAL (localhost, 127.0.0.1 o ::1). Cualquier otro host
+//      aborta, salvo que exista PERMITIR_BASE_REMOTA_DE_TEST=1, y en ese caso
+//      el log dice qué host se aceptó y que el TRUNCATE va en serio. El
+//      permiso remoto no afloja la condición 1.
+//
+// POR QUÉ EL NOMBRE Y NO EL PUERTO
+//
+// El 16 de septiembre de 2026 el .env.test.example apuntaba a localhost:5433,
+// y en la máquina del dueño ese puerto era la base de otro proyecto. La suite
+// no la vació porque las credenciales no coincidieron, no por diseño: la
+// guarda de localhost la aceptaba. Ningún número de puerto garantiza estar
+// libre; el nombre de la base sí es de este proyecto. Lo fijan
+// docker-compose.yml (POSTGRES_DB) y el job `test` de ci.yml.
 //
 // LA GUARDA ANTERIOR Y POR QUÉ CAMBIÓ
 //
@@ -38,6 +51,9 @@ import { withEncryption } from "@/lib/prisma-encryption";
 
 /** Variable que habilita un host remoto. El valor tiene que ser exactamente "1". */
 export const VARIABLE_PERMISO_REMOTO = "PERMITIR_BASE_REMOTA_DE_TEST";
+
+/** El único nombre de base contra el que corre la suite de integración. */
+export const NOMBRE_BASE_DE_TEST = "sesion_test";
 
 const HOSTS_LOCALES: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
@@ -81,11 +97,12 @@ export function hayBaseDeTest(): boolean {
 // Guarda
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Host de la URL (sin puerto), para poder decir qué se recibió sin filtrar
+/** Host, puerto y base de la URL, para poder decir qué se recibió sin filtrar
  *  la contraseña que viaja en el userinfo de la connection string. */
-function hostDe(url: string): string | null {
+function partesDe(url: string): { host: string; puerto: string; base: string } | null {
   try {
-    return new URL(url).hostname;
+    const u = new URL(url);
+    return { host: u.hostname, puerto: u.port || "5432", base: decodeURIComponent(u.pathname.replace(/^\//, "")) };
   } catch {
     return null;
   }
@@ -93,10 +110,13 @@ function hostDe(url: string): string | null {
 
 const AYUDA = [
   "Cómo arreglarlo:",
-  "  - Con Docker: `npm run db:test:up` y DATABASE_URL_TEST del .env.test.example.",
-  "  - Sin Docker: la rama `test` de Neon en DATABASE_URL_TEST, con conexión",
-  `    directa, y ${VARIABLE_PERMISO_REMOTO}=1 para declarar que es remota.`,
+  `  - Con Docker: \`npm run db:test:up\` y DATABASE_URL_TEST del .env.test.example,`,
+  `    o un contenedor propio con POSTGRES_DB=${NOMBRE_BASE_DE_TEST} y el puerto que te asigne.`,
+  `  - Sin Docker: una base llamada ${NOMBRE_BASE_DE_TEST} en la rama \`test\` de Neon, con`,
+  `    conexión directa, y ${VARIABLE_PERMISO_REMOTO}=1 para declarar que es remota.`,
   "  - CI: el job `test` levanta un Postgres propio y define la variable.",
+  "  - Nunca renombres ni crees esa base dentro de un servidor que no sea tuyo:",
+  "    la guarda confía en el nombre.",
 ].join("\n");
 
 /**
@@ -124,10 +144,27 @@ export function validarUrlDeBaseDeTest(
     );
   }
 
-  const host = hostDe(limpia);
-  if (host === null) {
+  const partes = partesDe(limpia);
+  if (partes === null) {
     throw new Error(
       ["DATABASE_URL_TEST no es una URL válida.", "", AYUDA].join("\n"),
+    );
+  }
+  const { host, puerto, base } = partes;
+
+  if (base !== NOMBRE_BASE_DE_TEST) {
+    throw new Error(
+      [
+        `DATABASE_URL_TEST apunta a la base "${base || "(sin nombre)"}" en ${host}:${puerto}, y la de pruebas de Sesión se llama "${NOMBRE_BASE_DE_TEST}".`,
+        "",
+        "Los tests de integración vacían TODAS las tablas con TRUNCATE ...",
+        "CASCADE. Una base con otro nombre no es la de pruebas de este proyecto:",
+        "puede ser la de desarrollo, una restauración o la de otro sistema que",
+        "escucha en ese puerto. Abortado antes de abrir la conexión: no se",
+        "ejecutó nada.",
+        "",
+        AYUDA,
+      ].join("\n"),
     );
   }
 
