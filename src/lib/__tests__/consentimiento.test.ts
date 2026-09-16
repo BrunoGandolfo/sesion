@@ -10,6 +10,8 @@ import {
   sugiereRefirmar,
 } from "@/lib/consentimiento";
 import { __resetLlaveroForTests } from "@/lib/llavero";
+import { POLITICA_POR_TIPO, backoffTrabajoMs } from "@/app/api/_lib/casos-uso/trabajos/politica";
+import { decidirResolucion } from "@/app/api/_lib/casos-uso/trabajos/resolver";
 
 const baseParams = {
   nombrePaciente: "María González",
@@ -18,17 +20,18 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 2.1 y sugiere re-firmar las anteriores", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("2.1");
+  it("la versión vigente del texto es la 2.2 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.2");
     expect(sugiereRefirmar("1.1")).toBe(true);
     // La 2.0 no decía que el resumen del proceso se puede imprimir.
     expect(sugiereRefirmar("2.0")).toBe(true);
-    expect(sugiereRefirmar("2.1")).toBe(false);
+    expect(sugiereRefirmar("2.1")).toBe(true);
+    expect(sugiereRefirmar("2.2")).toBe(false);
   });
 
   it("interpola los tres datos y lleva la versión", () => {
     const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("Versión 2.1");
+    expect(texto).toContain("Versión 2.2");
     expect(texto).toContain("Hola María González.");
     expect(texto).toContain("con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo");
   });
@@ -89,25 +92,60 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).not.toMatch(/administra/i);
   });
 
-  it("el audio se borra al aprobar, la clave se destruye, y el borrado se reintenta", () => {
+  it("al aprobar destruye la clave activa y declara los reintentos acotados y el fallo", () => {
     expect(hechos.LIMPIEZA_AUDIO_REINTENTA).toBe(true);
+    expect(hechos.CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(true);
     expect(texto).toContain("revisa y aprueba la nota");
-    expect(texto).toContain("destruye la clave que abre el audio y borra el archivo; si el borrado falla, lo reintenta");
+    expect(texto).toContain("destruye siempre la clave del audio en la base que usa para trabajar");
+    expect(texto).toContain("Desde entonces no puede abrir ese archivo, aunque siga pendiente de borrado");
+    expect(texto).toContain(`repite los intentos durante unos ${hechos.LIMPIEZA_AUDIO_DIAS_APROX} días; después el borrado queda marcado como fallido`);
+    expect(texto).not.toContain("hasta lograrlo");
     expect(texto).not.toContain("imposible de abrir");
+    expect(texto).not.toContain("nadie puede abrir");
+  });
+
+  it("el plazo aproximado y el fallo salen de la política real de borrado", () => {
+    const tipo = "borrar_audio_r2";
+    const { tope } = POLITICA_POR_TIPO[tipo];
+    expect(tope).toBe(hechos.LIMPIEZA_AUDIO_MAX_INTENTOS);
+    const esperas = Array.from({ length: tope - 1 }, (_, i) => backoffTrabajoMs(tipo, i + 1));
+    expect(Math.ceil(esperas.reduce((suma, ms) => suma + ms, 0) / 86_400_000)).toBe(hechos.LIMPIEZA_AUDIO_DIAS_APROX);
+    expect(decidirResolucion({ tipo, intentos: tope }, { ok: false, error: "R2 no responde" }, new Date("2026-09-16T12:00:00Z"))).toEqual({ estado: "fallido" });
   });
 
   it("los backups se declaran con su plazo y que pueden contener la clave cifrada", () => {
     expect(hechos.RETENCION_BACKUPS_DIAS).toBe(30);
+    expect(hechos.RETENCION_BACKUPS_MENSUALES_MESES).toBe(12);
+    expect(hechos.RETENCION_BACKUPS_MENSUALES_DIAS).toBe(366);
     expect(hechos.BACKUP_INCLUYE_CLAVE_AUDIO).toBe(true);
-    expect(texto).toContain("se guardan 30 días");
+    expect(texto).toContain("se guardan 30 días si son diarias y hasta 12 meses si son mensuales");
     expect(texto).toContain("sí pueden contener, cifrada, la clave de un audio");
+    expect(texto).toContain("Esa clave puede conservarse hasta 12 meses, aunque ya se haya eliminado de la base que usa la aplicación");
+    expect(texto).toContain("Si el archivo no se pudo borrar, esa copia de la clave podría permitir abrirlo");
+  });
+
+  it("el resumen lo propone la misma IA y sólo queda vigente por decisión de la profesional", () => {
+    expect(hechos.RESUMEN_PROPUESTO_POR_IA).toBe(true);
+    expect(texto).toContain("Lo propone la misma inteligencia artificial que redacta la nota; Lic. Ana Pérez lo revisa, lo corrige o lo descarta");
+    expect(texto).toContain("Solo queda vigente cuando ella lo acepta. La decisión sigue siendo suya.");
+  });
+
+  it("declara el archivo temporal del servidor y su borrado al terminar", () => {
+    expect(hechos.AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL).toBe(true);
+    expect(texto).toContain("lo descifra en un archivo temporal del servidor y lo manda a transcribir. Ese archivo temporal se borra al terminar");
+    expect(texto).not.toContain("solo en memoria");
   });
 
   it("dice qué queda guardado, cifrado: nota, transcripción, resumen, consentimiento y firma", () => {
-    expect(texto).toContain("La transcripción de la sesión.");
-    expect(texto).toContain("El resumen de tu proceso que ella mantiene.");
-    expect(texto).toContain("Este consentimiento y tu firma.");
-    expect(texto).toContain("El audio no queda.");
+    const enumeracion = texto.split("¿Qué queda guardado?\n")[1].split("El borrado del audio")[0];
+    expect(enumeracion).toBe(`En la base de datos de la aplicación (Neon), cifrado, y accesible solo para Lic. Ana Pérez:
+- La nota clínica, como parte de tu historia clínica.
+- La transcripción de la sesión.
+- El resumen de tu proceso que ella mantiene.
+- Este consentimiento y tu firma.
+`);
+    expect(texto).toContain("El borrado del audio sigue los pasos y plazos explicados arriba.");
+    expect(texto).not.toContain("El audio no queda.");
   });
 
   it("el resumen del proceso se puede imprimir, sale sin cifrar y cada vez queda registrado", () => {
@@ -247,7 +285,7 @@ describe("la ruta de consentimiento", () => {
     const { descifrar, aadDe } = await import("@/lib/encryption");
     const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
     expect(texto).toContain("Hola María González.");
-    expect(texto).toContain("Versión 2.1");
+    expect(texto).toContain("Versión 2.2");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
   });
