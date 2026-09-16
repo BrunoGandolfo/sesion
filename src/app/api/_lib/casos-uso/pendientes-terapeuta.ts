@@ -28,17 +28,16 @@
 // criterios: hay un número que no coincide consigo mismo.
 //
 // Ahora la deuda sale de una sola función pura, `deudoresDeHoy`, que es
-// `calcularDeudores` con la forma que viaja por la red. La consumen las tres
-// apariciones de la deuda en Hoy (el bloque de pendientes, el KPI "Por
-// cobrar" y "Te deben") y también la lista de /api/dashboard. El orden es el
-// que devuelve `calcularDeudores` —monto descendente—, que es el mismo con
-// el que Cobros dibuja su lista.
+// `calcularDeudores` con la forma que viaja por la red. /api/dashboard
+// comparte esa cuenta con Pendientes y con la actualización local al cobrar.
+// Hoy muestra la deuda una sola vez, en Pendientes; el detalle está en Cobros.
 //
 // Sin request ni Response: recibe prisma y `ahora` como parámetros.
 
 import type { db } from "@/lib/db";
 import { esConsentimientoVigente } from "@/lib/consentimiento";
 import { finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
+import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 
 import type {
   DeudaPaciente,
@@ -62,8 +61,7 @@ export interface PendientesTerapeutaParams {
   organizationId: string;
   ahora: Date;
   /** Los turnos con deuda, si quien llama ya los leyó. /api/dashboard los
-   *  necesita también para el KPI y para la lista de "Te deben", así que los
-   *  pasa y la consulta se hace una sola vez. Sin esto se leen acá. */
+   *  pasa para compartir la cuenta sin repetir la consulta. */
   turnosConDeuda?: TurnoConDeuda[];
 }
 
@@ -104,8 +102,7 @@ function masAntiguoPorPaciente(turnos: TurnoConDeuda[]): Map<string, string> {
  * mismo con el que Cobros dibuja su lista— y, a igual monto, la deuda más
  * vieja primero, para que el orden no dependa de cómo vino la consulta.
  *
- * Es la fuente única de la deuda de la pantalla de Hoy: la usan el bloque de
- * pendientes (vía `sinCobrar`), el KPI "Por cobrar" y "Te deben". Pura: recibe
+ * Es la fuente única de la deuda de la pantalla de Hoy. Pura: recibe
  * los turnos que ya leyó `buscarTurnosConDeuda` y no vuelve a la base.
  */
 export function deudoresDeHoy(
@@ -122,13 +119,7 @@ export function deudoresDeHoy(
       montoTotal: deudor.montoTotal,
       diasAtraso: deudor.diasAtraso ?? 0,
     }))
-    .sort((a, b) =>
-      b.montoTotal !== a.montoTotal
-        ? b.montoTotal - a.montoTotal
-        : (masAntiguo.get(a.pacienteId) ?? "").localeCompare(
-            masAntiguo.get(b.pacienteId) ?? "",
-          ),
-    );
+    .sort(porMontoYAntiguedad((deudor) => deudor.montoTotal, masAntiguo));
 }
 
 function totalizar(sinCobrar: PacienteSinCobrar[]): TotalSinCobrar {
@@ -139,9 +130,8 @@ function totalizar(sinCobrar: PacienteSinCobrar[]): TotalSinCobrar {
   };
 }
 
-/** Las tres formas en que la deuda aparece en Hoy, salidas de una sola
- *  cuenta: la lista con nombre y apellido ("Te deben"), la lista con el
- *  nombre unido (el bloque de pendientes) y el total (el KPI). */
+/** Las representaciones de la deuda en los datos de Hoy, salidas de una
+ *  sola cuenta: deudores, pendientes agrupados y total. */
 export interface DeudaDeHoy {
   deudores: DeudaPaciente[];
   sinCobrar: PacienteSinCobrar[];
@@ -150,13 +140,12 @@ export interface DeudaDeHoy {
 
 /**
  * La deuda de la organización, una sola vez y en un solo orden, en las tres
- * formas que consume la pantalla de Hoy. Pura: recibe los turnos que ya leyó
+ * formas que devuelve /api/dashboard. Pura: recibe los turnos que ya leyó
  * `buscarTurnosConDeuda` y no vuelve a la base.
  *
  * Las tres salidas tienen los mismos pacientes, en el mismo orden y con los
  * mismos montos, por construcción: `sinCobrar` es `deudores` con el nombre
- * unido y `totalSinCobrar` es su suma. Es lo que hace que el número de
- * arriba de la pantalla y el del KPI no puedan volver a discrepar.
+ * unido y `totalSinCobrar` es su suma.
  */
 export function deudaDeHoy(
   turnos: TurnoConDeuda[],

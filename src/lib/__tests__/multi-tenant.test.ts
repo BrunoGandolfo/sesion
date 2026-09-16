@@ -34,6 +34,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { cifrarConsentimiento } from "@/lib/prisma-encryption";
+import { obtenerTurnoParaGrabar } from "@/app/api/_lib/casos-uso/obtener-turno-para-grabar";
 
 import {
   conectarBaseDeTest,
@@ -199,6 +200,56 @@ afterAll(async () => {
     process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
   }
   __resetLlaveroForTests();
+});
+
+describe("obtenerTurnoParaGrabar — datos de la pantalla y aislamiento", () => {
+  it("devuelve el turno propio y la vigencia de la autorización", async () => {
+    const a = await crearOrg();
+    const turnoId = await crearTurno(a);
+    const leer = () => obtenerTurnoParaGrabar({
+      prisma: db, organizationId: a.orgId, turnoId,
+    });
+    expect(await leer()).toEqual({
+      id: turnoId,
+      fecha: MANANA,
+      paciente: { id: a.pacienteId, nombre: "Ana", apellido: "Pérez" },
+      autorizacionVigente: false,
+    });
+
+    const consentimiento = await db.consentimientoGrabacion.create({
+      data: {
+        ...cifrarConsentimiento(randomUUID(), {
+          textoCompleto: "Autorización de prueba",
+          firmaDigital: "data:image/png;base64,AAAA",
+        }),
+        pacienteId: a.pacienteId,
+        organizationId: a.orgId,
+        firmadoEn: MANANA,
+        textoVersion: "1.1",
+      },
+    });
+    expect((await leer())?.autorizacionVigente).toBe(true);
+    await db.consentimientoGrabacion.update({
+      where: { id: consentimiento.id }, data: { revocadoEn: MANANA },
+    });
+    expect((await leer())?.autorizacionVigente).toBe(false);
+  });
+
+  it("no devuelve el turno de otra organización", async () => {
+    const a = await crearOrg();
+    const b = await crearOrg();
+    const turnoId = await crearTurno(a);
+    expect(await obtenerTurnoParaGrabar({
+      prisma: db, organizationId: b.orgId, turnoId,
+    })).toBeNull();
+  });
+
+  it("devuelve null para un turno inexistente", async () => {
+    const a = await crearOrg();
+    expect(await obtenerTurnoParaGrabar({
+      prisma: db, organizationId: a.orgId, turnoId: randomUUID(),
+    })).toBeNull();
+  });
 });
 
 describe("PATCH /api/pacientes/[id] — aislamiento entre organizaciones", () => {

@@ -7,6 +7,7 @@
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { clavesDeRiesgo } from "@/components/grabacion/RiesgoDetectadoBanner";
 import { apiGet } from "@/lib/api-client";
+import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 import type {
   Configuracion,
   DashboardData,
@@ -216,14 +217,6 @@ export function aplicarCobro(
   const masAntiguo = new Map(
     data.pendientes.sinCobrar.map((p) => [p.pacienteId, p.masAntiguo]),
   );
-  const porMonto = <T extends { pacienteId: string }>(
-    monto: (item: T) => number,
-  ) => (a: T, b: T) =>
-    monto(b) !== monto(a)
-      ? monto(b) - monto(a)
-      : (masAntiguo.get(a.pacienteId) ?? "").localeCompare(
-          masAntiguo.get(b.pacienteId) ?? "",
-        );
 
   const deudores: DeudaPaciente[] = data.deudores
     .map((deudor) =>
@@ -236,7 +229,7 @@ export function aplicarCobro(
         : deudor,
     )
     .filter((deudor) => deudor.sesionesImpagas > 0)
-    .sort(porMonto((deudor) => deudor.montoTotal));
+    .sort(porMontoYAntiguedad((deudor) => deudor.montoTotal, masAntiguo));
 
   const sinCobrar = data.pendientes.sinCobrar
     .map((p) =>
@@ -245,7 +238,7 @@ export function aplicarCobro(
         : p,
     )
     .filter((p) => p.sesiones > 0)
-    .sort(porMonto((p) => p.monto));
+    .sort(porMontoYAntiguedad((p) => p.monto, masAntiguo));
 
   return {
     ...data,

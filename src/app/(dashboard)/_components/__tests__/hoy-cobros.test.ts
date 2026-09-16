@@ -1,18 +1,11 @@
-// @vitest-environment jsdom
-//
-// La deuda conserva su cuenta única aunque Hoy la muestre una sola vez.
+// La lectura inicial y el cobro local conservan la misma cuenta y orden.
 
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
 
 import { deudaDeHoy } from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
 import type { TurnoConDeuda } from "@/app/api/_lib/domain";
-import { money } from "@/lib/format";
 import type { DashboardData } from "@/types/domain";
 
-import { Kpis } from "../kpis";
-import { Pendientes } from "../pendientes";
-import { TeDeben } from "../te-deben";
 import { aplicarCobro } from "../datos";
 
 const AHORA = new Date("2026-09-07T15:00:00.000Z");
@@ -67,56 +60,20 @@ function datosDeHoy(): DashboardData {
   };
 }
 
-/** Los nombres, en el orden en que los dibuja "Te deben". */
-function nombresDeTeDeben(data: DashboardData): string[] {
-  const { container } = render(<TeDeben deudores={data.deudores} />);
-  return [...container.querySelectorAll("a[href^='/pacientes/']")].map(
-    (enlace) => enlace.textContent?.split("$")[0]?.trim() ?? "",
-  );
-}
-
 describe("la deuda de Hoy sale de una sola cuenta", () => {
-  it("conserva la cuenta y evita repetirla entre los indicadores", () => {
+  it("ordena los deudores por monto descendente", () => {
     const data = datosDeHoy();
-    const esperados = 3;
-
-    // 1. El bloque de pendientes, arriba de todo.
-    const { unmount } = render(<Pendientes pendientes={data.pendientes} />);
-    expect(
-      screen.getByText(
-        `${esperados} pacientes te deben · ${money(
-          data.pendientes.totalSinCobrar.monto,
-        )}`,
-      ),
-    ).toBeTruthy();
-    unmount();
-
-    // El resumen enlaza a Cobros; los indicadores ya no repiten la deuda.
-    const kpis = render(<Kpis ahora={AHORA} data={data} />);
-    expect(screen.queryByText("Por cobrar")).toBeNull();
-    expect(screen.getByText("Sesiones hoy")).toBeTruthy();
-    kpis.unmount();
-
-    // 3. "Te deben": tantos nombres como el tope de la sección, pero de la
-    //    misma lista.
-    expect(data.deudores).toHaveLength(esperados);
-    expect(nombresDeTeDeben(data)).toEqual([
-      "Gonzalo Méndez",
-      "Diego Martínez",
-      "Alejandro Sosa",
-    ]);
+    expect(data.deudores.map((d) => d.pacienteId)).toEqual(["p3", "p2", "p1"]);
   });
 
   it("lista los mismos deudores y en el mismo orden que el bloque de arriba", () => {
     const data = datosDeHoy();
-    // El bloque de pendientes ya no dibuja nombres —los dice una sola vez
-    // "Te deben"—, pero consume la misma lista y en el mismo orden.
     expect(data.pendientes.sinCobrar.map((d) => d.pacienteNombre)).toEqual(
       data.deudores.map((d) => `${d.nombre} ${d.apellido}`),
     );
   });
 
-  it("el total del KPI es la suma de esa misma lista", () => {
+  it("el total es la suma de esa misma lista", () => {
     const data = datosDeHoy();
     expect(data.kpis.deudaAcumulada).toBe(
       data.deudores.reduce((total, d) => total + d.montoTotal, 0),
@@ -154,7 +111,7 @@ describe("aplicarCobro — cobrar no descuadra la cuenta", () => {
     return { ...data, sesionesHoy: [TURNO_DE_HOY as never] };
   }
 
-  it("baja la deuda en los tres lugares a la vez", () => {
+  it("baja la deuda en las listas y el total a la vez", () => {
     const despues = aplicarCobro(conElTurnoDeHoy(), "t1", "efectivo", AHORA);
 
     expect(despues.pendientes.totalSinCobrar.pacientes).toBe(2);
@@ -184,4 +141,31 @@ describe("aplicarCobro — cobrar no descuadra la cuenta", () => {
     const unaVez = aplicarCobro(antes, "t1", "efectivo", AHORA);
     expect(aplicarCobro(unaVez, "t1", "efectivo", AHORA)).toBe(unaVez);
   });
+
+  it.each([1, 60])(
+    "ordena igual que el servidor al quedar montos iguales (impago de %i días)",
+    (diasAtras) => {
+      // p3 debía más que p2; tras cobrar 3000 ambos deben 6000.
+      // Se prueban las dos antigüedades para que no alcance un sort estable
+      // que conserve por casualidad el orden previo al cobro.
+      const viejo = turnoImpago("p3", "Gonzalo", "Méndez", 6000, diasAtras);
+      const cobrado = turnoImpago("p3", "Gonzalo", "Méndez", 3000, 0);
+      const restantes = [...TURNOS.slice(0, 3), viejo];
+      const antes = deudaDeHoy([...restantes, cobrado], AHORA);
+      const data = conElTurnoDeHoy();
+      data.sesionesHoy = [{ ...data.sesionesHoy[0], tarifaCobrada: 3000 }];
+      data.deudores = antes.deudores;
+      data.kpis.deudaAcumulada = antes.totalSinCobrar.monto;
+      data.pendientes = { ...data.pendientes, ...antes };
+
+      const despues = aplicarCobro(data, "t1", "efectivo", AHORA);
+      const esperado = deudaDeHoy(restantes, AHORA);
+      expect(despues.deudores).toEqual(esperado.deudores);
+      expect(despues.pendientes.sinCobrar).toEqual(esperado.sinCobrar);
+      expect(despues.pendientes.totalSinCobrar).toEqual(esperado.totalSinCobrar);
+      expect(despues.deudores.map((d) => d.pacienteId)).toEqual(
+        diasAtras > 30 ? ["p3", "p2", "p1"] : ["p2", "p3", "p1"],
+      );
+    },
+  );
 });
