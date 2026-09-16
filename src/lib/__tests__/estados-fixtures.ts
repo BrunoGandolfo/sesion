@@ -22,7 +22,7 @@ import {
 } from "@/lib/prisma-encryption";
 import type { NotaSoap } from "@/lib/sesion-clinica/schema";
 
-import { conectarBaseDeTest } from "./db-test";
+import { conectarBaseDeTest, limpiarDatosDeTest } from "./db-test";
 
 export interface BaseArea2 {
   /** Cliente crudo: columnas físicas, fixtures, aserciones. */
@@ -178,14 +178,16 @@ async function crearSesionUnaVez(
 /** Borra todo lo de una organización, en orden de claves foráneas. */
 export async function limpiarOrg(prisma: PrismaClient, orgId: string | undefined): Promise<void> {
   if (!orgId) return;
-  await prisma.trabajo.deleteMany({ where: { organizationId: orgId } });
-  await prisma.eventoAuditoria.deleteMany({ where: { organizationId: orgId } });
-  await prisma.sesionClinica.deleteMany({ where: { organizationId: orgId } });
-  await prisma.turno.deleteMany({ where: { organizationId: orgId } });
-  await prisma.hilo.deleteMany({ where: { organizationId: orgId } });
-  await prisma.paciente.deleteMany({ where: { organizationId: orgId } });
-  await prisma.configuracion.deleteMany({ where: { organizationId: orgId } });
-  await prisma.organization.deleteMany({ where: { id: orgId } });
+  await limpiarDatosDeTest(prisma, async (tx) => {
+    await tx.trabajo.deleteMany({ where: { organizationId: orgId } });
+    await tx.eventoAuditoria.deleteMany({ where: { organizationId: orgId } });
+    await tx.sesionClinica.deleteMany({ where: { organizationId: orgId } });
+    await tx.turno.deleteMany({ where: { organizationId: orgId } });
+    await tx.hilo.deleteMany({ where: { organizationId: orgId } });
+    await tx.paciente.deleteMany({ where: { organizationId: orgId } });
+    await tx.configuracion.deleteMany({ where: { organizationId: orgId } });
+    await tx.organization.deleteMany({ where: { id: orgId } });
+  });
 }
 
 /** Auditoría como stub: junta los eventos en memoria. */

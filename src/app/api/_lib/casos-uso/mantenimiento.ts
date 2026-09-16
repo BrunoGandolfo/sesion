@@ -9,7 +9,9 @@
 //      es la activa del llavero se descifran y vuelven a cifrar, de a tandas.
 //      Es lo que hace posible rotar CLAVES_CIFRADO sin ventana: se agrega la
 //      clave nueva, el cron migra, y cuando `pendientes` da 0 se saca la
-//      vieja (docs/encryption.md §3).
+//      vieja (docs/encryption.md §3). Las versiones inmutables del Recorrido
+//      no se reescriben: siguen contando como pendientes y errores. Su clave
+//      debe conservarse hasta tener un procedimiento administrativo de rotación.
 //
 // El re-cifrado va por SQL crudo: la extensión de Prisma prohíbe (con razón)
 // filtrar por una columna cifrada, y acá hay que encontrar las filas por el
@@ -89,8 +91,8 @@ export interface ResultadoRecifrado {
   /** Filas con una clave que no es la activa y que TODAVÍA quedan (contando
    *  después de esta tanda). 0 = se puede sacar la clave vieja. */
   pendientes: number;
-  /** Blobs que no se pudieron descifrar (clave ausente del llavero o dato
-   *  corrupto): se dejan como están y se avisa. */
+  /** Blobs que no se pudieron descifrar o reescribir por inmutabilidad:
+   * se dejan como están y se avisa. */
   errores: number;
 }
 
@@ -128,6 +130,11 @@ export async function recifrarTanda(
         LIMIT ${tope - recifradas - errores}`,
     );
     for (const fila of filas) {
+      if (tabla === "hilo_versiones") {
+        errores += 1;
+        console.error(`[mantenimiento] hilo_versiones ${fila.id}: contenido inmutable; conservar la clave anterior`);
+        continue;
+      }
       const aad = aadDe(tabla, columna, fila.id);
       let texto: string;
       try {
@@ -171,10 +178,14 @@ export async function mantenimiento(params: {
 }): Promise<ResultadoMantenimiento> {
   const purga = await purgarOperativas(params.prisma, params.ahora);
   const inicio = Date.now();
-  let recifrado = await recifrarTanda(params.prisma);
-  while (params.todo && recifrado.pendientes > 0 && recifrado.recifradas > 0) {
+  let tanda = await recifrarTanda(params.prisma);
+  let recifrado = tanda;
+  // Solo repetir si la última tanda avanzó y no encontró una fila que requiere
+  // intervención. El total acumulado no demuestra progreso en la última tanda.
+  while (params.todo && tanda.pendientes > 0 && tanda.recifradas > 0 && tanda.errores === 0) {
     if (Date.now() - inicio > (params.presupuestoMs ?? 50_000)) break;
     const otra = await recifrarTanda(params.prisma);
+    tanda = otra;
     recifrado = {
       recifradas: recifrado.recifradas + otra.recifradas,
       pendientes: otra.pendientes,

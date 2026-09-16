@@ -30,13 +30,14 @@
 //        fila, se rechaza antes de llegar a la base. Es lo que hace que el
 //        AAD sea una garantía y no una convención.
 //
-// Límite dicho a propósito: las guardas miran el modelo de la operación,
-// no los `create`/`update` anidados de otro modelo dentro de `data`. No
-// se escriben columnas cifradas por escritura anidada.
+// Las mismas guardas recorren las escrituras anidadas siguiendo las relaciones
+// del schema generado, incluso desde un modelo sin columnas cifradas. Un update
+// anidado de una relación singular también exige where.id: data.id no prueba
+// cuál es su fila destino. No se resuelve ese id con una lectura separada.
 
 import { Buffer } from "node:buffer";
 
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { aadDe, cifrar, descifrar, ErrorDescifrado } from "./encryption";
 import { validarLlavero } from "./llavero";
@@ -495,6 +496,16 @@ function verificarBlobs(
   }
 }
 
+/** El AAD incluye el id: cambiarlo deja ilegibles incluso las columnas que
+ * esta operación no reescribe. cifrarX devuelve el mismo id y sigue permitido. */
+function verificarIdInvariable(modelo: ModeloCifrado, data: unknown, where: Raw): void {
+  if (!esObjetoPlano(data) || data.id === undefined) return;
+  const id = esObjetoPlano(data.id) ? data.id.set : data.id;
+  if (typeof where.id !== "string" || id !== where.id) {
+    throw new Error(`${modelo}: no se puede cambiar el id de una fila con campos cifrados; exige where.id y el mismo data.id.`);
+  }
+}
+
 /**
  * Lanza si una escritura lleva columnas cifradas sin el id de la fila o con
  * blobs que no descifran con el AAD de esa fila. Exportada para testearla
@@ -522,11 +533,13 @@ export function assertEscrituraCifradaConsistente(
     case "update":
     case "updateMany": {
       const where = esObjetoPlano(args.where) ? args.where : {};
+      verificarIdInvariable(modelo, args.data, where);
       verificarBlobs(modelo, args.data, where.id, "where.id");
       return;
     }
     case "upsert": {
       const where = esObjetoPlano(args.where) ? args.where : {};
+      verificarIdInvariable(modelo, args.update, where);
       verificarBlobs(modelo, args.create, esObjetoPlano(args.create) ? args.create.id : undefined, "create.id");
       verificarBlobs(modelo, args.update, where.id, "where.id");
       return;
@@ -538,16 +551,57 @@ export function assertEscrituraCifradaConsistente(
 // La extensión
 // ────────────────────────────────────────────────────────────────────────────
 
-type ArgsQuery = { args: unknown; query: (args: never) => Promise<unknown>; operation: string };
+// Solo relaciones reales. Nunca interpretar un JSON de negocio o un blob como
+// si fuera un árbol de operaciones Prisma. No hay una segunda copia del schema.
+const RELACIONES = new Map(Prisma.dmmf.datamodel.models.map((modelo) => [
+  modelo.name,
+  modelo.fields.filter((campo) => campo.kind === "object"),
+]));
 
-function guarda(modelo: ModeloCifrado) {
-  return {
-    $allOperations({ args, query, operation }: ArgsQuery) {
-      assertConsultaSinCifrados(modelo, args);
-      assertEscrituraCifradaConsistente(modelo, operation, args);
-      return query(args as never);
-    },
-  };
+function esModeloCifrado(modelo: string): modelo is ModeloCifrado {
+  return Object.hasOwn(CAMPOS_CIFRADOS, modelo);
+}
+
+function validarAnidadas(modelo: string, data: unknown): void {
+  if (Array.isArray(data)) {
+    for (const fila of data) validarAnidadas(modelo, fila);
+    return;
+  }
+  if (!esObjetoPlano(data)) return;
+  for (const relacion of RELACIONES.get(modelo) ?? []) {
+    const operaciones = data[relacion.name];
+    if (!esObjetoPlano(operaciones)) continue;
+    for (const [operacion, valor] of Object.entries(operaciones)) {
+      for (const entrada of Array.isArray(valor) ? valor : [valor]) {
+        if (!esObjetoPlano(entrada)) continue;
+        if (operacion === "create") {
+          validarOperacion(relacion.type, "create", { data: entrada });
+        } else if (operacion === "connectOrCreate") {
+          validarOperacion(relacion.type, "create", { where: entrada.where, data: entrada.create });
+        } else if (operacion === "update" && !relacion.isList && !Object.hasOwn(entrada, "data")) {
+          // Prisma admite la forma abreviada singular. Si escribe cifrado,
+          // la guarda la rechaza por no poder demostrar where.id.
+          validarOperacion(relacion.type, "update", { data: entrada });
+        } else if (OPERACIONES_DE_ESCRITURA.has(operacion)) {
+          validarOperacion(relacion.type, operacion, entrada);
+        }
+      }
+    }
+  }
+}
+
+function validarOperacion(modelo: string, operacion: string, args: unknown): void {
+  if (esModeloCifrado(modelo)) {
+    assertConsultaSinCifrados(modelo, args);
+    assertEscrituraCifradaConsistente(modelo, operacion, args);
+  }
+  if (!OPERACIONES_DE_ESCRITURA.has(operacion) || !esObjetoPlano(args)) return;
+  if (operacion === "upsert") {
+    validarAnidadas(modelo, args.create);
+    validarAnidadas(modelo, args.update);
+  } else {
+    validarAnidadas(modelo, args.data);
+  }
 }
 
 export function withEncryption<C extends PrismaClient>(client: C) {
@@ -624,12 +678,12 @@ export function withEncryption<C extends PrismaClient>(client: C) {
       },
     },
     query: {
-      paciente: guarda("Paciente"),
-      turno: guarda("Turno"),
-      consentimientoGrabacion: guarda("ConsentimientoGrabacion"),
-      hotWord: guarda("HotWord"),
-      sesionClinica: guarda("SesionClinica"),
-      hiloVersion: guarda("HiloVersion"),
+      $allModels: {
+        $allOperations({ model, operation, args, query }) {
+          validarOperacion(model, operation, args);
+          return query(args);
+        },
+      },
     },
   });
 }

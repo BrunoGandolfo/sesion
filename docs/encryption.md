@@ -115,9 +115,20 @@ tipo generado). Escribir una columna `*Encrypted` a mano pasa por la guarda 2.
    rechazan antes de llegar a la base. Cuesta un descifrado por columna
    escrita. `assertEscrituraCifradaConsistente` está exportada.
 
-Límite: las guardas miran el modelo de la operación, no los `create`
-anidados de otro modelo dentro de `data`. No se escriben columnas cifradas
-por escritura anidada.
+Las guardas también recorren las escrituras anidadas siguiendo las relaciones
+del cliente generado: `create`, `createMany`, `update`, `updateMany`, `upsert`
+y `connectOrCreate`, incluso bajo modelos sin columnas cifradas. Un update
+singular cifrado usa `{ where: { id }, data: ... }`: la relación implícita o
+`data.id` no demuestran cuál es el destino. No se hacen lecturas previas ni se
+adivinan ids. Cambiar el id de una fila cifrada se rechaza para no invalidar el
+AAD de las columnas existentes. El SQL crudo no pasa por estas guardas.
+
+La base protege además `eventos_auditoria` contra UPDATE, DELETE y TRUNCATE, y
+`hilo_versiones` contra borrado y cambios de cualquier columna salvo `estado`,
+`resuelta_en` y `resuelta_por_user_id`. Son triggers de la migración
+`20260916013000_inmutabilidad`, también efectivos ante SQL crudo. El contenido
+cifrado de una versión del Recorrido no se reemplaza ni siquiera por otro blob
+válido para la misma fila.
 
 ## 3. Rotación de claves
 
@@ -128,7 +139,11 @@ Sin ventana de mantenimiento:
    cifra con la 2; lo viejo se sigue leyendo con la 1.
 2. El cron diario de mantenimiento (`/api/cron/mantenimiento`) re-cifra hasta
    200 filas por corrida cuyo id de clave no sea el activo, en todas las
-   columnas de §1. Para apurar: `GET /api/cron/mantenimiento?recifrar=todo`
+   columnas mutables de §1. Las versiones del Recorrido **no se reescriben**:
+   permanecen en `pendientes`, cuentan como `errores` y se informa que hay que
+   conservar su clave anterior. La rotación administrativa de esas versiones
+   requiere un procedimiento separado; no hay una excepción para el cron.
+   Para apurar: `GET /api/cron/mantenimiento?recifrar=todo`
    con el `CRON_SECRET` corre hasta agotar o hasta 50 s. Devuelve el objeto recifrado con recifradas, pendientes y errores.
 3. Cuando pendientes y errores dan 0 en TODAS las columnas,
    sacar `1=…` de la variable. Deploy. Si quedara una fila con una clave

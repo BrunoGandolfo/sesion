@@ -32,7 +32,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
 
 import { withEncryption } from "@/lib/prisma-encryption";
 
@@ -241,10 +241,23 @@ export const TABLAS = [
  * TRUNCATE, y solo acepta un cliente devuelto por conectarBaseDeTest.
  */
 export async function vaciarTablas(prisma: PrismaClient): Promise<void> {
+  const lista = TABLAS.map((t) => `"${t}"`).join(",\n       ");
+  await limpiarDatosDeTest(prisma, async (tx) => {
+    await tx.$executeRawUnsafe(`TRUNCATE TABLE ${lista} RESTART IDENTITY CASCADE`);
+  });
+}
+
+/** Limpieza administrativa de fixtures. DDL transaccional: los triggers se
+ * reactivan antes del commit, o el rollback revierte también su desactivación.
+ * No hay una bandera ni una excepción de inmutabilidad accesible por la app. */
+export async function limpiarDatosDeTest(
+  prisma: PrismaClient,
+  limpiar: (tx: Prisma.TransactionClient) => Promise<void>,
+): Promise<void> {
   if (!autorizados.has(prisma)) {
     throw new Error(
       [
-        "vaciarTablas() recibió un PrismaClient que no salió de",
+        "La limpieza recibió un PrismaClient que no salió de",
         "conectarBaseDeTest(): no se puede saber a qué base apunta.",
         "",
         "Obtené el cliente con `const { prisma, db } = conectarBaseDeTest()`.",
@@ -252,10 +265,11 @@ export async function vaciarTablas(prisma: PrismaClient): Promise<void> {
     );
   }
 
-  const lista = TABLAS.map((t) => `"${t}"`).join(",\n       ");
-  await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE
-       ${lista}
-     RESTART IDENTITY CASCADE`,
-  );
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("ALTER TABLE eventos_auditoria DISABLE TRIGGER eventos_auditoria_inmutable");
+    await tx.$executeRawUnsafe("ALTER TABLE hilo_versiones DISABLE TRIGGER hilo_versiones_sin_borrado");
+    await limpiar(tx);
+    await tx.$executeRawUnsafe("ALTER TABLE hilo_versiones ENABLE TRIGGER hilo_versiones_sin_borrado");
+    await tx.$executeRawUnsafe("ALTER TABLE eventos_auditoria ENABLE TRIGGER eventos_auditoria_inmutable");
+  });
 }

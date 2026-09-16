@@ -96,7 +96,10 @@ const DESTRUCTIVAS = [
   /\bALTER\s+TABLE\b[^;]*\bDROP\s+(COLUMN\s+)?"?\w+"?/i,
   /\bALTER\s+TABLE\b[^;]*\bSET\s+NOT\s+NULL\b/i,
   /\bALTER\s+TABLE\b[^;]*\bALTER\s+COLUMN\b[^;]*\bTYPE\b/i,
-  /\bTRUNCATE\b/i,
+  // En un trigger el evento sigue con ON u OR (palabras reservadas, no nombres
+  // de tablas sin comillas). No anclar al inicio: puede haber comentarios SQL
+  // antes de una sentencia destructiva. Mantener la detección conservadora.
+  /\bTRUNCATE\b(?!\s+(?:ON|OR)\b)/i,
   /\bDELETE\s+FROM\b/i,
 ];
 
@@ -138,7 +141,8 @@ if (base) {
   const nuevos = git("ls-files", "--others", "--exclude-standard", "--", "prisma/migrations");
   archivos = [...new Set(`${cambiados}\n${nuevos}`.split("\n"))].filter((f) => f.endsWith(".sql"));
 } else {
-  archivos = git("ls-files", "prisma/migrations").split("\n").filter((f) => f.endsWith(".sql"));
+  const todos = git("ls-files", "--cached", "--others", "--exclude-standard", "--", "prisma/migrations");
+  archivos = [...new Set(todos.split("\n"))].filter((f) => f.endsWith(".sql"));
 }
 
 if (!base && archivos.length === 0) {
@@ -147,7 +151,10 @@ if (!base && archivos.length === 0) {
 
 let destructivasMarcadas = 0;
 for (const archivo of archivos) {
-  if (!existsSync(archivo)) continue;
+  if (!existsSync(archivo)) {
+    fallar(`${archivo}: no se pudo revisar; el archivo enumerado por Git no existe.`);
+    continue;
+  }
   const sql = readFileSync(archivo, "utf8");
   const esDestructiva = DESTRUCTIVAS.some((re) => re.test(sinComentarios(sql)));
   if (!esDestructiva) continue;
