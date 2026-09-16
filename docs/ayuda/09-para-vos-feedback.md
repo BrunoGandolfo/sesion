@@ -3,31 +3,35 @@
 **Para qué sirve.** Es la otra cara de una sesión: habla de **tu** trabajo en
 esa sesión, no de la paciente. Se lee cuando querés, no antes que la nota.
 
-**Dónde está.** Cuando hay análisis disponible, arriba de la nota hay un selector de dos opciones,
-**Nota clínica | Para vos**. Se llega también desde el aviso que queda en la
-nota apenas la aprobás ("Leer Para vos") y desde la fila de la sesión en la
-pestaña Sesiones de la ficha. Tiene dirección propia, así que se puede volver
-con el botón de atrás. Si no hay análisis, el selector puede no aparecer;
-abrir la vista no genera un análisis nuevo.
+**Dónde está.** Arriba de la nota hay un selector de dos opciones, **Nota
+clínica | Para vos**, que aparece siempre que la nota está para revisar o
+guardada, haya análisis o no. Si hay análisis, se llega también desde el aviso
+que queda en la nota apenas la aprobás (**Leer Para vos**) y desde la fila de la
+sesión en la pestaña Sesiones de la ficha. Tiene dirección propia, así que se
+puede volver con el botón de atrás. Abrir la vista no genera un análisis nuevo.
 
 Si al análisis le faltó una parte, se muestra igual lo que llegó, con un aviso
-que dice *"Parte del análisis no llegó."* Antes, cuando faltaba algo, el bloque
-entero desaparecía sin avisar.
+que dice *"Parte del análisis no llegó."*
 
 ## Si todavía no está listo
 
-El servidor guarda un estado del análisis separado de la nota. La pantalla
-todavía no muestra estos cuatro estados de forma completa; los textos previstos son:
+El análisis tiene su propio estado, separado de la nota. Cuando no hay análisis
+para mostrar, la vista dice en cuál está:
 
-- **Todavía no se pidió**: no se generó un pedido.
-- **Se está generando…**: está pendiente.
-- **Listo**: se muestra el reporte.
-- **No se pudo generar**: el pedido falló.
+- **Todavía no se pidió.** — *"Esta sesión no tiene análisis."* y el botón
+  **Preparar Para vos**.
+- **Se está generando…** — *"El análisis está en preparación. Podés seguir
+  trabajando; lo vas a encontrar acá cuando esté listo."* La vista se actualiza
+  sola.
+- **No se pudo generar.** — con el botón **Volver a pedir Para vos**.
+- **Listo** sin contenido visible — *"El análisis figura listo, pero no pudimos
+  mostrar su contenido. Volvé a abrir la sesión para comprobarlo."*
 
-**Pedir de nuevo todavía no está disponible en la pantalla**. El servidor permite
-reintentarlo sin volver a transcribir ni rehacer la nota, incluso aunque la nota ya
-esté aprobada. Hasta que se conecte ese control, avisale a quien administra Sesión;
-abrir la vista no genera un análisis nuevo.
+Pedirlo de nuevo no vuelve a transcribir ni rehace la nota, y se puede aunque la
+nota ya esté aprobada. Mientras tanto dice *"Pidiendo el análisis…"*. Los botones
+aparecen solo si la sesión tiene transcripción. Si el pedido no se pudo
+confirmar: *"No pudimos confirmar el pedido. Probá de nuevo; la nota se
+conserva."*
 
 ## Qué instrumento te toca
 
@@ -37,7 +41,9 @@ Depende de lo que elegiste en **Tu consultorio → Tu enfoque**:
 - **Cognitivo-conductual** → **CTS-R** + **MITI 4.2.1**
 
 Las sesiones ya analizadas conservan el instrumento con el que se generaron:
-cambiar el enfoque no reescribe lo viejo.
+cambiar el enfoque no reescribe lo viejo. Pero si después volvés a pedir **Para
+vos** o volvés a escribir la nota, el análisis nuevo usa el enfoque que tengas
+elegido en ese momento.
 
 ## GTFS — Gestalt Therapy Fidelity Scale
 
@@ -53,7 +59,8 @@ la sesión. Es una referencia para tu auto-supervisión, no una calificación."*
 
 En **Ver detalle** cada ítem aparece con uno de tres estados:
 
-- **Presente** (punto verde) — apareció, y hay cita textual que lo prueba.
+- **Presente** (punto verde) — apareció. El modelo tiene instrucciones de
+  respaldarlo con una cita textual; revisá que la cita esté.
 - **Ausente** (punto gris) — la sesión daba lugar y no apareció.
 - **No determinable** (punto punteado) — no hay cómo saberlo desde el audio, con
   la razón escrita al lado.
@@ -81,8 +88,10 @@ transcripción, no la escala completa de doce.
 - **Áreas de crecimiento** — hasta 3, cada una con una observación y una
   sugerencia concreta.
 - **Observación general** — una idea para la próxima sesión.
-- Cada puntaje trae **la cita literal y el minuto** que lo justifican. Sin cita,
-  no hay puntaje: aparece **"No determinable"** con la razón.
+- Cada puntaje debería traer **la cita literal y el minuto** que lo justifican,
+  y sin cita el modelo tiene que marcar **"No determinable"** con la razón. Es
+  una instrucción al modelo, no algo que la app compruebe: si ves un puntaje sin
+  cita, tomalo con más cautela.
 
 Y al pie, siempre: *"Este análisis es generado por IA a partir de la
 transcripción. No sustituye la supervisión clínica profesional. Las métricas son
@@ -113,6 +122,9 @@ src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
 src/app/(dashboard)/sesiones/[id]/para-vos/page.tsx
+src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
+src/app/api/_lib/casos-uso/sesion/reintentar-feedback.ts
+src/app/api/_lib/casos-uso/sesion/reclamar.ts
 processor/prompts/therapist_feedback_gestalt_v1.1.md
 processor/prompts/therapist_feedback_v1.1.md
 -->
