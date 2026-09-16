@@ -19,9 +19,9 @@ function Parrafos({ texto, vacio }: { texto: string | null; vacio: string }) {
   return <div className="space-y-3">{parrafos.map((p, i) => <p key={i} className="whitespace-pre-wrap break-inside-avoid">{p}</p>)}</div>;
 }
 
-export function HiloContenido({ contenido, anterior, sesiones = [] }: { contenido: ContenidoHilo; anterior?: ContenidoHilo; sesiones?: { id: string; fecha: string }[] }) {
+export function HiloContenido({ contenido, anterior, sesiones = [], solo }: { contenido: ContenidoHilo; anterior?: ContenidoHilo; solo?: keyof ContenidoHilo; sesiones?: { id: string; fecha: string }[] }) {
   const cambiado = (campo: keyof ContenidoHilo) => anterior && JSON.stringify(contenido[campo]) !== JSON.stringify(anterior[campo]);
-  const seccion = (campo: keyof ContenidoHilo, titulo: string, cuerpo: React.ReactNode, partible = false) => <section className={`space-y-2 ${partible ? "" : "break-inside-avoid"}`}>
+  const seccion = (campo: keyof ContenidoHilo, titulo: string, cuerpo: React.ReactNode, partible = false) => solo && solo !== campo ? null : <section className={`space-y-2 ${partible ? "" : "break-inside-avoid"}`}>
     <h4 className="font-semibold break-after-avoid">{titulo}{cambiado(campo) ? <span className="ml-2 text-xs text-sage-700">Con cambios</span> : null}</h4>{cuerpo}
   </section>;
   return <div className="space-y-5 text-sm leading-relaxed">

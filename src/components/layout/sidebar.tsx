@@ -5,6 +5,7 @@ import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSesionActual } from "@/components/layout/providers";
+import { useSalidaProtegida } from "./proteccion-trabajo";
 import { cerrarSesion } from "@/lib/sesion-cliente";
 import { motion } from "framer-motion";
 import {
@@ -56,6 +57,7 @@ function getFirstName(name: string): string {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const confirmarSalida = useSalidaProtegida();
   const reducido = useMovimientoReducido();
   const usuaria = useSesionActual();
   const [redCount, setRedCount] = React.useState(0);
@@ -193,7 +195,7 @@ export function Sidebar() {
             </div>
             <button
               type="button"
-              onClick={() => void cerrarSesion("/login")}
+              onClick={() => confirmarSalida(() => void cerrarSesion("/login"), { navegar: true })}
               aria-label="Cerrar sesión"
               title="Cerrar sesión"
               className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"

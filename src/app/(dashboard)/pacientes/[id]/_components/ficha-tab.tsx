@@ -5,6 +5,8 @@
 // Editar de la ficha está en la cabecera.
 
 import * as React from "react";
+import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
+import { SALIDA_NOTAS_PRIVADAS } from "@/lib/glosario";
 import type { VarianteToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import {
@@ -58,6 +60,7 @@ export function FichaTab({
   onPacienteActualizado,
 }: FichaTabProps) {
   const router = useRouter();
+  const confirmarSalida = useSalidaProtegida();
   const [confirmandoArchivo, setConfirmandoArchivo] = React.useState(false);
   const [archivando, setArchivando] = React.useState(false);
   const [turnosAbiertos, setTurnosAbiertos] = React.useState(false);
@@ -257,7 +260,7 @@ export function FichaTab({
               variante="peligro"
               enviando={archivando}
               enviandoLabel="Archivando…"
-              onConfirmar={() => void cambiarActivo(false)}
+              onConfirmar={() => confirmarSalida(() => void cambiarActivo(false))}
               onCancelar={() => setConfirmandoArchivo(false)}
             />
           ) : null}
@@ -320,6 +323,8 @@ export function NotasEditor({
   const [status, setStatus] = React.useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   );
+
+  useProtegerTrabajo(value !== savedValue, SALIDA_NOTAS_PRIVADAS);
 
   // Autoguardado con espera: el estado solo cambia dentro del timer, nunca
   // en el cuerpo del efecto.

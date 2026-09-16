@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { Button } from "@/components/ui";
+import { Button, Textarea } from "@/components/ui";
 
 import { EDITAR } from "./textos";
 
@@ -14,7 +14,8 @@ import { EDITAR } from "./textos";
 // del título porque el toque no existe para quien navega con teclado o con
 // lector de pantalla, y porque un texto que no parece editable no se toca.
 //
-// El texto se guarda al perder el foco, en el estado local de la pantalla.
+// Cada cambio actualiza el borrador de la pantalla, también antes del blur:
+// cerrar o recargar mientras se escribe ya debe pedir confirmación.
 // No viaja a la API hasta Aprobar, y viaja entero como notaEditada.
 
 interface SeccionSoapProps {
@@ -71,9 +72,6 @@ export function SeccionSoap({
 
   const cerrarGuardando = () => {
     setEditando(false);
-    if (borrador !== valor) {
-      onGuardar?.(borrador);
-    }
   };
 
   return (
@@ -104,17 +102,18 @@ export function SeccionSoap({
       </div>
 
       {editando ? (
-        <textarea
+        <Textarea
           ref={textareaRef}
           aria-labelledby={tituloId}
           value={borrador}
           rows={3}
           onChange={(evento) => {
             setBorrador(evento.target.value);
+            onGuardar?.(evento.target.value);
             ajustarAlto();
           }}
           onBlur={cerrarGuardando}
-          className="resize-none overflow-hidden rounded-md border border-sage-500 bg-white px-4 py-3 font-sans text-[15px] leading-[1.7] text-ink-900 outline-none ring-[3px] ring-sage-500/20"
+          className="resize-none overflow-hidden font-sans leading-[1.7]"
         />
       ) : (
         <div

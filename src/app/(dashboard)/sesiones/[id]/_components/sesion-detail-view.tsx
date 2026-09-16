@@ -25,7 +25,8 @@ import type {
 } from "@/lib/sesion-clinica/schema";
 
 import { BarraAcciones } from "./barra-acciones";
-import { ConfirmarSalida } from "./confirmar-salida";
+import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
+import { CAMBIOS_SIN_APROBAR_MENSAJE, FALTA_REVISAR_RIESGO, FALTA_REVISAR_MENCIONES, FALTA_REVISAR_AMBAS, FALTA_REVISAR_VERSION, FEEDBACK_REINTENTAR_ERROR } from "@/lib/glosario";
 import { NotaSesionView } from "./nota-sesion-view";
 import { ParaVosView } from "./para-vos-view";
 import { hrefDeVista, SelectorVista, type VistaSesion } from "./selector-vista";
@@ -136,11 +137,14 @@ export function SesionDetailView({
   const [errorAccion, setErrorAccion] = React.useState<string | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = React.useState(false);
   // "Volver" con correcciones sin aprobar: pregunta antes de irse.
-  const [confirmarVolver, setConfirmarVolver] = React.useState(false);
+  const confirmarSalida = useSalidaProtegida();
   // La nota se acaba de aprobar en esta pantalla. No es lo mismo que
   // `estado === "aprobada"`: una nota abierta ya aprobada no muestra el
   // aviso, porque no acaba de pasar nada.
   const [aprobadaAhora, setAprobadaAhora] = React.useState(false);
+  const [pidiendoFeedback, setPidiendoFeedback] = React.useState(false);
+  const [errorFeedback, setErrorFeedback] = React.useState<string | null>(null);
+  const [lecturaFeedback, setLecturaFeedback] = React.useState(0);
   const [toast, setToast] = React.useState({ open: false, mensaje: "" });
 
   const aplicar = React.useCallback((fila: SesionClinicaResponse) => {
@@ -189,6 +193,42 @@ export function SesionDetailView({
     onSesion,
   });
 
+  React.useEffect(() => {
+    if (vista !== "para-vos" || sesion?.feedbackEstado !== "pendiente") return;
+    const control = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const leer = async () => {
+      try {
+        const fila = await apiGet<SesionClinicaResponse>(`/api/sesion-clinica/${id}`, { signal: control.signal });
+        if (control.signal.aborted) return;
+        aplicar(fila); setErrorFeedback(null);
+        if (fila.feedbackEstado === "pendiente") timer = setTimeout(leer, 10_000);
+      } catch (e) {
+        if (!esAbort(e)) setErrorFeedback(mensajeDeError(e));
+      }
+    };
+    timer = setTimeout(leer, lecturaFeedback ? 0 : 10_000);
+    return () => { control.abort(); clearTimeout(timer); };
+  }, [id, vista, sesion?.feedbackEstado, lecturaFeedback, aplicar]);
+
+  const pedirFeedback = async () => {
+    if (pidiendoFeedback) return;
+    setPidiendoFeedback(true); setErrorFeedback(null);
+    try {
+      const fila = await apiPost<SesionClinicaResponse>(`/api/sesion-clinica/${id}/feedback/reintentar`, {});
+      aplicar(fila);
+    } catch {
+      // Puede haberse creado el trabajo aunque se haya perdido su respuesta.
+      try {
+        const fila = await apiGet<SesionClinicaResponse>(`/api/sesion-clinica/${id}`);
+        aplicar(fila);
+        if (fila.feedbackEstado === "pendiente" || fila.feedbackEstado === "listo") return;
+      }
+      catch { /* El mensaje no afirma que el pedido haya fallado. */ }
+      setErrorFeedback(FEEDBACK_REINTENTAR_ERROR);
+    } finally { setPidiendoFeedback(false); }
+  };
+
   const datos = sesion?.datos ?? null;
   const feedback = sesion?.feedback;
   const clavesRiesgo = React.useMemo(
@@ -200,6 +240,12 @@ export function SesionDetailView({
   // vacía y `every` es true.
   const requiereMenciones = exigeConfirmarMenciones(datos);
   const puedeAprobar = !conflictoAprobacion && clavesRiesgo.every((clave) => revisadas.has(clave)) && (!requiereMenciones || revisadas.has(CLAVE_MENCIONES));
+  const faltanSenales = clavesRiesgo.some(clave => !revisadas.has(clave));
+  const faltanMenciones = requiereMenciones && !revisadas.has(CLAVE_MENCIONES);
+  const motivoBloqueo = conflictoAprobacion ? FALTA_REVISAR_VERSION
+    : faltanSenales && faltanMenciones ? FALTA_REVISAR_AMBAS
+    : faltanMenciones ? FALTA_REVISAR_MENCIONES
+    : faltanSenales ? FALTA_REVISAR_RIESGO : null;
   const exigeConfirmarRiesgo = clavesRiesgo.includes(CLAVE_RIESGO_GRADUADO);
 
   const marcarRevisada = React.useCallback((clave: string, marcada: boolean) => {
@@ -255,6 +301,7 @@ export function SesionDetailView({
         },
       );
       aplicar(fila);
+      setBorradorAnterior(null);
       setAprobadaAhora(true);
       setEnviando(false);
       setToast({ open: true, mensaje: NOTA_GUARDADA });
@@ -332,43 +379,12 @@ export function SesionDetailView({
     edicion !== null &&
     !mismaNota(edicion.nota, notaDeSesion(sesion));
 
-  // ── Las tres puertas por las que se pierde el borrador ──────────────────
-  //
-  // 1. El selector de vista (selector-vista.tsx) y 2. el botón "Volver" de
-  //    acá abajo: las dos preguntan con el mismo ConfirmarSalida.
-  // 3. Cerrar la pestaña o recargar: el aviso lo da el navegador, abajo.
-  //
-  // EL GESTO DE ATRÁS DEL TELÉFONO QUEDA SIN CUBRIR, A PROPÓSITO.
-  //
-  // La única forma de interceptarlo es empujar una entrada falsa al historial
-  // con pushState y devolverla en cada popstate. Ese hack le miente al
-  // historial de toda la app: rompe el "atrás" de las demás pantallas, deja
-  // entradas fantasma cuando el componente se desmonta por cualquier otro
-  // camino, y en el navegador del teléfono —que es donde ella trabaja— el
-  // gesto es el que más se usa, o sea el que peor se puede permitir romper.
-  // El precio de no interceptarlo es perder correcciones en un caso; el de
-  // interceptarlo, una navegación impredecible en toda la app. Se elige el
-  // primero, y queda escrito acá para que nadie lo "arregle" sin leer esto.
+  // Menú, enlaces, Atrás y recarga usan la misma protección del dashboard.
+  useProtegerTrabajo(tieneCambios || borradorAnterior !== null, CAMBIOS_SIN_APROBAR_MENSAJE);
 
-  // Cerrar la pestaña o recargar. El navegador muestra su propio diálogo y no
-  // se puede escribir su texto: desde 2019 Chrome, Firefox y Safari ignoran
-  // cualquier string que se devuelva. Alcanza igual — lo que hace falta es
-  // que pregunte, no cómo lo diga.
-  React.useEffect(() => {
-    if (!tieneCambios) return;
-    const alSalir = (evento: BeforeUnloadEvent) => {
-      evento.preventDefault();
-    };
-    window.addEventListener("beforeunload", alSalir);
-    return () => window.removeEventListener("beforeunload", alSalir);
-  }, [tieneCambios]);
-
-  // El selector no se ofrece si la otra cara está vacía: un control de dos
-  // opciones donde una lleva a una pantalla sin nada enseña lo contrario de
-  // lo que vino a enseñar. Estando en "Para vos" siempre se ofrece, para
-  // poder salir por donde se entró.
+  // Para vos también explica la espera y ofrece el reintento cuando corresponde.
   const selector =
-    conNota && (vista === "para-vos" || hayParaVos(feedback)) ? (
+    conNota ? (
       <SelectorVista id={id} vista={vista} tieneCambios={tieneCambios} />
     ) : null;
 
@@ -385,25 +401,14 @@ export function SesionDetailView({
         <div className="mb-4 flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => {
-              if (tieneCambios) {
-                setConfirmarVolver(true);
-                return;
-              }
-              router.back();
-            }}
+            onClick={() => confirmarSalida(() => router.back(), { navegar: true })}
             className="inline-flex min-h-[44px] items-center gap-1 self-start font-sans text-[13px] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:text-ink-700"
           >
             <ChevronLeft size={16} strokeWidth={1.6} aria-hidden="true" />
             <span>{VOLVER}</span>
           </button>
 
-          {confirmarVolver ? (
-            <ConfirmarSalida
-              onConfirmar={() => router.back()}
-              onCancelar={() => setConfirmarVolver(false)}
-            />
-          ) : null}
+
         </div>
 
         {/* La segunda espera: la ruta ya llegó —su loading.tsx dibujó este
@@ -488,7 +493,8 @@ export function SesionDetailView({
         ) : null}
 
         {conNota && sesion && vista === "para-vos" ? (
-          <ParaVosView sesion={sesion} selector={selector} />
+          <ParaVosView sesion={sesion} selector={selector} onReintentar={() => void pedirFeedback()}
+            pidiendo={pidiendoFeedback} error={errorFeedback} onActualizar={() => setLecturaFeedback(n => n + 1)} />
         ) : null}
 
         {conNota && sesion && edicion && vista === "nota" ? (
@@ -514,7 +520,7 @@ export function SesionDetailView({
         ) : null}
 
         {borradorAnterior ? (
-          <details className="mt-4 rounded-lg border border-ink-200 p-4">
+          <details className="mt-4 rounded-lg border border-[color:var(--border-subtle)] p-4">
             <summary>Tu borrador anterior</summary>
             <p>Lo conservamos acá para que puedas recuperar tus correcciones mientras revisás la nota actual.</p>
             {Object.entries(borradorAnterior).map(([seccion, texto]) => (
@@ -542,6 +548,8 @@ export function SesionDetailView({
         <BarraAcciones
           key={edicion?.version}
           puedeAprobar={puedeAprobar}
+          motivo={motivoBloqueo}
+            borradorAnterior={borradorAnterior !== null}
           enviando={enviando}
           onAprobar={() => void aprobar()}
           onDescartar={() => void descartar()}

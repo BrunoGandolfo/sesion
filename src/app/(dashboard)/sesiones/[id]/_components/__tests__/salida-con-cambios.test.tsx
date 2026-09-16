@@ -11,12 +11,12 @@
 // que el aviso del navegador se registre y se dé de baja con los cambios.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { apiGet, apiPost, ApiClientError } from "@/lib/api-client";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 import {
-  CAMBIOS_SIN_APROBAR_TITULO,
+  SALIDA_TRABAJO_TITULO,
   EDITAR,
   IR_IGUAL,
   QUEDARME,
@@ -24,8 +24,11 @@ import {
   VOLVER,
 } from "@/lib/glosario";
 
+import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
+import { FALTA_REVISAR_MENCIONES, FALTA_REVISAR_RIESGO, APROBAR_DESCARTA_ANTERIOR } from "@/lib/glosario";
 import { SesionDetailView } from "../sesion-detail-view";
 
+vi.mock("@/components/ui/sheet", () => ({ Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null }));
 const back = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ back, push: vi.fn(), replace: vi.fn() }),
@@ -95,7 +98,7 @@ function sesionEnRevision(): SesionClinicaResponse {
 
 /** Monta la nota y espera a que llegue la fila. */
 async function abrirLaNota() {
-  render(<SesionDetailView id="ses_1" />);
+  render(<ProteccionTrabajo><SesionDetailView id="ses_1" /></ProteccionTrabajo>);
   await screen.findByRole("heading", { level: 1, name: "Lucía Fernández" });
 }
 
@@ -117,6 +120,8 @@ it("las menciones se leen en la nota y la aprobación envía confirmoMenciones",
   await abrirLaNota();
   expect((screen.getByRole("button", { name: /Aprobar/ }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByText("Dijo que quería morir")).toBeTruthy();
+  expect(screen.getByText(FALTA_REVISAR_MENCIONES)).toBeTruthy();
+  expect(screen.queryByText(FALTA_REVISAR_RIESGO)).toBeNull();
   fireEvent.click(screen.getByRole("checkbox", { name: "Leí las menciones" }));
   fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
   fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: /Aprobar/ }));
@@ -142,7 +147,7 @@ describe("Volver con correcciones sin aprobar", () => {
 
     expect(back).not.toHaveBeenCalled();
     expect(screen.getByRole("alertdialog")).toBeTruthy();
-    expect(screen.getByText(CAMBIOS_SIN_APROBAR_TITULO)).toBeTruthy();
+    expect(screen.getByText(SALIDA_TRABAJO_TITULO)).toBeTruthy();
   });
 
   it("'Quedarme' cierra la pregunta y la nota sigue en pantalla", async () => {
@@ -186,33 +191,19 @@ describe("Volver con correcciones sin aprobar", () => {
 
 describe("cerrar la pestaña o recargar", () => {
   it("se avisa mientras hay correcciones, y se deja de avisar sin ellas", async () => {
-    const agregar = vi.spyOn(window, "addEventListener");
-    const quitar = vi.spyOn(window, "removeEventListener");
-
+    const intentaSalir = () => {
+      const evento = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(evento);
+      return evento.defaultPrevented;
+    };
     await abrirLaNota();
-    // Sin correcciones no hay nada registrado.
-    expect(
-      agregar.mock.calls.some(([evento]) => evento === "beforeunload"),
-    ).toBe(false);
-
-    corregirLaS("Relató la semana, con más detalle del trabajo.");
-    await waitFor(() =>
-      expect(
-        agregar.mock.calls.some(([evento]) => evento === "beforeunload"),
-      ).toBe(true),
-    );
-
-    // Deshacer la corrección da de baja el aviso: el navegador no pregunta
-    // por una nota que quedó igual que en la fila.
-    corregirLaS("Relató la semana.");
-    await waitFor(() =>
-      expect(
-        quitar.mock.calls.some(([evento]) => evento === "beforeunload"),
-      ).toBe(true),
-    );
-
-    agregar.mockRestore();
-    quitar.mockRestore();
+    expect(intentaSalir()).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: `${EDITAR} — ${SOAP_S.titulo}` }));
+    const campo = screen.getByRole("textbox");
+    fireEvent.change(campo, { target: { value: "Todavía escribiendo, sin blur" } });
+    expect(intentaSalir()).toBe(true);
+    fireEvent.change(campo, { target: { value: NOTA.subjetivo } });
+    expect(intentaSalir()).toBe(false);
   });
 });
 
@@ -234,8 +225,14 @@ describe("aprobación de una generación obsoleta", () => {
     expect(screen.getByText("Tu borrador anterior")).toBeTruthy();
     vi.mocked(apiPost).mockResolvedValueOnce({ ...sesionEnRevision(), estado: "aprobada", generacion: 2 });
     fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
+    expect(screen.getByText(APROBAR_DESCARTA_ANTERIOR)).toBeTruthy();
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: /Aprobar/ }));
     await waitFor(() => expect(vi.mocked(apiPost).mock.calls.at(-1)?.[1]).toMatchObject({ generacion: 2, notaEditada: { subjetivo: "Nota actual nueva" } }));
+    await waitFor(() => expect(screen.queryByText("Tu borrador anterior")).toBeNull());
+    back.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: VOLVER }));
+    expect(back).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 });
 
@@ -279,4 +276,42 @@ it("avisa un hueco de audio en la nota recuperada del servidor", async () => {
   await abrirLaNota();
   expect(screen.getByText("Audio posiblemente incompleto")).toBeTruthy();
   expect(screen.getByText(/puede faltar parte de lo conversado/)).toBeTruthy();
+});
+
+
+describe("Para vos: estados y recuperación", () => {
+  const pendiente = () => ({ ...sesionEnRevision(), feedbackEstado: "pendiente" as const, modeloAsr: "whisper" });
+  beforeEach(() => { vi.mocked(apiGet).mockReset(); vi.mocked(apiPost).mockReset(); });
+  it("muestra fallo y pide el reintento por el contrato existente", async () => {
+    vi.mocked(apiGet).mockResolvedValue({ ...pendiente(), feedbackEstado: "fallido" });
+    vi.mocked(apiPost).mockResolvedValue(pendiente());
+    render(<ProteccionTrabajo><SesionDetailView id="ses_1" vista="para-vos" /></ProteccionTrabajo>);
+    fireEvent.click(await screen.findByRole("button", { name: "Volver a pedir Para vos" }));
+    expect(apiPost).toHaveBeenCalledExactlyOnceWith("/api/sesion-clinica/ses_1/feedback/reintentar", {});
+    await screen.findByText("Se está generando…");
+    expect(screen.queryByRole("button", { name: "Volver a pedir Para vos" })).toBeNull();
+  });
+  it("si pierde la respuesta, reconoce el pedido ya creado sin afirmar un fallo", async () => {
+    vi.mocked(apiGet).mockResolvedValueOnce({ ...pendiente(), feedbackEstado: "no_pedido" }).mockResolvedValue(pendiente());
+    vi.mocked(apiPost).mockRejectedValue(new Error("Respuesta perdida"));
+    render(<ProteccionTrabajo><SesionDetailView id="ses_1" vista="para-vos" /></ProteccionTrabajo>);
+    fireEvent.click(await screen.findByRole("button", { name: "Preparar Para vos" }));
+    await screen.findByText("Se está generando…");
+    expect(screen.queryByText(/No pudimos confirmar el pedido/)).toBeNull();
+  });
+  it("relee un pendiente y muestra su fallo sin quedarse esperando para siempre", async () => {
+    vi.mocked(apiGet).mockResolvedValueOnce(pendiente()).mockResolvedValue({ ...pendiente(), feedbackEstado: "fallido" });
+    vi.useFakeTimers();
+    try {
+      render(<ProteccionTrabajo><SesionDetailView id="ses_1" vista="para-vos" /></ProteccionTrabajo>);
+      await act(async () => {});
+      expect(screen.getByText("Se está generando…")).toBeTruthy();
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(screen.getByText("No se pudo generar.")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Volver a pedir Para vos" })).toBeTruthy();
+      expect(apiGet).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(apiGet).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
 });

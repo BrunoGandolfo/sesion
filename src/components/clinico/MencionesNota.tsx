@@ -15,7 +15,7 @@ export function MencionesNota({ datos, editable, revisada, onRevisar }: {
 }) {
   const menciones = datos?.riesgoLexico?.coincidencias ?? [];
   if (!menciones.length) return null;
-  return <section aria-label="Menciones de la transcripción" className="rounded-lg border border-gold-200 bg-cream-100 p-4">
+  return <section aria-label="Menciones de la transcripción" className="rounded-lg border border-gold-500/30 bg-cream-100 p-4">
     <h2 className="font-semibold">Frases para revisar</h2>
     <p className="mt-2 text-sm">Estas menciones de la transcripción necesitan tu lectura. Por sí solas no constituyen una evaluación de riesgo.</p>
     <ul className="my-3 space-y-2">
