@@ -89,7 +89,10 @@ npm run test:integration
 ~~~
 
 `DATABASE_URL_TEST` debe apuntar al Postgres exclusivo de integración.
-La suite vacía esa base; no comparte la base de la app. Si hay varias ramas,
+La suite vacía esa base; no comparte la base de la app. La base tiene que
+llamarse `sesion_test`: con cualquier otro nombre la guarda aborta antes de
+conectar. El puerto del ejemplo (25433) no protege nada y puede estar ocupado
+por otro sistema en tu máquina; revisalo antes de levantar el contenedor. Si hay varias ramas,
 asigná un contenedor y un puerto distintos a cada una. En CI se crea un
 Postgres 17 efímero por corrida. Los helpers actuales de conexión son
 `src/lib/__tests__/db-test.ts` y `src/lib/__tests__/base-identidad.ts`;

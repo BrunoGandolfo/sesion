@@ -6,7 +6,12 @@
 #   npm run test:integration
 #   npm run db:test:down   lo tira, con sus datos
 #
-# Puerto 5433 y no 5432 para no chocar con un Postgres local. Los datos van
+# Puerto 25433, solo en loopback: 5432 y sus vecinos (5433, 5434…) son los que
+# eligen otros proyectos, y en la máquina del dueño 5433 era la base de otro
+# sistema. Ningún número garantiza estar libre: lo que impide vaciar una base
+# ajena es la guarda de src/lib/__tests__/db-test.ts, que exige que la base se
+# llame sesion_test (POSTGRES_DB, abajo). Si 25433 está ocupado, cambialo acá,
+# en package.json (db:test:up) y en tu .env.test. Los datos van
 # a tmpfs: la base nace vacía cada vez que se levanta, que es exactamente lo
 # que los tests esperan (los vacían con TRUNCATE entre casos).
 services:
@@ -16,7 +21,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: sesion_test
     ports:
-      - "5433:5432"
+      - "127.0.0.1:25433:5432"
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:

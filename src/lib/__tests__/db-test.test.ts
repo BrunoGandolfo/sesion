@@ -1,11 +1,12 @@
 // Unitario — la guarda de la base de test, a solas.
 //
 // Lo que protege: que un TRUNCATE ... CASCADE nunca corra contra una base
-// que no sea local sin que alguien lo haya pedido con nombre y apellido
+// que no sea la de pruebas de este proyecto (se llama sesion_test) ni contra
+// una que no sea local sin que alguien lo haya pedido con nombre y apellido
 // (PERMITIR_BASE_REMOTA_DE_TEST=1). Y que la lista de tablas que se vacían
 // sea la del schema entero: una tabla nueva que no esté acá queda con datos
 // entre casos, y un test que pasa gracias a datos de otro test es un verde
-// falso.
+// falso. La prueba contra una base ajena real está en base-ajena.test.ts.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -13,23 +14,57 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  NOMBRE_BASE_DE_TEST,
   TABLAS,
   validarUrlDeBaseDeTest,
   VARIABLE_PERMISO_REMOTO,
 } from "./db-test";
 
-const LOCAL = "postgresql://postgres:postgres@localhost:5433/sesion_test";
-const REMOTA = "postgresql://usuario:secreto@ep-alguna-rama-123456.sa-east-1.aws.neon.tech/neondb?sslmode=require";
+const LOCAL = "postgresql://postgres:postgres@localhost:25433/sesion_test";
+const REMOTA = "postgresql://usuario:secreto@ep-alguna-rama-123456.sa-east-1.aws.neon.tech/sesion_test?sslmode=require";
 
 describe("validarUrlDeBaseDeTest", () => {
   it("acepta localhost, 127.0.0.1 y ::1 sin pedir nada más", () => {
     expect(validarUrlDeBaseDeTest(LOCAL, undefined)).toBe(LOCAL);
     expect(
-      validarUrlDeBaseDeTest("postgresql://p:p@127.0.0.1:5432/x", undefined),
-    ).toBe("postgresql://p:p@127.0.0.1:5432/x");
-    expect(validarUrlDeBaseDeTest("postgresql://p:p@[::1]:5432/x", undefined)).toBe(
-      "postgresql://p:p@[::1]:5432/x",
+      validarUrlDeBaseDeTest("postgresql://p:p@127.0.0.1:5432/sesion_test", undefined),
+    ).toBe("postgresql://p:p@127.0.0.1:5432/sesion_test");
+    expect(validarUrlDeBaseDeTest("postgresql://p:p@[::1]:5432/sesion_test", undefined)).toBe(
+      "postgresql://p:p@[::1]:5432/sesion_test",
     );
+  });
+
+  it("una base local con otro nombre aborta antes de conectar, aunque sea localhost", () => {
+    expect(NOMBRE_BASE_DE_TEST).toBe("sesion_test");
+    // La de otro proyecto en un puerto vecino, la de desarrollo de este,
+    // una restauración, una sin nombre, y el nombre con otra caja o sufijo.
+    for (const base of ["cfo", "sesion", "sesion_vida", "restaurada", "", "SESION_TEST", "sesion_test_2", "postgres"]) {
+      const url = `postgresql://postgres:postgres@localhost:5433/${base}`;
+      expect(() => validarUrlDeBaseDeTest(url, undefined), base).toThrow(/la de pruebas de Sesión se llama "sesion_test"/);
+    }
+  });
+
+  it("el error por nombre dice base, host y puerto, y nunca la contraseña", () => {
+    let mensaje = "";
+    try {
+      validarUrlDeBaseDeTest("postgresql://postgres:secreto@127.0.0.1:5433/cfo?schema=public", undefined);
+    } catch (e) {
+      mensaje = (e as Error).message;
+    }
+    expect(mensaje).toContain('"cfo" en 127.0.0.1:5433');
+    expect(mensaje).toContain("no se\nejecutó nada");
+    expect(mensaje).not.toContain("secreto");
+  });
+
+  it("el permiso remoto no afloja el nombre", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const produccion = REMOTA.replace("/sesion_test", "/neondb");
+      expect(() => validarUrlDeBaseDeTest(produccion, "1")).toThrow(/se llama "sesion_test"/);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("sin la variable, aborta: es un TRUNCATE sin destino", () => {

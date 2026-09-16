@@ -3,7 +3,7 @@
  * programar, reprogramar, cancelar, y el aviso de cobro.
  *
  * Ejecutar:
- *   DATABASE_URL_TEST="postgresql://postgres:postgres@localhost:5433/sesion_test" \
+ *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
  *   npx vitest run src/lib/__tests__/envios-del-turno.test.ts
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";

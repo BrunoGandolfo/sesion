@@ -15,7 +15,7 @@
     "test:integration": "VITEST_SUITE=integration vitest run",
     "test:watch": "vitest",
     "postinstall": "prisma generate",
-    "db:test:up": "docker compose up -d --wait postgres-test && DATABASE_URL=postgresql://postgres:postgres@localhost:5433/sesion_test prisma migrate deploy",
+    "db:test:up": "docker compose up -d --wait postgres-test && DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:25433/sesion_test prisma migrate deploy",
     "db:test:down": "docker compose down -v",
     "guardias": "node scripts/ci/max-duration.mjs && node scripts/ci/acta-vigente.mjs && node scripts/ci/migraciones.mjs --sin-drift",
     "e2e": "node pruebas/e2e/recorrido.mjs"

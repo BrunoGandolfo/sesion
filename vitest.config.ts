@@ -75,6 +75,8 @@ const INTEGRACION = [
   'src/lib/__tests__/crear-serie-turno.test.ts',
   // Área 5: el ensayo de restauración con respaldos generados contra la base de test.
   'src/lib/__tests__/ensayo-restauracion.test.ts',
+  // La guarda de la base de test contra una base ajena real (crea y borra la suya).
+  'src/lib/__tests__/base-ajena.test.ts',
 ]
 
 // Repetidos a mano en vez de importar `defaultExclude`: al pasar `exclude`

@@ -9,7 +9,7 @@
  * pueda saber cuándo fue el último aviso que SALIÓ.
  *
  * Ejecutar:
- *   DATABASE_URL_TEST="postgresql://postgres:postgres@localhost:5433/sesion_test" \
+ *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
  *   npx vitest run src/lib/__tests__/recordar-cobro.test.ts
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
