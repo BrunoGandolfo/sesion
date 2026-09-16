@@ -1,0 +1,435 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Organizaciones — multi-tenant desde el día 1
+// En el MVP hay una sola fila. Cuando escale
+// a SaaS, no tocamos el modelo.
+// ============================================
+
+model Organization {
+  id       String   @id @default(cuid())
+  nombre   String
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  invitaciones        Invitacion[]
+  configuracion       Configuracion?
+  pacientes           Paciente[]
+  turnos              Turno[]
+  usuarios            User[]
+  consentimientos     ConsentimientoGrabacion[]
+  sesionesClinicas    SesionClinica[]
+  hotWords            HotWord[]
+  contextosClinicos   PacienteContextoClinico[]
+
+  @@map("organizaciones")
+}
+
+// ============================================
+// Auth — single user en MVP, multi-user en SaaS
+// ============================================
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  hashedPassword String   @map("hashed_password")
+  nombre         String
+  organizationId String   @map("organization_id")
+  creadoEn       DateTime @default(now()) @map("creado_en")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  passwordResets PasswordReset[]
+  invitacionesCreadas Invitacion[] @relation("InvitacionesCreadas")
+
+  @@map("usuarios")
+}
+
+// ============================================
+// Configuración — singleton por organización
+// ============================================
+
+model Configuracion {
+  id                   String @id @default(cuid())
+  nombreProfesional    String @map("nombre_profesional")
+  direccion            String @default("")
+  whatsappOrigen       String @default("") @map("whatsapp_origen")
+  tarifaDefault        Int    @map("tarifa_default")
+  horasAnticipacion    Int    @default(24) @map("horas_anticipacion")
+
+  // Cuándo sale el recordatorio de WhatsApp, dicho como lo piensa ella y no
+  // en horas: "dia_anterior" | "dos_dias_antes" | "misma_manana". La cuenta
+  // vive en src/lib/recordatorios-programacion.ts (calcularProgramadoEn),
+  // única para crear y para reprogramar turnos.
+  //
+  // horasAnticipacion se conserva por compatibilidad: ya no decide nada de
+  // la programación, pero sigue en la fila y en la API para no romper a
+  // quien todavía la lea.
+  recordatorioModo     String @default("dia_anterior") @map("recordatorio_modo")
+  templateRecordatorio String @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
+
+  // Orientación teórica de la profesional. Determina el instrumento de
+  // auto-supervisión (Llamada C): "cbt_mi" → MITI 4.2.1 + CTS-R,
+  // "gestalt" → GTFS. Ver docs/contrato-multi-orientacion.md.
+  orientacionTeorica String @default("cbt_mi") @map("orientacion_teorica")
+
+  organizationId String       @unique @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("configuraciones")
+}
+
+// ============================================
+// Pacientes
+// ============================================
+
+model Paciente {
+  id            String   @id @default(cuid())
+  nombre        String
+  apellido      String
+  telefono      String
+  email         String?
+  tarifa        Int
+  notas         String?  @db.Text
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  organizationId  String                    @map("organization_id")
+  organization    Organization              @relation(fields: [organizationId], references: [id])
+  turnos          Turno[]
+  consentimientos ConsentimientoGrabacion[]
+  hotWords        HotWord[]
+  contextoClinico PacienteContextoClinico?
+
+  @@index([organizationId, activo])
+  @@index([organizationId, apellido])
+  @@map("pacientes")
+}
+
+// ============================================
+// Turnos — con pago inline
+// ============================================
+
+model Turno {
+  id            String    @id @default(cuid())
+  fecha         DateTime
+  duracion      Int       @default(50)
+  modalidad     String    @default("presencial")
+  estado        String    @default("programado")
+  tarifaCobrada Int       @map("tarifa_cobrada")
+  pagoEstado    String    @default("pendiente") @map("pago_estado")
+  pagoFecha     DateTime? @map("pago_fecha")
+  pagoMetodo    String?   @map("pago_metodo")
+  notas         String?   @db.Text
+  creadoEn      DateTime  @default(now()) @map("creado_en")
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+
+  pacienteId     String         @map("paciente_id")
+  paciente       Paciente       @relation(fields: [pacienteId], references: [id])
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  recordatorios  Recordatorio[]
+  sesionClinica  SesionClinica?
+
+  @@index([organizationId, fecha])
+  @@index([organizationId, pagoEstado])
+  @@index([pacienteId])
+  @@map("turnos")
+}
+
+// ============================================
+// Recordatorios de WhatsApp
+// ============================================
+
+model Recordatorio {
+  id            String    @id @default(cuid())
+  programadoEn  DateTime  @map("programado_en")
+  enviadoEn     DateTime? @map("enviado_en")
+  estado        String    @default("pendiente")
+  textoEnviado  String?   @map("texto_enviado") @db.Text
+  error         String?   @db.Text
+  intentos      Int       @default(0)
+  creadoEn      DateTime  @default(now()) @map("creado_en")
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+
+  turnoId String @map("turno_id")
+  turno   Turno  @relation(fields: [turnoId], references: [id])
+
+  @@index([estado, programadoEn])
+  @@map("recordatorios")
+}
+
+// ============================================
+// Consentimiento para grabación de sesiones
+// ============================================
+
+model ConsentimientoGrabacion {
+  id             String       @id @default(cuid())
+  pacienteId     String
+  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  firmadoEn     DateTime // Timestamp de la firma
+  revocadoEn    DateTime? // Null = vigente, con fecha = revocado
+  textoVersion  String // Versión del texto de consentimiento firmado (ej: "1.0")
+  textoCompleto String    @db.Text // Texto íntegro que el paciente firmó
+  firmaDigital  String // Representación de la firma (base64 del canvas)
+  ipOrigen      String? // IP desde donde se firmó (auditoría)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pacienteId])
+  @@index([organizationId])
+  @@map("consentimientos_grabacion")
+}
+
+// ============================================
+// Sesión clínica — datos generados por IA
+// a partir de la grabación de un turno realizado.
+// ============================================
+
+model SesionClinica {
+  id             String       @id @default(cuid())
+  turnoId        String       @unique // Relación 1:1 con Turno
+  turno          Turno        @relation(fields: [turnoId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Estado del pipeline
+  estado String @default("pendiente")
+  // Valores: pendiente | grabando | subiendo | procesando | revision | aprobado | error
+
+  // Audio
+  duracionAudioSeg Int? // Duración del audio en segundos
+  audioR2Key       String? // Key del audio cifrado en R2 (null después de borrar)
+  audioBorradoEn   DateTime? // Cuándo se borró el audio
+
+  // Tramos en que la grabación estuvo en pausa, tal como los reporta el
+  // navegador al confirmar la subida: [{ inicio: ISO, fin: ISO }].
+  // Sin cifrar a propósito: son marcas de tiempo del dispositivo, no
+  // contenido clínico, y sirven para leer la duración real de la sesión.
+  pausas           Json?
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Notas clínicas — cifrado en reposo (AES-256-GCM)
+  //
+  // Solo existen las columnas cifradas. Los campos lógicos en claro
+  // (transcripcion, notaSubjetivo/Objetivo/Analisis/Plan, datosEstructurados,
+  // notasEdicion, notaSoapOriginal) NO están en este schema: los expone la
+  // extensión de Prisma Client (src/lib/prisma-encryption.ts), que cifra al
+  // escribir y descifra al leer. Formato del blob:
+  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
+  // Clave maestra en NOTES_ENCRYPTION_KEY (32 bytes en base64).
+  // Estos campos NO deben usarse en WHERE / ORDER BY / índices.
+  // ──────────────────────────────────────────────────────────────────────
+  transcripcionEncrypted      Bytes? @map("transcripcion_encrypted") // texto plano: transcripcion
+  notaSoapEncrypted           Bytes? @map("nota_soap_encrypted") // texto plano: JSON.stringify({subjetivo, objetivo, analisis, plan})
+  datosEstructuradosEncrypted Bytes? @map("datos_estructurados_encrypted") // texto plano: JSON.stringify(datosEstructurados ya parseado)
+  // Nota tal como la generó la IA (antes de cualquier edición humana). Misma
+  // forma y cifrado que notaSoapEncrypted. Se escribe UNA sola vez (primer
+  // callback con nota); aprobar/reproceso nunca la pisan. Campo lógico en la
+  // extensión Prisma: notaSoapOriginal ({subjetivo, objetivo, analisis, plan} | null).
+  notaSoapOriginalEncrypted   Bytes? @map("nota_soap_original_encrypted")
+
+  // Metadatos de procesamiento
+  modeloASR   String? // Ej: "qwen3-asr-1.7b"
+  modeloLLM   String? // Ej: "qwen3.5-72b-q4"
+  // Versión del prompt con el que el worker generó la nota (trazabilidad).
+  promptVersion String? @map("prompt_version")
+  // Etiqueta de hablante que el pipeline asignó a la terapeuta ("S0" por
+  // convención del worker). Permite reinterpretar la transcripción si la
+  // diarización invirtió los roles.
+  hablanteTerapeuta String? @default("S0") @map("hablante_terapeuta")
+  procesadoEn DateTime? // Cuándo terminó el procesamiento
+  error       String?   @db.Text // Detalle del error si estado = "error"
+  intentos    Int       @default(0)
+
+  // Aprobación por la profesional
+  aprobadoEn            DateTime? // Cuándo Mariana aprobó la nota
+  // Ediciones manuales de Mariana, cifradas. Campo lógico: notasEdicion.
+  notasEdicionEncrypted Bytes?    @map("notas_edicion_encrypted")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([estado])
+  @@map("sesiones_clinicas")
+}
+
+// ============================================
+// HotWords — vocabulario clínico para mejorar
+// la transcripción ASR (términos clínicos,
+// modismos rioplatenses, nombres propios).
+// ============================================
+
+model HotWord {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  scope      String // "global" | "profesional" | "paciente"
+  pacienteId String? // Solo si scope === "paciente"
+  paciente   Paciente? @relation(fields: [pacienteId], references: [id])
+
+  termino   String  @db.VarChar(200)
+  categoria String? @db.VarChar(50) // "termino_clinico" | "modismo_rioplatense" | "nombre_propio" | "otro"
+  activo    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, scope, pacienteId, termino])
+  @@index([organizationId])
+  @@index([scope])
+  @@index([pacienteId])
+  @@map("hot_words")
+}
+
+// ============================================
+// Golden Thread — contexto longitudinal del
+// paciente que se inyecta al LLM antes de
+// generar cada nota SOAP. Una fila por paciente.
+//
+// El artefacto es editable por la terapeuta: las
+// actualizaciones automáticas generadas tras
+// aprobar una sesión quedan con
+// `aprobadoPorTerapeutaEn = null` hasta que la
+// profesional revisa.
+// ============================================
+
+model PacienteContextoClinico {
+  id             String       @id @default(cuid())
+  pacienteId     String       @unique @map("paciente_id")
+  paciente       Paciente     @relation(fields: [pacienteId], references: [id])
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Estructura editable, sin cifrar.
+  //
+  // Son arrays de strings cortos / objetos pequeños útiles para queries y
+  // dashboards. Tomada la decisión deliberada de no cifrarlos: si en algún
+  // momento queremos tablero "pacientes con objetivos activos sobre X",
+  // necesitamos poder consultar estas columnas. PHI clínicamente densa va
+  // abajo en las columnas *_encrypted.
+  // ──────────────────────────────────────────────────────────────────────
+  objetivosTerapeuticos  Json @default("[]") @map("objetivos_terapeuticos")
+  // Array de {id, descripcion, estado: "activo"|"cerrado"|"pausado", fechaInicio, fechaCierre?}
+
+  intervencionesProbadas Json @default("[]") @map("intervenciones_probadas")
+  // Array de {tecnica, eficaciaPercibida: "alta"|"media"|"baja", sesiones: number[]}
+
+  temasRecurrentes       Json @default("[]") @map("temas_recurrentes")
+  // Array de {tema, conteo}
+
+  // ──────────────────────────────────────────────────────────────────────
+  // PHI sensible — cifrado en reposo (AES-256-GCM)
+  //
+  // Mismo patrón que SesionClinica: solo existe la columna Bytes? con el
+  // blob cifrado; el campo lógico en claro (hipotesisDiagnostica,
+  // resumenAcumulativo, riesgosHistoricos) lo expone la extensión de Prisma
+  // Client (src/lib/prisma-encryption.ts). Formato del blob:
+  //   "ENC1" magic (4B) || IV (12B) || authTag (16B) || ciphertext (NB)
+  //
+  // riesgosHistoricos se guarda como JSON serializado (timeline de flags):
+  //   [{ sesionId, fecha, flag: "ideacionSuicida"|..., detalle }]
+  //
+  // Estos campos NO pueden usarse en WHERE / ORDER BY / índices — la
+  // extensión Prisma lo enforza en runtime.
+  // ──────────────────────────────────────────────────────────────────────
+  hipotesisDiagnosticaEncrypted Bytes?  @map("hipotesis_diagnostica_encrypted")
+  resumenAcumulativoEncrypted   Bytes?  @map("resumen_acumulativo_encrypted")
+  riesgosHistoricosEncrypted    Bytes?  @map("riesgos_historicos_encrypted")
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Tracking del Golden Thread
+  // ──────────────────────────────────────────────────────────────────────
+  // String suelto (no FK): la sesión que generó la última actualización del
+  // contexto. Mantenerlo desacoplado evita ciclos de relación y permite que
+  // sea null para contextos creados manualmente por la terapeuta.
+  ultimaSesionId         String?   @map("ultima_sesion_id")
+  version                Int       @default(1)
+  // null = sugerencia generada por la IA pendiente de revisión humana.
+  // Con timestamp = aprobado por la terapeuta y considerado canónico.
+  aprobadoPorTerapeutaEn DateTime? @map("aprobado_por_terapeuta_en")
+  creadoEn               DateTime  @default(now()) @map("creado_en")
+  actualizadoEn          DateTime  @updatedAt @map("actualizado_en")
+
+  @@index([organizationId])
+  @@index([aprobadoPorTerapeutaEn])
+  @@map("paciente_contexto_clinico")
+}
+
+// ============================================
+// Auditoría — registro de acciones sobre datos
+// clínicos (quién, qué, cuándo, sobre qué).
+//
+// append-only: nunca update ni delete desde la app.
+// Sin relación a Organization ni a las entidades
+// auditadas: no queremos cascadas que borren el
+// rastro cuando se elimina lo auditado. `detalle`
+// jamás contiene texto clínico ni datos personales
+// (ver src/app/api/_lib/auditoria.ts → detalleSeguro).
+// ============================================
+
+enum ActorAuditoria {
+  usuario
+  worker
+  sistema
+}
+
+model EventoAuditoria {
+  id             String         @id @default(cuid())
+  organizationId String         @map("organization_id")
+  actorTipo      ActorAuditoria @map("actor_tipo")
+  actorId        String?        @map("actor_id")
+  accion         String
+  entidad        String
+  entidadId      String         @map("entidad_id")
+  detalle        Json?
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt])
+  @@index([entidad, entidadId])
+  @@map("eventos_auditoria")
+}
+
+// Enlaces de un solo uso. Nunca se almacena el token que viaja por correo.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_resets")
+}
+
+// En esta versión organizationId y email se crean siempre null: consultorio propio.
+model Invitacion {
+  id             String        @id @default(cuid())
+  organizationId String?       @map("organization_id")
+  email          String?
+  tokenHash      String        @unique @map("token_hash")
+  expiresAt      DateTime      @map("expires_at")
+  usedAt         DateTime?     @map("used_at")
+  createdBy      String        @map("created_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  creadora       User          @relation("InvitacionesCreadas", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([createdBy, createdAt])
+  @@map("invitaciones")
+}

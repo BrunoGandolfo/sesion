@@ -5,25 +5,25 @@
 // una vez por copia (diaria y mensual), y scripts/ensayo/ensayo-manual.sh en
 // la máquina del dueño. Comprobaciones:
 //
-//   1. Filas por tabla. La lista de tablas sale de prisma/schema.prisma (cada
-//      `@@map` de un model). Las tablas de MINIMOS tienen que tener al menos
-//      esa cantidad de filas: una base restaurada sin pacientes ni sesiones
-//      no es una restauración, es una base vacía con el esquema puesto.
+//   0. Esquema conocido. Compara tablas, columnas y tipos con producción
+//      d02ae0e (instantánea conservada acá) y con prisma/schema.prisma. Si
+//      no coincide con ninguno, informa esquema desconocido y falla.
+//   1. Filas por tabla. Usa las tablas y mínimos del esquema detectado:
+//      una base sin pacientes ni sesiones está vacía, aunque se restauró.
 //   2. Cifrado en reposo. Toda columna *_encrypted no nula tiene que ser un
-//      blob ENC2, y el id de clave de cada blob (byte 4) tiene que estar
-//      entre los ids CONOCIDOS. Un id que no está es LA señal de "hay datos
-//      cifrados con una clave retirada o desconocida, y ningún llavero la
-//      abre": se informa así, no como corrupción. Esto no necesita ninguna
-//      clave: solo la lista de ids, que no es secreta.
-//   3. Muestras: la nota clínica más vieja y la más nueva (nota_final o, si
-//      no hay ninguna aprobada, nota_ia) y la versión del Recorrido más vieja
-//      y la más nueva. Si no hay ninguna, falla: no hay nada que leer.
+//      blob ENC1 (producción) o ENC2 (nuevo). En ENC2 el id (byte 4) debe
+//      estar entre los ids conocidos: si no está, se informa clave ausente,
+//      no corrupción. ENC1 no guarda id; el automático solo puede comprobar
+//      su formato y deja explícito que no identificó ni probó la clave.
+//   3. Muestras: nota clínica más vieja y más nueva; contexto actual por
+//      paciente en producción, versiones del Recorrido en el nuevo. Usa
+//      las columnas y fechas propias de cada esquema. Sin muestras falla.
 //      - Ensayo AUTOMÁTICO (CLAVES_CIFRADO_IDS): no se descifra nada. La
 //        clave clínica no vive en GitHub Actions, a propósito.
 //      - Ensayo MANUAL (CLAVES_CIFRADO, en la máquina del dueño): se
-//        descifran de verdad, con AES-256-GCM y el AAD de su celda, y se
-//        comprueba que lo descifrado es el JSON esperado. Nada del texto se
-//        imprime ni se guarda: solo ids y sí/no.
+//        descifra con AES-256-GCM. ENC2 usa id y AAD; ENC1 prueba las claves
+//        del llavero sin AAD, como producción. Se valida JSON o texto según
+//        la columna. Nada del contenido se imprime ni se guarda.
 //   4. Integridad referencial. Para cada clave foránea se cuentan las filas
 //      hijas sin padre. pg_restore ya fallaría, pero deja el número en el acta.
 //
@@ -40,7 +40,7 @@
 //   CLAVES_CIFRADO="1=<base64>,2=…"  el llavero completo, formato de la app.
 //
 // Usa `psql` (PSQL, o PG_BIN/psql, o el del PATH) y no Prisma: así el ensayo
-// no depende de `npm ci` ni del cliente generado, y corre contra cualquier base.
+// no depende de `npm ci` ni del cliente generado para reconocer ambos esquemas.
 
 import { execFileSync } from "node:child_process";
 import { createDecipheriv } from "node:crypto";
@@ -55,30 +55,42 @@ const VARIABLE_IDS = "CLAVES_CIFRADO_IDS";
 
 /** Filas mínimas por tabla. Una copia con menos no sirve para volver a
  *  atender: no hay a quién ni qué. */
-const MINIMOS = {
+const MINIMOS_COMUNES = {
   organizaciones: 1,
   usuarios: 1,
   pacientes: 1,
   turnos: 1,
   sesiones_clinicas: 1,
-  hilos: 1,
-  hilo_versiones: 1,
 };
 
-/** Qué se descifra: la muestra más vieja y la más nueva de cada una. */
-const MUESTRAS = [
+// La instantánea de producción es schema.prisma de d02ae0e, sin cambios.
+// El contrato nuevo se deriva del schema del checkout. Se comparan TODAS
+// las tablas/columnas/tipos físicos antes de consultar contenido.
+const ESQUEMAS = [
   {
-    rotulo: "nota clínica",
-    tabla: "sesiones_clinicas",
-    // En orden de preferencia: la aprobada; si no hay ninguna, la de la IA.
-    columnas: ["nota_final_encrypted", "nota_ia_encrypted"],
-    valida: (v) => v !== null && typeof v === "object" && ["subjetivo", "objetivo", "analisis", "plan"].every((k) => k in v),
+    id: "produccion-d02ae0e",
+    archivo: join(RAIZ, "scripts/ensayo/esquema-produccion.prisma"),
+    formato: "ENC1",
+    minimos: { ...MINIMOS_COMUNES, paciente_contexto_clinico: 1 },
+    muestras: [
+      { rotulo: "nota clínica", tabla: "sesiones_clinicas", fecha: "createdAt", tipo: "nota",
+        columnas: ["nota_soap_encrypted", "nota_soap_original_encrypted"] },
+      // Producción conserva el contexto actual por paciente, no versiones.
+      { rotulo: "contexto longitudinal", tabla: "paciente_contexto_clinico", fecha: "creado_en", tipo: "contexto",
+        columnas: ["resumen_acumulativo_encrypted", "hipotesis_diagnostica_encrypted", "riesgos_historicos_encrypted"] },
+    ],
   },
   {
-    rotulo: "versión del Recorrido",
-    tabla: "hilo_versiones",
-    columnas: ["contenido_encrypted"],
-    valida: (v) => v !== null && typeof v === "object" && !Array.isArray(v),
+    id: "nuevo",
+    archivo: join(RAIZ, "prisma/schema.prisma"),
+    formato: "ENC2",
+    minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
+    muestras: [
+      { rotulo: "nota clínica", tabla: "sesiones_clinicas", fecha: "creada_en", tipo: "nota",
+        columnas: ["nota_final_encrypted", "nota_ia_encrypted"] },
+      { rotulo: "versión del Recorrido", tabla: "hilo_versiones", fecha: "creada_en", tipo: "hilo",
+        columnas: ["contenido_encrypted"] },
+    ],
   },
 ];
 
@@ -112,18 +124,38 @@ function sql(consulta) {
   }).trim();
 }
 
-function tablasDelSchema() {
-  const schema = readFileSync(join(RAIZ, "prisma", "schema.prisma"), "utf8");
-  const tablas = [];
-  let dentroDeModel = false;
-  for (const linea of schema.split("\n")) {
-    if (/^model\s+\w+\s*\{/.test(linea)) dentroDeModel = true;
-    else if (/^enum\s+\w+\s*\{/.test(linea)) dentroDeModel = false;
-    const m = linea.match(/^\s*@@map\("([^"]+)"\)/);
-    if (dentroDeModel && m) tablas.push(m[1]);
-    if (/^\}/.test(linea)) dentroDeModel = false;
+function contratoDelSchema(archivo) {
+  const schema = readFileSync(archivo, "utf8");
+  const tipos = { String: "text", Int: "int4", Float: "float8", Boolean: "bool", DateTime: "timestamp", Json: "jsonb", Bytes: "bytea" };
+  for (const [, nombre, cuerpo] of schema.matchAll(/^enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+    tipos[nombre] = cuerpo.match(/@@map\("([^"]+)"\)/)?.[1] ?? nombre;
+  }
+  const tablas = {};
+  for (const [, nombre, cuerpo] of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+    const tabla = cuerpo.match(/@@map\("([^"]+)"\)/)?.[1] ?? nombre;
+    tablas[tabla] = {};
+    for (const linea of cuerpo.split("\n")) {
+      const campo = linea.match(/^\s*(\w+)\s+(\w+)(\??)(\s+.*|\s*)$/);
+      if (!campo || !tipos[campo[2]]) continue; // Relaciones, no columnas.
+      const columna = campo[4].match(/@map\("([^"]+)"\)/)?.[1] ?? campo[1];
+      tablas[tabla][columna] = /@db\.VarChar\(/.test(campo[4]) ? "varchar"
+        : /@db\.Char\(/.test(campo[4]) ? "bpchar" : tipos[campo[2]];
+    }
   }
   return tablas;
+}
+
+function detectarEsquema() {
+  const catalogo = JSON.parse(sql(`SELECT coalesce(json_object_agg(tabla, columnas), '{}') FROM (
+    SELECT t.table_name AS tabla,
+      coalesce(json_object_agg(c.column_name, c.udt_name) FILTER (WHERE c.column_name IS NOT NULL), '{}') AS columnas
+    FROM information_schema.tables t LEFT JOIN information_schema.columns c
+      ON c.table_schema = t.table_schema AND c.table_name = t.table_name
+    WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND t.table_name <> '_prisma_migrations'
+    GROUP BY t.table_name) s`));
+  const firma = (tablas) => JSON.stringify(Object.entries(tablas).sort().map(([tabla, columnas]) => [tabla, Object.entries(columnas).sort()]));
+  return ESQUEMAS.map((e) => ({ ...e, tablas: contratoDelSchema(e.archivo) }))
+    .find((e) => firma(e.tablas) === firma(catalogo)) ?? null;
 }
 
 /** Mismas reglas que src/lib/llavero.ts. Devuelve Map<id, Buffer>. */
@@ -176,7 +208,22 @@ const mensajeClaveAusente = (id, modo) =>
     : `hay datos cifrados con la clave ${id}, que no figura en ${VARIABLE_IDS}: es una clave retirada o desconocida y ningún llavero conocido la abre. ` +
       `No es corrupción: si la clave ${id} existe guardada aparte, agregar su id a ${VARIABLE_IDS}; si no existe, esos datos no se pueden recuperar.`;
 
-function descifrar(blob, aad, llavero) {
+function descifrar(blob, aad, llavero, formato) {
+  if (formato === "ENC1") {
+    if (blob.length < 32 || blob.subarray(0, 4).toString("ascii") !== "ENC1") {
+      throw new ErrorDescifrado("formato", "no tiene el prefijo ENC1 o es demasiado corto: dato corrupto o sin cifrar");
+    }
+    // ENC1 no tiene id ni AAD. Solo la autenticación con una clave del
+    // llavero manual puede identificarla; nunca se le inventa el id 1.
+    for (const [claveId, clave] of llavero) {
+      try {
+        const decipher = createDecipheriv("aes-256-gcm", clave, blob.subarray(4, 16), { authTagLength: 16 });
+        decipher.setAuthTag(blob.subarray(16, 32));
+        return { texto: Buffer.concat([decipher.update(blob.subarray(32)), decipher.final()]).toString("utf8"), claveId };
+      } catch { /* Probar la siguiente clave conservada por el dueño. */ }
+    }
+    throw new ErrorDescifrado("autenticacion", "ENC1 no descifra con ninguna clave del llavero: falta la clave correcta o el dato está alterado");
+  }
   if (blob.length < POS_CT || !blob.subarray(0, 4).equals(MAGIC)) {
     throw new ErrorDescifrado("formato", "no tiene el prefijo ENC2 o es demasiado corto: dato corrupto o sin cifrar");
   }
@@ -187,7 +234,7 @@ function descifrar(blob, aad, llavero) {
   decipher.setAAD(Buffer.from(aad, "utf8"));
   decipher.setAuthTag(blob.subarray(POS_TAG, POS_CT));
   try {
-    return Buffer.concat([decipher.update(blob.subarray(POS_CT)), decipher.final()]).toString("utf8");
+    return { texto: Buffer.concat([decipher.update(blob.subarray(POS_CT)), decipher.final()]).toString("utf8"), claveId: id };
   } catch {
     throw new ErrorDescifrado(
       "autenticacion",
@@ -198,7 +245,7 @@ function descifrar(blob, aad, llavero) {
 
 // ─── 1. Filas por tabla ─────────────────────────────────────────────────────
 
-function contarFilas(tablas) {
+function contarFilas(tablas, minimos) {
   const conteos = {};
   const problemas = [];
   for (const t of tablas) {
@@ -210,7 +257,7 @@ function contarFilas(tablas) {
     }
     const n = Number(sql(`SELECT count(*) FROM "${t}"`));
     conteos[t] = n;
-    const minimo = MINIMOS[t] ?? 0;
+    const minimo = minimos[t] ?? 0;
     if (n === 0 && minimo > 0) problemas.push(`tabla ${t} vacía: 0 filas, el mínimo es ${minimo}`);
     else if (n < minimo) problemas.push(`${t}: ${n} filas, el mínimo es ${minimo}`);
   }
@@ -219,7 +266,7 @@ function contarFilas(tablas) {
 
 // ─── 2. Cifrado en reposo: prefijo e ids de clave ───────────────────────────
 
-function verificarCifrado(idsConocidos, modo) {
+function verificarCifrado(idsConocidos, modo, formato) {
   const columnas = sql(
     `SELECT table_name || '.' || column_name FROM information_schema.columns
      WHERE table_schema = 'public' AND column_name LIKE '%\\_encrypted' AND data_type = 'bytea'
@@ -233,21 +280,25 @@ function verificarCifrado(idsConocidos, modo) {
   const detalle = {};
   const problemas = [];
   const clavesAusentes = new Set();
+  let sinId = 0;
 
   for (const col of columnas) {
     const [tabla, columna] = col.split(".");
     const [ids, malos] = sql(
       `SELECT coalesce(json_object_agg(id, n) FILTER (WHERE id IS NOT NULL), '{}'),
               coalesce(sum(n) FILTER (WHERE id IS NULL), 0)
-       FROM (SELECT CASE WHEN length("${columna}") >= ${POS_CT}
-                          AND substring("${columna}" from 1 for 4) = '\\x454e4332'::bytea
-                         THEN get_byte("${columna}", ${POS_ID}) END AS id, count(*) AS n
+       FROM (SELECT CASE WHEN length("${columna}") >= ${formato === "ENC1" ? 32 : POS_CT}
+                          AND substring("${columna}" from 1 for 4) = '${formato === "ENC1" ? "\\x454e4331" : "\\x454e4332"}'::bytea
+                         THEN ${formato === "ENC1" ? "0" : `get_byte("${columna}", ${POS_ID})`} END AS id, count(*) AS n
              FROM "${tabla}" WHERE "${columna}" IS NOT NULL GROUP BY 1) s`,
     ).split("|");
     const porClaveCol = Object.fromEntries(Object.entries(JSON.parse(ids)).map(([k, v]) => [Number(k), Number(v)]));
-    detalle[col] = { porClave: porClaveCol, otros: Number(malos) };
+    const sinIdCol = formato === "ENC1" ? (porClaveCol[0] ?? 0) : 0;
+    if (formato === "ENC1") delete porClaveCol[0];
+    sinId += sinIdCol;
+    detalle[col] = { porClave: porClaveCol, sinId: sinIdCol, otros: Number(malos) };
     otros += Number(malos);
-    if (Number(malos) > 0) problemas.push(`${col}: ${malos} valor(es) sin prefijo ENC2: dato corrupto o sin cifrar`);
+    if (Number(malos) > 0) problemas.push(`${col}: ${malos} valor(es) sin prefijo ${formato} o demasiado cortos: dato corrupto o sin cifrar`);
     for (const [id, n] of Object.entries(porClaveCol)) {
       porClave[id] = (porClave[id] ?? 0) + n;
       if (!idsConocidos.has(Number(id))) {
@@ -257,27 +308,28 @@ function verificarCifrado(idsConocidos, modo) {
     }
   }
 
-  return { columnas: columnas.length, porClave, otros, clavesAusentes: [...clavesAusentes].sort(), detalle, problemas };
+  return { formato, columnas: columnas.length, porClave, sinId, otros, clavesAusentes: [...clavesAusentes].sort(), detalle, problemas };
 }
 
 // ─── 3. Muestras: elegir siempre, descifrar solo con llavero ──────────────────────────────────────────────
 
-function elegirMuestras(llavero, idsConocidos) {
+function elegirMuestras(llavero, idsConocidos, esquema) {
   const muestras = [];
   const problemas = [];
 
-  for (const def of MUESTRAS) {
+  for (const def of esquema.muestras) {
     const columna = def.columnas.find(
       (c) => Number(sql(`SELECT count(*) FROM "${def.tabla}" WHERE "${c}" IS NOT NULL`)) > 0,
     );
     if (!columna) {
-      problemas.push(`no hay ninguna ${def.rotulo} en la copia (${def.tabla}.${def.columnas.join("/")} todas NULL): nada que descifrar`);
+      const ausencia = def.tipo === "contexto" ? "no hay contexto longitudinal" : `no hay ninguna ${def.rotulo}`;
+      problemas.push(`${ausencia} en la copia (${def.tabla}.${def.columnas.join("/")} todas NULL): nada que descifrar`);
       continue;
     }
     for (const orden of ["ASC", "DESC"]) {
       const [id, hex] = sql(
         `SELECT id, encode("${columna}", 'hex') FROM "${def.tabla}"
-         WHERE "${columna}" IS NOT NULL ORDER BY creada_en ${orden}, id ${orden} LIMIT 1`,
+         WHERE "${columna}" IS NOT NULL ORDER BY "${def.fecha}" ${orden}, id ${orden} LIMIT 1`,
       ).split("|");
       const blob = Buffer.from(hex, "hex");
       const muestra = {
@@ -286,25 +338,31 @@ function elegirMuestras(llavero, idsConocidos) {
         columna,
         id,
         cual: orden === "ASC" ? "más vieja" : "más nueva",
-        claveId: blob.length > POS_ID && blob.subarray(0, 4).equals(MAGIC) ? blob[POS_ID] : null,
+        formato: esquema.formato,
+        claveId: esquema.formato === "ENC2" && blob.length >= POS_CT && blob.subarray(0, 4).equals(MAGIC) ? blob[POS_ID] : null,
         /** true/false si se intentó descifrar; null en el ensayo automático. */
         descifrada: null,
         ok: false,
       };
-      muestra.ok = muestra.claveId !== null && idsConocidos.has(muestra.claveId);
+      muestra.ok = esquema.formato === "ENC1" ? null : muestra.claveId !== null && idsConocidos.has(muestra.claveId);
       if (!llavero) {
         muestras.push(muestra);
         continue;
       }
       try {
-        const texto = descifrar(blob, `${def.tabla}:${columna}:${id}`, llavero);
+        const { texto, claveId } = descifrar(blob, `${def.tabla}:${columna}:${id}`, llavero, esquema.formato);
+        muestra.claveId = claveId;
         let valor;
         try {
-          valor = JSON.parse(texto);
+          valor = def.tipo === "contexto" && columna !== "riesgos_historicos_encrypted" ? texto : JSON.parse(texto);
         } catch {
           throw new ErrorDescifrado("contenido", "descifra, pero el texto no es JSON");
         }
-        if (!def.valida(valor)) throw new ErrorDescifrado("contenido", "descifra, pero el JSON no tiene la forma esperada");
+        const valido = def.tipo === "nota"
+          ? valor !== null && typeof valor === "object" && ["subjetivo", "objetivo", "analisis", "plan"].every((k) => k in valor)
+          : def.tipo === "hilo" ? valor !== null && typeof valor === "object" && !Array.isArray(valor)
+            : columna === "riesgos_historicos_encrypted" ? Array.isArray(valor) : typeof valor === "string";
+        if (!valido) throw new ErrorDescifrado("contenido", "descifra, pero el contenido no tiene la forma esperada");
         muestra.descifrada = true;
         muestra.ok = true;
       } catch (error) {
@@ -384,20 +442,34 @@ function seccionCopia(etiqueta, archivo) {
     lineas.push(`_${mensaje ?? "No hay resultado ni un fallo registrado que explique su ausencia. La causa es desconocida; ver la corrida."}_`, "");
     return lineas;
   }
-  lineas.push(`- **Fecha del respaldo:** ${r.fechaArchivo ?? "?"}`, `- **Resultado de la verificación:** ${r.ok ? "OK" : "FALLÓ"}`, "", "| Tabla | Filas |", "| --- | --- |");
-  for (const [t, n] of Object.entries(r.tablas.conteos)) lineas.push(`| ${t} | ${n ?? "no existe"} |`);
+  lineas.push(`- **Fecha del respaldo:** ${r.fechaArchivo ?? "?"}`, `- **Resultado de la verificación:** ${r.ok ? "OK" : "FALLÓ"}`);
+  if (r.esquema) lineas.push(`- **Esquema restaurado:** ${r.esquema}`);
+  if (r.tablas) {
+    lineas.push("", "| Tabla | Filas |", "| --- | --- |");
+    for (const [t, n] of Object.entries(r.tablas.conteos)) lineas.push(`| ${t} | ${n ?? "no existe"} |`);
+  }
+  if (!r.cifrado || !r.descifrado || !r.fk) {
+    lineas.push("", "**Problemas:**", "", ...r.problemas.map((p) => `- ${p}`), "");
+    return lineas;
+  }
   const claves = Object.entries(r.cifrado.porClave).map(([id, n]) => `clave ${id}: ${n}`).join(", ") || "ninguna";
   lineas.push(
     "",
-    `- **Cifrado:** ${r.cifrado.columnas} columnas \`*_encrypted\`; blobs por clave: ${claves}; sin prefijo ENC2: ${r.cifrado.otros}` +
+    `- **Cifrado:** ${r.cifrado.columnas} columnas \`*_encrypted\`; formato ${r.cifrado.formato ?? "ENC2"}; blobs por clave: ${claves}; formato inválido: ${r.cifrado.otros}` +
       (r.cifrado.clavesAusentes.length ? `; **claves que faltan en el llavero: ${r.cifrado.clavesAusentes.join(", ")}**` : ""),
     `- **Ids de clave conocidos (${r.descifrado.modo === "llavero" ? "del llavero" : VARIABLE_IDS}):** ${r.descifrado.idsConocidos.join(", ")} (nunca los valores)`,
   );
+  if (r.cifrado.formato === "ENC1") {
+    lineas.push(`- **Límite de ENC1:** ${r.cifrado.sinId} blobs sin identificador de clave. El automático comprueba el formato, pero no puede identificar ni confirmar la clave; lo prueba el ensayo manual con el llavero.`);
+    lineas.push("- **Recorrido de producción:** contexto actual por paciente; este esquema no conserva versiones históricas.");
+  }
   for (const m of r.descifrado.muestras) {
     const nombre = `${m.rotulo[0].toUpperCase()}${m.rotulo.slice(1)} ${m.cual}`;
     const donde = `${m.tabla} \`${m.id}\`, clave ${m.claveId ?? "?"}`;
     if (m.descifrada === null) {
-      lineas.push(`- **${nombre}:** ${donde}; clave ${m.ok ? "conocida" : "DESCONOCIDA"}. No se descifra en el ensayo automático: lo hace el trimestral a mano.`);
+      lineas.push(m.formato === "ENC1"
+        ? `- **${nombre}:** ${m.tabla} \`${m.id}\`; ENC1 sin id de clave. Descifrado no probado en el automático.`
+        : `- **${nombre}:** ${donde}; clave ${m.ok ? "conocida" : "DESCONOCIDA"}. No se descifra en el ensayo automático: lo hace el trimestral a mano.`);
     } else {
       lineas.push(`- **${nombre} descifrada y leída:** ${m.descifrada ? "sí" : "NO"} (${donde}${m.descifrada ? "" : `; ${m.codigo}: ${m.error}`})`);
     }
@@ -419,9 +491,10 @@ function armarActa() {
     "",
     ...seccionCopia("diario", flag("--diario")),
     ...seccionCopia("mensual", flag("--mensual")),
-    "Este ensayo NO descifra nada: la clave clínica no está en GitHub Actions, a propósito. Prueba que la copia se " +
-      "restaura, tiene datos y que todo lo cifrado usa claves conocidas. Leer una nota y una versión del Recorrido con el " +
-      "llavero es el ensayo A MANO trimestral (scripts/ensayo/ensayo-manual.sh, docs/operaciones.md §4), con acta en docs/operaciones/actas/.",
+    "El ensayo automático descifra el archivo de respaldo, pero no las notas clínicas: la clave clínica no está en GitHub Actions. " +
+      "Comprueba filas, formato cifrado y claves foráneas; en ENC2 también contrasta los ids de clave. ENC1 no incluye esos ids. " +
+      "El descifrado clínico se prueba A MANO con el llavero (scripts/ensayo/ensayo-manual.sh, docs/operaciones.md §4). " +
+      "Cada copia indica arriba qué se pudo verificar y qué falló.",
     "",
     "### Próximo ensayo automático: el día 1 del mes que viene.",
     "",
@@ -448,43 +521,66 @@ try {
   process.exit(1);
 }
 
-const tablas = tablasDelSchema();
-if (tablas.length === 0) {
-  console.error("No se encontró ninguna tabla en prisma/schema.prisma.");
-  process.exit(1);
-}
-
-const filas = contarFilas(tablas);
-const cifrado = verificarCifrado(idsConocidos, llavero ? "llavero" : "ids");
-const descifrado = elegirMuestras(llavero, idsConocidos);
-const fk = verificarClavesForaneas();
-const problemas = [...filas.problemas, ...cifrado.problemas, ...descifrado.problemas, ...fk.problemas];
-
 const resultado = {
   fecha: new Date().toISOString(),
   etiqueta: ETIQUETA,
   archivo: process.env.BACKUP_ARCHIVO ?? null,
   fechaArchivo: process.env.BACKUP_FECHA ?? null,
-  tablas: filas,
-  cifrado,
-  descifrado,
-  fk,
-  problemas,
-  ok: problemas.length === 0,
+  esquema: "no determinado",
+  tablas: null,
+  cifrado: null,
+  descifrado: null,
+  fk: null,
+  problemas: [],
+  ok: false,
 };
+let etapa = "detección del esquema";
+try {
+  const esquema = detectarEsquema();
+  if (!esquema) {
+    resultado.esquema = "desconocido";
+    resultado.problemas.push("esquema restaurado desconocido: las tablas, columnas o tipos no coinciden con producción (d02ae0e) ni con el esquema nuevo");
+  } else {
+    resultado.esquema = esquema.id;
+    etapa = "conteo de filas";
+    resultado.tablas = contarFilas(Object.keys(esquema.tablas), esquema.minimos);
+    resultado.problemas.push(...resultado.tablas.problemas);
+    etapa = "censo de cifrado";
+    resultado.cifrado = verificarCifrado(idsConocidos, llavero ? "llavero" : "ids", esquema.formato);
+    resultado.problemas.push(...resultado.cifrado.problemas);
+    etapa = "selección y verificación de muestras";
+    resultado.descifrado = elegirMuestras(llavero, idsConocidos, esquema);
+    resultado.problemas.push(...resultado.descifrado.problemas);
+    etapa = "verificación de claves foráneas";
+    resultado.fk = verificarClavesForaneas();
+    resultado.problemas.push(...resultado.fk.problemas);
+    resultado.ok = resultado.problemas.length === 0;
+  }
+} catch {
+  // El error de psql ya está en stderr. No copiar el Error de execFileSync:
+  // contiene la URL de conexión, que puede tener credenciales.
+  resultado.problemas.push(`no se pudo completar ${etapa}; ver el error de la corrida`);
+}
 writeFileSync(join(SALIDA, `resultado-${ETIQUETA}.json`), JSON.stringify(resultado, null, 2));
 
-console.log(
-  `[${ETIQUETA}] tablas: ${tablas.length}; columnas cifradas: ${cifrado.columnas} (por clave ${JSON.stringify(cifrado.porClave)}, sin ENC2 ${cifrado.otros}); ` +
-    (llavero
-      ? `muestras descifradas: ${descifrado.muestras.filter((m) => m.descifrada).length}/${descifrado.muestras.length}`
-      : `muestras con clave conocida: ${descifrado.muestras.filter((m) => m.ok).length}/${descifrado.muestras.length} (sin descifrar)`) +
-    `; FK: ${fk.constraints}, violaciones ${fk.violaciones}`,
-);
-for (const [t, n] of Object.entries(filas.conteos)) console.log(`  ${t}: ${n ?? "NO EXISTE"}`);
-for (const m of descifrado.muestras) {
-  const estado = m.descifrada === null ? (m.ok ? "clave conocida, sin descifrar" : "clave DESCONOCIDA") : m.descifrada ? "descifrada y leída" : m.codigo;
-  console.log(`  ${m.rotulo} ${m.cual} (${m.tabla} ${m.id}, clave ${m.claveId ?? "?"}): ${estado}`);
+const { tablas: filas, cifrado, descifrado, fk, problemas } = resultado;
+console.log(`[${ETIQUETA}] esquema restaurado: ${resultado.esquema}`);
+if (filas && cifrado && descifrado && fk) {
+  console.log(
+    `[${ETIQUETA}] tablas: ${Object.keys(filas.conteos).length}; columnas cifradas: ${cifrado.columnas} (${cifrado.formato}, sin id ${cifrado.sinId}, por clave ${JSON.stringify(cifrado.porClave)}, inválidos ${cifrado.otros}); ` +
+      (llavero
+        ? `muestras descifradas: ${descifrado.muestras.filter((m) => m.descifrada).length}/${descifrado.muestras.length}`
+        : cifrado.formato === "ENC1" ? "muestras ENC1 sin id: clave no identificable (sin descifrar)"
+          : `muestras con clave conocida: ${descifrado.muestras.filter((m) => m.ok).length}/${descifrado.muestras.length} (sin descifrar)`) +
+      `; FK: ${fk.constraints}, violaciones ${fk.violaciones}`,
+  );
+  for (const [t, n] of Object.entries(filas.conteos)) console.log(`  ${t}: ${n ?? "NO EXISTE"}`);
+  for (const m of descifrado.muestras) {
+    const estado = m.descifrada === null
+      ? m.formato === "ENC1" ? "ENC1 sin id, clave no probada" : m.ok ? "clave conocida, sin descifrar" : "clave DESCONOCIDA"
+      : m.descifrada ? "descifrada y leída" : m.codigo;
+    console.log(`  ${m.rotulo} ${m.cual} (${m.tabla} ${m.id}, clave ${m.claveId ?? "?"}): ${estado}`);
+  }
 }
 
 if (problemas.length > 0) {

@@ -1,6 +1,8 @@
 // El ensayo de restauración, probado con respaldos generados acá contra el
 // Postgres local de test: uno bueno, uno vacío, uno corrupto, uno truncado, y
 // el bueno leído con un llavero al que se le retiró la clave de su época.
+// También restaura el esquema de producción d02ae0e con ENC1, comprueba sus
+// columnas y fechas distintas, y rechaza estructuras desconocidas o mixtas.
 //
 // Corre los mismos archivos que el workflow y que el ensayo manual:
 // scripts/ensayo/restaurar.sh, scripts/ensayo/verificar-restauracion.mjs y
@@ -11,7 +13,7 @@
 // ensayo_*).
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -30,6 +32,7 @@ const VERIFICAR = resolve("scripts/ensayo/verificar-restauracion.mjs");
 const MANUAL = resolve("scripts/ensayo/ensayo-manual.sh");
 const WORKFLOW = resolve(".github/workflows/ensayo-restauracion.yml");
 const IDS = "CLAVES_CIFRADO_IDS";
+const SCHEMA_PRODUCCION = resolve("scripts/ensayo/esquema-produccion.prisma");
 const PASSPHRASE = "passphrase-de-prueba";
 const bin = (nombre: string) => (process.env.PG_BIN ? join(process.env.PG_BIN, nombre) : nombre);
 
@@ -47,9 +50,9 @@ const gpg = (entrada: string, salida: string) =>
   execFileSync("gpg", ["--batch", "--yes", "--quiet", "--symmetric", "--cipher-algo", "AES256", "--passphrase-fd", "0", "--output", salida, entrada], {
     input: PASSPHRASE, env: { ...process.env, GNUPGHOME: join(carpeta, "gnupg") },
   });
-const respaldar = (nombre: string) => {
+const respaldar = (nombre: string, url = urlDeBaseDeTest()) => {
   const dump = join(carpeta, `${nombre}.dump`);
-  execFileSync(bin("pg_dump"), ["--format=custom", "--no-owner", "--no-privileges", `--file=${dump}`, urlDeBaseDeTest()]);
+  execFileSync(bin("pg_dump"), ["--format=custom", "--no-owner", "--no-privileges", `--file=${dump}`, url]);
   gpg(dump, `${dump}.gpg`);
   return dump;
 };
@@ -63,7 +66,7 @@ const psql = (url: string, ...sentencias: string[]) =>
 
 function restaurar(archivo: string, nombreBase: string) {
   psql(urlDeBaseDeTest(), `DROP DATABASE IF EXISTS ${nombreBase}`, `CREATE DATABASE ${nombreBase}`);
-  basesCreadas.push(nombreBase);
+  if (!basesCreadas.includes(nombreBase)) basesCreadas.push(nombreBase);
   const r = spawnSync("bash", [RESTAURAR, join(carpeta, archivo), urlDe(nombreBase)], {
     encoding: "utf8", env: { NODE_ENV: "test", PATH: process.env.PATH, PG_BIN: process.env.PG_BIN ?? "", BACKUP_ENCRYPTION_KEY: PASSPHRASE, GNUPGHOME: join(carpeta, "gnupg") },
   });
@@ -76,6 +79,21 @@ function verificar(url: string, claves: Record<string, string>, etiqueta: string
   const r = spawnSync(process.execPath, [VERIFICAR, "--etiqueta", etiqueta, "--salida", carpeta], { encoding: "utf8", env });
   const ruta = join(carpeta, `resultado-${etiqueta}.json`);
   return { ...r, resultado: existsSync(ruta) ? JSON.parse(readFileSync(ruta, "utf8")) : null };
+}
+
+function acta(etiqueta: string) {
+  const trabajo = mkdtempSync(join(carpeta, "acta-"));
+  writeFileSync(join(trabajo, "resultado-diario.json"), readFileSync(join(carpeta, `resultado-${etiqueta}.json`)));
+  return execFileSync(process.execPath, [VERIFICAR, "--acta", "--salida", trabajo], { encoding: "utf8" });
+}
+
+// Formato exacto de encrypt() en release d02ae0e: ENC1 + IV + tag + cuerpo.
+// Sin id de clave ni AAD. Datos y clave generados por este test, nunca reales.
+function cifrarProduccion(texto: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", Buffer.from(K1, "base64"), iv);
+  const cuerpo = Buffer.concat([cipher.update(texto, "utf8"), cipher.final()]);
+  return `decode('${Buffer.concat([Buffer.from("ENC1"), iv, cipher.getAuthTag(), cuerpo]).toString("hex")}', 'hex')`;
 }
 
 beforeAll(async () => {
@@ -110,6 +128,34 @@ beforeAll(async () => {
   // Vacío: el esquema entero, sin una sola fila.
   await vaciarTablas(base.prisma);
   respaldar("vacio");
+
+  // Prisma crea el esquema REAL de producción desde su instantánea exacta;
+  // el verificador tiene un lector distinto, por lo que también se prueba
+  // la detección de nombres físicos, camelCase, enums y tipos de columnas.
+  const produccion = "ensayo_origen_produccion";
+  psql(urlDeBaseDeTest(), `CREATE DATABASE ${produccion}`);
+  basesCreadas.push(produccion);
+  execFileSync(resolve("node_modules/.bin/prisma"), ["db", "push", "--schema", SCHEMA_PRODUCCION, "--skip-generate"], {
+    env: { NODE_ENV: "test", PATH: process.env.PATH, DATABASE_URL: urlDe(produccion) }, stdio: "pipe",
+  });
+  respaldar("produccion-vacio", urlDe(produccion));
+  psql(urlDe(produccion), `
+    INSERT INTO organizaciones (id, nombre) VALUES ('org', 'Prueba');
+    INSERT INTO usuarios (id, email, hashed_password, nombre, organization_id)
+      VALUES ('usuario', 'prueba@example.invalid', 'ficticio', 'Prueba', 'org');
+    INSERT INTO pacientes (id, nombre, apellido, telefono, tarifa, organization_id, actualizado_en)
+      VALUES ('p1', 'Prueba', 'Uno', '', 1800, 'org', now()), ('p2', 'Prueba', 'Dos', '', 1800, 'org', now());
+    INSERT INTO turnos (id, fecha, tarifa_cobrada, paciente_id, organization_id, actualizado_en)
+      VALUES ('t1', '2024-01-01T12:00:00Z', 1800, 'p1', 'org', now()), ('t2', '2026-01-01T12:00:00Z', 1800, 'p2', 'org', now());
+    INSERT INTO sesiones_clinicas (id, "turnoId", "organizationId", "createdAt", "updatedAt", nota_soap_encrypted, nota_soap_original_encrypted)
+      VALUES ('z_nota_vieja', 't1', 'org', '2024-01-01T12:00:00Z', now(), ${cifrarProduccion(JSON.stringify(NOTA))}, ${cifrarProduccion(JSON.stringify(NOTA))}),
+             ('a_nota_nueva', 't2', 'org', '2026-01-01T12:00:00Z', now(), ${cifrarProduccion(JSON.stringify(NOTA))}, ${cifrarProduccion(JSON.stringify(NOTA))});
+    INSERT INTO paciente_contexto_clinico (id, paciente_id, organization_id, creado_en, actualizado_en,
+      resumen_acumulativo_encrypted, hipotesis_diagnostica_encrypted, riesgos_historicos_encrypted)
+      VALUES ('z_contexto_viejo', 'p1', 'org', '2024-01-01T12:00:00Z', now(), ${cifrarProduccion("Contexto ficticio privado")}, ${cifrarProduccion("Hipótesis ficticia")}, ${cifrarProduccion("[]")}),
+             ('a_contexto_nuevo', 'p2', 'org', '2026-01-01T12:00:00Z', now(), ${cifrarProduccion("Contexto ficticio privado")}, ${cifrarProduccion("Hipótesis ficticia")}, ${cifrarProduccion("[]")});
+  `);
+  respaldar("produccion", urlDe(produccion));
 }, 120_000);
 
 afterAll(async () => {
@@ -141,6 +187,7 @@ describe("el respaldo bueno", () => {
     const v = verificar(url, { [IDS]: "1" }, "diario");
     expect(v.status, v.stderr).toBe(0);
     expect(v.resultado.ok).toBe(true);
+    expect(v.resultado.esquema).toBe("nuevo");
     expect(v.resultado.descifrado.modo).toBe("ids");
     const muestras = v.resultado.descifrado.muestras as { descifrada: boolean | null; ok: boolean; claveId: number }[];
     expect(muestras.length).toBe(4);
@@ -148,6 +195,11 @@ describe("el respaldo bueno", () => {
     expect(v.stdout).toContain("sin descifrar");
     expect(v.resultado.cifrado.clavesAusentes).toEqual([]);
     expect(v.resultado.tablas.problemas).toEqual([]);
+    const informe = acta("diario");
+    expect(informe).toContain("**Resultado de la verificación:** OK");
+    expect(informe).toContain("**Esquema restaurado:** nuevo");
+    expect(informe).toContain("| sesiones_clinicas | 1 |");
+    expect(informe).toContain("formato ENC2");
   });
 
   it("modo manual: descifra al menos una nota clínica y una versión del Recorrido con la clave de su época", () => {
@@ -195,6 +247,117 @@ describe("el respaldo bueno", () => {
     expect(v.stderr).not.toContain("falta la clave");
     expect(v.resultado.descifrado.muestras.every((m: { codigo: string }) => m.codigo === "autenticacion")).toBe(true);
   });
+});
+
+describe("compatibilidad con el respaldo de producción d02ae0e", () => {
+  let url: string;
+  beforeAll(() => {
+    const r = restaurar("produccion.dump.gpg", "ensayo_produccion");
+    expect(r.status, r.stderr).toBe(0);
+    url = r.url;
+  });
+
+  it("completa el automático con ENC1, tablas viejas y sus fechas; no inventa un id de clave", () => {
+    const v = verificar(url, { [IDS]: "99" }, "produccion-auto");
+    expect(v.status, v.stderr).toBe(0);
+    expect(v.resultado.esquema).toBe("produccion-d02ae0e");
+    expect(v.resultado.ok).toBe(true);
+    expect(v.resultado.tablas.conteos.sesiones_clinicas).toBe(2);
+    expect(v.resultado.tablas.conteos.paciente_contexto_clinico).toBe(2);
+    expect(v.resultado.tablas.conteos).not.toHaveProperty("hilo_versiones");
+    expect(v.resultado.tablas.conteos).not.toHaveProperty("hilos");
+    expect(v.resultado.cifrado).toMatchObject({ formato: "ENC1", columnas: 8, sinId: 10, porClave: {}, otros: 0, clavesAusentes: [] });
+    expect(v.resultado.descifrado.muestras.map((m: { id: string }) => m.id)).toEqual(["z_nota_vieja", "a_nota_nueva", "z_contexto_viejo", "a_contexto_nuevo"]);
+    expect(v.resultado.descifrado.muestras.every((m: { claveId: null; ok: null; descifrada: null }) => m.claveId === null && m.ok === null && m.descifrada === null)).toBe(true);
+    expect(v.resultado.fk.violaciones).toBe(0);
+    expect(v.resultado.fk.constraints).toBeGreaterThan(0);
+    const texto = acta("produccion-auto");
+    expect(texto).toContain("**Resultado de la verificación:** OK");
+    expect(texto).toContain("| paciente_contexto_clinico | 2 |");
+    expect(texto).toContain("no puede identificar ni confirmar la clave");
+    expect(texto).toContain("no conserva versiones históricas");
+    expect(texto).not.toContain("clave conocida");
+    expect(texto).not.toContain("falló antes de verificar");
+  });
+
+  it("el manual abre notas JSON y contextos de texto ENC1 con la clave que autentica, sin asumir id 1", () => {
+    const v = verificar(url, { [VARIABLE_LLAVERO]: `2=${K2},7=${K1}` }, "produccion-manual");
+    expect(v.status, v.stderr).toBe(0);
+    expect(v.resultado.descifrado.muestras).toHaveLength(4);
+    expect(v.resultado.descifrado.muestras.every((m: { claveId: number; descifrada: boolean; ok: boolean }) => m.claveId === 7 && m.descifrada && m.ok)).toBe(true);
+    expect(v.stdout + v.stderr + JSON.stringify(v.resultado)).not.toContain("Contexto ficticio privado");
+    expect(v.stdout + v.stderr + JSON.stringify(v.resultado)).not.toContain(K1);
+  });
+
+  it("sin la clave que abre ENC1 el manual falla sin adjudicarle una identidad inventada", () => {
+    const v = verificar(url, { [VARIABLE_LLAVERO]: `2=${K2}` }, "produccion-sin-clave");
+    expect(v.status).toBe(1);
+    expect(v.resultado.ok).toBe(false);
+    expect(v.stderr).toContain("ENC1 no descifra con ninguna clave del llavero");
+    expect(v.resultado.descifrado.muestras.every((m: { claveId: null; codigo: string }) => m.claveId === null && m.codigo === "autenticacion")).toBe(true);
+  });
+
+  it("usa la nota original y el JSON de riesgos cuando son el contenido disponible", () => {
+    const r = restaurar("produccion.dump.gpg", "ensayo_produccion_alternativas");
+    expect(r.status, r.stderr).toBe(0);
+    psql(r.url, "UPDATE sesiones_clinicas SET nota_soap_encrypted = NULL",
+      "UPDATE paciente_contexto_clinico SET resumen_acumulativo_encrypted = NULL, hipotesis_diagnostica_encrypted = NULL");
+    const v = verificar(r.url, { [VARIABLE_LLAVERO]: `7=${K1}` }, "produccion-alternativas");
+    expect(v.status, v.stderr).toBe(0);
+    expect(v.resultado.descifrado.muestras.map((m: { columna: string }) => m.columna)).toEqual([
+      "nota_soap_original_encrypted", "nota_soap_original_encrypted", "riesgos_historicos_encrypted", "riesgos_historicos_encrypted",
+    ]);
+    expect(v.resultado.descifrado.muestras.every((m: { descifrada: boolean }) => m.descifrada)).toBe(true);
+  });
+
+  it("un esquema viejo vacío produce conteos y problemas reales en el acta", () => {
+    const r = restaurar("produccion-vacio.dump.gpg", "ensayo_produccion_vacio");
+    expect(r.status, r.stderr).toBe(0);
+    const v = verificar(r.url, { [IDS]: "1" }, "produccion-vacio");
+    expect(v.status).toBe(1);
+    expect(v.resultado.esquema).toBe("produccion-d02ae0e");
+    expect(v.resultado.tablas.conteos.paciente_contexto_clinico).toBe(0);
+    expect(v.stderr).toContain("tabla sesiones_clinicas vacía: 0 filas");
+    expect(v.stderr).toContain("no hay contexto longitudinal en la copia");
+    const texto = acta("produccion-vacio");
+    expect(texto).toContain("**Resultado de la verificación:** FALLÓ");
+    expect(texto).toContain("| sesiones_clinicas | 0 |");
+    expect(texto).toContain("tabla paciente_contexto_clinico vacía");
+    expect(texto).not.toContain("sin generar un resultado detallado");
+  });
+
+  it("rechaza un blob alterado aunque el esquema viejo sea conocido", () => {
+    const r = restaurar("produccion.dump.gpg", "ensayo_produccion_corrupto");
+    expect(r.status, r.stderr).toBe(0);
+    psql(r.url, "UPDATE sesiones_clinicas SET nota_soap_encrypted = decode('00000000', 'hex')");
+    const v = verificar(r.url, { [IDS]: "1" }, "produccion-corrupto");
+    expect(v.status).toBe(1);
+    expect(v.resultado.esquema).toBe("produccion-d02ae0e");
+    expect(v.resultado.cifrado.otros).toBe(2);
+    expect(v.stderr).toContain("sin prefijo ENC1 o demasiado cortos");
+  });
+});
+
+it.each([
+  ["bueno.dump.gpg", "ALTER TABLE sesiones_clinicas RENAME COLUMN creada_en TO fecha_ajena"],
+  ["bueno.dump.gpg", "ALTER TABLE pacientes DROP COLUMN telefono"],
+  ["bueno.dump.gpg", "ALTER TABLE sesiones_clinicas ALTER COLUMN nota_final_encrypted TYPE text USING 'ajeno'"],
+  ["produccion.dump.gpg", "ALTER TABLE sesiones_clinicas RENAME COLUMN \"createdAt\" TO creada_en"],
+  ["produccion.dump.gpg", "CREATE TABLE hilos (id text)"],
+  ["produccion.dump.gpg", "DROP TABLE recordatorios"],
+])("rechaza una estructura desconocida y lo publica como resultado: %s / %s", (archivo, cambio) => {
+  const r = restaurar(archivo, "ensayo_esquema_desconocido");
+  expect(r.status, r.stderr).toBe(0);
+  psql(r.url, cambio);
+  const v = verificar(r.url, { [IDS]: "1" }, "desconocido");
+  expect(v.status).toBe(1);
+  expect(v.resultado).toMatchObject({ esquema: "desconocido", ok: false, tablas: null, cifrado: null, descifrado: null, fk: null });
+  expect(v.stderr).toContain("esquema restaurado desconocido");
+  const texto = acta("desconocido");
+  expect(texto).toContain("**Resultado de la verificación:** FALLÓ");
+  expect(texto).toContain("esquema restaurado desconocido");
+  expect(texto).not.toContain("sin generar un resultado detallado");
+  expect(texto).not.toContain("falló al abrirse");
 });
 
 it("el guion manual restaura, descifra y verifica en una base local", () => {
