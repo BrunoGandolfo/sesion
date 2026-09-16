@@ -124,9 +124,13 @@ jobs:
         run: |
           set -euo pipefail
           elegir() { # <prefijo> <índice en la lista ordenada por fecha: -1 última, 0 primera>
-            aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "$1" \
+            # Un prefijo vacío puede no traer Contents; sort_by necesita una lista.
+            if ! aws s3api list-objects-v2 --bucket "${R2_BUCKET}" --prefix "$1" \
               --endpoint-url "${R2_ENDPOINT}" \
-              --query "sort_by(Contents, &LastModified)[$2].Key" --output text
+              --query "sort_by(Contents || \`[]\`, &LastModified)[$2].Key" --output text; then
+              echo "ERROR: no se pudo listar el prefijo $1." >&2
+              return 1
+            fi
           }
           fecha() {
             aws s3api head-object --bucket "${R2_BUCKET}" --key "$1" \

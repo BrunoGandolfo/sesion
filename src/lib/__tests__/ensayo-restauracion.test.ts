@@ -4,8 +4,9 @@
 //
 // Corre los mismos archivos que el workflow y que el ensayo manual:
 // scripts/ensayo/restaurar.sh, scripts/ensayo/verificar-restauracion.mjs y
-// scripts/ensayo/ensayo-manual.sh. Lo único simulado es `aws`, en el test del
-// paso que elige las copias. Necesita pg_dump/pg_restore/psql 17 (PG_BIN o el
+// scripts/ensayo/ensayo-manual.sh. La selección de copias con aws simulado y
+// JMESPath real se prueba en processor/tests/test_ensayo_listado.py.
+// Necesita pg_dump/pg_restore/psql 17 (PG_BIN o el
 // PATH) y gpg, además de DATABASE_URL_TEST (superusuario: crea y borra bases
 // ensayo_*).
 
@@ -252,38 +253,6 @@ describe("el workflow prueba también una copia mensual y no pide ninguna clave 
     if (!p) throw new Error(`Falta el paso "${nombre}"`);
     return p;
   };
-  const elegir = (diarios: string, mensuales: string) => {
-    const dir = mkdtempSync(join(tmpdir(), "sesion-elegir-"));
-    mkdirSync(join(dir, "bin"));
-    // `aws` simulado: lista canned por prefijo y respeta el índice del --query.
-    writeFileSync(join(dir, "bin/aws"), [
-      "#!/bin/bash", 'cmd="$2"; prefix=""; query=""',
-      'while [ $# -gt 0 ]; do case "$1" in --prefix) prefix="$2"; shift;; --query) query="$2"; shift;; esac; shift; done',
-      '[ "$cmd" = head-object ] && { echo "2026-09-01T06:00:00+00:00"; exit 0; }',
-      'case "$prefix" in backups/mensuales/) lista=($FAKE_MENSUALES);; backups/sesion-backup-) lista=($FAKE_DIARIOS);; *) lista=();; esac',
-      '[ ${#lista[@]} -eq 0 ] && { echo None; exit 0; }',
-      'case "$query" in *"[-1]"*) echo "${lista[-1]}";; *"[0]"*) echo "${lista[0]}";; *) echo None;; esac',
-    ].join("\n"), { mode: 0o755 });
-    const r = spawnSync("bash", ["-c", paso("Elegir las copias: la diaria más reciente y la mensual más vieja").run!], {
-      cwd: dir, encoding: "utf8",
-      env: { NODE_ENV: "test", PATH: `${join(dir, "bin")}:${process.env.PATH}`, GITHUB_ENV: join(dir, "env"), R2_BUCKET: "b", R2_ENDPOINT: "https://r2.invalid", FAKE_DIARIOS: diarios, FAKE_MENSUALES: mensuales },
-    });
-    const env = existsSync(join(dir, "env")) ? readFileSync(join(dir, "env"), "utf8") : "";
-    rmSync(dir, { recursive: true, force: true });
-    return { ...r, env };
-  };
-
-  it("elige la diaria más reciente y la mensual más vieja", () => {
-    const r = elegir("backups/sesion-backup-a.dump.gpg backups/sesion-backup-b.dump.gpg", "backups/mensuales/enero.dump.gpg backups/mensuales/agosto.dump.gpg");
-    expect(r.status, r.stderr).toBe(0);
-    expect(r.env).toContain("BACKUP_DIARIO=backups/sesion-backup-b.dump.gpg");
-    expect(r.env).toContain("BACKUP_MENSUAL=backups/mensuales/enero.dump.gpg");
-  });
-  it("sin copia mensual el ensayo falla en vez de probar solo la diaria", () => {
-    const r = elegir("backups/sesion-backup-a.dump.gpg", "");
-    expect(r.status).toBe(1);
-    expect(r.stderr).toContain("no hay ninguna copia mensual");
-  });
   it("restaura y verifica las dos copias, y la mensual corre aunque la diaria haya fallado", () => {
     expect(paso("Restaurar y verificar la copia diaria").run).toContain("--etiqueta diario");
     const mensual = paso("Restaurar y verificar la copia mensual");
