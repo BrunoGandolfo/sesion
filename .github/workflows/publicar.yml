@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # El SHA pedido por el dueño; la guarda exige CI verde para ese SHA.
           ref: ${{ inputs.sha }}
@@ -107,7 +107,7 @@ jobs:
           esac
 
       - name: Setup Node 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
