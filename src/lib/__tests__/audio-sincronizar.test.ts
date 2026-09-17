@@ -1,14 +1,14 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { sincronizarAudio } from "@/lib/audio/sincronizar";
 import type { GrabacionLocal } from "@/lib/audio/almacen";
-const local = vi.hoisted(() => ({ indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 20, sha256: "a".repeat(64), cifrado: new ArrayBuffer(20) }));
+const local = vi.hoisted(() => ({ indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 20, sha256: "a".repeat(64), continuacion: false, cifrado: new ArrayBuffer(20) }));
 vi.mock("@/lib/audio/almacen", () => ({ leerSegmento: vi.fn(async () => local) }));
 const g: GrabacionLocal = { cuenta: "org:usuaria", organizationId: "org", sesionId: "id-recuperado", turnoId: "turno", estado: "cerrada", cantidad: 1, duracionMs: 50_000, pausas: [] };
 afterEach(() => vi.unstubAllGlobals());
 
 test.each(["consulta", "reserva", "put", "confirmacion", "cierre"].flatMap(paso => ["antes", "despues"].map(momento => [paso, momento])))("red cortada %s %s: concilia y no duplica", async (paso, momento) => {
   let reservado = false, recibido = false, confirmado = false, cerrado = false, fallo = false, procesamientos = 0, puts = 0;
-  const remoto = () => ({ id: g.sesionId, estado: cerrado ? "procesando" : "grabando", duracionAudioSeg: cerrado ? 50 : null, pausas: [], segmentos: reservado ? [{ indice: 0, inicioMs: 0, iv: local.iv, bytes: 20, sha256: local.sha256, confirmado }] : [] });
+  const remoto = () => ({ id: g.sesionId, estado: cerrado ? "procesando" : "grabando", duracionAudioSeg: cerrado ? 50 : null, pausas: [], segmentos: reservado ? [{ indice: 0, inicioMs: 0, iv: local.iv, bytes: 20, sha256: local.sha256, continuacion: false, confirmado }] : [] });
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const operacion = url === "https://r2.test/segmento" ? "put" : url.endsWith("segmentos") ? "reserva" : url.endsWith("confirmar") ? "confirmacion" : url.endsWith("finalizar") ? "cierre" : "consulta";
     // La primera confirmación negativa previa al PUT no consume el fallo.
@@ -29,6 +29,11 @@ test.each(["consulta", "reserva", "put", "confirmacion", "cierre"].flatMap(paso 
   expect(procesamientos).toBe(1); expect(puts).toBe(1);
 });
 
+test("una continuación declarada distinta también detiene el envío, con salida", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ data: { id: g.sesionId, estado: "grabando", segmentos: [{ ...local, continuacion: true, confirmado: true }] } })));
+  await expect(sincronizarAudio({} as IDBDatabase, g)).rejects.toMatchObject({ status: 409, conflicto: true });
+});
+
 test("un contenido remoto distinto detiene el envío y conserva el segmento local", async () => {
   const fetch = vi.fn(async () => Response.json({ data: { id: g.sesionId, estado: "grabando", segmentos: [{ ...local, sha256: "b".repeat(64), confirmado: true }] } }));
   vi.stubGlobal("fetch", fetch);
@@ -39,7 +44,7 @@ test("un contenido remoto distinto detiene el envío y conserva el segmento loca
 
 
 test("un cierre ya procesado se reconcilia aunque el worker haya actualizado duración y avisos", async () => {
-  const remoto = { id: g.sesionId, estado: "revision", duracionAudioSeg: 49, pausas: [{ inicio: 49800, fin: 50000, siguienteIndice: 1, motivo: "interrupcion" }], segmentos: [{ indice: local.indice, inicioMs: local.inicioMs, bytes: local.bytes, iv: local.iv, sha256: local.sha256, confirmado: true }] };
+  const remoto = { id: g.sesionId, estado: "revision", duracionAudioSeg: 49, pausas: [{ inicio: 49800, fin: 50000, siguienteIndice: 1, motivo: "interrupcion" }], segmentos: [{ indice: local.indice, inicioMs: local.inicioMs, bytes: local.bytes, iv: local.iv, sha256: local.sha256, continuacion: local.continuacion, confirmado: true }] };
   const fetch = vi.fn(async (url: string) => { expect(url).toBe(`/api/audio/${g.sesionId}`); return Response.json({ data: remoto }); });
   vi.stubGlobal("fetch", fetch);
   expect(await sincronizarAudio({} as IDBDatabase, g)).toEqual(remoto);

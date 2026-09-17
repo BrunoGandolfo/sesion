@@ -32,9 +32,11 @@ No. La transcripción queda guardada, cifrada, junto con la nota. Está dicho en
 autorización que firma la paciente. → `12-camino-del-audio-y-privacidad.md`
 
 **6. ¿Puedo bloquear la pantalla mientras grabo?**
-No bloquees la pantalla mientras grabás: mantené Sesión abierta. Si la pantalla
-se bloquea o cambiás de app, la captura se pausa; al volver, tocá **Reanudar
-grabación**.
+Sí. Podés bloquear la pantalla o pasar a otra app: la grabación sigue y cada
+segundo queda guardado cifrado. Sesión igual pide mantener la pantalla encendida
+mientras grabás. Lo que sí corta la captura es que el micrófono deje de estar
+—una llamada, otra app que se lo lleve—. Al volver, mirá el medidor de sonido
+para confirmar que sigue entrando audio.
 → `07-grabar-una-sesion.md`
 
 **7. Pausé y me olvidé de reanudar. ¿Perdí la sesión?**

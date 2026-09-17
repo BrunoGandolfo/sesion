@@ -1,19 +1,29 @@
-import { LIMITE_SEGUNDOS, SEGMENTO_MS, SOLAPE_MS } from "./contrato";
+import { ENTREGA_MS, LIMITE_SEGUNDOS, SEGMENTO_MS, SIN_AUDIO_MS } from "./contrato";
 
 type Motivo = "manual" | "interrupcion" | "limite";
-const INTERVALO_RESPALDO_MS = 1000;
-const ESPERA_STOP_MS = 5000;
-const DEMORA_MAXIMA_MS = 5000;
-// El worker admite 65 s por archivo. Dejamos margen para recibir stop.
-const CIERRE_PREVENTIVO_MS = SEGMENTO_MS + 3000;
-type Activo = {
-  recorder: MediaRecorder; inicio: number; inicioGlobal: number; fin: number;
-  blob: Promise<Blob>; chunks: Blob[]; ultimoDato: number; guardado: boolean;
-  completar: (incompleto?: boolean) => void; timeout?: ReturnType<typeof setTimeout>;
-};
+/** Cuánto se espera al `stop` antes de cerrar con lo que ya se entregó. No se
+ *  pierde nada: cada entrega ya está cifrada y guardada. */
+const ESPERA_STOP_MS = 5_000;
+const TICK_MS = 1_000;
+/** Tope de lo que un solo tick puede sumar al reloj de silencio. Si la página
+ *  estuvo congelada, ese tiempo no lo vivió nadie y no prueba nada sobre el
+ *  micrófono. */
+const TICK_MAXIMO_MS = 2_000;
+
+export interface EntregaCaptura {
+  /** Posición de la entrega dentro de la pieza en curso. */
+  orden: number;
+  inicioMs: number;
+  duracionMs: number;
+  continuacion: boolean;
+}
+
 export interface OpcionesCaptura {
-  guardar: (blob: Blob, duracionMs: number, inicioMs: number) => Promise<void>;
-  respaldar?: (blob: Blob, duracionMs: number, inicioMs: number) => Promise<void>;
+  /** Un trozo de un segundo, tal como lo entregó el navegador. Se guarda
+   *  cifrado enseguida; es lo único que sobrevive a una muerte del proceso. */
+  entregar: (trozo: Blob, entrega: EntregaCaptura) => Promise<void>;
+  /** La pieza completa: todas las entregas acumuladas desde el último corte. */
+  guardar: (blob: Blob, duracionMs: number, inicioMs: number, continuacion: boolean) => Promise<void>;
   parada: (motivo: Motivo) => Promise<void>;
   error: (mensaje: string) => void;
   ahora?: () => number;
@@ -26,200 +36,180 @@ export function crearRecorder(stream: MediaStream): MediaRecorder {
   return new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64_000 });
 }
 
-/** Dos recorders comparten la pista durante el solape. La cola contiene como
- * máximo los cierres en curso; la red nunca forma parte de esta cola. */
+/**
+ * Un solo MediaRecorder por corrida, pidiendo audio cada segundo.
+ *
+ * No hay rotación, no hay dos recorders, no hay solape: el corte de una pieza
+ * ocurre en el acumulador, entre dos entregas, sin tocar el recorder. Por eso
+ * una página congelada no pierde audio ni necesita que ningún temporizador
+ * llegue a horario: el navegador sigue grabando y entrega lo pendiente al
+ * despertar.
+ *
+ * Lo único que este objeto decide solo es interrumpir, y sólo con una prueba:
+ * que no llegó una entrega en SIN_AUDIO_MS de página viva.
+ */
 export class CapturaAudio {
-  private activos: Activo[] = [];
-  private pendientes: Activo[] = [];
-  private procesando: Promise<void> | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private recorder: MediaRecorder | null = null;
   private stream: MediaStream | null = null;
-  private inicio = 0;
+  private mimeType = "audio/webm";
+  /** Acumulador en claro de la pieza en curso. Nunca se escribe así en disco. */
+  private trozos: Blob[] = [];
+  private orden = 0;
+  /** La pieza en curso continúa el archivo de la anterior. */
+  private continuacion = false;
+  /** Milisegundos ya grabados antes de esta corrida. Fijo mientras dura. */
   private base = 0;
+  /** Total grabado cuando no hay corrida en curso. */
+  private total = 0;
+  /** Reloj al arrancar la corrida. */
+  private inicio = 0;
+  /** Dónde arranca la pieza en curso, relativo a la corrida. */
+  private desde = 0;
+  /** Hasta dónde cubren las entregas ya recibidas, relativo a la corrida. */
   private hasta = 0;
-  private escritura: Promise<void> = Promise.resolve();
+  private sinAudioMs = 0;
   private ultimoTick = 0;
-  private siguiente = 0;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private escritura: Promise<void> = Promise.resolve();
+  private cerrando: Promise<void> | null = null;
+  /** Se levanta antes de pedir el `stop`: la entrega final llega enseguida y
+   *  no tiene que abrir una pieza nueva. */
+  private pausando = false;
   private reloj: () => number;
-  private detenido: Promise<void> | null = null;
-  private errorPersistencia = false;
-  private motivoPendiente: Motivo | null = null;
 
   constructor(private opciones: OpcionesCaptura) { this.reloj = opciones.ahora ?? (() => performance.now()); }
 
-  get grabando() { return this.timer !== null; }
-  get duracionMs() { return Math.min(LIMITE_SEGUNDOS * 1000, this.base + (this.grabando ? this.reloj() - this.inicio : 0)); }
+  get grabando() { return this.recorder !== null; }
+  get duracionMs() { return Math.min(LIMITE_SEGUNDOS * 1000, this.grabando ? this.base + this.reloj() - this.inicio : this.total); }
 
   iniciar(stream: MediaStream, duracionMs: number) {
-    if (this.grabando || this.pendientes.length || this.detenido) throw new Error("Primero hay que guardar los segmentos pendientes");
+    if (this.grabando || this.cerrando) throw new Error("La captura anterior todavía se está guardando");
     if (duracionMs >= LIMITE_SEGUNDOS * 1000) throw new Error("Se alcanzó el límite de 150 minutos");
+    const recorder = (this.opciones.crearRecorder ?? crearRecorder)(stream);
     this.stream = stream;
-    this.base = duracionMs;
-    this.hasta = 0;
+    this.mimeType = recorder.mimeType || "audio/webm";
+    this.base = this.total = duracionMs;
     this.inicio = this.ultimoTick = this.reloj();
-    this.siguiente = SEGMENTO_MS - SOLAPE_MS;
-    this.abrir();
-    this.timer = setInterval(() => this.tick(), 100);
+    this.trozos = [];
+    this.orden = 0;
+    this.continuacion = false;
+    this.desde = this.hasta = 0;
+    this.sinAudioMs = 0;
+    let vivo = true;
+    const datos = (e: BlobEvent) => { if (vivo && e.data.size) this.recibir(e.data); };
+    recorder.addEventListener("dataavailable", datos);
+    recorder.addEventListener("error", () => {
+      if (!vivo) return;
+      this.opciones.error("El micrófono interrumpió la captura. Se guardó todo lo que había entregado hasta ahora.");
+      void this.pausar("interrupcion").catch(() => {});
+    }, { once: true });
+    this.cortar = () => { vivo = false; recorder.removeEventListener("dataavailable", datos); };
+    recorder.start(ENTREGA_MS);
+    this.recorder = recorder;
+    this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
-  /** Respaldo y segmento definitivo se escriben en orden. Un respaldo tardío
-   * no puede reaparecer después de consolidar el segmento. */
+  /** Desconecta los oyentes de la corrida en curso. La reemplaza `iniciar`. */
+  private cortar: () => void = () => {};
+
+  /** Las escrituras van en orden: una entrega tardía no puede aparecer después
+   *  del cierre de su pieza, que es el que la retira. */
   private escribir(operacion: () => Promise<void>): Promise<void> {
     const resultado = this.escritura.then(operacion);
     this.escritura = resultado.catch(() => {});
     return resultado;
   }
 
-  private abrir() {
-    const recorder = (this.opciones.crearRecorder ?? crearRecorder)(this.stream!);
-    const ahora = this.reloj();
-    if (!this.activos.length && !this.pendientes.length && this.hasta === 0) this.inicio = this.ultimoTick = ahora;
-    const inicio = ahora - this.inicio;
-    let resolver!: (blob: Blob) => void;
-    let completo = false;
-    const activo: Activo = {
-      recorder, inicio, inicioGlobal: this.base + inicio, fin: 0, ultimoDato: inicio,
-      chunks: [], guardado: false, blob: new Promise(resolve => { resolver = resolve; }),
-      completar: (incompleto = false) => {
-        if (completo) return;
-        completo = true;
-        clearTimeout(activo.timeout);
-        if (incompleto) {
-          // No inventamos los segundos que el navegador no entregó.
-          activo.fin = Math.min(activo.fin, activo.ultimoDato);
-          this.motivoPendiente = "interrupcion";
-          this.opciones.error("El grabador no respondió al detenerse. Se conservó lo recibido; el último tramo puede estar incompleto. Podés reanudar o terminar lo guardado.");
-          void this.pausar("interrupcion").catch(() => {});
-        }
-        resolver(new Blob(activo.chunks, { type: recorder.mimeType }));
-        recorder.removeEventListener("dataavailable", datos);
-        recorder.removeEventListener("stop", detener);
-        recorder.removeEventListener("error", error);
-      },
+  private recibir(trozo: Blob) {
+    const t = this.reloj() - this.inicio;
+    const orden = this.orden++;
+    const cubierto = this.hasta;
+    this.sinAudioMs = 0;
+    this.trozos.push(trozo);
+    const entrega: EntregaCaptura = {
+      orden,
+      inicioMs: this.base + cubierto,
+      duracionMs: Math.max(0, t - cubierto),
+      // La primera entrega de la pieza hereda su condición; de ahí en más son
+      // continuación, porque ninguna trae la cabecera del contenedor.
+      continuacion: orden === 0 ? this.continuacion : true,
     };
-    const datos = (e: BlobEvent) => {
-      if (!e.data.size || completo) return;
-      activo.chunks.push(e.data);
-      activo.ultimoDato = this.reloj() - this.inicio;
-      // Basta el prefijo del primer recorder pendiente: durante el solape
-      // cubre también al nuevo. El segundo toma su lugar al consolidar el viejo.
-      const primero = [...this.pendientes, ...this.activos].find(a => !a.guardado && a.chunks.length);
-      if (primero !== activo || !this.opciones.respaldar) return;
-      const prefijo = new Blob(activo.chunks, { type: recorder.mimeType });
-      const fin = activo.ultimoDato;
-      void this.escribir(async () => {
-        if (activo.guardado) return;
-        await this.opciones.respaldar!(prefijo, Math.max(0, fin - Math.max(this.hasta, inicio)), activo.inicioGlobal);
-      }).catch(() => {
-        this.errorPersistencia = true;
-        this.opciones.error("No se pudo respaldar el audio en este dispositivo. La captura se pausó; mantené esta página abierta y reintentá.");
-        void this.pausar("interrupcion").catch(() => {});
-      });
-    };
-    const detener = () => activo.completar();
-    const error = () => {
-      this.opciones.error("El micrófono interrumpió la captura. El último tramo puede estar incompleto.");
+    this.hasta = Math.max(cubierto, t);
+    void this.escribir(() => this.opciones.entregar(trozo, entrega)).catch(() => {
+      this.opciones.error("No se pudo guardar el audio en este dispositivo. La captura se pausó; mantené esta página abierta y reintentá.");
       void this.pausar("interrupcion").catch(() => {});
-    };
-    recorder.addEventListener("dataavailable", datos);
-    recorder.addEventListener("stop", detener, { once: true });
-    recorder.addEventListener("error", error, { once: true });
-    recorder.start(INTERVALO_RESPALDO_MS);
-    this.activos.push(activo);
+    });
+    // Durante una pausa no se corta: la entrega final del `stop` pertenece a
+    // la pieza que se está cerrando, no a una pieza nueva de duración cero.
+    if (!this.pausando && this.hasta - this.desde >= SEGMENTO_MS) void this.escribir(() => this.cerrarPieza(this.hasta)).catch(() => {});
   }
 
-  private cerrar(activo: Activo, fin = this.reloj() - this.inicio) {
-    activo.fin = fin;
-    this.pendientes.push(activo);
-    activo.timeout = setTimeout(() => activo.completar(true), ESPERA_STOP_MS);
-    try { if (activo.recorder.state !== "inactive") activo.recorder.stop(); }
-    catch { activo.completar(true); }
+  /** Cierra la pieza en curso con lo acumulado. Vacía el acumulador aunque la
+   *  escritura falle: los trozos ya están guardados uno por uno. */
+  private async cerrarPieza(fin: number): Promise<void> {
+    const trozos = this.trozos;
+    const desde = this.desde;
+    const continuacion = this.continuacion;
+    this.trozos = [];
+    this.orden = 0;
+    this.desde = this.hasta = Math.max(fin, desde);
+    this.continuacion = true;
+    if (!trozos.length) return;
+    await this.opciones.guardar(new Blob(trozos, { type: this.mimeType }), Math.max(0, this.desde - desde), this.base + desde, continuacion);
   }
 
   private tick() {
     const ahora = this.reloj();
-    const demorado = ahora - this.ultimoTick > DEMORA_MAXIMA_MS;
+    // Sólo cuenta el tiempo que esta página estuvo viva. Un congelamiento no
+    // es prueba de que el micrófono haya dejado de entregar.
+    this.sinAudioMs += Math.min(ahora - this.ultimoTick, TICK_MAXIMO_MS);
     this.ultimoTick = ahora;
-    const demasiadoLargo = this.activos.some(a => ahora - this.inicio - a.inicio >= CIERRE_PREVENTIVO_MS);
-    if (demorado || demasiadoLargo) {
-      this.opciones.error("El teléfono demoró la captura. Se pausó para proteger lo guardado; revisá el último tramo antes de reanudar.");
+    if (this.sinAudioMs >= SIN_AUDIO_MS) {
+      this.opciones.error("Hace un minuto que no entra sonido. La captura se pausó para que revises el micrófono; lo grabado se conserva.");
       void this.pausar("interrupcion").catch(() => {});
       return;
     }
-    if (this.pendientes.length >= 2 || this.errorPersistencia) { void this.pausar("interrupcion").catch(() => {}); return; }
-    if (this.duracionMs >= LIMITE_SEGUNDOS * 1000) { void this.pausar("limite").catch(() => {}); return; }
-    const transcurrido = ahora - this.inicio;
-    if (transcurrido >= this.siguiente && this.activos.length === 1) {
-      try { this.abrir(); } catch { void this.pausar("interrupcion").catch(() => {}); return; }
-      this.siguiente = transcurrido + SEGMENTO_MS - SOLAPE_MS;
-    }
-    if (this.activos.length === 2 && transcurrido - this.activos[1].inicio >= SOLAPE_MS) {
-      this.cerrar(this.activos.shift()!);
-      void this.drenar().catch(() => { void this.pausar("interrupcion").catch(() => {}); });
-    }
+    if (this.duracionMs >= LIMITE_SEGUNDOS * 1000) void this.pausar("limite").catch(() => {});
   }
 
-  async drenar(): Promise<void> {
-    if (this.procesando) return this.procesando;
-    this.procesando = (async () => {
-      try {
-        while (this.pendientes.length) {
-          const activo = this.pendientes[0];
-          const blob = await activo.blob;
-          const duracion = Math.max(0, activo.fin - Math.max(this.hasta, activo.inicio));
-          // Al pausar durante el solape, el nuevo puede estar cubierto entero.
-          if (activo.fin > activo.inicio) {
-            if (!blob.size) {
-              this.opciones.error("El micrófono no entregó audio para este tramo. No se pudo recuperar; lo guardado anteriormente se conserva.");
-              this.motivoPendiente = "interrupcion";
-              // No hay bytes que recuperar ni que descartar. No contamos este
-              // hueco como audio ni impedimos reanudar después de avisarlo.
-              void this.pausar("interrupcion").catch(() => {});
-            } else {
-              // Conservamos también el recorder cubierto por el reloj: el
-              // anterior podría estar truncado. El worker mide ambos archivos.
-              await this.escribir(async () => {
-                await this.opciones.guardar(blob, duracion, activo.inicioGlobal);
-                activo.guardado = true;
-              });
-            }
-          }
-          // Un segmento vacío no cubre al recorder superpuesto: todavía puede
-          // recuperar el audio de ese segundo que sí capturó el otro.
-          if (blob.size) this.hasta = Math.max(this.hasta, activo.fin);
-          activo.guardado = true;
-          activo.chunks = [];
-          this.pendientes.shift();
-        }
-        if (this.motivoPendiente) {
-          await this.opciones.parada(this.motivoPendiente);
-          this.motivoPendiente = null;
-        }
-        this.errorPersistencia = false;
-      } catch {
-        this.errorPersistencia = true;
-        this.opciones.error("La captura se detuvo porque no se pudo guardar un segmento. Mantené esta página abierta y reintentá.");
-        throw new Error("Quedan segmentos por guardar");
-      }
-    })();
-    try { await this.procesando; } finally { this.procesando = null; }
-  }
-
+  /** Detiene la corrida, cierra su última pieza y avisa el motivo. Siempre
+   *  termina: si `stop` no llega, cierra con lo entregado. */
   async pausar(motivo: Motivo = "manual"): Promise<void> {
-    if (this.detenido) return this.detenido;
-    if (!this.grabando) return this.drenar();
-    this.base = this.duracionMs;
-    clearInterval(this.timer!);
-    this.timer = null;
-    const fin = this.reloj() - this.inicio;
-    this.motivoPendiente = motivo;
-    for (const activo of this.activos) this.cerrar(activo, fin);
-    this.activos = [];
-    this.stream?.getTracks().forEach(t => t.stop());
-    this.stream = null;
-    this.detenido = (async () => {
-      await this.drenar();
+    if (this.cerrando) return this.cerrando;
+    const recorder = this.recorder;
+    if (!recorder) { await this.escritura; return; }
+    this.total = Math.min(LIMITE_SEGUNDOS * 1000, this.base + (this.reloj() - this.inicio));
+    this.pausando = true;
+    this.recorder = null;
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    this.cerrando = (async () => {
+      await this.esperarStop(recorder);
+      this.cortar();
+      this.stream?.getTracks().forEach(t => t.stop());
+      this.stream = null;
+      // Si la escritura de la pieza falla, la captura igual se detuvo: el
+      // estado tiene que decirlo. El audio no se pierde —sus entregas siguen
+      // guardadas— y Reintentar las consolida.
+      let fallo: unknown = null;
+      try { await this.escribir(() => this.cerrarPieza(this.hasta)); }
+      catch (e) { fallo = e; }
+      await this.opciones.parada(motivo);
+      if (fallo) throw fallo;
     })();
-    try { await this.detenido; } finally { this.detenido = null; }
+    try { await this.cerrando; } finally { this.cerrando = null; this.pausando = false; }
+  }
+
+  private esperarStop(recorder: MediaRecorder): Promise<void> {
+    return new Promise<void>(resolve => {
+      let listo = false;
+      const terminar = () => { if (listo) return; listo = true; clearTimeout(espera); resolve(); };
+      const espera = setTimeout(() => {
+        this.opciones.error("El grabador no respondió al detenerse. Se conservó todo lo que había entregado hasta ese momento.");
+        terminar();
+      }, ESPERA_STOP_MS);
+      recorder.addEventListener("stop", terminar, { once: true });
+      try { if (recorder.state === "inactive") terminar(); else recorder.stop(); }
+      catch { terminar(); }
+    });
   }
 }

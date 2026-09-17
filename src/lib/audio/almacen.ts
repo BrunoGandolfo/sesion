@@ -16,8 +16,21 @@ export interface SegmentoLocal extends DescriptorSegmento {
   cifrado: ArrayBuffer;
 }
 
+/**
+ * Una entrega de un segundo, cifrada con el índice de pieza que le tocaría si
+ * hubiera que recuperarla. Escritura lineal: cada trozo se cifra y se escribe
+ * una sola vez, y el cierre de la pieza las retira todas juntas.
+ */
+export interface EntregaLocal extends SegmentoLocal {
+  /** Índice de la pieza en curso; `indice` es `base + orden`. */
+  base: number;
+  /** Tiempo nuevo que cubre esta entrega. */
+  duracionMs: number;
+}
+
+/** Prefijo acumulado del grabador anterior (base v2). Sólo se lee, para no
+ *  perder el audio de una grabación que quedó abierta en aquella versión. */
 export interface RespaldoLocal extends SegmentoLocal {
-  /** Tiempo nuevo cubierto por el prefijo; el solape no se vuelve a sumar. */
   duracionMs: number;
 }
 
@@ -35,11 +48,18 @@ function terminar(tx: IDBTransaction): Promise<void> {
   });
 }
 
+/** Todas las entregas de una grabación, en orden de índice. */
+function rangoEntregas(cuenta: string, sesionId: string): IDBKeyRange {
+  return IDBKeyRange.bound([cuenta, sesionId], [cuenta, sesionId, []]);
+}
+
 export async function abrirAlmacen(): Promise<IDBDatabase> {
-  const r = indexedDB.open("sesion-audio-cifrado", 2);
+  const r = indexedDB.open("sesion-audio-cifrado", 3);
   r.onupgradeneeded = () => {
     if (!r.result.objectStoreNames.contains("grabaciones")) r.result.createObjectStore("grabaciones", { keyPath: ["cuenta", "sesionId"] }).createIndex("turno", ["cuenta", "turnoId"], { unique: true });
     if (!r.result.objectStoreNames.contains("segmentos")) r.result.createObjectStore("segmentos", { keyPath: ["cuenta", "sesionId", "indice"] });
+    if (!r.result.objectStoreNames.contains("entregas")) r.result.createObjectStore("entregas", { keyPath: ["cuenta", "sesionId", "indice"] });
+    // `respaldos` (v2) se conserva vacío: lo lee una sola vez `recuperarEntregas`.
     if (!r.result.objectStoreNames.contains("respaldos")) r.result.createObjectStore("respaldos", { keyPath: ["cuenta", "sesionId"] });
   };
   const db = await pedir(r);
@@ -59,12 +79,12 @@ export async function guardarGrabacion(db: IDBDatabase, grabacion: GrabacionLoca
   await fin;
 }
 
-/** Segmento y reloj durable avanzan juntos o no avanza ninguno. */
+/** Pieza cerrada, reloj durable y retirada de sus entregas: todo junto o nada. */
 export async function guardarSegmento(db: IDBDatabase, grabacion: GrabacionLocal, segmento: SegmentoLocal): Promise<void> {
-  const tx = db.transaction(["grabaciones", "segmentos", "respaldos"], "readwrite", { durability: "strict" });
+  const tx = db.transaction(["grabaciones", "segmentos", "entregas"], "readwrite", { durability: "strict" });
   const fin = terminar(tx);
   tx.objectStore("segmentos").add(segmento);
-  tx.objectStore("respaldos").delete([segmento.cuenta, segmento.sesionId]);
+  tx.objectStore("entregas").delete(rangoEntregas(segmento.cuenta, segmento.sesionId));
   tx.objectStore("grabaciones").put(grabacion);
   await fin;
 }
@@ -73,36 +93,59 @@ export async function leerSegmento(db: IDBDatabase, cuenta: string, sesionId: st
   return pedir(db.transaction("segmentos").objectStore("segmentos").get([cuenta, sesionId, indice]));
 }
 
-/** Prefijo acumulado cifrado con el mismo formato del segmento. Nunca es
- * visible para la subida hasta que stop lo consolide o una reapertura lo recupere. */
-export async function guardarRespaldo(db: IDBDatabase, respaldo: RespaldoLocal): Promise<void> {
-  const tx = db.transaction(["grabaciones", "respaldos"], "readwrite", { durability: "strict" });
+/** Una entrega sólo se guarda si la pieza que la espera sigue siendo la que
+ *  el reloj durable señala. Una entrega tardía de una pieza ya cerrada no
+ *  puede reaparecer. */
+export async function guardarEntrega(db: IDBDatabase, entrega: EntregaLocal): Promise<void> {
+  const tx = db.transaction(["grabaciones", "entregas"], "readwrite", { durability: "strict" });
   const fin = terminar(tx);
-  const r = tx.objectStore("grabaciones").get([respaldo.cuenta, respaldo.sesionId]);
+  const r = tx.objectStore("grabaciones").get([entrega.cuenta, entrega.sesionId]);
   r.onsuccess = () => {
     const g: GrabacionLocal | undefined = r.result;
-    if (g && g.cantidad === respaldo.indice && !["cerrada", "entregada"].includes(g.estado)) tx.objectStore("respaldos").put(respaldo);
+    if (g && g.cantidad === entrega.base && !["cerrada", "entregada"].includes(g.estado)) tx.objectStore("entregas").put(entrega);
   };
   await fin;
 }
 
-/** Atómico e idempotente: al volver de una muerte del proceso, conserva el
- * prefijo ya cifrado sin pedir una clave ni descifrarlo en el dispositivo. */
-export async function recuperarRespaldo(db: IDBDatabase, grabacion: GrabacionLocal): Promise<GrabacionLocal> {
-  const tx = db.transaction(["grabaciones", "segmentos", "respaldos"], "readwrite", { durability: "strict" });
+/**
+ * Atómico e idempotente. Al volver de una muerte del proceso, las entregas de
+ * la pieza que quedó sin cerrar se incorporan como piezas propias, de un
+ * segundo cada una: ya están cifradas con el índice que les toca, así que no
+ * hace falta ni la clave ni la red ni descifrar nada en el dispositivo.
+ *
+ * El worker las vuelve a pegar porque son continuación de la misma corrida.
+ */
+export async function recuperarEntregas(db: IDBDatabase, grabacion: GrabacionLocal): Promise<GrabacionLocal> {
+  const tx = db.transaction(["grabaciones", "segmentos", "entregas", "respaldos"], "readwrite", { durability: "strict" });
   const fin = terminar(tx);
+  const { cuenta, sesionId } = grabacion;
+  const abierta = !["cerrada", "entregada"].includes(grabacion.estado);
   let recuperada = grabacion;
-  const r = tx.objectStore("respaldos").get([grabacion.cuenta, grabacion.sesionId]);
-  r.onsuccess = () => {
-    const respaldo: RespaldoLocal | undefined = r.result;
-    if (!respaldo) return;
-    if (respaldo.indice === grabacion.cantidad && !["cerrada", "entregada"].includes(grabacion.estado)) {
-      const { duracionMs, ...segmento } = respaldo;
-      recuperada = { ...grabacion, cantidad: grabacion.cantidad + 1, duracionMs: grabacion.duracionMs + duracionMs };
-      tx.objectStore("segmentos").add(segmento);
-      tx.objectStore("grabaciones").put(recuperada);
+  const incorporar = (pieza: SegmentoLocal, duracionMs: number) => {
+    const segmento: SegmentoLocal = {
+      cuenta, sesionId, cifrado: pieza.cifrado, indice: pieza.indice, iv: pieza.iv,
+      bytes: pieza.bytes, sha256: pieza.sha256, inicioMs: pieza.inicioMs, continuacion: pieza.continuacion,
+    };
+    tx.objectStore("segmentos").add(segmento);
+    recuperada = { ...recuperada, cantidad: recuperada.cantidad + 1, duracionMs: recuperada.duracionMs + duracionMs };
+    tx.objectStore("grabaciones").put(recuperada);
+  };
+  // Un prefijo dejado por la base v2: era un archivo completo del grabador
+  // anterior, así que entra como pieza que se decodifica sola.
+  const viejo = tx.objectStore("respaldos").get([cuenta, sesionId]);
+  viejo.onsuccess = () => {
+    const respaldo: RespaldoLocal | undefined = viejo.result;
+    if (respaldo && abierta && respaldo.indice === recuperada.cantidad) incorporar({ ...respaldo, continuacion: false }, respaldo.duracionMs);
+    if (respaldo) tx.objectStore("respaldos").delete([cuenta, sesionId]);
+  };
+  const pendientes = tx.objectStore("entregas").getAll(rangoEntregas(cuenta, sesionId));
+  pendientes.onsuccess = () => {
+    const entregas: EntregaLocal[] = [...(pendientes.result ?? [])].sort((a, b) => a.indice - b.indice);
+    if (abierta) for (const entrega of entregas) {
+      if (entrega.indice !== recuperada.cantidad) break;
+      incorporar(entrega, entrega.duracionMs);
     }
-    tx.objectStore("respaldos").delete([grabacion.cuenta, grabacion.sesionId]);
+    if (entregas.length) tx.objectStore("entregas").delete(rangoEntregas(cuenta, sesionId));
   };
   await fin;
   return recuperada;

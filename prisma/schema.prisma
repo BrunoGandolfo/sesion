@@ -720,6 +720,10 @@ model AudioSegmento {
   /// Inicio en el reloj monotónico de captura, en milisegundos. Primero cero;
   /// null en registros anteriores cuya medida se desconoce.
   inicioMs       Float?    @map("inicio_ms")
+  /// Esta pieza continúa el archivo de la anterior: no se decodifica sola. El
+  /// worker concatena la corrida antes de decodificarla. Falso en la primera
+  /// pieza de cada corrida, y en los registros anteriores a las corridas.
+  continuacion   Boolean   @default(false)
   confirmadoEn   DateTime? @map("confirmado_en")
 
   sesion       SesionClinica @relation(fields: [sesionId], references: [id], onDelete: Cascade)

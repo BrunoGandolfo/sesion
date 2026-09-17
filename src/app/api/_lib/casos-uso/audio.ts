@@ -59,9 +59,9 @@ export async function claveAudio({ prisma, organizationId, sesionId }: Sesion) {
 }
 
 export async function estadoAudio({ prisma, organizationId, sesionId }: Sesion): Promise<EstadoAudioRemoto> {
-  const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { id: true, estado: true, duracionAudioSeg: true, pausas: true, segmentos: { orderBy: { indice: "asc" }, select: { indice: true, iv: true, bytes: true, sha256: true, inicioMs: true, confirmadoEn: true } } } });
+  const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { id: true, estado: true, duracionAudioSeg: true, pausas: true, segmentos: { orderBy: { indice: "asc" }, select: { indice: true, iv: true, bytes: true, sha256: true, inicioMs: true, continuacion: true, confirmadoEn: true } } } });
   if (!fila) throw new ApiError("Grabación no encontrada", 404);
-  return { ...fila, pausas: (fila.pausas ?? []) as unknown as PausaAudio[], segmentos: fila.segmentos.map(s => ({ indice: s.indice, iv: Buffer.from(s.iv).toString("base64"), bytes: s.bytes, sha256: s.sha256, inicioMs: s.inicioMs, confirmado: s.confirmadoEn !== null })) };
+  return { ...fila, pausas: (fila.pausas ?? []) as unknown as PausaAudio[], segmentos: fila.segmentos.map(s => ({ indice: s.indice, iv: Buffer.from(s.iv).toString("base64"), bytes: s.bytes, sha256: s.sha256, inicioMs: s.inicioMs, continuacion: s.continuacion, confirmado: s.confirmadoEn !== null })) };
 }
 
 export type ObjetosAudio = {
@@ -71,14 +71,14 @@ export type ObjetosAudio = {
 
 export async function reservarSegmento(input: Sesion & { descriptor: DescriptorSegmento; objetos: ObjetosAudio }) {
   const { prisma, organizationId, sesionId, descriptor: d } = input;
-  if (d.indice === 0 && d.inicioMs !== 0) throw new ApiError("El primer segmento empieza en cero", 400);
+  if (d.indice === 0 && (d.inicioMs !== 0 || d.continuacion)) throw new ApiError("El primer segmento empieza en cero y no continúa a ninguno", 400);
   const confirmado = await prisma.$transaction(async tx => {
     // Mismo lock que el cierre: ningún segmento puede aparecer después de sellar.
     const lock = await tx.sesionClinica.updateMany({ where: { id: sesionId, organizationId, estado: "grabando" }, data: { actualizadaEn: new Date() } });
     if (!lock.count) throw new ApiError("La grabación ya se cerró o no está disponible", 409);
     const existente = await tx.audioSegmento.findUnique({ where: { sesionId_indice: { sesionId, indice: d.indice } } });
     if (existente) {
-      if (existente.bytes !== d.bytes || existente.sha256 !== d.sha256 || existente.inicioMs !== d.inicioMs || Buffer.from(existente.iv).toString("base64") !== d.iv) throw new ApiError("Ese segmento ya tiene otro contenido o inicio. Se conserva la copia local.", 409);
+      if (existente.bytes !== d.bytes || existente.sha256 !== d.sha256 || existente.inicioMs !== d.inicioMs || existente.continuacion !== d.continuacion || Buffer.from(existente.iv).toString("base64") !== d.iv) throw new ApiError("Ese segmento ya tiene otro contenido o inicio. Se conserva la copia local.", 409);
       return existente.confirmadoEn !== null;
     }
     const cantidad = await tx.audioSegmento.count({ where: { sesionId, organizationId } });

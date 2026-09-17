@@ -1,6 +1,15 @@
-"""Audio comprimido independiente -> validar, descifrar, decodificar y recortar.
-Un segmento en RAM; ffmpeg escribe el resultado en disco temporal privado.
-Nunca concatena archivos Opus/AAC por sus bytes ni rellena huecos con silencio.
+"""Audio comprimido -> validar, descifrar, decodificar y recortar.
+
+El teléfono graba con un solo MediaRecorder por CORRIDA y sube esa corrida
+partida en PIEZAS, cortadas en fronteras de entrega. La primera pieza de una
+corrida trae la cabecera del contenedor; las que declaran `continuacion` son
+la continuación de ese mismo archivo y no se decodifican solas.
+
+Por eso acá se pegan los BYTES DESCIFRADOS de las piezas de una corrida antes
+de decodificar: es rearmar un archivo que venía partido, no concatenar dos
+archivos Opus/AAC independientes —eso sigue sin hacerse nunca—. Cada corrida
+se decodifica una sola vez y se ubica por el inicio medido de su primera
+pieza. Los huecos entre corridas no se rellenan con silencio.
 """
 import base64
 import hashlib
@@ -19,10 +28,9 @@ import r2_client
 from errores import PipelineError
 
 MAX_BYTES_SEGMENTO = 4 * 1024 * 1024
-# Una página congelada no puede rotar a los 60 s. Admitimos hasta cinco
-# minutos: a los 64 kbit/s solicitados son ~2,4 MB, debajo del tope de 4 MiB.
-# Sigue siendo un límite por archivo, no un cambio del tamaño de captura.
-MAX_SEGUNDOS_SEGMENTO = 5 * 60
+# Una corrida es lo que se grabó entre un Grabar y la pausa siguiente: puede
+# ser la sesión entera. El tope por pieza sigue siendo de tamaño (4 MiB).
+MAX_SEGUNDOS_CORRIDA = 150 * 60
 
 
 def _ffmpeg(argumentos):
@@ -48,7 +56,7 @@ def fin_aac(entrada):
         if stream["codec_name"] == "opus": return None
         if stream["codec_name"] != "aac": raise ValueError("Codec no admitido")
         fin = float(stream["duration"])
-        if not math.isfinite(fin) or not 0 < fin <= MAX_SEGUNDOS_SEGMENTO: raise ValueError("Duración inválida")
+        if not math.isfinite(fin) or not 0 < fin <= MAX_SEGUNDOS_CORRIDA: raise ValueError("Duración inválida")
         return fin
     except FileNotFoundError as exc:
         raise PipelineError("audio_infraestructura", "Falta ffprobe en el worker") from exc
@@ -67,6 +75,21 @@ def descifrar_segmento(cifrado, clave, iv, organization_id, sesion_id, indice):
         return cipher.decrypt_and_verify(cifrado[:-16], cifrado[-16:])
     except (ValueError, TypeError) as exc:
         raise PipelineError("descifrado_error", "No se pudo autenticar un segmento") from exc
+
+
+def agrupar_corridas(segmentos):
+    """Piezas -> lista de corridas. Una pieza que declara `continuacion`
+    pertenece a la corrida de la anterior; cualquier otra abre una nueva.
+    La pieza 0 nunca es continuación: no hay archivo anterior que continuar.
+    """
+    if segmentos and segmentos[0].get("continuacion"):
+        raise PipelineError("audio_invalido", "La primera pieza no puede ser continuación", definitivo=True)
+    corridas = []
+    for i, segmento in enumerate(segmentos):
+        if i == 0 or not segmento.get("continuacion"):
+            corridas.append([])
+        corridas[-1].append((i, segmento))
+    return corridas
 
 
 @dataclass
@@ -92,31 +115,37 @@ def armar_audio(sesion_id: str, audio: dict):
     huecos = []
     archivos = []
     frecuencia = 16000
+    # Se valida TODO el inventario antes de bajar un solo byte: una medida que
+    # falta no se descubre a mitad del ensamblado.
+    for i, segmento in enumerate(segmentos):
+        esperado = segmento.get("bytes", 0)
+        if segmento.get("key") != f"{org}/{sesion_id}/{i}" or not 17 <= esperado <= MAX_BYTES_SEGMENTO:
+            raise PipelineError("audio_invalido", "Ubicación o tamaño de segmento inválido", definitivo=True)
+        inicio_ms = segmento.get("inicioMs")
+        if (type(inicio_ms) not in (int, float) or not math.isfinite(inicio_ms)
+                or not 0 <= inicio_ms <= 9_000_000 or inicio_ms <= inicio_anterior
+                or (i == 0 and inicio_ms != 0)):
+            raise PipelineError("audio_inicio", "Falta un inicio medido válido; se conserva para revisión", definitivo=True)
+        inicio_anterior = inicio_ms
+    corridas = agrupar_corridas(segmentos)
     with tempfile.TemporaryDirectory(prefix="sesion-audio-") as temporal:
         carpeta = Path(temporal)
-        for i, segmento in enumerate(segmentos):
-            key = f"{org}/{sesion_id}/{i}"
-            esperado = segmento.get("bytes", 0)
-            if segmento.get("key") != key or not 17 <= esperado <= MAX_BYTES_SEGMENTO:
-                raise PipelineError("audio_invalido", "Ubicación o tamaño de segmento inválido", definitivo=True)
-            inicio_ms = segmento.get("inicioMs")
-            if (type(inicio_ms) not in (int, float) or not math.isfinite(inicio_ms)
-                    or not 0 <= inicio_ms <= 9_000_000 or inicio_ms <= inicio_anterior
-                    or (i == 0 and inicio_ms != 0)):
-                raise PipelineError("audio_inicio", "Falta un inicio medido válido; se conserva para revisión", definitivo=True)
-            inicio_anterior = inicio_ms
+        for corrida in corridas:
+            primero, cabeza = corrida[0]
             # La precisión del recorte es una muestra (0,0625 ms a 16 kHz).
-            inicio = round(inicio_ms * frecuencia / 1000)
-            try:
-                cifrado = r2_client.descargar_segmento(key, esperado)
-            except Exception as exc:
-                raise PipelineError("r2_error", "No se pudo descargar un segmento") from exc
-            if len(cifrado) != esperado or hashlib.sha256(cifrado).hexdigest() != segmento.get("sha256"):
-                raise PipelineError("audio_invalido", "La huella del segmento no coincide", definitivo=True)
-            claro = descifrar_segmento(cifrado, audio["clave"], segmento["iv"], org, sesion_id, i)
-            entrada = carpeta / "segmento"
-            entrada.write_bytes(claro)
-            del cifrado, claro
+            inicio = round(cabeza["inicioMs"] * frecuencia / 1000)
+            entrada = carpeta / "corrida"
+            with entrada.open("wb") as archivo:
+                for i, segmento in corrida:
+                    try:
+                        cifrado = r2_client.descargar_segmento(f"{org}/{sesion_id}/{i}", segmento["bytes"])
+                    except Exception as exc:
+                        raise PipelineError("r2_error", "No se pudo descargar un segmento") from exc
+                    if len(cifrado) != segmento["bytes"] or hashlib.sha256(cifrado).hexdigest() != segmento.get("sha256"):
+                        raise PipelineError("audio_invalido", "La huella del segmento no coincide", definitivo=True)
+                    claro = descifrar_segmento(cifrado, audio["clave"], segmento["iv"], org, sesion_id, i)
+                    archivo.write(claro)
+                    del cifrado, claro
             completo = carpeta / "completo.wav"
             fin = fin_aac(entrada)
             # Normalizar PTS ANTES de cortar evita perder el pre-skip de Opus.
@@ -126,17 +155,17 @@ def armar_audio(sesion_id: str, audio: dict):
             entrada.unlink()
             with wave.open(str(completo), "rb") as wav:
                 muestras = wav.getnframes()
-            if not 0 < muestras <= MAX_SEGUNDOS_SEGMENTO * frecuencia:
-                raise PipelineError("audio_invalido", "Duración de segmento inválida", definitivo=True)
+            if not 0 < muestras <= MAX_SEGUNDOS_CORRIDA * frecuencia:
+                raise PipelineError("audio_invalido", "Duración de corrida inválida", definitivo=True)
             if inicio > hasta:
                 huecos.append({"inicio": hasta * 1000 / frecuencia,
                                "fin": inicio * 1000 / frecuencia,
-                               "siguienteIndice": i, "motivo": "interrupcion"})
+                               "siguienteIndice": primero, "motivo": "interrupcion"})
             recorte = min(muestras, max(0, hasta - inicio))
             hasta = max(hasta, inicio + muestras)
             conservadas = muestras - recorte
             if conservadas:
-                salida = carpeta / f"{i}.wav"
+                salida = carpeta / f"{primero}.wav"
                 _ffmpeg(["-i", str(completo), "-af", f"atrim=start_sample={recorte},asetpts=PTS-STARTPTS",
                          "-c:a", "pcm_s16le", str(salida)])
                 archivos.append(salida.name)

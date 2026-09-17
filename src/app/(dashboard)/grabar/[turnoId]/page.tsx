@@ -17,5 +17,5 @@ export default async function GrabarPage({ params }: { params: Promise<{ turnoId
     leerEstadoPrueba({ prisma: db, organizationId }),
   ]);
   if (!turno) notFound();
-  return <GrabarView turnoId={turno.id} organizationId={organizationId} cuenta={`${organizationId}:${userId}`} horaTexto={formatearHoraMvd(turno.fecha)} pacienteId={turno.paciente.id} pacienteNombre={`${turno.paciente.nombre} ${turno.paciente.apellido}`.trim()} autorizacionVigente={turno.autorizacionVigente} prueba={prueba} />;
+  return <GrabarView turnoId={turno.id} organizationId={organizationId} cuenta={`${organizationId}:${userId}`} horaTexto={formatearHoraMvd(turno.fecha)} pacienteId={turno.paciente.id} pacienteNombre={`${turno.paciente.nombre} ${turno.paciente.apellido}`.trim()} autorizacionVigente={turno.autorizacionVigente} nombreProfesional={turno.nombreProfesional} direccionConsultorio={turno.direccionConsultorio} prueba={prueba} />;
 }

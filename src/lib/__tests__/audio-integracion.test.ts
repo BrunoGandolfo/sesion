@@ -9,7 +9,7 @@ import { registrarTranscripcion } from "@/app/api/_lib/casos-uso/sesion/registra
 import { reclamarSesiones } from "@/app/api/_lib/casos-uso/sesion/reclamar";
 let base: ReturnType<typeof conectarBaseDeTest>;
 let organizationId: string, turnoId: string;
-const descriptor = { indice: 0, inicioMs: 0, iv: Buffer.alloc(12, 1).toString("base64"), bytes: 100, sha256: "a".repeat(64) };
+const descriptor = { indice: 0, inicioMs: 0, iv: Buffer.alloc(12, 1).toString("base64"), bytes: 100, sha256: "a".repeat(64) , continuacion: false };
 let recibido = false;
 const objetos: ObjetosAudio = { firmar: async key => ({ url: key, headers: {} }), comprobar: async () => ({ existe: recibido, bytes: 100, sha256: descriptor.sha256 }) };
 const inicio = () => ({ prisma: base.db, organizationId, turnoId });
@@ -79,6 +79,22 @@ test("la medida real es inmutable, conserva decimales en Postgres y llega al wor
   await finalizarAudio({ ...sesion(id), cantidad: 2, duracionAudioSeg: 119, pausas: [] });
   const [trabajo] = await reclamarSesiones({ prisma: base.db, ahora: new Date(), limite: 1, terminosAsr: async () => [] });
   expect(trabajo.audio?.segmentos.map(s => s.inicioMs)).toEqual([0, 1100.25]);
+});
+
+test("una pieza de adentro de la corrida se guarda como continuación y llega así al worker", async () => {
+  const { id } = await prepararAudio(inicio());
+  await reservarSegmento({ ...sesion(id), descriptor, objetos });
+  recibido = true;
+  await confirmarSegmento({ ...sesion(id), indice: 0, objetos });
+  const segunda = { ...descriptor, indice: 1, inicioMs: 60_000, continuacion: true };
+  await reservarSegmento({ ...sesion(id), descriptor: segunda, objetos });
+  await confirmarSegmento({ ...sesion(id), indice: 1, objetos });
+  // Declarar otra continuación para la misma pieza es un desacuerdo, no un reintento.
+  await expect(reservarSegmento({ ...sesion(id), descriptor: { ...segunda, continuacion: false }, objetos })).rejects.toMatchObject({ status: 409 });
+  expect((await estadoAudio(sesion(id))).segmentos.map(s => s.continuacion)).toEqual([false, true]);
+  await finalizarAudio({ ...sesion(id), cantidad: 2, duracionAudioSeg: 120, pausas: [] });
+  const [trabajo] = await reclamarSesiones({ prisma: base.db, ahora: new Date(), limite: 1, terminosAsr: async () => [] });
+  expect(trabajo.audio?.segmentos.map(s => s.continuacion)).toEqual([false, true]);
 });
 
 test("una fila anterior sin medida permanece nula y no se procesa inventando el segundo nominal", async () => {

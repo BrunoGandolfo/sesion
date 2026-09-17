@@ -65,10 +65,12 @@ it("la ayuda explica el rechazo de solapamientos y permite turnos consecutivos",
   expect(texto).not.toContain("No avisa de choques");
 });
 
-it("no aconseja bloquear el teléfono ni garantiza recuperar una interrupción", () => {
+it("dice que se puede bloquear el teléfono, y no garantiza recuperar una interrupción", () => {
+  // La captura ya no depende de que la página esté despierta: la advertencia
+  // vieja era verdad del grabador que rotaba recorders por temporizador.
   for (const archivo of ["07-grabar-una-sesion.md", "13-preguntas-frecuentes.md"]) {
-    expect(documento(archivo)).toMatch(/No bloquees la pantalla/);
-    expect(documento(archivo)).not.toContain("Podés bloquear la pantalla");
+    expect(documento(archivo)).toContain("Podés bloquear la pantalla");
+    expect(documento(archivo)).not.toMatch(/No bloquees la pantalla/);
   }
   const prompt = systemPromptAyuda();
   expect(prompt).toContain("La recuperación completa no está garantizada");
@@ -162,7 +164,7 @@ it("la ayuda describe el cifrado por tramos que hace el grabador, no una protecc
 it("la ayuda describe los botones del grabador que existen", () => {
   const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
   const texto = documento("07-grabar-una-sesion.md");
-  for (const boton of ["Grabar sesión", "Reanudar grabación", "Pausar", "Terminar y enviar", "Enviar grabación pendiente", "Comprobar y reintentar envío", "Conservar copia y habilitar otra grabación"]) {
+  for (const boton of ["Grabar sesión", "Reanudar grabación", "Pausar", "Terminar y enviar", "Enviar grabación pendiente", "Comprobar y reintentar envío", "Conservar esta copia y liberar el turno"]) {
     expect(vista).toContain(boton);
     expect(texto).toContain(boton);
   }
@@ -172,8 +174,18 @@ it("la ayuda describe los botones del grabador que existen", () => {
   // La base local tiene una grabación por turno: volver a grabar no reemplaza.
   expect(codigo("src/lib/audio/almacen.ts")).toContain('createIndex("turno", ["cuenta", "turnoId"], { unique: true })');
   expect(texto).toContain("Volver a grabar no reemplaza la copia anterior");
+  // El medidor y la pantalla bloqueada son las dos cosas que la ayuda decía al
+  // revés mientras el grabador estaba roto.
+  expect(vista).toContain("<MedidorAudio");
+  expect(texto).toContain("medidor de sonido");
+  expect(codigo("src/app/(dashboard)/grabar/[turnoId]/_components/medidor-audio.tsx")).toContain("En pausa: no está entrando sonido");
+  expect(texto).toContain("En pausa: no está entrando sonido");
+  expect(texto).not.toMatch(/No bloquees la pantalla|No hay medidor|No sigue grabando con la pantalla bloqueada/);
+  // Firmar la autorización es un toque desde la propia pantalla de grabar.
+  expect(vista).toContain("<ConsentimientoBadge");
+  expect(texto).toContain("la firma ahí mismo");
   for (const archivo of ["07-grabar-una-sesion.md", "13-preguntas-frecuentes.md", "14-cuando-algo-falla.md"]) {
-    expect(documento(archivo)).not.toMatch(/Terminar la sesión|y un medidor de sonido|Se cortó el micrófono|Cortado|crea uno de 50 minutos|puede reemplazarse la copia/);
+    expect(documento(archivo)).not.toMatch(/Terminar la sesión|Se cortó el micrófono|Cortado|crea uno de 50 minutos|puede reemplazarse la copia/);
   }
 });
 

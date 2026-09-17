@@ -98,7 +98,7 @@ describe("R2 client", () => {
   });
 
   describe("segmentos inmutables", () => {
-    const descriptor = { indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 12345, sha256: "a".repeat(64) };
+    const descriptor = { indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 12345, sha256: "a".repeat(64), continuacion: false };
     it("firma el tamaño, la huella y la prohibición de sobrescribir durante cinco minutos", async () => {
       setR2Env();
       const { objetosAudio } = await import("@/lib/r2");

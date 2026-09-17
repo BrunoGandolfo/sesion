@@ -6,7 +6,7 @@ import { Grabadora } from "@/lib/audio/grabadora";
 
 const m = vi.hoisted(() => ({
   grabaciones: new Map<string, GrabacionLocal>(),
-  guardar: vi.fn(), segmento: vi.fn(), pedir: vi.fn(), sincronizar: vi.fn(), cerrar: vi.fn(),
+  guardar: vi.fn(), segmento: vi.fn(), pedir: vi.fn(), sincronizar: vi.fn(), cerrar: vi.fn(), recuperar: vi.fn(),
 }));
 vi.mock("@/lib/audio/almacen", () => ({
   abrirAlmacen: async () => ({ close: m.cerrar }),
@@ -14,7 +14,7 @@ vi.mock("@/lib/audio/almacen", () => ({
   buscarGrabacion: async (_db: unknown, cuenta: string, turno: string) => [...m.grabaciones.values()].find(g => g.cuenta === cuenta && g.turnoId === turno),
   guardarGrabacion: m.guardar,
   guardarSegmento: m.segmento,
-  guardarRespaldo: vi.fn(), recuperarRespaldo: async (_db: unknown, g: GrabacionLocal) => g,
+  guardarEntrega: vi.fn(), recuperarEntregas: m.recuperar,
 }));
 vi.mock("@/lib/audio/sincronizar", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/audio/sincronizar")>(),
@@ -28,6 +28,7 @@ beforeEach(() => {
   m.grabaciones.clear();
   vi.clearAllMocks();
   m.guardar.mockImplementation(async (_db, g: GrabacionLocal) => { m.grabaciones.set(g.sesionId, structuredClone(g)); });
+  m.recuperar.mockImplementation(async (_db: unknown, g: GrabacionLocal) => g);
   m.pedir.mockRejectedValue(new ErrorAudio("Grabación no encontrada", 404));
   m.sincronizar.mockRejectedValue(new ErrorAudio("Grabación no encontrada", 404));
   Object.defineProperty(navigator, "locks", { configurable: true, value: { request: async (_name: string, _opts: unknown, callback: (lock: object) => Promise<void>) => callback({}) } });
@@ -43,6 +44,9 @@ async function abrir(g = original()) {
 }
 
 test("recupera el identificador real y marca el tramo abierto como posiblemente incompleto", async () => {
+  // Sin falla de red: así se ve el aviso de la reapertura, que una falla
+  // posterior taparía (en pantalla hay una sola línea a la vez).
+  m.sincronizar.mockResolvedValue({ estado: "grabando" });
   const grabadora = await abrir({ ...original(), estado: "capturando" });
   expect(grabadora.snapshot().grabacion).toMatchObject({ sesionId: "sesion-recuperada", estado: "interrumpida", cantidad: 3 });
   expect(grabadora.snapshot().mensaje).toContain("incompleto");
@@ -52,7 +56,7 @@ test("recupera el identificador real y marca el tramo abierto como posiblemente 
 
 test("un 404 comprobado permite otra grabación y conserva identidad, cantidad y duración de la anterior", async () => {
   const grabadora = await abrir();
-  await grabadora.archivarAusente();
+  await grabadora.apartarCopia();
   expect(m.pedir).toHaveBeenCalledExactlyOnceWith("/sesion-recuperada");
   expect(m.grabaciones.get("sesion-recuperada")).toEqual({ ...original(), turnoId: "turno:archivo:sesion-recuperada" });
   expect(grabadora.snapshot().grabacion).toBeNull();
@@ -62,16 +66,16 @@ test("un 404 comprobado permite otra grabación y conserva identidad, cantidad y
 test("no archiva si al reconciliar la sesión vuelve a existir", async () => {
   const grabadora = await abrir();
   m.pedir.mockResolvedValueOnce({ estado: "procesando" });
-  await grabadora.archivarAusente();
+  await grabadora.apartarCopia();
   expect(m.grabaciones.get("sesion-recuperada")).toEqual(original());
   expect(grabadora.snapshot().grabacion?.sesionId).toBe("sesion-recuperada");
-  expect(grabadora.snapshot().ausenteRemoto).toBe(false);
+  expect(grabadora.snapshot().desacuerdo).toBeNull();
 });
 
 test("perder la respuesta de la comprobación no habilita otra grabación", async () => {
   const grabadora = await abrir();
   m.pedir.mockRejectedValueOnce(new TypeError("Network error"));
-  await grabadora.archivarAusente();
+  await grabadora.apartarCopia();
   expect(m.grabaciones.get("sesion-recuperada")).toEqual(original());
   expect(grabadora.snapshot().grabacion?.sesionId).toBe("sesion-recuperada");
 });
@@ -79,10 +83,10 @@ test("perder la respuesta de la comprobación no habilita otra grabación", asyn
 test("si aborta la escritura del archivo, se mantiene el turno ocupado y se permite reintentar", async () => {
   const grabadora = await abrir();
   m.guardar.mockRejectedValueOnce(new Error("Transacción abortada"));
-  await grabadora.archivarAusente();
+  await grabadora.apartarCopia();
   expect(m.grabaciones.get("sesion-recuperada")).toEqual(original());
   expect(grabadora.snapshot().grabacion?.sesionId).toBe("sesion-recuperada");
-  await grabadora.archivarAusente();
+  await grabadora.apartarCopia();
   expect(grabadora.snapshot().grabacion).toBeNull();
 });
 
@@ -156,7 +160,7 @@ test.each(["ended"])("no inicia si %s ocurrió durante la escritura de arranque"
   expect(m.grabaciones.get("sesion-recuperada")?.estado).toBe("pausada");
 });
 
-test.each(["segmento", "pausa"])("Reintentar recupera la escritura de %s antes de subir", async falla => {
+test("Reintentar consolida las entregas durables de una pieza que no se pudo escribir", async () => {
   m.sincronizar.mockResolvedValue({ estado: "grabando" });
   const grabadora = await abrir({ ...original(), estado: "pausada" });
   m.pedir.mockResolvedValue({ clave: "prueba" });
@@ -172,15 +176,19 @@ test.each(["segmento", "pausa"])("Reintentar recupera la escritura de %s antes d
   vi.stubGlobal("MediaRecorder", Recorder);
   await grabadora.iniciar();
   await vi.advanceTimersByTimeAsync(10000);
-  if (falla === "segmento") m.segmento.mockRejectedValueOnce(new Error("Almacenamiento temporalmente ocupado"));
-  else m.guardar.mockRejectedValueOnce(new Error("Almacenamiento temporalmente ocupado"));
+  m.segmento.mockRejectedValueOnce(new Error("Almacenamiento temporalmente ocupado"));
   await grabadora.pausar();
   expect(grabadora.snapshot().error).toBeTruthy();
+  // Las entregas de esa pieza siguen guardadas; reintentar las incorpora.
+  m.recuperar.mockImplementationOnce(async (_db: unknown, g: GrabacionLocal) => {
+    const recuperada = { ...g, cantidad: g.cantidad + 1, duracionMs: g.duracionMs + 10_000 };
+    m.grabaciones.set(g.sesionId, structuredClone(recuperada));
+    return recuperada;
+  });
   await grabadora.reintentar();
   const durable = m.grabaciones.get("sesion-recuperada");
-  expect(durable).toMatchObject({ estado: "pausada", cantidad: 4, duracionMs: 130000 });
-  expect(durable?.pausas).toEqual([{ inicio: 130000, fin: null, siguienteIndice: 4, motivo: "manual" }]);
-  expect(m.sincronizar.mock.lastCall?.[1]).toMatchObject({ cantidad: 4, estado: "pausada" });
+  expect(durable).toMatchObject({ cantidad: 4, duracionMs: 130000 });
+  expect(m.sincronizar.mock.lastCall?.[1]).toMatchObject({ cantidad: 4 });
   expect(grabadora.snapshot().error).toBeNull();
 });
 

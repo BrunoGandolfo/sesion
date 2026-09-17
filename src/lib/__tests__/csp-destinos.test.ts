@@ -154,7 +154,7 @@ describe("destinos externos del código", () => {
     process.env.R2_BUCKET_NAME = "sesion-audio";
     const { objetosAudio } = await import("@/lib/r2");
     const { url } = await objetosAudio.firmar("org/sesion/0", {
-      indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 20, sha256: "a".repeat(64),
+      indice: 0, inicioMs: 0, iv: "AAAAAAAAAAAAAAAA", bytes: 20, sha256: "a".repeat(64), continuacion: false,
     });
     expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toContain("if-none-match");
     expect(new URL(url).searchParams.get("X-Amz-SignedHeaders")).toContain("x-amz-meta-sha256");

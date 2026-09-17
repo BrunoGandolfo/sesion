@@ -8,7 +8,10 @@ export const segmentoAudioSchema = indiceAudioSchema.extend({
   bytes: z.int().min(17).max(MAX_BYTES_SEGMENTO),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   inicioMs: z.number().finite().min(0).max(LIMITE_SEGUNDOS * 1000),
-}).strict().refine(s => s.indice !== 0 || s.inicioMs === 0, { path: ["inicioMs"], message: "El primer segmento empieza en cero" });
+  continuacion: z.boolean(),
+}).strict()
+  .refine(s => s.indice !== 0 || s.inicioMs === 0, { path: ["inicioMs"], message: "El primer segmento empieza en cero" })
+  .refine(s => s.indice !== 0 || !s.continuacion, { path: ["continuacion"], message: "El primer segmento no continúa a ninguno" });
 export const finalizarAudioSchema = z.object({
   cantidad: z.int().min(1).max(MAX_SEGMENTOS),
   duracionAudioSeg: z.int().min(1).max(LIMITE_SEGUNDOS),
