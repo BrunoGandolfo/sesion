@@ -70,13 +70,16 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 2. Se abre **Autorización para grabar las sesiones**. **La lee la paciente**:
    qué se graba, para qué y por dónde pasa: el cifrado por tramos en el
    teléfono, el almacenamiento en Cloudflare R2, el proceso en Railway, la base
-   en Neon, que AssemblyAI recibe audio y vocabulario y Anthropic la
-   transcripción y el resumen del proceso. También explica que el resumen del
-   proceso lo propone la IA y solo queda vigente cuando lo aceptás, que el
-   servidor descifra el audio en un archivo temporal que se borra al terminar,
-   que al aprobar se destruye la clave del audio y el borrado se reintenta
-   durante unos 15 días, los respaldos (diarios de 30 días y mensuales de hasta
-   12 meses, que pueden conservar la clave), qué queda guardado (nota,
+   en Neon, que AssemblyAI recibe audio y vocabulario, y que Anthropic recibe
+   la transcripción y el resumen del proceso y, después de aprobar, la nota
+   aprobada. También explica que el borrador de la IA se guarda antes de que lo
+   apruebes, que el resumen del proceso lo propone la IA y solo queda vigente
+   cuando lo aceptás, que el servidor descifra el audio en un archivo temporal
+   que se borra al terminar, cómo se pide el borrado en AssemblyAI y hasta
+   cuándo se reintenta, que al aprobar se destruye la clave del audio y el
+   borrado se reintenta durante unos 15 días, que en el teléfono queda una copia
+   cifrada, los respaldos (diarios de 30 días y mensuales de hasta 12 meses, que
+   pueden conservar la clave), qué queda guardado (nota,
    transcripción, resumen del proceso, autorización y firma), que podés imprimir
    el resumen del proceso para tu propio archivo, que puede revocarla cuando
    quiera y que aceptar no es obligatorio. Se enmarca en la **Ley 18.331**.
@@ -85,9 +88,10 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 5. Tocá **Firmar**.
 
 Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
-La versión vigente del texto es **2.2**. Las firmas anteriores, incluida la
-2.1, siguen sirviendo para grabar y no hace falta revocarlas, pero **necesitan
-que la paciente firme la 2.2**: no cuentan lo que agrega la versión nueva. Pedíselo
+La versión vigente del texto es **2.3**. Las firmas anteriores, incluidas la
+2.1 y la 2.2, siguen sirviendo para grabar y no hace falta revocarlas, pero
+**necesitan que la paciente firme la 2.3**: no cuentan lo que corrige la versión
+nueva. Pedíselo
 en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
 pidas vos.
 

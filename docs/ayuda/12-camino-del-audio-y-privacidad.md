@@ -30,13 +30,18 @@ está pendiente de corregir.
    terminar. El consentimiento lo cuenta así: se descifra *"en un archivo
    temporal del servidor"* que *"se borra al terminar"*.
 3. **AssemblyAI** recibe el audio sin cifrar y el vocabulario.
-4. Al terminar la transcripción, la app le pide a AssemblyAI que la borre. Si
-   falla, se reintenta, cada vez más espaciado, **hasta 20 veces**; si no lo
-   logra, avisa a quien administra Sesión. Hay un caso raro, una caída del
-   proceso en el momento justo, en el que ese reintento no queda registrado.
-   El consentimiento dice que el pedido se repite *"hasta que el servicio
-   confirma que lo hizo"*: no menciona ese tope. Esa frase del consentimiento
-   está pendiente de corregir.
+4. Apenas termina la transcripción, bien o mal, la app le pide a AssemblyAI que
+   borre el audio y el texto. Ese primer pedido es uno solo.
+   - **Si la transcripción se completó**, la app además repite el pedido, cada
+     vez más espaciado, **hasta 20 veces**, durante **unos 15 días**, hasta que
+     AssemblyAI responde que lo borró o que ya no existe. Si aun así no lo
+     logra, el borrado queda marcado como fallido y avisa a quien administra
+     Sesión.
+   - **Si la transcripción falla**, o el proceso se interrumpe o no logra dejar
+     anotado ese reintento, queda solo el primer pedido, o ninguno si el proceso
+     se cortó antes, y la app no puede comprobar que AssemblyAI lo haya borrado.
+   - Que AssemblyAI responda que el texto "ya no existe" cuenta como borrado: la
+     app no puede distinguir si lo borró antes o si nunca llegó a existir.
 5. **Anthropic** recibe la transcripción y el Recorrido vigente de la paciente
    para redactar la nota, la transcripción para el análisis **Para vos**, y la
    nota aprobada con el Recorrido vigente para preparar una propuesta del
@@ -85,7 +90,7 @@ lo impide también.
 El PDF que exportás desde el Recorrido sale de la app **sin cifrar**: queda bajo
 tu cuidado, como cualquier registro en papel. Queda registrada la preparación de
 la copia; volver a imprimir desde la hoja ya abierta no agrega otro registro. El
-consentimiento 2.2 se lo cuenta a la paciente. Ver
+consentimiento 2.3 se lo cuenta a la paciente. Ver
 `10-el-hilo-y-el-recorrido.md`.
 
 ## Respaldos y eliminación
@@ -101,7 +106,7 @@ todavía no estaba aprobada cuando se hizo la copia. Esa clave puede conservarse
 **hasta 12 meses** en un respaldo mensual, aunque ya se haya borrado de la base
 con la que trabaja la app. Si el audio no se pudo borrar, esa copia de la clave
 podría permitir abrirlo. Aprobar hoy no cambia los respaldos anteriores. El
-consentimiento 2.2 cuenta los dos plazos.
+consentimiento 2.3 cuenta los dos plazos.
 
 Quitar la clave activa no garantiza que hayan desaparecido todas las copias.
 Los pedidos de borrado se siguen con reintentos; el funcionamiento y la
@@ -109,15 +114,18 @@ restauración de los respaldos requieren comprobación.
 
 ## Autorización y revocación
 
-La versión vigente del texto de autorización es la **2.2**. Revocar la
+La versión vigente del texto de autorización es la **2.3**. Revocar la
 autorización impide grabaciones futuras. No borra la historia que ya quedó
 guardada.
 
-**Las firmas de versiones anteriores, incluida la 2.1, necesitan que la paciente
-firme la 2.2**: no cuentan los plazos reales de borrado y de respaldo, que el
-resumen del proceso lo propone la IA ni el descifrado en archivo temporal. La app
-no bloquea la grabación con una firma anterior y no te sugiere la nueva en
-pantalla: depende de que la pidas vos.
+**Las firmas de versiones anteriores, incluidas la 2.1 y la 2.2, necesitan que la
+paciente firme la 2.3**: no cuentan cómo ocurre el borrado en AssemblyAI, la
+copia cifrada que queda en el teléfono, que el borrador de la IA se guarda antes
+de aprobar ni lo que Anthropic recibe después de aprobar. Las anteriores a la 2.2
+tampoco cuentan los plazos reales de borrado y de respaldo, que el resumen del
+proceso lo propone la IA ni el descifrado en archivo temporal. La app no bloquea
+la grabación con una firma anterior y no te sugiere la nueva en pantalla:
+depende de que la pidas vos.
 
 <!-- fuentes:
 src/lib/consentimiento-hechos.ts
