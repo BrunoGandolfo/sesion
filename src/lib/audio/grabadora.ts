@@ -1,4 +1,5 @@
-import { abrirAlmacen, buscarGrabacion, guardarGrabacion, guardarSegmento, retirarCopiasViejas, type GrabacionLocal } from "./almacen";
+import { abrirAlmacen, buscarGrabacion, guardarGrabacion, guardarSegmento, guardarRespaldo, recuperarRespaldo, retirarCopiasViejas, type GrabacionLocal } from "./almacen";
+import { EntornoAudio } from "./entorno";
 import { CapturaAudio } from "./captura";
 import { cifrarSegmento, importarClave } from "./cifrado";
 import { LIMITE_SEGUNDOS, MAX_SEGMENTOS } from "./contrato";
@@ -12,6 +13,8 @@ export interface VistaGrabadora {
   mensaje: string;
   error: string | null;
   ausenteRemoto?: boolean;
+  nivelAudio: number | null;
+  silencioso: boolean;
 }
 
 export class Grabadora {
@@ -19,6 +22,7 @@ export class Grabadora {
   private clave: CryptoKey | null = null;
   private grabacion: GrabacionLocal | null = null;
   private captura: CapturaAudio;
+  private entorno: EntornoAudio | null = null;
   private cancelarLock: (() => void) | null = null;
   private sincronizando: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -27,10 +31,15 @@ export class Grabadora {
   private siguienteEnvio = 0;
   private intentos = 0;
   private oyentes = new Set<() => void>();
-  private vista: VistaGrabadora = { lista: false, ocupada: false, grabacion: null, segundos: 0, mensaje: "", error: null };
+  private vista: VistaGrabadora = { lista: false, ocupada: false, grabacion: null, segundos: 0, mensaje: "", error: null, nivelAudio: null, silencioso: false };
 
   constructor(private cuenta: string, private organizationId: string, private turnoId: string) {
     this.captura = new CapturaAudio({
+      respaldar: async (blob, duracionMs, inicioMs) => {
+        const g = this.grabacion!;
+        const segmento = await cifrarSegmento(blob, this.clave!, this.organizationId, g.sesionId, g.cantidad, g.cantidad === 0 ? 0 : inicioMs);
+        await guardarRespaldo(this.db!, { ...segmento, cuenta: this.cuenta, sesionId: g.sesionId, duracionMs: Math.min(duracionMs, LIMITE_SEGUNDOS * 1000 - g.duracionMs) });
+      },
       guardar: async (blob, duracionMs, inicioMs) => {
         const g = this.grabacion!;
         if (g.cantidad >= MAX_SEGMENTOS) throw new Error("Se alcanzó el máximo de segmentos");
@@ -42,6 +51,7 @@ export class Grabadora {
         void this.enviar();
       },
       parada: async motivo => {
+        this.liberarEntorno();
         const g = this.grabacion!;
         const siguiente: GrabacionLocal = { ...g, estado: motivo === "interrupcion" ? "interrumpida" : "pausada", pausas: [...g.pausas, { inicio: g.duracionMs, fin: null, siguienteIndice: g.cantidad, motivo }] };
         await guardarGrabacion(this.db!, siguiente);
@@ -50,6 +60,7 @@ export class Grabadora {
       },
       error: error => {
         if (this.grabacion?.estado === "capturando" && !this.captura.grabando) this.grabacion = { ...this.grabacion, estado: "interrumpida" };
+        if (!this.captura.grabando) this.liberarEntorno();
         this.publicar({ error });
       },
     });
@@ -81,6 +92,7 @@ export class Grabadora {
       if (this.cancelada) { this.db.close(); return; }
       this.grabacion = await buscarGrabacion(this.db, this.cuenta, this.turnoId) ?? null;
       if (this.cancelada) { this.db.close(); return; }
+      if (this.grabacion) this.grabacion = await recuperarRespaldo(this.db, this.grabacion);
       if (this.grabacion?.estado === "capturando") {
         this.grabacion = { ...this.grabacion, estado: "interrumpida", pausas: [...this.grabacion.pausas, { inicio: this.grabacion.duracionMs, fin: null, siguienteIndice: this.grabacion.cantidad, motivo: "interrupcion" }] };
         await guardarGrabacion(this.db, this.grabacion);
@@ -96,10 +108,14 @@ export class Grabadora {
     } catch (e) { this.publicar({ error: e instanceof Error ? e.message : "No se pudo abrir la grabación" }); }
   }
 
-  private visibilidad = () => { if (document.visibilityState === "hidden") this.interrumpir(); };
+  private liberarEntorno() { this.entorno?.cerrar(); this.entorno = null; }
+  private visibilidad = () => {
+    if (document.visibilityState === "visible" && this.captura.grabando) void this.entorno?.recuperarPantalla();
+  };
   private online = () => { this.siguienteEnvio = 0; void this.enviar(); };
   private interrumpir = () => {
     if (this.captura.grabando) {
+      this.liberarEntorno();
       // La interrupción del micrófono no espera a que termine una acción de UI.
       void this.captura.pausar("interrupcion").catch(() => {}).finally(() => this.publicar());
     }
@@ -134,13 +150,13 @@ export class Grabadora {
       this.grabacion = siguiente;
       if (this.cancelada) throw new Error("La pantalla se cerró antes de empezar");
       const pistas = stream.getAudioTracks();
-      pistas.forEach(t => { t.addEventListener("mute", this.interrumpir); t.addEventListener("ended", this.interrumpir); });
       // El permiso y la escritura local son asíncronos: la pista o la página
       // pudieron cambiar antes de que existieran estos oyentes.
-      if (document.visibilityState === "hidden" || !pistas.length || pistas.some(t => t.muted || t.readyState === "ended")) {
+      if (!pistas.length || pistas.some(t => t.readyState === "ended")) {
         throw new Error("El micrófono o la pantalla se interrumpieron antes de empezar. Volvé a la app y reintentá.");
       }
       this.captura.iniciar(stream, g.duracionMs);
+      this.entorno = new EntornoAudio(stream, this.interrumpir, (nivelAudio, silencioso) => this.publicar({ nivelAudio, silencioso }));
       stream = null;
       this.publicar({ mensaje: "Grabando. Cada segmento se guarda cifrado y se envía mientras seguís." });
     } catch (e) {
@@ -160,6 +176,7 @@ export class Grabadora {
     if (!this.grabacion || this.vista.ocupada) return;
     this.publicar({ ocupada: true });
     try {
+      this.liberarEntorno();
       await this.captura.pausar(motivo);
     } catch (e) { this.publicar({ error: e instanceof Error ? e.message : "No se pudo guardar la pausa" }); }
     finally { this.publicar({ ocupada: false }); }
@@ -167,7 +184,12 @@ export class Grabadora {
 
   async terminar() {
     if (!this.grabacion || this.vista.ocupada) return;
-    if (this.captura.grabando) await this.pausar();
+    if (this.captura.grabando) {
+      await this.pausar();
+      // Un stop perdido o una escritura fallida requieren revisar el aviso.
+      // No cerrar automáticamente la sesión ni borrar la explicación.
+      if (this.vista.error && this.grabacion.estado === "interrumpida") return;
+    }
     this.publicar({ ocupada: true, error: null });
     try {
       await this.captura.drenar();
@@ -225,11 +247,13 @@ export class Grabadora {
 
   async cerrar() {
     this.cancelada = true;
+    this.liberarEntorno();
     if (this.timer) clearInterval(this.timer);
     document.removeEventListener("visibilitychange", this.visibilidad);
     window.removeEventListener("pagehide", this.interrumpir);
     window.removeEventListener("online", this.online);
     try { await this.captura.pausar("interrupcion"); await this.sincronizando; }
+    catch (e) { this.publicar({ error: e instanceof Error ? e.message : "Queda audio por guardar" }); }
     finally { this.clave = null; this.db?.close(); this.cancelarLock?.(); }
   }
 

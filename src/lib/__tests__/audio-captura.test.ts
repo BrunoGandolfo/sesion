@@ -154,3 +154,26 @@ test("si falla el primero sin bytes, conserva el audio disponible del recorder s
   await captura.pausar();
   expect(duraciones).toEqual([500]);
 });
+
+test("una rotación demorada hasta 64,5 s cierra sin agregar el segundo de solape que excedería 65 s", async () => {
+  vi.useFakeTimers();
+  let reloj = 0;
+  const guardar = vi.fn<(blob: Blob, duracionMs: number, inicioMs: number) => Promise<void>>().mockResolvedValue(undefined); const parada = vi.fn(async () => {}); const error = vi.fn();
+  class Demorado extends EventTarget {
+    state = "inactive"; mimeType = "audio/webm";
+    start() { this.state = "recording"; }
+    stop() { this.state = "inactive"; this.dispatchEvent(Object.assign(new Event("dataavailable"), { data: new Blob(["audio"]) })); this.dispatchEvent(new Event("stop")); }
+  }
+  const crear = vi.fn(() => new Demorado() as unknown as MediaRecorder);
+  const captura = new CapturaAudio({ guardar, parada, error, ahora: () => reloj, crearRecorder: crear });
+  captura.iniciar({ getTracks: () => [{ stop() {} }] } as unknown as MediaStream, 0);
+  // Avanzamos reloj y timers juntos hasta el último latido antes de la frontera.
+  for (let i = 0; i < 589; i++) { reloj += 100; await vi.advanceTimersByTimeAsync(100); }
+  reloj = 64_500; await vi.advanceTimersByTimeAsync(100);
+  await captura.drenar();
+  expect(captura.grabando).toBe(false);
+  expect(crear).toHaveBeenCalledTimes(1);
+  expect(guardar.mock.calls[0]?.[1]).toBe(64_500);
+  expect(parada).toHaveBeenCalledWith("interrupcion");
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("demoró"));
+});
