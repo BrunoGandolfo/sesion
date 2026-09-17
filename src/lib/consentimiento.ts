@@ -1,4 +1,4 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.3.
+// Texto del consentimiento informado para grabar sesiones, versión 2.4.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
@@ -17,7 +17,12 @@
 // La 2.3 cuenta el borrado en AssemblyAI como ocurre (un pedido inmediato y
 // reintentos acotados sólo si la transcripción se completó), la copia cifrada
 // que queda en el teléfono y que el borrador de la IA se guarda antes de
-// aprobar. Las firmas anteriores necesitan refirma. La vigencia técnica no se cambia en esta tanda: la API
+// aprobar.
+//
+// La 2.4 deja de prometer lo que la app no ejecuta (decisión del dueño): en
+// lugar de "derecho a acceder, corregir y eliminar", dice qué puede pedir la
+// paciente que la app sí hace y qué no se puede hacer desde la app. Las firmas
+// anteriores necesitan refirma. La vigencia técnica no se cambia en esta tanda: la API
 // devuelve sugiereRefirmar y la profesional debe pedir la nueva firma.
 
 import type { db } from "@/lib/db";
@@ -30,9 +35,11 @@ import {
   ASR_REINTENTO_SOLO_SI_SE_COMPLETO,
   AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL,
   BACKUP_INCLUYE_CLAVE_AUDIO,
+  BORRADO_DE_DATOS_A_PEDIDO,
   BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR,
   CLAVE_AUDIO_DESTRUIDA_AL_APROBAR,
   CLAVE_POR_SESION,
+  CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA,
   COPIA_LOCAL_CIFRADA_SE_CONSERVA,
   LIMPIEZA_AUDIO_DIAS_APROX,
   LIMPIEZA_AUDIO_REINTENTA,
@@ -40,6 +47,10 @@ import {
   LLM_RECIBE_NOTA_APROBADA,
   MARCO_LEGAL,
   MEDIOS_CAPTURA,
+  NOTA_APROBADA_CORREGIBLE,
+  PACIENTE_PUEDE_CORREGIR_CONTACTO,
+  PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES,
+  PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN,
   PROVEEDORES,
   RESPALDO_LOCAL_CIFRADO,
   RECORRIDO_EXPORTABLE,
@@ -47,12 +58,13 @@ import {
   RETENCION_BACKUPS_DIAS,
   RETENCION_BACKUPS_MENSUALES_MESES,
   REVOCAR_BORRA_HISTORIA,
+  TRANSCRIPCION_VISIBLE_EN_PANTALLA,
   VOCABULARIO_A_ASR,
   VOCABULARIO_INCLUYE_NOMBRES,
   VOCABULARIO_SOLO_A_ASR,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.3";
+export const CONSENTIMIENTO_VERSION = "2.4";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
@@ -125,6 +137,21 @@ export function generarTextoConsentimiento(params: {
     ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La preparación de esa copia queda registrada por la aplicación.`
     : "";
 
+  const pedidos = [
+    PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN ? "que te muestre tus notas clínicas aprobadas y el resumen de tu proceso" : null,
+    PACIENTE_PUEDE_CORREGIR_CONTACTO || PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES
+      ? `que corrija ${[PACIENTE_PUEDE_CORREGIR_CONTACTO ? "tus datos de contacto" : null, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES ? "el resumen de tu proceso" : null].filter(Boolean).join(" o ")}`
+      : null,
+  ].filter(Boolean);
+  const noSePuede = [
+    !BORRADO_DE_DATOS_A_PEDIDO ? "borrar tus datos" : null,
+    !NOTA_APROBADA_CORREGIBLE ? "corregir las notas ya aprobadas" : null,
+    !TRANSCRIPCION_VISIBLE_EN_PANTALLA || !CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA
+      ? `ver ${[!TRANSCRIPCION_VISIBLE_EN_PANTALLA ? "la transcripción" : null, !CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA ? "esta autorización firmada" : null].filter(Boolean).join(" ni ")}`
+      : null,
+  ].filter(Boolean);
+  const queSePuedePedir = `\n\n¿Qué podés pedir?\nPodés pedirle a ${nombreProfesional} ${pedidos.join(", y ")}.${PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES ? " Corregir el resumen agrega una versión nueva: las anteriores se conservan." : ""}${noSePuede.length ? ` Desde la aplicación no se puede ${noSePuede.join(", ni ")}.` : ""}`;
+
   const revocar = REVOCAR_BORRA_HISTORIA
     ? "Lo ya guardado se elimina de tu historia clínica."
     : "Lo ya guardado sigue formando parte de tu historia clínica.";
@@ -162,7 +189,7 @@ En la base de datos de la aplicación (${neon.nombre}), cifrado, y accesible sol
 - La transcripción de la sesión.
 - El resumen de tu proceso que ella mantiene.
 - Este consentimiento y tu firma.
-El borrado del audio sigue los pasos y plazos explicados arriba.${exportacion}
+El borrado del audio sigue los pasos y plazos explicados arriba.${exportacion}${queSePuedePedir}
 
 ¿Podés cambiar de opinión?
 Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a ${nombreProfesional}. A partir de ese momento no se graban más sesiones. ${revocar} Esto no afecta tu tratamiento ni tu relación con ella.
@@ -171,7 +198,7 @@ Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a ${nomb
 No. Si preferís que no se grabe, la sesión sigue igual y ${nombreProfesional} toma notas como siempre.
 
 Marco legal
-${MARCO_LEGAL.ley}: el tratamiento de datos de salud exige tu consentimiento previo, libre, expreso e informado.${MARCO_LEGAL.transferenciaInternacional ? " Parte del procesamiento ocurre fuera del país; esta autorización incluye esa transferencia internacional." : ""} Tenés derecho a acceder a tus datos, a pedir que se corrijan y a pedir que se eliminen.
+${MARCO_LEGAL.ley}: el tratamiento de datos de salud exige tu consentimiento previo, libre, expreso e informado.${MARCO_LEGAL.transferenciaInternacional ? " Parte del procesamiento ocurre fuera del país; esta autorización incluye esa transferencia internacional." : ""}
 
 Al firmar, declaro que:
 - Leí y entendí esta información.

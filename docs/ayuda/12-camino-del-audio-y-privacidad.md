@@ -90,7 +90,7 @@ lo impide también.
 El PDF que exportás desde el Recorrido sale de la app **sin cifrar**: queda bajo
 tu cuidado, como cualquier registro en papel. Queda registrada la preparación de
 la copia; volver a imprimir desde la hoja ya abierta no agrega otro registro. El
-consentimiento 2.3 se lo cuenta a la paciente. Ver
+consentimiento 2.4 se lo cuenta a la paciente. Ver
 `10-el-hilo-y-el-recorrido.md`.
 
 ## Respaldos y eliminación
@@ -106,7 +106,7 @@ todavía no estaba aprobada cuando se hizo la copia. Esa clave puede conservarse
 **hasta 12 meses** en un respaldo mensual, aunque ya se haya borrado de la base
 con la que trabaja la app. Si el audio no se pudo borrar, esa copia de la clave
 podría permitir abrirlo. Aprobar hoy no cambia los respaldos anteriores. El
-consentimiento 2.3 cuenta los dos plazos.
+consentimiento 2.4 cuenta los dos plazos.
 
 Quitar la clave activa no garantiza que hayan desaparecido todas las copias.
 Los pedidos de borrado se siguen con reintentos; el funcionamiento y la
@@ -114,16 +114,35 @@ restauración de los respaldos requieren comprobación.
 
 ## Autorización y revocación
 
-La versión vigente del texto de autorización es la **2.3**. Revocar la
+La versión vigente del texto de autorización es la **2.4**. Revocar la
 autorización impide grabaciones futuras. No borra la historia que ya quedó
 guardada.
 
-**Las firmas de versiones anteriores, incluidas la 2.1 y la 2.2, necesitan que la
-paciente firme la 2.3**: no cuentan cómo ocurre el borrado en AssemblyAI, la
-copia cifrada que queda en el teléfono, que el borrador de la IA se guarda antes
-de aprobar ni lo que Anthropic recibe después de aprobar. Las anteriores a la 2.2
-tampoco cuentan los plazos reales de borrado y de respaldo, que el resumen del
-proceso lo propone la IA ni el descifrado en archivo temporal. La app no bloquea
+## Qué puede pedir la paciente
+
+La autorización le cuenta a la paciente lo que puede pedirte y la app hace:
+
+- **Que le muestres** sus notas clínicas aprobadas y el resumen de su proceso,
+  en pantalla o impreso.
+- **Que corrijas** sus datos de contacto, con **Editar datos**, o el resumen de
+  su proceso, con **Editar Recorrido**. Corregir el resumen agrega una versión:
+  las anteriores se conservan.
+
+Y le dice lo que **no se puede hacer desde la app**: borrar sus datos, corregir
+una nota ya aprobada, y ver la transcripción o la autorización firmada. Hasta la
+versión 2.3 el texto decía que tenía derecho a pedir que sus datos se eliminen;
+la app no lo ejecuta, y la 2.4 dejó de prometerlo.
+
+## Firmas anteriores
+
+**Las firmas de versiones anteriores, incluidas la 2.1, la 2.2 y la 2.3,
+necesitan que la paciente firme la 2.4**. Las anteriores a la 2.4 prometen
+derechos que la app no ejecuta. Las anteriores a la 2.3 no cuentan cómo ocurre el
+borrado en AssemblyAI, la copia cifrada que queda en el teléfono, que el
+borrador de la IA se guarda antes de aprobar ni lo que Anthropic recibe después
+de aprobar. Las anteriores a la 2.2 tampoco cuentan los plazos reales de borrado
+y de respaldo, que el resumen del proceso lo propone la IA ni el descifrado en
+archivo temporal. La app no bloquea
 la grabación con una firma anterior y no te sugiere la nueva en pantalla:
 depende de que la pidas vos.
 

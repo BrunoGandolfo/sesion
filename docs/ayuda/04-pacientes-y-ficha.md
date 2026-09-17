@@ -81,17 +81,21 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
    cifrada, los respaldos (diarios de 30 días y mensuales de hasta 12 meses, que
    pueden conservar la clave), qué queda guardado (nota,
    transcripción, resumen del proceso, autorización y firma), que podés imprimir
-   el resumen del proceso para tu propio archivo, que puede revocarla cuando
-   quiera y que aceptar no es obligatorio. Se enmarca en la **Ley 18.331**.
+   el resumen del proceso para tu propio archivo, qué puede pedirte (que le
+   muestres sus notas aprobadas y el resumen de su proceso, y que corrijas sus
+   datos de contacto o ese resumen) y qué no se puede hacer desde la app (borrar
+   sus datos, corregir una nota aprobada, ver la transcripción o la autorización
+   firmada), que puede revocarla cuando quiera y que aceptar no es obligatorio.
+   Se enmarca en la **Ley 18.331**.
 3. La paciente marca **"Leí y entiendo la información anterior"**.
 4. Firma con el dedo donde dice **Firmá acá**.
 5. Tocá **Firmar**.
 
 Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
-La versión vigente del texto es **2.3**. Las firmas anteriores, incluidas la
-2.1 y la 2.2, siguen sirviendo para grabar y no hace falta revocarlas, pero
-**necesitan que la paciente firme la 2.3**: no cuentan lo que corrige la versión
-nueva. Pedíselo
+La versión vigente del texto es **2.4**. Las firmas anteriores, incluidas la
+2.1, la 2.2 y la 2.3, siguen sirviendo para grabar y no hace falta revocarlas,
+pero **necesitan que la paciente firme la 2.4**: no cuentan lo que corrige la
+versión nueva. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
 en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
 pidas vos.
 
