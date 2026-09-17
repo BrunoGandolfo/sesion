@@ -1,8 +1,7 @@
 "use client";
 
-// En móvil, el formulario va antes de la explicación. En escritorio se
-// conserva la presencia a la izquierda mediante el orden visual de las columnas.
-// Los textos viven en glosario.ts.
+// La portada rodea al formulario; no interviene en el ingreso.
+// En móvil solo la presentación breve precede a los campos.
 //
 // Entrar es un POST a /api/cuenta/entrar: el servidor verifica, abre la
 // sesión en la base y deja la cookie. Si llegamos acá con ?sesion=vencida
@@ -28,11 +27,7 @@ import { ENTRADA_REINGRESO,
   ENTRAR,
 } from "@/lib/glosario";
 
-import { Presencia } from "./_components/presencia";
-
-// Texto nuevo de esta pantalla; va al glosario cuando el área 6 lo integre
-// (docs/pendientes/03-identidad.md).
-
+import { Portada } from "./_components/portada";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,9 +63,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-cream-50">
-      <div className="mx-auto flex min-h-screen w-full max-w-[420px] flex-col justify-center px-6 py-12 lg:max-w-[1020px] lg:flex-row lg:items-center lg:justify-center lg:gap-20 lg:px-12">
-        <div className="flex w-full flex-col lg:w-[380px] lg:shrink-0">
+    <Portada>
           <Card className="p-7 shadow-subtle">
             {aviso && (
               <p role="status" className="mb-4 text-sm text-sage-600">
@@ -115,15 +108,6 @@ export default function LoginPage() {
             </form>
           </Card>
 
-          <p className="mt-6 text-center text-[12px] text-ink-500">
-            v1.0 · hecho con cuidado
-          </p>
-
-        </div>
-        <div className="mt-8 w-full lg:order-first lg:mt-0 lg:min-w-0">
-          <Presencia />
-        </div>
-      </div>
-    </main>
+    </Portada>
   );
 }

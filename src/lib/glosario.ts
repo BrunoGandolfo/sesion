@@ -1062,9 +1062,8 @@ export const CARGANDO_COBROS = "Cargando tus cobros…";
 // presencia. Es la única pantalla que ve alguien que todavía no es usuaria,
 // así que es la única que tiene que decir qué es esto.
 //
-// Es institucional: acá NO entra Lupita (docs/diseno/04-personaje.md fija
-// dónde aparece —ayuda, estados vacíos, onboarding, confirmaciones alegres—
-// y la entrada no es ninguno de esos).
+// Es institucional: describe también la ayuda de Lupita, sin montar el
+// personaje ni abrir el chat antes del ingreso.
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1085,7 +1084,7 @@ export const ESLOGAN = "Un lugar para tu trabajo clínico";
 
 /** Una frase concreta de entrada, centrada en el trabajo clínico. */
 export const ENTRADA_QUE_HACE =
-  "Sesión acompaña tu trabajo clínico: las notas de cada encuentro, el recorrido de tus pacientes y la organización del consultorio, en un mismo lugar.";
+  "Sesión reúne la organización del consultorio y la documentación clínica de cada paciente, con asistencia de inteligencia artificial y revisión profesional.";
 
 /**
  * Las tres cosas que hace, una línea cada una y en este orden: la nota
@@ -1100,15 +1099,53 @@ export const ENTRADA_QUE_HACE =
  * que tiene cualquier psicóloga frente a una nota escrita por una máquina.
  */
 export const ENTRADA_AFIRMACIONES = [
-  "La nota clínica se escribe sola y la aprobás vos.",
-  "Los cobros y los recordatorios, al día.",
-  "Un análisis de tu propia práctica, hecho para vos.",
+  "La IA prepara un borrador de nota clínica y la aprobás vos.",
+  "Agenda, recordatorios por SMS y cobros.",
+  "Un análisis de la sesión para reflexionar sobre tu práctica.",
 ] as const;
 
-/** El cifrado para la subida empieza al terminar, no durante la captura.
- * La copia local previa no está cifrada: no prometer protección que no existe. */
+/** Almacenamiento cifrado; no afirma cifrado de extremo a extremo ni
+ * incluye los datos administrativos o las copias exportadas. */
 export const ENTRADA_CONFIDENCIALIDAD =
-  "Al terminar, el audio se cifra antes de subirse. La copia local previa no está cifrada.";
+  "El audio se cifra por tramos en tu dispositivo antes de guardarse y enviarse. Las notas, las transcripciones, el análisis y el Recorrido se guardan cifrados.";
+
+// Portada. Respaldo de cada afirmación: docs/pendientes/portada.md.
+export const PORTADA_ACCESO = "Entrar a tu cuenta";
+export const PORTADA_FUNCIONES_TITULO = "De la agenda al Recorrido";
+export const PORTADA_FUNCIONES = [
+  {
+    titulo: "Agenda, recordatorios y cobros",
+    parrafos: [
+      "Organizá turnos únicos o recurrentes y activá recordatorios por SMS. Registrá los cobros y consultá las deudas de cada paciente.",
+    ],
+  },
+  {
+    titulo: "De la sesión a la nota clínica",
+    parrafos: [
+      "Con autorización de la paciente, grabá la sesión. El audio se transcribe y la IA prepara un borrador de nota SOAP: Subjetivo, Objetivo, Análisis y Plan. Vos lo revisás, corregís y aprobás.",
+    ],
+  },
+  {
+    titulo: "El Recorrido de cada paciente",
+    parrafos: [
+      "Un historial longitudinal del proceso. Después de aprobar una nota, la IA propone cómo incorporar esa sesión al Recorrido. Vos decidís si aceptás, editás o descartás la propuesta.",
+      "Podés exportar el Recorrido a PDF desde la impresión del navegador. Esa copia queda sin cifrar, bajo tu cuidado.",
+    ],
+  },
+  {
+    titulo: "Una lectura de tu trabajo",
+    parrafos: [
+      "Para vos ofrece un análisis de la sesión a partir de la transcripción, con observaciones sobre tus intervenciones. Es una herramienta de reflexión; no reemplaza la supervisión clínica.",
+    ],
+  },
+] as const;
+export const PORTADA_CIFRADO = "Datos clínicos cifrados";
+export const PORTADA_LUPITA_TITULO = "Lupita, para orientarte";
+export const PORTADA_LUPITA =
+  "Lupita responde dudas sobre cómo usar Sesión a partir de su guía de ayuda. No consulta tus pacientes ni tus montos.";
+export const PORTADA_LUPITA_CUIDADO =
+  "Sí recibe lo que escribís en el chat: evitá incluir datos clínicos o personales.";
+export const PORTADA_PIE = "© Mariana Roldán";
 
 /** Los rótulos del formulario. Estaban escritos a mano en la página. */
 export const ENTRADA_EMAIL = "Email";

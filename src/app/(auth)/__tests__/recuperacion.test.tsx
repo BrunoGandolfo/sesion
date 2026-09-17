@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import RecuperarPage from "@/app/(auth)/recuperar/page";
 import { RestablecerForm } from "@/app/(auth)/restablecer/restablecer-form";
-import { ENTRADA_EMAIL, ENTRADA_CONTRASENA, ENTRADA_REPETIR, ENTRADA_RECUPERAR_BOTON, ENTRADA_RECUPERAR_ENVIADO, ENTRADA_RESTABLECER, ENTRADA_PASSWORD_NO_COINCIDE } from "@/lib/glosario";
+import { ENTRADA_EMAIL, ENTRADA_CONTRASENA, ENTRADA_REPETIR, ENTRADA_RECUPERAR_BOTON, ENTRADA_RECUPERAR_ENVIADO, ENTRADA_RESTABLECER, ENTRADA_PASSWORD_NO_COINCIDE, ENTRADA_QUE_HACE } from "@/lib/glosario";
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
@@ -37,7 +37,7 @@ it("sin token no permite enviar contraseñas", () => {
 it("recuperar pone el formulario y la vuelta a entrar antes de la explicación", () => {
   render(<RecuperarPage />);
   const formulario = screen.getByLabelText(ENTRADA_EMAIL).closest("form")!;
-  const explicacion = screen.getByText("Sesión acompaña tu trabajo clínico: las notas de cada encuentro, el recorrido de tus pacientes y la organización del consultorio, en un mismo lugar.");
+  const explicacion = screen.getByText(ENTRADA_QUE_HACE);
   const volver = screen.getByRole("link", { name: "Volver a entrar" });
   expect(formulario.compareDocumentPosition(explicacion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(volver.compareDocumentPosition(explicacion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
