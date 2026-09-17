@@ -36,6 +36,11 @@ CI rojo; ese workflow no migra ni tiene permiso para avanzar release.
 
 ### El día de publicación es un acto manual
 
+**Primera publicación del esquema nuevo:** antes de habilitar Publicar, seguir
+[Reconstruir producción](https://github.com/BrunoGandolfo/sesion/blob/main/docs/operaciones/reconstruir-produccion.md). Ese procedimiento
+prepara una base vacía y la cuenta inicial; la secuencia de abajo no convierte
+el esquema viejo ni limpia el audio de prueba.
+
 Al cierre de Fase 4, Publicar está **deshabilitado desde la interfaz de GitHub**.
 Cambiar su archivo no lo habilita. **Bruno debe volver a habilitarlo antes del
 día de publicación**; esa acción quedó pendiente y no la hizo el agente.
