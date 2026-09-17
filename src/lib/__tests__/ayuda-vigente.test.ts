@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
 import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/audio/contrato";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
@@ -157,7 +157,7 @@ it("la ayuda describe los botones del grabador que existen", () => {
 
 it("no convierte borrado, cifrado parcial y proveedores en garantías absolutas", () => {
   const privacidad = documento("12-camino-del-audio-y-privacidad.md");
-  expect(privacidad).toContain("Si falla, se reintenta");
+  expect(privacidad).toContain("Si falla, reintenta");
   expect(privacidad).toContain("las notas privadas de la ficha, las notas del turno");
   expect(privacidad).toContain("vocabulario que cargás también se envía");
   expect(privacidad).toContain("requieren comprobación");
@@ -285,7 +285,7 @@ describe("la ayuda sigue al consentimiento vigente", () => {
 
   it("nombra solo la versión vigente como la del texto de autorización", () => {
     expect(consentimiento).toContain(`Versión ${CONSENTIMIENTO_VERSION}`);
-    // "consentimiento 2.2", "es la **2.2**", "firme la 2.2": ninguna otra versión.
+    // "consentimiento 2.3", "es la **2.3**", "firme la 2.3": ninguna otra versión.
     const menciones = [...ayuda().matchAll(/(?:consentimiento|texto es|autorización es la|autorización vigente es la|firme la|firmar la) \**(\d+\.\d+)\**/gi)].map((m) => m[1]);
     expect(menciones.length).toBeGreaterThanOrEqual(5);
     expect(new Set(menciones)).toEqual(new Set([CONSENTIMIENTO_VERSION]));
@@ -344,15 +344,20 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     expect(ayuda()).not.toMatch(/cada exportación queda registrada|registra cada vez que lo hace/i);
   });
 
-  it("donde el consentimiento no describe el código, la ayuda lo dice", () => {
-    // Borrado en AssemblyAI: el consentimiento promete repetir hasta la
-    // confirmación; el código se rinde a los 20 intentos.
-    const prometeHastaConfirmar = consentimiento.includes("repite el pedido hasta que el servicio confirma que lo hizo");
-    const nota = "Esa frase del consentimiento está pendiente de corregir";
-    if (prometeHastaConfirmar && Number.isFinite(POLITICA_POR_TIPO.borrar_transcript_asr.tope)) {
-      expect(documento("12-camino-del-audio-y-privacidad.md")).toContain(nota);
-    } else {
-      expect(documento("12-camino-del-audio-y-privacidad.md")).not.toContain(nota);
-    }
+  it("el borrado en AssemblyAI: el consentimiento lo cuenta como ocurre y la ayuda ya no advierte una diferencia", () => {
+    // Hasta la 2.2 el consentimiento prometía repetir el pedido hasta la
+    // confirmación, y la ayuda lo advertía. Desde la 2.3 dice el tope, y la
+    // advertencia no puede volver.
+    expect(consentimiento).not.toContain("repite el pedido hasta que el servicio confirma que lo hizo");
+    expect(consentimiento).toContain(`repite ese pedido durante unos ${ASR_BORRADO_DIAS_APROX} días, hasta que el servicio responde que lo borró o que ya no existe`);
+    expect(POLITICA_POR_TIPO.borrar_transcript_asr.tope).toBe(ASR_BORRADO_MAX_INTENTOS);
+    const privacidad = documento("12-camino-del-audio-y-privacidad.md");
+    expect(privacidad).not.toMatch(/Esa frase del consentimiento|no menciona ese tope/);
+    expect(ayuda()).not.toMatch(/Esa frase del consentimiento está pendiente de corregir/);
+    // La ayuda cuenta las dos partes del borrado, igual que el consentimiento.
+    expect(privacidad).toContain("Apenas termina la transcripción, bien o mal, la app le pide a AssemblyAI que borre el audio y el texto");
+    expect(privacidad).toContain(`**hasta ${ASR_BORRADO_MAX_INTENTOS} veces**, durante **unos ${ASR_BORRADO_DIAS_APROX} días**, hasta que AssemblyAI responde que lo borró o que ya no existe`);
+    expect(privacidad).toContain("la app no puede comprobar que AssemblyAI lo haya borrado");
+    expect(documento("00-que-es-sesion.md")).toContain(`se reintenta durante unos ${ASR_BORRADO_DIAS_APROX} días`);
   });
 });

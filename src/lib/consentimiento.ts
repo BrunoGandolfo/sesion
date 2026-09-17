@@ -1,4 +1,4 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.2.
+// Texto del consentimiento informado para grabar sesiones, versión 2.3.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
@@ -12,8 +12,12 @@
 // firma anterior no cubre esa salida: hay que volver a firmar.
 //
 // La 2.2 corrige retención, reintentos, propuesta de la IA y archivo temporal,
-// e incluye el párrafo de exportación de la 2.1. Las firmas anteriores
-// necesitan refirma. La vigencia técnica no se cambia en esta tanda: la API
+// e incluye el párrafo de exportación de la 2.1.
+//
+// La 2.3 cuenta el borrado en AssemblyAI como ocurre (un pedido inmediato y
+// reintentos acotados sólo si la transcripción se completó), la copia cifrada
+// que queda en el teléfono y que el borrador de la IA se guarda antes de
+// aprobar. Las firmas anteriores necesitan refirma. La vigencia técnica no se cambia en esta tanda: la API
 // devuelve sugiereRefirmar y la profesional debe pedir la nueva firma.
 
 import type { db } from "@/lib/db";
@@ -21,13 +25,19 @@ import type { db } from "@/lib/db";
 import {
   ANTHROPIC_RETENCION_CERO,
   ASR_BORRADO_CON_REINTENTO,
+  ASR_BORRADO_DIAS_APROX,
+  ASR_BORRADO_INMEDIATO,
+  ASR_REINTENTO_SOLO_SI_SE_COMPLETO,
   AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL,
   BACKUP_INCLUYE_CLAVE_AUDIO,
+  BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR,
   CLAVE_AUDIO_DESTRUIDA_AL_APROBAR,
   CLAVE_POR_SESION,
+  COPIA_LOCAL_CIFRADA_SE_CONSERVA,
   LIMPIEZA_AUDIO_DIAS_APROX,
   LIMPIEZA_AUDIO_REINTENTA,
   LLM_RECIBE_CONTEXTO,
+  LLM_RECIBE_NOTA_APROBADA,
   MARCO_LEGAL,
   MEDIOS_CAPTURA,
   PROVEEDORES,
@@ -39,9 +49,10 @@ import {
   REVOCAR_BORRA_HISTORIA,
   VOCABULARIO_A_ASR,
   VOCABULARIO_INCLUYE_NOMBRES,
+  VOCABULARIO_SOLO_A_ASR,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.2";
+export const CONSENTIMIENTO_VERSION = "2.3";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
@@ -68,13 +79,16 @@ export function generarTextoConsentimiento(params: {
       : ` Recibe además una lista de términos clínicos que ${nombreProfesional} carga para que se escriban bien; esa lista no incluye nombres de personas.`
     : "";
 
-  const borradoAsr = ASR_BORRADO_CON_REINTENTO
-    ? " Cuando termina, la aplicación le pide que borre el audio y el texto, y repite el pedido hasta que el servicio confirma que lo hizo."
+  const borradoAsr = ASR_BORRADO_INMEDIATO && ASR_BORRADO_CON_REINTENTO && ASR_REINTENTO_SOLO_SI_SE_COMPLETO
+    ? ` Apenas termina, bien o mal, la aplicación le pide que borre el audio y el texto. Si la transcripción se completó, además repite ese pedido durante unos ${ASR_BORRADO_DIAS_APROX} días, hasta que el servicio responde que lo borró o que ya no existe; si aun así no lo logra, el borrado queda marcado como fallido. Si la transcripción falla, o el programa se interrumpe o no logra dejar anotado el reintento, ese pedido se hace una sola vez o no llega a hacerse, y esta aplicación no puede comprobar que el servicio lo haya borrado.`
     : " Cuando termina, la aplicación le pide que borre el audio y el texto; esta aplicación no puede comprobar si lo hizo.";
 
-  const contexto = LLM_RECIBE_CONTEXTO
+  const contexto = (LLM_RECIBE_CONTEXTO
     ? "recibe el texto de la sesión y el resumen de tu proceso hasta ese día, y redacta el borrador de la nota"
-    : "recibe el texto de la sesión y redacta el borrador de la nota";
+    : "recibe el texto de la sesión y redacta el borrador de la nota")
+    + (LLM_RECIBE_NOTA_APROBADA
+      ? `. Cuando ${nombreProfesional} aprueba la nota, recibe esa nota, con sus correcciones, y el resumen vigente, para proponer cómo actualizarlo`
+      : "");
 
   const retencion = ANTHROPIC_RETENCION_CERO
     ? ` La cuenta que usa esta aplicación está configurada para que ${anthropic.nombre} no conserve ese contenido ni lo use para entrenar sus sistemas.`
@@ -88,9 +102,16 @@ export function generarTextoConsentimiento(params: {
     : "La aplicación intenta borrar el archivo.");
 
   const plazos = `Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días si son diarias y hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses si son mensuales.`;
+  const copiaLocal = COPIA_LOCAL_CIFRADA_SE_CONSERVA
+    ? ` En el teléfono de ${nombreProfesional} queda una copia cifrada de la grabación: la aplicación no la borra, y desde la aprobación ya no puede abrirla.`
+    : "";
   const backups = BACKUP_INCLUYE_CLAVE_AUDIO
-    ? ` ${plazos} No contienen el audio, pero sí pueden contener, cifrada, la clave de un audio que todavía no se había borrado. Esa clave puede conservarse hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses, aunque ya se haya eliminado de la base que usa la aplicación. Si el archivo no se pudo borrar, esa copia de la clave podría permitir abrirlo.`
+    ? ` ${plazos} No contienen el audio, pero sí pueden contener, cifrada, la clave de un audio que todavía no se había borrado. Esa clave puede conservarse hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses, aunque ya se haya eliminado de la base que usa la aplicación. Si el archivo no se pudo borrar, esa copia de la clave podría permitir abrirlo${COPIA_LOCAL_CIFRADA_SE_CONSERVA ? ", y lo mismo vale para la copia cifrada del teléfono" : ""}.`
     : ` ${plazos} No contienen el audio ni su clave.`;
+
+  const nota = BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR
+    ? `el registro escrito que ${nombreProfesional} guarda en tu historia clínica. Primero la inteligencia artificial escribe un borrador, que queda guardado, cifrado; ${nombreProfesional} lo revisa, lo corrige y lo aprueba antes de que forme parte de tu historia clínica.`
+    : `el registro escrito que ${nombreProfesional} guarda en tu historia clínica y que ella revisa y aprueba antes de que quede guardado.`;
 
   const resumen = RESUMEN_PROPUESTO_POR_IA
     ? `También para preparar, a partir de varias sesiones, un resumen de tu proceso. Lo propone la misma inteligencia artificial que redacta la nota; ${nombreProfesional} lo revisa, lo corrige o lo descarta. Solo queda vigente cuando ella lo acepta. La decisión sigue siendo suya.`
@@ -119,7 +140,7 @@ Antes de empezar queremos contarte cómo funciona la grabación de las sesiones 
 El audio de tu sesión de psicoterapia con ${nombreProfesional}, en el consultorio ubicado en ${direccionConsultorio}.${soloAudio ? " No se graba video." : ""}
 
 ¿Para qué?
-Para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: el registro escrito que ${nombreProfesional} guarda en tu historia clínica y que ella revisa y aprueba antes de que quede guardado. ${resumen} También se prepara un análisis de su propio trabajo que solo ella ve.
+Para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: ${nota} ${resumen} También se prepara un análisis de su propio trabajo que solo ella ve.
 
 ¿Por dónde pasa el audio?
 ${respaldoLocal}
@@ -127,13 +148,13 @@ ${respaldoLocal}
 3. ${assemblyai.nombre}, una empresa de ${assemblyai.pais}, convierte el audio en texto. Recibe el audio sin cifrar.${vocabulario}${borradoAsr}
 4. ${anthropic.nombre}, otra empresa de ${anthropic.pais}, ${contexto}.${retencion}
 
-No se les envía tu teléfono ni tu documento. Lo que sí reciben es lo que se dice en la sesión${VOCABULARIO_A_ASR ? " y las palabras de la lista" : ""}.
+No se les envía tu teléfono ni tu documento. Lo que sí reciben es lo que se dice en la sesión${VOCABULARIO_A_ASR ? (VOCABULARIO_SOLO_A_ASR ? `; además, ${assemblyai.nombre} recibe las palabras de la lista` : " y las palabras de la lista") : ""}${LLM_RECIBE_CONTEXTO || LLM_RECIBE_NOTA_APROBADA ? `, y ${anthropic.nombre}, el resumen de tu proceso y la nota aprobada` : ""}.
 
 ¿Quién puede escuchar o leer?
 ${nombreProfesional}, desde su cuenta. Nadie más de su consultorio. ${assemblyai.nombre} y ${anthropic.nombre} procesan de forma automática; sus condiciones dicen que ninguna persona accede al contenido, pero eso depende de ellos y esta aplicación no puede verificarlo.
 
 ¿Cuánto tiempo queda el audio?
-Hasta que ${nombreProfesional} revisa y aprueba la nota, en general el mismo día. ${limpieza}${backups}
+Hasta que ${nombreProfesional} revisa y aprueba la nota, en general el mismo día. ${limpieza}${copiaLocal}${backups}
 
 ¿Qué queda guardado?
 En la base de datos de la aplicación (${neon.nombre}), cifrado, y accesible solo para ${nombreProfesional}:

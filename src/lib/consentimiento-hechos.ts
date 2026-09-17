@@ -43,13 +43,41 @@ export const VOCABULARIO_A_ASR = true;
 export const VOCABULARIO_INCLUYE_NOMBRES = true;
 
 /**
- * El borrado en AssemblyAI es un trabajo durable (borrar_transcript_asr):
- * se reintenta hasta que el proveedor confirma (200/404). Área 2 y 4.
+ * El borrado en AssemblyAI tiene dos partes, y el texto tiene que contar las dos:
+ *
+ * 1. Inmediato: asr_assemblyai.transcribir() pide DELETE en el `finally` que
+ *    envuelve la espera del transcript, salga bien o mal. Es de mejor
+ *    esfuerzo: un solo pedido, sin reintento, sólo loguea el status.
+ * 2. Durable: sólo si la transcripción se completó, processor.py registra el
+ *    id (registrar_asr) y la app crea borrar_transcript_asr en la misma
+ *    transacción. Ese trabajo reintenta con la política de
+ *    trabajos/politica.ts (20 intentos, unas dos semanas) y trabajos/resolver
+ *    lo deja `fallido` al agotarlos.
+ *
+ * Lo que NO cubre el durable: una transcripción que falla o vence (queda sólo
+ * el pedido inmediato), un proceso que muere antes de ese pedido, un audio
+ * subido cuyo transcript no llegó a crearse (no hay id que borrar) y un
+ * registro del id que falla (processor.py lo loguea y sigue).
  */
 export const ASR_BORRADO_CON_REINTENTO = true;
+export const ASR_BORRADO_INMEDIATO = true;
+/** El reintento durable existe sólo si la transcripción se completó. */
+export const ASR_REINTENTO_SOLO_SI_SE_COMPLETO = true;
+export const ASR_BORRADO_MAX_INTENTOS = 20;
+export const ASR_BORRADO_DIAS_APROX = 15;
+/** processor.borrar_transcript_asr: 200 (borrado) y 404 (no existe) son hecho.
+ * Un 404 no distingue "lo borró antes" de "nunca existió con ese id". */
+export const ASR_CONFIRMACION_HTTP = [200, 404] as const;
 
 /** Anthropic recibe la transcripción y el hilo vigente del paciente. */
 export const LLM_RECIBE_CONTEXTO = true;
+
+/** hilo/trabajo.ts (adjuntoContexto): para proponer el Recorrido, Anthropic
+ * recibe la nota APROBADA (notaFinal, con las correcciones de la
+ * profesional), sus datos y el Recorrido vigente. La lista de palabras no le
+ * llega: sólo va a AssemblyAI (clinical_analyzer.py no la usa). */
+export const LLM_RECIBE_NOTA_APROBADA = true;
+export const VOCABULARIO_SOLO_A_ASR = true;
 
 /** clinical_analyzer.py usa el mismo proveedor/modelo para la nota y el
  * resumen. hilo/trabajo.ts sólo crea una propuesta; hilo/escribir.ts exige
@@ -59,6 +87,16 @@ export const RESUMEN_PROPUESTO_POR_IA = true;
 /** audio_entrada.py: armar_audio usa TemporaryDirectory, escribe el audio
  * descifrado y elimina el directorio al salir, también ante excepciones. */
 export const AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL = true;
+
+/** sesion/resultado.ts guarda la nota de la IA (notaIa), cifrada, apenas
+ * llega: antes de que la profesional la apruebe. Al aprobar se guarda aparte
+ * la nota final y el borrador se conserva (se ve como "borrador original"). */
+export const BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR = true;
+
+/** audio/almacen.ts no tiene ninguna operación que borre segmentos o
+ * grabaciones cifradas del navegador: sólo retirarCopiasViejas, que borra la
+ * base vieja sin cifrar. La copia cifrada del teléfono se conserva. */
+export const COPIA_LOCAL_CIFRADA_SE_CONSERVA = true;
 
 /** Workspace de Anthropic con retención deshabilitada. Verificado en la
  *  consola el 2026-09-04 (docs/operaciones.md §1). Renovar la fecha a mano. */

@@ -34,15 +34,15 @@ cada paciente.
   datos administrativos tienen otro tratamiento.
 - **AssemblyAI** recibe audio y vocabulario, que puede incluir nombres propios.
   **Anthropic** recibe la transcripción y el Recorrido para redactar, y propone
-  los cambios del Recorrido. El borrado en AssemblyAI se reintenta hasta 20
-  veces.
+  los cambios del Recorrido. A AssemblyAI se le pide borrar apenas termina la
+  transcripción y, si se completó, se reintenta durante unos 15 días.
 - Los respaldos diarios se conservan **30 días** y hay además una copia mensual
   que se conserva **hasta 12 meses**. No contienen audio, pero pueden conservar
   cifrada la clave de una sesión todavía no aprobada.
 - El audio se descifra para transcribirlo en un archivo temporal del servidor,
   que se borra al terminar.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
-- La autorización vigente es la **2.2**. Las firmas anteriores necesitan que la
+- La autorización vigente es la **2.3**. Las firmas anteriores necesitan que la
   paciente firme la nueva. Ver `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.
