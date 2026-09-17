@@ -20,10 +20,11 @@ vigentes. → `12-camino-del-audio-y-privacidad.md`
 
 **4. ¿Cuándo se borra el audio?**
 Al aprobar se destruye la clave activa y se programa el borrado del audio
-remoto, con hasta 20 reintentos. Los respaldos diarios se conservan 30 días y
-los mensuales 12 meses; no contienen audio, pero pueden conservar su clave
-cifrada. La copia cifrada que queda en el navegador no se borra, pero sin la
-clave no se puede abrir.
+remoto, con hasta 20 reintentos durante unos 15 días; si no lo logra, el borrado
+queda marcado como fallido. Los respaldos diarios se conservan 30 días y los
+mensuales hasta 12 meses; no contienen audio, pero pueden conservar su clave
+cifrada, y con ella un audio que no se pudo borrar podría abrirse. La copia
+cifrada que queda en el navegador no se borra; la app ya no puede abrirla.
 → `12-camino-del-audio-y-privacidad.md`
 
 **5. ¿La transcripción también se borra?**
@@ -139,8 +140,8 @@ después no borra el contador.
 
 **28. ¿Puedo guardar el Recorrido de una paciente fuera de la app?**
 Sí. En la pestaña **Recorrido**, **Exportar PDF** abre una hoja para imprimir o
-guardar como PDF. El archivo sale sin cifrar y queda bajo tu cuidado; cada
-exportación queda registrada. → `10-el-hilo-y-el-recorrido.md`
+guardar como PDF. El archivo sale sin cifrar y queda bajo tu cuidado; queda
+registrada la preparación de cada copia. → `10-el-hilo-y-el-recorrido.md`
 
 **29. ¿La IA cambia el Recorrido sola?**
 No. Después de aprobar una nota, la IA prepara una propuesta y vos decidís:

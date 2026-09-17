@@ -93,7 +93,9 @@ guardada** y permanecés en la nota, con el aviso *"Nota aprobada. El audio se
 borra en segundo plano."* y, si hay análisis, **Leer Para vos**.
 
 La clave que abre el audio se destruye en ese momento; el borrado remoto queda
-en segundo plano y se reintenta. No equivale a borrar los respaldos anteriores.
+en segundo plano y se reintenta durante unos 15 días, hasta marcarse como fallido
+si no lo logra. No equivale a borrar los respaldos anteriores, que pueden
+conservar la clave hasta 12 meses.
 Ver `12-camino-del-audio-y-privacidad.md`.
 
 Si la nota cambió mientras la revisabas (por ejemplo, porque llegó una nueva

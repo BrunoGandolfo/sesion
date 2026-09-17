@@ -13,7 +13,9 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
 3. Cada tramo se envía ya cifrado mientras seguís grabando.
 
 La copia cifrada queda en el navegador aunque la nota ya esté aprobada: la app no
-la borra. Sin la clave, que se destruye al aprobar, no se puede abrir.
+la borra. Al aprobar, la app destruye la clave en la base con la que trabaja y ya
+no puede abrirla. Una copia de la clave puede seguir en los respaldos (ver
+abajo).
 
 La pantalla de entrada todavía dice que *"La copia local previa no está
 cifrada"*. Ese texto quedó de la versión anterior del grabador y ya no es cierto;
@@ -25,21 +27,26 @@ está pendiente de corregir.
 2. El proceso que corre en **Railway** descarga los tramos, comprueba que ninguno
    haya cambiado, los descifra y los une para transcribir. Para unirlos usa
    archivos temporales en un disco privado del servidor, que se borran al
-   terminar. El texto del consentimiento dice que se descifra *"solo en
-   memoria"*: esa frase no describe este paso y está pendiente de corregir.
+   terminar. El consentimiento lo cuenta así: se descifra *"en un archivo
+   temporal del servidor"* que *"se borra al terminar"*.
 3. **AssemblyAI** recibe el audio sin cifrar y el vocabulario.
 4. Al terminar la transcripción, la app le pide a AssemblyAI que la borre. Si
    falla, se reintenta, cada vez más espaciado, **hasta 20 veces**; si no lo
    logra, avisa a quien administra Sesión. Hay un caso raro, una caída del
    proceso en el momento justo, en el que ese reintento no queda registrado.
+   El consentimiento dice que el pedido se repite *"hasta que el servicio
+   confirma que lo hizo"*: no menciona ese tope. Esa frase del consentimiento
+   está pendiente de corregir.
 5. **Anthropic** recibe la transcripción y el Recorrido vigente de la paciente
    para redactar la nota, la transcripción para el análisis **Para vos**, y la
    nota aprobada con el Recorrido vigente para preparar una propuesta del
-   Recorrido.
-6. Al aprobar la nota, la clave del audio se destruye en el registro activo y se
-   programa el borrado de los tramos en R2. Si falla, se reintenta hasta 20 veces
-   y se comprueba que el archivo ya no esté. La transcripción y la nota se
-   conservan.
+   Recorrido. El resumen del proceso lo propone la misma IA que redacta la nota;
+   solo queda vigente cuando lo aceptás.
+6. Al aprobar la nota, la app destruye siempre la clave del audio en la base con
+   la que trabaja: desde ahí ya no puede abrir el audio, aunque siga pendiente de
+   borrado. Después intenta borrar los tramos en R2 y comprueba que ya no estén.
+   Si falla, reintenta **hasta 20 veces**, durante **unos 15 días**; después el
+   borrado queda marcado como fallido. La transcripción y la nota se conservan.
 
 ## Nombres y proveedores
 
@@ -69,15 +76,17 @@ disponibles para organizar el consultorio.
 
 Hay un registro de auditoría: no es una copia de las notas y no guarda su texto.
 Queda registrado, entre otras cosas, cada vez que abrís una nota, cada lectura de
-la transcripción, cada exportación del Recorrido a PDF y cada cambio del
-Recorrido. Ese registro no se puede modificar ni borrar desde la app, y la base
+la transcripción, la preparación de cada copia del Recorrido para PDF y cada
+cambio del Recorrido. Ese registro no se puede modificar ni borrar desde la app, y la base
 lo impide también.
 
 ## El PDF del Recorrido
 
 El PDF que exportás desde el Recorrido sale de la app **sin cifrar**: queda bajo
-tu cuidado, como cualquier registro en papel. El consentimiento 2.1 se lo cuenta
-a la paciente. Ver `10-el-hilo-y-el-recorrido.md`.
+tu cuidado, como cualquier registro en papel. Queda registrada la preparación de
+la copia; volver a imprimir desde la hoja ya abierta no agrega otro registro. El
+consentimiento 2.2 se lo cuenta a la paciente. Ver
+`10-el-hilo-y-el-recorrido.md`.
 
 ## Respaldos y eliminación
 
@@ -88,9 +97,11 @@ Hay dos clases de respaldo de la base:
   conserva **12 meses**.
 
 No contienen audio, pero sí pueden contener cifrada la clave de una sesión que
-todavía no estaba aprobada cuando se hizo la copia. Aprobar hoy no cambia los
-respaldos anteriores. El consentimiento menciona solo los 30 días: esa diferencia
-está pendiente de una decisión del dueño.
+todavía no estaba aprobada cuando se hizo la copia. Esa clave puede conservarse
+**hasta 12 meses** en un respaldo mensual, aunque ya se haya borrado de la base
+con la que trabaja la app. Si el audio no se pudo borrar, esa copia de la clave
+podría permitir abrirlo. Aprobar hoy no cambia los respaldos anteriores. El
+consentimiento 2.2 cuenta los dos plazos.
 
 Quitar la clave activa no garantiza que hayan desaparecido todas las copias.
 Los pedidos de borrado se siguen con reintentos; el funcionamiento y la
@@ -98,11 +109,15 @@ restauración de los respaldos requieren comprobación.
 
 ## Autorización y revocación
 
-La versión vigente del texto de autorización es la **2.1**. Revocar la
+La versión vigente del texto de autorización es la **2.2**. Revocar la
 autorización impide grabaciones futuras. No borra la historia que ya quedó
-guardada. Las firmas de versiones anteriores siguen vigentes para grabar, pero no
-cuentan que el Recorrido se puede exportar a PDF: conviene que la paciente firme
-la 2.1. La app no te lo sugiere en pantalla; depende de que lo pidas vos.
+guardada.
+
+**Las firmas de versiones anteriores, incluida la 2.1, necesitan que la paciente
+firme la 2.2**: no cuentan los plazos reales de borrado y de respaldo, que el
+resumen del proceso lo propone la IA ni el descifrado en archivo temporal. La app
+no bloquea la grabación con una firma anterior y no te sugiere la nueva en
+pantalla: depende de que la pidas vos.
 
 <!-- fuentes:
 src/lib/consentimiento-hechos.ts

@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { RESPALDO_LOCAL_CIFRADO, RETENCION_BACKUPS_DIAS, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/audio/contrato";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
 import { DISPERSION_MINUTOS } from "@/lib/recordatorios-programacion";
@@ -269,4 +270,89 @@ it("describe los controles clínicos según lo que la pantalla ofrece hoy", () =
   } else {
     expect(documento("08-la-nota-clinica.md")).not.toContain("Ver transcripción todavía no está disponible");
   }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// La ayuda sigue al consentimiento vigente. Cada caso lee la versión, los
+// hechos y el texto que se genera: si el consentimiento cambia y la ayuda no,
+// falla. La ayuda se ajusta al consentimiento, no al revés.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("la ayuda sigue al consentimiento vigente", () => {
+  const consentimiento = generarTextoConsentimiento({ nombrePaciente: "P", nombreProfesional: "Profesional", direccionConsultorio: "D" });
+  /** Toda la ayuda en una línea, para buscar frases partidas por el ancho. */
+  const ayuda = () => leerCorpus().replace(/\s+/g, " ");
+
+  it("nombra solo la versión vigente como la del texto de autorización", () => {
+    expect(consentimiento).toContain(`Versión ${CONSENTIMIENTO_VERSION}`);
+    // "consentimiento 2.2", "es la **2.2**", "firme la 2.2": ninguna otra versión.
+    const menciones = [...ayuda().matchAll(/(?:consentimiento|texto es|autorización es la|autorización vigente es la|firme la|firmar la) \**(\d+\.\d+)\**/gi)].map((m) => m[1]);
+    expect(menciones.length).toBeGreaterThanOrEqual(5);
+    expect(new Set(menciones)).toEqual(new Set([CONSENTIMIENTO_VERSION]));
+    for (const archivo of ["00-que-es-sesion.md", "04-pacientes-y-ficha.md", "10-el-hilo-y-el-recorrido.md", "12-camino-del-audio-y-privacidad.md"]) {
+      expect(documento(archivo)).toContain(CONSENTIMIENTO_VERSION);
+    }
+    // Una firma anterior necesita la nueva: la ayuda no dice que alcance.
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain(`necesitan que la paciente firme la ${CONSENTIMIENTO_VERSION}`);
+    expect(documento("04-pacientes-y-ficha.md")).toContain(`necesitan que la paciente firme la ${CONSENTIMIENTO_VERSION}`);
+  });
+
+  it("los plazos de respaldo son los del consentimiento", () => {
+    expect(consentimiento).toContain(`${RETENCION_BACKUPS_DIAS} días si son diarias y hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses si son mensuales`);
+    for (const archivo of ["00-que-es-sesion.md", "12-camino-del-audio-y-privacidad.md", "13-preguntas-frecuentes.md"]) {
+      expect(documento(archivo)).toContain(`${RETENCION_BACKUPS_DIAS} días`);
+      expect(documento(archivo)).toContain(`${RETENCION_BACKUPS_MENSUALES_MESES} meses`);
+    }
+    expect(BACKUP_INCLUYE_CLAVE_AUDIO).toBe(true);
+    expect(consentimiento).toContain("esa copia de la clave podría permitir abrirlo");
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("esa copia de la clave podría permitir abrirlo");
+    expect(ayuda()).not.toMatch(/consentimiento menciona solo|sin la clave no se puede abrir|Sin la clave, que se destruye al aprobar, no se puede abrir/i);
+  });
+
+  it("el borrado del audio se rinde a los días que dice el consentimiento", () => {
+    expect(CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(true);
+    expect(POLITICA_POR_TIPO.borrar_audio_r2.tope).toBe(LIMPIEZA_AUDIO_MAX_INTENTOS);
+    expect(consentimiento).toContain(`durante unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; después el borrado queda marcado como fallido`);
+    for (const archivo of ["00-que-es-sesion.md", "08-la-nota-clinica.md", "12-camino-del-audio-y-privacidad.md", "13-preguntas-frecuentes.md"]) {
+      expect(documento(archivo)).toContain(`unos ${LIMPIEZA_AUDIO_DIAS_APROX} días`);
+    }
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("queda marcado como fallido");
+  });
+
+  it("el resumen del Recorrido lo propone la IA y decide la profesional", () => {
+    expect(RESUMEN_PROPUESTO_POR_IA).toBe(true);
+    expect(consentimiento).toContain("Lo propone la misma inteligencia artificial que redacta la nota");
+    expect(documento("10-el-hilo-y-el-recorrido.md")).toContain("La redacta la misma IA que escribe la nota");
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("lo propone la misma IA que redacta la nota");
+    expect(documento("04-pacientes-y-ficha.md")).toContain("lo propone la IA y solo queda vigente cuando lo aceptás");
+  });
+
+  it("el descifrado en el servidor usa un archivo temporal", () => {
+    expect(AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL).toBe(true);
+    expect(consentimiento).toContain("lo descifra en un archivo temporal del servidor");
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("temporal del servidor");
+    expect(documento("00-que-es-sesion.md")).toContain("archivo temporal del servidor");
+    expect(ayuda()).not.toMatch(/solo en memoria/);
+  });
+
+  it("la exportación a PDF: registra la preparación de la copia", () => {
+    expect(RECORRIDO_EXPORTABLE).toBe(true);
+    expect(consentimiento).toContain("La preparación de esa copia queda registrada por la aplicación");
+    expect(documento("10-el-hilo-y-el-recorrido.md")).toContain("Queda registrada la preparación de la copia");
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("Queda registrada la preparación de la copia");
+    expect(documento("13-preguntas-frecuentes.md")).toContain("registrada la preparación de cada copia");
+    expect(ayuda()).not.toMatch(/cada exportación queda registrada|registra cada vez que lo hace/i);
+  });
+
+  it("donde el consentimiento no describe el código, la ayuda lo dice", () => {
+    // Borrado en AssemblyAI: el consentimiento promete repetir hasta la
+    // confirmación; el código se rinde a los 20 intentos.
+    const prometeHastaConfirmar = consentimiento.includes("repite el pedido hasta que el servicio confirma que lo hizo");
+    const nota = "Esa frase del consentimiento está pendiente de corregir";
+    if (prometeHastaConfirmar && Number.isFinite(POLITICA_POR_TIPO.borrar_transcript_asr.tope)) {
+      expect(documento("12-camino-del-audio-y-privacidad.md")).toContain(nota);
+    } else {
+      expect(documento("12-camino-del-audio-y-privacidad.md")).not.toContain(nota);
+    }
+  });
 });
