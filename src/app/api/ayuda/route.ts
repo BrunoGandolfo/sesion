@@ -31,6 +31,7 @@ import {
   responderAyudaStreaming,
 } from "../_lib/casos-uso/responder-ayuda";
 import { reservarCupo, devolverCupo } from "../_lib/casos-uso/ayuda/reservar-cupo";
+import { consultarAgenda } from "../_lib/casos-uso/ayuda/agenda";
 import { errorResponse, validationError } from "../_lib/responses";
 
 export const runtime = "nodejs";
@@ -63,7 +64,12 @@ export async function POST(request: Request) {
     const reserva = await reservarCupo(db, userId);
     let flujo: Awaited<ReturnType<typeof responderAyudaStreaming>>;
     try {
-      flujo = await responderAyudaStreaming({ pregunta: parsed.data.pregunta, historial: parsed.data.historial });
+      const ahora = new Date();
+      flujo = await responderAyudaStreaming({
+        pregunta: parsed.data.pregunta,
+        historial: parsed.data.historial,
+        consultarAgenda: (periodo) => consultarAgenda({ prisma: db, organizationId, periodo, ahora }),
+      });
     } catch (error) {
       await devolverCupo(db, reserva);
       throw error;

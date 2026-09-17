@@ -4,8 +4,10 @@ import { registrarAuditoria } from "@/app/api/_lib/auditoria";
 import { responderAyudaStreaming } from "@/app/api/_lib/casos-uso/responder-ayuda";
 import { reservarCupo, devolverCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
 import { ApiError } from "@/app/api/_lib/responses";
+import { db } from "@/lib/db";
+import { getSessionActor } from "@/app/api/_lib/auth";
 
-vi.mock("@/lib/db", () => ({ db: {} }));
+vi.mock("@/lib/db", () => ({ db: { turno: { findMany: vi.fn().mockResolvedValue([]) } } }));
 vi.mock("@/app/api/_lib/auth", () => ({
   getSessionActor: vi.fn().mockResolvedValue({ organizationId: "org", userId: "user" }),
 }));
@@ -68,10 +70,36 @@ it("entrega texto limpio antes de completar el proveedor y audita su largo limpi
 
 const pedir = () => POST(new Request("http://localhost/api/ayuda", { method: "POST", body: JSON.stringify({ pregunta: "¿Cómo hago?" }) }));
 
+it("la capacidad de agenda queda ligada al actor, nunca a la organización del cuerpo", async () => {
+  vi.mocked(responderAyudaStreaming).mockImplementation(async input => {
+    await input.consultarAgenda!("hoy");
+    return { fragmentos: (async function* () { yield "Sin turnos"; })(), resultado: Promise.resolve({ texto: "Sin turnos", tokensEntrada: 1, tokensSalida: 1, cacheLeido: 0, cacheEscrito: 0, motivoDeCorte: "tool_use" }), cancelar: vi.fn() };
+  });
+  const respuesta = await POST(new Request("http://localhost/api/ayuda", {
+    method: "POST", body: JSON.stringify({ pregunta: "Turnos hoy", organizationId: "ajena", userId: "otra" }),
+  }));
+  expect(await respuesta.text()).toBe("Sin turnos");
+  expect(db.turno.findMany).toHaveBeenCalledWith(expect.objectContaining({
+    where: expect.objectContaining({ organizationId: "org", paciente: { organizationId: "org" } }),
+    select: { fecha: true, duracion: true, modalidad: true, paciente: { select: { nombre: true } } },
+  }));
+  expect(reservarCupo).toHaveBeenCalledWith(db, "user");
+  expect(vi.mocked(reservarCupo).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(db.turno.findMany).mock.invocationCallOrder[0]);
+});
+
+it("sin sesión responde 401 antes de reservar, consultar o llamar al proveedor", async () => {
+  vi.mocked(getSessionActor).mockRejectedValueOnce(new ApiError("No autorizado", 401));
+  expect((await pedir()).status).toBe(401);
+  expect(reservarCupo).not.toHaveBeenCalled();
+  expect(responderAyudaStreaming).not.toHaveBeenCalled();
+  expect(db.turno.findMany).not.toHaveBeenCalled();
+});
+
 it("con el cupo agotado responde 429 sin llamar al proveedor", async () => {
   vi.mocked(reservarCupo).mockRejectedValue(new ApiError("Tope diario", 429));
   expect((await pedir()).status).toBe(429);
   expect(responderAyudaStreaming).not.toHaveBeenCalled();
+  expect(db.turno.findMany).not.toHaveBeenCalled();
 });
 
 it("devuelve la reserva si el proveedor falla antes de abrir el stream", async () => {

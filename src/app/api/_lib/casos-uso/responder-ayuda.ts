@@ -2,7 +2,8 @@
 //
 // Recibe la pregunta y el historial ya parseados, arma la llamada a Anthropic
 // y devuelve la respuesta con sus métricas. No lee `request`, no devuelve
-// `Response` y no toca la base. El cupo se reserva en reservar-cupo.ts.
+// `Response`. La única lectura se inyecta como consultarAgenda, ligada a la
+// organización autenticada; el cupo se reserva aparte en reservar-cupo.ts.
 //
 // LO QUE NUNCA SALE DE ACÁ
 //
@@ -25,6 +26,7 @@ import {
 import { systemPromptAyuda } from "@/lib/ayuda-corpus";
 
 import { ApiError } from "../responses";
+import { HERRAMIENTAS_AYUDA, resolverHerramienta, type ConsultarAgenda } from "./ayuda/herramientas";
 
 
 /** Largo máximo de una pregunta. Mide caracteres, no tokens: es un tope
@@ -81,6 +83,8 @@ export interface ResponderAyudaInput {
   crear?: typeof crearMensaje;
   /** Inyectable: evita leer el corpus del disco en los tests del caso de uso. */
   systemPrompt?: string;
+  /** Capacidad cerrada, ligada por el servidor a la organización autenticada. */
+  consultarAgenda?: ConsultarAgenda;
 }
 
 export interface ResponderAyudaStreamingInput extends ResponderAyudaInput {
@@ -146,6 +150,7 @@ export async function responderAyuda(
         max_tokens: MAX_TOKENS_RESPUESTA,
         // El system va primero y entero: es el prefijo que se cachea.
         system: systemCacheado(system),
+        ...(input.consultarAgenda ? { tools: HERRAMIENTAS_AYUDA, tool_choice: { type: "auto" as const, disable_parallel_tool_use: true } } : {}),
         // Todo lo variable va después del corte del caché.
         messages: [
           ...historialAMensajes(input.historial ?? []),
@@ -161,7 +166,9 @@ export async function responderAyuda(
   }
 
   return {
-    respuesta: resultado.texto,
+    respuesta: input.consultarAgenda
+      ? await resolverHerramienta(resultado, input.consultarAgenda) ?? resultado.texto
+      : resultado.texto,
     tokensEntrada: resultado.tokensEntrada,
     tokensSalida: resultado.tokensSalida,
     cacheLeido: resultado.cacheLeido,
@@ -185,11 +192,12 @@ export async function responderAyudaStreaming(
   }
 
   try {
-    return await (input.crearStreaming ?? crearMensajeStreaming)(
+    const flujo = await (input.crearStreaming ?? crearMensajeStreaming)(
       {
         model: MODELO_AYUDA,
         max_tokens: MAX_TOKENS_RESPUESTA,
         system: systemCacheado(input.systemPrompt ?? systemPromptAyuda()),
+        ...(input.consultarAgenda ? { tools: HERRAMIENTAS_AYUDA, tool_choice: { type: "auto" as const, disable_parallel_tool_use: true } } : {}),
         messages: [
           ...historialAMensajes(input.historial ?? []),
           { role: "user", content: pregunta },
@@ -197,8 +205,46 @@ export async function responderAyudaStreaming(
       },
       { apiKey },
     );
+    return input.consultarAgenda ? conConsultaAgenda(flujo, input.consultarAgenda) : flujo;
   } catch (error) {
     console.error("[ayuda] fallo del proveedor", error);
     throw new ApiError(MENSAJE_PROVEEDOR_CAIDO, 502);
   }
+}
+
+/** El texto de ayuda sigue llegando por fragmentos. Una consulta de agenda
+ * termina en el listado del servidor, sin otra llamada al proveedor. */
+function conConsultaAgenda(flujo: FlujoMensajes, consultar: ConsultarAgenda): FlujoMensajes {
+  let cancelado = false;
+  let completar!: (valor: ResultadoMensajes) => void;
+  let fallar!: (error: unknown) => void;
+  const resultado = new Promise<ResultadoMensajes>((resolve, reject) => { completar = resolve; fallar = reject; });
+  void resultado.catch(() => {});
+  async function* leer() {
+    let texto = "";
+    try {
+      for await (const parte of flujo.fragmentos) {
+        if (cancelado) return;
+        texto += parte;
+        yield parte;
+      }
+      const original = await flujo.resultado;
+      if (cancelado) return;
+      const agenda = await resolverHerramienta(original, consultar);
+      if (cancelado) return;
+      if (agenda !== null) {
+        const parte = `${texto ? "\n\n" : ""}${agenda}`;
+        texto += parte;
+        yield parte;
+      }
+      completar({ ...original, texto });
+    } catch (error) {
+      fallar(error);
+      throw error;
+    }
+  }
+  return {
+    fragmentos: leer(), resultado,
+    cancelar: () => { cancelado = true; flujo.cancelar(); fallar(new Error("Consulta cancelada")); },
+  };
 }

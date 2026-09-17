@@ -17,9 +17,7 @@ la borra. Al aprobar, la app destruye la clave en la base con la que trabaja y y
 no puede abrirla. Una copia de la clave puede seguir en los respaldos (ver
 abajo).
 
-La pantalla de entrada todavía dice que *"La copia local previa no está
-cifrada"*. Ese texto quedó de la versión anterior del grabador y ya no es cierto;
-está pendiente de corregir.
+La pantalla de entrada ya describe el cifrado por tramos antes de guardar y enviar.
 
 ## En los servicios
 
@@ -52,6 +50,18 @@ está pendiente de corregir.
    borrado. Después intenta borrar los tramos en R2 y comprueba que ya no estén.
    Si falla, reintenta **hasta 20 veces**, durante **unos 15 días**; después el
    borrado queda marcado como fallido. La transcripción y la nota se conservan.
+
+## La agenda y Lupita
+
+Lupita puede consultar solo el nombre de pila, el día, la hora, la duración y la
+modalidad de los turnos de hoy, mañana o esta semana de tu consultorio. No lee
+fichas, teléfonos, montos, notas, transcripciones, Recorrido ni consentimientos.
+Solo consulta; no modifica nada.
+
+El servidor prepara esos listados. Si seguís conversando, las preguntas y
+respuestas anteriores se envían a Anthropic, y pueden incluir esos nombres y
+horarios. Evitá pegar datos clínicos o personales. El consentimiento 2.5 explica
+este uso de la agenda. El acceso de Lupita no abre los registros clínicos.
 
 ## Nombres y proveedores
 
@@ -90,7 +100,7 @@ lo impide también.
 El PDF que exportás desde el Recorrido sale de la app **sin cifrar**: queda bajo
 tu cuidado, como cualquier registro en papel. Queda registrada la preparación de
 la copia; volver a imprimir desde la hoja ya abierta no agrega otro registro. El
-consentimiento 2.4 se lo cuenta a la paciente. Ver
+consentimiento 2.5 se lo cuenta a la paciente. Ver
 `10-el-hilo-y-el-recorrido.md`.
 
 ## Respaldos y eliminación
@@ -106,7 +116,7 @@ todavía no estaba aprobada cuando se hizo la copia. Esa clave puede conservarse
 **hasta 12 meses** en un respaldo mensual, aunque ya se haya borrado de la base
 con la que trabaja la app. Si el audio no se pudo borrar, esa copia de la clave
 podría permitir abrirlo. Aprobar hoy no cambia los respaldos anteriores. El
-consentimiento 2.4 cuenta los dos plazos.
+consentimiento 2.5 cuenta los dos plazos.
 
 Quitar la clave activa no garantiza que hayan desaparecido todas las copias.
 Los pedidos de borrado se siguen con reintentos; el funcionamiento y la
@@ -114,7 +124,7 @@ restauración de los respaldos requieren comprobación.
 
 ## Autorización y revocación
 
-La versión vigente del texto de autorización es la **2.4**. Revocar la
+La versión vigente del texto de autorización es la **2.5**. Revocar la
 autorización impide grabaciones futuras. No borra la historia que ya quedó
 guardada.
 
@@ -135,8 +145,8 @@ la app no lo ejecuta, y la 2.4 dejó de prometerlo.
 
 ## Firmas anteriores
 
-**Las firmas de versiones anteriores, incluidas la 2.1, la 2.2 y la 2.3,
-necesitan que la paciente firme la 2.4**. Las anteriores a la 2.4 prometen
+**Las firmas de versiones anteriores, incluida la 2.4, necesitan que la paciente firme la 2.5**. Las anteriores a la 2.5 no explican la consulta de agenda de Lupita
+ni que los datos de agenda pueden enviarse en el historial del chat. Las anteriores a la 2.4 prometen
 derechos que la app no ejecuta. Las anteriores a la 2.3 no cuentan cómo ocurre el
 borrado en AssemblyAI, la copia cifrada que queda en el teléfono, que el
 borrador de la IA se guarda antes de aprobar ni lo que Anthropic recibe después

@@ -688,12 +688,23 @@ export const AYUDA_PANEL = "Ayuda de la app";
  *  misma respiración, lo que Lupita no ve: es la promesa de privacidad de la
  *  app, y se hace antes de que ella escriba nada. */
 export const AYUDA_BIENVENIDA =
-  "Preguntame cómo usar Sesión.";
+  "Preguntame cómo usar Sesión o qué turnos tenés.";
 
 export const AYUDA_PRIVACIDAD =
-  "No veo pacientes ni montos. Solo conozco la ayuda de Sesión.";
+  "De tu agenda veo solo nombres, días, horas, duración y modalidad. No leo fichas, teléfonos, montos, notas, transcripciones, Recorrido ni consentimientos. No cambio nada. Evitá pegar datos clínicos o personales en el chat.";
+
+export const AYUDA_FUERA_DE_ALCANCE =
+  "Puedo explicar cómo usar Sesión y consultar los turnos de hoy, mañana o esta semana de tu consultorio: nombre, día, hora, duración y modalidad. No puedo consultar teléfonos, tarifas, deudas, cobros, notas, transcripciones, Recorrido, consentimientos ni fichas, ni datos de otro consultorio. Tampoco puedo agendar, cancelar ni modificar nada.";
+
+export const AYUDA_AGENDA_TITULOS = {
+  hoy: "Estos son tus turnos de hoy, en hora de Montevideo (sin cancelados):",
+  manana: "Estos son tus turnos de mañana, en hora de Montevideo (sin cancelados):",
+  esta_semana: "Estos son tus turnos de esta semana, de lunes a domingo, en hora de Montevideo (sin cancelados):",
+} as const;
+export const AYUDA_AGENDA_VACIA = "No hay turnos en ese período.";
 
 export const AYUDA_PREGUNTAS_INICIALES = [
+  "¿Qué turnos tengo hoy?",
   "¿Cómo cambio la tarifa?",
   "¿Cómo configuro el recordatorio?",
   "¿Qué pasa si se corta la grabación?",
@@ -716,7 +727,7 @@ export const AYUDA_ENVIAR = "Preguntar";
 export const AYUDA_CERRAR = "Cerrar";
 
 /** La espera, mientras el asistente contesta. Nunca "procesando". */
-export const AYUDA_ESPERANDO = "Lupita está buscando en la ayuda…";
+export const AYUDA_ESPERANDO = "Lupita está preparando la respuesta…";
 
 /** Rótulo accesible del hilo de mensajes. */
 export const AYUDA_HILO = "Conversación con Lupita";
@@ -1142,7 +1153,7 @@ export const PORTADA_FUNCIONES = [
 export const PORTADA_CIFRADO = "Datos clínicos cifrados";
 export const PORTADA_LUPITA_TITULO = "Lupita, para orientarte";
 export const PORTADA_LUPITA =
-  "Lupita responde dudas sobre cómo usar Sesión a partir de su guía de ayuda. No consulta tus pacientes ni tus montos.";
+  "Lupita explica cómo usar Sesión y consulta tu agenda de hoy, mañana o esta semana: nombres, días, horas, duración y modalidad. No lee fichas, teléfonos, montos, notas, transcripciones, Recorrido ni consentimientos. No cambia nada.";
 export const PORTADA_LUPITA_CUIDADO =
   "Sí recibe lo que escribís en el chat: evitá incluir datos clínicos o personales.";
 export const PORTADA_PIE = "© Mariana Roldán";
