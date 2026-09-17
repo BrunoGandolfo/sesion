@@ -1,0 +1,45 @@
+Base: 2d59c68e6ec4b12e4d6d869e80d99a6a430b28bf
+Fragmentos de salidas reales; las mutaciones fueron revertidas.
+
+Grabador antes del arreglo
+   × ocultar y volver no interrumpe ni finaliza una grabación que sigue entregando audio 10ms
+   × pide wake lock, lo recupera al volver y lo libera al pausar 2ms
+   × unmute cancela los tres segundos de gracia, incluso si vuelve a silenciarse 2ms
+   × mute persistente interrumpe recién después de la gracia, con explicación 1ms
+   × un hilo principal demorado dos segundos no se confunde con micrófono interrumpido 1ms
+   × entrega y respalda antes de rotar el segmento de sesenta segundos 2ms
+   × pausar sale de ocupada con un aviso aunque nunca llegue stop 1ms
+   × terminar sale de ocupada con un aviso aunque nunca llegue stop 1ms
+   × pagehide con stop perdido permite volver con un mensaje y reanudar, sin cerrar la sesión 2ms
+ Test Files  1 failed (1)
+      Tests  9 failed (9)
+   Start at  16:33:09
+   Duration  738ms (transform 64ms, setup 0ms, import 80ms, tests 24ms, environment 534ms)
+
+Medidor antes de conectarlo
+   × el medidor acompaña la captura y advierte cuando no entra sonido 9ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  16:35:56
+   Duration  2.85s (transform 199ms, setup 0ms, import 2.05s, tests 219ms, environment 474ms)
+
+Respuesta clínica correcta en la base
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  16:38:18
+   Duration  189ms (transform 46ms, setup 0ms, import 87ms, tests 8ms, environment 0ms)
+
+Mutación temporal del select
+   × el select común nunca pide transcripcion 4ms
+   × el select común nunca pide audioClave 0ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  16:44:25
+   Duration  233ms (transform 55ms, setup 0ms, import 102ms, tests 12ms, environment 0ms)
+
+Mutación temporal de la respuesta
+   × la respuesta nunca filtra transcripción, clave ni key aunque la fila las traiga 6ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  16:44:26
+   Duration  191ms (transform 45ms, setup 0ms, import 87ms, tests 11ms, environment 0ms)

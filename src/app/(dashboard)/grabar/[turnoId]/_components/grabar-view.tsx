@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { MedidorAudio } from "./medidor-audio";
 import { ArrowLeft, Mic, Pause, Check, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useAudioGrabacion } from "@/hooks/useAudioGrabacion";
@@ -41,6 +42,7 @@ export function GrabarView(props: Props) {
     {!audio.lista && !audio.error && <p role="status">{PREPARANDO_GRABACION}</p>}
     {audio.lista && <p className="flex items-center gap-2 text-sm font-semibold text-sage-700" role="status">{capturando ? <Mic size={16} aria-hidden="true" /> : estado === "entregada" ? <Check size={16} aria-hidden="true" /> : audio.grabacion ? <Pause size={16} aria-hidden="true" /> : <Mic size={16} aria-hidden="true" />}{rotulo}</p>}
     <p className="font-display text-6xl font-medium tabular-nums tracking-tight text-ink-900" aria-label="Duración grabada">{formatearDuracion(audio.segundos)}</p>
+    {capturando && <MedidorAudio nivel={audio.nivelAudio ?? null} silencioso={audio.silencioso} />}
     {audio.grabacion && !capturando && !cerrada && <p>Hay una grabación de este turno. Podés recuperar y enviar lo guardado o reanudarla.</p>}
     {audio.segundos >= AVISO_LIMITE_SEGUNDOS && !cerrada && <p role="status">{audio.segundos >= LIMITE_SEGUNDOS ? "Llegaste al límite. Elegí Terminar para procesar lo guardado." : "Llevás 135 minutos. La captura se pausará al llegar a 150."}</p>}
     {audio.mensaje && <p role="status" aria-live="polite">{audio.mensaje}</p>}
@@ -54,6 +56,6 @@ export function GrabarView(props: Props) {
       {estado === "entregada" && <Link href={`/sesiones/${audio.grabacion!.sesionId}`}>Ver la sesión</Link>}
     </div>
     </div></section>
-    <p className="flex items-start gap-3 text-sm leading-relaxed text-ink-500"><ShieldCheck size={18} className="mt-0.5 shrink-0" aria-hidden="true" /><span>Mantené la pantalla encendida. Si se bloquea o se interrumpe el micrófono, el tramo puede quedar incompleto y habrá que reanudar.</span></p>
+    <p className="flex items-start gap-3 text-sm leading-relaxed text-ink-500"><ShieldCheck size={18} className="mt-0.5 shrink-0" aria-hidden="true" /><span>Mientras grabás, Sesión intenta mantener la pantalla encendida. Al volver a la app, revisá que siga entrando sonido: algunos teléfonos suspenden el micrófono al bloquearse.</span></p>
   </section>;
 }

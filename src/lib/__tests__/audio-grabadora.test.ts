@@ -14,6 +14,7 @@ vi.mock("@/lib/audio/almacen", () => ({
   buscarGrabacion: async (_db: unknown, cuenta: string, turno: string) => [...m.grabaciones.values()].find(g => g.cuenta === cuenta && g.turnoId === turno),
   guardarGrabacion: m.guardar,
   guardarSegmento: m.segmento,
+  guardarRespaldo: vi.fn(), recuperarRespaldo: async (_db: unknown, g: GrabacionLocal) => g,
 }));
 vi.mock("@/lib/audio/sincronizar", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/audio/sincronizar")>(),
@@ -135,7 +136,7 @@ test("terminar espera la subida en curso y envía el cierre antes de completar l
 });
 
 
-test.each(["mute", "ended", "hidden"])("no inicia si %s ocurrió durante la escritura de arranque", async interrupcion => {
+test.each(["ended"])("no inicia si %s ocurrió durante la escritura de arranque", async interrupcion => {
   const grabadora = await abrir({ ...original(), estado: "pausada" });
   m.pedir.mockResolvedValue({ clave: "prueba" });
   const pista = Object.assign(new EventTarget(), { muted: false, readyState: "live", stop: vi.fn() });

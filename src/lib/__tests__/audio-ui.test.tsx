@@ -74,3 +74,15 @@ test("salir durante la captura pregunta; quedarse no termina ni reenvía", () =>
   expect(m.terminar).not.toHaveBeenCalled();
   expect(m.reenviar).not.toHaveBeenCalled();
 });
+
+test("el medidor acompaña la captura y advierte cuando no entra sonido", () => {
+  m.vista = { grabacion: { estado: "capturando" }, nivelAudio: 0.5, silencioso: false };
+  const { rerender } = render(<GrabarView {...props} />);
+  expect(screen.getByText("El audio se escucha bien")).toBeTruthy();
+  m.vista.silencioso = true;
+  rerender(<GrabarView {...props} />);
+  expect(screen.getByText("No está entrando sonido")).toBeTruthy();
+  m.vista.grabacion = { estado: "pausada" };
+  rerender(<GrabarView {...props} />);
+  expect(screen.queryByText("No está entrando sonido")).toBeNull();
+});

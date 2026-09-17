@@ -4,7 +4,7 @@ import { Grabadora, type VistaGrabadora } from "@/lib/audio/grabadora";
 
 export function useAudioGrabacion(cuenta: string, organizationId: string, turnoId: string) {
   const referencia = useRef<Grabadora | null>(null);
-  const [vista, setVista] = useState<VistaGrabadora>({ lista: false, ocupada: false, grabacion: null, segundos: 0, mensaje: "", error: null });
+  const [vista, setVista] = useState<VistaGrabadora>({ lista: false, ocupada: false, grabacion: null, segundos: 0, mensaje: "", error: null, nivelAudio: null, silencioso: false });
   useEffect(() => {
     let cancelado = false;
     let grabadora: Grabadora | null = null;
