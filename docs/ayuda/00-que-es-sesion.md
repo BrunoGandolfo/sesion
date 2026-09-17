@@ -26,18 +26,24 @@ cada paciente.
 
 - Mientras grabás, el audio **se cifra en el teléfono, tramo por tramo**, antes de
   guardarse, y viaja ya cifrado.
-- Al aprobar, la clave se destruye en el registro activo y se pide borrar el
-  audio remoto; si falla, se reintenta hasta 20 veces.
+- Al aprobar, la clave del audio se destruye en la base con la que trabaja la
+  app y se pide borrar el audio remoto; si falla, se reintenta hasta 20 veces,
+  durante unos 15 días, y después el borrado queda marcado como fallido.
 - La nota, la transcripción, el Recorrido, las notas privadas, las notas del
   turno, el vocabulario y la autorización con su firma se guardan cifrados. Los
   datos administrativos tienen otro tratamiento.
 - **AssemblyAI** recibe audio y vocabulario, que puede incluir nombres propios.
-  **Anthropic** recibe la transcripción y el Recorrido para redactar. El borrado
-  en AssemblyAI se reintenta hasta 20 veces.
+  **Anthropic** recibe la transcripción y el Recorrido para redactar, y propone
+  los cambios del Recorrido. El borrado en AssemblyAI se reintenta hasta 20
+  veces.
 - Los respaldos diarios se conservan **30 días** y hay además una copia mensual
-  que se conserva 12 meses. No contienen audio, pero pueden conservar cifrada la
-  clave de una sesión todavía no aprobada.
+  que se conserva **hasta 12 meses**. No contienen audio, pero pueden conservar
+  cifrada la clave de una sesión todavía no aprobada.
+- El audio se descifra para transcribirlo en un archivo temporal del servidor,
+  que se borra al terminar.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
+- La autorización vigente es la **2.2**. Las firmas anteriores necesitan que la
+  paciente firme la nueva. Ver `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.
 

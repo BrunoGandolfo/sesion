@@ -117,7 +117,9 @@ anterior aparte, sin borrarla, y deja grabar de nuevo ese turno.
   de la versión anterior, sin cifrar, la app las borra y avisa: *"Se retiraron
   las grabaciones de prueba anteriores, que estaban sin cifrar."*
 - La copia cifrada queda guardada en el navegador aunque la nota ya esté
-  aprobada. Sin la clave, que se destruye al aprobar, no se puede abrir.
+  aprobada. Al aprobar, la app destruye la clave con la que trabaja y ya no puede
+  abrirla, pero un respaldo de la base puede conservar esa clave hasta 12 meses.
+  Ver `12-camino-del-audio-y-privacidad.md`.
 - Si hubo una interrupción, la nota lo avisa: **Audio posiblemente incompleto**.
 
 ## Lo que NO hace

@@ -30,7 +30,8 @@ Tiene seis secciones:
 ## Cómo cambia: la IA propone, vos decidís
 
 Cuando aprobás una nota, la app le pide a la IA una **propuesta** de Recorrido
-que incorpore esa sesión. **La propuesta no cambia nada por sí sola.** Mientras
+que incorpore esa sesión. La redacta la misma IA que escribe la nota. **La
+propuesta no cambia nada por sí sola.** Mientras
 la prepara dice *"Preparando una propuesta…"*. Esa tarea puede quedar pendiente o
 fallar: si falla, dice *"No se pudo preparar una propuesta."* con **Volver a
 intentar**.
@@ -152,10 +153,11 @@ descartadas) queda solo la fila del historial, sin su texto. En **Cómo va** no 
 imprimen las citas de **Lo que dijo**.
 
 El archivo sale de la aplicación **sin cifrar**: queda bajo tu cuidado, como
-cualquier registro en papel. **Abrir la hoja ya cuenta como exportación**: queda
-registrado quién la abrió y cuándo, aunque después no imprimas. El
-consentimiento 2.1 se lo cuenta a la paciente; si firmó una versión anterior,
-conviene que firme la nueva.
+cualquier registro en papel. **Queda registrada la preparación de la copia**:
+abrir la hoja ya cuenta, con quién la abrió y cuándo, aunque después no
+imprimas. Volver a tocar **Imprimir o guardar PDF** en la hoja ya abierta no
+agrega otro registro. El consentimiento 2.2 se lo cuenta a la paciente; si firmó
+una versión anterior, necesita firmar la nueva.
 
 ## Lo que NO hace
 
