@@ -46,27 +46,43 @@ def reales(tmp_path_factory):
             w.writeframes(b"".join(struct.pack("<h", int(14000 * math.sin(2 * math.pi * (300 + segundo * 10) * j / 16000)) if 1600 <= j < 3200 else 0) for j in range(16000)))
     resultado = {}
     for codec, extension in [("libopus", "webm"), ("aac", "m4a")]:
-        for nombre, inicios, total in [("", [0, 59, 118], 125), ("-variable", [58.9*i for i in range(8)], 472.3)]:
+        for nombre, inicios, total, maximo in [
+            ("", [0, 59, 118], 125, 60),
+            ("-variable", [58.9*i for i in range(8)], 472.3, 60),
+            # Congelación: el primer recorder no rota hasta los 300 segundos.
+            # El segundo arranca 875 ms antes: no se puede recortar un segundo fijo.
+            ("-largo", [0, 299.125], 359, 300),
+            ("-largo-hueco", [0, 300.25], 359, 300),
+            ("-excesivo", [0], 301, 301),
+        ]:
             archivos = []
             for i, inicio in enumerate(inicios):
                 p = carpeta / f"{codec}{nombre}-{i}.{extension}"
-                subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", str(inicio), "-i", str(referencia), "-t", str(min(60, total-inicio)), "-c:a", codec, "-b:a", "64k", str(p)], check=True)
+                subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", str(inicio), "-i", str(referencia), "-t", str(min(maximo, total-inicio)), "-c:a", codec, "-b:a", "64k", str(p)], check=True)
                 archivos.append(p)
             resultado[codec+nombre] = archivos
     return resultado
 
 
 @pytest.mark.parametrize("codec", ["libopus", "aac"])
-@pytest.mark.parametrize("variable", [False, True])
-def test_union_real_sin_perdidas_ni_repeticiones(codec, variable, reales, monkeypatch):
-    total = 472.3 if variable else 125
-    pulsos = 473 if variable else 125
-    audio, blobs = entrada(reales[codec + ("-variable" if variable else "")], [58900*i for i in range(8)] if variable else None)
+@pytest.mark.parametrize("caso", ["", "-variable", "-largo"])
+def test_union_real_sin_perdidas_ni_repeticiones(codec, caso, reales, monkeypatch):
+    total, pulsos, inicios = {
+        "": (125, 125, [0, 59000, 118000]),
+        "-variable": (472.3, 473, [58900*i for i in range(8)]),
+        "-largo": (359, 359, [0, 299125]),
+    }[caso]
+    audio, blobs = entrada(reales[codec + caso], inicios)
+    assert all(s["bytes"] <= 4 * 1024 * 1024 for s in audio["segmentos"])
     monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs[key])
     with armar_audio("s1", audio) as preparado:
         archivo = preparado.archivo
         with wave.open(str(archivo), "rb") as w:
             assert abs(w.getnframes() / 16000 - total) < .2
+            if caso == "-largo":
+                assert w.getnframes() == 359 * 16000
+                assert preparado.duracion_ms == 359000
+                assert preparado.huecos == []
             datos = struct.unpack("<" + "h" * w.getnframes(), w.readframes(w.getnframes()))
         # Detecta comienzos por energía en ventanas de 10 ms.
         activos = [sum(x*x for x in datos[i:i+160]) / 160 > 2_000_000 for i in range(0, len(datos), 160)]
@@ -189,3 +205,42 @@ def test_truncado_salva_tono_y_hueco_real_avisa_sin_recortar_ni_rellenar(codec, 
         posicion = (tono - (.2 if hueco else 0)) * 16000
         assert max(abs(x) for x in datos[int(posicion):int(posicion+960)]) > 10_000
         assert preparado.huecos == ([{"inicio": 59800, "fin": 60000, "siguienteIndice": 1, "motivo": "interrupcion"}] if hueco else [])
+
+
+@pytest.mark.parametrize("codec", ["libopus", "aac"])
+def test_segmento_largo_con_hueco_conserva_audio_y_avisa(codec, reales, monkeypatch):
+    audio, blobs = entrada(reales[codec + "-largo-hueco"], [0, 300250])
+    monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs[key])
+    with armar_audio("s1", audio) as preparado:
+        with wave.open(str(preparado.archivo), "rb") as w:
+            assert w.getnframes() == 358.75 * 16000
+        assert preparado.duracion_ms + 250 == 359000
+        assert preparado.huecos == [
+            {"inicio": 300000, "fin": 300250, "siguienteIndice": 1, "motivo": "interrupcion"},
+        ]
+
+
+@pytest.mark.parametrize("codec", ["libopus", "aac"])
+def test_rechaza_segmento_mayor_a_cinco_minutos(codec, reales, monkeypatch):
+    # Archivo REAL de 301 segundos, bien cifrado y dentro del tope de bytes:
+    # debe rechazarlo por duración, no por tamaño, autenticación ni metadata rota.
+    audio, blobs = entrada(reales[codec + "-excesivo"], [0])
+    assert audio["segmentos"][0]["bytes"] <= 4 * 1024 * 1024
+    monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs[key])
+    with pytest.raises(PipelineError) as error:
+        with armar_audio("s1", audio):
+            pytest.fail("No debe entregar un segmento que excede cinco minutos")
+    assert error.value.codigo == "audio_invalido"
+    assert error.value.definitivo
+
+
+def test_rechaza_archivo_que_no_es_audio_aunque_su_cifrado_y_huella_sean_validos(tmp_path, monkeypatch):
+    archivo = tmp_path / "corrupto.webm"
+    archivo.write_bytes(b"Esto no es un contenedor de audio")
+    audio, blobs = entrada([archivo], [0])
+    monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs[key])
+    with pytest.raises(PipelineError) as error:
+        with armar_audio("s1", audio):
+            pytest.fail("No debe entregar un archivo corrupto")
+    assert error.value.codigo == "audio_invalido"
+    assert error.value.definitivo

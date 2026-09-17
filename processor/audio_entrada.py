@@ -19,6 +19,10 @@ import r2_client
 from errores import PipelineError
 
 MAX_BYTES_SEGMENTO = 4 * 1024 * 1024
+# Una página congelada no puede rotar a los 60 s. Admitimos hasta cinco
+# minutos: a los 64 kbit/s solicitados son ~2,4 MB, debajo del tope de 4 MiB.
+# Sigue siendo un límite por archivo, no un cambio del tamaño de captura.
+MAX_SEGUNDOS_SEGMENTO = 5 * 60
 
 
 def _ffmpeg(argumentos):
@@ -44,7 +48,7 @@ def fin_aac(entrada):
         if stream["codec_name"] == "opus": return None
         if stream["codec_name"] != "aac": raise ValueError("Codec no admitido")
         fin = float(stream["duration"])
-        if not math.isfinite(fin) or not 0 < fin <= 65: raise ValueError("Duración inválida")
+        if not math.isfinite(fin) or not 0 < fin <= MAX_SEGUNDOS_SEGMENTO: raise ValueError("Duración inválida")
         return fin
     except FileNotFoundError as exc:
         raise PipelineError("audio_infraestructura", "Falta ffprobe en el worker") from exc
@@ -122,7 +126,7 @@ def armar_audio(sesion_id: str, audio: dict):
             entrada.unlink()
             with wave.open(str(completo), "rb") as wav:
                 muestras = wav.getnframes()
-            if not 0 < muestras <= 65 * frecuencia:
+            if not 0 < muestras <= MAX_SEGUNDOS_SEGMENTO * frecuencia:
                 raise PipelineError("audio_invalido", "Duración de segmento inválida", definitivo=True)
             if inicio > hasta:
                 huecos.append({"inicio": hasta * 1000 / frecuencia,
