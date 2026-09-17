@@ -5,3 +5,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 CMD ["python", "worker.py"]
+
+# Redespliegue: patrón de watch corregido, build por Dockerfile con ffmpeg (17-09-2026)
