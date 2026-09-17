@@ -51,12 +51,17 @@ const OPCIONES_MODALIDAD: { value: Modalidad; label: string }[] = [
 interface TurnoEditarCamposProps {
   /** Rótulo del campo de notas: en el alta dice que es opcional. */
   notasLabel?: string;
+  /** Avisa que la usuaria escribió la fecha o la hora a mano. El alta lo usa
+   *  para que la propuesta que llega después no le pise lo que escribió;
+   *  "Reprogramar" no lo necesita y no lo pasa. */
+  onFechaUHoraEditada?: () => void;
   /** Se dibuja entre fecha/hora y duración (la propuesta de fecha). */
   children?: React.ReactNode;
 }
 
 export function TurnoEditarCampos({
   notasLabel = "Notas (opcional)",
+  onFechaUHoraEditada,
   children,
 }: TurnoEditarCamposProps) {
   const {
@@ -67,6 +72,18 @@ export function TurnoEditarCampos({
   } = useFormContext<CamposTurnoValores>();
   const duracion = useWatch({ control, name: "duracion" });
   const modalidad = useWatch({ control, name: "modalidad" });
+
+  // El onChange propio se compone con el de react-hook-form en vez de pasarlo
+  // por las opciones de register: así el aviso sale del evento real del
+  // input, sin depender de cómo encadene register las dos funciones.
+  const campoFecha = register("fecha");
+  const campoHora = register("hora");
+  const conAviso = <T,>(
+    alCambiar: (evento: T) => unknown,
+  ) => (evento: T) => {
+    alCambiar(evento);
+    onFechaUHoraEditada?.();
+  };
 
   return (
     <>
@@ -79,13 +96,15 @@ export function TurnoEditarCampos({
           label="Fecha"
           type="date"
           error={errors.fecha?.message}
-          {...register("fecha")}
+          {...campoFecha}
+          onChange={conAviso(campoFecha.onChange)}
         />
         <Input
           label="Hora"
           type="time"
           error={errors.hora?.message}
-          {...register("hora")}
+          {...campoHora}
+          onChange={conAviso(campoHora.onChange)}
         />
       </div>
 

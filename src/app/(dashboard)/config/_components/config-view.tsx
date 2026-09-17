@@ -268,10 +268,18 @@ export function ConfigView() {
 
     apiGet<Configuracion>("/api/config", { signal: controller.signal })
       .then((config) => {
-        const siguiente = formDesdeConfig(config);
+        // Los campos que la usuaria ya escribió ganan sobre lo que traiga la
+        // red, como en el alta de turno. Hoy no puede pasar —el formulario no
+        // se dibuja mientras `cargando`, y el reintento lo vuelve a poner—,
+        // pero si alguna vez se muestra mientras carga, o se agrega un
+        // refetch al volver a la pestaña, esto es lo que evita que una
+        // respuesta lenta le borre lo tipeado.
+        const escritos = Object.fromEntries(
+          Array.from(camposSuciosRef.current, (campo) => [campo, formRef.current[campo]]),
+        ) as Partial<FormConfig>;
+        const siguiente = { ...formDesdeConfig(config), ...escritos };
         formRef.current = siguiente;
-        camposSuciosRef.current.clear();
-        setCamposPendientes([]);
+        setCamposPendientes(Array.from(camposSuciosRef.current));
         setForm(siguiente);
         setEstadoGuardado("idle");
         setCargando(false);
