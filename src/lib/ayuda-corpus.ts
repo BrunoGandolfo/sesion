@@ -4,9 +4,15 @@
 //
 // Mariana pregunta "¿cómo hago para…?" o "¿por qué la app hace…?" y recibe
 // una respuesta corta. La única fuente son los documentos de docs/ayuda/: no
-// hay base vectorial ni búsqueda: entran los 16 archivos enteros —67 KB, unos
-// 20 mil tokens— en el system prompt, y el prompt caching de Anthropic hace
-// que ese bloque se pague completo una vez y después se lea al 10 %.
+// hay base vectorial ni búsqueda: entran los 16 archivos enteros —unos 92 KB
+// al 16 de septiembre de 2026— en el system prompt, y el prompt caching de
+// Anthropic hace que ese bloque se pague completo una vez y después se lea
+// más barato.
+//
+// Lo único que este archivo escribe por su cuenta son la identidad, los
+// límites y los ejemplos de voz. Todo lo que Lupita sabe de la app sale de
+// docs/ayuda/: un ejemplo que nombre un botón tiene que usar el texto que la
+// pantalla muestra hoy (ayuda-corpus.test.ts lo comprueba contra el código).
 //
 // Por eso el prompt tiene que ser BYTE A BYTE IDÉNTICO entre pedidos: el
 // caché es un prefijo, y cualquier cambio —una fecha, un nombre de usuaria,
@@ -24,8 +30,9 @@
 // RUNTIME NODEJS
 //
 // Lee del disco con node:fs. Este módulo NO es alcanzable desde
-// src/middleware.ts (regla 9 de AGENTS.md): lo importa solamente el caso de
-// uso de /api/ayuda, que declara runtime nodejs.
+// src/proxy.ts (regla 1 de AGENTS.md, vigilada por proxy-liviano.test.ts): lo
+// importa solamente el caso de uso de /api/ayuda, cuya ruta declara runtime
+// nodejs.
 //
 // OJO CON EL DEPLOY: Next traza los imports, no las lecturas de disco, así
 // que docs/ayuda/ no entra solo en el bundle de la función. Por eso
@@ -33,9 +40,13 @@
 //
 //   outputFileTracingIncludes: { "/api/ayuda": ["./docs/ayuda/**"] }
 //
-// Si esa línea se cae, en local no se nota y en Vercel /api/ayuda contesta
-// ERROR_CORPUS_AUSENTE. Y si algún día el corpus lo usa otra ruta, esa ruta
-// necesita su propia entrada: la clave es la ruta, no el módulo.
+// Si esa línea se cae, en local no se nota y en Vercel falla la lectura con
+// un ErrorCorpus (ERROR_CORPUS_AUSENTE). La usuaria no ve ese código: el caso
+// de uso arma el prompt dentro del mismo try que llama al proveedor, así que
+// /api/ayuda contesta 502 con MENSAJE_PROVEEDOR_CAIDO y el log dice
+// "[ayuda] fallo del proveedor" con el ErrorCorpus como causa. Y si algún día
+// el corpus lo usa otra ruta, esa ruta necesita su propia entrada: la clave
+// es la ruta, no el módulo.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -100,15 +111,22 @@ const IDENTIDAD = [
   "Tu única fuente son los documentos que están abajo, entre las marcas CORPUS. No tenés acceso a sus pacientes, sus turnos ni sus montos: no los ves y no los podés mirar. Si te preguntan algo que necesitaría ese acceso, decí que no ves esos datos y explicá en qué pantalla los ve ella.",
 ].join("\n");
 
-const EJEMPLOS_DE_VOZ = [
+/**
+ * Ejemplos de tono. Se exportan para que el test compruebe que cada nombre de
+ * botón o pantalla entre comillas existe en el código: un ejemplo con un botón
+ * retirado le enseña a Lupita a nombrarlo aunque la ayuda ya no lo mencione.
+ */
+export const EJEMPLOS_DE_VOZ = [
   "Ejemplos buenos:",
-  'Pregunta: ¿Dónde cambio la tarifa?\nRespuesta: Andá a "Tu consultorio" y buscá "Lo que cobrás".\nCambiás la tarifa y listo: se guarda sola.\nOjo chiquito: los pacientes y turnos que ya cargaste conservan la tarifa que tenían.',
-  'Pregunta: ¿Cómo mando un recordatorio?\nRespuesta: Eso camina solo. Cuando agendás un turno, Sesión programa el SMS según lo que elegiste en "Tu consultorio".\nSi querés cambiar el momento o el texto, entrá ahí y bajá hasta "Recordatorio".',
-  'Pregunta: ¿Qué pasa si se corta la grabación?\nRespuesta: Mirá el estado de la grabación.\nSi aparecen "Reanudar" o "Terminar la sesión", podés seguir desde ahí con lo que haya capturado.\nLa recuperación completa no está garantizada: no cierres la pantalla ni descartes el audio mientras intentás guardarlo.',
+  'Pregunta: ¿Dónde cambio la tarifa?\nRespuesta: Andá a "Tu consultorio" y buscá "Lo que cobrás por sesión".\nCambiás la tarifa y listo: se guarda sola.\nOjo chiquito: los pacientes y turnos que ya cargaste conservan la tarifa que tenían.',
+  'Pregunta: ¿Cómo mando un recordatorio?\nRespuesta: Eso camina solo. Cuando agendás un turno, Sesión programa el SMS según lo que elegiste en "Tu consultorio".\nSi querés cambiar el momento o el texto, entrá ahí y bajá hasta "Recordatorio". El momento nuevo vale para los turnos que agendes o reprogrames desde ahí.',
+  'Pregunta: ¿Qué pasa si se corta la grabación?\nRespuesta: Tranqui: lo que ya se grabó queda guardado, cifrado, en el teléfono.\nVolvé a la pantalla de grabar de ese turno y elegí "Reanudar grabación" o "Terminar y enviar".\nEl pedacito que se estaba grabando justo en el corte puede quedar incompleto. La recuperación completa no está garantizada.',
   "Ejemplos malos (nunca respondas así):",
   'Malo: **Configuración de tarifa**\n1. Navegue al módulo de configuración.\n2. Modifique el campo correspondiente.',
   "Malo: Por lo que contás, tu paciente parece estar evitando el tratamiento. Te recomiendo explorar esa resistencia.",
-].join("\n\n");
+];
+
+const TEXTO_EJEMPLOS_DE_VOZ = EJEMPLOS_DE_VOZ.join("\n\n");
 
 /** Título de la sección de límites. */
 const TITULO_LIMITES = "Tus límites, que no se negocian:";
@@ -190,7 +208,7 @@ export function systemPromptAyuda(raiz?: string): string {
     "",
     MARCA_FIN_CORPUS,
     "",
-    EJEMPLOS_DE_VOZ,
+    TEXTO_EJEMPLOS_DE_VOZ,
     "",
     LIMITES_ASISTENTE[2],
   ].join("\n");
