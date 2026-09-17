@@ -32,7 +32,12 @@ vi.mock("react", async (importOriginal) => {
   return { ...real, cache: <T,>(fn: T) => fn };
 });
 
-const ahora = new Date("2026-09-10T12:00:00Z");
+// El reloj real, no una fecha escrita a mano. La invitación se crea con
+// `ahora` y la ruta de registro la consume con la hora del servidor; la sesión
+// se busca con `new Date()`. Con una fecha fija, la invitación vencía a los
+// siete días y la sesión moría a los catorce de inactividad: la prueba pasaba
+// sólo cerca de esa fecha. Así mide los mismos plazos corra el día que corra.
+const ahora = new Date();
 const huella = { ip: "203.0.113.7", userAgent: "vitest" };
 const datos = { nombre: "Colega", email: "colega@example.test", password: "contraseña larga", aceptaTerminos: true };
 const hashear = (p: string) => bcrypt.hash(p, BCRYPT_RONDAS);
