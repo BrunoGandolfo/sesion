@@ -42,7 +42,7 @@ cada paciente.
 - El audio se descifra para transcribirlo en un archivo temporal del servidor,
   que se borra al terminar.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
-- La autorización vigente es la **2.3**. Las firmas anteriores necesitan que la
+- La autorización vigente es la **2.4**. Las firmas anteriores necesitan que la
   paciente firme la nueva. Ver `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.

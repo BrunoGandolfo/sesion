@@ -141,6 +141,37 @@ export const ACCION_VER_SESION = "sesion.ver";
 export const RECORRIDO_EXPORTABLE = true;
 export const ACCION_EXPORTAR_RECORRIDO = "hilo.exportar_pdf";
 
+/**
+ * Lo que la paciente puede pedir y la app efectivamente ejecuta. El texto sólo
+ * ofrece estas acciones (decisión del dueño: no prometer lo que el sistema no
+ * hace).
+ *
+ * - Ver sus notas aprobadas y el resumen del proceso: la nota se abre en
+ *   /sesiones/[id] y el Recorrido en la ficha, también como PDF.
+ * - Corregir sus datos de contacto: PATCH /api/pacientes/[id]
+ *   (pacienteUpdateSchema: nombre, apellido, teléfono).
+ * - Corregir el resumen del proceso: POST .../hilo/versiones agrega una
+ *   versión; las anteriores no se borran (trigger de inmutabilidad).
+ */
+export const PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN = true;
+export const PACIENTE_PUEDE_CORREGIR_CONTACTO = true;
+export const PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES = true;
+
+/**
+ * Lo que NO se puede hacer desde la app, y por eso el texto no lo ofrece:
+ * - Borrar datos: /api/pacientes/[id] no tiene DELETE (sólo se archiva), y la
+ *   migración 20260916013000_inmutabilidad impide borrar versiones del
+ *   Recorrido y eventos de auditoría.
+ * - Corregir una nota aprobada: `aprobada` es terminal (sesion-clinica/estados).
+ * - Ver la transcripción: ningún componente llama a su ruta de lectura.
+ * - Ver esta autorización firmada: GET /api/pacientes/[id]/consentimiento no
+ *   devuelve el texto ni la firma.
+ */
+export const BORRADO_DE_DATOS_A_PEDIDO = false;
+export const NOTA_APROBADA_CORREGIBLE = false;
+export const TRANSCRIPCION_VISIBLE_EN_PANTALLA = false;
+export const CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA = false;
+
 export const MARCO_LEGAL = {
   ley: "Ley 18.331 de Protección de Datos Personales (Uruguay)",
   transferenciaInternacional: true,

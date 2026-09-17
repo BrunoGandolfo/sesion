@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
 import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/audio/contrato";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
@@ -285,7 +285,7 @@ describe("la ayuda sigue al consentimiento vigente", () => {
 
   it("nombra solo la versión vigente como la del texto de autorización", () => {
     expect(consentimiento).toContain(`Versión ${CONSENTIMIENTO_VERSION}`);
-    // "consentimiento 2.3", "es la **2.3**", "firme la 2.3": ninguna otra versión.
+    // "consentimiento 2.4", "es la **2.4**", "firme la 2.4": ninguna otra versión.
     const menciones = [...ayuda().matchAll(/(?:consentimiento|texto es|autorización es la|autorización vigente es la|firme la|firmar la) \**(\d+\.\d+)\**/gi)].map((m) => m[1]);
     expect(menciones.length).toBeGreaterThanOrEqual(5);
     expect(new Set(menciones)).toEqual(new Set([CONSENTIMIENTO_VERSION]));
@@ -342,6 +342,23 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("Queda registrada la preparación de la copia");
     expect(documento("13-preguntas-frecuentes.md")).toContain("registrada la preparación de cada copia");
     expect(ayuda()).not.toMatch(/cada exportación queda registrada|registra cada vez que lo hace/i);
+  });
+
+  it("lo que la paciente puede pedir: lo mismo que el consentimiento, y nada que la app no haga", () => {
+    expect(PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN && PACIENTE_PUEDE_CORREGIR_CONTACTO && PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES).toBe(true);
+    expect(BORRADO_DE_DATOS_A_PEDIDO || NOTA_APROBADA_CORREGIBLE).toBe(false);
+    expect(consentimiento).toContain("que te muestre tus notas clínicas aprobadas y el resumen de tu proceso, y que corrija tus datos de contacto o el resumen de tu proceso");
+    expect(consentimiento).not.toMatch(/que se eliminen|Tenés derecho/);
+    const privacidad = documento("12-camino-del-audio-y-privacidad.md");
+    expect(privacidad).toContain("sus notas clínicas aprobadas y el resumen de su proceso");
+    expect(privacidad).toContain("sus datos de contacto, con **Editar datos**, o el resumen de su proceso, con **Editar Recorrido**");
+    expect(privacidad).toContain("borrar sus datos, corregir una nota ya aprobada, y ver la transcripción o la autorización firmada");
+    // Los botones que nombra existen.
+    expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Editar Recorrido");
+    expect(codigo("src/lib/glosario.ts")).toContain('EDITAR_DATOS = "Editar datos"');
+    expect(documento("04-pacientes-y-ficha.md")).toContain("qué no se puede hacer desde la app (borrar sus datos");
+    // Ninguna página le ofrece a la paciente borrar o corregir lo que la app no hace.
+    expect(ayuda()).not.toMatch(/derecho a (acceder|pedir que se (corrijan|eliminen))|puede pedir que se borren/i);
   });
 
   it("el borrado en AssemblyAI: el consentimiento lo cuenta como ocurre y la ayuda ya no advierte una diferencia", () => {

@@ -25,20 +25,22 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 2.3 y sugiere re-firmar las anteriores", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("2.3");
+  it("la versión vigente del texto es la 2.4 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.4");
     expect(sugiereRefirmar("1.1")).toBe(true);
     // La 2.0 no decía que el resumen del proceso se puede imprimir.
     expect(sugiereRefirmar("2.0")).toBe(true);
     expect(sugiereRefirmar("2.1")).toBe(true);
     // La 2.2 prometía repetir el borrado en AssemblyAI hasta la confirmación.
     expect(sugiereRefirmar("2.2")).toBe(true);
-    expect(sugiereRefirmar("2.3")).toBe(false);
+    // La 2.3 prometía el derecho a pedir que se eliminen los datos.
+    expect(sugiereRefirmar("2.3")).toBe(true);
+    expect(sugiereRefirmar("2.4")).toBe(false);
   });
 
   it("interpola los tres datos y lleva la versión", () => {
     const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("Versión 2.3");
+    expect(texto).toContain("Versión 2.4");
     expect(texto).toContain("Hola María González.");
     expect(texto).toContain("con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo");
   });
@@ -232,6 +234,41 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).toContain("Sé que puedo revocar esta autorización cuando quiera");
   });
 
+  it("sólo ofrece pedidos que la app ejecuta, y dice lo que no se puede hacer", () => {
+    // Ver notas aprobadas y resumen; corregir contacto y resumen con versiones.
+    expect(hechos.PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN).toBe(true);
+    expect(hechos.PACIENTE_PUEDE_CORREGIR_CONTACTO).toBe(true);
+    expect(hechos.PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES).toBe(true);
+    expect(codigo("src/app/api/pacientes/[id]/route.ts")).toMatch(/export async function PATCH/);
+    expect(codigo("src/app/api/_lib/schemas.ts")).toMatch(/pacienteCreateSchema = z\.object\(\{\s+nombre:[\s\S]*apellido:[\s\S]*telefono:/);
+    expect(codigo("src/app/api/_lib/schemas.ts")).toContain("export const pacienteUpdateSchema = pacienteCreateSchema.partial()");
+    expect(codigo("src/app/api/pacientes/[id]/hilo/versiones/route.ts")).toMatch(/export async function POST/);
+    expect(texto).toContain("Podés pedirle a Lic. Ana Pérez que te muestre tus notas clínicas aprobadas y el resumen de tu proceso, y que corrija tus datos de contacto o el resumen de tu proceso.");
+    expect(texto).toContain("Corregir el resumen agrega una versión nueva: las anteriores se conservan.");
+
+    // Lo que no se puede hacer desde la app, con la línea que lo impide.
+    expect(hechos.BORRADO_DE_DATOS_A_PEDIDO).toBe(false);
+    expect(codigo("src/app/api/pacientes/[id]/route.ts")).not.toMatch(/export async function DELETE/);
+    const inmutabilidad = codigo("prisma/migrations/20260916013000_inmutabilidad/migration.sql");
+    expect(inmutabilidad).toContain("CREATE TRIGGER hilo_versiones_sin_borrado");
+    expect(inmutabilidad).toContain("CREATE TRIGGER eventos_auditoria_inmutable");
+    expect(hechos.NOTA_APROBADA_CORREGIBLE).toBe(false);
+    const estados = codigo("src/lib/sesion-clinica/estados.ts");
+    // Desde "aprobada" sólo se puede volver a pedir Para vos, sin tocar la nota.
+    expect([...estados.matchAll(/desde: \[([^\]]*)\]/g)].filter((m) => m[1].includes('"aprobada"'))).toHaveLength(1);
+    expect(estados).toMatch(/reintentar_feedback: \{\s+actor: "usuaria",\s+desde: \["revision", "aprobada"\],\s+hacia: "mismo"/);
+    expect(hechos.TRANSCRIPCION_VISIBLE_EN_PANTALLA).toBe(false);
+    expect(hechos.CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA).toBe(false);
+    const rutaConsentimiento = codigo("src/app/api/pacientes/[id]/consentimiento/route.ts");
+    const select = rutaConsentimiento.slice(rutaConsentimiento.indexOf("const consentimientoSelect"), rutaConsentimiento.indexOf("} as const;"));
+    expect(select).not.toMatch(/textoCompleto|firmaDigital/);
+    expect(texto).toContain("Desde la aplicación no se puede borrar tus datos, ni corregir las notas ya aprobadas, ni ver la transcripción ni esta autorización firmada.");
+
+    // Y ya no promete los derechos que la app no ejecuta.
+    expect(texto).not.toContain("Tenés derecho");
+    expect(texto).not.toMatch(/que se eliminen|acceder a tus datos/);
+  });
+
   it("marco legal y transferencia internacional", () => {
     expect(texto).toContain(hechos.MARCO_LEGAL.ley);
     expect(texto).toContain("transferencia internacional");
@@ -353,7 +390,7 @@ describe("la ruta de consentimiento", () => {
     const { descifrar, aadDe } = await import("@/lib/encryption");
     const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
     expect(texto).toContain("Hola María González.");
-    expect(texto).toContain("Versión 2.3");
+    expect(texto).toContain("Versión 2.4");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
   });
