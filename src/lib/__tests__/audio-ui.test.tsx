@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { GrabarView } from "@/app/(dashboard)/grabar/[turnoId]/_components/grabar-view";
 import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
-import { QUEDARME, PREPARANDO_GRABACION } from "@/lib/glosario";
+import { QUEDARME, PREPARANDO_GRABACION, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE } from "@/lib/glosario";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/ui/sheet", () => ({ Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null }));
 const m = vi.hoisted(() => ({ vista: {} as Record<string, unknown>, iniciar: vi.fn(), terminar: vi.fn(), reenviar: vi.fn() }));
@@ -32,6 +32,30 @@ test("al límite espera la decisión de la profesional", () => {
   expect(m.terminar).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Terminar y enviar" }));
   expect(m.terminar).toHaveBeenCalledOnce();
+});
+
+test("consultorio de prueba: desde el principio dice el tope, avisa cerca y en el tope no deja empezar otra", () => {
+  const { rerender } = render(<GrabarView {...props} prueba={{ usadas: 0, restantes: 15, tope: 15 }} />);
+  expect(screen.getByText(PRUEBA_AVISO(0))).toBeTruthy();
+  expect(screen.queryByText(PRUEBA_CERCA(3))).toBeNull();
+
+  rerender(<GrabarView {...props} prueba={{ usadas: 12, restantes: 3, tope: 15 }} />);
+  expect(screen.getByText(PRUEBA_CERCA(3))).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Grabar sesión" }) as HTMLButtonElement).disabled).toBe(false);
+
+  rerender(<GrabarView {...props} prueba={{ usadas: 15, restantes: 0, tope: 15 }} />);
+  expect(screen.getByRole("alert").textContent).toContain(PRUEBA_TOPE);
+  expect((screen.getByRole("button", { name: "Grabar sesión" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
+  expect(m.iniciar).not.toHaveBeenCalled();
+});
+
+test("en el tope, la grabación ya empezada se puede reanudar; sin prueba no hay aviso", () => {
+  m.vista = { grabacion: { estado: "pausada", sesionId: "s" } };
+  const { rerender } = render(<GrabarView {...props} prueba={{ usadas: 15, restantes: 0, tope: 15 }} />);
+  expect((screen.getByRole("button", { name: "Reanudar grabación" }) as HTMLButtonElement).disabled).toBe(false);
+  rerender(<GrabarView {...props} prueba={null} />);
+  expect(screen.queryByText(/Estás probando Sesión/)).toBeNull();
 });
 
 test("explica por qué todavía no se puede empezar", () => {

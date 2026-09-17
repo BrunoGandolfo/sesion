@@ -9,22 +9,20 @@ import {
   TOKEN_CUENTA,
   tokenVigente,
 } from "@/lib/cuenta-tokens";
-import { CUENTA_TOPE_INVITACIONES, CUENTA_INVITAR_NO_PERMITIDO,
+import { formatearFechaCompletaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
+import { CUENTA_INVITAR_NO_PERMITIDO,
   ENTRADA_INVITACION_INVALIDA,
   ENTRADA_REGISTRO_ERROR,
   ENTRADA_TERMINOS_REQUERIDOS,
+  INVITAR_AGOTADAS,
+  INVITAR_ESPERA,
 } from "@/lib/glosario";
+import { cupoInvitacion, type ContadorInvitaciones, type CupoInvitacion } from "@/lib/limites-prueba";
 import { validarPasswordNueva } from "@/lib/password";
 
 import { ApiError } from "../responses";
 
 export const VIGENCIA_INVITACION_MS = 7 * 24 * 60 * 60 * 1000;
-
-/**
- * TEMPORAL: tope de invitaciones vigentes por creadora, por costo de APIs
- * durante la prueba. Cuando la prueba termine, este número sube o se saca.
- */
-export const MAX_INVITACIONES_VIGENTES = 2;
 
 /**
  * TEMPORAL: quién puede invitar, por costo de APIs durante la prueba. Hoy la
@@ -67,19 +65,19 @@ export interface SesionNueva {
 }
 
 export interface RepositorioRegistro {
-  /** Cuenta las vigentes de la creadora y crea la nueva en UN acto (lock por
-   *  creadora): `null` si ya hay `topeVigentes`. Dos pedidos en paralelo no
-   *  pueden superar el tope. */
+  /** Lee el contador de la creadora, decide con `cupoInvitacion`, lo suma y
+   *  crea la invitación en UN acto (lock por creadora). Si no hay cupo no crea
+   *  nada y devuelve por qué. Dos pedidos en paralelo no pasan los dos. */
   crearInvitacion(input: {
     tokenHash: string;
     venceEn: Date;
     creadaEn: Date;
     creadaPorId: string;
-    topeVigentes: number;
-  }): Promise<{ id: string } | null>;
+  }): Promise<{ id: string } | Exclude<CupoInvitacion, { disponible: true }>>;
+  contadorInvitaciones(userId: string): Promise<ContadorInvitaciones>;
   buscarInvitacion(tokenHash: string): Promise<InvitacionGuardada | null>;
-  /** Crea organización, usuaria, configuración, sesión, consumo de la
-   *  invitación y los dos eventos de auditoría, atómicamente. */
+  /** Crea organización (de prueba), usuaria, configuración, sesión, consumo
+   *  de la invitación y los dos eventos de auditoría, atómicamente. */
   registrar(input: {
     invitacionId: string;
     nombre: string;
@@ -109,15 +107,27 @@ export async function crearInvitacion(
     tokenHash: await hashTokenCuenta(token),
     venceEn,
     creadaEn: ahora,
-    topeVigentes: MAX_INVITACIONES_VIGENTES,
   });
-  if (!creada) {
-    throw new ApiError(
-      CUENTA_TOPE_INVITACIONES(MAX_INVITACIONES_VIGENTES),
-      429,
-    );
-  }
+  if (!("id" in creada)) throw new ApiError(motivoSinCupo(creada), 429);
   return { enlace: `${ORIGEN_CUENTA}/registro?token=${token}`, vence: venceEn.toISOString(), invitacionId: creada.id };
+}
+
+function motivoSinCupo(cupo: Exclude<CupoInvitacion, { disponible: true }>): string {
+  return cupo.motivo === "agotadas"
+    ? INVITAR_AGOTADAS
+    : INVITAR_ESPERA(`${formatearFechaCompletaMvd(cupo.desde)} a las ${formatearHoraMvd(cupo.desde)}`);
+}
+
+/** Lo que la pantalla de invitar muestra ANTES de generar: cuántas quedan y,
+ *  si hoy no se puede, por qué (`aviso`, con la fecha si hay que esperar). */
+export async function consultarInvitaciones(
+  actor: ActorInvitante,
+  repo: RepositorioRegistro,
+  ahora = new Date(),
+): Promise<{ restantes: number; aviso: string | null }> {
+  const cupo = cupoInvitacion(await repo.contadorInvitaciones(actor.userId), ahora);
+  if (!puedeInvitar(actor)) return { restantes: cupo.restantes, aviso: CUENTA_INVITAR_NO_PERMITIDO };
+  return { restantes: cupo.restantes, aviso: cupo.disponible ? null : motivoSinCupo(cupo) };
 }
 
 export async function invitacionDisponible(

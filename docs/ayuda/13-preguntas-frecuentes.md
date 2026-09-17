@@ -148,8 +148,15 @@ No. Después de aprobar una nota, la IA prepara una propuesta y vos decidís:
 **Aceptar**, **Editar y aceptar** o **Descartar propuesta**. Las versiones
 anteriores se conservan. → `10-el-hilo-y-el-recorrido.md`
 
+**30. ¿Cuántas colegas puedo invitar?**
+Cinco en total, una cada 30 días. Cada invitada tiene un consultorio de prueba
+que puede grabar hasta 15 sesiones; lo demás de su consultorio no tiene límite.
+Al llegar a 15, la app le dice que hable con quien la invitó.
+→ `11-tu-consultorio.md`
+
 <!-- fuentes:
 src/lib/glosario.ts
+src/lib/limites-prueba.ts
 src/lib/login-intentos.ts
 src/lib/consentimiento.ts
 src/lib/recordatorios-programacion.ts

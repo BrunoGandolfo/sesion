@@ -2,6 +2,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { db } from "@/lib/db";
 import { consentimientoVigenteDe } from "@/lib/consentimiento";
+import { PRUEBA_TOPE } from "@/lib/glosario";
+import { TOPE_GRABACIONES_PRUEBA } from "@/lib/limites-prueba";
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { keyAudio } from "@/lib/sesion-clinica/estados";
 import type { DescriptorSegmento, EstadoAudioRemoto, PausaAudio } from "@/lib/audio/contrato";
@@ -33,6 +35,15 @@ export async function prepararAudio({ prisma, organizationId, turnoId }: Base & 
       }
       return { id: existente.id };
     }
+    // Una grabación nueva suma al contador del consultorio. En un consultorio
+    // de prueba, sólo si no llegó al tope: el UPDATE toma el lock de la fila y
+    // vuelve a mirar la condición, así dos inicios a la vez no pasan del tope.
+    // Reanudar la misma grabación (arriba) no suma.
+    const contada = await tx.organization.updateMany({
+      where: { id: organizationId, OR: [{ deInvitacion: false }, { grabacionesIniciadas: { lt: TOPE_GRABACIONES_PRUEBA } }] },
+      data: { grabacionesIniciadas: { increment: 1 } },
+    });
+    if (!contada.count) throw new ApiError(PRUEBA_TOPE, 403);
     const id = randomUUID();
     await tx.sesionClinica.create({ data: { ...cifrarSesion(id, { audioClave: randomBytes(32).toString("base64") }), organizationId, turnoId, estado: "grabando" } });
     return { id };

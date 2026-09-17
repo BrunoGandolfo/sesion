@@ -3,22 +3,39 @@ import { ApiError } from "@/app/api/_lib/responses";
 import { hashTokenCuenta } from "@/lib/cuenta-tokens";
 import { ENTRADA_INVITACION_INVALIDA, ENTRADA_REGISTRO_ERROR, TERMINOS_VERSION } from "@/lib/glosario";
 import { OPCIONES_TRANSACCION, tomarLocks } from "@/lib/intentos-serializados";
+import { cupoInvitacion } from "@/lib/limites-prueba";
 import type { ClienteCifrado } from "@/lib/prisma-encryption";
 import { VIGENCIA_ABSOLUTA_MS } from "@/lib/sesion-acceso";
 
 export function repositorioRegistro(prisma: ClienteCifrado): RepositorioRegistro {
   return {
-    crearInvitacion: ({ topeVigentes, ...datos }) =>
+    crearInvitacion: (datos) =>
       prisma.$transaction(async (tx) => {
-        // Contar y crear bajo el mismo lock: sin esto, dos pedidos en paralelo
-        // leen "1 vigente" los dos y quedan tres.
+        // Leer el contador y sumarle bajo el mismo lock: sin esto, dos pedidos
+        // en paralelo leen "hay cupo" los dos y pasan los dos.
         await tomarLocks(tx, [`invitaciones:${datos.creadaPorId}`]);
-        const vigentes = await tx.invitacion.count({
-          where: { creadaPorId: datos.creadaPorId, usadaEn: null, venceEn: { gt: datos.creadaEn } },
+        const usuaria = await tx.user.findUniqueOrThrow({
+          where: { id: datos.creadaPorId },
+          select: { invitacionesGeneradas: true, ultimaInvitacionEn: true },
         });
-        if (vigentes >= topeVigentes) return null;
+        const cupo = cupoInvitacion(
+          { generadas: usuaria.invitacionesGeneradas, ultimaEn: usuaria.ultimaInvitacionEn },
+          datos.creadaEn,
+        );
+        if (!cupo.disponible) return cupo;
+        await tx.user.update({
+          where: { id: datos.creadaPorId },
+          data: { invitacionesGeneradas: { increment: 1 }, ultimaInvitacionEn: datos.creadaEn },
+        });
         return tx.invitacion.create({ data: datos, select: { id: true } });
       }, OPCIONES_TRANSACCION),
+    contadorInvitaciones: async (userId) => {
+      const usuaria = await prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { invitacionesGeneradas: true, ultimaInvitacionEn: true },
+      });
+      return { generadas: usuaria.invitacionesGeneradas, ultimaEn: usuaria.ultimaInvitacionEn };
+    },
     buscarInvitacion: (tokenHash) =>
       prisma.invitacion.findUnique({
         where: { tokenHash },
@@ -41,7 +58,8 @@ export function repositorioRegistro(prisma: ClienteCifrado): RepositorioRegistro
             where: { id: datos.invitacionId },
             select: { creadaPorId: true, creadaPor: { select: { organizationId: true } } },
           });
-          const org = await tx.organization.create({ data: { nombre: `Consultorio de ${datos.nombre}` } });
+          // De prueba: graba hasta TOPE_GRABACIONES_PRUEBA sesiones (casos-uso/audio.ts).
+          const org = await tx.organization.create({ data: { nombre: `Consultorio de ${datos.nombre}`, deInvitacion: true } });
           const user = await tx.user.create({
             data: { nombre: datos.nombre, email: datos.email, hashedPassword: datos.hashedPassword, organizationId: org.id, rol: "titular" },
           });

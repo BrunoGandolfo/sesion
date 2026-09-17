@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { EstadoEnvioSms } from "@prisma/client";
-import { RECORDATORIO_ESTADO, otrasSesionesCerradas, CUENTA_TOPE_INVITACIONES, FRECUENCIA_LABEL, FEEDBACK_ESTADO_LABEL } from "@/lib/glosario";
+import { RECORDATORIO_ESTADO, otrasSesionesCerradas, INVITAR_RESTANTES, PRUEBA_CERCA, FRECUENCIA_LABEL, FEEDBACK_ESTADO_LABEL } from "@/lib/glosario";
 import { FRECUENCIAS_TURNO } from "@/lib/constantes-turno";
 it("cubre cada estado durable de SMS y distingue aceptación de entrega", () => {
   expect(Object.keys(RECORDATORIO_ESTADO).sort()).toEqual(Object.values(EstadoEnvioSms).sort());
@@ -12,7 +12,10 @@ it("los mensajes respetan las cantidades reales", () => {
   expect(otrasSesionesCerradas(0)).toBe("No había otras sesiones abiertas.");
   expect(otrasSesionesCerradas(1)).toBe("Cerramos 1 sesión en otro dispositivo.");
   expect(otrasSesionesCerradas(3)).toBe("Cerramos 3 sesiones en otros dispositivos.");
-  expect(CUENTA_TOPE_INVITACIONES(2)).toContain("2 invitaciones vigentes");
+  expect(INVITAR_RESTANTES(1)).toBe("Te queda 1 invitación.");
+  expect(INVITAR_RESTANTES(4)).toBe("Te quedan 4 invitaciones.");
+  expect(PRUEBA_CERCA(1)).toBe("Te queda 1 sesión para grabar de las 15 de la prueba.");
+  expect(PRUEBA_CERCA(3)).toBe("Te quedan 3 sesiones para grabar de las 15 de la prueba.");
 });
 it("cada frecuencia y cada estado de Para vos tienen texto", () => {
   expect(Object.keys(FRECUENCIA_LABEL).sort()).toEqual([...FRECUENCIAS_TURNO].sort());

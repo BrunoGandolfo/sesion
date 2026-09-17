@@ -1,16 +1,17 @@
 import { afterEach, expect, it, vi } from "vitest";
 
 import {
+  consultarInvitaciones,
   crearInvitacion,
   invitacionDisponible,
-  MAX_INVITACIONES_VIGENTES,
   puedeInvitar,
   registrarCuenta,
   type InvitacionGuardada,
   type RepositorioRegistro,
 } from "@/app/api/_lib/casos-uso/registrar-cuenta";
 import { ApiError } from "@/app/api/_lib/responses";
-import { ENTRADA_REGISTRO_ERROR } from "@/lib/glosario";
+import { CUENTA_INVITAR_NO_PERMITIDO, ENTRADA_REGISTRO_ERROR, INVITAR_AGOTADAS } from "@/lib/glosario";
+import { cupoInvitacion, ESPERA_ENTRE_INVITACIONES_MS, type ContadorInvitaciones } from "@/lib/limites-prueba";
 
 const ahora = new Date("2026-09-10T12:00:00Z");
 const actor = { userId: "duena", email: "mariana@example.test", rol: "titular" };
@@ -18,13 +19,15 @@ const datos = { token: "a".repeat(64), email: " Nueva@example.test ", nombre: " 
 const huella = { ip: "203.0.113.7", userAgent: "vitest" };
 const hashTokenSesion = async (t: string) => `hash(${t})`;
 
-function preparar(cambios: Partial<InvitacionGuardada> = {}, vigentes = 0) {
+function preparar(cambios: Partial<InvitacionGuardada> = {}, contador: ContadorInvitaciones = { generadas: 0, ultimaEn: null }) {
   const invitacion: InvitacionGuardada = { id: "invitacion", creadaPorId: "duena", venceEn: new Date(ahora.getTime() + 10000), usadaEn: null, ...cambios };
   const repo: RepositorioRegistro = {
-    // El repositorio real cuenta y crea bajo lock; el doble simula el conteo.
-    crearInvitacion: vi.fn().mockImplementation(async ({ topeVigentes }: { topeVigentes: number }) =>
-      vigentes >= topeVigentes ? null : { id: "inv-nueva" },
-    ),
+    // El repositorio real decide con cupoInvitacion bajo lock; el doble también.
+    crearInvitacion: vi.fn().mockImplementation(async ({ creadaEn }: { creadaEn: Date }) => {
+      const cupo = cupoInvitacion(contador, creadaEn);
+      return cupo.disponible ? { id: "inv-nueva" } : cupo;
+    }),
+    contadorInvitaciones: vi.fn().mockResolvedValue(contador),
     buscarInvitacion: vi.fn().mockResolvedValue(invitacion),
     registrar: vi.fn().mockResolvedValue({ userId: "nueva", organizationId: "nuevo-consultorio", sesionId: "ses" }),
   };
@@ -54,7 +57,6 @@ it("crea un enlace canónico de 7 días, guardando sólo el hash", async () => {
   expect(resultado.invitacionId).toBe("inv-nueva");
   const guardado = vi.mocked(deps.repo.crearInvitacion).mock.calls[0][0];
   expect(guardado.creadaPorId).toBe("duena");
-  expect(guardado.topeVigentes).toBe(MAX_INVITACIONES_VIGENTES);
   expect(resultado.enlace).not.toContain(guardado.tokenHash);
 });
 
@@ -65,12 +67,27 @@ it("sin permiso: 403 y no crea nada", async () => {
   expect(deps.repo.crearInvitacion).not.toHaveBeenCalled();
 });
 
-it(`con ${MAX_INVITACIONES_VIGENTES} vigentes: 429 (el repositorio no crea, bajo su lock)`, async () => {
+it("sin cupo: 429 con el motivo; si hay que esperar, dice desde qué día y hora", async () => {
   process.env.INVITACIONES_PERMITIDAS = actor.email;
-  const deps = preparar({}, MAX_INVITACIONES_VIGENTES);
-  await expect(crearInvitacion(actor, deps.repo, ahora)).rejects.toMatchObject({ status: 429 });
-  // TEMPORAL: tope por costo de APIs durante la prueba.
-  expect(MAX_INVITACIONES_VIGENTES).toBe(2);
+  await expect(crearInvitacion(actor, preparar({}, { generadas: 5, ultimaEn: null }).repo, ahora))
+    .rejects.toMatchObject({ status: 429, message: INVITAR_AGOTADAS });
+  // Última el 10 de septiembre a las 09:00 de Montevideo: la próxima, desde el 10 de octubre a esa hora.
+  await expect(crearInvitacion(actor, preparar({}, { generadas: 1, ultimaEn: ahora }).repo, new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS - 1)))
+    .rejects.toMatchObject({ status: 429, message: "Generaste una invitación hace menos de 30 días. Vas a poder generar la próxima desde el 10 de octubre de 2026 a las 09:00." });
+  await expect(crearInvitacion(actor, preparar({}, { generadas: 1, ultimaEn: ahora }).repo, new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS)))
+    .resolves.toMatchObject({ invitacionId: "inv-nueva" });
+});
+
+it("consultarInvitaciones: cuántas quedan y por qué hoy no, antes de generar", async () => {
+  process.env.INVITACIONES_PERMITIDAS = actor.email;
+  expect(await consultarInvitaciones(actor, preparar().repo, ahora)).toEqual({ restantes: 5, aviso: null });
+  expect(await consultarInvitaciones(actor, preparar({}, { generadas: 2, ultimaEn: ahora }).repo, ahora)).toEqual({
+    restantes: 3,
+    aviso: "Generaste una invitación hace menos de 30 días. Vas a poder generar la próxima desde el 10 de octubre de 2026 a las 09:00.",
+  });
+  expect(await consultarInvitaciones(actor, preparar({}, { generadas: 5, ultimaEn: null }).repo, ahora)).toEqual({ restantes: 0, aviso: INVITAR_AGOTADAS });
+  process.env.INVITACIONES_PERMITIDAS = "otra@example.test";
+  expect(await consultarInvitaciones(actor, preparar().repo, ahora)).toEqual({ restantes: 5, aviso: CUENTA_INVITAR_NO_PERMITIDO });
 });
 
 it("registra con email y nombre normalizados, password hasheada y la sesión nueva", async () => {

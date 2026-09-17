@@ -9,7 +9,11 @@ Necesitás un enlace de una colega que ya use Sesión. Completá nombre, email,
 contraseña dos veces y aceptá los términos y la política de privacidad.
 Al tocar **Crear mi cuenta**, se abre tu propio consultorio y entrás a **Hoy**.
 Los datos de quien te invitó permanecen separados. Si el enlace venció o ya
-se usó, pedile otro. Más detalles en `11-tu-consultorio.md`.
+se usó, pedile otro.
+
+Una cuenta creada por invitación es **de prueba**: puede grabar hasta **15
+sesiones en total**. Lo demás (agenda, pacientes, cobros, recordatorios) no
+tiene límite. Más detalles en `11-tu-consultorio.md`.
 
 ## Entrar
 
