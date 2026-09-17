@@ -1,5 +1,5 @@
 /**
- * Integración — invitaciones y alta: permiso, tope de vigentes, alta atómica
+ * Integración — invitaciones y alta: permiso, límites de invitaciones, alta atómica
  * (org + usuaria + configuración + sesión + eventos) y la ruta que deja la
  * cookie. Contra la base de test (DATABASE_URL_TEST).
  */
@@ -9,12 +9,14 @@ import bcrypt from "bcryptjs";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import {
+  consultarInvitaciones,
   crearInvitacion,
-  MAX_INVITACIONES_VIGENTES,
   registrarCuenta,
 } from "@/app/api/_lib/casos-uso/registrar-cuenta";
 import { repositorioRegistro } from "@/lib/cuenta-registro-db";
 import { hashTokenCuenta } from "@/lib/cuenta-tokens";
+import { INVITAR_AGOTADAS } from "@/lib/glosario";
+import { ESPERA_ENTRE_INVITACIONES_MS, TOPE_INVITACIONES_TOTAL } from "@/lib/limites-prueba";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { BCRYPT_RONDAS } from "@/lib/password";
 import { buscarSesionViva, hashTokenSesion, nuevoTokenSesion } from "@/lib/sesion-acceso";
@@ -84,6 +86,9 @@ it("crea un consultorio propio con configuración vacía, sesión abierta y los 
   expect(config).toMatchObject({ tarifaDefault: 0, nombreProfesional: "", direccion: "" });
   const usuario = await prisma.user.findUniqueOrThrow({ where: { id: nuevo.userId } });
   expect(usuario.rol).toBe("titular");
+  // El consultorio nuevo es de prueba; el de quien invita, no.
+  expect((await prisma.organization.findUniqueOrThrow({ where: { id: nuevo.organizationId } })).deInvitacion).toBe(true);
+  expect((await prisma.organization.findUniqueOrThrow({ where: { id: org.id } })).deInvitacion).toBe(false);
   expect(await bcrypt.compare(datos.password, usuario.hashedPassword)).toBe(true);
 
   const sesion = await buscarSesionViva(estado.base.db, deps.tokenSesion, new Date());
@@ -130,30 +135,48 @@ it("un fallo después de crear la organización revierte también el consumo", a
   expect((await estado.base.prisma.invitacion.findUniqueOrThrow({ where: { id: invitacion.id } })).usadaEn).toBeNull();
 });
 
-it(`tope: la invitación ${MAX_INVITACIONES_VIGENTES + 1} vigente es 429; usar una libera el cupo; sin permiso es 403`, async () => {
-  const { repo, actor } = await preparar(); // ya hay 1 vigente
-  await crearInvitacion(actor, repo, ahora);
-  await expect(crearInvitacion(actor, repo, ahora)).rejects.toMatchObject({ status: 429 });
-  expect(await estado.base.prisma.invitacion.count()).toBe(MAX_INVITACIONES_VIGENTES);
+const DIA = 24 * 60 * 60 * 1000;
 
-  const primera = await estado.base.prisma.invitacion.findFirstOrThrow();
-  await estado.base.prisma.invitacion.update({ where: { id: primera.id }, data: { usadaEn: ahora } });
-  await expect(crearInvitacion(actor, repo, ahora)).resolves.toBeDefined();
-
-  process.env.INVITACIONES_PERMITIDAS = "otra@example.test";
-  await expect(crearInvitacion(actor, repo, ahora)).rejects.toMatchObject({ status: 403 });
+it("la sexta invitación no se puede generar, ni aunque la limpieza haya purgado las anteriores", async () => {
+  const { repo, actor } = await preparar(); // la primera, ahora
+  for (let i = 1; i < TOPE_INVITACIONES_TOTAL; i++) {
+    await crearInvitacion(actor, repo, new Date(ahora.getTime() + i * ESPERA_ENTRE_INVITACIONES_MS));
+  }
+  expect(await estado.base.prisma.invitacion.count()).toBe(5);
+  // El mantenimiento borra las invitaciones viejas: el contador no depende de esas filas.
+  await estado.base.prisma.invitacion.deleteMany();
+  const muchoDespues = new Date(ahora.getTime() + 400 * DIA);
+  await expect(crearInvitacion(actor, repo, muchoDespues)).rejects.toMatchObject({ status: 429, message: INVITAR_AGOTADAS });
+  expect(await estado.base.prisma.invitacion.count()).toBe(0);
+  expect(await consultarInvitaciones(actor, repo, muchoDespues)).toEqual({ restantes: 0, aviso: INVITAR_AGOTADAS });
 });
 
-it(`tope en paralelo: ${MAX_INVITACIONES_VIGENTES + 3} pedidos a la vez dejan exactamente ${MAX_INVITACIONES_VIGENTES} vigentes`, async () => {
-  const { repo, actor } = await preparar(); // ya hay 1 vigente
-  const resultados = await Promise.allSettled(
-    Array.from({ length: MAX_INVITACIONES_VIGENTES + 3 }, () => crearInvitacion(actor, repo, ahora)),
-  );
-  expect(resultados.filter((r) => r.status === "fulfilled")).toHaveLength(MAX_INVITACIONES_VIGENTES - 1);
+it("una segunda antes de los treinta días no se genera, y el aviso dice desde cuándo sí", async () => {
+  const { repo, actor, invitante } = await preparar();
+  const casi = new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS - 1);
+  await expect(crearInvitacion(actor, repo, casi)).rejects.toMatchObject({ status: 429, message: expect.stringContaining("Vas a poder generar la próxima desde el ") });
+  const { aviso, restantes } = await consultarInvitaciones(actor, repo, casi);
+  expect(restantes).toBe(4);
+  expect(aviso).toContain("Vas a poder generar la próxima desde el ");
+  expect(await estado.base.prisma.invitacion.count()).toBe(1);
+  expect(await estado.base.prisma.user.findUniqueOrThrow({ where: { id: invitante.id } })).toMatchObject({ invitacionesGeneradas: 1, ultimaInvitacionEn: ahora });
+
+  await expect(crearInvitacion(actor, repo, new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS))).resolves.toBeDefined();
+  process.env.INVITACIONES_PERMITIDAS = "otra@example.test";
+  await expect(crearInvitacion(actor, repo, new Date(ahora.getTime() + 90 * DIA))).rejects.toMatchObject({ status: 403 });
+});
+
+it("en paralelo: cinco pedidos a la vez generan una sola invitación", async () => {
+  const { repo, actor, invitante } = await preparar();
+  await estado.base.prisma.invitacion.deleteMany();
+  await estado.base.prisma.user.update({ where: { id: invitante.id }, data: { invitacionesGeneradas: 0, ultimaInvitacionEn: null } });
+  const resultados = await Promise.allSettled(Array.from({ length: 5 }, () => crearInvitacion(actor, repo, ahora)));
+  expect(resultados.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   for (const r of resultados.filter((r) => r.status === "rejected")) {
     expect((r as PromiseRejectedResult).reason).toMatchObject({ status: 429 });
   }
-  expect(await estado.base.prisma.invitacion.count({ where: { usadaEn: null } })).toBe(MAX_INVITACIONES_VIGENTES);
+  expect(await estado.base.prisma.invitacion.count()).toBe(1);
+  expect((await estado.base.prisma.user.findUniqueOrThrow({ where: { id: invitante.id } })).invitacionesGeneradas).toBe(1);
 });
 
 it("POST /api/cuenta/registro responde 201 con la cookie de la sesión creada, y esa cookie autentica", async () => {
@@ -173,15 +196,18 @@ it("POST /api/cuenta/registro responde 201 con la cookie de la sesión creada, y
   expect(actor.rol).toBe("titular");
 });
 
-it("POST /api/cuenta/invitaciones exige sesión y permiso, y deja el evento", async () => {
+it("GET y POST /api/cuenta/invitaciones exigen sesión; el POST deja el evento y el GET muestra el cupo", async () => {
   const { invitante, org } = await preparar();
+  // La que generó preparar() fue hace 31 días: hoy se puede generar otra.
+  await estado.base.prisma.user.update({ where: { id: invitante.id }, data: { ultimaInvitacionEn: new Date(Date.now() - 31 * DIA) } });
   const sesion = await estado.base.db.sesionAcceso.create({
     data: { userId: invitante.id, tokenHash: "s".repeat(64), ultimoUsoEn: new Date(), venceEn: new Date(Date.now() + 86_400_000) },
   });
   void sesion;
   estado.cookie = null;
-  const { POST } = await import("@/app/api/cuenta/invitaciones/route");
+  const { GET, POST } = await import("@/app/api/cuenta/invitaciones/route");
   expect((await POST()).status).toBe(401);
+  expect((await GET()).status).toBe(401);
 
   // El token en claro no importa acá: buscarSesionViva hashea la cookie, así
   // que se crea la sesión desde un token real.
@@ -194,4 +220,9 @@ it("POST /api/cuenta/invitaciones exige sesión y permiso, y deja el evento", as
   expect(cuerpo.data.enlace).toMatch(/\/registro\?token=[a-f0-9]{64}$/);
   const evento = await estado.base.prisma.eventoAuditoria.findFirstOrThrow({ where: { organizationId: org.id, accion: "cuenta.invitacion_creada" } });
   expect(JSON.stringify(evento.detalle)).not.toContain(cuerpo.data.enlace.split("token=")[1]);
+
+  const cupo = await (await GET()).json();
+  expect(cupo.data.restantes).toBe(3);
+  expect(cupo.data.aviso).toContain("Vas a poder generar la próxima desde el ");
+  expect((await POST()).status).toBe(429);
 });

@@ -6,6 +6,10 @@ mes.
 
 ## Lo que ves, de arriba abajo
 
+Si tu consultorio se creó con una invitación, arriba de todo hay un aviso de la
+prueba: cuántas de las **15 sesiones** llevás grabadas, cuántas te quedan cuando
+son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
+
 1. **Tu cabecera** — tu avatar con tus iniciales, tu primer nombre y, debajo, el
    saludo con la fecha corta: *Buen día* hasta las 12, *Buenas tardes* hasta las
    19 y *Buenas noches* después. Tocar el nombre no hace nada: a **Tu
@@ -89,6 +93,8 @@ contar cuando se graba o se cobra.
   o a Cobros.
 
 <!-- fuentes:
+src/app/(dashboard)/page.tsx
+src/components/layout/aviso-prueba.tsx
 src/app/(dashboard)/_components/dashboard.tsx
 src/app/(dashboard)/_components/saludo.tsx
 src/app/(dashboard)/_components/pendientes.tsx

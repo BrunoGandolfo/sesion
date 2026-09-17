@@ -25,6 +25,7 @@
 // El único import del módulo, y es de tipos: `MetodoPago` no existe en
 // tiempo de ejecución, así que el glosario sigue siendo sólo strings.
 import type { FrecuenciaTurno, MetodoPago } from "@/types/domain";
+import { ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, TOPE_INVITACIONES_TOTAL } from "@/lib/limites-prueba";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Navegación
@@ -1198,13 +1199,21 @@ export const ENTRADA_PEDIR_INVITACION = "Pedile otro a quien te invitó";
 export const ENTRADA_REGISTRO_ERROR = "No pudimos crear la cuenta con esos datos. Revisalos o probá entrar con tu cuenta.";
 export const ENTRADA_CUENTA_CREADA_SIN_SESION = "Tu cuenta ya está creada. Entrá con tu email y contraseña. Si el acceso está bloqueado por intentos, esperá antes de volver a probar.";
 export const INVITAR_COLEGA = "Invitar a una colega";
-export const INVITAR_DESCRIPCION = "Tu colega crea su propio consultorio, separado del tuyo. El enlace vence en 7 días y se usa una sola vez. Compartilo sólo con ella.";
+export const INVITAR_DESCRIPCION = "La invitación es para que una colega pruebe Sesión, no para usarla como su consultorio. Crea un consultorio de prueba, separado del tuyo, que puede grabar hasta " + TOPE_GRABACIONES_PRUEBA + " sesiones en total. El enlace vence en 7 días y se usa una sola vez. Compartilo sólo con ella.";
+export const INVITAR_LIMITES = "Podés generar " + TOPE_INVITACIONES_TOTAL + " invitaciones en total, una cada " + ESPERA_ENTRE_INVITACIONES_DIAS + " días.";
+export const INVITAR_RESTANTES = (n: number) => n === 1 ? "Te queda 1 invitación." : "Te quedan " + n + " invitaciones.";
+export const INVITAR_AGOTADAS = "Ya generaste las " + TOPE_INVITACIONES_TOTAL + " invitaciones de tu cuenta. No podés generar más.";
+/** `cuando`: "17 de octubre de 2026 a las 15:30". */
+export const INVITAR_ESPERA = (cuando: string) => "Generaste una invitación hace menos de " + ESPERA_ENTRE_INVITACIONES_DIAS + " días. Vas a poder generar la próxima desde el " + cuando + ".";
+export const PRUEBA_AVISO = (usadas: number) => "Estás probando Sesión: este consultorio puede grabar hasta " + TOPE_GRABACIONES_PRUEBA + " sesiones. Llevás " + usadas + ".";
+export const PRUEBA_CERCA = (restantes: number) => (restantes === 1 ? "Te queda 1 sesión" : "Te quedan " + restantes + " sesiones") + " para grabar de las " + TOPE_GRABACIONES_PRUEBA + " de la prueba.";
+export const PRUEBA_TOPE = "Llegaste a las " + TOPE_GRABACIONES_PRUEBA + " sesiones grabadas de la prueba y no podés grabar más. Para seguir, hablá con quien te invitó. La agenda, los pacientes, los cobros y lo demás siguen funcionando.";
 export const INVITAR_GENERAR = "Generar enlace";
 export const INVITAR_ENLACE = "Enlace de invitación";
 export const INVITAR_COPIAR = "Copiar";
 export const INVITAR_COPIADO = "Enlace copiado";
 export const INVITAR_WHATSAPP = "Compartir por WhatsApp";
-export const INVITAR_MENSAJE = "Te invito a probar Sesión. Con este enlace creás tu propio consultorio. Vence en 7 días:";
+export const INVITAR_MENSAJE = "Te invito a probar Sesión. Con este enlace creás un consultorio de prueba, que puede grabar hasta " + TOPE_GRABACIONES_PRUEBA + " sesiones. Vence en 7 días:";
 export const INVITAR_ERROR_COPIA = "No pude copiarlo. Seleccioná el enlace y copialo desde tu navegador.";
 export const TERMINOS_TITULO = "Términos y política de privacidad";
 export const TERMINOS_FECHA = "Borrador del 9 de septiembre de 2026";
@@ -1271,7 +1280,6 @@ export const CUENTA_ENTRADA_NO_DISPONIBLE = "No pudimos procesar la entrada en e
 export const FRECUENCIA_LABEL: Readonly<Record<FrecuenciaTurno, string>> = {unico:"Una vez",semanal:"Cada semana",quincenal:"Cada 15 días"};
 export const SESION_FALLO_LABEL: Readonly<Record<string, string>> = {intentos_agotados:"Se intentó cinco veces seguidas y no salió.",grabacion_abandonada:"La grabación quedó a medias."};
 export const FEEDBACK_ESTADO_LABEL = {no_pedido:"Todavía no se pidió.",pendiente:"Se está generando…",listo:"Listo",fallido:"No se pudo generar."} as const;
-export const CUENTA_TOPE_INVITACIONES = (n: number) => "Ya tenés " + n + " invitaciones vigentes. Esperá a que se usen o venzan.";
 
 export const SMS_MOTIVOS = {
   "CREDENCIALES": "el servicio de SMS rechazó las credenciales",

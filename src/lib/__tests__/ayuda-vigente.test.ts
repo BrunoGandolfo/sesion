@@ -6,7 +6,8 @@ import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consen
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/audio/contrato";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
 import { DISPERSION_MINUTOS } from "@/lib/recordatorios-programacion";
-import { ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
+import { ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_AGOTADAS, INVITAR_ESPERA, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
+import { AVISO_GRABACIONES_RESTANTES, ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, TOPE_INVITACIONES_TOTAL } from "@/lib/limites-prueba";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -97,6 +98,27 @@ it("la ayuda lleva a la vista separada de Para vos y no promete salir al aprobar
   expect(nota).not.toContain("**Para vos** (plegado)");
   expect(nota).not.toContain("pantalla vuelve sola");
   expect(documento("09-para-vos-feedback.md")).toContain("Abrir la vista no genera un análisis nuevo");
+});
+
+it("la ayuda cuenta los límites de las invitaciones con los números y los textos del código", () => {
+  expect([TOPE_INVITACIONES_TOTAL, ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, AVISO_GRABACIONES_RESTANTES]).toEqual([5, 30, 15, 3]);
+  const plano = (t: string) => t.replace(/\s+/g, " ");
+  const consultorio = plano(documento("11-tu-consultorio.md"));
+  expect(consultorio).toContain("**5 invitaciones en total**");
+  expect(consultorio).toContain("**Una cada 30 días**, contados desde la última que generaste, no por mes calendario");
+  expect(consultorio).toContain(INVITAR_AGOTADAS);
+  expect(consultorio).toContain(INVITAR_ESPERA("…").slice(0, -1));
+  expect(consultorio).toContain("**Puede grabar hasta 15 sesiones en total**");
+  expect(consultorio).toContain(PRUEBA_AVISO(0).replace("0.", "N."));
+  expect(consultorio).toContain(PRUEBA_CERCA(7).replace("7", "N"));
+  expect(consultorio).toContain(PRUEBA_TOPE);
+  expect(consultorio).not.toMatch(/invitaciones vigentes/);
+  // Lo que la ayuda promete, el código lo hace: el tope se cobra al empezar, no al contar filas.
+  expect(codigo("src/app/api/_lib/casos-uso/audio.ts")).toContain("grabacionesIniciadas: { increment: 1 }");
+  expect(codigo("src/lib/cuenta-registro-db.ts")).toContain("deInvitacion: true");
+  expect(plano(documento("07-grabar-una-sesion.md"))).toContain("**Una cuenta de prueba graba hasta 15 sesiones.**");
+  expect(plano(documento("01-entrar-y-cuenta.md"))).toContain("**15 sesiones en total**");
+  expect(plano(documento("02-pantalla-hoy.md"))).toContain("**15 sesiones**");
 });
 
 it("la ayuda avisa que un campo inválido frena el lote de configuración", () => {

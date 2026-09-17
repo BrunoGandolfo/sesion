@@ -49,6 +49,14 @@ model Organization {
   nombre   String
   creadoEn DateTime @default(now()) @map("creado_en")
 
+  /// Consultorio creado por invitación: es una prueba y graba hasta
+  /// TOPE_GRABACIONES_PRUEBA sesiones en total (src/lib/limites-prueba.ts).
+  deInvitacion         Boolean @default(false) @map("de_invitacion")
+  /// Grabaciones iniciadas en la vida del consultorio. Un contador y no un
+  /// COUNT de sesiones_clinicas: una sesión fallida se puede eliminar, y
+  /// eliminarla no devuelve el cupo.
+  grabacionesIniciadas Int     @default(0) @map("grabaciones_iniciadas")
+
   usuarios         User[]
   configuracion    Configuracion?
   pacientes        Paciente[]
@@ -83,6 +91,12 @@ model User {
   rol            RolUsuario @default(titular)
   organizationId String     @map("organization_id")
   creadoEn       DateTime   @default(now()) @map("creado_en")
+
+  /// Invitaciones generadas en la vida de la cuenta, y cuándo la última. En
+  /// la cuenta y no contadas en `invitaciones`: el mantenimiento purga esas
+  /// filas a los 30 días (casos-uso/mantenimiento.ts).
+  invitacionesGeneradas Int       @default(0) @map("invitaciones_generadas")
+  ultimaInvitacionEn    DateTime? @map("ultima_invitacion_en")
 
   organization        Organization    @relation(fields: [organizationId], references: [id])
   sesionesAcceso      SesionAcceso[]
@@ -201,7 +215,6 @@ model Invitacion {
 
   creadaPor User @relation(fields: [creadaPorId], references: [id], onDelete: Cascade)
 
-  // Tope de vigentes: COUNT WHERE creada_por_id = ? AND usada_en IS NULL AND vence_en > now().
   @@index([creadaPorId])
   @@map("invitaciones")
 }

@@ -52,6 +52,7 @@ const INTEGRACION = [
   'src/lib/__tests__/salud-trabajos.test.ts',
   'src/lib/__tests__/revision-carreras.test.ts',
   'src/lib/__tests__/registro-atomico.test.ts',
+  'src/lib/__tests__/limites-prueba-integracion.test.ts',
   'src/lib/__tests__/recuperacion-atomica.test.ts',
   'src/lib/__tests__/prisma-encryption.test.ts',
   // Área 2: vida de la sesión clínica y trabajos durables.

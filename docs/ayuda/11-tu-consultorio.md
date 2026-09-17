@@ -108,7 +108,11 @@ se ven en la computadora.
 
 ## Invitar a una colega
 
-1. En **Tu consultorio** buscá **Invitar a una colega** y tocá **Generar enlace**.
+1. En **Tu consultorio** buscá **Invitar a una colega**. Antes de generar nada,
+   la sección dice que la invitación es para que una colega **pruebe** Sesión,
+   que su consultorio de prueba puede grabar hasta **15 sesiones en total**, que
+   podés generar **5 invitaciones en total, una cada 30 días**, y cuántas te
+   quedan. Tocá **Generar enlace**.
    La sección aparece siempre, pero solo algunas cuentas tienen permiso para
    invitar: si la tuya no, dice *"No podés invitar desde esta cuenta."*
 2. Usá **Copiar** o **Compartir por WhatsApp** y compartí el enlace de forma
@@ -116,15 +120,49 @@ se ven en la computadora.
 3. Tu colega abre el enlace, completa su nombre, email y contraseña dos veces,
    acepta los términos y la política de privacidad y toca **Crear mi cuenta**.
 
-Podés tener hasta **2 invitaciones vigentes**. Si llegaste al límite, dice *"Ya
-tenés 2 invitaciones vigentes. Esperá a que se usen o venzan."* El enlace vence en **7 días** y se usa una sola vez. Si venció o ya se usó,
-tu colega necesita pedirte otro. Compartilo sólo con ella.
+### Los límites de las invitaciones
 
-La invitada tiene **un consultorio nuevo y separado**, con configuración vacía
-y tarifa inicial 0. No ve tus pacientes, turnos ni notas, y vos no ves los suyos.
+Las invitaciones son para probar la app, no para usarla como consultorio real.
+
+- **5 invitaciones en total**, en toda la vida de tu cuenta. No se recuperan
+  cuando una vence o se usa. Después de la quinta dice *"Ya generaste las 5
+  invitaciones de tu cuenta. No podés generar más."* y **Generar enlace** queda
+  apagado.
+- **Una cada 30 días**, contados desde la última que generaste, no por mes
+  calendario. Si todavía no pasaron, dice *"Generaste una invitación hace menos
+  de 30 días. Vas a poder generar la próxima desde el …"*, con el día y la hora,
+  y **Generar enlace** queda apagado hasta entonces.
+
+El enlace vence en **7 días** y se usa una sola vez. Si venció o ya se usó, tu
+colega necesita pedirte otro, y ese otro cuenta como una invitación más.
+Compartilo sólo con ella.
+
+Estos límites no cambian nada de tu propio consultorio: grabás, agendás y
+cobrás igual que siempre.
+
+La invitada tiene **un consultorio de prueba, nuevo y separado**, con
+configuración vacía y tarifa inicial 0. No ve tus pacientes, turnos ni notas, y
+vos no ves los suyos.
 Al crear la cuenta ya queda adentro y entra a **Hoy**, donde Pendientes le
 muestra los primeros pasos, empezando por *"Cargá tu tarifa"*. Mientras la
 tarifa sea 0, el alta de paciente la propone en 0 y hay que escribir una mayor.
+
+### El consultorio de prueba
+
+- **Puede grabar hasta 15 sesiones en total**, en toda la vida de esa cuenta.
+  Cuenta cada grabación que se empieza; eliminar una sesión fallida no devuelve
+  el lugar. Reanudar una grabación ya empezada no cuenta de nuevo.
+- **Lo sabe desde el principio**: en **Hoy** y en la pantalla de grabar dice
+  *"Estás probando Sesión: este consultorio puede grabar hasta 15 sesiones.
+  Llevás N."*
+- **Cuando se acerca**, con 3 o menos, agrega *"Te quedan N sesiones para grabar
+  de las 15 de la prueba."*
+- **Cuando llega**, dice *"Llegaste a las 15 sesiones grabadas de la prueba y no
+  podés grabar más. Para seguir, hablá con quien te invitó. La agenda, los
+  pacientes, los cobros y lo demás siguen funcionando."* y **Grabar sesión**
+  queda apagado.
+- **Lo demás no tiene límite**: agenda, pacientes, cobros, recordatorios y el
+  resto funcionan igual.
 
 <!-- fuentes:
 src/app/(dashboard)/config/_components/config-view.tsx
@@ -141,6 +179,9 @@ src/app/(dashboard)/config/_components/mensaje-recordatorio.tsx
 src/app/(dashboard)/config/_components/vocabulario-seccion.tsx
 src/app/(dashboard)/config/_components/invitar-colega.tsx
 src/app/api/_lib/casos-uso/registrar-cuenta.ts
+src/lib/limites-prueba.ts
+src/app/api/_lib/casos-uso/audio.ts
+src/components/layout/aviso-prueba.tsx
 src/app/api/cuenta/registro/route.ts
 src/lib/sms/texto.ts
 src/lib/glosario.ts

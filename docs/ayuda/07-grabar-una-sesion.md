@@ -12,6 +12,11 @@ el borrador de la nota clínica.
   autorización** y *"Para iniciar o reanudar necesitás la autorización vigente
   de la paciente."* El botón para grabar queda apagado. Volvé con **Volver a la
   ficha** y firmala ahí. Ver `04-pacientes-y-ficha.md`.
+- **Una cuenta de prueba graba hasta 15 sesiones.** Si tu consultorio se creó
+  con una invitación, arriba dice cuántas llevás. Al llegar a 15, dice *"Llegaste
+  a las 15 sesiones grabadas de la prueba y no podés grabar más. Para seguir,
+  hablá con quien te invitó."* y **Grabar sesión** queda apagado. Una grabación
+  ya empezada se puede reanudar y enviar. Ver `11-tu-consultorio.md`.
 
 ## Grabar
 
@@ -144,6 +149,8 @@ src/lib/audio/almacen.ts
 src/lib/audio/sincronizar.ts
 src/lib/audio/contrato.ts
 src/app/api/_lib/casos-uso/audio.ts
+src/lib/limites-prueba.ts
+src/components/layout/aviso-prueba.tsx
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/lib/glosario.ts
 -->
