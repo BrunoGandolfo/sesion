@@ -161,6 +161,14 @@ export function NuevoTurnoForm({
   const [errorNuevo, setErrorNuevo] = React.useState<string | null>(null);
 
   const [propuesta, setPropuesta] = React.useState<Date | null>(null);
+  // La consulta del último turno llega segundos después de elegir el
+  // paciente, y hasta acá escribía fecha y hora sin mirar nada: quien ya las
+  // había escrito veía su horario reemplazado por la propuesta, y el 409 de
+  // superposición que contestaba el servidor hablaba de un horario que ella
+  // no había elegido. Desde que toca cualquiera de los dos campos, la
+  // propuesta se sigue mostrando en el texto de abajo pero no se aplica. Es
+  // un ref y no estado porque lo lee el `.then` de un pedido ya en vuelo.
+  const fechaUHoraEditadaRef = React.useRef(false);
   const [enviando, setEnviando] = React.useState(false);
   const [errorEnvio, setErrorEnvio] = React.useState<string | null>(null);
 
@@ -210,6 +218,7 @@ export function NuevoTurnoForm({
           .sort((a, b) => b.getTime() - a.getTime())[0];
         const sugerida = proponerDesdeUltimoTurno(ultimo, new Date());
         setPropuesta(sugerida);
+        if (fechaUHoraEditadaRef.current) return;
         setValue("fecha", fechaInputMvd(sugerida), { shouldDirty: true });
         setValue("hora", horaInputMvd(sugerida), { shouldDirty: true });
       })
@@ -551,7 +560,11 @@ export function NuevoTurnoForm({
             </div>
           ) : null}
 
-          <TurnoEditarCampos>
+          <TurnoEditarCampos
+            onFechaUHoraEditada={() => {
+              fechaUHoraEditadaRef.current = true;
+            }}
+          >
             {propuesta && pacienteElegido ? (
               <p className="-mt-2 text-[12px] leading-[1.5] text-ink-500">
                 Propuesto desde el último turno de {pacienteElegido.nombre}:{" "}
