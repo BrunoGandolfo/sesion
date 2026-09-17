@@ -1,4 +1,4 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.1.
+// Texto del consentimiento informado para grabar sesiones, versión 2.2.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
@@ -11,18 +11,21 @@
 // resumen del proceso para su propio archivo (RECORRIDO_EXPORTABLE). Una
 // firma anterior no cubre esa salida: hay que volver a firmar.
 //
-// Las firmas anteriores siguen vigentes para grabar; no obliga a firmar de
-// nuevo (decisión del dueño). La API del consentimiento devuelve
-// sugiereRefirmar, pero hoy ninguna pantalla lo muestra: la refirma depende
-// de que la profesional la pida.
+// La 2.2 corrige retención, reintentos, propuesta de la IA y archivo temporal,
+// e incluye el párrafo de exportación de la 2.1. Las firmas anteriores
+// necesitan refirma. La vigencia técnica no se cambia en esta tanda: la API
+// devuelve sugiereRefirmar y la profesional debe pedir la nueva firma.
 
 import type { db } from "@/lib/db";
 
 import {
   ANTHROPIC_RETENCION_CERO,
   ASR_BORRADO_CON_REINTENTO,
+  AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL,
   BACKUP_INCLUYE_CLAVE_AUDIO,
+  CLAVE_AUDIO_DESTRUIDA_AL_APROBAR,
   CLAVE_POR_SESION,
+  LIMPIEZA_AUDIO_DIAS_APROX,
   LIMPIEZA_AUDIO_REINTENTA,
   LLM_RECIBE_CONTEXTO,
   MARCO_LEGAL,
@@ -30,13 +33,15 @@ import {
   PROVEEDORES,
   RESPALDO_LOCAL_CIFRADO,
   RECORRIDO_EXPORTABLE,
+  RESUMEN_PROPUESTO_POR_IA,
   RETENCION_BACKUPS_DIAS,
+  RETENCION_BACKUPS_MENSUALES_MESES,
   REVOCAR_BORRA_HISTORIA,
   VOCABULARIO_A_ASR,
   VOCABULARIO_INCLUYE_NOMBRES,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.1";
+export const CONSENTIMIENTO_VERSION = "2.2";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
@@ -75,16 +80,28 @@ export function generarTextoConsentimiento(params: {
     ? ` La cuenta que usa esta aplicación está configurada para que ${anthropic.nombre} no conserve ese contenido ni lo use para entrenar sus sistemas.`
     : "";
 
-  const limpieza = LIMPIEZA_AUDIO_REINTENTA
-    ? "En ese momento la aplicación destruye la clave que abre el audio y borra el archivo; si el borrado falla, lo reintenta hasta lograrlo."
-    : "En ese momento la aplicación destruye la clave que abre el audio y borra el archivo.";
+  const clave = CLAVE_AUDIO_DESTRUIDA_AL_APROBAR
+    ? "En ese momento la aplicación destruye siempre la clave del audio en la base que usa para trabajar. Desde entonces no puede abrir ese archivo, aunque siga pendiente de borrado. "
+    : "";
+  const limpieza = clave + (LIMPIEZA_AUDIO_REINTENTA
+    ? `La aplicación intenta borrar el archivo. Si no lo logra, repite los intentos durante unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; después el borrado queda marcado como fallido.`
+    : "La aplicación intenta borrar el archivo.");
 
+  const plazos = `Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días si son diarias y hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses si son mensuales.`;
   const backups = BACKUP_INCLUYE_CLAVE_AUDIO
-    ? ` Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días y no contienen el audio, pero sí pueden contener, cifrada, la clave de un audio que todavía no se había borrado.`
-    : ` Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días y no contienen el audio ni su clave.`;
+    ? ` ${plazos} No contienen el audio, pero sí pueden contener, cifrada, la clave de un audio que todavía no se había borrado. Esa clave puede conservarse hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses, aunque ya se haya eliminado de la base que usa la aplicación. Si el archivo no se pudo borrar, esa copia de la clave podría permitir abrirlo.`
+    : ` ${plazos} No contienen el audio ni su clave.`;
+
+  const resumen = RESUMEN_PROPUESTO_POR_IA
+    ? `También para preparar, a partir de varias sesiones, un resumen de tu proceso. Lo propone la misma inteligencia artificial que redacta la nota; ${nombreProfesional} lo revisa, lo corrige o lo descarta. Solo queda vigente cuando ella lo acepta. La decisión sigue siendo suya.`
+    : "También para preparar, a partir de varias sesiones, un resumen de tu proceso que solo ella ve y edita.";
+
+  const descifrado = AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL
+    ? "lo descifra en un archivo temporal del servidor y lo manda a transcribir. Ese archivo temporal se borra al terminar"
+    : "lo descifra solo en memoria y lo manda a transcribir";
 
   const exportacion = RECORRIDO_EXPORTABLE
-    ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La aplicación registra cada vez que lo hace.`
+    ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La preparación de esa copia queda registrada por la aplicación.`
     : "";
 
   const revocar = REVOCAR_BORRA_HISTORIA
@@ -102,11 +119,11 @@ Antes de empezar queremos contarte cómo funciona la grabación de las sesiones 
 El audio de tu sesión de psicoterapia con ${nombreProfesional}, en el consultorio ubicado en ${direccionConsultorio}.${soloAudio ? " No se graba video." : ""}
 
 ¿Para qué?
-Para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: el registro escrito que ${nombreProfesional} guarda en tu historia clínica y que ella revisa y aprueba antes de que quede guardado. También para preparar, a partir de varias sesiones, un resumen de tu proceso que solo ella ve y edita, y un análisis de su propio trabajo que solo ella ve.
+Para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: el registro escrito que ${nombreProfesional} guarda en tu historia clínica y que ella revisa y aprueba antes de que quede guardado. ${resumen} También se prepara un análisis de su propio trabajo que solo ella ve.
 
 ¿Por dónde pasa el audio?
 ${respaldoLocal}
-2. Ya cifrado, se guarda en un servicio de almacenamiento (${r2.nombre}) y de ahí lo toma un programa de esta aplicación que corre en un servidor (${railway.nombre}), lo descifra solo en memoria y lo manda a transcribir.
+2. Ya cifrado, se guarda en un servicio de almacenamiento (${r2.nombre}) y de ahí lo toma un programa de esta aplicación que corre en un servidor (${railway.nombre}), ${descifrado}.
 3. ${assemblyai.nombre}, una empresa de ${assemblyai.pais}, convierte el audio en texto. Recibe el audio sin cifrar.${vocabulario}${borradoAsr}
 4. ${anthropic.nombre}, otra empresa de ${anthropic.pais}, ${contexto}.${retencion}
 
@@ -124,7 +141,7 @@ En la base de datos de la aplicación (${neon.nombre}), cifrado, y accesible sol
 - La transcripción de la sesión.
 - El resumen de tu proceso que ella mantiene.
 - Este consentimiento y tu firma.
-El audio no queda.${exportacion}
+El borrado del audio sigue los pasos y plazos explicados arriba.${exportacion}
 
 ¿Podés cambiar de opinión?
 Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a ${nombreProfesional}. A partir de ese momento no se graban más sesiones. ${revocar} Esto no afecta tu tratamiento ni tu relación con ella.

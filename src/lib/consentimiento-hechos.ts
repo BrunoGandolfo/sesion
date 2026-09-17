@@ -51,6 +51,15 @@ export const ASR_BORRADO_CON_REINTENTO = true;
 /** Anthropic recibe la transcripción y el hilo vigente del paciente. */
 export const LLM_RECIBE_CONTEXTO = true;
 
+/** clinical_analyzer.py usa el mismo proveedor/modelo para la nota y el
+ * resumen. hilo/trabajo.ts sólo crea una propuesta; hilo/escribir.ts exige
+ * la decisión de la profesional para hacerla vigente o rechazarla. */
+export const RESUMEN_PROPUESTO_POR_IA = true;
+
+/** audio_entrada.py: armar_audio usa TemporaryDirectory, escribe el audio
+ * descifrado y elimina el directorio al salir, también ante excepciones. */
+export const AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL = true;
+
 /** Workspace de Anthropic con retención deshabilitada. Verificado en la
  *  consola el 2026-09-04 (docs/operaciones.md §1). Renovar la fecha a mano. */
 export const ANTHROPIC_RETENCION_CERO = true;
@@ -59,9 +68,22 @@ export const ANTHROPIC_RETENCION_VERIFICADA_EL = "2026-09-04";
 /** El borrado del audio en R2 es un trabajo durable (borrar_audio_r2) y la
  *  clave se destruye en la transacción que aprueba la nota. Área 2. */
 export const LIMPIEZA_AUDIO_REINTENTA = true;
+/** trabajos/politica.ts: 20 intentos, con unas dos semanas de esperas.
+ * trabajos/resolver.ts deja el trabajo fallido cuando se agotan. No es un
+ * plazo exacto: depende también de que corra el servicio de borrado. */
+export const LIMPIEZA_AUDIO_MAX_INTENTOS = 20;
+export const LIMPIEZA_AUDIO_DIAS_APROX = 15;
+/** sesion/aprobar.ts: audioClave:null dentro de la transacción, haya o no
+ * archivo en R2. No elimina las claves incluidas en respaldos anteriores. */
+export const CLAVE_AUDIO_DESTRUIDA_AL_APROBAR = true;
 
 /** Backups diarios de la base (.github/workflows/backup.yml), retención en días. */
 export const RETENCION_BACKUPS_DIAS = 30;
+/** El mismo workflow conserva mensuales 366 días (hasta 12 meses).
+ * consentimiento-retencion.test.ts ejecuta esa limpieza con R2 simulado
+ * y compara sus plazos con estos hechos y con el texto generado. */
+export const RETENCION_BACKUPS_MENSUALES_DIAS = 366;
+export const RETENCION_BACKUPS_MENSUALES_MESES = 12;
 /** El dump incluye la clave del audio (cifrada) de las sesiones no aprobadas. */
 export const BACKUP_INCLUYE_CLAVE_AUDIO = true;
 
