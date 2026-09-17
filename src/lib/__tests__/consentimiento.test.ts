@@ -25,8 +25,8 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 2.4 y sugiere re-firmar las anteriores", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("2.4");
+  it("la versión vigente del texto es la 2.5 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.5");
     expect(sugiereRefirmar("1.1")).toBe(true);
     // La 2.0 no decía que el resumen del proceso se puede imprimir.
     expect(sugiereRefirmar("2.0")).toBe(true);
@@ -35,12 +35,13 @@ describe("generarTextoConsentimiento", () => {
     expect(sugiereRefirmar("2.2")).toBe(true);
     // La 2.3 prometía el derecho a pedir que se eliminen los datos.
     expect(sugiereRefirmar("2.3")).toBe(true);
-    expect(sugiereRefirmar("2.4")).toBe(false);
+    expect(sugiereRefirmar("2.4")).toBe(true);
+    expect(sugiereRefirmar("2.5")).toBe(false);
   });
 
   it("interpola los tres datos y lleva la versión", () => {
     const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("Versión 2.4");
+    expect(texto).toContain("Versión 2.5");
     expect(texto).toContain("Hola María González.");
     expect(texto).toContain("con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo");
   });
@@ -51,6 +52,18 @@ describe("generarTextoConsentimiento", () => {
 // el texto miente: este bloque es el que lo grita.
 describe("cada frase tiene el hecho que la respalda", () => {
   const texto = generarTextoConsentimiento(baseParams);
+
+  it("explica la agenda mínima de Lupita, la ausencia de escrituras y el historial enviado al proveedor", () => {
+    expect(hechos.LUPITA_CONSULTA_AGENDA).toBe(true);
+    expect([...hechos.LUPITA_CAMPOS_AGENDA]).toEqual(["nombre", "dia", "hora", "duracion", "modalidad"]);
+    expect(hechos.LUPITA_SOLO_LECTURA).toBe(true);
+    expect(hechos.LUPITA_HISTORIAL_A_ANTHROPIC).toBe(true);
+    expect(texto).toContain("puede consultar tu nombre de pila, el día, la hora, la duración y la modalidad de tus turnos");
+    expect(texto).toContain("No consulta tu teléfono, tarifas, deudas, cobros, notas clínicas, transcripciones, resumen del proceso, consentimientos ni tu ficha");
+    expect(texto).toContain("Solo lee: no agenda, cancela ni modifica turnos o datos");
+    expect(texto).toContain(`Las preguntas y respuestas del chat se envían a ${hechos.PROVEEDORES.anthropic.nombre}`);
+    expect(texto).toContain("ese servicio puede recibir esos datos de agenda");
+  });
 
   it("solo audio", () => {
     expect([...hechos.MEDIOS_CAPTURA]).toEqual(["audio"]);
@@ -390,7 +403,7 @@ describe("la ruta de consentimiento", () => {
     const { descifrar, aadDe } = await import("@/lib/encryption");
     const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
     expect(texto).toContain("Hola María González.");
-    expect(texto).toContain("Versión 2.4");
+    expect(texto).toContain("Versión 2.5");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
   });

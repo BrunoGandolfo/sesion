@@ -79,6 +79,15 @@ export const LLM_RECIBE_CONTEXTO = true;
 export const LLM_RECIBE_NOTA_APROBADA = true;
 export const VOCABULARIO_SOLO_A_ASR = true;
 
+/** ayuda/agenda.ts: select cerrado y organización de la sesión autenticada.
+ * Lupita no recibe fichas ni registros clínicos. La respuesta la arma el
+ * servidor; si la conversación continúa, puede viajar en su historial. */
+export const LUPITA_CONSULTA_AGENDA = true;
+export const LUPITA_CAMPOS_AGENDA = ["nombre", "dia", "hora", "duracion", "modalidad"] as const;
+export const LUPITA_SOLO_LECTURA = true;
+/** responder-ayuda.ts: historialAMensajes envía preguntas y respuestas. */
+export const LUPITA_HISTORIAL_A_ANTHROPIC = true;
+
 /** clinical_analyzer.py usa el mismo proveedor/modelo para la nota y el
  * resumen. hilo/trabajo.ts sólo crea una propuesta; hilo/escribir.ts exige
  * la decisión de la profesional para hacerla vigente o rechazarla. */

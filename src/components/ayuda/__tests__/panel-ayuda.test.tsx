@@ -22,6 +22,8 @@ import {
   AYUDA_STREAM_CORTADO,
   AYUDA_SIN_CONEXION,
   AYUDA_TOPE_DIARIO,
+  AYUDA_BIENVENIDA,
+  AYUDA_PRIVACIDAD,
 } from "@/lib/glosario";
 
 // Copia literal de preguntaSchema (src/app/api/ayuda/route.ts). Está
@@ -86,7 +88,7 @@ afterEach(() => {
 });
 
 describe("PanelAyuda — primera impresión", () => {
-  it("ofrece tres preguntas del corpus y tocar una la envía", async () => {
+  it("ofrece preguntas de ayuda y agenda y tocar una la envía", async () => {
     const fetchMock = vi.fn().mockResolvedValue(respuestaOk("Listo."));
     vi.stubGlobal("fetch", fetchMock);
     const panel = montar();
@@ -102,6 +104,15 @@ describe("PanelAyuda — primera impresión", () => {
     expect(cuerposEnviados(fetchMock)[0]).toEqual({
       pregunta: AYUDA_PREGUNTAS_INICIALES[0],
     });
+  });
+
+  it("dice qué datos de agenda ve y qué no puede consultar ni cambiar", () => {
+    const panel = montar();
+    expect(panel.getByText(AYUDA_BIENVENIDA)).toBeTruthy();
+    const aviso = panel.getByText(AYUDA_PRIVACIDAD).textContent!;
+    expect(aviso).toContain("solo nombres, días, horas, duración y modalidad");
+    expect(aviso).toContain("No leo fichas, teléfonos, montos, notas, transcripciones, Recorrido ni consentimientos");
+    expect(aviso).toContain("No cambio nada");
   });
 
   it("no dibuja ninguna pose en una ruta clínica", () => {
@@ -158,6 +169,20 @@ describe("PanelAyuda — streaming", () => {
 });
 
 describe("PanelAyuda — el historial", () => {
+  it("mantiene completa una agenda larga en pantalla y acota su historial al límite de la ruta", async () => {
+    const agenda = ("Turnos de esta semana: " + "Paciente de prueba 10:00 50 min presencial. ".repeat(120)).trim();
+    const fetchMock = vi.fn().mockResolvedValueOnce(respuestaOk(agenda)).mockResolvedValueOnce(respuestaOk("Mañana no hay turnos."));
+    vi.stubGlobal("fetch", fetchMock);
+    const panel = montar();
+    preguntar(panel, "Turnos de esta semana");
+    expect(await panel.findByText(agenda)).toBeTruthy();
+    preguntar(panel, "¿y mañana?");
+    expect(await panel.findByText("Mañana no hay turnos.")).toBeTruthy();
+    const segundo = cuerposEnviados(fetchMock)[1];
+    const validado = preguntaSchema.parse(segundo);
+    expect(validado.historial?.[1].texto).toBe(agenda.slice(0, 4000).trim());
+    expect(panel.getByText(agenda)).toBeTruthy();
+  });
   it("manda la pregunta sola la primera vez y con los turnos previos después", async () => {
     const fetchMock = vi
       .fn()

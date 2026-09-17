@@ -19,8 +19,30 @@ cada paciente.
 6. **Grabar** — con un turno agendado y la autorización firmada, grabás la
    sesión; la app escribe un borrador de nota clínica (SOAP) que vos revisás,
    editás y aprobás, y después propone cómo actualizar el Recorrido.
-7. **Lupita** — la ayuda dentro de la app. Responde con lo que dicen estos
-   documentos.
+7. **Lupita** — explica cómo usar la app con estos documentos. También puede
+   consultar los turnos de hoy, mañana o esta semana de tu consultorio, solo
+   con nombre de pila, día, hora, duración y modalidad. No modifica nada.
+
+## Preguntarle a Lupita por la agenda
+
+Podés preguntar «¿Qué turnos tengo hoy?», «¿Quién viene mañana?» o «¿A qué hora
+y con quién tengo turnos esta semana?». Usa la hora de Montevideo; la semana
+va de lunes a domingo. Muestra los turnos sin cancelar, incluidos los que ya
+pasaron, ordenados por día y hora. Si no hay ninguno, lo dice. Si la consulta
+falla, muestra un error: no lo confunde con una agenda vacía.
+
+No consulta apellidos, teléfonos, tarifas, deudas, cobros, notas clínicas,
+transcripciones, Recorrido, consentimientos ni fichas, aunque se lo pidas.
+Tampoco ve otro consultorio ni agenda, cancela o modifica nada. Puede explicar
+cómo usar esas pantallas; sus datos quedan fuera de su alcance. Si le pedís
+algo fuera de ese alcance o de esos tres períodos, te lo dice con claridad.
+Por ahora devuelve el listado completo del período, sin buscar por paciente.
+
+Los listados los arma la aplicación, sin que la IA vuelva a escribir las horas.
+La conversación puede enviarse a Anthropic en las preguntas siguientes, incluidos
+los nombres y horarios ya consultados. Evitá pegar datos clínicos o personales.
+El límite sigue siendo 40 preguntas por día de Montevideo; consultar la agenda
+cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la pantalla.
 
 ## Qué pasa con tus datos y los de tus pacientes
 
@@ -42,7 +64,7 @@ cada paciente.
 - El audio se descifra para transcribirlo en un archivo temporal del servidor,
   que se borra al terminar.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
-- La autorización vigente es la **2.4**. Las firmas anteriores necesitan que la
+- La autorización vigente es la **2.5**. Las firmas anteriores necesitan que la
   paciente firme la nueva. Ver `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.

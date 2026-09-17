@@ -1,4 +1,4 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.4.
+// Texto del consentimiento informado para grabar sesiones, versión 2.5.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
@@ -24,6 +24,8 @@
 // paciente que la app sí hace y qué no se puede hacer desde la app. Las firmas
 // anteriores necesitan refirma. La vigencia técnica no se cambia en esta tanda: la API
 // devuelve sugiereRefirmar y la profesional debe pedir la nueva firma.
+// La 2.5 explica la consulta acotada de agenda de Lupita y que los datos de
+// agenda pueden llegar a Anthropic en el historial del chat. Requiere refirma.
 
 import type { db } from "@/lib/db";
 
@@ -45,6 +47,9 @@ import {
   LIMPIEZA_AUDIO_REINTENTA,
   LLM_RECIBE_CONTEXTO,
   LLM_RECIBE_NOTA_APROBADA,
+  LUPITA_CONSULTA_AGENDA,
+  LUPITA_SOLO_LECTURA,
+  LUPITA_HISTORIAL_A_ANTHROPIC,
   MARCO_LEGAL,
   MEDIOS_CAPTURA,
   NOTA_APROBADA_CORREGIBLE,
@@ -64,7 +69,7 @@ import {
   VOCABULARIO_SOLO_A_ASR,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.4";
+export const CONSENTIMIENTO_VERSION = "2.5";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
@@ -137,6 +142,10 @@ export function generarTextoConsentimiento(params: {
     ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La preparación de esa copia queda registrada por la aplicación.`
     : "";
 
+  const lupita = LUPITA_CONSULTA_AGENDA
+    ? `\n\nLa ayuda de la aplicación\nLupita es el asistente que responde preguntas sobre cómo usar la aplicación. Si ${nombreProfesional} le pregunta por la agenda de hoy, mañana o esta semana, puede consultar tu nombre de pila, el día, la hora, la duración y la modalidad de tus turnos. No consulta tu teléfono, tarifas, deudas, cobros, notas clínicas, transcripciones, resumen del proceso, consentimientos ni tu ficha.${LUPITA_SOLO_LECTURA ? " Solo lee: no agenda, cancela ni modifica turnos o datos." : ""}${LUPITA_HISTORIAL_A_ANTHROPIC ? ` Las preguntas y respuestas del chat se envían a ${anthropic.nombre} para continuar la conversación; por eso ese servicio puede recibir esos datos de agenda. La profesional debe evitar pegar información clínica o personal en el chat.` : ""}`
+    : "";
+
   const pedidos = [
     PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN ? "que te muestre tus notas clínicas aprobadas y el resumen de tu proceso" : null,
     PACIENTE_PUEDE_CORREGIR_CONTACTO || PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES
@@ -179,6 +188,7 @@ No se les envía tu teléfono ni tu documento. Lo que sí reciben es lo que se d
 
 ¿Quién puede escuchar o leer?
 ${nombreProfesional}, desde su cuenta. Nadie más de su consultorio. ${assemblyai.nombre} y ${anthropic.nombre} procesan de forma automática; sus condiciones dicen que ninguna persona accede al contenido, pero eso depende de ellos y esta aplicación no puede verificarlo.
+${lupita}
 
 ¿Cuánto tiempo queda el audio?
 Hasta que ${nombreProfesional} revisa y aprueba la nota, en general el mismo día. ${limpieza}${copiaLocal}${backups}

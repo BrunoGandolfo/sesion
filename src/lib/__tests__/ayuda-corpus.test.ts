@@ -130,10 +130,11 @@ describe("systemPromptAyuda", () => {
     expect(LIMITES_ASISTENTE[2]).toContain("Empezá cada respuesta con una frase corta y humana");
   });
 
-  it("dice que no ve pacientes, turnos ni montos", () => {
-    expect(systemPromptAyuda()).toContain(
-      "No tenés acceso a sus pacientes, sus turnos ni sus montos",
-    );
+  it("permite solo la consulta cerrada de agenda y prohíbe datos y escrituras ajenos a ella", () => {
+    expect(systemPromptAyuda()).toContain("consultar_agenda");
+    expect(systemPromptAyuda()).toContain("No tenés acceso a teléfonos, tarifas, deudas, cobros, notas clínicas, transcripciones, Recorrido, consentimientos ni fichas");
+    expect(systemPromptAyuda()).toContain("No tenés herramientas de escritura");
+    expect(systemPromptAyuda()).not.toContain("No tenés acceso a sus pacientes, sus turnos ni sus montos");
   });
 
   it("lleva el corpus adentro", () => {

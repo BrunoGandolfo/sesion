@@ -207,6 +207,7 @@ async function publicas() {
   });
   await paso('Recuperación, sin enviar correo', async () => {
     await page.getByRole('link', { name: '¿Olvidaste tu contraseña?' }).click();
+    await page.waitForURL('**/recuperar');
     await visible(page.getByLabel('Email', { exact: true }));
     await alcanzable(page.locator('button[type="submit"]').filter({ visible: true }).first());
   });

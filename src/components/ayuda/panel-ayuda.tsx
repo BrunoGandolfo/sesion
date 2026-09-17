@@ -114,7 +114,9 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
     const historial = turnos
       .filter((turno) => turno.completo !== false)
       .slice(-MAX_TURNOS_ENVIADOS)
-      .map(({ rol, texto }) => ({ rol, texto }));
+      // Una semana completa puede superar el máximo del historial HTTP.
+      // Se conserva entera en pantalla; sólo se acota lo que vuelve a enviarse.
+      .map(({ rol, texto }) => ({ rol, texto: texto.slice(0, 4000) }));
     setTurnos((previos) => [...previos, { rol: "usuaria", texto: pregunta }]);
     setBorrador("");
     setError(null);

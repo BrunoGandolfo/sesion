@@ -92,9 +92,9 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 5. Tocá **Firmar**.
 
 Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
-La versión vigente del texto es **2.4**. Las firmas anteriores, incluidas la
-2.1, la 2.2 y la 2.3, siguen sirviendo para grabar y no hace falta revocarlas,
-pero **necesitan que la paciente firme la 2.4**: no cuentan lo que corrige la
+La versión vigente del texto es **2.5**. Las firmas anteriores, incluidas la
+2.1, la 2.2, la 2.3 y la 2.4, siguen sirviendo para grabar y no hace falta revocarlas,
+pero **necesitan que la paciente firme la 2.5**: no cuentan el acceso de Lupita a la agenda ni lo que corrige la
 versión nueva. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
 en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
 pidas vos.

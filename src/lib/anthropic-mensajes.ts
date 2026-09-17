@@ -7,6 +7,7 @@ import type {
   Message,
   MessageParam,
   TextBlockParam,
+  Tool,
 } from "@anthropic-ai/sdk/resources/messages";
 
 export const MODELO_AYUDA = "claude-sonnet-5";
@@ -31,6 +32,13 @@ export interface PedidoMensajes {
   system: BloqueSystem[];
   messages: MensajeAnthropic[];
   temperature?: number;
+  tools?: Tool[];
+  tool_choice?: { type: "auto"; disable_parallel_tool_use: boolean };
+}
+
+export interface LlamadaHerramienta {
+  nombre: string;
+  entrada: unknown;
 }
 
 export interface ResultadoMensajes {
@@ -40,6 +48,7 @@ export interface ResultadoMensajes {
   cacheLeido: number;
   cacheEscrito: number;
   motivoDeCorte: string | null;
+  herramientas?: LlamadaHerramienta[];
 }
 
 export class ErrorAnthropic extends Error {
@@ -85,7 +94,7 @@ function cliente(opciones: OpcionesMensajes): Anthropic {
   });
 }
 
-function resultadoDe(mensaje: Message): ResultadoMensajes {
+function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMensajes {
   const usage = mensaje.usage;
   const texto = mensaje.content
     .filter((bloque) => bloque.type === "text")
@@ -93,7 +102,14 @@ function resultadoDe(mensaje: Message): ResultadoMensajes {
     .join("")
     .trim();
 
-  if (texto === "") {
+  const herramientas = mensaje.content
+    .filter((bloque) => bloque.type === "tool_use")
+    .map((bloque) => ({ nombre: bloque.name, entrada: bloque.input }));
+  if (herramientas.length && !permiteHerramientas) {
+    throw new ErrorAnthropic("respuesta con herramientas no habilitadas");
+  }
+
+  if (texto === "" && herramientas.length === 0) {
     throw new ErrorAnthropic(
       `respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`,
     );
@@ -106,6 +122,7 @@ function resultadoDe(mensaje: Message): ResultadoMensajes {
     cacheLeido: usage?.cache_read_input_tokens ?? 0,
     cacheEscrito: usage?.cache_creation_input_tokens ?? 0,
     motivoDeCorte: mensaje.stop_reason ?? null,
+    ...(herramientas.length ? { herramientas } : {}),
   };
 }
 
@@ -128,7 +145,7 @@ export async function crearMensaje(
       system: pedido.system,
       messages: pedido.messages as MessageParam[],
     });
-    return resultadoDe(mensaje);
+    return resultadoDe(mensaje, Boolean(pedido.tools?.length));
   } catch (error) {
     throw envolverError(error);
   }
@@ -169,7 +186,7 @@ export async function crearMensajeStreaming(
     const eventos = stream[Symbol.asyncIterator]();
     await stream.withResponse();
 
-    const resultado = stream.finalMessage().then(resultadoDe).catch((error) => {
+    const resultado = stream.finalMessage().then((mensaje) => resultadoDe(mensaje, Boolean(pedido.tools?.length))).catch((error) => {
       throw errorDelFlujo(error);
     });
     // El iterador y el resultado reflejan el mismo error. Si quien consume se

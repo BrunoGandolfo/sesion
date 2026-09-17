@@ -111,7 +111,7 @@ describe("Pantalla de entrada", () => {
 
   it("explica el alcance de Lupita sin abrir un chat antes de entrar", () => {
     render(<LoginPage />);
-    expect(screen.getByText(PORTADA_LUPITA).textContent).toContain("No consulta tus pacientes ni tus montos");
+    expect(screen.getByText(PORTADA_LUPITA).textContent).toContain("nombres, días, horas, duración y modalidad");
     expect(screen.getByText(PORTADA_LUPITA_CUIDADO).textContent).toContain("recibe lo que escribís");
     expect(screen.queryByRole("dialog")).toBeNull();
   });
