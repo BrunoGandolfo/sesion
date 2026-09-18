@@ -13,10 +13,12 @@ el borrador de la nota clínica.
   **Grabar** en la cabecera de la ficha y la paciente no tiene turno, la app
   **crea uno de 50 minutos, presencial, con la hora de ahora** recién cuando
   tocás **Grabar sesión** (ese turno no genera recordatorio).
-- **Una cuenta de prueba graba hasta 15 sesiones.** Al llegar a 15, al tocar
-  **Grabar sesión** la app dice *"Llegaste a las 15 sesiones grabadas de la
-  prueba y no podés grabar más. Para seguir, hablá con quien te invitó."* Una
-  grabación ya empezada se puede terminar y enviar. Ver `11-tu-consultorio.md`.
+- **Una cuenta de prueba graba hasta 15 sesiones.** Si tu consultorio se creó
+  con una invitación, arriba dice cuántas llevás. Al llegar a 15, dice
+  *"Llegaste a las 15 sesiones grabadas de la prueba y no podés grabar más.
+  Para seguir, hablá con quien te invitó."* y **Grabar sesión** queda apagado.
+  Una grabación que quedó guardada en el teléfono se puede enviar igual: ya
+  está contada. Ver `11-tu-consultorio.md`.
 
 ## Grabar
 

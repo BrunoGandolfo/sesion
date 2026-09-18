@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import type { DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import type { PacienteConDeuda, Turno } from "@/types/domain";
 import { ApiClientError } from "@/lib/api-client";
-import { COBRO_DESHECHO } from "@/lib/glosario";
+import { COBRO_DESHECHO, PRUEBA_TOPE } from "@/lib/glosario";
 
 import { CobrosView } from "../cobros/_components/cobros-view";
 import { GrabarView } from "../grabar/[turnoId]/_components/grabar-view";
@@ -211,6 +211,19 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
     await act(async () => { m.grabador?.onListo(datos); });
     await verificarAviso("Te avisamos cuando la nota esté lista", true);
     expect(m.subir).toHaveBeenCalledWith("s1", datos, expect.any(Function));
+  });
+
+  it("en el tope de la prueba la pantalla de grabar avisa y apaga Grabar sesión", async () => {
+    render(<GrabarView turnoId="t1" turnoProgramado={false} horaTexto="12:00" pacienteId="p1" pacienteNombre="Paciente Sintética" autorizacionVigente prueba={{ usadas: 15, restantes: 0, tope: 15 }} />);
+    expect(screen.getByRole("alert").textContent).toContain(PRUEBA_TOPE);
+    expect((screen.getByRole("button", { name: "Grabar sesión" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(m.iniciar).not.toHaveBeenCalled();
+  });
+
+  it("con cupo, la pantalla de grabar muestra cuántas lleva y deja grabar", async () => {
+    render(<GrabarView turnoId="t1" turnoProgramado={false} horaTexto="12:00" pacienteId="p1" pacienteNombre="Paciente Sintética" autorizacionVigente prueba={{ usadas: 4, restantes: 11, tope: 15 }} />);
+    expect(screen.getByRole("status").textContent).toContain("4");
+    expect((screen.getByRole("button", { name: "Grabar sesión" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("un inicio rechazado no muestra una confirmación", async () => {

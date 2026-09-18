@@ -33,6 +33,7 @@ import {
   type EstadoGrabador,
   type MotivoInterrupcion,
 } from "@/components/grabacion/GrabadorSesion";
+import { AvisoPrueba } from "@/components/layout/aviso-prueba";
 import { Button, Confirmar, Toast } from "@/components/ui";
 import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
 import {
@@ -44,6 +45,7 @@ import {
 import { apiGet, apiPost } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
+import type { EstadoPrueba } from "@/lib/limites-prueba";
 import {
   ALGO_FALLO,
   AUDIO_NO_GUARDADO,
@@ -83,6 +85,9 @@ interface GrabarViewProps {
   pacienteId: string;
   pacienteNombre: string;
   autorizacionVigente: boolean;
+  /** Consultorio creado por invitación: cuántas grabaciones lleva. null en
+   *  la cuenta de quien invita. */
+  prueba?: EstadoPrueba | null;
 }
 
 type Fase =
@@ -109,6 +114,7 @@ export function GrabarView({
   pacienteId,
   pacienteNombre,
   autorizacionVigente,
+  prueba = null,
 }: GrabarViewProps) {
   const router = useRouter();
 
@@ -348,6 +354,9 @@ export function GrabarView({
 
   const mostrandoSubida = fase === "guardando" || fase === "guardado";
   const cifrando = grabador.estado === "cifrando";
+  // En el tope de la prueba no se inicia una grabación nueva; el servidor lo
+  // rechaza igual (403). Una pendiente sí se puede enviar: ya está contada.
+  const sinCupo = prueba?.restantes === 0;
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-80px)] w-full max-w-[560px] flex-col px-5 py-6 lg:py-10">
@@ -360,6 +369,8 @@ export function GrabarView({
           <span>Volver</span>
         </Link>
       ) : null}
+
+      <AvisoPrueba prueba={prueba} className="mb-6" />
 
       <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
         <header className="space-y-1">
@@ -419,6 +430,7 @@ export function GrabarView({
             autorizacionVigente={autorizacionVigente}
             pacienteId={pacienteId}
             preparando={fase === "preparando"}
+            sinCupo={sinCupo}
             pendienteMinutos={
               grabador.pendiente
                 ? Math.max(1, Math.round(grabador.pendiente.duracionAproxSeg / 60))
@@ -445,6 +457,7 @@ function PantallaPrevia({
   autorizacionVigente,
   pacienteId,
   preparando,
+  sinCupo,
   pendienteMinutos,
   onEmpezar,
   onEnviarPendiente,
@@ -453,6 +466,8 @@ function PantallaPrevia({
   autorizacionVigente: boolean;
   pacienteId: string;
   preparando: boolean;
+  /** Tope de grabaciones de la prueba alcanzado: Grabar sesión apagado. */
+  sinCupo: boolean;
   pendienteMinutos: number | null;
   onEmpezar: () => void;
   onEnviarPendiente: () => void;
@@ -492,7 +507,7 @@ function PantallaPrevia({
       <button
         type="button"
         onClick={onEmpezar}
-        disabled={preparando}
+        disabled={preparando || sinCupo}
         className="inline-flex h-[132px] w-[132px] flex-col items-center justify-center gap-2 rounded-full bg-sage-500 text-white shadow-raised transition-colors duration-150 hover:bg-sage-600 active:bg-sage-700 disabled:opacity-60 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30"
       >
         {preparando ? (

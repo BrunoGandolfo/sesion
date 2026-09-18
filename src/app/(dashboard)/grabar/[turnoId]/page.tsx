@@ -12,6 +12,7 @@
 import { notFound } from "next/navigation";
 
 import { buscarActor } from "@/app/api/_lib/auth";
+import { leerEstadoPrueba } from "@/app/api/_lib/casos-uso/estado-prueba";
 import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { db } from "@/lib/db";
 import { hora } from "@/lib/format";
@@ -45,6 +46,10 @@ export default async function GrabarPage({
   }
 
   const { organizationId } = sesion;
+  // Consultorio de prueba: cuántas grabaciones lleva, para el aviso y para
+  // apagar el botón al llegar al tope. El tope de verdad lo aplica el
+  // servidor al crear la sesión (casos-uso/audio.ts, prepararAudio).
+  const prueba = await leerEstadoPrueba({ prisma: db, organizationId });
 
   // Sin turno agendado: el turno se crea recién cuando toca "Grabar sesión",
   // para no dejar turnos fantasma si abre la pantalla y se arrepiente.
@@ -73,6 +78,7 @@ export default async function GrabarPage({
           paciente.id,
           organizationId,
         )}
+        prueba={prueba}
       />
     );
   }
@@ -102,6 +108,7 @@ export default async function GrabarPage({
         turno.paciente.id,
         organizationId,
       )}
+      prueba={prueba}
     />
   );
 }
