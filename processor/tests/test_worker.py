@@ -14,7 +14,7 @@ ITEM = {
     "orientacionTeorica": "gestalt",
     "terminosAsr": ["GTFS", "   ", None, "MITI 4.2.1"],
     "duracionAudioSeg": 120,
-    "audio": {"clave": "k", "segmentos": [{"indice": 0, "key": "org/s1/0", "iv": "iv0", "bytes": 10}]},
+    "audio": {"key": "org/s1/0"},
     "checkpoint": None,
 }
 

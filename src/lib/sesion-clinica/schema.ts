@@ -214,6 +214,53 @@ export type PausaGrabacion = z.infer<typeof pausaGrabacionSchema>;
 
 export const pausasGrabacionSchema = z.array(pausaGrabacionSchema);
 
+// ────────────────────────────────────────────────────────────────────────────
+// Diagnóstico de la grabación
+//
+// Qué le pasó al grabador en el teléfono, sin una palabra de contenido
+// clínico: horas, motivos y conteos. Viaja con upload-confirmar y queda en
+// eventos_auditoria.detalle. Existe porque el 18/9 hubo que adivinar por qué
+// se había cortado una sesión: el motivo vivía en la memoria de la pestaña.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const TIPOS_EVENTO_GRABACION = [
+  "pausa",
+  "reanudar",
+  "limite",
+  "mute",
+  "unmute",
+  "pista-terminada",
+  "error-recorder",
+  "oculta",
+  "visible",
+  "wakelock-concedido",
+  "wakelock-rechazado",
+  "wakelock-soltado",
+  // El latido de 250 ms tardó más de 5 s: la página estuvo congelada.
+  "hueco-latido",
+  // Pasaron más de 5 s sin chunks que el audio recibido no explica.
+  "hueco-chunks",
+  "recuperada",
+] as const;
+
+/** Tope de eventos por grabación: acota el jsonb ante un teléfono que parpadea. */
+export const MAX_EVENTOS_GRABACION = 300;
+
+export const eventoGrabacionSchema = z.object({
+  t: fechaIso,
+  tipo: z.enum(TIPOS_EVENTO_GRABACION),
+  /** Cuánto duró el hueco, en milisegundos. */
+  ms: z.number().int().nonnegative().optional(),
+});
+export type EventoGrabacion = z.infer<typeof eventoGrabacionSchema>;
+
+export const diagnosticoGrabacionSchema = z.object({
+  eventos: z.array(eventoGrabacionSchema).max(MAX_EVENTOS_GRABACION),
+  chunks: z.number().int().nonnegative(),
+  bytes: z.number().int().nonnegative(),
+});
+export type DiagnosticoGrabacion = z.infer<typeof diagnosticoGrabacionSchema>;
+
 /**
  * Parseo tolerante de la columna `pausas`: acepta el array ya deserializado
  * o el string JSON; devuelve null si está ausente o no valida. Nunca lanza:

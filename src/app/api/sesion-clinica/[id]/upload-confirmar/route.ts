@@ -32,8 +32,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       registrarAuditoria({ organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.subir_audio_fin", entidad: "sesion_clinica", entidadId: id, detalle });
 
     try {
-      const { bytes, sesion } = await confirmarSubida({ prisma: db, organizationId, sesionId: id, ...parsed.data, almacen: almacenAudio });
-      await auditar({ ok: true, duracionAudioSeg: parsed.data.duracionAudioSeg, bytes });
+      const { diagnostico, ...cierre } = parsed.data;
+      const { bytes, sesion } = await confirmarSubida({ prisma: db, organizationId, sesionId: id, ...cierre, almacen: almacenAudio });
+      // El diagnóstico del grabador queda acá y sólo acá: horas, motivos y
+      // conteos para no volver a adivinar por qué se cortó una grabación.
+      await auditar({ ok: true, duracionAudioSeg: cierre.duracionAudioSeg, bytes, ...(diagnostico ? { diagnostico } : {}) });
       return ok(sesion);
     } catch (error) {
       if (error instanceof ApiError && error.message === MENSAJE_NO_LLEGO) {

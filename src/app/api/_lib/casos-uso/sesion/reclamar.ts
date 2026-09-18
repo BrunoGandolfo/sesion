@@ -4,8 +4,8 @@
 // número nunca se repite ni se resetea. Lo que se entrega:
 //
 //   - el ticket (credencial para lease, checkpoint, asr y resultado);
-//   - el audio: la clave descifrada, el IV y la key calculada del archivo —
-//     sólo si todavía NO hay transcripción;
+//   - el audio: la key calculada del archivo en R2 — sólo si todavía NO hay
+//     transcripción;
 //   - el checkpoint: la transcripción ya hecha (reproceso, reintento tras un
 //     fallo del modelo): ningún intento vuelve a pagar el ASR;
 //   - paciente, orientación teórica y vocabulario del ASR (best-effort).
@@ -46,11 +46,8 @@ export function limiteReclamo(valor: string | null | undefined): number {
 export interface AudioEntregado {
   organizationId: string;
   pausas: unknown;
-  /** Clave AES-256 del audio, base64. */
-  clave: string;
-  /** IV con que el teléfono cifró el archivo, base64. */
-  iv: string;
-  /** `<org>/<sesion>/0`: calculada, nunca persistida. */
+  /** `<org>/<sesion>/0`: calculada, nunca persistida. El objeto es el audio
+   *  tal como lo grabó el teléfono: no hay clave ni IV que entregar. */
   key: string;
 }
 
@@ -143,9 +140,7 @@ export async function reclamarSesiones({
         modeloAsr: true,
         speechAnalytics: true,
         audioEstado: true,
-        audioIv: true,
-        // Campos lógicos: la extensión los descifra al leer.
-        audioClave: true,
+        // Campo lógico: la extensión lo descifra al leer.
         transcripcion: true,
         turno: { select: { pacienteId: true } },
         organization: {
@@ -165,10 +160,8 @@ export async function reclamarSesiones({
         : null;
 
     const audio: AudioEntregado | null =
-      !checkpoint && fila.audioEstado === "en_r2" && fila.audioClave && fila.audioIv
+      !checkpoint && fila.audioEstado === "en_r2"
         ? {
-            clave: fila.audioClave,
-            iv: Buffer.from(fila.audioIv).toString("base64"),
             key: keyAudio(fila.organizationId, c.id, 0),
             organizationId: fila.organizationId,
             pausas: fila.pausas ?? [],

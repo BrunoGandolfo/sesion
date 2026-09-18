@@ -3,26 +3,47 @@
 ## Captura y subida
 
 La pantalla `src/app/(dashboard)/grabar/[turnoId]/page.tsx` usa
-`src/components/grabacion/GrabadorSesion.tsx` (un solo MediaRecorder con
-`pause()`/`resume()`, chunks de 1 s, wake lock, recuperación tras cierre) y
-`src/hooks/useGrabacionSesion.ts` para la subida. Al crear la sesión
-(`POST /api/sesion-clinica`, `casos-uso/audio.ts: prepararAudio`) el servidor
-genera la clave AES-256 de la sesión; el teléfono la pide por
-`POST /api/sesion-clinica/[id]/clave` y con ella cifra cada chunk antes de
-escribirlo en IndexedDB (`src/lib/grabacion-storage.ts`) y el archivo entero al
-terminar (`src/lib/grabacion-cifrado.ts`).
+`src/components/grabacion/GrabadorSesion.tsx` y `src/hooks/useGrabacionSesion.ts`
+para la subida. Una grabación es **un solo MediaRecorder** desde Grabar hasta
+Terminar, con `start(1000)`:
 
-La subida son tres pasos: `POST [id]/upload-url` (grabando → subiendo, guarda
-el IV y devuelve la URL prefirmada), PUT directo a R2 y
-`POST [id]/upload-confirmar` (HeadObject; subiendo → procesando sólo si el
-objeto está, si no vuelve a grabando y responde 409).
+- la pausa manual y el tope de 150 minutos usan `pause()`/`resume()` del mismo
+  recorder; un micrófono silenciado o un rato sin chunks no cambian nada (se
+  avisa en pantalla, con horas); sólo `ended` de la pista o `onerror` del
+  recorder terminan la grabación, y ahí sólo se ofrece guardar lo grabado.
+  Nunca se abre un segundo recorder ni se pega su salida;
+- cuánto se grabó lo miden los chunks recibidos (`src/lib/grabacion-captura.ts`:
+  `contarChunk`), no el reloj de pared. El tope se aplica sobre eso. El RMS del
+  analizador sólo alimenta el medidor y el aviso visible de silencio;
+- el wake lock lo lleva `src/hooks/usePantallaEncendida.ts`, desde que se abre
+  la pantalla hasta que la subida está confirmada.
+
+**La app no cifra el audio.** Cada chunk se escribe en IndexedDB como `Blob`
+(`src/lib/grabacion-storage.ts`) y el archivo final es un `Blob` de esos
+`Blob`s, que se sube con el PUT prefirmado tal cual, sin `arrayBuffer()` ni
+copias en memoria. El audio viaja por TLS, R2 lo cifra en reposo y se borra al
+aprobar la nota (`borrar_audio_r2`). Las columnas `audio_clave_encrypted` y
+`audio_iv` siguen en el esquema, sin usarse.
+
+La subida son tres pasos: `POST [id]/upload-url` (grabando → subiendo, devuelve
+la URL prefirmada), PUT directo a R2 y `POST [id]/upload-confirmar` (HeadObject;
+subiendo → procesando sólo si el objeto está, si no vuelve a grabando y
+responde 409). Con la confirmación viaja un **diagnóstico** sin contenido
+clínico (`diagnosticoGrabacionSchema` en `src/lib/sesion-clinica/schema.ts`:
+pausas, tope, mute, pista terminada, visibilidad, wake lock
+concedido/rechazado/soltado, huecos entre latidos y entre chunks mayores a 5 s,
+cantidad de chunks y bytes) que la ruta guarda en
+`eventos_auditoria.detalle` de `sesion.subir_audio_fin`.
 `POST [id]/volver-a-grabar` (subiendo → grabando) es la que pide el cliente
 para repetir una subida que falló. El turno pasa a realizado por
 `PATCH /api/turnos/[id]` desde la pantalla, con la subida confirmada.
 
-El esquema guarda la clave y el IV en la sesión (`audio_clave_encrypted`,
-`audio_iv`). La key de R2 se calcula como organización/sesión/0, sin persistir
-una key enviada por el cliente: `src/lib/sesion-clinica/estados.ts`.
+`duracion_audio_seg` es lo que midió el teléfono. La duración que informa el
+ASR no la pisa: queda en el detalle de `sesion.transcripcion_guardada`
+(`duracionAsrSeg`). Cuando difieren, esa diferencia es el dato.
+
+La key de R2 se calcula como organización/sesión/0, sin persistir una key
+enviada por el cliente: `src/lib/sesion-clinica/estados.ts`.
 
 ## Estados y operaciones existentes
 
@@ -58,7 +79,8 @@ incrementa intento, genera un ticket y da un lease de cinco minutos.
 El payload incluye sesión, paciente, intento, ticket, orientación, vocabulario
 ASR, duración y uno de estos recursos:
 
-- audio: organización, clave descifrada, IV, key calculada y pausas;
+- audio: organización, key calculada y pausas (sin clave ni IV: la app no
+  cifra el audio);
 - checkpoint: transcripción ya guardada, métricas y modelo ASR.
 
 Con checkpoint no se vuelve a descargar ni a transcribir. El vocabulario es
@@ -84,9 +106,13 @@ las antiguas variables de entorno de lease.
 ## Worker, ASR y nota
 
 `processor/worker.py` ejecuta `processor/processor.py`.
-`descargar_y_descifrar` baja el archivo por su key (`processor/r2_client.py`)
-y lo descifra en memoria (`processor/crypto.py`, AES-256-GCM); `transcribir`
-manda esos bytes al ASR desde memoria. No se escribe audio en claro en disco y
+`descargar_audio` baja el archivo por su key (`processor/r2_client.py`) y
+comprueba que sea UNA grabación: cuenta cabeceras EBML (el id `1A 45 DF A3`
+seguido de su tamaño y del elemento `EBMLVersion`, para no confundirlo con esos
+cuatro bytes dentro del audio). Con más de una falla antes del ASR con el
+código definitivo `audio_varias_cabeceras`: son grabaciones pegadas y
+transcribirlas daría una nota de una parte de la sesión sin avisar.
+`transcribir` manda los bytes al ASR desde memoria. No se escribe audio en disco y
 no hace falta ffmpeg (la imagen `processor/Dockerfile` todavía lo instala; no
 se usa).
 
@@ -116,7 +142,8 @@ borrar_transcript_asr, generar_feedback e integrar_contexto.
 
 `src/app/api/_lib/casos-uso/sesion/aprobar.ts` exige confirmar un riesgo
 moderado/alto o las menciones léxicas que correspondan. Dentro de una
-transacción guarda la nota final, anula audioClave, pasa a aprobada y crea
+transacción guarda la nota final, anula audioClave (sólo tiene valor en sesiones
+grabadas antes de que la app dejara de cifrar el audio), pasa a aprobada y crea
 los trabajos borrar_audio_r2 (si hay audio) e integrar_contexto.
 No llama a R2 antes de confirmar la base. El evento de auditoría se registra
 después de esa transacción, con hash de nota y sin texto clínico.

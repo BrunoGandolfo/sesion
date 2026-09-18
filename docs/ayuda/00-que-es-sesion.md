@@ -46,11 +46,13 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 
 ## Qué pasa con tus datos y los de tus pacientes
 
-- Mientras grabás, cada trozo de audio **se cifra en el teléfono** antes de
-  guardarse. Al terminar, el archivo entero se cifra y recién entonces viaja.
-- Al aprobar, la clave del audio se destruye en la base con la que trabaja la
-  app y se pide borrar el audio remoto; si falla, se reintenta hasta 20 veces,
-  durante unos 15 días, y después el borrado queda marcado como fallido.
+- **La app no cifra el audio.** Mientras grabás queda en tu teléfono, protegido
+  por el bloqueo del teléfono; viaja por una conexión cifrada (TLS) y el almacén
+  donde espera lo cifra en reposo.
+- Al aprobar la nota se pide borrar el audio remoto; si falla, se reintenta
+  hasta 20 veces, durante unos 15 días, y después el borrado queda marcado como
+  fallido. Hasta que se borra, ese archivo se puede escuchar con acceso al
+  almacén.
 - La nota, la transcripción, el Recorrido, las notas privadas, las notas del
   turno, el vocabulario y la autorización con su firma se guardan cifrados. Los
   datos administrativos tienen otro tratamiento.
@@ -59,10 +61,9 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
   los cambios del Recorrido. A AssemblyAI se le pide borrar apenas termina la
   transcripción y, si se completó, se reintenta durante unos 15 días.
 - Los respaldos diarios se conservan **30 días** y hay además una copia mensual
-  que se conserva **hasta 12 meses**. No contienen audio, pero pueden conservar
-  cifrada la clave de una sesión todavía no aprobada.
-- El audio se descifra para transcribirlo solo en memoria del servidor: no se
-  escribe en ningún archivo.
+  que se conserva **hasta 12 meses**. No contienen audio.
+- Para transcribirlo, el servidor tiene el audio solo en memoria: no lo escribe
+  en ningún archivo.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
 - La autorización vigente es la **2.6**. Las firmas anteriores necesitan que la
   paciente firme la nueva. Ver `12-camino-del-audio-y-privacidad.md`.
@@ -96,7 +97,6 @@ src/lib/deudas.ts
 src/app/(dashboard)/_components/kpis.tsx
 src/app/(dashboard)/config/_components/config-view.tsx
 src/lib/grabacion-storage.ts
-src/lib/grabacion-cifrado.ts
 src/app/api/_lib/casos-uso/trabajos/politica.ts
 src/components/clinico/HiloView.tsx
 src/lib/ayuda-corpus.ts

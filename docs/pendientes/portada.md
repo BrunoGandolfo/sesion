@@ -26,7 +26,7 @@ usando las otras pantallas de acceso. No se modifica el consentimiento.
 | Turnos únicos y recurrentes | `src/app/api/_lib/casos-uso/crear-turno.ts`, `src/app/api/_lib/casos-uso/serie-turnos.ts` |
 | Recordatorios por SMS | `src/lib/recordatorios-programacion.ts`, `src/app/api/_lib/casos-uso/despachar-sms.ts` |
 | Cobros y deudas por paciente | `src/app/api/_lib/casos-uso/cobrar-turno.ts`, `src/app/(dashboard)/cobros/_components/cobros-view.tsx` |
-| Grabación con autorización, audio cifrado antes de persistir/enviar | `src/app/api/_lib/casos-uso/audio.ts`, `src/lib/audio/grabadora.ts`, `src/lib/audio/cifrado.ts`, `src/lib/audio/sincronizar.ts` |
+| Grabación con autorización; el audio viaja por TLS (la app no lo cifra) | `src/app/api/_lib/casos-uso/audio.ts`, `src/components/grabacion/GrabadorSesion.tsx`, `src/hooks/useGrabacionSesion.ts` |
 | Transcripción y borrador SOAP | `processor/processor.py`, `processor/clinical_analyzer.py`, `src/lib/glosario.ts` (`SOAP_SECCIONES`) |
 | Revisión, corrección y aprobación profesional | `src/app/(dashboard)/sesiones/[id]/_components/nota-sesion-view.tsx`, `src/app/api/_lib/casos-uso/sesion/aprobar.ts` |
 | Recorrido longitudinal; propuestas tras aprobar; aceptar, editar o descartar | `src/app/api/_lib/casos-uso/sesion/aprobar.ts`, `src/app/api/_lib/casos-uso/hilo/trabajo.ts`, `src/app/api/_lib/casos-uso/hilo/escribir.ts` |

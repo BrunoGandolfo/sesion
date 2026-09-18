@@ -19,12 +19,12 @@ accesos o la retención de los proveedores. Hay que verificar sus condiciones
 vigentes. → `12-camino-del-audio-y-privacidad.md`
 
 **4. ¿Cuándo se borra el audio?**
-Al aprobar se destruye la clave activa y se programa el borrado del audio
-remoto, con hasta 20 reintentos durante unos 15 días; si no lo logra, el borrado
-queda marcado como fallido. Los respaldos diarios se conservan 30 días y los
-mensuales hasta 12 meses; no contienen audio, pero pueden conservar su clave
-cifrada, y con ella un audio que no se pudo borrar podría abrirse. La copia
-cifrada del teléfono se borra cuando el servidor confirma que el archivo llegó.
+Al aprobar la nota se programa el borrado del audio remoto, con hasta 20
+reintentos durante unos 15 días; si no lo logra, el borrado queda marcado como
+fallido. La app no cifra el audio: mientras ese archivo exista se puede escuchar
+con acceso al almacén. Los respaldos diarios se conservan 30 días y los
+mensuales hasta 12 meses; no contienen audio. La copia del teléfono se borra
+cuando el servidor confirma que el archivo llegó.
 → `12-camino-del-audio-y-privacidad.md`
 
 **5. ¿La transcripción también se borra?**
@@ -33,22 +33,25 @@ autorización que firma la paciente. → `12-camino-del-audio-y-privacidad.md`
 
 **6. ¿Puedo bloquear la pantalla mientras grabo?**
 Mejor no: dejá la pantalla encendida y Sesión abierta. La app pide mantenerla
-encendida; si el sistema la apaga igual, el teléfono puede dejar de entregar
-sonido y la grabación queda pausada con lo capturado hasta ahí, cifrado. Cada
-segundo queda guardado cifrado, así que lo grabado no se pierde. Al volver,
-revisá el estado y el medidor de sonido antes de seguir.
+encendida, y si el teléfono no lo permite te lo avisa antes de empezar. Con la
+pantalla apagada el teléfono puede dejar de entregar sonido: la app no corta la
+grabación por eso, pero ese rato no se graba. Cada segundo que sí entró queda
+guardado, así que lo grabado no se pierde. Al volver, la pantalla te dice entre
+qué horas no se grabó y podés seguir o terminar.
 → `07-grabar-una-sesion.md`
 
 **7. Pausé y me olvidé de reanudar. ¿Perdí la sesión?**
-No. Lo grabado hasta la pausa quedó guardado, cifrado. Mientras está pausada no
+No. Lo grabado hasta la pausa quedó guardado. Mientras está pausada no
 se captura audio y el cronómetro se detiene. **Reanudar** retoma la captura en
 el mismo archivo; lo que no se grabó durante la pausa no se recupera.
 → `07-grabar-una-sesion.md`
 
-**8. Entró una llamada y se cortó el micrófono.**
-La grabación queda pausada con *"Se cortó el micrófono. Lo grabado está a
-salvo."* Elegí **Reanudar** o **Terminar la sesión** con lo que haya. Durante el
-corte no se graba: la recuperación completa no está garantizada.
+**8. Entró una llamada mientras grababa.**
+La grabación no se corta: el teléfono silencia el micrófono mientras dura la
+llamada, la pantalla lo avisa y vuelve sola cuando lo libera. Durante la llamada
+se graba silencio: la recuperación completa no está garantizada. Si otra app se
+lleva el micrófono del todo, la grabación termina ahí y la pantalla ofrece
+**Guardar lo grabado**.
 → `14-cuando-algo-falla.md`
 
 **9. ¿Cuánto tarda la nota?**
@@ -65,8 +68,8 @@ No. La nota se guarda una sola vez, al aprobar. Si intentás salir con cambios, 
 app pregunta antes. → `08-la-nota-clinica.md`
 
 **12. ¿Puedo desaprobar una nota?**
-No. La app no ofrece deshacer la aprobación y al aprobar se destruye la
-clave activa y se reintenta el borrado remoto. No cuentes con ese audio para volver atrás. → `08-la-nota-clinica.md`
+No. La app no ofrece deshacer la aprobación y al aprobar se programa el
+borrado del audio remoto. No cuentes con ese audio para volver atrás. → `08-la-nota-clinica.md`
 
 **13. El botón "Aprobar nota" está apagado.**
 Debajo dice por qué. Marcá **Revisé esta señal** en cada señal de riesgo y, si

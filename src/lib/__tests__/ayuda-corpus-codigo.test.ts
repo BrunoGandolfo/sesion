@@ -90,18 +90,18 @@ describe("los ejemplos de voz de Lupita", () => {
     expect(recordatorio).toContain("vale para los turnos que agendes o reprogrames");
   });
 
-  it("la grabación cortada: lo guardado está cifrado y los botones son los del grabador", () => {
+  it("la grabación cortada: lo guardado queda en el teléfono y los botones son los del grabador", () => {
     const grabacion = ejemplosBuenos().find((e) => e.includes("¿Qué pasa si se corta la grabación?"))!;
     const storage = codigo("src/lib/grabacion-storage.ts");
-    const guardar = storage.slice(storage.indexOf("export async function guardarChunk("));
-    expect(guardar.indexOf("await cifrarChunk(")).toBeGreaterThan(-1);
-    expect(guardar.indexOf("await cifrarChunk(")).toBeLessThan(guardar.indexOf(".put("));
-    expect(grabacion).toContain("queda guardado, cifrado, en el teléfono");
+    // Cada chunk se guarda apenas llega, tal cual: la app no cifra el audio.
+    expect(storage).toContain("const registro: ChunkGrabacion = { sesionClinicaId, indice, blob: chunk };");
+    expect(grabacion).toContain("queda guardado en el teléfono, segundo a segundo");
+    expect(grabacion).not.toContain("cifrado");
     const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
     const glosario = codigo("src/lib/glosario.ts");
-    for (const [constante, boton] of [["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"]]) {
+    for (const [constante, boton] of [["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["SEGUIR_GRABANDO", "Seguir grabando"]]) {
       expect(glosario).toContain(`export const ${constante} = "${boton}"`);
-      expect(vista).toContain(`{${constante}}`);
+      expect(vista).toContain(constante);
       expect(grabacion).toContain(`"${boton}"`);
     }
     expect(grabacion).toContain("La recuperación completa no está garantizada");

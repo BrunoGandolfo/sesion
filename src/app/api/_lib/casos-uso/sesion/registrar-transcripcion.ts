@@ -5,6 +5,12 @@
 //
 // `modeloAsr` va en el mismo UPDATE que la transcripción: es la señal de
 // "hay transcripción" que usan la respuesta a la UI y las precondiciones.
+//
+// `duracionSeg` es la duración que informa el proveedor del ASR. NO pisa
+// `duracionAudioSeg`, que es lo que midió el teléfono contando chunks: son dos
+// medidas de cosas distintas, y cuando difieren esa diferencia es el dato (un
+// archivo que el decodificador leyó más corto que lo grabado). Queda en el
+// detalle de la auditoría, al lado de la del teléfono.
 
 import type { SpeechAnalytics } from "@/lib/sesion-clinica/schema";
 
@@ -47,7 +53,6 @@ export async function registrarTranscripcion({
     data: {
       modeloAsr,
       ...(speechAnalytics !== undefined ? { speechAnalytics } : {}),
-      ...(duracionSeg !== undefined ? { duracionAudioSeg: duracionSeg } : {}),
       ...(asrTranscriptId !== undefined ? { asrTranscriptId } : {}),
       ...cifrarSesion(sesionId, { transcripcion }),
     },
@@ -64,6 +69,7 @@ export async function registrarTranscripcion({
       intento,
       modeloAsr,
       caracteres: transcripcion.length,
+      duracionAsrSeg: duracionSeg ?? null,
       rolesOrigen: speechAnalytics?.rolesOrigen ?? null,
     },
   });

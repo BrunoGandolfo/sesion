@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import type { DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import type { PacienteConDeuda, Turno } from "@/types/domain";
 import { ApiClientError } from "@/lib/api-client";
-import { COBRO_DESHECHO, PRUEBA_TOPE } from "@/lib/glosario";
+import { COBRO_DESHECHO, GRABACION_LLEGO, PRUEBA_TOPE } from "@/lib/glosario";
 
 import { CobrosView } from "../cobros/_components/cobros-view";
 import { GrabarView } from "../grabar/[turnoId]/_components/grabar-view";
@@ -45,14 +45,15 @@ vi.mock("../pacientes/[id]/_components/cabecera-ficha", () => ({ CabeceraFicha: 
 vi.mock("@/hooks/useHoy", () => ({ useHoy: () => AHORA }));
 vi.mock("@/hooks/useGrabacionSesion", () => ({
   useGrabacionSesion: () => ({ sesionClinica: { id: "s1", estado: "aprobada" }, loading: false }),
-  subirAudioCifrado: m.subir, volverAGrabando: vi.fn(), marcarTurnoRealizado: vi.fn(),
-  pedirClaveAudio: vi.fn(async () => "clave-de-prueba"),
+  subirAudio: m.subir, volverAGrabando: vi.fn(), marcarTurnoRealizado: vi.fn(),
 }));
 vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: vi.fn() }));
+// jsdom no tiene wake lock: acá se prueba otra cosa, no ese aviso.
+vi.mock("@/hooks/usePantallaEncendida", () => ({ usePantallaEncendida: () => ({ estado: "concedida", seApago: false, cerrarAviso: () => {} }) }));
 vi.mock("@/components/grabacion/GrabadorSesion", () => ({
   useGrabador: (opciones: NonNullable<typeof m.grabador>) => {
     m.grabador = opciones;
-    return { estado: "inactivo", pendiente: null, iniciar: m.iniciar };
+    return { estado: "inactivo", pendienteSeg: null, iniciar: m.iniciar, anotar: vi.fn() };
   },
   formatearDuracion: () => "00:00",
 }));
@@ -205,11 +206,12 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
     act(() => m.grabador?.onError(FALLO));
     await verificarAviso(FALLO, false);
     fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
-    // El grabador arranca con la clave de la sesión, que la pantalla pidió al servidor.
-    await waitFor(() => expect(m.iniciar).toHaveBeenCalledWith("t1", "clave-de-prueba"));
-    const datos: DatosGrabacion = { audioBlob: new Blob(["audio sintético"]), claveCifrado: "clave-de-prueba", ivCifrado: "iv-de-prueba", duracionSegundos: 5, pausas: [] };
+    // El grabador arranca sólo con el turno: no hay clave que pedirle a nadie.
+    await waitFor(() => expect(m.iniciar).toHaveBeenCalledWith("t1"));
+    const datos: DatosGrabacion = { audioBlob: new Blob(["audio sintético"]), duracionSegundos: 5, pausas: [], diagnostico: { eventos: [], chunks: 5, bytes: 15 } };
     await act(async () => { m.grabador?.onListo(datos); });
-    await verificarAviso("Te avisamos cuando la nota esté lista", true);
+    // La confirmación queda en pantalla, no en un aviso que se va solo.
+    expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
     expect(m.subir).toHaveBeenCalledWith("s1", datos, expect.any(Function));
   });
 

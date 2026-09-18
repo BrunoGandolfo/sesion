@@ -24,21 +24,22 @@ export const PROVEEDORES = {
 export const MEDIOS_CAPTURA = ["audio"] as const;
 
 /**
- * El audio se cifra EN EL TELÉFONO mientras se graba: cada trozo que entrega
- * el micrófono se cifra con la clave de la sesión antes de guardarse en el
- * navegador (src/lib/grabacion-storage.ts, guardarChunk), y el archivo
- * entero se cifra con esa misma clave antes de subirse
- * (src/lib/grabacion-cifrado.ts). grabacion-storage.test.ts mira lo escrito
- * y comprueba que no queda audio en claro. Si en algún momento el respaldo
- * local quedara sin cifrar, esto pasa a false y el texto deja de prometerlo.
+ * DESACTUALIZADO A PROPÓSITO (rama grabador-dhh, 18/9/2026). La app dejó de
+ * cifrar el audio: los trozos se guardan como Blob (src/lib/grabacion-storage.ts)
+ * y el archivo se sube tal cual. Estas tres banderas NO se cambiaron porque
+ * cambiarlas cambia el texto del consentimiento, y una versión nueva del texto
+ * —que las pacientes vuelven a firmar— la decide el dueño. Las frases que
+ * dejaron de ser ciertas están en
+ * docs/pendientes/consentimiento-sin-cifrado-de-audio.md.
  */
 export const RESPALDO_LOCAL_CIFRADO = true;
 
 /** El archivo se sube entero al terminar, no por tramos mientras se graba
- * (useGrabacionSesion.subirAudioCifrado: upload-url → PUT → upload-confirmar). */
+ * (useGrabacionSesion.subirAudio: upload-url → PUT → upload-confirmar). Esto
+ * sigue siendo cierto. */
 export const AUDIO_SE_SUBE_AL_TERMINAR = true;
 
-/** Una clave AES distinta por sesión (sesiones_clinicas.audio_clave_encrypted). */
+/** Ver la nota de RESPALDO_LOCAL_CIFRADO: ya no hay clave por sesión. */
 export const CLAVE_POR_SESION = true;
 
 /**

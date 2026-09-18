@@ -10,7 +10,7 @@ import {
 import { excedeMaximoPalabras, TERMINO_MUY_LARGO } from "@/lib/hot-words";
 import { normalizePhone } from "@/lib/phone";
 import { RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
-import { pausasGrabacionSchema } from "@/lib/sesion-clinica/schema";
+import { diagnosticoGrabacionSchema, pausasGrabacionSchema } from "@/lib/sesion-clinica/schema";
 
 // Las listas cerradas del turno se declaran una sola vez en
 // src/lib/constantes-turno.ts; acá solo se re-exportan para las rutas.
@@ -216,13 +216,12 @@ const MAX_TAMANO_AUDIO_BYTES = 2 * 1024 * 1024 * 1024;
 
 /** POST [id]/upload-url */
 export const uploadUrlSchema = z.object({
-  iv: z.string().trim().min(1, "Falta el IV de cifrado"),
   tamanoBytes: z
     .number()
     .int("El tamaño debe ser un entero")
     .positive("El tamaño debe ser mayor a cero")
     .max(MAX_TAMANO_AUDIO_BYTES, "El audio supera el tamaño máximo admitido"),
-  mime: z.string().trim().min(1).max(100).default("application/octet-stream"),
+  mime: z.string().trim().min(1).max(100).default("audio/webm"),
 });
 
 /** POST [id]/upload-confirmar */
@@ -233,4 +232,7 @@ export const uploadConfirmarSchema = z.object({
     .int("La duración debe ser un número entero")
     .nonnegative("La duración no puede ser negativa"),
   pausas: pausasGrabacionSchema.optional(),
+  /** Qué le pasó al grabador en el teléfono. Sin contenido clínico: va a la
+   *  auditoría, no a la sesión. */
+  diagnostico: diagnosticoGrabacionSchema.optional(),
 });

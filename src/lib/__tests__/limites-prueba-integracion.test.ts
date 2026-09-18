@@ -53,7 +53,7 @@ test("el grabador crea la sesión por POST /api/sesion-clinica, que pasa por el 
   const ruta = codigo("src/app/api/sesion-clinica/route.ts");
   expect(ruta).toMatch(/export async function POST[\s\S]*await prepararAudio\(\{ prisma: db, organizationId, turnoId \}\)/);
   const casoDeUso = codigo("src/app/api/_lib/casos-uso/audio.ts");
-  const preparar = casoDeUso.slice(casoDeUso.indexOf("export async function prepararAudio("), casoDeUso.indexOf("export async function claveAudio("));
+  const preparar = casoDeUso.slice(casoDeUso.indexOf("export async function prepararAudio("), casoDeUso.indexOf("export async function pedirUrlSubida("));
   expect(preparar).toContain("grabacionesIniciadas: { lt: TOPE_GRABACIONES_PRUEBA }");
   expect(preparar).toContain("grabacionesIniciadas: { increment: 1 }");
   expect(preparar).toContain("throw new ApiError(PRUEBA_TOPE, 403)");

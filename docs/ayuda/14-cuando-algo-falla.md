@@ -29,41 +29,58 @@ enlace por correo. Detalle en `01-entrar-y-cuenta.md`.
 
 ## La grabación se cortó
 
-### Se interrumpió la captura
+### Dejó de llegar audio un rato
 
-**Ves:** la grabación pausada y una de estas líneas: *"Se cortó el micrófono. Lo
-grabado está a salvo."*, *"Dejó de entrar sonido y se pausó la grabación. Lo
-grabado está a salvo."*, *"La pantalla se apagó y se pausó la grabación. Lo
-grabado está a salvo."* o *"Llegaste a las 2 horas y media de grabación. Lo
-grabado está a salvo."*
+**Ves:** *"No se grabó entre las 10:12 y las 10:20. Ahora está grabando de
+nuevo: podés seguir o terminar."*, o mientras todavía no volvió, *"No está
+llegando audio desde las 10:12."* Muchas veces viene junto con *"La pantalla se
+apagó. Con la pantalla apagada el teléfono puede dejar de grabar: mantenela
+encendida."*
 
-Pasa cuando entra una llamada, otra app se lleva el micrófono, pasa un rato sin
-que entre sonido, la pantalla se apaga o se llega al límite de tiempo.
+Pasa cuando el teléfono se bloquea o pone a dormir al navegador: deja de
+entregar audio y la app no lo puede evitar. La grabación NO se corta sola.
 
-**Qué hacer:** lo ya guardado se conserva, cifrado. Elegí **Reanudar** o
-**Terminar la sesión** con lo que haya. Durante el corte no se graba, y la
-recuperación completa no está garantizada: lo que el teléfono no llegó a
-capturar no se puede recuperar.
+**Qué hacer:** tocá **Seguir grabando** o **Terminar la sesión**. Ese rato no se
+grabó y no cuenta como tiempo grabado; lo demás está guardado. La recuperación
+completa no está garantizada: lo que el teléfono no llegó a capturar no se puede
+recuperar.
+
+### El micrófono se desconectó
+
+**Ves:** *"El micrófono se desconectó y la grabación terminó acá. No se puede
+continuar esta grabación: guardá lo grabado."*
+
+Otra app se llevó el micrófono del todo o se le quitó el permiso al navegador.
+Una llamada común no produce esto: sólo silencia el micrófono un rato.
+
+**Qué hacer:** tocá **Guardar lo grabado**. Lo que entró hasta ahí se envía como
+cualquier grabación.
+
+### Llegaste al límite
+
+**Ves:** *"Llegaste a las 2 horas y media de grabación. Lo grabado está a salvo:
+tocá Terminar la sesión para enviarlo."* La grabación queda en pausa y no se
+puede reanudar. Tocá **Terminar la sesión**.
 
 ### Se cerró el navegador o se apagó el teléfono
 
 **Qué hacer:** volvé a la pantalla de grabar de **ese mismo turno**, en el
-**mismo teléfono**. Si la app encuentra la copia cifrada dice *"Quedó una
-grabación de ~N min sin enviar"*: **Guardarla ahora** la envía (la app pide la
-clave al servidor y la abre ahí) y **Descartarla** la borra. Empezar una
-grabación nueva del mismo turno reemplaza la copia anterior.
+**mismo teléfono**. Si la app encuentra la copia dice *"Quedó una grabación de
+~N min sin enviar"*: **Guardarla ahora** la envía tal cual y **Descartarla** la
+borra. Esa grabación no se puede continuar. Empezar una grabación nueva del
+mismo turno reemplaza la copia anterior.
 
 ### No se pudo guardar el audio
 
 **Ves:** *"No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de
 nuevo."* y un botón **Reintentar**.
 
-Puede ser la conexión. Nada se borra: el archivo cifrado sigue en memoria y la
-copia cifrada en el teléfono.
+Puede ser la conexión. Nada se borra: la grabación sigue guardada en el
+teléfono.
 
 **Qué hacer:** poné el teléfono en una conexión buena (wifi mejor que datos) y
 tocá **Reintentar**. Podés reintentar las veces que haga falta. No des por
-guardada una sesión hasta ver *"Te avisamos cuando la nota esté lista"*.
+guardada una sesión hasta ver *"La grabación llegó bien."*
 
 ### La sesión se guardó pero el turno quedó agendado
 

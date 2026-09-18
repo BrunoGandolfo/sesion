@@ -86,7 +86,7 @@ abrir.
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), la clave cifrada, el IV del archivo (`audio_iv`, en claro), duración, pausas, cuándo se borró. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. La clave del audio se destruye en la misma transacción que aprueba. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
+| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), duración medida por el teléfono (el ASR no la pisa), pausas, cuándo se borró. `audio_clave_encrypted` y `audio_iv` quedan en el esquema **sin usarse** (aceptan null): la app ya no cifra el audio, y sólo tienen valor en sesiones grabadas con la versión que sí cifraba. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. La clave del audio se destruye en la misma transacción que aprueba. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
 
 ### Trabajo durable y worker
 
@@ -138,8 +138,9 @@ Los once primeros los resolvió el dueño en la consigna; los aplico tal cual y
 anoto cómo se ven en el esquema. Del 12 en adelante son los que encontré yo.
 
 1. **Audio.** No se adopta el formato binario `SAP1` ni el manifiesto con hash
-   del diseño 01. La sesión lleva la clave cifrada en columna propia,
-   `audio_estado` y el IV del archivo (`audio_iv`). La tabla `audio_segmentos`
+   del diseño 01. La sesión lleva `audio_estado`; las columnas de la clave
+   (`audio_clave_encrypted`) y del IV (`audio_iv`) quedaron sin uso cuando la
+   app dejó de cifrar el audio (rama grabador-dhh, sin migración). La tabla `audio_segmentos`
    del diseño por segmentos se borró (migración `20260918120000_grabador_restaurado`)
    al volver al grabador de un solo archivo. La key de R2 no existe como columna.
 2. **Estados de la sesión.** El enum y las columnas de identidad del intento
@@ -268,10 +269,9 @@ y el 4 se aceptaron sin cambios. Las dos preguntas de §4 quedan como están.
 1. **Un solo IV para un audio en segmentos** (aceptado por el dueño el
    11-09-2026, aplicado, y retirado el 18-09-2026 con el grabador de un solo
    archivo). El argumento sigue valiendo: con AES-GCM, dos cifrados distintos
-   con la misma clave y el mismo IV recuperan texto claro. Hoy con una clave
-   por sesión hay un IV aleatorio de 12 bytes por cada trozo que se guarda en
-   el teléfono (nunca sale de ahí) y otro para el archivo que se sube
-   (`sesiones_clinicas.audio_iv`, en claro: no es secreto).
+   con la misma clave y el mismo IV recuperan texto claro. Hoy el punto es
+   histórico: la app no cifra el audio, así que no hay ni clave ni IV de audio
+   (`sesiones_clinicas.audio_iv` queda sin usarse).
 2. **Nombre, apellido y teléfono en claro.** Es la decisión del 03 y la
    respeto porque la búsqueda y la agenda los necesitan en SQL. Dejo constancia
    de que es la única información que identifica a una persona y que queda sin

@@ -1,6 +1,6 @@
 """
 Orquesta el pipeline de una sesion reclamada:
-R2 -> descifrado -> AssemblyAI -> checkpoint de transcripcion en la app ->
+R2 -> comprobacion del archivo -> AssemblyAI -> checkpoint de transcripcion en la app ->
 nota SOAP -> resultado a la app. Y ejecuta los trabajos durables
 que la app le entrega (borrar el transcript en AssemblyAI, generar "Para vos").
 
@@ -22,7 +22,7 @@ Reglas con la app (contrato Area 2, src/app/api/_lib/casos-uso/sesion/*):
 Privacidad de logs: solo ids, conteos, codigos y status. Nunca clave, iv,
 texto de transcripcion/nota ni datos del paciente.
 """
-import base64
+import re
 import io
 import logging
 import threading
@@ -39,7 +39,6 @@ from schemas_llm import validar_estructura_contexto
 from riesgo_lexico import buscar_menciones
 import speech_analytics
 from clinical_analyzer import mensaje_error_api
-from crypto import descifrar
 from errores import LeasePerdido, PipelineError
 from transcripcion import formatear_para_llm
 
@@ -66,7 +65,8 @@ class SesionReclamada:
     paciente_id: str | None
     orientacion_teorica: str
     terminos_asr: list[str]
-    # {clave: base64, iv: base64, key} o None si hay checkpoint.
+    # {key, organizationId, pausas} o None si hay checkpoint. El audio no viene
+    # cifrado por la app: no hay clave ni iv.
     audio: dict | None
     # {transcripcion, speechAnalytics, modeloAsr} o None.
     checkpoint: dict | None
@@ -187,7 +187,7 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
                 transcripto = desde_checkpoint(sesion.checkpoint)
             else:
                 lease.comprobar("audio")
-                audio = descargar_y_descifrar(etiqueta, sesion.audio, sesion.intento)
+                audio = descargar_audio(etiqueta, sesion.audio, sesion.intento)
                 lease.comprobar("asr")
                 transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr)
                 del audio
@@ -210,30 +210,45 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
 
 # Pasos ─────────────────────────────────────────────────────────────────────
 
-def descargar_y_descifrar(etiqueta: str, audio: dict | None, intento: int) -> bytes:
+# Cabecera de un archivo WebM/Matroska: el id EBML (1A 45 DF A3), su tamano
+# (1 a 8 bytes) y el elemento EBMLVersion (42 86) con el que empieza siempre.
+# Buscar solo los cuatro bytes del id daria falsos positivos: en ~120 MB de
+# Opus esa secuencia aparece por azar en una de cada cuarenta sesiones.
+_CABECERA_EBML = re.compile(rb"\x1a\x45\xdf\xa3.{1,8}?\x42\x86", re.DOTALL)
+
+
+def cabeceras_ebml(datos: bytes) -> int:
+    """Cuantas cabeceras de archivo WebM hay en `datos`."""
+    return len(_CABECERA_EBML.findall(datos))
+
+
+def descargar_audio(etiqueta: str, audio: dict | None, intento: int) -> bytes:
     """
-    R2 -> bytes de audio en claro, todo en memoria: no se escribe ningun
-    archivo. El archivo (cifrado en el telefono con la clave de la sesion y su
-    IV) se descarga por la key que calculo la app y se descifra.
+    R2 -> bytes de audio, todo en memoria: no se escribe ningun archivo. El
+    audio llega tal como lo grabo el telefono (la app no lo cifra: viaja por
+    TLS y R2 lo cifra en reposo).
+
+    Una grabacion es UN MediaRecorder y por lo tanto UN archivo, con una sola
+    cabecera. Dos cabeceras son dos archivos pegados: la linea de tiempo esta
+    rota y el ASR transcribiria solo una parte, o la misma dos veces, sin
+    avisar. Se rechaza antes de gastar el ASR, con su propio codigo.
     """
-    if not audio or not audio.get("clave"):
-        raise PipelineError("audio_sin_clave", "Falta la clave para descifrar el audio")
-    if not audio.get("key") or not audio.get("iv"):
-        raise PipelineError("audio_sin_clave", "Falta la key o el iv del audio")
+    if not audio or not audio.get("key"):
+        raise PipelineError("audio_sin_key", "Falta la ubicacion del audio")
 
     logger.info(f"[{etiqueta}] Intento {intento}. Descargando el audio de R2")
     try:
-        cifrado, _ = r2_client.descargar_audio(audio["key"])
+        datos, _ = r2_client.descargar_audio(audio["key"])
     except Exception as e:
         logger.error(f"[{etiqueta}] R2 fallo ({type(e).__name__}): {str(e)[:300]}")
         raise PipelineError("r2_error", "No se pudo descargar el audio de R2") from e
-    try:
-        datos = descifrar(base64.b64encode(cifrado).decode(), audio["clave"], audio["iv"])
-    except ValueError as e:
-        # Los mensajes de crypto.descifrar son de forma (largos, tag), sin material de clave.
-        logger.error(f"[{etiqueta}] Descifrado fallo: {str(e)[:120]}")
-        raise PipelineError("descifrado_error", "No se pudo descifrar el audio") from e
-    logger.info(f"[{etiqueta}] Descargado y descifrado: {len(datos)} bytes")
+    cabeceras = cabeceras_ebml(datos)
+    logger.info(f"[{etiqueta}] Descargado: {len(datos)} bytes, {cabeceras} cabecera(s) EBML")
+    if cabeceras > 1:
+        raise PipelineError(
+            "audio_varias_cabeceras",
+            "El archivo de audio tiene mas de una cabecera: son grabaciones pegadas y no se puede transcribir entero",
+        )
     return datos
 
 
