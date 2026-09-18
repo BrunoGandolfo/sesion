@@ -5,7 +5,11 @@
 // componente cliente necesita saber de la sesión; leer quién está entrada
 // se hace por el contexto de src/components/layout/providers.tsx.
 
+import { olvidarNotas } from "@/lib/notas-en-proceso";
+
 export async function cerrarSesion(destino = "/login"): Promise<void> {
+  // El aviso de nota lista guarda el nombre de la paciente en la pestaña.
+  olvidarNotas();
   try {
     await fetch("/api/cuenta/salir", { method: "POST", credentials: "same-origin" });
   } catch {

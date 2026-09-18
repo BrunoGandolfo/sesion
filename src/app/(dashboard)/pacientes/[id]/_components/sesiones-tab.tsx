@@ -14,7 +14,9 @@ import { ChevronDown, Mic } from "lucide-react";
 import { fechaInputMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Card, Chip } from "@/components/ui";
-import { AnilloProgreso, ListaEnCascada } from "@/components/ui/movimiento";
+import { IndicadorProcesando } from "@/components/ui/procesando";
+import { enProceso } from "@/lib/notas-en-proceso";
+import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet, esAbort } from "@/lib/api-client";
@@ -44,6 +46,8 @@ import { CobrarSheet } from "./turnos-pagos-tab";
 
 interface SesionesTabProps {
   pacienteId: string;
+  /** Nombre y apellido: lo dice el indicador mientras se escribe la nota. */
+  pacienteNombre: string;
   turnoHoy: Turno | null;
   sesionHoy: SesionClinicaEnsamblada | null;
   sesionHoyCargando: boolean;
@@ -179,6 +183,7 @@ const ENLACE_SECUNDARIO =
 
 export function SesionesTab({
   pacienteId,
+  pacienteNombre,
   turnoHoy,
   sesionHoy,
   sesionHoyCargando,
@@ -261,6 +266,7 @@ export function SesionesTab({
       {turnoHoy ? (
         <SesionDeHoy
           turno={turnoHoy}
+          paciente={pacienteNombre}
           sesion={sesionHoy}
           cargando={sesionHoyCargando}
           onCobrar={() => setCobroTarget(turnoHoy)}
@@ -345,16 +351,21 @@ export function SesionesTab({
 
 function SesionDeHoy({
   turno,
+  paciente,
   sesion,
   cargando,
   onCobrar,
 }: {
   turno: Turno;
+  paciente: string;
   sesion: SesionClinicaEnsamblada | null;
   cargando: boolean;
   onCobrar: () => void;
 }) {
-  const chip = sesion ? chipDeEstado(sesion.estado) : null;
+  // En proceso el indicador de abajo ya lo dice con el nombre: el chip
+  // repetiría lo mismo con otras palabras.
+  const chip =
+    sesion && !enProceso(sesion.estado) ? chipDeEstado(sesion.estado) : null;
   const cobrable = esDeudaPendiente(turno);
 
   let accion: React.ReactNode = null;
@@ -368,16 +379,7 @@ function SesionDeHoy({
       </Link>
     );
   } else if (sesion.estado === "subiendo" || sesion.estado === "procesando") {
-    accion = (
-      <div className="flex items-center gap-3 rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-3 py-3">
-        <AnilloProgreso
-          tamano={16}
-          className="shrink-0 text-sage-500"
-          etiqueta={ESCRIBIENDO_NOTA}
-        />
-        <span className="font-sans text-[13px] text-ink-700">{ESCRIBIENDO_NOTA}</span>
-      </div>
-    );
+    accion = <IndicadorProcesando paciente={paciente} className="w-full" />;
   } else if (sesion.estado === "revision") {
     accion = (
       <Link href={`/sesiones/${sesion.id}`} className={ENLACE_PRIMARIO}>

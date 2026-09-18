@@ -21,14 +21,14 @@ import {
   type UltimaSesionCorta,
 } from "@/components/clinico/brief-corto";
 import { Avatar, Button, Card, Chip } from "@/components/ui";
-import { AnilloProgreso, Latido } from "@/components/ui/movimiento";
+import { Latido } from "@/components/ui/movimiento";
+import { IndicadorProcesando } from "@/components/ui/procesando";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
 import {
   COBRAR,
   EN_CURSO,
   ENSEGUIDA,
-  ESCRIBIENDO_NOTA,
   FIRMAR_AUTORIZACION,
   GRABAR_SESION,
   NOTA_GUARDADA,
@@ -194,10 +194,10 @@ export function CardAhora({
 
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
         {accion.tipo === "escribiendo" ? (
-          <p className="flex items-center gap-2 font-sans text-[14px] font-semibold text-gold-500">
-            <AnilloProgreso tamano={16} etiqueta={ESCRIBIENDO_NOTA} />
-            {ESCRIBIENDO_NOTA}
-          </p>
+          <IndicadorProcesando
+            paciente={`${turno.paciente.nombre} ${turno.paciente.apellido}`.trim()}
+            className="w-full"
+          />
         ) : null}
         {accion.tipo === "hecho" ? (
           <Chip variant="sage">{NOTA_GUARDADA}</Chip>

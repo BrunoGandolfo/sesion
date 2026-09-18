@@ -1366,3 +1366,40 @@ export const DESCARTAR_BORRADOR_ACCION = "Descartar borrador";
 export const QUITAR_ELEMENTO_BORRADOR = "Se quita este elemento del borrador. Las versiones guardadas del Recorrido se conservan.";
 
 export const APROBAR_DESCARTA_ANTERIOR = "Al aprobar esta nota se descarta la copia de tu borrador anterior. Si querés conservar alguno de esos cambios, incorporalo a esta nota antes de aprobar.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Nota en proceso y aviso de nota lista
+//
+// Mientras el worker escribe (3 a 10 minutos) la ficha y Hoy lo muestran con
+// un anillo que gira y el nombre de la paciente; cuando termina, un aviso que
+// se queda hasta que ella lo toca, en cualquier pantalla
+// (src/components/layout/avisos-de-notas.tsx).
+// ────────────────────────────────────────────────────────────────────────────
+
+/** El renglón de la ficha y de Hoy mientras se escribe la nota. */
+export function procesandoSesionDe(paciente: string): string {
+  return `Procesando la sesión de ${paciente}`;
+}
+
+/** Debajo de "Procesando…": cuánto tarda y que no hace falta quedarse. */
+export const PROCESANDO_DETALLE =
+  "Tarda unos minutos. Podés seguir con lo tuyo: te avisamos acá cuando la nota esté lista.";
+
+export function notaListaDe(paciente: string): string {
+  return `La nota de ${paciente} está lista`;
+}
+
+export const REVISAR = "Revisar";
+
+export function notaFallidaDe(paciente: string): string {
+  return `No pudimos escribir la nota de ${paciente}`;
+}
+
+/** Lo que se hace con el fallo: el botón de reintentar está en la nota. */
+export const NOTA_FALLIDA_DETALLE =
+  "La grabación está guardada. Entrá y tocá Reintentar.";
+
+export const VER_QUE_PASO = "Ver qué pasó";
+
+/** Nombre accesible de la cruz del aviso. */
+export const CERRAR_AVISO = "Cerrar aviso";

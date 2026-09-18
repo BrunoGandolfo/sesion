@@ -43,7 +43,8 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    Debajo puede aparecer la señal de riesgo, *"Última vez (…):"* y *"Para la
    próxima:"*, tomadas de la última nota aprobada. Después, **un solo botón**, el
    primero que corresponda en este orden: **Firmar autorización** → **Revisar
-   nota** → *Escribiendo la nota…* (sin botón) → **Cobrar** → **Grabar sesión**.
+   nota** → *Procesando la sesión de …* (sin botón, con un anillo que gira) →
+   **Cobrar** → **Grabar sesión**.
    **Cobrar** aparece cuando la sesión ya quedó realizada y sin cobrar. Si ya
    está todo hecho, un chip **"Nota guardada"**. Siempre está además el enlace
    **Ver ficha →**.

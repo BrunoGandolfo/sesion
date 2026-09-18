@@ -36,7 +36,7 @@ enlace **Ir a la agenda**: primero hay que agendar.
 ### Pestaña **Sesiones**
 
 - **Hoy**, si hay turno hoy: la hora, la duración, la modalidad y un botón según
-  el momento (**Grabar sesión**, *Escribiendo la nota…*, **Revisar nota**,
+  el momento (**Grabar sesión**, *Procesando la sesión de …*, **Revisar nota**,
   **Cobrar** o **Ver nota**). Si la grabación quedó sin terminar, **Grabar
   sesión** sirve para retomarla. Si la sesión falló, el enlace dice **Ver**.
 - **Para retomar** — el brief antes de la sesión (ver `10-el-hilo-y-el-recorrido.md`).
