@@ -1253,7 +1253,9 @@ export const TERMINOS_SECCIONES = [
 // Textos integrados de las áreas de Fase 3.
 export const PASSWORD_AVISO_CIERRE =
   "Al cambiarla te vamos a pedir que entres de nuevo en todos tus dispositivos, este incluido.";
-export const PASSWORD_CAMBIADA_REINGRESO = "Contraseña cambiada. Entrá de nuevo.";
+/** Tu consultorio: salir con un dato inválido o un guardado que falló. */
+export const CONFIG_SIN_GUARDAR_SALIDA =
+  "Hay cambios en Tu consultorio que no se pudieron guardar. Si salís ahora, se pierden.";
 export const OTRAS_SESIONES_BOTON = "Cerrar sesión en los demás dispositivos";
 export const OTRAS_SESIONES_DESCRIPCION =
   "Si perdiste un teléfono o entraste desde una computadora ajena, esto cierra todas las demás sesiones. Esta sigue abierta.";
