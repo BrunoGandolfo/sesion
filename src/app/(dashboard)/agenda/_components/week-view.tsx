@@ -4,6 +4,7 @@ import * as React from "react";
 import { agregarDiasMvd, esMismoDiaMvd, inicioDeSemanaMvd, partesMvd, horaLocalMvd, minutosDelDiaMvd } from "@/lib/fechas-montevideo";
 import type { TurnoConPaciente } from "@/types/domain";
 import { hora } from "@/lib/format";
+import { CANCELADO, NO_VINO } from "@/lib/glosario";
 import { ALTO_HORA, distribuirTurnos } from "./week-layout";
 
 interface Props {
@@ -103,25 +104,37 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                 ))}
                 {distribuirTurnos(turnosPorDia[i], horaInicial).map(({ turno, top, height, columna, columnas }) => {
                   const isPresencial = turno.modalidad === "presencial";
+                  // "No vino" y cancelado no ocupan el horario (se puede
+                  // agendar encima): se dibujan apagados y lo dicen, con los
+                  // mismos rótulos y el mismo borde gris que SessionRow.
+                  const libera =
+                    turno.estado === "ausente"
+                      ? NO_VINO
+                      : turno.estado === "cancelado"
+                        ? CANCELADO
+                        : null;
+                  const detalle = libera ? `${hora(turno.fecha)} · ${libera}` : hora(turno.fecha);
                   return (
                     <button
                       key={turno.id}
                       type="button"
                       onClick={() => onEventClick(turno)}
                       style={{ top, height, left: `calc(${(columna / columnas) * 100}% + 2px)`, width: `calc(${100 / columnas}% - 4px)` }}
-                      title={`${turno.paciente.nombre} ${turno.paciente.apellido} · ${hora(turno.fecha)}`}
+                      title={`${turno.paciente.nombre} ${turno.paciente.apellido} · ${detalle}`}
                       className={`absolute min-w-0 overflow-hidden rounded-sm border-l-[3px] px-1 py-0.5 text-left text-[11px] transition-[box-shadow] duration-[var(--duration-fast)] hover:ring-2 hover:ring-sage-300 ${
-                        isPresencial
-                          ? "bg-sage-100 border-l-sage-500"
-                          : "bg-gold-50 border-l-gold-500"
+                        libera
+                          ? "bg-cream-50 border-l-ink-300"
+                          : isPresencial
+                            ? "bg-sage-100 border-l-sage-500"
+                            : "bg-gold-50 border-l-gold-500"
                       }`}
-                      aria-label={`${turno.paciente.nombre} ${turno.paciente.apellido} ${hora(turno.fecha)}`}
+                      aria-label={`${turno.paciente.nombre} ${turno.paciente.apellido} ${detalle}`}
                     >
-                      <span className="block truncate font-semibold leading-[14px] text-ink-900">
+                      <span className={`block truncate font-semibold leading-[14px] ${libera ? "text-ink-500 line-through" : "text-ink-900"}`}>
                         {turno.paciente.nombre} {turno.paciente.apellido}
                       </span>
                       <span className="block truncate text-[10px] leading-[12px] text-ink-500 tabular-nums">
-                        {hora(turno.fecha)}
+                        {detalle}
                       </span>
                     </button>
                   );

@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       modalidad: parsed.data.modalidad,
       notas: parsed.data.notas ?? null,
       frecuencia: parsed.data.frecuencia,
+      alGrabar: parsed.data.alGrabar ?? false,
       ahora: new Date(),
     });
 

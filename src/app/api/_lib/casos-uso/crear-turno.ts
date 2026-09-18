@@ -11,6 +11,8 @@
 //     serie no se crea y sale el 409 de siempre. Si choca una repetición,
 //     esa fecha se OMITE, el resto se genera igual, y las omitidas vuelven
 //     en la respuesta para que la pantalla se las muestre a la profesional.
+//   - Un turno que nace al grabar (`alGrabar`) no pasa por la regla: la
+//     sesión ya está ocurriendo (decisión del dueño).
 //   - Todo en una transacción y bajo el lock de agenda: o queda la serie
 //     completa o no queda nada.
 //   - Cada turno generado es independiente: mismos campos, mismo aviso por
@@ -36,7 +38,11 @@ import { toTurno } from "../domain";
 import { ApiError } from "../responses";
 import { programarEnvioDelTurno } from "./envios-del-turno";
 import { fechasDeSerie } from "./serie-turnos";
-import { buscarTurnoSolapado, tomarLockDeAgenda } from "./solapamiento-turnos";
+import {
+  buscarTurnoSolapado,
+  rechazoPorSolapamiento,
+  tomarLockDeAgenda,
+} from "./solapamiento-turnos";
 import { TURNO_SOLAPADO } from "@/lib/glosario";
 
 type ClientePrisma = typeof db;
@@ -51,6 +57,10 @@ export interface CrearTurnoInput {
   notas: string | null;
   /** "unico" agenda un solo turno; lo demás crea una serie. */
   frecuencia: FrecuenciaTurno;
+  /** El turno nace al grabar (la pantalla de grabar lo crea con la hora de
+   *  este instante): la sesión ya está ocurriendo, así que no pasa por la
+   *  regla de choques. Decisión del dueño. */
+  alGrabar?: boolean;
   /** Momento del alta: decide si el turno lleva recordatorio. */
   ahora: Date;
 }
@@ -68,6 +78,7 @@ export async function crearTurno({
   modalidad,
   notas,
   frecuencia,
+  alGrabar = false,
   ahora,
 }: CrearTurnoInput): Promise<TurnoCreado> {
   return prisma.$transaction(async (tx) => {
@@ -109,15 +120,23 @@ export async function crearTurno({
     const omitidas: Date[] = [];
 
     for (const fechaTurno of fechas) {
-      const ocupado = await buscarTurnoSolapado({
-        prisma: tx,
-        organizationId,
-        intervalo: { inicio: fechaTurno, duracionMin: duracion },
-      });
+      const ocupado = alGrabar
+        ? null
+        : await buscarTurnoSolapado({
+            prisma: tx,
+            organizationId,
+            intervalo: { inicio: fechaTurno, duracionMin: duracion },
+          });
 
       if (ocupado) {
         // El turno elegido choca: es el 409 de siempre, y aborta todo.
-        if (primero === null) throw new ApiError(TURNO_SOLAPADO, 409);
+        if (primero === null) {
+          throw rechazoPorSolapamiento({
+            organizationId,
+            intervalo: { inicio: fechaTurno, duracionMin: duracion },
+            ocupado,
+          });
+        }
         omitidas.push(fechaTurno);
         continue;
       }
