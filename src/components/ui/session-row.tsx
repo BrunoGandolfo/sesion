@@ -62,6 +62,7 @@ type Status = {
 /** Acción única de la fila. La decide el estado del turno, no la pantalla:
  *  la misma fila en la agenda y en Hoy ofrece lo mismo. */
 type Accion = {
+  tipo: "cobrar" | "autorizar" | "grabar";
   label: string;
   tono: "gold" | "terracotta";
   onClick: () => void;
@@ -116,12 +117,13 @@ export function puedeGrabarseHoy(
 }
 
 /**
- * Orden de precedencia, el mismo que la card de Ahora: sin autorización no
- * se graba; una sesión cuya hora
- * ya pasó y sigue impaga se cobra —aunque el turno todavía figure como
- * programado, porque el caso de uso de cobrar lo marca realizado—; y si no
- * hay cobro pendiente, se graba. Sin handler, la fila muestra el chip de
- * estado. El acceso a la nota se muestra por separado, siempre.
+ * Orden de precedencia: una sesión cuya hora ya pasó y sigue impaga se cobra
+ * —aunque el turno todavía figure como programado, porque el caso de uso de
+ * cobrar lo marca realizado—; si no hay cobro, sin autorización no se graba;
+ * y si no, se graba. Cobrar no depende de la autorización: una sesión que no
+ * se grabó se cobra igual, y el aviso de la firma va aparte (avisoDe). Sin
+ * handler, la fila muestra el chip de estado. El acceso a la nota se muestra
+ * por separado, siempre.
  */
 function accionDe({
   turno,
@@ -133,20 +135,21 @@ function accionDe({
 }: SessionRowProps): Accion | null {
   if (turno.estado === "cancelado" || turno.estado === "ausente") return null;
 
-  if (sinAutorizacion && onAutorizar) {
-    return {
-      label: `${FALTA_AUTORIZACION} →`,
-      tono: "terracotta",
-      onClick: onAutorizar,
-    };
-  }
-
   const horaPasada = ahora
     ? turno.fecha.getTime() <= ahora.getTime()
     : turno.estado === "realizado";
 
   if (horaPasada && turno.pagoEstado === "pendiente" && onCobrar) {
-    return { label: COBRAR, tono: "gold", onClick: onCobrar };
+    return { tipo: "cobrar", label: COBRAR, tono: "gold", onClick: onCobrar };
+  }
+
+  if (sinAutorizacion && onAutorizar) {
+    return {
+      tipo: "autorizar",
+      label: `${FALTA_AUTORIZACION} →`,
+      tono: "terracotta",
+      onClick: onAutorizar,
+    };
   }
 
   // Sin `ahora` no se puede saber si el turno es de hoy: se conserva la regla
@@ -161,10 +164,25 @@ function accionDe({
     ESTADOS_PASADA_LA_GRABACION.includes(estadoSesion);
 
   if (!yaPasoLaGrabacion && puedeGrabar && onGrabar) {
-    return { label: GRABAR_SESION, tono: "gold", onClick: onGrabar };
+    return { tipo: "grabar", label: GRABAR_SESION, tono: "gold", onClick: onGrabar };
   }
 
   return null;
+}
+
+/** Si la acción es Cobrar y falta la firma, el aviso se muestra al lado:
+ *  no la reemplaza ni la esconde. */
+function avisoDe(
+  { sinAutorizacion, onAutorizar }: SessionRowProps,
+  accion: Accion | null,
+): Accion | null {
+  if (!sinAutorizacion || !onAutorizar || accion?.tipo !== "cobrar") return null;
+  return {
+    tipo: "autorizar",
+    label: `${FALTA_AUTORIZACION} →`,
+    tono: "terracotta",
+    onClick: onAutorizar,
+  };
 }
 
 const TONO: Record<Accion["tono"], string> = {
@@ -178,6 +196,7 @@ export function SessionRow(props: SessionRowProps) {
   const status = statusFor(turno);
   const leftClass = borderLeftClass(turno);
   const accion = accionDe(props);
+  const aviso = avisoDe(props, accion);
   const sesion = turno.sesionClinica;
   const nota = sesion?.estado === "revision" ? REVISAR_NOTA
     : sesion?.estado === "aprobada" ? VER_NOTA : null;
@@ -233,6 +252,7 @@ export function SessionRow(props: SessionRowProps) {
         ) : procesando ? (
           <span className="text-[13px] text-ink-500" role="status">{NOTA_PROCESANDO}</span>
         ) : null}
+        {aviso ? <BotonAccion accion={aviso} /> : null}
         <div className="flex items-center shrink-0">
           {cobroConfirmado ? (
             // Ocupa el lugar del botón, no se agrega al lado: la marca aparece
@@ -241,25 +261,31 @@ export function SessionRow(props: SessionRowProps) {
               <CheckDibujado tamano={20} />
             </span>
           ) : accion ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                accion.onClick();
-              }}
-              className="group inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-1"
-            >
-              <span
-                className={`rounded-full px-[10px] py-[3px] text-[12px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap transition-colors duration-[var(--duration-fast)] ${TONO[accion.tono]}`}
-              >
-                {accion.label}
-              </span>
-            </button>
+            <BotonAccion accion={accion} />
           ) : (
             <Chip variant={status.variant}>{status.label}</Chip>
           )}
         </div>
     </div>
     </div>
+  );
+}
+
+function BotonAccion({ accion }: { accion: Accion }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        accion.onClick();
+      }}
+      className="group inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-1"
+    >
+      <span
+        className={`rounded-full px-[10px] py-[3px] text-[12px] font-semibold uppercase tracking-[0.08em] whitespace-nowrap transition-colors duration-[var(--duration-fast)] ${TONO[accion.tono]}`}
+      >
+        {accion.label}
+      </span>
+    </button>
   );
 }
