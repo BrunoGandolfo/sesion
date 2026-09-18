@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Grabadora, type VistaGrabadora } from "@/lib/audio/grabadora";
+import { Grabadora, VISTA_INICIAL, type VistaGrabadora } from "@/lib/audio/grabadora";
 
 export function useAudioGrabacion(cuenta: string, organizationId: string, turnoId: string) {
   const referencia = useRef<Grabadora | null>(null);
-  const [vista, setVista] = useState<VistaGrabadora>({ lista: false, ocupada: false, grabacion: null, segundos: 0, mensaje: "", error: null, nivelAudio: null, silencioso: false });
+  const [vista, setVista] = useState<VistaGrabadora>(VISTA_INICIAL);
   useEffect(() => {
     let cancelado = false;
     let grabadora: Grabadora | null = null;
@@ -18,5 +18,5 @@ export function useAudioGrabacion(cuenta: string, organizationId: string, turnoI
     });
     return () => { cancelado = true; desuscribir?.(); referencia.current = null; void grabadora?.cerrar(); };
   }, [cuenta, organizationId, turnoId]);
-  return { ...vista, iniciar: () => referencia.current?.iniciar(), pausar: () => referencia.current?.pausar(), terminar: () => referencia.current?.terminar(), reenviar: () => referencia.current?.reintentar(), archivarAusente: () => referencia.current?.archivarAusente() };
+  return { ...vista, iniciar: () => referencia.current?.iniciar(), pausar: () => referencia.current?.pausar(), terminar: () => referencia.current?.terminar(), reenviar: () => referencia.current?.reintentar(), apartarCopia: () => referencia.current?.apartarCopia() };
 }

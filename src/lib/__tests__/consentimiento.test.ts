@@ -140,13 +140,18 @@ describe("cada frase tiene el hecho que la respalda", () => {
   it("la copia cifrada del teléfono se conserva: la app no tiene cómo borrarla", () => {
     expect(hechos.COPIA_LOCAL_CIFRADA_SE_CONSERVA).toBe(true);
     const almacen = codigo("src/lib/audio/almacen.ts");
-    // Los prefijos se retiran al consolidarlos en segmentos, en la misma
-    // transacción. No se borra la copia cifrada permanente del teléfono.
+    // Las entregas de un segundo se retiran al consolidarlas en su pieza, en la
+    // misma transacción que la escribe, y lo mismo hacía el prefijo de la base
+    // v2 al recuperarlo. Ese audio no se pierde: cambia de lugar. No se borra
+    // ningún segmento ni la copia cifrada permanente del teléfono.
     const borrados = almacen.match(/(?:[\w$]+\.)+(?:objectStore\("[^"]+"\)\.)?(?:deleteDatabase|deleteObjectStore|delete|clear)\s*\(/g) ?? [];
     expect([...new Set(borrados)]).toEqual([
+      'tx.objectStore("entregas").delete(',
       'tx.objectStore("respaldos").delete(',
       'indexedDB.deleteDatabase(',
     ]);
+    // Nunca aparece un borrado del almacén de piezas consolidadas.
+    expect(almacen).not.toMatch(/objectStore\("segmentos"\)\.(delete|clear)/);
     expect(almacen).toContain('indexedDB.deleteDatabase("sesion-grabaciones")');
     expect(texto).toContain("En el teléfono de Lic. Ana Pérez queda una copia cifrada de la grabación: la aplicación no la borra, y desde la aprobación ya no puede abrirla.");
     expect(texto).toContain("y lo mismo vale para la copia cifrada del teléfono");

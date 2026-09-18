@@ -1,48 +1,182 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { CapturaAudio } from "@/lib/audio/captura";
+import { CapturaAudio, type OpcionesCaptura } from "@/lib/audio/captura";
 import { cifrarSegmento, importarClave } from "@/lib/audio/cifrado";
 import { aadSegmento } from "@/lib/audio/contrato";
 
+/** Un MediaRecorder que entrega cada `ms` como el de verdad con start(ms). */
 class Recorder extends EventTarget {
   state = "inactive";
   mimeType = "audio/webm;codecs=opus";
-  start() { this.state = "recording"; }
-  stop() { this.state = "inactive"; this.dispatchEvent(Object.assign(new Event("dataavailable"), { data: new Blob(["audio sintético"]) })); this.dispatchEvent(new Event("stop")); }
+  intervalo?: ReturnType<typeof setInterval>;
+  entregado = 0;
+  start(ms?: number) {
+    this.state = "recording";
+    if (ms) this.intervalo = setInterval(() => this.entregar(), ms);
+  }
+  entregar() { this.entregado++; this.dispatchEvent(Object.assign(new Event("dataavailable"), { data: new Blob([`trozo ${this.entregado} `]) })); }
+  stop() {
+    clearInterval(this.intervalo);
+    this.state = "inactive";
+    this.entregar();
+    this.dispatchEvent(new Event("stop"));
+  }
 }
-const stream = { getTracks: () => [{ stop() {} }] } as unknown as MediaStream;
-afterEach(() => vi.useRealTimers());
-function crear() {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
-  const duraciones: number[] = [];
-  const inicios: number[] = [];
+const stream = () => ({ getTracks: () => [{ stop() {} }] }) as unknown as MediaStream;
+
+type Pieza = { duracion: number; inicio: number; continuacion: boolean; texto: string };
+type Entrega = { orden: number; inicio: number; duracion: number; continuacion: boolean };
+
+function crear(extra: Partial<OpcionesCaptura> = {}) {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "performance"] });
+  const piezas: Pieza[] = [];
+  const entregas: Entrega[] = [];
+  const recorders: Recorder[] = [];
   const parada = vi.fn(async () => {});
-  const captura = new CapturaAudio({ guardar: async (_b, ms, inicio) => { duraciones.push(ms); inicios.push(inicio); }, parada, error: vi.fn(), crearRecorder: () => new Recorder() as unknown as MediaRecorder });
-  return { captura, duraciones, inicios, parada };
+  const error = vi.fn();
+  const captura = new CapturaAudio({
+    entregar: async (_trozo, e) => { entregas.push({ orden: e.orden, inicio: e.inicioMs, duracion: e.duracionMs, continuacion: e.continuacion }); },
+    guardar: async (blob, duracion, inicio, continuacion) => { piezas.push({ duracion, inicio, continuacion, texto: await blob.text() }); },
+    parada, error,
+    crearRecorder: () => { const r = new Recorder(); recorders.push(r); return r as unknown as MediaRecorder; },
+    ...extra,
+  });
+  return { captura, piezas, entregas, parada, error, recorders };
 }
-test("150 minutos medidos: solape una sola vez, límite pausa y no finaliza", async () => {
-  const { captura, duraciones, inicios, parada } = crear();
-  captura.iniciar(stream, 0);
-  await vi.advanceTimersByTimeAsync(9_000_000);
+afterEach(() => vi.useRealTimers());
+
+test("un solo recorder por corrida: las piezas se cortan en el acumulador, sin rotar ni solapar", async () => {
+  const { captura, piezas, recorders } = crear();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(180_000);
+  await captura.pausar();
+  expect(recorders).toHaveLength(1);
+  // Tres minutos = tres piezas de un minuto (más la cola que entrega el stop),
+  // pegadas sin huecos ni repeticiones: sólo la primera trae cabecera.
+  expect(piezas.slice(0, 3).map(p => p.inicio)).toEqual([0, 60_000, 120_000]);
+  expect(piezas.slice(0, 3).map(p => p.duracion)).toEqual([60_000, 60_000, 60_000]);
+  expect(piezas.map(p => p.continuacion)).toEqual([false, ...piezas.slice(1).map(() => true)]);
+  expect(piezas.every((p, i) => i === 0 || p.inicio > piezas[i - 1].inicio)).toBe(true);
+  expect(piezas.reduce((a, p) => a + p.duracion, 0)).toBe(180_000);
+});
+
+test("la primera pieza de cada corrida se decodifica sola; las de adentro son continuación", async () => {
+  const { captura, piezas } = crear();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(70_000);
+  await captura.pausar();
+  captura.iniciar(stream(), 70_000);
+  await vi.advanceTimersByTimeAsync(5_000);
+  await captura.pausar();
+  expect(piezas.map(p => ({ inicio: p.inicio, continuacion: p.continuacion }))).toEqual([
+    { inicio: 0, continuacion: false },       // corrida 1, con cabecera
+    { inicio: 60_000, continuacion: true },   // sigue el mismo archivo
+    { inicio: 70_000, continuacion: false },  // corrida 2: recorder nuevo
+  ]);
+});
+
+test("cada entrega de un segundo se guarda por separado, cubriendo el tiempo sin repetirlo", async () => {
+  const { captura, entregas } = crear();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(3_000);
+  expect(entregas).toEqual([
+    { orden: 0, inicio: 0, duracion: 1000, continuacion: false },
+    { orden: 1, inicio: 1000, duracion: 1000, continuacion: true },
+    { orden: 2, inicio: 2000, duracion: 1000, continuacion: true },
+  ]);
+  await captura.pausar();
+  // Tras cerrar la pieza, la numeración de entregas vuelve a empezar.
+  captura.iniciar(stream(), 3_000);
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(entregas.at(-1)).toEqual({ orden: 0, inicio: 3_000, duracion: 1000, continuacion: false });
+});
+
+test("una página congelada no interrumpe nada: al volver sigue la misma corrida", async () => {
+  let reloj = 0;
+  const { captura, piezas, parada, error, recorders } = crear({ ahora: () => reloj });
+  captura.iniciar(stream(), 0);
+  for (let i = 0; i < 30; i++) { reloj += 1000; await vi.advanceTimersByTimeAsync(1000); }
+  // Cuarenta segundos sin que corra un solo temporizador de la página.
+  reloj += 40_000;
+  await vi.advanceTimersByTimeAsync(1000);
+  reloj += 1000;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(captura.grabando).toBe(true);
+  expect(parada).not.toHaveBeenCalled();
+  expect(error).not.toHaveBeenCalled();
+  expect(recorders).toHaveLength(1);
+  await captura.pausar();
+  expect(piezas.reduce((a, p) => a + p.duracion, 0)).toBe(71_000);
+});
+
+test("un minuto de página viva sin una sola entrega sí interrumpe", async () => {
+  const { captura, parada, error, recorders } = crear();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(2_000);
+  clearInterval(recorders[0].intervalo);
+  await vi.advanceTimersByTimeAsync(61_000);
   expect(captura.grabando).toBe(false);
-  expect(duraciones.reduce((a, b) => a + b, 0)).toBe(9_000_000);
+  expect(parada).toHaveBeenCalledWith("interrupcion");
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("no entra sonido"));
+});
+
+test("150 minutos medidos: el límite pausa y no finaliza nada", async () => {
+  const { captura, piezas, parada } = crear();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(9_100_000);
+  expect(captura.grabando).toBe(false);
+  expect(piezas.reduce((a, p) => a + p.duracion, 0)).toBe(9_000_000);
   expect(parada).toHaveBeenCalledExactlyOnceWith("limite");
-  expect(duraciones.length).toBeGreaterThan(150);
-  expect(inicios[0]).toBe(0);
-  expect(inicios.every((ms, i) => ms === i * 59000)).toBe(true);
+  expect(piezas[0].inicio).toBe(0);
 });
-test("pausar durante el solape no duplica audio; la pausa no cuenta", async () => {
-  const { captura, duraciones, inicios } = crear();
-  captura.iniciar(stream, 0);
-  await vi.advanceTimersByTimeAsync(59_500);
+
+test("la pausa conserva el inicio medido y la corrida siguiente acumula desde ahí", async () => {
+  let retraso = 0;
+  const { captura, piezas } = crear({ ahora: () => performance.now() + retraso });
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(59_900);
+  retraso = 100.25;
+  await vi.advanceTimersByTimeAsync(1_000);
   await captura.pausar();
-  await vi.advanceTimersByTimeAsync(120_000);
-  captura.iniciar(stream, 59_500);
-  await vi.advanceTimersByTimeAsync(10_500);
+  // El retraso del hilo entra en la medida, no la falsea: los inicios siguen
+  // en orden estricto y las duraciones suman exactamente lo transcurrido.
+  expect(piezas[0].inicio).toBe(0);
+  expect(piezas.every((p, i) => i === 0 || p.inicio > piezas[i - 1].inicio)).toBe(true);
+  expect(piezas.reduce((a, p) => a + p.duracion, 0)).toBeCloseTo(61_000.25, 5);
+  captura.iniciar(stream(), 61_000.25);
+  await vi.advanceTimersByTimeAsync(5_000);
   await captura.pausar();
-  expect(duraciones).toEqual([59_500, 0, 10_500]);
-  expect(inicios).toEqual([0, 59_000, 59_500]);
-  expect(captura.duracionMs).toBe(70_000);
+  expect(piezas.at(-1)).toMatchObject({ duracion: 5_000, inicio: 61_000.25, continuacion: false });
 });
+
+test("si el stop no llega nunca, la pieza igual se cierra con lo entregado", async () => {
+  const { captura, piezas, parada, error, recorders } = crear();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(4_000);
+  vi.spyOn(recorders[0], "stop").mockImplementation(() => { clearInterval(recorders[0].intervalo); });
+  const pausa = captura.pausar();
+  await vi.advanceTimersByTimeAsync(6_000);
+  await pausa;
+  expect(piezas).toHaveLength(1);
+  expect(piezas[0].texto).toContain("trozo 4");
+  expect(parada).toHaveBeenCalledWith("manual");
+  expect(error).toHaveBeenCalledWith(expect.stringContaining("no respondió"));
+});
+
+test("un error del recorder interrumpe conservando lo entregado, y se puede reanudar", async () => {
+  const { captura, piezas, parada, recorders } = crear();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(10_000);
+  recorders[0].dispatchEvent(new Event("error"));
+  await vi.advanceTimersByTimeAsync(100);
+  expect(captura.grabando).toBe(false);
+  expect(parada).toHaveBeenCalledWith("interrupcion");
+  expect(piezas[0].duracion).toBe(10_000);
+  captura.iniciar(stream(), 10_000);
+  await vi.advanceTimersByTimeAsync(5_000);
+  await captura.pausar();
+  expect(piezas.at(-1)).toMatchObject({ duracion: 5_000, inicio: 10_000 });
+});
+
 test("AES-GCM binario con IV propio, clave no extraíble e identidad autenticada", async () => {
   const raw = crypto.getRandomValues(new Uint8Array(32));
   const clave = await importarClave(Buffer.from(raw).toString("base64"));
@@ -58,122 +192,16 @@ test("AES-GCM binario con IV propio, clave no extraíble e identidad autenticada
   await expect(crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aadSegmento("otra", "sesion", 0) }, abrir, a.cifrado)).rejects.toThrow();
 });
 
-test("conserva el inicio medido aunque se retrase el cierre y acumula tras pausa", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
-  let retraso = 0;
-  const medidas: { duracion: number; inicio: number }[] = [];
-  const captura = new CapturaAudio({
-    ahora: () => performance.now() + retraso,
-    guardar: async (_blob, duracion, inicio) => { medidas.push({ duracion, inicio }); },
-    parada: async () => {}, error: vi.fn(), crearRecorder: () => new Recorder() as unknown as MediaRecorder,
+test("si la escritura de la pieza falla, la pausa igual queda registrada", async () => {
+  const { captura, parada, entregas } = crear({
+    guardar: async () => { throw new Error("Almacenamiento ocupado"); },
   });
-  captura.iniciar(stream, 0);
-  await vi.advanceTimersByTimeAsync(59_900);
-  retraso = 100.25;
-  await vi.advanceTimersByTimeAsync(1000);
-  await captura.pausar();
-  expect(medidas).toEqual([{ duracion: 60_100.25, inicio: 0 }, { duracion: 900, inicio: 59000 }]);
-  captura.iniciar(stream, 61_000.25);
-  await vi.advanceTimersByTimeAsync(5000);
-  await captura.pausar();
-  expect(medidas[2]).toEqual({ duracion: 5000, inicio: 61000.25 });
-});
-
-test.each(["segmento", "pausa"])("reintentar tras un fallo al guardar %s conserva la pausa sin duplicar audio", async falla => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
-  const duraciones: number[] = [];
-  const pausas: string[] = [];
-  let fallar = true;
-  const captura = new CapturaAudio({
-    guardar: async (_blob, ms) => {
-      if (falla === "segmento" && fallar) { fallar = false; throw new Error("Transacción abortada"); }
-      duraciones.push(ms);
-    },
-    parada: async motivo => {
-      if (falla === "pausa" && fallar) { fallar = false; throw new Error("Transacción abortada"); }
-      pausas.push(motivo);
-    },
-    error: vi.fn(), crearRecorder: () => new Recorder() as unknown as MediaRecorder,
-  });
-  captura.iniciar(stream, 0);
-  await vi.advanceTimersByTimeAsync(10_000);
-  await expect(captura.pausar()).rejects.toThrow();
+  captura.iniciar(stream(), 0);
+  await vi.advanceTimersByTimeAsync(4_000);
+  await expect(captura.pausar()).rejects.toThrow("Almacenamiento ocupado");
+  // La captura se detuvo: el estado tiene que decirlo, y el audio no se pierde
+  // porque cada entrega ya está guardada por separado.
   expect(captura.grabando).toBe(false);
-  await captura.drenar();
-  expect(duraciones).toEqual([10_000]);
-  expect(pausas).toEqual(["manual"]);
-  captura.iniciar(stream, 10_000);
-  await vi.advanceTimersByTimeAsync(5_000);
-  await captura.pausar();
-  expect(duraciones).toEqual([10_000, 5_000]);
-  expect(pausas).toEqual(["manual", "manual"]);
-});
-
-test.each([true, false])("error del recorder: conserva los bytes finales disponibles=%s y permite reanudar", async hayAudio => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
-  const recorder = new Recorder();
-  const duraciones: number[] = [];
-  const guardados: string[] = [];
-  const error = vi.fn();
-  const parada = vi.fn(async () => {});
-  const captura = new CapturaAudio({
-    guardar: async (blob, ms) => { guardados.push(await blob.text()); duraciones.push(ms); },
-    parada, error, crearRecorder: () => recorder as unknown as MediaRecorder,
-  });
-  captura.iniciar(stream, 0);
-  await vi.advanceTimersByTimeAsync(10_000);
-  recorder.state = "inactive";
-  recorder.dispatchEvent(new Event("error"));
-  expect(captura.grabando).toBe(false);
-  expect(error).toHaveBeenCalled();
-  recorder.dispatchEvent(Object.assign(new Event("dataavailable"), { data: new Blob(hayAudio ? ["audio final recuperado"] : []) }));
-  recorder.dispatchEvent(new Event("stop"));
-  await captura.pausar();
-  expect(guardados).toEqual(hayAudio ? ["audio final recuperado"] : []);
-  expect(duraciones).toEqual(hayAudio ? [10_000] : []);
-  expect(parada).toHaveBeenCalledExactlyOnceWith("interrupcion");
-  captura.iniciar(stream, hayAudio ? 10_000 : 0);
-  await vi.advanceTimersByTimeAsync(5_000);
-  await captura.pausar();
-  expect(duraciones).toEqual(hayAudio ? [10_000, 5_000] : [5_000]);
-});
-
-test("si falla el primero sin bytes, conserva el audio disponible del recorder superpuesto", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
-  const recorders: Recorder[] = [];
-  const duraciones: number[] = [];
-  const captura = new CapturaAudio({
-    guardar: async (_blob, ms) => { duraciones.push(ms); }, parada: async () => {}, error: vi.fn(),
-    crearRecorder: () => { const r = new Recorder(); recorders.push(r); return r as unknown as MediaRecorder; },
-  });
-  captura.iniciar(stream, 0);
-  await vi.advanceTimersByTimeAsync(59_500);
-  recorders[0].state = "inactive";
-  recorders[0].dispatchEvent(new Event("error"));
-  recorders[0].dispatchEvent(new Event("stop"));
-  await captura.pausar();
-  expect(duraciones).toEqual([500]);
-});
-
-test("una rotación demorada hasta 64,5 s cierra sin agregar el segundo de solape que excedería 65 s", async () => {
-  vi.useFakeTimers();
-  let reloj = 0;
-  const guardar = vi.fn<(blob: Blob, duracionMs: number, inicioMs: number) => Promise<void>>().mockResolvedValue(undefined); const parada = vi.fn(async () => {}); const error = vi.fn();
-  class Demorado extends EventTarget {
-    state = "inactive"; mimeType = "audio/webm";
-    start() { this.state = "recording"; }
-    stop() { this.state = "inactive"; this.dispatchEvent(Object.assign(new Event("dataavailable"), { data: new Blob(["audio"]) })); this.dispatchEvent(new Event("stop")); }
-  }
-  const crear = vi.fn(() => new Demorado() as unknown as MediaRecorder);
-  const captura = new CapturaAudio({ guardar, parada, error, ahora: () => reloj, crearRecorder: crear });
-  captura.iniciar({ getTracks: () => [{ stop() {} }] } as unknown as MediaStream, 0);
-  // Avanzamos reloj y timers juntos hasta el último latido antes de la frontera.
-  for (let i = 0; i < 589; i++) { reloj += 100; await vi.advanceTimersByTimeAsync(100); }
-  reloj = 64_500; await vi.advanceTimersByTimeAsync(100);
-  await captura.drenar();
-  expect(captura.grabando).toBe(false);
-  expect(crear).toHaveBeenCalledTimes(1);
-  expect(guardar.mock.calls[0]?.[1]).toBe(64_500);
-  expect(parada).toHaveBeenCalledWith("interrupcion");
-  expect(error).toHaveBeenCalledWith(expect.stringContaining("demoró"));
+  expect(parada).toHaveBeenCalledExactlyOnceWith("manual");
+  expect(entregas.length).toBeGreaterThanOrEqual(4);
 });

@@ -23,14 +23,19 @@ def cifrar(datos, indice):
     return texto + tag, base64.b64encode(iv).decode()
 
 
-def entrada(archivos, inicios=None):
+def entrada(archivos, inicios=None, continuaciones=None, piezas=None):
+    """`archivos` son rutas; `piezas` permite pasar bytes crudos, que es lo que
+    entrega el navegador cuando una corrida se parte en fronteras de entrega."""
     blobs = {}
     descriptores = []
-    for i, archivo in enumerate(archivos):
-        cifrado, iv = cifrar(archivo.read_bytes(), i)
+    crudos = piezas if piezas is not None else [a.read_bytes() for a in archivos]
+    for i, datos in enumerate(crudos):
+        cifrado, iv = cifrar(datos, i)
         key = f"org/s1/{i}"
         blobs[key] = cifrado
-        descriptores.append(dict(indice=i, key=key, iv=iv, bytes=len(cifrado), sha256=hashlib.sha256(cifrado).hexdigest(), inicioMs=inicios[i] if inicios is not None else 59000*i))
+        descriptores.append(dict(indice=i, key=key, iv=iv, bytes=len(cifrado), sha256=hashlib.sha256(cifrado).hexdigest(),
+                                 inicioMs=inicios[i] if inicios is not None else 59000*i,
+                                 continuacion=bool(continuaciones[i]) if continuaciones is not None else False))
     return {"organizationId": "org", "clave": base64.b64encode(CLAVE).decode(), "segmentos": descriptores, "pausas": []}, blobs
 
 
@@ -221,16 +226,52 @@ def test_segmento_largo_con_hueco_conserva_audio_y_avisa(codec, reales, monkeypa
 
 
 @pytest.mark.parametrize("codec", ["libopus", "aac"])
-def test_rechaza_segmento_mayor_a_cinco_minutos(codec, reales, monkeypatch):
-    # Archivo REAL de 301 segundos, bien cifrado y dentro del tope de bytes:
-    # debe rechazarlo por duración, no por tamaño, autenticación ni metadata rota.
+def test_rechaza_una_corrida_mas_larga_que_el_tope(codec, reales, monkeypatch):
+    # Archivo REAL de 301 segundos, bien cifrado y dentro del tope de bytes: se
+    # rechaza por duración, no por tamaño, autenticación ni metadata rota. El
+    # tope se baja para no generar 150 minutos de audio en una prueba.
     audio, blobs = entrada(reales[codec + "-excesivo"], [0])
     assert audio["segmentos"][0]["bytes"] <= 4 * 1024 * 1024
+    monkeypatch.setattr("audio_entrada.MAX_SEGUNDOS_CORRIDA", 100)
     monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs[key])
     with pytest.raises(PipelineError) as error:
         with armar_audio("s1", audio):
-            pytest.fail("No debe entregar un segmento que excede cinco minutos")
-    assert error.value.codigo == "audio_invalido"
+            pytest.fail("No debe entregar una corrida que excede el tope")
+    assert error.value.codigo in ("audio_invalido", "audio_inicio")
+    assert error.value.definitivo
+
+
+@pytest.mark.parametrize("codec", ["libopus", "aac"])
+def test_una_corrida_partida_en_piezas_sin_cabecera_se_rearma_entera(codec, reales, monkeypatch):
+    """Lo que entrega MediaRecorder con start(1000): UN archivo continuo que se
+    sube en piezas cortadas en fronteras de entrega. Sólo la primera trae la
+    cabecera del contenedor; las demás no se decodifican solas."""
+    completo = reales[codec + "-largo"][0].read_bytes()  # 300 s continuos
+    cortes = [0, len(completo) // 3, 2 * len(completo) // 3, len(completo)]
+    piezas = [completo[a:b] for a, b in zip(cortes, cortes[1:])]
+    assert all(piezas)
+    audio, blobs = entrada(None, inicios=[0, 100_000, 200_000], continuaciones=[False, True, True], piezas=piezas)
+    monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs[key])
+    with armar_audio("s1", audio) as preparado:
+        with wave.open(str(preparado.archivo), "rb") as w:
+            muestras = w.getnframes()
+    # Mismo audio que el archivo entero: ni se pierde ni se repite nada, y no
+    # aparece un hueco inventado entre piezas de la misma corrida.
+    audio_entero, blobs_entero = entrada(reales[codec + "-largo"][:1], [0])
+    monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs_entero[key])
+    with armar_audio("s1", audio_entero) as entero:
+        with wave.open(str(entero.archivo), "rb") as w:
+            esperadas = w.getnframes()
+    assert muestras == esperadas
+    assert preparado.huecos == []
+
+
+def test_la_primera_pieza_no_puede_declararse_continuacion(reales, monkeypatch):
+    audio, blobs = entrada(reales["libopus"][:1], [0], continuaciones=[True])
+    monkeypatch.setattr("r2_client.descargar_segmento", lambda key, n: blobs[key])
+    with pytest.raises(PipelineError) as error:
+        with armar_audio("s1", audio):
+            pytest.fail("No hay archivo anterior que continuar")
     assert error.value.definitivo
 
 

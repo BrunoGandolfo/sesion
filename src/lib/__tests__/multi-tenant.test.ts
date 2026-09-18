@@ -211,6 +211,8 @@ describe("obtenerTurnoParaGrabar — datos de la pantalla y aislamiento", () => 
     });
     expect(await leer()).toEqual({
       id: turnoId,
+      nombreProfesional: expect.any(String),
+      direccionConsultorio: expect.any(String),
       fecha: MANANA,
       paciente: { id: a.pacienteId, nombre: "Ana", apellido: "Pérez" },
       autorizacionVigente: false,

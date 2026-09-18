@@ -1,0 +1,180 @@
+{
+  "navegador": "145.0.7632.6",
+  "antes": {
+    "relojMs": 66005,
+    "recorders": 1,
+    "vista": {
+      "estado": "capturando",
+      "error": "Red de subida desconectada en esta prueba"
+    },
+    "pista": "live",
+    "entregasRecibidas": 64,
+    "grabacion": {
+      "cuenta": "c",
+      "organizationId": "o",
+      "sesionId": "s",
+      "turnoId": "t",
+      "estado": "capturando",
+      "cantidad": 1,
+      "duracionMs": 60174,
+      "pausas": []
+    },
+    "entregas": [
+      {
+        "indice": 1,
+        "base": 1,
+        "inicioMs": 60174,
+        "duracionMs": 1020.5999999940395,
+        "continuacion": true,
+        "bytes": 8294,
+        "cifradoEsBinario": true,
+        "claves": [
+          "indice",
+          "inicioMs",
+          "iv",
+          "bytes",
+          "sha256",
+          "cifrado",
+          "continuacion",
+          "cuenta",
+          "sesionId",
+          "base",
+          "duracionMs"
+        ]
+      },
+      {
+        "indice": 2,
+        "base": 1,
+        "inicioMs": 61194.59999999404,
+        "duracionMs": 1019.7000000029802,
+        "continuacion": true,
+        "bytes": 8294,
+        "cifradoEsBinario": true,
+        "claves": [
+          "indice",
+          "inicioMs",
+          "iv",
+          "bytes",
+          "sha256",
+          "cifrado",
+          "continuacion",
+          "cuenta",
+          "sesionId",
+          "base",
+          "duracionMs"
+        ]
+      },
+      {
+        "indice": 3,
+        "base": 1,
+        "inicioMs": 62214.29999999702,
+        "duracionMs": 1020.2000000029802,
+        "continuacion": true,
+        "bytes": 8294,
+        "cifradoEsBinario": true,
+        "claves": [
+          "indice",
+          "inicioMs",
+          "iv",
+          "bytes",
+          "sha256",
+          "cifrado",
+          "continuacion",
+          "cuenta",
+          "sesionId",
+          "base",
+          "duracionMs"
+        ]
+      }
+    ],
+    "entregasTotales": 5
+  },
+  "despues": {
+    "grabacion": {
+      "cuenta": "c",
+      "organizationId": "o",
+      "sesionId": "s",
+      "turnoId": "t",
+      "estado": "interrumpida",
+      "cantidad": 6,
+      "duracionMs": 65273.79999999702,
+      "pausas": [
+        {
+          "inicio": 65273.79999999702,
+          "fin": null,
+          "siguienteIndice": 6,
+          "motivo": "interrupcion"
+        }
+      ]
+    },
+    "deNuevo": {
+      "cuenta": "c",
+      "organizationId": "o",
+      "sesionId": "s",
+      "turnoId": "t",
+      "estado": "interrumpida",
+      "cantidad": 6,
+      "duracionMs": 65273.79999999702,
+      "pausas": [
+        {
+          "inicio": 65273.79999999702,
+          "fin": null,
+          "siguienteIndice": 6,
+          "motivo": "interrupcion"
+        }
+      ]
+    },
+    "piezas": [
+      {
+        "indice": 0,
+        "inicioMs": 0,
+        "continuacion": false,
+        "bytes": 484147
+      },
+      {
+        "indice": 1,
+        "inicioMs": 60174,
+        "continuacion": true,
+        "bytes": 8294
+      },
+      {
+        "indice": 2,
+        "inicioMs": 61194.59999999404,
+        "continuacion": true,
+        "bytes": 8294
+      },
+      {
+        "indice": 3,
+        "inicioMs": 62214.29999999702,
+        "continuacion": true,
+        "bytes": 8294
+      },
+      {
+        "indice": 4,
+        "inicioMs": 63234.5,
+        "continuacion": true,
+        "bytes": 8294
+      },
+      {
+        "indice": 5,
+        "inicioMs": 64254.39999999106,
+        "continuacion": true,
+        "bytes": 8294
+      }
+    ],
+    "entregasRestantes": 0,
+    "solaFalla": true,
+    "duracionCorridaSeg": 65.22,
+    "migracionV2": {
+      "antes": 0,
+      "cantidad": 1,
+      "duracionMs": 4000
+    },
+    "aislado": true,
+    "vista": {
+      "estado": "interrumpida",
+      "mensaje": ""
+    }
+  },
+  "perdidaAnteLaCaidaSeg": 0.785
+}

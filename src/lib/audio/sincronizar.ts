@@ -2,7 +2,9 @@ import { leerSegmento, type GrabacionLocal } from "./almacen";
 import type { EstadoAudioRemoto } from "./contrato";
 
 export class ErrorAudio extends Error {
-  constructor(message: string, readonly status: number) { super(message); }
+  /** El servidor y esta copia describen distinto el mismo segmento. No se
+   *  arregla reintentando: la pantalla ofrece apartar la copia local. */
+  constructor(message: string, readonly status: number, readonly conflicto = false) { super(message); }
 }
 export async function pedirAudio<T>(ruta: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/audio${ruta}`, {
@@ -22,11 +24,17 @@ export async function sincronizarAudio(db: IDBDatabase, grabacion: GrabacionLoca
     if (!local) throw new ErrorAudio("Falta un segmento local. Se conserva la grabación para revisar.", 409);
     if (!Number.isFinite(local.inicioMs)) throw new ErrorAudio("Esta copia no tiene la medida del inicio. Se conserva para revisar.", 409);
     const recibido = remoto.segmentos[indice];
-    if (recibido && (recibido.sha256 !== local.sha256 || recibido.iv !== local.iv || recibido.bytes !== local.bytes || recibido.inicioMs !== local.inicioMs)) throw new ErrorAudio("Hay otro contenido o inicio para este segmento. Se conservan ambas copias.", 409);
+    if (recibido && (recibido.sha256 !== local.sha256 || recibido.iv !== local.iv || recibido.bytes !== local.bytes || recibido.inicioMs !== local.inicioMs || recibido.continuacion !== local.continuacion)) throw new ErrorAudio("El servidor tiene otro contenido para este tramo. Las dos copias se conservan; apartá esta para seguir.", 409, true);
     if (recibido?.confirmado) continue;
     if (remoto.estado !== "grabando") throw new ErrorAudio("La sesión cambió y quedan segmentos locales. Se conservan para revisar.", 409);
-    const { iv, bytes, sha256, inicioMs } = local;
-    const reserva = await pedirAudio<{ confirmado: boolean; url?: string; headers?: Record<string, string> }>(`${ruta}/segmentos`, { indice, iv, bytes, sha256, inicioMs });
+    const { iv, bytes, sha256, inicioMs, continuacion } = local;
+    const reserva = await pedirAudio<{ confirmado: boolean; url?: string; headers?: Record<string, string> }>(`${ruta}/segmentos`, { indice, iv, bytes, sha256, inicioMs, continuacion })
+      .catch((e: unknown) => {
+        // El servidor ya guardó otra cosa en ese índice: tampoco se arregla
+        // reintentando.
+        if (e instanceof ErrorAudio && e.status === 409 && /otro contenido/.test(e.message)) throw new ErrorAudio(e.message, 409, true);
+        throw e;
+      });
     if (reserva.confirmado) continue;
     // Una respuesta perdida del PUT anterior se resuelve con HEAD antes de reenviar.
     let confirmacion = await pedirAudio<{ confirmado: boolean }>(`${ruta}/confirmar`, { indice });

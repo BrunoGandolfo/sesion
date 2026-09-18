@@ -52,6 +52,7 @@ export interface SegmentoEntregado {
   bytes: number;
   sha256: string;
   inicioMs: number | null;
+  continuacion: boolean;
 }
 
 export interface AudioEntregado {
@@ -156,7 +157,7 @@ export async function reclamarSesiones({
         transcripcion: true,
         turno: { select: { pacienteId: true } },
         segmentos: {
-          select: { indice: true, iv: true, bytes: true, sha256: true, inicioMs: true },
+          select: { indice: true, iv: true, bytes: true, sha256: true, inicioMs: true, continuacion: true },
           orderBy: { indice: "asc" },
         },
         organization: {
@@ -188,6 +189,7 @@ export async function reclamarSesiones({
               bytes: s.bytes,
               sha256: s.sha256,
               inicioMs: s.inicioMs,
+              continuacion: s.continuacion,
             })),
           }
         : null;

@@ -1,0 +1,29 @@
+Base: e1843dd550128881821ad3a3e374b7dc374de09e
+Implementación de hoy (origin/main) + las pruebas nuevas de esta rama.
+
+== src/lib/__tests__/grabador-simple.test.tsx ==
+   × bloquear la pantalla no corta la grabación: al despertar sigue capturando 12ms
+   × un minuto entero sin que entre audio sí interrumpe, con explicación 8ms
+   × una grabación corta se envía aunque el stop no llegue nunca 2ms
+   × nunca hay dos avisos de momentos distintos en pantalla 3ms
+   × un desacuerdo con el servidor deja una salida, no un cartel eterno 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  5 failed | 1 passed (6)
+
+== src/lib/__tests__/audio-ui.test.tsx ==
+   × el medidor sigue a la vista con la grabación en pausa, y dice que está en pausa 10ms
+   × la autorización se firma en la pantalla de grabar, sin ir a la ficha 1005ms
+   × un desacuerdo con el servidor ofrece apartar la copia 29ms
+   × un aviso y una falla no conviven: la falla manda 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed | 8 passed (12)
+
+== processor/tests/test_audio_entrada.py (worker de hoy) ==
+tests/test_audio_entrada.py:274: Failed
+=========================== short test summary info ============================
+FAILED tests/test_audio_entrada.py::test_rechaza_una_corrida_mas_larga_que_el_tope[libopus]
+FAILED tests/test_audio_entrada.py::test_rechaza_una_corrida_mas_larga_que_el_tope[aac]
+FAILED tests/test_audio_entrada.py::test_una_corrida_partida_en_piezas_sin_cabecera_se_rearma_entera[libopus]
+FAILED tests/test_audio_entrada.py::test_una_corrida_partida_en_piezas_sin_cabecera_se_rearma_entera[aac]
+FAILED tests/test_audio_entrada.py::test_la_primera_pieza_no_puede_declararse_continuacion
+5 failed, 32 deselected in 15.09s
