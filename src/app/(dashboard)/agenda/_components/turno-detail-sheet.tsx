@@ -93,7 +93,6 @@ interface Props {
   turno: TurnoConPaciente | null;
   onClose: () => void;
   onUpdated: (message: string) => void;
-  onError: (message: string) => void;
   /**
    * El cobro entró. Lo avisa aparte de `onUpdated` para que la pantalla
    * pueda dejarle la marca a la fila que lo originó mientras este sheet se
@@ -129,7 +128,6 @@ export function TurnoDetailSheet({
   turno,
   onClose,
   onUpdated,
-  onError,
   onCobrado,
 }: Props) {
   const [modo, setModo] = React.useState<Modo>("ver");
@@ -227,81 +225,68 @@ export function TurnoDetailSheet({
   const sesionId = sesion !== "sin-dato" && sesion ? sesion.id : null;
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
 
-  async function patchTurno(payload: Record<string, unknown>, mensaje: string) {
+  /**
+   * Lo que rodea a las cuatro acciones del detalle: bloquear los botones,
+   * borrar el error anterior y, si el pedido falla, dejar TODO como estaba.
+   *
+   * Quedarse en el modo en que estaba no es un detalle: antes, un 409 por
+   * choque de horario devolvía a "ver", y al volver a "Reprogramar" el
+   * formulario se recargaba con los valores del turno. O sea que el rechazo
+   * le borraba justo la hora que tenía que corregir. Y el mensaje salía dos
+   * veces —en línea y como toast—; ahora sale una sola, acá abajo.
+   */
+  async function ejecutar(
+    pedido: (actual: TurnoConPaciente) => Promise<void>,
+  ) {
     if (!turno) return;
     setEnviando(true);
     setError(null);
     try {
-      await apiPatch<Turno>(`/api/turnos/${turno.id}`, payload);
-      onUpdated(mensaje);
+      await pedido(turno);
     } catch (err) {
-      const m = mensajeDe(err);
-      setError(m);
-      onError(m);
-      setModo("ver");
+      setError(mensajeDe(err));
     } finally {
       setEnviando(false);
     }
+  }
+
+  function patchTurno(payload: Record<string, unknown>, mensaje: string) {
+    return ejecutar(async (actual) => {
+      await apiPatch<Turno>(`/api/turnos/${actual.id}`, payload);
+      onUpdated(mensaje);
+    });
   }
 
   // Cancela este turno y los siguientes de su serie que sigan programados
   // (casos-uso/cancelar-serie-turno.ts). Los realizados y los anteriores no
   // se tocan; cancelar UNO solo sigue siendo "Cancelar turno".
-  async function cancelarRestoDeSerie() {
-    if (!turno) return;
-    setEnviando(true);
-    setError(null);
-    try {
+  function cancelarRestoDeSerie() {
+    return ejecutar(async (actual) => {
       const resultado = await apiPost<{ cancelados: number }>(
-        `/api/turnos/${turno.id}/cancelar-serie`,
+        `/api/turnos/${actual.id}/cancelar-serie`,
         {},
       );
       onUpdated(SERIE_CANCELADA(resultado.cancelados));
-    } catch (err) {
-      const m = mensajeDe(err);
-      setError(m);
-      onError(m);
-      setModo("ver");
-    } finally {
-      setEnviando(false);
-    }
+    });
   }
 
-  async function cobrar(metodo: MetodoPago) {
-    if (!turno) return;
-    setEnviando(true);
-    setError(null);
-    try {
-      await apiPost<Turno>(`/api/turnos/${turno.id}/cobrar`, { metodo });
+  function cobrar(metodo: MetodoPago) {
+    return ejecutar(async (actual) => {
+      await apiPost<Turno>(`/api/turnos/${actual.id}/cobrar`, { metodo });
       // Primero la marca en la fila, después el cierre: el trazo empieza
       // mientras el sheet se va, no después.
-      onCobrado?.(turno.id);
+      onCobrado?.(actual.id);
       onUpdated("Cobro registrado");
-    } catch (err) {
-      const m = mensajeDe(err);
-      setError(m);
-      onError(m);
-      setModo("ver");
-    } finally {
-      setEnviando(false);
-    }
+    });
   }
 
-  async function deshacerCobro() {
-    if (!turno) return;
-    setEnviando(true);
-    setError(null);
-    try {
-      await apiDelete<Turno>(`/api/turnos/${turno.id}/cobrar`, { actualizadoEn: turno.actualizadoEn });
+  function deshacerCobro() {
+    return ejecutar(async (actual) => {
+      await apiDelete<Turno>(`/api/turnos/${actual.id}/cobrar`, {
+        actualizadoEn: actual.actualizadoEn,
+      });
       onUpdated(COBRO_DESHECHO);
-    } catch (err) {
-      const m = mensajeDe(err);
-      setError(m);
-      onError(m);
-      setModo("ver");
-    } finally {
-      setEnviando(false);
-    }
+    });
   }
 
   const guardarReprogramacion = handleSubmit((values) => {
@@ -511,11 +496,6 @@ export function TurnoDetailSheet({
               </div>
             ) : null}
 
-            {error ? (
-              <p role="alert" className="text-[12px] text-[color:var(--color-error)]">
-                {error}
-              </p>
-            ) : null}
           </>
         ) : null}
 
@@ -620,12 +600,6 @@ export function TurnoDetailSheet({
           <form onSubmit={guardarReprogramacion} className="flex flex-col gap-4">
             <TurnoEditarCampos notasLabel="Notas" />
 
-            {error ? (
-              <p role="alert" className="text-[12px] text-[color:var(--color-error)]">
-                {error}
-              </p>
-            ) : null}
-
             <div className="flex justify-end gap-2 border-t border-[color:var(--border-subtle)] pt-4">
               <Button
                 type="button"
@@ -641,6 +615,13 @@ export function TurnoDetailSheet({
             </div>
           </form>
           </FormProvider>
+        ) : null}
+
+        {/* El error de cualquiera de las acciones, una sola vez y acá. */}
+        {error ? (
+          <p role="alert" className="text-[12px] text-[color:var(--color-error)]">
+            {error}
+          </p>
         ) : null}
       </div>
     </Sheet>

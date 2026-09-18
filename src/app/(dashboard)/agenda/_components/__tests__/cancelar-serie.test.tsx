@@ -34,9 +34,8 @@ beforeEach(() => {
 });
 async function montar(datos = turno) {
   const onUpdated = vi.fn();
-  const onError = vi.fn();
-  await act(async () => { render(<TurnoDetailSheet open turno={datos} onClose={vi.fn()} onUpdated={onUpdated} onError={onError} />); });
-  return { onUpdated, onError };
+  await act(async () => { render(<TurnoDetailSheet open turno={datos} onClose={vi.fn()} onUpdated={onUpdated} />); });
+  return { onUpdated };
 }
 it("desde el detalle, dos toques confirman la cancelación del resto con el contrato vigente", async () => {
   const { onUpdated } = await montar();
@@ -60,10 +59,13 @@ it("no ofrece cancelar una serie en un turno único", async () => {
 });
 it("un error real del servidor no se presenta como una cancelación exitosa", async () => {
   api.post.mockRejectedValue(new ApiClientError("No se pudo cancelar la serie", 503));
-  const { onUpdated, onError } = await montar();
+  const { onUpdated } = await montar();
   fireEvent.click(screen.getByRole("button", { name: "Cancelar el resto de la serie" }));
   fireEvent.click(screen.getByRole("button", { name: "Cancelar el resto" }));
-  await screen.findByRole("alert");
+  // Una sola vez y en línea: el detalle ya no manda el error hacia arriba
+  // para que la pantalla lo repita como toast.
+  const avisos = await screen.findAllByRole("alert");
+  expect(avisos).toHaveLength(1);
+  expect(avisos[0].textContent).toBe("No se pudo cancelar la serie");
   expect(onUpdated).not.toHaveBeenCalled();
-  expect(onError).toHaveBeenCalledWith("No se pudo cancelar la serie");
 });

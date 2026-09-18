@@ -35,7 +35,19 @@ import {
   horaInputMvd,
 } from "@/lib/fechas-montevideo";
 import { fechaLarga, hora as formatHora, money } from "@/lib/format";
-import { FRECUENCIA_LABEL, SE_REPITE, AYUDA_SERIE, ALGO_FALLO } from "@/lib/glosario";
+import {
+  FRECUENCIA_LABEL,
+  SE_REPITE,
+  AYUDA_SERIE,
+  ALGO_FALLO,
+  PACIENTE_YA_CREADA,
+  TARIFA_SIN_CARGAR,
+} from "@/lib/glosario";
+// La regla de la tarifa es una sola y es la del servidor (entera y mayor a
+// cero). Antes acá se miraba sólo si había número: con la tarifa del
+// consultorio en 0 el formulario anunciaba que iba a crear con $0 y el POST
+// contestaba "Datos inválidos".
+import { pacienteCreateSchema } from "@/app/api/_lib/schemas";
 import type { Duracion, Modalidad, Paciente } from "@/types/domain";
 
 import {
@@ -176,6 +188,12 @@ export function NuevoTurnoForm({
   const fechaUHoraEditadaRef = React.useRef(false);
   const [enviando, setEnviando] = React.useState(false);
   const [errorEnvio, setErrorEnvio] = React.useState<string | null>(null);
+
+  /** ¿La tarifa del consultorio sirve para crear una paciente? La decide el
+   *  mismo schema que valida el POST, no una copia. */
+  const tarifaUsable = pacienteCreateSchema.shape.tarifa.safeParse(
+    tarifaDefault,
+  ).success;
 
   const pacienteElegido = React.useMemo(
     () => pacientes.find((p) => p.id === pacienteId) ?? null,
@@ -338,10 +356,8 @@ export function NuevoTurnoForm({
     if (!nuevoTelefono.trim()) {
       throw new Error("Ingresá el teléfono");
     }
-    if (tarifaDefault === null) {
-      throw new Error(
-        "No pudimos leer tu tarifa por sesión. Cargala en Tu consultorio y probá de nuevo.",
-      );
+    if (tarifaDefault === null || !tarifaUsable) {
+      throw new Error(TARIFA_SIN_CARGAR);
     }
     const creado = await apiPost<Paciente>("/api/pacientes", {
       nombre,
@@ -527,10 +543,13 @@ export function NuevoTurnoForm({
               <p className="text-[13px] font-semibold text-ink-900">
                 Paciente nuevo
               </p>
+              {/* Creada: los campos dejan de aceptar cambios. Editarlos no
+                  hacía nada —el reenvío usa la que ya existe— y no lo decía. */}
               <Input
                 label="Nombre y apellido"
                 autoComplete="off"
                 value={nuevoNombre}
+                disabled={pacienteCreado !== null}
                 onChange={(e) => setNuevoNombre(e.target.value)}
               />
               <Input
@@ -540,12 +559,15 @@ export function NuevoTurnoForm({
                 autoComplete="off"
                 placeholder="+598 99 123 456"
                 value={nuevoTelefono}
+                disabled={pacienteCreado !== null}
                 onChange={(e) => setNuevoTelefono(e.target.value)}
               />
               <p className="text-[12px] leading-[1.5] text-ink-500">
-                {tarifaDefault !== null
-                  ? `Se crea con la tarifa de Tu consultorio (${money(tarifaDefault)}). El resto de la ficha se completa después.`
-                  : "No pudimos leer tu tarifa por sesión: cargala en Tu consultorio para crear pacientes desde acá."}
+                {pacienteCreado !== null
+                  ? PACIENTE_YA_CREADA
+                  : tarifaUsable && tarifaDefault !== null
+                    ? `Se crea con la tarifa de Tu consultorio (${money(tarifaDefault)}). El resto de la ficha se completa después.`
+                    : TARIFA_SIN_CARGAR}
               </p>
               {errorNuevo ? (
                 <p
@@ -623,7 +645,12 @@ export function NuevoTurnoForm({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={enviando}>
+            <Button
+              type="submit"
+              disabled={
+                enviando || (creando && pacienteCreado === null && !tarifaUsable)
+              }
+            >
               {enviando ? "Agendando…" : "Agendar"}
             </Button>
           </div>
