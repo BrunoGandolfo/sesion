@@ -1,4 +1,4 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.5.
+// Texto del consentimiento informado para grabar sesiones, versión 2.6.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
@@ -26,6 +26,13 @@
 // devuelve sugiereRefirmar y la profesional debe pedir la nueva firma.
 // La 2.5 explica la consulta acotada de agenda de Lupita y que los datos de
 // agenda pueden llegar a Anthropic en el historial del chat. Requiere refirma.
+//
+// La 2.6 vuelve al grabador de un solo archivo: cada trozo se cifra en el
+// teléfono antes de guardarse y el archivo entero se cifra y se sube al
+// terminar (no por tramos mientras se graba); el servidor lo descifra en
+// memoria, sin archivo temporal; y la copia cifrada del teléfono se borra
+// cuando la subida se confirma. Tres frases de la 2.5 dejaban de ser
+// ciertas: por eso cambia la versión y las firmas anteriores necesitan refirma.
 
 import type { db } from "@/lib/db";
 
@@ -36,6 +43,7 @@ import {
   ASR_BORRADO_INMEDIATO,
   ASR_REINTENTO_SOLO_SI_SE_COMPLETO,
   AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL,
+  AUDIO_SE_SUBE_AL_TERMINAR,
   BACKUP_INCLUYE_CLAVE_AUDIO,
   BORRADO_DE_DATOS_A_PEDIDO,
   BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR,
@@ -69,7 +77,7 @@ import {
   VOCABULARIO_SOLO_A_ASR,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.5";
+export const CONSENTIMIENTO_VERSION = "2.6";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
@@ -87,7 +95,7 @@ export function generarTextoConsentimiento(params: {
   const soloAudio = MEDIOS_CAPTURA.length === 1 && MEDIOS_CAPTURA[0] === "audio";
 
   const respaldoLocal = RESPALDO_LOCAL_CIFRADO
-    ? `1. Mientras se graba, el audio se cifra en el teléfono de ${nombreProfesional}, por tramos, ${CLAVE_POR_SESION ? "con una clave que se crea para esa sesión" : "con la clave de la aplicación"}, y se va subiendo ya cifrado. En el teléfono no queda audio sin cifrar.`
+    ? `1. Mientras se graba, cada trozo de audio se cifra en el teléfono de ${nombreProfesional} antes de guardarse, ${CLAVE_POR_SESION ? "con una clave que se crea para esa sesión" : "con la clave de la aplicación"}. ${AUDIO_SE_SUBE_AL_TERMINAR ? "Al terminar, el archivo completo se cifra con esa misma clave y recién entonces se sube." : "Se va subiendo ya cifrado."} En el teléfono no queda audio sin cifrar.`
     : `1. Mientras se graba, el audio queda en el teléfono de ${nombreProfesional}. En esa etapa todavía no está cifrado. Al terminar se cifra en el teléfono, antes de salir, ${CLAVE_POR_SESION ? "con una clave que se crea para esa sesión" : "con la clave de la aplicación"}.`;
 
   const vocabulario = VOCABULARIO_A_ASR

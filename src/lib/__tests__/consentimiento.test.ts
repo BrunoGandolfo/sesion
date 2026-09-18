@@ -25,8 +25,8 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 2.5 y sugiere re-firmar las anteriores", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("2.5");
+  it("la versión vigente del texto es la 2.6 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.6");
     expect(sugiereRefirmar("1.1")).toBe(true);
     // La 2.0 no decía que el resumen del proceso se puede imprimir.
     expect(sugiereRefirmar("2.0")).toBe(true);
@@ -36,12 +36,14 @@ describe("generarTextoConsentimiento", () => {
     // La 2.3 prometía el derecho a pedir que se eliminen los datos.
     expect(sugiereRefirmar("2.3")).toBe(true);
     expect(sugiereRefirmar("2.4")).toBe(true);
-    expect(sugiereRefirmar("2.5")).toBe(false);
+    // La 2.5 prometía subida por tramos, archivo temporal y copia local conservada.
+    expect(sugiereRefirmar("2.5")).toBe(true);
+    expect(sugiereRefirmar("2.6")).toBe(false);
   });
 
   it("interpola los tres datos y lleva la versión", () => {
     const texto = generarTextoConsentimiento(baseParams);
-    expect(texto).toContain("Versión 2.5");
+    expect(texto).toContain("Versión 2.6");
     expect(texto).toContain("Hola María González.");
     expect(texto).toContain("con Lic. Ana Pérez, en el consultorio ubicado en Av. 18 de Julio 1234, Montevideo");
   });
@@ -70,11 +72,25 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).toContain("No se graba video.");
   });
 
-  it("el respaldo local va cifrado por tramos con clave por sesión", () => {
+  it("cada trozo se cifra en el teléfono con la clave de la sesión, y el archivo se sube entero al terminar", () => {
     expect(hechos.RESPALDO_LOCAL_CIFRADO).toBe(true);
     expect(hechos.CLAVE_POR_SESION).toBe(true);
-    expect(texto).toContain("se cifra en el teléfono de Lic. Ana Pérez, por tramos, con una clave que se crea para esa sesión");
+    expect(hechos.AUDIO_SE_SUBE_AL_TERMINAR).toBe(true);
+    // El chunk se cifra antes de la transacción que lo escribe.
+    const storage = codigo("src/lib/grabacion-storage.ts");
+    const guardar = storage.slice(storage.indexOf("export async function guardarChunk("));
+    expect(guardar.indexOf("await cifrarChunk(")).toBeGreaterThan(-1);
+    expect(guardar.indexOf("await cifrarChunk(")).toBeLessThan(guardar.indexOf(".put("));
+    // La clave es de la sesión: la genera el servidor y el teléfono la pide.
+    expect(codigo("src/app/api/_lib/casos-uso/audio.ts")).toContain("audioClave: randomBytes(32).toString(\"base64\")");
+    expect(codigo("src/lib/grabacion-cifrado.ts")).not.toContain("generarClave(");
+    // Un solo archivo al terminar: url → PUT → confirmar.
+    const subida = codigo("src/hooks/useGrabacionSesion.ts");
+    expect(subida.indexOf("/upload-url")).toBeLessThan(subida.indexOf("/upload-confirmar"));
+    expect(texto).toContain("cada trozo de audio se cifra en el teléfono de Lic. Ana Pérez antes de guardarse, con una clave que se crea para esa sesión");
+    expect(texto).toContain("Al terminar, el archivo completo se cifra con esa misma clave y recién entonces se sube.");
     expect(texto).toContain("En el teléfono no queda audio sin cifrar.");
+    expect(texto).not.toContain("por tramos");
     expect(texto).not.toContain("todavía no está cifrado");
   });
 
@@ -137,24 +153,17 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).not.toContain("antes de que quede guardado");
   });
 
-  it("la copia cifrada del teléfono se conserva: la app no tiene cómo borrarla", () => {
-    expect(hechos.COPIA_LOCAL_CIFRADA_SE_CONSERVA).toBe(true);
-    const almacen = codigo("src/lib/audio/almacen.ts");
-    // Las entregas de un segundo se retiran al consolidarlas en su pieza, en la
-    // misma transacción que la escribe, y lo mismo hacía el prefijo de la base
-    // v2 al recuperarlo. Ese audio no se pierde: cambia de lugar. No se borra
-    // ningún segmento ni la copia cifrada permanente del teléfono.
-    const borrados = almacen.match(/(?:[\w$]+\.)+(?:objectStore\("[^"]+"\)\.)?(?:deleteDatabase|deleteObjectStore|delete|clear)\s*\(/g) ?? [];
-    expect([...new Set(borrados)]).toEqual([
-      'tx.objectStore("entregas").delete(',
-      'tx.objectStore("respaldos").delete(',
-      'indexedDB.deleteDatabase(',
-    ]);
-    // Nunca aparece un borrado del almacén de piezas consolidadas.
-    expect(almacen).not.toMatch(/objectStore\("segmentos"\)\.(delete|clear)/);
-    expect(almacen).toContain('indexedDB.deleteDatabase("sesion-grabaciones")');
-    expect(texto).toContain("En el teléfono de Lic. Ana Pérez queda una copia cifrada de la grabación: la aplicación no la borra, y desde la aprobación ya no puede abrirla.");
-    expect(texto).toContain("y lo mismo vale para la copia cifrada del teléfono");
+  it("la copia cifrada del teléfono se borra al confirmar la subida, y el texto no dice que quede", () => {
+    expect(hechos.COPIA_LOCAL_CIFRADA_SE_CONSERVA).toBe(false);
+    // La pantalla borra el respaldo recién con la confirmación del servidor.
+    const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+    expect(vista.indexOf("await subirAudioCifrado(")).toBeLessThan(vista.indexOf("void limpiarGrabacion(turno)"));
+    const storage = codigo("src/lib/grabacion-storage.ts");
+    const limpiar = storage.slice(storage.indexOf("export async function limpiarGrabacion("));
+    expect(limpiar).toContain("tx.objectStore(STORE_CHUNKS).delete(rangoChunks(sesionClinicaId));");
+    expect(limpiar).toContain("tx.objectStore(STORE_META).delete(sesionClinicaId);");
+    expect(texto).not.toContain("queda una copia cifrada de la grabación");
+    expect(texto).not.toContain("lo mismo vale para la copia cifrada del teléfono");
   });
 
   it("Anthropic recibe la nota aprobada y el resumen; la lista de palabras sólo va a AssemblyAI", () => {
@@ -222,10 +231,13 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).toContain("Solo queda vigente cuando ella lo acepta. La decisión sigue siendo suya.");
   });
 
-  it("declara el archivo temporal del servidor y su borrado al terminar", () => {
-    expect(hechos.AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL).toBe(true);
-    expect(texto).toContain("lo descifra en un archivo temporal del servidor y lo manda a transcribir. Ese archivo temporal se borra al terminar");
-    expect(texto).not.toContain("solo en memoria");
+  it("declara que el servidor descifra solo en memoria", () => {
+    expect(hechos.AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL).toBe(false);
+    const worker = codigo("processor/processor.py");
+    expect(worker).toContain("asr_assemblyai.transcribir(io.BytesIO(audio_bytes), terminos)");
+    expect(worker).not.toMatch(/TemporaryDirectory|NamedTemporaryFile|open\(.*"wb"/);
+    expect(texto).toContain("lo descifra solo en memoria y lo manda a transcribir");
+    expect(texto).not.toContain("archivo temporal");
   });
 
   it("dice qué queda guardado, cifrado: nota, transcripción, resumen, consentimiento y firma", () => {
@@ -413,7 +425,7 @@ describe("la ruta de consentimiento", () => {
     const { descifrar, aadDe } = await import("@/lib/encryption");
     const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
     expect(texto).toContain("Hola María González.");
-    expect(texto).toContain("Versión 2.5");
+    expect(texto).toContain("Versión 2.6");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
   });

@@ -25,13 +25,11 @@ def _get_client():
         )
     return _client
 
-def descargar_segmento(key: str, bytes_esperados: int) -> bytes:
-    response = _get_client().get_object(Bucket=config.R2_BUCKET_NAME, Key=key)
-    body = response["Body"]
+def descargar_audio(key: str) -> tuple[bytes, dict]:
     try:
-        datos = body.read(bytes_esperados + 1)
-        if len(datos) != bytes_esperados:
-            raise ValueError("El tamaño del segmento no coincide")
-        return datos
-    finally:
-        body.close()
+        response = _get_client().get_object(Bucket=config.R2_BUCKET_NAME, Key=key)
+        datos = response["Body"].read()
+        metadata = response.get("Metadata", {})
+        return datos, metadata
+    except Exception as e:
+        raise RuntimeError(f"Error descargando {key} de R2: {e}")

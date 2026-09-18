@@ -3,7 +3,7 @@
 // La ayuda (docs/ayuda/) tiene su propia prueba en ayuda-vigente.test.ts. Este
 // archivo cubre lo que NO sale de la ayuda: los ejemplos de voz de
 // src/lib/ayuda-corpus.ts. Un ejemplo con un botón retirado le enseña a Lupita
-// a nombrarlo aunque la ayuda ya no lo mencione: pasó con "Terminar la sesión".
+// a nombrarlo aunque la ayuda ya no lo mencione: pasó con "Terminar y enviar".
 //
 // Mismo criterio que la prueba de la ayuda: cada afirmación se ata a la línea
 // de código que la hace verdadera, leída del disco.
@@ -68,7 +68,7 @@ describe("los ejemplos de voz de Lupita", () => {
 
   it("no enseñan botones retirados ni nombres recortados", () => {
     const texto = ejemplosBuenos().join("\n");
-    expect(texto).not.toMatch(/"Terminar la sesión"|"Reanudar"|"Lo que cobrás"/);
+    expect(texto).not.toMatch(/"Terminar y enviar"|"Reanudar grabación"|"Lo que cobrás"/);
   });
 
   it("la tarifa: se guarda sola y los turnos ya cargados conservan la suya", () => {
@@ -92,13 +92,16 @@ describe("los ejemplos de voz de Lupita", () => {
 
   it("la grabación cortada: lo guardado está cifrado y los botones son los del grabador", () => {
     const grabacion = ejemplosBuenos().find((e) => e.includes("¿Qué pasa si se corta la grabación?"))!;
-    const grabadora = codigo("src/lib/audio/grabadora.ts");
-    expect(grabadora.indexOf("cifrarSegmento(")).toBeGreaterThan(-1);
-    expect(grabadora.indexOf("cifrarSegmento(")).toBeLessThan(grabadora.indexOf("guardarSegmento("));
+    const storage = codigo("src/lib/grabacion-storage.ts");
+    const guardar = storage.slice(storage.indexOf("export async function guardarChunk("));
+    expect(guardar.indexOf("await cifrarChunk(")).toBeGreaterThan(-1);
+    expect(guardar.indexOf("await cifrarChunk(")).toBeLessThan(guardar.indexOf(".put("));
     expect(grabacion).toContain("queda guardado, cifrado, en el teléfono");
     const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
-    for (const boton of ["Reanudar grabación", "Terminar y enviar"]) {
-      expect(vista).toContain(boton);
+    const glosario = codigo("src/lib/glosario.ts");
+    for (const [constante, boton] of [["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"]]) {
+      expect(glosario).toContain(`export const ${constante} = "${boton}"`);
+      expect(vista).toContain(`{${constante}}`);
       expect(grabacion).toContain(`"${boton}"`);
     }
     expect(grabacion).toContain("La recuperación completa no está garantizada");

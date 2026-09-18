@@ -433,10 +433,6 @@ export function SesionDetailView({
           </Aviso>
         ) : null}
 
-        {sesion?.pausas?.some(p => "motivo" in p && p.motivo === "interrupcion") ? (
-          <Aviso titulo="Audio posiblemente incompleto" detalle="Se detectó una interrupción en la grabación. Revisá la nota teniendo en cuenta que puede faltar parte de lo conversado." />
-        ) : null}
-
         {sesion && (sesion.estado === "procesando" || sesion.estado === "subiendo") ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AnilloProgreso tamano={30} className="text-gold-500" />

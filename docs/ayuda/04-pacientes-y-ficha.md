@@ -68,8 +68,7 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 
 1. En la ficha, tocá **Firmar autorización**.
 2. Se abre **Autorización para grabar las sesiones**. **La lee la paciente**:
-   qué se graba, para qué y por dónde pasa: el cifrado por tramos en el
-   teléfono, el almacenamiento en Cloudflare R2, el proceso en Railway, la base
+   qué se graba, para qué y por dónde pasa: el cifrado en el teléfono, el almacenamiento en Cloudflare R2, el proceso en Railway, la base
    en Neon, que AssemblyAI recibe audio y vocabulario, y que Anthropic recibe
    la transcripción y el resumen del proceso y, después de aprobar, la nota
    aprobada. También explica que el borrador de la IA se guarda antes de que lo
@@ -92,9 +91,9 @@ El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 5. Tocá **Firmar**.
 
 Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
-La versión vigente del texto es **2.5**. Las firmas anteriores, incluidas la
-2.1, la 2.2, la 2.3 y la 2.4, siguen sirviendo para grabar y no hace falta revocarlas,
-pero **necesitan que la paciente firme la 2.5**: no cuentan el acceso de Lupita a la agenda ni lo que corrige la
+La versión vigente del texto es **2.6**. Las firmas anteriores, incluidas la
+2.1, la 2.2, la 2.3, la 2.4 y la 2.5, siguen sirviendo para grabar y no hace falta revocarlas,
+pero **necesitan que la paciente firme la 2.6**: no cuentan cómo graba y sube el grabador de hoy, el acceso de Lupita a la agenda ni lo que corrige la
 versión nueva. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
 en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
 pidas vos.

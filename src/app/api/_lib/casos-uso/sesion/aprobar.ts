@@ -71,7 +71,6 @@ export async function aprobarSesion({
       notaIa: true,
       datos: true,
       turno: { select: { pacienteId: true } },
-      segmentos: { select: { indice: true }, orderBy: { indice: "asc" } },
     },
   });
   if (!existente) throw new ApiError("Sesión clínica no encontrada", 404);
@@ -135,7 +134,7 @@ export async function aprobarSesion({
         tipo: "borrar_audio_r2",
         payload: {
           prefijo: prefijoAudio(organizationId, sesionId),
-          indices: existente.segmentos.map((s) => s.indice),
+          indices: [0],
         },
         organizationId,
         sesionId,

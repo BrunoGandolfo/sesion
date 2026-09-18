@@ -264,7 +264,6 @@ export const TABLAS = [
   "bajas_sms",
   "consentimientos_grabacion",
   "sesiones_clinicas",
-  "audio_segmentos",
   "trabajos",
   "worker_estado",
   "hot_words",

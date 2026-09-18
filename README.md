@@ -17,8 +17,8 @@ configuración de los proveedores.
 | Pacientes | Ficha, notas privadas, vocabulario por paciente, turnos/pagos, sesiones, Recorrido y consentimiento. |
 | Configuración y cuenta | Perfil, tarifa, orientación, recordatorio SMS, vocabulario, invitaciones y sesiones revocables. Un campo inválido rechaza el lote de configuración completo. |
 | Lupita | Ayuda basada en los archivos de `docs/ayuda/`. El modelo declarado es claude-sonnet-5, en `src/lib/anthropic-mensajes.ts`. Consulta solo nombres, días, horas, duración y modalidad de los turnos de hoy, mañana o esta semana del propio consultorio. No consulta fichas, teléfonos, dinero ni historias clínicas, y no modifica datos. |
-| Grabación y subida | Construida. La captura corta segmentos de 60 s con 1 s de solape (`src/lib/audio/contrato.ts`), los cifra con AES-GCM en el navegador antes de guardarlos en IndexedDB (`src/lib/audio/grabadora.ts`, `src/lib/audio/cifrado.ts`) y sube cada uno con PUT prefirmado a R2 mientras se graba (`src/lib/audio/sincronizar.ts`). Recupera lo guardado tras un cierre, bloquea dos pestañas sobre la misma grabación y no reemplaza una copia existente. Límite de 150 minutos. |
-| Procesamiento clínico | API con estados explícitos, reclamos con ticket, checkpoint de transcripción y trabajos durables. El worker descarga y verifica los segmentos, los une, transcribe con AssemblyAI, escribe nota y feedback, prepara propuestas del Recorrido y borra el transcript en AssemblyAI. |
+| Grabación y subida | Un solo MediaRecorder con pausa y reanudación (`src/components/grabacion/GrabadorSesion.tsx`). Cada trozo se cifra con AES-GCM y la clave de la sesión antes de guardarse en IndexedDB (`src/lib/grabacion-storage.ts`); al terminar, el archivo entero se cifra (`src/lib/grabacion-cifrado.ts`) y se sube con PUT prefirmado a R2 (`src/hooks/useGrabacionSesion.ts`: upload-url → PUT → upload-confirmar). El servidor cierra la sesión solo cuando R2 confirma el objeto. Recupera lo guardado tras un cierre pidiendo la clave al servidor. Límite de 150 minutos. |
+| Procesamiento clínico | API con estados explícitos, reclamos con ticket, checkpoint de transcripción y trabajos durables. El worker descarga el archivo, lo descifra en memoria, transcribe con AssemblyAI, escribe nota y feedback, prepara propuestas del Recorrido y borra el transcript en AssemblyAI. |
 | Nota clínica | Revisión, edición y aprobación con confirmación de señales de riesgo y de menciones léxicas («Leí las menciones», exigida también por `src/app/api/_lib/casos-uso/sesion/aprobar.ts`). Volver a escribir, reintentar y eliminar. Para vos con estados y pedido de nuevo. |
 | Recorrido | Construido. Al aprobar una nota se encola `integrar_contexto`; el worker devuelve una propuesta que solo se aplica si la profesional la acepta, con o sin ediciones. Cada escritura es una versión nueva; la migración `20260916013000_inmutabilidad` impide cambiar el contenido o borrar versiones. Brief antes de la sesión y gráficos de progreso. |
 | Exportación del Recorrido | Hoja de impresión del navegador en `src/app/(impresion)/pacientes/[id]/recorrido/imprimir/`. Pide los datos con `POST /api/pacientes/[id]/hilo/exportar`, que registra `hilo.exportar_pdf` en la misma transacción que lee. Lleva la versión vigente, las que estuvieron vigentes, el historial sin texto de propuestas no adoptadas y los gráficos. El consentimiento 2.1 lo informa. |
@@ -27,14 +27,9 @@ configuración de los proveedores.
 
 - **Retención de respaldos:** `.github/workflows/backup.yml` conserva diarios 30
   días y mensuales 12 meses; el consentimiento solo menciona 30 días.
-- **Descifrado en el worker:** el consentimiento dice que el audio se descifra
-  «solo en memoria», pero `processor/audio_entrada.py` usa archivos temporales en
-  disco para unir los segmentos.
-- **Pantalla de entrada:** el texto de confidencialidad de `src/lib/glosario.ts`
-  todavía dice que la copia local previa no está cifrada.
 - **Re-firma:** la API devuelve `sugiereRefirmar`, pero ninguna pantalla lo muestra.
-- **Copia local:** los segmentos cifrados quedan en IndexedDB después de
-  entregados; la app no los borra.
+- **Pantalla bloqueada:** el grabador no garantiza seguir capturando con la
+  pantalla apagada; pausa y avisa.
 - **Borrados externos:** los trabajos de borrado en R2 y AssemblyAI se rinden a
   los 20 intentos (`src/app/api/_lib/casos-uso/trabajos/politica.ts`), y queda
   una ventana entre crear el transcript y registrar su borrado durable.
@@ -55,7 +50,7 @@ configuración de los proveedores.
 | Identidad | Cookie opaca y revocable, con hash en sesiones_acceso; vence a los 30 días o tras 14 sin uso. Cambiar o restablecer la contraseña cierra todas las sesiones. |
 | Datos | Prisma 5.22, Postgres 17; esquema en `prisma/schema.prisma` y tres migraciones en `prisma/migrations/`. |
 | Cifrado de columnas | AES-256-GCM, ENC2 y AAD por fila; extensión de `src/lib/prisma-encryption.ts`. |
-| Audio/proceso | Segmentos cifrados en el navegador, R2 y worker Python en Railway; AssemblyAI para transcripción y Anthropic para nota, feedback y propuestas del Recorrido. Contrato y límites en `docs/pipeline.md`. |
+| Audio/proceso | Archivo cifrado en el navegador, R2 y worker Python en Railway; AssemblyAI para transcripción y Anthropic para nota, feedback y propuestas del Recorrido. Contrato y límites en `docs/pipeline.md`. |
 | SMS/correo | Twilio y Resend. La persistencia del envío vive en envios_sms. Los recordatorios se dispersan de 0 a 14 minutos por turno (`src/lib/recordatorios-programacion.ts`). |
 | Crons | `vercel.json`: recordatorios cada 5 minutos, trabajos cada 10, salud cada hora y mantenimiento diario. |
 | Entrega y operación | GitHub Actions (CI, backup diario, ensayo mensual de restauración, latido cada 15 minutos, aviso de CI rojo y publicación manual), Vercel, Sentry y backups cifrados en R2; `docs/operaciones.md`. |

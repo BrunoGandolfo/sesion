@@ -49,7 +49,6 @@ const INTEGRACION = [
   'src/lib/__tests__/endurecer-integracion.test.ts',
   'src/lib/__tests__/cupo-ayuda-integracion.test.ts',
   'src/lib/__tests__/hilo-integracion.test.ts',
-  'src/lib/__tests__/audio-integracion.test.ts',
   'src/lib/__tests__/salud-trabajos.test.ts',
   'src/lib/__tests__/revision-carreras.test.ts',
   'src/lib/__tests__/registro-atomico.test.ts',

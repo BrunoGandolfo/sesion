@@ -192,11 +192,3 @@ def test_contexto_red_y_json_roto_son_error(mocker):
     get.return_value.json.side_effect = ValueError("JSON roto")
     with pytest.raises(requests.RequestException):
         app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET)
-
-
-def test_lease_envia_huecos_con_ticket(mocker):
-    post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
-    pausas = [{"inicio": 59800, "fin": 60000, "siguienteIndice": 1, "motivo": "interrupcion"}]
-    app_client.renovar_lease("s1", TICKET, 3, "audio", pausas_audio=pausas)
-    assert post.call_args.kwargs["json"]["pausasAudio"] == pausas
-    assert post.call_args.kwargs["headers"]["Authorization"] == f"Bearer {TICKET}"

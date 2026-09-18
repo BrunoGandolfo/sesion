@@ -2,12 +2,14 @@
 //
 // "Hecho" no es que el DeleteObject respondió 204 (S3 y R2 responden 204
 // también sobre una key inexistente): es que después del borrado un
-// HeadObject de cada segmento devuelve 404. Recién ahí la sesión —si todavía
+// HeadObject de cada objeto devuelve 404. Recién ahí la sesión —si todavía
 // existe— pasa a `audioEstado = borrado`. La actualización tolera count = 0:
 // eliminar ya borró la fila y el trabajo se completa igual.
 //
-// El payload trae todo lo que hace falta ({ prefijo, indices }) porque los
-// segmentos se borran de la base en la misma transacción que la sesión.
+// El payload trae todo lo que hace falta ({ prefijo, indices }) porque la
+// sesión se borra de la base en la misma transacción que crea el trabajo. El
+// grabador sube un solo archivo (índice 0); la lista de índices queda para
+// que un trabajo pueda borrar más de un objeto bajo el mismo prefijo.
 
 import { z } from "zod";
 
@@ -76,7 +78,7 @@ export function keysDe(payload: PayloadBorradoR2): string[] {
 }
 
 /**
- * Borra cada segmento y verifica que no está. Lanza si alguno sigue ahí o
+ * Borra cada objeto y verifica que no está. Lanza si alguno sigue ahí o
  * si R2 no contesta: el llamador marca el trabajo para reintentar. Si todo
  * se fue, marca el audio de la sesión como borrado.
  */
@@ -92,7 +94,7 @@ export async function ejecutarBorradoR2({
   const keys = keysDe(payload);
   const plazo: Plazo = { vence: reloj() + plazoMs, reloj, hechas: 0, total: keys.length * 2 };
 
-  // Una grabación larga tiene decenas de segmentos: las llamadas van en
+  // Un trabajo puede traer varios objetos: las llamadas van en
   // tandas de CONCURRENCIA, y entre tanda y tanda se mira el plazo del
   // trabajo entero: el cron tiene que poder resolverlo antes de que Vercel
   // corte la función.

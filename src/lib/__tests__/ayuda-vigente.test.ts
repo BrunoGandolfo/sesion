@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
 import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
-import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/audio/contrato";
+import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
 import { DISPERSION_MINUTOS } from "@/lib/recordatorios-programacion";
 import { ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_AGOTADAS, INVITAR_ESPERA, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
@@ -65,12 +65,17 @@ it("la ayuda explica el rechazo de solapamientos y permite turnos consecutivos",
   expect(texto).not.toContain("No avisa de choques");
 });
 
-it("dice que se puede bloquear el teléfono, y no garantiza recuperar una interrupción", () => {
-  // La captura ya no depende de que la página esté despierta: la advertencia
-  // vieja era verdad del grabador que rotaba recorders por temporizador.
+it("pide dejar la pantalla encendida, y no garantiza recuperar una interrupción", () => {
+  // El grabador es un solo MediaRecorder: con la pantalla apagada el sistema
+  // puede soltar el micrófono, y lo que hace la app es pausar y avisar
+  // (AVISO_PANTALLA_APAGADA, CORTE_PANTALLA), no seguir grabando.
+  const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+  expect(vista).toContain("Dejá la pantalla encendida.");
+  expect(codigo("src/lib/glosario.ts")).toContain("La pantalla se apagó: la grabación se puede cortar. Mantenela encendida.");
+  expect(documento("07-grabar-una-sesion.md")).toContain("Dejá la pantalla encendida");
+  expect(documento("13-preguntas-frecuentes.md")).toContain("dejá la pantalla encendida");
   for (const archivo of ["07-grabar-una-sesion.md", "13-preguntas-frecuentes.md"]) {
-    expect(documento(archivo)).toContain("Podés bloquear la pantalla");
-    expect(documento(archivo)).not.toMatch(/No bloquees la pantalla/);
+    expect(documento(archivo)).not.toMatch(/Podés bloquear la pantalla|la grabación sigue y cada segundo/);
   }
   const prompt = systemPromptAyuda();
   expect(prompt).toContain("La recuperación completa no está garantizada");
@@ -81,7 +86,7 @@ it("los minutos que enseña la ayuda coinciden con los límites de captura", () 
   const texto = documento("07-grabar-una-sesion.md");
   expect(texto).toContain(`**${LIMITE_SEGUNDOS / 60} minutos**`);
   expect(texto).toContain(`**${AVISO_LIMITE_SEGUNDOS / 60} minutos**`);
-  expect(texto).toContain("todavía tenés que terminar");
+  expect(texto).toContain("Todavía tenés que tocar **Terminar la sesión**");
   expect(texto).not.toContain("hora y media");
 });
 
@@ -131,17 +136,19 @@ it("la ayuda avisa que un campo inválido frena el lote de configuración", () =
   expect(texto).not.toMatch(/lo demás se guarda igual|Cada campo se guarda por separado|Todo se guarda solo/);
 });
 
-it("la ayuda describe el cifrado por tramos que hace el grabador, no una protección pendiente", () => {
-  // El grabador cifra cada segmento antes de guardarlo en el teléfono.
+it("la ayuda describe el cifrado en el teléfono que hace el grabador, no una protección pendiente", () => {
+  // Cada chunk se cifra antes de escribirse en IndexedDB (grabacion-storage.ts)
+  // y el archivo entero antes de subirse (grabacion-cifrado.ts).
   expect(RESPALDO_LOCAL_CIFRADO).toBe(true);
-  const grabadora = codigo("src/lib/audio/grabadora.ts");
-  expect(grabadora.indexOf("cifrarSegmento(")).toBeGreaterThan(-1);
-  expect(grabadora.indexOf("cifrarSegmento(")).toBeLessThan(grabadora.indexOf("guardarSegmento("));
+  const storage = codigo("src/lib/grabacion-storage.ts");
+  const guardar = storage.slice(storage.indexOf("export async function guardarChunk("));
+  expect(guardar.indexOf("await cifrarChunk(")).toBeGreaterThan(-1);
+  expect(guardar.indexOf("await cifrarChunk(")).toBeLessThan(guardar.indexOf(".put("));
   expect(VOCABULARIO_A_ASR && VOCABULARIO_INCLUYE_NOMBRES).toBe(true);
   for (const archivo of ["00-que-es-sesion.md", "07-grabar-una-sesion.md", "12-camino-del-audio-y-privacidad.md"]) {
     expect(documento(archivo)).toMatch(/se cifra(n)? en el teléfono/);
     expect(documento(archivo)).not.toContain("Todavía no está implementado en este grabador");
-    expect(documento(archivo)).not.toMatch(/se cifra al terminar|cifra el archivo al terminar|subida por segmentos independientes todavía está pendiente/);
+    expect(documento(archivo)).not.toMatch(/por tramos|tramo por tramo|subida por segmentos independientes todavía está pendiente/);
   }
   // Mientras la pantalla de entrada conserve el texto viejo, la ayuda lo desmiente.
   if (ENTRADA_CONFIDENCIALIDAD.includes("no está cifrada")) {
@@ -163,29 +170,41 @@ it("la ayuda describe el cifrado por tramos que hace el grabador, no una protecc
 
 it("la ayuda describe los botones del grabador que existen", () => {
   const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+  const glosario = codigo("src/lib/glosario.ts");
   const texto = documento("07-grabar-una-sesion.md");
-  for (const boton of ["Grabar sesión", "Reanudar grabación", "Pausar", "Terminar y enviar", "Enviar grabación pendiente", "Comprobar y reintentar envío", "Conservar esta copia y liberar el turno"]) {
+  // Los botones salen del glosario; la vista los usa por su constante.
+  for (const [constante, boton] of [["GRABAR_SESION", "Grabar sesión"], ["PAUSAR", "Pausar"], ["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["GUARDANDO", "Guardando…"]]) {
+    expect(glosario).toContain(`export const ${constante} = "${boton}"`);
+    expect(vista).toContain(`{${constante}}`);
+    expect(texto).toContain(boton);
+  }
+  for (const boton of ["Reintentar", "Guardarla ahora", "Descartarla"]) {
     expect(vista).toContain(boton);
     expect(texto).toContain(boton);
   }
-  // /grabar/nuevo no crea un turno: manda a agendarlo.
-  expect(codigo("src/app/(dashboard)/grabar/[turnoId]/page.tsx")).toContain("Agendá el turno para grabar la sesión");
-  expect(texto).toContain("Agendá el turno para grabar la sesión");
-  // La base local tiene una grabación por turno: volver a grabar no reemplaza.
-  expect(codigo("src/lib/audio/almacen.ts")).toContain('createIndex("turno", ["cuenta", "turnoId"], { unique: true })');
-  expect(texto).toContain("Volver a grabar no reemplaza la copia anterior");
-  // El medidor y la pantalla bloqueada son las dos cosas que la ayuda decía al
-  // revés mientras el grabador estaba roto.
+  // /grabar/nuevo crea el turno recién al tocar Grabar sesión.
+  expect(vista).toContain('await apiPost<TurnoApi>("/api/turnos"');
+  expect(vista).toContain("DURACION_SIN_TURNO");
+  expect(texto).toContain("crea uno de 50 minutos");
+  // Empezar de nuevo el mismo turno reemplaza lo guardado (iniciarSesionGrabacion borra los chunks previos).
+  expect(codigo("src/lib/grabacion-storage.ts")).toContain("tx.objectStore(STORE_CHUNKS).delete(rangoChunks(sesionClinicaId));");
+  expect(texto).toContain("Empezar una grabación nueva del mismo turno reemplaza la copia anterior");
+  // El medidor existe; la pantalla bloqueada no se promete.
   expect(vista).toContain("<MedidorAudio");
   expect(texto).toContain("medidor de sonido");
-  expect(codigo("src/app/(dashboard)/grabar/[turnoId]/_components/medidor-audio.tsx")).toContain("En pausa: no está entrando sonido");
-  expect(texto).toContain("En pausa: no está entrando sonido");
-  expect(texto).not.toMatch(/No bloquees la pantalla|No hay medidor|No sigue grabando con la pantalla bloqueada/);
-  // Firmar la autorización es un toque desde la propia pantalla de grabar.
-  expect(vista).toContain("<ConsentimientoBadge");
-  expect(texto).toContain("la firma ahí mismo");
+  expect(codigo("src/app/(dashboard)/grabar/[turnoId]/_components/medidor-audio.tsx")).toContain("El audio se escucha bien");
+  expect(texto).toContain("El audio se escucha bien");
+  expect(texto).not.toMatch(/No hay medidor|Podés bloquear la pantalla/);
+  // Firmar la autorización lleva a la ficha.
+  expect(vista).toContain("{FIRMAR_AUTORIZACION}");
+  expect(texto).toContain("**Firmar autorización** que lleva a la ficha");
+  // Los cortes se explican con las frases del glosario, y ninguno envía solo.
+  for (const constante of ["CORTE_MICROFONO", "CORTE_LIMITE", "CORTE_SIN_SONIDO", "CORTE_PANTALLA"]) {
+    expect(vista).toContain(constante);
+  }
+  expect(texto).toContain("Ninguna interrupción envía nada sola");
   for (const archivo of ["07-grabar-una-sesion.md", "13-preguntas-frecuentes.md", "14-cuando-algo-falla.md"]) {
-    expect(documento(archivo)).not.toMatch(/Terminar la sesión|Se cortó el micrófono|Cortado|crea uno de 50 minutos|puede reemplazarse la copia/);
+    expect(documento(archivo)).not.toMatch(/Terminar y enviar|Reanudar grabación|Enviar grabación pendiente|Comprobar y reintentar envío|Conservar esta copia|Audio recibido|otra pestaña/);
   }
 });
 
@@ -246,8 +265,12 @@ it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
 
 it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar la contraseña", () => {
   // Los únicos usos vigentes de esas palabras son botones que existen hoy.
-  const vigentes = [INVITAR_WHATSAPP, "Descartar propuesta", "**Descartar**"];
+  const vigentes = [INVITAR_WHATSAPP, "Descartar propuesta", "**Descartar**", "**Descartarla**", "Descartar grabación"];
   expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Descartar propuesta");
+  // Los del grabador: la copia pendiente y la grabación en curso.
+  const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+  expect(vista).toContain("Descartarla");
+  expect(vista).toContain("Descartar grabación");
   let corpus = leerCorpus();
   for (const texto of vigentes) corpus = corpus.replaceAll(texto, "");
   expect(corpus).not.toMatch(/WhatsApp|Descartar|Descartarla|Volver a intentarlo/i);
@@ -361,12 +384,12 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     expect(documento("04-pacientes-y-ficha.md")).toContain("lo propone la IA y solo queda vigente cuando lo aceptás");
   });
 
-  it("el descifrado en el servidor usa un archivo temporal", () => {
-    expect(AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL).toBe(true);
-    expect(consentimiento).toContain("lo descifra en un archivo temporal del servidor");
-    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("temporal del servidor");
-    expect(documento("00-que-es-sesion.md")).toContain("archivo temporal del servidor");
-    expect(ayuda()).not.toMatch(/solo en memoria/);
+  it("el descifrado en el servidor es en memoria, sin archivo temporal", () => {
+    expect(AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL).toBe(false);
+    expect(consentimiento).toContain("lo descifra solo en memoria y lo manda a transcribir");
+    expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("lo descifra **en memoria**");
+    expect(documento("00-que-es-sesion.md")).toContain("solo en memoria del servidor");
+    expect(ayuda()).not.toMatch(/archivo temporal del servidor|temporal del servidor/);
   });
 
   it("la exportación a PDF: registra la preparación de la copia", () => {

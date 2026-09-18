@@ -29,7 +29,6 @@ import { ApiError } from "../../responses";
 export type ClienteSesion = Pick<
   typeof db,
   | "sesionClinica"
-  | "audioSegmento"
   | "trabajo"
   | "turno"
   | "configuracion"

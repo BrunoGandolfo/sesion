@@ -1,21 +1,114 @@
-import Link from "next/link";
+// Pantalla de grabación. Una sola cosa por vez: antes de grabar, la única
+// verificación es la autorización de la paciente; después, el cronómetro.
+//
+// La ruta acepta dos formas:
+//   /grabar/<turnoId>                        turno ya agendado
+//   /grabar/nuevo?pacienteId=<id>            sesión sin turno agendado
+//
+// Los datos del encabezado (nombre y hora) y el estado del consentimiento se
+// resuelven en el servidor: la pantalla no arranca con un esqueleto ni pide
+// tres endpoints antes de mostrar el botón.
+
 import { notFound } from "next/navigation";
+
 import { buscarActor } from "@/app/api/_lib/auth";
 import { leerEstadoPrueba } from "@/app/api/_lib/casos-uso/estado-prueba";
-import { obtenerTurnoParaGrabar } from "@/app/api/_lib/casos-uso/obtener-turno-para-grabar";
+import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { db } from "@/lib/db";
-import { formatearHoraMvd } from "@/lib/fechas-montevideo";
+import { hora } from "@/lib/format";
+
 import { GrabarView } from "./_components/grabar-view";
+
 export const dynamic = "force-dynamic";
-export default async function GrabarPage({ params }: { params: Promise<{ turnoId: string }> }) {
-  const [{ turnoId }, actor] = await Promise.all([params, buscarActor()]);
-  if (!actor) notFound();
-  if (turnoId === "nuevo") return <main className="p-6"><h1>Agendá el turno para grabar la sesión</h1><Link href="/agenda">Ir a la agenda</Link></main>;
-  const { organizationId, userId } = actor;
-  const [turno, prueba] = await Promise.all([
-    obtenerTurnoParaGrabar({ prisma: db, turnoId, organizationId }),
-    leerEstadoPrueba({ prisma: db, organizationId }),
+
+/** La misma pregunta que hace POST /api/sesion-clinica antes de crear la
+ *  sesión. Una sola función: si las dos no contestan lo mismo, la pantalla
+ *  ofrece grabar y la API lo rechaza (o al revés). */
+function tieneAutorizacion(pacienteId: string, organizationId: string) {
+  return consentimientoVigenteDe(db, pacienteId, organizationId);
+}
+
+export default async function GrabarPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ turnoId: string }>;
+  searchParams: Promise<{ pacienteId?: string }>;
+}) {
+  const [{ turnoId }, { pacienteId }, sesion] = await Promise.all([
+    params,
+    searchParams,
+    buscarActor(),
   ]);
-  if (!turno) notFound();
-  return <GrabarView turnoId={turno.id} organizationId={organizationId} cuenta={`${organizationId}:${userId}`} horaTexto={formatearHoraMvd(turno.fecha)} pacienteId={turno.paciente.id} pacienteNombre={`${turno.paciente.nombre} ${turno.paciente.apellido}`.trim()} autorizacionVigente={turno.autorizacionVigente} nombreProfesional={turno.nombreProfesional} direccionConsultorio={turno.direccionConsultorio} prueba={prueba} />;
+
+  if (!sesion) {
+    notFound();
+  }
+
+  const { organizationId } = sesion;
+  // Consultorio de prueba: cuántas grabaciones lleva, para el aviso y para
+  // apagar el botón al llegar al tope. El tope de verdad lo aplica el
+  // servidor al crear la sesión (casos-uso/audio.ts, prepararAudio).
+  const prueba = await leerEstadoPrueba({ prisma: db, organizationId });
+
+  // Sin turno agendado: el turno se crea recién cuando toca "Grabar sesión",
+  // para no dejar turnos fantasma si abre la pantalla y se arrepiente.
+  if (turnoId === "nuevo") {
+    if (!pacienteId) {
+      notFound();
+    }
+
+    const paciente = await db.paciente.findFirst({
+      where: { id: pacienteId, organizationId },
+      select: { id: true, nombre: true, apellido: true },
+    });
+
+    if (!paciente) {
+      notFound();
+    }
+
+    return (
+      <GrabarView
+        turnoId={null}
+        turnoProgramado
+        horaTexto={null}
+        pacienteId={paciente.id}
+        pacienteNombre={`${paciente.nombre} ${paciente.apellido}`.trim()}
+        autorizacionVigente={await tieneAutorizacion(
+          paciente.id,
+          organizationId,
+        )}
+        prueba={prueba}
+      />
+    );
+  }
+
+  const turno = await db.turno.findFirst({
+    where: { id: turnoId, organizationId },
+    select: {
+      id: true,
+      fecha: true,
+      estado: true,
+      paciente: { select: { id: true, nombre: true, apellido: true } },
+    },
+  });
+
+  if (!turno) {
+    notFound();
+  }
+
+  return (
+    <GrabarView
+      turnoId={turno.id}
+      turnoProgramado={turno.estado === "programado"}
+      horaTexto={hora(turno.fecha)}
+      pacienteId={turno.paciente.id}
+      pacienteNombre={`${turno.paciente.nombre} ${turno.paciente.apellido}`.trim()}
+      autorizacionVigente={await tieneAutorizacion(
+        turno.paciente.id,
+        organizationId,
+      )}
+      prueba={prueba}
+    />
+  );
 }

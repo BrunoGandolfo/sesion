@@ -5,28 +5,26 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
 
 ## En el teléfono
 
-1. Mientras grabás, la app corta el audio en tramos de un minuto.
-2. Cada tramo **se cifra en el teléfono** con una clave propia de esa sesión y
-   recién después se guarda en el almacenamiento del navegador. En el teléfono no
-   queda audio sin cifrar. El tramo que se está grabando existe sin cifrar solo
-   en la memoria, hasta un minuto.
-3. Cada tramo se envía ya cifrado mientras seguís grabando.
+1. Cada sesión tiene una clave propia, que genera el servidor y el teléfono
+   pide al empezar a grabar. No se guarda en el teléfono.
+2. Cada trozo de audio que entrega el micrófono, cada segundo, **se cifra en el
+   teléfono** con esa clave y recién después se guarda en el almacenamiento del
+   navegador. En el teléfono no queda audio sin cifrar.
+3. Al terminar, el archivo completo **se cifra con esa misma clave** y recién
+   entonces se envía. Mientras grabás no se sube nada.
 
-La copia cifrada queda en el navegador aunque la nota ya esté aprobada: la app no
-la borra. Al aprobar, la app destruye la clave en la base con la que trabaja y ya
-no puede abrirla. Una copia de la clave puede seguir en los respaldos (ver
-abajo).
-
-La pantalla de entrada ya describe el cifrado por tramos antes de guardar y enviar.
+La copia cifrada queda en el navegador hasta que el servidor confirma que el
+archivo llegó: con esa confirmación, la app la borra. Si la subida falla, la
+copia se conserva, cifrada, para reintentar; para abrirla la app le pide la
+clave al servidor, que solo la entrega mientras la sesión sigue grabando.
 
 ## En los servicios
 
-1. Los tramos se guardan cifrados en **Cloudflare R2**, uno por uno.
-2. El proceso que corre en **Railway** descarga los tramos, comprueba que ninguno
-   haya cambiado, los descifra y los une para transcribir. Para unirlos usa
-   archivos temporales en un disco privado del servidor, que se borran al
-   terminar. El consentimiento lo cuenta así: se descifra *"en un archivo
-   temporal del servidor"* que *"se borra al terminar"*.
+1. El archivo se guarda cifrado en **Cloudflare R2**.
+2. El proceso que corre en **Railway** descarga el archivo y lo descifra **en
+   memoria** para transcribir: no escribe ningún archivo con audio en claro en
+   el servidor. El consentimiento lo cuenta así: *"lo descifra solo en
+   memoria y lo manda a transcribir"*.
 3. **AssemblyAI** recibe el audio sin cifrar y el vocabulario.
 4. Apenas termina la transcripción, bien o mal, la app le pide a AssemblyAI que
    borre el audio y el texto. Ese primer pedido es uno solo.
@@ -47,7 +45,7 @@ La pantalla de entrada ya describe el cifrado por tramos antes de guardar y envi
    solo queda vigente cuando lo aceptás.
 6. Al aprobar la nota, la app destruye siempre la clave del audio en la base con
    la que trabaja: desde ahí ya no puede abrir el audio, aunque siga pendiente de
-   borrado. Después intenta borrar los tramos en R2 y comprueba que ya no estén.
+   borrado. Después intenta borrar el archivo en R2 y comprueba que ya no esté.
    Si falla, reintenta **hasta 20 veces**, durante **unos 15 días**; después el
    borrado queda marcado como fallido. La transcripción y la nota se conservan.
 
@@ -60,7 +58,7 @@ Solo consulta; no modifica nada.
 
 El servidor prepara esos listados. Si seguís conversando, las preguntas y
 respuestas anteriores se envían a Anthropic, y pueden incluir esos nombres y
-horarios. Evitá pegar datos clínicos o personales. El consentimiento 2.5 explica
+horarios. Evitá pegar datos clínicos o personales. El consentimiento 2.6 explica
 este uso de la agenda. El acceso de Lupita no abre los registros clínicos.
 
 ## Nombres y proveedores
@@ -100,7 +98,7 @@ lo impide también.
 El PDF que exportás desde el Recorrido sale de la app **sin cifrar**: queda bajo
 tu cuidado, como cualquier registro en papel. Queda registrada la preparación de
 la copia; volver a imprimir desde la hoja ya abierta no agrega otro registro. El
-consentimiento 2.5 se lo cuenta a la paciente. Ver
+consentimiento 2.6 se lo cuenta a la paciente. Ver
 `10-el-hilo-y-el-recorrido.md`.
 
 ## Respaldos y eliminación
@@ -116,7 +114,7 @@ todavía no estaba aprobada cuando se hizo la copia. Esa clave puede conservarse
 **hasta 12 meses** en un respaldo mensual, aunque ya se haya borrado de la base
 con la que trabaja la app. Si el audio no se pudo borrar, esa copia de la clave
 podría permitir abrirlo. Aprobar hoy no cambia los respaldos anteriores. El
-consentimiento 2.5 cuenta los dos plazos.
+consentimiento 2.6 cuenta los dos plazos.
 
 Quitar la clave activa no garantiza que hayan desaparecido todas las copias.
 Los pedidos de borrado se siguen con reintentos; el funcionamiento y la
@@ -124,7 +122,7 @@ restauración de los respaldos requieren comprobación.
 
 ## Autorización y revocación
 
-La versión vigente del texto de autorización es la **2.5**. Revocar la
+La versión vigente del texto de autorización es la **2.6**. Revocar la
 autorización impide grabaciones futuras. No borra la historia que ya quedó
 guardada.
 
@@ -145,24 +143,27 @@ la app no lo ejecuta, y la 2.4 dejó de prometerlo.
 
 ## Firmas anteriores
 
-**Las firmas de versiones anteriores, incluida la 2.4, necesitan que la paciente firme la 2.5**. Las anteriores a la 2.5 no explican la consulta de agenda de Lupita
+**Las firmas de versiones anteriores, incluida la 2.5, necesitan que la paciente firme la 2.6**. La 2.5 decía
+que el audio se iba subiendo en partes mientras se grababa, que el servidor lo descifraba en un archivo temporal y
+que la copia cifrada del teléfono no se borraba: el grabador de hoy sube el archivo entero al terminar, el
+servidor lo descifra en memoria y la copia del teléfono se borra al confirmar la subida. Las anteriores a la 2.5
+no explican la consulta de agenda de Lupita
 ni que los datos de agenda pueden enviarse en el historial del chat. Las anteriores a la 2.4 prometen
 derechos que la app no ejecuta. Las anteriores a la 2.3 no cuentan cómo ocurre el
-borrado en AssemblyAI, la copia cifrada que queda en el teléfono, que el
-borrador de la IA se guarda antes de aprobar ni lo que Anthropic recibe después
-de aprobar. Las anteriores a la 2.2 tampoco cuentan los plazos reales de borrado
-y de respaldo, que el resumen del proceso lo propone la IA ni el descifrado en
-archivo temporal. La app no bloquea
+borrado en AssemblyAI, que el borrador de la IA se guarda antes de aprobar ni
+lo que Anthropic recibe después de aprobar. Las anteriores a la 2.2 tampoco
+cuentan los plazos reales de borrado y de respaldo ni que el resumen del
+proceso lo propone la IA. La app no bloquea
 la grabación con una firma anterior y no te sugiere la nueva en pantalla:
 depende de que la pidas vos.
 
 <!-- fuentes:
 src/lib/consentimiento-hechos.ts
 src/lib/consentimiento.ts
-src/lib/audio/grabadora.ts
-src/lib/audio/cifrado.ts
-src/lib/audio/almacen.ts
-src/lib/audio/sincronizar.ts
+src/components/grabacion/GrabadorSesion.tsx
+src/lib/grabacion-storage.ts
+src/lib/grabacion-cifrado.ts
+src/hooks/useGrabacionSesion.ts
 src/lib/glosario.ts
 src/lib/prisma-encryption.ts
 src/app/api/_lib/casos-uso/audio.ts
@@ -170,7 +171,6 @@ src/app/api/_lib/casos-uso/sesion/aprobar.ts
 src/app/api/_lib/casos-uso/trabajos/politica.ts
 src/app/api/_lib/casos-uso/trabajos/ejecutar-borrado-r2.ts
 src/app/api/_lib/casos-uso/hilo/exportar.ts
-processor/audio_entrada.py
 processor/asr_assemblyai.py
 processor/processor.py
 prisma/migrations/20260916013000_inmutabilidad/migration.sql

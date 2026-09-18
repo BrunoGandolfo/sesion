@@ -161,7 +161,9 @@ export function prefijoAudio(organizationId: string, sesionId: string): string {
   return `${organizationId}/${sesionId}/`;
 }
 
-/** Key del segmento `indice` de una sesión: `<org>/<sesion>/<indice>`. */
+/** Key del objeto `indice` de una sesión: `<org>/<sesion>/<indice>`. El
+ *  grabador sube un solo archivo, el 0; el índice queda por el payload de
+ *  borrar_audio_r2, que borra por prefijo e índices. */
 export function keyAudio(
   organizationId: string,
   sesionId: string,

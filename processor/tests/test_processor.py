@@ -4,9 +4,6 @@ resultado nota, fallos transitorios/definitivos, lease perdido, y los
 trabajos durables. Sin red.
 """
 import logging
-from contextlib import nullcontext
-from pathlib import Path
-from audio_entrada import AudioPreparado
 
 import pytest
 
@@ -37,7 +34,7 @@ def sesion(**extra) -> SesionReclamada:
         paciente_id="p1",
         orientacion_teorica="cbt_mi",
         terminos_asr=["GTFS"],
-        audio={"clave": "k", "segmentos": [{"indice": 0, "key": "org/s1/0", "iv": "iv", "bytes": 10}]},
+        audio={"clave": "k", "iv": "iv", "key": "org/s1/0"},
         checkpoint=None,
     )
     base.update(extra)
@@ -48,7 +45,7 @@ def sesion(**extra) -> SesionReclamada:
 def pasos(mocker):
     """Pasos exitosos por defecto; cada test rompe el que le interesa."""
     mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
-    mocker.patch("processor.armar_audio", side_effect=lambda *a: nullcontext(AudioPreparado(Path("audio.wav"), 120000, [])))
+    mocker.patch("processor.descargar_y_descifrar", return_value=b"audio")
     mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
     mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
     mocker.patch("processor.formatear_para_llm", return_value="[00:00] Terapeuta: hola")
@@ -118,7 +115,7 @@ def test_analizar_no_genera_feedback_y_suma_speech_analytics(pasos):
 
 
 def test_con_checkpoint_no_descarga_ni_transcribe(pasos):
-    descargar = pasos["mocker"].patch("processor.armar_audio")
+    descargar = pasos["mocker"].patch("processor.descargar_y_descifrar")
     transcribir = pasos["mocker"].patch("processor.transcribir")
 
     processor.procesar_sesion(
@@ -153,7 +150,7 @@ def test_fallo_transitorio_en_asr_se_informa_como_no_definitivo_con_el_paso(paso
 
 
 def test_fallo_definitivo_en_descifrado(pasos):
-    pasos["mocker"].patch("processor.armar_audio", side_effect=PipelineError("descifrado_error", "No se pudo descifrar el audio"))
+    pasos["mocker"].patch("processor.descargar_y_descifrar", side_effect=PipelineError("descifrado_error", "No se pudo descifrar el audio"))
 
     processor.procesar_sesion(sesion())
 
@@ -271,21 +268,53 @@ def test_un_5xx_del_lease_no_lo_pierde(pasos):
 
 # Pasos reales ──────────────────────────────────────────────────────────────
 
-def test_transcribir_sin_segmentos_es_asr_vacio(mocker, tmp_path):
-    archivo = tmp_path / "audio.wav"
-    archivo.write_bytes(b"audio")
+def test_descargar_descifra_el_archivo_con_la_clave_y_el_iv_de_la_sesion(mocker):
+    descargas = []
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or (b"cifrado", {})))
+    descifrar = mocker.patch("processor.descifrar", return_value=b"audio en claro")
+
+    audio = {"clave": "clave", "iv": "iv0", "key": "org/s1/0"}
+    assert processor.descargar_y_descifrar("s1", audio, 1) == b"audio en claro"
+    assert descargas == ["org/s1/0"]
+    assert descifrar.call_args.args[1:] == ("clave", "iv0")
+
+
+def test_descargar_sin_clave_key_o_iv_es_definitivo():
+    for audio in ({"clave": "", "iv": "i", "key": "k"}, {"clave": "c", "iv": "", "key": "k"}, {"clave": "c", "iv": "i", "key": ""}, None):
+        with pytest.raises(PipelineError) as exc:
+            processor.descargar_y_descifrar("s1", audio, 1)
+        assert exc.value.codigo == "audio_sin_clave" and exc.value.definitivo
+
+
+def test_descargar_con_r2_caido_es_transitorio(mocker):
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=RuntimeError("boom"))
+    with pytest.raises(PipelineError) as exc:
+        processor.descargar_y_descifrar("s1", {"clave": "c", "iv": "i", "key": "k"}, 1)
+    assert exc.value.codigo == "r2_error" and not exc.value.definitivo
+
+
+def test_descifrado_roto_es_definitivo_y_no_loguea_la_clave(mocker, caplog):
+    mocker.patch("processor.r2_client.descargar_audio", return_value=(b"cifrado", {}))
+    mocker.patch("processor.descifrar", side_effect=ValueError("tag invalido"))
+    with caplog.at_level(logging.ERROR), pytest.raises(PipelineError) as exc:
+        processor.descargar_y_descifrar("s1", {"clave": "CLAVE-SECRETA", "iv": "i", "key": "k"}, 1)
+    assert exc.value.codigo == "descifrado_error" and exc.value.definitivo
+    assert "CLAVE-SECRETA" not in caplog.text
+
+
+def test_transcribir_sin_segmentos_es_asr_vacio(mocker):
     mocker.patch("processor.asr_assemblyai.transcribir", return_value={"segments": []})
     with pytest.raises(PipelineError) as exc:
-        processor.transcribir("s1", archivo)
+        processor.transcribir("s1", b"audio")
     assert exc.value.codigo == "asr_vacio" and exc.value.definitivo
 
 
-def test_transcribir_pasa_los_terminos_y_no_los_loguea(mocker, caplog, tmp_path):
-    archivo = tmp_path / "audio.wav"
-    archivo.write_bytes(b"audio")
+def test_transcribir_pasa_los_terminos_y_no_los_loguea(mocker, caplog):
     asr = mocker.patch("processor.asr_assemblyai.transcribir", return_value=TRANSCRIPCION)
     with caplog.at_level(logging.DEBUG):
-        processor.transcribir("s1", archivo, ["NOMBRE-SECRETO", "GTFS"])
+        processor.transcribir("s1", b"audio", ["NOMBRE-SECRETO", "GTFS"])
+    # El ASR recibe un flujo binario con el audio, sin pasar por disco.
+    assert asr.call_args.args[0].read() == b"audio"
     assert asr.call_args.args[1] == ["NOMBRE-SECRETO", "GTFS"]
     mensajes = [r.getMessage() for r in caplog.records]
     assert any("2 terminos ASR" in m for m in mensajes)
@@ -348,25 +377,3 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
 def test_un_tipo_desconocido_no_lanza():
     res = processor.ejecutar_trabajo({"tipo": "desconocido"})
     assert res["ok"] is False and "desconocido" in res["error"]
-
-
-def test_huecos_se_avisan_y_persisten_antes_del_asr_sin_perder_pausas(pasos, caplog):
-    hueco = {"inicio": 59800, "fin": 60000, "siguienteIndice": 1, "motivo": "interrupcion"}
-    pausa = {"inicio": 118000, "fin": None, "siguienteIndice": 2, "motivo": "manual"}
-    pasos["mocker"].patch("processor.armar_audio", side_effect=lambda *a: nullcontext(AudioPreparado(Path("audio.wav"), 117800, [hueco])))
-    s = sesion()
-    s.audio["pausas"] = [pausa]
-    with caplog.at_level(logging.WARNING):
-        processor.procesar_sesion(s)
-    assert "Audio posiblemente incompleto" in caplog.text
-    assert pasos["lease"].call_args.kwargs["pausas_audio"] == [pausa, hueco]
-
-
-@pytest.mark.parametrize("status", [409, 503])
-def test_no_transcribe_si_no_se_pudo_guardar_el_aviso_de_hueco(pasos, status):
-    hueco = {"inicio": 59800, "fin": 60000, "siguienteIndice": 1, "motivo": "interrupcion"}
-    pasos["mocker"].patch("processor.armar_audio", side_effect=lambda *a: nullcontext(AudioPreparado(Path("audio.wav"), 117800, [hueco])))
-    pasos["lease"].return_value = RespuestaApp(ok=False, status=status)
-    asr = pasos["mocker"].patch("processor.transcribir")
-    processor.procesar_sesion(sesion())
-    asr.assert_not_called()
