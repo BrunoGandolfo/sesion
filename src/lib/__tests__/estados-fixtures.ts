@@ -92,7 +92,7 @@ export const CLAVE_AUDIO = Buffer.alloc(32, 7).toString("base64");
 
 export interface OpcionesSesion {
   estado: EstadoSesion;
-  /** true (default): audio en R2 con clave y dos segmentos. */
+  /** true (default): audio en R2 con clave e IV. */
   audio?: boolean;
   transcripcion?: string | null;
   notaIa?: NotaSoap | null;
@@ -155,18 +155,7 @@ async function crearSesionUnaVez(
           feedbackEstado: opciones.feedbackEstado ?? "no_pedido",
           falloCodigo: opciones.falloCodigo ?? null,
           ...cifrarSesion(sesionId, campos),
-          segmentos: conAudio
-            ? {
-                create: [0, 1].map((indice) => ({
-                  indice,
-                  organizationId: org.orgId,
-                  iv: randomBytes(12),
-                  bytes: 1000 + indice,
-                  sha256: "a".repeat(64),
-                  confirmadoEn: new Date(),
-                })),
-              }
-            : undefined,
+          audioIv: conAudio ? randomBytes(12) : null,
         },
       },
     },

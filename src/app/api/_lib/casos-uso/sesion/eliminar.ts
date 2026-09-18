@@ -1,9 +1,8 @@
 // Eliminar: solo desde `fallida`. Borra la fila entera (transcripción, nota
-// IA, feedback, segmentos por cascada) y libera el turno para volver a
-// grabar. El audio en R2 se borra después, con reintentos: en la MISMA
-// transacción queda el trabajo `borrar_audio_r2` con el prefijo y los
-// índices, porque los segmentos se van de la base junto con la sesión y el
-// trabajo no puede volver a leerlos.
+// IA, feedback) y libera el turno para volver a grabar. El audio en R2 se
+// borra después, con reintentos: en la MISMA transacción queda el trabajo
+// `borrar_audio_r2` con el prefijo y el índice del archivo, porque la sesión
+// se va de la base y el trabajo no puede volver a leerla.
 //
 // El DELETE lleva el estado de partida y la organización en el WHERE; si
 // count = 0 la transacción se deshace y el trabajo no queda.
@@ -44,7 +43,6 @@ export async function eliminarSesion({
         estado: true,
         audioEstado: true,
         turno: { select: { pacienteId: true } },
-        segmentos: { select: { indice: true }, orderBy: { indice: "asc" } },
       },
     });
     if (!existente) throw new ApiError("Sesión clínica no encontrada", 404);
@@ -59,7 +57,7 @@ export async function eliminarSesion({
         tipo: "borrar_audio_r2",
         payload: {
           prefijo: prefijoAudio(organizationId, sesionId),
-          indices: existente.segmentos.map((s) => s.indice),
+          indices: [0],
         },
         organizationId,
         sesionId,
@@ -76,7 +74,7 @@ export async function eliminarSesion({
         409,
       );
     }
-    return { audioPorBorrar, segmentos: existente.segmentos.length };
+    return { audioPorBorrar };
   });
 
   await registrarAuditoria({
@@ -88,7 +86,6 @@ export async function eliminarSesion({
     entidadId: sesionId,
     detalle: {
       audioPorBorrar: resultado.audioPorBorrar,
-      segmentos: resultado.segmentos,
     },
   });
 

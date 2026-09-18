@@ -345,18 +345,17 @@ describe("reintentar y eliminar (desde fallida)", () => {
     expect(await filaDe(base.prisma, sesionId)).not.toBeNull();
   });
 
-  it("eliminar borra la fila y sus segmentos y deja el trabajo con prefijo e índices, en una transacción", async () => {
+  it("eliminar borra la fila y deja el trabajo con prefijo e índice del archivo, en una transacción", async () => {
     const { sesionId, turnoId } = await crearSesion(base.prisma, org, { estado: "fallida", transcripcion: TRANSCRIPCION });
     const auditoria = auditoriaEnMemoria();
     const r = await eliminarSesion({ ...comun(sesionId), usuarioId: org.userId, registrarAuditoria: auditoria.registrar });
     expect(r).toEqual({ eliminada: true, audioPorBorrar: true });
     expect(await filaDe(base.prisma, sesionId)).toBeNull();
-    expect(await base.prisma.audioSegmento.count({ where: { sesionId } })).toBe(0);
     // El turno queda libre para volver a grabar.
     expect(await base.prisma.turno.findUnique({ where: { id: turnoId } })).not.toBeNull();
     const [trabajo] = await trabajosDe(base.prisma, sesionId);
     expect(trabajo.tipo).toBe("borrar_audio_r2");
-    expect(trabajo.payload).toEqual({ prefijo: `${org.orgId}/${sesionId}/`, indices: [0, 1] });
+    expect(trabajo.payload).toEqual({ prefijo: `${org.orgId}/${sesionId}/`, indices: [0] });
     expect(auditoria.eventos.map((e) => e.accion)).toEqual(["sesion.eliminar"]);
   });
 

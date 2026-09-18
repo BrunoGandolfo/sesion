@@ -65,7 +65,6 @@ model Organization {
   enviosSms        EnvioSms[]
   consentimientos  ConsentimientoGrabacion[]
   sesionesClinicas SesionClinica[]
-  audioSegmentos   AudioSegmento[]
   trabajos         Trabajo[]
   hotWords         HotWord[]
   hilos            Hilo[]
@@ -614,14 +613,19 @@ model SesionClinica {
   estado EstadoSesion @default(grabando)
 
   // ── Audio ──────────────────────────────────────────────────────────────
-  // Se graba en segmentos independientes de ~60 s, cifrados en el teléfono
-  // con esta clave y subidos mientras se graba (tabla audio_segmentos).
+  // Un solo archivo por sesión, cifrado en el teléfono con esta clave al
+  // terminar de grabar y subido entero a R2 (key `<org>/<sesion>/0`,
+  // calculada en estados.ts). Mientras se graba, cada trozo se cifra con la
+  // misma clave y un IV propio antes de guardarse en el navegador.
   audioEstado         EstadoAudio @default(sin_audio) @map("audio_estado")
   /// Campo lógico `audioClave`: clave AES-256 del audio, cifrada por la
-  /// extensión. Es la única clave de la sesión; el IV de cada segmento vive
-  /// en audio_segmentos.iv. Se destruye (NULL) en la misma transacción que
+  /// extensión. La genera el servidor al crear la sesión y el teléfono la
+  /// pide para cifrar. Se destruye (NULL) en la misma transacción que
   /// aprueba: aunque el borrado en R2 tarde, el audio ya no se puede abrir.
   audioClaveEncrypted Bytes?      @map("audio_clave_encrypted")
+  /// IV (12 bytes, en claro: no es secreto) con que el teléfono cifró el
+  /// archivo que subió. Lo escribe upload-url; el worker lo recibe al reclamar.
+  audioIv             Bytes?      @map("audio_iv")
   duracionAudioSeg    Int?        @map("duracion_audio_seg")
   /// Tramos en pausa tal como los reporta el teléfono: [{ inicio, fin }].
   /// Sin cifrar: marcas de tiempo, no contenido.
@@ -689,7 +693,6 @@ model SesionClinica {
   creadaEn      DateTime @default(now()) @map("creada_en")
   actualizadaEn DateTime @updatedAt @map("actualizada_en")
 
-  segmentos AudioSegmento[]
 
   // Ficha, "Ahora" y huérfanas: WHERE organization_id = ? AND estado IN (…).
   @@index([organizationId, estado])
@@ -706,33 +709,6 @@ model SesionClinica {
 /// (HEAD). confirmadoEn null = reservado, no confirmado. Se borra con la
 /// sesión (eliminar); el trabajo borrar_audio_r2 lleva en su payload lo que
 /// necesita para borrar los objetos.
-model AudioSegmento {
-  sesionId       String    @map("sesion_id")
-  organizationId String    @map("organization_id")
-  indice         Int
-  /// 12 bytes aleatorios generados en el teléfono para este segmento. Un IV
-  /// por segmento evita repetir nonce con la misma clave (la falla grave de
-  /// AES-GCM) sin depender de ninguna regla de derivación. No es secreto: va
-  /// en claro.
-  iv             Bytes
-  bytes          Int
-  sha256         String    @db.Char(64)
-  /// Inicio en el reloj monotónico de captura, en milisegundos. Primero cero;
-  /// null en registros anteriores cuya medida se desconoce.
-  inicioMs       Float?    @map("inicio_ms")
-  /// Esta pieza continúa el archivo de la anterior: no se decodifica sola. El
-  /// worker concatena la corrida antes de decodificarla. Falso en la primera
-  /// pieza de cada corrida, y en los registros anteriores a las corridas.
-  continuacion   Boolean   @default(false)
-  confirmadoEn   DateTime? @map("confirmado_en")
-
-  sesion       SesionClinica @relation(fields: [sesionId], references: [id], onDelete: Cascade)
-  organization Organization  @relation(fields: [organizationId], references: [id])
-
-  // Inventario de una sesión, en orden: WHERE sesion_id = ? ORDER BY indice.
-  @@id([sesionId, indice])
-  @@map("audio_segmentos")
-}
 
 // ============================================================================
 // Trabajo durable (efectos externos fuera del request)

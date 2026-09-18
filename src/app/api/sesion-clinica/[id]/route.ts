@@ -1,7 +1,7 @@
 // GET: la sesión para la UI, sin transcripción (tiene ruta propia). No hay
 // PATCH ni DELETE: cada transición es una ruta con nombre (aprobar,
-// reprocesar, reintentar, eliminar, feedback/reintentar) que escribe con el
-// estado de partida en el WHERE.
+// reprocesar, reintentar, eliminar, feedback/reintentar, volver-a-grabar) que
+// escribe con el estado de partida en el WHERE.
 
 import { db } from "@/lib/db";
 
@@ -39,3 +39,4 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return errorResponse(error);
   }
 }
+

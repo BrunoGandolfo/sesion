@@ -103,7 +103,7 @@ describe("aprobar", () => {
       ["borrar_audio_r2", "app", "pendiente"],
       ["integrar_contexto", "worker", "pendiente"],
     ]);
-    expect(trabajos[0].payload).toEqual({ prefijo: `${org.orgId}/${sesionId}/`, indices: [0, 1] });
+    expect(trabajos[0].payload).toEqual({ prefijo: `${org.orgId}/${sesionId}/`, indices: [0] });
     expect(trabajos[1].payload).toEqual({ sesionId, pacienteId: org.pacienteId });
     expect(trabajos[1].pacienteId).toBe(org.pacienteId);
 

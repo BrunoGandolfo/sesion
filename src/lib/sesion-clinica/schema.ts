@@ -206,20 +206,10 @@ const fechaIso = z.string().datetime();
 // tres pausas no son 50 minutos de trabajo.
 // ────────────────────────────────────────────────────────────────────────────
 
-const pausaHistoricaSchema = z.object({
+export const pausaGrabacionSchema = z.object({
   inicio: fechaIso,
   fin: fechaIso,
 });
-/** Marcas de audio medidas con reloj monotónico; no son fechas de pared. */
-export const pausaMedidaSchema = z.object({
-  inicio: z.number().finite().nonnegative(),
-  fin: z.number().finite().nonnegative().nullable(),
-  siguienteIndice: z.int().nonnegative(),
-  motivo: z.enum(["manual", "interrupcion", "limite"]),
-}).strict();
-export type PausaMedida = z.infer<typeof pausaMedidaSchema>;
-// La lectura conserva las pausas ya guardadas sin reescribir sus filas.
-export const pausaGrabacionSchema = z.union([pausaHistoricaSchema, pausaMedidaSchema]);
 export type PausaGrabacion = z.infer<typeof pausaGrabacionSchema>;
 
 export const pausasGrabacionSchema = z.array(pausaGrabacionSchema);
@@ -335,7 +325,6 @@ const intentoSchema = z.number().int().positive();
 
 /** POST [id]/lease */
 export const leaseSchema = z.object({
-  pausasAudio: z.array(pausaMedidaSchema).max(3600).optional(),
   intento: intentoSchema,
   /** En qué paso está (asr, nota…): sólo para la señal de vida. */
   paso: z.string().max(40).optional(),

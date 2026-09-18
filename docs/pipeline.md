@@ -1,23 +1,28 @@
 # Pipeline clínico: implementación y límites de main
 
-La rama `audio`, desde `34187da`, reconstruye captura, subida y ensamblado por
-fronteras medidas. Estado, API, evidencia y límites:
-`docs/pendientes/01-audio.md`. No se da por habilitada para uso clínico.
-
 ## Captura y subida
 
 La pantalla `src/app/(dashboard)/grabar/[turnoId]/page.tsx` usa
-`src/hooks/useAudioGrabacion.ts`. `src/lib/audio/cifrado.ts` cifra cada segmento
-comprimido antes de que `src/lib/audio/almacen.ts` lo escriba en IndexedDB.
-`src/lib/audio/sincronizar.ts` reconcilia la subida por las rutas `/api/audio`.
-`src/app/api/_lib/casos-uso/audio.ts` conserva la identidad de sesión y realiza
-el cierre mediante `audio_listo`. La ruta compatible de sesión por turno también
-delega en casos de uso; ya no es excepción del guardián de Prisma.
+`src/components/grabacion/GrabadorSesion.tsx` (un solo MediaRecorder con
+`pause()`/`resume()`, chunks de 1 s, wake lock, recuperación tras cierre) y
+`src/hooks/useGrabacionSesion.ts` para la subida. Al crear la sesión
+(`POST /api/sesion-clinica`, `casos-uso/audio.ts: prepararAudio`) el servidor
+genera la clave AES-256 de la sesión; el teléfono la pide por
+`POST /api/sesion-clinica/[id]/clave` y con ella cifra cada chunk antes de
+escribirlo en IndexedDB (`src/lib/grabacion-storage.ts`) y el archivo entero al
+terminar (`src/lib/grabacion-cifrado.ts`).
 
-El esquema guarda una clave por sesión y un IV por segmento. Las keys de R2 se
-calculan como organización/sesión/índice, sin persistir una key enviada por el
-cliente: `src/lib/sesion-clinica/estados.ts`. Se agregó únicamente `audio_segmentos.inicio_ms`, nullable y sin default, para el inicio
-medido con reloj monotónico. No se modificó el consentimiento.
+La subida son tres pasos: `POST [id]/upload-url` (grabando → subiendo, guarda
+el IV y devuelve la URL prefirmada), PUT directo a R2 y
+`POST [id]/upload-confirmar` (HeadObject; subiendo → procesando sólo si el
+objeto está, si no vuelve a grabando y responde 409).
+`POST [id]/volver-a-grabar` (subiendo → grabando) es la que pide el cliente
+para repetir una subida que falló. El turno pasa a realizado por
+`PATCH /api/turnos/[id]` desde la pantalla, con la subida confirmada.
+
+El esquema guarda la clave y el IV en la sesión (`audio_clave_encrypted`,
+`audio_iv`). La key de R2 se calcula como organización/sesión/0, sin persistir
+una key enviada por el cliente: `src/lib/sesion-clinica/estados.ts`.
 
 ## Estados y operaciones existentes
 
@@ -53,7 +58,7 @@ incrementa intento, genera un ticket y da un lease de cinco minutos.
 El payload incluye sesión, paciente, intento, ticket, orientación, vocabulario
 ASR, duración y uno de estos recursos:
 
-- audio: organización, clave descifrada, pausas y segmentos ordenados con índice, key, IV, bytes, SHA-256 e inicio medido (`inicioMs`);
+- audio: organización, clave descifrada, IV, key calculada y pausas;
 - checkpoint: transcripción ya guardada, métricas y modelo ASR.
 
 Con checkpoint no se vuelve a descargar ni a transcribir. El vocabulario es
@@ -79,17 +84,11 @@ las antiguas variables de entorno de lease.
 ## Worker, ASR y nota
 
 `processor/worker.py` ejecuta `processor/processor.py`.
-`processor/audio_entrada.py` verifica y descifra un segmento a la vez, lo decodifica
-con ffmpeg y arma un archivo temporal en disco para subirlo al ASR. La imagen
-`processor/Dockerfile` incluye ffmpeg/ffprobe. Se mide cada archivo decodificado
-(eliminando el padding final de AAC según MP4). Su inicio más esa duración indica
-hasta dónde llegó. El siguiente se recorta solamente por la diferencia positiva
-entre esa cobertura y su inicio; un hueco se conserva como interrupción, sin
-recortar el siguiente ni rellenar silencio. La duración final se compara con la
-suma exacta de muestras medidas menos las recortadas, nunca con segundos redondeados.
-La renovación del lease admite `pausasAudio`: antes del ASR conserva las pausas
-de captura y los huecos medidos en la columna existente `pausas`. La pantalla de sesión avisa si hay
-interrupciones. Ver evidencia y límites en `docs/pendientes/01-audio.md`.
+`descargar_y_descifrar` baja el archivo por su key (`processor/r2_client.py`)
+y lo descifra en memoria (`processor/crypto.py`, AES-256-GCM); `transcribir`
+manda esos bytes al ASR desde memoria. No se escribe audio en claro en disco y
+no hace falta ffmpeg (la imagen `processor/Dockerfile` todavía lo instala; no
+se usa).
 
 `processor/asr_assemblyai.py` usa la API REST de AssemblyAI. Los defaults
 de `processor/config.py` son universal-3-5-pro con fallback universal-2,

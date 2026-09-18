@@ -24,12 +24,19 @@ export const PROVEEDORES = {
 export const MEDIOS_CAPTURA = ["audio"] as const;
 
 /**
- * El audio se cifra EN EL TELÉFONO, por segmentos, mientras se graba
- * (esquema: audio_segmentos.iv, clave por sesión). Área 1 lo implementa;
- * si en algún momento el respaldo local quedara sin cifrar, esto pasa a
- * false y el texto deja de prometerlo.
+ * El audio se cifra EN EL TELÉFONO mientras se graba: cada trozo que entrega
+ * el micrófono se cifra con la clave de la sesión antes de guardarse en el
+ * navegador (src/lib/grabacion-storage.ts, guardarChunk), y el archivo
+ * entero se cifra con esa misma clave antes de subirse
+ * (src/lib/grabacion-cifrado.ts). grabacion-storage.test.ts mira lo escrito
+ * y comprueba que no queda audio en claro. Si en algún momento el respaldo
+ * local quedara sin cifrar, esto pasa a false y el texto deja de prometerlo.
  */
 export const RESPALDO_LOCAL_CIFRADO = true;
+
+/** El archivo se sube entero al terminar, no por tramos mientras se graba
+ * (useGrabacionSesion.subirAudioCifrado: upload-url → PUT → upload-confirmar). */
+export const AUDIO_SE_SUBE_AL_TERMINAR = true;
 
 /** Una clave AES distinta por sesión (sesiones_clinicas.audio_clave_encrypted). */
 export const CLAVE_POR_SESION = true;
@@ -93,19 +100,21 @@ export const LUPITA_HISTORIAL_A_ANTHROPIC = true;
  * la decisión de la profesional para hacerla vigente o rechazarla. */
 export const RESUMEN_PROPUESTO_POR_IA = true;
 
-/** audio_entrada.py: armar_audio usa TemporaryDirectory, escribe el audio
- * descifrado y elimina el directorio al salir, también ante excepciones. */
-export const AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL = true;
+/** processor.py: descargar_y_descifrar descifra en memoria y transcribir
+ * manda esos bytes al ASR desde memoria (io.BytesIO). No se escribe ningún
+ * archivo con audio en claro en el servidor. */
+export const AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL = false;
 
 /** sesion/resultado.ts guarda la nota de la IA (notaIa), cifrada, apenas
  * llega: antes de que la profesional la apruebe. Al aprobar se guarda aparte
  * la nota final y el borrador se conserva (se ve como "borrador original"). */
 export const BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR = true;
 
-/** audio/almacen.ts no tiene ninguna operación que borre segmentos o
- * grabaciones cifradas del navegador: sólo retirarCopiasViejas, que borra la
- * base vieja sin cifrar. La copia cifrada del teléfono se conserva. */
-export const COPIA_LOCAL_CIFRADA_SE_CONSERVA = true;
+/** grabar-view.tsx llama a limpiarGrabacion (grabacion-storage.ts) apenas
+ * upload-confirmar responde OK: la copia cifrada del teléfono se borra con
+ * la subida confirmada. Hasta ese momento se conserva, cifrada, para poder
+ * reintentar. */
+export const COPIA_LOCAL_CIFRADA_SE_CONSERVA = false;
 
 /** Workspace de Anthropic con retención deshabilitada. Verificado en la
  *  consola el 2026-09-04 (docs/operaciones.md §1). Renovar la fecha a mano. */

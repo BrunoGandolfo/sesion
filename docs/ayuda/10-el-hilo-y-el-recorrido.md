@@ -156,7 +156,7 @@ El archivo sale de la aplicación **sin cifrar**: queda bajo tu cuidado, como
 cualquier registro en papel. **Queda registrada la preparación de la copia**:
 abrir la hoja ya cuenta, con quién la abrió y cuándo, aunque después no
 imprimas. Volver a tocar **Imprimir o guardar PDF** en la hoja ya abierta no
-agrega otro registro. El consentimiento 2.5 se lo cuenta a la paciente; si firmó
+agrega otro registro. El consentimiento 2.6 se lo cuenta a la paciente; si firmó
 una versión anterior, necesita firmar la nueva.
 
 ## Lo que NO hace

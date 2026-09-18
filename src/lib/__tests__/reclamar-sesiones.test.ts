@@ -56,13 +56,13 @@ describe("reclamar sesiones", () => {
     expect(fila?.estado).toBe("procesando");
   });
 
-  it("entrega la clave descifrada y las keys calculadas de cada segmento; ningún payload trae una key persistida", async () => {
+  it("entrega la clave descifrada, el IV y la key calculada del archivo; ningún payload trae una key persistida", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "procesando" });
     const [s] = (await reclamar()).filter((x) => x.sesionClinicaId === sesionId);
     expect(s.audio?.clave).toBe(CLAVE_AUDIO);
-    expect(s.audio?.segmentos.map((seg) => seg.key)).toEqual([`${org.orgId}/${sesionId}/0`, `${org.orgId}/${sesionId}/1`]);
-    expect(s.audio?.segmentos[0].iv).toMatch(/^[A-Za-z0-9+/]+=*$/);
-    expect(Buffer.from(s.audio!.segmentos[0].iv, "base64")).toHaveLength(12);
+    expect(s.audio?.key).toBe(`${org.orgId}/${sesionId}/0`);
+    expect(s.audio?.iv).toMatch(/^[A-Za-z0-9+/]+=*$/);
+    expect(Buffer.from(s.audio!.iv, "base64")).toHaveLength(12);
     expect(s.checkpoint).toBeNull();
     expect(s.pacienteId).toBe(org.pacienteId);
     expect(s.orientacionTeorica).toBe("gestalt");

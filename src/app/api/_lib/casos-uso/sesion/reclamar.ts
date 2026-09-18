@@ -4,8 +4,8 @@
 // número nunca se repite ni se resetea. Lo que se entrega:
 //
 //   - el ticket (credencial para lease, checkpoint, asr y resultado);
-//   - el audio: la clave descifrada y, por segmento, la key calculada, el IV
-//     y el tamaño — sólo si todavía NO hay transcripción;
+//   - el audio: la clave descifrada, el IV y la key calculada del archivo —
+//     sólo si todavía NO hay transcripción;
 //   - el checkpoint: la transcripción ya hecha (reproceso, reintento tras un
 //     fallo del modelo): ningún intento vuelve a pagar el ASR;
 //   - paciente, orientación teórica y vocabulario del ASR (best-effort).
@@ -43,24 +43,15 @@ export function limiteReclamo(valor: string | null | undefined): number {
   return Math.min(n, LIMITE_RECLAMO_MAX);
 }
 
-export interface SegmentoEntregado {
-  indice: number;
-  /** `<org>/<sesion>/<indice>`: calculada, nunca persistida. */
-  key: string;
-  /** IV del segmento, base64. */
-  iv: string;
-  bytes: number;
-  sha256: string;
-  inicioMs: number | null;
-  continuacion: boolean;
-}
-
 export interface AudioEntregado {
   organizationId: string;
   pausas: unknown;
   /** Clave AES-256 del audio, base64. */
   clave: string;
-  segmentos: SegmentoEntregado[];
+  /** IV con que el teléfono cifró el archivo, base64. */
+  iv: string;
+  /** `<org>/<sesion>/0`: calculada, nunca persistida. */
+  key: string;
 }
 
 export interface CheckpointEntregado {
@@ -152,14 +143,11 @@ export async function reclamarSesiones({
         modeloAsr: true,
         speechAnalytics: true,
         audioEstado: true,
+        audioIv: true,
         // Campos lógicos: la extensión los descifra al leer.
         audioClave: true,
         transcripcion: true,
         turno: { select: { pacienteId: true } },
-        segmentos: {
-          select: { indice: true, iv: true, bytes: true, sha256: true, inicioMs: true, continuacion: true },
-          orderBy: { indice: "asc" },
-        },
         organization: {
           select: { configuracion: { select: { orientacionTeorica: true } } },
         },
@@ -177,20 +165,13 @@ export async function reclamarSesiones({
         : null;
 
     const audio: AudioEntregado | null =
-      !checkpoint && fila.audioEstado === "en_r2" && fila.audioClave
+      !checkpoint && fila.audioEstado === "en_r2" && fila.audioClave && fila.audioIv
         ? {
             clave: fila.audioClave,
+            iv: Buffer.from(fila.audioIv).toString("base64"),
+            key: keyAudio(fila.organizationId, c.id, 0),
             organizationId: fila.organizationId,
             pausas: fila.pausas ?? [],
-            segmentos: fila.segmentos.map((s) => ({
-              indice: s.indice,
-              key: keyAudio(fila.organizationId, c.id, s.indice),
-              iv: Buffer.from(s.iv).toString("base64"),
-              bytes: s.bytes,
-              sha256: s.sha256,
-              inicioMs: s.inicioMs,
-              continuacion: s.continuacion,
-            })),
           }
         : null;
 

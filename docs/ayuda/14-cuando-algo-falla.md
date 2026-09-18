@@ -31,63 +31,62 @@ enlace por correo. Detalle en `01-entrar-y-cuenta.md`.
 
 ### Se interrumpió la captura
 
-**Ves:** el estado **En pausa** y *"La captura se interrumpió. Este tramo puede
-estar incompleto; revisá el micrófono antes de reanudar."*
+**Ves:** la grabación pausada y una de estas líneas: *"Se cortó el micrófono. Lo
+grabado está a salvo."*, *"Dejó de entrar sonido y se pausó la grabación. Lo
+grabado está a salvo."*, *"La pantalla se apagó y se pausó la grabación. Lo
+grabado está a salvo."* o *"Llegaste a las 2 horas y media de grabación. Lo
+grabado está a salvo."*
 
-Pasa cuando entra una llamada, otra app se lleva el micrófono, o la pantalla se
-bloquea o pasa a otra app. Si el propio micrófono falla, puede decir: *"El
-micrófono interrumpió la captura. El último tramo puede estar incompleto."*
+Pasa cuando entra una llamada, otra app se lleva el micrófono, pasa un rato sin
+que entre sonido, la pantalla se apaga o se llega al límite de tiempo.
 
-**Qué hacer:** lo ya guardado se conserva, cifrado. Elegí **Reanudar grabación**
-o **Terminar y enviar**. Durante el corte no se graba, y la recuperación completa
-no está garantizada: el tramo que estaba en curso puede quedar incompleto.
+**Qué hacer:** lo ya guardado se conserva, cifrado. Elegí **Reanudar** o
+**Terminar la sesión** con lo que haya. Durante el corte no se graba, y la
+recuperación completa no está garantizada: lo que el teléfono no llegó a
+capturar no se puede recuperar.
 
 ### Se cerró el navegador o se apagó el teléfono
 
 **Qué hacer:** volvé a la pantalla de grabar de **ese mismo turno**, en el
-**mismo teléfono**. La app recupera lo guardado y dice *"Se recuperó lo guardado.
-El tramo que estaba en captura al cerrarse la app puede estar incompleto."*
-Después podés **Reanudar grabación** o **Terminar y enviar**. Volver a grabar no
-reemplaza la copia anterior.
+**mismo teléfono**. Si la app encuentra la copia cifrada dice *"Quedó una
+grabación de ~N min sin enviar"*: **Guardarla ahora** la envía (la app pide la
+clave al servidor y la abre ahí) y **Descartarla** la borra. Empezar una
+grabación nueva del mismo turno reemplaza la copia anterior.
 
-Si probás desde otro dispositivo, dice *"Ya existe audio en el servidor para este
-turno. Volvé al dispositivo que conserva la grabación; no se reemplazó nada."*
+### No se pudo guardar el audio
 
-### No se confirma el envío
+**Ves:** *"No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de
+nuevo."* y un botón **Reintentar**.
 
-**Ves:** *"No pudimos confirmar el envío. La copia cifrada se conserva y se
-reintentará."* y el botón **Comprobar y reintentar envío**.
+Puede ser la conexión. Nada se borra: el archivo cifrado sigue en memoria y la
+copia cifrada en el teléfono.
 
-Puede ser la conexión. La app reintenta sola y apenas vuelve la red. Si ya
-terminaste, el estado dice **Pendiente de envío** con **Enviar grabación
-pendiente**.
+**Qué hacer:** poné el teléfono en una conexión buena (wifi mejor que datos) y
+tocá **Reintentar**. Podés reintentar las veces que haga falta. No des por
+guardada una sesión hasta ver *"Te avisamos cuando la nota esté lista"*.
 
-**Qué hacer:** poné el teléfono en una conexión buena y mantené la pantalla
-abierta hasta ver **Audio recibido**.
+### La sesión se guardó pero el turno quedó agendado
 
-### No se pudo guardar un tramo en el teléfono
+**Ves:** *"La sesión se guardó, pero el turno quedó como agendado. Probá de
+nuevo."* y **Reintentar**.
 
-**Ves:** *"La captura se detuvo porque no se pudo guardar un segmento. Mantené
-esta página abierta y reintentá."*
+El audio ya está a salvo y la nota se está escribiendo. **Reintentar** repite
+solo el paso que marca el turno como realizado.
 
-Puede ser falta de espacio en el teléfono. **Qué hacer:** no cierres la pantalla,
-liberá espacio si podés y reintentá.
+### No se pudo capturar audio
 
-### El micrófono no entregó audio
+**Ves:** *"No se pudo capturar audio de la sesión."*
 
-**Ves:** *"El micrófono no entregó audio para este tramo. No se pudo recuperar;
-lo guardado anteriormente se conserva."*
-
-Ese tramo no se recupera. Revisá el micrófono y reanudá.
+Se grabó silencio o el micrófono no entregó nada. **Ese audio no se recupera.**
 
 ### No puedo empezar a grabar
 
-- **Falta la autorización** y el botón apagado: la paciente tiene que firmar la
-  autorización en la ficha.
-- *"Agendá el turno para grabar la sesión"*: no hay turno; agendalo primero.
-- *"Esta grabación está abierta en otra pestaña"*: cerrá la otra pestaña.
-- *"El micrófono o la pantalla se interrumpieron antes de empezar. Volvé a la app
-  y reintentá."*
+- **Falta la autorización** y el botón **Firmar autorización**: la paciente
+  tiene que firmar la autorización en la ficha.
+- Uno de estos, con un botón **Probá de nuevo**: *"No diste permiso para usar el
+  micrófono. Habilitalo y probá de nuevo."*, *"No encontramos un micrófono
+  disponible en este dispositivo."* o *"No pudimos acceder al micrófono. Cerrá
+  otras apps que lo estén usando y probá de nuevo."*
 - *"Este navegador no permite grabar Opus ni AAC"* o *"Este navegador no puede
   impedir dos grabaciones simultáneas. Usá un navegador actualizado."*:
   actualizá el navegador o usá otro.

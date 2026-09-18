@@ -46,8 +46,8 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 
 ## Qué pasa con tus datos y los de tus pacientes
 
-- Mientras grabás, el audio **se cifra en el teléfono, tramo por tramo**, antes de
-  guardarse, y viaja ya cifrado.
+- Mientras grabás, cada trozo de audio **se cifra en el teléfono** antes de
+  guardarse. Al terminar, el archivo entero se cifra y recién entonces viaja.
 - Al aprobar, la clave del audio se destruye en la base con la que trabaja la
   app y se pide borrar el audio remoto; si falla, se reintenta hasta 20 veces,
   durante unos 15 días, y después el borrado queda marcado como fallido.
@@ -61,10 +61,10 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 - Los respaldos diarios se conservan **30 días** y hay además una copia mensual
   que se conserva **hasta 12 meses**. No contienen audio, pero pueden conservar
   cifrada la clave de una sesión todavía no aprobada.
-- El audio se descifra para transcribirlo en un archivo temporal del servidor,
-  que se borra al terminar.
+- El audio se descifra para transcribirlo solo en memoria del servidor: no se
+  escribe en ningún archivo.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
-- La autorización vigente es la **2.5**. Las firmas anteriores necesitan que la
+- La autorización vigente es la **2.6**. Las firmas anteriores necesitan que la
   paciente firme la nueva. Ver `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.
@@ -95,8 +95,8 @@ src/app/(dashboard)/cobros/_components/cobros-view.tsx
 src/lib/deudas.ts
 src/app/(dashboard)/_components/kpis.tsx
 src/app/(dashboard)/config/_components/config-view.tsx
-src/lib/audio/grabadora.ts
-src/lib/audio/cifrado.ts
+src/lib/grabacion-storage.ts
+src/lib/grabacion-cifrado.ts
 src/app/api/_lib/casos-uso/trabajos/politica.ts
 src/components/clinico/HiloView.tsx
 src/lib/ayuda-corpus.ts

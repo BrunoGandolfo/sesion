@@ -18,8 +18,6 @@ del modelo con forma invalida dos veces), el resto si puede (red, timeouts,
 CODIGOS_DEFINITIVOS = frozenset(
     {
         "audio_sin_clave",
-        "audio_sin_segmentos",
-        "audio_dev",
         "descifrado_error",
         "asr_vacio",
         "asr_rechazado",

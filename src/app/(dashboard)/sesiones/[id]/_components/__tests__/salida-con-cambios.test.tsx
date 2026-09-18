@@ -270,15 +270,6 @@ it("si otra pestaña aprobó la misma generación, muestra la nota realmente apr
   expect(screen.queryByRole("button", { name: /Aprobar/ })).toBeNull();
 });
 
-
-it("avisa un hueco de audio en la nota recuperada del servidor", async () => {
-  vi.mocked(apiGet).mockResolvedValueOnce({ ...sesionEnRevision(), pausas: [{ inicio: 59800, fin: 60000, siguienteIndice: 1, motivo: "interrupcion" }] });
-  await abrirLaNota();
-  expect(screen.getByText("Audio posiblemente incompleto")).toBeTruthy();
-  expect(screen.getByText(/puede faltar parte de lo conversado/)).toBeTruthy();
-});
-
-
 describe("Para vos: estados y recuperación", () => {
   const pendiente = () => ({ ...sesionEnRevision(), feedbackEstado: "pendiente" as const, modeloAsr: "whisper" });
   beforeEach(() => { vi.mocked(apiGet).mockReset(); vi.mocked(apiPost).mockReset(); });

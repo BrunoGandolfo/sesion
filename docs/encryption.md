@@ -38,7 +38,7 @@ fechas y montos, `speech_analytics` (números), IP y navegador en
 `sesiones_acceso` e `intentos_acceso` (purgas según fecha y estado; no son treinta días desde la creación en todos los casos). La lista completa está en
 `docs/esquema.md`.
 
-El esquema PREVÉ audio cifrado por sesión (audio_clave_encrypted) y un IV por segmento (audio_segmentos.iv). La captura de main todavía guarda fragmentos locales sin cifrar y cifra el blob al terminar; no cumple la promesa de cifrado durante la grabación del consentimiento 2.0. La subida nueva está pendiente: ver `docs/pipeline.md`.
+El audio se cifra con una clave por sesión (`audio_clave_encrypted`, generada en el servidor y entregada al teléfono por `POST /api/sesion-clinica/[id]/clave`) y un IV para el archivo subido (`audio_iv`, en claro). En el teléfono cada trozo se cifra con esa clave y un IV propio antes de guardarse en IndexedDB (`src/lib/grabacion-storage.ts`); el archivo entero se cifra al terminar (`src/lib/grabacion-cifrado.ts`). Nada de eso pasa por esta capa: ver `docs/pipeline.md`.
 
 Los backups de la base se cifran con gpg (`docs/operaciones.md`). El workflow retiene diarios treinta días y mensuales 366 días; el consentimiento sólo informa treinta. Además, una copia puede conservar la clave de un audio todavía no aprobado. Destruir la clave en la fila activa no vuelve inaccesibles esas copias si se conservan las claves necesarias para descifrarlas.
 

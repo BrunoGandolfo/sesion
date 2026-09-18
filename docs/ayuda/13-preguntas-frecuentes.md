@@ -24,7 +24,7 @@ remoto, con hasta 20 reintentos durante unos 15 días; si no lo logra, el borrad
 queda marcado como fallido. Los respaldos diarios se conservan 30 días y los
 mensuales hasta 12 meses; no contienen audio, pero pueden conservar su clave
 cifrada, y con ella un audio que no se pudo borrar podría abrirse. La copia
-cifrada que queda en el navegador no se borra; la app ya no puede abrirla.
+cifrada del teléfono se borra cuando el servidor confirma que el archivo llegó.
 → `12-camino-del-audio-y-privacidad.md`
 
 **5. ¿La transcripción también se borra?**
@@ -32,22 +32,24 @@ No. La transcripción queda guardada, cifrada, junto con la nota. Está dicho en
 autorización que firma la paciente. → `12-camino-del-audio-y-privacidad.md`
 
 **6. ¿Puedo bloquear la pantalla mientras grabo?**
-Sí. Podés bloquear la pantalla o pasar a otra app: la grabación sigue y cada
-segundo queda guardado cifrado. Sesión igual pide mantener la pantalla encendida
-mientras grabás. Lo que sí corta la captura es que el micrófono deje de estar
-—una llamada, otra app que se lo lleve—. Al volver, mirá el medidor de sonido
-para confirmar que sigue entrando audio.
+Mejor no: dejá la pantalla encendida y Sesión abierta. La app pide mantenerla
+encendida; si el sistema la apaga igual, el teléfono puede dejar de entregar
+sonido y la grabación queda pausada con lo capturado hasta ahí, cifrado. Cada
+segundo queda guardado cifrado, así que lo grabado no se pierde. Al volver,
+revisá el estado y el medidor de sonido antes de seguir.
 → `07-grabar-una-sesion.md`
 
 **7. Pausé y me olvidé de reanudar. ¿Perdí la sesión?**
 No. Lo grabado hasta la pausa quedó guardado, cifrado. Mientras está pausada no
-se captura audio y el cronómetro se detiene. **Reanudar grabación** retoma la
-captura; lo que no se grabó durante la pausa no se recupera. → `07-grabar-una-sesion.md`
+se captura audio y el cronómetro se detiene. **Reanudar** retoma la captura en
+el mismo archivo; lo que no se grabó durante la pausa no se recupera.
+→ `07-grabar-una-sesion.md`
 
 **8. Entró una llamada y se cortó el micrófono.**
-La captura queda **En pausa** y lo ya grabado se conserva. Elegí **Reanudar
-grabación** o **Terminar y enviar**. El tramo que se estaba grabando puede quedar
-incompleto: la recuperación completa no está garantizada. → `14-cuando-algo-falla.md`
+La grabación queda pausada con *"Se cortó el micrófono. Lo grabado está a
+salvo."* Elegí **Reanudar** o **Terminar la sesión** con lo que haya. Durante el
+corte no se graba: la recuperación completa no está garantizada.
+→ `14-cuando-algo-falla.md`
 
 **9. ¿Cuánto tarda la nota?**
 No hay un tiempo fijo. Mientras se escribe ves **"Escribiendo la nota…"**; cuando

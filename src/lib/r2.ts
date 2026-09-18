@@ -1,6 +1,7 @@
 // Acceso a R2 (Cloudflare) por S3 API. Cuatro operaciones, las que usa el
-// pipeline: saber si está configurado, firmar el PUT del navegador,
-// verificar que el objeto llegó y borrarlo cuando la nota se aprueba.
+// pipeline: saber si está configurado, firmar el PUT del navegador
+// (generarUrlSubida), verificar que el objeto llegó (existeAudio) y borrarlo
+// cuando la nota se aprueba (borrarAudio).
 //
 // El audio NUNCA sube ni baja por acá: el navegador hace PUT directo a la
 // URL prefirmada (Vercel corta los requests en 4,5 MB) y el worker lo
@@ -16,7 +17,7 @@ import {
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import type { ObjetosAudio } from "@/app/api/_lib/casos-uso/audio";
+import type { AlmacenAudio } from "@/app/api/_lib/casos-uso/audio";
 
 interface R2Config {
   accountId: string;
@@ -45,26 +46,6 @@ function leerConfig(): R2Config | null {
 
 let clienteSingleton: R2Cliente | null = null;
 
-/** PUT inmutable; un reintento comprueba el mismo objeto, nunca lo pisa. */
-export const objetosAudio: ObjetosAudio = {
-  async firmar(key, descriptor) {
-    const { cliente, bucket } = obtenerCliente();
-    const headers = { "Content-Type": "application/octet-stream", "If-None-Match": "*", "x-amz-meta-sha256": descriptor.sha256 };
-    const url = await getSignedUrl(cliente, new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: headers["Content-Type"], ContentLength: descriptor.bytes, IfNoneMatch: "*", Metadata: { sha256: descriptor.sha256 } }), { expiresIn: 300, unhoistableHeaders: new Set(["x-amz-meta-sha256"]) });
-    return { url, headers };
-  },
-  async comprobar(key) {
-    const { cliente, bucket } = obtenerCliente();
-    try {
-      const r = await cliente.send(new HeadObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
-      return { existe: true, bytes: r.ContentLength ?? null, sha256: r.Metadata?.sha256 };
-    } catch (e) {
-      if ((e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return { existe: false, bytes: null };
-      throw new Error("No se pudo comprobar el segmento en R2");
-    }
-  },
-};
-
 function obtenerCliente(): R2Cliente {
   if (clienteSingleton) return clienteSingleton;
 
@@ -79,7 +60,6 @@ function obtenerCliente(): R2Cliente {
     region: "auto",
     // El cuerpo lo aporta después el navegador. El checksum automático del
     // SDK firmaría aquí el cuerpo vacío y R2 rechazaría el audio real.
-    // La huella del ciphertext se firma en metadata y se valida en el worker.
     requestChecksumCalculation: "WHEN_REQUIRED",
     endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
     credentials: {
@@ -98,6 +78,47 @@ function obtenerCliente(): R2Cliente {
  */
 export function r2Configurado(): boolean {
   return leerConfig() !== null;
+}
+
+export interface UrlSubida {
+  url: string;
+  expiraEn: Date;
+}
+
+/**
+ * URL prefirmada para que el NAVEGADOR haga PUT directo a R2 con el audio
+ * cifrado. Content-Type y Content-Length quedan firmados: el navegador tiene
+ * que mandar exactamente esos headers.
+ */
+export async function generarUrlSubida(
+  key: string,
+  opciones: {
+    contentType: string;
+    contentLength: number;
+    expiraEnSegundos?: number;
+  },
+): Promise<UrlSubida> {
+  const { cliente, bucket } = obtenerCliente();
+  const expiraEnSegundos = opciones.expiraEnSegundos ?? 60 * 60;
+
+  try {
+    const comando = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: opciones.contentType,
+      ContentLength: opciones.contentLength,
+    });
+    const url = await getSignedUrl(cliente, comando, {
+      expiresIn: expiraEnSegundos,
+    });
+    return {
+      url,
+      expiraEn: new Date(Date.now() + expiraEnSegundos * 1000),
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`No se pudo generar la URL de subida (${key}): ${msg}`);
+  }
 }
 
 /**
@@ -142,3 +163,9 @@ export async function borrarAudio(key: string): Promise<void> {
     throw new Error(`No se pudo borrar el audio de R2 (${key}): ${msg}`);
   }
 }
+
+/** Lo que los casos de uso de la subida piden de R2. */
+export const almacenAudio: AlmacenAudio = {
+  firmarSubida: generarUrlSubida,
+  existe: existeAudio,
+};
