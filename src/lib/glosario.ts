@@ -246,6 +246,17 @@ export const NO_VINO = "No vino";
 export const TURNO_SOLAPADO =
   "Ya tenés un turno a esa hora. Elegí otro horario, o cancelá el que está.";
 
+/** El mismo rechazo, diciendo contra qué turno choca: sin eso, la
+ *  profesional prueba horarios a ciegas. `desde` y `hasta` en hora de
+ *  Montevideo ("10:00", "10:50"). */
+export function TURNO_SOLAPADO_CON(
+  paciente: string,
+  desde: string,
+  hasta: string,
+): string {
+  return `Ya tenés un turno a esa hora: ${paciente}, de ${desde} a ${hasta}. Elegí otro horario, o cancelá el que está.`;
+}
+
 /** Revierte el cobro de un turno: vuelve a quedar sin cobrar. No es
  *  "Anular" ni "Eliminar pago": no se borra nada, se deshace lo último. */
 export const DESHACER_COBRO = "Deshacer cobro";

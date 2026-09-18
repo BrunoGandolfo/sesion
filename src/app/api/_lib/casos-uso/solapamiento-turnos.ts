@@ -51,7 +51,8 @@
 
 import type { db } from "@/lib/db";
 
-import { TURNO_SOLAPADO } from "@/lib/glosario";
+import { formatearHoraMvd } from "@/lib/fechas-montevideo";
+import { TURNO_SOLAPADO_CON } from "@/lib/glosario";
 
 import { ApiError } from "../responses";
 
@@ -119,6 +120,8 @@ export interface TurnoOcupado {
   id: string;
   fecha: Date;
   duracion: number;
+  /** Para decirle a la profesional con quién choca. No va al log. */
+  paciente: { nombre: string; apellido: string };
 }
 
 export interface BuscarSolapadoParams {
@@ -159,7 +162,12 @@ export async function buscarTurnoSolapado({
       fecha: { gt: desde, lt: hasta },
       ...(excluirTurnoId ? { id: { not: excluirTurnoId } } : {}),
     },
-    select: { id: true, fecha: true, duracion: true },
+    select: {
+      id: true,
+      fecha: true,
+      duracion: true,
+      paciente: { select: { nombre: true, apellido: true } },
+    },
     orderBy: { fecha: "asc" },
   });
 
@@ -174,15 +182,43 @@ export async function buscarTurnoSolapado({
 }
 
 /**
- * Lo mismo, pero lanzando el 409 que la UI ya sabe mostrar (los formularios
- * pintan `error.mensaje` de la API tal cual).
+ * El 409 de un choque. El mensaje nombra el turno que ocupa el lugar (los
+ * formularios pintan `error.mensaje` de la API tal cual), y el log deja el
+ * intervalo pedido y el turno que lo ocupa: sin esa línea, un rechazo no se
+ * puede diagnosticar después. En el log van solo ids, fechas y duraciones,
+ * nunca datos de la paciente.
  */
+export function rechazoPorSolapamiento({
+  organizationId,
+  intervalo,
+  excluirTurnoId,
+  ocupado,
+}: Omit<BuscarSolapadoParams, "prisma"> & { ocupado: TurnoOcupado }): ApiError {
+  console.warn(
+    `[turnos] solapamiento org=${organizationId}` +
+      ` pedido=${intervalo.inicio.toISOString()} duracion=${intervalo.duracionMin}` +
+      (excluirTurnoId ? ` turno=${excluirTurnoId}` : "") +
+      ` ocupa=${ocupado.id} ocupaFecha=${ocupado.fecha.toISOString()}` +
+      ` ocupaDuracion=${ocupado.duracion}`,
+  );
+  const paciente = `${ocupado.paciente.nombre} ${ocupado.paciente.apellido}`.trim();
+  return new ApiError(
+    TURNO_SOLAPADO_CON(
+      paciente,
+      formatearHoraMvd(ocupado.fecha),
+      formatearHoraMvd(new Date(finDe({ inicio: ocupado.fecha, duracionMin: ocupado.duracion }))),
+    ),
+    409,
+  );
+}
+
+/** Lo mismo que buscarTurnoSolapado, pero lanzando ese 409. */
 export async function assertSinSolapamiento(
   params: BuscarSolapadoParams,
 ): Promise<void> {
   const ocupado = await buscarTurnoSolapado(params);
 
   if (ocupado) {
-    throw new ApiError(TURNO_SOLAPADO, 409);
+    throw rechazoPorSolapamiento({ ...params, ocupado });
   }
 }

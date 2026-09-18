@@ -54,6 +54,17 @@ describe("agenda semanal sin tarjetas tapadas", () => {
     }
   });
 
+  it("un turno al que no vino no se ve como uno que ocupa el horario", () => {
+    const vino = turno("Ana", 10);
+    const noVino = { ...turno("Bea", 12), estado: "ausente" as const };
+    render(<WeekView anchor={dia} today={dia} turnos={[vino, noVino]} onEventClick={() => {}} />);
+    const [ocupa, libre] = screen.getAllByRole("button");
+    expect(libre.textContent).toContain("No vino");
+    expect(libre.getAttribute("aria-label")).toContain("No vino");
+    expect(ocupa.textContent).not.toContain("No vino");
+    expect(libre.className).not.toBe(ocupa.className);
+  });
+
   it("no muestra turnos de otra semana ni agrega acciones a un calendario vacío", () => {
     const otro = turno("Otro", 10);
     otro.fecha = new Date(2026, 8, 20, 10);
