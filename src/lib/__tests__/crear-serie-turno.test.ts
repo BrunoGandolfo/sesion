@@ -38,7 +38,7 @@ import { fechasDeSerie } from "@/app/api/_lib/casos-uso/serie-turnos";
 import { actualizarTurno } from "@/app/api/_lib/casos-uso/turnos";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { agregarDiasMvd, instanteMvd } from "@/lib/fechas-montevideo";
-import { TURNO_SOLAPADO } from "@/lib/glosario";
+import { TURNO_SOLAPADO_CON } from "@/lib/glosario";
 
 import { PrismaClient } from "@prisma/client";
 
@@ -244,7 +244,10 @@ describe("crearTurno con frecuencia", () => {
 
     await expect(
       crearTurno({ ...base(orgId, pacienteId), frecuencia: "semanal" }),
-    ).rejects.toMatchObject({ message: TURNO_SOLAPADO, status: 409 });
+    ).rejects.toMatchObject({
+      message: TURNO_SOLAPADO_CON("Lucía Ferreira", "15:00", "15:50"),
+      status: 409,
+    });
 
     expect(await prismaRaw.serieTurno.count({ where: { organizationId: orgId } })).toBe(0);
     expect(await prismaRaw.turno.count({ where: { organizationId: orgId } })).toBe(1);

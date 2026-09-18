@@ -122,13 +122,15 @@ nuevo el turno.
 
 ## La nota no llega
 
-### Sigue diciendo "Escribiendo la nota…"
+### Sigue diciendo "Procesando la sesión de …"
 
-Es normal que tarde. La pantalla se actualiza sola mientras la sesión está en
+Es normal que tarde unos minutos. La app se fija sola mientras la sesión está en
 proceso.
 
-**Qué hacer:** salí y volvé más tarde. La nota, cuando esté, aparece en **Hoy**,
-en el bloque de pendientes, y en la ficha con el chip **Para revisar**.
+**Qué hacer:** seguí con lo tuyo. Con la app abierta, cuando la nota esté te
+aparece el aviso *"La nota de … está lista"* con **Revisar**. Si cerraste la
+app, la nota aparece en **Hoy**, en el bloque de pendientes, y en la ficha con
+el chip **Para revisar**.
 
 ### Dice "No pudimos escribir la nota"
 

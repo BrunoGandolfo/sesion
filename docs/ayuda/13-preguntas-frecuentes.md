@@ -55,13 +55,18 @@ lleva el micrófono del todo, la grabación termina ahí y la pantalla ofrece
 → `14-cuando-algo-falla.md`
 
 **9. ¿Cuánto tarda la nota?**
-No hay un tiempo fijo. Mientras se escribe ves **"Escribiendo la nota…"**; cuando
+No hay un tiempo fijo, suelen ser unos minutos. Mientras se escribe, en la ficha
+y en **Hoy** ves **"Procesando la sesión de …"** con un anillo que gira; cuando
 está lista, el chip pasa a **Para revisar** y aparece en los pendientes de
 **Hoy**. → `08-la-nota-clinica.md`
 
 **10. ¿La app me avisa al teléfono cuando la nota está lista?**
-No. Hay que entrar a la app. Aparece arriba en **Hoy**, en el bloque de
-pendientes. → `02-pantalla-hoy.md`
+Con la app abierta, sí: en la pantalla en la que estés aparece *"La nota de …
+está lista"* con el botón **Revisar**, y se queda hasta que lo tocás o lo
+cerrás con la cruz. Si la nota no se pudo escribir, el aviso lo dice y lleva a
+la nota para reintentar. Con el teléfono bloqueado o la app cerrada no llega
+nada: la próxima vez que entres, la nota está en los pendientes de **Hoy**.
+→ `02-pantalla-hoy.md`
 
 **11. Edité la nota y me fui sin aprobar. ¿Se guardó?**
 No. La nota se guarda una sola vez, al aprobar. Si intentás salir con cambios, la

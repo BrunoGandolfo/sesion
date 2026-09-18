@@ -4,7 +4,7 @@ import * as React from "react";
 import { agregarDiasMvd, esMismoDiaMvd, esMismoMesMvd, inicioDeMesMvd, inicioDeSemanaMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaLarga } from "@/lib/format";
 
-import { AGENDADO, MES_LEYENDA, PAGADO } from "@/lib/glosario";
+import { AGENDADO, MES_LEYENDA, NO_VINO, PAGADO } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
 interface Props {
@@ -71,9 +71,11 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
                       key={t.id}
                       aria-hidden="true"
                       className={`h-[6px] w-[6px] rounded-full ${
-                        t.pagoEstado === "pagado"
-                          ? "bg-sage-500"
-                          : "bg-gold-500"
+                        t.estado === "ausente" || t.estado === "cancelado"
+                          ? "bg-ink-300"
+                          : t.pagoEstado === "pagado"
+                            ? "bg-sage-500"
+                            : "bg-gold-500"
                       }`}
                     />
                   ))}
@@ -106,6 +108,10 @@ function Leyenda() {
       <span className="inline-flex items-center gap-1.5">
         <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-sage-500" />
         {PAGADO}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-ink-300" />
+        {NO_VINO}
       </span>
     </div>
   );

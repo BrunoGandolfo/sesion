@@ -7,6 +7,7 @@
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { clavesDeRiesgo } from "@/components/grabacion/RiesgoDetectadoBanner";
 import { apiGet } from "@/lib/api-client";
+import { enProceso } from "@/lib/notas-en-proceso";
 import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 import type {
   Configuracion,
@@ -284,4 +285,32 @@ export async function leerHoy(): Promise<EstadoHoy> {
     nombre: config?.nombreProfesional?.trim() || null,
     ahora: new Date(),
   };
+}
+
+/** Una sesión del día cuya nota se está escribiendo. */
+export interface SesionEnProceso {
+  turnoId: string;
+  sesionId: string;
+  paciente: string;
+}
+
+/**
+ * Las sesiones del día que están subiendo o en manos del worker, en el orden
+ * de los turnos. Hoy las muestra arriba con el indicador que gira y se las
+ * pasa al aviso del panel para que avise cuando la nota esté lista.
+ */
+export function sesionesEnProceso(
+  turnos: TurnoConPaciente[],
+): SesionEnProceso[] {
+  return turnos.flatMap((turno) =>
+    turno.sesionClinica && enProceso(turno.sesionClinica.estado)
+      ? [
+          {
+            turnoId: turno.id,
+            sesionId: turno.sesionClinica.id,
+            paciente: `${turno.paciente.nombre} ${turno.paciente.apellido}`.trim(),
+          },
+        ]
+      : [],
+  );
 }

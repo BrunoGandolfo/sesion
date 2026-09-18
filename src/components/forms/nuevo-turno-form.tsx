@@ -159,6 +159,11 @@ export function NuevoTurnoForm({
   const [nuevoNombre, setNuevoNombre] = React.useState("");
   const [nuevoTelefono, setNuevoTelefono] = React.useState("");
   const [errorNuevo, setErrorNuevo] = React.useState<string | null>(null);
+  // El paciente que ya creó "Crear a X". Si el turno se rechaza (un 409 por
+  // choque, por ejemplo) y ella reintenta con otra hora, se reusa: antes cada
+  // reintento creaba otro paciente con el mismo nombre. Se olvida al empezar
+  // a crear de nuevo.
+  const [pacienteCreado, setPacienteCreado] = React.useState<string | null>(null);
 
   const [propuesta, setPropuesta] = React.useState<Date | null>(null);
   // La consulta del último turno llega segundos después de elegir el
@@ -265,6 +270,7 @@ export function NuevoTurnoForm({
     setNuevoTelefono("");
     setErrorNuevo(null);
     setPropuesta(null);
+    setPacienteCreado(null);
     setCreando(true);
     setAbierto(false);
   };
@@ -360,9 +366,12 @@ export function NuevoTurnoForm({
 
     setEnviando(true);
     try {
-      if (creando) {
+      if (creando && pacienteCreado) {
+        idPaciente = pacienteCreado;
+      } else if (creando) {
         try {
           idPaciente = await crearPaciente();
+          setPacienteCreado(idPaciente);
         } catch (err) {
           setErrorNuevo(
             err instanceof ApiClientError

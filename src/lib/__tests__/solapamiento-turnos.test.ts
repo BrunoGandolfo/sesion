@@ -38,7 +38,13 @@ import {
   seSolapan,
 } from "@/app/api/_lib/casos-uso/solapamiento-turnos";
 import { __resetLlaveroForTests } from "@/lib/llavero";
-import { TURNO_SOLAPADO } from "@/lib/glosario";
+import {
+  agregarDiasMvd,
+  formatearHoraMvd,
+  instanteMvd,
+  partesMvd,
+} from "@/lib/fechas-montevideo";
+import { TURNO_SOLAPADO_CON } from "@/lib/glosario";
 
 import {
   conectarBaseDeTest,
@@ -200,7 +206,7 @@ async function crearOrgConPacientes() {
     prismaRaw.paciente.create({
       data: {
         nombre: "Lucía",
-        apellido: "Gómez",
+        apellido: "Fernández",
         telefono: "+59899123456",
         tarifa: 1000,
         organizationId: org.id,
@@ -260,6 +266,16 @@ async function turnoExistente(
   return turno.id;
 }
 
+/** El mensaje del 409 contra el turno de Lucía (el de turnoExistente). */
+function choqueCon(inicio: Date, duracion = 50): string {
+  const fin = new Date(inicio.getTime() + duracion * MS_POR_MINUTO);
+  return TURNO_SOLAPADO_CON(
+    "Lucía Fernández",
+    formatearHoraMvd(inicio),
+    formatearHoraMvd(fin),
+  );
+}
+
 async function postTurno(fecha: Date, duracion = 50) {
   const res = await crearTurno(
     pedidoPost({
@@ -312,9 +328,39 @@ describe("POST /api/turnos rechaza el horario ocupado", () => {
     const { status, cuerpo } = await postTurno(enUnaSemana());
 
     expect(status).toBe(409);
-    expect((cuerpo as { error: string }).error).toBe(TURNO_SOLAPADO);
+    expect((cuerpo as { error: string }).error).toBe(choqueCon(enUnaSemana()));
     // Y no se creó nada.
     expect(await prismaRaw.turno.count()).toBe(1);
+  });
+
+  it("el 409 dice con quién choca y de qué hora a qué hora, en hora de Montevideo; el log deja ids y fechas, sin nombres", async () => {
+    const orgId = await crearOrgConPacientes();
+    const { anio, mes, dia } = partesMvd(agregarDiasMvd(new Date(), 7));
+    const diezEnPunto = instanteMvd(anio, mes, dia, 10, 0);
+    const ocupa = await turnoExistente(orgId, diezEnPunto, 50);
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const pedido = instanteMvd(anio, mes, dia, 10, 30);
+      const { status, cuerpo } = await postTurno(pedido, 50);
+
+      expect(status).toBe(409);
+      const mensaje = (cuerpo as { error: string }).error;
+      expect(mensaje).toContain("Lucía Fernández");
+      expect(mensaje).toContain("10:00");
+      expect(mensaje).toContain("10:50");
+
+      const lineas = aviso.mock.calls.map((c) => String(c[0]));
+      const linea = lineas.find((l) => l.startsWith("[turnos] solapamiento"));
+      expect(linea).toBeDefined();
+      expect(linea).toContain(`pedido=${pedido.toISOString()}`);
+      expect(linea).toContain("duracion=50");
+      expect(linea).toContain(`ocupa=${ocupa}`);
+      expect(linea).toContain(`ocupaFecha=${diezEnPunto.toISOString()}`);
+      expect(linea).not.toMatch(/Lucía|Fernández|Pérez/);
+    } finally {
+      aviso.mockRestore();
+    }
   });
 
   it("se pisa por diez minutos: 409", async () => {
@@ -413,6 +459,40 @@ describe("POST /api/turnos rechaza el horario ocupado", () => {
   });
 });
 
+describe("POST /api/turnos con alGrabar: el turno que nace al grabar", () => {
+  function postAlGrabar(fecha: Date, extra: Record<string, unknown> = {}) {
+    return crearTurno(
+      pedidoPost({
+        pacienteId: otroPacienteId,
+        fecha: fecha.toISOString(),
+        duracion: 50,
+        modalidad: "presencial",
+        alGrabar: true,
+        ...extra,
+      }),
+    );
+  }
+
+  it("no pasa por la regla de choques: la sesión ya está ocurriendo", async () => {
+    const orgId = await crearOrgConPacientes();
+    await turnoExistente(orgId, enUnaSemana());
+
+    const res = await postAlGrabar(enUnaSemana(10));
+
+    expect(res.status).toBe(201);
+    expect(await prismaRaw.turno.count()).toBe(2);
+  });
+
+  it("no sirve para una serie: 400 y no se crea nada", async () => {
+    await crearOrgConPacientes();
+
+    const res = await postAlGrabar(enUnaSemana(), { frecuencia: "semanal" });
+
+    expect(res.status).toBe(400);
+    expect(await prismaRaw.turno.count()).toBe(0);
+  });
+});
+
 describe("PATCH /api/turnos/[id] y el horario ocupado", () => {
   it("mover un turno encima de otro: 409 y no se movió", async () => {
     const orgId = await crearOrgConPacientes();
@@ -425,7 +505,7 @@ describe("PATCH /api/turnos/[id] y el horario ocupado", () => {
     );
 
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe(TURNO_SOLAPADO);
+    expect((await res.json()).error).toBe(choqueCon(enUnaSemana()));
     const fila = await prismaRaw.turno.findUniqueOrThrow({
       where: { id: movido },
     });

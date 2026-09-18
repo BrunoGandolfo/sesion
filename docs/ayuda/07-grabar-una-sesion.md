@@ -157,7 +157,9 @@ Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
   horas no se grabó.
 - **No continúa una grabación después de cerrar la app**: lo que quedó se envía
   o se descarta.
-- **No te avisa al teléfono** cuando la nota está lista.
+- **No te avisa con el teléfono bloqueado ni con la app cerrada** cuando la
+  nota está lista: el aviso aparece dentro de la app, en la pantalla en la que
+  estés, mientras la tengas abierta.
 - **No traduce todos los errores del micrófono**: si el navegador niega el
   permiso, puede mostrar su propio mensaje, a veces en inglés.
 

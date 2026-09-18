@@ -19,6 +19,7 @@ import { Button, Segmented, Sheet, Toast } from "@/components/ui";
 import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
 import { apiGet, esAbort } from "@/lib/api-client";
+import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
 import { ALGO_FALLO, FICHA, RECORRIDO, SESIONES } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
@@ -183,6 +184,22 @@ export function PacienteDetailView({ id }: { id: string }) {
   const { sesionClinica: sesionHoy, loading: sesionHoyCargando } =
     useGrabacionSesion({ turno: turnoHoy, onTurnoActualizado: refetchData });
 
+  // La nota de hoy se está escribiendo: que la siga el aviso del panel, así
+  // ella se entera aunque se vaya de la ficha (avisos-de-notas.tsx).
+  const nombrePaciente =
+    fichaActual.tipo === "lista"
+      ? `${fichaActual.ficha.paciente.nombre} ${fichaActual.ficha.paciente.apellido}`.trim()
+      : null;
+  React.useEffect(() => {
+    if (sesionHoy && nombrePaciente && enProceso(sesionHoy.estado)) {
+      seguirNota({
+        sesionId: sesionHoy.id,
+        turnoId: sesionHoy.turnoId,
+        paciente: nombrePaciente,
+      });
+    }
+  }, [sesionHoy, nombrePaciente]);
+
   const consentimientoVigente =
     consentimiento && consentimiento.id === id ? consentimiento.vigente : null;
 
@@ -242,6 +259,7 @@ export function PacienteDetailView({ id }: { id: string }) {
             {activeTab === "sesiones" && (
               <SesionesTab
                 pacienteId={paciente.id}
+                pacienteNombre={`${paciente.nombre} ${paciente.apellido}`.trim()}
                 turnoHoy={turnoHoy}
                 sesionHoy={sesionHoy}
                 sesionHoyCargando={sesionHoyCargando}

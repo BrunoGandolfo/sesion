@@ -44,6 +44,13 @@ export const turnoCreateSchema = z.object({
   /** "unico" agenda uno solo; semanal/quincenal crean una serie. Opcional
    *  para quien agenda uno sin pensar en series (la pantalla de grabar). */
   frecuencia: frecuenciaTurnoSchema.default("unico"),
+  /** El turno nace al grabar, con la hora de este instante: la sesión ya
+   *  está ocurriendo y no pasa por la regla de choques (decisión del
+   *  dueño). Solo para un turno suelto: una serie no nace grabando. */
+  alGrabar: z.literal(true).optional(),
+}).refine((d) => !d.alGrabar || d.frecuencia === "unico", {
+  message: "Un turno que nace al grabar no puede ser una serie",
+  path: ["alGrabar"],
 });
 
 export const turnoUpdateSchema = z.object({

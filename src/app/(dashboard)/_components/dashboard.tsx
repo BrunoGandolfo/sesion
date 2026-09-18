@@ -6,6 +6,9 @@
 import * as React from "react";
 
 import { EsqueletoHoy } from "@/components/esqueletos";
+import { useSeguimientoNotas } from "@/components/layout/avisos-de-notas";
+import { IndicadorProcesando } from "@/components/ui/procesando";
+import { seguirNota } from "@/lib/notas-en-proceso";
 import { Toast } from "@/components/ui";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
 import type { VarianteToast } from "@/components/ui/toast";
@@ -34,6 +37,7 @@ import {
   leerHoy,
   parsePaciente,
   repartirElDia,
+  sesionesEnProceso,
   type EstadoHoy,
   type JsonPaciente,
 } from "./datos";
@@ -97,6 +101,30 @@ export function Dashboard() {
       cancelado = true;
     };
   }, [reloadKey]);
+
+  // Las notas del día que se están escribiendo: las sigue el aviso del panel
+  // (avisos-de-notas.tsx) y, cuando alguna termina, Hoy se vuelve a leer
+  // para que la fila pase de "Procesando" a "Revisar nota" sin recargar.
+  const enProcesoHoy = React.useMemo(
+    () => (estado ? sesionesEnProceso(estado.data.sesionesHoy) : []),
+    [estado],
+  );
+  React.useEffect(() => {
+    for (const sesion of enProcesoHoy) seguirNota(sesion);
+  }, [enProcesoHoy]);
+
+  const { resueltas } = useSeguimientoNotas();
+  // Una vez por sesión: si la lectura nueva todavía la trajera en proceso,
+  // no se entra en una vuelta de recargas.
+  const recargadasPor = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    const terminada = enProcesoHoy.find(
+      (s) => resueltas.includes(s.sesionId) && !recargadasPor.current.has(s.sesionId),
+    );
+    if (!terminada) return;
+    recargadasPor.current.add(terminada.sesionId);
+    recargar();
+  }, [enProcesoHoy, resueltas, recargar]);
 
   const abrirTurno = React.useCallback(() => {
     setTurnoSheet(true);
@@ -210,6 +238,17 @@ export function Dashboard() {
         <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
 
         <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
+          {/* La del turno de ahora la muestra su card, más abajo. */}
+          {enProcesoHoy.some((s) => s.turnoId !== ahoraTurno?.id) ? (
+            <div className="flex flex-col gap-2">
+              {enProcesoHoy
+                .filter((s) => s.turnoId !== ahoraTurno?.id)
+                .map((s) => (
+                  <IndicadorProcesando key={s.sesionId} paciente={s.paciente} />
+                ))}
+            </div>
+          ) : null}
+
           <AgendaDelDia
           turnos={turnos}
           ahora={ahora}
