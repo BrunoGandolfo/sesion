@@ -83,7 +83,9 @@ describe("Pantalla de entrada", () => {
 
   it("distingue el almacenamiento cifrado de la copia PDF exportada", () => {
     render(<LoginPage />);
-    expect(screen.getByText(ENTRADA_CONFIDENCIALIDAD).textContent).toContain("antes de guardarse y enviarse");
+    // Del audio sólo se afirma lo cierto: la app no lo cifra, viaja por TLS.
+    expect(screen.getByText(ENTRADA_CONFIDENCIALIDAD).textContent).toContain("El audio viaja por una conexión cifrada.");
+    expect(screen.getByText(ENTRADA_CONFIDENCIALIDAD).textContent).not.toMatch(/se cifra (por tramos )?en tu dispositivo/);
     expect(screen.queryByText(/La copia local previa no está cifrada/)).toBeNull();
     expect(screen.getByText(/Podés exportar el Recorrido a PDF/).textContent).toContain("sin cifrar");
     expect(screen.queryByText(/se borra cuando aprobás la nota/)).toBeNull();

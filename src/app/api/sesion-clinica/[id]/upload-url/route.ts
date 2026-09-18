@@ -1,9 +1,8 @@
 // Paso 1 de la subida directa a R2 (sin pasar por Vercel).
 //
-// El navegador ya cifró el audio (AES-256-GCM, con la clave que le entregó
-// [id]/clave). Acá se guarda el IV, se emite una URL prefirmada PUT de R2 con
-// la key calculada de la sesión, Content-Type y Content-Length firmados,
-// válida 60 min, y la sesión pasa grabando → subiendo. El navegador hace el
+// Se emite una URL prefirmada PUT de R2 con la key calculada de la sesión,
+// Content-Type y Content-Length firmados, válida 60 min, y la sesión pasa
+// grabando → subiendo. El audio va tal como se grabó. El navegador hace el
 // PUT directo a R2 (paso 2) y después confirma con POST [id]/upload-confirmar
 // (paso 3), que verifica con HeadObject.
 //

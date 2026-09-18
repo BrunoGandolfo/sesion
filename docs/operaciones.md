@@ -228,8 +228,10 @@ cabeceras y código XML del proveedor, redactando firmas. No clasificar cualquie
 403 como CORS: revisar origen/métodos/headers del bucket, credenciales, expiración
 y headers firmados según la evidencia.
 
-**Audio pendiente de borrado.** La aprobación destruye audioClave y encola el
-borrado después de confirmar la base. Mirar trabajos, intentos y último error;
+**Audio pendiente de borrado.** La aprobación encola el borrado después de
+confirmar la base. La app no cifra el audio: mientras el objeto exista en R2 se
+puede escuchar con acceso al bucket, así que un borrado fallido importa más que
+antes (ya no hay clave que destruir). Mirar trabajos, intentos y último error;
 no buscar una columna de key del audio del esquema anterior. El payload conserva
 prefijo e índices. Las políticas son acotadas, en
 `src/app/api/_lib/casos-uso/trabajos/politica.ts`.

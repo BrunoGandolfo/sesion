@@ -1,7 +1,8 @@
 # Sesión Processor
 
-Worker Python que procesa las sesiones grabadas: descarga el audio cifrado
-de R2, lo descifra en memoria, transcribe con AssemblyAI, genera la nota SOAP
+Worker Python que procesa las sesiones grabadas: descarga el audio de R2 (la
+app no lo cifra), comprueba que sea una sola grabación (una cabecera EBML),
+transcribe con AssemblyAI, genera la nota SOAP
 y el feedback con Anthropic y reporta el resultado al callback de la app.
 Toda la comunicación con la app pasa por `app_client.py`.
 
@@ -19,7 +20,7 @@ python worker.py         # loop: cada POLL_INTERVAL_SECONDS consulta /pendientes
 Modo manual para una sola sesión:
 
 ```bash
-python worker.py manual <sesion_clinica_id> <audio_r2_key> <clave_cifrado> <iv>
+python worker.py manual <item.json>
 ```
 
 ## Correr los tests

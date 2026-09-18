@@ -1,8 +1,8 @@
-// Tests de la subida del audio cifrado a R2, tal como está hoy.
+// Tests de la subida del audio a R2, tal como está hoy.
 //
 // POR QUÉ ESTOS Y NO OTROS
 //
-// `subirAudioCifrado` y `volverAGrabando` (src/hooks/useGrabacionSesion.ts)
+// `subirAudio` y `volverAGrabando` (src/hooks/useGrabacionSesion.ts)
 // son funciones de módulo, no hooks: se pueden probar con vitest puro
 // poniendo dobles de `fetch` y de `XMLHttpRequest` en el global. No hacen
 // falta ni jsdom ni @testing-library, que el proyecto no tiene y que no se
@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ErrorSubida,
-  subirAudioCifrado,
+  subirAudio,
   volverAGrabando,
 } from "@/hooks/useGrabacionSesion";
 
@@ -143,15 +143,18 @@ function xhrQue(opciones: OpcionesXhr = {}) {
   };
 }
 
-function datosDeGrabacion(pausas?: { inicio: string; fin: string }[]) {
+const DIAGNOSTICO = {
+  eventos: [{ t: "2026-09-18T13:09:37.000Z", tipo: "hueco-chunks" as const, ms: 509_000 }],
+  chunks: 2400,
+  bytes: 3,
+};
+
+function datosDeGrabacion(pausas: { inicio: string; fin: string }[] = []) {
   return {
-    audioBlob: new Blob([new Uint8Array([1, 2, 3])], {
-      type: "application/octet-stream",
-    }),
-    claveCifrado: "clave-base64",
-    ivCifrado: "iv-base64",
+    audioBlob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm;codecs=opus" }),
     duracionSegundos: 2400,
-    ...(pausas ? { pausas } : {}),
+    pausas,
+    diagnostico: DIAGNOSTICO,
   };
 }
 
@@ -179,14 +182,14 @@ afterEach(() => {
 
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("subirAudioCifrado — camino feliz", () => {
+describe("subirAudio — camino feliz", () => {
   it("hace los tres pasos en orden y devuelve la sesión actualizada", async () => {
     globalThis.fetch = fetchQueDevuelve(
       OK_URL,
       OK_CONFIRMAR,
     ) as unknown as typeof fetch;
 
-    const resultado = await subirAudioCifrado(SESION_ID, datosDeGrabacion());
+    const resultado = await subirAudio(SESION_ID, datosDeGrabacion());
 
     expect(llamadas.map((l) => l.url)).toEqual([
       `/api/sesion-clinica/${SESION_ID}/upload-url`,
@@ -197,24 +200,34 @@ describe("subirAudioCifrado — camino feliz", () => {
     expect(resultado).toEqual(SESION_ACTUALIZADA.data);
   });
 
-  it("manda el IV al paso 1; la clave no viaja nunca, ni al PUT", async () => {
-    // La clave la generó el servidor y se la dio al grabador: mandarla de
-    // vuelta sería pasear material criptográfico por la red sin motivo.
-    globalThis.fetch = fetchQueDevuelve(
-      OK_URL,
-      OK_CONFIRMAR,
-    ) as unknown as typeof fetch;
+  it("no manda IV ni clave: el audio no se cifra en la app", async () => {
+    globalThis.fetch = fetchQueDevuelve(OK_URL, OK_CONFIRMAR) as unknown as typeof fetch;
 
-    await subirAudioCifrado(SESION_ID, datosDeGrabacion());
+    await subirAudio(SESION_ID, datosDeGrabacion());
 
-    expect(cuerpoDe(0)).toEqual({
-      iv: "iv-base64",
-      tamanoBytes: 3,
-      mime: "application/octet-stream",
-    });
-    expect(JSON.stringify(llamadas.map((l) => l.init?.body ?? ""))).not.toContain("clave-base64");
-    // Lo que viaja a R2 es el blob, a secas.
-    expect(ultimoPut.enviado).toBeInstanceOf(Blob);
+    expect(cuerpoDe(0)).toEqual({ tamanoBytes: 3, mime: "audio/webm;codecs=opus" });
+  });
+
+  it("el Blob viaja a R2 TAL CUAL: el mismo objeto, sin arrayBuffer() ni copias en memoria", async () => {
+    // Dos horas son ~120 MB. Copiarlo a memoria (y peor, pasarlo por base64)
+    // es lo que congelaba la pantalla y podía matar la pestaña.
+    globalThis.fetch = fetchQueDevuelve(OK_URL, OK_CONFIRMAR) as unknown as typeof fetch;
+    const datos = datosDeGrabacion();
+    const copiar = vi.spyOn(datos.audioBlob, "arrayBuffer");
+
+    await subirAudio(SESION_ID, datos);
+
+    expect(ultimoPut.enviado).toBe(datos.audioBlob);
+    expect(copiar).not.toHaveBeenCalled();
+  });
+
+  it("el diagnóstico del grabador viaja con la confirmación", async () => {
+    globalThis.fetch = fetchQueDevuelve(OK_URL, OK_CONFIRMAR) as unknown as typeof fetch;
+
+    await subirAudio(SESION_ID, datosDeGrabacion());
+
+    expect(cuerpoDe(1).diagnostico).toEqual(DIAGNOSTICO);
+    expect(cuerpoDe(1).duracionAudioSeg).toBe(2400);
   });
 
   it("usa exactamente los headers que firmó el servidor", async () => {
@@ -225,7 +238,7 @@ describe("subirAudioCifrado — camino feliz", () => {
       OK_CONFIRMAR,
     ) as unknown as typeof fetch;
 
-    await subirAudioCifrado(SESION_ID, datosDeGrabacion());
+    await subirAudio(SESION_ID, datosDeGrabacion());
 
     expect(ultimoPut.headers).toEqual(URL_PREFIRMADA.data.headers);
   });
@@ -240,7 +253,7 @@ describe("subirAudioCifrado — camino feliz", () => {
     ) as unknown as typeof fetch;
 
     const vistos: number[] = [];
-    await subirAudioCifrado(SESION_ID, datosDeGrabacion(), (p) =>
+    await subirAudio(SESION_ID, datosDeGrabacion(), (p: number) =>
       vistos.push(p),
     );
 
@@ -248,7 +261,7 @@ describe("subirAudioCifrado — camino feliz", () => {
   });
 });
 
-describe("subirAudioCifrado — las pausas", () => {
+describe("subirAudio — las pausas", () => {
   it("manda las pausas cerradas al confirmar", async () => {
     globalThis.fetch = fetchQueDevuelve(
       OK_URL,
@@ -261,9 +274,10 @@ describe("subirAudioCifrado — las pausas", () => {
       },
     ];
 
-    await subirAudioCifrado(SESION_ID, datosDeGrabacion(pausas));
+    await subirAudio(SESION_ID, datosDeGrabacion(pausas));
 
     expect(cuerpoDe(1)).toEqual({
+      diagnostico: DIAGNOSTICO,
       key: URL_PREFIRMADA.data.key,
       duracionAudioSeg: 2400,
       pausas,
@@ -277,11 +291,12 @@ describe("subirAudioCifrado — las pausas", () => {
     ) as unknown as typeof fetch;
     const abierta = { inicio: "2026-09-05T15:10:00.000Z", fin: "" };
 
-    await subirAudioCifrado(SESION_ID, datosDeGrabacion([abierta]));
+    await subirAudio(SESION_ID, datosDeGrabacion([abierta]));
 
     // Sin pausas válidas el campo se OMITE, no se manda vacío: así un
     // reintento de la misma subida no borra las pausas ya guardadas.
     expect(cuerpoDe(1)).toEqual({
+      diagnostico: DIAGNOSTICO,
       key: URL_PREFIRMADA.data.key,
       duracionAudioSeg: 2400,
     });
@@ -293,13 +308,13 @@ describe("subirAudioCifrado — las pausas", () => {
       OK_CONFIRMAR,
     ) as unknown as typeof fetch;
 
-    await subirAudioCifrado(SESION_ID, datosDeGrabacion());
+    await subirAudio(SESION_ID, datosDeGrabacion());
 
     expect(cuerpoDe(1)).not.toHaveProperty("pausas");
   });
 });
 
-describe("subirAudioCifrado — cada paso falla distinto", () => {
+describe("subirAudio — cada paso falla distinto", () => {
   it("si el paso 1 falla, dice paso 'url' y no toca R2", async () => {
     globalThis.fetch = fetchQueDevuelve({
       ok: false,
@@ -307,7 +322,7 @@ describe("subirAudioCifrado — cada paso falla distinto", () => {
       cuerpo: { error: "La sesión ya tiene una subida en curso." },
     }) as unknown as typeof fetch;
 
-    const error = await subirAudioCifrado(
+    const error = await subirAudio(
       SESION_ID,
       datosDeGrabacion(),
     ).catch((e: unknown) => e);
@@ -329,7 +344,7 @@ describe("subirAudioCifrado — cada paso falla distinto", () => {
     }) as unknown as typeof XMLHttpRequest;
     globalThis.fetch = fetchQueDevuelve(OK_URL) as unknown as typeof fetch;
 
-    const error = await subirAudioCifrado(
+    const error = await subirAudio(
       SESION_ID,
       datosDeGrabacion(),
     ).catch((e: unknown) => e);
@@ -347,7 +362,7 @@ describe("subirAudioCifrado — cada paso falla distinto", () => {
     }) as unknown as typeof XMLHttpRequest;
     globalThis.fetch = fetchQueDevuelve(OK_URL) as unknown as typeof fetch;
 
-    const error = await subirAudioCifrado(
+    const error = await subirAudio(
       SESION_ID,
       datosDeGrabacion(),
     ).catch((e: unknown) => e);
@@ -362,7 +377,7 @@ describe("subirAudioCifrado — cada paso falla distinto", () => {
       cuerpo: { error: "No se pudo verificar el audio en R2" },
     }) as unknown as typeof fetch;
 
-    const error = await subirAudioCifrado(
+    const error = await subirAudio(
       SESION_ID,
       datosDeGrabacion(),
     ).catch((e: unknown) => e);
@@ -377,7 +392,7 @@ describe("subirAudioCifrado — cada paso falla distinto", () => {
       cuerpo: null,
     }) as unknown as typeof fetch;
 
-    const error = await subirAudioCifrado(
+    const error = await subirAudio(
       SESION_ID,
       datosDeGrabacion(),
     ).catch((e: unknown) => e);

@@ -1,19 +1,18 @@
-// La grabación, del lado del servidor: crear la sesión con su clave, entregar
-// la clave al teléfono, firmar la subida del archivo cifrado y cerrar la
-// sesión recién cuando R2 confirma que el archivo llegó.
+// La grabación, del lado del servidor: crear la sesión, firmar la subida del
+// archivo y cerrar la sesión recién cuando R2 confirma que el archivo llegó.
 //
-// Un solo archivo por sesión, cifrado en el teléfono al terminar. El servidor
-// no lleva inventario de trozos: lo único que decide el cierre es HeadObject
-// sobre la key calculada (`<org>/<sesion>/0`, estados.ts).
+// Un solo archivo por sesión, tal como lo grabó el teléfono. La app no cifra
+// el audio: viaja por TLS, R2 lo cifra en reposo y se borra tras procesarse.
+// El servidor no lleva inventario de trozos: lo único que decide el cierre es
+// HeadObject sobre la key calculada (`<org>/<sesion>/0`, estados.ts).
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 
 import type { db } from "@/lib/db";
 import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { PRUEBA_TOPE } from "@/lib/glosario";
 import { TOPE_GRABACIONES_PRUEBA } from "@/lib/limites-prueba";
-import { cifrarSesion } from "@/lib/prisma-encryption";
 import { keyAudio } from "@/lib/sesion-clinica/estados";
 import type { PausaGrabacion } from "@/lib/sesion-clinica/schema";
 
@@ -49,17 +48,14 @@ export async function leerSesionPorTurno({ prisma, organizationId, turnoId }: Ba
 
 export async function prepararAudio({ prisma, organizationId, turnoId }: Base & { turnoId: string }) {
   return prisma.$transaction(async (tx) => {
-    // Serializa dos inicios del mismo turno sin reemplazar su identidad ni su clave.
+    // Serializa dos inicios del mismo turno sin reemplazar su identidad.
     const tocado = await tx.turno.updateMany({ where: { id: turnoId, organizationId, estado: { in: ["programado", "realizado"] } }, data: { actualizadoEn: new Date() } });
     if (!tocado.count) throw new ApiError("El turno no está disponible para grabar", 409);
     const turno = await tx.turno.findUniqueOrThrow({ where: { id: turnoId }, select: { pacienteId: true } });
     if (!await consentimientoVigenteDe(tx, turno.pacienteId, organizationId)) throw new ApiError("Falta consentimiento vigente para grabar", 400);
-    const existente = await tx.sesionClinica.findUnique({ where: { turnoId }, select: { id: true, estado: true, audioClave: true } });
+    const existente = await tx.sesionClinica.findUnique({ where: { turnoId }, select: { id: true, estado: true } });
     if (existente) {
       if (existente.estado !== "grabando") throw new ApiError("La grabación ya se cerró. Revisá su estado.", 409);
-      if (!existente.audioClave) {
-        await tx.sesionClinica.update({ where: { id: existente.id }, data: cifrarSesion(existente.id, { audioClave: randomBytes(32).toString("base64") }) });
-      }
       return { id: existente.id };
     }
     // Una grabación nueva suma al contador del consultorio. En un consultorio
@@ -72,30 +68,21 @@ export async function prepararAudio({ prisma, organizationId, turnoId }: Base & 
     });
     if (!contada.count) throw new ApiError(PRUEBA_TOPE, 403);
     const id = randomUUID();
-    await tx.sesionClinica.create({ data: { ...cifrarSesion(id, { audioClave: randomBytes(32).toString("base64") }), organizationId, turnoId, estado: "grabando" } });
+    await tx.sesionClinica.create({ data: { id, organizationId, turnoId, estado: "grabando" } });
     return { id };
   });
 }
 
-/** La clave con la que el teléfono cifra: sólo mientras la sesión graba. */
-export async function claveAudio({ prisma, organizationId, sesionId }: Sesion) {
-  const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { estado: true, audioClave: true, turno: { select: { pacienteId: true } } } });
-  if (!fila) throw new ApiError("Grabación no encontrada", 404);
-  if (fila.estado !== "grabando" || !fila.audioClave) throw new ApiError("La grabación ya no admite captura", 409);
-  if (!await consentimientoVigenteDe(prisma, fila.turno.pacienteId, organizationId)) throw new ApiError("Falta autorización vigente para grabar", 403);
-  return { clave: fila.audioClave };
-}
-
 /**
- * Paso 1 de la subida: la sesión pasa grabando → subiendo, guarda el IV con
- * que el teléfono cifró el archivo y devuelve la URL prefirmada del PUT.
+ * Paso 1 de la subida: la sesión pasa grabando → subiendo y devuelve la URL
+ * prefirmada del PUT.
  *
  * La URL se firma ANTES de tocar la fila: si R2 falla, la sesión sigue en
  * grabando y el cliente reintenta sin más. La transición lleva el estado en
  * el WHERE, así dos pestañas pidiendo URL a la vez no se pisan.
  */
-export async function pedirUrlSubida(input: Sesion & { iv: string; tamanoBytes: number; mime: string; almacen: AlmacenAudio }) {
-  const { prisma, organizationId, sesionId, iv, tamanoBytes, mime, almacen } = input;
+export async function pedirUrlSubida(input: Sesion & { tamanoBytes: number; mime: string; almacen: AlmacenAudio }) {
+  const { prisma, organizationId, sesionId, tamanoBytes, mime, almacen } = input;
   const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { estado: true } });
   if (!fila) throw new ApiError("Sesión clínica no encontrada", 404);
   if (fila.estado !== "grabando") {
@@ -113,7 +100,7 @@ export async function pedirUrlSubida(input: Sesion & { iv: string; tamanoBytes: 
     operacion: "empezar_subida",
     sesionId,
     organizationId,
-    data: { audioIv: Buffer.from(iv, "base64"), falloCodigo: null, falloDetalle: null },
+    data: { falloCodigo: null, falloDetalle: null },
     conflicto: "La sesión cambió mientras se preparaba la subida. Probá de nuevo.",
   });
   // El navegador DEBE mandar exactamente estos headers en el PUT: están firmados en la URL.

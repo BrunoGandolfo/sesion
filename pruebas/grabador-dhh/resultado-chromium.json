@@ -1,0 +1,80 @@
+{
+  "navegador": "145.0.7632.6",
+  "relojTotalSeg": 60.2,
+  "cuenta": {
+    "recorders": 1,
+    "pause": 1,
+    "resume": 1,
+    "stop": 1
+  },
+  "trasDobleToque": {
+    "estado": "grabando",
+    "segundos": 19.397200439453126,
+    "hueco": null,
+    "conmutando": true,
+    "limiteAlcanzado": false,
+    "microfonoSilenciado": false
+  },
+  "antesDeCongelar": {
+    "estado": "grabando",
+    "segundos": 30.63720092773438,
+    "hueco": null,
+    "conmutando": false,
+    "limiteAlcanzado": false,
+    "microfonoSilenciado": false
+  },
+  "trasCongelar": {
+    "estado": "grabando",
+    "segundos": 48.58250157212357,
+    "hueco": null,
+    "conmutando": false,
+    "limiteAlcanzado": false,
+    "microfonoSilenciado": false
+  },
+  "archivo": {
+    "bytes": 798973,
+    "formato": "matroska,webm",
+    "codec": "opus",
+    "audioDecodificadoSeg": 50.04,
+    "finDeMarcasSeg": 49.983,
+    "mayorSaltoDeMarcasSeg": 0.063,
+    "cabecerasEBML": 1,
+    "erroresDecodificacion": ""
+  },
+  "confirmacion": {
+    "key": "org/sesion-arnes/0",
+    "duracionAudioSeg": 49,
+    "pausas": [
+      {
+        "inicio": "2026-09-18T19:10:13.844Z",
+        "fin": "2026-09-18T19:10:18.860Z"
+      }
+    ],
+    "diagnostico": {
+      "eventos": [
+        {
+          "t": "2026-09-18T19:10:13.844Z",
+          "tipo": "pausa"
+        },
+        {
+          "t": "2026-09-18T19:10:18.860Z",
+          "tipo": "reanudar"
+        },
+        {
+          "t": "2026-09-18T19:10:38.340Z",
+          "tipo": "hueco-latido",
+          "ms": 10061
+        }
+      ],
+      "chunks": 40,
+      "bytes": 798973
+    }
+  },
+  "dosHoras": {
+    "bytes": 117964800,
+    "mayorTrabaMs": 4,
+    "heapAntesMB": 37,
+    "heapPicoMB": 37,
+    "ms": 552
+  }
+}

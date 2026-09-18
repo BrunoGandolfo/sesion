@@ -309,52 +309,77 @@ export const TERMINAR_SESION = "Terminar la sesión";
 export const PAUSAR = "Pausar";
 export const REANUDAR = "Reanudar";
 
-/** Un solo texto para todo el tramo cifrar + subir + confirmar. Reemplaza a
- *  "Cifrando audio…", "Subiendo el audio cifrado…" y "Audio cifrado listo". */
+/** Un solo texto para los formularios que guardan. */
 export const GUARDANDO = "Guardando…";
 
+// ─── Después de Terminar ─────────────────────────────────────────────────────
+// Tres momentos, tres textos, y algo que se mueve en pantalla: una pantalla
+// quieta con un aviso de un segundo y medio se leyó como "no subió".
+
+export const PREPARANDO_GRABACION = "Preparando la grabación…";
+export const ENVIANDO_GRABACION = (porcentaje: number) =>
+  `Enviando la grabación… ${porcentaje} %. No cierres esta pantalla.`;
+/** Coherente con el aviso que existe de verdad (notaListaDe, más abajo): la
+ *  app avisa adentro, en la pantalla en la que esté, sin notificación push. */
+export const GRABACION_LLEGO =
+  "La grabación llegó bien. La nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando esté.";
+export const VOLVER_A_LA_FICHA = "Volver a la ficha";
+
 // ─── Avisos de una grabación en curso ───────────────────────────────────────
-// Los tres son persistentes: se quedan en pantalla mientras la condición
-// dure. No son toasts. Un aviso que se va solo no sirve para algo que hay
-// que resolver ahora.
+// Son persistentes. No son toasts: un aviso que se va solo no sirve para algo
+// que hay que mirar ahora. Ninguno detiene la grabación.
 
 /** Falta poco para el tope de 150 minutos. El número sale de
  *  AVISO_LIMITE_SEGUNDOS: se avisa con 15 minutos de anticipación. */
 export const AVISO_LIMITE_GRABACION = "Quedan 15 minutos de grabación";
 
-/** El sistema operativo soltó el wake lock: la pantalla se apagó sola o ella
- *  la apagó. Es la antesala del corte del 7/9, y por eso se dice con todas
- *  las letras qué puede pasar y qué hacer. */
-export const AVISO_PANTALLA_APAGADA =
-  "La pantalla se apagó: la grabación se puede cortar. Mantenela encendida.";
+/** Antes de empezar: el teléfono no concedió mantener la pantalla encendida
+ *  (ahorro de batería, navegador sin soporte). Se dice antes, no después. */
+export const AVISO_SIN_PANTALLA_ENCENDIDA =
+  "Este teléfono no dejó que Sesión mantenga la pantalla encendida. Si se bloquea, la grabación se puede cortar: sacá el bloqueo automático o tocá la pantalla cada tanto.";
 
-/** Hace rato que no entra señal y la pantalla está a la vista. Se avisa
- *  antes de cortar porque en sesión un silencio largo puede ser normal. */
+/** La pantalla se apagó mientras grababa o enviaba. Queda hasta que ella lo
+ *  cierra: es lo que explica un hueco, y tiene que poder leerlo al volver. */
+export const AVISO_PANTALLA_APAGADA =
+  "La pantalla se apagó. Con la pantalla apagada el teléfono puede dejar de grabar: mantenela encendida.";
+export const ENTENDIDO = "Entendido";
+
+/** El medidor lleva dos minutos en cero con la pantalla a la vista. En sesión
+ *  un silencio largo puede ser normal: se avisa y nada más. */
 export const AVISO_SIN_SONIDO = "No está entrando sonido";
 
-// ─── Por qué se interrumpió una grabación ───────────────────────────────────
-// Una interrupción NUNCA cierra la sesión sola: el audio queda entero y ella
-// decide si reanuda o termina. Lo que cambia es la explicación, porque no se
-// resuelven igual.
+/** El teléfono silenció el micrófono, casi siempre por una llamada. La
+ *  grabación sigue abierta y vuelve sola. */
+export const AVISO_MICROFONO_SILENCIADO =
+  "El teléfono silenció el micrófono (¿una llamada?). La grabación sigue abierta y vuelve sola cuando lo libere.";
 
-/** El micrófono se cortó: llamada entrante, otra app se lo llevó, la pista
- *  murió. Se reanuda volviendo a pedir el micrófono. */
-export const CORTE_MICROFONO = "Se cortó el micrófono. Lo grabado está a salvo.";
+const horaCorta = (epoch: number) =>
+  new Date(epoch).toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** Hubo un rato sin audio y ya volvió. Con las horas, para que sepa qué falta. */
+export const AVISO_HUECO = (desde: number, hasta: number) =>
+  `No se grabó entre las ${horaCorta(desde)} y las ${horaCorta(hasta)}. Ahora está grabando de nuevo: podés seguir o terminar.`;
+
+/** Dejó de llegar audio y todavía no volvió. */
+export const AVISO_SIN_AUDIO_DESDE = (desde: number) =>
+  `No está llegando audio desde las ${horaCorta(desde)}. Podés esperar a que vuelva o terminar con lo grabado.`;
+export const SEGUIR_GRABANDO = "Seguir grabando";
+
+// ─── Cuándo una grabación se detiene sola ───────────────────────────────────
+// Nada cierra la sesión solo: ella decide siempre. Y sólo dos cosas detienen
+// la captura sin que ella lo pida.
 
 /** Se llegó al tope de duración. No es una falla: es el archivo que no puede
  *  crecer más. Se dice el número para que se entienda que no se rompió nada. */
 export const CORTE_LIMITE =
-  "Llegaste a las 2 horas y media de grabación. Lo grabado está a salvo.";
+  "Llegaste a las 2 horas y media de grabación. Lo grabado está a salvo: tocá Terminar la sesión para enviarlo.";
 
-/** No entró sonido durante minutos. La causa más común es la pantalla
- *  bloqueada, así que se nombra: es lo que ella puede cambiar. */
-export const CORTE_SIN_SONIDO =
-  "Dejó de entrar sonido y se pausó la grabación. Lo grabado está a salvo.";
-
-/** La pantalla se apagó y el navegador descargó la página. Se vuelve con los
- *  chunks recuperados del teléfono, en pausa, esperando decisión. */
-export const CORTE_PANTALLA =
-  "La pantalla se apagó y se pausó la grabación. Lo grabado está a salvo.";
+/** El micrófono se desconectó de verdad (otra app se lo llevó, se revocó el
+ *  permiso). No se puede seguir en el mismo archivo, y pegar dos archivos lo
+ *  rompe: la grabación termina acá y se guarda lo que hay. */
+export const GRABACION_TERMINO_MICROFONO =
+  "El micrófono se desconectó y la grabación terminó acá. No se puede continuar esta grabación: guardá lo grabado.";
+export const GUARDAR_LO_GRABADO = "Guardar lo grabado";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Autorización de grabación (consentimiento informado)
@@ -499,9 +524,7 @@ export const FALTA_REVISAR_AMBAS = "Revisá las señales y las menciones de la t
 export const FALTA_REVISAR_VERSION = "La nota cambió. Revisá la versión actual antes de aprobar.";
 export const SALIDA_TRABAJO_TITULO = "Tenés trabajo en curso";
 export const SALIDA_RECORRIDO = "Tenés un borrador del Recorrido sin guardar. Si seguís, se descartan tus cambios.";
-export const SALIDA_CAPTURA = "La sesión se está grabando. Si salís, la captura se pausa. Lo grabado se conserva, pero necesitás volver y reanudar para seguir grabando.";
 export const DESCARTAR_BORRADOR = "Se descarta este borrador sin guardar. Las versiones guardadas del Recorrido se conservan.";
-export const PREPARANDO_GRABACION = "Preparando la grabación y comprobando si hay una copia para recuperar…";
 export const FEEDBACK_REINTENTAR_ERROR = "No pudimos confirmar el pedido. Probá de nuevo; la nota se conserva.";
 export const FEEDBACK_PEDIR = "Preparar Para vos";
 export const FEEDBACK_REINTENTAR = "Volver a pedir Para vos";
@@ -1127,10 +1150,11 @@ export const ENTRADA_AFIRMACIONES = [
   "Un análisis de la sesión para reflexionar sobre tu práctica.",
 ] as const;
 
-/** Almacenamiento cifrado; no afirma cifrado de extremo a extremo ni
- * incluye los datos administrativos o las copias exportadas. */
+/** Almacenamiento cifrado de lo escrito; del audio sólo afirma lo que es
+ * cierto (viaja por TLS: la app no lo cifra). No afirma cifrado de extremo a
+ * extremo ni incluye los datos administrativos o las copias exportadas. */
 export const ENTRADA_CONFIDENCIALIDAD =
-  "El audio se cifra por tramos en tu dispositivo antes de guardarse y enviarse. Las notas, las transcripciones, el análisis y el Recorrido se guardan cifrados.";
+  "El audio viaja por una conexión cifrada. Las notas, las transcripciones, el análisis y el Recorrido se guardan cifrados.";
 
 // Portada. Respaldo de cada afirmación: docs/pendientes/portada.md.
 export const PORTADA_ACCESO = "Entrar a tu cuenta";

@@ -1,37 +1,26 @@
 // @vitest-environment jsdom
 //
-// La prueba de que ninguna interrupción sube nada sola.
-//
-// `grabacion-captura.test.ts` prueba las reglas; este archivo prueba que el
-// hook las OBEDECE, que es donde falló el 7/9: la regla "al llegar al tope,
-// cortar" existía, y el latido la implementaba llamando a `terminar`. Las dos
-// piezas estaban bien por separado.
-//
-// Por eso el assert que se repite en los cinco casos es siempre el mismo:
-// `onListo` no se llamó. Es la única firma que distingue "se pausó" de "se
-// subió", y es lo que la profesional vio pasar sin haberlo pedido.
-//
-// EL DOBLE DEL MICRÓFONO
-//
-// No hay AudioContext a propósito: en jsdom no existe, y el grabador ya
-// degrada a "sin medidor" cuando falta. Eso deja la detección de silencio
-// apoyada en el otro reloj —la sequía de chunks del MediaRecorder—, que es
-// justamente el que funciona con la pantalla apagada y el que este archivo
-// necesita ejercitar. Emitir un chunk es la forma de decir "entra audio".
+// Una grabación es UN MediaRecorder. Estas pruebas cuentan recorders, stops y
+// toques: son las que fallaban el 18/9, cuando reanudar tras un corte abría
+// un recorder nuevo y pegaba su archivo al anterior.
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useGrabador } from "@/components/grabacion/GrabadorSesion";
+import { useGrabador, type DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
+import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
+import { limpiarGrabacion } from "@/lib/grabacion-storage";
 
-// IndexedDB no existe en jsdom, así que el backup real degrada a no-op y la
-// vuelta de bfcache no tendría de dónde releer nada. Se dobla el módulo
-// entero: lo que importa acá es qué hace el grabador con lo que le devuelven.
+/** Lo que "quedó en el teléfono". null = no hay nada que recuperar. */
+let persistido: {
+  sesionClinicaId: string;
+  chunks: Blob[];
+  mimeType: string;
+  duracionAproxSeg: number;
+  pausas: { inicio: number; fin: number | null }[];
+} | null = null;
+
 vi.mock("@/lib/grabacion-storage", () => ({
-  // En el teléfono los chunks quedan cifrados y se abren con la clave; acá
-  // el doble los devuelve tal cual: lo que se prueba es qué hace el grabador
-  // con lo que recupera, no el cifrado (grabacion-storage.test.ts).
-  descifrarChunks: vi.fn(async (chunks: Blob[]) => chunks),
   guardarChunk: vi.fn(async () => {}),
   guardarPausas: vi.fn(async () => {}),
   iniciarSesionGrabacion: vi.fn(async () => {}),
@@ -39,146 +28,76 @@ vi.mock("@/lib/grabacion-storage", () => ({
   recuperarGrabacionPendiente: vi.fn(async () => persistido),
 }));
 
-/** Lo que "quedó en el teléfono". null = no hay nada que recuperar. */
-let persistido: {
-  sesionClinicaId: string;
-  chunks: Blob[];
-  duracionAproxSeg: number;
-  pausas: { inicio: number; fin: number | null }[];
-} | null = null;
-import {
-  LIMITE_SEGUNDOS,
-  AVISO_LIMITE_SEGUNDOS,
-  SILENCIO_OCULTA_INTERRUMPIR_SEG,
-  SILENCIO_VISIBLE_INTERRUMPIR_SEG,
-} from "@/lib/grabacion-captura";
-
-const CLAVE = "turno-de-prueba";
-/** La clave AES de la sesión, tal como la entregaría POST [id]/clave. */
-const CLAVE_CIFRADO = "clave-de-prueba";
-
-/** El MediaRecorder falso vivo del test: por acá se emiten los chunks. */
-let recorderActivo: RecorderFalso | null = null;
+const TURNO = "turno-de-prueba";
+const recorders: RecorderFalso[] = [];
+let pista: PistaFalsa;
+let pedidosDeMicrofono = 0;
 
 class RecorderFalso {
   state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm";
+  mimeType = "audio/webm;codecs=opus";
   ondataavailable: ((evento: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
   onerror: (() => void) | null = null;
-
-  constructor() {
-    // Se pasa como argumento en vez de `recorderActivo = this`: aliasear
-    // `this` a una variable es justo lo que prohíbe no-this-alias.
-    RecorderFalso.registrar(this);
-  }
-
-  static registrar(instancia: RecorderFalso) {
-    recorderActivo = instancia;
-  }
-
-  start() {
-    this.state = "recording";
-  }
-
-  pause() {
-    this.state = "paused";
-  }
-
-  resume() {
-    this.state = "recording";
-  }
-
-  /** Cuando está en true, `stop()` no dispara el onstop hasta que se llame
-   *  a `soltarOnstop()`. Es la única forma de reproducir el orden real: el
-   *  navegador decide cuándo entrega el onstop, y puede ser después del
-   *  pageshow. */
-  retenerOnstop = false;
-  private onstopRetenido = false;
-
-  stop() {
-    this.state = "inactive";
-    if (this.retenerOnstop) {
-      this.onstopRetenido = true;
-      return;
-    }
-    this.onstop?.();
-  }
-
-  soltarOnstop() {
-    if (!this.onstopRetenido) return;
-    this.onstopRetenido = false;
-    this.onstop?.();
-  }
-
-  /** Un segundo de audio entrando. */
-  emitirChunk() {
-    this.ondataavailable?.({ data: new Blob(["audio"]) });
-  }
-
-  static isTypeSupported() {
-    return true;
-  }
+  pause = vi.fn(() => { this.state = "paused"; });
+  resume = vi.fn(() => { this.state = "recording"; });
+  stop = vi.fn(() => { this.state = "inactive"; this.emitirChunk(); this.onstop?.(); });
+  constructor() { RecorderFalso.registrar(this); }
+  static registrar(instancia: RecorderFalso) { recorders.push(instancia); }
+  static isTypeSupported() { return true; }
+  start() { this.state = "recording"; }
+  emitirChunk(bytes = 5) { this.ondataavailable?.({ data: new Blob(["a".repeat(bytes)]) }); }
 }
 
-function pistaFalsa() {
-  return { stop: () => {}, onended: null, onmute: null, onunmute: null };
+class PistaFalsa {
+  onended: (() => void) | null = null;
+  onmute: (() => void) | null = null;
+  onunmute: (() => void) | null = null;
+  stop = vi.fn();
 }
 
-function verVisibilidad(estado: "visible" | "hidden") {
-  Object.defineProperty(document, "visibilityState", {
-    configurable: true,
-    get: () => estado,
-  });
-}
-
-/**
- * Deja correr `segundos` de reloj emitiendo un chunk cada `cadaSegundos`.
- * `cadaSegundos = null` es el corte: pasa el tiempo y no entra nada.
- */
-async function correr(segundos: number, cadaSegundos: number | null = 1) {
-  const paso = cadaSegundos ?? 30;
-
-  for (let t = 0; t < segundos; t += paso) {
+/** Corre `segundos` de reloj con un chunk por segundo, como con start(1000). */
+async function grabar(segundos: number) {
+  for (let t = 0; t < segundos; t += 1) {
     await act(async () => {
-      vi.advanceTimersByTime(paso * 1000);
-      if (cadaSegundos !== null) {
-        recorderActivo?.emitirChunk();
-      }
+      vi.advanceTimersByTime(1000);
+      if (recorders[0]?.state === "recording") recorders[0].emitirChunk();
     });
   }
 }
 
-async function grabarUnRato(hook: { current: { iniciar: (c: string, k: string) => Promise<void> } }) {
-  await act(async () => {
-    await hook.current.iniciar(CLAVE, CLAVE_CIFRADO);
-  });
-  await correr(20);
+/** La página no corre: pasa el reloj, y ni timers ni chunks. */
+async function congelar(ms: number) {
+  await act(async () => { vi.setSystemTime(Date.now() + ms); });
 }
 
 function montar() {
-  const onListo = vi.fn();
+  const onListo = vi.fn<(datos: DatosGrabacion) => void>();
   const onError = vi.fn();
-  const { result } = renderHook(() =>
-    useGrabador({ claveGrabacion: CLAVE, onListo, onError }),
-  );
-  return { grabador: result, onListo, onError };
+  const { result, unmount } = renderHook(() => useGrabador({ claveGrabacion: TURNO, onListo, onError }));
+  return { grabador: result, onListo, onError, unmount };
+}
+
+async function empezar(grabador: { current: { iniciar: (c: string) => Promise<void> } }, segundos = 20) {
+  await act(async () => { await grabador.current.iniciar(TURNO); });
+  await grabar(segundos);
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
-  recorderActivo = null;
+  vi.setSystemTime(new Date("2026-09-18T13:00:00.000Z"));
+  recorders.length = 0;
   persistido = null;
-  verVisibilidad("visible");
-
+  pedidosDeMicrofono = 0;
+  pista = new PistaFalsa();
   vi.stubGlobal("MediaRecorder", RecorderFalso);
   vi.stubGlobal("navigator", {
     ...navigator,
     mediaDevices: {
-      getUserMedia: async () => ({
-        getAudioTracks: () => [pistaFalsa()],
-        getTracks: () => [pistaFalsa()],
-      }),
+      getUserMedia: async () => {
+        pedidosDeMicrofono += 1;
+        return { getAudioTracks: () => [pista], getTracks: () => [pista] };
+      },
     },
   });
 });
@@ -186,312 +105,215 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
-describe("la pantalla se bloquea a mitad de sesión", () => {
-  it("al minuto sin audio pausa la grabación y NO sube nada", async () => {
+describe("una grabación es un solo MediaRecorder", () => {
+  it("pausar y reanudar, las veces que haga falta, usa pause()/resume() del mismo recorder", async () => {
     const { grabador, onListo } = montar();
+    await empezar(grabador, 10);
 
-    await grabarUnRato(grabador);
-    expect(grabador.current.estado).toBe("grabando");
+    for (let vuelta = 0; vuelta < 3; vuelta += 1) {
+      act(() => grabador.current.pausar());
+      expect(grabador.current.estado).toBe("pausado");
+      await act(async () => { vi.advanceTimersByTime(60_000); });
+      act(() => grabador.current.reanudar());
+      expect(grabador.current.estado).toBe("grabando");
+      await grabar(10);
+    }
 
-    // El celular se bloquea: la pista sigue "viva" (no emite ended ni mute),
-    // simplemente deja de entrar audio. Es exactamente el 7/9.
-    verVisibilidad("hidden");
-    await correr(SILENCIO_OCULTA_INTERRUMPIR_SEG + 5, null);
+    act(() => grabador.current.terminar());
 
-    expect(grabador.current.estado).toBe("interrumpida");
-    expect(grabador.current.motivoInterrupcion).toBe("sin-sonido");
-    expect(onListo).not.toHaveBeenCalled();
+    expect(recorders).toHaveLength(1);
+    expect(pedidosDeMicrofono).toBe(1);
+    expect(recorders[0].pause).toHaveBeenCalledTimes(3);
+    expect(recorders[0].resume).toHaveBeenCalledTimes(3);
+    expect(recorders[0].stop).toHaveBeenCalledTimes(1);
+    expect(pista.stop).toHaveBeenCalledTimes(1);
+    // 40 s de audio recibido; los tres minutos en pausa no son grabación.
+    expect(onListo.mock.calls[0][0].duracionSegundos).toBe(40);
+    expect(onListo.mock.calls[0][0].pausas).toHaveLength(3);
   });
 
-  it("lo grabado antes del corte sigue ahí, esperando decisión", async () => {
-    const { grabador, onListo } = montar();
+  it("un doble toque en Reanudar reanuda una sola vez y no vuelve a pausar", async () => {
+    const { grabador } = montar();
+    await empezar(grabador, 5);
+    act(() => grabador.current.pausar());
+    await act(async () => { vi.advanceTimersByTime(5000); });
 
-    await grabarUnRato(grabador);
-    const segundosAntes = grabador.current.segundos;
-    expect(segundosAntes).toBeGreaterThan(0);
-
-    verVisibilidad("hidden");
-    await correr(SILENCIO_OCULTA_INTERRUMPIR_SEG + 5, null);
-
-    // El cronómetro no siguió corriendo durante el corte: la interrupción
-    // abre una pausa, y el tiempo sin micrófono no es tiempo grabado.
-    expect(grabador.current.segundos).toBeLessThanOrEqual(segundosAntes + 2);
-    expect(onListo).not.toHaveBeenCalled();
-
-    // Y terminar sigue siendo un acto suyo, no del reloj: recién con su toque
-    // arranca el cifrado. (No se espera a que termine: `cifrarGrabacion` pide
-    // Web Crypto de verdad, que jsdom no trae. Que salga de "interrumpida" es
-    // lo que este test tiene que ver.)
     act(() => {
-      grabador.current.terminar();
+      grabador.current.reanudar();
+      // El segundo toque cae sobre el botón que ahora dice Pausar.
+      grabador.current.reanudar();
+      grabador.current.pausar();
     });
-    expect(grabador.current.estado).toBe("cifrando");
+
+    expect(recorders[0].resume).toHaveBeenCalledTimes(1);
+    expect(recorders[0].pause).toHaveBeenCalledTimes(1);
+    expect(grabador.current.estado).toBe("grabando");
+    // Mientras dura la guarda el botón va deshabilitado; después se libera.
+    expect(grabador.current.conmutando).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(grabador.current.conmutando).toBe(false);
+    expect(recorders).toHaveLength(1);
   });
 
-  it("con la pantalla a la vista aguanta mucho más antes de cortar", async () => {
+  it("el micrófono silenciado por una llamada NO detiene el recorder ni suelta el micrófono", async () => {
     const { grabador, onListo } = montar();
+    await empezar(grabador, 10);
 
-    await grabarUnRato(grabador);
-
-    // Dos minutos de silencio en sesión son trabajo, no una falla: avisa.
-    await correr(150, null);
+    act(() => pista.onmute?.());
+    await grabar(30);
     expect(grabador.current.estado).toBe("grabando");
-    expect(grabador.current.audioSilencioso).toBe(true);
+    expect(grabador.current.microfonoSilenciado).toBe(true);
+    expect(recorders[0].stop).not.toHaveBeenCalled();
+    expect(pista.stop).not.toHaveBeenCalled();
 
-    // A los cinco sí corta, y tampoco sube nada.
-    await correr(SILENCIO_VISIBLE_INTERRUMPIR_SEG, null);
-    expect(grabador.current.estado).toBe("interrumpida");
-    expect(grabador.current.motivoInterrupcion).toBe("sin-sonido");
-    expect(onListo).not.toHaveBeenCalled();
+    act(() => pista.onunmute?.());
+    expect(grabador.current.microfonoSilenciado).toBe(false);
+    act(() => grabador.current.terminar());
+    expect(recorders).toHaveLength(1);
+    expect(onListo.mock.calls[0][0].diagnostico.eventos.map((e) => e.tipo)).toEqual(["mute", "unmute"]);
   });
 
-  it("mientras entra audio no corta nunca, ni oculta", async () => {
+  it("si la pista terminó, la grabación termina ahí: no se reanuda, sólo se guarda lo grabado", async () => {
     const { grabador, onListo } = montar();
+    await empezar(grabador, 15);
 
-    await grabarUnRato(grabador);
-    verVisibilidad("hidden");
-    await correr(600, 1);
+    act(() => pista.onended?.());
+    expect(grabador.current.estado).toBe("terminada");
 
-    expect(grabador.current.estado).toBe("grabando");
+    // Reanudar no existe para este estado: no abre otro recorder.
+    act(() => grabador.current.reanudar());
+    expect(grabador.current.estado).toBe("terminada");
+    expect(pedidosDeMicrofono).toBe(1);
     expect(onListo).not.toHaveBeenCalled();
+
+    act(() => grabador.current.terminar());
+    expect(onListo).toHaveBeenCalledTimes(1);
+    expect(recorders).toHaveLength(1);
+    expect(onListo.mock.calls[0][0].diagnostico.eventos.at(-1)?.tipo).toBe("pista-terminada");
+  });
+
+  it("un error del recorder tampoco abre otro: termina y ofrece guardar", async () => {
+    const { grabador } = montar();
+    await empezar(grabador, 5);
+    act(() => recorders[0].onerror?.());
+    expect(grabador.current.estado).toBe("terminada");
+    expect(recorders).toHaveLength(1);
   });
 });
 
-describe("el tope de duración", () => {
-  it("avisa a los 135 minutos y corta a los 150 sin subir nada", async () => {
+describe("lo grabado se mide por los chunks, no por el reloj", () => {
+  it("con el teléfono bloqueado veinte minutos no corta nada, y al volver dice el hueco con sus horas", async () => {
     const { grabador, onListo } = montar();
+    await empezar(grabador, 60);
+    const desde = Date.now();
 
-    await act(async () => {
-      await grabador.current.iniciar(CLAVE, CLAVE_CIFRADO);
-    });
-
-    // Sesión larga con audio entrando todo el tiempo: el único corte posible
-    // es el del tope.
-    await correr(AVISO_LIMITE_SEGUNDOS + 60, 30);
+    await congelar(20 * 60 * 1000);
+    // Al desbloquear vuelven los timers y el audio.
+    await grabar(3);
 
     expect(grabador.current.estado).toBe("grabando");
+    expect(recorders[0].stop).not.toHaveBeenCalled();
+    expect(recorders[0].pause).not.toHaveBeenCalled();
+    expect(grabador.current.segundos).toBe(63);
+    // Desde donde termina el audio que sí llegó, hasta que volvió a llegar a ritmo normal.
+    expect(grabador.current.hueco).toEqual({ desde: desde + 2000, hasta: desde + 20 * 60 * 1000 + 2000 });
+
+    // El aviso queda hasta que ella lo cierra; después sigue o termina.
+    await grabar(30);
+    expect(grabador.current.hueco).not.toBeNull();
+    act(() => grabador.current.cerrarAvisoHueco());
+    expect(grabador.current.hueco).toBeNull();
+
+    act(() => grabador.current.terminar());
+    const { duracionSegundos, diagnostico } = onListo.mock.calls[0][0];
+    expect(duracionSegundos).toBe(93);
+    expect(diagnostico.eventos.map((e) => e.tipo)).toEqual(["hueco-latido", "hueco-chunks"]);
+    expect(diagnostico.eventos[1].ms).toBe(20 * 60 * 1000);
+  });
+
+  it("si el audio deja de llegar con la pantalla a la vista, lo dice mientras dura y sigue grabando", async () => {
+    const { grabador } = montar();
+    await empezar(grabador, 10);
+    const desde = Date.now();
+
+    await act(async () => { vi.advanceTimersByTime(8000); });
+
+    expect(grabador.current.hueco).toEqual({ desde, hasta: null });
+    expect(grabador.current.estado).toBe("grabando");
+    expect(recorders[0].stop).not.toHaveBeenCalled();
+  });
+
+  it("el tope de 150 minutos se aplica sobre el audio recibido: pausa el MISMO recorder y no sube nada", async () => {
+    const { grabador, onListo } = montar();
+    await act(async () => { await grabador.current.iniciar(TURNO); });
+
+    // 149 minutos de audio y después 30 de teléfono bloqueado: son 179 de
+    // reloj, y NO es el tope.
+    await act(async () => {
+      for (let t = 0; t < 149 * 60; t += 1) { vi.advanceTimersByTime(1000); recorders[0].emitirChunk(); }
+    });
+    await congelar(30 * 60 * 1000);
+    await grabar(1);
+    expect(grabador.current.limiteAlcanzado).toBe(false);
     expect(grabador.current.avisoLimite).toBe(true);
-    expect(onListo).not.toHaveBeenCalled();
+    expect(grabador.current.segundos).toBeGreaterThanOrEqual(AVISO_LIMITE_SEGUNDOS);
 
-    await correr(LIMITE_SEGUNDOS - AVISO_LIMITE_SEGUNDOS, 30);
-
-    // Lo que antes cifraba y subía. Ahora espera.
-    expect(grabador.current.estado).toBe("interrumpida");
-    expect(grabador.current.motivoInterrupcion).toBe("limite");
+    await grabar(60);
     expect(grabador.current.limiteAlcanzado).toBe(true);
+    expect(grabador.current.estado).toBe("pausado");
     expect(grabador.current.segundos).toBe(LIMITE_SEGUNDOS);
+    expect(recorders[0].pause).toHaveBeenCalledTimes(1);
+    expect(recorders[0].stop).not.toHaveBeenCalled();
     expect(onListo).not.toHaveBeenCalled();
-  });
 
-  it("una sesión de 120 minutos ya no se corta: es el caso del 7/9", async () => {
-    const { grabador, onListo } = montar();
-
-    await act(async () => {
-      await grabador.current.iniciar(CLAVE, CLAVE_CIFRADO);
-    });
-    await correr(120 * 60, 30);
-
-    expect(grabador.current.estado).toBe("grabando");
-    expect(grabador.current.avisoLimite).toBe(false);
-    expect(onListo).not.toHaveBeenCalled();
+    // Pasado el tope no se reanuda: sólo se termina.
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    act(() => grabador.current.reanudar());
+    expect(recorders[0].resume).not.toHaveBeenCalled();
+    act(() => grabador.current.terminar());
+    expect(onListo.mock.calls[0][0].duracionSegundos).toBe(LIMITE_SEGUNDOS);
+    expect(recorders).toHaveLength(1);
   });
 });
 
-describe("el aviso de la pantalla apagada", () => {
-  it("no se enciende cuando el navegador no tiene wake lock", async () => {
-    // navigator.wakeLock no existe en el doble: el grabador marca
-    // `wakeLockActivo` en false, pero eso NO es "se apagó la pantalla".
-    // Decírselo sería mandarla a resolver un problema que no tiene.
-    const { grabador } = montar();
-
-    await grabarUnRato(grabador);
-
-    expect(grabador.current.wakeLockActivo).toBe(false);
-    expect(grabador.current.wakeLockSoltado).toBe(false);
-  });
-});
-
-describe("la pantalla se apaga y el navegador descarga la página", () => {
-  it("al volver de bfcache recupera lo grabado y queda en pausa", async () => {
+describe("lo que se entrega", () => {
+  it("es un Blob armado con los mismos chunks, con el formato del recorder, sin cifrar ni copiar", async () => {
     const { grabador, onListo } = montar();
+    await empezar(grabador, 3);
+    act(() => grabador.current.terminar());
 
-    await grabarUnRato(grabador);
-    expect(grabador.current.estado).toBe("grabando");
-
-    // Lo que el backup incremental venía guardando mientras grababa.
-    persistido = {
-      sesionClinicaId: CLAVE,
-      chunks: [new Blob(["a"]), new Blob(["b"]), new Blob(["c"])],
-      duracionAproxSeg: 20,
-      pausas: [],
-    };
-
-    // `pagehide` tira la RAM porque el proceso puede morir. Antes esto dejaba
-    // la grabación muerta en la pantalla previa: el efecto de recuperación
-    // depende de `claveGrabacion` y volver de bfcache no remonta nada.
-    await act(async () => {
-      window.dispatchEvent(new Event("pagehide"));
-    });
-    expect(grabador.current.estado).toBe("inactivo");
-
-    const vuelta = new Event("pageshow");
-    Object.defineProperty(vuelta, "persisted", { value: true });
-
-    await act(async () => {
-      window.dispatchEvent(vuelta);
-    });
-
-    expect(grabador.current.estado).toBe("interrumpida");
-    expect(grabador.current.motivoInterrupcion).toBe("pantalla");
-    expect(grabador.current.segundos).toBe(20);
-    expect(onListo).not.toHaveBeenCalled();
+    const { audioBlob, diagnostico } = onListo.mock.calls[0][0];
+    expect(audioBlob.type).toBe("audio/webm;codecs=opus");
+    // 3 chunks + el que entrega stop(), de 5 bytes cada uno.
+    expect(audioBlob.size).toBe(20);
+    expect(await audioBlob.text()).toBe("a".repeat(20));
+    expect(diagnostico).toMatchObject({ chunks: 4, bytes: 20 });
+    expect(Object.keys(onListo.mock.calls[0][0]).sort()).toEqual(["audioBlob", "diagnostico", "duracionSegundos", "pausas"]);
   });
 
-  it("desde 'interrumpida' la vuelta la deja como estaba, no la borra", async () => {
-    // P1 de Codex (a): `pagehide` solo levantaba la bandera para grabando y
-    // pausado. Con la grabación ya interrumpida —el micrófono se cortó y ella
-    // todavía no decidió— la bandera quedaba en false y detenerActiva sin
-    // recorder la mandaba a "inactivo": al volver, la grabación y sus dos
-    // botones habían desaparecido de la pantalla.
+  it("una grabación que quedó en el teléfono se envía sin pedir ninguna clave", async () => {
+    persistido = { sesionClinicaId: TURNO, chunks: [new Blob(["cabecera"]), new Blob(["+audio"])], mimeType: "audio/webm", duracionAproxSeg: 2, pausas: [] };
     const { grabador, onListo } = montar();
+    await act(async () => { await Promise.resolve(); });
+    expect(grabador.current.pendienteSeg).toBe(2);
 
-    await grabarUnRato(grabador);
+    act(() => grabador.current.enviarPendiente());
 
-    verVisibilidad("hidden");
-    await correr(SILENCIO_OCULTA_INTERRUMPIR_SEG + 5, null);
-    expect(grabador.current.estado).toBe("interrumpida");
-
-    const segundosAntes = grabador.current.segundos;
-
-    persistido = {
-      sesionClinicaId: CLAVE,
-      chunks: [new Blob(["a"]), new Blob(["b"])],
-      duracionAproxSeg: segundosAntes,
-      pausas: [],
-    };
-
-    await act(async () => {
-      window.dispatchEvent(new Event("pagehide"));
-    });
-
-    // Nada que detener: sigue interrumpida, no pasa por "inactivo".
-    expect(grabador.current.estado).toBe("interrumpida");
-
-    const vuelta = new Event("pageshow");
-    Object.defineProperty(vuelta, "persisted", { value: true });
-
-    await act(async () => {
-      window.dispatchEvent(vuelta);
-    });
-
-    expect(grabador.current.estado).toBe("interrumpida");
-    expect(grabador.current.segundos).toBe(segundosAntes);
-    expect(onListo).not.toHaveBeenCalled();
-
-    // Y sigue siendo suya la decisión.
-    act(() => {
-      grabador.current.terminar();
-    });
-    expect(grabador.current.estado).toBe("cifrando");
+    expect(await onListo.mock.calls[0][0].audioBlob.text()).toBe("cabecera+audio");
+    expect(onListo.mock.calls[0][0].diagnostico.eventos[0].tipo).toBe("recuperada");
+    // No se abrió ningún micrófono ni recorder para enviarla.
+    expect(recorders).toHaveLength(0);
   });
 
-  it("aguanta que pageshow llegue antes que el onstop del recorder", async () => {
-    // P1 de Codex (b): `recorder.stop()` deja el estado en "inactivo" recién
-    // en `onstop`, un turno después. Si `pageshow` llegaba en el medio, la
-    // guarda veía "grabando", se retiraba, y nadie reintentaba nunca.
-    //
-    // El doble retiene el onstop para forzar ese orden, que en un teléfono
-    // decide el navegador y no nosotros.
-    const { grabador, onListo } = montar();
-
-    await grabarUnRato(grabador);
-    persistido = {
-      sesionClinicaId: CLAVE,
-      chunks: [new Blob(["a"]), new Blob(["b"]), new Blob(["c"])],
-      duracionAproxSeg: 20,
-      pausas: [],
-    };
-
-    const recorder = recorderActivo;
-    if (!recorder) throw new Error("no hay recorder");
-    recorder.retenerOnstop = true;
-
-    await act(async () => {
-      window.dispatchEvent(new Event("pagehide"));
-    });
-
-    // El stop salió pero el onstop todavía no llegó: sigue "grabando".
-    expect(recorder.state).toBe("inactive");
-    expect(grabador.current.estado).toBe("grabando");
-
-    const vuelta = new Event("pageshow");
-    Object.defineProperty(vuelta, "persisted", { value: true });
-
-    await act(async () => {
-      window.dispatchEvent(vuelta);
-    });
-
-    // Todavía no puede restaurar, pero tampoco se rindió: quedó anotada.
-    expect(grabador.current.estado).toBe("grabando");
-
-    await act(async () => {
-      recorder.soltarOnstop();
-    });
-
-    expect(grabador.current.estado).toBe("interrumpida");
-    expect(grabador.current.motivoInterrupcion).toBe("pantalla");
-    expect(grabador.current.segundos).toBe(20);
-    expect(onListo).not.toHaveBeenCalled();
-  });
-
-  it("una carga nueva (sin persisted) no resucita nada por su cuenta", async () => {
-    // Ahí no hubo bfcache: de esa recuperación se encarga el efecto de
-    // montaje, que se la OFRECE en la pantalla previa en vez de reabrirla.
+  it("descartar la pendiente la borra del teléfono", async () => {
+    persistido = { sesionClinicaId: TURNO, chunks: [new Blob(["x"])], mimeType: "audio/webm", duracionAproxSeg: 1, pausas: [] };
     const { grabador } = montar();
-
-    await grabarUnRato(grabador);
-    persistido = {
-      sesionClinicaId: CLAVE,
-      chunks: [new Blob(["a"])],
-      duracionAproxSeg: 20,
-      pausas: [],
-    };
-
-    await act(async () => {
-      window.dispatchEvent(new Event("pagehide"));
-      window.dispatchEvent(new Event("pageshow"));
-    });
-
-    expect(grabador.current.estado).toBe("inactivo");
-  });
-
-  it("no resucita una grabación que ella descartó", async () => {
-    const { grabador } = montar();
-
-    await grabarUnRato(grabador);
-
-    await act(async () => {
-      grabador.current.descartar();
-    });
-    expect(grabador.current.estado).toBe("inactivo");
-
-    persistido = {
-      sesionClinicaId: CLAVE,
-      chunks: [new Blob(["a"])],
-      duracionAproxSeg: 20,
-      pausas: [],
-    };
-
-    const vuelta = new Event("pageshow");
-    Object.defineProperty(vuelta, "persisted", { value: true });
-
-    await act(async () => {
-      window.dispatchEvent(vuelta);
-    });
-
-    // `pagehide` nunca corrió con captura viva: no hay nada que restaurar.
-    expect(grabador.current.estado).toBe("inactivo");
+    await act(async () => { await Promise.resolve(); });
+    act(() => grabador.current.descartarPendiente());
+    expect(grabador.current.pendienteSeg).toBeNull();
+    expect(limpiarGrabacion).toHaveBeenCalledWith(TURNO);
   });
 });

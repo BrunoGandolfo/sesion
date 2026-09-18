@@ -65,7 +65,7 @@ def _procesar_pendientes(items: list[dict]) -> None:
             return
         sesion = SesionReclamada.desde_item(item)
         if not sesion:
-            # Nunca loguear el item completo: trae ticket, clave e IVs.
+            # Nunca loguear el item completo: trae el ticket.
             logger.warning(
                 f"Item ignorado por falta de campos: sesion={item.get('sesionClinicaId') or '?'}"
                 if isinstance(item, dict)

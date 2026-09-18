@@ -144,6 +144,27 @@ describe("lease", () => {
 });
 
 describe("ASR y checkpoint", () => {
+  it("la duración que informa el ASR NO pisa la que midió el teléfono: queda aparte, en la auditoría", async () => {
+    const r = await reclamada();
+    const antes = await filaDe(base.prisma, r.sesionId);
+    const auditoria = auditoriaEnMemoria();
+
+    await registrarTranscripcion({
+      ...comun(r.sesionId),
+      registrarAuditoria: auditoria.registrar,
+      intento: r.intento,
+      transcripcion: TRANSCRIPCION,
+      modeloAsr: "assemblyai:universal-2",
+      // El caso del 18/9: el teléfono dijo 1493 s y AssemblyAI encontró 982.
+      duracionSeg: 982,
+    });
+
+    const despues = await filaDe(base.prisma, r.sesionId);
+    expect(antes?.duracionAudioSeg).toBe(120);
+    expect(despues?.duracionAudioSeg).toBe(120);
+    expect(auditoria.eventos[0]).toMatchObject({ accion: "sesion.transcripcion_guardada", detalle: { duracionAsrSeg: 982 } });
+  });
+
   it("registrar el transcript deja UN trabajo de borrado aunque se registre dos veces", async () => {
     const { sesionId, intento } = await reclamada();
     const a = await registrarAsr({ ...comun(sesionId), intento, transcriptId: "tr-1" });

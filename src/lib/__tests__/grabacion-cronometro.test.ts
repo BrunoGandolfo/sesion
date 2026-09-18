@@ -1,86 +1,19 @@
-// El cronómetro de la grabación: cuánto se grabó de verdad, y cómo se ve.
-//
-// Los casos de `segundosGrabados` venían de grabacion-storage.test.ts y se
-// mudaron acá con el módulo (src/lib/grabacion-cronometro.ts). No cambió ni
-// una expectativa: es la misma aritmética, importada de su casa nueva.
-//
-// Instantes explícitos en epoch, no `new Date(...)` con componentes locales:
-// la cuenta es en milisegundos y no tiene por qué depender de la zona del
-// proceso.
+// Cómo se muestra el tiempo y cómo viajan las pausas. Cuánto se grabó lo
+// prueba grabacion-captura.test.ts: ya no se cuenta con el reloj de pared.
 
 import { describe, expect, it } from "vitest";
 
 import {
   aRegistradas,
   formatearDuracion,
-  segundosGrabados,
 } from "@/lib/grabacion-cronometro";
 
-const T0 = 1_700_000_000_000;
-
-describe("segundosGrabados", () => {
-  it("sin pausas cuenta todo el tiempo transcurrido", () => {
-    expect(segundosGrabados(T0, T0 + 90_000)).toBe(90);
-  });
-
-  it("descuenta una pausa cerrada", () => {
-    expect(
-      segundosGrabados(T0, T0 + 90_000, [
-        { inicio: T0 + 10_000, fin: T0 + 40_000 },
-      ]),
-    ).toBe(60);
-  });
-
-  it("descuenta varias pausas", () => {
-    expect(
-      segundosGrabados(T0, T0 + 100_000, [
-        { inicio: T0 + 10_000, fin: T0 + 20_000 },
-        { inicio: T0 + 50_000, fin: T0 + 65_000 },
-      ]),
-    ).toBe(75);
-  });
-
-  it("con una pausa abierta el cronómetro se detiene", () => {
-    const pausas = [{ inicio: T0 + 30_000, fin: null }];
-
-    expect(segundosGrabados(T0, T0 + 30_000, pausas)).toBe(30);
-    expect(segundosGrabados(T0, T0 + 120_000, pausas)).toBe(30);
-    expect(segundosGrabados(T0, T0 + 600_000, pausas)).toBe(30);
-  });
-
-  it("al reanudar vuelve a correr desde lo acumulado", () => {
-    const pausada = [{ inicio: T0 + 30_000, fin: null }];
-    expect(segundosGrabados(T0, T0 + 120_000, pausada)).toBe(30);
-
-    const reanudada = [{ inicio: T0 + 30_000, fin: T0 + 120_000 }];
-    expect(segundosGrabados(T0, T0 + 135_000, reanudada)).toBe(45);
-  });
-
-  it("recorta los tramos de pausa que caen fuera de la ventana", () => {
-    expect(
-      segundosGrabados(T0, T0 + 60_000, [
-        { inicio: T0 - 20_000, fin: T0 + 10_000 },
-        { inicio: T0 + 50_000, fin: T0 + 90_000 },
-      ]),
-    ).toBe(40);
-  });
-
-  it("suma lo que ya venía grabado de una recuperación", () => {
-    expect(segundosGrabados(null, T0, [], 42)).toBe(42);
-    expect(
-      segundosGrabados(T0, T0 + 30_000, [{ inicio: T0, fin: T0 + 10_000 }], 42),
-    ).toBe(62);
-  });
-
-  it("nunca devuelve un negativo", () => {
-    expect(segundosGrabados(T0, T0 - 5_000)).toBe(0);
-    expect(
-      segundosGrabados(T0, T0 + 10_000, [{ inicio: T0, fin: T0 + 60_000 }]),
-    ).toBe(0);
-  });
-});
 
 describe("formatearDuracion", () => {
+  it("una medida con decimales (los chunks no llegan en segundos exactos) se muestra entera", () => {
+    expect(formatearDuracion(452.7)).toBe("07:32");
+  });
+
   it("siempre con dos dígitos", () => {
     expect(formatearDuracion(0)).toBe("00:00");
     expect(formatearDuracion(9)).toBe("00:09");

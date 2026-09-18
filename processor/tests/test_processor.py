@@ -34,7 +34,7 @@ def sesion(**extra) -> SesionReclamada:
         paciente_id="p1",
         orientacion_teorica="cbt_mi",
         terminos_asr=["GTFS"],
-        audio={"clave": "k", "iv": "iv", "key": "org/s1/0"},
+        audio={"key": "org/s1/0"},
         checkpoint=None,
     )
     base.update(extra)
@@ -45,7 +45,7 @@ def sesion(**extra) -> SesionReclamada:
 def pasos(mocker):
     """Pasos exitosos por defecto; cada test rompe el que le interesa."""
     mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
-    mocker.patch("processor.descargar_y_descifrar", return_value=b"audio")
+    mocker.patch("processor.descargar_audio", return_value=b"audio")
     mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
     mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
     mocker.patch("processor.formatear_para_llm", return_value="[00:00] Terapeuta: hola")
@@ -115,7 +115,7 @@ def test_analizar_no_genera_feedback_y_suma_speech_analytics(pasos):
 
 
 def test_con_checkpoint_no_descarga_ni_transcribe(pasos):
-    descargar = pasos["mocker"].patch("processor.descargar_y_descifrar")
+    descargar = pasos["mocker"].patch("processor.descargar_audio")
     transcribir = pasos["mocker"].patch("processor.transcribir")
 
     processor.procesar_sesion(
@@ -149,14 +149,14 @@ def test_fallo_transitorio_en_asr_se_informa_como_no_definitivo_con_el_paso(paso
     }
 
 
-def test_fallo_definitivo_en_descifrado(pasos):
-    pasos["mocker"].patch("processor.descargar_y_descifrar", side_effect=PipelineError("descifrado_error", "No se pudo descifrar el audio"))
+def test_fallo_definitivo_en_el_archivo(pasos):
+    pasos["mocker"].patch("processor.descargar_audio", side_effect=PipelineError("audio_varias_cabeceras", "No se pudo abrir el audio"))
 
     processor.procesar_sesion(sesion())
 
     payload = pasos["resultado"].call_args.args[2]
     assert payload["resultado"] == "fallo"
-    assert payload["codigo"] == "descifrado_error"
+    assert payload["codigo"] == "audio_varias_cabeceras"
     assert payload["definitivo"] is True
     assert payload["paso"] == "audio"
 
@@ -268,38 +268,53 @@ def test_un_5xx_del_lease_no_lo_pierde(pasos):
 
 # Pasos reales ──────────────────────────────────────────────────────────────
 
-def test_descargar_descifra_el_archivo_con_la_clave_y_el_iv_de_la_sesion(mocker):
+# Cabecera real de un WebM de MediaRecorder de Chrome y la que escribe ffmpeg:
+# id EBML, tamano (1 u 8 bytes) y el elemento EBMLVersion.
+CABECERA_CHROME = bytes.fromhex("1a45dfa39f4286810142f7810142f2810442f381084282847765626d")
+CABECERA_FFMPEG = bytes.fromhex("1a45dfa3010000000000002342868101")
+
+
+def test_descargar_entrega_el_audio_tal_cual_sin_clave_ni_iv(mocker):
     descargas = []
-    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or (b"cifrado", {})))
-    descifrar = mocker.patch("processor.descifrar", return_value=b"audio en claro")
-
-    audio = {"clave": "clave", "iv": "iv0", "key": "org/s1/0"}
-    assert processor.descargar_y_descifrar("s1", audio, 1) == b"audio en claro"
+    archivo = CABECERA_CHROME + b"opus" * 50
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or (archivo, {})))
+    assert processor.descargar_audio("s1", {"key": "org/s1/0"}, 1) == archivo
     assert descargas == ["org/s1/0"]
-    assert descifrar.call_args.args[1:] == ("clave", "iv0")
 
 
-def test_descargar_sin_clave_key_o_iv_es_definitivo():
-    for audio in ({"clave": "", "iv": "i", "key": "k"}, {"clave": "c", "iv": "", "key": "k"}, {"clave": "c", "iv": "i", "key": ""}, None):
+def test_descargar_sin_key_es_definitivo():
+    for audio in ({"key": ""}, {}, None):
         with pytest.raises(PipelineError) as exc:
-            processor.descargar_y_descifrar("s1", audio, 1)
-        assert exc.value.codigo == "audio_sin_clave" and exc.value.definitivo
+            processor.descargar_audio("s1", audio, 1)
+        assert exc.value.codigo == "audio_sin_key" and exc.value.definitivo
 
 
 def test_descargar_con_r2_caido_es_transitorio(mocker):
     mocker.patch("processor.r2_client.descargar_audio", side_effect=RuntimeError("boom"))
     with pytest.raises(PipelineError) as exc:
-        processor.descargar_y_descifrar("s1", {"clave": "c", "iv": "i", "key": "k"}, 1)
+        processor.descargar_audio("s1", {"key": "k"}, 1)
     assert exc.value.codigo == "r2_error" and not exc.value.definitivo
 
 
-def test_descifrado_roto_es_definitivo_y_no_loguea_la_clave(mocker, caplog):
-    mocker.patch("processor.r2_client.descargar_audio", return_value=(b"cifrado", {}))
-    mocker.patch("processor.descifrar", side_effect=ValueError("tag invalido"))
-    with caplog.at_level(logging.ERROR), pytest.raises(PipelineError) as exc:
-        processor.descargar_y_descifrar("s1", {"clave": "CLAVE-SECRETA", "iv": "i", "key": "k"}, 1)
-    assert exc.value.codigo == "descifrado_error" and exc.value.definitivo
-    assert "CLAVE-SECRETA" not in caplog.text
+@pytest.mark.parametrize("segunda", [CABECERA_CHROME, CABECERA_FFMPEG])
+def test_dos_grabaciones_pegadas_se_rechazan_antes_del_asr(mocker, segunda):
+    # Lo que producia reanudar con un MediaRecorder nuevo: dos archivos pegados.
+    pegado = CABECERA_CHROME + b"a" * 4000 + segunda + b"b" * 4000
+    mocker.patch("processor.r2_client.descargar_audio", return_value=(pegado, {}))
+    asr = mocker.patch("processor.asr_assemblyai.transcribir")
+    with pytest.raises(PipelineError) as exc:
+        processor.descargar_audio("s1", {"key": "k"}, 1)
+    assert exc.value.codigo == "audio_varias_cabeceras" and exc.value.definitivo
+    asr.assert_not_called()
+
+
+def test_los_cuatro_bytes_del_id_sueltos_en_el_audio_no_son_una_cabecera(mocker):
+    # En ~120 MB de Opus la secuencia 1A 45 DF A3 aparece por azar: sin el
+    # elemento EBMLVersion detras no es una cabecera y no se rechaza.
+    archivo = CABECERA_CHROME + b"x" * 500 + bytes.fromhex("1a45dfa3") + b"y" * 500
+    mocker.patch("processor.r2_client.descargar_audio", return_value=(archivo, {}))
+    assert processor.cabeceras_ebml(archivo) == 1
+    assert processor.descargar_audio("s1", {"key": "k"}, 1) == archivo
 
 
 def test_transcribir_sin_segmentos_es_asr_vacio(mocker):

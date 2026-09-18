@@ -9,7 +9,6 @@ import { hashDeTicket } from "@/app/api/_lib/tickets";
 import { LEASE_SESION_MS, MAX_FALLOS_SEGUIDOS } from "@/lib/sesion-clinica/estados";
 
 import {
-  CLAVE_AUDIO,
   conectarArea2,
   crearOrg,
   crearSesion,
@@ -56,13 +55,11 @@ describe("reclamar sesiones", () => {
     expect(fila?.estado).toBe("procesando");
   });
 
-  it("entrega la clave descifrada, el IV y la key calculada del archivo; ningún payload trae una key persistida", async () => {
+  it("entrega la key calculada del archivo y nada más del audio: ni clave ni IV, la app no lo cifra", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "procesando" });
     const [s] = (await reclamar()).filter((x) => x.sesionClinicaId === sesionId);
-    expect(s.audio?.clave).toBe(CLAVE_AUDIO);
     expect(s.audio?.key).toBe(`${org.orgId}/${sesionId}/0`);
-    expect(s.audio?.iv).toMatch(/^[A-Za-z0-9+/]+=*$/);
-    expect(Buffer.from(s.audio!.iv, "base64")).toHaveLength(12);
+    expect(Object.keys(s.audio ?? {}).sort()).toEqual(["key", "organizationId", "pausas"]);
     expect(s.checkpoint).toBeNull();
     expect(s.pacienteId).toBe(org.pacienteId);
     expect(s.orientacionTeorica).toBe("gestalt");

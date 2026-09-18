@@ -38,9 +38,9 @@ fechas y montos, `speech_analytics` (números), IP y navegador en
 `sesiones_acceso` e `intentos_acceso` (purgas según fecha y estado; no son treinta días desde la creación en todos los casos). La lista completa está en
 `docs/esquema.md`.
 
-El audio se cifra con una clave por sesión (`audio_clave_encrypted`, generada en el servidor y entregada al teléfono por `POST /api/sesion-clinica/[id]/clave`) y un IV para el archivo subido (`audio_iv`, en claro). En el teléfono cada trozo se cifra con esa clave y un IV propio antes de guardarse en IndexedDB (`src/lib/grabacion-storage.ts`); el archivo entero se cifra al terminar (`src/lib/grabacion-cifrado.ts`). Nada de eso pasa por esta capa: ver `docs/pipeline.md`.
+**La app no cifra el audio.** Se guarda como `Blob` en IndexedDB mientras se graba (`src/lib/grabacion-storage.ts`), viaja a R2 por TLS con un PUT prefirmado, R2 lo cifra en reposo (cifrado del proveedor, no de la app) y se borra al aprobar la nota. El campo lógico `audioClave` (`audio_clave_encrypted`) y la columna `audio_iv` siguen en el esquema sin usarse: sólo tienen valor en sesiones grabadas con la versión que cifraba en el teléfono. Consecuencia que hay que saber: ya no existe una clave cuya destrucción vuelva ilegible un audio que no se pudo borrar. Ver `docs/pipeline.md`.
 
-Los backups de la base se cifran con gpg (`docs/operaciones.md`). El workflow retiene diarios treinta días y mensuales 366 días; el consentimiento sólo informa treinta. Además, una copia puede conservar la clave de un audio todavía no aprobado. Destruir la clave en la fila activa no vuelve inaccesibles esas copias si se conservan las claves necesarias para descifrarlas.
+Los backups de la base se cifran con gpg (`docs/operaciones.md`). El workflow retiene diarios treinta días y mensuales 366 días; el consentimiento sólo informa treinta. Una copia anterior puede conservar la clave de un audio grabado con la versión que cifraba; las sesiones nuevas no tienen clave de audio.
 
 ## 2. Cómo funciona
 

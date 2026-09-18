@@ -1,21 +1,23 @@
 "use client";
 
-// Capa visual de la grabación. Toda la lógica (chunks, pausa, cifrado,
-// IndexedDB, recuperación) vive en useGrabador; acá está el orden de la
-// pantalla y la conversación con la API:
+// Capa visual de la grabación. Toda la lógica (un solo MediaRecorder, chunks,
+// pausa, IndexedDB, recuperación) vive en useGrabador; acá está el orden de
+// la pantalla y la conversación con la API:
 //
 //   crear turno (solo si no había)  →  asegurar la sesión clínica en
-//   "grabando"  →  grabar  →  cifrar  →  upload-url / PUT a R2 /
-//   upload-confirmar  →  el turno pasa a realizado  →  volver a la ficha.
+//   "grabando"  →  grabar  →  upload-url / PUT a R2 / upload-confirmar  →
+//   el turno pasa a realizado  →  ella toca "Volver a la ficha".
 //
-// No hay pantalla intermedia entre "Terminar la sesión" y la subida: cuando
-// la terapeuta termina, termina.
+// Después de Terminar siempre hay algo que se mueve y un texto que dice en
+// qué está. La pantalla no navega sola: que desapareciera a los 1,6 segundos
+// se leía como "no subió".
 
 import * as React from "react";
 import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   ChevronLeft,
   Loader2,
   Mic,
@@ -29,19 +31,19 @@ import {
 import {
   formatearDuracion,
   useGrabador,
+  type AvisoHueco,
   type DatosGrabacion,
   type EstadoGrabador,
-  type MotivoInterrupcion,
 } from "@/components/grabacion/GrabadorSesion";
 import { AvisoPrueba } from "@/components/layout/aviso-prueba";
 import { Button, Confirmar, Toast } from "@/components/ui";
-import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
+import { Aparece, Latido } from "@/components/ui/movimiento";
 import {
   marcarTurnoRealizado,
-  pedirClaveAudio,
-  subirAudioCifrado,
+  subirAudio,
   volverAGrabando,
 } from "@/hooks/useGrabacionSesion";
+import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
@@ -49,32 +51,39 @@ import type { EstadoPrueba } from "@/lib/limites-prueba";
 import {
   ALGO_FALLO,
   AUDIO_NO_GUARDADO,
+  AVISO_HUECO,
   AVISO_LIMITE_GRABACION,
+  AVISO_MICROFONO_SILENCIADO,
   AVISO_PANTALLA_APAGADA,
+  AVISO_SIN_AUDIO_DESDE,
+  AVISO_SIN_PANTALLA_ENCENDIDA,
   CORTE_LIMITE,
-  CORTE_MICROFONO,
-  CORTE_PANTALLA,
-  CORTE_SIN_SONIDO,
   EN_PAUSA,
+  ENTENDIDO,
+  ENVIANDO_GRABACION,
   FALTA_AUTORIZACION,
   FIRMAR_AUTORIZACION,
+  GRABACION_LLEGO,
+  GRABACION_TERMINO_MICROFONO,
   GRABAR_SESION,
-  GUARDANDO,
+  GUARDAR_LO_GRABADO,
   PAUSAR,
+  PREPARANDO_GRABACION,
   REANUDAR,
+  SEGUIR_GRABANDO,
   TERMINAR_SESION,
   TURNO_NO_MARCADO,
+  VOLVER_A_LA_FICHA,
 } from "@/lib/glosario";
 
 import { MedidorAudio } from "./medidor-audio";
 
-const NOTA_EN_CAMINO = "Te avisamos cuando la nota esté lista";
-
 /** Duración por defecto del turno creado al vuelo. */
 const DURACION_SIN_TURNO = 50;
 
-// Cuánto queda el toast en pantalla antes de volver a la ficha.
-const MS_ANTES_DE_VOLVER = 1600;
+/** Estados de la sesión en los que todavía tiene sentido enviar una
+ *  grabación que quedó en el teléfono. */
+const ADMITE_AUDIO = new Set(["grabando", "subiendo"]);
 
 interface GrabarViewProps {
   /** null cuando la ruta es /grabar/nuevo?pacienteId=… */
@@ -93,7 +102,7 @@ interface GrabarViewProps {
 type Fase =
   | "previo"
   | "preparando"
-  | "guardando"
+  | "enviando"
   | "guardado"
   | "no-guardado"
   // El audio ya está en R2 y la nota está en camino; lo único que falló es
@@ -126,9 +135,9 @@ export function GrabarView({
   const [confirmarDescarte, setConfirmarDescarte] = React.useState(false);
   const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>({ open: false, message: "", variante: "aviso" });
 
-  // El audio cifrado del último intento: lo que hace posible "Reintentar" sin
-  // volver a grabar. Los chunks, cifrados, siguen en IndexedDB hasta que la
-  // confirmación responde OK.
+  // La grabación del último intento: lo que hace posible "Reintentar" sin
+  // volver a grabar. Los chunks siguen en IndexedDB hasta que la confirmación
+  // responde OK.
   const audioRef = React.useRef<DatosGrabacion | null>(null);
   const turnoIdRef = React.useRef(turnoIdInicial);
   const sesionIdRef = React.useRef<string | null>(null);
@@ -149,10 +158,10 @@ export function GrabarView({
 
       setErrorPantalla(null);
       setProgreso(0);
-      setFase("guardando");
+      setFase("enviando");
 
       try {
-        await subirAudioCifrado(sesionId, datos, (p) => setProgreso(p));
+        await subirAudio(sesionId, datos, (p: number) => setProgreso(p));
 
         audioRef.current = null;
         // Recién con la confirmación en la mano deja de hacer falta el backup.
@@ -175,11 +184,10 @@ export function GrabarView({
         }
 
         setFase("guardado");
-        setToast({ open: true, message: NOTA_EN_CAMINO, variante: "confirmacion" });
       } catch (error) {
-        // Nada se borra: el blob cifrado queda en memoria y los chunks,
-        // cifrados, en IndexedDB. La sesión vuelve a "grabando" para repetir
-        // desde upload-url con el mismo blob.
+        // Nada se borra: la grabación sigue en memoria y sus chunks en
+        // IndexedDB. La sesión vuelve a "grabando" para repetir desde
+        // upload-url con el mismo blob.
         console.warn("[grabar] falló la subida", error);
         setErrorPantalla(AUDIO_NO_GUARDADO);
         setFase("no-guardado");
@@ -208,17 +216,31 @@ export function GrabarView({
     onError: onErrorGrabacion,
   });
 
-  // Vuelta a la ficha una vez que el toast se leyó. Timeout, no setState:
-  // el efecto solo agenda la navegación.
+  const enCursoAhora =
+    grabador.estado === "grabando" || grabador.estado === "pausado" || grabador.estado === "terminada";
+  const enviandoAhora = grabador.estado === "preparando" || fase === "enviando";
+  // La pantalla encendida desde que entra hasta que la grabación llegó:
+  // también mientras sube, que en dos horas de audio son varios minutos.
+  const pantalla = usePantallaEncendida(fase !== "guardado", enCursoAhora || enviandoAhora, grabador.anotar);
+
+  // Una grabación que quedó en el teléfono sólo se ofrece si la sesión todavía
+  // la admite. Si ya está en procesando (o más allá) el audio llegó: la copia
+  // local sobra y se borra, en vez de ofrecerse de nuevo para siempre.
+  const { pendienteSeg, descartarPendiente } = grabador;
   React.useEffect(() => {
-    if (fase !== "guardado") return;
-
-    const timer = window.setTimeout(() => {
-      router.push(`/pacientes/${pacienteId}`);
-    }, MS_ANTES_DE_VOLVER);
-
-    return () => window.clearTimeout(timer);
-  }, [fase, pacienteId, router]);
+    if (pendienteSeg === null || !turnoId) return;
+    let cancelado = false;
+    void apiGet<SesionApi | null>(`/api/sesion-clinica?turnoId=${turnoId}`)
+      .then((sesion) => {
+        if (!cancelado && sesion && !ADMITE_AUDIO.has(sesion.estado)) descartarPendiente();
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+    // descartarPendiente se recrea en cada render; la condición es el dato.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendienteSeg, turnoId]);
 
   /**
    * Deja la sesión clínica del turno en estado "grabando" y devuelve su id.
@@ -261,6 +283,10 @@ export function GrabarView({
           fecha: new Date().toISOString(),
           duracion: DURACION_SIN_TURNO,
           modalidad: "presencial",
+          // Un turno que nace al grabar no pasa por la regla de choque: la
+          // sesión está ocurriendo, y un solapamiento en la agenda no puede
+          // impedir grabarla.
+          alGrabar: true,
         });
 
         turno = creado.id;
@@ -270,23 +296,19 @@ export function GrabarView({
         setHoraTexto(hora(new Date(creado.fecha)));
       }
 
-      const sesionId = await asegurarSesion(turno);
-      sesionIdRef.current = sesionId;
-      // La clave con la que el teléfono cifra cada trozo y el archivo. No
-      // se guarda en el dispositivo: se pide cada vez.
-      await grabador.iniciar(turno, await pedirClaveAudio(sesionId));
+      sesionIdRef.current = await asegurarSesion(turno);
+      await grabador.iniciar(turno);
+      // iniciar() arranca el diagnóstico de cero: se repone lo que ya se
+      // sabía de la pantalla encendida.
+      grabador.anotar(pantalla.estado === "concedida" ? "wakelock-concedido" : "wakelock-rechazado");
     } catch (error) {
       setFase("previo");
       setToast({ open: true, message: mensajeDe(error, ALGO_FALLO), variante: "aviso" });
     }
   }
 
-  /**
-   * Una grabación que quedó cifrada en este teléfono: la clave para abrirla
-   * se le pide al servidor, que sólo la entrega mientras la sesión sigue en
-   * grabando. Recién con la clave en la mano el grabador la descifra, la
-   * cifra entera y la entrega a `subir`.
-   */
+  /** Una grabación que quedó en este teléfono: se envía tal cual, sin pedir
+   *  nada más que la sesión en "grabando". */
   async function enviarPendiente() {
     const turno = turnoIdRef.current;
 
@@ -298,11 +320,9 @@ export function GrabarView({
     setFase("preparando");
 
     try {
-      const sesionId = await asegurarSesion(turno);
-      sesionIdRef.current = sesionId;
-      const clave = await pedirClaveAudio(sesionId);
+      sesionIdRef.current = await asegurarSesion(turno);
       setFase("previo");
-      grabador.enviarPendiente(clave);
+      grabador.enviarPendiente();
     } catch (error) {
       setFase("previo");
       setToast({ open: true, message: mensajeDe(error, ALGO_FALLO), variante: "aviso" });
@@ -329,7 +349,6 @@ export function GrabarView({
       turnoProgramadoRef.current = false;
       setErrorPantalla(null);
       setFase("guardado");
-      setToast({ open: true, message: NOTA_EN_CAMINO, variante: "confirmacion" });
     } catch (error) {
       console.warn("[grabar] el turno no quedó realizado", error);
       setToast({ open: true, message: TURNO_NO_MARCADO, variante: "aviso" });
@@ -347,20 +366,14 @@ export function GrabarView({
     void subir(datos);
   }
 
-  const grabando = grabador.estado === "grabando";
-  const pausado = grabador.estado === "pausado";
-  const interrumpida = grabador.estado === "interrumpida";
-  const enCurso = grabando || pausado || interrumpida;
-
-  const mostrandoSubida = fase === "guardando" || fase === "guardado";
-  const cifrando = grabador.estado === "cifrando";
   // En el tope de la prueba no se inicia una grabación nueva; el servidor lo
   // rechaza igual (403). Una pendiente sí se puede enviar: ya está contada.
   const sinCupo = prueba?.restantes === 0;
+  const volver = () => router.push(`/pacientes/${pacienteId}`);
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-80px)] w-full max-w-[560px] flex-col px-5 py-6 lg:py-10">
-      {!enCurso && !mostrandoSubida && !cifrando ? (
+      {!enCursoAhora && !enviandoAhora && fase !== "guardado" ? (
         <Link
           href={`/pacientes/${pacienteId}`}
           className="mb-6 inline-flex items-center gap-1 self-start text-[13px] text-ink-500 transition-colors duration-150 hover:text-ink-700"
@@ -384,10 +397,14 @@ export function GrabarView({
           ) : null}
         </header>
 
-        {mostrandoSubida || cifrando ? (
-          <PantallaGuardando
-            progreso={fase === "guardado" ? 100 : progreso}
+        {enviandoAhora ? (
+          <PantallaEnviando
+            progreso={fase === "enviando" ? (progreso ?? 0) : null}
+            pantallaApagada={pantalla.seApago}
+            onCerrarAvisoPantalla={pantalla.cerrarAviso}
           />
+        ) : fase === "guardado" ? (
+          <PantallaLlego onVolver={volver} />
         ) : fase === "no-guardado" ? (
           <PantallaConReintento
             mensaje={errorPantalla ?? AUDIO_NO_GUARDADO}
@@ -398,21 +415,24 @@ export function GrabarView({
             mensaje={errorPantalla ?? TURNO_NO_MARCADO}
             onReintentar={() => void reintentarMarcarRealizado()}
           />
-        ) : enCurso ? (
+        ) : enCursoAhora ? (
           <PantallaGrabando
             estado={grabador.estado}
             segundos={grabador.segundos}
             nivel={grabador.nivelAudio}
             silencioso={grabador.audioSilencioso}
-            pantallaApagada={grabador.wakeLockSoltado}
+            microfonoSilenciado={grabador.microfonoSilenciado}
+            hueco={grabador.hueco}
+            pantallaApagada={pantalla.seApago}
             avisoLimite={grabador.avisoLimite}
-            motivoInterrupcion={grabador.motivoInterrupcion}
-            mensajeError={grabador.mensajeError}
+            limiteAlcanzado={grabador.limiteAlcanzado}
+            conmutando={grabador.conmutando}
             confirmando={confirmarDescarte}
             onPausar={grabador.pausar}
             onReanudar={grabador.reanudar}
-            onReanudarTrasCorte={() => void grabador.reanudarTrasInterrupcion()}
             onTerminar={grabador.terminar}
+            onCerrarAvisoHueco={grabador.cerrarAvisoHueco}
+            onCerrarAvisoPantalla={pantalla.cerrarAviso}
             onPedirDescarte={() => setConfirmarDescarte(true)}
             onCancelarDescarte={() => setConfirmarDescarte(false)}
             onDescartar={descartar}
@@ -431,9 +451,10 @@ export function GrabarView({
             pacienteId={pacienteId}
             preparando={fase === "preparando"}
             sinCupo={sinCupo}
+            sinPantallaEncendida={pantalla.estado === "rechazada"}
             pendienteMinutos={
-              grabador.pendiente
-                ? Math.max(1, Math.round(grabador.pendiente.duracionAproxSeg / 60))
+              grabador.pendienteSeg !== null
+                ? Math.max(1, Math.round(grabador.pendienteSeg / 60))
                 : null
             }
             onEmpezar={() => void empezar()}
@@ -458,6 +479,7 @@ function PantallaPrevia({
   pacienteId,
   preparando,
   sinCupo,
+  sinPantallaEncendida,
   pendienteMinutos,
   onEmpezar,
   onEnviarPendiente,
@@ -468,6 +490,8 @@ function PantallaPrevia({
   preparando: boolean;
   /** Tope de grabaciones de la prueba alcanzado: Grabar sesión apagado. */
   sinCupo: boolean;
+  /** El teléfono no concedió el wake lock: se dice ANTES de empezar. */
+  sinPantallaEncendida: boolean;
   pendienteMinutos: number | null;
   onEmpezar: () => void;
   onEnviarPendiente: () => void;
@@ -524,6 +548,14 @@ function PantallaPrevia({
           {GRABAR_SESION}
         </span>
       </button>
+
+      {sinPantallaEncendida ? (
+        <div role="status" className="w-full">
+          <Aviso icono={<Sun size={15} strokeWidth={1.8} aria-hidden="true" />}>
+            {AVISO_SIN_PANTALLA_ENCENDIDA}
+          </Aviso>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -533,15 +565,18 @@ function PantallaGrabando({
   segundos,
   nivel,
   silencioso,
+  microfonoSilenciado,
+  hueco,
   pantallaApagada,
   avisoLimite,
-  motivoInterrupcion,
-  mensajeError,
+  limiteAlcanzado,
+  conmutando,
   confirmando,
   onPausar,
   onReanudar,
-  onReanudarTrasCorte,
   onTerminar,
+  onCerrarAvisoHueco,
+  onCerrarAvisoPantalla,
   onPedirDescarte,
   onCancelarDescarte,
   onDescartar,
@@ -550,20 +585,24 @@ function PantallaGrabando({
   segundos: number;
   nivel: number;
   silencioso: boolean;
+  microfonoSilenciado: boolean;
+  hueco: AvisoHueco | null;
   pantallaApagada: boolean;
   avisoLimite: boolean;
-  motivoInterrupcion: MotivoInterrupcion | null;
-  mensajeError: string | null;
+  limiteAlcanzado: boolean;
+  conmutando: boolean;
   confirmando: boolean;
   onPausar: () => void;
   onReanudar: () => void;
-  onReanudarTrasCorte: () => void;
   onTerminar: () => void;
+  onCerrarAvisoHueco: () => void;
+  onCerrarAvisoPantalla: () => void;
   onPedirDescarte: () => void;
   onCancelarDescarte: () => void;
   onDescartar: () => void;
 }) {
-  const interrumpida = estado === "interrumpida";
+  // El micrófono se fue: la grabación terminó y sólo queda guardarla.
+  const terminada = estado === "terminada";
 
   return (
     <div className="flex w-full flex-col items-center gap-6">
@@ -584,45 +623,72 @@ function PantallaGrabando({
           key={estado}
           className="font-sans text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-500"
         >
-          {estado === "grabando" ? "REC" : interrumpida ? "Cortado" : EN_PAUSA}
+          {estado === "grabando" ? "REC" : terminada ? "Terminada" : EN_PAUSA}
         </Aparece>
       </div>
 
       <p
         className="font-mono text-[52px] font-semibold leading-none tabular-nums text-ink-900"
-        aria-label={`${segundos} segundos grabados`}
+        aria-label={`${Math.floor(segundos)} segundos grabados`}
       >
         {formatearDuracion(segundos)}
       </p>
 
-      {interrumpida ? (
-        <div className="flex flex-col items-center gap-2">
+      {terminada ? (
+        <div role="alert" className="flex flex-col items-center gap-2">
           <MicOff
             size={20}
             strokeWidth={1.9}
             aria-hidden="true"
             className="text-[color:var(--color-error)]"
           />
-          {/* Cuatro cortes distintos, cuatro explicaciones distintas: volver
-              a pedir el micrófono no arregla haber llegado al tope, y decirle
-              "se cortó el micrófono" cuando lo que pasó fue que se apagó la
-              pantalla la manda a buscar el problema donde no está. */}
-          <p className="font-sans text-[14px] text-ink-700">
-            {textoDelCorte(motivoInterrupcion)}
+          <p className="max-w-[340px] font-sans text-[14px] leading-[1.5] text-ink-700">
+            {GRABACION_TERMINO_MICROFONO}
           </p>
-          {mensajeError ? (
-            <p className="font-sans text-[13px] text-[color:var(--color-error)]">
-              {mensajeError}
-            </p>
-          ) : null}
         </div>
       ) : (
         <>
           <MedidorAudio nivel={nivel} silencioso={silencioso} />
-          <AvisosDeGrabacion
-            pantallaApagada={pantallaApagada}
-            avisoLimite={avisoLimite}
-          />
+          <div role="status" className="flex w-full flex-col gap-2 empty:hidden">
+            {pantallaApagada ? (
+              <Aviso
+                icono={<Sun size={15} strokeWidth={1.8} aria-hidden="true" />}
+                accion={ENTENDIDO}
+                onAccion={onCerrarAvisoPantalla}
+              >
+                {AVISO_PANTALLA_APAGADA}
+              </Aviso>
+            ) : null}
+            {hueco ? (
+              hueco.hasta === null ? (
+                <Aviso icono={<MicOff size={15} strokeWidth={1.8} aria-hidden="true" />}>
+                  {AVISO_SIN_AUDIO_DESDE(hueco.desde)}
+                </Aviso>
+              ) : (
+                <Aviso
+                  icono={<MicOff size={15} strokeWidth={1.8} aria-hidden="true" />}
+                  accion={SEGUIR_GRABANDO}
+                  onAccion={onCerrarAvisoHueco}
+                >
+                  {AVISO_HUECO(hueco.desde, hueco.hasta)}
+                </Aviso>
+              )
+            ) : null}
+            {microfonoSilenciado ? (
+              <Aviso icono={<MicOff size={15} strokeWidth={1.8} aria-hidden="true" />}>
+                {AVISO_MICROFONO_SILENCIADO}
+              </Aviso>
+            ) : null}
+            {limiteAlcanzado ? (
+              <Aviso icono={<Square size={13} strokeWidth={2} aria-hidden="true" />}>
+                {CORTE_LIMITE}
+              </Aviso>
+            ) : avisoLimite ? (
+              <Aviso icono={<Square size={13} strokeWidth={2} aria-hidden="true" />}>
+                {AVISO_LIMITE_GRABACION}
+              </Aviso>
+            ) : null}
+          </div>
         </>
       )}
 
@@ -639,18 +705,11 @@ function PantallaGrabando({
       ) : (
         <>
           <div className="flex w-full flex-col gap-3 sm:flex-row">
-            {interrumpida ? (
-              <Button
-                className="flex-1"
-                onClick={onReanudarTrasCorte}
-                icon={<Play size={16} strokeWidth={1.8} aria-hidden="true" />}
-              >
-                {REANUDAR}
-              </Button>
-            ) : estado === "pausado" ? (
+            {terminada || limiteAlcanzado ? null : estado === "pausado" ? (
               <Button
                 className="flex-1"
                 onClick={onReanudar}
+                disabled={conmutando}
                 icon={<Play size={16} strokeWidth={1.8} aria-hidden="true" />}
               >
                 {REANUDAR}
@@ -660,6 +719,7 @@ function PantallaGrabando({
                 variant="secondary"
                 className="flex-1"
                 onClick={onPausar}
+                disabled={conmutando}
                 icon={<Pause size={16} strokeWidth={1.8} aria-hidden="true" />}
               >
                 {PAUSAR}
@@ -671,7 +731,7 @@ function PantallaGrabando({
               onClick={onTerminar}
               icon={<Square size={15} strokeWidth={2} aria-hidden="true" />}
             >
-              {TERMINAR_SESION}
+              {terminada ? GUARDAR_LO_GRABADO : TERMINAR_SESION}
             </Button>
           </div>
 
@@ -685,122 +745,112 @@ function PantallaGrabando({
         </>
       )}
 
-      {/* Decía "Podés bloquear la pantalla". Podías, y por eso el 7/9 una
-          sesión de 120 minutos llegó cortada en 90: con la pantalla apagada
-          el micrófono deja de entregar señal sin avisar. Ahora la grabación
-          se pausa sola en vez de subirse, pero seguir grabando con la
-          pantalla encendida sigue siendo lo que mejor funciona. */}
+      {/* El 7/9 y el 18/9 el teléfono se bloqueó a mitad de sesión y dejó de
+          entregar audio sin avisar. La app pide mantener la pantalla
+          encendida, pero el teléfono puede no hacer caso: se le dice a ella. */}
       <p className="max-w-[320px] font-sans text-[13px] leading-[1.55] text-ink-500">
-        Se guarda cifrado en el teléfono. Dejá la pantalla encendida.
+        Dejá la pantalla encendida mientras grabás.
       </p>
     </div>
   );
 }
 
-/**
- * Por qué se interrumpió la grabación, en las palabras del glosario.
- *
- * El fallback es el corte de micrófono porque es el único que existía antes
- * de que la interrupción tuviera motivo: una grabación cortada por una
- * versión anterior no tiene con qué contestar, y "se cortó el micrófono" es
- * lo que decía entonces.
- */
-function textoDelCorte(motivo: MotivoInterrupcion | null) {
-  switch (motivo) {
-    case "limite":
-      return CORTE_LIMITE;
-    case "sin-sonido":
-      return CORTE_SIN_SONIDO;
-    case "pantalla":
-      return CORTE_PANTALLA;
-    default:
-      return CORTE_MICROFONO;
-  }
-}
-
-/**
- * Los avisos de una grabación en curso: persistentes, apilados, y ninguno
- * interrumpe nada.
- *
- * Los dos son cosas que el grabador ya sabía desde siempre y que nadie leía:
- * `wakeLockSoltado` y `avisoLimite` se calculaban y se tiraban. Se muestran
- * mientras la condición dure y se van solos cuando se resuelve: no hay nada
- * que cerrar ni que confirmar, porque el trabajo de ella es la sesión, no la
- * app.
- *
- * El tercer aviso —el silencio— vive en el medidor, pegado a las barras en
- * cero que lo explican.
- *
- * El orden es el de urgencia: la pantalla apagada primero, porque es la única
- * que puede terminar en una grabación pausada a mitad de sesión.
- */
-function AvisosDeGrabacion({
-  pantallaApagada,
-  avisoLimite,
-}: {
-  pantallaApagada: boolean;
-  avisoLimite: boolean;
-}) {
-  if (!pantallaApagada && !avisoLimite) {
-    return null;
-  }
-
-  return (
-    <div role="status" className="flex w-full flex-col gap-2">
-      {pantallaApagada ? (
-        <Aviso icono={<Sun size={15} strokeWidth={1.8} aria-hidden="true" />}>
-          {AVISO_PANTALLA_APAGADA}
-        </Aviso>
-      ) : null}
-      {avisoLimite ? (
-        <Aviso icono={<Square size={13} strokeWidth={2} aria-hidden="true" />}>
-          {AVISO_LIMITE_GRABACION}
-        </Aviso>
-      ) : null}
-    </div>
-  );
-}
-
+/** Un aviso persistente. Con `accion`, queda hasta que ella lo cierra. */
 function Aviso({
   icono,
   children,
+  accion,
+  onAccion,
 }: {
   icono: React.ReactNode;
   children: React.ReactNode;
+  accion?: string;
+  onAccion?: () => void;
 }) {
   return (
     <div className="flex w-full items-start gap-2 rounded-md border border-[color:var(--border-subtle)] bg-cream-100 px-3 py-2 text-left">
       <span className="mt-[2px] shrink-0 text-ink-500">{icono}</span>
-      <p className="font-sans text-[13px] leading-[1.45] text-ink-700">
-        {children}
-      </p>
+      <div className="flex flex-col items-start gap-1">
+        <p className="font-sans text-[13px] leading-[1.45] text-ink-700">
+          {children}
+        </p>
+        {accion && onAccion ? (
+          <button
+            type="button"
+            onClick={onAccion}
+            className="min-h-8 font-sans text-[13px] font-semibold text-sage-700 underline underline-offset-4"
+          >
+            {accion}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-// Entra con un fundido corto en el mismo lugar donde estaba el cronómetro:
-// "Terminar la sesión" no cambia de pantalla, cambia de estado. El salto
-// que había antes hacía dudar de si se había apretado bien.
-function PantallaGuardando({ progreso }: { progreso: number | null }) {
+// Después de Terminar. Tapa toda la pantalla, menú inferior incluido: mientras
+// la grabación viaja no hay adónde ir, y tocar el menú sin querer la cortaba.
+// Siempre hay algo que se mueve: una pantalla quieta se lee como "se colgó".
+function PantallaEnviando({
+  progreso,
+  pantallaApagada,
+  onCerrarAvisoPantalla,
+}: {
+  /** null mientras se prepara el archivo; 0-100 mientras viaja. */
+  progreso: number | null;
+  pantallaApagada: boolean;
+  onCerrarAvisoPantalla: () => void;
+}) {
+  const texto = progreso === null ? PREPARANDO_GRABACION : ENVIANDO_GRABACION(progreso);
+
   return (
-    <Aparece className="flex w-full flex-col items-center gap-5">
-      <AnilloProgreso tamano={30} className="text-sage-500" etiqueta={GUARDANDO} />
-      <p className="font-sans text-[16px] font-semibold text-ink-900">
-        {GUARDANDO}
+    <div
+      data-testid="enviando"
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-cream-50 px-6 text-center"
+    >
+      <Loader2 size={34} strokeWidth={1.8} aria-hidden="true" className="animate-spin text-sage-500" />
+      <p role="status" aria-live="polite" className="max-w-[320px] font-sans text-[16px] font-semibold leading-[1.45] text-ink-900">
+        {texto}
       </p>
       <div
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={progreso ?? undefined}
-        aria-label={GUARDANDO}
+        aria-label={texto}
         className="h-[6px] w-full max-w-[280px] overflow-hidden rounded-full bg-cream-200"
       >
         <div
           className="h-full rounded-full bg-sage-500 transition-[width] duration-200"
-          style={{ width: `${progreso ?? 6}%` }}
+          style={{ width: `${Math.max(progreso ?? 0, 4)}%` }}
         />
       </div>
+      {pantallaApagada ? (
+        <div className="w-full max-w-[340px]">
+          <Aviso
+            icono={<Sun size={15} strokeWidth={1.8} aria-hidden="true" />}
+            accion={ENTENDIDO}
+            onAccion={onCerrarAvisoPantalla}
+          >
+            {AVISO_PANTALLA_APAGADA}
+          </Aviso>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// La grabación llegó. La pantalla se queda acá hasta que ella decida irse.
+function PantallaLlego({ onVolver }: { onVolver: () => void }) {
+  return (
+    <Aparece className="flex w-full flex-col items-center gap-5">
+      <Check size={30} strokeWidth={2} aria-hidden="true" className="text-sage-600" />
+      <p role="status" className="max-w-[340px] font-sans text-[16px] font-semibold leading-[1.5] text-ink-900">
+        {GRABACION_LLEGO}
+      </p>
+      <Button className="w-full sm:w-auto" onClick={onVolver}>
+        {VOLVER_A_LA_FICHA}
+      </Button>
     </Aparece>
   );
 }

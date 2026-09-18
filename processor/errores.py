@@ -10,15 +10,15 @@ aplica su politica: un transitorio vuelve a la cola con backoff y se agota a
 los MAX fallos seguidos; un definitivo deja la sesion en `fallida` hasta que
 la profesional reintente o elimine). Se puede fijar por excepcion
 (`definitivo=`) o dejar que lo decida el codigo: los de CODIGOS_DEFINITIVOS
-no se arreglan solos con el tiempo (audio que no se puede abrir, respuesta
+no se arreglan solos con el tiempo (audio que son dos archivos pegados, respuesta
 del modelo con forma invalida dos veces), el resto si puede (red, timeouts,
 5xx de un proveedor, error interno).
 """
 
 CODIGOS_DEFINITIVOS = frozenset(
     {
-        "audio_sin_clave",
-        "descifrado_error",
+        "audio_sin_key",
+        "audio_varias_cabeceras",
         "asr_vacio",
         "asr_rechazado",
         "llm_invalido",

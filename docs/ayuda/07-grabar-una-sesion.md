@@ -12,7 +12,9 @@ el borrador de la nota clínica.
 - **Con turno o sin turno.** Si hay turno hoy, se graba ese turno. Si tocás
   **Grabar** en la cabecera de la ficha y la paciente no tiene turno, la app
   **crea uno de 50 minutos, presencial, con la hora de ahora** recién cuando
-  tocás **Grabar sesión** (ese turno no genera recordatorio).
+  tocás **Grabar sesión** (ese turno no genera recordatorio). Ese turno se crea
+  aunque a esa hora haya otro en la agenda: la sesión está ocurriendo, y un
+  choque de horarios no impide grabarla.
 - **Una cuenta de prueba graba hasta 15 sesiones.** Si tu consultorio se creó
   con una invitación, arriba dice cuántas llevás. Al llegar a 15, dice
   *"Llegaste a las 15 sesiones grabadas de la prueba y no podés grabar más.
@@ -27,74 +29,92 @@ el borrador de la nota clínica.
 2. Tocá el botón redondo verde **Grabar sesión**.
 3. La primera vez, el navegador te pide permiso para usar el micrófono.
 
+Si el teléfono no dejó que Sesión mantenga la pantalla encendida (por el ahorro
+de batería, por ejemplo), lo dice **antes de empezar**, debajo del botón: *"Este
+teléfono no dejó que Sesión mantenga la pantalla encendida. Si se bloquea, la
+grabación se puede cortar: sacá el bloqueo automático o tocá la pantalla cada
+tanto."* Igual podés grabar.
+
 Arriba ves el nombre de la paciente y la hora del turno. Un punto que respira
-marca que está grabando, el cronómetro cuenta el tiempo grabado y debajo hay un
-medidor de sonido: barras que se mueven con la voz y una leyenda que dice
-*"El audio se escucha bien"*. Si deja de entrar sonido con la pantalla a la
-vista, las barras quedan en cero y la leyenda pasa a *"No está entrando
-sonido"*. Al pie lo recuerda: *"Se guarda cifrado en el teléfono. Dejá la
-pantalla encendida."*
+marca que está grabando, el cronómetro cuenta el **audio que realmente entró** y
+debajo hay un medidor de sonido: barras que se mueven con la voz y una leyenda
+que dice *"El audio se escucha bien"*. Si pasan dos minutos sin sonido con la
+pantalla a la vista, las barras quedan en cero y la leyenda pasa a *"No está
+entrando sonido"*. El medidor sólo avisa: nunca corta la grabación. Al pie lo
+recuerda: *"Dejá la pantalla encendida mientras grabás."*
 
 ## Mientras grabás
 
-El navegador entrega el audio **cada segundo**, y cada entrega **se cifra en el
-teléfono antes de guardarse** con la clave de esa sesión. Es una sola grabación,
-un solo archivo: pausar no la corta en pedazos. Nada se envía hasta que
-terminás.
+El navegador entrega el audio **cada segundo** y cada entrega se guarda en el
+teléfono apenas llega. Es una sola grabación, un solo archivo, de punta a punta:
+pausar no la corta en pedazos. Nada se envía hasta que terminás.
 
 **Dejá la pantalla encendida y Sesión abierta.** La app pide mantener la
-pantalla encendida mientras grabás; si el sistema la apaga igual, aparece
-*"La pantalla se apagó: la grabación se puede cortar. Mantenela encendida."*
-Con la pantalla apagada el teléfono puede dejar de entregar sonido sin avisar.
+pantalla encendida mientras grabás y mientras envía; si el teléfono la apaga
+igual, aparece *"La pantalla se apagó. Con la pantalla apagada el teléfono puede
+dejar de grabar: mantenela encendida."* y queda ahí hasta que tocás
+**Entendido**. Con la pantalla apagada el teléfono puede dejar de entregar
+sonido sin avisar, y eso la app no lo puede evitar.
 
-Lo que corta la captura es que el micrófono deje de estar (una llamada, otra app
-que se lo lleve, la pista silenciada más de tres segundos), que pase un rato sin
-que entre sonido (dos minutos de aviso y cinco de corte con la pantalla a la
-vista; un minuto con la pantalla oculta), que la pantalla se apague y el
-navegador descargue la página, o llegar al límite de tiempo. En todos esos casos
-la grabación queda **pausada**, lo grabado se conserva, y sos vos quien decide
-si reanuda o termina. **Ninguna interrupción envía nada sola.**
+**Si dejó de llegar audio, la pantalla lo dice con las horas.** Al volver de un
+bloqueo vas a ver, por ejemplo, *"No se grabó entre las 10:12 y las 10:20. Ahora
+está grabando de nuevo: podés seguir o terminar."* Tocá **Seguir grabando** o
+**Terminar la sesión**. Mientras el audio todavía no volvió dice *"No está
+llegando audio desde las 10:12."* Ese rato no cuenta como tiempo grabado.
+
+**Una llamada entrante no corta la grabación.** El teléfono silencia el
+micrófono mientras dura y la pantalla dice *"El teléfono silenció el micrófono
+(¿una llamada?). La grabación sigue abierta y vuelve sola cuando lo libere."*
+
+**Ninguna interrupción envía nada sola.**
 
 ### Pausar
 
 **Pausar** detiene la captura y aparece **En pausa**. El cronómetro se detiene
 y el tiempo en pausa no cuenta. **Reanudar** sigue la captura de audio en el
-mismo archivo.
+mismo archivo, las veces que haga falta. Justo después de tocar, el botón queda
+apagado un instante: un doble toque no pausa ni reanuda dos veces.
 
-### Si se corta el micrófono o se interrumpe la captura
+### Si el micrófono se desconecta
 
-La pantalla dice qué pasó y que lo grabado está a salvo; por ejemplo: *"Se cortó
-el micrófono. Lo grabado está a salvo."*, *"Dejó de entrar sonido y se pausó la
-grabación. Lo grabado está a salvo."* o *"La pantalla se apagó y se pausó la
-grabación. Lo grabado está a salvo."* Elegí **Reanudar** (vuelve a pedir el
-micrófono) o **Terminar la sesión** con lo que haya. Durante la interrupción no
-se graba. La recuperación completa no está garantizada: lo que el teléfono no
-llegó a capturar no se puede recuperar.
+Si otra app se lleva el micrófono del todo o se le quita el permiso, la
+grabación **termina ahí**: *"El micrófono se desconectó y la grabación terminó
+acá. No se puede continuar esta grabación: guardá lo grabado."* El único botón
+es **Guardar lo grabado**, que la envía como cualquier otra. No se puede seguir
+en el mismo archivo, y pegar dos grabaciones lo rompería. La recuperación
+completa no está garantizada: lo que el teléfono no llegó a capturar no se puede
+recuperar.
 
 ## Terminar
 
 1. Tocá **Terminar la sesión** (el botón rojo). No hay pantalla intermedia.
-2. Aparece **Guardando…** con el progreso: la app cifra el archivo entero con la
-   clave de la sesión, lo sube y espera que el servidor confirme que llegó.
-3. Al terminar aparece *"Te avisamos cuando la nota esté lista"*, la app vuelve
-   sola a la ficha y el turno queda marcado como **realizado**; su recordatorio
-   pendiente se cancela.
+2. La pantalla entera pasa a decir *"Preparando la grabación…"* y enseguida
+   *"Enviando la grabación… 37 %. No cierres esta pantalla."*, con un indicador
+   que gira y una barra. Mientras envía, el menú de abajo no está: no hay nada
+   que tocar hasta que llegue. La pantalla sigue encendida.
+3. Cuando el servidor confirma que llegó, dice *"La grabación llegó bien. La
+   nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando
+   esté."* y se queda ahí hasta que tocás **Volver a la ficha**. Mientras se
+   escribe, la ficha y **Hoy** muestran *"Procesando la sesión de …"*; cuando
+   termina aparece, en la pantalla en la que estés, *"La nota de … está lista"*
+   con **Revisar**. No llega ninguna notificación al teléfono. El turno queda marcado como **realizado** y su
+   recordatorio pendiente se cancela.
 
-Con la confirmación en la mano, la app borra la copia cifrada del teléfono.
+Con la confirmación en la mano, la app borra la copia del teléfono.
 
-El límite es de **150 minutos** de grabación, con un aviso a los **135
+El límite es de **150 minutos** de audio grabado, con un aviso a los **135
 minutos**: *"Quedan 15 minutos de grabación"*. Al llegar al límite la captura
 queda pausada: *"Llegaste a las 2 horas y media de grabación. Lo grabado está a
-salvo."* Todavía tenés que tocar **Terminar la sesión** para que se envíe y se
-procese. No se envía sola.
+salvo: tocá Terminar la sesión para enviarlo."* Todavía tenés que tocar
+**Terminar la sesión** para que se envíe y se procese. No se envía sola.
 
 ## Si la subida falla
 
 La pantalla dice *"No se pudo guardar el audio. Está a salvo en tu teléfono.
-Probá de nuevo."* con un botón **Reintentar**. Nada se borra: el archivo
-cifrado sigue en memoria y la copia cifrada en el teléfono. Poné el teléfono en
-una conexión buena y tocá **Reintentar** las veces que haga falta. No des por
-guardada una sesión hasta ver *"Te avisamos cuando la nota esté lista"*.
+Probá de nuevo."* con un botón **Reintentar**. Nada se borra: la grabación sigue
+guardada en el teléfono. Poné el teléfono en una conexión buena y tocá
+**Reintentar** las veces que haga falta. No des por guardada una sesión hasta
+ver *"La grabación llegó bien."*
 
 Si el audio ya subió pero el turno no quedó marcado, dice *"La sesión se guardó,
 pero el turno quedó como agendado. Probá de nuevo."*: **Reintentar** repite solo
@@ -103,32 +123,31 @@ ese paso.
 ## Si se cerró la app o el navegador
 
 Volvé a la pantalla de grabar de **ese mismo turno**, en el mismo teléfono. La
-app encuentra la copia cifrada y dice *"Quedó una grabación de ~N min sin
-enviar"*, con **Guardarla ahora** y **Descartarla**. Para abrirla, la app le pide
-al servidor la clave de esa sesión (nunca quedó en el teléfono) y después la
-envía como si hubieras tocado **Terminar la sesión**.
+app encuentra la copia y dice *"Quedó una grabación de ~N min sin enviar"*, con
+**Guardarla ahora** y **Descartarla**. **Guardarla ahora** la envía tal cual,
+como si hubieras tocado **Terminar la sesión**. Esa grabación no se puede
+continuar: sólo enviar o descartar.
 
-Si el navegador solo descargó la página con la pantalla apagada, al volver
-recupera lo guardado y queda **En pausa** con *"La pantalla se apagó y se pausó
-la grabación. Lo grabado está a salvo."*: podés **Reanudar** o **Terminar la
-sesión**.
+Si esa sesión ya había llegado al servidor (está procesándose o ya tiene nota),
+la app borra sola la copia del teléfono en vez de ofrecerla otra vez.
 
 Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
 
 ## Qué hace la app por detrás
 
-- Cada sesión tiene una clave propia, que genera el servidor y el teléfono pide
-  al empezar a grabar. Cada trozo se cifra en el teléfono con esa clave antes
-  de guardarse en el almacenamiento del navegador; en el teléfono no queda audio
-  sin cifrar. Lo que está en la memoria de la pestaña mientras grabás no se
-  guarda en claro en ningún lado.
-- Al terminar, el archivo entero se cifra con esa misma clave y viaja cifrado.
-  El servidor comprueba que el archivo llegó antes de dar la grabación por
-  terminada.
-- Con la subida confirmada, la copia cifrada del teléfono se borra.
-- Al aprobar la nota, la app destruye la clave con la que trabaja; un respaldo
-  de la base puede conservar esa clave hasta 12 meses. Ver
-  `12-camino-del-audio-y-privacidad.md`.
+- **La app no cifra el audio.** Mientras grabás queda en el almacenamiento del
+  navegador de tu teléfono, protegido por el bloqueo del teléfono. Viaja al
+  servidor por una conexión cifrada (TLS), el almacén donde espera lo cifra en
+  reposo, y se borra después de procesarse. Las notas y la transcripción sí las
+  cifra la app. Ver `12-camino-del-audio-y-privacidad.md`.
+- El archivo se envía tal como se grabó, sin copiarlo entero a la memoria: por
+  eso una sesión de dos horas no congela la pantalla.
+- El servidor comprueba que el archivo llegó antes de dar la grabación por
+  terminada. Con la subida confirmada, la copia del teléfono se borra.
+- Junto con la grabación viaja un registro técnico de lo que le pasó al
+  grabador —horas de pausas y huecos, si la pantalla se apagó, cuántos trozos
+  llegaron—, sin nada de lo que se dijo en la sesión. Sirve para entender un
+  corte sin tener que adivinar.
 
 ## Lo que NO hace
 
@@ -137,8 +156,12 @@ Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
 - **No graba sin autorización vigente.**
 - **No graba dos veces el mismo turno**: un turno tiene una sola sesión clínica.
 - **No sube nada mientras grabás**: el archivo sale entero al terminar.
-- **No garantiza seguir grabando con la pantalla bloqueada**: si el sistema
-  suelta el micrófono, la grabación queda pausada con lo capturado hasta ahí.
+- **No cifra el audio en el teléfono.**
+- **No garantiza seguir grabando con la pantalla bloqueada**: eso lo decide el
+  teléfono. Si dejó de entregar audio, al volver la pantalla te dice entre qué
+  horas no se grabó.
+- **No continúa una grabación después de cerrar la app**: lo que quedó se envía
+  o se descarta.
 - **No te avisa con el teléfono bloqueado ni con la app cerrada** cuando la
   nota está lista: el aviso aparece dentro de la app, en la pantalla en la que
   estés, mientras la tengas abierta.
@@ -152,7 +175,7 @@ src/app/(dashboard)/grabar/[turnoId]/_components/medidor-audio.tsx
 src/components/grabacion/GrabadorSesion.tsx
 src/hooks/useGrabacionSesion.ts
 src/lib/grabacion-storage.ts
-src/lib/grabacion-cifrado.ts
+src/hooks/usePantallaEncendida.ts
 src/lib/grabacion-captura.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/lib/limites-prueba.ts

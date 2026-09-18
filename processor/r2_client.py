@@ -1,8 +1,9 @@
 """
-Cliente R2 (Cloudflare) para descargar audio cifrado.
+Cliente R2 (Cloudflare) para descargar el audio. La app no lo cifra: llega
+tal como lo grabo el telefono (R2 lo cifra en reposo por su cuenta).
 
-El borrado NO vive aca: el audio se elimina desde la app (crypto-shredding
-en /aprobar o DELETE de la sesion), nunca desde el worker.
+El borrado NO vive aca: el audio se elimina desde la app (trabajo
+borrar_audio_r2, al aprobar o al eliminar la sesion), nunca desde el worker.
 """
 import boto3
 from botocore.config import Config as BotoConfig

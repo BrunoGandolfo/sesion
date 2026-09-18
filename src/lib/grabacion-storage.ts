@@ -6,11 +6,11 @@
 // recuperarlos si el navegador mata el proceso (MIUI, Chrome en
 // Android, cierre de pestaña, etc.).
 //
-// NADA SE ESCRIBE SIN CIFRAR. Cada chunk se cifra con la clave AES-256 de la
-// sesión (la que entrega el servidor) y un IV propio de 12 bytes antes de
-// entrar a IndexedDB: en el teléfono no queda audio en claro, ni un segundo.
-// La clave no se guarda acá: para abrir una grabación recuperada se le pide
-// al servidor de nuevo (POST [id]/clave) y se descifra con `descifrarChunks`.
+// Los chunks se guardan como Blob, tal como los entrega el MediaRecorder. La
+// app no cifra el audio: en el teléfono lo protege el bloqueo del dispositivo,
+// viaja por TLS y R2 lo cifra en reposo. Guardar el Blob sin tocarlo es lo que
+// permite armar el archivo final sin copiarlo a memoria: dos horas de sesión
+// son ~120 MB, y un teléfono de gama media no tiene de dónde sacar tres copias.
 //
 // Filosofía de errores: este módulo es un SEGURO, no una dependencia.
 // Si IndexedDB no está disponible, la cuota se agota o cualquier
@@ -53,88 +53,23 @@ export interface Pausa {
 interface MetaGrabacion {
   sesionClinicaId: string;
   iniciadaEn: number; // Date.now() al iniciar
-  /** Ausente en grabaciones persistidas antes de que existiera la pausa. */
+  /** El formato que eligió el MediaRecorder: sin él no se arma el archivo. */
+  mimeType?: string;
   pausas?: Pausa[];
 }
 
-/** Un trozo tal como queda en el teléfono: sólo bytes cifrados y su IV. */
-export interface ChunkCifrado {
-  /** 12 bytes aleatorios, en claro: no son secreto, y sin ellos no se abre. */
-  iv: Uint8Array<ArrayBuffer>;
-  /** AES-256-GCM del trozo (ciphertext + tag). */
-  datos: ArrayBuffer;
-}
-
-interface ChunkGrabacion extends ChunkCifrado {
+interface ChunkGrabacion {
   sesionClinicaId: string;
   indice: number;
+  blob: Blob;
 }
 
 export interface GrabacionPendiente {
   sesionClinicaId: string;
-  /** Cifrados: para volver a tener audio hace falta `descifrarChunks`. */
-  chunks: ChunkCifrado[];
+  chunks: Blob[];
+  mimeType: string;
   duracionAproxSeg: number;
   pausas: Pausa[];
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Cifrado de cada trozo. Web Crypto, sin dependencias: la misma clave AES-GCM
-// que cifra el archivo entero (src/lib/crypto.ts), pero sin pasar por base64,
-// que sería un tercio más de bytes por cada segundo de audio.
-// ────────────────────────────────────────────────────────────────────────────
-
-const IV_BYTES = 12;
-
-function claveABytes(claveBase64: string): Uint8Array<ArrayBuffer> {
-  const binario = atob(claveBase64);
-  const bytes = new Uint8Array(binario.length);
-  for (let i = 0; i < binario.length; i += 1) {
-    bytes[i] = binario.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function importarClave(claveBase64: string, uso: KeyUsage): Promise<CryptoKey> {
-  return globalThis.crypto.subtle.importKey(
-    "raw",
-    claveABytes(claveBase64),
-    { name: "AES-GCM" },
-    false,
-    [uso],
-  );
-}
-
-async function cifrarChunk(chunk: Blob, claveBase64: string): Promise<ChunkCifrado> {
-  const clave = await importarClave(claveBase64, "encrypt");
-  const iv = globalThis.crypto.getRandomValues(new Uint8Array(IV_BYTES));
-  const datos = await globalThis.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    clave,
-    await chunk.arrayBuffer(),
-  );
-  return { iv, datos };
-}
-
-/**
- * Vuelve a tener los trozos en claro, en orden, con la clave de la sesión.
- * Lanza si la clave no es la de esa grabación: AES-GCM no abre con otra.
- */
-export async function descifrarChunks(
-  chunks: readonly ChunkCifrado[],
-  claveBase64: string,
-): Promise<Blob[]> {
-  const clave = await importarClave(claveBase64, "decrypt");
-  const abiertos: Blob[] = [];
-  for (const chunk of chunks) {
-    const datos = await globalThis.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: chunk.iv },
-      clave,
-      chunk.datos,
-    );
-    abiertos.push(new Blob([datos]));
-  }
-  return abiertos;
 }
 
 function indexedDBDisponible(): boolean {
@@ -232,6 +167,7 @@ function avisar(operacion: string, error: unknown) {
  */
 export async function iniciarSesionGrabacion(
   sesionClinicaId: string,
+  mimeType: string,
 ): Promise<void> {
   if (!indexedDBDisponible()) {
     return;
@@ -246,6 +182,7 @@ export async function iniciarSesionGrabacion(
     const meta: MetaGrabacion = {
       sesionClinicaId,
       iniciadaEn: Date.now(),
+      mimeType,
       pausas: [],
     };
     tx.objectStore(STORE_META).put(meta);
@@ -284,6 +221,7 @@ export async function guardarPausas(
     const meta: MetaGrabacion = {
       sesionClinicaId,
       iniciadaEn: actual?.iniciadaEn ?? Date.now(),
+      mimeType: actual?.mimeType,
       pausas: pausas.map((p) => ({ inicio: p.inicio, fin: p.fin })),
     };
     store.put(meta);
@@ -295,26 +233,23 @@ export async function guardarPausas(
 }
 
 /**
- * Cifra y persiste un chunk de audio. Pensado para llamarse fire-and-forget
- * desde `ondataavailable`: nunca lanza y no hay que await-earlo en el
- * hot path de la grabación. El chunk en claro no toca IndexedDB: se cifra
- * antes de abrir la transacción, y si el cifrado falla no se guarda nada.
+ * Persiste un chunk de audio. Pensado para llamarse fire-and-forget desde
+ * `ondataavailable`: nunca lanza y no hay que await-earlo en el hot path de
+ * la grabación.
  */
 export async function guardarChunk(
   sesionClinicaId: string,
   indice: number,
   chunk: Blob,
-  claveCifrado: string,
 ): Promise<void> {
   if (!indexedDBDisponible()) {
     return;
   }
 
   try {
-    const cifrado = await cifrarChunk(chunk, claveCifrado);
     const db = await abrirDB();
     const tx = db.transaction(STORE_CHUNKS, "readwrite");
-    const registro: ChunkGrabacion = { sesionClinicaId, indice, ...cifrado };
+    const registro: ChunkGrabacion = { sesionClinicaId, indice, blob: chunk };
 
     tx.objectStore(STORE_CHUNKS).put(registro);
 
@@ -327,10 +262,10 @@ export async function guardarChunk(
 
 /**
  * Devuelve la grabación pendiente más reciente (si existe alguna con
- * chunks persistidos), con sus chunks cifrados ordenados por índice.
- * Devuelve null si no hay nada recuperable o IndexedDB no está
- * disponible. Una grabación de la base anterior (chunks en claro, sin
- * `iv`) no se ofrece: no hay forma de tratarla como cifrada.
+ * chunks persistidos), con sus chunks ordenados por índice. Devuelve null si
+ * no hay nada recuperable o IndexedDB no está disponible. Un registro de la
+ * versión que cifraba cada chunk (sin `blob`) no se ofrece: la clave para
+ * abrirlo ya no se entrega.
  */
 export async function recuperarGrabacionPendiente(): Promise<GrabacionPendiente | null> {
   if (!indexedDBDisponible()) {
@@ -368,13 +303,14 @@ export async function recuperarGrabacionPendiente(): Promise<GrabacionPendiente 
 
       registros.sort((a, b) => a.indice - b.indice);
 
-      if (registros.some((r) => !(r.iv instanceof Uint8Array) || !r.datos)) {
+      if (registros.some((r) => !(r.blob instanceof Blob))) {
         continue;
       }
 
       return {
         sesionClinicaId: meta.sesionClinicaId,
-        chunks: registros.map((r) => ({ iv: r.iv, datos: r.datos })),
+        chunks: registros.map((r) => r.blob),
+        mimeType: meta.mimeType ?? "audio/webm",
         duracionAproxSeg: registros.length * SEGUNDOS_POR_CHUNK,
         pausas: meta.pausas ?? [],
       };

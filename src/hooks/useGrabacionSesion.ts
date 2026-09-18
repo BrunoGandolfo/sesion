@@ -2,8 +2,7 @@
 
 import * as React from "react";
 
-import { limpiarGrabacion } from "@/lib/grabacion-storage";
-import type { PausaRegistrada } from "@/components/grabacion/GrabadorSesion";
+import type { DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import {
   ESTADOS_ACTIVOS,
   normalizarSesionClinica,
@@ -13,19 +12,6 @@ import {
   type SesionClinicaEnsamblada,
 } from "@/hooks/useSesionClinicaPolling";
 import type { Turno } from "@/types/domain";
-
-export interface DatosGrabacion {
-  audioBlob: Blob;
-  claveCifrado: string;
-  ivCifrado: string;
-  duracionSegundos: number;
-  /**
-   * Tramos en que la grabación estuvo pausada, en ISO. Los produce el
-   * grabador (useGrabador → onListo). Opcional: quien suba un audio sin
-   * haberlas registrado simplemente no las manda.
-   */
-  pausas?: PausaRegistrada[];
-}
 
 interface UseGrabacionSesionOptions {
   turno: Turno | null;
@@ -39,14 +25,7 @@ interface UseGrabacionSesionResult {
   loading: boolean;
   submitting: boolean;
   error: string | null;
-  /** true cuando hay un blob cifrado en memoria cuya subida falló. */
-  subidaPendiente: boolean;
-  /** 0-100 mientras el PUT a R2 está en curso; null fuera de eso. */
-  progresoSubida: number | null;
   iniciar: () => Promise<void>;
-  completar: (datos: DatosGrabacion) => Promise<void>;
-  /** Repite los tres pasos de la subida con el mismo blob cifrado. */
-  reintentarSubida: () => Promise<void>;
   reintentar: () => Promise<void>;
   refrescar: () => Promise<void>;
 }
@@ -133,19 +112,18 @@ function putConProgreso(
   });
 }
 
-export async function subirAudioCifrado(
+export async function subirAudio(
   sesionClinicaId: string,
   datos: DatosGrabacion,
   onProgreso?: (porcentaje: number) => void,
 ): Promise<SesionClinicaApiBase> {
-  const mime = datos.audioBlob.type || "application/octet-stream";
+  const mime = datos.audioBlob.type || "audio/webm";
 
-  // 1. URL prefirmada (guarda el IV en el servidor).
+  // 1. URL prefirmada.
   const resUrl = await fetch(`/api/sesion-clinica/${sesionClinicaId}/upload-url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      iv: datos.ivCifrado,
       tamanoBytes: datos.audioBlob.size,
       mime,
     }),
@@ -155,7 +133,9 @@ export async function subirAudioCifrado(
   }
   const { data: subida } = (await resUrl.json()) as UrlSubidaResponse;
 
-  // 2. PUT directo a R2.
+  // 2. PUT directo a R2. El Blob va tal cual: es un Blob de Blobs respaldado
+  // en disco, y el navegador lo lee de a tramos mientras lo envía. Pasarlo por
+  // arrayBuffer() lo copiaría entero a memoria (~120 MB en dos horas).
   onProgreso?.(0);
   await putConProgreso(subida.url, datos.audioBlob, subida.headers, onProgreso);
   onProgreso?.(100);
@@ -176,6 +156,7 @@ export async function subirAudioCifrado(
         // Sin pausas el campo se omite: el backend deja la columna como
         // estaba, así un reintento de la misma subida no borra lo anterior.
         ...(pausas.length > 0 ? { pausas } : {}),
+        diagnostico: datos.diagnostico,
       }),
     },
   );
@@ -188,22 +169,6 @@ export async function subirAudioCifrado(
   }
   const body = (await resConfirmar.json()) as { data: SesionClinicaApiBase };
   return body.data;
-}
-
-/**
- * La clave AES de la sesión, para cifrar en el teléfono. El servidor la
- * generó al crear la sesión y sólo la entrega mientras está en grabando.
- */
-export async function pedirClaveAudio(sesionClinicaId: string): Promise<string> {
-  const res = await fetch(`/api/sesion-clinica/${sesionClinicaId}/clave`, {
-    method: "POST",
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(await parseError(res));
-  }
-  const body = (await res.json()) as { data: { clave: string } };
-  return body.data.clave;
 }
 
 /**
@@ -271,18 +236,7 @@ export function useGrabacionSesion({
   const [carga, setCarga] = React.useState<CargaSesion | null>(null);
   const [submitting, setSubmitting] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [subidaPendiente, setSubidaPendiente] = React.useState<boolean>(false);
-  const [progresoSubida, setProgresoSubida] = React.useState<number | null>(
-    null,
-  );
-
-  // Último blob cifrado cuya subida no se completó. Vive solo en memoria de
-  // esta pestaña; los chunks, cifrados, siguen en IndexedDB (no se borran
-  // hasta que la confirmación responde OK).
-  const ultimoAudioRef = React.useRef<DatosGrabacion | null>(null);
-
   const turnoId = turno?.id ?? null;
-  const turnoEstado = turno?.estado ?? null;
   const onTurnoActualizadoRef = React.useRef(onTurnoActualizado);
   React.useEffect(() => {
     onTurnoActualizadoRef.current = onTurnoActualizado;
@@ -359,7 +313,7 @@ export function useGrabacionSesion({
         body: JSON.stringify({ turnoId }),
       });
       if (!createRes.ok) throw new Error(await parseError(createRes));
-      // La sesión nace en "grabando", con su clave: no hay PATCH.
+      // La sesión nace en "grabando": no hay PATCH.
       const createBody = (await createRes.json()) as {
         data: SesionClinicaApiBase;
       };
@@ -374,72 +328,6 @@ export function useGrabacionSesion({
       setSubmitting(false);
     }
   }, [turnoId, guardarSesion, reportarError]);
-
-  const completar = React.useCallback(
-    async (datos: DatosGrabacion) => {
-      const current = sesionClinica;
-      if (!current || !turnoId) return;
-      const sesionId = current.id;
-      const eraProgramado = turnoEstado === "programado";
-      ultimoAudioRef.current = datos;
-      setError(null);
-      setSubmitting(true);
-      setProgresoSubida(null);
-      try {
-        const actualizada = await subirAudioCifrado(sesionId, datos, (p) =>
-          setProgresoSubida(p),
-        );
-        guardarSesion(normalizarSesionClinica(actualizada));
-
-        // Confirmación OK: recién ahora el backup incremental en IndexedDB
-        // deja de hacer falta (GrabadorSesion lo persiste con el turnoId
-        // como clave; fire-and-forget).
-        ultimoAudioRef.current = null;
-        setSubidaPendiente(false);
-        void limpiarGrabacion(turnoId);
-
-        if (eraProgramado) {
-          try {
-            await fetch(`/api/turnos/${turnoId}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ estado: "realizado" }),
-            });
-          } catch {
-            // best-effort
-          }
-          onTurnoActualizadoRef.current?.();
-        }
-      } catch (err) {
-        // Nada se borra: el blob cifrado queda en memoria y los chunks,
-        // cifrados, en IndexedDB. La sesión vuelve a "grabando" para repetir
-        // desde el paso 1 con el mismo blob ("Reintentar subida").
-        const mensaje =
-          err instanceof Error ? err.message : "Error al subir el audio";
-        reportarError(mensaje);
-        setSubidaPendiente(true);
-        const paso = err instanceof ErrorSubida ? err.paso : "put";
-        if (paso !== "url") {
-          await volverAGrabando(sesionId);
-        }
-      } finally {
-        setProgresoSubida(null);
-        setSubmitting(false);
-      }
-    },
-    [sesionClinica, turnoId, turnoEstado, guardarSesion, reportarError],
-  );
-
-  const reintentarSubida = React.useCallback(async () => {
-    const datos = ultimoAudioRef.current;
-    if (!datos) {
-      reportarError(
-        "No queda un audio cifrado en memoria para reenviar. Si la grabación quedó guardada en el dispositivo, el grabador la ofrece al volver a entrar.",
-      );
-      return;
-    }
-    await completar(datos);
-  }, [completar, reportarError]);
 
   const reintentar = React.useCallback(async () => {
     if (!sesionClinica) return;
@@ -482,11 +370,7 @@ export function useGrabacionSesion({
     loading,
     submitting,
     error,
-    subidaPendiente,
-    progresoSubida,
     iniciar,
-    completar,
-    reintentarSubida,
     reintentar,
     refrescar,
   };

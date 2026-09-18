@@ -5,27 +5,34 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
 
 ## En el teléfono
 
-1. Cada sesión tiene una clave propia, que genera el servidor y el teléfono
-   pide al empezar a grabar. No se guarda en el teléfono.
-2. Cada trozo de audio que entrega el micrófono, cada segundo, **se cifra en el
-   teléfono** con esa clave y recién después se guarda en el almacenamiento del
-   navegador. En el teléfono no queda audio sin cifrar.
-3. Al terminar, el archivo completo **se cifra con esa misma clave** y recién
-   entonces se envía. Mientras grabás no se sube nada.
+**La app no cifra el audio.** Lo protegen otras tres cosas, que no son de la app:
 
-La copia cifrada queda en el navegador hasta que el servidor confirma que el
-archivo llegó: con esa confirmación, la app la borra. Si la subida falla, la
-copia se conserva, cifrada, para reintentar; para abrirla la app le pide la
-clave al servidor, que solo la entrega mientras la sesión sigue grabando.
+1. Mientras grabás, cada trozo que entrega el micrófono, cada segundo, se guarda
+   tal cual en el almacenamiento del navegador de tu teléfono. Lo protege el
+   bloqueo del teléfono: quien pueda desbloquearlo y abrir el navegador puede
+   llegar a ese audio mientras esté ahí.
+2. Al terminar, el archivo se envía entero por una conexión cifrada (**TLS**).
+   Mientras grabás no se sube nada.
+3. La copia queda en el navegador hasta que el servidor confirma que el archivo
+   llegó: con esa confirmación, la app la borra. Si la subida falla, la copia se
+   conserva para reintentar.
+
+> **El consentimiento 2.6 todavía dice otra cosa.** Afirma que cada trozo se
+> cifra en el teléfono con una clave de la sesión y que esa clave se destruye al
+> aprobar. Eso dejó de ser cierto y el texto está pendiente de corrección por
+> quien administra Sesión. Hasta que salga la versión nueva, no le leas esas
+> frases a una paciente como si describieran lo que pasa hoy.
 
 ## En los servicios
 
-1. El archivo se guarda cifrado en **Cloudflare R2**.
-2. El proceso que corre en **Railway** descarga el archivo y lo descifra **en
-   memoria** para transcribir: no escribe ningún archivo con audio en claro en
-   el servidor. El consentimiento lo cuenta así: *"lo descifra solo en
-   memoria y lo manda a transcribir"*.
-3. **AssemblyAI** recibe el audio sin cifrar y el vocabulario.
+1. El archivo se guarda en **Cloudflare R2**, que cifra en reposo todo lo que
+   almacena. Ese cifrado es del proveedor, no de la app: quien tenga acceso a la
+   cuenta del almacén puede escuchar el archivo mientras exista.
+2. El proceso que corre en **Railway** descarga el archivo y lo tiene **en
+   memoria** para transcribir: no escribe ningún archivo con audio en el
+   servidor. Antes de transcribir comprueba que sea una sola grabación y no dos
+   pegadas.
+3. **AssemblyAI** recibe el audio y el vocabulario.
 4. Apenas termina la transcripción, bien o mal, la app le pide a AssemblyAI que
    borre el audio y el texto. Ese primer pedido es uno solo.
    - **Si la transcripción se completó**, la app además repite el pedido, cada
@@ -43,11 +50,11 @@ clave al servidor, que solo la entrega mientras la sesión sigue grabando.
    nota aprobada con el Recorrido vigente para preparar una propuesta del
    Recorrido. El resumen del proceso lo propone la misma IA que redacta la nota;
    solo queda vigente cuando lo aceptás.
-6. Al aprobar la nota, la app destruye siempre la clave del audio en la base con
-   la que trabaja: desde ahí ya no puede abrir el audio, aunque siga pendiente de
-   borrado. Después intenta borrar el archivo en R2 y comprueba que ya no esté.
-   Si falla, reintenta **hasta 20 veces**, durante **unos 15 días**; después el
-   borrado queda marcado como fallido. La transcripción y la nota se conservan.
+6. Al aprobar la nota, la app intenta borrar el archivo en R2 y comprueba que ya
+   no esté. Si falla, reintenta **hasta 20 veces**, durante **unos 15 días**;
+   después el borrado queda marcado como fallido. Mientras el archivo no se
+   borre, se puede escuchar con acceso al almacén: ya no hay una clave cuya
+   destrucción lo vuelva ilegible. La transcripción y la nota se conservan.
 
 ## La agenda y Lupita
 
@@ -79,7 +86,7 @@ esta app no puede verificar por sí sola que nunca acceda una persona.
 La nota, el borrador original, la transcripción, los datos de la sesión, el
 análisis para vos, cada versión del Recorrido, las notas privadas de la ficha,
 las notas del turno, el vocabulario y el consentimiento con su firma se guardan
-cifrados. También se cifra la clave del audio mientras debe conservarse.
+cifrados. El audio no entra en esa lista: la app no lo cifra.
 
 Eso no convierte todos los campos de la base en secretos cifrados: nombre,
 apellido, teléfono, fechas, estados e importes administrativos siguen
@@ -109,14 +116,11 @@ Hay dos clases de respaldo de la base:
 - El primer día de cada mes se guarda además una copia **mensual**, que se
   conserva **12 meses**.
 
-No contienen audio, pero sí pueden contener cifrada la clave de una sesión que
-todavía no estaba aprobada cuando se hizo la copia. Esa clave puede conservarse
-**hasta 12 meses** en un respaldo mensual, aunque ya se haya borrado de la base
-con la que trabaja la app. Si el audio no se pudo borrar, esa copia de la clave
-podría permitir abrirlo. Aprobar hoy no cambia los respaldos anteriores. El
-consentimiento 2.6 cuenta los dos plazos.
+No contienen audio ni ninguna clave de audio: las sesiones grabadas desde esta
+versión no tienen clave. Un respaldo anterior puede conservar, cifrada, la clave
+de una sesión grabada con la versión que sí cifraba. Aprobar hoy no cambia los
+respaldos anteriores.
 
-Quitar la clave activa no garantiza que hayan desaparecido todas las copias.
 Los pedidos de borrado se siguen con reintentos; el funcionamiento y la
 restauración de los respaldos requieren comprobación.
 
@@ -162,7 +166,6 @@ src/lib/consentimiento-hechos.ts
 src/lib/consentimiento.ts
 src/components/grabacion/GrabadorSesion.tsx
 src/lib/grabacion-storage.ts
-src/lib/grabacion-cifrado.ts
 src/hooks/useGrabacionSesion.ts
 src/lib/glosario.ts
 src/lib/prisma-encryption.ts

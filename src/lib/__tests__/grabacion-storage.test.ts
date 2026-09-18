@@ -1,7 +1,7 @@
 // Tests del seguro de la grabación: lo que persiste en IndexedDB (chunks y
-// pausas) para sobrevivir a que el navegador mate el proceso, y la promesa
-// que el consentimiento hace sobre eso: en el teléfono no queda audio sin
-// cifrar. El cifrado es Web Crypto de verdad (Node la trae), no un doble.
+// pausas) para sobrevivir a que el navegador mate el proceso. Los chunks se
+// guardan como Blob, tal como salen del MediaRecorder: la app no cifra el
+// audio, y no copiarlo es lo que deja armar dos horas de archivo sin memoria.
 //
 // La aritmética del cronómetro se mudó con su módulo:
 // src/lib/__tests__/grabacion-cronometro.test.ts.
@@ -205,9 +205,6 @@ let storage!: ModuloStorage;
 
 const TURNO = "turno_abc";
 const OTRO_TURNO = "turno_xyz";
-/** La clave AES de la sesión, base64, como la entrega el servidor. */
-const CLAVE = Buffer.alloc(32, 7).toString("base64");
-const OTRA_CLAVE = Buffer.alloc(32, 9).toString("base64");
 
 function chunk(texto: string) {
   return new Blob([texto], { type: "audio/webm" });
@@ -225,13 +222,10 @@ async function recuperarAlgo() {
   return pendiente;
 }
 
-/** Los chunks recuperados, ya abiertos con la clave de la sesión. */
-async function chunksAbiertos(clave = CLAVE) {
+/** Los chunks recuperados: son los Blobs que se guardaron. */
+async function chunksAbiertos() {
   const pendiente = await recuperarAlgo();
-  return {
-    ...pendiente,
-    abiertos: await storage.descifrarChunks(pendiente.chunks, clave),
-  };
+  return { ...pendiente, abiertos: pendiente.chunks };
 }
 
 beforeAll(async () => {
@@ -253,11 +247,11 @@ afterEach(() => {
 
 describe("grabacion-storage — guardar y recuperar", () => {
   it("devuelve los chunks de la grabación en el orden en que se capturaron", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
     // A propósito fuera de orden: la recuperación ordena por índice.
-    await storage.guardarChunk(TURNO, 2, chunk("c"), CLAVE);
-    await storage.guardarChunk(TURNO, 0, chunk("a"), CLAVE);
-    await storage.guardarChunk(TURNO, 1, chunk("b"), CLAVE);
+    await storage.guardarChunk(TURNO, 2, chunk("c"));
+    await storage.guardarChunk(TURNO, 0, chunk("a"));
+    await storage.guardarChunk(TURNO, 1, chunk("b"));
 
     const pendiente = await chunksAbiertos();
 
@@ -277,17 +271,17 @@ describe("grabacion-storage — guardar y recuperar", () => {
   });
 
   it("ignora una grabación cuya meta quedó sin chunks", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
 
     await expect(storage.recuperarGrabacionPendiente()).resolves.toBeNull();
   });
 
   it("empezar de nuevo el mismo turno reemplaza los chunks anteriores", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk("vieja"), CLAVE);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("vieja"));
 
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk("nueva"), CLAVE);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("nueva"));
 
     const pendiente = await chunksAbiertos();
 
@@ -298,8 +292,8 @@ describe("grabacion-storage — guardar y recuperar", () => {
 
 describe("grabacion-storage — pausas", () => {
   it("guarda las pausas y las devuelve con la grabación recuperada", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk("a"), CLAVE);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("a"));
     await storage.guardarPausas(TURNO, [
       { inicio: 1_000, fin: 4_000 },
       { inicio: 9_000, fin: null },
@@ -314,8 +308,8 @@ describe("grabacion-storage — pausas", () => {
   });
 
   it("una grabación recién iniciada no tiene pausas", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk("a"), CLAVE);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("a"));
 
     const pendiente = await recuperarAlgo();
 
@@ -323,10 +317,10 @@ describe("grabacion-storage — pausas", () => {
   });
 
   it("guardar pausas no borra los chunks ya persistidos", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk("a"), CLAVE);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("a"));
     await storage.guardarPausas(TURNO, [{ inicio: 5, fin: 9 }]);
-    await storage.guardarChunk(TURNO, 1, chunk("b"), CLAVE);
+    await storage.guardarChunk(TURNO, 1, chunk("b"));
 
     const pendiente = await recuperarAlgo();
 
@@ -337,8 +331,8 @@ describe("grabacion-storage — pausas", () => {
 
 describe("grabacion-storage — borrar", () => {
   it("limpiarGrabacion borra chunks y meta de esa grabación", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk("a"), CLAVE);
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("a"));
 
     await storage.limpiarGrabacion(TURNO);
 
@@ -346,17 +340,17 @@ describe("grabacion-storage — borrar", () => {
   });
 
   it("limpiarGrabacion no toca la grabación de otro turno", async () => {
-    await storage.iniciarSesionGrabacion(OTRO_TURNO);
-    await storage.guardarChunk(OTRO_TURNO, 0, chunk("otra"), CLAVE);
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk("esta"), CLAVE);
+    await storage.iniciarSesionGrabacion(OTRO_TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(OTRO_TURNO, 0, chunk("otra"));
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("esta"));
 
     await storage.limpiarGrabacion(TURNO);
 
     const pendiente = await recuperarAlgo();
 
     expect(pendiente.sesionClinicaId).toBe(OTRO_TURNO);
-    const [abierto] = await storage.descifrarChunks(pendiente.chunks, CLAVE);
+    const [abierto] = pendiente.chunks;
     expect(await abierto.text()).toBe("otra");
   });
 });
@@ -365,9 +359,9 @@ describe("grabacion-storage — degradación", () => {
   it("sin IndexedDB no lanza y se comporta como solo-RAM", async () => {
     vi.stubGlobal("indexedDB", undefined);
 
-    await expect(storage.iniciarSesionGrabacion(TURNO)).resolves.toBeUndefined();
+    await expect(storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus")).resolves.toBeUndefined();
     await expect(
-      storage.guardarChunk(TURNO, 0, chunk("a"), CLAVE),
+      storage.guardarChunk(TURNO, 0, chunk("a")),
     ).resolves.toBeUndefined();
     await expect(storage.guardarPausas(TURNO, [])).resolves.toBeUndefined();
     await expect(storage.limpiarGrabacion(TURNO)).resolves.toBeUndefined();
@@ -380,69 +374,39 @@ describe("grabacion-storage — degradación", () => {
 // Se mira lo que quedó escrito en el almacén, no lo que devuelve el módulo.
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("grabacion-storage — nada queda en claro", () => {
-  const MARCA = "dato clinico sensible que no puede quedar en el telefono";
+describe("grabacion-storage — el audio se guarda tal cual", () => {
+  it("cada chunk se guarda como el mismo Blob que entregó el MediaRecorder, sin copiarlo", async () => {
+    const original = chunk("audio");
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, original);
 
-  /** Todo lo que hay en el store de chunks, byte a byte, como texto. */
-  function todoLoEscrito(): { registros: Record<string, unknown>[]; texto: string } {
-    const store = dbFalsa.stores.get("chunks");
-    if (!store) throw new Error("no hay store de chunks");
-    const registros = [...store.registros.values()];
-    const partes = registros.map((r) =>
-      Object.values(r)
-        .map((v) => {
-          if (v instanceof ArrayBuffer) return new TextDecoder().decode(v);
-          if (v instanceof Uint8Array) return new TextDecoder().decode(v);
-          return String(v);
-        })
-        .join("|"),
-    );
-    return { registros, texto: partes.join("\n") };
-  }
-
-  it("cada chunk se escribe cifrado, con IV propio, y nunca como Blob", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk(MARCA), CLAVE);
-    await storage.guardarChunk(TURNO, 1, chunk(MARCA), CLAVE);
-
-    const { registros, texto } = todoLoEscrito();
-
-    expect(registros).toHaveLength(2);
-    expect(texto).not.toContain(MARCA);
-    expect(texto).not.toContain("sensible");
-    for (const r of registros) {
-      expect(r.chunk).toBeUndefined();
-      expect(Object.values(r).some((v) => v instanceof Blob)).toBe(false);
-      expect(r.iv).toBeInstanceOf(Uint8Array);
-      expect((r.iv as Uint8Array).byteLength).toBe(12);
-      expect(r.datos).toBeInstanceOf(ArrayBuffer);
-      // GCM agrega 16 bytes de tag: lo cifrado es más largo que el audio.
-      expect((r.datos as ArrayBuffer).byteLength).toBe(MARCA.length + 16);
-    }
-    // Mismo audio dos veces, distinto cifrado: el IV cumple su función.
-    const [a, b] = registros;
-    expect(Buffer.from(a.iv as Uint8Array).equals(Buffer.from(b.iv as Uint8Array))).toBe(false);
-    expect(Buffer.from(a.datos as ArrayBuffer).equals(Buffer.from(b.datos as ArrayBuffer))).toBe(false);
+    const registros = [...dbFalsa.stores.get("chunks")!.registros.values()] as Record<string, unknown>[];
+    expect(registros).toHaveLength(1);
+    expect(registros[0].blob).toBe(original);
+    expect(Object.keys(registros[0]).sort()).toEqual(["blob", "indice", "sesionClinicaId"]);
   });
 
-  it("lo recuperado sigue cifrado y se abre sólo con la clave de la sesión", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    await storage.guardarChunk(TURNO, 0, chunk(MARCA), CLAVE);
+  it("lo recuperado se arma en un archivo sin pedir ninguna clave, con el formato con que se grabó", async () => {
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus");
+    await storage.guardarChunk(TURNO, 0, chunk("cabecera+"));
+    await storage.guardarChunk(TURNO, 1, chunk("audio"));
 
     const pendiente = await recuperarAlgo();
-    const crudo = new TextDecoder().decode(pendiente.chunks[0].datos);
-    expect(crudo).not.toContain(MARCA);
-
-    const [abierto] = await storage.descifrarChunks(pendiente.chunks, CLAVE);
-    expect(await abierto.text()).toBe(MARCA);
-
-    await expect(storage.descifrarChunks(pendiente.chunks, OTRA_CLAVE)).rejects.toBeTruthy();
+    expect(pendiente.mimeType).toBe("audio/webm;codecs=opus");
+    const archivo = new Blob(pendiente.chunks, { type: pendiente.mimeType });
+    expect(await archivo.text()).toBe("cabecera+audio");
   });
 
-  it("una grabación de la base anterior, guardada en claro, no se ofrece", async () => {
-    await storage.iniciarSesionGrabacion(TURNO);
-    // Un registro como los escribía el grabador viejo: el Blob tal cual.
-    dbFalsa.stores.get("chunks")!.put({ sesionClinicaId: TURNO, indice: 0, chunk: chunk("vieja") });
+  it("guardar las pausas no pierde el formato de la grabación", async () => {
+    await storage.iniciarSesionGrabacion(TURNO, "audio/mp4");
+    await storage.guardarChunk(TURNO, 0, chunk("a"));
+    await storage.guardarPausas(TURNO, [{ inicio: 1, fin: 2 }]);
+    expect((await recuperarAlgo()).mimeType).toBe("audio/mp4");
+  });
+
+  it("un registro de la versión que cifraba cada chunk no se ofrece: su clave ya no se entrega", async () => {
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm");
+    dbFalsa.stores.get("chunks")!.put({ sesionClinicaId: TURNO, indice: 0, iv: new Uint8Array(12), datos: new ArrayBuffer(20) });
 
     await expect(storage.recuperarGrabacionPendiente()).resolves.toBeNull();
   });
