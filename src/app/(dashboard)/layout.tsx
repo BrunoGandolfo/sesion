@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { buscarActor } from "@/app/api/_lib/auth";
+import { AvisosDeNotas } from "@/components/layout/avisos-de-notas";
 import { AvisoVersion } from "@/components/layout/aviso-version";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { Providers } from "@/components/layout/providers";
@@ -72,6 +73,7 @@ export default async function DashboardLayout({
           {children}
         </main>
         <BottomNav />
+        <AvisosDeNotas />
       </div>
     </Providers>
   );

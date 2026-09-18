@@ -148,6 +148,13 @@ body {
 /* Los indicadores de carga permanecen quietos, en toda la app. */
 .animate-pulse, .animate-spin { animation: none; }
 
+/* La excepción: la nota que se está escribiendo. Son minutos, no un
+   instante de carga, y un anillo quieto se lee como "se colgó". Lo usa
+   ui/procesando.tsx. Con movimiento reducido la regla de abajo lo deja
+   quieto como a todo lo demás. */
+@keyframes gira-procesando { to { transform: rotate(360deg); } }
+.gira-procesando { animation: gira-procesando 1.2s linear infinite; }
+
 *, *::before, *::after { transition-timing-function: var(--ease-out); }
 
 @media (prefers-reduced-motion: reduce) {
