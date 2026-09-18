@@ -254,3 +254,26 @@ test("una copia local de una sesión todavía en grabando se ofrece, sin pedir n
   expect(m.get.mock.calls.every(([url]) => !String(url).includes("/clave"))).toBe(true);
   expect(m.post).not.toHaveBeenCalled();
 });
+
+test("el turno que nace al grabar se crea con alGrabar: no pasa por la regla de choque", async () => {
+  m.post.mockImplementation(async (url: string) =>
+    url === "/api/turnos" ? { id: "t-nuevo", fecha: "2026-09-18T15:00:00.000Z" } : { id: "s1", estado: "grabando" });
+  m.get.mockResolvedValue(null);
+  const grabador = grabadorEn({});
+  render(<GrabarView {...props} turnoId={null} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
+
+  await waitFor(() => expect(grabador.iniciar).toHaveBeenCalledWith("t-nuevo"));
+  expect(m.post).toHaveBeenCalledWith("/api/turnos", expect.objectContaining({ pacienteId: "p1", alGrabar: true }));
+  // Con un turno que ya existía no se crea ninguno.
+  expect(m.post.mock.calls.filter(([url]) => url === "/api/turnos")).toHaveLength(1);
+});
+
+test("con un turno ya agendado no se crea otro ni se manda alGrabar", async () => {
+  const grabador = grabadorEn({});
+  render(<GrabarView {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
+  await waitFor(() => expect(grabador.iniciar).toHaveBeenCalledWith("t1"));
+  expect(m.post.mock.calls.some(([url]) => url === "/api/turnos")).toBe(false);
+});

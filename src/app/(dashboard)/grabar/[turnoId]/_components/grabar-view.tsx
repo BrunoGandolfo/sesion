@@ -283,6 +283,10 @@ export function GrabarView({
           fecha: new Date().toISOString(),
           duracion: DURACION_SIN_TURNO,
           modalidad: "presencial",
+          // Un turno que nace al grabar no pasa por la regla de choque: la
+          // sesión está ocurriendo, y un solapamiento en la agenda no puede
+          // impedir grabarla.
+          alGrabar: true,
         });
 
         turno = creado.id;

@@ -12,7 +12,9 @@ el borrador de la nota clínica.
 - **Con turno o sin turno.** Si hay turno hoy, se graba ese turno. Si tocás
   **Grabar** en la cabecera de la ficha y la paciente no tiene turno, la app
   **crea uno de 50 minutos, presencial, con la hora de ahora** recién cuando
-  tocás **Grabar sesión** (ese turno no genera recordatorio).
+  tocás **Grabar sesión** (ese turno no genera recordatorio). Ese turno se crea
+  aunque a esa hora haya otro en la agenda: la sesión está ocurriendo, y un
+  choque de horarios no impide grabarla.
 - **Una cuenta de prueba graba hasta 15 sesiones.** Si tu consultorio se creó
   con una invitación, arriba dice cuántas llevás. Al llegar a 15, dice
   *"Llegaste a las 15 sesiones grabadas de la prueba y no podés grabar más.
@@ -91,8 +93,11 @@ recuperar.
    que gira y una barra. Mientras envía, el menú de abajo no está: no hay nada
    que tocar hasta que llegue. La pantalla sigue encendida.
 3. Cuando el servidor confirma que llegó, dice *"La grabación llegó bien. La
-   nota va a estar lista en unos minutos."* y se queda ahí hasta que tocás
-   **Volver a la ficha**. El turno queda marcado como **realizado** y su
+   nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando
+   esté."* y se queda ahí hasta que tocás **Volver a la ficha**. Mientras se
+   escribe, la ficha y **Hoy** muestran *"Procesando la sesión de …"*; cuando
+   termina aparece, en la pantalla en la que estés, *"La nota de … está lista"*
+   con **Revisar**. No llega ninguna notificación al teléfono. El turno queda marcado como **realizado** y su
    recordatorio pendiente se cancela.
 
 Con la confirmación en la mano, la app borra la copia del teléfono.

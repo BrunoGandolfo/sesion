@@ -100,7 +100,9 @@ ningún recordatorio**.
   programado**: solo de los agendados.
 - **No cobra un turno agendado cuya hora todavía no llegó**: dice *"La sesión
   todavía no empezó: vas a poder cobrarla cuando llegue la hora"*.
-- **No permite superponer turnos** con otro turno agendado o realizado.
+- **No permite superponer turnos** con otro turno agendado o realizado. La única
+  excepción es el turno que nace al tocar **Grabar sesión** sin turno previo
+  (ver `07-grabar-una-sesion.md`).
   Si se pisan los horarios, no se guarda el cambio: elegí otra hora o duración.
   Un turno puede empezar justo cuando termina el anterior.
 - **No se borran turnos.**

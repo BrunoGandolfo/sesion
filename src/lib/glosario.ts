@@ -319,8 +319,10 @@ export const GUARDANDO = "Guardando…";
 export const PREPARANDO_GRABACION = "Preparando la grabación…";
 export const ENVIANDO_GRABACION = (porcentaje: number) =>
   `Enviando la grabación… ${porcentaje} %. No cierres esta pantalla.`;
+/** Coherente con el aviso que existe de verdad (notaListaDe, más abajo): la
+ *  app avisa adentro, en la pantalla en la que esté, sin notificación push. */
 export const GRABACION_LLEGO =
-  "La grabación llegó bien. La nota va a estar lista en unos minutos.";
+  "La grabación llegó bien. La nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando esté.";
 export const VOLVER_A_LA_FICHA = "Volver a la ficha";
 
 // ─── Avisos de una grabación en curso ───────────────────────────────────────
