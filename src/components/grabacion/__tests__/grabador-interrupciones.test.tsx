@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGrabador, type DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
-import { limpiarGrabacion } from "@/lib/grabacion-storage";
+import { guardarChunk, limpiarGrabacion } from "@/lib/grabacion-storage";
 
 /** Lo que "quedó en el teléfono". null = no hay nada que recuperar. */
 let persistido: {
@@ -61,7 +61,8 @@ async function grabar(segundos: number) {
   for (let t = 0; t < segundos; t += 1) {
     await act(async () => {
       vi.advanceTimersByTime(1000);
-      if (recorders[0]?.state === "recording") recorders[0].emitirChunk();
+      const actual = recorders.at(-1);
+      if (actual?.state === "recording") actual.emitirChunk();
     });
   }
 }
@@ -282,23 +283,23 @@ describe("lo grabado se mide por los chunks, no por el reloj", () => {
 describe("lo que se entrega", () => {
   it("es un Blob armado con los mismos chunks, con el formato del recorder, sin cifrar ni copiar", async () => {
     const { grabador, onListo } = montar();
-    await empezar(grabador, 3);
+    await empezar(grabador, 11);
     act(() => grabador.current.terminar());
 
     const { audioBlob, diagnostico } = onListo.mock.calls[0][0];
     expect(audioBlob.type).toBe("audio/webm;codecs=opus");
-    // 3 chunks + el que entrega stop(), de 5 bytes cada uno.
-    expect(audioBlob.size).toBe(20);
-    expect(await audioBlob.text()).toBe("a".repeat(20));
-    expect(diagnostico).toMatchObject({ chunks: 4, bytes: 20 });
+    // 11 chunks + el que entrega stop(), de 5 bytes cada uno.
+    expect(audioBlob.size).toBe(60);
+    expect(await audioBlob.text()).toBe("a".repeat(60));
+    expect(diagnostico).toMatchObject({ chunks: 12, bytes: 60 });
     expect(Object.keys(onListo.mock.calls[0][0]).sort()).toEqual(["audioBlob", "diagnostico", "duracionSegundos", "pausas"]);
   });
 
   it("una grabación que quedó en el teléfono se envía sin pedir ninguna clave", async () => {
-    persistido = { sesionClinicaId: TURNO, chunks: [new Blob(["cabecera"]), new Blob(["+audio"])], mimeType: "audio/webm", duracionAproxSeg: 2, pausas: [] };
+    persistido = { sesionClinicaId: TURNO, chunks: [new Blob(["cabecera"]), new Blob(["+audio"])], mimeType: "audio/webm", duracionAproxSeg: 600, pausas: [] };
     const { grabador, onListo } = montar();
     await act(async () => { await Promise.resolve(); });
-    expect(grabador.current.pendienteSeg).toBe(2);
+    expect(grabador.current.pendienteSeg).toBe(600);
 
     act(() => grabador.current.enviarPendiente());
 
@@ -313,6 +314,62 @@ describe("lo que se entrega", () => {
     const { grabador } = montar();
     await act(async () => { await Promise.resolve(); });
     act(() => grabador.current.descartarPendiente());
+    expect(grabador.current.pendienteSeg).toBeNull();
+    expect(limpiarGrabacion).toHaveBeenCalledWith(TURNO);
+  });
+});
+
+describe("un toque accidental no se sube", () => {
+  it("con menos de 10 segundos grabados, Terminar no entrega nada, borra lo guardado y deja volver a grabar", async () => {
+    const { grabador, onListo, onError } = montar();
+    await empezar(grabador, 3);
+
+    act(() => grabador.current.terminar());
+
+    expect(onListo).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(grabador.current.muyCorta).toBe(true);
+    expect(grabador.current.estado).toBe("inactivo");
+    expect(grabador.current.segundos).toBe(0);
+    expect(limpiarGrabacion).toHaveBeenCalledWith(TURNO);
+    // Se soltó el micrófono, y el último trozo que entrega stop() no vuelve a
+    // escribirse en el teléfono después de borrar.
+    expect(pista.stop).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(guardarChunk).mock.calls).toHaveLength(3);
+
+    // Mismo turno, otra vez: graba de nuevo (con un recorder nuevo) y esta vez sí entrega.
+    await empezar(grabador, 12);
+    expect(recorders).toHaveLength(2);
+    expect(grabador.current.muyCorta).toBe(false);
+    act(() => grabador.current.terminar());
+    expect(onListo).toHaveBeenCalledTimes(1);
+    expect(onListo.mock.calls[0][0].duracionSegundos).toBe(12);
+  });
+
+  it("diez segundos justos sí se suben", async () => {
+    const { grabador, onListo } = montar();
+    await empezar(grabador, 10);
+    act(() => grabador.current.terminar());
+    expect(onListo).toHaveBeenCalledTimes(1);
+  });
+
+  it("lo que cuenta es el audio grabado, no el reloj: 3 s de audio y un minuto en pausa siguen siendo un toque", async () => {
+    const { grabador, onListo } = montar();
+    await empezar(grabador, 3);
+    act(() => grabador.current.pausar());
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    act(() => grabador.current.terminar());
+    expect(onListo).not.toHaveBeenCalled();
+    expect(grabador.current.muyCorta).toBe(true);
+  });
+
+  it("una copia de 2 segundos que quedó en el teléfono tampoco se sube: se borra", async () => {
+    persistido = { sesionClinicaId: TURNO, chunks: [new Blob(["x"]), new Blob(["y"])], mimeType: "audio/webm", duracionAproxSeg: 2, pausas: [] };
+    const { grabador, onListo } = montar();
+    await act(async () => { await Promise.resolve(); });
+    act(() => grabador.current.enviarPendiente());
+    expect(onListo).not.toHaveBeenCalled();
+    expect(grabador.current.muyCorta).toBe(true);
     expect(grabador.current.pendienteSeg).toBeNull();
     expect(limpiarGrabacion).toHaveBeenCalledWith(TURNO);
   });

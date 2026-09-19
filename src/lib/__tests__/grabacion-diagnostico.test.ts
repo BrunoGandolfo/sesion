@@ -1,15 +1,12 @@
-// El diagnóstico del grabador: viaja con upload-confirmar y queda en
-// eventos_auditoria.detalle. Sin contenido clínico: horas, motivos y conteos.
-
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+// El diagnóstico del grabador: lo que el schema de upload-confirmar acepta.
+// Sin contenido clínico: horas, motivos y conteos. Que llegue de verdad a
+// eventos_auditoria.detalle lo prueba grabacion-diagnostico-integracion.test.tsx.
 
 import { expect, test } from "vitest";
 
 import { uploadConfirmarSchema, uploadUrlSchema } from "@/app/api/_lib/schemas";
 import { MAX_EVENTOS_GRABACION } from "@/lib/sesion-clinica/schema";
 
-const codigo = (ruta: string) => readFileSync(join(process.cwd(), ruta), "utf8");
 const T = "2026-09-18T13:09:37.000Z";
 const cierre = { key: "org/s1/0", duracionAudioSeg: 984 };
 
@@ -49,12 +46,10 @@ test("tiene tope: un teléfono que parpadea no infla la auditoría", () => {
   expect(uploadConfirmarSchema.safeParse({ ...cierre, diagnostico: { eventos, chunks: 1, bytes: 1 } }).success).toBe(false);
 });
 
-test("la ruta lo guarda en la auditoría de la subida y no se lo pasa al caso de uso de la sesión", () => {
-  const ruta = codigo("src/app/api/sesion-clinica/[id]/upload-confirmar/route.ts");
-  expect(ruta).toContain("const { diagnostico, ...cierre } = parsed.data;");
-  expect(ruta).toContain("...cierre, almacen: almacenAudio");
-  expect(ruta).toMatch(/await auditar\(\{ ok: true,[^}]*diagnostico/);
-});
+// Que el diagnóstico llegue de verdad a eventos_auditoria lo prueba
+// grabacion-diagnostico-integracion.test.tsx, con la ruta y la base reales.
+// Acá había una prueba que leía el texto de la ruta ("auditar({ …diagnostico")
+// y por eso pasaba mientras `detalleSeguro` lo tiraba entero.
 
 test("upload-url ya no pide IV: el audio no se cifra en la app", () => {
   expect(uploadUrlSchema.parse({ tamanoBytes: 10, mime: "audio/webm" })).toEqual({ tamanoBytes: 10, mime: "audio/webm" });

@@ -54,7 +54,7 @@ const props = { turnoId: "t1", turnoProgramado: false, horaTexto: "12:00", pacie
 function grabadorEn(parcial: Partial<Grabador>) {
   m.grabador = {
     estado: "inactivo", segundos: 10, nivelAudio: 0.4, audioSilencioso: false, microfonoSilenciado: false, hueco: null,
-    limiteAlcanzado: false, avisoLimite: false, conmutando: false, mensajeError: null, pendienteSeg: null,
+    limiteAlcanzado: false, avisoLimite: false, conmutando: false, mensajeError: null, pendienteSeg: null, muyCorta: false,
     iniciar: vi.fn(), pausar: vi.fn(), reanudar: vi.fn(), terminar: vi.fn(), descartar: vi.fn(), cerrarAvisoHueco: vi.fn(),
     enviarPendiente: vi.fn(), descartarPendiente: vi.fn(), anotar: vi.fn(), resetear: vi.fn(),
     ...parcial,

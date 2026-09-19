@@ -102,6 +102,10 @@ recuperar.
 
 Con la confirmación en la mano, la app borra la copia del teléfono.
 
+Si grabaste **menos de 10 segundos** (un toque sin querer), al tocar Terminar
+no se envía nada: dice *"Grabaste menos de 10 segundos. No se guardó nada."* y
+el botón **Grabar sesión** vuelve a estar ahí, para el mismo turno.
+
 El límite es de **150 minutos** de audio grabado, con un aviso a los **135
 minutos**: *"Quedan 15 minutos de grabación"*. Al llegar al límite la captura
 queda pausada: *"Llegaste a las 2 horas y media de grabación. Lo grabado está a

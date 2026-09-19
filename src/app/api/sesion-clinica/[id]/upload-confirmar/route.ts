@@ -7,7 +7,7 @@ import { almacenAudio, r2Configurado } from "@/lib/r2";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
-import { confirmarSubida, MENSAJE_NO_LLEGO } from "../../../_lib/casos-uso/audio";
+import { confirmarSubida, diagnosticoParaAuditoria, MENSAJE_NO_LLEGO } from "../../../_lib/casos-uso/audio";
 import { ApiError, errorResponse, ok, validationError } from "../../../_lib/responses";
 import { uploadConfirmarSchema } from "../../../_lib/schemas";
 
@@ -35,8 +35,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       const { diagnostico, ...cierre } = parsed.data;
       const { bytes, sesion } = await confirmarSubida({ prisma: db, organizationId, sesionId: id, ...cierre, almacen: almacenAudio });
       // El diagnóstico del grabador queda acá y sólo acá: horas, motivos y
-      // conteos para no volver a adivinar por qué se cortó una grabación.
-      await auditar({ ok: true, duracionAudioSeg: cierre.duracionAudioSeg, bytes, ...(diagnostico ? { diagnostico } : {}) });
+      // conteos para no volver a adivinar por qué se cortó una grabación. Va
+      // aplanado: la auditoría descarta los objetos anidados sin avisar.
+      await auditar({ ok: true, duracionAudioSeg: cierre.duracionAudioSeg, bytes, ...(diagnostico ? diagnosticoParaAuditoria(diagnostico) : {}) });
       return ok(sesion);
     } catch (error) {
       if (error instanceof ApiError && error.message === MENSAJE_NO_LLEGO) {

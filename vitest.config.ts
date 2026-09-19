@@ -60,6 +60,8 @@ const INTEGRACION = [
   'src/lib/__tests__/aprobar.test.ts',
   'src/lib/__tests__/reclamar-sesiones.test.ts',
   'src/lib/__tests__/worker-escrituras.test.ts',
+  // El diagnóstico del grabador, del hook a la fila de auditoría.
+  'src/lib/__tests__/grabacion-diagnostico-integracion.test.tsx',
   'src/lib/__tests__/feedback-trabajos.test.ts',
   'src/lib/__tests__/despachar-sms.test.ts',
   'src/lib/__tests__/envios-del-turno.test.ts',

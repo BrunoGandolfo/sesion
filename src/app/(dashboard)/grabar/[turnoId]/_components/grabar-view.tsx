@@ -64,6 +64,7 @@ import {
   FALTA_AUTORIZACION,
   FIRMAR_AUTORIZACION,
   GRABACION_LLEGO,
+  GRABACION_MUY_CORTA,
   GRABACION_TERMINO_MICROFONO,
   GRABAR_SESION,
   GUARDAR_LO_GRABADO,
@@ -301,6 +302,9 @@ export function GrabarView({
       // iniciar() arranca el diagnóstico de cero: se repone lo que ya se
       // sabía de la pantalla encendida.
       grabador.anotar(pantalla.estado === "concedida" ? "wakelock-concedido" : "wakelock-rechazado");
+      // Ya está grabando: si la grabación se descarta por corta, la pantalla
+      // previa tiene que volver con el botón de Grabar activo.
+      setFase("previo");
     } catch (error) {
       setFase("previo");
       setToast({ open: true, message: mensajeDe(error, ALGO_FALLO), variante: "aviso" });
@@ -452,6 +456,7 @@ export function GrabarView({
             preparando={fase === "preparando"}
             sinCupo={sinCupo}
             sinPantallaEncendida={pantalla.estado === "rechazada"}
+            muyCorta={grabador.muyCorta}
             pendienteMinutos={
               grabador.pendienteSeg !== null
                 ? Math.max(1, Math.round(grabador.pendienteSeg / 60))
@@ -480,6 +485,7 @@ function PantallaPrevia({
   preparando,
   sinCupo,
   sinPantallaEncendida,
+  muyCorta,
   pendienteMinutos,
   onEmpezar,
   onEnviarPendiente,
@@ -492,6 +498,8 @@ function PantallaPrevia({
   sinCupo: boolean;
   /** El teléfono no concedió el wake lock: se dice ANTES de empezar. */
   sinPantallaEncendida: boolean;
+  /** Se acaba de descartar un toque accidental: se dice, y se puede grabar. */
+  muyCorta: boolean;
   pendienteMinutos: number | null;
   onEmpezar: () => void;
   onEnviarPendiente: () => void;
@@ -512,6 +520,11 @@ function PantallaPrevia({
 
   return (
     <div className="flex w-full flex-col items-center gap-6">
+      {muyCorta ? (
+        <p role="status" className="font-sans text-[15px] font-semibold text-ink-900">
+          {GRABACION_MUY_CORTA}
+        </p>
+      ) : null}
       {pendienteMinutos !== null ? (
         <div className="w-full rounded-md border border-[color:var(--border-subtle)] bg-cream-100 px-4 py-4 text-left">
           <p className="font-sans text-[14px] font-semibold text-ink-900">

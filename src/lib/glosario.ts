@@ -340,6 +340,10 @@ export const GRABACION_LLEGO =
   "La grabación llegó bien. La nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando esté.";
 export const VOLVER_A_LA_FICHA = "Volver a la ficha";
 
+/** Se tocó Terminar con menos de diez segundos grabados: un toque accidental.
+ *  No se sube ni se transcribe nada, y se puede volver a grabar ahí mismo. */
+export const GRABACION_MUY_CORTA = "Grabaste menos de 10 segundos. No se guardó nada.";
+
 // ─── Avisos de una grabación en curso ───────────────────────────────────────
 // Son persistentes. No son toasts: un aviso que se va solo no sirve para algo
 // que hay que mirar ahora. Ninguno detiene la grabación.

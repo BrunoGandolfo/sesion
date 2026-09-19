@@ -37,6 +37,7 @@ import {
   HUECO_MS,
   LIMITE_SEGUNDOS,
   medidaInicial,
+  MINIMO_SEGUNDOS,
   reanudarMedida,
   SILENCIO_AVISO_SEG,
   sinChunksDesde,
@@ -128,6 +129,9 @@ export interface Grabador {
   /** Pausar/Reanudar acaban de tocarse: el botón va deshabilitado. */
   conmutando: boolean;
   mensajeError: string | null;
+  /** Se tocó Terminar con menos de MINIMO_SEGUNDOS grabados: no se guardó
+   *  nada y se puede volver a grabar. Lo apaga el próximo Grabar. */
+  muyCorta: boolean;
   /** Minutos aproximados de una grabación de este turno que quedó guardada. */
   pendienteSeg: number | null;
   iniciar: (clave: string) => Promise<void>;
@@ -154,6 +158,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
   const [avisoLimite, setAvisoLimite] = React.useState(false);
   const [conmutando, setConmutando] = React.useState(false);
   const [mensajeError, setMensajeError] = React.useState<string | null>(null);
+  const [muyCorta, setMuyCorta] = React.useState(false);
   const [pendiente, setPendiente] = React.useState<GrabacionPendiente | null>(null);
 
   const recorderRef = React.useRef<MediaRecorder | null>(null);
@@ -467,6 +472,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
 
     volverAInactivo();
     setPendiente(null);
+    setMuyCorta(false);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -536,8 +542,21 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     cambiarEstado("grabando");
   }
 
+  /** Un toque accidental: se tira lo grabado, en el teléfono y en memoria, y
+   *  la pantalla vuelve a ofrecer Grabar. Al servidor no llega nada: la sesión
+   *  sigue en "grabando", que es justo el estado desde el que se graba. */
+  function descartarPorCorta() {
+    descartar();
+    setMuyCorta(true);
+  }
+
   function terminar() {
     const actual = estadoRef.current;
+
+    if ((actual === "grabando" || actual === "pausado" || actual === "terminada") && medidaRef.current.segundos < MINIMO_SEGUNDOS) {
+      descartarPorCorta();
+      return;
+    }
 
     if (actual === "terminada") {
       cambiarEstado("preparando");
@@ -561,6 +580,9 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     if (claveRef.current) void limpiarGrabacion(claveRef.current);
     entregarAlDetenerRef.current = false;
     try {
+      // stop() entrega un último trozo: sin oyente, para que no vuelva a
+      // escribirse en el teléfono lo que se acaba de borrar.
+      if (recorderRef.current) recorderRef.current.ondataavailable = null;
       if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
     } catch {
       // Ya estaba detenido.
@@ -570,6 +592,11 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
 
   function enviarPendiente() {
     if (!pendiente || estadoRef.current !== "inactivo") return;
+    if (pendiente.duracionAproxSeg < MINIMO_SEGUNDOS) {
+      descartarPendiente();
+      setMuyCorta(true);
+      return;
+    }
     setPendiente(null);
     cambiarEstado("preparando");
     eventosRef.current = [];
@@ -594,6 +621,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     avisoLimite,
     conmutando,
     mensajeError,
+    muyCorta,
     pendienteSeg: pendiente ? pendiente.duracionAproxSeg : null,
     iniciar,
     pausar,
