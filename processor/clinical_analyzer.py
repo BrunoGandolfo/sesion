@@ -129,9 +129,10 @@ def _llamar_anthropic(
     El system prompt lleva cache_control: es identico entre sesiones y
     representa la mayor parte del input.
 
-    `max_tokens` es por llamada: la nota y el contexto usan
-    config.LLM_MAX_TOKENS y el feedback config.LLM_MAX_TOKENS_FEEDBACK, que es
-    mas alto porque el reporte gestalt no entraba en el techo comun.
+    `max_tokens` es por llamada: la nota usa config.LLM_MAX_TOKENS_NOTA, el
+    feedback config.LLM_MAX_TOKENS_FEEDBACK y el contexto el techo comun
+    config.LLM_MAX_TOKENS. Los dos primeros son mas altos porque sus salidas no
+    entraban en el comun (ver los comentarios de config.py).
     """
     output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
     # `effort` vive dentro de output_config en la API actual. Los niveles
@@ -168,13 +169,20 @@ def _llamar_anthropic(
         raise PipelineError("llm_error", "Anthropic no responde") from e
 
     usage = response.usage
-    # `tope` es lo unico que distingue las tres llamadas en el log: la nota y
-    # el contexto van con LLM_MAX_TOKENS y el feedback con
-    # LLM_MAX_TOKENS_FEEDBACK. Sin el, todas las lineas se ven iguales y no
-    # habia forma de saber cuantos tokens de salida gasta un feedback.
+    # `tope` es lo unico que distingue las tres llamadas en el log (la nota y
+    # el feedback van con el suyo, el contexto con el comun). Sin el, todas las
+    # lineas se ven iguales y no habia forma de saber cuantos tokens de salida
+    # gasta cada una.
+    # `pensamiento` es cuantos de esos tokens de salida se fueron en razonar
+    # (usage.output_tokens_details.thinking_tokens). Sin ese numero, un
+    # truncado no se puede diagnosticar: la nota se ve corta y el techo parece
+    # de sobra, cuando lo que paso es que el razonamiento se comio el techo.
+    detalles = getattr(usage, "output_tokens_details", None)
+    pensamiento = getattr(detalles, "thinking_tokens", None)
     logger.info(
         f"Anthropic OK (request_id={getattr(response, '_request_id', None)}): "
         f"input={usage.input_tokens} output={usage.output_tokens}/{max_tokens} "
+        f"pensamiento={pensamiento} "
         f"cache_read={getattr(usage, 'cache_read_input_tokens', None)} "
         f"cache_write={getattr(usage, 'cache_creation_input_tokens', None)} "
         f"stop={response.stop_reason}"
@@ -252,8 +260,12 @@ def _llamar_validando(
     ocupa `max_retries` del SDK, y repetir una llamada de 8k tokens porque la
     red se cayo no arregla nada.
 
-    `max_tokens` None = el techo comun (config.LLM_MAX_TOKENS). El feedback
-    pasa el suyo.
+    `max_tokens` None = el techo comun (config.LLM_MAX_TOKENS). La nota y el
+    feedback pasan el suyo.
+
+    Ante `llm_truncado` la segunda pasada va con el DOBLE de techo (tope en
+    config.LLM_MAX_TOKENS_REINTENTO). Repetir con el mismo max_tokens era hacer
+    otra vez la pregunta que acababa de no entrar.
 
     Devuelve (resultado, reintentos), con reintentos en 0 o 1.
     """
@@ -284,10 +296,13 @@ def _llamar_validando(
             if e.codigo == "llm_truncado":
                 # Se repite el pedido IGUAL, sin bloque de correccion: pedirle
                 # al modelo que se extienda menos seria decidir por Mariana
-                # cuanto dura el feedback, y los prompts no se tocan. Lo que
-                # arregla el truncado es el techo de tokens; este reintento es
-                # la red por si aun asi se pasa.
+                # cuanto dura la nota o el feedback, y los prompts no se tocan.
+                # Lo que cambia es el techo: hasta el 19-sep la segunda pasada
+                # iba con el MISMO max_tokens, o sea que repetia la pregunta
+                # que ya habia fallado y casi no podia terminar distinto. Ahora
+                # duplica, contra el tope que todavia entra sin streaming.
                 correccion = None
+                tope = min(tope * 2, config.LLM_MAX_TOKENS_REINTENTO)
             else:
                 correccion = "la respuesta anterior no era JSON parseable"
             motivo_log = f"{e.codigo}: {e.mensaje_publico}"
@@ -304,7 +319,10 @@ def _llamar_validando(
             else:
                 return resultado, intento
 
-        logger.warning(f"Salida del LLM invalida ({motivo_log}); se repite la llamada (1 intento)")
+        logger.warning(
+            f"Salida del LLM invalida ({motivo_log}); se repite la llamada "
+            f"(1 intento, max_tokens={tope})"
+        )
 
     # Inalcanzable: el bucle sale por return o por raise.
     raise PipelineError("llm_estructura_invalida", "No se obtuvo una salida valida")
@@ -349,7 +367,11 @@ def analizar(
     user_content = "\n\n".join(bloques)
 
     resultado, reintentos = _llamar_validando(
-        system_prompt, user_content, SCHEMA_NOTA, validar_estructura_nota
+        system_prompt,
+        user_content,
+        SCHEMA_NOTA,
+        validar_estructura_nota,
+        max_tokens=config.LLM_MAX_TOKENS_NOTA,
     )
     advertencias = sanear_datos_nota(resultado)
     for advertencia in advertencias:
@@ -392,6 +414,20 @@ def actualizar_contexto_clinico(
         "</nota_soap_aprobada>"
     )
 
+    # El contexto SE QUEDA con el techo comun (8192), a proposito.
+    #
+    # El riesgo de truncarse es el mismo que tenia la nota, y encima crece: esta
+    # llamada reescribe el Recorrido ENTERO en cada sesion y SCHEMA_CONTEXTO no
+    # acota ni el resumen ni ninguno de sus arrays. Lo que cambia es el precio
+    # de fallar. La nota que se trunca deja a la profesional sin nota y la
+    # sesion en "fallida"; esto corre como trabajo `integrar_contexto`, despues
+    # de que la nota ya fue aprobada, y si falla el Recorrido no se actualiza y
+    # el trabajo se puede volver a correr.
+    #
+    # Y no hay un solo caso de llm_truncado en esta llamada. Subirle el techo
+    # hoy seria elegir un numero sin dato. Lo que si tiene ahora es la segunda
+    # pasada con el doble (16384), que es justo lo que no existia: hasta el
+    # 19-sep el reintento repetia el pedido con el mismo techo.
     actualizado, reintentos = _llamar_validando(
         system_prompt, user_content, SCHEMA_CONTEXTO, validar_estructura_contexto
     )
