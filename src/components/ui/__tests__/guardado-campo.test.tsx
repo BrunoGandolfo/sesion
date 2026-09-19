@@ -31,13 +31,14 @@ it("en configuración muestra pendiente, guardando y guardado solo junto al camp
   fireEvent.change(screen.getByLabelText("Nombre"), {target:{value:"Otro nombre"}});
   expect(juntoAlCampo("Nombre").getByRole("status").textContent).toBe("Sin guardar todavía.");
 });
-it("un campo inválido informa el rechazo del lote y no confirma los demás", async () => {
+it("un campo inválido no frena a los demás: se guardan y solo él queda sin guardar", async () => {
   await montarConfig();
   fireEvent.change(screen.getByLabelText("Nombre"), {target:{value:""}});
   fireEvent.change(screen.getByLabelText("Dirección del consultorio"), {target:{value:"Otra calle"}});
   await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
-  expect(api.patch).not.toHaveBeenCalled();
-  for(const label of ["Nombre","Dirección del consultorio"]) expect(juntoAlCampo(label).getByRole("status").textContent).toMatch(/No se guardó/);
+  expect(api.patch).toHaveBeenCalledExactlyOnceWith("/api/config", {direccion:"Otra calle"});
+  expect(juntoAlCampo("Nombre").getByRole("status").textContent).toMatch(/No se guardó/);
+  expect(juntoAlCampo("Dirección del consultorio").getByRole("status").textContent).toBe("Guardado.");
 });
 it("la ficha confirma después de la respuesta y deja de decir Guardado al volver a escribir", async () => {
   const onSaved = vi.fn();

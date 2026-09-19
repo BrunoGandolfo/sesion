@@ -16,20 +16,20 @@ import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 import * as React from "react";
 import { LogOut } from "lucide-react";
 import { useSesionActual } from "@/components/layout/providers";
+import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
 import { cerrarSesion } from "@/lib/sesion-cliente";
 
 import { GuardadoCampo, type EstadoCampo } from "@/components/ui/guardado-campo";
 import { Button, Card, Input } from "@/components/ui";
-import { CheckDibujado } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
-import { otrasSesionesCerradas, PASSWORD_AVISO_CIERRE, PASSWORD_CAMBIADA_REINGRESO, OTRAS_SESIONES_BOTON, OTRAS_SESIONES_DESCRIPCION, OTRAS_SESIONES_CERRANDO, ALGO_FALLO, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
+import { otrasSesionesCerradas, PASSWORD_AVISO_CIERRE, OTRAS_SESIONES_BOTON, OTRAS_SESIONES_DESCRIPCION, OTRAS_SESIONES_CERRANDO, ALGO_FALLO, CONFIG_SIN_GUARDAR_SALIDA, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
 import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
 import {
   RECORDATORIO_MODOS,
   RECORDATORIO_MODO_DEFAULT,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
-import { TEMPLATE_SMS_SUGERIDO } from "@/lib/sms/texto";
+import { prepararPlantillaRecordatorio, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms/texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 import { MensajeRecordatorio } from "./mensaje-recordatorio";
@@ -88,7 +88,12 @@ function formDesdeConfig(config: Configuracion): FormConfig {
     whatsappOrigen: config.whatsappOrigen,
     tarifaDefault: String(config.tarifaDefault),
     recordatorioModo: config.recordatorioModo,
-    templateRecordatorio: config.templateRecordatorio,
+    // La plantilla que de verdad sale: la misma preparación que usan el envío
+    // y la vista previa. Sin esto, el editor mostraba la guardada tal cual y
+    // la vista previa otra (el default viejo de la base se reemplaza entero,
+    // y a cualquier otra se le agregan remitente y contacto). No se guarda al
+    // abrir: queda en la base con el primer cambio que ella haga.
+    templateRecordatorio: prepararPlantillaRecordatorio(config.templateRecordatorio),
     orientacionTeorica: config.orientacionTeorica,
   };
 }
@@ -97,6 +102,8 @@ function patchDesdeCampos(
   form: FormConfig,
   campos: CampoConfig[],
 ): { patch: PatchConfig; campos: CampoConfig[]; invalido: boolean } {
+  // `invalido` avisa, no frena: los campos válidos del lote salen igual y los
+  // inválidos quedan pendientes, con su error en el campo.
   const patch: PatchConfig = {};
   const incluidos: CampoConfig[] = [];
   let invalido = false;
@@ -212,18 +219,17 @@ export function ConfigView() {
 
     const campos = Array.from(camposSuciosRef.current);
     if (campos.length === 0) return;
-    setCamposAvisados(campos);
 
     const { patch, campos: enviados, invalido } = patchDesdeCampos(
       formRef.current,
       campos,
     );
+    setCamposAvisados(enviados);
 
-    if (invalido) {
-      setEstadoGuardado("error");
+    if (enviados.length === 0) {
+      if (invalido) setEstadoGuardado("error");
       return;
     }
-    if (enviados.length === 0) return;
 
     for (const campo of enviados) camposSuciosRef.current.delete(campo);
     setCamposPendientes(Array.from(camposSuciosRef.current));
@@ -248,10 +254,15 @@ export function ConfigView() {
       volverAGuardarRef.current = false;
 
       if (montadoRef.current) {
-        if (guardado && camposSuciosRef.current.size === 0) mostrarGuardado();
+        if (guardado && invalido) setEstadoGuardado("error");
+        else if (guardado && camposSuciosRef.current.size === 0) mostrarGuardado();
         if (camposSuciosRef.current.size > 0 && (guardado || volver)) {
           programarGuardado();
         }
+      } else if (volver) {
+        // Ella ya se fue y escribió algo mientras viajaba el anterior: no hay
+        // pantalla que lo reprograme, se manda ahora.
+        void guardarPendientesRef.current();
       }
     }
   }, [limpiarAviso, mostrarGuardado, programarGuardado]);
@@ -295,10 +306,47 @@ export function ConfigView() {
     return () => {
       montadoRef.current = false;
       controller.abort();
-      if (debounceRef.current !== null) window.clearTimeout(debounceRef.current);
       if (avisoRef.current !== null) window.clearTimeout(avisoRef.current);
     };
   }, [reloadKey]);
+
+  // Salir de la pantalla no espera al autoguardado: lo pendiente se manda en
+  // ese momento. Navegar dentro de la app no recarga la página, así que el
+  // pedido termina aunque la pantalla ya no esté.
+  React.useEffect(
+    () => () => {
+      if (debounceRef.current !== null) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      void guardarPendientesRef.current();
+    },
+    [],
+  );
+
+  // Cerrar o recargar la pestaña corta los pedidos comunes; `keepalive` es el
+  // que el navegador deja terminar.
+  React.useEffect(() => {
+    const alSalir = () => {
+      const { patch, campos } = patchDesdeCampos(
+        formRef.current,
+        Array.from(camposSuciosRef.current),
+      );
+      if (campos.length === 0) return;
+      void fetch("/api/config", {
+        method: "PATCH",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }).catch(() => {});
+    };
+    window.addEventListener("pagehide", alSalir);
+    return () => window.removeEventListener("pagehide", alSalir);
+  }, []);
+
+  // Lo único que no se puede mandar al salir: un dato inválido o un guardado
+  // que falló. Eso se avisa antes de perderlo.
+  useProtegerTrabajo(estadoGuardado === "error", CONFIG_SIN_GUARDAR_SALIDA);
 
   const reintentarCarga = () => {
     setCargando(true);
@@ -333,11 +381,14 @@ export function ConfigView() {
   }, [guardarPendientes]);
 
   // No atribuir un guardado a otro campo, ni al valor nuevo escrito mientras
-  // viajaba el anterior. Un campo inválido sigue rechazando el lote completo.
+  // viajaba el anterior. El error es de lo que quedó sin guardar; los campos
+  // válidos del mismo lote ya se guardaron.
   function estadoDelCampo(campo: CampoConfig): EstadoCampo {
-    if (estadoGuardado === "error" && camposAvisados.includes(campo)) return "error";
-    if (camposPendientes.includes(campo)) return "pendiente";
-    return camposAvisados.includes(campo) ? estadoGuardado : "idle";
+    if (camposPendientes.includes(campo)) {
+      return estadoGuardado === "error" ? "error" : "pendiente";
+    }
+    if (!camposAvisados.includes(campo)) return "idle";
+    return estadoGuardado === "error" ? "guardado" : estadoGuardado;
   }
 
   if (cargando) {
@@ -593,7 +644,6 @@ function CambiarPassword() {
   const [repetir, setRepetir] = React.useState("");
   const [enviando, setEnviando] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [listo, setListo] = React.useState(false);
 
   const limpiar = () => {
     setActual("");
@@ -628,7 +678,6 @@ function CambiarPassword() {
       await apiPost("/api/cuenta/password", { actual, nueva });
       limpiar();
       setAbierto(false);
-      setListo(true);
       // El servidor cerró todas las sesiones, incluida esta: la cookie ya no
       // vale. A /login con el aviso, sin pasar por el proxy con cookie muerta.
       // Recargar descarta el estado privado en memoria tras revocar la sesión.
@@ -643,28 +692,14 @@ function CambiarPassword() {
 
   if (!abierto) {
     return (
-      <div className="flex flex-col gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          className="w-full sm:w-auto"
-          onClick={() => {
-            setListo(false);
-            setAbierto(true);
-          }}
-        >
-          Cambiar contraseña
-        </Button>
-        {listo ? (
-          <p
-            role="status"
-            className="flex items-center gap-2 text-[13px] text-sage-600"
-          >
-            <CheckDibujado tamano={16} className="shrink-0" />
-            {PASSWORD_CAMBIADA_REINGRESO}
-          </p>
-        ) : null}
-      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        className="w-full sm:w-auto"
+        onClick={() => setAbierto(true)}
+      >
+        Cambiar contraseña
+      </Button>
     );
   }
 
@@ -727,15 +762,6 @@ function CambiarPassword() {
     </form>
   );
 }
-
-// Textos nuevos de esta pantalla; van al glosario cuando el área 6 los
-// integre (docs/pendientes/03-identidad.md).
-
-
-
-
-
-
 
 // ────────────────────────────────────────────────────────────────────────────
 // Cerrar sesión en los demás dispositivos
