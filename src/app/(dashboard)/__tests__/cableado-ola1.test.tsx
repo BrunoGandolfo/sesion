@@ -50,7 +50,7 @@ it.each([
       aceptadoEn:null,intentos:1,motivoNoEnvio:"Motivo informado por el proveedor"}];
     throw Error("Ruta vieja: " + url);
   });
-  render(<TurnoDetailSheet open turno={turno} onClose={vi.fn()} onUpdated={vi.fn()} onError={vi.fn()} />);
+  render(<TurnoDetailSheet open turno={turno} onClose={vi.fn()} onUpdated={vi.fn()} />);
   expect(await screen.findByText(texto)).toBeTruthy();
   expect(screen.getByText("Motivo informado por el proveedor")).toBeTruthy();
   expect(screen.queryByRole("button", {name:/reintentar/i})).toBeNull();

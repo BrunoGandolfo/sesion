@@ -173,9 +173,14 @@ export function AgendaView() {
     }
 
     const controller = new AbortController();
+    // Con los cancelados: la agenda los muestra apagados (session-row y el
+    // punto gris del mes ya los distinguen). Sin este parámetro la API los
+    // filtra, y un turno cancelado desaparecía de la grilla como si nunca
+    // hubiera existido — que es lo que la deja sin saber si lo canceló.
     const url =
       `/api/turnos?desde=${encodeURIComponent(range.desde.toISOString())}` +
-      `&hasta=${encodeURIComponent(range.hasta.toISOString())}`;
+      `&hasta=${encodeURIComponent(range.hasta.toISOString())}` +
+      `&includeCancelados=true`;
 
     const marcando = window.setTimeout(() => setTurnosStatus("loading"), 0);
 
@@ -273,10 +278,6 @@ export function AgendaView() {
     setDetalleId(null);
     setToast({ open: true, message, variante: "confirmacion" });
     refetchTurnos();
-  };
-
-  const handleTurnoError = (message: string) => {
-    setToast({ open: true, message, variante: "aviso" });
   };
 
   const openSheet = () => {
@@ -444,7 +445,6 @@ export function AgendaView() {
         turno={selectedTurno}
         onClose={closeDetalle}
         onUpdated={handleTurnoUpdated}
-        onError={handleTurnoError}
         onCobrado={marcarCobrado}
       />
 

@@ -51,8 +51,12 @@
 
 import type { db } from "@/lib/db";
 
-import { formatearHoraMvd } from "@/lib/fechas-montevideo";
-import { TURNO_SOLAPADO_CON } from "@/lib/glosario";
+import {
+  esMismoDiaMvd,
+  formatearFechaLargaMvd,
+  formatearHoraMvd,
+} from "@/lib/fechas-montevideo";
+import { TURNO_SOLAPADO_CON, TURNO_SOLAPADO_CON_DIA } from "@/lib/glosario";
 
 import { ApiError } from "../responses";
 
@@ -202,12 +206,24 @@ export function rechazoPorSolapamiento({
       ` ocupaDuracion=${ocupado.duracion}`,
   );
   const paciente = `${ocupado.paciente.nombre} ${ocupado.paciente.apellido}`.trim();
+  const desde = formatearHoraMvd(ocupado.fecha);
+  const hasta = formatearHoraMvd(
+    new Date(finDe({ inicio: ocupado.fecha, duracionMin: ocupado.duracion })),
+  );
+  // El día se nombra sólo cuando hace falta: el que ocupa arrancó otro día
+  // (uno de 23:40 se mete en la madrugada siguiente) y decir "de 23:40 a
+  // 00:30" a secas deja el día que ella mira pareciendo libre. Los dos días
+  // se comparan en Montevideo, que es el único calendario del consultorio.
+  const mismoDia = esMismoDiaMvd(intervalo.inicio, ocupado.fecha);
   return new ApiError(
-    TURNO_SOLAPADO_CON(
-      paciente,
-      formatearHoraMvd(ocupado.fecha),
-      formatearHoraMvd(new Date(finDe({ inicio: ocupado.fecha, duracionMin: ocupado.duracion }))),
-    ),
+    mismoDia
+      ? TURNO_SOLAPADO_CON(paciente, desde, hasta)
+      : TURNO_SOLAPADO_CON_DIA(
+          paciente,
+          formatearFechaLargaMvd(ocupado.fecha),
+          desde,
+          hasta,
+        ),
     409,
   );
 }

@@ -8,18 +8,13 @@ import { z } from "zod";
 import { Button, Card, Input } from "@/components/ui";
 import { apiPatch } from "@/lib/api-client";
 import { ALGO_FALLO } from "@/lib/glosario";
+import { pacienteCreateSchema } from "@/app/api/_lib/schemas";
 
-const editarPacienteSchema = z.object({
-  nombre: z.string().trim().min(1, "Ingresá el nombre"),
-  apellido: z.string().trim().min(1, "Ingresá el apellido"),
-  telefono: z.string().trim().min(1, "Ingresá el teléfono"),
-  tarifa: z
-    .number("Ingresá una tarifa")
-    .int("Usá pesos sin centavos")
-    .min(0, "La tarifa no puede ser negativa"),
-});
+// La misma regla del alta y del servidor. La copia que vivía acá aceptaba
+// tarifa 0 y el PATCH la rechazaba con "Datos inválidos".
+const editarPacienteSchema = pacienteCreateSchema.omit({ notas: true });
 
-type EditarPacienteFormValues = z.infer<typeof editarPacienteSchema>;
+type EditarPacienteFormValues = z.input<typeof editarPacienteSchema>;
 
 export interface EditarPacienteFormProps {
   paciente: {
@@ -55,14 +50,16 @@ export function EditarPacienteForm({
     mode: "onSubmit",
   });
 
-  async function submit(values: EditarPacienteFormValues) {
+  // Ya normalizado por el schema del servidor (teléfono en E.164, textos
+  // recortados): no hace falta volver a limpiarlo acá.
+  async function submit(values: z.output<typeof editarPacienteSchema>) {
     setApiError(null);
 
     try {
       await apiPatch(`/api/pacientes/${paciente.id}`, {
-        nombre: values.nombre.trim(),
-        apellido: values.apellido.trim(),
-        telefono: values.telefono.trim(),
+        nombre: values.nombre,
+        apellido: values.apellido,
+        telefono: values.telefono,
         tarifa: values.tarifa,
       });
       onSuccess();

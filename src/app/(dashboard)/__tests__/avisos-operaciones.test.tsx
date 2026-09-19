@@ -63,9 +63,12 @@ vi.mock("../agenda/_components/week-view", () => ({
   WeekView: ({ onEventClick }: { onEventClick: (turno: Turno) => void }) =>
     <button onClick={() => onEventClick(TURNO)}>Abrir turno de prueba</button>,
 }));
+// El detalle del turno ya no reporta errores hacia arriba: los muestra en
+// línea y se queda donde estaba (turno-detail-sheet.tsx, `ejecutar`). Lo que
+// sigue subiendo, y es lo que se prueba acá, es la confirmación.
 vi.mock("../agenda/_components/turno-detail-sheet", () => ({
-  TurnoDetailSheet: ({ open, onError, onUpdated }: { open: boolean; onError: (s: string) => void; onUpdated: (s: string) => void }) =>
-    open ? <div><button onClick={() => onError(FALLO)}>Simular rechazo</button><button onClick={() => onUpdated("Turno actualizado")}>Simular confirmación</button></div> : null,
+  TurnoDetailSheet: ({ open, onUpdated }: { open: boolean; onUpdated: (s: string) => void }) =>
+    open ? <div><button onClick={() => onUpdated("Turno actualizado")}>Simular confirmación</button></div> : null,
 }));
 
 const AHORA = new Date("2026-09-09T15:00:00.000Z");
@@ -191,11 +194,9 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
     await verificarAviso(exito ? "Cobrado" : FALLO, exito);
   });
 
-  it("agenda no celebra el error y sí la confirmación siguiente", async () => {
+  it("agenda confirma lo que el detalle del turno resolvió", async () => {
     render(<AgendaView />);
     fireEvent.click(await screen.findByRole("button", { name: "Abrir turno de prueba" }));
-    fireEvent.click(screen.getByRole("button", { name: "Simular rechazo" }));
-    await verificarAviso(FALLO, false);
     fireEvent.click(screen.getByRole("button", { name: "Simular confirmación" }));
     await verificarAviso("Turno actualizado", true);
   });

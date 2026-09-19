@@ -54,8 +54,10 @@ function comprobarPanel(panel: HTMLElement) {
     expect(getComputedStyle(nodo).overflowX).not.toBe("hidden");
     if (nodo !== panel) expect(getComputedStyle(nodo).maxHeight).not.toBe("90vh");
   }
-  const mobile = panel.classList.contains("lg:hidden");
-  expect(panel.style.maxHeight).toBe(mobile ? "90dvh" : "85dvh");
+  // Un solo panel, con el tope de alto de cada viewport en sus clases: 90dvh
+  // en el teléfono y 85dvh de `lg:` para arriba.
+  expect(panel.classList.contains("max-h-[90dvh]")).toBe(true);
+  expect(panel.classList.contains("lg:max-h-[85dvh]")).toBe(true);
   expect(getComputedStyle(boton.closest("form")!.lastElementChild!).position).toBe("static");
   const contenido = panel.querySelector<HTMLElement>(`.${estilos.contenido}`)!;
   expect(getComputedStyle(contenido).paddingBottom).toContain("safe-area-inset-bottom");
@@ -73,11 +75,12 @@ describe("panel de alta con un solo scroll", () => {
         : <NuevoPacienteForm tarifaDefault={2200} onSuccess={vi.fn()} onCancel={vi.fn()} />;
     render(<Sheet open formulario onClose={vi.fn()}><div className="px-6 pt-3 lg:px-7 lg:pt-7">{formulario}</div></Sheet>);
     await aplicarEstilos();
+    // El sheet monta su contenido UNA vez: un panel, no uno por viewport.
     const paneles = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'));
-    expect(paneles).toHaveLength(2);
+    expect(paneles).toHaveLength(1);
     paneles.forEach(comprobarPanel);
     fireEvent.submit(paneles[0].querySelector("form")!);
-    await within(paneles[0]).findByText(tipo === "paciente" ? "Ingresá el nombre" : /Elegí un paciente/);
+    await within(paneles[0]).findByText(tipo === "paciente" ? "Falta el nombre" : /Elegí un paciente/);
     paneles.forEach(comprobarPanel);
   });
 
@@ -99,7 +102,7 @@ describe("panel de alta con un solo scroll", () => {
   it("activa el contenedor desde Hoy después de cargar la lista", async () => {
     const props = { open: true, onClose: vi.fn(), onSubmit: vi.fn() };
     const { rerender } = render(<SheetNuevoTurno {...props} pacientes={null} />);
-    expect(document.querySelectorAll(`.${estilos.contenido}`)).toHaveLength(2);
+    expect(document.querySelectorAll(`.${estilos.contenido}`)).toHaveLength(1);
     rerender(<SheetNuevoTurno {...props} pacientes={[]} />);
     await aplicarEstilos();
     document.querySelectorAll<HTMLElement>('[role="dialog"]').forEach(comprobarPanel);

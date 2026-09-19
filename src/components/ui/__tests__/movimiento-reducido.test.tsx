@@ -59,13 +59,11 @@ describe("Sheet con movimiento reducido", () => {
       </Sheet>,
     );
 
-    // El sheet monta el panel de mobile y el de desktop a la vez y esconde
-    // uno con CSS, que en jsdom no corre: se miran los dos.
+    // El sheet monta su contenido una sola vez: hay un panel y cambia de
+    // forma con clases responsive.
     const paneles = screen.getAllByRole("dialog");
-    expect(paneles).toHaveLength(2);
-    for (const panel of paneles) {
-      expect(transformDe(panel)).toBe("");
-    }
+    expect(paneles).toHaveLength(1);
+    expect(transformDe(paneles[0])).toBe("");
   });
 
   it("deja el overlay sin fundido, pero lo deja", () => {
@@ -92,10 +90,9 @@ describe("Sheet con movimiento reducido", () => {
       </Sheet>,
     );
 
-    // El atrapado de foco en sí no se puede ejercitar en jsdom —el sheet
-    // elige el panel visible con getClientRects() y sin layout no hay
-    // ninguno—, pero lo que sostiene el contrato del diálogo sí se ve:
-    // aria-modal y el rótulo siguen ahí con la preferencia puesta.
+    // La trampa de foco tiene sus propias pruebas (sheet-dialogo.test.tsx);
+    // acá se mira lo que sostiene el contrato del diálogo con la preferencia
+    // puesta: aria-modal y el rótulo siguen ahí.
     for (const panel of screen.getAllByRole("dialog")) {
       expect(panel.getAttribute("aria-modal")).toBe("true");
       expect(panel.getAttribute("aria-label")).toBe("Cobrar");

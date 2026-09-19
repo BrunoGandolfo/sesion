@@ -257,6 +257,21 @@ export function TURNO_SOLAPADO_CON(
   return `Ya tenés un turno a esa hora: ${paciente}, de ${desde} a ${hasta}. Elegí otro horario, o cancelá el que está.`;
 }
 
+/**
+ * El mismo rechazo, cuando el turno que ocupa el lugar EMPEZÓ otro día: uno
+ * de 23:40 que termina 00:30 le come la medianoche al día siguiente. Con sólo
+ * las horas, el día que ella está mirando parecía libre y el mensaje hablaba
+ * de un horario que no veía por ningún lado.
+ */
+export function TURNO_SOLAPADO_CON_DIA(
+  paciente: string,
+  dia: string,
+  desde: string,
+  hasta: string,
+): string {
+  return `Ya tenés un turno a esa hora: ${paciente}, del ${dia} de ${desde} a ${hasta}. Elegí otro horario, o cancelá el que está.`;
+}
+
 /** Revierte el cobro de un turno: vuelve a quedar sin cobrar. No es
  *  "Anular" ni "Eliminar pago": no se borra nada, se deshace lo último. */
 export const DESHACER_COBRO = "Deshacer cobro";
@@ -833,9 +848,31 @@ export const AGENDA_DIA_VACIO_LINEAS: [string, string, string] = [
 /** El botón que agenda un turno, desde el estado vacío o desde el header. */
 export const AGENDAR = "Agendar";
 
+/**
+ * "Crear a X" crea la paciente con la tarifa de Tu consultorio. Si esa tarifa
+ * no sirve —cero, o vacía— el servidor contestaba "Datos inválidos" recién al
+ * enviar, sin decir qué faltaba ni dónde se carga. Ahora se dice antes.
+ */
+export const TARIFA_SIN_CARGAR =
+  "Para crear una paciente desde acá necesitás una tarifa por sesión mayor a cero. Cargala en Tu consultorio y volvé.";
+
+/**
+ * La paciente ya quedó creada: si el turno se rechaza y ella corrige el
+ * nombre acá, esos cambios no van a ningún lado (el reenvío usa la que ya
+ * existe). Antes los campos seguían editables y no lo decían.
+ */
+export const PACIENTE_YA_CREADA =
+  "Ya la creaste. Si hay que corregir algo, se hace desde su ficha.";
+
 /** Los puntos del mes: dorado y verde no se explican en ningún lado de esa
  *  pantalla, y son el único dato de la grilla. */
 export const MES_LEYENDA = "Cada punto es un turno:";
+
+/** El punto gris del mes es el mismo para los dos: el turno está en la
+ *  agenda pero no hubo sesión. Se dicen juntos porque comparten el color, y
+ *  decir sólo uno hacía que un turno cancelado pareciera un error de la
+ *  pantalla. */
+export const MES_LEYENDA_SIN_SESION = "No vino o cancelado";
 
 /** La carga masiva del vocabulario, que vive plegada: se usa una vez, al
  *  principio, y el resto del tiempo estorba a la lista. */

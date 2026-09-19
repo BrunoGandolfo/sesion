@@ -4,7 +4,7 @@ import * as React from "react";
 import { agregarDiasMvd, esMismoDiaMvd, esMismoMesMvd, inicioDeMesMvd, inicioDeSemanaMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaLarga } from "@/lib/format";
 
-import { AGENDADO, MES_LEYENDA, NO_VINO, PAGADO } from "@/lib/glosario";
+import { AGENDADO, MES_LEYENDA, MES_LEYENDA_SIN_SESION, PAGADO } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
 interface Props {
@@ -111,7 +111,7 @@ function Leyenda() {
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-ink-300" />
-        {NO_VINO}
+        {MES_LEYENDA_SIN_SESION}
       </span>
     </div>
   );

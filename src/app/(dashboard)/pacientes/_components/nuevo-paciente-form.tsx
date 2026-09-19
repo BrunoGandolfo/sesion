@@ -8,19 +8,14 @@ import { z } from "zod";
 import { Button, Input, Textarea } from "@/components/ui";
 import { ApiClientError, apiPost } from "@/lib/api-client";
 import { ALGO_FALLO } from "@/lib/glosario";
+import { pacienteCreateSchema } from "@/app/api/_lib/schemas";
 import type { Paciente } from "@/types/domain";
 
-const schema = z.object({
-  nombre: z.string().trim().min(1, "Ingresá el nombre"),
-  apellido: z.string().trim().min(1, "Ingresá el apellido"),
-  telefono: z.string().trim().min(8, "Ingresá el teléfono"),
-  tarifa: z
-    .number({ error: "Ingresá la tarifa" })
-    .positive("La tarifa debe ser mayor a 0"),
-  notas: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof schema>;
+// Una sola regla para el alta de una paciente: la del servidor. Antes el
+// formulario tenía la suya (teléfono mínimo 8, tarifa positiva pero no
+// entera) y la edición otra más (tarifa entera pero ≥ 0, que el POST
+// rechaza). Tres copias de la misma cosa, y ninguna igual a la que decide.
+type FormValues = z.input<typeof pacienteCreateSchema>;
 
 export interface NuevoPacienteFormProps {
   /** Tarifa por sesión de Tu consultorio. Sin ella el campo arranca vacío:
@@ -44,7 +39,7 @@ export function NuevoPacienteForm({
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(pacienteCreateSchema),
     defaultValues: {
       nombre: "",
       apellido: "",
@@ -55,18 +50,17 @@ export function NuevoPacienteForm({
     mode: "onSubmit",
   });
 
-  async function submit(values: FormValues) {
+  // `values` llega ya validado y normalizado por el schema del servidor: el
+  // teléfono viene en E.164 y los textos recortados.
+  async function submit(values: z.output<typeof pacienteCreateSchema>) {
     setSubmitError(null);
     try {
       const paciente = await apiPost<Paciente>("/api/pacientes", {
-        nombre: values.nombre.trim(),
-        apellido: values.apellido.trim(),
-        telefono: values.telefono.trim(),
+        nombre: values.nombre,
+        apellido: values.apellido,
+        telefono: values.telefono,
         tarifa: values.tarifa,
-        notas:
-          values.notas && values.notas.trim().length > 0
-            ? values.notas.trim()
-            : null,
+        notas: values.notas && values.notas.length > 0 ? values.notas : null,
       });
       reset();
       onSuccess(paciente);
