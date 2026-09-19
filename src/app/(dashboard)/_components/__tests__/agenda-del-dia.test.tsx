@@ -9,10 +9,12 @@
 // el dibujo acompaña palabras que ya dicen todo.
 
 import { describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import {
   COBRAR,
+  FALTA_AUTORIZACION,
+  GRABAR_SESION,
   HOY_SIN_TURNOS_DETALLE,
   HOY_SIN_TURNOS_TITULO,
 } from "@/lib/glosario";
@@ -21,8 +23,10 @@ import type { TurnoConPaciente } from "@/types/domain";
 import { AgendaDelDia } from "../agenda-del-dia";
 import { hayRiesgoEnElDia } from "../datos";
 
+const push = vi.fn();
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push }),
 }));
 
 const AHORA = new Date("2026-09-07T15:00:00.000Z");
@@ -129,6 +133,57 @@ describe("el cobro se confirma en la fila que lo originó (D9)", () => {
     conUnTurno("otro-turno");
 
     expect(screen.getByText(COBRAR)).toBeTruthy();
+  });
+});
+
+describe("cobrar no depende de la autorización para grabar", () => {
+  function fila(turno: TurnoConPaciente, sinAutorizacion: boolean) {
+    const onCobrar = vi.fn();
+    render(
+      <AgendaDelDia
+        turnos={[turno]}
+        ahora={AHORA}
+        notaPorTurno={new Map()}
+        sinAutorizacion={new Set(sinAutorizacion ? [turno.id] : [])}
+        onCobrar={onCobrar}
+        onAgendar={() => {}}
+      />,
+    );
+    return onCobrar;
+  }
+
+  it("un turno cobrable sin autorización ofrece Cobrar y avisa de la autorización", () => {
+    push.mockClear();
+    const onCobrar = fila(TURNO, true);
+
+    fireEvent.click(screen.getByRole("button", { name: COBRAR }));
+    expect(onCobrar).toHaveBeenCalledWith("t1");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `${FALTA_AUTORIZACION} →` }),
+    );
+    expect(push).toHaveBeenCalledWith("/pacientes/p1");
+  });
+
+  it("con la autorización vigente, sólo Cobrar, como antes", () => {
+    fila(TURNO, false);
+
+    expect(screen.getByRole("button", { name: COBRAR })).toBeTruthy();
+    expect(screen.queryByText(`${FALTA_AUTORIZACION} →`)).toBeNull();
+  });
+
+  it("sin nada que cobrar, la autorización sigue antes que grabar", () => {
+    // Turno de más tarde: todavía no se cobra, y sin firma no se graba.
+    const tarde = {
+      ...TURNO,
+      estado: "programado" as const,
+      fecha: new Date("2026-09-07T18:00:00.000Z"),
+    };
+    fila(tarde, true);
+
+    expect(screen.getByRole("button", { name: `${FALTA_AUTORIZACION} →` })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: COBRAR })).toBeNull();
+    expect(screen.queryByRole("button", { name: GRABAR_SESION })).toBeNull();
   });
 });
 
