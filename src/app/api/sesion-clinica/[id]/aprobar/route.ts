@@ -2,7 +2,6 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { notaSoapSchema } from "@/lib/sesion-clinica/schema";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { aprobarSesion } from "../../../_lib/casos-uso/sesion/aprobar";
 import { errorResponse, ok, validationError } from "../../../_lib/responses";
@@ -37,7 +36,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       organizationId,
       usuarioId: userId,
       ...parsed.data,
-      registrarAuditoria,
     });
     return ok(toSesionClinicaResponse(sesion));
   } catch (error) {

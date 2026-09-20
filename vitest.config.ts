@@ -71,6 +71,8 @@ const INTEGRACION = [
   'src/lib/__tests__/cobrar-turno.test.ts',
   'src/lib/__tests__/contexto-clinico.test.ts',
   'src/lib/__tests__/multi-tenant.test.ts',
+  // El rastro legal y el acto se confirman juntos (auditoria.ts).
+  'src/lib/__tests__/auditoria-transaccional.test.ts',
   'src/lib/__tests__/login-atomico.test.ts',
   'src/lib/__tests__/password-atomico.test.ts',
   'src/lib/__tests__/solapamiento-turnos.test.ts',

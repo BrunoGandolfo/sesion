@@ -35,6 +35,8 @@ export type ClienteSesion = Pick<
   | "hotWord"
   | "hiloVersion"
   | "workerEstado"
+  // El rastro se escribe con el mismo cliente que el acto (auditoria.ts).
+  | "eventoAuditoria"
 >;
 
 /** Lo que necesitan las operaciones que abren su propia transacción: el

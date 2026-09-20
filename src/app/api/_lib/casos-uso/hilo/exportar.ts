@@ -13,15 +13,15 @@
 //   - Las fechas de las sesiones, para que la hoja muestre fechas y no ids.
 //   - Los datos de "Cómo va" sobre todas las sesiones.
 //
-// La auditoría se escribe DENTRO de la transacción que lee: si el registro
-// falla, no salen datos. A diferencia de registrarAuditoria, que se traga el
-// error, acá exportar sin rastro no es una opción.
+// La auditoría se escribe DENTRO de la transacción que lee, con `auditar`: si
+// el registro falla, no salen datos. A diferencia de registrarAuditoria, que
+// se traga el error, acá exportar sin rastro no es una opción.
 
 import { ACCION_EXPORTAR_RECORRIDO } from "@/lib/consentimiento-hechos";
 import type { db } from "@/lib/db";
 import { contenidoHiloSchema, type ResumenVersionHilo, type VersionHilo } from "@/lib/hilo/contenido";
 
-import { detalleSeguro } from "../../auditoria-pura";
+import { auditar } from "../../auditoria";
 import { ApiError } from "../../responses";
 import type { ProgresoClinico } from "../progreso-clinico";
 import { filtroHilo, resumenSelect, type BaseHilo, type IdentidadHilo } from "./base";
@@ -89,17 +89,17 @@ export async function exportarRecorrido(
     });
     const progreso = await leerProgreso(tx, identidad, "todo", ahora);
 
-    await tx.eventoAuditoria.create({ data: {
+    await auditar(tx, {
       organizationId: identidad.organizationId, actorTipo: "usuario", actorId: usuarioId,
       accion: ACCION_EXPORTAR_RECORRIDO, entidad: "hilo", entidadId: identidad.pacienteId,
-      detalle: detalleSeguro({
+      detalle: {
         vigente: vigente?.version ?? null,
         versiones: filas.length,
         conContenido: conContenido.map(f => f.version),
         sesiones: progreso.totalSesiones,
-      }) as object,
+      },
       creadoEn: ahora,
-    } });
+    });
 
     return {
       paciente,

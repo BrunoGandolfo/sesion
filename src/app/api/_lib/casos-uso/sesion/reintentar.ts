@@ -2,7 +2,7 @@
 // el fallo. `intento` NO se resetea (es identidad); lo que vuelve a cero es
 // `fallosSeguidos`. Sin tope a propósito: es una acción humana.
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 import type { FilaSesionClinica } from "../../sesion-clinica";
 
 import { leerSesion } from "./leer";
@@ -14,7 +14,6 @@ export interface ReintentarSesionInput {
   sesionId: string;
   organizationId: string;
   usuarioId: string;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
   ahora?: Date;
 }
 
@@ -23,7 +22,6 @@ export async function reintentarSesion({
   sesionId,
   organizationId,
   usuarioId,
-  registrarAuditoria,
   ahora = new Date(),
 }: ReintentarSesionInput): Promise<FilaSesionClinica> {
   await transicionar({
@@ -39,7 +37,7 @@ export async function reintentarSesion({
 
   const sesion = await leerSesion(prisma, sesionId, organizationId);
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,

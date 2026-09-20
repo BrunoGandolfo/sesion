@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       hashear: (password) => bcrypt.hash(password, BCRYPT_RONDAS),
       comparar: bcrypt.compare,
     });
-    await registrarAuditoria({
+    await registrarAuditoria(db, {
       organizationId: user.organizationId, actorTipo: "usuario", actorId: user.userId,
       accion: "cuenta.restablecer", entidad: "usuario", entidadId: user.userId,
     });

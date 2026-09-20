@@ -3,7 +3,7 @@
 // reintentos aunque el proceso muera antes del resultado (H-11). Idempotente
 // por transcriptId: registrar dos veces el mismo no duplica el trabajo.
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 import { crearTrabajo } from "../trabajos/crear";
 
 import { transicionar, type ClienteTransaccional } from "./transicion";
@@ -14,7 +14,6 @@ export interface RegistrarAsrInput {
   organizationId: string;
   intento: number;
   transcriptId: string;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
 }
 
 export async function registrarAsr({
@@ -23,7 +22,6 @@ export async function registrarAsr({
   organizationId,
   intento,
   transcriptId,
-  registrarAuditoria,
 }: RegistrarAsrInput): Promise<{ trabajoId: string }> {
   const trabajo = await prisma.$transaction(async (tx) => {
     await transicionar({
@@ -52,7 +50,7 @@ export async function registrarAsr({
     });
   });
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "worker",
     actorId: null,

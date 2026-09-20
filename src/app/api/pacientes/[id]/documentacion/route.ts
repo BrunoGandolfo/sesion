@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
+import { auditar } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { requirePaciente } from "../../../_lib/pacientes";
 import { errorResponse, ok, validationError } from "../../../_lib/responses";
@@ -97,8 +97,14 @@ export async function GET(request: Request, { params }: RouteParams) {
       procesadaEn: s.procesadaEn ? s.procesadaEn.toISOString() : null,
     }));
 
-    // Este GET devuelve notas completas en lote: cuenta como exportación.
-    await registrarAuditoria({
+    // Este GET devuelve notas completas en lote: cuenta como EXPORTACIÓN de
+    // documentación clínica, y por eso va con `auditar` y no con la variante
+    // best-effort: si el rastro no se puede escribir, las notas no salen (la
+    // usuaria ve un error y vuelve a pedirlas). Es el mismo criterio que
+    // casos-uso/hilo/exportar.ts. No hay transacción que abrazarlo porque el
+    // acto es una lectura: alcanza con escribirlo ANTES de devolver el
+    // cuerpo, y que su fallo voltee la respuesta.
+    await auditar(db, {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,

@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import { registrarAsrSchema } from "@/lib/sesion-clinica/schema";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { identidadWorker, registrarLatido } from "../../../_lib/casos-uso/sesion/latido";
 import { registrarAsr } from "../../../_lib/casos-uso/sesion/registrar-asr";
 import { errorResponse, ok, validationError } from "../../../_lib/responses";
@@ -25,7 +24,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       sesionId: sesion.sesionId,
       organizationId: sesion.organizationId,
       ...parsed.data,
-      registrarAuditoria,
     });
     await registrarLatido({ prisma: db, ...identidadWorker(request), ahora: new Date(), tipo: "trabajo" });
     return ok(resultado);

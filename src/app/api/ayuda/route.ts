@@ -93,7 +93,7 @@ export async function POST(request: Request) {
           const resultado = await flujo.resultado;
           const textoCompleto = limpiarMarkdown(resultado.texto);
           // El stream cierra después del rastro; el cupo ya quedó reservado.
-          await registrarAuditoria({
+          await registrarAuditoria(db, {
             organizationId,
             actorTipo: "usuario",
             actorId: userId,

@@ -17,7 +17,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import type { EventoAuditoriaInput } from "@/app/api/_lib/auditoria-pura";
 import { claveDeCobro } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import {
   ACCION_AVISO,
@@ -68,15 +67,13 @@ async function crearImpago(base: Base, diasAtras: number): Promise<void> {
   });
 }
 
-function stubAuditoria() {
-  const eventos: EventoAuditoriaInput[] = [];
-  return {
-    eventos,
-    registrarAuditoria: async (evento: EventoAuditoriaInput) => {
-      eventos.push(evento);
-    },
-  };
-}
+/** El rastro que quedó EN LA BASE. El caso de uso ya no recibe la función de
+ *  auditoría: escribe con el mismo cliente que el acto. */
+const eventosDe = (organizationId: string) =>
+  prismaRaw.eventoAuditoria.findMany({
+    where: { organizationId },
+    orderBy: [{ creadoEn: "asc" }, { id: "asc" }],
+  });
 
 const enviosDe = (pacienteId: string) =>
   prismaRaw.envioSms.findMany({ where: { pacienteId }, orderBy: { creadoEn: "asc" } });
@@ -105,14 +102,12 @@ describe("recordarCobro", () => {
     const base = await crearBase();
     await crearImpago(base, 40);
     await crearImpago(base, 12);
-    const auditoria = stubAuditoria();
 
     const resultado = await recordarCobro({
       prisma: db,
       organizationId: base.orgId,
       pacienteId: base.pacienteId,
       usuarioId: "user-1",
-      registrarAuditoria: auditoria.registrarAuditoria,
       ahora: AHORA,
     });
 
@@ -138,8 +133,9 @@ describe("recordarCobro", () => {
       intentos: 0,
     });
 
-    expect(auditoria.eventos).toHaveLength(1);
-    const evento = auditoria.eventos[0];
+    const eventos = await eventosDe(base.orgId);
+    expect(eventos).toHaveLength(1);
+    const evento = eventos[0];
     expect(evento).toMatchObject({
       accion: ACCION_AVISO,
       entidad: "paciente",
@@ -157,13 +153,11 @@ describe("recordarCobro", () => {
   it("dos toques el mismo día son un solo envío y un solo evento", async () => {
     const base = await crearBase();
     await crearImpago(base, 5);
-    const auditoria = stubAuditoria();
     const pedir = () =>
       recordarCobro({
         prisma: db,
         organizationId: base.orgId,
         pacienteId: base.pacienteId,
-        registrarAuditoria: auditoria.registrarAuditoria,
         ahora: AHORA,
       });
 
@@ -174,7 +168,7 @@ describe("recordarCobro", () => {
     expect(segundo.creado).toBe(false);
     expect(segundo.envioId).toBe(primero.envioId);
     expect(await enviosDe(base.pacienteId)).toHaveLength(1);
-    expect(auditoria.eventos).toHaveLength(1);
+    expect(await eventosDe(base.orgId)).toHaveLength(1);
   });
 
   it("a quien no debe nada no se le avisa: 409 y no se crea nada", async () => {
@@ -190,33 +184,29 @@ describe("recordarCobro", () => {
         organizationId: base.orgId,
       },
     });
-    const auditoria = stubAuditoria();
 
     await expect(
       recordarCobro({
         prisma: db,
         organizationId: base.orgId,
         pacienteId: base.pacienteId,
-        registrarAuditoria: auditoria.registrarAuditoria,
         ahora: AHORA,
       }),
     ).rejects.toMatchObject({ status: 409 });
     expect(await enviosDe(base.pacienteId)).toHaveLength(0);
-    expect(auditoria.eventos).toHaveLength(0);
+    expect(await eventosDe(base.orgId)).toHaveLength(0);
   });
 
   it("una paciente de otra organización no existe para esta", async () => {
     const base = await crearBase();
     const otra = await crearBase();
     await crearImpago(otra, 10);
-    const auditoria = stubAuditoria();
 
     await expect(
       recordarCobro({
         prisma: db,
         organizationId: base.orgId,
         pacienteId: otra.pacienteId,
-        registrarAuditoria: auditoria.registrarAuditoria,
         ahora: AHORA,
       }),
     ).rejects.toMatchObject({ status: 404 });
@@ -227,14 +217,12 @@ describe("recordarCobro", () => {
     const base = await crearBase();
     await crearImpago(base, 3);
     await prismaRaw.paciente.update({ where: { id: base.pacienteId }, data: { telefono: "   " } });
-    const auditoria = stubAuditoria();
 
     await expect(
       recordarCobro({
         prisma: db,
         organizationId: base.orgId,
         pacienteId: base.pacienteId,
-        registrarAuditoria: auditoria.registrarAuditoria,
         ahora: AHORA,
       }),
     ).rejects.toMatchObject({ status: 409 });
@@ -245,13 +233,11 @@ describe("recordarCobro", () => {
     const base = await crearBase();
     await crearImpago(base, 3);
     await prismaRaw.bajaSms.create({ data: { telefono: TELEFONO, motivo: "respuesta_baja" } });
-    const auditoria = stubAuditoria();
 
     const error = await recordarCobro({
       prisma: db,
       organizationId: base.orgId,
       pacienteId: base.pacienteId,
-      registrarAuditoria: auditoria.registrarAuditoria,
       ahora: AHORA,
     }).catch((e: unknown) => e);
 

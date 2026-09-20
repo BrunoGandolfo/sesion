@@ -9,7 +9,7 @@
 
 import { prefijoAudio } from "@/lib/sesion-clinica/estados";
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 import { ApiError } from "../../responses";
 import { crearTrabajo } from "../trabajos/crear";
 
@@ -20,7 +20,6 @@ export interface EliminarSesionInput {
   sesionId: string;
   organizationId: string;
   usuarioId: string;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
 }
 
 export interface SesionEliminada {
@@ -34,7 +33,6 @@ export async function eliminarSesion({
   sesionId,
   organizationId,
   usuarioId,
-  registrarAuditoria,
 }: EliminarSesionInput): Promise<SesionEliminada> {
   const resultado = await prisma.$transaction(async (tx) => {
     const existente = await tx.sesionClinica.findFirst({
@@ -77,7 +75,7 @@ export async function eliminarSesion({
     return { audioPorBorrar };
   });
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,

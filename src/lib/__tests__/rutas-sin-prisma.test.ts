@@ -28,7 +28,6 @@ const RAIZ_API = join(process.cwd(), "src", "app", "api");
  *  src/app/api, con el área dueña. Quitar cada una al migrarla. */
 const EXCEPCIONES_TEMPORALES: Record<string, string> = {
   "cuenta/password/route.ts": "área 3 (identidad)",
-  "pacientes/[id]/consentimiento/route.ts": "área 3 (identidad)",
   // Las dos leen sesiones para la ficha y el recorrido: se rehacen en la
   // Ola 2 con el grabador y el Recorrido (docs/pendientes/cierre-ola-1.md).
   "pacientes/[id]/documentacion/route.ts": "Ola 2 (sesión clínica)",

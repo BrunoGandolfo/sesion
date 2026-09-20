@@ -15,7 +15,7 @@ import { ApiError } from "@/app/api/_lib/responses";
 import * as r2 from "@/lib/r2";
 
 import {
-  auditoriaEnMemoria,
+  eventosAuditoriaDe,
   camposDe,
   conectarArea2,
   crearOrg,
@@ -74,7 +74,6 @@ async function codigo(promesa: Promise<unknown>): Promise<number> {
 describe("aprobar", () => {
   it("guarda la nota final, destruye la clave y deja los dos trabajos, sin llamar a R2", async () => {
     const { sesionId } = await enRevision();
-    const auditoria = auditoriaEnMemoria();
 
     const respuesta = await aprobarSesion({ generacion: 1,
       prisma: base.db,
@@ -82,7 +81,6 @@ describe("aprobar", () => {
       organizationId: org.orgId,
       usuarioId: org.userId,
       notasEdicion: "sin cambios",
-      registrarAuditoria: auditoria.registrar,
     });
 
     expect(respuesta.estado).toBe("aprobada");
@@ -108,9 +106,12 @@ describe("aprobar", () => {
     expect(trabajos[1].pacienteId).toBe(org.pacienteId);
 
     expect(r2.borrarAudio).not.toHaveBeenCalled();
-    expect(auditoria.eventos.map((e) => e.accion)).toEqual(["sesion.aprobar"]);
-    expect(auditoria.eventos[0].detalle).toMatchObject({ trabajos: ["borrar_audio_r2", "integrar_contexto"] });
-    expect(JSON.stringify(auditoria.eventos[0].detalle)).not.toContain("S");
+    // El rastro se lee de la tabla: el caso de uso lo escribe con el mismo
+    // cliente que el acto, no con una función inyectada.
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, sesionId);
+    expect(eventos.map((e) => e.accion)).toEqual(["sesion.aprobar"]);
+    expect(eventos[0].detalle).toMatchObject({ trabajos: ["borrar_audio_r2", "integrar_contexto"] });
+    expect(JSON.stringify(eventos[0].detalle)).not.toContain("S");
   });
 
   it("la nota editada es la final; la de la IA no se toca", async () => {
@@ -122,7 +123,6 @@ describe("aprobar", () => {
       organizationId: org.orgId,
       usuarioId: org.userId,
       notaEditada: editada,
-      registrarAuditoria: auditoriaEnMemoria().registrar,
     });
     const campos = await camposDe(base.db, sesionId);
     expect(campos.notaFinal).toEqual(editada);
@@ -136,7 +136,6 @@ describe("aprobar", () => {
       sesionId,
       organizationId: org.orgId,
       usuarioId: org.userId,
-      registrarAuditoria: auditoriaEnMemoria().registrar,
     });
     expect((await trabajosDe(base.prisma, sesionId)).map((t) => t.tipo)).toEqual(["integrar_contexto"]);
   });
@@ -150,7 +149,6 @@ describe("aprobar", () => {
       sesionId,
       organizationId: org.orgId,
       usuarioId: org.userId,
-      registrarAuditoria: auditoriaEnMemoria().registrar,
     });
     await expect(codigo(sinConfirmar)).resolves.toBe(400);
     expect((await filaDe(base.prisma, sesionId))?.estado).toBe("revision");
@@ -162,7 +160,6 @@ describe("aprobar", () => {
       organizationId: org.orgId,
       usuarioId: org.userId,
       confirmoRiesgo: true,
-      registrarAuditoria: auditoriaEnMemoria().registrar,
     });
     expect((await filaDe(base.prisma, sesionId))?.estado).toBe("aprobada");
   });
@@ -179,24 +176,22 @@ describe("aprobar", () => {
       sesionId,
       organizationId: org.orgId,
       usuarioId: org.userId,
-      registrarAuditoria: auditoriaEnMemoria().registrar,
     });
     await expect(codigo(sin)).resolves.toBe(400);
-    const auditoria = auditoriaEnMemoria();
     await aprobarSesion({ generacion: 1,
       prisma: base.db,
       sesionId,
       organizationId: org.orgId,
       usuarioId: org.userId,
       confirmoMenciones: true,
-      registrarAuditoria: auditoria.registrar,
     });
-    expect(auditoria.eventos[0].detalle).toMatchObject({ confirmoMenciones: true, menciones: 1 });
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, sesionId);
+    expect(eventos.at(-1)?.detalle).toMatchObject({ confirmoMenciones: true, menciones: 1 });
   });
 
   it("aprobar y reprocesar a la vez: exactamente uno gana (M3)", async () => {
     const { sesionId } = await enRevision();
-    const comun = { sesionId, organizationId: org.orgId, usuarioId: org.userId, registrarAuditoria: auditoriaEnMemoria().registrar };
+    const comun = { sesionId, organizationId: org.orgId, usuarioId: org.userId };
     const [a, r] = await Promise.all([
       codigo(aprobarSesion({ generacion: 1, prisma: base.db, ...comun })),
       codigo(reprocesarSesion({ prisma: base.db, ...comun })),
@@ -245,7 +240,6 @@ describe("aprobar", () => {
         sesionId,
         organizationId: org.orgId,
         usuarioId: org.userId,
-        registrarAuditoria: auditoriaEnMemoria().registrar,
       }),
     ).rejects.toThrow("la base se cayó");
 
@@ -265,7 +259,6 @@ describe("aprobar", () => {
           sesionId,
           organizationId: otra.orgId,
           usuarioId: otra.userId,
-          registrarAuditoria: auditoriaEnMemoria().registrar,
         }),
       ),
     ).resolves.toBe(404);
@@ -274,7 +267,7 @@ describe("aprobar", () => {
 
   it("aprobada es terminal: aprobar, reprocesar, reintentar y eliminar responden 409", async () => {
     const { sesionId } = await enRevision();
-    const comun = { sesionId, organizationId: org.orgId, usuarioId: org.userId, registrarAuditoria: auditoriaEnMemoria().registrar };
+    const comun = { sesionId, organizationId: org.orgId, usuarioId: org.userId };
     await aprobarSesion({ generacion: 1, prisma: base.db, ...comun });
 
     await expect(codigo(aprobarSesion({ generacion: 1, prisma: base.db, ...comun }))).resolves.toBe(409);

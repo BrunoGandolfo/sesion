@@ -22,7 +22,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     const sesion = await volverAGrabar({ prisma: db, organizationId, sesionId: id });
 
-    await registrarAuditoria({
+    await registrarAuditoria(db, {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,

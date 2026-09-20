@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const subida = await pedirUrlSubida({ prisma: db, organizationId, sesionId: id, ...parsed.data, almacen: almacenAudio });
 
-    await registrarAuditoria({
+    await registrarAuditoria(db, {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,

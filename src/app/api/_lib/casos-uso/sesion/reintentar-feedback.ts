@@ -7,7 +7,7 @@
 
 import type { EstadoFeedback } from "@/lib/sesion-clinica/schema";
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 import { ApiError } from "../../responses";
 import type { FilaSesionClinica } from "../../sesion-clinica";
 import { crearTrabajo } from "../trabajos/crear";
@@ -26,7 +26,6 @@ export interface ReintentarFeedbackInput {
   sesionId: string;
   organizationId: string;
   usuarioId: string;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
 }
 
 export async function reintentarFeedback({
@@ -34,7 +33,6 @@ export async function reintentarFeedback({
   sesionId,
   organizationId,
   usuarioId,
-  registrarAuditoria,
 }: ReintentarFeedbackInput): Promise<FilaSesionClinica> {
   const existente = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
@@ -72,7 +70,7 @@ export async function reintentarFeedback({
 
   const sesion = await leerSesion(prisma, sesionId, organizationId);
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,

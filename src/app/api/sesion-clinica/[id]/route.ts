@@ -24,7 +24,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const sesion = await leerSesion(db, id, organizationId);
 
-    await registrarAuditoria({
+    await registrarAuditoria(db, {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,

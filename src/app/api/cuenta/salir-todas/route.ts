@@ -19,7 +19,7 @@ export async function POST() {
       ahora: new Date(),
       exceptoId: actor.sesionId,
     });
-    await registrarAuditoria({
+    await registrarAuditoria(db, {
       organizationId: actor.organizationId,
       actorTipo: "usuario",
       actorId: actor.userId,

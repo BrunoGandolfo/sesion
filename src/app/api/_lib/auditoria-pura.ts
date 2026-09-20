@@ -14,6 +14,9 @@ export interface EventoAuditoriaInput {
   entidad: string;
   entidadId: string;
   detalle?: Record<string, unknown>;
+  /** Momento del acto. Sin esto la fila lo pone sola (now()); se pasa cuando
+   *  el caso de uso ya tiene un reloj y todo el acto lleva la misma hora. */
+  creadoEn?: Date;
 }
 
 /** Largo máximo de un string dentro de `detalle`. */
