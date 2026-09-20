@@ -375,14 +375,107 @@ def test_el_feedback_gestalt_usa_el_mismo_techo(llm, prompt):
     assert llm.call_args.args[3] == config.LLM_MAX_TOKENS_FEEDBACK
 
 
-def test_la_nota_conserva_el_techo_comun(llm, prompt):
-    # Subir el del feedback no toca el de la nota.
+def test_la_nota_pide_su_propio_techo(llm, prompt):
+    # 2026-09-19: una sesion de 21 minutos termino "fallida" con llm_truncado
+    # en el paso "nota" y la profesional se quedo sin nota. La nota dejo de ir
+    # con el techo comun y paso al mismo numero que el feedback.
     llm.side_effect = [_nota()]
 
     clinical_analyzer.analizar("[00:00] Terapeuta: hola")
 
+    assert config.LLM_MAX_TOKENS_NOTA == 16384
+    assert llm.call_args.args[3] == config.LLM_MAX_TOKENS_NOTA
+    assert config.LLM_MAX_TOKENS_NOTA > config.LLM_MAX_TOKENS
+
+
+def test_el_contexto_sigue_con_el_techo_comun(llm, prompt):
+    # Decision explicita: la Llamada B se queda en 8192 (no hay un solo caso de
+    # truncado ahi, y si falla el Recorrido no se actualiza pero la nota ya
+    # esta aprobada). Lo que gano es la segunda pasada con el doble.
+    llm.side_effect = [{
+        "hipotesisDiagnostica": None,
+        "resumenAcumulativo": None,
+        "objetivosTerapeuticos": [],
+        "intervencionesProbadas": [],
+        "temasRecurrentes": [],
+        "riesgosHistoricos": [],
+        "cambios": [],
+    }]
+
+    clinical_analyzer.actualizar_contexto_clinico({}, {}, {}, "s1", "2026-09-19")
+
     assert llm.call_args.args[3] == config.LLM_MAX_TOKENS
     assert config.LLM_MAX_TOKENS == 8192
+
+
+# El techo de la segunda pasada ─────────────────────────────────────────────
+#
+# Hasta el 19-sep el reintento por llm_truncado repetia el pedido con el MISMO
+# max_tokens: volvia a hacer la pregunta que acababa de no entrar, y dos
+# truncados seguidos eran un fallo definitivo. Ahora la segunda pasada duplica.
+
+def test_una_nota_truncada_y_despues_completa_termina_en_nota(llm, prompt):
+    # Lo que en produccion dejo a la profesional sin nota: el primer intento
+    # vuelve truncado. Con el techo mas alto en la segunda pasada, sale.
+    llm.side_effect = [_truncado(config.LLM_MAX_TOKENS_NOTA), _nota()]
+
+    resultado, nombre, diagnostico = clinical_analyzer.analizar("[00:00] Terapeuta: hola")
+
+    assert llm.call_count == 2
+    assert diagnostico.reintentos == 1
+    assert resultado["nota"]["analisis"] == "a"
+    assert nombre == clinical_analyzer.PROMPTS["nota"]
+
+    primero = llm.call_args_list[0].args[3]
+    segundo = llm.call_args_list[1].args[3]
+    assert primero == config.LLM_MAX_TOKENS_NOTA
+    assert segundo > primero
+    assert segundo == config.LLM_MAX_TOKENS_REINTENTO
+
+
+def test_la_nota_truncada_dos_veces_sigue_fallando(llm, prompt):
+    # Subir el techo no convierte el truncado en imposible: dos veces seguidas
+    # sigue siendo un fallo con el mismo codigo. La sesion no se inventa nada.
+    llm.side_effect = [
+        _truncado(config.LLM_MAX_TOKENS_NOTA),
+        _truncado(config.LLM_MAX_TOKENS_REINTENTO),
+    ]
+
+    with pytest.raises(PipelineError) as exc:
+        clinical_analyzer.analizar("[00:00] Terapeuta: hola")
+
+    assert exc.value.codigo == "llm_truncado"
+    assert llm.call_count == 2
+
+
+def test_la_segunda_pasada_no_pasa_del_tope_sin_streaming(llm, prompt):
+    # 20480: el SDK exige streaming por encima de 21333 tokens
+    # (expected_time = 3600 * max_tokens / 128000 > 600 s). Este worker no
+    # usa streaming.
+    llm.side_effect = [_truncado(config.LLM_MAX_TOKENS_FEEDBACK), _feedback_cbt_mi()]
+
+    clinical_analyzer.generar_feedback_terapeuta("t")
+
+    assert config.LLM_MAX_TOKENS_REINTENTO == 20480
+    assert config.LLM_MAX_TOKENS_REINTENTO <= 21333
+    assert llm.call_args_list[1].args[3] == config.LLM_MAX_TOKENS_REINTENTO
+
+
+def test_el_contexto_truncado_reintenta_con_el_doble(llm, prompt):
+    llm.side_effect = [_truncado(), {
+        "hipotesisDiagnostica": None,
+        "resumenAcumulativo": None,
+        "objetivosTerapeuticos": [],
+        "intervencionesProbadas": [],
+        "temasRecurrentes": [],
+        "riesgosHistoricos": [],
+        "cambios": [],
+    }]
+
+    clinical_analyzer.actualizar_contexto_clinico({}, {}, {}, "s1", "2026-09-19")
+
+    assert llm.call_args_list[0].args[3] == 8192
+    assert llm.call_args_list[1].args[3] == 16384
 
 
 # Los prompts que declara PROMPTS existen en disco ──────────────────────────

@@ -385,8 +385,14 @@ it("el guion manual restaura, descifra y verifica en una base local", () => {
 it("una nota alterada en la copia hace fallar el ensayo como corrupción", () => {
   const r = restaurar("bueno.dump.gpg", "ensayo_alterado");
   expect(r.status, r.stderr).toBe(0);
-  // Se cambia el último byte del ciphertext: el prefijo y el id de clave quedan intactos.
-  psql(r.url, `UPDATE sesiones_clinicas SET nota_final_encrypted = overlay(nota_final_encrypted PLACING '\\x00'::bytea FROM length(nota_final_encrypted)) WHERE id = '${sesionId}'`);
+  // Se altera el último byte del ciphertext: el prefijo y el id de clave quedan
+  // intactos. Se INVIERTE un bit (`# 1`, el xor de Postgres) en vez de fijarlo
+  // en cero: el ciphertext es aleatorio, así que una de cada 256 corridas ese
+  // byte ya era cero, la "alteración" no alteraba nada, el verificador
+  // respondía OK y el test fallaba con "expected +0 to be 1". Pasó en el CI de
+  // main el 19/9. Invertido, el byte siempre queda distinto. Es lo mismo que
+  // ya hacía encryption.test.ts:102 (`alterado[...] ^= 0x01`).
+  psql(r.url, `UPDATE sesiones_clinicas SET nota_final_encrypted = set_byte(nota_final_encrypted, length(nota_final_encrypted) - 1, get_byte(nota_final_encrypted, length(nota_final_encrypted) - 1) # 1) WHERE id = '${sesionId}'`);
   const v = verificar(r.url, { [VARIABLE_LLAVERO]: `1=${K1}` }, "alterado");
   expect(v.status).toBe(1);
   expect(v.stderr).toContain(`(sesiones_clinicas.nota_final_encrypted ${sesionId}): no descifra con la clave 1: dato corrupto`);
