@@ -1,6 +1,7 @@
 "use client";
 
-// Hoy empieza por la agenda. La deuda se muestra una vez en Pendientes.
+// Hoy empieza por quién viene ahora; después la agenda del día y, al final,
+// los pendientes. La deuda se muestra una vez en Pendientes.
 // Las reglas y las acciones siguen en sus componentes originales.
 
 import * as React from "react";
@@ -238,7 +239,25 @@ export function Dashboard() {
         <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
 
         <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
-          {/* La del turno de ahora la muestra su card, más abajo. */}
+          {/* Primero quién viene ahora o después: es lo que se busca entre
+              pacientes, con el teléfono en la mano. La agenda del día y los
+              pendientes vienen después. */}
+          {ahoraTurno ? (
+            <CardAhora
+              turno={ahoraTurno}
+              enCurso={enCurso}
+              sinAutorizacion={sinAutorizacion.has(ahoraTurno.id)}
+              sinCobrar={ahoraSinCobrar}
+              onCobrar={() => setCobrando(ahoraTurno.id)}
+              reloadKey={reloadKey}
+            />
+          ) : turnos.length > 0 ? (
+            <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-500">
+              {HOY_SIN_PROXIMA}
+            </p>
+          ) : null}
+
+          {/* La del turno de ahora la muestra su card, arriba. */}
           {enProcesoHoy.some((s) => s.turnoId !== ahoraTurno?.id) ? (
             <div className="flex flex-col gap-2">
               {enProcesoHoy
@@ -261,22 +280,6 @@ export function Dashboard() {
           />
 
           <Pendientes pendientes={pendientes} inicio={inicio} />
-
-          {/* El detalle de la próxima sesión acompaña a la agenda. */}
-          {ahoraTurno ? (
-            <CardAhora
-              turno={ahoraTurno}
-              enCurso={enCurso}
-              sinAutorizacion={sinAutorizacion.has(ahoraTurno.id)}
-              sinCobrar={ahoraSinCobrar}
-              onCobrar={() => setCobrando(ahoraTurno.id)}
-              reloadKey={reloadKey}
-            />
-          ) : turnos.length > 0 ? (
-            <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-500">
-              {HOY_SIN_PROXIMA}
-            </p>
-          ) : null}
 
           <Kpis ahora={ahora} data={data} />
 

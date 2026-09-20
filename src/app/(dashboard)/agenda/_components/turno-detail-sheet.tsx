@@ -50,12 +50,13 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
   NO_VINO,
   PAGADO,
   PENDIENTE,
+  NOTA_PROCESANDO,
   RECORDATORIO,
-  REVISAR_NOTA,
 } from "@/lib/glosario";
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
+import { estadoClinicoDe } from "@/components/ui/session-row";
 
 // Los campos de "Reprogramar" son los del alta (fecha, hora, duración,
 // modalidad, notas): mismo schema y mismo componente, turno-editar-campos.
@@ -222,7 +223,14 @@ export function TurnoDetailSheet({
   // turno vuelve a quedar sin cobrar y se puede volver a cobrar.
   const puedeDeshacerCobro = turno.pagoEstado === "pagado";
   const puedeGrabarORevisar = esProgramado || esRealizado;
-  const sesionId = sesion !== "sin-dato" && sesion ? sesion.id : null;
+  // El estado clínico, con las mismas palabras que la fila de Hoy y de
+  // Agenda (estadoClinicoDe): "Nota fallida · Ver qué pasó", "Para revisar",
+  // "Nota lista". Antes cualquier sesión, fallida incluida, ofrecía "Revisar
+  // nota", y una nota que no se pudo escribir parecía una nota para leer.
+  const sesionDatos = sesion !== "sin-dato" ? sesion : null;
+  const notaClinica = estadoClinicoDe(sesionDatos);
+  const notaEnProceso =
+    sesionDatos?.estado === "procesando" || sesionDatos?.estado === "subiendo";
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
 
   /**
@@ -428,14 +436,22 @@ export function TurnoDetailSheet({
                   </Button>
                 ) : null}
 
-                {sesionId ? (
-                  <Button asChild variant="secondary">
-                    <Link href={`/sesiones/${sesionId}`}>
-                      {REVISAR_NOTA}
+                {notaClinica ? (
+                  <Button
+                    asChild
+                    variant="secondary"
+                    className={notaClinica.fallida ? "!text-terracotta-600" : undefined}
+                  >
+                    <Link href={`/sesiones/${notaClinica.sesionId}`}>
+                      {notaClinica.rotulo}
                       <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
                     </Link>
                   </Button>
-                ) : (
+                ) : notaEnProceso ? (
+                  <p className="text-[13px] text-ink-500" role="status">
+                    {NOTA_PROCESANDO}
+                  </p>
+                ) : sesionDatos ? null : (
                   <Button asChild variant="secondary">
                     <Link href={`/grabar/${turno.id}`}>
                       <Mic size={16} strokeWidth={1.8} aria-hidden="true" />

@@ -29,7 +29,9 @@ const TURNO: TurnoConPaciente = {
   },
 };
 
-it.each([["revision", "Revisar nota"], ["aprobada", "Ver nota"]])("enlaza la nota %s aunque haya un cobro pendiente", (estado, label) => {
+// El rótulo es el estado clínico, separado del pago: "Para revisar" y
+// "Nota lista" (antes "Revisar nota" y "Ver nota").
+it.each([["revision", "Para revisar"], ["aprobada", "Nota lista"]])("enlaza la nota %s aunque haya un cobro pendiente", (estado, label) => {
   const abrirTurno = vi.fn();
   const cobrar = vi.fn();
   render(<SessionRow turno={{ ...TURNO, sesionClinica: { id: "nota-1", estado } }} onClick={abrirTurno} onCobrar={cobrar} />);
@@ -78,7 +80,7 @@ it("con la nota en revisión ya no ofrece grabar", () => {
     />,
   );
   expect(screen.queryByRole("button", { name: "Grabar sesión" })).toBeNull();
-  expect(screen.getByRole("link", { name: "Revisar nota" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Para revisar" })).toBeTruthy();
 });
 
 it("llama Sin cobrar al pago pendiente sin cambiar el estado del turno", () => {

@@ -12,11 +12,13 @@ import {
   FALTA_AUTORIZACION,
   GRABAR_SESION,
   NO_VINO,
-  PAGADO,
-  PENDIENTE,
-  REVISAR_NOTA,
-  VER_NOTA,
+  NOTA_FALLIDA,
+  NOTA_LISTA,
   NOTA_PROCESANDO,
+  PAGADO,
+  PARA_REVISAR,
+  PENDIENTE,
+  VER_QUE_PASO,
 } from "@/lib/glosario";
 import { Avatar } from "./avatar";
 import { Chip } from "./chip";
@@ -70,6 +72,24 @@ type Accion = {
 
 /** Alias viejo de "procesando" que todavía llega en filas antiguas. */
 const ESTADOS_PROCESANDO: ReadonlyArray<string> = ["procesando", "transcribiendo"];
+
+/**
+ * El estado clínico del turno, separado del pago. Son dos cosas distintas y
+ * se dicen por separado: una nota que FALLÓ se veía en su fila sólo como
+ * "Cobrar", y la deuda tapaba el problema clínico. Cada rótulo lleva a la
+ * sesión; el de la fallida, además, se pinta como problema.
+ */
+export function estadoClinicoDe(
+  sesion: { id: string; estado?: string } | null,
+): { rotulo: string; sesionId: string; fallida: boolean } | null {
+  if (!sesion) return null;
+  if (sesion.estado === "fallida") {
+    return { rotulo: `${NOTA_FALLIDA} · ${VER_QUE_PASO}`, sesionId: sesion.id, fallida: true };
+  }
+  if (sesion.estado === "revision") return { rotulo: PARA_REVISAR, sesionId: sesion.id, fallida: false };
+  if (sesion.estado === "aprobada") return { rotulo: NOTA_LISTA, sesionId: sesion.id, fallida: false };
+  return null;
+}
 
 /** Ocultan "Grabar sesión": el audio ya salió del navegador y el pipeline
  *  siguió, así que volver a grabar pisaría la nota. En "pendiente",
@@ -198,8 +218,7 @@ export function SessionRow(props: SessionRowProps) {
   const accion = accionDe(props);
   const aviso = avisoDe(props, accion);
   const sesion = turno.sesionClinica;
-  const nota = sesion?.estado === "revision" ? REVISAR_NOTA
-    : sesion?.estado === "aprobada" ? VER_NOTA : null;
+  const nota = estadoClinicoDe(sesion);
   const procesando = sesion && ESTADOS_PROCESANDO.includes(sesion.estado);
 
   const base = `w-full flex flex-wrap items-center gap-3 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-[var(--duration-fast)] border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
@@ -245,9 +264,16 @@ export function SessionRow(props: SessionRowProps) {
         <div className="flex min-w-0 flex-1 basis-full sm:basis-[240px] items-center gap-4">{content}</div>
       )}
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-        {nota && sesion ? (
-          <Link href={`/sesiones/${sesion.id}`} className="inline-flex min-h-11 items-center rounded-md px-2 text-[13px] font-semibold text-sage-700 hover:bg-sage-50">
-            {nota}
+        {nota ? (
+          <Link
+            href={`/sesiones/${nota.sesionId}`}
+            className={`inline-flex min-h-11 items-center rounded-md px-2 text-[13px] font-semibold ${
+              nota.fallida
+                ? "text-terracotta-600 hover:bg-terracotta-50"
+                : "text-sage-700 hover:bg-sage-50"
+            }`}
+          >
+            {nota.rotulo}
           </Link>
         ) : procesando ? (
           <span className="text-[13px] text-ink-500" role="status">{NOTA_PROCESANDO}</span>
