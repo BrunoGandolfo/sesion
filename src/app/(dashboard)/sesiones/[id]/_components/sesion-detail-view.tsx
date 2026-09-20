@@ -29,6 +29,7 @@ import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/prot
 import { CAMBIOS_SIN_APROBAR_MENSAJE, FALTA_REVISAR_RIESGO, FALTA_REVISAR_MENCIONES, FALTA_REVISAR_AMBAS, FALTA_REVISAR_VERSION, FEEDBACK_REINTENTAR_ERROR } from "@/lib/glosario";
 import { NotaSesionView } from "./nota-sesion-view";
 import { ParaVosView } from "./para-vos-view";
+import { TranscripcionView } from "./transcripcion-view";
 import { hrefDeVista, SelectorVista, type VistaSesion } from "./selector-vista";
 import {
   ALGO_FALLO,
@@ -51,11 +52,12 @@ import {
 // documento clínico de la sesión y se lee entera, con su propia URL, no
 // dentro de un panel que tapa la ficha.
 //
-// DOS VISTAS, UN SOLO CONTENEDOR
+// TRES VISTAS, UN SOLO CONTENEDOR
 //
-// La sesión tiene dos caras: la nota clínica (/sesiones/[id]) y "Para vos"
-// (/sesiones/[id]/para-vos). Las dos leen la misma fila, comparten cabecera
-// y se eligen con el mismo selector, así que las dos rutas montan este
+// La sesión tiene tres caras: la nota clínica (/sesiones/[id]), "Para vos"
+// (/sesiones/[id]/para-vos) y la transcripción (/sesiones/[id]/transcripcion,
+// que pide su texto aparte y recién al abrirse). Todas leen la misma fila, comparten cabecera
+// y se eligen con el mismo selector, así que las tres rutas montan este
 // componente con `vista` distinta. Duplicar la carga, el polling y los
 // estados de pipeline en dos contenedores habría sido dos veces la misma
 // pantalla con dos formas de fallar.
@@ -491,6 +493,10 @@ export function SesionDetailView({
         {conNota && sesion && vista === "para-vos" ? (
           <ParaVosView sesion={sesion} selector={selector} onReintentar={() => void pedirFeedback()}
             pidiendo={pidiendoFeedback} error={errorFeedback} onActualizar={() => setLecturaFeedback(n => n + 1)} />
+        ) : null}
+
+        {conNota && sesion && vista === "transcripcion" ? (
+          <TranscripcionView sesion={sesion} selector={selector} />
         ) : null}
 
         {conNota && sesion && edicion && vista === "nota" ? (

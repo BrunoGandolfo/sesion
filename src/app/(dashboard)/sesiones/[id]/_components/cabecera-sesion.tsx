@@ -1,5 +1,7 @@
-// La cabecera de una sesión: de quién es, qué día fue y en qué estado está
-// la nota.
+// La cabecera de una sesión: de quién es, qué día y a qué hora fue, y en qué
+// estado está la nota. La hora va siempre: dos sesiones del mismo día (una
+// paciente que vino dos veces, una pareja y después uno de los dos) sólo se
+// distinguen por ella.
 //
 // Vive suelta y no dentro de la nota porque ahora la comparten dos vistas
 // hermanas —la nota clínica y "Para vos"— y las dos tienen que decir lo
@@ -11,7 +13,7 @@
 // dos se está mirando.
 
 import { Chip } from "@/components/ui";
-import { fechaLarga } from "@/lib/format";
+import { formatearFechaLargaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
 import { APROBADA, BORRADOR, NOTA_CLINICA } from "./textos";
@@ -27,7 +29,11 @@ export function CabeceraSesion({ sesion, rotulo }: CabeceraSesionProps) {
   const nombrePaciente = paciente
     ? `${paciente.nombre} ${paciente.apellido}`
     : NOTA_CLINICA;
-  const fecha = sesion.turno ? fechaLarga(new Date(sesion.turno.fecha)) : null;
+  // Día y hora del consultorio (Montevideo), mire quien mire y desde donde mire.
+  const inicio = sesion.turno ? new Date(sesion.turno.fecha) : null;
+  const fecha = inicio
+    ? `${formatearFechaLargaMvd(inicio)} · ${formatearHoraMvd(inicio)}`
+    : null;
   const aprobada = sesion.estado === "aprobada";
 
   return (
@@ -40,7 +46,7 @@ export function CabeceraSesion({ sesion, rotulo }: CabeceraSesionProps) {
       </h1>
       <div className="flex flex-wrap items-center gap-3">
         {fecha ? (
-          <span className="font-sans text-[14px] text-ink-500">{fecha}</span>
+          <time dateTime={inicio?.toISOString()} className="font-sans text-[14px] text-ink-500">{fecha}</time>
         ) : null}
         <Chip variant={aprobada ? "sage" : "gold"}>
           {aprobada ? APROBADA : BORRADOR}

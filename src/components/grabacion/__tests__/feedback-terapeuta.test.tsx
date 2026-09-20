@@ -23,7 +23,7 @@ import {
   hayParaVos,
   leerFeedback,
 } from "@/components/grabacion/FeedbackTerapeutaView";
-import { PARA_VOS_INCOMPLETO } from "@/lib/glosario";
+import { INSTRUMENTO_Y_PUNTAJE, PARA_VOS_INCOMPLETO } from "@/lib/glosario";
 
 const CITA = { timestamp: "12:30", quote: "eso me costó bastante" };
 
@@ -209,6 +209,29 @@ describe("FeedbackTerapeutaView", () => {
     render(<FeedbackTerapeutaView feedbackTerapeuta={sinItems} />);
     expect(screen.getByText(/Ningún ítem fue evaluable/)).toBeTruthy();
     expect(screen.queryByText(PARA_VOS_INCOMPLETO)).toBeNull();
+  });
+
+  it.each([
+    ["MITI/CTS-R", feedbackCompleto],
+    ["gestalt", () => ({ ...feedbackGestalt(), fortalezas: [{ descripcion: "Sostuvo el silencio", evidence: [CITA] }] })],
+  ])("primero lo que se lee, después el instrumento plegado (%s)", (_nombre, feedback) => {
+    const { container } = render(<FeedbackTerapeutaView feedbackTerapeuta={feedback()} />);
+    const instrumento = screen.getByRole("button", { name: new RegExp(INSTRUMENTO_Y_PUNTAJE) });
+    // Cerrado de entrada: la sigla y el puntaje no son lo primero que ve.
+    expect(instrumento.getAttribute("aria-expanded")).toBe("false");
+    // Y debajo de todo lo que está escrito en lenguaje llano.
+    const texto = container.textContent ?? "";
+    const titulos = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent ?? "");
+    for (const titulo of titulos.filter((t) => /Fortalezas|Áreas|Observación/.test(t))) {
+      expect(texto.indexOf(titulo)).toBeGreaterThanOrEqual(0);
+      expect(texto.indexOf(titulo)).toBeLessThan(texto.indexOf(INSTRUMENTO_Y_PUNTAJE));
+    }
+    expect(titulos.some((t) => /Fortalezas/.test(t))).toBe(true);
+  });
+
+  it("si el análisis trajo sólo el instrumento, va abierto: plegarlo dejaría la pantalla en blanco", () => {
+    render(<FeedbackTerapeutaView feedbackTerapeuta={feedbackGestalt()} />);
+    expect(screen.getByRole("button", { name: new RegExp(INSTRUMENTO_Y_PUNTAJE) }).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("un objeto vacío avisa en vez de desaparecer", () => {

@@ -10,11 +10,13 @@ import type {
 } from "@/lib/sesion-clinica/schema";
 
 import { CabeceraSesion } from "./cabecera-sesion";
-import { MasDeEstaSesion } from "./mas-de-esta-sesion";
+import { IndiceNota, type EntradaIndice } from "./indice-nota";
+import { hayMasDeEstaSesion, MasDeEstaSesion } from "./mas-de-esta-sesion";
 import { Plegable } from "./plegable";
 import { SeccionSoap } from "./seccion-soap";
 import {
   ESTADO_EMOCIONAL_OBSERVADO,
+  MAS_DE_ESTA_SESION,
   NOTA_CLINICA,
   RESUMEN,
   SECCIONES_SOAP,
@@ -23,8 +25,8 @@ import {
 
 // La nota, en el orden en que se lee.
 //
-// Cabecera → UN bloque de riesgo → Resumen → S, O, A, P → "Más de esta
-// sesión" → "Ver el borrador original".
+// Cabecera → índice → UN bloque de riesgo → Resumen → S, O, A, P → "Más de
+// esta sesión" → "Ver el borrador original".
 //
 // "Para vos" YA NO ESTÁ ACÁ. Era el plegable del final —cerrado, a seis
 // pantallas de scroll— y ahora es la vista hermana /sesiones/[id]/para-vos,
@@ -70,12 +72,21 @@ export function NotaSesionView({
     original !== null &&
     SECCIONES_SOAP.some(({ clave }) => (original[clave] ?? "").trim() !== "");
 
+  // El índice ofrece sólo lo que está dibujado.
+  const indice: EntradaIndice[] = [
+    ...(datos?.resumenSesion ? [{ destino: "nota-resumen", titulo: RESUMEN }] : []),
+    ...SECCIONES_SOAP.map(({ clave, titulo }) => ({ destino: `nota-${clave}`, titulo })),
+    ...(hayMasDeEstaSesion(datos) ? [{ destino: "nota-mas", titulo: MAS_DE_ESTA_SESION }] : []),
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <CabeceraSesion sesion={sesion} rotulo={NOTA_CLINICA} />
 
       {selector}
       {aviso}
+
+      <IndiceNota entradas={indice} />
 
       <MencionesNota datos={datos} editable={editable} revisada={revisadas?.has(CLAVE_MENCIONES) ?? false} onRevisar={onRevisar} />
 
@@ -88,7 +99,7 @@ export function NotaSesionView({
       />
 
       {datos?.resumenSesion ? (
-        <section className="rounded-lg bg-cream-100 px-4 py-4">
+        <section id="nota-resumen" className="scroll-mt-16 rounded-lg bg-cream-100 px-4 py-4">
           <h2 className="font-sans text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500">
             {RESUMEN}
           </h2>
@@ -113,6 +124,7 @@ export function NotaSesionView({
         {SECCIONES_SOAP.map(({ clave, titulo, ayuda }) => (
           <SeccionSoap
             key={clave}
+            id={`nota-${clave}`}
             titulo={titulo}
             ayuda={ayuda}
             valor={nota[clave]}
@@ -126,7 +138,9 @@ export function NotaSesionView({
         ))}
       </div>
 
-      <MasDeEstaSesion datos={datos} />
+      <div id="nota-mas" className="scroll-mt-16 empty:hidden">
+        <MasDeEstaSesion datos={datos} />
+      </div>
 
       {hayOriginal && original ? (
         <Plegable titulo={VER_BORRADOR_ORIGINAL}>

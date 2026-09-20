@@ -11,10 +11,13 @@ sola; al estar lista, el chip pasa a **Para revisar**.
 
 ## Qué contiene, en orden
 
-1. **Cabecera** — *Nota clínica (SOAP)*, el nombre, la fecha y un chip: **Para
-   revisar** (dorado) o **Nota guardada** (verde).
-2. Un selector **Nota clínica | Para vos**, que aparece siempre que la nota está
-   para revisar o guardada.
+1. **Cabecera** — *Nota clínica (SOAP)*, el nombre, el día **y la hora** de la
+   sesión (para distinguir dos del mismo día) y un chip: **Para revisar**
+   (dorado) o **Nota guardada** (verde).
+2. Un selector **Nota clínica | Para vos | Transcripción**, que aparece siempre
+   que la nota está para revisar o guardada. Debajo, un **índice** de una línea
+   (Resumen, Subjetivo, Objetivo, Análisis, Plan, Más de esta sesión) que queda
+   a la vista mientras leés: tocá una sección y la pantalla salta ahí.
 3. **Audio posiblemente incompleto**, si la grabación tuvo una interrupción:
    *"Revisá la nota teniendo en cuenta que puede faltar parte de lo conversado."*
 4. **Frases para revisar**, si la transcripción tiene menciones (ver abajo).
@@ -131,9 +134,28 @@ la pantalla de grabar ofrece **Conservar copia y habilitar otra grabación**. Ve
 
 ## Ver transcripción
 
-La transcripción se conserva cifrada. **Ver transcripción todavía no está
-disponible en la pantalla**. El servidor ya permite consultarla y cada lectura
-queda registrada; falta conectar ese acceso.
+En el selector de arriba, tocá **Transcripción**. Es la tercera vista de la
+sesión, con la misma cabecera que la nota. El texto se pide recién en ese
+momento —abrir la nota no lo trae— y **cada lectura queda registrada**. No se
+guarda en el teléfono ni en el navegador.
+
+Se lee en bloques, cada uno con su **minuto** y quién habla (**Terapeuta** o
+**Paciente**). *"Quién habla en cada parte lo asignó el sistema automáticamente
+y puede estar equivocado."* Si alguna línea no tiene esa forma, se muestra
+entera igual: no se descarta nada.
+
+Arriba queda fijo el **buscador**: escribí una palabra (dos letras o más, sin
+preocuparte por mayúsculas ni tildes) y muestra cuántas veces aparece (*"2 de
+7"*), la resalta y te lleva al lugar; con las flechas, o con Enter, pasás a la
+siguiente o a la anterior. Si no está: *"No aparece «…» en esta
+transcripción."* La búsqueda es sobre lo que se dijo, no sobre los minutos ni
+los nombres.
+
+Si la sesión todavía no tiene texto dice **"Todavía no hay transcripción"**; si
+no se pudo abrir, **"No pudimos abrir la transcripción"**, con **Reintentar**.
+
+No tiene audio, no se puede editar ni exportar. La transcripción se conserva
+cifrada.
 
 ## Qué hace la app por detrás
 
@@ -157,6 +179,10 @@ src/app/(dashboard)/sesiones/[id]/_components/nota-sesion-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/mas-de-esta-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/seccion-soap.tsx
 src/app/(dashboard)/sesiones/[id]/_components/barra-acciones.tsx
+src/app/(dashboard)/sesiones/[id]/_components/cabecera-sesion.tsx
+src/app/(dashboard)/sesiones/[id]/_components/indice-nota.tsx
+src/app/(dashboard)/sesiones/[id]/_components/transcripcion-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/transcripcion.ts
 src/components/clinico/MencionesNota.tsx
 src/components/grabacion/RiesgoDetectadoBanner.tsx
 src/app/api/_lib/casos-uso/sesion/aprobar.ts
