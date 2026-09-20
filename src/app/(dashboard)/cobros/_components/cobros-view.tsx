@@ -7,7 +7,14 @@
 // No se calcula "trabajaste N horas gratis": la deuda se cuenta en sesiones,
 // que es como ella la piensa.
 //
-// El recordatorio de cobro sale por SMS desde acá, y lo aprieta ella: antes
+// La acción principal de cada fila de "Te deben" es registrar el pago: a
+// esta pantalla se viene cuando una paciente pagó, y antes había que salir a
+// su ficha para anotarlo. El cobro sigue siendo por turno (POST
+// /api/turnos/[id]/cobrar): la fila trae la deuda sumada, sin ids, así que
+// al abrir el panel se lee el detalle de esa paciente y ella marca qué
+// sesiones le pagó. El método se elige con el mismo sheet que usa Hoy.
+//
+// El recordatorio de cobro es la acción secundaria. Sale por SMS desde acá, y lo aprieta ella: antes
 // abría el teléfono con el texto cargado y la app no se enteraba de nada
 // —ni si el mensaje había salido, ni cuándo—, así que no había forma de
 // saber si ya le había avisado a alguien. Ahora se manda desde el servidor
@@ -34,6 +41,7 @@ import { TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import {
   TEMPLATE_COBRO_DEFAULT,
   interpolarTemplateCobro,
@@ -46,37 +54,50 @@ import { fechaCorta, fechaLarga, money } from "@/lib/format";
 import {
   ALGO_FALLO,
   AVISADO,
+  BUSCANDO_SESIONES,
+  COBRADO,
   COBRASTE_ESTE_MES,
+  COBRO_INCOMPLETO,
   COBROS_DEL_MES,
   COBROS_NO_CARGARON,
+  ELEGIR_METODO_DE_PAGO,
   ENVIANDO_SMS,
   ENVIAR_SMS,
+  MARCAR_TODAS,
   METODO_PAGO_LABEL,
   NADIE_TE_DEBE,
   NADIE_TE_DEBE_LINEAS,
   NAV,
+  NO_SE_PUDO_COBRAR,
   RECORDAR_COBRO,
   RECORDAR_COBRO_TITULO,
+  REGISTRAR_PAGO,
+  REGISTRAR_PAGO_TITULO,
   REINTENTAR,
+  SESIONES_NO_CARGARON,
   SIN_COBRAR,
   SIN_COBRAR_FRASE_FINAL,
   SIN_COBROS_ESTE_MES,
   SIN_COBROS_ESTE_MES_LINEAS,
   SIN_METODO,
   SMS_DESTINO,
-  SMS_SIN_CONFIGURAR,
   TE_DEBEN,
   VER_COBROS_DEL_MES,
   VER_TE_DEBEN,
   VISTA_DE_COBROS,
+  YA_NO_DEBE,
   pluralizar,
 } from "@/lib/glosario";
 import type {
   Configuracion,
   DeudaPaciente,
   KPIsDashboard,
+  MetodoPago,
+  Turno,
   TurnoConPaciente,
 } from "@/types/domain";
+
+import { SheetMetodoPago } from "../../_components/sheet-metodo-pago";
 
 // ============================================
 // Tipos de fetch — JSON → Date donde la UI lo necesita
@@ -117,8 +138,6 @@ type DatosCobros = {
   deudores: DeudorItem[];
   cobros: TurnoConPaciente[];
   nombreProfesional: string;
-  /** false solo si el servidor dijo que falta configurar el SMS. */
-  smsOk: boolean;
 };
 
 async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
@@ -139,7 +158,6 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
     deudores,
     cobros: cobros.map(parseTurno),
     nombreProfesional: config?.nombreProfesional ?? "",
-    smsOk: true,
   };
 }
 
@@ -202,7 +220,7 @@ export function CobrosView() {
 
   if (!datos || !ahora) return null;
 
-  const { kpis, deudores, cobros, nombreProfesional, smsOk } = datos;
+  const { kpis, deudores, cobros, nombreProfesional } = datos;
 
   const sesionesSinCobrar = deudores.reduce(
     (sum, d) => sum + d.sesionesImpagas,
@@ -239,7 +257,16 @@ export function CobrosView() {
           sesionesSinCobrar={sesionesSinCobrar}
           nombreProfesional={nombreProfesional}
           ahora={ahora}
-          smsOk={smsOk}
+          onCobrado={() => {
+            // La deuda y los ingresos del mes salen del servidor: se vuelve a
+            // pedir todo. Los datos viejos quedan en pantalla mientras tanto.
+            setReloadKey((k) => k + 1);
+            setToast({ open: true, message: COBRADO, variante: "confirmacion" });
+          }}
+          onCobroIncompleto={(mensaje, huboCobros) => {
+            if (huboCobros) setReloadKey((k) => k + 1);
+            setToast({ open: true, message: mensaje, variante: "aviso" });
+          }}
           onAvisado={(creado) => {
             setToast({ open: true, message: creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.", variante: "confirmacion" });
           }}
@@ -383,12 +410,17 @@ function kpiValueClass(tone: "sage" | "terracotta" | "default"): string {
 // ============================================
 // Te deben
 // ============================================
+/** Qué tiene abierto debajo una fila. De a una por vez en toda la lista: dos
+ *  paneles abiertos son dos lugares donde tocar sin querer. */
+type PanelAbierto = { pacienteId: string; modo: "pago" | "sms" } | null;
+
 function TeDeben({
   deudores,
   sesionesSinCobrar,
   nombreProfesional,
   ahora,
-  smsOk,
+  onCobrado,
+  onCobroIncompleto,
   onAvisado,
   onError,
   onVerCobros,
@@ -397,11 +429,72 @@ function TeDeben({
   sesionesSinCobrar: number;
   nombreProfesional: string;
   ahora: Date;
-  smsOk: boolean;
+  /** Todas las sesiones elegidas quedaron cobradas. */
+  onCobrado: () => void;
+  /** Alguna falló. `huboCobros` dice si antes de fallar entró alguna. */
+  onCobroIncompleto: (mensaje: string, huboCobros: boolean) => void;
   onAvisado: (creado: boolean) => void;
   onError: (mensaje: string) => void;
   onVerCobros: () => void;
 }) {
+  const [panel, setPanel] = React.useState<PanelAbierto>(null);
+  // Las sesiones marcadas, mientras el selector de método está abierto.
+  const [porCobrar, setPorCobrar] = React.useState<string[] | null>(null);
+  // Cómo terminó el cobro. Lo escribe `cobrar` y lo lee el cierre del sheet,
+  // que llega después: el sheet se queda abierto lo que dura el tilde.
+  const resultadoRef = React.useRef<
+    | { registradas: number; elegidas: number; error: string | null; terminado: boolean }
+    | null
+  >(null);
+
+  // El cobro es por turno: una llamada por sesión marcada, en orden. Si una
+  // falla se corta ahí y se dice cuántas entraron. Rechaza para que el sheet
+  // no dibuje el tilde sobre un cobro que no quedó completo.
+  async function cobrar(metodo: MetodoPago) {
+    const ids = porCobrar ?? [];
+    const resultado = {
+      registradas: 0,
+      elegidas: ids.length,
+      error: null as string | null,
+      terminado: false,
+    };
+    resultadoRef.current = resultado;
+    try {
+      for (const id of ids) {
+        await apiPost(`/api/turnos/${id}/cobrar`, { metodo });
+        resultado.registradas += 1;
+      }
+    } catch (error) {
+      resultado.error =
+        error instanceof ApiClientError ? error.mensaje : NO_SE_PUDO_COBRAR;
+      throw error;
+    } finally {
+      resultado.terminado = true;
+    }
+  }
+
+  function alCerrarMetodo() {
+    const resultado = resultadoRef.current;
+    // Con cobros en vuelo el sheet no se cierra (Escape, tocar afuera): se
+    // cierra solo cuando terminan, y recién ahí se sabe qué decir.
+    if (resultado && !resultado.terminado) return;
+    resultadoRef.current = null;
+    setPorCobrar(null);
+    if (!resultado) return; // cerró sin elegir: el panel sigue como estaba
+    if (resultado.error === null) {
+      setPanel(null);
+      onCobrado();
+      return;
+    }
+    if (resultado.registradas > 0) setPanel(null);
+    onCobroIncompleto(
+      resultado.registradas > 0
+        ? COBRO_INCOMPLETO(resultado.registradas, resultado.elegidas)
+        : resultado.error,
+      resultado.registradas > 0,
+    );
+  }
+
   if (deudores.length === 0) {
     return (
       <EstadoVacio
@@ -440,13 +533,23 @@ function TeDeben({
               deudor={d}
               nombreProfesional={nombreProfesional}
               ahora={ahora}
-              smsOk={smsOk}
+              abierto={panel?.pacienteId === d.pacienteId ? panel.modo : null}
+              onAbrir={(modo) =>
+                setPanel(modo ? { pacienteId: d.pacienteId, modo } : null)
+              }
+              onElegirMetodo={setPorCobrar}
               onAvisado={onAvisado}
               onError={onError}
             />
           ))}
         </ListaEnCascada>
       </Card>
+
+      <SheetMetodoPago
+        open={porCobrar !== null}
+        onClose={alCerrarMetodo}
+        onElegir={cobrar}
+      />
     </div>
   );
 }
@@ -471,26 +574,35 @@ function ZonaIndicador({ dias }: { dias: number }) {
 }
 
 // ============================================
-// La fila de una deudora: quién es, cuánto debe, cuándo se le avisó y el
-// botón. La confirmación se abre debajo, a lo ancho: el mensaje entero tiene
-// que poder leerse antes de mandarlo, y no entra al lado del botón.
+// La fila de una deudora: quién es, cuánto debe, cuándo se le avisó y dos
+// acciones. "Registrar pago" es la principal, con el peso de un botón lleno;
+// el recordatorio es un enlace de texto que dice que manda un SMS. Lo que
+// abre cada una se despliega debajo, a lo ancho: ni la lista de sesiones ni
+// el mensaje entero entran al lado del botón.
 // ============================================
 function FilaDeudor({
   deudor,
   nombreProfesional,
   ahora,
-  smsOk,
+  abierto,
+  onAbrir,
+  onElegirMetodo,
   onAvisado,
   onError,
 }: {
   deudor: DeudorItem;
   nombreProfesional: string;
   ahora: Date;
-  smsOk: boolean;
+  /** Qué panel de esta fila está desplegado; lo decide la lista. */
+  abierto: "pago" | "sms" | null;
+  onAbrir: (modo: "pago" | "sms" | null) => void;
+  /** Las sesiones marcadas: abre el selector de método. */
+  onElegirMetodo: (turnoIds: string[]) => void;
   onAvisado: (creado: boolean) => void;
   onError: (mensaje: string) => void;
 }) {
-  const [confirmando, setConfirmando] = React.useState(false);
+  const confirmando = abierto === "sms";
+  const setConfirmando = (valor: boolean) => onAbrir(valor ? "sms" : null);
   const [enviando, setEnviando] = React.useState(false);
   const nombreCompleto = `${deudor.nombre} ${deudor.apellido}`;
   const telefono = deudor.telefono?.trim() ?? "";
@@ -559,22 +671,33 @@ function FilaDeudor({
             {money(deudor.montoTotal)}
           </span>
         </Link>
-        <div className="flex items-center gap-2 lg:shrink-0">
-          {!smsOk ? (
-            <p className="text-[12px] leading-[1.4] text-ink-500 lg:max-w-[220px] lg:text-right">
-              {SMS_SIN_CONFIGURAR}
-            </p>
-          ) : telefono && !confirmando ? (
+        <div className="flex flex-col gap-1 lg:shrink-0 lg:flex-row-reverse lg:items-center lg:gap-2">
+          {abierto === null ? (
+            <Button
+              size="sm"
+              onClick={() => onAbrir("pago")}
+              aria-label={`${REGISTRAR_PAGO} de ${nombreCompleto}`}
+              className="w-full lg:w-auto"
+            >
+              {REGISTRAR_PAGO}
+            </Button>
+          ) : null}
+          {telefono && abierto === null ? (
             <button
               type="button"
               onClick={() => setConfirmando(true)}
-              aria-label={`${RECORDAR_COBRO} a ${nombreCompleto} por SMS`}
-              className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-sage-500 px-4 text-[13px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:bg-sage-50 lg:min-h-[36px] lg:w-auto"
+              // El nombre accesible es el de siempre ("Recordar cobro a … por
+              // SMS"): lo busca avisos-operaciones.test.tsx, que es de todas
+              // las pantallas.
+              aria-label={`Recordar cobro a ${nombreCompleto} por SMS`}
+              className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-700 lg:min-h-[36px] lg:w-auto"
             >
               <Send size={14} strokeWidth={1.8} aria-hidden="true" />
               {RECORDAR_COBRO}
             </button>
           ) : null}
+        </div>
+        <div className="hidden lg:flex lg:shrink-0 lg:items-center">
           <Link
             href={`/pacientes/${deudor.pacienteId}`}
             aria-label={`Ver ficha de ${nombreCompleto}`}
@@ -584,6 +707,14 @@ function FilaDeudor({
           </Link>
         </div>
       </div>
+
+      {abierto === "pago" ? (
+        <RegistrarPago
+          pacienteId={deudor.pacienteId}
+          onElegirMetodo={onElegirMetodo}
+          onCancelar={() => onAbrir(null)}
+        />
+      ) : null}
 
       {confirmando ? (
         <Confirmar
@@ -610,6 +741,145 @@ function FilaDeudor({
         />
       ) : null}
     </div>
+  );
+}
+
+// ============================================
+// Registrar pago: las sesiones sin cobrar de esa paciente, para marcar las
+// que pagó. Con una sola ya viene marcada; con varias no se marca ninguna
+// por ella: anotar de más un cobro es peor que un toque extra, y "Marcar
+// todas" queda a mano. El método se elige después, una vez para todas.
+// ============================================
+type TurnoJson = Omit<Turno, "fecha"> & { fecha: string };
+
+function RegistrarPago({
+  pacienteId,
+  onElegirMetodo,
+  onCancelar,
+}: {
+  pacienteId: string;
+  onElegirMetodo: (turnoIds: string[]) => void;
+  onCancelar: () => void;
+}) {
+  const [sesiones, setSesiones] = React.useState<TurnoJson[] | "error" | null>(null);
+  const [marcadas, setMarcadas] = React.useState<ReadonlySet<string>>(new Set());
+  const [intento, setIntento] = React.useState(0);
+  const tituloId = React.useId();
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    apiGet<{ turnos: TurnoJson[] }>(`/api/pacientes/${pacienteId}`, {
+      signal: controller.signal,
+    })
+      .then(({ turnos }) => {
+        // La misma regla que suma la deuda de la fila, y de la más vieja a
+        // la más nueva: es el orden en que se pagan.
+        const impagas = turnos
+          .filter(esDeudaPendiente)
+          .sort((a, b) => a.fecha.localeCompare(b.fecha));
+        setSesiones(impagas);
+        setMarcadas(new Set(impagas.length === 1 ? [impagas[0].id] : []));
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || esAbort(err)) return;
+        setSesiones("error");
+      });
+    return () => controller.abort();
+  }, [pacienteId, intento]);
+
+  const alternar = (id: string) =>
+    setMarcadas((actual) => {
+      const siguiente = new Set(actual);
+      if (!siguiente.delete(id)) siguiente.add(id);
+      return siguiente;
+    });
+
+  const lista = Array.isArray(sesiones) ? sesiones : [];
+  const elegidas = lista.filter((t) => marcadas.has(t.id));
+  const total = elegidas.reduce((suma, t) => suma + t.tarifaCobrada, 0);
+
+  return (
+    <section
+      aria-labelledby={tituloId}
+      className="mt-3 rounded-[10px] border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-4"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h3 id={tituloId} className="text-[14px] font-semibold text-ink-900">
+          {REGISTRAR_PAGO_TITULO}
+        </h3>
+        {lista.length > 1 && elegidas.length < lista.length ? (
+          <button
+            type="button"
+            onClick={() => setMarcadas(new Set(lista.map((t) => t.id)))}
+            className="min-h-[44px] shrink-0 px-1 text-[13px] font-medium text-sage-600 underline-offset-2 hover:underline lg:min-h-0"
+          >
+            {MARCAR_TODAS}
+          </button>
+        ) : null}
+      </div>
+
+      {sesiones === null ? (
+        <p className="mt-2 text-[13px] text-ink-500">{BUSCANDO_SESIONES}</p>
+      ) : sesiones === "error" ? (
+        <p role="alert" className="mt-2 text-[13px] text-ink-700">
+          {SESIONES_NO_CARGARON}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setSesiones(null);
+              setIntento((n) => n + 1);
+            }}
+            className="font-medium text-sage-600 underline underline-offset-2"
+          >
+            {REINTENTAR}
+          </button>
+        </p>
+      ) : lista.length === 0 ? (
+        <p className="mt-2 text-[13px] text-ink-500">{YA_NO_DEBE}</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-[color:var(--border-subtle)]">
+          {lista.map((t) => (
+            <li key={t.id}>
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={marcadas.has(t.id)}
+                  onChange={() => alternar(t.id)}
+                  className="h-[18px] w-[18px] shrink-0 cursor-pointer accent-sage-500"
+                />
+                <span className="min-w-0 flex-1 text-[14px] text-ink-900">
+                  Sesión del {fechaLarga(new Date(t.fecha))}
+                </span>
+                <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[14px] font-medium tabular-nums text-ink-700">
+                  {money(t.tarifaCobrada)}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <p aria-live="polite" className="text-[13px] text-ink-500">
+          {elegidas.length > 0
+            ? `${pluralizar(elegidas.length, "sesión", "sesiones")} · ${money(total)}`
+            : " "}
+        </p>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={onCancelar} className="flex-1 lg:flex-none">
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            disabled={elegidas.length === 0}
+            onClick={() => onElegirMetodo(elegidas.map((t) => t.id))}
+            className="flex-1 lg:flex-none"
+          >
+            {ELEGIR_METODO_DE_PAGO}
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 

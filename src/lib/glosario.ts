@@ -643,8 +643,10 @@ export const HUECOS_EXPLICADOS =
 // canal a la vista, para que sepa exactamente qué va a pasar cuando toque.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** El botón de la fila del deudor. */
-export const RECORDAR_COBRO = "Recordar cobro";
+/** La acción secundaria de la fila del deudor. Dice el canal en el propio
+ *  botón: tocarlo es empezar a mandar un mensaje, y eso se tiene que saber
+ *  antes de tocar, no recién en la confirmación. */
+export const RECORDAR_COBRO = "Recordar cobro por SMS";
 
 /** La pregunta de la confirmación, con el mensaje y el número a la vista. */
 export const RECORDAR_COBRO_TITULO = "¿Mandarle este mensaje?";
@@ -672,11 +674,6 @@ export const AVISADO = "Avisado";
  *  la auditoría y en el log, que es donde sirve. */
 export const SMS_NO_ENVIADO =
   "No pudimos enviar el SMS. Quedó registrado; probá más tarde.";
-
-/** Sin Twilio configurado no hay botón: se dice qué falta y dónde se
- *  arregla, sin nombrar variables de entorno. */
-export const SMS_SIN_CONFIGURAR =
-  "Para avisar por SMS falta configurar el envío en Tu consultorio.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Vocabulario clínico (hot words)
@@ -919,6 +916,39 @@ export const VISTA_DE_COBROS = "Vista de cobros";
  *  como ella la piensa. Se completa con el número. */
 export const SIN_COBRAR_FRASE_FINAL = "sin cobrar.";
 
+// ─── Registrar un pago desde Te deben ───────────────────────────────────────
+// La acción principal de cada fila: ella viene a esta pantalla cuando le
+// pagaron, no cuando quiere reclamar. El cobro sigue siendo por sesión: se
+// eligen las sesiones que pagó y después el método, una sola vez para todas.
+// La confirmación es COBRADO, la misma de Hoy.
+
+/** El botón principal de la fila. */
+export const REGISTRAR_PAGO = "Registrar pago";
+
+/** La pregunta del panel, arriba de la lista de sesiones sin cobrar. */
+export const REGISTRAR_PAGO_TITULO = "¿Qué sesiones te pagó?";
+
+/** Atajo cuando hay más de una: lo común es que pague todo junto. */
+export const MARCAR_TODAS = "Marcar todas";
+
+/** El botón que sigue al selector de método. Deshabilitado sin sesiones
+ *  marcadas. */
+export const ELEGIR_METODO_DE_PAGO = "Elegir método de pago";
+
+/** Mientras llega el detalle de las sesiones de esa paciente. */
+export const BUSCANDO_SESIONES = "Buscando sus sesiones…";
+
+/** No se pudo traer el detalle. */
+export const SESIONES_NO_CARGARON = "No pudimos traer sus sesiones.";
+
+/** La lista llegó vacía: se cobró desde otro lado mientras tanto. */
+export const YA_NO_DEBE = "Ya no tiene sesiones sin cobrar.";
+
+/** Se eligieron varias y una falló en el medio: se dice cuántas quedaron. */
+export function COBRO_INCOMPLETO(registradas: number, elegidas: number): string {
+  return `Quedaron registradas ${registradas} de ${elegidas}. Probá de nuevo con las que faltan.`;
+}
+
 // ─── Estado vacío: nadie debe nada ──────────────────────────────────────────
 // Es la única confirmación alegre que 04-personaje.md le permite a Cobros, y
 // por eso es el único lugar de esta pantalla donde aparece Lupita.
@@ -927,7 +957,7 @@ export const NADIE_TE_DEBE = "Nadie te debe";
 export const NADIE_TE_DEBE_LINEAS = [
   "Todas las sesiones realizadas están cobradas.",
   "Cuando cobres un turno desde la agenda, el pago aparece en Cobros del mes.",
-  "Si alguien queda sin pagar, va a aparecer acá con un botón para recordárselo.",
+  "Si alguien queda sin pagar, va a aparecer acá para que registres el pago cuando te pague.",
 ] as const;
 
 /** El botón del estado vacío: lleva a la otra vista. */
@@ -939,7 +969,7 @@ export const VER_COBROS_DEL_MES = "Ver cobros del mes";
 
 export const SIN_COBROS_ESTE_MES = "Todavía no cobraste este mes";
 export const SIN_COBROS_ESTE_MES_LINEAS = [
-  "Los cobros se registran desde el turno, en la agenda o en Hoy.",
+  "Los cobros se registran desde Te deben, o desde el turno en la agenda o en Hoy.",
   "Cada pago aparece acá con la fecha y el método.",
   "Lo que quedó sin cobrar está en Te deben.",
 ] as const;
