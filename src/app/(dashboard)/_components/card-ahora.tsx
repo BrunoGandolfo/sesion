@@ -2,10 +2,15 @@
 
 // AHORA: la sesión en curso, o la próxima del día si no hay ninguna abierta.
 //
-// Es la única tarjeta de la pantalla de Hoy y tiene un solo botón, el que
-// corresponde al momento del turno: grabar, esperar la nota, revisarla,
-// cobrar o hacer firmar la autorización. Nunca dos a la vez: si hay dos
-// cosas posibles, la que se ofrece es la que no se puede saltear.
+// Es la única tarjeta de la pantalla de Hoy y va ARRIBA de todo: en el
+// teléfono, entre pacientes, lo primero que se necesita es quién viene ahora.
+// Tiene un solo botón de acción, el que corresponde al momento del turno:
+// grabar, esperar la nota, revisarla, cobrar o hacer firmar la autorización.
+// Nunca dos a la vez: si hay dos cosas posibles, la que se ofrece es la que
+// no se puede saltear. La excepción es la firma: Cobrar no depende de ella
+// (una sesión que no se grabó se cobra igual), así que cuando faltan las dos
+// se cobra y la firma se avisa al lado, como ya hacía la fila
+// (components/ui/session-row.tsx). Aparte, siempre, "Preparar sesión".
 //
 // El brief va en versión corta —última vez y foco— porque acá se lee de
 // pie, con la paciente entrando: el mismo componente que usa el sheet del
@@ -23,16 +28,19 @@ import {
 import { Avatar, Button, Card, Chip } from "@/components/ui";
 import { Latido } from "@/components/ui/movimiento";
 import { IndicadorProcesando } from "@/components/ui/procesando";
+import { estadoClinicoDe } from "@/components/ui/session-row";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
 import {
   COBRAR,
   EN_CURSO,
   ENSEGUIDA,
+  FALTA_AUTORIZACION,
   FIRMAR_AUTORIZACION,
   GRABAR_SESION,
-  NOTA_GUARDADA,
-  REVISAR_NOTA,
+  NOTA_LISTA,
+  PARA_REVISAR,
+  PREPARAR_SESION,
   VER_FICHA,
 } from "@/lib/glosario";
 import type { EstadoProcesamiento, TurnoConPaciente } from "@/types/domain";
@@ -41,7 +49,11 @@ import type { EstadoProcesamiento, TurnoConPaciente } from "@/types/domain";
 type SesionDelTurno = { id: string; estado: EstadoProcesamiento } | null;
 
 /** Lo único que esta card necesita de /api/pacientes/[id]/brief. */
-type RespuestaBrief = { ultimaSesion: UltimaSesionCorta | null } | null;
+type RespuestaBrief = {
+  ultimaSesion: UltimaSesionCorta | null;
+  notaPendiente?: boolean;
+  propuestaPendiente?: boolean;
+} | null;
 
 interface Contexto {
   sesion: SesionDelTurno;
@@ -70,6 +82,7 @@ async function leerContexto(
 
 type Accion =
   | { tipo: "autorizar" }
+  | { tipo: "fallida"; sesionId: string }
   | { tipo: "revisar"; sesionId: string }
   | { tipo: "escribiendo" }
   | { tipo: "cobrar" }
@@ -77,17 +90,18 @@ type Accion =
   | { tipo: "hecho" };
 
 /**
- * Un solo botón, en este orden: sin autorización firmada no se graba; una
- * nota escrita espera revisión antes que cualquier otra cosa; mientras el
- * pipeline trabaja no hay nada que apretar; después viene el cobro; y si
- * nada de eso aplica, se graba.
+ * Un solo botón, en este orden: una nota que FALLÓ va antes que todo (es un
+ * problema clínico, no una deuda); una nota escrita espera revisión; mientras
+ * el pipeline trabaja no hay nada que apretar; después viene el cobro —que no
+ * depende de la firma—; sin cobro y sin firma, se pide la firma; y si nada de
+ * eso aplica, se graba. Exportada para probarse sin montar la card.
  */
-function accionDe(
+export function accionDe(
   sesion: SesionDelTurno,
   sinAutorizacion: boolean,
   sinCobrar: boolean,
 ): Accion {
-  if (sinAutorizacion) return { tipo: "autorizar" };
+  if (sesion?.estado === "fallida") return { tipo: "fallida", sesionId: sesion.id };
   if (sesion?.estado === "revision") {
     return { tipo: "revisar", sesionId: sesion.id };
   }
@@ -95,6 +109,7 @@ function accionDe(
     return { tipo: "escribiendo" };
   }
   if (sinCobrar) return { tipo: "cobrar" };
+  if (sinAutorizacion) return { tipo: "autorizar" };
   if (sesion?.estado === "aprobada") return { tipo: "hecho" };
   return { tipo: "grabar" };
 }
@@ -145,7 +160,12 @@ export function CardAhora({
   }, [turno.id, turno.paciente.id, reloadKey]);
 
   const accion = accionDe(contexto.sesion, sinAutorizacion, sinCobrar);
+  // Si se cobra y además falta la firma, la firma se avisa al lado: no
+  // reemplaza al cobro ni se esconde detrás.
+  const avisoFirma = sinAutorizacion && accion.tipo === "cobrar";
+  const notaClinica = estadoClinicoDe(contexto.sesion);
   const ultima = contexto.brief?.ultimaSesion ?? null;
+  const preparar = `/pacientes/${turno.paciente.id}?preparar=1`;
   const ModalityIcon = turno.modalidad === "online" ? Video : MapPin;
   const nombre = `${turno.paciente.nombre} ${turno.paciente.apellido}`;
 
@@ -190,7 +210,27 @@ export function CardAhora({
         </div>
       </div>
 
-      <BriefCorto className="mt-4" ultimaSesion={ultima} />
+      <BriefCorto
+        className="mt-4"
+        ultimaSesion={ultima}
+        pacienteId={turno.paciente.id}
+        notaPendiente={contexto.brief?.notaPendiente ?? false}
+        propuestaPendiente={contexto.brief?.propuestaPendiente ?? false}
+      />
+
+      {/* El estado clínico, aparte del cobro y con las mismas palabras que
+          la fila. Cuando es el botón de acción (fallida, para revisar) no se
+          repite acá. */}
+      {notaClinica && accion.tipo !== "fallida" && accion.tipo !== "revisar" ? (
+        <p className="mt-4">
+          <Link
+            href={`/sesiones/${notaClinica.sesionId}`}
+            className="font-sans text-[13px] font-semibold text-sage-700 hover:text-sage-800"
+          >
+            {notaClinica.rotulo} →
+          </Link>
+        </p>
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
         {accion.tipo === "escribiendo" ? (
@@ -200,7 +240,12 @@ export function CardAhora({
           />
         ) : null}
         {accion.tipo === "hecho" ? (
-          <Chip variant="sage">{NOTA_GUARDADA}</Chip>
+          <Chip variant="sage">{NOTA_LISTA}</Chip>
+        ) : null}
+        {accion.tipo === "fallida" ? (
+          <Button asChild className="!bg-terracotta-600 hover:!bg-terracotta-700">
+            <Link href={`/sesiones/${accion.sesionId}`}>{notaClinica?.rotulo}</Link>
+          </Button>
         ) : null}
         {accion.tipo === "autorizar" ? (
           <Button asChild>
@@ -211,17 +256,29 @@ export function CardAhora({
         ) : null}
         {accion.tipo === "revisar" ? (
           <Button asChild>
-            <Link href={`/sesiones/${accion.sesionId}`}>{REVISAR_NOTA}</Link>
+            <Link href={`/sesiones/${accion.sesionId}`}>{PARA_REVISAR}</Link>
           </Button>
         ) : null}
         {accion.tipo === "cobrar" ? (
           <Button onClick={onCobrar}>{COBRAR}</Button>
+        ) : null}
+        {avisoFirma ? (
+          <Link
+            href={`/pacientes/${turno.paciente.id}`}
+            className="font-sans text-[13px] font-semibold text-terracotta-600 hover:text-terracotta-700"
+          >
+            {FALTA_AUTORIZACION} →
+          </Link>
         ) : null}
         {accion.tipo === "grabar" ? (
           <Button asChild>
             <Link href={`/grabar/${turno.id}`}>{GRABAR_SESION}</Link>
           </Button>
         ) : null}
+
+        <Button asChild variant="secondary">
+          <Link href={preparar}>{PREPARAR_SESION}</Link>
+        </Button>
 
         <Link
           href={`/pacientes/${turno.paciente.id}`}

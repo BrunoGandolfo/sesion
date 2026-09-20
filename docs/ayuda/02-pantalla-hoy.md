@@ -1,8 +1,8 @@
 # La pantalla de Hoy
 
-**Para qué sirve.** Es la primera pantalla: la agenda del día, lo que espera una
-acción tuya, la sesión que viene o está en curso, y dos números del día y del
-mes.
+**Para qué sirve.** Es la primera pantalla: la sesión que viene o está en
+curso, la agenda del día, lo que espera una acción tuya, y dos números del día
+y del mes.
 
 ## Lo que ves, de arriba abajo
 
@@ -16,12 +16,32 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    consultorio** se entra por el **engranaje** de arriba a la derecha.
 2. **El día** — el día de la semana y, al lado, *"3 sesiones en el día"* o
    *"sin sesiones agendadas"*.
-3. **Agenda del día** — una fila por turno, en orden de hora, con el botón
+3. **La tarjeta de ahora** — borde verde a la izquierda, arriba de todo. Es la
+   sesión en curso, o la próxima del día. Si ya no queda ninguna: *"No queda
+   ninguna sesión por delante hoy."* La tarjeta tiene el nombre, la modalidad,
+   la duración, la tarifa, la hora en grande y un chip:
+   - **"En curso"** (verde, con un punto que late) — la hora ya empezó y todavía
+     no terminó.
+   - **"Enseguida"** (gris) — es el próximo turno y todavía no empezó.
+   Debajo puede aparecer la señal de riesgo, *"Última vez (…):"* y *"Para la
+   próxima:"*, tomadas de la última nota aprobada. Son dos líneas: si el
+   resumen es más largo lo dice (*"Hay más."*), y si hay una nota sin revisar
+   o una propuesta del Recorrido sin decidir que ese resumen todavía no
+   incluye, también lo dice. Después, **un solo botón**, el primero que
+   corresponda en este orden: **Nota fallida · Ver qué pasó** → **Para
+   revisar** → *Procesando la sesión de …* (sin botón, con un anillo que gira)
+   → **Cobrar** → **Firmar autorización** → **Grabar sesión**.
+   **Cobrar** aparece cuando la sesión ya quedó realizada y sin cobrar, aunque
+   falte la firma: en ese caso **Falta la autorización →** se muestra al lado.
+   Si ya está todo hecho, un chip **"Nota lista"**. Siempre están además
+   **Preparar sesión** (abre la ficha en modo preparación) y el enlace **Ver
+   ficha →**.
+4. **Agenda del día** — una fila por turno, en orden de hora, con el botón
    **Agendar** y, en la computadora, **Ver semana →**. Cada fila muestra la hora,
    la duración, la paciente, la modalidad y la tarifa, y a la derecha lo que
    corresponde hacer (ver abajo). Si no hay turnos: *"Hoy no hay nada
    agendado."* *"A veces eso también es parte del trabajo."*
-4. **Pendientes** — una tarjeta con borde dorado a la izquierda. Aparece solo si
+5. **Pendientes** — una tarjeta con borde dorado a la izquierda. Aparece solo si
    hay algo:
    - **Los primeros pasos**, en una cuenta nueva: *"Cargá tu tarifa"*, *"Cargá
      tu primera paciente"*, *"Agendá la primera sesión"*.
@@ -33,21 +53,6 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
      firmaron la autorización de grabación.
    De las notas y de las autorizaciones se muestran hasta 3, y el resto se
    resume como *"y N más"*.
-5. **La tarjeta de ahora** — borde verde a la izquierda. Es la sesión en curso, o
-   la próxima del día. Si ya no queda ninguna: *"No queda ninguna sesión por
-   delante hoy."* La tarjeta tiene el nombre, la modalidad, la duración, la
-   tarifa, la hora en grande y un chip:
-   - **"En curso"** (verde, con un punto que late) — la hora ya empezó y todavía
-     no terminó.
-   - **"Enseguida"** (gris) — es el próximo turno y todavía no empezó.
-   Debajo puede aparecer la señal de riesgo, *"Última vez (…):"* y *"Para la
-   próxima:"*, tomadas de la última nota aprobada. Después, **un solo botón**, el
-   primero que corresponda en este orden: **Firmar autorización** → **Revisar
-   nota** → *Procesando la sesión de …* (sin botón, con un anillo que gira) →
-   **Cobrar** → **Grabar sesión**.
-   **Cobrar** aparece cuando la sesión ya quedó realizada y sin cobrar. Si ya
-   está todo hecho, un chip **"Nota guardada"**. Siempre está además el enlace
-   **Ver ficha →**.
 6. **Los dos números** — **Sesiones hoy**, con cuántas están pagas, y **Este
    mes**, lo cobrado en el mes corriente. No se tocan.
 
@@ -57,8 +62,14 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
 - **Cobrar** — en cuanto pasó la hora del turno y no está cobrado, aunque
   todavía figure como agendado.
 - **Grabar sesión** — si el turno se puede grabar hoy.
-- **Revisar nota** o **Ver nota** — si ya hay una nota para revisar o guardada.
+- El estado de la nota, aparte del pago y siempre a la vista: **Nota fallida ·
+  Ver qué pasó** (la nota no se pudo escribir; lleva a la sesión, que explica
+  qué pasó), **Para revisar** (hay una nota escrita esperando que la leas) o
+  **Nota lista** (ya está aprobada). Los tres llevan a la nota.
 - **Procesando** — mientras se escribe la nota.
+
+Una sesión cuya nota falló nunca se ve sólo como **Cobrar**: la deuda es una
+cosa y la nota que falta es otra, y las dos se muestran.
 
 Si cobrás desde una fila un turno que todavía figuraba **Agendado**, el cobro
 queda registrado pero la fila puede seguir mostrando **Cobrar** hasta que

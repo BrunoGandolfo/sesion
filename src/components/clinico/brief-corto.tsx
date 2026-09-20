@@ -23,8 +23,12 @@ import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaRelativa } from "@/lib/format";
 import {
+  NOTA_SIN_INCORPORAR,
   PARA_LA_PROXIMA,
   PARA_RETOMAR,
+  PREPARAR_SESION,
+  PROPUESTA_SIN_INCORPORAR,
+  RESUMEN_HAY_MAS,
   SENAL_DE_RIESGO,
   VER_FICHA,
   pluralizar,
@@ -111,7 +115,35 @@ export interface BriefCortoProps {
   /** Agrega la advertencia de que la última nota todavía no se aprobó. La
    *  card AHORA no la muestra: ahí el brief son dos líneas y nada más. */
   avisarNotaSinAprobar?: boolean;
+  /** Con él, "Preparar sesión" enlaza a la ficha en modo preparación
+   *  (/pacientes/[id]?preparar=1). Sin él no hay a dónde ir y no se ofrece. */
+  pacienteId?: string;
+  /** Hay una nota de esta paciente escrita y sin revisar: el resumen no la
+   *  incluye todavía (viene de /brief como `notaPendiente`). */
+  notaPendiente?: boolean;
+  /** El Recorrido tiene una propuesta sin decidir (`propuestaPendiente`). */
+  propuestaPendiente?: boolean;
   className?: string;
+}
+
+/**
+ * ¿El texto quedó cortado por `line-clamp`? Se mide, no se adivina: cuando
+ * el contenido desborda su caja, hay más de lo que se ve. Sin geometría (en
+ * jsdom, o antes del primer layout) contesta que no.
+ */
+function useRecortado(ref: React.RefObject<HTMLElement | null>, texto: string | null) {
+  const [recortado, setRecortado] = React.useState(false);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const medir = () => setRecortado(el.scrollHeight > el.clientHeight + 1);
+    medir();
+    if (typeof ResizeObserver === "undefined") return;
+    const observador = new ResizeObserver(medir);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, [ref, texto]);
+  return recortado;
 }
 
 /**
@@ -122,17 +154,30 @@ export function BriefCorto({
   ultimaSesion,
   riesgosHistoricos = 0,
   avisarNotaSinAprobar = false,
+  pacienteId,
+  notaPendiente = false,
+  propuestaPendiente = false,
   className = "",
 }: BriefCortoProps) {
   const aviso = textoRiesgo(ultimaSesion?.riesgo, riesgosHistoricos);
-
-  if (!ultimaSesion && !aviso) return null;
+  const resumenRef = React.useRef<HTMLParagraphElement>(null);
+  const focoRef = React.useRef<HTMLParagraphElement>(null);
 
   const resumen =
     ultimaSesion?.resumenSesion ??
     (ultimaSesion?.temas && ultimaSesion.temas.length > 0
       ? ultimaSesion.temas.join(", ")
       : "sin resumen todavía");
+
+  // Las dos líneas recortan. Cuando recortan, se dice: un resumen cortado en
+  // silencio parece un resumen entero, y ella entra a la sesión creyendo que
+  // ya leyó todo.
+  const resumenRecortado = useRecortado(resumenRef, resumen);
+  const focoRecortado = useRecortado(focoRef, ultimaSesion?.focoProximaSesion ?? null);
+  const hayMas = resumenRecortado || focoRecortado;
+  const preparar = pacienteId ? `/pacientes/${pacienteId}?preparar=1` : null;
+
+  if (!ultimaSesion && !aviso && !notaPendiente && !propuestaPendiente) return null;
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
@@ -157,7 +202,7 @@ export function BriefCorto({
       ) : null}
 
       {ultimaSesion ? (
-        <p className="line-clamp-2 font-sans text-[13px] leading-[1.5] text-ink-700">
+        <p ref={resumenRef} className="line-clamp-2 font-sans text-[13px] leading-[1.5] text-ink-700">
           <span className="text-ink-500">
             Última vez ({fechaRelativa(new Date(ultimaSesion.fecha)).toLowerCase()}):
           </span>{" "}
@@ -166,7 +211,7 @@ export function BriefCorto({
       ) : null}
 
       {ultimaSesion?.focoProximaSesion ? (
-        <p className="line-clamp-2 font-sans text-[13px] leading-[1.5] text-ink-700">
+        <p ref={focoRef} className="line-clamp-2 font-sans text-[13px] leading-[1.5] text-ink-700">
           <span className="text-ink-500">{PARA_LA_PROXIMA}:</span>{" "}
           {ultimaSesion.focoProximaSesion}
         </p>
@@ -175,6 +220,24 @@ export function BriefCorto({
       {avisarNotaSinAprobar && ultimaSesion?.pendienteAprobacion ? (
         <p className="font-sans text-[12px] leading-[1.5] text-gold-500">
           La última nota todavía no está aprobada: esto puede cambiar.
+        </p>
+      ) : null}
+
+      {/* Lo que este resumen NO incluye: una nota sin revisar, una propuesta
+          sin decidir, o texto que quedó fuera de las dos líneas. Cada aviso
+          lleva a preparar la sesión, que es donde está entero. */}
+      {notaPendiente ? (
+        <p className="font-sans text-[12px] leading-[1.5] text-gold-500">{NOTA_SIN_INCORPORAR}</p>
+      ) : null}
+      {propuestaPendiente ? (
+        <p className="font-sans text-[12px] leading-[1.5] text-gold-500">{PROPUESTA_SIN_INCORPORAR}</p>
+      ) : null}
+      {preparar && (hayMas || notaPendiente || propuestaPendiente) ? (
+        <p className="font-sans text-[12px] leading-[1.5] text-ink-500">
+          {hayMas ? `${RESUMEN_HAY_MAS} ` : null}
+          <Link href={preparar} className="font-semibold text-sage-600 hover:text-sage-700">
+            {PREPARAR_SESION}
+          </Link>
         </p>
       ) : null}
     </div>
@@ -187,6 +250,8 @@ export function BriefCorto({
 
 type BriefResponse = {
   pacienteId: string;
+  notaPendiente?: boolean;
+  propuestaPendiente?: boolean;
   ultimaSesion:
     | (UltimaSesionCorta & { riesgo: RiesgoCorto & { notaParaTerapeuta: string | null } })
     | null;
@@ -232,10 +297,10 @@ export function BriefCortoDePaciente({ pacienteId }: { pacienteId: string }) {
   // El brief es apoyo, no bloquea el turno: si no llega, el sheet sigue.
   if (estado.tipo === "error") return null;
 
-  const { ultimaSesion, hiloLongitudinal } = estado.brief;
+  const { ultimaSesion, hiloLongitudinal, notaPendiente, propuestaPendiente } = estado.brief;
   const riesgosHistoricos = hiloLongitudinal?.riesgosHistoricos.length ?? 0;
 
-  if (!ultimaSesion && !hiloLongitudinal) {
+  if (!ultimaSesion && !hiloLongitudinal && !notaPendiente && !propuestaPendiente) {
     return (
       <Marco>
         <p className="mt-2 font-display text-[15px] italic leading-[1.5] text-ink-700">
@@ -256,12 +321,15 @@ export function BriefCortoDePaciente({ pacienteId }: { pacienteId: string }) {
         </Link>
       }
     >
-      {ultimaSesion || riesgosHistoricos > 0 ? (
+      {ultimaSesion || riesgosHistoricos > 0 || notaPendiente || propuestaPendiente ? (
         <BriefCorto
           className="mt-2"
           ultimaSesion={ultimaSesion}
           riesgosHistoricos={riesgosHistoricos}
           avisarNotaSinAprobar
+          pacienteId={pacienteId}
+          notaPendiente={notaPendiente}
+          propuestaPendiente={propuestaPendiente}
         />
       ) : hiloLongitudinal?.resumenAcumulativo ? (
         <p className="mt-2 line-clamp-2 text-[13px] leading-[1.55] text-ink-700">

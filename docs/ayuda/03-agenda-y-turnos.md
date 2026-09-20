@@ -68,9 +68,12 @@ paciente no vino a este turno."*
   figuraba *Agendado* y la hora ya pasó, **cobrar lo cierra**: pasa a realizado.
   Mientras el turno está agendado, el propio sheet lo dice: *"al cobrar, el
   turno queda como realizado"*. **El recordatorio se cancela.**
-- **Grabar sesión** / **Revisar nota** — **Grabar sesión** si el turno todavía no
-  tiene sesión clínica; si ya la tiene, **Revisar nota** lleva a la nota, aunque
-  ya esté aprobada.
+- **Grabar sesión**, o el estado de la nota — **Grabar sesión** si el turno
+  todavía no tiene sesión clínica. Si ya la tiene, el botón dice cómo está la
+  nota y lleva a ella: **Nota fallida · Ver qué pasó** (no se pudo escribir),
+  **Para revisar** (escrita, sin aprobar) o **Nota lista** (aprobada). Mientras
+  se escribe, dice *Procesando* y no hay botón. Una nota fallida nunca se
+  presenta como algo para revisar.
 - **Reprogramar** — cambiás fecha, hora, duración, modalidad y notas. Si
   cambiaste la fecha o la hora, **el recordatorio viejo se cancela y se programa
   uno nuevo** para el horario nuevo. Si solo cambiaste la duración o la

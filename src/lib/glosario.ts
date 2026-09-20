@@ -459,6 +459,34 @@ export const PENDIENTE = "Sin cobrar";
 export const CANCELADO = "Cancelado";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Estado clínico del turno, separado del pago
+// Una sesión cuya nota FALLÓ se veía en su fila sólo como "Cobrar", y desde
+// Agenda "Revisar nota" llevaba a una nota fallida: la deuda tapaba el
+// problema clínico y se podía cerrar el día sin notarlo. La nota tiene su
+// propio rótulo, al lado del de pago, y una fallida nunca se llama "Revisar".
+// ────────────────────────────────────────────────────────────────────────────
+
+/** La nota no se pudo escribir. Lleva a la sesión, que explica qué pasó
+ *  (el enlace dice VER_QUE_PASO, que ya existe más abajo, junto al aviso). */
+export const NOTA_FALLIDA = "Nota fallida";
+/** La nota ya está aprobada. Para "escrita y sin revisar" se usa
+ *  PARA_REVISAR, que ya existe arriba. */
+export const NOTA_LISTA = "Nota lista";
+
+/** Abre la ficha en modo preparación (/pacientes/[id]?preparar=1): el
+ *  resumen entero, el Recorrido y lo que quedó sin incorporar. */
+export const PREPARAR_SESION = "Preparar sesión";
+
+/** El resumen corto se muestra en dos líneas. Cuando hay más, se dice: un
+ *  corte silencioso parece un resumen completo. */
+export const RESUMEN_HAY_MAS = "Hay más.";
+/** Una nota de esta paciente está escrita y sin revisar: el resumen no la
+ *  incluye todavía. */
+export const NOTA_SIN_INCORPORAR = "Hay una nota sin revisar que este resumen todavía no incluye.";
+/** El Recorrido tiene una propuesta esperando decisión. */
+export const PROPUESTA_SIN_INCORPORAR = "El Recorrido tiene una propuesta sin revisar.";
+
+// ────────────────────────────────────────────────────────────────────────────
 // Métodos de pago
 // La lista estaba escrita cuatro veces —el sheet de la agenda, el sheet de
 // Hoy, la pestaña de pagos de la ficha y la lista de cobros—, dos veces como
