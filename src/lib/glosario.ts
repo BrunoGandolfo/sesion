@@ -235,7 +235,9 @@ export function pieRecorridoPdf(nombreProfesional: string | null): string {
 export const PARA_RETOMAR = "Para retomar";
 
 /** El mismo resumen, en la ficha: un bloque plegado debajo del título de la
- *  lista de sesiones. Se abre solo cuando la ficha se pide con ?preparar=1. */
+ *  lista de sesiones. Se abre solo cuando la ficha se pide con ?preparar=1.
+ *  El mismo rótulo lo usan Hoy (la tarjeta de ahora y el resumen corto) y el
+ *  detalle del turno de Agenda como enlace a /pacientes/[id]?preparar=1. */
 export const PREPARAR_SESION = "Preparar sesión";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -481,10 +483,6 @@ export const NOTA_FALLIDA = "Nota fallida";
 /** La nota ya está aprobada. Para "escrita y sin revisar" se usa
  *  PARA_REVISAR, que ya existe arriba. */
 export const NOTA_LISTA = "Nota lista";
-
-/** Abre la ficha en modo preparación (/pacientes/[id]?preparar=1): el
- *  resumen entero, el Recorrido y lo que quedó sin incorporar. */
-export const PREPARAR_SESION = "Preparar sesión";
 
 /** El resumen corto se muestra en dos líneas. Cuando hay más, se dice: un
  *  corte silencioso parece un resumen completo. */

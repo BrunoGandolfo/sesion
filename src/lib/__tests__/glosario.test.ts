@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, it, expect } from "vitest";
 
 import * as glosario from "@/lib/glosario";
@@ -198,6 +201,19 @@ describe("glosario — constantes de texto", () => {
       if (typeof valor !== "string") continue;
       expect(valor.trim(), `${nombre} está vacía`).not.toBe("");
     }
+  });
+
+  // 2026-09-20: al fusionar dos ramas quedó PREPARAR_SESION declarada dos
+  // veces y main se puso en rojo. tsc lo atrapa, pero recién en CI y sin
+  // decir de qué ramas vino: esta prueba lo dice por su nombre, acá.
+  it("ningún nombre exportado está declarado dos veces", () => {
+    const fuente = readFileSync(join(process.cwd(), "src/lib/glosario.ts"), "utf8");
+    const nombres = Array.from(
+      fuente.matchAll(/^export (?:const|function|let) ([A-Za-z_$][\w$]*)/gm),
+      (m) => m[1],
+    );
+    const repetidos = nombres.filter((n, i) => nombres.indexOf(n) !== i);
+    expect(repetidos, `declarados más de una vez: ${repetidos.join(", ")}`).toEqual([]);
   });
 });
 
