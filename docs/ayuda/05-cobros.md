@@ -5,7 +5,9 @@ y quién te debe.
 
 ## Cobrar una sesión
 
-Se cobra **desde el turno**, y **Cobrar** aparece en varios lugares:
+El cobro es **por sesión**. Si la paciente te paga una sesión que ya pasó, lo más
+directo es **Cobros → Te deben → Registrar pago** (más abajo). Además, **Cobrar**
+aparece en el turno, en varios lugares:
 
 - En **Hoy**, en la fila del turno en cuanto pasó su hora, y en la tarjeta de
   ahora cuando la sesión ya quedó realizada.
@@ -16,11 +18,11 @@ Se cobra **desde el turno**, y **Cobrar** aparece en varios lugares:
 
 Hay seis métodos de pago: **Efectivo**, **Transferencia**, **MercadoPago**,
 **Débito**, **Crédito** y **Otro**. El selector se llama distinto según dónde
-estés: **Método de pago** en Hoy, *"¿Cómo pagó?"* en la Agenda y **Cobrar
+estés: **Método de pago** en Hoy y en Cobros, *"¿Cómo pagó?"* en la Agenda y **Cobrar
 sesión** en la ficha. Al elegir uno:
 
-- En **Hoy** se dibuja un tilde verde, el sheet se cierra solo y aparece
-  *"Cobrado. Ese ya está."*
+- En **Hoy** y en **Cobros** se dibuja un tilde verde, el sheet se cierra solo y
+  aparece *"Cobrado. Ese ya está."*
 - En la **Agenda** se cierra y aparece *"Cobro registrado"*.
 - En la **ficha** se dibuja un tilde y aparece *"Cobrado"*.
 
@@ -51,10 +53,31 @@ solapas:
 
 - **Te deben** — *"Son N sesiones sin cobrar."* y la lista **ordenada por monto**,
   de mayor a menor: nombre, cuántas sesiones sin cobrar, cuánto hace y el total.
-  Si ya le recordaste el cobro, dice *"Avisado hace N días"*. Si no debe nadie:
-  *"Nadie te debe"*.
+  Cada persona tiene el botón **Registrar pago**. Si ya le recordaste el cobro,
+  dice *"Avisado hace N días"*. Si no debe nadie: *"Nadie te debe"*.
 - **Cobros del mes** — cada pago con su fecha, la paciente, el **método** y el
   monto. Si todavía no cobraste nada: *"Todavía no cobraste este mes"*.
+
+## Registrar un pago desde "Te deben"
+
+Cuando una paciente te paga, no hace falta ir a su ficha:
+
+1. En **Te deben**, tocá **Registrar pago** en su fila.
+2. Se abre *"¿Qué sesiones te pagó?"* con sus sesiones sin cobrar, de la más
+   vieja a la más nueva, cada una con su **fecha** y su **monto**. Marcá las que
+   te pagó. Si tiene una sola, ya viene marcada; si tiene varias, **Marcar
+   todas** las marca de una vez. Abajo ves cuántas marcaste y el total.
+3. Tocá **Elegir método de pago** y elegí cómo pagó. El método vale para todas
+   las sesiones marcadas.
+
+Se dibuja el tilde, aparece *"Cobrado. Ese ya está."* y la pantalla se actualiza
+sola: baja **Sin cobrar**, sube **Cobraste este mes**, y la persona sale de la
+lista si ya no debe nada. Hasta que elegís el método no se registra nada:
+**Cancelar**, o cerrar el selector sin elegir, no cobra.
+
+Si marcaste varias y una no se pudo registrar, la app se detiene ahí y te dice
+cuántas quedaron: *"Quedaron registradas 1 de 2. Probá de nuevo con las que
+faltan."*
 
 ## Las tres zonas de la deuda
 
@@ -67,11 +90,13 @@ esa última zona.
 Un turno **Agendado** cuya hora ya pasó todavía no cuenta como deuda: empieza a
 contar cuando lo grabás o lo cobrás.
 
-## "Recordar cobro"
+## "Recordar cobro por SMS"
 
-En **Te deben**, cada persona con teléfono cargado tiene el botón **Recordar
-cobro**. Se abre *"¿Mandarle este mensaje?"* con el texto y el número al que
-sale. Revisá el mensaje y confirmá con **Enviar SMS**: se programa un **SMS**.
+En **Te deben**, debajo de **Registrar pago**, cada persona con teléfono cargado
+tiene la acción **Recordar cobro por SMS**. Tocarla **no envía nada**: se abre
+*"¿Mandarle este mensaje?"* con el texto y el número al que sale. Revisá el
+mensaje y confirmá con **Enviar SMS**: recién ahí se programa un **SMS**. Con
+**Cancelar** no sale nada.
 
 El recordatorio de cobro **sale solo cuando vos confirmás el envío**; el del
 turno se programa automáticamente. El texto del cobro no es configurable.
@@ -100,7 +125,8 @@ turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
 
 - **No cobra plata ni emite factura ni recibo.**
 - **No cobra parcial**: se cobra la tarifa completa del turno, no un monto libre.
-- **No cambia el mensaje de "Recordar cobro"**: no es configurable.
+- **No cambia el mensaje de "Recordar cobro por SMS"**: no es configurable.
+- **No registra un pago "a cuenta" de toda la deuda**: se marcan sesiones enteras.
 - Deshacer un cobro **no vuelve el turno a "Agendado"**: haber cobrado por error
   no significa que la sesión no ocurrió.
 
