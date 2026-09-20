@@ -16,7 +16,7 @@ export async function GET() {
     const turnos = await cobrosDelMes({
       prisma: db,
       organizationId,
-      ahora: new Date(),
+      enElMesDe: new Date(),
     });
 
     return ok(turnos);
