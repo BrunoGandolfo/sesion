@@ -35,21 +35,38 @@ enlace **Ir a la agenda**: primero hay que agendar.
 
 ### Pestaña **Sesiones**
 
-- **Hoy**, si hay turno hoy: la hora, la duración, la modalidad y un botón según
-  el momento (**Grabar sesión**, *Procesando la sesión de …*, **Revisar nota**,
-  **Cobrar** o **Ver nota**). Si la grabación quedó sin terminar, **Grabar
-  sesión** sirve para retomarla. Si la sesión falló, el enlace dice **Ver**.
-- **Para retomar** — el brief antes de la sesión (ver `10-el-hilo-y-el-recorrido.md`).
-- **Sesiones** — todas las sesiones documentadas, agrupadas por mes (el más
-  reciente abierto, los anteriores plegados). Cada fila: fecha, hora, duración,
-  modalidad, un chip **Para revisar** o **Nota guardada** y un resumen de dos
-  líneas. Se cargan de a 10 con **Cargar más**.
+Lo primero que se ve es la lista **Sesiones**, con la cuenta al lado (*"8
+sesiones"*): de la más reciente a la más antigua, agrupadas por mes (el más
+reciente abierto, los anteriores plegados con su cuenta). Cada sesión aparece
+una sola vez y la cuenta coincide con lo que la lista muestra.
+
+- Cada fila: la **fecha y la hora** (dos sesiones del mismo día se distinguen),
+  duración, modalidad, un chip **Para revisar** o **Nota guardada**, el resumen
+  **entero** —no se corta— y **Ver nota** (o **Revisar nota**). Tocar la fila
+  abre la nota. Si la sesión tiene análisis, también está **Para vos**.
+- La sesión de **hoy** está en la misma lista, arriba, marcada **Hoy** y con su
+  botón adentro según el momento: **Grabar sesión**, *Procesando la sesión de
+  …*, **Revisar nota**, **Cobrar** o **Ver nota**. Si la grabación quedó sin
+  terminar, **Grabar sesión** sirve para retomarla. Si la sesión falló, el
+  enlace dice **Ver**.
+- **Preparar sesión** — el botón a la derecha del título de la lista (en el
+  celular, debajo). Está cerrado; al tocarlo se abre el resumen para antes de la
+  sesión: la señal de riesgo, la última nota aprobada, *Para la próxima* y *El
+  recorrido hasta hoy* con los objetivos y los temas, todo entero (ver
+  `10-el-hilo-y-el-recorrido.md`). Si hay una **señal de riesgo**, se avisa al
+  lado del botón aunque esté cerrado. Desde Hoy y Agenda se puede llegar con el
+  bloque ya abierto (la dirección termina en `?preparar=1`).
+- Se cargan de a 10 con **Cargar más**.
+- Al volver de una nota, la ficha queda en la misma pestaña y con esa sesión a
+  la vista.
 
 ### Pestaña **Recorrido**
 
 El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
 
-### Pestaña **Ficha**
+### Pestaña **Datos**
+
+Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
 
 - **Datos de contacto** — teléfono (se puede tocar para llamar), tarifa
   por sesión y fecha de alta.

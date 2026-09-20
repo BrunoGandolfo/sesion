@@ -2,7 +2,20 @@
 import { useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 
 // Ficha del paciente: carga, cabecera, tres pestañas (Sesiones, Recorrido,
-// Ficha) y un solo sheet de edición.
+// Datos) y un solo sheet de edición.
+//
+// LO QUE LA FICHA LEE Y ESCRIBE EN SU URL
+//
+//   ?tab=recorrido|datos   la pestaña abierta (sin parámetro: Sesiones). Se
+//                          escribe al cambiar de pestaña, con replaceState, y
+//                          así "volver" desde una nota cae en la misma pestaña:
+//                          la nota vuelve con router.back().
+//   ?vuelve=<sesionId>     se escribe al tocar una sesión de la lista, en la
+//                          entrada del historial que se está dejando. Al
+//                          volver, esa fila se trae a la vista y el parámetro
+//                          se borra (un refresco no la vuelve a buscar).
+//   ?preparar=1            CONTRATO con Hoy y Agenda: abre la pestaña Sesiones
+//                          con "Preparar sesión" abierto y a la vista.
 //
 // Sin flotantes: "Grabar" vive en la cabecera, en el flujo del documento.
 // El porqué está escrito en cabecera-ficha.tsx.
@@ -12,6 +25,7 @@ import { useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 // acciones son enlaces a /grabar/[turnoId] y /sesiones/[id].
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import type { VarianteToast } from "@/components/ui/toast";
 import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 
@@ -20,7 +34,7 @@ import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
-import { ALGO_FALLO, FICHA, RECORRIDO, SESIONES } from "@/lib/glosario";
+import { ALGO_FALLO, DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { CabeceraFicha, CabeceraNavegacionFicha } from "./cabecera-ficha";
@@ -35,13 +49,30 @@ import { FichaTab } from "./ficha-tab";
 import { RecorridoTab } from "./recorrido-tab";
 import { SesionesTab } from "./sesiones-tab";
 
-type TabKey = "sesiones" | "recorrido" | "ficha";
+type TabKey = "sesiones" | "recorrido" | "datos";
 
 const TAB_OPTIONS: { value: TabKey; label: string }[] = [
   { value: "sesiones", label: SESIONES },
   { value: "recorrido", label: RECORRIDO },
-  { value: "ficha", label: FICHA },
+  { value: "datos", label: DATOS },
 ];
+
+function tabDeLaUrl(valor: string | null): TabKey {
+  return valor === "recorrido" || valor === "datos" ? valor : "sesiones";
+}
+
+/** Reescribe los parámetros de la entrada actual del historial, sin navegar.
+ *  Next sincroniza replaceState con useSearchParams. */
+function escribirEnLaUrl(cambiar: (parametros: URLSearchParams) => void) {
+  const parametros = new URLSearchParams(window.location.search);
+  cambiar(parametros);
+  const consulta = parametros.toString();
+  window.history.replaceState(
+    null,
+    "",
+    consulta ? `${window.location.pathname}?${consulta}` : window.location.pathname,
+  );
+}
 
 type ToastState = { open: boolean; message: string; variante: VarianteToast };
 
@@ -62,7 +93,12 @@ export function PacienteDetailView({ id }: { id: string }) {
     id: string;
     vigente: boolean;
   } | null>(null);
-  const [activeTab, setActiveTab] = React.useState<TabKey>("sesiones");
+  const searchParams = useSearchParams();
+  const preparar = searchParams.get("preparar") === "1";
+  const volverA = searchParams.get("vuelve");
+  const [activeTab, setActiveTab] = React.useState<TabKey>(() =>
+    preparar ? "sesiones" : tabDeLaUrl(searchParams.get("tab")),
+  );
   const confirmarSalida = useSalidaProtegida();
   const [reloadKey, setReloadKey] = React.useState(0);
   const [editarOpen, setEditarOpen] = React.useState(false);
@@ -209,6 +245,16 @@ export function PacienteDetailView({ id }: { id: string }) {
     refetchData();
   }
 
+  function cambiarDePestana(tab: TabKey) {
+    setActiveTab(tab);
+    escribirEnLaUrl((parametros) => {
+      if (tab === "sesiones") parametros.delete("tab");
+      else parametros.set("tab", tab);
+      parametros.delete("preparar");
+      parametros.delete("vuelve");
+    });
+  }
+
   const hrefGrabar = turnoHoy
     ? `/grabar/${turnoHoy.id}`
     : `/grabar/nuevo?pacienteId=${encodeURIComponent(id)}`;
@@ -251,7 +297,7 @@ export function PacienteDetailView({ id }: { id: string }) {
               <Segmented
                 options={TAB_OPTIONS}
                 value={activeTab}
-                onChange={(tab) => { if (tab !== activeTab) confirmarSalida(() => setActiveTab(tab)); }}
+                onChange={(tab) => { if (tab !== activeTab) confirmarSalida(() => cambiarDePestana(tab)); }}
                 ariaLabel="Secciones del paciente"
               />
             </div>
@@ -265,12 +311,18 @@ export function PacienteDetailView({ id }: { id: string }) {
                 sesionHoyCargando={sesionHoyCargando}
                 onTurnoActualizado={refetchData}
                 onAviso={avisar}
+                prepararAbierto={preparar}
+                volverA={volverA}
+                onVolvio={() => escribirEnLaUrl((parametros) => parametros.delete("vuelve"))}
+                onAbrirSesion={(sesionId) =>
+                  escribirEnLaUrl((parametros) => parametros.set("vuelve", sesionId))
+                }
               />
             )}
 
             {activeTab === "recorrido" && <RecorridoTab pacienteId={paciente.id} />}
 
-            {activeTab === "ficha" && (
+            {activeTab === "datos" && (
               <FichaTab
                 paciente={paciente}
                 turnos={turnos}
