@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { crearMensaje, PedidoMensajes } from "@/lib/anthropic-mensajes";
+import type {
+  crearMensajeStreaming,
+  FlujoMensajes,
+  PedidoMensajes,
+  ResultadoMensajes,
+} from "@/lib/anthropic-mensajes";
 import { MODELO_AYUDA } from "@/lib/anthropic-mensajes";
 
 import { ApiError } from "@/app/api/_lib/responses";
@@ -11,7 +16,7 @@ import {
   MAX_TURNOS_HISTORIAL,
   MENSAJE_PROVEEDOR_CAIDO,
   MENSAJE_SIN_CLAVE,
-  responderAyuda,
+  responderAyudaStreaming,
   type TurnoAyuda,
 } from "@/app/api/_lib/casos-uso/responder-ayuda";
 
@@ -27,18 +32,34 @@ const RESULTADO_OK = {
   motivoDeCorte: "end_turn" as const,
 };
 
-/** Doble de crearMensaje que guarda el pedido y contesta fijo. */
-function proveedorQueContesta(resultado = RESULTADO_OK) {
+/** Doble de crearMensajeStreaming que guarda el pedido y contesta fijo, en
+ *  un solo fragmento. */
+function proveedorQueContesta(resultado: ResultadoMensajes = RESULTADO_OK) {
   const pedidos: PedidoMensajes[] = [];
-  const crear: typeof crearMensaje = async (pedido) => {
+  const crear: typeof crearMensajeStreaming = async (pedido) => {
     pedidos.push(pedido);
-    return resultado;
+    return flujoDe(resultado);
   };
   return { crear, pedidos };
 }
 
-/** Doble de crearMensaje que se cae. */
-const proveedorCaido: typeof crearMensaje = async () => {
+function flujoDe(resultado: ResultadoMensajes): FlujoMensajes {
+  async function* fragmentos() {
+    yield resultado.texto;
+  }
+  return { fragmentos: fragmentos(), resultado: Promise.resolve(resultado), cancelar: () => {} };
+}
+
+/** Lo que la usuaria termina viendo, y las métricas del flujo. */
+async function consumir(flujo: FlujoMensajes) {
+  let texto = "";
+  for await (const parte of flujo.fragmentos) texto += parte;
+  const { tokensEntrada, tokensSalida, cacheLeido } = await flujo.resultado;
+  return { respuesta: texto, tokensEntrada, tokensSalida, cacheLeido };
+}
+
+/** Doble de crearMensajeStreaming que se cae. */
+const proveedorCaido: typeof crearMensajeStreaming = async () => {
   throw new Error("HTTP 529: overloaded — este texto NO puede salir a la app");
 };
 
@@ -105,16 +126,16 @@ describe("historialAMensajes", () => {
   });
 });
 
-describe("responderAyuda — validación", () => {
+describe("responderAyudaStreaming — validación", () => {
   it("400 con la pregunta vacía", async () => {
     await expect(
-      responderAyuda({ pregunta: "   ", apiKey: CLAVE, systemPrompt: SYSTEM }),
+      responderAyudaStreaming({ pregunta: "   ", apiKey: CLAVE, systemPrompt: SYSTEM }),
     ).rejects.toMatchObject({ status: 400 });
   });
 
   it("400 pasados los 600 caracteres", async () => {
     await expect(
-      responderAyuda({
+      responderAyudaStreaming({
         pregunta: "a".repeat(LARGO_MAX_PREGUNTA + 1),
         apiKey: CLAVE,
         systemPrompt: SYSTEM,
@@ -124,27 +145,26 @@ describe("responderAyuda — validación", () => {
 
   it("600 justos pasan", async () => {
     const { crear } = proveedorQueContesta();
-    await expect(
-      responderAyuda({
-        pregunta: "a".repeat(LARGO_MAX_PREGUNTA),
-        apiKey: CLAVE,
-        systemPrompt: SYSTEM,
-        crear,
-      }),
-    ).resolves.toMatchObject({ respuesta: RESULTADO_OK.texto });
+    const flujo = await responderAyudaStreaming({
+      pregunta: "a".repeat(LARGO_MAX_PREGUNTA),
+      apiKey: CLAVE,
+      systemPrompt: SYSTEM,
+      crearStreaming: crear,
+    });
+    expect(await consumir(flujo)).toMatchObject({ respuesta: RESULTADO_OK.texto });
   });
 });
 
-describe("responderAyuda — sin clave", () => {
+describe("responderAyudaStreaming — sin clave", () => {
   it("503 con mensaje para la usuaria, sin llamar al proveedor", async () => {
     const { crear, pedidos } = proveedorQueContesta();
 
     const error = await atrapar<ApiError>(
-      responderAyuda({
+      responderAyudaStreaming({
         pregunta: "¿cómo cobro?",
         apiKey: "",
         systemPrompt: SYSTEM,
-        crear,
+        crearStreaming: crear,
       }),
     );
 
@@ -159,7 +179,7 @@ describe("responderAyuda — sin clave", () => {
     delete process.env.ANTHROPIC_API_KEY;
     try {
       await expect(
-        responderAyuda({ pregunta: "¿cómo cobro?", systemPrompt: SYSTEM }),
+        responderAyudaStreaming({ pregunta: "¿cómo cobro?", systemPrompt: SYSTEM }),
       ).rejects.toMatchObject({ status: 503 });
     } finally {
       if (original === undefined) delete process.env.ANTHROPIC_API_KEY;
@@ -168,14 +188,14 @@ describe("responderAyuda — sin clave", () => {
   });
 });
 
-describe("responderAyuda — el proveedor falla", () => {
+describe("responderAyudaStreaming — el proveedor falla", () => {
   it("502 y el detalle interno NO sale en el mensaje", async () => {
     const error = await atrapar<ApiError>(
-      responderAyuda({
+      responderAyudaStreaming({
         pregunta: "¿cómo cobro?",
         apiKey: CLAVE,
         systemPrompt: SYSTEM,
-        crear: proveedorCaido,
+        crearStreaming: proveedorCaido,
       }),
     );
 
@@ -186,11 +206,11 @@ describe("responderAyuda — el proveedor falla", () => {
   });
 
   it("el detalle sí va al log", async () => {
-    await responderAyuda({
+    await responderAyudaStreaming({
       pregunta: "¿cómo cobro?",
       apiKey: CLAVE,
       systemPrompt: SYSTEM,
-      crear: proveedorCaido,
+      crearStreaming: proveedorCaido,
     }).catch(() => undefined);
 
     expect(console.error).toHaveBeenCalledWith(
@@ -200,14 +220,14 @@ describe("responderAyuda — el proveedor falla", () => {
   });
 });
 
-describe("responderAyuda — el pedido que arma", () => {
+describe("responderAyudaStreaming — el pedido que arma", () => {
   it("usa Haiku 4.5 y el techo de tokens", async () => {
     const { crear, pedidos } = proveedorQueContesta();
-    await responderAyuda({
+    await responderAyudaStreaming({
       pregunta: "¿cómo cobro?",
       apiKey: CLAVE,
       systemPrompt: SYSTEM,
-      crear,
+      crearStreaming: crear,
     });
 
     expect(pedidos[0].model).toBe(MODELO_AYUDA);
@@ -217,11 +237,11 @@ describe("responderAyuda — el pedido que arma", () => {
 
   it("el system va cacheado y la pregunta DESPUÉS, en messages", async () => {
     const { crear, pedidos } = proveedorQueContesta();
-    await responderAyuda({
+    await responderAyudaStreaming({
       pregunta: "¿cómo cobro un turno?",
       apiKey: CLAVE,
       systemPrompt: SYSTEM,
-      crear,
+      crearStreaming: crear,
     });
 
     expect(pedidos[0].system).toEqual([
@@ -234,7 +254,7 @@ describe("responderAyuda — el pedido que arma", () => {
 
   it("el historial va antes de la pregunta nueva", async () => {
     const { crear, pedidos } = proveedorQueContesta();
-    await responderAyuda({
+    await responderAyudaStreaming({
       pregunta: "¿y si no me anduvo?",
       historial: [
         { rol: "usuaria", texto: "¿cómo cobro?" },
@@ -242,7 +262,7 @@ describe("responderAyuda — el pedido que arma", () => {
       ],
       apiKey: CLAVE,
       systemPrompt: SYSTEM,
-      crear,
+      crearStreaming: crear,
     });
 
     expect(pedidos[0].messages).toEqual([
@@ -252,16 +272,16 @@ describe("responderAyuda — el pedido que arma", () => {
     ]);
   });
 
-  it("devuelve la respuesta y las métricas, sin el resto del resultado", async () => {
+  it("entrega la respuesta por fragmentos y las métricas del flujo", async () => {
     const { crear } = proveedorQueContesta();
-    const r = await responderAyuda({
+    const flujo = await responderAyudaStreaming({
       pregunta: "¿cómo cobro?",
       apiKey: CLAVE,
       systemPrompt: SYSTEM,
-      crear,
+      crearStreaming: crear,
     });
 
-    expect(r).toEqual({
+    expect(await consumir(flujo)).toEqual({
       respuesta: RESULTADO_OK.texto,
       tokensEntrada: 40,
       tokensSalida: 60,

@@ -8,12 +8,28 @@ import {
   esHuerfana,
   ESTADO_TERMINAL,
   ESTADOS_EN_PIPELINE,
-  estadosSinSalida,
+  ESTADOS_SESION,
   keyAudio,
   LISTA_OPERACIONES,
   OPERACIONES,
   prefijoAudio,
 } from "@/lib/sesion-clinica/estados";
+
+/**
+ * Sanidad de la tabla: todo estado no terminal tiene al menos una salida (a
+ * otro estado o borrada). Vivía en estados.ts como `estadosSinSalida()`, pero
+ * no es comportamiento de la app —nadie la llamaba en producción—, sino la
+ * forma de esta afirmación. Vive donde se afirma.
+ */
+function estadosSinSalida(): string[] {
+  return ESTADOS_SESION.filter(
+    (estado) =>
+      estado !== ESTADO_TERMINAL &&
+      !LISTA_OPERACIONES.some(
+        (op) => op.desde.includes(estado) && op.hacia !== "mismo" && op.hacia !== estado,
+      ),
+  );
+}
 
 describe("tabla de transiciones", () => {
   it("todo estado no terminal tiene una salida", () => {

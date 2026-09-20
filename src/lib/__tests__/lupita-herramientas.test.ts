@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { HERRAMIENTAS_AYUDA, resolverHerramienta } from "@/app/api/_lib/casos-uso/ayuda/herramientas";
-import { responderAyuda, responderAyudaStreaming } from "@/app/api/_lib/casos-uso/responder-ayuda";
-import { crearMensajeStreaming, type PedidoMensajes, type ResultadoMensajes } from "@/lib/anthropic-mensajes";
+import { responderAyudaStreaming } from "@/app/api/_lib/casos-uso/responder-ayuda";
+import { crearMensajeStreaming, type FlujoMensajes, type PedidoMensajes, type ResultadoMensajes } from "@/lib/anthropic-mensajes";
 import { AYUDA_AGENDA_VACIA, AYUDA_FUERA_DE_ALCANCE } from "@/lib/glosario";
 
 const resultado = (nombre = "consultar_agenda", entrada: unknown = { periodo: "hoy" }): ResultadoMensajes => ({
@@ -9,6 +9,21 @@ const resultado = (nombre = "consultar_agenda", entrada: unknown = { periodo: "h
   motivoDeCorte: "tool_use", herramientas: [{ nombre, entrada }],
 });
 const vacia = async () => [];
+
+/** Doble de crearMensajeStreaming: un flujo con el texto (vacío en tool_use)
+ *  y el resultado ya resuelto. La agenda la agrega el caso de uso al final. */
+const flujoDe = (r: ResultadoMensajes): FlujoMensajes => ({
+  fragmentos: (async function* () { if (r.texto) yield r.texto; })(),
+  resultado: Promise.resolve(r),
+  cancelar: () => {},
+});
+
+/** Lo que la usuaria termina leyendo. */
+async function leer(flujo: FlujoMensajes): Promise<string> {
+  let texto = "";
+  for await (const parte of flujo.fragmentos) texto += parte;
+  return texto;
+}
 
 describe("herramientas cerradas de Lupita", () => {
   it.each(["hoy", "manana", "esta_semana"])("valida %s y devuelve la agenda vacía sin inventar", async periodo => {
@@ -50,29 +65,31 @@ describe("herramientas cerradas de Lupita", () => {
 
 describe("el caso de uso con la capacidad de agenda", () => {
   it("manda solo las dos herramientas cerradas, respeta el historial y no manda la agenda al proveedor", async () => {
-    const crear = vi.fn(async () => resultado("consultar_agenda", { periodo: "manana" }));
+    const crear = vi.fn(async () => flujoDe(resultado("consultar_agenda", { periodo: "manana" })));
     const consultarAgenda = vi.fn(async () => [{ nombre: "PACIENTE_DE_PRUEBA", dia: "2026-09-18", hora: "15:15", duracion: 50, modalidad: "online" as const }]);
-    const respuesta = await responderAyuda({
+    const flujo = await responderAyudaStreaming({
       pregunta: "¿y mañana?", historial: [{ rol: "usuaria", texto: "¿Qué turnos tengo hoy?" }],
-      apiKey: "prueba", systemPrompt: "ayuda", crear, consultarAgenda,
+      apiKey: "prueba", systemPrompt: "ayuda", crearStreaming: crear, consultarAgenda,
     });
+    const texto = await leer(flujo);
     expect(consultarAgenda).toHaveBeenCalledExactlyOnceWith("manana");
-    expect(respuesta.respuesta).toContain("2026-09-18 · 15:15 · PACIENTE_DE_PRUEBA · 50 min · online");
+    expect(texto).toContain("2026-09-18 · 15:15 · PACIENTE_DE_PRUEBA · 50 min · online");
     expect(crear).toHaveBeenCalledTimes(1);
     const pedido = crear.mock.calls[0] as unknown as [PedidoMensajes];
     expect(pedido[0].tools).toEqual(HERRAMIENTAS_AYUDA);
     expect(pedido[0].tools?.map(h => h.name)).toEqual(["consultar_agenda", "fuera_de_alcance"]);
     expect(pedido[0].tool_choice).toEqual({ type: "auto", disable_parallel_tool_use: true });
     expect(JSON.stringify(pedido)).not.toContain("PACIENTE_DE_PRUEBA");
-    expect(respuesta.tokensEntrada).toBe(10);
+    await expect(flujo.resultado).resolves.toMatchObject({ tokensEntrada: 10 });
   });
   it("no corta un listado largo por el límite de tokens del modelo", async () => {
-    const respuesta = await responderAyuda({ pregunta: "Turnos esta semana", apiKey: "prueba", systemPrompt: "ayuda",
-      crear: async () => resultado("consultar_agenda", { periodo: "esta_semana" }),
+    const flujo = await responderAyudaStreaming({ pregunta: "Turnos esta semana", apiKey: "prueba", systemPrompt: "ayuda",
+      crearStreaming: async () => flujoDe(resultado("consultar_agenda", { periodo: "esta_semana" })),
       consultarAgenda: async () => Array.from({ length: 100 }, (_, i) => ({ nombre: `Paciente ${i}`, dia: "2026-09-18", hora: "10:00", duracion: 50, modalidad: "presencial" })),
     });
-    expect(respuesta.respuesta.split("\n")).toHaveLength(101);
-    expect(respuesta.respuesta).toContain("Paciente 99");
+    const texto = await leer(flujo);
+    expect(texto.split("\n")).toHaveLength(101);
+    expect(texto).toContain("Paciente 99");
   });
   it("lee tool_use real del SDK por SSE y muestra el listado, con métricas y una sola consulta", async () => {
     const eventos = [

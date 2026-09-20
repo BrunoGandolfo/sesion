@@ -15,7 +15,6 @@
 // Runtime nodejs: importa el corpus, que lee del disco.
 
 import {
-  crearMensaje,
   crearMensajeStreaming,
   MODELO_AYUDA,
   systemCacheado,
@@ -72,7 +71,7 @@ export interface TurnoAyuda {
   texto: string;
 }
 
-export interface ResponderAyudaInput {
+export interface ResponderAyudaStreamingInput {
   pregunta: string;
   /** Los turnos previos, del más viejo al más nuevo. Se recortan a los
    *  últimos MAX_TURNOS_HISTORIAL. */
@@ -80,22 +79,11 @@ export interface ResponderAyudaInput {
   /** Por defecto process.env.ANTHROPIC_API_KEY. Explícito para los tests. */
   apiKey?: string;
   /** Inyectable: los tests pasan un doble en vez de llamar a Anthropic. */
-  crear?: typeof crearMensaje;
+  crearStreaming?: typeof crearMensajeStreaming;
   /** Inyectable: evita leer el corpus del disco en los tests del caso de uso. */
   systemPrompt?: string;
   /** Capacidad cerrada, ligada por el servidor a la organización autenticada. */
   consultarAgenda?: ConsultarAgenda;
-}
-
-export interface ResponderAyudaStreamingInput extends ResponderAyudaInput {
-  crearStreaming?: typeof crearMensajeStreaming;
-}
-
-export interface RespuestaAyuda {
-  respuesta: string;
-  tokensEntrada: number;
-  tokensSalida: number;
-  cacheLeido: number;
 }
 
 /**
@@ -116,66 +104,13 @@ export function historialAMensajes(
 }
 
 /**
- * Pregunta → respuesta. Lanza ApiError 400 (pregunta inválida), 503 (sin
- * clave configurada) o 502 (el proveedor falló).
+ * Pregunta → respuesta, por fragmentos. Lanza ApiError 400 (pregunta
+ * inválida), 503 (sin clave configurada) o 502 (el proveedor falló).
+ *
+ * Es la única forma de preguntar: la variante que devolvía la respuesta
+ * entera existió hasta que la ruta pasó a streaming y después no la llamó
+ * nadie más que sus propios tests.
  */
-export async function responderAyuda(
-  input: ResponderAyudaInput,
-): Promise<RespuestaAyuda> {
-  const pregunta = input.pregunta.trim();
-
-  if (pregunta === "") {
-    throw new ApiError(MENSAJE_PREGUNTA_VACIA, 400);
-  }
-  if (pregunta.length > LARGO_MAX_PREGUNTA) {
-    throw new ApiError(MENSAJE_PREGUNTA_LARGA, 400);
-  }
-
-  const apiKey = input.apiKey ?? process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    // No es un error del que haya que enterarse por Sentry cada vez: es el
-    // estado normal en local. Se loguea una línea y se contesta 503.
-    console.warn("[ayuda] ANTHROPIC_API_KEY no configurada");
-    throw new ApiError(MENSAJE_SIN_CLAVE, 503);
-  }
-
-  const crear = input.crear ?? crearMensaje;
-  const system = input.systemPrompt ?? systemPromptAyuda();
-
-  let resultado: ResultadoMensajes;
-  try {
-    resultado = await crear(
-      {
-        model: MODELO_AYUDA,
-        max_tokens: MAX_TOKENS_RESPUESTA,
-        // El system va primero y entero: es el prefijo que se cachea.
-        system: systemCacheado(system),
-        ...(input.consultarAgenda ? { tools: HERRAMIENTAS_AYUDA, tool_choice: { type: "auto" as const, disable_parallel_tool_use: true } } : {}),
-        // Todo lo variable va después del corte del caché.
-        messages: [
-          ...historialAMensajes(input.historial ?? []),
-          { role: "user", content: pregunta },
-        ],
-      },
-      { apiKey },
-    );
-  } catch (error) {
-    // El detalle del proveedor va al log de la función y muere ahí.
-    console.error("[ayuda] fallo del proveedor", error);
-    throw new ApiError(MENSAJE_PROVEEDOR_CAIDO, 502);
-  }
-
-  return {
-    respuesta: input.consultarAgenda
-      ? await resolverHerramienta(resultado, input.consultarAgenda) ?? resultado.texto
-      : resultado.texto,
-    tokensEntrada: resultado.tokensEntrada,
-    tokensSalida: resultado.tokensSalida,
-    cacheLeido: resultado.cacheLeido,
-  };
-}
-
-/** La variante incremental: valida y arma exactamente el mismo pedido. */
 export async function responderAyudaStreaming(
   input: ResponderAyudaStreamingInput,
 ): Promise<FlujoMensajes> {

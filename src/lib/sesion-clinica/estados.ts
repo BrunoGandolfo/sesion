@@ -137,21 +137,6 @@ export const ESTADOS_EN_PIPELINE: ReadonlySet<EstadoSesion> = new Set(
   ),
 );
 
-/** Sanidad de la tabla: todo estado no terminal tiene al menos una salida
- *  (a otro estado o borrada). Se verifica en el test, no en runtime. */
-export function estadosSinSalida(): EstadoSesion[] {
-  return ESTADOS_SESION.filter(
-    (estado) =>
-      estado !== ESTADO_TERMINAL &&
-      !LISTA_OPERACIONES.some(
-        (op) =>
-          op.desde.includes(estado) &&
-          op.hacia !== "mismo" &&
-          op.hacia !== estado,
-      ),
-  );
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Audio en R2: la key se calcula, nunca se persiste ni la manda un cliente.
 // ────────────────────────────────────────────────────────────────────────────
