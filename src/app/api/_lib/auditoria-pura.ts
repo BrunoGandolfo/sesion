@@ -72,7 +72,7 @@ function primitivoSeguro(value: unknown): Primitivo | undefined {
 }
 
 /**
- * Función PURA. Devuelve una copia de `detalle` apta para persistir:
+ * Devuelve una copia de `detalle` apta para persistir:
  *   - conserva solo primitivos (string truncado a 120 chars, number finito,
  *     boolean, null) y arrays de primitivos cortos (≤ 20 elementos, cada uno
  *     con las mismas reglas; los elementos no primitivos se descartan);
@@ -80,28 +80,67 @@ function primitivoSeguro(value: unknown): Primitivo | undefined {
  *   - elimina las claves de la lista negra (texto clínico / PII / criptografía).
  * Con `undefined` devuelve `undefined`; con un objeto que queda vacío devuelve
  * `{}` (se persiste igual: la ausencia de detalle también es información).
+ *
+ * ─── POR QUÉ AVISA ──────────────────────────────────────────────────────────
+ *
+ * El filtro descartaba en silencio. El 18 de septiembre el diagnóstico del
+ * grabador viajaba como objeto anidado: nunca llegó a la tabla y nadie se
+ * enteró, porque la ruta respondía 200 y la fila quedaba con un detalle a
+ * medias. Ahora cada descarte deja una línea en el log con el NOMBRE de la
+ * clave —nunca el valor, que es justo lo que el filtro existe para no dejar
+ * salir— y se distinguen las dos causas, que se arreglan distinto:
+ *
+ *   "forma"     el valor no es primitivo (un objeto anidado, casi siempre).
+ *               Es un error de quien llama: hay que aplanarlo antes.
+ *   "prohibida" la clave está en la lista negra. El filtro hizo su trabajo;
+ *               el aviso está para que no se confunda con lo anterior.
+ *
+ * Deja de ser una función pura en sentido estricto —escribe en el log—, pero
+ * lo que devuelve sigue dependiendo sólo de lo que recibe, y sigue sin
+ * importar db ni Prisma: los tests unitarios la importan igual.
  */
 export function detalleSeguro(
   detalle: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (detalle === undefined) return undefined;
   const out: Record<string, unknown> = {};
+  const prohibidas: string[] = [];
+  const porForma: string[] = [];
   for (const [clave, valor] of Object.entries(detalle)) {
-    if (CLAVES_PROHIBIDAS.has(clave)) continue;
+    if (CLAVES_PROHIBIDAS.has(clave)) {
+      prohibidas.push(clave);
+      continue;
+    }
     if (Array.isArray(valor)) {
       const items: Primitivo[] = [];
+      let descartados = 0;
       for (const item of valor) {
         if (items.length >= DETALLE_MAX_ARRAY) break;
         const p = primitivoSeguro(item);
-        if (p !== undefined) items.push(p);
+        if (p === undefined) descartados += 1;
+        else items.push(p);
       }
+      if (descartados > 0) porForma.push(`${clave}[]`);
       out[clave] = items;
       continue;
     }
     const p = primitivoSeguro(valor);
-    if (p !== undefined) out[clave] = p;
+    if (p === undefined) porForma.push(clave);
+    else out[clave] = p;
   }
+  avisar("forma", porForma);
+  avisar("prohibida", prohibidas);
   return out;
+}
+
+/** Una línea por causa, con los nombres de las claves y ningún valor. */
+function avisar(causa: "forma" | "prohibida", claves: string[]): void {
+  if (claves.length === 0) return;
+  console.warn(
+    causa === "forma"
+      ? `[auditoria] detalle: descartado por forma (no es primitivo ni array de primitivos): ${claves.join(", ")}`
+      : `[auditoria] detalle: descartado por clave prohibida: ${claves.join(", ")}`,
+  );
 }
 
 /**
