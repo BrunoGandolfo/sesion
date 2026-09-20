@@ -13,6 +13,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { apiPost } from "@/lib/api-client";
+import { ULTIMA_SESION_CON_SENAL } from "@/lib/glosario";
 import { hiloVacio, type ContenidoHilo, type ResumenVersionHilo } from "@/lib/hilo/contenido";
 
 import { RecorridoImprimible } from "../recorrido-imprimible";
@@ -92,4 +93,13 @@ async function hoja(ultimaConSenal: boolean): Promise<string> {
 
 it("sin señal en la última sesión, la hoja es idéntica a la de antes del cambio de pantalla", async () => {
   await expect(await hoja(false)).toMatchFileSnapshot("./__snapshots__/hoja-sin-senal.html");
+});
+
+it("la única diferencia admitida: con señal en la última sesión, el papel muestra la misma alerta que la pantalla", async () => {
+  expect(await hoja(false)).not.toContain(ULTIMA_SESION_CON_SENAL);
+  cleanup();
+  const conSenal = await hoja(true);
+  expect(conSenal).toContain(ULTIMA_SESION_CON_SENAL);
+  // «Sin riesgo» en el texto no es lo que la enciende: es el nivel que marcó el servidor.
+  expect(conSenal).toContain("Sin riesgo a la vista");
 });

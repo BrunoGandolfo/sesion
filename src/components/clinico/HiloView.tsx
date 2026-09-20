@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, Card } from "@/components/ui";
 import { apiGet, apiPost, ApiClientError, esAbort } from "@/lib/api-client";
 import { formatearFechaCompletaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
 import { contenidoHiloSchema, hiloVacio, type ContenidoHilo, type Recorrido, type VersionHilo } from "@/lib/hilo/contenido";
-import { HiloContenido } from "./HiloContenido";
+import { HiloContenido, ORDEN_PANTALLA } from "./HiloContenido";
 import { HiloEditor } from "./HiloEditor";
 import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 import { SALIDA_RECORRIDO, DESCARTAR_BORRADOR, DESCARTAR_PROPUESTA, DESCARTAR_BORRADOR_ACCION } from "@/lib/glosario";
@@ -15,7 +15,10 @@ type Borrador = { basadaEnVersion: number; contenido: ContenidoHilo; propuestaId
 const fecha = (iso: string) => `${formatearFechaCompletaMvd(new Date(iso))}, ${formatearHoraMvd(new Date(iso))}`;
 const mensaje = (e: unknown) => e instanceof Error ? e.message : "No pudimos cargar el Recorrido. Probá de nuevo.";
 
-export function HiloView({ pacienteId }: { pacienteId: string }) {
+// El orden de la pantalla: la versión vigente (lo que el Recorrido tiene y la
+// lista de sesiones no), lo que está por resolverse —propuestas y tu borrador—,
+// los indicadores que le pasa la pestaña, y al final, aparte, el historial.
+export function HiloView({ pacienteId, indicadores }: { pacienteId: string; indicadores?: ReactNode }) {
   const url = `/api/pacientes/${pacienteId}/hilo`;
   const [datos, setDatos] = useState<Recorrido | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +28,11 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
   const [comparar, setComparar] = useState(false);
   const [historica, setHistorica] = useState<VersionHilo | null>(null);
   useProtegerTrabajo(borrador !== null, SALIDA_RECORRIDO);
+  // El editor se abre debajo de la versión vigente, fuera de la vista de
+  // quien tocó "Editar" arriba o "Usar como borrador" abajo: se la lleva ahí.
+  const editorRef = useRef<HTMLDivElement>(null);
+  const editando = borrador !== null;
+  useEffect(() => { if (editando) editorRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, [editando]);
   const confirmarSalida = useSalidaProtegida();
   const cargar = useCallback(async (signal?: AbortSignal) => {
     const r = await apiGet<Recorrido>(url, { signal });
@@ -93,7 +101,7 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
           <p className="mt-1 text-sm text-ink-500">{vigente ? `${vigente.actor === "ia" ? "Propuesta aceptada" : "Revisado por vos"} el ${fecha(vigente.resueltaEn ?? vigente.creadaEn)}` : "Todavía no hay un Recorrido revisado."}</p></div>
           <Button variant="secondary" disabled={ocupado || !!borrador} onClick={() => editar(vigente?.contenido ?? hiloVacio())}>Editar Recorrido</Button>
         </div>
-        {vigente ? <HiloContenido contenido={vigente.contenido} sesiones={datos.sesionesAprobadas} /> : <p>Podés escribirlo o esperar una propuesta después de aprobar una nota.</p>}
+        {vigente ? <HiloContenido pantalla contenido={vigente.contenido} sesiones={datos.sesionesAprobadas} /> : <p>Podés escribirlo o esperar una propuesta después de aprobar una nota.</p>}
       </Card>
       {propuesta ? <Card className="space-y-4 border-sage-200 p-5">
         <h3 className="font-semibold">Hay una propuesta nueva</h3>
@@ -101,9 +109,9 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
         {propuesta.sesionOrigenId ? <Link className="underline" href={`/sesiones/${propuesta.sesionOrigenId}`}>Ver nota de origen</Link> : null}
         <ul className="list-inside list-disc">{propuesta.contenido.cambios.map((c, i) => <li key={i}>{c}</li>)}</ul>
         <Button variant="secondary" onClick={() => setComparar(!comparar)}>{comparar ? "Cerrar comparación" : "Ver propuesta"}</Button>
-        {comparar ? <div className="space-y-5">{(["hipotesisDiagnostica", "resumenAcumulativo", "objetivosTerapeuticos", "intervencionesProbadas", "temasRecurrentes", "riesgosHistoricos"] as const).map(campo => <div key={campo} className="grid gap-4 border-t border-[color:var(--border-subtle)] pt-4 md:grid-cols-2">
-          <section><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Vigente</p><HiloContenido solo={campo} contenido={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section>
-          <section className="rounded-md bg-sage-50 p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sage-700">Propuesta</p><HiloContenido solo={campo} contenido={propuesta.contenido} anterior={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section>
+        {comparar ? <div className="space-y-5">{ORDEN_PANTALLA.map(campo => <div key={campo} className="grid gap-4 border-t border-[color:var(--border-subtle)] pt-4 md:grid-cols-2">
+          <section><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Vigente</p><HiloContenido pantalla solo={campo} contenido={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section>
+          <section className="rounded-md bg-sage-50 p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sage-700">Propuesta</p><HiloContenido pantalla solo={campo} contenido={propuesta.contenido} anterior={vigente?.contenido ?? hiloVacio()} sesiones={datos.sesionesAprobadas} /></section>
         </div>)}</div> : null}
         <div className="flex flex-wrap gap-3">
           <Button disabled={ocupado || !!borrador} onClick={() => accion(`/propuestas/${propuesta.id}/aceptar`, { basadaEnVersion: base })}>Aceptar</Button>
@@ -117,23 +125,26 @@ export function HiloView({ pacienteId }: { pacienteId: string }) {
         <Button variant="secondary" disabled={ocupado || !!borrador} onClick={() => accion("/regenerar", { basadaEnVersion: base, propuestaId: p.id })}>Volver a generar sobre el Recorrido actual</Button>
       </div></Card>)}
       {datos.trabajos.map(t => <p key={t.id} className="text-sm" role="status">{t.estado === "fallido" ? <>No se pudo preparar una propuesta. <Button variant="ghost" disabled={ocupado || !!borrador} onClick={() => accion("/regenerar", { basadaEnVersion: base, trabajoId: t.id })}>Volver a intentar</Button></> : propuesta ? "Hay otra sesión esperando que resuelvas la propuesta anterior." : "Preparando una propuesta…"}{t.sesionId ? <> <Link className="underline" href={`/sesiones/${t.sesionId}`}>Ver sesión</Link></> : null}</p>)}
-      {borrador ? <Card className="space-y-4 p-5">
+      {borrador ? <div ref={editorRef} className="scroll-mt-4"><Card className="space-y-4 p-5">
         <h3 className="font-semibold">{borrador.propuestaId ? "Editar propuesta" : "Tu edición del Recorrido"}</h3>
         <p className="text-sm">Al guardar se agrega una versión; las anteriores se conservan.</p>
         {propuesta && !borrador.propuestaId ? <p>Guardar tu edición dejará desactualizada la propuesta abierta.</p> : null}
         {conflicto ? <div role="alert"><p>El Recorrido cambió en otra pantalla. Tu borrador se conserva abajo. Revisá la versión vigente antes de continuar.</p><Button variant="secondary" onClick={() => { setBorrador({ ...borrador, basadaEnVersion: base, propuestaId: undefined }); setConflicto(false); }}>Ya leí la versión actual; continuar con mi borrador</Button></div> : null}
         <HiloEditor valor={borrador.contenido} cambiar={contenido => setBorrador({ ...borrador, contenido })} disabled={ocupado} sesiones={datos.sesionesAprobadas} />
         <div className="flex flex-wrap gap-3"><Button disabled={ocupado || conflicto} onClick={guardar}>{borrador.propuestaId ? "Guardar y aceptar" : "Guardar nueva versión"}</Button><Button variant="ghost" disabled={ocupado} onClick={() => confirmarSalida(() => setBorrador(null), { mensaje: DESCARTAR_BORRADOR, etiqueta: DESCARTAR_BORRADOR_ACCION })}>Cancelar edición</Button></div>
-      </Card> : null}
-      <details className="rounded-md border border-[color:var(--border-subtle)] p-4"><summary className="cursor-pointer font-semibold">Historial de versiones ({datos.historial.length}{datos.hayMas ? "+" : ""})</summary>
+      </Card></div> : null}
+    </>}
+    {indicadores}
+    {datos ? <>
+      <details className="rounded-md border border-[color:var(--border-subtle)] px-4 py-1.5"><summary className="cursor-pointer py-2.5 font-semibold">Historial de versiones ({datos.historial.length}{datos.hayMas ? "+" : ""})</summary>
         <ul className="mt-4 space-y-3">{datos.historial.map(v => <li key={v.id}><Button variant="ghost" disabled={ocupado} onClick={() => ver(v.version)}>Versión {v.version} · {v.actor === "ia" ? "Propuesta de IA" : "Edición profesional"} · {v.estado}</Button><p className="text-xs text-ink-500">{fecha(v.creadaEn)}{v.resueltaEn ? ` · Resuelta el ${fecha(v.resueltaEn)}` : ""}</p></li>)}</ul>
         {datos.hayMas ? <Button variant="secondary" disabled={ocupado} onClick={masHistoria}>Ver versiones anteriores</Button> : null}
       </details>
-      {historica ? <Card className="space-y-4 p-5"><h3 className="font-semibold">Versión {historica.version} · {historica.estado}</h3><HiloContenido contenido={historica.contenido} sesiones={datos.sesionesAprobadas} />
+      {historica ? <Card className="space-y-4 p-5"><h3 className="font-semibold">Versión {historica.version} · {historica.estado}</h3><HiloContenido pantalla contenido={historica.contenido} sesiones={datos.sesionesAprobadas} />
         <div className="flex flex-wrap gap-3"><Button variant="secondary" disabled={ocupado || !!borrador} onClick={() => editar(historica.contenido)}>Usar como borrador de una versión nueva</Button>
           {historica.actor === "ia" && historica.estado === "rechazada" && historica.sesionOrigenId ? <Button variant="secondary" disabled={ocupado || !!borrador} onClick={() => accion("/regenerar", { basadaEnVersion: base, propuestaId: historica.id })}>Volver a generar propuesta</Button> : null}
           <Button variant="ghost" onClick={() => setHistorica(null)}>Cerrar versión</Button></div>
       </Card> : null}
-    </>}
+    </> : null}
   </div>;
 }

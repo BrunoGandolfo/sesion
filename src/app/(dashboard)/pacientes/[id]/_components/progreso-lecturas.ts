@@ -271,34 +271,3 @@ export function lecturaIntervenciones(
 export function lecturaRatioHabla(): Lectura | null {
   return null;
 }
-
-// ============================================
-// Progreso percibido — detección de términos de deterioro/riesgo
-// ============================================
-const TERMINOS_DETERIORO = [
-  "retroceso",
-  "deterioro",
-  "empeor",
-  "riesgo",
-  "crisis",
-  "recaida",
-  "ideacion",
-  "autolesion",
-  "suicid",
-  "descompensa",
-];
-
-/** True si el texto contiene términos de deterioro o riesgo (comparación
- *  sin tildes y sin mayúsculas). Decide el borde terracotta de la card. */
-export function contieneTerminosDeterioro(texto: string): boolean {
-  // NFD separa cada tilde en un combining mark (U+0300..U+036F), que acá
-  // se descarta para comparar sin acentos.
-  const plano = Array.from(texto.normalize("NFD"))
-    .filter((ch) => {
-      const code = ch.codePointAt(0) ?? 0;
-      return code < 0x0300 || code > 0x036f;
-    })
-    .join("")
-    .toLowerCase();
-  return TERMINOS_DETERIORO.some((t) => plano.includes(t));
-}
