@@ -109,7 +109,10 @@ async function crearEnvio(o: Opciones = {}) {
 
 const leer = (id: string) => prismaRaw.envioSms.findUniqueOrThrow({ where: { id } });
 
-/** Retrasa `actualizado_en` para simular una reserva huérfana (@updatedAt: por SQL). */
+/** Retrasa `actualizado_en` para simular una reserva huérfana (@updatedAt: por SQL).
+ *  La columna es `timestamp WITHOUT time zone` y el valor entra por SQL crudo,
+ *  o sea CON zona: es la sesión de Postgres la que decide dónde aterriza. La
+ *  fija en UTC conectarBaseDeTest(); ver el porqué ahí. */
 async function envejecer(id: string, cuando: Date) {
   await prismaRaw.$executeRaw`UPDATE envios_sms SET actualizado_en = ${cuando} WHERE id = ${id}`;
 }

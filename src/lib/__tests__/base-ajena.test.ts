@@ -83,3 +83,20 @@ it("la suite apuntada a una base ajena con el esquema de Sesión aborta antes de
     { id: organizacionAjena, nombre: "Datos que no son de la suite" },
   ]);
 }, 120_000);
+
+// ────────────────────────────────────────────────────────────────────────────
+// El reloj de la base
+//
+// `npm test` fija TZ=UTC para el proceso de Node; esto es la otra mitad. Las
+// columnas de fecha son `timestamp WITHOUT time zone`, así que un valor que
+// entra por SQL crudo aterriza donde diga la zona de la SESIÓN de Postgres.
+// La imagen postgres:17 y el runner de CI corren en UTC; un Postgres
+// instalado en Uruguay, en America/Montevideo, y ahí un caso de
+// despachar-sms daba rojo sin que nada del código hubiera cambiado.
+// conectarBaseDeTest lo fija en la conexión: esto lo vigila.
+// ────────────────────────────────────────────────────────────────────────────
+
+it("la conexión de test habla UTC, sea cual sea la zona del servidor", async () => {
+  const [{ TimeZone }] = await base.prisma.$queryRawUnsafe<{ TimeZone: string }[]>("SHOW TimeZone");
+  expect(TimeZone).toBe("UTC");
+});

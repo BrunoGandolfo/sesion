@@ -7,11 +7,21 @@ import { reprocesarSesion } from '@/app/api/_lib/casos-uso/sesion/reprocesar';
 import { aplicarResultadoSesion } from '@/app/api/_lib/casos-uso/sesion/resultado';
 import { reclamarSesiones } from '@/app/api/_lib/casos-uso/sesion/reclamar';
 import { cifrarSesion } from '@/lib/prisma-encryption';
+import { __resetLlaveroForTests } from '@/lib/llavero';
+import { CLAVES_CIFRADO_TEST } from './base-identidad';
 let base: ReturnType<typeof conectarBaseDeTest>;
 let org: string, paciente: string, turno: string;
 const ahora = new Date('2026-09-15T15:00:00Z');
 const nota = (s:string) => ({subjetivo:s,objetivo:'observacion ficticia',analisis:'analisis ficticio',plan:'plan ficticio'});
-beforeAll(()=> {base=conectarBaseDeTest()});
+// La clave se pone ACÁ y no se hereda del ambiente. Este archivo fallaba al
+// importar en cualquier máquina donde CLAVES_CIFRADO no estuviera exportada,
+// y pasaba en CI sólo porque ci.yml la declara a nivel de workflow: el
+// veredicto de la suite no puede depender de qué tenga cargado la terminal.
+beforeAll(()=> {
+ process.env.CLAVES_CIFRADO = CLAVES_CIFRADO_TEST;
+ __resetLlaveroForTests();
+ base=conectarBaseDeTest();
+});
 afterAll(async()=>base.prisma.$disconnect());
 beforeEach(async()=>{
  await vaciarTablas(base.prisma);
