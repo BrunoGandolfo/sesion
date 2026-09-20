@@ -865,15 +865,16 @@ function RegistrarPago({
             ? `${pluralizar(elegidas.length, "sesión", "sesiones")} · ${money(total)}`
             : " "}
         </p>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={onCancelar} className="flex-1 lg:flex-none">
+        {/* En el teléfono van apilados, el principal arriba: lado a lado,
+            "Elegir método de pago" se partía en tres renglones. */}
+        <div className="flex flex-col-reverse gap-2 lg:flex-row">
+          <Button variant="secondary" size="sm" onClick={onCancelar}>
             Cancelar
           </Button>
           <Button
             size="sm"
             disabled={elegidas.length === 0}
             onClick={() => onElegirMetodo(elegidas.map((t) => t.id))}
-            className="flex-1 lg:flex-none"
           >
             {ELEGIR_METODO_DE_PAGO}
           </Button>
