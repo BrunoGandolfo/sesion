@@ -354,6 +354,17 @@ vi.mock("@/lib/db", () => {
     baseDeDatos.vigentes = 0;
     return { count };
   };
+  // El evento sólo se anota si viene por el cliente de la TRANSACCIÓN. Firmar
+  // y revocar son actos legales: su rastro se confirma con el acto o no
+  // ocurre. Si alguien lo volviera a escribir con el `db` global —después del
+  // COMMIT y sin poder volver atrás—, este doble lo hace explotar acá en vez
+  // de dejar pasar un acto sin rastro.
+  const eventoAuditoriaEnLaTransaccion = {
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      baseDeDatos.eventos.push(data);
+      return data;
+    },
+  };
   const db = {
     paciente: { findFirst: async () => baseDeDatos.paciente },
     configuracion: { findUnique: async () => ({ nombreProfesional: "Lic. Ana Pérez", direccion: "Av. 18 de Julio 1234, Montevideo" }) },
@@ -365,13 +376,13 @@ vi.mock("@/lib/db", () => {
       },
     },
     eventoAuditoria: {
-      create: async ({ data }: { data: Record<string, unknown> }) => {
-        baseDeDatos.eventos.push(data);
-        return data;
+      create: async () => {
+        throw new Error("El rastro de firmar/revocar va DENTRO de la transacción, no con el db global");
       },
     },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
+        eventoAuditoria: eventoAuditoriaEnLaTransaccion,
         consentimientoGrabacion: {
           updateMany: revocarVigentes,
           create: async ({ data }: { data: Record<string, unknown> }) => {
