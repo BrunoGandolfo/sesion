@@ -14,7 +14,9 @@ import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { PRUEBA_TOPE } from "@/lib/glosario";
 import { TOPE_GRABACIONES_PRUEBA } from "@/lib/limites-prueba";
 import { keyAudio } from "@/lib/sesion-clinica/estados";
-import type { PausaGrabacion } from "@/lib/sesion-clinica/schema";
+import type { DiagnosticoGrabacion, PausaGrabacion } from "@/lib/sesion-clinica/schema";
+
+import { DETALLE_MAX_ARRAY } from "../auditoria-pura";
 
 import { ApiError } from "../responses";
 import { SESION_SELECT, toSesionClinicaResponse } from "../sesion-clinica";
@@ -149,4 +151,31 @@ export async function confirmarSubida(input: Sesion & { key: string; duracionAud
     conflicto: "La sesión cambió de estado durante la confirmación",
   });
   return { bytes, sesion: toSesionClinicaResponse(await leerSesion(prisma, sesionId, organizationId)) };
+}
+
+/**
+ * El diagnóstico del grabador, en la forma que la auditoría acepta.
+ *
+ * `detalleSeguro` (auditoria-pura.ts) sólo deja pasar primitivos y arrays
+ * cortos de primitivos, y descarta en silencio cualquier objeto anidado: es su
+ * garantía de que al rastro no entra texto clínico. El diagnóstico llegaba como
+ * objeto y por eso se perdió entero en las primeras grabaciones reales (19/9).
+ *
+ * Acá se aplana: los conteos como números y cada evento como un string
+ * "hora tipo [ms]", en tandas de DETALLE_MAX_ARRAY bajo `diagnostico`,
+ * `diagnostico2`, `diagnostico3`… Todo lo que entra ya pasó por el schema Zod:
+ * horas ISO, tipos de una lista cerrada y enteros. No hay texto libre.
+ */
+export function diagnosticoParaAuditoria(diagnostico: DiagnosticoGrabacion): Record<string, number | string[]> {
+  const eventos = diagnostico.eventos.map((e) => `${e.t} ${e.tipo}${e.ms === undefined ? "" : ` ${e.ms}`}`);
+  const detalle: Record<string, number | string[]> = {
+    diagnosticoChunks: diagnostico.chunks,
+    diagnosticoBytes: diagnostico.bytes,
+    diagnosticoEventos: eventos.length,
+    diagnostico: eventos.slice(0, DETALLE_MAX_ARRAY),
+  };
+  for (let desde = DETALLE_MAX_ARRAY, tanda = 2; desde < eventos.length; desde += DETALLE_MAX_ARRAY, tanda += 1) {
+    detalle[`diagnostico${tanda}`] = eventos.slice(desde, desde + DETALLE_MAX_ARRAY);
+  }
+  return detalle;
 }

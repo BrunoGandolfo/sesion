@@ -15,6 +15,9 @@
 
 /** Tope de una grabación: 150 minutos de audio recibido. */
 export const LIMITE_SEGUNDOS = 9000;
+/** Menos que esto es un toque accidental: no se sube ni se transcribe. El
+ *  19/9 una grabación de 2 s se subió, pagó el ASR y terminó fallida. */
+export const MINIMO_SEGUNDOS = 10;
 /** A los 135 minutos se avisa que quedan 15. */
 export const AVISO_LIMITE_SEGUNDOS = 8100;
 /** Cada cuánto se le pide audio al MediaRecorder. */
