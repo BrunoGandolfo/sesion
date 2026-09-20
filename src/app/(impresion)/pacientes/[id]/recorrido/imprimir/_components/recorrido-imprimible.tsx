@@ -30,7 +30,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 
 import { AlianzaChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/alianza";
 import type { ProgresoResponse } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/base";
-import { CardDeLaUltima, SESIONES_PARA_GRAFICOS } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor";
+import { LecturasDeLaUltima, SESIONES_PARA_GRAFICOS } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor";
 import { FlagsRiesgoTimeline } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/flags";
 import { IntensidadChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/intensidad";
 import { IntervencionesChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/intervenciones";
@@ -43,10 +43,8 @@ import { formatearFechaCompletaMvd, formatearFechaCortaMvd, formatearHoraMvd, pa
 import {
   COMO_VA,
   IMPRIMIR_O_GUARDAR_PDF,
-  OBSERVACION_IA,
   POCO_RECORRIDO_DETALLE,
   POCO_RECORRIDO_TITULO,
-  PROGRESO_PERCIBIDO,
   RECORRIDO,
   pieRecorridoPdf,
   pluralizar,
@@ -229,18 +227,9 @@ function Hoja({ datos }: { datos: Exportacion }) {
                     <AlianzaChart sesiones={sesionesGraficos} />
                     <TemasTable temas={progreso.temas} sesiones={sesionesGraficos} />
                     <IntervencionesChart sesiones={sesionesGraficos} />
-                    <CardDeLaUltima
-                      rotulo={PROGRESO_PERCIBIDO}
-                      texto={ultimaConNota.progresoPercibido}
-                      sesionId={ultimaConNota.sesionId}
-                      fecha={new Date(ultimaConNota.fecha)}
-                    />
-                    <CardDeLaUltima
-                      rotulo={OBSERVACION_IA}
-                      texto={ultimaConNota.observacionIA}
-                      sesionId={ultimaConNota.sesionId}
-                      fecha={new Date(ultimaConNota.fecha)}
-                    />
+                    {/* La misma pieza que la pantalla: la alerta de la última
+                        sesión sale igual en el papel. */}
+                    <LecturasDeLaUltima ultima={ultimaConNota} />
                   </div>
                 )}
               </Seccion>

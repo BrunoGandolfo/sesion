@@ -2,8 +2,10 @@
 
 import { fechaCompleta } from "@/lib/format";
 
-// Contenedor del Recorrido ("Cómo va"): selector de período, carga de
-// /progreso para ese período y la secuencia de gráficos.
+// Los indicadores por sesión del Recorrido: selector de período, carga de
+// /progreso para ese período y la secuencia de gráficos. En pantalla no tienen
+// nombre propio que compita con "Recorrido", y dicen lo que son: estimaciones
+// del sistema, no una medición clínica validada.
 //
 // El período viaja en la URL (?rango=): así el enlace que ella se manda a sí
 // misma, o el back del navegador, vuelven a lo que estaba mirando. La carga
@@ -19,15 +21,16 @@ import { AlertTriangle, ChevronDown } from "lucide-react";
 
 import { Button, Card, EditorialRule } from "@/components/ui";
 import { apiGet, esAbort } from "@/lib/api-client";
-import { ALGO_FALLO, COMO_VA, REINTENTAR } from "@/lib/glosario";
+import { ALGO_FALLO, REINTENTAR } from "@/lib/glosario";
 
-import { contieneTerminosDeterioro } from "../progreso-lecturas";
 import { AlianzaChart } from "./alianza";
 import {
   esRango,
   fechaDe,
+  tieneSenal,
   type ProgresoResponse,
   type RangoProgreso,
+  type SesionProgreso,
 } from "./base";
 import { FlagsRiesgoTimeline } from "./flags";
 import { IntensidadChart } from "./intensidad";
@@ -36,6 +39,8 @@ import { SelectorRango } from "./selector-rango";
 import { TemasTable } from "./temas";
 import {
   DESDE_LA_TERCERA,
+  INDICADORES_POR_SESION,
+  INDICADORES_SON_ESTIMACIONES,
   OBSERVACION_IA,
   POCO_RECORRIDO_DETALLE,
   POCO_RECORRIDO_TITULO,
@@ -43,6 +48,7 @@ import {
   RANGO_SIN_SESIONES,
   SIN_SESIONES_DETALLE,
   SIN_SESIONES_TITULO,
+  ULTIMA_SESION_CON_SENAL,
   VER_LA_SESION,
 } from "./textos";
 
@@ -109,20 +115,20 @@ export function GraficosProgreso({ pacienteId }: { pacienteId: string }) {
   const abierto = abiertoManual ?? haySuficiente;
 
   return (
-    <section aria-labelledby="como-va-heading">
+    <section aria-labelledby="indicadores-heading">
       <button
         type="button"
         aria-expanded={abierto}
         onClick={() => setAbiertoManual(!abierto)}
-        className="mb-3 flex w-full items-center justify-between gap-3 text-left"
+        className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
       >
         <span className="flex items-center">
           <EditorialRule />
           <span
-            id="como-va-heading"
+            id="indicadores-heading"
             className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500"
           >
-            {COMO_VA}
+            {INDICADORES_POR_SESION}
           </span>
         </span>
         <span className="flex items-center gap-2 font-sans text-[12px] text-ink-500">
@@ -137,6 +143,9 @@ export function GraficosProgreso({ pacienteId }: { pacienteId: string }) {
           />
         </span>
       </button>
+      <p className="mb-3 text-[12px] leading-[1.5] text-ink-500">
+        {INDICADORES_SON_ESTIMACIONES}
+      </p>
 
       {abierto ? (
         <div className="flex flex-col gap-5 lg:gap-6">
@@ -206,19 +215,7 @@ function CuerpoGraficos({
       <AlianzaChart sesiones={sesiones} />
       <TemasTable temas={temas ?? []} sesiones={sesiones} />
       <IntervencionesChart sesiones={sesiones} />
-      <CardDeLaUltima
-        rotulo={PROGRESO_PERCIBIDO}
-        texto={ultima.progresoPercibido}
-        sesionId={ultima.sesionId}
-        fecha={fechaDe(ultima)}
-        alerta={contieneTerminosDeterioro(ultima.progresoPercibido ?? "")}
-      />
-      <CardDeLaUltima
-        rotulo={OBSERVACION_IA}
-        texto={ultima.observacionIA}
-        sesionId={ultima.sesionId}
-        fecha={fechaDe(ultima)}
-      />
+      <LecturasDeLaUltima ultima={ultima} />
     </>
   );
 }
@@ -307,9 +304,35 @@ function EmptyState({ variante }: { variante: keyof typeof EMPTY_STATE_TEXTOS })
 // período, dicho con su fecha y con enlace a esa nota. Antes se buscaba
 // "la última que tuviera texto", que mezclaba una lectura de hace ocho
 // sesiones con un gráfico de hoy.
+//
+// La alerta la decide el servidor, no el texto: la sesión tiene señal si su
+// nivelRiesgo no es "ninguno" o si tiene algún flag activo (tieneSenal). Antes
+// se buscaban palabras en el progreso percibido, y "sin riesgo" encendía la
+// alerta. La pantalla y la hoja de impresión dibujan este mismo componente:
+// no pueden decir cosas distintas.
 // ────────────────────────────────────────────────────────────────────────────
 
-export function CardDeLaUltima({
+export function LecturasDeLaUltima({ ultima }: { ultima: SesionProgreso }) {
+  return (
+    <>
+      <CardDeLaUltima
+        rotulo={PROGRESO_PERCIBIDO}
+        texto={ultima.progresoPercibido}
+        sesionId={ultima.sesionId}
+        fecha={fechaDe(ultima)}
+        alerta={tieneSenal(ultima)}
+      />
+      <CardDeLaUltima
+        rotulo={OBSERVACION_IA}
+        texto={ultima.observacionIA}
+        sesionId={ultima.sesionId}
+        fecha={fechaDe(ultima)}
+      />
+    </>
+  );
+}
+
+function CardDeLaUltima({
   rotulo,
   texto,
   sesionId,
@@ -350,6 +373,11 @@ export function CardDeLaUltima({
       <p className="mt-2 text-[11px] tabular-nums text-ink-500">
         {fechaCompleta(fecha)}
       </p>
+      {alerta ? (
+        <p className="mt-2 text-[12px] font-semibold text-terracotta-600">
+          {ULTIMA_SESION_CON_SENAL}
+        </p>
+      ) : null}
     </section>
   );
 }

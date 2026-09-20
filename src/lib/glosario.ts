@@ -672,6 +672,28 @@ export const SIN_DATO = "Sin dato";
 export const HUECOS_EXPLICADOS =
   "La línea se corta donde la sesión no registró el dato: no se completa por interpolación.";
 
+/** Título en pantalla del bloque de gráficos del Recorrido. La pestaña tiene
+ *  un solo nombre, "Recorrido"; esto nombra lo que hay adentro, no otra cosa.
+ *  La hoja impresa conserva COMO_VA. */
+export const INDICADORES_POR_SESION = "Indicadores por sesión";
+
+/** Lo que son y lo que no: va siempre a la vista, debajo del título. */
+export const INDICADORES_SON_ESTIMACIONES =
+  "Son estimaciones que hace el sistema a partir de cada nota. Orientan; no son una medición clínica validada.";
+
+/** Por qué la tarjeta de la última sesión está en alerta: lo dice el texto,
+ *  no solo el color (en papel blanco y negro el color no se ve). */
+export const ULTIMA_SESION_CON_SENAL = "Esta sesión tiene una señal de riesgo marcada.";
+
+/** El relato acumulado del Recorrido, plegado en pantalla. */
+export const RELATO_UN_PARRAFO_POR_SESION = "un párrafo por sesión";
+
+/** Secciones del Recorrido sin contenido, en pantalla. */
+export const SIN_OBJETIVOS = "Sin objetivos registrados.";
+export const SIN_INTERVENCIONES = "Sin intervenciones registradas.";
+export const SIN_TEMAS = "Sin temas registrados.";
+export const SIN_SENALES_ANTERIORES = "Sin señales anteriores.";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Recordatorio de cobro
 //

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
-import { QUITAR_ELEMENTO_BORRADOR } from "@/lib/glosario";
+import { EL_RECORRIDO_HASTA_HOY, QUITAR_ELEMENTO_BORRADOR } from "@/lib/glosario";
 import { Button, Input, Textarea } from "@/components/ui";
 import { fechaInputMvd, formatearFechaCompletaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
 import { formatearEtiqueta } from "@/lib/etiquetas";
@@ -14,8 +14,7 @@ export function HiloEditor({ valor, cambiar, disabled, sesiones }: { valor: Cont
   const quitar = (accion: () => void) => confirmar(accion, { mensaje: QUITAR_ELEMENTO_BORRADOR, etiqueta: "Quitar del borrador" });
   const poner = <K extends keyof ContenidoHilo>(clave: K, dato: ContenidoHilo[K]) => cambiar({ ...valor, [clave]: dato });
   return <fieldset disabled={disabled} className="space-y-5">
-    <Textarea label="Hipótesis clínica" rows={3} value={valor.hipotesisDiagnostica ?? ""} onChange={e => poner("hipotesisDiagnostica", e.target.value || null)} />
-    <Textarea label="El recorrido hasta hoy" rows={8} value={valor.resumenAcumulativo ?? ""} onChange={e => poner("resumenAcumulativo", e.target.value || null)} />
+    {/* El mismo orden en que se lee en pantalla (ORDEN_PANTALLA): el relato acumulado, al final. */}
     <section className="space-y-3"><h4 className="font-semibold">Objetivos</h4>
       {valor.objetivosTerapeuticos.map((o, i) => {
         const editar = (parche: Partial<typeof o>) => poner("objetivosTerapeuticos", valor.objetivosTerapeuticos.map((x, j) => j === i ? { ...x, ...parche } : x));
@@ -29,6 +28,15 @@ export function HiloEditor({ valor, cambiar, disabled, sesiones }: { valor: Cont
       })}
       <Button type="button" variant="ghost" onClick={() => poner("objetivosTerapeuticos", [...valor.objetivosTerapeuticos, { id: crypto.randomUUID(), descripcion: "", estado: "activo", fechaInicio: fechaInputMvd(new Date()), fechaCierre: null }])}>Agregar objetivo</Button>
     </section>
+    <Textarea label="Hipótesis clínica" rows={3} value={valor.hipotesisDiagnostica ?? ""} onChange={e => poner("hipotesisDiagnostica", e.target.value || null)} />
+    <section className="space-y-3"><h4 className="font-semibold">Temas recurrentes</h4>
+      {valor.temasRecurrentes.map((x, i) => <fieldset key={i} className="rounded-md border border-[color:var(--border-subtle)] p-3"><legend>Tema {i + 1}</legend>
+        <Input label="Tema" value={x.tema} onChange={e => poner("temasRecurrentes", valor.temasRecurrentes.map((v, j) => i === j ? { ...v, tema: e.target.value } : v))} />
+        <Input label="Cantidad de sesiones" type="number" min={1} value={x.conteo} onChange={e => poner("temasRecurrentes", valor.temasRecurrentes.map((v, j) => i === j ? { ...v, conteo: Number(e.target.value) } : v))} />
+        <Button type="button" variant="ghost" onClick={() => quitar(() => poner("temasRecurrentes", valor.temasRecurrentes.filter((_, j) => j !== i)))}>Quitar tema {i + 1}</Button>
+      </fieldset>)}
+      <Button type="button" variant="ghost" onClick={() => poner("temasRecurrentes", [...valor.temasRecurrentes, { tema: "", conteo: 1 }])}>Agregar tema</Button>
+    </section>
     <section className="space-y-3"><h4 className="font-semibold">Intervenciones</h4>
       {valor.intervencionesProbadas.map((x, i) => {
         const editar = (parche: Partial<typeof x>) => poner("intervencionesProbadas", valor.intervencionesProbadas.map((v, j) => i === j ? { ...v, ...parche } : v));
@@ -40,14 +48,6 @@ export function HiloEditor({ valor, cambiar, disabled, sesiones }: { valor: Cont
         </fieldset>;
       })}
       <Button type="button" variant="ghost" onClick={() => poner("intervencionesProbadas", [...valor.intervencionesProbadas, { tecnica: "otra", eficaciaPercibida: "media", sesiones: [] }])}>Agregar intervención</Button>
-    </section>
-    <section className="space-y-3"><h4 className="font-semibold">Temas recurrentes</h4>
-      {valor.temasRecurrentes.map((x, i) => <fieldset key={i} className="rounded-md border border-[color:var(--border-subtle)] p-3"><legend>Tema {i + 1}</legend>
-        <Input label="Tema" value={x.tema} onChange={e => poner("temasRecurrentes", valor.temasRecurrentes.map((v, j) => i === j ? { ...v, tema: e.target.value } : v))} />
-        <Input label="Cantidad de sesiones" type="number" min={1} value={x.conteo} onChange={e => poner("temasRecurrentes", valor.temasRecurrentes.map((v, j) => i === j ? { ...v, conteo: Number(e.target.value) } : v))} />
-        <Button type="button" variant="ghost" onClick={() => quitar(() => poner("temasRecurrentes", valor.temasRecurrentes.filter((_, j) => j !== i)))}>Quitar tema {i + 1}</Button>
-      </fieldset>)}
-      <Button type="button" variant="ghost" onClick={() => poner("temasRecurrentes", [...valor.temasRecurrentes, { tema: "", conteo: 1 }])}>Agregar tema</Button>
     </section>
     <section className="space-y-3"><h4 className="font-semibold">Señales anteriores</h4>
       {valor.riesgosHistoricos.map((x, i) => {
@@ -61,5 +61,6 @@ export function HiloEditor({ valor, cambiar, disabled, sesiones }: { valor: Cont
       })}
       <p className="text-sm text-ink-500">Las señales conservan su sesión de origen. Podés corregirlas o quitarlas de esta versión; las anteriores quedan en el historial.</p>
     </section>
+    <Textarea label={EL_RECORRIDO_HASTA_HOY} rows={8} value={valor.resumenAcumulativo ?? ""} onChange={e => poner("resumenAcumulativo", e.target.value || null)} />
   </fieldset>;
 }

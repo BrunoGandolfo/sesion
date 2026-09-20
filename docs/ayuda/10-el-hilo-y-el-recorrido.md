@@ -1,13 +1,16 @@
 # El Recorrido
 
-**Para qué sirve.** El Recorrido es la memoria del proceso de cada paciente: la
-hipótesis, lo que pasó sesión tras sesión, los objetivos, lo que probaste y las
-señales. También muestra cómo va ese proceso en el tiempo.
+**Para qué sirve.** El Recorrido es la síntesis del proceso de cada paciente: los
+objetivos, la hipótesis, los temas que vuelven, lo que probaste y las señales.
+Es lo que la lista de sesiones no te da. También trae indicadores de cada
+sesión a lo largo del tiempo.
 
 ## Dónde está
 
-En la ficha, pestaña **Recorrido**. Arriba está **Exportar PDF**; debajo, la
-tarjeta **El Recorrido**; más abajo, **Cómo va**.
+En la ficha, pestaña **Recorrido**. De arriba hacia abajo: **Exportar PDF**; la
+tarjeta **El Recorrido**, con la versión vigente; si hay algo por resolver, la
+propuesta de la IA o tu edición; los **Indicadores por sesión**; y al final,
+aparte, el **Historial de versiones**.
 
 ## El Recorrido vigente
 
@@ -16,16 +19,22 @@ quién la dejó así: *"Revisado por vos el …"* o *"Propuesta aceptada el …"
 todavía no hay ninguna: *"Todavía no hay un Recorrido revisado."* y *"Podés
 escribirlo o esperar una propuesta después de aprobar una nota."*
 
-Tiene seis secciones:
+Tiene seis secciones, en este orden:
 
-- **Hipótesis clínica.**
-- **El recorrido hasta hoy** — el resumen acumulado, un párrafo por sesión.
 - **Objetivos** — cada uno con su estado (activo, pausado o cerrado), desde qué
   fecha y, si se cerró, cuándo.
+- **Hipótesis clínica.**
+- **Temas recurrentes** — cada uno con en cuántas sesiones apareció.
 - **Intervenciones** — la técnica, la eficacia registrada (alta, media o baja) y
   las notas en las que apareció, como enlaces *"Nota del …"* con su fecha.
-- **Temas recurrentes** — cada uno con en cuántas sesiones apareció.
 - **Señales anteriores** — la fecha, la señal y su detalle.
+- **El recorrido hasta hoy** — el relato acumulado, un párrafo por sesión. Está
+  **plegado**: tocá el título para leerlo. Repite lo que ya dicen las notas, por
+  eso va al final.
+
+Una sección sin contenido lo dice, por ejemplo *"Sin objetivos registrados."* En
+el PDF el contenido es el mismo, con el relato abierto y en el orden de siempre
+(hipótesis, relato, objetivos, intervenciones, temas, señales).
 
 ## Cómo cambia: la IA propone, vos decidís
 
@@ -41,7 +50,8 @@ una nota aprobada. Se incorpora al Recorrido cuando vos la aceptás."* Ahí pod�
 
 - **Ver nota de origen** y leer la lista de cambios que propone.
 - **Ver propuesta** — compara, sección por sección, la versión vigente y la
-  propuesta, y marca **Con cambios** donde difieren.
+  propuesta, y marca **Con cambios** donde difieren. Ahí el relato aparece
+  abierto.
 - **Aceptar** — la propuesta pasa a ser la versión vigente.
 - **Editar y aceptar** — la corregís antes y se guarda tu versión.
 - **Descartar propuesta** — pide confirmación. El Recorrido vigente y las
@@ -56,8 +66,9 @@ vieja**, **Descartar** y **Volver a generar sobre el Recorrido actual**.
 
 ## Editar el Recorrido
 
-Tocá **Editar Recorrido**, corregí lo que haga falta y tocá **Guardar nueva
-versión**, o **Cancelar edición**. La pantalla lo dice: *"Al guardar se agrega
+Tocá **Editar Recorrido**: la pantalla te lleva al editor, que tiene las
+secciones en el mismo orden en que se leen. Corregí lo que haga falta y tocá
+**Guardar nueva versión**, o **Cancelar edición**. La pantalla lo dice: *"Al guardar se agrega
 una versión; las anteriores se conservan."* Si hay una propuesta abierta,
 guardar tu edición la deja desactualizada.
 
@@ -97,11 +108,14 @@ todavía no se incorpora a este resumen."* Si hay una propuesta sin revisar:
 vigente."* Estos avisos no aparecen en la versión corta. Abrir el brief no genera
 una nota nueva.
 
-## Cómo va
+## Indicadores por sesión
 
-Debajo de la tarjeta, plegable. Se abre solo a partir de la **tercera sesión con
-nota**, contando las aprobadas y las que están para revisar; antes dice
-*"Todavía no hay suficiente recorrido."*
+Debajo de la tarjeta (y de la propuesta, si hay una), plegable. **Son
+estimaciones que hace el sistema a partir de cada nota. Orientan; no son una
+medición clínica validada**, y la pantalla lo dice siempre debajo del título. Se
+abre solo a partir de la **tercera sesión con nota**, contando las aprobadas y
+las que están para revisar; antes dice *"Todavía no hay suficiente recorrido."*
+En el PDF este bloque se titula **Cómo va**.
 
 El selector de período ofrece **Últimas 10** (el default), **3 meses**, **6
 meses** y **Todo**, y queda guardado en la dirección de la página.
@@ -118,7 +132,10 @@ meses** y **Todo**, y queda guardado en la dirección de la página.
   (**nuevo**, **↑ sube**, **↓ baja**, **= estable**) y *"desde 4 mar"*.
 - **Intervenciones** — cantidad y tipo por sesión.
 - **Progreso percibido** y **Observación IA** — de la **última sesión del
-  período**, con su fecha y el enlace **Ver la sesión**.
+  período**, con su fecha y el enlace **Ver la sesión**. Si esa sesión tiene una
+  señal de riesgo marcada, la tarjeta de Progreso percibido sale en terracotta y
+  dice *"Esta sesión tiene una señal de riesgo marcada."* Lo decide la señal que
+  quedó en la nota, no las palabras del texto, y en el PDF sale igual.
 
 Cada gráfico puede traer una lectura breve escrita por la app sobre la
 tendencia. Es orientativa: leela con tu criterio.

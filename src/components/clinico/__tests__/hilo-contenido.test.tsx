@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { hiloVacio, type ContenidoHilo } from "@/lib/hilo/contenido";
 import { HiloContenido } from "../HiloContenido";
 
@@ -48,4 +48,37 @@ it.each(secciones)("la comparación de %s muestra únicamente esa sección y sus
   expect(screen.getByRole("heading").textContent).toBe(`${titulo}Con cambios`);
   rerender(<HiloContenido solo={campo} contenido={contenido} anterior={contenido} />);
   expect(screen.queryByText("Con cambios")).toBeNull();
+});
+
+// ── En pantalla: mismo contenido, otro orden ────────────────────────────────
+
+it("en pantalla abre con objetivos e hipótesis y deja el relato acumulado plegado al final", () => {
+  const { container } = render(<HiloContenido pantalla contenido={contenido} />);
+  expect(screen.getAllByRole("heading").map(h => h.textContent)).toEqual([
+    "Objetivos", "Hipótesis clínica", "Temas recurrentes", "Intervenciones", "Señales anteriores",
+  ]);
+  const relato = container.querySelector("details")!;
+  expect(relato.open).toBe(false);
+  expect(relato.querySelector("summary")!.textContent).toBe("El recorrido hasta hoy · un párrafo por sesión");
+  // Sigue disponible, entero, adentro del plegable; y es lo último.
+  expect(within(relato).getByText("Primer encuentro.")).toBeTruthy();
+  expect(container.firstElementChild!.lastElementChild).toBe(relato);
+  // Lo primero que se lee es un objetivo, no un párrafo de sesión.
+  expect(container.firstElementChild!.firstElementChild!.textContent).toContain("Reconocer emociones");
+});
+
+it("en pantalla una sección sin contenido lo dice; en el papel queda como estaba", () => {
+  const { container, rerender } = render(<HiloContenido pantalla contenido={hiloVacio()} />);
+  for (const texto of ["Sin objetivos registrados.", "Sin intervenciones registradas.", "Sin temas registrados.", "Sin señales anteriores."]) {
+    expect(screen.getByText(texto)).toBeTruthy();
+  }
+  rerender(<HiloContenido contenido={hiloVacio()} />);
+  expect(screen.queryByText("Sin objetivos registrados.")).toBeNull();
+  expect(container.querySelectorAll("ul")).toHaveLength(4);
+});
+
+it("al comparar una propuesta en pantalla, el relato va abierto y con su marca de cambios", () => {
+  const { container } = render(<HiloContenido pantalla solo="resumenAcumulativo" contenido={contenido} anterior={hiloVacio()} />);
+  expect(container.querySelector("details")).toBeNull();
+  expect(screen.getByRole("heading").textContent).toBe("El recorrido hasta hoyCon cambios");
 });
