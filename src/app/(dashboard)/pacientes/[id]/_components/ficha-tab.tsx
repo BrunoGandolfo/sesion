@@ -1,6 +1,6 @@
 "use client";
 
-// Pestaña Ficha: contacto, tarifa, notas privadas, autorización de
+// Pestaña Datos (se llamó "Ficha"): contacto, tarifa, notas privadas, autorización de
 // grabación, turnos y pagos (plegado) y archivar. Sin Editar: el único
 // Editar de la ficha está en la cabecera.
 

@@ -63,6 +63,11 @@ export const INICIO_AGENDAR_SESION = "Agendá la primera sesión";
 export const SESIONES = "Sesiones";
 export const RECORRIDO = "Recorrido";
 export const FICHA = "Ficha";
+/** La tercera pestaña. Se llamó "Ficha" adentro de la ficha, y lo que tiene
+ *  son datos administrativos: contacto, tarifa, autorización, pagos. */
+export const DATOS = "Datos";
+/** Marca de la sesión de hoy dentro de la lista de sesiones. */
+export const SESION_DE_HOY = "Hoy";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Estado de la nota clínica
@@ -228,6 +233,10 @@ export function pieRecorridoPdf(nombreProfesional: string | null): string {
 
 /** Card de preparación antes de la sesión. Ya se llama así en la app. */
 export const PARA_RETOMAR = "Para retomar";
+
+/** El mismo resumen, en la ficha: un bloque plegado debajo del título de la
+ *  lista de sesiones. Se abre solo cuando la ficha se pide con ?preparar=1. */
+export const PREPARAR_SESION = "Preparar sesión";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Turnos

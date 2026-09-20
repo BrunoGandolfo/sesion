@@ -1,7 +1,20 @@
 "use client";
 
-// Pestaña Sesiones: la sesión de hoy (un solo botón según estado), el brief
-// "Para retomar" y la lista de sesiones, cada una enlazada a /sesiones/[id].
+// Pestaña Sesiones: la lista de sesiones, y nada antes que ella.
+//
+// Una investigación de uso sobre producción encontró la lista enterrada: con
+// dos sesiones, su título aparecía a 2060 px del comienzo en el celular,
+// debajo de una tarjeta "Hoy" y de un resumen largo y abierto. Y la sesión de
+// hoy se sacaba de la lista, así que el contador decía "2 sesiones" y se veía
+// una. Ahora:
+//
+//   - el título de la lista es lo primero de la pestaña;
+//   - cada sesión aparece UNA vez, la de hoy incluida, destacada en su lugar
+//     —arriba, porque es la más reciente— con su acción pendiente adentro;
+//   - el contador cuenta lo que la lista muestra;
+//   - el resumen previo es el botón "Preparar sesión" del renglón del título
+//     (brief-pre-sesion.tsx), cerrado salvo que la ficha venga con ?preparar=1;
+//   - el resumen de cada fila va entero: ningún texto clínico se recorta.
 //
 // Acá no se graba ni se revisa nada: grabar vive en /grabar/[turnoId] y la
 // nota en /sesiones/[id]. La sesión de hoy llega por props (polling del
@@ -10,7 +23,7 @@
 import * as React from "react";
 import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
-import { ChevronDown, Mic } from "lucide-react";
+import { ChevronDown, ChevronRight, Mic } from "lucide-react";
 import { fechaInputMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Card, Chip } from "@/components/ui";
@@ -31,6 +44,8 @@ import {
   PARA_REVISAR,
   PARA_VOS,
   REVISAR_NOTA,
+  SESION_DE_HOY,
+  VER_NOTA,
   pluralizar,
 } from "@/lib/glosario";
 import type {
@@ -53,6 +68,16 @@ interface SesionesTabProps {
   sesionHoyCargando: boolean;
   onTurnoActualizado: () => void;
   onAviso: (mensaje: string, variante?: VarianteToast) => void;
+  /** La ficha se pidió con ?preparar=1: "Preparar sesión" arranca abierto. */
+  prepararAbierto?: boolean;
+  /** Se vuelve de la nota de esta sesión: su mes se abre y la fila se trae a
+   *  la vista. */
+  volverA?: string | null;
+  /** La fila ya se buscó (estuviera o no): el padre borra ?vuelve de la URL. */
+  onVolvio?: () => void;
+  /** Se tocó un enlace a la nota de esta sesión: el padre lo anota en la URL
+   *  para que "volver" sepa a dónde. */
+  onAbrirSesion?: (sesionClinicaId: string) => void;
 }
 
 // Ítem de GET /api/pacientes/[id]/documentacion: la nota vigente (aprobada
@@ -152,7 +177,14 @@ function temasDeLaSesion(datos: DatosEstructurados | null): string {
 // la vista.
 // ────────────────────────────────────────────────────────────────────────────
 
-type GrupoMes = { clave: string; titulo: string; sesiones: DocSesion[] };
+/** Lo que la lista muestra: una sesión con nota (viene de /documentacion) o
+ *  el turno de hoy cuya sesión todavía no tiene nota —sin grabar, en proceso
+ *  o fallida—, que /documentacion no trae. */
+type Fila =
+  | { tipo: "nota"; clave: string; fecha: Date; doc: DocSesion }
+  | { tipo: "hoy"; clave: string; fecha: Date; turno: Turno };
+
+type GrupoMes = { clave: string; titulo: string; filas: Fila[] };
 
 function tituloDeMes(fecha: Date): string {
   const texto = formatearMesMvd(fecha, true);
@@ -161,17 +193,16 @@ function tituloDeMes(fecha: Date): string {
 
 /** Agrupa por mes conservando el orden en que vino la lista (la API la manda
  *  de la más reciente a la más vieja). */
-function agruparPorMes(sesiones: DocSesion[]): GrupoMes[] {
+function agruparPorMes(filas: Fila[]): GrupoMes[] {
   const grupos: GrupoMes[] = [];
-  for (const sesion of sesiones) {
-    const fecha = new Date(sesion.fecha);
-    const clave = fechaInputMvd(fecha).slice(0, 7);
+  for (const fila of filas) {
+    const clave = fechaInputMvd(fila.fecha).slice(0, 7);
     const ultimo = grupos[grupos.length - 1];
     if (ultimo && ultimo.clave === clave) {
-      ultimo.sesiones.push(sesion);
+      ultimo.filas.push(fila);
       continue;
     }
-    grupos.push({ clave, titulo: tituloDeMes(fecha), sesiones: [sesion] });
+    grupos.push({ clave, titulo: tituloDeMes(fila.fecha), filas: [fila] });
   }
   return grupos;
 }
@@ -189,6 +220,10 @@ export function SesionesTab({
   sesionHoyCargando,
   onTurnoActualizado,
   onAviso,
+  prepararAbierto = false,
+  volverA = null,
+  onVolvio,
+  onAbrirSesion,
 }: SesionesTabProps) {
   const [lista, setLista] = React.useState<ListaState>(() => listaInicial(pacienteId));
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -196,6 +231,10 @@ export function SesionesTab({
 
   const listaActual =
     lista.pacienteId === pacienteId ? lista : listaInicial(pacienteId);
+  const notaDeHoy =
+    sesionHoy && (sesionHoy.estado === "revision" || sesionHoy.estado === "aprobada")
+      ? sesionHoy.estado
+      : null;
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -222,21 +261,50 @@ export function SesionesTab({
         });
       });
     return () => controller.abort();
-  }, [pacienteId, reloadKey]);
+    // `notaDeHoy`: cuando la sesión de hoy pasa a tener nota (el polling del
+    // padre la ve llegar a "revision"), la lista se vuelve a pedir para que la
+    // traiga con su resumen.
+  }, [pacienteId, reloadKey, notaDeHoy]);
 
-  // La sesión de hoy ya está arriba: la lista no la repite.
-  const sesionesListadas = React.useMemo(
-    () =>
-      sesionHoy
-        ? listaActual.docs.filter((d) => d.sesionClinicaId !== sesionHoy.id)
-        : listaActual.docs,
-    [listaActual.docs, sesionHoy],
-  );
+  // La sesión de hoy va UNA vez. Si ya tiene nota, /documentacion la trae y se
+  // destaca en su fila. Si no, se agrega acá, primera: es la más reciente.
+  const hoyEnLaLista =
+    turnoHoy !== null && listaActual.docs.some((d) => d.turnoId === turnoHoy.id);
+  const hoySuelta = turnoHoy !== null && !listaActual.loading && !hoyEnLaLista;
 
-  const grupos = React.useMemo(
-    () => agruparPorMes(sesionesListadas),
-    [sesionesListadas],
-  );
+  const grupos = React.useMemo(() => {
+    const filas: Fila[] = listaActual.docs.map((doc) => ({
+      tipo: "nota",
+      clave: doc.sesionClinicaId,
+      fecha: new Date(doc.fecha),
+      doc,
+    }));
+    if (hoySuelta && turnoHoy) {
+      filas.unshift({ tipo: "hoy", clave: turnoHoy.id, fecha: turnoHoy.fecha, turno: turnoHoy });
+    }
+    return agruparPorMes(filas);
+  }, [listaActual.docs, hoySuelta, turnoHoy]);
+
+  // El contador cuenta lo que la lista muestra.
+  const totalEnLista = listaActual.totalSesiones + (hoySuelta ? 1 : 0);
+
+  // Volver de una nota: la fila de esa sesión, a la vista. Una sola vez, y
+  // sólo con lo que la URL traía AL MONTAR: al tocar una sesión el padre
+  // escribe ?vuelve en la entrada que se está dejando, y eso no es una vuelta.
+  const [vuelveA] = React.useState(volverA);
+  const yaVolvio = React.useRef(false);
+  React.useEffect(() => {
+    if (!vuelveA || yaVolvio.current || listaActual.loading) return;
+    yaVolvio.current = true;
+    document.getElementById(`sesion-${vuelveA}`)?.scrollIntoView?.({ block: "center" });
+    onVolvio?.();
+  }, [vuelveA, listaActual.loading, onVolvio]);
+
+  function alTocarLaLista(evento: React.MouseEvent<HTMLElement>) {
+    const enlace = (evento.target as HTMLElement).closest('a[href^="/sesiones/"]');
+    const fila = enlace?.closest<HTMLElement>("[data-sesion-id]");
+    if (fila?.dataset.sesionId) onAbrirSesion?.(fila.dataset.sesionId);
+  }
 
   async function cargarMas() {
     const next = listaActual.page + 1;
@@ -263,28 +331,19 @@ export function SesionesTab({
 
   return (
     <div className="flex flex-col gap-8">
-      {turnoHoy ? (
-        <SesionDeHoy
-          turno={turnoHoy}
-          paciente={pacienteNombre}
-          sesion={sesionHoy}
-          cargando={sesionHoyCargando}
-          onCobrar={() => setCobroTarget(turnoHoy)}
-        />
-      ) : null}
-
-      <BriefPreSesion pacienteId={pacienteId} />
-
-      <section className="flex flex-col gap-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="font-display text-[20px] font-medium tracking-[-0.01em] text-ink-900">
-            Sesiones
-          </h2>
-          {listaActual.totalSesiones > 0 ? (
-            <span className="font-sans text-[12px] text-ink-500">
-              {pluralizar(listaActual.totalSesiones, "sesión", "sesiones")}
-            </span>
-          ) : null}
+      <section className="flex flex-col gap-4" onClickCapture={alTocarLaLista}>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="font-display text-[20px] font-medium tracking-[-0.01em] text-ink-900">
+              Sesiones
+            </h2>
+            {totalEnLista > 0 ? (
+              <span className="font-sans text-[12px] text-ink-500">
+                {pluralizar(totalEnLista, "sesión", "sesiones")}
+              </span>
+            ) : null}
+          </div>
+          <BriefPreSesion pacienteId={pacienteId} abrir={prepararAbierto} />
         </div>
 
         {listaActual.error ? (
@@ -302,7 +361,7 @@ export function SesionesTab({
           <p className="font-sans text-[13px] text-ink-500">Cargando…</p>
         ) : null}
 
-        {!listaActual.loading && listaActual.docs.length === 0 && !listaActual.error ? (
+        {!listaActual.loading && grupos.length === 0 && !listaActual.error ? (
           <Card className="border-[color:var(--border-subtle)]">
             <p className="font-sans text-[14px] leading-[1.6] text-ink-500">
               Todavía no hay sesiones grabadas. Cuando grabes la primera, la
@@ -317,7 +376,16 @@ export function SesionesTab({
               <GrupoDeMes
                 key={grupo.clave}
                 grupo={grupo}
-                abiertoPorDefecto={indice === 0}
+                abiertoPorDefecto={
+                  indice === 0 || grupo.filas.some((f) => f.clave === vuelveA)
+                }
+                hoy={{
+                  turno: turnoHoy,
+                  sesion: sesionHoy,
+                  cargando: sesionHoyCargando,
+                  paciente: pacienteNombre,
+                  onCobrar: () => setCobroTarget(turnoHoy),
+                }}
               />
             ))}
           </div>
@@ -349,84 +417,30 @@ export function SesionesTab({
   );
 }
 
-function SesionDeHoy({
-  turno,
-  paciente,
-  sesion,
-  cargando,
-  onCobrar,
-}: {
-  turno: Turno;
-  paciente: string;
+/** Lo que las filas necesitan saber de la sesión de hoy. */
+type Hoy = {
+  turno: Turno | null;
   sesion: SesionClinicaEnsamblada | null;
   cargando: boolean;
+  paciente: string;
   onCobrar: () => void;
-}) {
-  // En proceso el indicador de abajo ya lo dice con el nombre: el chip
-  // repetiría lo mismo con otras palabras.
-  const chip =
-    sesion && !enProceso(sesion.estado) ? chipDeEstado(sesion.estado) : null;
-  const cobrable = esDeudaPendiente(turno);
+};
 
-  let accion: React.ReactNode = null;
-  if (cargando) {
-    accion = <p className="font-sans text-[13px] text-ink-500">Cargando…</p>;
-  } else if (!sesion || sesion.estado === "grabando") {
-    accion = (
-      <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
-        <Mic size={16} strokeWidth={1.8} aria-hidden="true" />
-        {GRABAR_SESION}
-      </Link>
-    );
-  } else if (sesion.estado === "subiendo" || sesion.estado === "procesando") {
-    accion = <IndicadorProcesando paciente={paciente} className="w-full" />;
-  } else if (sesion.estado === "revision") {
-    accion = (
-      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_PRIMARIO}>
-        {REVISAR_NOTA}
-      </Link>
-    );
-  } else if (sesion.estado === "aprobada") {
-    accion = cobrable ? (
-      <Button variant="primary" onClick={onCobrar}>
-        Cobrar
-      </Button>
-    ) : (
-      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
-        Ver nota
-      </Link>
-    );
-  } else {
-    accion = (
-      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
-        Ver
-      </Link>
-    );
-  }
+const FILA =
+  "relative flex flex-col gap-2 rounded-lg border px-4 py-4 transition-colors duration-[var(--duration-fast)] focus-within:ring-[3px] focus-within:ring-sage-500/20 sm:px-5";
+const FILA_COMUN = `${FILA} border-[color:var(--border-subtle)] bg-white hover:bg-cream-50`;
+const FILA_DE_HOY = `${FILA} border-sage-200 bg-sage-50`;
 
+function MarcaDeHoy() {
   return (
-    <section className="flex flex-col gap-4 rounded-lg border border-sage-200 bg-sage-50 p-5 lg:p-6">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-sage-700">
-            Hoy
-          </span>
-          <span className="font-display italic text-[20px] font-medium leading-tight text-ink-900 lg:text-[22px]">
-            Sesión a las {hora(turno.fecha)}
-          </span>
-          <span className="font-sans text-[12px] text-ink-500 tabular-nums">
-            {turno.duracion} min · {turno.modalidad === "online" ? "Online" : "Presencial"}
-          </span>
-        </div>
-        {chip ? (
-          <Chip variant={chip.variant} size="sm">
-            {chip.label}
-          </Chip>
-        ) : null}
-      </div>
-      <div className="flex sm:justify-start">{accion}</div>
-    </section>
+    <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-sage-700">
+      {SESION_DE_HOY}
+    </span>
   );
+}
+
+function modalidadTexto(modalidad: Modalidad): string {
+  return modalidad === "online" ? "Online" : "Presencial";
 }
 
 /** Un mes de la lista. El más reciente arranca abierto; los anteriores,
@@ -434,9 +448,11 @@ function SesionDeHoy({
 function GrupoDeMes({
   grupo,
   abiertoPorDefecto,
+  hoy,
 }: {
   grupo: GrupoMes;
   abiertoPorDefecto: boolean;
+  hoy: Hoy;
 }) {
   const [abierto, setAbierto] = React.useState(abiertoPorDefecto);
   const panelId = React.useId();
@@ -454,7 +470,7 @@ function GrupoDeMes({
           {grupo.titulo}
           <span className="font-normal text-ink-500">
             {" "}
-            · {pluralizar(grupo.sesiones.length, "sesión", "sesiones")}
+            · {pluralizar(grupo.filas.length, "sesión", "sesiones")}
           </span>
         </span>
         <ChevronDown
@@ -477,12 +493,91 @@ function GrupoDeMes({
           item="li"
           className="mt-3 flex flex-col gap-3"
         >
-          {grupo.sesiones.map((sesion) => (
-            <FilaSesion key={sesion.sesionClinicaId} sesion={sesion} />
-          ))}
+          {grupo.filas.map((fila) =>
+            fila.tipo === "hoy" ? (
+              <FilaDeHoySinNota key={fila.clave} turno={fila.turno} hoy={hoy} />
+            ) : (
+              <FilaSesion
+                key={fila.clave}
+                sesion={fila.doc}
+                hoy={hoy.turno?.id === fila.doc.turnoId ? hoy : null}
+              />
+            ),
+          )}
         </ListaEnCascada>
       ) : null}
     </section>
+  );
+}
+
+/** El turno de hoy cuando su sesión todavía no tiene nota: sin grabar, en
+ *  proceso o fallida. Misma fila que las demás, destacada, con su acción. */
+function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
+  const { sesion, cargando, paciente } = hoy;
+  // En proceso el indicador de abajo ya lo dice con el nombre: el chip
+  // repetiría lo mismo con otras palabras.
+  const chip =
+    sesion && !enProceso(sesion.estado) ? chipDeEstado(sesion.estado) : null;
+
+  let accion: React.ReactNode;
+  if (cargando) {
+    accion = <p className="font-sans text-[13px] text-ink-500">Cargando…</p>;
+  } else if (!sesion || sesion.estado === "grabando") {
+    accion = (
+      <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
+        <Mic size={16} strokeWidth={1.8} aria-hidden="true" />
+        {GRABAR_SESION}
+      </Link>
+    );
+  } else if (sesion.estado === "subiendo" || sesion.estado === "procesando") {
+    accion = <IndicadorProcesando paciente={paciente} className="w-full" />;
+  } else if (sesion.estado === "revision") {
+    // La lista todavía no la trajo con su nota (se está volviendo a pedir).
+    accion = (
+      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_PRIMARIO}>
+        {REVISAR_NOTA}
+      </Link>
+    );
+  } else if (sesion.estado === "aprobada") {
+    accion = esDeudaPendiente(turno) ? (
+      <Button variant="primary" onClick={hoy.onCobrar}>
+        Cobrar
+      </Button>
+    ) : (
+      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
+        {VER_NOTA}
+      </Link>
+    );
+  } else {
+    accion = (
+      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
+        Ver
+      </Link>
+    );
+  }
+
+  return (
+    <div
+      id={sesion ? `sesion-${sesion.id}` : undefined}
+      data-sesion-id={sesion?.id}
+      className={FILA_DE_HOY}
+    >
+      <MarcaDeHoy />
+      <span className="font-display text-[15px] font-medium text-ink-900">
+        {fechaLarga(turno.fecha)} · {hora(turno.fecha)}
+      </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="font-sans text-[12px] text-ink-500 tabular-nums">
+          {turno.duracion} min · {modalidadTexto(turno.modalidad)}
+        </span>
+        {chip ? (
+          <Chip variant={chip.variant} size="sm">
+            {chip.label}
+          </Chip>
+        ) : null}
+      </div>
+      <div className="flex pt-1 sm:justify-start">{accion}</div>
+    </div>
   );
 }
 
@@ -502,46 +597,79 @@ function GrupoDeMes({
 // inset-0` —así el área tocable no cambia— y el enlace secundario va encima,
 // con su propio `relative`. El foco de teclado sigue llegando a los dos, en
 // orden.
-function FilaSesion({ sesion }: { sesion: DocSesion }) {
+//
+// El título lleva fecha Y hora: dos sesiones del mismo día se distinguen sin
+// leer la letra chica. El resumen va entero —sin line-clamp—: es texto
+// clínico y cortarlo con tres puntos es decidir por ella qué no lee.
+//
+// `hoy` viene cuando esta sesión es la del turno de hoy: se destaca en su
+// lugar y, si tiene algo pendiente (revisar, cobrar), el botón va adentro.
+function FilaSesion({ sesion, hoy }: { sesion: DocSesion; hoy: Hoy | null }) {
   const fecha = new Date(sesion.fecha);
   const resumen = resumenCorto(sesion.datos) || temasDeLaSesion(sesion.datos);
   const esRevision = sesion.estado === "revision";
   const conParaVos = hayParaVos(sesion.feedback);
+  const href = `/sesiones/${sesion.sesionClinicaId}`;
+  const cobrable = hoy?.turno ? esDeudaPendiente(hoy.turno) : false;
 
   return (
-    <div className="relative flex flex-col gap-2 rounded-lg border border-[color:var(--border-subtle)] bg-white px-4 py-4 transition-colors duration-[var(--duration-fast)] focus-within:ring-[3px] focus-within:ring-sage-500/20 hover:bg-cream-50 sm:px-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-display text-[15px] font-medium text-ink-900">
-            <Link
-              href={`/sesiones/${sesion.sesionClinicaId}`}
-              className="after:absolute after:inset-0 after:content-[''] focus:outline-none"
-            >
-              {fechaLarga(fecha)}
-            </Link>
-          </span>
-          <span className="font-sans text-[12px] text-ink-500 tabular-nums">
-            {hora(fecha)} · {sesion.duracionMin} min ·{" "}
-            {sesion.modalidad === "online" ? "Online" : "Presencial"}
-          </span>
-        </div>
+    <div
+      id={`sesion-${sesion.sesionClinicaId}`}
+      data-sesion-id={sesion.sesionClinicaId}
+      className={hoy ? FILA_DE_HOY : FILA_COMUN}
+    >
+      {hoy ? <MarcaDeHoy /> : null}
+      <span className="font-display text-[15px] font-medium text-ink-900">
+        <Link
+          href={href}
+          className="after:absolute after:inset-0 after:content-[''] focus:outline-none"
+        >
+          {fechaLarga(fecha)} · {hora(fecha)}
+        </Link>
+      </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="font-sans text-[12px] text-ink-500 tabular-nums">
+          {sesion.duracionMin} min · {modalidadTexto(sesion.modalidad)}
+        </span>
         <Chip variant={esRevision ? "gold" : "sage"} size="sm">
           {esRevision ? PARA_REVISAR : NOTA_GUARDADA}
         </Chip>
       </div>
       {resumen ? (
-        <p className="line-clamp-2 font-sans text-[14px] leading-[1.55] text-ink-700">
+        <p className="font-sans text-[14px] leading-[1.55] text-ink-700">
           {resumen}
         </p>
       ) : null}
-      {conParaVos ? (
-        <Link
-          href={`/sesiones/${sesion.sesionClinicaId}/para-vos`}
-          className="relative inline-flex min-h-[44px] items-center self-start font-sans text-[13px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:text-sage-700"
-        >
-          {PARA_VOS}
-        </Link>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        {hoy && esRevision ? (
+          <Link href={href} className={`relative ${ENLACE_PRIMARIO}`}>
+            {REVISAR_NOTA}
+          </Link>
+        ) : (
+          // La tarjeta entera ya es el enlace (el de la fecha, estirado): esto
+          // es sólo la seña a la vista de que se puede tocar.
+          <span
+            aria-hidden="true"
+            className="inline-flex items-center gap-1 py-1 font-sans text-[13px] font-semibold text-sage-600"
+          >
+            {esRevision ? REVISAR_NOTA : VER_NOTA}
+            <ChevronRight size={14} strokeWidth={1.8} />
+          </span>
+        )}
+        {hoy && !esRevision && cobrable ? (
+          <Button variant="primary" size="sm" className="relative" onClick={hoy.onCobrar}>
+            Cobrar
+          </Button>
+        ) : null}
+        {conParaVos ? (
+          <Link
+            href={`${href}/para-vos`}
+            className="relative inline-flex min-h-[44px] items-center font-sans text-[13px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:text-sage-700"
+          >
+            {PARA_VOS}
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }
