@@ -125,15 +125,32 @@ describe("la nota clínica", () => {
     render(<NotaSesionView sesion={sesion()} nota={NOTA} editable={false} />);
 
     // La nota conserva sus plegables…
-    expect(screen.getByText("Más de esta sesión")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Más de esta sesión", expanded: false })).toBeTruthy();
     // …y perdió el del final. El análisis vive en la vista hermana.
     expect(screen.queryByText(PARA_VOS)).toBeNull();
     expect(screen.queryByText("Sostuvo el silencio")).toBeNull();
   });
 
+  it("tiene un índice corto que salta a cada sección sin navegar", () => {
+    const saltar = vi.fn();
+    Element.prototype.scrollIntoView = saltar;
+    render(<NotaSesionView sesion={sesion()} nota={NOTA} editable={false} />);
+
+    const indice = screen.getByRole("navigation", { name: "Secciones de la nota" });
+    const entradas = within(indice).getAllByRole("button").map((b) => b.textContent);
+    expect(entradas.slice(-5)).toEqual(["Subjetivo (S)", "Objetivo (O)", "Análisis (A)", "Plan (P)", "Más de esta sesión"]);
+
+    fireEvent.click(within(indice).getByRole("button", { name: "Plan (P)" }));
+    expect(saltar).toHaveBeenCalledTimes(1);
+    expect((saltar.mock.instances[0] as HTMLElement).id).toBe("nota-plan");
+    expect(screen.getByRole("heading", { level: 2, name: "Plan (P)" }).closest("#nota-plan")).toBeTruthy();
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("los chips de temas envuelven en vez de salirse por el borde", () => {
     render(<NotaSesionView sesion={sesion()} nota={NOTA} editable={false} />);
-    fireEvent.click(screen.getByText("Más de esta sesión"));
+    // El índice también lo nombra: el plegable es el botón que se expande.
+    fireEvent.click(screen.getByRole("button", { name: "Más de esta sesión", expanded: false }));
 
     // texto="libre" es lo que les saca whitespace-nowrap. Con "estado", el
     // tema largo producía un chip más ancho que el teléfono, en un layout

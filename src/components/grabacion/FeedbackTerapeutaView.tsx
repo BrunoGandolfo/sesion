@@ -6,6 +6,7 @@ import { Plegable } from "@/components/ui";
 import {
   CTSR,
   GTFS,
+  INSTRUMENTO_Y_PUNTAJE,
   MITI,
   PARA_VOS_INCOMPLETO,
   VER_DETALLE,
@@ -23,11 +24,19 @@ import type {
   ScoreMITIGlobal,
 } from "@/types/domain";
 
-// "Para vos": la auto-supervisión de una sesión, entera y sin plegar.
+// "Para vos": la auto-supervisión de una sesión.
 //
 // Ya no es un bloque al pie de la nota. Vive en su propia vista
-// (/sesiones/[id]/para-vos) y este componente dibuja su contenido: el
-// instrumento, las fortalezas, las áreas de crecimiento y el disclaimer.
+// (/sesiones/[id]/para-vos) y este componente dibuja su contenido.
+//
+// EL ORDEN: PRIMERO LO QUE SE LEE, DESPUÉS CÓMO SE MIDIÓ
+//
+// Fortalezas, áreas de crecimiento (cada una con su sugerencia) y la
+// observación general van arriba y a la vista: están escritas en lenguaje
+// llano, con la cita que las sostiene, y son lo que ella vino a buscar. El
+// instrumento —sigla, puntajes, ítems— va después, en un plegable cerrado.
+// Antes la pantalla arrancaba por "MITI 4.2.1" y un puntaje, y lo útil
+// quedaba debajo. No cambió ni se sacó nada del contenido: cambió el orden.
 //
 // EL GUARDIÁN, QUE ANTES ESCONDÍA
 //
@@ -474,20 +483,33 @@ export function FeedbackTerapeutaView({
   // incompleto, que es el caso que este componente vino a arreglar.
   if (!feedback || !hayParaVos(feedbackTerapeuta)) return null;
 
+  const hayNucleo =
+    feedback.fortalezas.length > 0 ||
+    feedback.areasCrecimiento.length > 0 ||
+    feedback.sugerenciaProximaSesion.trim() !== "";
+
   return (
     <div className="flex flex-col gap-5">
       {feedback.completo ? null : <AvisoIncompleto />}
 
+      <NucleoPanteoricoSections nucleo={feedback} />
+
+      {/* Plegado porque arriba hay algo que leer. Si el análisis trajo sólo
+          el instrumento, plegarlo dejaría la pantalla en blanco: va abierto. */}
       {feedback.mitiGlobales && feedback.ctsrSubset ? (
-        <BloqueMitiCtsr
-          mitiGlobales={feedback.mitiGlobales}
-          ctsrSubset={feedback.ctsrSubset}
-        />
+        <Plegable titulo={INSTRUMENTO_Y_PUNTAJE} ayuda={`${MITI.sigla} + ${CTSR.sigla}`} abiertoPorDefecto={!hayNucleo}>
+          <BloqueMitiCtsr
+            mitiGlobales={feedback.mitiGlobales}
+            ctsrSubset={feedback.ctsrSubset}
+          />
+        </Plegable>
       ) : null}
 
-      {feedback.itemsGTFS ? <BloqueGestalt items={feedback.itemsGTFS} /> : null}
-
-      <NucleoPanteoricoSections nucleo={feedback} />
+      {feedback.itemsGTFS ? (
+        <Plegable titulo={INSTRUMENTO_Y_PUNTAJE} ayuda={GTFS.sigla} abiertoPorDefecto={!hayNucleo}>
+          <BloqueGestalt items={feedback.itemsGTFS} />
+        </Plegable>
+      ) : null}
 
       <p className="border-t border-cream-200 pt-4 font-sans text-[12px] leading-[1.55] italic text-ink-500">
         {DISCLAIMER_TEXT}

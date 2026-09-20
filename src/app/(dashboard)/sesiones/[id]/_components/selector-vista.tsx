@@ -1,7 +1,8 @@
 "use client";
 
-// Las dos caras de una sesión, en un solo control: la nota clínica y
-// "Para vos".
+// Las caras de una sesión, en un solo control: la nota clínica, "Para vos" y
+// la transcripción (la tercera, que llegó después: el servidor ya la
+// entregaba y no había cómo abrirla).
 //
 // POR QUÉ UN SELECTOR Y NO UN ENLACE
 //
@@ -43,13 +44,13 @@ import { useRouter } from "next/navigation";
 import { Segmented } from "@/components/ui";
 
 import { ConfirmarSalida } from "./confirmar-salida";
-import { PARA_VOS, SELECTOR_VISTA_SESION, VISTA_NOTA } from "./textos";
+import { PARA_VOS, SELECTOR_VISTA_SESION, TRANSCRIPCION, VISTA_NOTA } from "./textos";
 
-/** Cuál de las dos caras se está mirando. */
-export type VistaSesion = "nota" | "para-vos";
+/** Cuál de las caras se está mirando. */
+export type VistaSesion = "nota" | "para-vos" | "transcripcion";
 
 export function hrefDeVista(id: string, vista: VistaSesion): string {
-  return vista === "para-vos" ? `/sesiones/${id}/para-vos` : `/sesiones/${id}`;
+  return vista === "nota" ? `/sesiones/${id}` : `/sesiones/${id}/${vista}`;
 }
 
 interface SelectorVistaProps {
@@ -91,6 +92,7 @@ export function SelectorVista({
         options={[
           { value: "nota", label: VISTA_NOTA },
           { value: "para-vos", label: PARA_VOS },
+          { value: "transcripcion", label: TRANSCRIPCION },
         ]}
       />
 

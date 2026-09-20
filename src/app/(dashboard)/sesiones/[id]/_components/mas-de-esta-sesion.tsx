@@ -113,30 +113,34 @@ function ListaChips({
   );
 }
 
+/** True si el bloque tiene algo que dibujar. Lo usa también el índice de la
+ *  nota, para no ofrecer un salto a un bloque que no está. */
+export function hayMasDeEstaSesion(datos: DatosEstructurados | null): boolean {
+  if (!datos) return false;
+  return (
+    (datos.temas?.length ?? 0) > 0 ||
+    (datos.emocionesPaciente?.length ?? 0) > 0 ||
+    (datos.intervenciones?.length ?? 0) > 0 ||
+    (datos.materialNuevo?.length ?? 0) > 0 ||
+    (datos.materialRecurrente?.length ?? 0) > 0 ||
+    (datos.compromisos?.length ?? 0) > 0 ||
+    datos.intensidadEmocional !== undefined ||
+    datos.alianzaTerapeutica !== undefined ||
+    Boolean(datos.focoProximaSesion)
+  );
+}
+
 export function MasDeEstaSesion({
   datos,
 }: {
   datos: DatosEstructurados | null;
 }) {
-  if (!datos) return null;
+  if (!datos || !hayMasDeEstaSesion(datos)) return null;
 
   const intervenciones = datos.intervenciones ?? [];
   const seLlevo = datos.compromisos ?? [];
   const intensidad = datos.intensidadEmocional;
   const alianza = datos.alianzaTerapeutica;
-
-  const hayAlgo =
-    (datos.temas?.length ?? 0) > 0 ||
-    (datos.emocionesPaciente?.length ?? 0) > 0 ||
-    intervenciones.length > 0 ||
-    (datos.materialNuevo?.length ?? 0) > 0 ||
-    (datos.materialRecurrente?.length ?? 0) > 0 ||
-    seLlevo.length > 0 ||
-    intensidad !== undefined ||
-    alianza !== undefined ||
-    Boolean(datos.focoProximaSesion);
-
-  if (!hayAlgo) return null;
 
   return (
     <Plegable titulo={MAS_DE_ESTA_SESION}>

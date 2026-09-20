@@ -1481,3 +1481,46 @@ export const VER_QUE_PASO = "Ver qué pasó";
 
 /** Nombre accesible de la cruz del aviso. */
 export const CERRAR_AVISO = "Cerrar aviso";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pantalla de la sesión: transcripción, índice de la nota e instrumento
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Tercera vista de la sesión, junto a la nota y "Para vos". */
+export const TRANSCRIPCION = "Transcripción";
+
+export const TRANSCRIPCION_SUBTITULO = "Lo que se dijo en la sesión, tal como quedó escrito.";
+
+/** Quién habla lo decidió el sistema, no ella: se dice siempre, arriba. */
+export const TRANSCRIPCION_HABLANTES =
+  "Quién habla en cada parte lo asignó el sistema automáticamente y puede estar equivocado.";
+
+export const TRANSCRIPCION_ABRIENDO = "Abriendo la transcripción…";
+
+/** 409: la sesión existe pero su texto todavía no. */
+export const TRANSCRIPCION_SIN_TEXTO_TITULO = "Todavía no hay transcripción";
+export const TRANSCRIPCION_SIN_TEXTO =
+  "El texto de esta sesión todavía no está escrito. Volvé a probar en unos minutos.";
+
+export const TRANSCRIPCION_ERROR_TITULO = "No pudimos abrir la transcripción";
+
+export const BUSCAR_EN_TRANSCRIPCION = "Buscar en la transcripción";
+export const BUSCAR_PLACEHOLDER = "Buscar una palabra";
+export const BUSCAR_ANTERIOR = "Resultado anterior";
+export const BUSCAR_SIGUIENTE = "Resultado siguiente";
+export const BUSCAR_BORRAR = "Borrar la búsqueda";
+export const BUSCAR_MINIMO = "Escribí al menos 2 letras.";
+
+export function resultadoDeBusqueda(actual: number, total: number): string {
+  return `${actual} de ${total}`;
+}
+
+export function busquedaSinResultados(consulta: string): string {
+  return `No aparece «${consulta}» en esta transcripción.`;
+}
+
+/** aria-label del índice de la nota. */
+export const INDICE_NOTA = "Secciones de la nota";
+
+/** "Para vos": el instrumento va después de las observaciones, plegado. */
+export const INSTRUMENTO_Y_PUNTAJE = "El instrumento y su puntaje";

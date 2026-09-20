@@ -19,6 +19,8 @@ import { EDITAR } from "./textos";
 // No viaja a la API hasta Aprobar, y viaja entero como notaEditada.
 
 interface SeccionSoapProps {
+  /** Ancla para el índice de la nota. */
+  id?: string;
   titulo: string;
   ayuda: string;
   valor: string;
@@ -29,6 +31,7 @@ interface SeccionSoapProps {
 }
 
 export function SeccionSoap({
+  id,
   titulo,
   ayuda,
   valor,
@@ -75,7 +78,7 @@ export function SeccionSoap({
   };
 
   return (
-    <section className="flex flex-col gap-2">
+    <section id={id} className="flex scroll-mt-16 flex-col gap-2">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2
