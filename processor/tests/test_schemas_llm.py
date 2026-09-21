@@ -101,6 +101,36 @@ def test_respuesta_truncada_es_llm_truncado(mocker):
     assert exc.value.codigo == "llm_truncado"
 
 
+def test_el_truncado_dice_contra_que_techo_y_cuanto_se_fue_en_razonar(mocker):
+    # Es lo que se lee despues para saber si el techo era chico o si el
+    # razonamiento se lo comio. Los dos numeros salen del `usage`.
+    respuesta = _respuesta("{", stop_reason="max_tokens")
+    respuesta.usage = SimpleNamespace(
+        input_tokens=10,
+        output_tokens=8000,
+        output_tokens_details=SimpleNamespace(thinking_tokens=7100),
+    )
+    _mockear_cliente(mocker, respuesta)
+
+    with pytest.raises(PipelineError) as exc:
+        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, 8000)
+
+    assert exc.value.codigo == "llm_truncado"
+    assert "techo de 8000 tokens" in exc.value.mensaje_publico
+    assert "razonamiento: 7100" in exc.value.mensaje_publico
+
+
+def test_sin_detalle_de_razonamiento_el_truncado_lo_dice(mocker):
+    # El SDK puede no traer output_tokens_details: se dice "desconocido" en
+    # vez de inventar un cero, que se leeria como "no razono nada".
+    _mockear_cliente(mocker, _respuesta("{", stop_reason="max_tokens"))
+
+    with pytest.raises(PipelineError) as exc:
+        clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, 8000)
+
+    assert "razonamiento: desconocido" in exc.value.mensaje_publico
+
+
 def test_sin_bloque_de_texto_es_llm_sin_texto(mocker):
     respuesta = _respuesta("ignorado")
     respuesta.content = [SimpleNamespace(type="tool_use", text=None)]

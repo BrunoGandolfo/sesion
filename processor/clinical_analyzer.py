@@ -49,6 +49,11 @@ _FEEDBACK_POR_ORIENTACION = {
 # seguidas con el error citado, el problema no lo arregla insistir.
 MAX_REINTENTOS_ESTRUCTURA = 1
 
+# Como se nombra cada pasada en el detalle del fallo. Un truncado en la
+# primera y uno en la segunda son problemas distintos —el segundo ya fue con
+# el techo duplicado— y hasta ahora el texto no los distinguia.
+NOMBRE_PASADA = ("primera pasada", "segunda pasada")
+
 # Fallos que merecen esa segunda pasada. Son de FORMA: la respuesta llego pero
 # no se puede usar. `llm_truncado` entro el 2026-09-07, con el techo de tokens
 # del feedback: hasta entonces una respuesta cortada se descartaba de una y la
@@ -189,8 +194,17 @@ def _llamar_anthropic(
     )
 
     if response.stop_reason == "max_tokens":
+        # El detalle dice contra QUE techo se corto y cuantos de esos tokens se
+        # fueron en razonar. Sin el segundo numero el diagnostico es imposible:
+        # la nota se ve corta y el techo parece de sobra, cuando lo que paso es
+        # que el razonamiento se comio el techo y no quedo lugar para la
+        # respuesta. Son dos enteros del `usage`: no hay una palabra de la
+        # sesion en este texto.
+        gastado = pensamiento if pensamiento is not None else "desconocido"
         raise PipelineError(
-            "llm_truncado", f"Respuesta truncada en {max_tokens} tokens"
+            "llm_truncado",
+            f"Respuesta truncada contra el techo de {max_tokens} tokens"
+            f" (razonamiento: {gastado})",
         )
     if response.stop_reason == "refusal":
         raise PipelineError("llm_rechazo", "El modelo rechazo la solicitud")
@@ -292,7 +306,11 @@ def _llamar_validando(
                 e.codigo not in CODIGOS_QUE_REINTENTAN
                 or intento == MAX_REINTENTOS_ESTRUCTURA
             ):
-                raise
+                # El codigo no cambia: es contrato con la app. Lo que se
+                # agrega es en cual de las dos pasadas se rindio.
+                raise e.ampliar_detalle(
+                    NOMBRE_PASADA[min(intento, len(NOMBRE_PASADA) - 1)]
+                )
             if e.codigo == "llm_truncado":
                 # Se repite el pedido IGUAL, sin bloque de correccion: pedirle
                 # al modelo que se extienda menos seria decidir por Mariana

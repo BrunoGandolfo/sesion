@@ -35,6 +35,18 @@ class PipelineError(Exception):
         self._definitivo = definitivo
         super().__init__(f"{codigo}: {mensaje_publico}")
 
+    def ampliar_detalle(self, extra: str) -> "PipelineError":
+        """
+        Agrega contexto al detalle que viaja a la app, sin tocar el codigo ni
+        si es definitivo. El codigo es contrato con la app; el detalle es el
+        texto que despues se lee para no volver a adivinar.
+
+        Devuelve self para poder escribir `raise e.ampliar_detalle(...)`.
+        """
+        self.mensaje_publico = f"{self.mensaje_publico}; {extra}"
+        self.args = (f"{self.codigo}: {self.mensaje_publico}",)
+        return self
+
     @property
     def definitivo(self) -> bool:
         if self._definitivo is not None:

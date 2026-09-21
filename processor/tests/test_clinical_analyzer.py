@@ -483,3 +483,102 @@ def test_el_contexto_truncado_reintenta_con_el_doble(llm, prompt):
 def test_los_cuatro_prompts_se_cargan():
     for nombre in clinical_analyzer.PROMPTS.values():
         assert clinical_analyzer._cargar_prompt(nombre).strip()
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# El detalle de un truncado dice contra que techo fue, cuanto se fue en
+# razonar y en cual de las dos pasadas se rindio.
+#
+# Antes decia "Respuesta truncada en 8000 tokens" y nada mas: con eso no se
+# podia saber si el techo era chico o si el razonamiento se lo habia comido,
+# ni si la segunda pasada —que va con el techo duplicado— tambien habia
+# fallado. El codigo del fallo NO cambia: es contrato con la app.
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def _truncado(techo: int = 8000, razonamiento: str = "7100") -> PipelineError:
+    """El error tal como lo arma _llamar_llm ante stop_reason=max_tokens."""
+    return PipelineError(
+        "llm_truncado",
+        f"Respuesta truncada contra el techo de {techo} tokens"
+        f" (razonamiento: {razonamiento})",
+    )
+
+
+def test_truncado_en_las_dos_pasadas_dice_techo_razonamiento_y_segunda_pasada(llm):
+    # La segunda va con el techo duplicado: son dos numeros distintos.
+    llm.side_effect = [_truncado(8000, "7100"), _truncado(16000, "15200")]
+
+    with pytest.raises(PipelineError) as exc:
+        _validando()
+
+    detalle = exc.value.mensaje_publico
+    assert exc.value.codigo == "llm_truncado"
+    assert "16000" in detalle
+    assert "razonamiento: 15200" in detalle
+    assert "segunda pasada" in detalle
+    assert "primera pasada" not in detalle
+    assert llm.call_count == 2
+
+
+def test_un_fallo_que_no_reintenta_queda_marcado_como_primera_pasada(llm):
+    # llm_rechazo no esta en CODIGOS_QUE_REINTENTAN: se rinde en la primera.
+    llm.side_effect = [PipelineError("llm_rechazo", "El modelo rechazo la solicitud")]
+
+    with pytest.raises(PipelineError) as exc:
+        _validando()
+
+    assert exc.value.codigo == "llm_rechazo"
+    assert "primera pasada" in exc.value.mensaje_publico
+    assert llm.call_count == 1
+
+
+def test_el_detalle_del_truncado_no_lleva_texto_de_la_sesion(llm):
+    # Lo unico que entra son dos enteros del `usage` y el nombre de la pasada.
+    llm.side_effect = [_truncado(), _truncado(16000, "15900")]
+
+    with pytest.raises(PipelineError) as exc:
+        _validando()
+
+    detalle = exc.value.mensaje_publico
+    for prohibido in ["subjetivo", "objetivo", "analisis", "plan", "paciente"]:
+        assert prohibido not in detalle.lower()
+    # Solo digitos, el nombre de la pasada y texto fijo.
+    assert "Respuesta truncada contra el techo de" in detalle
+
+
+def test_sin_dato_de_razonamiento_lo_dice_en_vez_de_inventar_un_cero(llm):
+    llm.side_effect = [
+        _truncado(8000, "desconocido"),
+        _truncado(16000, "desconocido"),
+    ]
+
+    with pytest.raises(PipelineError) as exc:
+        _validando()
+
+    assert "razonamiento: desconocido" in exc.value.mensaje_publico
+    assert "razonamiento: 0" not in exc.value.mensaje_publico
+
+
+def test_ampliar_detalle_no_toca_el_codigo_ni_lo_definitivo():
+    error = PipelineError("llm_truncado", "base")
+    definitivo_antes = error.definitivo
+
+    ampliado = error.ampliar_detalle("segunda pasada")
+
+    assert ampliado is error
+    assert error.codigo == "llm_truncado"
+    assert error.definitivo is definitivo_antes
+    assert error.mensaje_publico == "base; segunda pasada"
+    assert str(error) == "llm_truncado: base; segunda pasada"
+
+
+def test_el_detalle_entra_en_los_500_caracteres_que_guarda_la_app(llm):
+    llm.side_effect = [_truncado(), _truncado(16000, "15900")]
+
+    with pytest.raises(PipelineError) as exc:
+        _validando()
+
+    # processor.py corta en 500 al mandarlo: si el texto creciera, se
+    # perderia justo la parte que se agrego al final.
+    assert len(exc.value.mensaje_publico) < 200
