@@ -25,6 +25,23 @@ export const HAY_MATERIAL = {
   OR: [{ audioEstado: "en_r2" as const }, { modeloAsr: { not: null } }],
 };
 
+/**
+ * La MISMA condición, para decidirlo sobre una fila ya leída (Pendientes usa
+ * esto para decir si una sesión fallida se puede reintentar).
+ *
+ * Son dos escrituras de una sola regla: una viaja al WHERE y la otra corre en
+ * memoria, y no hay forma de derivar una de la otra sin un intérprete de
+ * `where`. Lo que las ata es un test —rutas-area2 / feedback-trabajos— que
+ * corre las dos sobre las mismas filas y exige la misma respuesta. Si cambia
+ * una, cambian las dos, o el test se pone rojo.
+ */
+export function hayMaterial(sesion: {
+  audioEstado: string;
+  modeloAsr: string | null;
+}): boolean {
+  return sesion.audioEstado === "en_r2" || sesion.modeloAsr !== null;
+}
+
 /** Lo que las dos vueltas a `procesando` escriben, además del estado. */
 export function datosVueltaAProcesando(ahora: Date) {
   return {

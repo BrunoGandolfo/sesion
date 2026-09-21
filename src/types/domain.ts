@@ -241,12 +241,44 @@ export interface TurnoSinAutorizacion {
   fecha: string;
 }
 
+/**
+ * Una sesión que se procesó y falló, y que sigue esperando una decisión.
+ *
+ * Hasta ahora una nota fallida no aparecía en ningún lado: Pendientes sólo
+ * miraba las que están en `revision`, así que una sesión del martes que
+ * falló el martes podía no enterarse nunca de que le falta la nota.
+ */
+export interface NotaFallida {
+  sesionId: string;
+  turnoId: string;
+  pacienteId: string;
+  /** "Ana López" — nombre y apellido ya unidos. */
+  pacienteNombre: string;
+  /** Fecha y hora del turno, ISO. */
+  fecha: string;
+  /** El código del fallo (`intentos_agotados`, `asr_vacio`…), o null si la
+   *  fila quedó sin código. Nunca el detalle: ese texto es de diagnóstico. */
+  codigo: string | null;
+  /** Si todavía hay con qué volver a intentar (audio en R2 o transcripción
+   *  ya hecha). En false, el único camino es eliminarla. */
+  puedeReintentarse: boolean;
+}
+
 export interface PendientesTerapeuta {
   notasParaRevisar: NotaParaRevisar[];
   /** Agrupado por paciente, de la deuda más grande a la más chica. */
   sinCobrar: PacienteSinCobrar[];
   totalSinCobrar: TotalSinCobrar;
   sinAutorizacion: TurnoSinAutorizacion[];
+  /**
+   * Sesiones fallidas sin resolver, de cualquier fecha, de la más vieja a la
+   * más nueva y con tope.
+   *
+   * OPCIONAL a propósito: el servidor lo manda siempre, pero dejarlo
+   * obligatorio rompería el tipado de las pantallas que hoy arman un
+   * `PendientesTerapeuta` a mano. Es un agregado, no un cambio de forma.
+   */
+  notasFallidas?: NotaFallida[];
 }
 
 /**
