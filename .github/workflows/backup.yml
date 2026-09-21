@@ -63,7 +63,7 @@ jobs:
 
     steps:
       # Sólo para la acción compuesta de alerta (vive en el repo).
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # ---------------------------------------------------------------------
       # 0. Sin credenciales de respaldo se aborta antes de tocar la base.
