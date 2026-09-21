@@ -140,12 +140,9 @@ export function saludo(d?: Date): string {
 // ============================================
 
 const AVATAR_TONES = [
-  { bg: "#4F7A6A", fg: "#F4F0E8" },
-  { bg: "#3E6355", fg: "#F4F0E8" },
-  { bg: "#B26B45", fg: "#FBF3EB" },
-  { bg: "#A88534", fg: "#FAF4E4" },
-  { bg: "#4A6B7D", fg: "#EEF3F5" },
-  { bg: "#6F9384", fg: "#F3F6F4" },
+  { bg: "var(--color-sage-50)", fg: "var(--color-sage-700)" },
+  { bg: "var(--color-sage-100)", fg: "var(--color-sage-700)" },
+  { bg: "var(--color-cream-100)", fg: "var(--color-ink-700)" },
 ] as const;
 
 export function initials(nombre: string, apellido?: string): string {

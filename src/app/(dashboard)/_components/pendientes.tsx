@@ -60,7 +60,7 @@ function Fila({
 }) {
   return (
     <div className="px-4 py-3.5">
-      <p className="flex items-center gap-2 font-sans text-[14px] font-semibold text-ink-900">
+      <p className="flex items-center gap-2 font-sans tabular-nums text-[14px] font-semibold text-ink-900">
         {icono}
         {titulo}
       </p>
@@ -69,7 +69,7 @@ function Fila({
       ) : null}
       {pie ? <div className="mt-1 pl-[26px]">{pie}</div> : null}
       {!pie && restantes > 0 ? (
-        <p className="mt-1 pl-[26px] font-sans text-[12px] text-ink-500">
+        <p className="mt-1 pl-[26px] font-sans tabular-nums text-[12px] text-ink-500">
           y {restantes} más
         </p>
       ) : null}

@@ -395,7 +395,7 @@ export function GrabarView({
             {pacienteNombre}
           </h1>
           {horaTexto ? (
-            <p className="font-mono text-[14px] tabular-nums text-ink-500">
+            <p className="text-[14px] tabular-nums text-ink-500">
               {horaTexto}
             </p>
           ) : null}
@@ -628,7 +628,7 @@ function PantallaGrabando({
         ) : (
           <span
             aria-hidden="true"
-            className="inline-block h-[10px] w-[10px] shrink-0 rounded-full bg-[color:var(--color-error)] opacity-40"
+            className="inline-block h-[10px] w-[10px] shrink-0 rounded-full bg-ink-300"
           />
         )}
         <Aparece
@@ -641,7 +641,7 @@ function PantallaGrabando({
       </div>
 
       <p
-        className="font-mono text-[52px] font-semibold leading-none tabular-nums text-ink-900"
+        className="min-w-[8ch] text-center text-[52px] font-semibold leading-none tabular-nums text-ink-900"
         aria-label={`${Math.floor(segundos)} segundos grabados`}
       >
         {formatearDuracion(segundos)}
@@ -740,7 +740,7 @@ function PantallaGrabando({
             )}
 
             <Button
-              className="flex-1 border-transparent !bg-[color:var(--color-error)] text-white hover:!bg-[#8f3b3b] active:!bg-[#7c3232]"
+              className="flex-1"
               onClick={onTerminar}
               icon={<Square size={15} strokeWidth={2} aria-hidden="true" />}
             >
@@ -822,7 +822,7 @@ function PantallaEnviando({
       className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-cream-50 px-6 text-center"
     >
       <Loader2 size={34} strokeWidth={1.8} aria-hidden="true" className="animate-spin text-sage-500" />
-      <p role="status" aria-live="polite" className="max-w-[320px] font-sans text-[16px] font-semibold leading-[1.45] text-ink-900">
+      <p role="status" aria-live="polite" className="max-w-[320px] font-sans tabular-nums text-[16px] font-semibold leading-[1.45] text-ink-900">
         {texto}
       </p>
       <div

@@ -105,17 +105,10 @@ function statusFor(turno: TurnoConPaciente): Status {
   if (turno.estado === "cancelado") return { variant: "neutral", label: CANCELADO };
   if (turno.estado === "ausente") return { variant: "neutral", label: NO_VINO };
   if (turno.pagoEstado === "pagado") return { variant: "sage", label: PAGADO };
-  if (turno.estado === "programado") return { variant: "gold", label: AGENDADO };
+  if (turno.estado === "programado") return { variant: "neutral", label: AGENDADO };
   return { variant: "terracotta", label: PENDIENTE };
 }
 
-function borderLeftClass(turno: TurnoConPaciente): string {
-  if (turno.estado === "cancelado") return "border-l-ink-300";
-  if (turno.pagoEstado === "pagado") return "border-l-sage-500";
-  if (turno.estado === "programado") return "border-l-gold-500";
-  if (turno.estado === "realizado") return "border-l-terracotta-500";
-  return "border-l-ink-300";
-}
 
 /**
  * Se puede grabar mientras el turno siga vivo —programado o realizado— y sea
@@ -214,7 +207,7 @@ const TONO: Record<Accion["tono"], string> = {
 export function SessionRow(props: SessionRowProps) {
   const { turno, onClick, cobroConfirmado = false, className = "" } = props;
   const status = statusFor(turno);
-  const leftClass = borderLeftClass(turno);
+  const leftClass = "border-l-cream-200";
   const accion = accionDe(props);
   const aviso = avisoDe(props, accion);
   const sesion = turno.sesionClinica;
@@ -226,10 +219,10 @@ export function SessionRow(props: SessionRowProps) {
   const content = (
     <>
       <div className="flex flex-col shrink-0 min-w-[52px]">
-        <span className="font-display text-[19px] font-medium tabular-nums leading-none text-ink-900">
+        <span className="text-[19px] font-medium tabular-nums leading-none text-ink-900">
           {hora(turno.fecha)}
         </span>
-        <span className="text-[12px] text-ink-500 mt-1">
+        <span className="tabular-nums text-[12px] text-ink-500 mt-1">
           {turno.duracion} min
         </span>
       </div>
@@ -244,7 +237,7 @@ export function SessionRow(props: SessionRowProps) {
           <span className="text-[15px] font-semibold text-ink-900 break-words">
             {turno.paciente.nombre} {turno.paciente.apellido}
           </span>
-          <span className="text-[12px] text-ink-500">
+          <span className="tabular-nums text-[12px] text-ink-500">
             {turno.modalidad === "online" ? "Online" : "Presencial"} ·{" "}
             {money(turno.tarifaCobrada)}
           </span>

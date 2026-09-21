@@ -43,7 +43,7 @@ export function Kpis({ ahora, data }: { ahora: Date; data: DashboardData }) {
       <div className="grid grid-cols-2">
         {items.map((item) => {
           const clases = `min-w-0 border-[color:var(--border-subtle)] p-4 lg:p-5 ${item.clases}`;
-          const numero = `mt-2 block font-[family-name:var(--font-display)] font-medium leading-none tabular-nums ${
+          const numero = `mt-2 block font-medium leading-none tabular-nums ${
             item.tamano
           } ${item.acento ? "text-terracotta-600" : "text-ink-900"}`;
           const cuerpo = (

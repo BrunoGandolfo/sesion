@@ -387,7 +387,7 @@ function KpiGrid({
               {item.label}
             </span>
             <span
-              className={`mt-2 block whitespace-nowrap font-[family-name:var(--font-display)] text-[22px] font-medium leading-none tabular-nums lg:text-[30px] ${kpiValueClass(item.tone)}`}
+              className={`mt-2 block whitespace-nowrap text-[22px] font-medium leading-none tabular-nums lg:text-[30px] ${kpiValueClass(item.tone)}`}
             >
               {item.value}
             </span>
@@ -514,7 +514,7 @@ function TeDeben({
       <Card className="rounded-[8px] border-l-2 border-l-terracotta-500 bg-cream-100 px-5 py-4 lg:px-6 lg:py-5">
         <p className="text-[15px] leading-[1.55] text-ink-700">
           {sesionesSinCobrar === 1 ? "Es" : "Son"}{" "}
-          <span className="font-[family-name:var(--font-display)] text-[24px] font-medium leading-none text-terracotta-600 lg:text-[28px]">
+          <span className="tabular-nums text-[24px] font-medium leading-none text-terracotta-600 lg:text-[28px]">
             {pluralizar(sesionesSinCobrar, "sesión", "sesiones")}
           </span>{" "}
           {SIN_COBRAR_FRASE_FINAL}
@@ -667,7 +667,7 @@ function FilaDeudor({
               ) : null}
             </span>
           </span>
-          <span className="col-start-2 row-start-1 whitespace-nowrap font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-terracotta-600">
+          <span className="col-start-2 row-start-1 whitespace-nowrap text-[15px] font-medium tabular-nums text-terracotta-600">
             {money(deudor.montoTotal)}
           </span>
         </Link>
@@ -850,7 +850,7 @@ function RegistrarPago({
                 <span className="min-w-0 flex-1 text-[14px] text-ink-900">
                   Sesión del {fechaLarga(new Date(t.fecha))}
                 </span>
-                <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[14px] font-medium tabular-nums text-ink-700">
+                <span className="whitespace-nowrap text-[14px] font-medium tabular-nums text-ink-700">
                   {money(t.tarifaCobrada)}
                 </span>
               </label>
@@ -939,7 +939,7 @@ function CobrosDelMes({
               <Link href={`/pacientes/${t.paciente.id}`} className="min-w-0 break-words text-[14px] font-semibold leading-[1.35] text-ink-900 hover:underline">
                 {nombreCompleto}
               </Link>
-              <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-[15px] font-medium tabular-nums text-sage-700">
+              <span className="whitespace-nowrap text-[15px] font-medium tabular-nums text-sage-700">
                 {money(t.tarifaCobrada)}
               </span>
               <span className="col-span-2 text-[12px] text-ink-500">

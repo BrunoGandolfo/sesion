@@ -14,7 +14,7 @@ export function AvisoPrueba({ prueba, className = "" }: { prueba: EstadoPrueba |
       className={`rounded-md border p-4 text-sm leading-relaxed text-ink-900 ${tope || cerca ? "border-terracotta-500/30 bg-terracotta-50" : "border-[color:var(--border-subtle)] bg-white"} ${className}`}
     >
       <p>{PRUEBA_AVISO(prueba.usadas)}</p>
-      {cerca && <p className="mt-1 font-semibold">{PRUEBA_CERCA(prueba.restantes)}</p>}
+      {cerca && <p className="mt-1 tabular-nums font-semibold">{PRUEBA_CERCA(prueba.restantes)}</p>}
       {tope && <p className="mt-1 font-semibold">{PRUEBA_TOPE}</p>}
     </div>
   );

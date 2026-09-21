@@ -35,7 +35,7 @@ export function Saludo({
 
       <h1 className="mt-3 flex flex-wrap items-baseline gap-x-2 font-[family-name:var(--font-display)] text-[24px] font-medium italic leading-tight tracking-[-0.02em] text-ink-900 lg:text-[30px]">
         {diaSemana(ahora)}
-        <span className="font-sans text-[13px] font-normal not-italic tracking-normal text-ink-500">
+        <span className="font-sans tabular-nums text-[13px] font-normal not-italic tracking-normal text-ink-500">
           {sesiones > 0
             ? pluralizar(sesiones, "sesión en el día", "sesiones en el día")
             : HOY_SIN_SESIONES}

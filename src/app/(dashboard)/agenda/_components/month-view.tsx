@@ -55,17 +55,17 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
               } ${!inMonth ? "opacity-30" : ""}`}
             >
               {isToday ? (
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sage-500 font-[family-name:var(--font-display)] text-[14px] font-medium leading-none text-white">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sage-500 tabular-nums text-[14px] font-medium leading-none text-white">
                   {partesMvd(day).dia}
                 </span>
               ) : (
-                <span className="text-[14px] font-medium leading-none text-ink-900">
+                <span className="tabular-nums text-[14px] font-medium leading-none text-ink-900">
                   {partesMvd(day).dia}
                 </span>
               )}
               {turnosDia.length > 0 ? (
                 <div className="mt-auto flex flex-wrap items-center gap-1">
-                  <span className="text-[12px] font-semibold leading-none text-ink-700">{turnosDia.length}</span>
+                  <span className="tabular-nums text-[12px] font-semibold leading-none text-ink-700">{turnosDia.length}</span>
                   {visibles.map((t) => (
                     <span
                       key={t.id}
@@ -75,7 +75,7 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
                           ? "bg-ink-300"
                           : t.pagoEstado === "pagado"
                             ? "bg-sage-500"
-                            : "bg-gold-500"
+                            : "bg-ink-500"
                       }`}
                     />
                   ))}
@@ -102,7 +102,7 @@ function Leyenda() {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[color:var(--border-subtle)] bg-cream-50 px-3 py-2 text-[11px] text-ink-500">
       <span>{MES_LEYENDA}</span>
       <span className="inline-flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-gold-500" />
+        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-ink-500" />
         {AGENDADO}
       </span>
       <span className="inline-flex items-center gap-1.5">

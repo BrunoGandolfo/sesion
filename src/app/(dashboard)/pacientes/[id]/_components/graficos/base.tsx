@@ -26,9 +26,9 @@ import { etiquetasDeFechas, useAnchoGrafico } from "./medidas";
 export const COLOR = {
   sage: "#4F7A6A",
   sageSoft: "#C2D4CB",
-  terracotta: "#B26B45",
+  terracotta: "var(--color-terracotta-500)",
   terracottaSoft: "#F5E0CC",
-  gold: "#A88534",
+  gold: "var(--color-gold-500)",
   goldSoft: "#FAF4E4",
   cream: "#FAFAF6",
   ink: "#1A2628",

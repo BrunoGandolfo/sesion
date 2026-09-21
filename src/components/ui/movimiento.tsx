@@ -229,7 +229,7 @@ export interface ContadorProps {
 
 /** Los totales se leen completos desde el primer cuadro. */
 export function Contador({ valor, formato = (n) => String(n), className }: ContadorProps) {
-  return <span className={className}>{formato(valor)}</span>;
+  return <span className={`tabular-nums ${className ?? ""}`}>{formato(valor)}</span>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

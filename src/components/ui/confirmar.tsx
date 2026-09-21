@@ -95,13 +95,13 @@ export function Confirmar({
   const esPeligro = variante === "peligro";
 
   const marco = esPeligro
-    ? "border-terracotta-500/30 bg-terracotta-50"
+    ? "border-error/30 bg-terracotta-50"
     : "border-[color:var(--border-subtle)] bg-cream-100";
 
-  const tituloColor = esPeligro ? "text-terracotta-600" : "text-ink-900";
+  const tituloColor = esPeligro ? "text-error" : "text-ink-900";
 
   const confirmarClase = esPeligro
-    ? "flex-1 !bg-terracotta-500 hover:!bg-terracotta-600 active:!bg-terracotta-600"
+    ? "flex-1 !bg-error hover:!bg-error active:!bg-error"
     : "flex-1";
 
   return (

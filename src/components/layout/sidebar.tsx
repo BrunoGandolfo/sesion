@@ -152,7 +152,7 @@ export function Sidebar() {
                   <span
                     aria-label={`${redCount} ${redCount === 1 ? "deudor" : "deudores"} con más de 30 días`}
                     title={`${redCount} pacientes con deudas de más de 30 días`}
-                    className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-terracotta-600 px-1.5 text-[11px] font-semibold leading-[18px] text-white"
+                    className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-terracotta-600 tabular-nums px-1.5 text-[11px] font-semibold leading-[18px] text-white"
                   >
                     {redCount} · +30 días
                   </span>
@@ -186,7 +186,7 @@ export function Sidebar() {
         {/* Footer */}
         <div className="mt-auto border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div className="flex items-center gap-3 px-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sage-500 font-[family-name:var(--font-display)] text-xs font-medium text-cream-100">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sage-100 font-sans text-xs font-medium text-sage-700">
               {initials}
             </div>
             <div className="flex-1 min-w-0">

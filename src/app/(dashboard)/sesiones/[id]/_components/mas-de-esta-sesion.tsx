@@ -165,7 +165,7 @@ export function MasDeEstaSesion({
                     {NOMBRE_INTERVENCION[intervencion.tipo]}
                   </Chip>
                   {intervencion.timestampAprox ? (
-                    <span className="font-mono text-[12px] tabular-nums text-ink-500">
+                    <span className="text-[12px] tabular-nums text-ink-500">
                       {intervencion.timestampAprox}
                     </span>
                   ) : null}
@@ -209,7 +209,7 @@ export function MasDeEstaSesion({
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-2">
             <Rotulo>{INTENSIDAD_EMOCIONAL}</Rotulo>
-            <span className="font-display text-[14px] font-medium text-ink-900">
+            <span className="tabular-nums text-[14px] font-medium text-ink-900">
               {intensidad}
               <span className="text-ink-500"> / 10</span>
             </span>

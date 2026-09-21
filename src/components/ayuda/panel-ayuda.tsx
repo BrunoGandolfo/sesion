@@ -340,7 +340,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
               placeholder={AYUDA_PLACEHOLDER}
               aria-label={AYUDA_PLACEHOLDER}
               autoComplete="off"
-              className="min-h-[44px] min-w-0 flex-1 rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-[var(--duration-fast)] placeholder:text-ink-500 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
+              className="min-h-[44px] min-w-0 flex-1 rounded-sm border border-[color:var(--border-control)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-[var(--duration-fast)] placeholder:text-ink-500 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
             />
             <button
               type="submit"
