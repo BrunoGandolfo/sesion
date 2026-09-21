@@ -67,7 +67,7 @@ export function Chip({
   return (
     <span
       data-texto={texto}
-      className={`inline-flex items-center rounded-full font-sans ${textoClasses[texto]} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center rounded-full font-sans tabular-nums ${textoClasses[texto]} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
     >
       {children}
     </span>

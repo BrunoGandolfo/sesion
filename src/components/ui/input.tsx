@@ -25,7 +25,7 @@ export function Input({
 
   const wrapperBorder = error
     ? "border-[color:var(--color-error)]"
-    : "border-[color:var(--border-subtle)] focus-within:border-sage-500";
+    : "border-[color:var(--border-control)] focus-within:border-sage-500";
 
   return (
     <div className="flex flex-col gap-2">
@@ -50,7 +50,7 @@ export function Input({
           id={inputId}
           aria-invalid={error ? true : undefined}
           aria-describedby={errorId}
-          className={`flex-1 min-w-0 bg-transparent py-[10px] text-[15px] text-ink-900 outline-none placeholder:text-ink-500 ${prefix ? "pl-2 pr-[14px]" : "px-[14px]"} ${className}`}
+          className={`flex-1 min-w-0 bg-transparent py-[10px] text-[15px] text-ink-900 outline-none placeholder:text-ink-500 ${prefix ? "pl-2 pr-[14px]" : "px-[14px]"} ${rest.type === "number" || rest.type === "date" || rest.type === "time" || rest.type === "tel" || rest.inputMode === "numeric" || rest.inputMode === "decimal" ? "tabular-nums" : ""} ${className}`}
           {...rest}
         />
       </div>

@@ -3,8 +3,8 @@
  * Color → token Tailwind del proyecto.
  *
  *   1–14 días  → sage       (#4F7A6A) — texto plano "hace X días"
- *  15–30 días  → gold/ocre  (#A88534) — "hace X días ⚠"
- *   31+ días   → terracotta (#B26B45) — bold/badge
+ *  15–30 días  → gold/ocre  (#866929) — "hace X días ⚠"
+ *   31+ días   → terracotta (#9A5C3B) — bold/badge
  *
  * El umbral 0 días (deudor de hoy mismo) cae en sage.
  */

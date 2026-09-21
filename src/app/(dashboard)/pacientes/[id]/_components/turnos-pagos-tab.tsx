@@ -67,7 +67,7 @@ function estadoChipVariant(
   estado: TurnoEstado,
 ): "sage" | "gold" | "terracotta" | "neutral" {
   if (estado === "realizado") return "sage";
-  if (estado === "cancelado") return "terracotta";
+  if (estado === "cancelado") return "neutral";
   if (estado === "ausente") return "gold";
   return "neutral";
 }
@@ -260,7 +260,7 @@ function DeudaBanner({ monto, cantidad }: { monto: number; cantidad: number }) {
             {pluralizar(cantidad, "sesión sin cobrar", "sesiones sin cobrar")}
           </span>
           <span className="text-ink-500"> · </span>
-          <span className="tabular-nums text-terracotta-500 font-display font-medium">
+          <span className="tabular-nums text-terracotta-500 font-medium">
             {money(monto)}
           </span>
         </p>
@@ -268,7 +268,7 @@ function DeudaBanner({ monto, cantidad }: { monto: number; cantidad: number }) {
           Deuda acumulada por sesiones realizadas y pendientes de cobro.
         </p>
       </div>
-      <span className="font-display text-[18px] font-medium tabular-nums text-terracotta-500 sm:text-[20px]">
+      <span className="text-[18px] font-medium tabular-nums text-terracotta-500 sm:text-[20px]">
         {money(monto)}
       </span>
     </div>
@@ -466,7 +466,7 @@ function MetodoPagoSelector({
         <h2 className="mt-1 font-display text-[22px] font-medium tracking-[-0.01em] text-ink-900">
           Elegí el método
         </h2>
-        <p className="mt-1 font-sans text-[13px] text-ink-500">{money(monto)}</p>
+        <p className="mt-1 font-sans tabular-nums text-[13px] text-ink-500">{money(monto)}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

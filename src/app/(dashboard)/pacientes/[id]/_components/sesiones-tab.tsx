@@ -338,7 +338,7 @@ export function SesionesTab({
               Sesiones
             </h2>
             {totalEnLista > 0 ? (
-              <span className="font-sans text-[12px] text-ink-500">
+              <span className="font-sans tabular-nums text-[12px] text-ink-500">
                 {pluralizar(totalEnLista, "sesión", "sesiones")}
               </span>
             ) : null}
@@ -563,7 +563,7 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
       className={FILA_DE_HOY}
     >
       <MarcaDeHoy />
-      <span className="font-display text-[15px] font-medium text-ink-900">
+      <span className="tabular-nums text-[15px] font-medium text-ink-900">
         {fechaLarga(turno.fecha)} · {hora(turno.fecha)}
       </span>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -619,7 +619,7 @@ function FilaSesion({ sesion, hoy }: { sesion: DocSesion; hoy: Hoy | null }) {
       className={hoy ? FILA_DE_HOY : FILA_COMUN}
     >
       {hoy ? <MarcaDeHoy /> : null}
-      <span className="font-display text-[15px] font-medium text-ink-900">
+      <span className="tabular-nums text-[15px] font-medium text-ink-900">
         <Link
           href={href}
           className="after:absolute after:inset-0 after:content-[''] focus:outline-none"

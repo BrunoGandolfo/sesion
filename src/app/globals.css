@@ -89,6 +89,8 @@
   /* Borders */
   --border-subtle: var(--color-cream-200);
   --border-strong: #C4BDAE;
+  /* Límite de controles: 3.29:1 sobre papel y 3.45:1 sobre blanco. */
+  --border-control: #858C86;
   --border-focus: var(--color-sage-500);
 }
 
@@ -108,6 +110,16 @@ body {
    No alteran bg-* ni border-* de la paleta.
    ============================================ */
 @layer utilities {
+  /* Una sola regla para cifras de pantalla y papel. Fraunces no tiene
+     cifras tabulares; pedir sólo `tabular-nums` no cambia sus anchos.
+     Los rótulos SVG del Recorrido ya usan Jakarta: heredan la misma regla. */
+  .tabular-nums, svg text {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    /* Evita que el redondeo de glifos altere el avance tabular en Chromium. */
+    text-rendering: geometricPrecision;
+  }
+
   .text-sage-500 {
     color: var(--color-sage-text);
   }

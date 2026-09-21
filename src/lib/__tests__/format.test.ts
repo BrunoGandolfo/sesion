@@ -244,9 +244,9 @@ describe("avatarColor", () => {
     expect(avatarColor("Ana Pérez")).toEqual(avatarColor("Ana Pérez"));
   });
 
-  it("devuelve un objeto con bg y fg en formato hex", () => {
+  it("devuelve referencias a los tokens compartidos para fondo y texto", () => {
     const c = avatarColor("Ana");
-    expect(c.bg).toMatch(/^#[0-9A-F]{6}$/i);
-    expect(c.fg).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(c.bg).toMatch(/^var\(--color-[a-z]+-\d+\)$/);
+    expect(c.fg).toMatch(/^var\(--color-[a-z]+-\d+\)$/);
   });
 });

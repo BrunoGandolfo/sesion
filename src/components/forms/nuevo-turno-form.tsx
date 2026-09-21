@@ -491,7 +491,7 @@ export function NuevoTurnoForm({
                         <span className="block truncate text-[14px] font-medium text-ink-900">
                           {nombreCompleto(p)}
                         </span>
-                        <span className="block text-[12px] text-ink-500">
+                        <span className="block tabular-nums text-[12px] text-ink-500">
                           {money(p.tarifa)}
                         </span>
                       </span>
@@ -521,7 +521,7 @@ export function NuevoTurnoForm({
                       <span className="block truncate text-[14px] font-medium text-ink-900">
                         Crear a {busquedaLimpia}
                       </span>
-                      <span className="block text-[12px] text-ink-500">
+                      <span className="block tabular-nums text-[12px] text-ink-500">
                         Nombre y teléfono, y seguimos con el turno
                       </span>
                     </span>

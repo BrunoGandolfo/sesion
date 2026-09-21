@@ -107,7 +107,7 @@ export function FichaTab({
             icon={<Wallet size={14} strokeWidth={1.6} aria-hidden="true" />}
             label="Tarifa"
           >
-            <span className="font-display font-medium tabular-nums text-ink-900">
+            <span className="font-medium tabular-nums text-ink-900">
               {money(paciente.tarifa)}
             </span>
             <span className="text-ink-500"> / sesión</span>

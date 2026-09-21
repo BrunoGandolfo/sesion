@@ -307,7 +307,7 @@ function ScoreBar({ label, score, maxScore, tono, razon, evidence }: ScoreBarPro
           {label}
         </span>
         <span
-          className={`font-display text-[14px] font-medium ${TONO_VALUE_TEXT[tono]}`}
+          className={`tabular-nums text-[14px] font-medium ${TONO_VALUE_TEXT[tono]}`}
         >
           {score === null ? (
             "No determinable"
@@ -360,7 +360,7 @@ export function EvidenceItem({ evidencia }: { evidencia: EvidenciaFeedback }) {
   return (
     <li className="flex flex-col gap-0.5 border-l-2 border-cream-200 pl-3">
       {evidencia.timestamp && (
-        <span className="font-mono text-[11px] font-semibold tabular-nums text-ink-500">
+        <span className="text-[11px] font-semibold tabular-nums text-ink-500">
           {evidencia.timestamp}
         </span>
       )}
@@ -699,7 +699,7 @@ function BloqueGestalt({ items }: { items: ItemGTFS[] }) {
           </p>
         ) : (
           <p className="flex items-baseline gap-2">
-            <span className="font-display text-[34px] font-medium leading-none text-ink-900">
+            <span className="tabular-nums text-[34px] font-medium leading-none text-ink-900">
               {presentes.length}
             </span>
             <span className="font-sans text-[14px] text-ink-700">

@@ -182,7 +182,7 @@ export function CardAhora({
             <h2 className="break-words font-[family-name:var(--font-display)] text-[22px] font-medium leading-tight text-ink-900 lg:text-[26px]">
               {nombre}
             </h2>
-            <p className="mt-1 flex flex-wrap items-center gap-1.5 font-sans text-[13px] text-ink-500">
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 font-sans tabular-nums text-[13px] text-ink-500">
               <ModalityIcon size={14} strokeWidth={1.8} aria-hidden="true" />
               {turno.modalidad === "online" ? "Online" : "Presencial"} ·{" "}
               {turno.duracion}′ · {money(turno.tarifaCobrada)}
@@ -191,7 +191,7 @@ export function CardAhora({
         </div>
 
         <div className="flex shrink-0 items-center justify-between gap-1.5 lg:flex-col lg:items-end">
-          <time className="font-[family-name:var(--font-display)] text-[32px] font-medium leading-none tabular-nums text-ink-900 lg:text-[38px]">
+          <time className="text-[32px] font-medium leading-none tabular-nums text-ink-900 lg:text-[38px]">
             {hora(turno.fecha)}
           </time>
           {/* El punto late solo mientras la sesión está abierta: es lo

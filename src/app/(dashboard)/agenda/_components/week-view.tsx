@@ -56,7 +56,7 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                   </span>
                   <div className="flex items-center gap-1.5">
                     <span
-                      className={`font-[family-name:var(--font-display)] text-[18px] font-medium leading-none tabular-nums ${
+                      className={`text-[18px] font-medium leading-none tabular-nums ${
                         isToday ? "text-sage-600" : "text-ink-900"
                       }`}
                     >
@@ -125,15 +125,15 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                         libera
                           ? "bg-cream-50 border-l-ink-300"
                           : isPresencial
-                            ? "bg-sage-100 border-l-sage-500"
-                            : "bg-gold-50 border-l-gold-500"
+                            ? "bg-sage-100 border-l-cream-200"
+                            : "bg-cream-100 border-l-cream-200"
                       }`}
                       aria-label={`${turno.paciente.nombre} ${turno.paciente.apellido} ${detalle}`}
                     >
                       <span className={`block truncate font-semibold leading-[14px] ${libera ? "text-ink-500 line-through" : "text-ink-900"}`}>
                         {turno.paciente.nombre} {turno.paciente.apellido}
                       </span>
-                      <span className="block truncate text-[10px] leading-[12px] text-ink-500 tabular-nums">
+                      <span className="block truncate text-[10px] leading-[12px] text-ink-700 tabular-nums">
                         {detalle}
                       </span>
                     </button>

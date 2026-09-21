@@ -73,7 +73,7 @@ export function CabeceraFicha({
                 </Chip>
               ) : null}
               {paciente.deudaTotal > 0 ? (
-                <span className="font-display font-medium tabular-nums text-terracotta-500">
+                <span className="font-medium tabular-nums text-terracotta-500">
                   Debe {money(paciente.deudaTotal)}
                 </span>
               ) : null}

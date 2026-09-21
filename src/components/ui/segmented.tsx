@@ -52,7 +52,7 @@ export function Segmented<T extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={`inline-flex max-w-full items-center gap-1 overflow-hidden rounded-md border border-[color:var(--border-subtle)] bg-cream-100 p-1 ${className}`}
+      className={`inline-flex max-w-full tabular-nums items-center gap-1 overflow-hidden rounded-md border border-[color:var(--border-subtle)] bg-cream-100 p-1 ${className}`}
     >
       {options.map((opt) => {
         const active = opt.value === value;

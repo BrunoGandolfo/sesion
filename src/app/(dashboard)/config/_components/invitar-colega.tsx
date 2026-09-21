@@ -32,7 +32,7 @@ export function InvitarColega() {
       {cupo?.aviso && !error && <p role="status" className="mb-4 text-sm font-semibold text-ink-900">{cupo.aviso}</p>}
       <Button type="button" disabled={creando || Boolean(cupo?.aviso)} onClick={() => void generar()}>{creando ? GUARDANDO : INVITAR_GENERAR}</Button>
       {enlace && <div className="mt-4 flex flex-col gap-3">
-        <label className="text-sm">{INVITAR_ENLACE}<input readOnly value={enlace} onFocus={e => e.target.select()} className="mt-1 w-full rounded border p-2 text-sm" /></label>
+        <label className="text-sm">{INVITAR_ENLACE}<input readOnly value={enlace} onFocus={e => e.target.select()} className="mt-1 w-full rounded border border-[color:var(--border-control)] p-2 text-sm" /></label>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={() => void copiar()}>{INVITAR_COPIAR}</Button>
           <a href={`https://wa.me/?text=${encodeURIComponent(`${INVITAR_MENSAJE}\n${enlace}`)}`} target="_blank" rel="noopener noreferrer" className="text-sm text-sage-600 underline">{INVITAR_WHATSAPP}</a>

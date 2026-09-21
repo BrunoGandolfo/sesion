@@ -80,7 +80,7 @@ const CATEGORIAS: ReadonlyArray<CategoriaInfo> = [
     value: "modismo_rioplatense",
     label: "Modismo rioplatense",
     chipLabel: "Modismo",
-    variant: "gold",
+    variant: "neutral",
   },
   {
     value: "nombre_propio",
@@ -400,7 +400,7 @@ export function HotWordsManager({
               id={categoriaId}
               value={nuevaCategoria}
               onChange={(e) => setNuevaCategoria(e.target.value as Categoria)}
-              className="rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
+              className="rounded-sm border border-[color:var(--border-control)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
             >
               {CATEGORIAS.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -547,7 +547,7 @@ export function HotWordsManager({
                 }}
                 placeholder="transferencia, contratransferencia, encuadre&#10;gurí&#10;Lacan"
                 rows={5}
-                className="resize-y rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] leading-[1.5] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
+                className="resize-y rounded-sm border border-[color:var(--border-control)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] leading-[1.5] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
               />
             </div>
 
@@ -563,7 +563,7 @@ export function HotWordsManager({
                   id={bulkCategoriaId}
                   value={bulkCategoria}
                   onChange={(e) => setBulkCategoria(e.target.value as Categoria)}
-                  className="rounded-sm border border-[color:var(--border-subtle)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
+                  className="rounded-sm border border-[color:var(--border-control)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] text-ink-900 outline-none transition-colors duration-150 focus-visible:border-sage-500 focus-visible:bg-white"
                 >
                   {CATEGORIAS.map((c) => (
                     <option key={c.value} value={c.value}>

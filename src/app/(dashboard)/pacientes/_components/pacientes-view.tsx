@@ -419,7 +419,7 @@ function DesktopTable({
               <span
                 className={
                   p.deudaTotal > 0
-                    ? "font-display text-[15px] font-medium tabular-nums text-terracotta-600"
+                    ? "text-[15px] font-medium tabular-nums text-terracotta-600"
                     : "text-[15px] text-ink-300"
                 }
               >
@@ -471,7 +471,7 @@ function MobileList({
               </span>
               {/* Sin `truncate`: la segunda línea decía "Hace 3 mes…" por
                   recortar una frase que entra en dos renglones. */}
-              <span className="text-[12px] leading-[1.4] text-ink-500">
+              <span className="tabular-nums text-[12px] leading-[1.4] text-ink-500">
                 {money(p.tarifa)} ·{" "}
                 {p.ultimaSesion ? fechaRelativa(p.ultimaSesion) : "-"}
               </span>

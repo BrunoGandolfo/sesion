@@ -23,7 +23,7 @@ export function Textarea({
 
   const wrapperBorder = error
     ? "border-[color:var(--color-error)]"
-    : "border-[color:var(--border-subtle)] focus-within:border-sage-500";
+    : "border-[color:var(--border-control)] focus-within:border-sage-500";
 
   return (
     <div className="flex flex-col gap-2">

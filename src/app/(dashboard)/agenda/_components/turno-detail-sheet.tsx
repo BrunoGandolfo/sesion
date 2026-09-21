@@ -521,7 +521,7 @@ export function TurnoDetailSheet({
             <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
               ¿Cómo pagó?
             </p>
-            <p className="mt-1 text-[13px] text-ink-700">
+            <p className="mt-1 tabular-nums text-[13px] text-ink-700">
               {money(turno.tarifaCobrada)}
               {esProgramado ? " · al cobrar, el turno queda como realizado." : ""}
             </p>

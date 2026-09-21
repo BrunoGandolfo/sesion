@@ -203,7 +203,7 @@ function Lector({ bloques }: { bloques: BloqueTranscripcion[] }) {
         className="sticky top-0 z-10 -mx-5 flex flex-col gap-1 border-b border-[color:var(--border-subtle)] bg-cream-50 px-5 py-2 lg:mx-0 lg:px-0"
       >
         <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center rounded-sm border border-[color:var(--border-subtle)] bg-white focus-within:border-sage-500 focus-within:ring-[3px] focus-within:ring-sage-500/20">
+          <div className="flex min-w-0 flex-1 items-center rounded-sm border border-[color:var(--border-control)] bg-white focus-within:border-sage-500 focus-within:ring-[3px] focus-within:ring-sage-500/20">
             <Search size={16} strokeWidth={1.8} aria-hidden="true" className="ml-3 shrink-0 text-ink-500" />
             <input
               type="search"
@@ -225,7 +225,7 @@ function Lector({ bloques }: { bloques: BloqueTranscripcion[] }) {
               className="min-h-[44px] min-w-0 flex-1 bg-transparent px-2 text-[15px] text-ink-900 !outline-none placeholder:text-ink-500 [&::-webkit-search-cancel-button]:hidden"
             />
             {total > 0 ? (
-              <span aria-live="polite" className="shrink-0 px-2 font-mono text-[12px] tabular-nums text-ink-500">
+              <span aria-live="polite" className="shrink-0 px-2 text-[12px] tabular-nums text-ink-500">
                 {resultadoDeBusqueda(actual + 1, total)}
               </span>
             ) : null}
@@ -327,7 +327,7 @@ const Bloque = React.memo(function Bloque({
   return (
     <li className="flex flex-col gap-1">
       <div className="flex items-baseline gap-2">
-        <span className="font-mono text-[12px] font-semibold tabular-nums text-ink-500">{bloque.marca}</span>
+        <span className="text-[12px] font-semibold tabular-nums text-ink-500">{bloque.marca}</span>
         <span
           className={`font-sans text-[12px] font-semibold uppercase tracking-[0.08em] ${
             bloque.hablante === ROTULO_TERAPEUTA ? "text-sage-700" : "text-ink-700"

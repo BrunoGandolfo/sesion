@@ -146,7 +146,7 @@ export function NotaSesionView({
         <Plegable titulo={VER_BORRADOR_ORIGINAL}>
           {SECCIONES_SOAP.map(({ clave, titulo, ayuda }) => (
             <div key={clave} className="flex flex-col gap-1">
-              <span className="font-display text-[15px] font-medium text-ink-900">
+              <span className="tabular-nums text-[15px] font-medium text-ink-900">
                 {titulo}
               </span>
               <span className="font-sans text-[13px] text-ink-500">
