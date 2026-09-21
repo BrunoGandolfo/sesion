@@ -41,6 +41,7 @@ import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 
 import type {
   DeudaPaciente,
+  NotaFallida,
   NotaParaRevisar,
   PacienteSinCobrar,
   PendientesTerapeuta,
@@ -53,6 +54,7 @@ import {
   calcularDeudores,
   type TurnoConDeuda,
 } from "../domain";
+import { hayMaterial } from "./sesion/reprocesar";
 
 type ClientePrisma = typeof db;
 
@@ -72,6 +74,16 @@ export interface PendientesTerapeutaParams {
  * turno cancelado o al que la paciente no vino sería ruido.
  */
 const ESTADOS_GRABABLES = ["programado", "realizado"] as const;
+
+/**
+ * Cuántas sesiones fallidas entran en Pendientes.
+ *
+ * De la más VIEJA a la más nueva: las que importan son las que se están
+ * olvidando, no las de hoy —de las de hoy ella se acuerda—. Con más de veinte
+ * fallidas sin resolver el problema no es la lista: es el pipeline, y eso
+ * avisa el control de salud.
+ */
+export const TOPE_NOTAS_FALLIDAS = 20;
 
 function nombreCompleto(paciente: {
   nombre: string;
@@ -173,7 +185,7 @@ export async function pendientesTerapeuta({
   const inicioDelDia = inicioDelDiaMvd(ahora);
   const finDelDia = finDelDiaMvd(ahora);
 
-  const [sesionesEnRevision, turnosImpagos, turnosDeHoy] = await Promise.all([
+  const [sesionesEnRevision, sesionesFallidas, turnosImpagos, turnosDeHoy] = await Promise.all([
     // 1. Notas generadas que todavía nadie aprobó. De cualquier fecha: una
     //    nota del jueves pasado sigue siendo trabajo clínico pendiente.
     prisma.sesionClinica.findMany({
@@ -190,13 +202,36 @@ export async function pendientesTerapeuta({
       },
     }),
 
-    // 2. Sesiones hechas y sin cobrar. La consulta es la de /api/deudores,
+    // 2. Sesiones que se procesaron y FALLARON, de cualquier fecha. Sin
+    //    esto una nota fallida no aparecía en ninguna pantalla: la sesión
+    //    quedaba sin nota y nadie se enteraba. Se ordenan por el turno, de
+    //    la más vieja a la más nueva, y se cortan en TOPE_NOTAS_FALLIDAS.
+    prisma.sesionClinica.findMany({
+      where: { organizationId, estado: "fallida" },
+      select: {
+        id: true,
+        turnoId: true,
+        falloCodigo: true,
+        audioEstado: true,
+        modeloAsr: true,
+        turno: {
+          select: {
+            fecha: true,
+            paciente: { select: { id: true, nombre: true, apellido: true } },
+          },
+        },
+      },
+      orderBy: { turno: { fecha: "asc" } },
+      take: TOPE_NOTAS_FALLIDAS,
+    }),
+
+    // 3. Sesiones hechas y sin cobrar. La consulta es la de /api/deudores,
     //    no una propia: la deuda de esta pantalla y la de Cobros tienen que
     //    ser la misma o el número no coincide consigo mismo. Si quien llama
     //    ya la leyó, no se vuelve a la base.
     turnosConDeuda ?? buscarTurnosConDeuda(prisma, organizationId),
 
-    // 3. Turnos de hoy, para cruzar contra las autorizaciones vigentes.
+    // 4. Turnos de hoy, para cruzar contra las autorizaciones vigentes.
     prisma.turno.findMany({
       where: {
         organizationId,
@@ -220,6 +255,18 @@ export async function pendientesTerapeuta({
       fecha: sesion.turno.fecha.toISOString(),
     }))
     .sort(porFechaAscendente);
+
+  const notasFallidas: NotaFallida[] = sesionesFallidas.map((sesion) => ({
+    sesionId: sesion.id,
+    turnoId: sesion.turnoId,
+    pacienteId: sesion.turno.paciente.id,
+    pacienteNombre: nombreCompleto(sesion.turno.paciente),
+    fecha: sesion.turno.fecha.toISOString(),
+    // El código sí; el detalle NO: ese texto es diagnóstico y puede nombrar
+    // límites, modelos y tamaños que no son asunto de esta pantalla.
+    codigo: sesion.falloCodigo,
+    puedeReintentarse: hayMaterial(sesion),
+  }));
 
   const { sinCobrar, totalSinCobrar } = deudaDeHoy(turnosImpagos, ahora);
 
@@ -248,5 +295,11 @@ export async function pendientesTerapeuta({
     }))
     .sort(porFechaAscendente);
 
-  return { notasParaRevisar, sinCobrar, totalSinCobrar, sinAutorizacion };
+  return {
+    notasParaRevisar,
+    sinCobrar,
+    totalSinCobrar,
+    sinAutorizacion,
+    notasFallidas,
+  };
 }

@@ -60,18 +60,27 @@ import { z } from "zod";
 
 import { METODOS_PAGO } from "@/lib/constantes-turno";
 import type { db } from "@/lib/db";
-import {
-  instanteMvd,
-  OFFSET_MONTEVIDEO_MIN,
-  partesMvd,
-} from "@/lib/fechas-montevideo";
+import { OFFSET_MONTEVIDEO_MIN } from "@/lib/fechas-montevideo";
 
 import {
   buscarTurnosConDeuda,
   deudaPorAntiguedad,
   TRAMOS_DEUDA,
 } from "../domain";
+import {
+  correrMeses,
+  finDeMes,
+  formatearMes,
+  inicioDeMes,
+  largoEnMeses,
+  mesDe,
+  parsearMes,
+  type MesMvd,
+} from "../periodo";
 import { ApiError } from "../responses";
+
+export { correrMeses, formatearMes, largoEnMeses, mesDe, parsearMes };
+export type { MesMvd };
 
 type ClientePrisma = typeof db;
 
@@ -80,59 +89,13 @@ export const METODOS_COBRO = [...METODOS_PAGO, "sin_metodo"] as const;
 export type MetodoCobro = (typeof METODOS_COBRO)[number];
 
 // ────────────────────────────────────────────────────────────────────────────
-// El período: siempre meses enteros de Montevideo
+// El período: siempre meses enteros de Montevideo. El parser y la aritmética
+// viven en _lib/periodo.ts, compartidos con el historial clínico: un solo
+// lugar decide qué significa "2026-09".
 // ────────────────────────────────────────────────────────────────────────────
 
-/** "2026-09". La unidad mínima del endpoint: no hay finanzas por día. */
-export const MES_ISO = /^(\d{4})-(\d{2})$/;
-
-export interface MesMvd {
-  anio: number;
-  /** 0-11, como en Date. */
-  mes: number;
-}
-
-/** El mes de Montevideo en que cae un instante. */
-export const mesDe = (instante: Date): MesMvd => {
-  const { anio, mes } = partesMvd(instante);
-  return { anio, mes };
-};
-
-export function parsearMes(texto: string): MesMvd {
-  const m = MES_ISO.exec(texto);
-  if (!m) throw new ApiError(`Mes inválido: ${texto} (se espera AAAA-MM)`, 400);
-  const anio = Number(m[1]);
-  const mes = Number(m[2]) - 1;
-  if (mes < 0 || mes > 11) throw new ApiError(`Mes inválido: ${texto}`, 400);
-  return { anio, mes };
-}
-
-export const formatearMes = ({ anio, mes }: MesMvd): string =>
-  `${anio}-${String(mes + 1).padStart(2, "0")}`;
-
-/** Meses enteros entre dos meses, contando los dos extremos. */
-export function largoEnMeses(desde: MesMvd, hasta: MesMvd): number {
-  return (hasta.anio - desde.anio) * 12 + (hasta.mes - desde.mes) + 1;
-}
-
-/**
- * Corre un mes `n` lugares (negativo hacia atrás).
- *
- * Va y vuelve por fechas-montevideo.ts en vez de hacer la cuenta acá:
- * `instanteMvd` normaliza el desborde de mes (mes 12 es enero del año que
- * viene, mes -1 es diciembre del anterior) y `partesMvd` lo lee de vuelta en
- * el calendario del consultorio. El mediodía es para no apoyarse en el borde
- * del día. Quien decide qué día es sigue siendo un solo archivo.
- */
-export function correrMeses({ anio, mes }: MesMvd, n: number): MesMvd {
-  return mesDe(instanteMvd(anio, mes + n, 1, 12));
-}
-
-/** El primer instante del mes, en Montevideo. */
-const inicioDe = ({ anio, mes }: MesMvd) => instanteMvd(anio, mes, 1);
-/** El último instante del mes, en Montevideo (día 0 del siguiente). */
-const finDe = ({ anio, mes }: MesMvd) =>
-  instanteMvd(anio, mes + 1, 0, 23, 59, 59, 999);
+const inicioDe = inicioDeMes;
+const finDe = finDeMes;
 
 /**
  * Literal SQL sin zona para un instante. Las columnas son `timestamp WITHOUT

@@ -140,7 +140,10 @@ de la sesión son constantes de `src/lib/sesion-clinica/estados.ts`.
 `.github/workflows/backup.yml` declara backup diario a las 06:00 UTC
 y ejecución manual. Hace dump custom con cliente Postgres 17, verifica el índice
 con pg_restore, cifra con gpg AES-256, sube a R2 y compara tamaño remoto/local.
-El día 1 guarda además una copia mensual.
+La PRIMERA corrida lograda de cada mes guarda además una copia mensual: la
+condición es que no haya ninguna bajo `backups/mensuales/sesion-backup-<AAAA-MM>-`,
+no la fecha de la corrida. Antes era "si hoy es día 1" y por eso nunca hubo
+ninguna; la auditoría con la evidencia está en `docs/respaldos.md`.
 
 **Retención real:** diarios, 30 días; mensuales, 366 días (el workflow los
 describe como doce meses). La limpieza se ejecuta cuando llega a ese paso
@@ -191,8 +194,9 @@ trimestral es exactamente esto, en la máquina del dueño y con su llavero:
    externos pendientes del dump también requieren revisión antes de activar
    crons y worker contra la base restaurada.
 
-`.github/workflows/ensayo-restauracion.yml` hace lo mismo el día 1 de cada
-mes, con dos copias (la diaria más reciente y la mensual más vieja) y SIN
+`.github/workflows/ensayo-restauracion.yml` hace lo mismo el día 2 de cada
+mes (el día 1 corría antes que el respaldo que venía a verificar: GitHub
+demora los `schedule` varias horas), con dos copias (la diaria más reciente y la mensual más vieja) y SIN
 descifrar: no recibe ninguna clave clínica, a propósito, para no tener el
 llavero en GitHub Actions. En su lugar censa el id de clave de cada blob
 contra la variable `CLAVES_CIFRADO_IDS` (Settings → Variables; solo ids, por

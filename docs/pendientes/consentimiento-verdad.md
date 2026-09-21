@@ -19,7 +19,7 @@ Base: `origin/main` en `6b7c0c5`. Rama: `consentimiento-verdad`.
 
 | Corrección | Código que la sostiene |
 |---|---|
-| Diarias: 30 días; mensuales: 12 meses | `.github/workflows/backup.yml:262` y `:263`: limpieza a 30 y 366 días. El volcado completo de la base está en `:143`; incluye las claves cifradas que todavía existían al copiar. |
+| Diarias: 30 días; mensuales: 12 meses | `.github/workflows/backup.yml`, paso "Limpiar diarios > 30 días y mensuales > 12 meses": limpieza a 30 y 366 días. El volcado completo de la base está en el paso "Ejecutar pg_dump"; incluye las claves cifradas que todavía existían al copiar. |
 | Clave eliminada al aprobar; borrado con límite | `src/app/api/_lib/casos-uso/sesion/aprobar.ts:113` abre la transacción y `:126` escribe `audioClave: null` sin depender del resultado de R2. `trabajos/politica.ts:20` fija 20 intentos; `trabajos/resolver.ts:42` marca `fallido` al agotarlos. Las 19 esperas suman 14 días, 8 horas y 36 minutos; «unos 15 días» es aproximado, no un vencimiento exacto si el servicio se interrumpe. |
 | La IA propone; la profesional decide | `processor/clinical_analyzer.py:145` usa el modelo compartido; `:351` redacta la nota y `:395` prepara el contexto. `processor/processor.py:449` devuelve la propuesta; `src/app/api/_lib/casos-uso/hilo/trabajo.ts` la guarda como `propuesta` o `desactualizada`. `hilo/escribir.ts:26` acepta, con o sin edición; `:51` rechaza. |
 | Audio descifrado en archivo temporal | `processor/audio_entrada.py:91` usa `TemporaryDirectory`; `:112` descifra y `:114` escribe el archivo. El contexto elimina sus archivos al terminar, también ante una excepción normal. `processor/processor.py:188` mantiene ese contexto durante la transcripción. |

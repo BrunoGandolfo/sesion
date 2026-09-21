@@ -4,8 +4,8 @@
 # Flujo:
 #   secretos → pg_dump (formato custom) → pg_restore --list (¿es un dump
 #   legible?) → gpg --symmetric (AES-256) → aws s3 cp a R2 → head-object →
-#   copia mensual (día 1) → retención (30 días diarios, 12 meses mensuales)
-#   → alerta por correo si algo falló.
+#   copia mensual (la primera lograda de cada mes) → retención (30 días
+#   diarios, 12 meses mensuales) → alerta por correo si algo falló.
 #
 # La clave del bucket usa timestamp en UTC con segundos, así dos corridas el
 # mismo día (scheduled + manual, p. ej.) generan archivos distintos y no se
@@ -124,12 +124,11 @@ jobs:
           set -euo pipefail
           stamp="$(date -u +'%Y-%m-%d-%H%M%S')"
           file="sesion-backup-${stamp}.dump"
-          if [ "$(date -u +'%d')" = "01" ]; then es_dia_uno=1; else es_dia_uno=0; fi
           {
             echo "BACKUP_FILE=${file}"
             echo "BACKUP_KEY=backups/${file}.gpg"
             echo "BACKUP_KEY_MENSUAL=backups/mensuales/${file}.gpg"
-            echo "ES_DIA_UNO=${es_dia_uno}"
+            echo "MES_ACTUAL=$(date -u +'%Y-%m')"
           } >> "$GITHUB_ENV"
           echo "Archivo local: ${file}"
 
@@ -225,16 +224,46 @@ jobs:
           echo "OK: backup verificado (${size} bytes)."
 
       # ---------------------------------------------------------------------
-      # 7. Copia mensual: el día 1 el mismo .gpg va también a
+      # 7. Copia mensual: la PRIMERA copia lograda de cada mes va también a
       #    backups/mensuales/. La retención diaria NUNCA toca ese prefijo.
+      #
+      #    ANTES ERA "si hoy es día 1", Y POR ESO NUNCA HUBO UNA.
+      #
+      #    El paso entró al repo el 11 de septiembre de 2026 (86f11f7) y el
+      #    ensayo de restauración del 16 falló con "no existe la copia
+      #    mensual" (issue #33). No era un permiso ni la retención: de las 74
+      #    corridas del respaldo, CERO cayeron un día 1. El mecanismo era más
+      #    joven que su primer disparo posible, el 1 de octubre.
+      #    El detalle, con la evidencia, en docs/respaldos.md.
+      #
+      #    Pero además era frágil por diseño, y eso es lo que se arregla acá:
+      #    dependía de que UNA corrida puntual saliera bien. Si el día 1 la
+      #    corrida se saltea —GitHub descarta schedules bajo carga—, o falla
+      #    antes de este paso, ese mes se quedaba sin copia mensual para
+      #    siempre y sin alarma: el hueco recién se veía en el ensayo del mes
+      #    siguiente.
+      #
+      #    Ahora la condición es el ESTADO del bucket y no el calendario: si
+      #    no hay ninguna copia de este mes, se hace. La primera corrida
+      #    exitosa del mes la crea, caiga el día que caiga, y las demás no
+      #    hacen nada. Es idempotente y se repara sola.
       # ---------------------------------------------------------------------
-      - name: Copia mensual (día 1)
-        if: env.ES_DIA_UNO == '1'
+      - name: Copia mensual (la primera lograda del mes)
         run: |
           set -euo pipefail
+          # Las claves llevan la fecha UTC adelante, así que el prefijo del mes
+          # alcanza para saber si ya hay una.
+          existentes="$(aws s3api list-objects-v2 --bucket "${R2_BUCKET}" \
+            --prefix "backups/mensuales/sesion-backup-${MES_ACTUAL}-" \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --query 'length(Contents || `[]`)' --output text)"
+          if [ "${existentes}" != "0" ]; then
+            echo "Ya hay copia mensual de ${MES_ACTUAL} (${existentes}): no se duplica."
+            exit 0
+          fi
           aws s3 cp "s3://${R2_BUCKET}/${BACKUP_KEY}" "s3://${R2_BUCKET}/${BACKUP_KEY_MENSUAL}" \
             --endpoint-url "${R2_ENDPOINT}" --only-show-errors
-          echo "Copia mensual: s3://${R2_BUCKET}/${BACKUP_KEY_MENSUAL}"
+          echo "Copia mensual de ${MES_ACTUAL}: s3://${R2_BUCKET}/${BACKUP_KEY_MENSUAL}"
 
       # ---------------------------------------------------------------------
       # 8. Retención. Diarios: 30 días, sólo bajo backups/sesion-backup-*

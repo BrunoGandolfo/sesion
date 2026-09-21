@@ -1,7 +1,7 @@
 # ============================================================================
 # Ensayo mensual de restauración: ¿los respaldos sirven para volver a atender?
 #
-# Un backup que nunca se restauró es una esperanza. Una vez por mes (día 1,
+# Un backup que nunca se restauró es una esperanza. Una vez por mes (día 2,
 # 04:00 Montevideo) y bajo demanda, este workflow, para DOS copias:
 #
 #   - la copia diaria más reciente (backups/sesion-backup-…), y
@@ -43,9 +43,17 @@ name: Ensayo de restauración
 
 on:
   schedule:
-    # Día 1 de cada mes, 07:00 UTC = 04:00 Montevideo, una hora después del
-    # backup de ese día.
-    - cron: "0 7 1 * *"
+    # Día 2 de cada mes, 07:00 UTC. ANTES ERA EL DÍA 1 "una hora después del
+    # backup de ese día", y eso era falso: el respaldo está agendado a las
+    # 06:00 UTC pero GitHub demora los `schedule` bajo carga, y sus 25
+    # corridas programadas arrancaron entre las 10:23 y las 12:26 UTC. O sea
+    # que el ensayo corría CUATRO HORAS ANTES del respaldo que venía a
+    # verificar, y en el primer mes —cuando todavía no hay ninguna copia
+    # mensual anterior— eso lo condena a fallar.
+    #
+    # El día 2 le da al respaldo un día entero de margen, sin depender de
+    # cuánto demore GitHub.
+    - cron: "0 7 2 * *"
   workflow_dispatch:
 
 permissions:

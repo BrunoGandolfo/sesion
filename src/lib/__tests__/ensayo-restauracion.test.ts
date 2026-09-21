@@ -504,4 +504,23 @@ if (args[0] === "s3api" && args[1] === "list-objects-v2") {
     expect(texto).not.toMatch(/^\s+CLAVES_CIFRADO:/m);
     expect(texto).toContain(`${IDS}: \${{ vars.${IDS} }}`);
   });
+
+  // El ensayo corría el día 1 "una hora después del backup de ese día", y eso
+  // era falso: el respaldo está agendado a las 06:00 UTC pero GitHub demora
+  // los schedule, y sus 25 corridas programadas arrancaron entre las 10:23 y
+  // las 12:26 UTC. El ensayo del día 1 miraba un bucket al que el respaldo de
+  // ese día todavía no había llegado. Ahora corre el día 2, y el acta le dice
+  // al dueño cuándo vuelve a mirarse: si alguien cambia el cron y no el acta,
+  // el documento que registra el estado de los respaldos empieza a mentir.
+  it("el día que anuncia el acta es el día en que el ensayo realmente corre", () => {
+    const cron = readFileSync(WORKFLOW, "utf8").match(/^\s*- cron: "(\S+) (\S+) (\S+) (\S+) (\S+)"/m);
+    expect(cron, "No se encontró el cron del ensayo").toBeTruthy();
+    const [, , , diaDelMes, mes, diaDeSemana] = cron!;
+    expect([mes, diaDeSemana], "el ensayo tiene que ser mensual").toEqual(["*", "*"]);
+    const anunciado = readFileSync(VERIFICAR, "utf8").match(/^const DIA_ENSAYO = (\d+);$/m);
+    expect(anunciado, "Falta DIA_ENSAYO en verificar-restauracion.mjs").toBeTruthy();
+    expect(anunciado![1]).toBe(diaDelMes);
+    // Y el día 1 no vuelve: el respaldo del mes puede no haber llegado.
+    expect(Number(diaDelMes)).toBeGreaterThan(1);
+  });
 });

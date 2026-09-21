@@ -19,7 +19,11 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import type { EstadoPago, EstadoSesion, EstadoTurno, PrismaClient } from "@prisma/client";
 
-import { pendientesTerapeuta } from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
+import {
+  pendientesTerapeuta,
+  TOPE_NOTAS_FALLIDAS,
+} from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
+import { HAY_MATERIAL, hayMaterial } from "@/app/api/_lib/casos-uso/sesion/reprocesar";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { cifrarConsentimiento } from "@/lib/prisma-encryption";
 
@@ -167,7 +171,7 @@ afterAll(async () => {
 });
 
 describe("pendientesTerapeuta — sin nada pendiente", () => {
-  it("devuelve las tres listas vacías", async () => {
+  it("devuelve las cuatro listas vacías", async () => {
     const orgId = await crearOrg();
 
     const pendientes = await pendientesDe(orgId);
@@ -177,7 +181,175 @@ describe("pendientesTerapeuta — sin nada pendiente", () => {
       sinCobrar: [],
       totalSinCobrar: { sesiones: 0, monto: 0, pacientes: 0 },
       sinAutorizacion: [],
+      notasFallidas: [],
     });
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// notasFallidas — el agregado de esta rama.
+//
+// Antes una sesión `fallida` no aparecía en ninguna pantalla: Pendientes sólo
+// miraba `revision`. La sesión quedaba sin nota y la profesional podía no
+// enterarse nunca.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("pendientesTerapeuta — notasFallidas", () => {
+  async function fallida(opciones: {
+    orgId: string;
+    pacienteId: string;
+    fecha: Date;
+    codigo?: string | null;
+    audioEstado?: "en_r2" | "sin_audio" | "borrado";
+    modeloAsr?: string | null;
+  }) {
+    const turnoId = await crearTurno({
+      orgId: opciones.orgId,
+      pacienteId: opciones.pacienteId,
+      fecha: opciones.fecha,
+      estado: "realizado",
+    });
+    const sesion = await db.sesionClinica.create({
+      data: {
+        turnoId,
+        organizationId: opciones.orgId,
+        estado: "fallida",
+        falloCodigo: opciones.codigo === undefined ? "intentos_agotados" : opciones.codigo,
+        audioEstado: opciones.audioEstado ?? "en_r2",
+        modeloAsr: opciones.modeloAsr ?? null,
+      },
+      select: { id: true },
+    });
+    return { sesionId: sesion.id, turnoId };
+  }
+
+  it("trae la fallida de la semana pasada, con paciente, fecha y código", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId, "Ana", "López");
+    const { sesionId, turnoId } = await fallida({
+      orgId, pacienteId, fecha: SEMANA_PASADA, codigo: "intentos_agotados",
+    });
+
+    const { notasFallidas } = await pendientesDe(orgId);
+
+    expect(notasFallidas).toEqual([
+      {
+        sesionId,
+        turnoId,
+        pacienteId,
+        pacienteNombre: "Ana López",
+        fecha: SEMANA_PASADA.toISOString(),
+        codigo: "intentos_agotados",
+        puedeReintentarse: true,
+      },
+    ]);
+  });
+
+  it("no trae las que ya se resolvieron: revision, aprobada, procesando", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId);
+    for (const estado of ["revision", "aprobada", "procesando", "grabando"] as const) {
+      const turnoId = await crearTurno({ orgId, pacienteId, fecha: SEMANA_PASADA, estado: "realizado" });
+      await crearSesion({ orgId, turnoId, estado });
+    }
+
+    expect((await pendientesDe(orgId)).notasFallidas).toEqual([]);
+  });
+
+  it("dice que NO se puede reintentar cuando ya no queda material", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId);
+    await fallida({ orgId, pacienteId, fecha: ANTEAYER, audioEstado: "borrado", modeloAsr: null });
+
+    const [nota] = (await pendientesDe(orgId)).notasFallidas!;
+    expect(nota.puedeReintentarse).toBe(false);
+  });
+
+  it("con la transcripción ya hecha se puede reintentar aunque no quede audio", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId);
+    await fallida({
+      orgId, pacienteId, fecha: ANTEAYER,
+      audioEstado: "borrado", modeloAsr: "assemblyai:universal-2",
+    });
+
+    expect((await pendientesDe(orgId)).notasFallidas![0].puedeReintentarse).toBe(true);
+  });
+
+  it("hayMaterial y HAY_MATERIAL responden lo mismo sobre las mismas filas", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId);
+    const casos = [
+      { audioEstado: "en_r2" as const, modeloAsr: null },
+      { audioEstado: "en_r2" as const, modeloAsr: "assemblyai:universal-2" },
+      { audioEstado: "borrado" as const, modeloAsr: "assemblyai:universal-2" },
+      { audioEstado: "borrado" as const, modeloAsr: null },
+      { audioEstado: "sin_audio" as const, modeloAsr: null },
+    ];
+    for (const caso of casos) await fallida({ orgId, pacienteId, fecha: ANTEAYER, ...caso });
+
+    // Lo que dice el WHERE de reprocesar/reintentar…
+    const segunSql = new Set(
+      (
+        await db.sesionClinica.findMany({
+          where: { organizationId: orgId, ...HAY_MATERIAL },
+          select: { id: true },
+        })
+      ).map((s) => s.id),
+    );
+    // …y lo que dice el predicado que usa Pendientes.
+    const filas = await db.sesionClinica.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, audioEstado: true, modeloAsr: true },
+    });
+    expect(filas).toHaveLength(casos.length);
+    for (const fila of filas) {
+      expect(hayMaterial(fila), `${fila.audioEstado}/${fila.modeloAsr}`).toBe(
+        segunSql.has(fila.id),
+      );
+    }
+  });
+
+  it("ordena de la más vieja a la más nueva y corta en el tope", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId);
+    // Una más que el tope, la más nueva de todas, para que quede afuera.
+    for (let i = 0; i <= TOPE_NOTAS_FALLIDAS; i += 1) {
+      await fallida({ orgId, pacienteId, fecha: new Date(2026, 7, 1 + i, 10, 0, 0) });
+    }
+
+    const { notasFallidas } = await pendientesDe(orgId);
+
+    expect(notasFallidas).toHaveLength(TOPE_NOTAS_FALLIDAS);
+    const fechas = notasFallidas!.map((n) => n.fecha);
+    expect([...fechas].sort()).toEqual(fechas);
+    expect(fechas[0]).toBe(new Date(2026, 7, 1, 10, 0, 0).toISOString());
+    // La más nueva es la que sobra.
+    expect(fechas.at(-1)).toBe(new Date(2026, 7, 1 + TOPE_NOTAS_FALLIDAS - 1, 10, 0, 0).toISOString());
+  });
+
+  it("no cruza organizaciones", async () => {
+    const orgA = await crearOrg();
+    const orgB = await crearOrg();
+    const pacienteA = await crearPaciente(orgA, "Ana", "López");
+    await fallida({ orgId: orgA, pacienteId: pacienteA, fecha: ANTEAYER });
+
+    expect((await pendientesDe(orgB)).notasFallidas).toEqual([]);
+    expect((await pendientesDe(orgA)).notasFallidas).toHaveLength(1);
+  });
+
+  it("el detalle del fallo NO sale: el código sí", async () => {
+    const orgId = await crearOrg();
+    const pacienteId = await crearPaciente(orgId);
+    const { sesionId } = await fallida({ orgId, pacienteId, fecha: ANTEAYER });
+    await db.sesionClinica.update({
+      where: { id: sesionId },
+      data: { falloDetalle: "techo 8000 tokens, razonamiento 7100" },
+    });
+
+    const { notasFallidas } = await pendientesDe(orgId);
+    expect(JSON.stringify(notasFallidas)).not.toContain("razonamiento");
+    expect(notasFallidas![0].codigo).toBe("intentos_agotados");
   });
 });
 

@@ -35,12 +35,16 @@ configuración de los proveedores.
   una ventana entre crear el transcript y registrar su borrado durable.
 - **Transcripción:** existe la ruta de lectura auditada, pero ninguna pantalla
   la ofrece.
-- **Grabación abandonada:** las transiciones `abandonar` de
-  `src/lib/sesion-clinica/estados.ts` no las usa ningún caso de uso.
+- **Grabación abandonada:** la transición `abandonar` de
+  `src/lib/sesion-clinica/estados.ts` ya tiene un usuario —la confirmación de
+  subida la aplica cuando el audio es más corto que el mínimo— pero sigue sin
+  haber forma de que la profesional abandone una grabación a mano.
 - **Hoy:** cobrar desde la fila un turno programado con la hora pasada registra
   el cobro, pero la pantalla no se actualiza.
 - **Restauración:** todavía no hay acta de ensayo en `docs/operaciones/actas/`;
-  la guarda la exige desde el 20 de diciembre de 2026.
+  la guarda la exige desde el 20 de diciembre de 2026. La copia mensual del
+  respaldo nunca existió hasta ahora y la primera se espera en octubre:
+  auditoría y evidencia en `docs/respaldos.md`.
 
 ## Arquitectura
 
@@ -134,6 +138,11 @@ Sin PR. El CI verde por sí solo no sustituye la prueba del dueño en teléfono.
 - `docs/pipeline.md`: contrato clínico existente y partes pendientes.
 - `docs/encryption.md`: columnas, formato y rotación.
 - `docs/operaciones.md`: despliegue, alertas, backup y diagnóstico.
+- `docs/respaldos.md`: qué de los respaldos está probado y qué no.
+- `docs/contrato-finanzas.md`: qué devuelve el tablero y qué significa cada número.
+- `docs/contrato-pendientes-historial-cobros.md`: los campos y parámetros
+  nuevos de Pendientes, el historial de la ficha y los cobros del mes.
+- `docs/contrato-respuestas-api.md`: las dos formas de respuesta y cuál usar.
 - `docs/pendientes/`: decisiones y textos pendientes de integración.
 
 Privado.
