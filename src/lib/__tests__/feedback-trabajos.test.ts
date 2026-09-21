@@ -20,7 +20,7 @@ import { ApiError } from "@/app/api/_lib/responses";
 import { autorizarTicketTrabajo } from "@/app/api/_lib/tickets";
 
 import {
-  auditoriaEnMemoria,
+  eventosAuditoriaDe,
   camposDe,
   conectarArea2,
   crearOrg,
@@ -69,7 +69,6 @@ const comun = (sesionId: string) => ({
   sesionId,
   organizationId: org.orgId,
   usuarioId: org.userId,
-  registrarAuditoria: auditoriaEnMemoria().registrar,
 });
 
 /** Entrega al worker el único trabajo pendiente de la sesión. */
@@ -371,12 +370,12 @@ describe("trabajo durable", () => {
 describe("ver transcripción", () => {
   it("la dueña la lee con evento propio; otra organización 404; sin transcripción 409", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "aprobada", transcripcion: TRANSCRIPCION, notaIa: NOTA });
-    const auditoria = auditoriaEnMemoria();
-    const r = await verTranscripcion({ ...comun(sesionId), registrarAuditoria: auditoria.registrar });
+    const r = await verTranscripcion({ ...comun(sesionId) });
     expect(r).toEqual({ transcripcion: TRANSCRIPCION, hablanteTerapeuta: "S0" });
-    expect(auditoria.eventos).toHaveLength(1);
-    expect(auditoria.eventos[0]).toMatchObject({ accion: "sesion.ver_transcripcion", actorId: org.userId, entidadId: sesionId });
-    expect(JSON.stringify(auditoria.eventos[0].detalle)).not.toContain("hola");
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, sesionId);
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]).toMatchObject({ accion: "sesion.ver_transcripcion", actorId: org.userId, entidadId: sesionId });
+    expect(JSON.stringify(eventos[0].detalle)).not.toContain("hola");
 
     await expect(codigo(verTranscripcion({ ...comun(sesionId), organizationId: otra.orgId, usuarioId: otra.userId }))).resolves.toBe(404);
 

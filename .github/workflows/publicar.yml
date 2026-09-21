@@ -3,8 +3,9 @@
 #
 # Un push a main o un CI exitoso NO publica. Bruno ejecuta Publicar desde main
 # por workflow_dispatch y escribe el SHA que quiere publicar, después de probar
-# en el teléfono. Hoy el workflow está deshabilitado en GitHub: debe habilitarlo
-# antes del día de publicación (docs/operaciones.md).
+# en el teléfono. El workflow está HABILITADO y ya publicó: no hay ningún paso
+# previo de habilitación (docs/operaciones.md). Estuvo deshabilitado durante la
+# Fase 4 y esta cabecera se quedó diciéndolo.
 #
 # Antes de migrar se exige que el SHA pertenezca a main, contenga release y
 # tenga su última corrida de CI de push en verde. Se verifica la conexión

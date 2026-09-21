@@ -35,6 +35,8 @@ export type ClienteSesion = Pick<
   | "hotWord"
   | "hiloVersion"
   | "workerEstado"
+  // El rastro se escribe con el mismo cliente que el acto (auditoria.ts).
+  | "eventoAuditoria"
 >;
 
 /** Lo que necesitan las operaciones que abren su propia transacción: el
@@ -59,6 +61,8 @@ export interface TransicionInput {
 
 export const MENSAJE_CONFLICTO =
   "La sesión cambió mientras se procesaba el pedido. Volvé a abrirla.";
+
+export const MENSAJE_NO_ENCONTRADA = "Sesión no encontrada";
 
 /** `where` de una transición: id, organización, estados de partida e intento. */
 export function whereTransicion({
@@ -88,8 +92,17 @@ export function whereTransicion({
 /**
  * Ejecuta la transición. Lanza ApiError 409 si la fila no estaba en el
  * estado de partida (o el intento no era el vigente, o no cumplía las
- * condiciones extra), y Error si se pide una operación que no cambia de
- * estado por UPDATE (eliminar: es un DELETE, ver eliminar.ts).
+ * condiciones extra), 404 si la sesión no es de esta organización —o no
+ * existe—, y Error si se pide una operación que no cambia de estado por
+ * UPDATE (eliminar: es un DELETE, ver eliminar.ts).
+ *
+ * POR QUÉ EL 404 Y NO UN 409 PARA TODO. El UPDATE lleva la organización en
+ * el WHERE, así que una sesión ajena nunca se tocó; pero contestarle 409 le
+ * decía "hay algo acá que no se puede cambiar ahora", y a otra organización
+ * esta sesión no le existe. La distinción cuesta una consulta SÓLO en el
+ * camino de error (count = 0), nunca en el feliz, y deja a toda la máquina de
+ * estados contestando lo mismo que el resto de la API: 404 lo ajeno, 409 lo
+ * propio en otro estado. Lo vigila multi-tenant.test.ts.
  */
 export async function transicionar(input: TransicionInput): Promise<void> {
   const op = operacion(input.operacion);
@@ -109,6 +122,11 @@ export async function transicionar(input: TransicionInput): Promise<void> {
     data: Object.keys(data).length === 0 ? { actualizadaEn: new Date() } : data,
   });
   if (count === 0) {
+    const propia = await input.prisma.sesionClinica.findFirst({
+      where: { id: input.sesionId, organizationId: input.organizationId },
+      select: { id: true },
+    });
+    if (!propia) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
     throw new ApiError(input.conflicto ?? MENSAJE_CONFLICTO, 409);
   }
 }

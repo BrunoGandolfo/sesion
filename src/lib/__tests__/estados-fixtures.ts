@@ -13,7 +13,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { PrismaClient, type EstadoSesion, type EstadoFeedback, type EstadoAudio } from "@prisma/client";
 
 import type { ClienteTransaccional } from "@/app/api/_lib/casos-uso/sesion/transicion";
-import type { EventoAuditoriaInput } from "@/app/api/_lib/auditoria-pura";
 import { __resetLlaveroForTests, VARIABLE_LLAVERO } from "@/lib/llavero";
 import {
   cifrarSesion,
@@ -179,15 +178,24 @@ export async function limpiarOrg(prisma: PrismaClient, orgId: string | undefined
   });
 }
 
-/** Auditoría como stub: junta los eventos en memoria. */
-export function auditoriaEnMemoria() {
-  const eventos: EventoAuditoriaInput[] = [];
-  return {
-    eventos,
-    registrar: async (evento: EventoAuditoriaInput) => {
-      eventos.push(evento);
-    },
-  };
+/**
+ * Los eventos de auditoría que quedaron EN LA BASE, del más viejo al más
+ * nuevo. Reemplaza al doble en memoria que había acá: los casos de uso ya no
+ * reciben la función de auditoría, escriben con el mismo cliente que el acto
+ * (src/app/api/_lib/auditoria.ts), así que el rastro se lee de la tabla y el
+ * test prueba que el INSERT ocurrió de verdad.
+ */
+export function eventosAuditoriaDe(
+  prisma: PrismaClient,
+  organizationId: string,
+  /** La entidad auditada (una sesión, una paciente). Sin esto vienen todos
+   *  los de la organización, que en un archivo de tests se acumulan. */
+  entidadId?: string,
+) {
+  return prisma.eventoAuditoria.findMany({
+    where: { organizationId, ...(entidadId ? { entidadId } : {}) },
+    orderBy: [{ creadoEn: "asc" }, { id: "asc" }],
+  });
 }
 
 /** Lee la fila cruda de una sesión (o null si ya no está). */

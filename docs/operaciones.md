@@ -36,24 +36,28 @@ CI rojo; ese workflow no migra ni tiene permiso para avanzar release.
 
 ### El día de publicación es un acto manual
 
-**Primera publicación del esquema nuevo:** antes de habilitar Publicar, seguir
+**Primera publicación del esquema nuevo:** antes de la primera corrida de
+Publicar contra la base nueva, seguir
 [Reconstruir producción](https://github.com/BrunoGandolfo/sesion/blob/main/docs/operaciones/reconstruir-produccion.md). Ese procedimiento
 prepara una base vacía y la cuenta inicial; la secuencia de abajo no convierte
 el esquema viejo ni limpia el audio de prueba.
 
-Al cierre de Fase 4, Publicar está **deshabilitado desde la interfaz de GitHub**.
-Cambiar su archivo no lo habilita. **Bruno debe volver a habilitarlo antes del
-día de publicación**; esa acción quedó pendiente y no la hizo el agente.
+Publicar está **habilitado** y ya publicó. Estuvo deshabilitado durante la
+Fase 4 y este documento se quedó diciéndolo; ya no hay ningún paso previo de
+habilitación. Que esté habilitado no publica nada por sí solo: el workflow
+sólo corre por `workflow_dispatch`, con el SHA escrito a mano.
 
 1. Elegir un SHA completo de main cuya última corrida de CI de push esté verde.
 2. Probar ese cambio en el teléfono y aprobar su publicación.
-3. En GitHub → Actions → Publicar, Bruno habilita el workflow si sigue
-   deshabilitado. Habilitarlo no publica.
-4. Elegir Run workflow, rama main, y escribir el SHA completo en el campo sha.
-   Esa ejecución manual sí inicia las migraciones a producción y después
-   avanza release.
-5. Comprobar la corrida, el SHA de release y el despliegue de Vercel. Si algo
+3. En GitHub → Actions → Publicar, elegir Run workflow, rama main, y escribir
+   el SHA completo en el campo sha. Esa ejecución manual sí inicia las
+   migraciones a producción y después avanza release.
+4. Comprobar la corrida, el SHA de release y el despliegue de Vercel. Si algo
    falla, leer el aviso y los logs antes de reintentar.
+
+El procedimiento de [Reconstruir producción](https://github.com/BrunoGandolfo/sesion/blob/main/docs/operaciones/reconstruir-produccion.md)
+sí pide deshabilitarlo en algunos tramos y volver a habilitarlo al final: eso
+es parte de ese procedimiento, no el estado normal.
 
 No hay que avanzar release a mano ni resolver una divergencia con force.
 El CI verde no sustituye la prueba de teléfono ni confirma entrega de SMS.

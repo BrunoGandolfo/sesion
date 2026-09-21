@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     }, OPCIONES_TRANSACCION);
 
     // Ni la contraseña ni su hash ni la IP: solo que pasó y cuántas sesiones cerró.
-    await registrarAuditoria({
+    await registrarAuditoria(db, {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,

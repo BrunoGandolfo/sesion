@@ -27,7 +27,7 @@
 import { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 
-import type { EventoAuditoriaInput } from "../auditoria-pura";
+import { registrarAuditoria } from "../auditoria";
 import { buscarTurnosConDeuda, calcularDeudores } from "../domain";
 import { ApiError } from "../responses";
 import { programarEnvioDeCobro } from "./envios-del-turno";
@@ -46,9 +46,6 @@ export interface RecordarCobroParams {
   pacienteId: string;
   /** Quién apretó el botón: va al evento de auditoría. */
   usuarioId?: string | null;
-  /** Se inyecta, como en aprobar-sesion: el módulo real escribe con el `db`
-   *  global y así el caso de uso se puede probar sin él. */
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
   ahora?: Date;
 }
 
@@ -80,7 +77,6 @@ export async function recordarCobro({
   organizationId,
   pacienteId,
   usuarioId,
-  registrarAuditoria,
   ahora = new Date(),
 }: RecordarCobroParams): Promise<RecordarCobroResultado> {
   const paciente = await prisma.paciente.findFirst({
@@ -113,7 +109,7 @@ export async function recordarCobro({
   const { envioId, creado } = await programarEnvioDeCobro(prisma, { organizationId, pacienteId, ahora });
 
   if (creado) {
-    await registrarAuditoria({
+    await registrarAuditoria(prisma, {
       organizationId,
       actorTipo: "usuario",
       actorId: usuarioId ?? null,

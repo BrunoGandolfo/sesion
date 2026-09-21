@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const auditar = (detalle: Record<string, unknown>) =>
-      registrarAuditoria({ organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.subir_audio_fin", entidad: "sesion_clinica", entidadId: id, detalle });
+      registrarAuditoria(db, { organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.subir_audio_fin", entidad: "sesion_clinica", entidadId: id, detalle });
 
     try {
       const { diagnostico, ...cierre } = parsed.data;

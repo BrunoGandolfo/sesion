@@ -14,7 +14,7 @@
 
 import type { SpeechAnalytics } from "@/lib/sesion-clinica/schema";
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { transicionar, type ClienteSesion } from "./transicion";
@@ -29,7 +29,6 @@ export interface RegistrarTranscripcionInput {
   modeloAsr: string;
   duracionSeg?: number;
   asrTranscriptId?: string;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
 }
 
 export async function registrarTranscripcion({
@@ -42,7 +41,6 @@ export async function registrarTranscripcion({
   modeloAsr,
   duracionSeg,
   asrTranscriptId,
-  registrarAuditoria,
 }: RegistrarTranscripcionInput): Promise<void> {
   await transicionar({
     prisma,
@@ -58,7 +56,7 @@ export async function registrarTranscripcion({
     },
   });
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "worker",
     actorId: null,

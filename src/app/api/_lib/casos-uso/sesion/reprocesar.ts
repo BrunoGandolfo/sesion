@@ -6,7 +6,7 @@
 // haya transcripción o audio: sin ninguno de los dos no habría nada que
 // procesar y la sesión quedaría colgada en `procesando`.
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 import type { FilaSesionClinica } from "../../sesion-clinica";
 
 import { leerSesion } from "./leer";
@@ -17,7 +17,6 @@ export interface ReprocesarSesionInput {
   sesionId: string;
   organizationId: string;
   usuarioId: string;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
   ahora?: Date;
 }
 
@@ -43,7 +42,6 @@ export async function reprocesarSesion({
   sesionId,
   organizationId,
   usuarioId,
-  registrarAuditoria,
   ahora = new Date(),
 }: ReprocesarSesionInput): Promise<FilaSesionClinica> {
   await transicionar({
@@ -59,7 +57,7 @@ export async function reprocesarSesion({
 
   const sesion = await leerSesion(prisma, sesionId, organizationId);
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,

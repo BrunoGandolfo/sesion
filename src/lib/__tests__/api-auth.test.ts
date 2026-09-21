@@ -30,14 +30,10 @@ import {
   bearerDe,
   buscarActor,
   getSessionActor,
-  hashTicket,
-  nuevoTicket,
   requireBearer,
   requireCron,
   requireM2M,
   secretosDe,
-  TICKET,
-  ticketDe,
 } from "@/app/api/_lib/auth";
 
 const SECRET = "secreto-de-prueba-m2m";
@@ -132,16 +128,6 @@ describe("requireBearer y bearerDe", () => {
     expect(requireBearer(requestCon("Bearer abc"), "abc")).toBeNull();
     expect(requireBearer(requestCon("Bearer "), undefined)?.status).toBe(401);
     expect(requireBearer(requestCon("Bearer "), "")?.status).toBe(401);
-  });
-});
-
-describe("tickets", () => {
-  it("nuevoTicket es 32 bytes hex y ticketDe devuelve su hash", async () => {
-    const t = nuevoTicket();
-    expect(TICKET.test(t)).toBe(true);
-    expect(await ticketDe(requestCon(`Bearer ${t}`))).toBe(await hashTicket(t));
-    expect(await ticketDe(requestCon(`Bearer ${SECRET}`))).toBeNull();
-    expect(await ticketDe(requestCon())).toBeNull();
   });
 });
 

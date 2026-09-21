@@ -17,7 +17,7 @@ import { backoffSesionMs } from "@/lib/sesion-clinica/estados";
 import type { ResultadoSesion } from "@/lib/sesion-clinica/schema";
 import type { Prisma } from "@prisma/client";
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 import { ApiError } from "../../responses";
 import { crearTrabajo } from "../trabajos/crear";
 
@@ -29,7 +29,6 @@ export interface ResultadoSesionInput {
   sesionId: string;
   organizationId: string;
   resultado: ResultadoSesion;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
   ahora?: Date;
 }
 
@@ -40,7 +39,6 @@ export async function aplicarResultadoSesion({
   sesionId,
   organizationId,
   resultado,
-  registrarAuditoria,
   ahora = new Date(),
 }: ResultadoSesionInput): Promise<{ estado: EstadoTrasResultado }> {
   const intento = resultado.intento;
@@ -143,7 +141,7 @@ export async function aplicarResultadoSesion({
     estado = "procesando";
   }
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "worker",
     actorId: null,

@@ -229,10 +229,42 @@ const autorizados = new WeakSet<object>();
  * hook.
  */
 export function conectarBaseDeTest(): BaseDeTest {
-  const url = urlDeBaseDeTest();
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  const prisma = new PrismaClient({
+    datasources: { db: { url: enUtc(urlDeBaseDeTest()) } },
+  });
   autorizados.add(prisma);
   return { prisma, db: withEncryption(prisma) };
+}
+
+/**
+ * La conexión, con la sesión de Postgres fijada en UTC.
+ *
+ * POR QUÉ. El 19 de septiembre un caso de despachar-sms ("una reserva
+ * reciente no se toca") falló contra un Postgres instalado en la máquina y
+ * pasó dentro de Docker. No era azar ni carrera: la imagen `postgres:17` y el
+ * runner de CI corren en UTC, y un Postgres instalado en Uruguay corre en
+ * America/Montevideo. Todas las columnas de fecha del esquema son `timestamp
+ * WITHOUT time zone`, y un `Date` de JavaScript que entra por `$executeRaw`
+ * llega como valor CON zona: Postgres lo convierte a la zona de la SESIÓN
+ * antes de guardarlo, así que el valor aterriza corrido tres horas. El test
+ * envejecía una reserva 30 segundos, la base la guardaba con tres horas y
+ * media, y el rescate —que se dispara a los 5 minutos— se la llevaba.
+ *
+ * `npm test` ya fija `TZ=UTC` para el proceso de Node. Esto es la otra mitad:
+ * el reloj de la BASE. Con las dos, la suite da el mismo veredicto en la
+ * laptop del dueño, en Docker y en CI, y el veredicto es el de producción
+ * (Neon corre en UTC).
+ *
+ * Se aplica a la conexión y no a la base (`ALTER DATABASE`) a propósito: no
+ * hay que tocar la configuración de una base que puede ser de otra persona,
+ * y así vale también para la rama `test` de Neon.
+ */
+function enUtc(url: string): string {
+  const u = new URL(url);
+  const previas = u.searchParams.get("options");
+  const utc = "-c TimeZone=UTC";
+  u.searchParams.set("options", previas ? `${previas} ${utc}` : utc);
+  return u.toString();
 }
 
 // ────────────────────────────────────────────────────────────────────────────

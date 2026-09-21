@@ -7,7 +7,6 @@
 import { db } from "@/lib/db";
 import { registrarTranscripcionSchema } from "@/lib/sesion-clinica/schema";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { identidadWorker, registrarLatido } from "../../../_lib/casos-uso/sesion/latido";
 import { registrarTranscripcion } from "../../../_lib/casos-uso/sesion/registrar-transcripcion";
@@ -30,7 +29,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
       sesionId: id,
       organizationId,
       usuarioId: userId,
-      registrarAuditoria,
     });
     return ok(resultado);
   } catch (error) {
@@ -50,7 +48,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       sesionId: sesion.sesionId,
       organizationId: sesion.organizationId,
       ...parsed.data,
-      registrarAuditoria,
     });
     await registrarLatido({ prisma: db, ...identidadWorker(request), ahora: new Date(), tipo: "trabajo" });
     return ok({ registrada: true });

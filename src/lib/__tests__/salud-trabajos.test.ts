@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import type { EstadoTrabajo } from "@prisma/client";
+import { __resetLlaveroForTests } from "@/lib/llavero";
 import { conectarBaseDeTest, vaciarTablas } from "./db-test";
+import { CLAVES_CIFRADO_TEST } from "./base-identidad";
 import { enviarCorreo } from "@/lib/correo";
 import { GET } from "@/app/api/cron/salud/route";
 
@@ -10,7 +12,13 @@ vi.mock("@/lib/db", () => ({ get db() { return base.db; } }));
 vi.mock("@/app/api/_lib/auth", () => ({ requireCron: () => null }));
 // Se ejecuta toda la cadena hasta el transporte de correo, sin enviar a nadie.
 vi.mock("@/lib/correo", () => ({ enviarCorreo: vi.fn(async () => {}) }));
-beforeAll(() => { base = conectarBaseDeTest(); });
+// La clave se pone ACÁ y no se hereda del ambiente: ver el comentario
+// equivalente en revision-carreras.test.ts.
+beforeAll(() => {
+  process.env.CLAVES_CIFRADO = CLAVES_CIFRADO_TEST;
+  __resetLlaveroForTests();
+  base = conectarBaseDeTest();
+});
 afterAll(async () => { await base.prisma.$disconnect(); });
 beforeEach(async () => {
   await vaciarTablas(base.prisma);

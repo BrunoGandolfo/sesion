@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, afterAll, beforeEach, expect, test } from 'vitest';
 import { conectarBaseDeTest, vaciarTablas } from '@/lib/__tests__/db-test';
 import { cobrarTurno, descobrarTurno } from '@/app/api/_lib/casos-uso/cobrar-turno';
 import { actualizarTurno } from '@/app/api/_lib/casos-uso/turnos';
@@ -7,11 +7,21 @@ import { reprocesarSesion } from '@/app/api/_lib/casos-uso/sesion/reprocesar';
 import { aplicarResultadoSesion } from '@/app/api/_lib/casos-uso/sesion/resultado';
 import { reclamarSesiones } from '@/app/api/_lib/casos-uso/sesion/reclamar';
 import { cifrarSesion } from '@/lib/prisma-encryption';
+import { __resetLlaveroForTests } from '@/lib/llavero';
+import { CLAVES_CIFRADO_TEST } from './base-identidad';
 let base: ReturnType<typeof conectarBaseDeTest>;
 let org: string, paciente: string, turno: string;
 const ahora = new Date('2026-09-15T15:00:00Z');
 const nota = (s:string) => ({subjetivo:s,objetivo:'observacion ficticia',analisis:'analisis ficticio',plan:'plan ficticio'});
-beforeAll(()=> {base=conectarBaseDeTest()});
+// La clave se pone ACÁ y no se hereda del ambiente. Este archivo fallaba al
+// importar en cualquier máquina donde CLAVES_CIFRADO no estuviera exportada,
+// y pasaba en CI sólo porque ci.yml la declara a nivel de workflow: el
+// veredicto de la suite no puede depender de qué tenga cargado la terminal.
+beforeAll(()=> {
+ process.env.CLAVES_CIFRADO = CLAVES_CIFRADO_TEST;
+ __resetLlaveroForTests();
+ base=conectarBaseDeTest();
+});
 afterAll(async()=>base.prisma.$disconnect());
 beforeEach(async()=>{
  await vaciarTablas(base.prisma);
@@ -48,9 +58,9 @@ test('un deshacer demorado conserva el cobro posterior',async()=>{
  expect(fin.pagoEstado).toBe('pagado');expect(fin.pagoMetodo).toBe('transferencia');
 });
 async function nuevaNota(id: string) {
- await reprocesarSesion({prisma:base.db,sesionId:id,organizationId:org,usuarioId:'ficticio',registrarAuditoria:async()=>{},ahora});
+ await reprocesarSesion({prisma:base.db,sesionId:id,organizationId:org,usuarioId:'ficticio',ahora});
  const [reclamo]=await reclamarSesiones({prisma:base.db,ahora,limite:1,terminosAsr:async()=>[]});
- await aplicarResultadoSesion({prisma:base.db,sesionId:id,organizationId:org,resultado:{intento:reclamo.intento,resultado:'nota',nota:nota('GENERACION 2'),datos:{},modeloLlm:'prueba',promptVersion:'prueba'},registrarAuditoria:async()=>{},ahora});
+ await aplicarResultadoSesion({prisma:base.db,sesionId:id,organizationId:org,resultado:{intento:reclamo.intento,resultado:'nota',nota:nota('GENERACION 2'),datos:{},modeloLlm:'prueba',promptVersion:'prueba'},ahora});
 }
 
 test.each(['antes de leer', 'entre lectura y escritura'])('rechaza aprobar otra generación: %s',async(momento)=>{
@@ -70,11 +80,12 @@ test.each(['antes de leer', 'entre lectura y escritura'])('rechaza aprobar otra 
    }});
   }});
  }
- const registrarAuditoria=vi.fn();
- await expect(aprobarSesion({prisma,sesionId:id,organizationId:org,usuarioId:'ficticio',generacion:1,notaEditada:borradorViejo,confirmoRiesgo:true,confirmoMenciones:true,registrarAuditoria,ahora})).rejects.toMatchObject({status:409});
+ await expect(aprobarSesion({prisma,sesionId:id,organizationId:org,usuarioId:'ficticio',generacion:1,notaEditada:borradorViejo,confirmoRiesgo:true,confirmoMenciones:true,ahora})).rejects.toMatchObject({status:409});
  const fin=await base.db.sesionClinica.findUniqueOrThrow({where:{id},select:{generacion:true,estado:true,notaIa:true,notaFinal:true}});
  expect(fin.generacion).toBe(2);expect(fin.estado).toBe('revision');expect(fin.notaIa?.subjetivo).toBe('GENERACION 2');expect(fin.notaFinal).toBeNull();
- expect(registrarAuditoria).not.toHaveBeenCalled();
+ // La aprobación rechazada no deja rastro: el evento se escribe con el
+ // mismo cliente que el acto, así que si no hubo acto no hay fila.
+ expect(await base.prisma.eventoAuditoria.count({where:{accion:'sesion.aprobar'}})).toBe(0);
  expect(await base.prisma.trabajo.count({where:{tipo:'integrar_contexto'}})).toBe(0);
 });
 

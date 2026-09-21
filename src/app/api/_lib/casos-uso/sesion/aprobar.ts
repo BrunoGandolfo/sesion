@@ -20,7 +20,8 @@ import {
   type NotaSoap,
 } from "@/lib/sesion-clinica/schema";
 
-import { hashTexto, type EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
+import { hashTexto } from "../../auditoria-pura";
 import { ApiError } from "../../responses";
 import type { FilaSesionClinica } from "../../sesion-clinica";
 import { crearTrabajo } from "../trabajos/crear";
@@ -38,7 +39,6 @@ export interface AprobarSesionInput {
   notasEdicion?: string;
   confirmoRiesgo?: boolean;
   confirmoMenciones?: boolean;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
   ahora?: Date;
 }
 
@@ -57,7 +57,6 @@ export async function aprobarSesion({
   notasEdicion,
   confirmoRiesgo,
   confirmoMenciones,
-  registrarAuditoria,
   ahora = new Date(),
 }: AprobarSesionInput): Promise<FilaSesionClinica> {
   const existente = await prisma.sesionClinica.findFirst({
@@ -156,7 +155,7 @@ export async function aprobarSesion({
 
   const sesion = await leerSesion(prisma, sesionId, organizationId);
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,

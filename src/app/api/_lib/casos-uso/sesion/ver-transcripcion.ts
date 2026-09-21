@@ -4,7 +4,7 @@
 // cualquier estado con transcripción (revision, aprobada, fallida tras el
 // checkpoint, procesando en un reproceso).
 
-import type { EventoAuditoriaInput } from "../../auditoria-pura";
+import { registrarAuditoria } from "../../auditoria";
 import { ApiError } from "../../responses";
 
 import type { ClienteSesion } from "./transicion";
@@ -17,7 +17,6 @@ export interface VerTranscripcionInput {
   sesionId: string;
   organizationId: string;
   usuarioId: string;
-  registrarAuditoria: (evento: EventoAuditoriaInput) => Promise<void>;
 }
 
 export interface TranscripcionVisible {
@@ -30,7 +29,6 @@ export async function verTranscripcion({
   sesionId,
   organizationId,
   usuarioId,
-  registrarAuditoria,
 }: VerTranscripcionInput): Promise<TranscripcionVisible> {
   const sesion = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
@@ -44,7 +42,7 @@ export async function verTranscripcion({
     throw new ApiError("La sesión todavía no tiene transcripción", 409);
   }
 
-  await registrarAuditoria({
+  await registrarAuditoria(prisma, {
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,

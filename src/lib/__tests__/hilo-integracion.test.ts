@@ -12,7 +12,7 @@ import { reclamarTrabajos } from "@/app/api/_lib/casos-uso/trabajos/reclamar";
 import { aplicarResultadoTrabajo } from "@/app/api/_lib/casos-uso/trabajos/resultado-worker";
 import { autorizarTicketTrabajo } from "@/app/api/_lib/tickets";
 import { hiloVacio } from "@/lib/hilo/contenido";
-import { auditoriaEnMemoria, conectarArea2, crearOrg, crearSesion, limpiarOrg, NOTA, pedidoConTicket, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, crearSesion, limpiarOrg, NOTA, pedidoConTicket, type BaseArea2, type Org } from "./estados-fixtures";
 
 let base: BaseArea2;
 let org: Org;
@@ -31,7 +31,7 @@ async function aprobar() {
   return sesionId;
 }
 async function aprobarExistente(sesionId: string) {
-  await aprobarSesion({ prisma: base.db, sesionId, organizationId: org.orgId, usuarioId: org.userId, generacion: 1, registrarAuditoria: auditoriaEnMemoria().registrar });
+  await aprobarSesion({ prisma: base.db, sesionId, organizationId: org.orgId, usuarioId: org.userId, generacion: 1 });
 }
 async function reclamar() {
   const entregas = await entregarTrabajos({ prisma: base.db, ahora, limite: 20, tipos: ["integrar_contexto"] });

@@ -57,11 +57,17 @@ describe.each(POR_UPDATE.map((op) => [op.nombre, op] as const))("%s", (nombre, o
     });
   }
 
-  it("de otra organización: 409 (la fila no es suya)", async () => {
+  // 404 y no 409: a otra organización esta sesión no le existe, y su
+  // respuesta no le confirma que exista. Antes contestaba 409 —el mismo
+  // "cambió mientras se procesaba" que recibe la dueña con la fila en otro
+  // estado—, que además de mentir dejaba a estas tres rutas (reintentar,
+  // reprocesar, volver_a_grabar) contestando distinto al resto de la API.
+  // El barrido de multi-tenant.test.ts lo exige para TODA ruta con id.
+  it("de otra organización: 404 (la fila no le existe)", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: op.desde[0], intento: 1 });
     await expect(
       transicionar({ prisma: base.db, operacion: nombre, sesionId, organizationId: "otra-org", intento }),
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({ status: 404 });
     expect((await filaDe(base.prisma, sesionId))?.estado).toBe(op.desde[0]);
   });
 });

@@ -16,6 +16,8 @@
 #   - guardias:  drift de migraciones, migraciones destructivas sin marca,
 #                maxDuration en toda ruta, acta de restauración vigente.
 #   - audit:     npm audit, BLOQUEANTE en high; moderate informa y no frena.
+#                Con npm 11 instalado en el runner: es el que habla sólo con
+#                el endpoint de avisos en lote (el `quick` está retirado).
 #   - worker-tests: pytest + pip-audit del worker Python.
 #
 # Notas:
@@ -223,6 +225,38 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+      # ── Por qué se instala npm 11 para auditar ────────────────────────
+      # El 20 de septiembre este paso falló una vez con
+      #   npm warn audit 400 Bad Request … This endpoint is being retired.
+      #   Use the bulk advisory endpoint instead
+      # y pasó al repetirlo. El mensaje confunde: no es que el repositorio
+      # use un endpoint viejo. npm 10 (el que trae Node 22) pide PRIMERO el
+      # endpoint vigente, /-/npm/v1/security/advisories/bulk, y sólo si ése
+      # falla cae al retirado, /-/npm/v1/security/audits/quick. Lo que se ve
+      # en el log es la SEGUNDA llamada: el aviso del retiro tapa la causa
+      # real, que fue el fallo de la primera. Y como `npm audit` es un
+      # comando de auditoría, cuando no consigue el informe LANZA, y el paso
+      # se pone rojo.
+      #
+      # GitHub confirmó el retiro de /audits/quick y /audits después del 15
+      # de julio de 2026, con apagones programados antes de esa fecha
+      # (community discussion #192768). npm 11 (arborist 9) sacó la caída al
+      # endpoint viejo: habla SÓLO con el de avisos en lote
+      # (npm/cli#7911). Verificado en el fuente de npm 11.19.1.
+      #
+      # Con npm 11 el log deja de mentir y no se hace una llamada de más a un
+      # endpoint que ya no existe. La FRECUENCIA de rojos no cambia: sigue
+      # dependiendo del endpoint vigente, y un fallo del SERVICIO de npm
+      # frena la publicación igual que una vulnerabilidad real. Eso es una
+      # decisión del dueño y está propuesta en el reporte de la rama, sin
+      # aplicar.
+      #
+      # Es una herramienta del runner, no una dependencia del proyecto:
+      # package.json no se toca, y este job no corre `npm ci` ni escribe el
+      # lockfile (sólo lo lee), así que no puede cambiarle la versión.
+      - name: Usar npm 11 para auditar (endpoint vigente de avisos)
+        run: npm install -g npm@^11
+
       # Sin `npm ci`: audit resuelve el árbol desde package-lock.json.
       # Bloqueante en high: una vulnerabilidad alta no se mergea, se arregla
       # o se documenta por qué no se puede (y entonces se ignora acá con

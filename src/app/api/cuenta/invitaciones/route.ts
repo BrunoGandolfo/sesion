@@ -37,7 +37,7 @@ export async function POST() {
       repositorioRegistro(db),
     );
     // Sin token ni email: solo que se creó y cuándo vence.
-    await registrarAuditoria({
+    await registrarAuditoria(db, {
       organizationId: actor.organizationId,
       actorTipo: "usuario",
       actorId: actor.userId,

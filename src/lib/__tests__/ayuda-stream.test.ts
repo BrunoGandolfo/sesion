@@ -63,7 +63,8 @@ it("entrega texto limpio antes de completar el proveedor y audita su largo limpi
   }
   expect(texto).toBe("Hola Mariana cómo*");
   expect(devolverCupo).not.toHaveBeenCalled();
-  expect(registrarAuditoria).toHaveBeenCalledWith(expect.objectContaining({
+  // El cliente va primero: lo que se inyecta es el cliente, no la función.
+  expect(registrarAuditoria).toHaveBeenCalledWith(db, expect.objectContaining({
     detalle: expect.objectContaining({ largoRespuesta: texto.length, modelo: "claude-sonnet-5" }),
   }));
 });

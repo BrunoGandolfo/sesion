@@ -176,17 +176,33 @@ export function diasDesde(fecha: Date | null, ahora: Date): number {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Deuda — única fuente de la regla "sesión impaga": turno realizado con pago
-// pendiente. Ya no se reescribe en ningún lado: la llaman toPacienteConDeuda
-// y calcularDeudores acá, la query de buscarTurnosConDeuda la aplica en SQL,
-// y de la UI la usan datos.ts (Hoy), ficha-tab, sesiones-tab y
-// turnos-pagos-tab. Un cambio de la regla se hace en esta función y nada más.
+// pendiente. La llaman toPacienteConDeuda y calcularDeudores acá, la query de
+// buscarTurnosConDeuda la aplica en SQL, y de la UI la usan datos.ts (Hoy),
+// ficha-tab, sesiones-tab y turnos-pagos-tab.
+//
+// La regla estaba escrita DOS veces: acá como comparación y abajo, otra vez,
+// como literal en el `where` de buscarTurnosConDeuda. Si alguien decidía que
+// "ausente" también se cobra, la pantalla y la consulta podían quedar
+// contando cosas distintas. Ahora la regla es UN dato —los valores que la
+// hacen verdadera— y las dos formas derivan de él: la función lo compara y la
+// consulta lo expande en el `where`. Un cambio de la regla se hace acá y en
+// ningún otro lado.
 // ────────────────────────────────────────────────────────────────────────────
+
+/** Los valores que hacen que un turno sea deuda pendiente. */
+export const DEUDA_PENDIENTE = {
+  estado: "realizado",
+  pagoEstado: "pendiente",
+} as const;
 
 export function esDeudaPendiente(turno: {
   estado: string;
   pagoEstado: string;
 }): boolean {
-  return turno.estado === "realizado" && turno.pagoEstado === "pendiente";
+  return (
+    turno.estado === DEUDA_PENDIENTE.estado &&
+    turno.pagoEstado === DEUDA_PENDIENTE.pagoEstado
+  );
 }
 
 export interface TurnoParaDeuda {
@@ -286,7 +302,7 @@ export interface TurnoConDeuda extends TurnoParaDeuda {
 
 /**
  * Query única de los turnos que son deuda pendiente de una organización
- * (regla esDeudaPendiente aplicada en la propia consulta). La consumen
+ * (DEUDA_PENDIENTE, la misma regla que esDeudaPendiente, en la consulta). La consumen
  * /api/dashboard y /api/deudores, que después pasan el resultado por
  * calcularDeudores y aplican cada uno su orden y su tope.
  *
@@ -303,8 +319,8 @@ export async function buscarTurnosConDeuda(
   const turnos = await prisma.turno.findMany({
     where: {
       organizationId,
-      estado: "realizado",
-      pagoEstado: "pendiente",
+      // La misma regla que esDeudaPendiente, expandida en el where.
+      ...DEUDA_PENDIENTE,
       ...(pacienteId ? { pacienteId } : {}),
     },
     select: {

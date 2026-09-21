@@ -19,7 +19,7 @@ import { autorizarTicketSesion } from "@/app/api/_lib/tickets";
 import { LEASE_SESION_MS } from "@/lib/sesion-clinica/estados";
 
 import {
-  auditoriaEnMemoria,
+  eventosAuditoriaDe,
   camposDe,
   conectarArea2,
   crearOrg,
@@ -74,7 +74,6 @@ const comun = (sesionId: string) => ({
   prisma: base.db,
   sesionId,
   organizationId: org.orgId,
-  registrarAuditoria: auditoriaEnMemoria().registrar,
 });
 
 function checkpoint(sesionId: string, intento: number) {
@@ -147,11 +146,9 @@ describe("ASR y checkpoint", () => {
   it("la duración que informa el ASR NO pisa la que midió el teléfono: queda aparte, en la auditoría", async () => {
     const r = await reclamada();
     const antes = await filaDe(base.prisma, r.sesionId);
-    const auditoria = auditoriaEnMemoria();
 
     await registrarTranscripcion({
       ...comun(r.sesionId),
-      registrarAuditoria: auditoria.registrar,
       intento: r.intento,
       transcripcion: TRANSCRIPCION,
       modeloAsr: "assemblyai:universal-2",
@@ -162,7 +159,8 @@ describe("ASR y checkpoint", () => {
     const despues = await filaDe(base.prisma, r.sesionId);
     expect(antes?.duracionAudioSeg).toBe(120);
     expect(despues?.duracionAudioSeg).toBe(120);
-    expect(auditoria.eventos[0]).toMatchObject({ accion: "sesion.transcripcion_guardada", detalle: { duracionAsrSeg: 982 } });
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, r.sesionId);
+    expect(eventos[0]).toMatchObject({ accion: "sesion.transcripcion_guardada", detalle: { duracionAsrSeg: 982 } });
   });
 
   it("registrar el transcript deja UN trabajo de borrado aunque se registre dos veces", async () => {
@@ -226,10 +224,8 @@ describe("resultado", () => {
   it("la nota pasa a revision, sube la generación, pide Para vos y suelta lease y ticket", async () => {
     const { sesionId, intento } = await reclamada();
     await checkpoint(sesionId, intento);
-    const auditoria = auditoriaEnMemoria();
     await aplicarResultadoSesion({
       ...comun(sesionId),
-      registrarAuditoria: auditoria.registrar,
       resultado: {
         intento,
         resultado: "nota",
@@ -258,12 +254,14 @@ describe("resultado", () => {
     expect((await trabajosDe(base.prisma, sesionId)).map((t) => [t.tipo, t.payload])).toEqual([
       ["generar_feedback", { sesionId, pacienteId: org.pacienteId, generacion: 1 }],
     ]);
-    expect(auditoria.eventos[0]).toMatchObject({
+    // El checkpoint de arriba ya dejó el suyo: el del resultado es el último.
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, sesionId);
+    expect(eventos.at(-1)).toMatchObject({
       accion: "sesion.resultado",
       actorTipo: "worker",
       detalle: { intento, resultado: "nota", estado: "revision", nivelRiesgo: "bajo" },
     });
-    expect(JSON.stringify(auditoria.eventos[0].detalle)).not.toContain("temas");
+    expect(JSON.stringify(eventos.at(-1)?.detalle)).not.toContain("temas");
   });
 
   it("un fallo transitorio deja la sesión en procesando con backoff; el reclamo siguiente la vuelve a entregar con intento + 1", async () => {
@@ -368,8 +366,7 @@ describe("reintentar y eliminar (desde fallida)", () => {
 
   it("eliminar borra la fila y deja el trabajo con prefijo e índice del archivo, en una transacción", async () => {
     const { sesionId, turnoId } = await crearSesion(base.prisma, org, { estado: "fallida", transcripcion: TRANSCRIPCION });
-    const auditoria = auditoriaEnMemoria();
-    const r = await eliminarSesion({ ...comun(sesionId), usuarioId: org.userId, registrarAuditoria: auditoria.registrar });
+    const r = await eliminarSesion({ ...comun(sesionId), usuarioId: org.userId });
     expect(r).toEqual({ eliminada: true, audioPorBorrar: true });
     expect(await filaDe(base.prisma, sesionId)).toBeNull();
     // El turno queda libre para volver a grabar.
@@ -377,7 +374,7 @@ describe("reintentar y eliminar (desde fallida)", () => {
     const [trabajo] = await trabajosDe(base.prisma, sesionId);
     expect(trabajo.tipo).toBe("borrar_audio_r2");
     expect(trabajo.payload).toEqual({ prefijo: `${org.orgId}/${sesionId}/`, indices: [0] });
-    expect(auditoria.eventos.map((e) => e.accion)).toEqual(["sesion.eliminar"]);
+    expect((await eventosAuditoriaDe(base.prisma, org.orgId, sesionId)).map((e) => e.accion)).toEqual(["sesion.eliminar"]);
   });
 
   it("eliminar sin audio no crea trabajo; de otra organización 404", async () => {

@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { eliminarSesion } from "../../../_lib/casos-uso/sesion/eliminar";
 import { errorResponse, ok } from "../../../_lib/responses";
@@ -20,7 +19,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
       sesionId: id,
       organizationId,
       usuarioId: userId,
-      registrarAuditoria,
     });
     return ok(resultado);
   } catch (error) {

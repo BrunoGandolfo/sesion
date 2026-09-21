@@ -7,7 +7,6 @@
 
 import { db } from "@/lib/db";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { recordarCobro } from "../../../_lib/casos-uso/recordar-cobro";
 import { errorResponse, ok } from "../../../_lib/responses";
@@ -30,7 +29,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
       organizationId,
       pacienteId: id,
       usuarioId: userId,
-      registrarAuditoria,
     });
 
     return ok(resultado);

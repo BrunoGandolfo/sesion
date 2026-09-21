@@ -22,17 +22,13 @@
 //
 // El PROCESSING_SECRET solo autoriza a RECLAMAR trabajo. Para escribir en
 // una sesión o un trabajo reclamado, el worker usa el ticket que recibió al
-// reclamar: nuevoTicket() genera uno, hashTicket() lo hashea para guardarlo
-// en la fila (ticket_hash), y ticketDe(request) devuelve el hash del Bearer
-// recibido para que el caso de uso lo compare con la fila. Un ticket vale
-// para UNA fila y vence con su lease.
+// reclamar, y de eso se ocupa _lib/tickets.ts: acá no hay nada de tickets.
 
 import { timingSafeEqual } from "node:crypto";
 
 import { cookies } from "next/headers";
 import { cache } from "react";
 
-import { sha256Hex } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { buscarSesionViva, tocarSesion } from "@/lib/sesion-acceso";
 import { nombreCookie, TOKEN_SESION } from "@/lib/sesion-cookie";
@@ -151,31 +147,4 @@ export function requireM2M(request: Request): Response | null {
 /** Auth de los crons: CRON_SECRET (lista). */
 export function requireCron(request: Request): Response | null {
   return requireBearer(request, process.env.CRON_SECRET);
-}
-
-// ─── Tickets ────────────────────────────────────────────────────────────────
-
-export const TICKET = /^[a-f0-9]{64}$/;
-
-/** 32 bytes aleatorios, hex. Se entrega al worker al reclamar; en la fila
- *  queda solo su hash. */
-export function nuevoTicket(): string {
-  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(32)), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
-export const hashTicket = sha256Hex;
-
-/**
- * El hash del ticket que viene como Bearer, listo para comparar con
- * `ticket_hash` de la fila (sesión clínica o trabajo). `null` si no hay
- * Bearer o no tiene la forma de un ticket. La comparación es por igualdad
- * del hash en la consulta (`WHERE ticket_hash = ?`): el hash ya hace
- * innecesario el tiempo constante.
- */
-export async function ticketDe(request: Request): Promise<string | null> {
-  const bearer = bearerDe(request);
-  if (!bearer || !TICKET.test(bearer)) return null;
-  return hashTicket(bearer);
 }

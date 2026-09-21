@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const { organizationId, userId } = await getSessionActor();
     const { turnoId } = sesionClinicaCrearSchema.parse(await request.json());
     const { id } = await prepararAudio({ prisma: db, organizationId, turnoId });
-    await registrarAuditoria({ organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.crear", entidad: "sesion_clinica", entidadId: id, detalle: { turnoId } });
+    await registrarAuditoria(db, { organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.crear", entidad: "sesion_clinica", entidadId: id, detalle: { turnoId } });
     return ok(await leerSesionPorTurno({ prisma: db, organizationId, turnoId }), 201);
   } catch (error) { return errorResponse(error); }
 }
