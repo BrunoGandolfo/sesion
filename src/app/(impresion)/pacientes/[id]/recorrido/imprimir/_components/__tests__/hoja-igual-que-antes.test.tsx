@@ -6,8 +6,10 @@
 // hoja. La referencia (__snapshots__/hoja-sin-senal.html) se generó con el
 // código de origin/main ee83f7b, ANTES de reordenar la pantalla: si un cambio
 // de presentación se cuela en el papel, este test lo dice. La única
-// diferencia admitida es la alerta de la última sesión cuando el servidor
-// marca una señal (segundo caso).
+// diferencia de contenido admitida es la alerta de la última sesión cuando
+// el servidor marca una señal (segundo caso). El 21/09/2026 se regeneró con
+// esta misma fixture por el cambio intencional de paleta A: cinco valores
+// de color, sin cambios de texto, estructura, tamaño ni orden.
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";

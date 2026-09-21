@@ -36,15 +36,15 @@
   /* Terracotta — deudas, warnings */
   --color-terracotta-50:  #FBF3EB;
   --color-terracotta-100: #F5E0CC;
-  --color-terracotta-500: #B26B45;
+  --color-terracotta-500: #9A5C3B;
   --color-terracotta-600: #8F5436;
 
   /* Gold — acento editorial */
   --color-gold-50:  #FAF4E4;
-  --color-gold-500: #A88534;
+  --color-gold-500: #866929;
 
-  /* Variantes AA solo para texto.
-     Mantienen intactos los tokens base usados como fondo o borde. */
+  /* Sage conserva una variante AA para texto. Atención y énfasis comparten
+     su color AA entre texto, fondos, bordes y gráficos (pantalla y papel). */
   /* Sage texto sobre #FFF / #FAFAF6 / #F4F0E8:
      viejo #4F7A6A = 4.86 / 4.64 / 4.27
      nuevo #4A7364 = 5.35 / 5.11 / 4.70 */
@@ -52,16 +52,16 @@
   /* Terracotta texto sobre #FFF / #FAFAF6 / #FBF3EB:
      viejo #B26B45 = 4.13 / 3.95 / 3.76
      nuevo #9A5C3B = 5.29 / 5.06 / 4.82 */
-  --color-terracotta-text: #9A5C3B;
+  --color-terracotta-text: var(--color-terracotta-500);
   /* Gold texto sobre #FFF / #FAFAF6 / #FAF4E4:
      viejo #A88534 = 3.46 / 3.31 / 3.15
      nuevo #866929 = 5.16 / 4.94 / 4.70 */
-  --color-gold-text: #866929;
+  --color-gold-text: var(--color-gold-500);
 
   /* Semantic */
   --color-success: #4F7A6A;
-  --color-warning: #B26B45;
-  --color-error:   #A04040;
+  --color-warning: var(--color-terracotta-500);
+  --color-error:   #8F4B48;
   --color-info:    #4A6B7D;
 
   /* Radii */
