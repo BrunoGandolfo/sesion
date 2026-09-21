@@ -277,6 +277,68 @@ export function calcularDeudores(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Deuda por antigüedad — los mismos turnos, agrupados por cuánto hace que se
+// dio la sesión. Lo usa Finanzas para decir "esto es de hace más de tres
+// meses"; sale de la MISMA lista y la MISMA regla que /api/deudores y que
+// Hoy, así que los tres números cierran por construcción.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Los tres tramos, del más nuevo al más viejo. El orden es el de la pantalla. */
+export const TRAMOS_DEUDA = ["hasta30", "de31a90", "mas90"] as const;
+export type TramoDeuda = (typeof TRAMOS_DEUDA)[number];
+
+/** En qué tramo cae una deuda de `diasAtraso` días. Los bordes: 30 días
+ *  justos son "hasta30" y 90 justos son "de31a90". */
+export function tramoDeDeuda(diasAtraso: number): TramoDeuda {
+  if (diasAtraso <= 30) return "hasta30";
+  if (diasAtraso <= 90) return "de31a90";
+  return "mas90";
+}
+
+export interface DeudaPorTramo {
+  tramo: TramoDeuda;
+  /** Sesiones impagas cuya fecha cae en el tramo. */
+  sesiones: number;
+  /** Suma de sus tarifas congeladas, en pesos enteros. */
+  monto: number;
+  /** Pacientes DISTINTAS con al menos una sesión en el tramo. Una paciente
+   *  con deuda vieja y nueva cuenta en los dos tramos: no se pueden sumar
+   *  los tres para saber cuántas deben. */
+  pacientes: number;
+}
+
+/**
+ * Reparte la deuda pendiente en los tres tramos por la antigüedad de la
+ * SESIÓN (no del aviso ni del vencimiento: acá no hay vencimientos). Siempre
+ * devuelve los tres tramos, con ceros si están vacíos: la pantalla dibuja
+ * tres barras aunque dos estén en cero.
+ */
+export function deudaPorAntiguedad(
+  turnos: TurnoParaDeuda[],
+  ahora: Date = new Date(),
+): DeudaPorTramo[] {
+  const acumulado = new Map<TramoDeuda, { sesiones: number; monto: number; pacientes: Set<string> }>(
+    TRAMOS_DEUDA.map((tramo) => [tramo, { sesiones: 0, monto: 0, pacientes: new Set<string>() }]),
+  );
+
+  for (const turno of turnos) {
+    if (!esDeudaPendiente(turno)) continue;
+    // Sin fecha no se puede fechar la deuda; cae en el tramo más nuevo, que
+    // es el que menos alarma. diasDesde ya recorta los futuros a 0.
+    const dias = turno.fecha ? diasDesde(turno.fecha, ahora) : 0;
+    const acumulador = acumulado.get(tramoDeDeuda(dias))!;
+    acumulador.sesiones += 1;
+    acumulador.monto += turno.tarifaCobrada;
+    acumulador.pacientes.add(turno.pacienteId);
+  }
+
+  return TRAMOS_DEUDA.map((tramo) => {
+    const { sesiones, monto, pacientes } = acumulado.get(tramo)!;
+    return { tramo, sesiones, monto, pacientes: pacientes.size };
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Deudores — query única y forma de respuesta de /api/deudores.
 // ────────────────────────────────────────────────────────────────────────────
 

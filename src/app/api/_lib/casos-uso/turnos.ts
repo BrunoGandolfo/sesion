@@ -79,11 +79,14 @@ export async function listarTurnos({
 export interface CobrosDelMesInput {
   prisma: ClientePrisma;
   organizationId: string;
-  ahora: Date;
+  /** CUALQUIER instante del mes que se quiere leer, no necesariamente hoy.
+   *  Se llamaba `ahora` y eso escondía que sirve para cualquier mes: es la
+   *  lectura de detalle que usa Finanzas al tocar una barra. */
+  enElMesDe: Date;
 }
 
 /**
- * Cobros (turnos pagados) del mes de `ahora`, por pagoFecha descendente.
+ * Cobros (turnos pagados) del mes de `enElMesDe`, por pagoFecha descendente.
  *
  * listarTurnos filtra por la fecha del turno; la vista "Cobros del mes"
  * necesita la fecha del PAGO: un turno de abril cobrado en mayo es de mayo.
@@ -91,13 +94,13 @@ export interface CobrosDelMesInput {
 export async function cobrosDelMes({
   prisma,
   organizationId,
-  ahora,
+  enElMesDe,
 }: CobrosDelMesInput): Promise<TurnoConPaciente[]> {
   const turnos = await prisma.turno.findMany({
     where: {
       organizationId,
       pagoEstado: "pagado",
-      pagoFecha: { gte: inicioDeMesMvd(ahora), lte: finDeMesMvd(ahora) },
+      pagoFecha: { gte: inicioDeMesMvd(enElMesDe), lte: finDeMesMvd(enElMesDe) },
     },
     include: INCLUDE_AGENDA,
     orderBy: { pagoFecha: "desc" },
