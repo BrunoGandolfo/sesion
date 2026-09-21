@@ -53,6 +53,12 @@ const PSQL = process.env.PSQL ?? (process.env.PG_BIN ? join(process.env.PG_BIN, 
 const VARIABLE_LLAVERO = "CLAVES_CIFRADO";
 const VARIABLE_IDS = "CLAVES_CIFRADO_IDS";
 
+/** Día del mes en que corre el ensayo automático, para el acta. Es el
+ *  day-of-month del cron de .github/workflows/ensayo-restauracion.yml, y
+ *  ensayo-restauracion.test.ts falla si los dos se separan: el acta que dice
+ *  cuándo vuelve a mirarse esto no puede quedar desfasada del calendario. */
+const DIA_ENSAYO = 2;
+
 /** Filas mínimas por tabla. Una copia con menos no sirve para volver a
  *  atender: no hay a quién ni qué. */
 const MINIMOS_COMUNES = {
@@ -496,7 +502,7 @@ function armarActa() {
       "El descifrado clínico se prueba A MANO con el llavero (scripts/ensayo/ensayo-manual.sh, docs/operaciones.md §4). " +
       "Cada copia indica arriba qué se pudo verificar y qué falló.",
     "",
-    "### Próximo ensayo automático: el día 1 del mes que viene.",
+    `### Próximo ensayo automático: el día ${DIA_ENSAYO} del mes que viene.`,
     "",
   ].join("\n");
 }
