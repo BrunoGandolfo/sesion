@@ -4,6 +4,12 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    /**
+     * Código estable para que el cliente distinga ESTE error de otro con el
+     * mismo status, sin leer el texto. Opcional: los errores que ya existían
+     * no lo llevan y su cuerpo no cambia (`{ error }` a secas).
+     */
+    public readonly codigo?: string,
   ) {
     super(message);
   }
@@ -26,7 +32,10 @@ export function errorResponse(error: unknown) {
   }
 
   if (error instanceof ApiError) {
-    return Response.json({ error: error.message }, { status: error.status });
+    return Response.json(
+      { error: error.message, ...(error.codigo ? { codigo: error.codigo } : {}) },
+      { status: error.status },
+    );
   }
 
   console.error(error);

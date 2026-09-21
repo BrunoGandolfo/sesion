@@ -13,7 +13,12 @@ import type { db } from "@/lib/db";
 import { consentimientoVigenteDe } from "@/lib/consentimiento";
 import { PRUEBA_TOPE } from "@/lib/glosario";
 import { TOPE_GRABACIONES_PRUEBA } from "@/lib/limites-prueba";
-import { keyAudio } from "@/lib/sesion-clinica/estados";
+import { MINIMO_SEGUNDOS } from "@/lib/grabacion-captura";
+import {
+  CODIGO_GRABACION_CORTA,
+  keyAudio,
+  prefijoAudio,
+} from "@/lib/sesion-clinica/estados";
 import type { DiagnosticoGrabacion, PausaGrabacion } from "@/lib/sesion-clinica/schema";
 
 import { DETALLE_MAX_ARRAY } from "../auditoria-pura";
@@ -23,6 +28,7 @@ import { SESION_SELECT, toSesionClinicaResponse } from "../sesion-clinica";
 
 import { leerSesion } from "./sesion/leer";
 import { transicionar } from "./sesion/transicion";
+import { crearTrabajo } from "./trabajos/crear";
 
 type Base = { prisma: typeof db; organizationId: string };
 type Sesion = Base & { sesionId: string };
@@ -42,6 +48,18 @@ export const EXPIRA_URL_SUBIDA_SEGUNDOS = 60 * 60;
 
 export const MENSAJE_NO_LLEGO =
   "El audio no llegó a R2. La sesión volvió a 'grabando': reintentá la subida.";
+
+/**
+ * Lo que se le contesta a una grabación más corta que el mínimo.
+ *
+ * El teléfono ya no la sube: `MINIMO_SEGUNDOS` de grabacion-captura.ts corta
+ * antes. Pero una PWA vieja cacheada sigue llamando a esta ruta, y el 19 de
+ * septiembre una grabación de 2 segundos se subió, se transcribió —con su
+ * costo— y terminó fallida con `asr_vacio`. Es la misma constante de los dos
+ * lados: ese módulo no importa NADA, así que el servidor lo puede leer sin
+ * arrastrar nada del navegador (lo vigila un test).
+ */
+export const MENSAJE_GRABACION_CORTA = `La grabación es más corta que el mínimo de ${MINIMO_SEGUNDOS} segundos: no se transcribe y el audio se borra.`;
 
 export async function leerSesionPorTurno({ prisma, organizationId, turnoId }: Base & { turnoId: string }) {
   const fila = await prisma.sesionClinica.findFirst({ where: { turnoId, organizationId }, select: SESION_SELECT });
@@ -135,6 +153,38 @@ export async function confirmarSubida(input: Sesion & { key: string; duracionAud
       // count = 0: otra pestaña ya la movió. El 409 de abajo sigue valiendo.
     }
     throw new ApiError(MENSAJE_NO_LLEGO, 409);
+  }
+
+  // ── El mínimo, también acá ──────────────────────────────────────────
+  // Antes de la transición a `procesando`, que es la que le pone el trabajo
+  // en la cola al worker y dispara el gasto del ASR. La sesión queda
+  // `fallida` con su código —así aparece en Pendientes y ella puede
+  // eliminarla— y el audio que YA está en R2 se encola para borrado en la
+  // misma transacción: o quedan las dos escrituras, o ninguna.
+  if (duracionAudioSeg < MINIMO_SEGUNDOS) {
+    await prisma.$transaction(async (tx) => {
+      await transicionar({
+        prisma: tx,
+        operacion: "abandonar",
+        sesionId,
+        organizationId,
+        data: {
+          audioEstado: "en_r2",
+          duracionAudioSeg,
+          falloCodigo: CODIGO_GRABACION_CORTA,
+          proximoIntentoEn: null,
+        },
+        conflicto: "La sesión cambió de estado durante la confirmación",
+      });
+      await crearTrabajo({
+        prisma: tx,
+        tipo: "borrar_audio_r2",
+        payload: { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] },
+        organizationId,
+        sesionId,
+      });
+    });
+    throw new ApiError(MENSAJE_GRABACION_CORTA, 422, CODIGO_GRABACION_CORTA);
   }
 
   await transicionar({

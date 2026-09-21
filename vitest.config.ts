@@ -74,6 +74,8 @@ const INTEGRACION = [
   // Los filtros del historial clínico y el mes de cobros, contra la base real.
   'src/lib/__tests__/historial-filtros.test.ts',
   'src/lib/__tests__/cobros-mes.test.ts',
+  // El mínimo de grabación, del lado del servidor.
+  'src/lib/__tests__/grabacion-minimo.test.ts',
   // Finanzas: agregados por mes de Montevideo contra la base real.
   'src/lib/__tests__/finanzas.test.ts',
   // El rastro legal y el acto se confirman juntos (auditoria.ts).

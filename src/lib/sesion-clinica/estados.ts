@@ -183,6 +183,9 @@ export function backoffSesionMs(fallosSeguidos: number): number {
 
 export const CODIGO_INTENTOS_AGOTADOS = "intentos_agotados";
 export const CODIGO_GRABACION_ABANDONADA = "grabacion_abandonada";
+/** La grabación no llegó al mínimo: no se transcribe y el audio se borra.
+ *  El teléfono ya no la sube, pero una PWA vieja cacheada sí (19/9). */
+export const CODIGO_GRABACION_CORTA = "grabacion_corta";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Huérfanas
