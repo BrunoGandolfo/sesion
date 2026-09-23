@@ -32,3 +32,48 @@ it("no confunde pendientes vacíos con una cuenta nueva cuando faltan los datos"
   render(<Pendientes pendientes={vacios} />);
   expect(screen.queryByRole("link")).toBeNull();
 });
+
+// Las notas que fallaron, de cualquier día: antes sólo aparecían en la
+// tarjeta o la fila del turno de HOY, y una de la semana pasada no se
+// encontraba sin entrar a la ficha de la paciente.
+it("muestra una nota fallida de hace una semana con nombre, fecha y el acceso a su nota", () => {
+  const fallida = {
+    sesionId: "s-vieja",
+    turnoId: "t-vieja",
+    pacienteId: "p1",
+    pacienteNombre: "Ana López",
+    fecha: "2026-09-16T15:00:00.000Z",
+    codigo: "intentos_agotados",
+    puedeReintentarse: true,
+    // No viaja, pero si viajara tampoco se muestra.
+    falloDetalle: "AssemblyAI 500: upstream timeout",
+  };
+  render(<Pendientes pendientes={{ ...vacios, notasFallidas: [fallida] }} />);
+
+  expect(screen.getByText("1 nota que no se pudo escribir")).toBeTruthy();
+  const enlace = screen.getByRole("link", { name: /Ana López/ });
+  expect(enlace.getAttribute("href")).toBe("/sesiones/s-vieja");
+  expect(enlace.textContent).toContain("16 sep");
+  expect(enlace.textContent).toContain("Ver qué pasó");
+  expect(enlace.textContent).not.toContain("No se puede reintentar");
+  expect(document.body.textContent).not.toContain("AssemblyAI");
+  expect(document.body.textContent).not.toContain("intentos_agotados");
+});
+
+it("una nota fallida que no puede reintentarse lo dice", () => {
+  render(
+    <Pendientes
+      pendientes={{
+        ...vacios,
+        notasFallidas: [
+          { sesionId: "s1", turnoId: "t1", pacienteId: "p1", pacienteNombre: "Ana López", fecha: "2026-09-16T15:00:00.000Z", codigo: null, puedeReintentarse: false },
+          { sesionId: "s2", turnoId: "t2", pacienteId: "p2", pacienteNombre: "Beatriz Díaz", fecha: "2026-09-18T15:00:00.000Z", codigo: null, puedeReintentarse: true },
+        ],
+      }}
+    />,
+  );
+
+  expect(screen.getByText("2 notas que no se pudieron escribir")).toBeTruthy();
+  expect(screen.getByRole("link", { name: /Ana López/ }).textContent).toContain("No se puede reintentar; se puede eliminar");
+  expect(screen.getByRole("link", { name: /Beatriz Díaz/ }).textContent).not.toContain("No se puede reintentar");
+});

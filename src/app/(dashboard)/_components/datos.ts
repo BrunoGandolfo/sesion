@@ -113,6 +113,11 @@ export interface DiaRepartido {
  * pendiente, no seis), así que para el turno de AHORA se cruza la pertenencia
  * del paciente con el estado de pago del propio turno: eso es lo que decide
  * si hay algo que cobrar en ESTE turno.
+ *
+ * Además, como en la fila de la agenda, un turno todavía "programado" cuya
+ * hora ya empezó y sigue impago se puede cobrar: el caso de uso de cobrar lo
+ * marca realizado (casos-uso/cobrar-turno.ts). Todavía no es deuda —no está
+ * en `sinCobrar`—, pero la sesión ya está ocurriendo y la tarjeta lo ofrece.
  */
 export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
   const pendientes = data.pendientes ?? SIN_PENDIENTES;
@@ -144,9 +149,22 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
     enCurso: Boolean(abierto),
     ahoraSinCobrar:
       ahoraTurno !== null &&
-      debenPacientes.has(ahoraTurno.paciente.id) &&
-      esDeudaPendiente(ahoraTurno),
+      ((debenPacientes.has(ahoraTurno.paciente.id) &&
+        esDeudaPendiente(ahoraTurno)) ||
+        empezoSinCobrar(ahoraTurno, ahora)),
   };
+}
+
+/** Programado, impago y con la hora ya empezada: cobrarlo lo cierra. */
+function empezoSinCobrar(
+  turno: Pick<TurnoConPaciente, "estado" | "pagoEstado" | "fecha">,
+  ahora: Date,
+): boolean {
+  return (
+    turno.estado === "programado" &&
+    turno.pagoEstado === "pendiente" &&
+    turno.fecha.getTime() <= ahora.getTime()
+  );
 }
 
 /**
@@ -185,7 +203,12 @@ export function hayRiesgoEnElDia(
  * se hiciera por partes, la pantalla volvería a decir dos números distintos
  * —que es exactamente lo que se acaba de arreglar—.
  *
- * Si el turno no era deuda pendiente (ya estaba pagado, o no está en el día)
+ * Un turno "programado" cuya hora ya empezó no era deuda: cobrarlo lo cierra
+ * y lo paga (casos-uso/cobrar-turno.ts), así que pasa a realizado y pagado y
+ * suma a lo cobrado del mes, sin tocar la deuda. Sin esto la tarjeta y la
+ * fila seguían ofreciendo Cobrar hasta recargar.
+ *
+ * Si el turno no era cobrable (ya estaba pagado, o no está en el día)
  * devuelve los datos sin tocar.
  */
 export function aplicarCobro(
@@ -195,6 +218,26 @@ export function aplicarCobro(
   cuando: Date,
 ): DashboardData {
   const turno = data.sesionesHoy.find((t) => t.id === turnoId);
+  if (turno && empezoSinCobrar(turno, cuando)) {
+    return {
+      ...data,
+      sesionesHoy: data.sesionesHoy.map((t) =>
+        t.id === turnoId
+          ? {
+              ...t,
+              estado: "realizado" as const,
+              pagoEstado: "pagado" as const,
+              pagoMetodo: metodo,
+              pagoFecha: cuando,
+            }
+          : t,
+      ),
+      kpis: {
+        ...data.kpis,
+        ingresosMes: data.kpis.ingresosMes + turno.tarifaCobrada,
+      },
+    };
+  }
   if (!turno || !esDeudaPendiente(turno)) return data;
 
   const monto = turno.tarifaCobrada;

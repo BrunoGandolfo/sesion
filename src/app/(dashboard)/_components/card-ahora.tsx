@@ -4,18 +4,20 @@
 //
 // Es la única tarjeta de la pantalla de Hoy y va ARRIBA de todo: en el
 // teléfono, entre pacientes, lo primero que se necesita es quién viene ahora.
-// Tiene un solo botón de acción, el que corresponde al momento del turno:
-// grabar, esperar la nota, revisarla, cobrar o hacer firmar la autorización.
-// Nunca dos a la vez: si hay dos cosas posibles, la que se ofrece es la que
-// no se puede saltear. La excepción es la firma: Cobrar no depende de ella
-// (una sesión que no se grabó se cobra igual), así que cuando faltan las dos
-// se cobra y la firma se avisa al lado, como ya hacía la fila
-// (components/ui/session-row.tsx). Aparte, siempre, "Preparar sesión".
+// Grabar y Cobrar son independientes: si la sesión empezó cinco minutos
+// tarde y la hora ya pasó, se sigue pudiendo grabar, y el cobro se ofrece
+// además, no en lugar de. Grabar se ofrece mientras el turno sea de hoy y no
+// haya una grabación de él (sin sesión, o con la sesión todavía en
+// "grabando"). Sin la firma de la autorización no se graba: en su lugar va
+// "Firmar autorización". Cuando la nota falló, espera revisión o se está
+// escribiendo, esa es la única acción: es un problema clínico, no una deuda.
+// Aparte, siempre, "Preparar sesión". La misma regla la aplica la fila de la
+// agenda (components/ui/session-row.tsx).
 //
 // El brief va en versión corta —última vez y foco— porque acá se lee de
 // pie, con la paciente entrando: el mismo componente que usa el sheet del
-// turno (components/clinico/brief-corto.tsx). La versión completa ("Para
-// retomar", brief-pre-sesion.tsx) sigue viviendo en la ficha.
+// turno (components/clinico/brief-corto.tsx). La versión completa
+// (brief-pre-sesion.tsx) sigue viviendo en la ficha.
 
 import * as React from "react";
 import Link from "next/link";
@@ -28,7 +30,7 @@ import {
 import { Avatar, Button, Card, Chip } from "@/components/ui";
 import { Latido } from "@/components/ui/movimiento";
 import { IndicadorProcesando } from "@/components/ui/procesando";
-import { estadoClinicoDe } from "@/components/ui/session-row";
+import { estadoClinicoDe, puedeGrabarseHoy } from "@/components/ui/session-row";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
 import {
@@ -46,7 +48,7 @@ import {
 import type { EstadoProcesamiento, TurnoConPaciente } from "@/types/domain";
 
 /** Lo único que esta card necesita de /api/sesion-clinica. */
-type SesionDelTurno = { id: string; estado: EstadoProcesamiento } | null;
+type SesionDelTurno = { id: string; estado: EstadoProcesamiento | string } | null;
 
 /** Lo único que esta card necesita de /api/pacientes/[id]/brief. */
 type RespuestaBrief = {
@@ -81,23 +83,34 @@ async function leerContexto(
 }
 
 type Accion =
-  | { tipo: "autorizar" }
   | { tipo: "fallida"; sesionId: string }
   | { tipo: "revisar"; sesionId: string }
   | { tipo: "escribiendo" }
-  | { tipo: "cobrar" }
-  | { tipo: "grabar" }
-  | { tipo: "hecho" };
+  | {
+      tipo: "turno";
+      /** Grabar, o "Firmar autorización" si falta la firma. */
+      grabar: "grabar" | "autorizar" | null;
+      cobrar: boolean;
+      /** Falta la firma y no hay nada que grabar: si se cobra, se avisa al
+       *  lado; si no, es el botón. */
+      firma: "aviso" | "boton" | null;
+      /** No queda nada por hacer y la nota está aprobada. */
+      hecho: boolean;
+    };
 
 /**
- * Un solo botón, en este orden: una nota que FALLÓ va antes que todo (es un
- * problema clínico, no una deuda); una nota escrita espera revisión; mientras
- * el pipeline trabaja no hay nada que apretar; después viene el cobro —que no
- * depende de la firma—; sin cobro y sin firma, se pide la firma; y si nada de
- * eso aplica, se graba. Exportada para probarse sin montar la card.
+ * Qué ofrece la tarjeta. Una nota que FALLÓ va antes que todo (es un
+ * problema clínico, no una deuda); una nota escrita espera revisión; y
+ * mientras el pipeline trabaja no hay nada que apretar. Fuera de eso, Grabar
+ * y Cobrar no se excluyen: Grabar mientras el turno sea de hoy y no se haya
+ * grabado —la hora no cuenta: una sesión que empezó tarde se graba igual—,
+ * y Cobrar cuando hay algo que cobrar. Exportada para probarse sin montar
+ * la card.
  */
 export function accionDe(
   sesion: SesionDelTurno,
+  turno: Pick<TurnoConPaciente, "estado" | "fecha">,
+  ahora: Date,
   sinAutorizacion: boolean,
   sinCobrar: boolean,
 ): Accion {
@@ -108,14 +121,25 @@ export function accionDe(
   if (sesion?.estado === "subiendo" || sesion?.estado === "procesando") {
     return { tipo: "escribiendo" };
   }
-  if (sinCobrar) return { tipo: "cobrar" };
-  if (sinAutorizacion) return { tipo: "autorizar" };
-  if (sesion?.estado === "aprobada") return { tipo: "hecho" };
-  return { tipo: "grabar" };
+  const sinGrabar = sesion === null || sesion.estado === "grabando";
+  const grabable = sinGrabar && puedeGrabarseHoy(turno, ahora);
+  const grabar = grabable ? (sinAutorizacion ? "autorizar" : "grabar") : null;
+  const firma =
+    sinAutorizacion && !grabable ? (sinCobrar ? "aviso" : "boton") : null;
+  return {
+    tipo: "turno",
+    grabar,
+    cobrar: sinCobrar,
+    firma,
+    hecho:
+      sesion?.estado === "aprobada" && !grabar && !sinCobrar && firma === null,
+  };
 }
 
 interface CardAhoraProps {
   turno: TurnoConPaciente;
+  /** El reloj de la pantalla: decide si el turno es de hoy. */
+  ahora: Date;
   /** La hora del turno ya empezó y todavía no terminó. */
   enCurso: boolean;
   /** El turno está en pendientes.sinAutorizacion. */
@@ -130,6 +154,7 @@ interface CardAhoraProps {
 
 export function CardAhora({
   turno,
+  ahora,
   enCurso,
   sinAutorizacion,
   sinCobrar,
@@ -159,11 +184,12 @@ export function CardAhora({
     };
   }, [turno.id, turno.paciente.id, reloadKey]);
 
-  const accion = accionDe(contexto.sesion, sinAutorizacion, sinCobrar);
-  // Si se cobra y además falta la firma, la firma se avisa al lado: no
-  // reemplaza al cobro ni se esconde detrás.
-  const avisoFirma = sinAutorizacion && accion.tipo === "cobrar";
-  const notaClinica = estadoClinicoDe(contexto.sesion);
+  // Mientras /api/sesion-clinica no contestó —o si falló— vale la sesión
+  // que ya trajo el día: sin ella, una sesión aprobada o procesándose
+  // ofrecía "Grabar sesión" hasta que llegara la respuesta, o para siempre.
+  const sesion: SesionDelTurno = contexto.sesion ?? turno.sesionClinica;
+  const accion = accionDe(sesion, turno, ahora, sinAutorizacion, sinCobrar);
+  const notaClinica = estadoClinicoDe(sesion);
   const ultima = contexto.brief?.ultimaSesion ?? null;
   const preparar = `/pacientes/${turno.paciente.id}?preparar=1`;
   const ModalityIcon = turno.modalidad === "online" ? Video : MapPin;
@@ -239,19 +265,9 @@ export function CardAhora({
             className="w-full"
           />
         ) : null}
-        {accion.tipo === "hecho" ? (
-          <Chip variant="sage">{NOTA_LISTA}</Chip>
-        ) : null}
         {accion.tipo === "fallida" ? (
           <Button asChild className="!bg-terracotta-600 hover:!bg-terracotta-700">
             <Link href={`/sesiones/${accion.sesionId}`}>{notaClinica?.rotulo}</Link>
-          </Button>
-        ) : null}
-        {accion.tipo === "autorizar" ? (
-          <Button asChild>
-            <Link href={`/pacientes/${turno.paciente.id}`}>
-              {FIRMAR_AUTORIZACION}
-            </Link>
           </Button>
         ) : null}
         {accion.tipo === "revisar" ? (
@@ -259,21 +275,40 @@ export function CardAhora({
             <Link href={`/sesiones/${accion.sesionId}`}>{PARA_REVISAR}</Link>
           </Button>
         ) : null}
-        {accion.tipo === "cobrar" ? (
-          <Button onClick={onCobrar}>{COBRAR}</Button>
-        ) : null}
-        {avisoFirma ? (
-          <Link
-            href={`/pacientes/${turno.paciente.id}`}
-            className="font-sans text-[13px] font-semibold text-terracotta-600 hover:text-terracotta-700"
-          >
-            {FALTA_AUTORIZACION} →
-          </Link>
-        ) : null}
-        {accion.tipo === "grabar" ? (
-          <Button asChild>
-            <Link href={`/grabar/${turno.id}`}>{GRABAR_SESION}</Link>
-          </Button>
+        {accion.tipo === "turno" ? (
+          <>
+            {accion.hecho ? <Chip variant="sage">{NOTA_LISTA}</Chip> : null}
+            {/* Grabar primero: es lo que no se puede dejar para después. Si
+                además hay cobro, va al lado y en segundo plano. */}
+            {accion.grabar === "grabar" ? (
+              <Button asChild>
+                <Link href={`/grabar/${turno.id}`}>{GRABAR_SESION}</Link>
+              </Button>
+            ) : null}
+            {accion.grabar === "autorizar" || accion.firma === "boton" ? (
+              <Button asChild>
+                <Link href={`/pacientes/${turno.paciente.id}`}>
+                  {FIRMAR_AUTORIZACION}
+                </Link>
+              </Button>
+            ) : null}
+            {accion.cobrar ? (
+              <Button
+                variant={accion.grabar ? "secondary" : "primary"}
+                onClick={onCobrar}
+              >
+                {COBRAR}
+              </Button>
+            ) : null}
+            {accion.firma === "aviso" ? (
+              <Link
+                href={`/pacientes/${turno.paciente.id}`}
+                className="font-sans text-[13px] font-semibold text-terracotta-600 hover:text-terracotta-700"
+              >
+                {FALTA_AUTORIZACION} →
+              </Link>
+            ) : null}
+          </>
         ) : null}
 
         <Button asChild variant="secondary">

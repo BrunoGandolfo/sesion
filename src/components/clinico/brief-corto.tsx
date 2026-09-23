@@ -11,8 +11,9 @@
 // aprobadas). Acá no se genera nada: se elige qué mostrar y en qué orden —
 // primero la señal de riesgo, después de qué se habló, después el foco.
 //
-// La versión completa ("Para retomar", pacientes/[id]/_components/
-// brief-pre-sesion.tsx) sigue viviendo en la ficha y no se toca.
+// La versión completa (pacientes/[id]/_components/brief-pre-sesion.tsx)
+// sigue viviendo en la ficha y no se toca. Las dos se llaman igual,
+// "Preparar sesión": es el mismo resumen, entero o en dos líneas.
 
 import * as React from "react";
 import Link from "next/link";
@@ -25,7 +26,6 @@ import { fechaRelativa } from "@/lib/format";
 import {
   NOTA_SIN_INCORPORAR,
   PARA_LA_PROXIMA,
-  PARA_RETOMAR,
   PREPARAR_SESION,
   PROPUESTA_SIN_INCORPORAR,
   RESUMEN_HAY_MAS,
@@ -267,7 +267,7 @@ type Estado =
   | { tipo: "listo"; brief: BriefResponse };
 
 /**
- * Mismo brief, con el rótulo "Para retomar" y el enlace a la ficha, para
+ * Mismo brief, con el rótulo "Preparar sesión" y el enlace a la ficha, para
  * pantallas que no tienen los datos a mano (el sheet del turno).
  */
 export function BriefCortoDePaciente({ pacienteId }: { pacienteId: string }) {
@@ -353,7 +353,7 @@ function Marco({
         <h3 className="flex min-w-0 items-center">
           <EditorialRule />
           <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-            {PARA_RETOMAR}
+            {PREPARAR_SESION}
           </span>
         </h3>
         {extra}
