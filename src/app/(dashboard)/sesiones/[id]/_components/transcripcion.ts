@@ -33,6 +33,26 @@ export function leerTranscripcion(transcripcion: string): BloqueTranscripcion[] 
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Hablantes
+//
+// El worker rotula "Terapeuta" al primer hablante que detecta el ASR (S0) y
+// "Paciente" a cualquier otro. Ese reparto puede estar equivocado, así que en
+// pantalla se muestra como "Hablante 1" y "Hablante 2": dos voces distintas,
+// sin afirmar quién es quién. Es presentación; el texto guardado no se toca.
+// Un rótulo que no sea ninguno de los dos se muestra tal cual.
+// ────────────────────────────────────────────────────────────────────────────
+
+const HABLANTES_DEL_WORKER: ReadonlyMap<string, 1 | 2> = new Map([
+  ["Terapeuta", 1],
+  ["Paciente", 2],
+]);
+
+/** 1 o 2 para los rótulos del worker; null para cualquier otro. */
+export function numeroDeHablante(hablante: string): 1 | 2 | null {
+  return HABLANTES_DEL_WORKER.get(hablante) ?? null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Búsqueda
 //
 // Sin distinguir mayúsculas ni tildes: ella escribe "angustia" o "mama" y

@@ -61,7 +61,7 @@ Para prepararla, usá un Postgres propio con dos bases distintas: sesion_e2e_mai
     node --env-file=.env pruebas/e2e/sembrar-local.mjs
     npm run dev -- --port 3131
 
-El complemento sembrar-local agrega una nota aprobada y Para vos de contenido ficticio para el primer turno del seed. Solo acepta una base cuyo nombre empiece por sesion_e2e_, en loopback, con la clave local del seed. No ejecuta IA, worker ni grabación. Es una fila persistida en Postgres, leída por las rutas reales; no una respuesta de API sustituida.
+El complemento sembrar-local agrega una nota aprobada, Para vos y una transcripción corta de contenido ficticio para el primer turno del seed. Solo acepta una base cuyo nombre empiece por sesion_e2e_, en loopback, con la clave local del seed. No ejecuta IA, worker ni grabación. Es una fila persistida en Postgres, leída por las rutas reales; no una respuesta de API sustituida.
 
 Con E2E_USUARIO y E2E_PASSWORD definidos en el terminal con la cuenta de prisma/seed.ts:
 

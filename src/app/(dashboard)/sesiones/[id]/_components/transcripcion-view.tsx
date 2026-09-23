@@ -38,6 +38,8 @@ import {
   BUSCAR_MINIMO,
   BUSCAR_PLACEHOLDER,
   BUSCAR_SIGUIENTE,
+  HABLANTE_1,
+  HABLANTE_2,
   REINTENTAR,
   TRANSCRIPCION,
   TRANSCRIPCION_ABRIENDO,
@@ -53,6 +55,7 @@ import {
   MINIMO_BUSQUEDA,
   buscarEnBloques,
   leerTranscripcion,
+  numeroDeHablante,
   type BloqueTranscripcion,
   type Coincidencia,
 } from "./transcripcion";
@@ -65,9 +68,12 @@ type Lectura =
 
 type Respuesta = { transcripcion: string };
 
-/** Así rotula el worker a la terapeuta (processor/transcripcion.py). Sólo se
- *  usa para darle otro color; el nombre que se muestra es el de la línea. */
-const ROTULO_TERAPEUTA = "Terapeuta";
+/** Cada hablante con su rótulo y su color: se distinguen las dos voces sin
+ *  decir quién es quién (ver transcripcion.ts). */
+const HABLANTES = {
+  1: { rotulo: HABLANTE_1, color: "text-sage-700" },
+  2: { rotulo: HABLANTE_2, color: "text-ink-700" },
+} as const;
 
 interface TranscripcionViewProps {
   sesion: SesionClinicaResponse;
@@ -191,8 +197,11 @@ function Lector({ bloques }: { bloques: BloqueTranscripcion[] }) {
     marcaActual.current?.scrollIntoView?.({ block: "center" });
   }, [actual, total, consulta]);
 
+  // Con una sola coincidencia no hay a dónde ir: las flechas se apagan.
+  const puedeMover = total > 1;
+
   const mover = (paso: number) => {
-    if (total === 0) return;
+    if (!puedeMover) return;
     setActual((previo) => (previo + paso + total) % total);
   };
 
@@ -243,10 +252,10 @@ function Lector({ bloques }: { bloques: BloqueTranscripcion[] }) {
               </button>
             ) : null}
           </div>
-          <BotonMover etiqueta={BUSCAR_ANTERIOR} deshabilitado={total === 0} onClick={() => mover(-1)}>
+          <BotonMover etiqueta={BUSCAR_ANTERIOR} deshabilitado={!puedeMover} onClick={() => mover(-1)}>
             <ChevronUp size={18} strokeWidth={1.8} aria-hidden="true" />
           </BotonMover>
-          <BotonMover etiqueta={BUSCAR_SIGUIENTE} deshabilitado={total === 0} onClick={() => mover(1)}>
+          <BotonMover etiqueta={BUSCAR_SIGUIENTE} deshabilitado={!puedeMover} onClick={() => mover(1)}>
             <ChevronDown size={18} strokeWidth={1.8} aria-hidden="true" />
           </BotonMover>
         </div>
@@ -328,13 +337,7 @@ const Bloque = React.memo(function Bloque({
     <li className="flex flex-col gap-1">
       <div className="flex items-baseline gap-2">
         <span className="text-[12px] font-semibold tabular-nums text-ink-500">{bloque.marca}</span>
-        <span
-          className={`font-sans text-[12px] font-semibold uppercase tracking-[0.08em] ${
-            bloque.hablante === ROTULO_TERAPEUTA ? "text-sage-700" : "text-ink-700"
-          }`}
-        >
-          {bloque.hablante}
-        </span>
+        <Hablante nombre={bloque.hablante} />
       </div>
       <p className="whitespace-pre-wrap break-words font-sans text-[15px] leading-[1.7] text-ink-900">{texto}</p>
     </li>
@@ -345,6 +348,19 @@ const Bloque = React.memo(function Bloque({
   // El resultado actual sólo le importa al bloque que resalta algo.
   (a.coincidencias === undefined || a.actual === b.actual),
 );
+
+function Hablante({ nombre }: { nombre: string }) {
+  const numero = numeroDeHablante(nombre);
+  const { rotulo, color } = numero ? HABLANTES[numero] : { rotulo: nombre, color: "text-ink-700" };
+  return (
+    <span
+      data-hablante={numero ?? undefined}
+      className={`font-sans text-[12px] font-semibold uppercase tracking-[0.08em] ${color}`}
+    >
+      {rotulo}
+    </span>
+  );
+}
 
 function Resaltado({
   texto,

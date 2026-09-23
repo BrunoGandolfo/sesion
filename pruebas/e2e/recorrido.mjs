@@ -247,15 +247,15 @@ async function pacientes() {
     const d = dialogo();
     await visible(d.getByRole('heading', { name: 'Nuevo paciente' }));
     await boton('Crear paciente', d).click();
-    await visible(d.getByText('Ingresá el nombre', { exact: true }));
-    await visible(d.getByText('Ingresá el apellido', { exact: true }));
-    await visible(d.getByText('Ingresá el teléfono', { exact: true }));
+    await visible(d.getByText('Falta el nombre', { exact: true }));
+    await visible(d.getByText('Falta el apellido', { exact: true }));
+    await visible(d.getByText('Falta el teléfono', { exact: true }));
     await d.getByLabel('Nombre', { exact: true }).fill('Prueba E2E');
     await d.getByLabel('Apellido', { exact: true }).fill(prueba.apellido);
     await d.getByLabel('Teléfono', { exact: true }).fill('+12025550123');
     await d.getByLabel('Tarifa por sesión', { exact: true }).fill('-1');
     await boton('Crear paciente', d).click();
-    await visible(d.getByText('La tarifa debe ser mayor a 0', { exact: true }));
+    await visible(d.getByText('La tarifa debe ser mayor a cero', { exact: true }));
     await d.getByLabel('Tarifa por sesión', { exact: true }).fill('1500');
     await d.getByLabel('Notas (opcional)', {exact:true}).fill(marca);
     if (ancho === 390) await page.setViewportSize({ width: 390, height: 500 });
@@ -343,7 +343,7 @@ async function agenda(prueba) {
 }
 
 async function ficha(datos, prueba) {
-  await paso('Ficha: sesiones', async () => {
+  await paso('Ficha: Sesiones', async () => {
     await ir('/pacientes/' + datos.paciente.id);
     await visible(page.getByRole('tab', { name: 'Sesiones', exact: true }));
     await visible(page.locator('a[href="/sesiones/' + datos.sesion.sesionClinicaId + '"]'));
@@ -354,10 +354,10 @@ async function ficha(datos, prueba) {
     if (pendientesOla2) {
       await visible(page.getByText('No pudimos completar la operación. Intentá de nuevo.', {exact:true}));
       assert(resultado.esperados.some(e => e.ruta?.endsWith('/contexto-clinico')), 'Falta el 404 esperado de Recorrido');
-    } else await visible(page.getByText(/El hilo|Todavía no|primera sesión/i).filter({visible:true}).first());
+    } else await visible(page.getByRole('heading', { name: 'El Recorrido', exact: true }));
   }, pendientesOla2 ? {textosErrorEsperados:erroresOla2,alertasEsperadas:[/^No pudimos completar la operación\. Intentá de nuevo\.\s+Reintentar$/]} : undefined);
-  await paso('Ficha: datos, autorización y pagos', async () => {
-    await page.getByRole('tab', { name: 'Ficha', exact: true }).click();
+  await paso('Ficha: Datos, autorización y pagos', async () => {
+    await page.getByRole('tab', { name: 'Datos', exact: true }).click();
     await visible(page.getByText('Teléfono', { exact: true }).first());
     await boton(/^Turnos y pagos/).click();
     await visible(page.getByText(/min$/).first());
@@ -465,7 +465,7 @@ async function cobrarYDeshacer(prueba) {
   const datos = {deuda:await get('/api/pacientes/' + prueba.id)};
   await paso('Cobrar y deshacer: base restituida', async () => {
     await ir('/pacientes/' + datos.deuda.paciente.id);
-    await page.getByRole('tab', { name: 'Ficha', exact: true }).click();
+    await page.getByRole('tab', { name: 'Datos', exact: true }).click();
     await boton(/^Turnos y pagos/).click();
     const filas = page.locator('li').filter({ has: page.getByRole('button', { name: 'Cobrar', exact: true }) });
     // El orden de la lista es por fecha descendente. Elegir un turno ya realizado evita cambiar su estado al cobrar.

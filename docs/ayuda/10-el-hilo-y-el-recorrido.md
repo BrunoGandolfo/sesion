@@ -95,9 +95,11 @@ aparece con la palabra técnica: *aplicada* (fue o es la vigente), *propuesta*,
 
 ## El brief antes de la sesión
 
-- **"Para retomar"**, en la pestaña **Sesiones**: la señal de riesgo, qué pasó la
-  última vez, el **Progreso percibido**, **Para la próxima** y un extracto del
-  Recorrido vigente.
+- **Preparar sesión**, en la pestaña **Sesiones**, plegado debajo del título de
+  la lista (se abre con un toque, o solo si llegaste desde el enlace **Preparar
+  sesión** de Hoy o de la agenda): la señal de riesgo, qué pasó la última vez, el
+  **Progreso percibido**, **Para la próxima** y un extracto del Recorrido
+  vigente.
 - **La versión corta**, en la tarjeta de **Hoy** y en el turno de la agenda: la
   señal, si la hay, *"Última vez (…):"* y *"Para la próxima:"*.
 
@@ -147,7 +149,8 @@ interpolación"*. El hueco es un dato que no se pudo evaluar, no un cero.
 
 Intensidad, alianza e intervenciones muestran el período elegido. **Los temas y
 las señales de riesgo se cuentan sobre todas las sesiones**, aunque sus
-subtítulos hablen del período.
+subtítulos hablen del período. Lo único de Temas que sí se acota al período es
+la tabla tema por sesión, dentro de **Ver detalle**.
 
 ## Exportar el Recorrido a PDF
 

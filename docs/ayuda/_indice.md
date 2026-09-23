@@ -8,7 +8,7 @@ también lo que la app **no** hace.
 - [02 · La pantalla de Hoy](02-pantalla-hoy.md) — la agenda del día, los pendientes, la tarjeta de ahora, los dos números y cada color.
 - [03 · Agenda y turnos](03-agenda-y-turnos.md) — crear, reprogramar, cancelar, "No vino", y qué pasa con el recordatorio en cada caso.
 - [04 · Pacientes y la ficha](04-pacientes-y-ficha.md) — alta, las tres pestañas, la autorización de grabación y archivar.
-- [05 · Cobros](05-cobros.md) — cobrar, métodos de pago, "Te deben", zonas de atraso, "Recordar cobro" y deshacer un cobro.
+- [05 · Cobros](05-cobros.md) — cobrar, métodos de pago, "Te deben", zonas de atraso, "Recordar cobro por SMS" y deshacer un cobro.
 - [06 · El recordatorio por SMS](06-recordatorios-sms.md) — cuándo sale y por qué no a la hora en punto, el mensaje y sus fichas, y qué hacer si no salió.
 - [07 · Grabar una sesión](07-grabar-una-sesion.md) — la autorización primero, el cifrado en el teléfono, pausar, terminar y guardar, y recuperar una grabación cortada.
 - [08 · La nota clínica](08-la-nota-clinica.md) — S/O/A/P, "Frases para revisar" y "Leí las menciones", la señal de riesgo, aprobar, volver a escribirla y el borrador original.

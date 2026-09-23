@@ -11,7 +11,7 @@ cada paciente.
 2. **Agenda** — los turnos por día, semana y mes. Crear, reprogramar,
    cancelar, marcar "No vino".
 3. **Pacientes** — la ficha de cada uno, con tres pestañas: **Sesiones**,
-   **Recorrido** y **Ficha**. El Recorrido se puede exportar a PDF.
+   **Recorrido** y **Datos**. El Recorrido se puede exportar a PDF.
 4. **Cobros** — "Te deben" y "Cobros del mes".
 5. **Tu consultorio** — tu nombre, tu dirección, tu teléfono, la tarifa, el
    enfoque teórico, el recordatorio, el vocabulario, invitar a una colega y tu
@@ -73,7 +73,7 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 ## Lo que NO hace
 
 - Los recordatorios de turno salen por SMS.
-  **Recordar cobro** también manda un SMS, pero solo cuando vos confirmás
+  **Recordar cobro por SMS** también manda un SMS, pero solo cuando vos confirmás
   el envío desde Cobros.
 - **No graba video.** Solo audio.
 - **No diagnostica.** El borrador de nota no pone diagnósticos DSM/CIE: la

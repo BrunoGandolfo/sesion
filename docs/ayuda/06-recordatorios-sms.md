@@ -101,7 +101,7 @@ Cancelar, cobrar o marcar **No vino** cancela los avisos pendientes. Un SMS que
 ya salió no puede retirarse del teléfono de la paciente. Un turno creado para
 una sesión que ya empezó no genera recordatorio.
 
-**Recordar cobro** usa SMS y sale solo cuando vos confirmás el envío en Cobros:
+**Recordar cobro por SMS** sale solo cuando vos confirmás el envío en Cobros:
 primero se programa, después se intenta mandar. No cambia el momento ni el
 texto de los recordatorios de turno.
 

@@ -119,7 +119,7 @@ reprogramás después de un aviso enviado, se programa un cambio de horario.
 → `03-agenda-y-turnos.md`
 
 **21. Cobré un turno por error. ¿Cómo lo deshago?**
-Abrí el turno cobrado en Agenda o en **Ficha → Turnos y pagos** y tocá
+Abrí el turno cobrado en Agenda o, en la ficha, en **Datos → Turnos y pagos** y tocá
 **Deshacer cobro**. Al confirmar, el monto vuelve a la deuda y el turno queda
 sin cobrar; no vuelve a Agendado. → `05-cobros.md`
 

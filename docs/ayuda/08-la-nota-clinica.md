@@ -16,24 +16,23 @@ sola; al estar lista, el chip pasa a **Para revisar**.
    (dorado) o **Nota guardada** (verde).
 2. Un selector **Nota clínica | Para vos | Transcripción**, que aparece siempre
    que la nota está para revisar o guardada. Debajo, un **índice** de una línea
-   (Resumen, Subjetivo, Objetivo, Análisis, Plan, Más de esta sesión) que queda
-   a la vista mientras leés: tocá una sección y la pantalla salta ahí.
-3. **Audio posiblemente incompleto**, si la grabación tuvo una interrupción:
-   *"Revisá la nota teniendo en cuenta que puede faltar parte de lo conversado."*
-4. **Frases para revisar**, si la transcripción tiene menciones (ver abajo).
-5. **Señal de riesgo**, si la hay (ver abajo).
-6. **Resumen** y **Estado emocional observado**.
-7. Las cuatro secciones **SOAP**, con su letra y una línea de ayuda:
+   (Resumen, Subjetivo (S), Objetivo (O), Análisis (A), Plan (P), Más de esta
+   sesión; solo las que tienen algo) que queda a la vista mientras leés: tocá
+   una sección y la pantalla salta ahí.
+3. **Frases para revisar**, si la transcripción tiene menciones (ver abajo).
+4. **Señal de riesgo**, si la hay (ver abajo).
+5. **Resumen** y **Estado emocional observado**.
+6. Las cuatro secciones **SOAP**, con su letra y una línea de ayuda:
    - **Subjetivo (S)** — *Lo relatado en sesión*
    - **Objetivo (O)** — *Lo que observaste*
    - **Análisis (A)** — *Tu lectura clínica*
    - **Plan (P)** — *Para la próxima sesión*
-8. **Más de esta sesión** (plegado) — **Temas**, **Emociones**,
+7. **Más de esta sesión** (plegado) — **Temas**, **Emociones**,
    **Intervenciones** (con tipo, descripción y minuto), **Apareció por primera
-   vez**, **Vuelve a aparecer**, **Se llevó**, **Para la próxima**, **Intensidad
-   emocional** (de 1 a 10) y **Alianza terapéutica** (Frágil, Inestable, Estable,
-   Fuerte).
-9. **Ver el borrador original** (plegado) — aparece **después de aprobar**: es la
+   vez**, **Vuelve a aparecer**, **Se llevó**, **Intensidad emocional** (de 1 a
+   10), **Alianza terapéutica** (Frágil, Inestable, Estable, Fuerte) y **Para la
+   próxima**.
+8. **Ver el borrador original** (plegado) — aparece **después de aprobar**: es la
    nota tal como la escribió el modelo, antes de tus cambios. Si pedís que se
    vuelva a escribir, la nueva redacción reemplaza ese borrador.
 
@@ -139,20 +138,24 @@ sesión, con la misma cabecera que la nota. El texto se pide recién en ese
 momento —abrir la nota no lo trae— y **cada lectura queda registrada**. No se
 guarda en el teléfono ni en el navegador.
 
-Se lee en bloques, cada uno con su **minuto** y quién habla (**Terapeuta** o
-**Paciente**). *"Quién habla en cada parte lo asignó el sistema automáticamente
-y puede estar equivocado."* Si alguna línea no tiene esa forma, se muestra
-entera igual: no se descarta nada.
+Se lee en bloques, cada uno con su **minuto** y quién habla: **Hablante 1** o
+**Hablante 2**, cada uno con su color. La app no dice cuál sos vos: el sistema
+separa las voces solo y a veces se equivoca (con una sola persona hablando
+puede partirla en dos). Por eso, arriba: *"Quién habla en cada parte lo asignó
+el sistema automáticamente y puede estar equivocado."* Si alguna línea no tiene
+esa forma, se muestra entera igual: no se descarta nada.
 
 Arriba queda fijo el **buscador**: escribí una palabra (dos letras o más, sin
 preocuparte por mayúsculas ni tildes) y muestra cuántas veces aparece (*"2 de
 7"*), la resalta y te lleva al lugar; con las flechas, o con Enter, pasás a la
-siguiente o a la anterior. Si no está: *"No aparece «…» en esta
+siguiente o a la anterior, y al llegar al final vuelve a la primera. Si aparece
+una sola vez dice *"1 de 1"* y las flechas quedan apagadas. Si no está: *"No aparece «…» en esta
 transcripción."* La búsqueda es sobre lo que se dijo, no sobre los minutos ni
 los nombres.
 
 Si la sesión todavía no tiene texto dice **"Todavía no hay transcripción"**; si
-no se pudo abrir, **"No pudimos abrir la transcripción"**, con **Reintentar**.
+no se pudo abrir, **"No pudimos abrir la transcripción"**. En los dos casos hay
+**Reintentar**.
 
 No tiene audio, no se puede editar ni exportar. La transcripción se conserva
 cifrada.

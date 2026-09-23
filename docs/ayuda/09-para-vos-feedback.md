@@ -3,12 +3,18 @@
 **Para qué sirve.** Es la otra cara de una sesión: habla de **tu** trabajo en
 esa sesión, no de la paciente. Se lee cuando querés, no antes que la nota.
 
-**Dónde está.** Arriba de la nota hay un selector de dos opciones, **Nota
-clínica | Para vos**, que aparece siempre que la nota está para revisar o
-guardada, haya análisis o no. Si hay análisis, se llega también desde el aviso
+**Dónde está.** Arriba de la nota hay un selector de tres opciones, **Nota
+clínica | Para vos | Transcripción**, que aparece siempre que la nota está para
+revisar o guardada, haya análisis o no. Si hay análisis, se llega también desde el aviso
 que queda en la nota apenas la aprobás (**Leer Para vos**) y desde la fila de la
 sesión en la pestaña Sesiones de la ficha. Tiene dirección propia, así que se
 puede volver con el botón de atrás. Abrir la vista no genera un análisis nuevo.
+
+**Qué ves, en orden.** Primero lo que se lee: **Fortalezas observadas**,
+**Áreas de crecimiento** y **Observación general**. Después, plegado, **El
+instrumento y su puntaje** (con la sigla al lado: **GTFS**, o **MITI 4.2.1 + CTS-R**); se abre
+con un toque. Si el análisis trajo solo el instrumento, viene abierto para que
+la pantalla no quede vacía. Al pie, el aviso de que lo escribió la IA.
 
 Si al análisis le faltó una parte, se muestra igual lo que llegó, con un aviso
 que dice *"Parte del análisis no llegó."*
@@ -53,8 +59,10 @@ Son **20 ítems**, agrupados en siete dimensiones: **Relación dialogal**, **Aqu
 ahora**, **Práctica fenomenológica**, **Conciencia corporal**, **Sensible al
 campo**, **Procesos de contacto** y **Actitud experimental**.
 
-Arriba ves la **Adherencia global**: *"13 de 18 ítems evaluables presentes"*, y
-al lado la aclaración: *"La GTFS releva la presencia de prácticas gestálticas en
+Al abrir **El instrumento y su puntaje**, lo primero es la
+**Adherencia global**: *"13 de 18 ítems evaluables presentes"* (si ninguno se
+pudo evaluar: *"Ningún ítem fue evaluable a partir de la transcripción de esta
+sesión."*), y debajo la aclaración: *"La GTFS releva la presencia de prácticas gestálticas en
 la sesión. Es una referencia para tu auto-supervisión, no una calificación."*
 
 En **Ver detalle** cada ítem aparece con uno de tres estados:
@@ -83,6 +91,8 @@ guiado**. Es un subconjunto elegido: son los cuatro que se pueden leer desde una
 transcripción, no la escala completa de doce.
 
 ## Lo que comparten los tres
+
+Es lo que está arriba de todo, antes del instrumento:
 
 - **Fortalezas observadas** — hasta 3, cada una con la cita que la sostiene.
 - **Áreas de crecimiento** — hasta 3, cada una con una observación y una

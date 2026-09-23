@@ -2,8 +2,9 @@
 //
 // Misma cabecera que la nota —misma paciente, misma fecha, mismo chip de
 // estado—, mismo selector arriba, y abajo el análisis de su propia práctica
-// en esa sesión: el instrumento, las fortalezas con su cita y su minuto, las
-// áreas de crecimiento y el disclaimer.
+// en esa sesión: las fortalezas con su cita y su minuto, las áreas de
+// crecimiento y la observación general; después, plegado, el instrumento y
+// su puntaje; al pie, el disclaimer.
 //
 // LAS REGLAS QUE ESTA PANTALLA NO ROMPE (docs/diseno/04-personaje.md)
 //
