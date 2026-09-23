@@ -230,6 +230,41 @@ describe("crearTurno con frecuencia", () => {
     expect(previo?.serieId).toBeNull();
   });
 
+  it("semanal de 120 minutos: cada turno de la serie dura 120", async () => {
+    const { orgId, pacienteId } = await crearOrg();
+
+    const creado = await crearTurno({ ...base(orgId, pacienteId), duracion: 120, frecuencia: "semanal" });
+
+    expect(creado.serie).toMatchObject({ creados: 13, omitidas: [] });
+    const duraciones = await prismaRaw.turno.findMany({
+      where: { serieId: creado.serie!.id },
+      select: { duracion: true },
+    });
+    expect(duraciones).toHaveLength(13);
+    expect(duraciones.every((t) => t.duracion === 120)).toBe(true);
+  });
+
+  it("una repetición que cae 90 minutos después del inicio de un turno de 120 se omite", async () => {
+    // El de 120 empieza a las 13:30 y termina 15:30: el de las 15:00 de la
+    // serie lo pisa aunque empiece más de 90 minutos después. Con la ventana
+    // escrita a mano en 90, este choque no se veía.
+    const { orgId, pacienteId } = await crearOrg();
+    const ocupada = agregarDiasMvd(ANCLA, 21);
+    await prismaRaw.turno.create({
+      data: {
+        organizationId: orgId,
+        pacienteId,
+        fecha: new Date(ocupada.getTime() - 90 * 60_000),
+        duracion: 120,
+        tarifaCobrada: 2500,
+      },
+    });
+
+    const creado = await crearTurno({ ...base(orgId, pacienteId), frecuencia: "semanal" });
+
+    expect(creado.serie).toMatchObject({ creados: 12, omitidas: [ocupada] });
+  });
+
   it("si el primer turno choca, sale el 409 de siempre y no queda nada", async () => {
     const { orgId, pacienteId } = await crearOrg();
     await prismaRaw.turno.create({

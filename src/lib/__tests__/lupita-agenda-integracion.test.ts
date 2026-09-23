@@ -108,6 +108,21 @@ describe("agenda mínima real en Postgres", () => {
       expect(await base.prisma.turno.findMany({ orderBy: { id: "asc" } })).toEqual(antes);
     },
   );
+  it("una sesión de 120 minutos se cuenta como de 120, sin redondear", async () => {
+    // Otro día, fuera de los períodos de los demás casos, y se borra al final.
+    const largo = await base.prisma.turno.create({ data: {
+      fecha: new Date("2026-10-02T13:00:00Z"), organizationId: propia.orgId, pacienteId: propia.pacienteId,
+      duracion: 120, modalidad: "presencial", tarifaCobrada: 8765,
+    } });
+    try {
+      const antesDelDia = new Date("2026-10-01T15:00:00Z"); // jueves 1, mediodía en Montevideo
+      const deManana = (periodo: PeriodoAgenda) => consultarAgenda({ prisma: base.db, organizationId: propia.orgId, periodo, ahora: antesDelDia });
+      expect(await deManana("manana")).toEqual([{ nombre: "Ana", dia: "2026-10-02", hora: "10:00", duracion: 120, modalidad: "presencial" }]);
+      expect(await resolverHerramienta(herramientas("consultar_agenda", { periodo: "manana" }), deManana)).toContain("2026-10-02 · 10:00 · Ana · 120 min · presencial");
+    } finally {
+      await base.prisma.turno.delete({ where: { id: largo.id } });
+    }
+  });
   it("lista la agenda real sin que el proveedor vuelva a redactar los horarios", async () => {
     expect(await resolverHerramienta(herramientas("consultar_agenda", { periodo: "manana" }), consulta)).toContain("2026-09-18 · 00:00 · Ana · 90 min · online");
   });

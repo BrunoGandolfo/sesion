@@ -389,9 +389,10 @@ enum MetodoPago {
 model Turno {
   id             String      @id @default(uuid())
   fecha          DateTime
-  /// Minutos. CHECK en la migración: IN (30, 45, 50, 60, 90), igual que
-  /// DURACIONES en src/lib/constantes-turno.ts. Int y no enum porque se suma
-  /// a la fecha para calcular el fin del turno.
+  /// Minutos. CHECK en la migración 20260923120000_turnos_duracion_120:
+  /// IN (30, 45, 50, 60, 90, 120), igual que DURACIONES en
+  /// src/lib/constantes-turno.ts. Int y no enum porque se suma a la fecha
+  /// para calcular el fin del turno.
   duracion       Int         @default(50)
   modalidad      Modalidad   @default(presencial)
   estado         EstadoTurno @default(programado)
@@ -420,6 +421,8 @@ model Turno {
   @@index([organizationId, fecha])
   // Cobros y deudores: WHERE organization_id = ? AND pago_estado = 'pendiente'.
   @@index([organizationId, pagoEstado])
+  // Finanzas y cobros del mes: WHERE organization_id = ? AND pago_fecha BETWEEN …
+  @@index([organizationId, pagoFecha])
   // Ficha del paciente: sus turnos.
   @@index([pacienteId])
   // Cancelar el resto de la serie: WHERE serie_id = ? AND fecha > ? AND estado = 'programado'.

@@ -49,6 +49,7 @@
 // turnos de UNA agenda, y no molesta a las demás. Con una sola profesional
 // por organización, la contención es nula.
 
+import { DURACIONES } from "@/lib/constantes-turno";
 import type { db } from "@/lib/db";
 
 import {
@@ -89,11 +90,11 @@ export async function tomarLockDeAgenda(
 const MS_POR_MINUTO = 60_000;
 
 /**
- * La duración más larga que admite `duracionSchema`. Si mañana se agrega una
- * de 120, esta constante tiene que crecer con ella o la ventana empieza a
- * dejar afuera solapamientos reales; el test lo fija contra el schema.
+ * La duración más larga que admite `duracionSchema`. Deriva de la misma
+ * lista: escrita a mano en 90, la de 120 quedaba fuera de la ventana y un
+ * turno de 10:00 a 12:00 no chocaba con otro de las 11:30.
  */
-export const DURACION_MAXIMA_MIN = 90;
+export const DURACION_MAXIMA_MIN = Math.max(...DURACIONES);
 
 /** Estados que efectivamente ocupan el horario. Espejo de TurnoEstado menos
  *  "cancelado" y "ausente". */

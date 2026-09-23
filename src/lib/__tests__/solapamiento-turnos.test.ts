@@ -37,6 +37,7 @@ import {
   DURACION_MAXIMA_MIN,
   seSolapan,
 } from "@/app/api/_lib/casos-uso/solapamiento-turnos";
+import { DURACIONES } from "@/lib/constantes-turno";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import {
   agregarDiasMvd,
@@ -135,8 +136,10 @@ describe("seSolapan", () => {
     // La ventana de la consulta se calcula con esta constante: si el schema
     // aceptara una duración mayor, un turno largo que empieza antes de la
     // ventana quedaría fuera y el solapamiento no se detectaría. El schema
-    // vive en src/app/api/_lib/schemas.ts (30/45/50/60/90).
-    expect(DURACION_MAXIMA_MIN).toBe(90);
+    // deriva de DURACIONES (src/lib/constantes-turno.ts), y la constante
+    // también: una duración nueva la hace crecer sola.
+    expect(DURACION_MAXIMA_MIN).toBe(Math.max(...DURACIONES));
+    expect(DURACION_MAXIMA_MIN).toBe(120);
   });
 });
 
@@ -456,6 +459,97 @@ describe("POST /api/turnos rechaza el horario ocupado", () => {
     await turnoExistente(orgId, enUnaSemana(-60), 90);
 
     expect((await postTurno(enUnaSemana())).status).toBe(409);
+  });
+});
+
+describe("turnos de 120 minutos", () => {
+  // Las sesiones de la profesional duran dos horas. 120 entra por la API
+  // (duracionSchema deriva de DURACIONES) y choca con todo lo que empiece
+  // antes de que termine, aunque arranque más de 90 minutos después: la
+  // ventana de la consulta es DURACION_MAXIMA_MIN.
+
+  it("POST con duracion 120 crea el turno; con 100 devuelve 400", async () => {
+    const orgId = await crearOrgConPacientes();
+
+    const largo = await postTurno(enUnaSemana(), 120);
+    expect(largo.status).toBe(201);
+    const creado = await prismaRaw.turno.findFirstOrThrow({ where: { organizationId: orgId } });
+    expect(creado.duracion).toBe(120);
+
+    const raro = await postTurno(enUnaSemana(24 * 60), 100);
+    expect(raro.status).toBe(400);
+    expect(await prismaRaw.turno.count()).toBe(1);
+  });
+
+  it("uno de 120 a las 10:00 rechaza otro a las 11:30, nombrando a la paciente y de 10:00 a 12:00", async () => {
+    const orgId = await crearOrgConPacientes();
+    const { anio, mes, dia } = partesMvd(agregarDiasMvd(new Date(), 7));
+    await turnoExistente(orgId, instanteMvd(anio, mes, dia, 10, 0), 120);
+
+    const { status, cuerpo } = await postTurno(instanteMvd(anio, mes, dia, 11, 30), 50);
+
+    expect(status).toBe(409);
+    const mensaje = (cuerpo as { error: string }).error;
+    expect(mensaje).toBe(TURNO_SOLAPADO_CON("Lucía Fernández", "10:00", "12:00"));
+    expect(mensaje).toContain("Lucía Fernández");
+    expect(mensaje).toContain("de 10:00 a 12:00");
+    expect(await prismaRaw.turno.count()).toBe(1);
+  });
+
+  it("choca hasta el último minuto y deja libre las 12:00", async () => {
+    const orgId = await crearOrgConPacientes();
+    const { anio, mes, dia } = partesMvd(agregarDiasMvd(new Date(), 7));
+    await turnoExistente(orgId, instanteMvd(anio, mes, dia, 10, 0), 120);
+
+    expect((await postTurno(instanteMvd(anio, mes, dia, 11, 59), 30)).status).toBe(409);
+    expect((await postTurno(instanteMvd(anio, mes, dia, 12, 0), 50)).status).toBe(201);
+  });
+
+  it("mover un turno a las 11:30 también choca con el de 120 de las 10:00", async () => {
+    const orgId = await crearOrgConPacientes();
+    const { anio, mes, dia } = partesMvd(agregarDiasMvd(new Date(), 7));
+    await turnoExistente(orgId, instanteMvd(anio, mes, dia, 10, 0), 120);
+    const otro = await turnoExistente(orgId, instanteMvd(anio, mes, dia, 15, 0), 50);
+
+    const res = await patchTurno(
+      pedidoPatch({ fecha: instanteMvd(anio, mes, dia, 11, 30).toISOString() }),
+      { params: Promise.resolve({ id: otro }) },
+    );
+
+    expect(res.status).toBe(409);
+  });
+});
+
+describe("turnos.duracion en la base: el CHECK es la lista de constantes-turno", () => {
+  // El CHECK no puede derivar de DURACIONES (Postgres no lee TypeScript);
+  // se escribe a mano en una migración. Acá se compara con la base real,
+  // después de `prisma migrate deploy`: si alguien cambia uno sin el otro,
+  // falla esto y no el alta de un turno en producción.
+
+  async function insertarConDuracion(duracion: number) {
+    const orgId = await crearOrgConPacientes();
+    return prismaRaw.$executeRaw`
+      INSERT INTO turnos (id, fecha, duracion, tarifa_cobrada, paciente_id, organization_id, actualizado_en)
+      VALUES (${randomUUID()}, ${enUnaSemana()}, ${duracion}, 1000, ${pacienteId}, ${orgId}, now())`;
+  }
+
+  it("un INSERT directo con duracion 120 pasa el CHECK", async () => {
+    expect(await insertarConDuracion(120)).toBe(1);
+  });
+
+  it("un INSERT directo con duracion 100 lo rechaza la base", async () => {
+    await expect(insertarConDuracion(100)).rejects.toThrow(/turnos_duracion_check/);
+    expect(await prismaRaw.turno.count()).toBe(0);
+  });
+
+  it("los valores del CHECK son exactamente DURACIONES", async () => {
+    const [fila] = await prismaRaw.$queryRaw<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conname = 'turnos_duracion_check' AND conrelid = 'turnos'::regclass`;
+    expect(fila).toBeDefined();
+    const valores = (fila.def.match(/\d+/g) ?? []).map(Number).sort((a, b) => a - b);
+    expect(valores).toEqual([...DURACIONES].sort((a, b) => a - b));
   });
 });
 

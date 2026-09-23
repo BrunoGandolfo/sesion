@@ -22,6 +22,7 @@ import {
   metodoPagoSchema,
 } from "@/lib/constantes-turno";
 import { METODO_PAGO_LABEL } from "@/lib/glosario";
+import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 
 // Guardián de las tres copias que no pueden derivar de constantes-turno.ts:
 // los enums de Postgres (vía el cliente que genera Prisma), el CHECK de
@@ -72,12 +73,27 @@ describe("duraciones", () => {
     expect(DURACION_DEFAULT).toBe(50);
   });
 
+  it("incluye la sesión de 120 minutos, la más larga", () => {
+    // La profesional atiende sesiones de dos horas. El CHECK de
+    // turnos.duracion (20260923120000_turnos_duracion_120) dice lo mismo.
+    expect([...DURACIONES]).toEqual([30, 45, 50, 60, 90, 120]);
+    expect(Math.max(...DURACIONES)).toBe(120);
+  });
+
+  it("el grabador deja grabar entera la sesión más larga, sin avisar que se acaba", () => {
+    // Tope 150 min, aviso a los 135 (grabacion-captura.ts). Si una duración
+    // nueva los alcanzara, la sesión se cortaría antes de terminar.
+    const masLargaSeg = Math.max(...DURACIONES) * 60;
+    expect(LIMITE_SEGUNDOS).toBeGreaterThan(masLargaSeg);
+    expect(AVISO_LIMITE_SEGUNDOS).toBeGreaterThan(masLargaSeg);
+  });
+
   it("esDuracion y duracionSchema dicen lo mismo", () => {
     for (const d of DURACIONES) {
       expect(esDuracion(d)).toBe(true);
       expect(duracionSchema.safeParse(d).success).toBe(true);
     }
-    for (const otro of [0, 47, 120, "50", null, undefined]) {
+    for (const otro of [0, 47, 100, 150, "120", null, undefined]) {
       expect(esDuracion(otro)).toBe(false);
       expect(duracionSchema.safeParse(otro).success).toBe(false);
     }

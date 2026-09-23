@@ -67,7 +67,7 @@ abrir.
 |---|---|---|---|---|
 | `pacientes` | Nombre, apellido, teléfono (E.164), tarifa, activa o no, y **notas privadas cifradas**. Sale `email` (nadie lo usaba). | La ficha. Nombre, apellido y teléfono quedan en claro a propósito: la búsqueda, el orden de la agenda y el envío de SMS en lote los necesitan en SQL. | Alta y edición de paciente. | Agenda, ficha, cobros, SMS, worker (id solamente). |
 | `series_turno` | Un turno recurrente: paciente, frecuencia (`semanal` / `quincenal`) y la hora ancla (el instante del primer turno). | Generar los turnos de la serie y "cancelar el resto". Nada más: no hay `generadaHasta`, `activa` ni avisos. | Crear turno con repetición. | Cancelar el resto de la serie. |
-| `turnos` | Fecha, duración (minutos: 30/45/50/60/90, restricción en la base), modalidad, estado (`programado` / `realizado` / `cancelado` / `ausente`), tarifa cobrada, estado y método de pago, fecha de pago, **nota privada cifrada**, y a qué serie pertenece (opcional). | La agenda y los cobros. Cada turno es independiente aunque venga de una serie. | Agenda, cobros, la generación de series, "cancelar el resto". | Agenda, Hoy, cobros, deudores, ficha, grabación. |
+| `turnos` | Fecha, duración (minutos: 30/45/50/60/90/120, restricción en la base), modalidad, estado (`programado` / `realizado` / `cancelado` / `ausente`), tarifa cobrada, estado y método de pago, fecha de pago, **nota privada cifrada**, y a qué serie pertenece (opcional). | La agenda y los cobros. Cada turno es independiente aunque venga de una serie. | Agenda, cobros, la generación de series, "cancelar el resto". | Agenda, Hoy, cobros, deudores, ficha, grabación. |
 
 ### SMS
 
@@ -315,3 +315,19 @@ y el 4 se aceptaron sin cambios. Las dos preguntas de §4 quedan como están.
   bloque marcado "A MANO". Si alguien regenera el archivo con `prisma migrate
   diff`, tiene que volver a pegar ese bloque. `prisma migrate diff` contra la
   base aplicada no los ve, así que el control de drift del área 5 pasa.
+- **El CHECK de `turnos.duracion`** nació en ese bloque y hoy lo define
+  `20260923120000_turnos_duracion_120` (`IN (30, 45, 50, 60, 90, 120)`). Una
+  duración nueva es otra migración que lo reemplaza (`DROP CONSTRAINT` + `ADD
+  CONSTRAINT` en el mismo archivo, que Prisma aplica en una sola
+  transacción), nunca editar una migración ya aplicada. Lleva la marca
+  `-- DESTRUCTIVA:` porque el guardián lee el `DROP CONSTRAINT` como
+  destructivo, aunque ampliar la lista no toca filas.
+  `solapamiento-turnos.test.ts` compara el CHECK de la base con `DURACIONES`.
+- **Índices de `turnos`:** `(organization_id, fecha)` para la agenda,
+  `(organization_id, pago_estado)` para cobros y deudores,
+  `(organization_id, pago_fecha)` —`turnos_organization_id_pago_fecha_idx`,
+  migración `20260923120100_turnos_pago_fecha_idx`— para lo cobrado en un
+  mes (Finanzas, `/api/turnos/cobros`, el tablero), `(paciente_id)` para la
+  ficha y `(serie_id)` para cancelar el resto de una serie. Se crean con
+  `CREATE INDEX` común, sin `CONCURRENTLY`: Prisma corre cada migración en
+  una transacción y `CONCURRENTLY` no la admite.

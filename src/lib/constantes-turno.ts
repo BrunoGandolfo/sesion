@@ -9,8 +9,11 @@
 // Lo que NO puede derivar de acá y hay que mantener igual a mano:
 //   - los enums de Postgres `modalidad`, `metodo_pago`, `estado_turno`,
 //     `estado_pago` y `frecuencia_serie` (prisma/schema.prisma);
-//   - el CHECK de `turnos.duracion` (prisma/migrations/0_init, bloque
-//     "A MANO"): Int y no enum porque se suma a la fecha.
+//   - el CHECK de `turnos.duracion`: Int y no enum porque se suma a la
+//     fecha. Nació en prisma/migrations/0_init (bloque "A MANO") y hoy lo
+//     define 20260923120000_turnos_duracion_120. Cambiar la lista es una
+//     migración nueva que lo reemplaza, nunca editar una ya aplicada.
+//     solapamiento-turnos.test.ts lo compara con la base real.
 // src/lib/__tests__/constantes-turno.test.ts compara estos arrays con los
 // enums que genera Prisma, así que una divergencia falla en CI.
 //
@@ -18,7 +21,7 @@
 
 import { z } from "zod";
 
-export const DURACIONES = [30, 45, 50, 60, 90] as const;
+export const DURACIONES = [30, 45, 50, 60, 90, 120] as const;
 export type Duracion = (typeof DURACIONES)[number];
 /** La que propone el formulario y el default de la columna. */
 export const DURACION_DEFAULT: Duracion = 50;

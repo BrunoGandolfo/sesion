@@ -100,12 +100,14 @@ interface TurnoFixture {
   pagoFecha?: Date | null;
   pagoMetodo?: MetodoPago | null;
   paciente?: number;
+  duracion?: number;
 }
 
 function filaTurno(org: Org, t: TurnoFixture) {
   const pagado = t.pagoFecha != null;
   return {
     fecha: t.fecha,
+    duracion: t.duracion ?? 50,
     estado: t.estado ?? "realizado",
     tarifaCobrada: t.tarifa ?? 1000,
     pagoEstado: (pagado ? "pagado" : "pendiente") as "pagado" | "pendiente",
@@ -246,6 +248,41 @@ describe("COBRADO y TRABAJADO son dos cosas distintas", () => {
     expect(mes.trabajadoSinCobrar).toBe(2000);
     expect(mes.sesionesRealizadasSinCobrar).toBe(2);
     expect(mes.tarifaPromedio).toBe(1000);
+  });
+});
+
+describe("la duración no pesa en la plata", () => {
+  it("una sesión de 120 minutos suma su tarifa, igual que una de 50: ni el doble ni por minuto", async () => {
+    const org = await crearOrg();
+    await sembrar(org, [
+      { fecha: instanteMvd(2026, 8, 2, 10), duracion: 120, tarifa: 1000, pagoFecha: instanteMvd(2026, 8, 2, 12) },
+      { fecha: instanteMvd(2026, 8, 3, 10), duracion: 50, tarifa: 1000, pagoFecha: instanteMvd(2026, 8, 3, 11) },
+      { fecha: instanteMvd(2026, 8, 4, 10), duracion: 120, tarifa: 1000 },
+    ]);
+
+    const r = await resumen(org, { desde: parsearMes("2026-09"), hasta: parsearMes("2026-09") });
+    const mes = periodo(r, "2026-09")!;
+
+    expect(mes.trabajado).toBe(3000);
+    expect(mes.sesionesRealizadas).toBe(3);
+    expect(mes.cobrado).toBe(2000);
+    expect(mes.sesionesCobradas).toBe(2);
+    expect(mes.trabajadoSinCobrar).toBe(1000);
+    expect(mes.tarifaPromedio).toBe(1000);
+  });
+});
+
+describe("el índice de lo cobrado", () => {
+  it("turnos (organization_id, pago_fecha) existe tras migrate deploy", async () => {
+    // Lo cobrado de un mes filtra por organization_id y un rango de
+    // pago_fecha (resumenFinanzas, /api/turnos/cobros, el tablero).
+    const filas = await prismaRaw.$queryRaw<{ indexdef: string }[]>`
+      SELECT indexdef FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND tablename = 'turnos'
+        AND indexname = 'turnos_organization_id_pago_fecha_idx'`;
+    expect(filas).toHaveLength(1);
+    expect(filas[0].indexdef).toMatch(/\(organization_id, pago_fecha\)/);
   });
 });
 

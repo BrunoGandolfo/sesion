@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { toTurno } from "@/app/api/_lib/domain";
+import { DURACIONES } from "@/lib/constantes-turno";
 
 // `toTurno` es la frontera entre la fila de la base y el tipo del dominio.
 // Con el esquema nuevo modalidad, estado, pagoEstado y pagoMetodo son enums
@@ -33,8 +34,9 @@ describe("toTurno — la fila válida pasa entera", () => {
     expect(turno).toEqual(FILA);
   });
 
-  it("acepta las cinco duraciones", () => {
-    for (const duracion of [30, 45, 50, 60, 90]) {
+  it("acepta todas las duraciones, 120 incluida", () => {
+    expect(DURACIONES).toContain(120);
+    for (const duracion of DURACIONES) {
       expect(toTurno({ ...FILA, duracion }).duracion).toBe(duracion);
     }
   });
