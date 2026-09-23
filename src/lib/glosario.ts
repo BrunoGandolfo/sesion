@@ -1608,3 +1608,9 @@ export const INDICE_NOTA = "Secciones de la nota";
 
 /** "Para vos": el instrumento va después de las observaciones, plegado. */
 export const INSTRUMENTO_Y_PUNTAJE = "El instrumento y su puntaje";
+
+// ── agenda-tocable ──────────────────────────────────────────────────────
+// El cuerpo de la fila de turno lleva a la ficha de la paciente; el detalle
+// del turno (reprogramar, cancelar, cobrar) queda en un control aparte, a la
+// derecha. La fila es la misma en Hoy y en Agenda.
+export const VER_TURNO = "Ver turno";

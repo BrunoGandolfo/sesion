@@ -29,6 +29,12 @@ const TURNO: TurnoConPaciente = {
   },
 };
 
+/** El cuerpo de la fila también es un enlace (a la ficha): acá importan
+ *  sólo los que llevan a una nota. */
+function enlacesANota() {
+  return screen.queryAllByRole("link").filter((a) => a.getAttribute("href")?.startsWith("/sesiones/"));
+}
+
 // El rótulo es el estado clínico, separado del pago: "Para revisar" y
 // "Nota lista" (antes "Revisar nota" y "Ver nota").
 it.each([["revision", "Para revisar"], ["aprobada", "Nota lista"]])("enlaza la nota %s aunque haya un cobro pendiente", (estado, label) => {
@@ -41,21 +47,21 @@ it.each([["revision", "Para revisar"], ["aprobada", "Nota lista"]])("enlaza la n
   fireEvent.click(screen.getByRole("button", { name: "Cobrar" }));
   expect(cobrar).toHaveBeenCalledOnce();
   expect(abrirTurno).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: /Ana López/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Ver turno de Ana López" }));
   expect(abrirTurno).toHaveBeenCalledOnce();
 });
 
 it.each(["procesando", "transcribiendo"])("muestra %s sin enlace ni opción de grabar de nuevo", (estado) => {
   render(<SessionRow turno={{ ...TURNO, estado: "programado", sesionClinica: { id: "nota-1", estado } }} onGrabar={vi.fn()} />);
   expect(screen.getByRole("status").textContent).toBe("Procesando");
-  expect(screen.queryByRole("link")).toBeNull();
+  expect(enlacesANota()).toHaveLength(0);
   expect(screen.queryByRole("button", { name: "Grabar sesión" })).toBeNull();
 });
 
 it("sin sesión clínica no muestra estado ni acceso a una nota", () => {
   render(<SessionRow turno={TURNO} />);
   expect(screen.queryByRole("status")).toBeNull();
-  expect(screen.queryByRole("link")).toBeNull();
+  expect(enlacesANota()).toHaveLength(0);
 });
 
 it.each(["grabando", "subiendo"])("con la grabación cortada en %s sigue ofreciendo grabar", (estado) => {
