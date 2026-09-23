@@ -328,7 +328,19 @@ async function agenda(prueba) {
   });
   await paso('Agenda: detalle del turno y reprogramación sin guardar', async () => {
     await boton('Hoy').click();
-    for (let i=0;i<3;i++) await boton('Anterior').click();
+    if (ancho === 1280) for (let i=0;i<3;i++) await boton('Anterior').click();
+    else {
+      // En el teléfono las flechas mueven la tira de a una semana y el día se
+      // elige tocándolo en la tira. El turno está tres días atrás: si hoy es
+      // lunes, martes o miércoles, cae en la semana anterior.
+      const diaHoy = new Intl.DateTimeFormat('en-US', {timeZone:'America/Montevideo', weekday:'short'}).format(new Date());
+      if (['Mon','Tue','Wed'].includes(diaHoy)) await boton('Anterior').click();
+      const tira = page.getByRole('group', {name:'Días de la semana', exact:true});
+      const numero = Number(fechaDePrueba().slice(8));
+      const dia = tira.getByRole('button', {name:new RegExp('^\\S+ ' + numero + ' de ')});
+      await dia.click();
+      assert.equal(await dia.getAttribute('aria-pressed'), 'true', 'La tira no eligió el día del turno de prueba');
+    }
     await page.getByRole('button').filter({hasText:prueba.apellido}).filter({visible:true}).first().click();
     const d = dialogo();
     await visible(d.getByRole('heading', {name:'Prueba E2E ' + prueba.apellido,exact:true}));

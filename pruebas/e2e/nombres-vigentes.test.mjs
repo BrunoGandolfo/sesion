@@ -18,16 +18,17 @@ import {
   PREPARAR_SESION,
   RECORDAR_COBRO,
 } from "../../src/lib/glosario";
+import { DURACIONES } from "../../src/lib/constantes-turno";
 
 const RAIZ = join(import.meta.dirname, "..", "..");
 
-// Las páginas de ayuda de esta cerca (02, 03, 07 y 14 tienen otro dueño) y el
-// recorrido automático.
+// Todas las páginas de ayuda y el recorrido automático.
 const ARCHIVOS = [
-  ...["00-que-es-sesion", "01-entrar-y-cuenta", "04-pacientes-y-ficha", "05-cobros",
-    "06-recordatorios-sms", "08-la-nota-clinica", "09-para-vos-feedback",
+  ...["00-que-es-sesion", "01-entrar-y-cuenta", "02-pantalla-hoy", "03-agenda-y-turnos",
+    "04-pacientes-y-ficha", "05-cobros",
+    "06-recordatorios-sms", "07-grabar-una-sesion", "08-la-nota-clinica", "09-para-vos-feedback",
     "10-el-hilo-y-el-recorrido", "11-tu-consultorio", "12-camino-del-audio-y-privacidad",
-    "13-preguntas-frecuentes", "_indice"].map((n) => `docs/ayuda/${n}.md`),
+    "13-preguntas-frecuentes", "14-cuando-algo-falla", "_indice"].map((n) => `docs/ayuda/${n}.md`),
   "pruebas/e2e/recorrido.mjs",
   "pruebas/e2e/README.md",
 ];
@@ -106,5 +107,12 @@ describe("nombres vigentes en el recorrido y la ayuda", () => {
     }
     expect(leer("10-el-hilo-y-el-recorrido.md")).toContain(`**${PREPARAR_SESION}**, en la pestaña **Sesiones**`);
     expect(leer("09-para-vos-feedback.md")).toContain("selector de tres opciones");
+    expect(leer("03-agenda-y-turnos.md")).toContain(`**"${PREPARAR_SESION}"**`);
+  });
+
+  it("la agenda ofrece en la ayuda las mismas duraciones que el formulario", () => {
+    const texto = plano(readFileSync(join(RAIZ, "docs/ayuda/03-agenda-y-turnos.md"), "utf8"));
+    const lista = `${DURACIONES.slice(0, -1).join(", ")} o ${DURACIONES.at(-1)} minutos`;
+    expect(texto).toContain(`**Duración**: ${lista}.`);
   });
 });

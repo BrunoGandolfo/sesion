@@ -28,7 +28,7 @@ en la agenda, con el chip **Cancelado** y el punto gris.
 1. Tocá **Agendar** en Agenda o en **Hoy**.
 2. Elegí la paciente, la **Fecha** y la **Hora**. Si la paciente ya tuvo turnos,
    la app propone el mismo día y hora de la última vez.
-3. Elegí la **Duración**: 30, 45, 50, 60 o 90 minutos.
+3. Elegí la **Duración**: 30, 45, 50, 60, 90 o 120 minutos.
 4. Elegí la **Modalidad**: **Presencial** u **Online**.
 5. En **Se repite**, elegí **Una vez**, **Cada semana** o **Cada 15 días**.
 6. Opcional: **Notas** ("Algo para recordar del turno.").
@@ -63,7 +63,7 @@ lo abre directamente.
 
 Se abre una ficha con el chip de estado, la duración, la
 modalidad, la tarifa, el pago y tus notas. En un turno agendado o realizado
-aparece además el brief **"Para retomar"**. El estado del **Recordatorio** se
+aparece además el resumen **"Preparar sesión"**. El estado del **Recordatorio** se
 muestra solo mientras el turno sigue agendado. Un turno ausente dice *"La
 paciente no vino a este turno."*
 
@@ -147,4 +147,6 @@ src/app/api/_lib/casos-uso/turnos.ts
 src/app/api/_lib/casos-uso/envios-del-turno.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/lib/glosario.ts
+src/lib/constantes-turno.ts
+src/components/clinico/brief-corto.tsx
 -->
