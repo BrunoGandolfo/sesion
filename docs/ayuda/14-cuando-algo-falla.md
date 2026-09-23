@@ -127,10 +127,33 @@ nuevo el turno.
 Es normal que tarde unos minutos. La app se fija sola mientras la sesión está en
 proceso.
 
-**Qué hacer:** seguí con lo tuyo. Con la app abierta, cuando la nota esté te
-aparece el aviso *"La nota de … está lista"* con **Revisar**. Si cerraste la
-app, la nota aparece en **Hoy**, en el bloque de pendientes, y en la ficha con
-el chip **Para revisar**.
+**Qué hacer:** seguí con lo tuyo. Con la app abierta, en cualquier pantalla,
+cuando la nota esté aparece arriba una franja: *"La nota de … está lista"* con
+**Revisar**, y el ítem **Hoy** del menú lleva un número. Tarda como mucho unos
+segundos en aparecer después de que la nota quedó escrita. Mientras grabás
+otra sesión la franja no se muestra, para que la paciente no vea otro nombre;
+el número de **Hoy** sí.
+
+La franja no tiene cruz: se va cuando abrís esa nota, desde la franja o desde
+cualquier otro lado, en este teléfono o en la computadora. Si cerraste la app
+y la volvés a abrir, la franja sigue ahí hasta que la abras. Tener abierta la
+ficha de esa paciente mientras la nota se escribe no cuenta como abrirla; si
+estabas mirando la nota misma mientras se escribía, al salir la franja
+aparece igual y se va cuando la volvés a abrir. Con dos o más
+notas es una sola franja que dice cuántas y de quiénes (*"2 notas listas"*);
+**Ver** muestra cada una con su botón.
+
+**No llega ninguna notificación con el teléfono bloqueado ni con la app
+cerrada.** La franja aparece la próxima vez que abrís Sesión. Si la nota se
+escribió hace más de una semana y no la abriste, ya no sale en la franja: está
+en **Hoy**, en el bloque de pendientes, y en la ficha con el chip **Para
+revisar**.
+
+### La franja dice "No pudimos escribir la nota de …"
+
+Es lo mismo que *"No pudimos escribir la nota"* de abajo, avisado desde
+cualquier pantalla. **Ver qué pasó** abre la sesión con el motivo y los
+botones. La franja se va cuando la abrís.
 
 ### Dice "No pudimos escribir la nota"
 
@@ -250,4 +273,8 @@ src/app/(dashboard)/_components/datos.ts
 src/components/ui/session-row.tsx
 src/app/api/_lib/casos-uso/cobrar-turno.ts
 src/lib/glosario.ts
+src/components/layout/avisos-de-notas.tsx
+src/components/layout/textos.ts
+src/lib/notas-en-proceso.ts
+src/app/api/_lib/casos-uso/avisos-notas.ts
 -->

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { buscarActor } from "@/app/api/_lib/auth";
 import { AvisosDeNotas } from "@/components/layout/avisos-de-notas";
+import { AyudaDelPanel } from "@/components/layout/ayuda-del-panel";
 import { AvisoVersion } from "@/components/layout/aviso-version";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { Providers } from "@/components/layout/providers";
@@ -50,6 +51,18 @@ export const dynamic = "force-dynamic";
 // Efecto lateral bueno: el bloqueo de scroll de fondo que `ui/sheet.tsx` ya
 // escribía (`document.body.style.overflow = "hidden"`) recién ahora hace
 // algo. Antes el body nunca scrolleaba y esa línea era decorativa.
+//
+// LOS DOS MENÚS ESTÁN MONTADOS A LA VEZ
+//
+// Sidebar y BottomNav se muestran u ocultan con CSS (`hidden lg:flex` /
+// `lg:hidden`), así que en el teléfono el lateral existe aunque no se vea.
+// Por eso lo que cuesta algo no va en los menús: el panel de ayuda es uno
+// solo, de `AyudaDelPanel` (antes cada menú montaba el suyo y el teléfono
+// tenía dos Lupitas con dos conversaciones), y el lateral pide el conteo de
+// deudores solo cuando se ve.
+//
+// La franja de avisos de notas (`AvisosDeNotas`) es el primer hijo del
+// <main>: arriba de cualquier pantalla, en el teléfono y en la computadora.
 
 export default async function DashboardLayout({
   children,
@@ -64,17 +77,19 @@ export default async function DashboardLayout({
 
   return (
     <Providers usuaria={{ nombre: actor.nombre, email: actor.email }}>
-      <div className="flex min-h-screen bg-cream-50">
-        <div className="shrink-0 lg:sticky lg:top-0 lg:flex lg:h-screen">
-          <Sidebar />
+      <AyudaDelPanel>
+        <div className="flex min-h-screen bg-cream-50">
+          <div className="shrink-0 lg:sticky lg:top-0 lg:flex lg:h-screen">
+            <Sidebar />
+          </div>
+          <main className="min-w-0 flex-1 overflow-x-clip pb-20 lg:pb-0">
+            <AvisosDeNotas />
+            <AvisoVersion />
+            {children}
+          </main>
+          <BottomNav />
         </div>
-        <main className="min-w-0 flex-1 overflow-x-clip pb-20 lg:pb-0">
-          <AvisoVersion />
-          {children}
-        </main>
-        <BottomNav />
-        <AvisosDeNotas />
-      </div>
+      </AyudaDelPanel>
     </Providers>
   );
 }
