@@ -17,7 +17,7 @@ it('deja envolver el nombre completo y conserva la acción de cobrar', async () 
   };
   const onCobrar = vi.fn();
   await act(async () => {
-    render(<CardAhora turno={turno} enCurso={false} sinAutorizacion={false} sinCobrar onCobrar={onCobrar} />);
+    render(<CardAhora turno={turno} ahora={fecha} enCurso={false} sinAutorizacion={false} sinCobrar onCobrar={onCobrar} />);
   });
   const nombre = screen.getByRole('heading', { name: 'Francisco Alejandro Algorta Rodríguez' });
   expect(nombre.className).toContain('break-words');

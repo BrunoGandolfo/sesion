@@ -245,6 +245,7 @@ export function Dashboard() {
           {ahoraTurno ? (
             <CardAhora
               turno={ahoraTurno}
+              ahora={ahora}
               enCurso={enCurso}
               sinAutorizacion={sinAutorizacion.has(ahoraTurno.id)}
               sinCobrar={ahoraSinCobrar}

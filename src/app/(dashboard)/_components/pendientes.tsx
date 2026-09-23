@@ -2,8 +2,9 @@
 
 // Lo que espera a la terapeuta cuando abre la app, arriba de todo.
 //
-// Tres listas, cada una con una acción y un final: revisar la nota, ver
-// quién debe, hacer firmar la autorización. Los datos vienen tal cual de
+// Cuatro listas, cada una con una acción y un final: ver qué pasó con una
+// nota que falló, revisar la nota, ver quién debe, hacer firmar la
+// autorización. Los datos vienen tal cual de
 // /api/dashboard → casos-uso/pendientes-terapeuta.ts: acá no se recalcula
 // ninguna regla clínica ni de cobro, solo se cuenta y se enlaza.
 //
@@ -16,18 +17,26 @@
 // mostraba sus tres nombres y el bloque de abajo otros tres —dos listas del
 // mismo dato, ordenadas distinto, a 400 px una de otra—.
 //
+// Las notas que fallaron van primero y son de cualquier fecha: una sesión
+// que ocurrió y se quedó sin nota es un problema clínico, y antes sólo se
+// encontraba si alguien se acordaba de la paciente y entraba a su ficha.
+// Del fallo se muestra si todavía se puede reintentar, nunca el detalle
+// técnico (ese texto no viaja: ver docs/contrato-pendientes-historial-cobros.md).
+//
 // Los pasos iniciales requieren datos explícitos de la cuenta: no tener
 // pendientes hoy no significa que todavía falten pacientes o turnos.
 // Cuando todas las tareas se cumplieron, el bloque desaparece.
 
 import * as React from "react";
 import Link from "next/link";
-import { FileText, ShieldAlert, Wallet } from "lucide-react";
+import { AlertTriangle, FileText, ShieldAlert, Wallet } from "lucide-react";
 
 import { Card } from "@/components/ui";
 import { fechaCorta, money } from "@/lib/format";
-import { INICIO_AGENDAR_SESION, INICIO_CARGAR_PACIENTE, INICIO_CARGAR_TARIFA, NAV, pluralizar } from "@/lib/glosario";
+import { INICIO_AGENDAR_SESION, INICIO_CARGAR_PACIENTE, INICIO_CARGAR_TARIFA, NAV, VER_QUE_PASO, pluralizar } from "@/lib/glosario";
 import type { DashboardData, PendientesTerapeuta } from "@/types/domain";
+
+import { NO_SE_PUEDE_REINTENTAR, notasQueFallaron } from "./textos";
 
 /** Cuántos ítems se listan por fila antes de resumir el resto. La fila es
  *  un recordatorio, no la pantalla de trabajo. */
@@ -83,6 +92,7 @@ const ITEM =
 export function Pendientes({ pendientes, inicio }: PendientesProps) {
   const { notasParaRevisar, sinCobrar, sinAutorizacion, totalSinCobrar } =
     pendientes;
+  const notasFallidas = pendientes.notasFallidas ?? [];
 
   // Un mismo turno se cuenta una vez, pero la autorización es de la paciente:
   // dos turnos de la misma persona en el día son un solo pendiente.
@@ -102,6 +112,7 @@ export function Pendientes({ pendientes, inicio }: PendientesProps) {
   ].filter((paso) => !paso.completo) : [];
 
   if (
+    notasFallidas.length === 0 &&
     notasParaRevisar.length === 0 &&
     sinCobrar.length === 0 &&
     pacientesSinAutorizacion.length === 0 &&
@@ -124,6 +135,47 @@ export function Pendientes({ pendientes, inicio }: PendientesProps) {
             ))}
           </ol>
         ) : null}
+        {notasFallidas.length > 0 ? (
+          <Fila
+            icono={
+              <AlertTriangle
+                size={16}
+                strokeWidth={1.8}
+                aria-hidden="true"
+                className="text-terracotta-500"
+              />
+            }
+            titulo={notasQueFallaron(notasFallidas.length)}
+            restantes={notasFallidas.length - MAX_VISIBLES}
+          >
+            {notasFallidas.slice(0, MAX_VISIBLES).map((nota) => (
+              <li key={nota.sesionId}>
+                <Link
+                  href={`/sesiones/${nota.sesionId}`}
+                  className={`${ITEM} flex-col !items-stretch gap-0.5`}
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-sans text-[13px] text-ink-900">
+                      {nota.pacienteNombre}
+                    </span>
+                    <span className="shrink-0 font-sans text-[12px] tabular-nums text-ink-500">
+                      {fecha(nota.fecha)}
+                    </span>
+                  </span>
+                  <span className="font-sans text-[12px] leading-[1.4]">
+                    <span className="font-semibold text-terracotta-600">
+                      {VER_QUE_PASO} →
+                    </span>
+                    {nota.puedeReintentarse ? null : (
+                      <span className="text-ink-500"> · {NO_SE_PUEDE_REINTENTAR}</span>
+                    )}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </Fila>
+        ) : null}
+
         {notasParaRevisar.length > 0 ? (
           <Fila
             icono={

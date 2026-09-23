@@ -27,15 +27,26 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    próxima:"*, tomadas de la última nota aprobada. Son dos líneas: si el
    resumen es más largo lo dice (*"Hay más."*), y si hay una nota sin revisar
    o una propuesta del Recorrido sin decidir que ese resumen todavía no
-   incluye, también lo dice. Después, **un solo botón**, el primero que
-   corresponda en este orden: **Nota fallida · Ver qué pasó** → **Para
-   revisar** → *Procesando la sesión de …* (sin botón, con un anillo que gira)
-   → **Cobrar** → **Firmar autorización** → **Grabar sesión**.
-   **Cobrar** aparece cuando la sesión ya quedó realizada y sin cobrar, aunque
-   falte la firma: en ese caso **Falta la autorización →** se muestra al lado.
-   Si ya está todo hecho, un chip **"Nota lista"**. Siempre están además
-   **Preparar sesión** (abre la ficha en modo preparación) y el enlace **Ver
-   ficha →**.
+   incluye, también lo dice, con el enlace **Preparar sesión**.
+   Después, los botones:
+   - Si la nota de ese turno **falló**, espera **revisión** o se está
+     **escribiendo**, eso es lo único que se ofrece: **Nota fallida · Ver qué
+     pasó**, **Para revisar**, o *Procesando la sesión de …* (sin botón, con
+     un anillo que gira).
+   - Si no, **Grabar sesión** y **Cobrar** no se reemplazan: pueden estar los
+     dos a la vez. **Grabar sesión** aparece mientras el turno sea de hoy y
+     todavía no haya una grabación terminada de él, **aunque la hora ya haya
+     pasado**: si empezás cinco minutos tarde, el botón sigue ahí. **Cobrar**
+     aparece en cuanto empezó la hora del turno y no está cobrado, aunque
+     todavía figure como agendado; si también se puede grabar, va al lado,
+     más discreto.
+   - Si la paciente no firmó la autorización, en lugar de **Grabar sesión**
+     aparece **Firmar autorización**, que lleva a la ficha. Si ya no hay nada
+     que grabar y hay que cobrar, se muestra **Cobrar** y al lado **Falta la
+     autorización →**.
+   - Si ya está todo hecho, un chip **"Nota lista"**.
+   Siempre están además **Preparar sesión** (abre la ficha en modo
+   preparación) y el enlace **Ver ficha →**.
 4. **Agenda del día** — una fila por turno, en orden de hora, con el botón
    **Agendar** y, en la computadora, **Ver semana →**. Cada fila muestra la hora,
    la duración, la paciente, la modalidad y la tarifa, y a la derecha lo que
@@ -45,6 +56,13 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    hay algo:
    - **Los primeros pasos**, en una cuenta nueva: *"Cargá tu tarifa"*, *"Cargá
      tu primera paciente"*, *"Agendá la primera sesión"*.
+   - **"1 nota que no se pudo escribir"** — sesiones que ocurrieron y cuya
+     nota falló, **de cualquier fecha**, de la más vieja a la más nueva. Cada
+     una muestra la paciente, la fecha y **Ver qué pasó →**, que lleva a la
+     sesión, donde se explica el fallo y se puede reintentar o eliminar. Si ya
+     no queda con qué reintentar (ni el audio ni la transcripción), lo dice:
+     *"No se puede reintentar; se puede eliminar"*. El detalle técnico del
+     fallo no se muestra acá.
    - **"2 notas para revisar"** — notas escritas y sin aprobar, **de cualquier
      fecha**. Cada una lleva a la nota.
    - **"1 paciente te debe · $ 2.200"** — el total, agrupado por persona, con el
@@ -71,9 +89,11 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
 Una sesión cuya nota falló nunca se ve sólo como **Cobrar**: la deuda es una
 cosa y la nota que falta es otra, y las dos se muestran.
 
-Si cobrás desde una fila un turno que todavía figuraba **Agendado**, el cobro
-queda registrado pero la fila puede seguir mostrando **Cobrar** hasta que
-recargues. No cobres dos veces. Ver `14-cuando-algo-falla.md`.
+Si cobrás un turno que todavía figuraba **Agendado**, pasa a realizado y
+cobrado en el momento, en la fila y en la tarjeta de ahora, y suma a **Este
+mes**. Si igual lo intentaras cobrar dos veces (por ejemplo desde otra
+pestaña), el segundo cobro no entra y la app avisa *"No se pudo cobrar."*:
+recargá y vas a ver el turno ya cobrado. Ver `14-cuando-algo-falla.md`.
 
 ## Los colores
 
@@ -89,7 +109,8 @@ La pantalla lee la agenda, los pendientes y los números juntos, y la tarjeta de
 ahora pide aparte el brief de esa paciente. Las notas para revisar salen de las
 sesiones sin aprobar; la deuda, de los turnos realizados e impagos; y las
 autorizaciones faltantes, de cruzar los turnos de hoy con las autorizaciones
-vigentes. La hora se resuelve siempre en hora de Montevideo, corra donde corra el
+vigentes; las notas que no se pudieron escribir, de las sesiones fallidas
+de cualquier fecha (hasta 20). La hora se resuelve siempre en hora de Montevideo, corra donde corra el
 servidor.
 
 Un turno **Agendado** cuya hora ya pasó todavía no cuenta como deuda: pasa a
@@ -114,6 +135,7 @@ src/app/(dashboard)/_components/card-ahora.tsx
 src/app/(dashboard)/_components/kpis.tsx
 src/app/(dashboard)/_components/agenda-del-dia.tsx
 src/app/(dashboard)/_components/datos.ts
+src/app/(dashboard)/_components/textos.ts
 src/app/api/_lib/casos-uso/obtener-dashboard.ts
 src/components/layout/cabecera-usuario.tsx
 src/components/ui/session-row.tsx

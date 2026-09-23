@@ -231,9 +231,6 @@ export function pieRecorridoPdf(nombreProfesional: string | null): string {
   return `Archivo personal de ${nombreProfesional ?? "la profesional"}. Contiene información clínica confidencial.`;
 }
 
-/** Card de preparación antes de la sesión. Ya se llama así en la app. */
-export const PARA_RETOMAR = "Para retomar";
-
 /** El mismo resumen, en la ficha: un bloque plegado debajo del título de la
  *  lista de sesiones. Se abre solo cuando la ficha se pide con ?preparar=1.
  *  El mismo rótulo lo usan Hoy (la tarjeta de ahora y el resumen corto) y el
