@@ -8,8 +8,8 @@
 // ninguna otra: es la diferencia entre "lo que tocaste se hizo" y un chip
 // que cambió solo.
 
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { DayView } from "../day-view";
 import { AGENDA_DIA_VACIO_TITULO } from "@/lib/glosario";
@@ -70,7 +70,7 @@ describe("DayView", () => {
   it("sin cobro reciente no hay ninguna marca", () => {
     const { container } = montar();
 
-    expect(screen.getByText(/Lucía/)).toBeDefined();
+    expect(screen.getByRole("link", { name: /Lucía/ })).toBeDefined();
     expect(checksDe(container)).toHaveLength(0);
   });
 
@@ -102,5 +102,22 @@ describe("DayView", () => {
 
     expect(screen.getByText(AGENDA_DIA_VACIO_TITULO)).toBeDefined();
     expect(checksDe(container)).toHaveLength(0);
+  });
+
+  it("tocar el nombre lleva a la ficha; el detalle del turno se abre desde su control", () => {
+    const abrir = vi.fn();
+    render(
+      <DayView date={DIA} turnos={TURNOS} onOpenTurno={abrir} onNuevoTurno={() => {}} />,
+    );
+
+    const lucia = screen.getByRole("link", { name: /Lucía Fernández/ });
+    expect(lucia.getAttribute("href")).toBe("/pacientes/p-t1");
+    expect(screen.getByRole("link", { name: /Mercedes Fernández/ }).getAttribute("href")).toBe(
+      "/pacientes/p-t2",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver turno de Mercedes Fernández" }));
+    expect(abrir).toHaveBeenCalledOnce();
+    expect(abrir.mock.calls[0][0].id).toBe("t2");
   });
 });

@@ -6,13 +6,22 @@ recordatorio en cada caso.
 
 ## Cómo se ve
 
-**En el teléfono** siempre se mira **un día**; tocando el título de la fecha se
-despliega el mes, con un punto y la cantidad de turnos en cada día. **En la
-computadora** elegís **Día**, **Semana** (empieza el lunes) o **Mes**. Las flechas
-mueven según lo que estés mirando, y **Hoy** vuelve al día de hoy.
+**En el teléfono** siempre se mira **un día**. Debajo del título de la fecha va
+la **semana** de ese día, de lunes a domingo: cada día con su inicial, su número
+y sus puntos de turnos. Tocá un día para ver sus turnos. Las flechas **‹ ›**
+mueven la semana de a una. Tocando el título de la fecha se despliega el **mes**
+entero; con el mes abierto, las flechas mueven de a un mes.
 
-Un día sin turnos dice *"Nada agendado este día"*. **Los turnos cancelados no se
-muestran en la agenda.**
+**En la computadora** elegís **Día**, **Semana** (empieza el lunes) o **Mes**. Las
+flechas mueven según lo que estés mirando, y **Hoy** vuelve al día de hoy.
+
+**Los puntos.** En el mes y en la semana del teléfono, cada punto es un turno:
+oscuro si está agendado o falta cobrarlo, verde si está pagado, gris si la
+paciente no vino o se canceló. No hay número al lado. Un día con más de cuatro
+turnos muestra **tres puntos y un +**.
+
+Un día sin turnos dice *"Nada agendado este día"*. Los turnos cancelados siguen
+en la agenda, con el chip **Cancelado** y el punto gris.
 
 ## Agendar un turno
 
@@ -46,7 +55,13 @@ Cuando se acaban los tres meses no se agrega nada solo: agendá una serie nueva.
 
 ## Abrir un turno
 
-Tocá el turno. Se abre una ficha con el chip de estado, la duración, la
+**Tocar la fila** —la hora, el nombre o la foto— **te lleva a la ficha de esa
+paciente**, en la Agenda y en **Hoy**. Para abrir el turno en sí (reprogramar,
+cancelar, cobrar, marcar que no vino) tocá la flecha **›** a la derecha de la
+fila, **"Ver turno"**. En la vista **Semana** de la computadora, tocar el turno
+lo abre directamente.
+
+Se abre una ficha con el chip de estado, la duración, la
 modalidad, la tarifa, el pago y tus notas. En un turno agendado o realizado
 aparece además el brief **"Para retomar"**. El estado del **Recordatorio** se
 muestra solo mientras el turno sigue agendado. Un turno ausente dice *"La
@@ -60,7 +75,7 @@ paciente no vino a este turno."*
 | **Sin cobrar** (terracotta) | La sesión se hizo y falta el pago. |
 | **Pagado** (verde) | Cobrado. |
 | **No vino** (gris) | La paciente faltó. |
-| **Cancelado** (gris) | El turno se anuló. No aparece en la agenda, pero sí en la ficha de la paciente. |
+| **Cancelado** (gris) | El turno se anuló. Queda en la agenda y en la ficha de la paciente, apagado. |
 
 ## Las acciones y el recordatorio
 
@@ -69,7 +84,10 @@ paciente no vino a este turno."*
   Mientras el turno está agendado, el propio sheet lo dice: *"al cobrar, el
   turno queda como realizado"*. **El recordatorio se cancela.**
 - **Grabar sesión**, o el estado de la nota — **Grabar sesión** si el turno
-  todavía no tiene sesión clínica. Si ya la tiene, el botón dice cómo está la
+  todavía no tiene sesión clínica. El botón **no desaparece cuando pasa la
+  hora** del turno: si empezaste tarde, sigue ahí durante todo ese día. En
+  la fila de **Hoy**, pasada la hora y sin cobrar, **Grabar sesión** y
+  **Cobrar** aparecen juntos: una cosa no reemplaza a la otra. Si ya la tiene, el botón dice cómo está la
   nota y lleva a ella: **Nota fallida · Ver qué pasó** (no se pudo escribir),
   **Para revisar** (escrita, sin aprobar) o **Nota lista** (aprobada). Mientras
   se escribe, dice *Procesando* y no hay botón. Una nota fallida nunca se
@@ -119,6 +137,9 @@ src/app/api/turnos/[id]/cobrar/route.ts
 src/app/api/_lib/casos-uso/cobrar-turno.ts
 src/app/(dashboard)/agenda/_components/agenda-header.tsx
 src/app/(dashboard)/agenda/_components/month-view.tsx
+src/app/(dashboard)/agenda/_components/semana-tira.tsx
+src/app/(dashboard)/agenda/_components/day-view.tsx
+src/components/ui/session-row.tsx
 src/components/forms/nuevo-turno-form.tsx
 src/components/forms/resultado-serie.tsx
 src/app/api/_lib/casos-uso/crear-turno.ts

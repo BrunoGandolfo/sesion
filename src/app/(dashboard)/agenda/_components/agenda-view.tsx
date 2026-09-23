@@ -31,6 +31,7 @@ import { AgendaHeader } from "./agenda-header";
 import { DayView, EstadoVacio } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
+import { SemanaTira } from "./semana-tira";
 import {
   NuevoTurnoForm,
   type NuevoTurnoData,
@@ -141,8 +142,14 @@ export function AgendaView() {
   const view: AgendaViewMode = isMobile ? "día" : (userView ?? "semana");
 
   // En mobile, con el mes abierto, hacen falta los turnos de todo el mes
-  // para pintar los puntos de cada día.
-  const rangeView: AgendaViewMode = isMobile && mesAbierto ? "mes" : view;
+  // para pintar los puntos de cada día; con el mes plegado, los de la semana
+  // del día elegido, que es lo que muestra la tira. Moverse dentro de la
+  // semana no vuelve a pedir nada: es el mismo rango.
+  const rangeView: AgendaViewMode = isMobile
+    ? mesAbierto
+      ? "mes"
+      : "semana"
+    : view;
 
   const range = React.useMemo(
     () => (anchor ? computeRange(rangeView, anchor) : null),
@@ -231,6 +238,8 @@ export function AgendaView() {
       const d = elegido ?? today;
       if (!d) return elegido;
       if (isMobile && mesAbierto) return agregarMesesMvd(d, -1);
+      // Mes plegado: las flechas mueven la tira de a una semana.
+      if (isMobile) return agregarDiasMvd(d, -7);
       if (view === "día") return agregarDiasMvd(d, -1);
       if (view === "semana") return agregarDiasMvd(d, -7);
       return agregarMesesMvd(d, -1);
@@ -241,6 +250,8 @@ export function AgendaView() {
       const d = elegido ?? today;
       if (!d) return elegido;
       if (isMobile && mesAbierto) return agregarMesesMvd(d, 1);
+      // Mes plegado: las flechas mueven la tira de a una semana.
+      if (isMobile) return agregarDiasMvd(d, 7);
       if (view === "día") return agregarDiasMvd(d, 1);
       if (view === "semana") return agregarDiasMvd(d, 7);
       return agregarMesesMvd(d, 1);
@@ -255,6 +266,8 @@ export function AgendaView() {
     setUserView("día");
     setMesAbierto(false);
   };
+  // La tira de la semana cambia el día sin tocar nada más.
+  const handleDiaDeLaTira = (day: Date) => setAnchorUsuario(day);
   const handleEventClick = (turno: TurnoConPaciente) => {
     setDetalleId(turno.id);
   };
@@ -360,6 +373,18 @@ export function AgendaView() {
               today={today}
               turnos={turnos ?? []}
               onDayClick={handleDayClick}
+            />
+          </div>
+        ) : null}
+
+        {/* Mobile, mes plegado: la semana del día elegido, debajo del título */}
+        {isReady && isMobile && !mesAbierto ? (
+          <div className="mt-3 lg:hidden">
+            <SemanaTira
+              anchor={anchor}
+              today={today}
+              turnos={turnos ?? []}
+              onDayClick={handleDiaDeLaTira}
             />
           </div>
         ) : null}

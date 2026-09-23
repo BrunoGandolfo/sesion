@@ -14,6 +14,12 @@ interface Props {
   onDayClick: (day: Date) => void;
 }
 
+/** Lo que se lee de un día: la fecha y cuántos turnos tiene. Los puntos no
+ *  dicen el número; esto sí. */
+export function etiquetaDelDia(day: Date, cantidad: number): string {
+  return `${fechaLarga(day)}: ${cantidad} ${cantidad === 1 ? "turno" : "turnos"}`;
+}
+
 const WEEK_LABELS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"] as const;
 
 export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
@@ -39,15 +45,12 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
           const inMonth = esMismoMesMvd(day, anchor);
           const isToday = esMismoDiaMvd(day, today);
           const turnosDia = turnos.filter((t) => esMismoDiaMvd(t.fecha, day));
-          const visibles = turnosDia.slice(0, 3);
-
-
           return (
             <button
               key={idx}
               type="button"
               onClick={() => onDayClick(day)}
-              aria-label={fechaLarga(day) + ": " + turnosDia.length + (turnosDia.length === 1 ? " turno" : " turnos")}
+              aria-label={etiquetaDelDia(day, turnosDia.length)}
               className={`flex min-h-[48px] flex-col gap-1 border-t border-[color:var(--border-subtle)] p-2 text-left transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 lg:min-h-[56px] ${
                 idx % 7 !== 0
                   ? "border-l border-[color:var(--border-subtle)]"
@@ -63,30 +66,57 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
                   {partesMvd(day).dia}
                 </span>
               )}
-              {turnosDia.length > 0 ? (
-                <div className="mt-auto flex flex-wrap items-center gap-1">
-                  <span className="tabular-nums text-[12px] font-semibold leading-none text-ink-700">{turnosDia.length}</span>
-                  {visibles.map((t) => (
-                    <span
-                      key={t.id}
-                      aria-hidden="true"
-                      className={`h-[6px] w-[6px] rounded-full ${
-                        t.estado === "ausente" || t.estado === "cancelado"
-                          ? "bg-ink-300"
-                          : t.pagoEstado === "pagado"
-                            ? "bg-sage-500"
-                            : "bg-ink-500"
-                      }`}
-                    />
-                  ))}
-
-                </div>
-              ) : null}
+              <PuntosDelDia turnos={turnosDia} className="mt-auto" />
             </button>
           );
         })}
       </div>
       <Leyenda />
+    </div>
+  );
+}
+
+/** Con más de cuatro turnos el día se dice con tres puntos y un "+": diez
+ *  puntitos no se cuentan de un vistazo y desbordan la celda del teléfono. */
+const MAX_PUNTOS = 4;
+
+function colorDelPunto(t: TurnoConPaciente): string {
+  if (t.estado === "ausente" || t.estado === "cancelado") return "bg-ink-300";
+  return t.pagoEstado === "pagado" ? "bg-sage-500" : "bg-ink-500";
+}
+
+/**
+ * Un punto por turno, con el color de su estado, y nada más: sin el número
+ * al lado. La cantidad la dice el aria-label de la celda que los contiene.
+ * Lo usan el mes y la tira de la semana, para que un día se vea igual en las
+ * dos.
+ */
+export function PuntosDelDia({
+  turnos,
+  className = "",
+}: {
+  turnos: TurnoConPaciente[];
+  className?: string;
+}) {
+  if (turnos.length === 0) return null;
+  const sobran = turnos.length > MAX_PUNTOS;
+  const visibles = sobran ? turnos.slice(0, MAX_PUNTOS - 1) : turnos;
+  return (
+    <div
+      aria-hidden="true"
+      data-puntos=""
+      className={`flex flex-wrap items-center gap-1 ${className}`}
+    >
+      {visibles.map((t) => (
+        <span
+          key={t.id}
+          data-punto=""
+          className={`h-[6px] w-[6px] rounded-full ${colorDelPunto(t)}`}
+        />
+      ))}
+      {sobran ? (
+        <span className="text-[11px] font-semibold leading-none text-ink-500">+</span>
+      ) : null}
     </div>
   );
 }
