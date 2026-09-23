@@ -478,6 +478,36 @@ describe("aislamiento entre organizaciones — barrido de todas las rutas con id
   });
 });
 
+// ─── Rutas SIN id que igual devuelven filas clínicas ───────────────────────
+// El barrido de arriba no las ve (no tienen `[id]`). Cada una se agrega acá a
+// mano, con lo que tiene que valer: la otra organización no ve nada.
+
+describe("aislamiento entre organizaciones — rutas sin id que listan sesiones", () => {
+  it("GET /api/sesion-clinica/avisos: otra organización recibe la lista vacía, nunca la sesión de A", async () => {
+    const a = await crearOrg();
+    const b = await crearOrg();
+    // La sesión de A está lista y nadie la abrió: para A es un aviso.
+    await prismaRaw.sesionClinica.update({
+      where: { id: a.sesionId },
+      data: { procesadaEn: new Date() },
+    });
+    const { GET } = (await import("@/app/api/sesion-clinica/avisos/route")) as {
+      GET: () => Promise<Response>;
+    };
+
+    como(a);
+    const propia = (await (await GET()).json()) as { data: { id: string }[] };
+    expect(propia.data.map((s) => s.id)).toEqual([a.sesionId]);
+
+    como(b);
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const crudo = await res.text();
+    expect(JSON.parse(crudo)).toEqual({ data: [] });
+    expect(crudo).not.toContain(a.sesionId);
+  });
+});
+
 /** Lo que una organización ajena no puede cambiar. */
 async function retrato(org: Org) {
   const [paciente, turno, sesion, hotWord, versiones, consentimientos] = await Promise.all([
