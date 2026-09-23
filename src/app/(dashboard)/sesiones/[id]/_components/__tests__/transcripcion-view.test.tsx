@@ -9,7 +9,7 @@ import * as React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-import { apiGet, ApiClientError } from "@/lib/api-client";
+import { apiGet, apiPost, ApiClientError } from "@/lib/api-client";
 import {
   BUSCAR_ANTERIOR,
   BUSCAR_EN_TRANSCRIPCION,
@@ -25,6 +25,7 @@ import {
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
 import { CabeceraSesion } from "../cabecera-sesion";
+import { HABLANTE_1, HABLANTE_2 } from "../textos";
 import { SesionDetailView } from "../sesion-detail-view";
 import { TranscripcionView } from "../transcripcion-view";
 
@@ -87,8 +88,35 @@ describe("TranscripcionView", () => {
     const bloques = screen.getAllByRole("listitem");
     expect(bloques).toHaveLength(4);
     expect(within(bloques[1]).getByText("00:09")).toBeTruthy();
-    expect(within(bloques[1]).getByText("Paciente")).toBeTruthy();
+    expect(within(bloques[1]).getByText(HABLANTE_2)).toBeTruthy();
     expect(within(bloques[3]).getByText("01:15")).toBeTruthy();
+  });
+
+  it("no afirma quién es quién: Terapeuta y Paciente se ven como Hablante 1 y Hablante 2, cada uno con su color", async () => {
+    const pedidos = vi.spyOn(globalThis, "fetch");
+    render(<TranscripcionView sesion={sesion()} />);
+    await screen.findByText("¿Cómo estuvo la semana?");
+    const bloques = screen.getAllByRole("listitem");
+
+    const uno = within(bloques[0]).getByText(HABLANTE_1);
+    const dos = within(bloques[1]).getByText(HABLANTE_2);
+    expect(within(bloques[3]).getByText(HABLANTE_1).className).toBe(uno.className);
+    expect(uno.className).not.toBe(dos.className);
+    expect(screen.queryByText("Terapeuta")).toBeNull();
+    expect(screen.queryByText("Paciente")).toBeNull();
+    // Sigue el aviso de que el reparto es automático.
+    expect(screen.getByText(TRANSCRIPCION_HABLANTES)).toBeTruthy();
+
+    // Es presentación: no se escribe nada de vuelta.
+    expect(apiPost).not.toHaveBeenCalled();
+    expect(pedidos).not.toHaveBeenCalled();
+    pedidos.mockRestore();
+  });
+
+  it("un rótulo que no es del worker se muestra tal cual", async () => {
+    vi.mocked(apiGet).mockResolvedValue({ transcripcion: "[00:01] Hablante C: Hola." } as never);
+    render(<TranscripcionView sesion={sesion()} />);
+    expect(await screen.findByText("Hablante C")).toBeTruthy();
   });
 
   it("una línea rara se ve entera", async () => {
@@ -156,6 +184,8 @@ describe("el buscador", () => {
     fireEvent.change(campo, { target: { value: "angustia" } });
 
     expect(screen.getByText("1 de 3")).toBeTruthy();
+    expect((screen.getByRole("button", { name: BUSCAR_ANTERIOR }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: BUSCAR_SIGUIENTE }) as HTMLButtonElement).disabled).toBe(false);
     expect(document.querySelectorAll("mark")).toHaveLength(3);
     expect(Array.from(document.querySelectorAll("mark"), (m) => m.textContent)).toEqual(["angustia", "angustia", "Angustia"]);
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
@@ -176,12 +206,27 @@ describe("el buscador", () => {
     expect(screen.getByText("3 de 3")).toBeTruthy();
   });
 
+  it("con una sola coincidencia dice 1 de 1 y las flechas quedan apagadas", async () => {
+    const campo = await abrir();
+    fireEvent.change(campo, { target: { value: "semana" } });
+    expect(screen.getByText("1 de 1")).toBeTruthy();
+    expect(document.querySelectorAll("mark")).toHaveLength(1);
+    const anterior = screen.getByRole("button", { name: BUSCAR_ANTERIOR }) as HTMLButtonElement;
+    const siguiente = screen.getByRole("button", { name: BUSCAR_SIGUIENTE }) as HTMLButtonElement;
+    expect(anterior.disabled).toBe(true);
+    expect(siguiente.disabled).toBe(true);
+    // Enter tampoco se mueve ni rompe el contador.
+    fireEvent.keyDown(campo, { key: "Enter" });
+    expect(screen.getByText("1 de 1")).toBeTruthy();
+  });
+
   it("sin resultados lo dice con la palabra buscada, y no deja nada resaltado", async () => {
     const campo = await abrir();
     fireEvent.change(campo, { target: { value: "hermano" } });
     expect(screen.getByText("No aparece «hermano» en esta transcripción.")).toBeTruthy();
     expect(document.querySelectorAll("mark")).toHaveLength(0);
     expect((screen.getByRole("button", { name: BUSCAR_SIGUIENTE }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: BUSCAR_ANTERIOR }) as HTMLButtonElement).disabled).toBe(true);
     // El texto sigue entero.
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
   });

@@ -117,7 +117,7 @@ persona, y los días de atraso salen de la sesión impaga más vieja.
 
 ## Si cobraste por error
 
-Abrí el turno cobrado en Agenda o en **Ficha → Turnos y pagos** y tocá
+Abrí el turno cobrado en Agenda o, en la ficha, en **Datos → Turnos y pagos** y tocá
 **Deshacer cobro**. Revisá la confirmación: el monto vuelve a la deuda y el
 turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
 

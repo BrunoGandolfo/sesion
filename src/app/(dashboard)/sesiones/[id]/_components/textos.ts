@@ -6,8 +6,9 @@
 // re-export, para que los componentes de la ruta sigan importando de un solo
 // lugar.
 //
-// Lo único propio es SECCIONES_SOAP, que no es texto sino el puente entre el
-// glosario y las claves de la nota.
+// Propios de esta pantalla quedan SECCIONES_SOAP, que no es texto sino el
+// puente entre el glosario y las claves de la nota, y los rótulos de hablante
+// de la transcripción, que no se usan en ninguna otra.
 
 import type { NotaSoap } from "@/lib/sesion-clinica/schema";
 
@@ -120,3 +121,13 @@ export const SECCIONES_SOAP: ReadonlyArray<{
   { clave: "analisis", ...SOAP_A },
   { clave: "plan", ...SOAP_P },
 ];
+
+/**
+ * Rótulos de hablante en la transcripción. El worker escribe "Terapeuta" y
+ * "Paciente", pero ese reparto lo hace el reconocimiento de voz y se
+ * equivoca (con una sola persona hablando llegó a rotular a las dos). En
+ * pantalla no se afirma quién es quién: sólo que son dos voces distintas.
+ * El texto guardado no cambia.
+ */
+export const HABLANTE_1 = "Hablante 1";
+export const HABLANTE_2 = "Hablante 2";

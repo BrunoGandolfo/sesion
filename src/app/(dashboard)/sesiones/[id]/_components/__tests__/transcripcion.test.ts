@@ -1,7 +1,7 @@
 // Leer y buscar en la transcripción: las funciones puras.
 import { describe, expect, it } from "vitest";
 
-import { buscarEnBloques, leerTranscripcion } from "../transcripcion";
+import { buscarEnBloques, leerTranscripcion, numeroDeHablante } from "../transcripcion";
 
 describe("leerTranscripcion", () => {
   it("parte el texto del worker en bloques con marca de tiempo y hablante", () => {
@@ -54,5 +54,21 @@ describe("buscarEnBloques", () => {
     expect(buscarEnBloques(bloques, "   ")).toEqual([]);
     expect(buscarEnBloques(bloques, "m")).toEqual([]);
     expect(buscarEnBloques(bloques, "hermano")).toEqual([]);
+  });
+});
+
+describe("numeroDeHablante", () => {
+  it("Terapeuta es el 1 y Paciente el 2; cualquier otro rótulo no tiene número", () => {
+    expect(numeroDeHablante("Terapeuta")).toBe(1);
+    expect(numeroDeHablante("Paciente")).toBe(2);
+    expect(numeroDeHablante("Hablante C")).toBeNull();
+    expect(numeroDeHablante("constructor")).toBeNull();
+  });
+
+  it("leer no reescribe el rótulo: el texto guardado sigue diciendo lo que dijo el worker", () => {
+    const texto = "[00:03] Terapeuta: Hola.\n[00:09] Paciente: Hola.";
+    const bloques = leerTranscripcion(texto);
+    expect(bloques.map((b) => (b.tipo === "turno" ? b.hablante : null))).toEqual(["Terapeuta", "Paciente"]);
+    expect(texto).toBe("[00:03] Terapeuta: Hola.\n[00:09] Paciente: Hola.");
   });
 });

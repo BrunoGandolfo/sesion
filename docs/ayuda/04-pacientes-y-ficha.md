@@ -62,7 +62,7 @@ una sola vez y la cuenta coincide con lo que la lista muestra.
 
 ### Pestaña **Recorrido**
 
-El hilo del proceso y los gráficos. Ver `10-el-hilo-y-el-recorrido.md`.
+El Recorrido del proceso, los indicadores por sesión y **Exportar PDF**. Ver `10-el-hilo-y-el-recorrido.md`.
 
 ### Pestaña **Datos**
 
