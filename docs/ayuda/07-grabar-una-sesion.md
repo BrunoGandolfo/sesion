@@ -96,8 +96,8 @@ recuperar.
    nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando
    esté."* y se queda ahí hasta que tocás **Volver a la ficha**. Mientras se
    escribe, la ficha y **Hoy** muestran *"Procesando la sesión de …"*; cuando
-   termina aparece, en la pantalla en la que estés, *"La nota de … está lista"*
-   con **Revisar**. No llega ninguna notificación al teléfono. El turno queda marcado como **realizado** y su
+   termina aparece arriba, en cualquier pantalla, una franja *"La nota de … está
+   lista"* con **Revisar**, y el ítem **Hoy** del menú lleva un número. No llega ninguna notificación al teléfono. El turno queda marcado como **realizado** y su
    recordatorio pendiente se cancela.
 
 Con la confirmación en la mano, la app borra la copia del teléfono.
@@ -167,8 +167,8 @@ Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
 - **No continúa una grabación después de cerrar la app**: lo que quedó se envía
   o se descarta.
 - **No te avisa con el teléfono bloqueado ni con la app cerrada** cuando la
-  nota está lista: el aviso aparece dentro de la app, en la pantalla en la que
-  estés, mientras la tengas abierta.
+  nota está lista: mientras la tengas abierta aparece la franja arriba y el
+  número en **Hoy**; si no, la franja sale la próxima vez que abrís Sesión.
 - **No traduce todos los errores del micrófono**: si el navegador niega el
   permiso, puede mostrar su propio mensaje, a veces en inglés.
 
@@ -184,4 +184,6 @@ src/lib/grabacion-captura.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/lib/limites-prueba.ts
 src/lib/glosario.ts
+src/components/layout/avisos-de-notas.tsx
+src/components/layout/globito-hoy.tsx
 -->

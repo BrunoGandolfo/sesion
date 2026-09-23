@@ -118,8 +118,11 @@ contar cuando se graba o se cobra.
 
 ## Lo que NO hace
 
-- **No se actualiza sola.** Si grabás en otra pestaña, hay que volver a entrar o
-  recargar.
+- **No se relee entera sola.** El aviso de nota lista sí llega solo: la franja
+  arriba y el número en **Hoy** (ver `14-cuando-algo-falla.md`). Y cuando
+  termina una nota que Hoy mostraba *Procesando*, la agenda y los pendientes se
+  actualizan sin recargar. Lo demás —un turno agendado o cobrado en otra
+  pestaña o en la computadora— aparece al volver a entrar o recargar.
 - **No muestra los turnos cancelados.**
 - **No muestra el bloque de pendientes** cuando no hay nada pendiente.
 - **No cobra desde el bloque de pendientes**: ahí se enlaza a la nota, a la ficha
@@ -143,4 +146,6 @@ src/components/clinico/brief-corto.tsx
 src/lib/glosario.ts
 src/lib/format.ts
 src/app/api/_lib/casos-uso/pendientes-terapeuta.ts
+src/components/layout/avisos-de-notas.tsx
+src/components/layout/globito-hoy.tsx
 -->

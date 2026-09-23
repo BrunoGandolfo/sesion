@@ -61,10 +61,11 @@ está lista, el chip pasa a **Para revisar** y aparece en los pendientes de
 **Hoy**. → `08-la-nota-clinica.md`
 
 **10. ¿La app me avisa al teléfono cuando la nota está lista?**
-Con la app abierta, sí: en la pantalla en la que estés aparece *"La nota de …
-está lista"* con el botón **Revisar**, y se queda hasta que lo tocás o lo
-cerrás con la cruz. Si la nota no se pudo escribir, el aviso lo dice y lleva a
-la nota para reintentar. Con el teléfono bloqueado o la app cerrada no llega
+Con la app abierta, sí: en cualquier pantalla aparece arriba una franja, *"La
+nota de … está lista"*, con el botón **Revisar**, y el ítem **Hoy** del menú
+lleva un número. La franja no se cierra: se va cuando abrís esa nota, desde la
+franja o desde cualquier otro lado. Si la nota no se pudo escribir, la franja
+lo dice y **Ver qué pasó** lleva a la sesión para reintentar. Con el teléfono bloqueado o la app cerrada no llega
 nada: la próxima vez que entres, la nota está en los pendientes de **Hoy**.
 → `02-pantalla-hoy.md`
 
@@ -193,4 +194,6 @@ src/components/grabacion/FeedbackTerapeutaView.tsx
 processor/prompts/clinical_note_v3.1.1.md
 processor/prompts/therapist_feedback_gestalt_v1.1.md
 docs/pipeline.md
+src/components/layout/avisos-de-notas.tsx
+src/components/layout/globito-hoy.tsx
 -->
