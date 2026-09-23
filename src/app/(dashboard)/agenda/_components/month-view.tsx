@@ -51,7 +51,7 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
               type="button"
               onClick={() => onDayClick(day)}
               aria-label={etiquetaDelDia(day, turnosDia.length)}
-              className={`flex min-h-[48px] flex-col gap-1 border-t border-[color:var(--border-subtle)] p-2 text-left transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 lg:min-h-[56px] ${
+              className={`flex min-h-[48px] flex-col gap-1 border-t border-[color:var(--border-subtle)] px-1.5 py-2 text-left lg:p-2 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 lg:min-h-[56px] ${
                 idx % 7 !== 0
                   ? "border-l border-[color:var(--border-subtle)]"
                   : ""
@@ -102,10 +102,12 @@ export function PuntosDelDia({
   const sobran = turnos.length > MAX_PUNTOS;
   const visibles = sobran ? turnos.slice(0, MAX_PUNTOS - 1) : turnos;
   return (
+    // Sin salto de línea: tres puntos y el "+", o cuatro puntos, entran en
+    // la celda más angosta del mes a 390 px (≈ 37 px de ancho útil).
     <div
       aria-hidden="true"
       data-puntos=""
-      className={`flex flex-wrap items-center gap-1 ${className}`}
+      className={`flex flex-nowrap items-center gap-[3px] ${className}`}
     >
       {visibles.map((t) => (
         <span
