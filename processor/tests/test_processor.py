@@ -46,6 +46,7 @@ def pasos(mocker):
     """Pasos exitosos por defecto; cada test rompe el que le interesa."""
     mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
     mocker.patch("processor.descargar_audio", return_value=b"audio")
+    mocker.patch("processor.preparar_para_asr", side_effect=lambda _etiqueta, audio: audio)
     mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
     mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
     mocker.patch("processor.formatear_para_llm", return_value="[00:00] Terapeuta: hola")

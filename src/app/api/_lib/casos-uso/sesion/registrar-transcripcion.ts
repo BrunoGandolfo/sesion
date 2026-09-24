@@ -10,7 +10,10 @@
 // `duracionAudioSeg`, que es lo que midió el teléfono contando chunks: son dos
 // medidas de cosas distintas, y cuando difieren esa diferencia es el dato (un
 // archivo que el decodificador leyó más corto que lo grabado). Queda en el
-// detalle de la auditoría, al lado de la del teléfono.
+// detalle de la auditoría. Cuando la del ASR supera a la del teléfono en
+// más de 10 % y más de 60 s, el worker manda además `avisoDuracion` (la del teléfono y el
+// exceso) y queda en el mismo detalle: el ASR factura esa duración, y que
+// aparezca es la señal de que la normalización del audio dejó de andar.
 
 import type { SpeechAnalytics } from "@/lib/sesion-clinica/schema";
 
@@ -29,6 +32,7 @@ export interface RegistrarTranscripcionInput {
   modeloAsr: string;
   duracionSeg?: number;
   asrTranscriptId?: string;
+  avisoDuracion?: { duracionTelefonoSeg: number; excesoPct: number };
 }
 
 export async function registrarTranscripcion({
@@ -41,6 +45,7 @@ export async function registrarTranscripcion({
   modeloAsr,
   duracionSeg,
   asrTranscriptId,
+  avisoDuracion,
 }: RegistrarTranscripcionInput): Promise<void> {
   await transicionar({
     prisma,
@@ -69,6 +74,14 @@ export async function registrarTranscripcion({
       caracteres: transcripcion.length,
       duracionAsrSeg: duracionSeg ?? null,
       rolesOrigen: speechAnalytics?.rolesOrigen ?? null,
+      // Plano: detalleSeguro descarta los objetos anidados.
+      ...(avisoDuracion !== undefined
+        ? {
+            avisoDuracion: "asr_inflada",
+            duracionTelefonoSeg: avisoDuracion.duracionTelefonoSeg,
+            excesoPct: avisoDuracion.excesoPct,
+          }
+        : {}),
     },
   });
 }

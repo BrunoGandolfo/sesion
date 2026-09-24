@@ -1,6 +1,7 @@
 """
 Orquesta el pipeline de una sesion reclamada:
-R2 -> comprobacion del archivo -> AssemblyAI -> checkpoint de transcripcion en la app ->
+R2 -> comprobacion del archivo -> normalizacion (audio_asr) -> AssemblyAI ->
+checkpoint de transcripcion en la app ->
 nota SOAP -> resultado a la app. Y ejecuta los trabajos durables
 que la app le entrega (borrar el transcript en AssemblyAI, generar "Para vos").
 
@@ -32,6 +33,7 @@ import requests
 
 import app_client
 import asr_assemblyai
+import audio_asr
 import clinical_analyzer
 import config
 import r2_client
@@ -188,6 +190,8 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
             else:
                 lease.comprobar("audio")
                 audio = descargar_audio(etiqueta, sesion.audio, sesion.intento)
+                lease.comprobar("normalizar")
+                audio = preparar_para_asr(etiqueta, audio)
                 lease.comprobar("asr")
                 transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr)
                 del audio
@@ -252,6 +256,48 @@ def descargar_audio(etiqueta: str, audio: dict | None, intento: int) -> bytes:
     return datos
 
 
+def preparar_para_asr(etiqueta: str, audio: bytes) -> bytes:
+    """
+    El archivo que va al ASR: el del telefono reempaquetado para que dure lo
+    que duran sus muestras (ver audio_asr). Si ffmpeg falla se manda el
+    original, como antes de este paso: la sesion se transcribe igual y, si
+    el original traia sellos con salto, la guardia de duracion lo avisa.
+    """
+    try:
+        normalizado = audio_asr.normalizar(audio)
+    except audio_asr.NormalizacionFallida as e:
+        logger.error(f"[{etiqueta}] normalizacion_fallida {e.motivo}: se manda el audio original al ASR")
+        return audio
+    logger.info(f"[{etiqueta}] Audio normalizado: {len(audio)} -> {len(normalizado)} bytes")
+    return normalizado
+
+
+# Si el ASR cuenta mas de esto por encima de lo que midio el telefono, el
+# arreglo de audio_asr dejo de funcionar (o algo nuevo infla la duracion).
+UMBRAL_AVISO_DURACION = 0.10
+# ...y ademas el exceso pasa de esto. En una grabacion corta el 10 % es un
+# segundo o dos, que es lo que ya difieren la cuenta de chunks del telefono y
+# la del ASR: sin piso, el aviso seria ruido.
+PISO_AVISO_DURACION_SEG = 60
+
+
+def aviso_duracion(duracion_asr_seg, duracion_telefono_seg) -> dict | None:
+    """
+    {duracionTelefonoSeg, excesoPct} si la duracion del ASR supera a la del
+    telefono en mas de UMBRAL_AVISO_DURACION y en mas de
+    PISO_AVISO_DURACION_SEG; None si no, o si falta alguna.
+    La del telefono es la cuenta de chunks del grabador (duracionAudioSeg).
+    """
+    if not isinstance(duracion_asr_seg, (int, float)) or not isinstance(duracion_telefono_seg, (int, float)):
+        return None
+    if isinstance(duracion_asr_seg, bool) or isinstance(duracion_telefono_seg, bool) or duracion_telefono_seg <= 0:
+        return None
+    exceso = duracion_asr_seg / duracion_telefono_seg - 1
+    if exceso <= UMBRAL_AVISO_DURACION or duracion_asr_seg - duracion_telefono_seg <= PISO_AVISO_DURACION_SEG:
+        return None
+    return {"duracionTelefonoSeg": int(duracion_telefono_seg), "excesoPct": round(exceso * 100, 1)}
+
+
 def transcribir(etiqueta: str, audio_bytes: bytes, terminos_asr: list[str] | None = None) -> dict:
     """AssemblyAI: transcripcion diarizada normalizada (ver asr_assemblyai)."""
     terminos = terminos_asr or []
@@ -296,6 +342,16 @@ def registrar_checkpoint(sesion: SesionReclamada, transcripcion: dict) -> Transc
     transcripcion_fmt = formatear_para_llm(transcripcion)
     modelo_asr = f"assemblyai:{transcripcion['speech_model']}"
 
+    duracion_asr = transcripcion.get("duration_seconds")
+    aviso = aviso_duracion(duracion_asr, sesion.duracion_audio_seg)
+    if aviso:
+        # No falla la sesion: el transcript es bueno, lo que esta mal es lo
+        # que se cobra. Queda en el log y en la auditoria de la app.
+        logger.warning(
+            f"[{etiqueta}] duracion_asr_inflada: ASR {duracion_asr}s, telefono "
+            f"{aviso['duracionTelefonoSeg']}s (+{aviso['excesoPct']}%)"
+        )
+
     res = app_client.registrar_transcripcion(
         etiqueta,
         sesion.ticket,
@@ -303,8 +359,9 @@ def registrar_checkpoint(sesion: SesionReclamada, transcripcion: dict) -> Transc
         transcripcion_fmt,
         modelo_asr,
         speech_analytics=speech_metrics,
-        duracion_seg=transcripcion.get("duration_seconds"),
+        duracion_seg=duracion_asr,
         asr_transcript_id=asr_id,
+        aviso_duracion=aviso,
     )
     if res.rechazado:
         raise LeasePerdido()

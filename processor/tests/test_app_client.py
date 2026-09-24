@@ -97,6 +97,17 @@ def test_registrar_asr_y_transcripcion_llevan_intento(mocker):
     }
 
 
+def test_registrar_transcripcion_manda_el_aviso_de_duracion_solo_si_hay(mocker):
+    post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
+
+    aviso = {"duracionTelefonoSeg": 3232, "excesoPct": 403.4}
+    app_client.registrar_transcripcion("s1", TICKET, 1, "x", "m", duracion_seg=16269, aviso_duracion=aviso)
+    assert post.call_args.kwargs["json"]["avisoDuracion"] == aviso
+
+    app_client.registrar_transcripcion("s1", TICKET, 1, "x", "m", duracion_seg=3232, aviso_duracion=None)
+    assert "avisoDuracion" not in post.call_args.kwargs["json"]
+
+
 def test_enviar_resultado_manda_el_payload_tal_cual(mocker):
     post = mocker.patch("app_client.requests.post", return_value=_resp(mocker, 200))
     payload = {"intento": 1, "resultado": "fallo", "codigo": "asr_timeout", "definitivo": False}

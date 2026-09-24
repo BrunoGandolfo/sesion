@@ -192,8 +192,13 @@ def registrar_transcripcion(
     speech_analytics: dict | None = None,
     duracion_seg: int | None = None,
     asr_transcript_id: str | None = None,
+    aviso_duracion: dict | None = None,
 ) -> RespuestaApp:
-    """Checkpoint tras el ASR: desde aca ningun reintento vuelve a transcribir."""
+    """
+    Checkpoint tras el ASR: desde aca ningun reintento vuelve a transcribir.
+    `aviso_duracion` ({duracionTelefonoSeg, excesoPct}) va al detalle de la
+    auditoria sesion.transcripcion_guardada; una app anterior lo ignora.
+    """
     payload: dict = {"intento": intento, "transcripcion": transcripcion, "modeloAsr": modelo_asr}
     if speech_analytics is not None:
         payload["speechAnalytics"] = speech_analytics
@@ -201,6 +206,8 @@ def registrar_transcripcion(
         payload["duracionSeg"] = int(duracion_seg)
     if asr_transcript_id:
         payload["asrTranscriptId"] = asr_transcript_id
+    if aviso_duracion:
+        payload["avisoDuracion"] = aviso_duracion
     logger.info(f"Checkpoint {sesion_id}: transcripcion ({len(transcripcion)} chars)")
     return _post(url_sesion(sesion_id, "transcripcion"), payload, ticket, f"Checkpoint {sesion_id}")
 

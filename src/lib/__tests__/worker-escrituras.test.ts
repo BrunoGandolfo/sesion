@@ -17,6 +17,7 @@ import { aplicarResultadoSesion } from "@/app/api/_lib/casos-uso/sesion/resultad
 import { ApiError } from "@/app/api/_lib/responses";
 import { autorizarTicketSesion } from "@/app/api/_lib/tickets";
 import { LEASE_SESION_MS } from "@/lib/sesion-clinica/estados";
+import { registrarTranscripcionSchema } from "@/lib/sesion-clinica/schema";
 
 import {
   eventosAuditoriaDe,
@@ -161,6 +162,50 @@ describe("ASR y checkpoint", () => {
     expect(despues?.duracionAudioSeg).toBe(120);
     const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, r.sesionId);
     expect(eventos[0]).toMatchObject({ accion: "sesion.transcripcion_guardada", detalle: { duracionAsrSeg: 982 } });
+  });
+
+  it("el aviso de duración inflada que manda el worker queda en el detalle de la auditoría", async () => {
+    const r = await reclamada();
+    // Lo que manda el worker (processor.aviso_duracion), por el schema de la ruta.
+    const cuerpo = registrarTranscripcionSchema.parse({
+      intento: r.intento,
+      transcripcion: TRANSCRIPCION,
+      modeloAsr: "assemblyai:universal-3-5-pro",
+      // El caso del 24/9: 54 minutos medidos, 4 h 31 min facturadas.
+      duracionSeg: 16269,
+      avisoDuracion: { duracionTelefonoSeg: 3232, excesoPct: 403.4 },
+    });
+
+    await registrarTranscripcion({ ...comun(r.sesionId), ...cuerpo });
+
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, r.sesionId);
+    expect(eventos[0]).toMatchObject({
+      accion: "sesion.transcripcion_guardada",
+      detalle: { duracionAsrSeg: 16269, avisoDuracion: "asr_inflada", duracionTelefonoSeg: 3232, excesoPct: 403.4 },
+    });
+  });
+
+  it("sin aviso, el detalle no lo trae; un aviso con otra forma lo rechaza la ruta", async () => {
+    const r = await reclamada();
+    await registrarTranscripcion({
+      ...comun(r.sesionId),
+      intento: r.intento,
+      transcripcion: TRANSCRIPCION,
+      modeloAsr: "assemblyai:universal-2",
+      duracionSeg: 118,
+    });
+    const [evento] = await eventosAuditoriaDe(base.prisma, org.orgId, r.sesionId);
+    expect(evento.detalle).not.toHaveProperty("avisoDuracion");
+    expect(evento.detalle).not.toHaveProperty("duracionTelefonoSeg");
+
+    const minimo = { intento: 1, transcripcion: "x", modeloAsr: "m" };
+    expect(registrarTranscripcionSchema.safeParse({ ...minimo, avisoDuracion: { excesoPct: 12 } }).success).toBe(false);
+    expect(
+      registrarTranscripcionSchema.safeParse({
+        ...minimo,
+        avisoDuracion: { duracionTelefonoSeg: 60, excesoPct: 12, texto: "no" },
+      }).success,
+    ).toBe(false);
   });
 
   it("registrar el transcript deja UN trabajo de borrado aunque se registre dos veces", async () => {
