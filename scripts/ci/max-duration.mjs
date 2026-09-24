@@ -22,7 +22,7 @@
 // Una ruta con GET y escritura toma el mayor de los dos. Este script NO
 // verifica la familia (eso es criterio, no sintaxis): verifica que la
 // declaración exista, sea un entero y esté dentro del techo que Vercel
-// admite. Es lo mismo que hace middleware-edge.test.ts con los imports: una
+// admite. Es lo mismo que hace proxy-liviano.test.ts con los imports: una
 // convención que se comprueba sola en vez de recordarse.
 //
 // Uso: `node scripts/ci/max-duration.mjs` (sale con 1 si falta alguna).

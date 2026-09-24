@@ -339,3 +339,70 @@ node scripts/ci/documentacion-vigente.mjs
 Valida `README.md`, `docs/pipeline.md`, `docs/encryption.md` y este documento contra archivos, exports HTTP y
 el catálogo de variables. No conecta a proveedores, no ejecuta migraciones
 remotas, no manda mensajes y no acredita disponibilidad de funciones pendientes.
+
+## 8. Content-Security-Policy: pasar de reporte a bloqueo
+
+La CSP sale del proxy (`src/proxy.ts`, política en `src/lib/csp.ts`) en modo
+**Report-Only**: el navegador no bloquea nada y postea las violaciones a
+`POST /api/csp-report`, que las deja en el log de la función (no en
+`eventos_auditoria`: son diagnóstico, no rastro clínico). La cabecera
+`frame-ancestors 'none'` de `next.config.ts` existe aparte porque una política
+report-only no impide el embebido.
+
+Pasar a bloqueo es cambiar `Content-Security-Policy-Report-Only` por
+`Content-Security-Policy` en `conReporteCsp` (`src/proxy.ts`). Antes, la lista de destinos externos (**DESTINOS_EXTERNOS**)
+(`src/lib/csp.ts`) tiene que cubrir todo lo que usa el navegador. El caso que
+importa es R2: el navegador hace PUT del audio directo al bucket y
+`connect-src` gobierna ese PUT. R2 entra por `R2_PUBLIC_HOST`, el origen exacto
+de la URL prefirmada, con el bucket como primer subdominio
+(`https://<bucket>.<accountId>.r2.cloudflarestorage.com`, sin comodín,
+obligatoria en producción). `src/lib/__tests__/csp-destinos.test.ts` falla
+ante cualquier host `https://` nuevo en `src/` que no esté declarado.
+
+### Qué mirar en los reportes
+
+Cada línea del log tiene la forma:
+
+```
+[csp] directiva="script-src-elem" bloqueado="https://…" documento="https://…" archivo="…:42" disposicion="report"
+```
+
+1. **`script-src-elem` o `script-src` con `bloqueado="inline"`:** un `<script>`
+   sin nonce. Si el `documento` es una página de la app, no se puede pasar a
+   bloqueo hasta encontrar cuál y por qué. La causa más probable es una página
+   prerenderizada en el build: sin request no hay nonce. Los layouts de
+   `(dashboard)`, `(auth)` e `(impresion)` declaran `dynamic = "force-dynamic"`;
+   una página fuera de esos grupos tiene que declararlo también. Si el
+   `documento` es de una extensión (`chrome-extension://`, `moz-…`) o el
+   `archivo` no es del dominio, es ruido del navegador de quien mira.
+2. **`style-src` o `style-src-attr`:** esperables. La política conserva
+   `'unsafe-inline'` en `style-src` porque Tailwind 4 y framer-motion escriben
+   en el atributo `style`, que los nonces no cubren. Sacarlo es un trabajo
+   aparte y no bloquea el paso de `script-src`.
+3. **`connect-src`, `img-src`, `media-src`, `font-src`:** algo que la app pide y
+   la política no contempla. Se agrega el destino a esa lista con un
+   comentario que diga qué lo pide, y a `src/lib/__tests__/csp-destinos.test.ts` si es un host
+   que sólo usa el servidor.
+
+### Cuándo
+
+Después de cuatro semanas de uso real contadas desde el deploy, para que la
+profesional haya pasado por cada pantalla (agenda, ficha, grabación,
+aprobación, configuración, cobros) en el teléfono y en la computadora. El
+plazo no está acreditado: hay que fijar la fecha de inicio. Además:
+
+- `src/lib/__tests__/csp-destinos.test.ts` en verde y `R2_PUBLIC_HOST` cargada en Vercel con el
+  host exacto (`GET /api/health` contesta 503 si falta);
+- cero reportes del tipo 1 del dominio propio en las últimas dos semanas;
+- al menos una grabación completa de una sesión real bajo la política;
+- el log leído después del último deploy de Next o de una dependencia grande.
+
+Antes de confiar en el log, comprobar que se lee: grabar una sesión de prueba
+y buscar su línea de `connect-src` o confirmar que no hay ninguna.
+
+### Al pasar a bloqueo
+
+Dejar también `Content-Security-Policy-Report-Only`, con la misma política,
+un mes más: la de bloqueo bloquea y la de reporte sigue avisando. Después se
+saca la de reporte, y se puede fusionar `frame-ancestors 'none'` de
+`next.config.ts` con la política del proxy.
