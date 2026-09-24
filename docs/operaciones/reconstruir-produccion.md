@@ -1,8 +1,10 @@
 # Reconstruir producción antes de la primera publicación del esquema nuevo
 
-Procedimiento para Bruno. Preparado el 17 de septiembre de 2026 sobre main
-c4d2baa. Se ejecuta **una sola vez**, antes de admitir pacientes reales.
-No sirve para actualizar una base que ya tenga el esquema nuevo.
+Procedimiento para Bruno. Se ejecuta **una sola vez**, antes de admitir
+pacientes reales. No sirve para actualizar una base que ya tenga el esquema
+nuevo: para eso está Publicar (`docs/operaciones.md`). Los valores esperados de
+§4 y §6 corresponden a las ocho migraciones de `prisma/migrations/`; si se
+agrega una migración, actualizarlos antes de ejecutar.
 
 ## Decisiones y punto sin retorno
 
@@ -10,7 +12,7 @@ Se descartan los datos actuales y el audio de prueba. Se crea una sola cuenta
 real, a mano. No se ejecuta el seed.
 
 **Camino elegido:** crear en Neon una rama hija llamada
-`reconstruccion-produccion`, vaciar **esa copia**, aplicar las tres migraciones
+`reconstruccion-produccion`, vaciar **esa copia**, aplicar las migraciones
 y comprobarla. La rama anterior queda intacta para volver atrás. Al publicar se
 cambian las conexiones a la rama nueva. Una rama de Neon es una copia de la
 base; no es una rama de Git.
@@ -289,12 +291,17 @@ psql --dbname="$URL_NUEVA" -X -v ON_ERROR_STOP=1 -c \
   'SELECT migration_name, finished_at IS NOT NULL AS terminada, rolled_back_at IS NULL AS vigente FROM "_prisma_migrations" ORDER BY migration_name;'
 ~~~
 
-**Bien:** `Database schema is up to date!` y estas tres filas, ambas columnas
+**Bien:** `Database schema is up to date!` y estas ocho filas, ambas columnas
 en `t`:
 
 1. `0_init`
 2. `20260915190000_audio_inicio_ms`
 3. `20260916013000_inmutabilidad`
+4. `20260917120000_limites_invitados`
+5. `20260917200000_audio_continuacion`
+6. `20260918120000_grabador_restaurado`
+7. `20260923120000_turnos_duracion_120`
+8. `20260923120100_turnos_pago_fecha_idx`
 
 Si falla, no habilitar Publicar. La copia puede haber quedado a medias:
 abandonar esa copia y usar §11, no reparar el historial manualmente.
@@ -381,14 +388,11 @@ UNION ALL SELECT 'configuraciones', count(*) FROM configuraciones
 UNION ALL SELECT 'pacientes', count(*) FROM pacientes
 UNION ALL SELECT 'turnos', count(*) FROM turnos
 UNION ALL SELECT 'sesiones_clinicas', count(*) FROM sesiones_clinicas
-UNION ALL SELECT 'audio_segmentos', count(*) FROM audio_segmentos
 UNION ALL SELECT 'hilo_versiones', count(*) FROM hilo_versiones
 UNION ALL SELECT 'trabajos', count(*) FROM trabajos
 UNION ALL SELECT 'envios_sms', count(*) FROM envios_sms;
 SELECT email, nombre, rol FROM usuarios;
-SELECT column_name, data_type, is_nullable, column_default
-FROM information_schema.columns
-WHERE table_schema='public' AND table_name='audio_segmentos' AND column_name='inicio_ms';
+SELECT to_regclass('public.audio_segmentos') IS NULL AS sin_audio_segmentos;
 SELECT tgname FROM pg_trigger WHERE NOT tgisinternal
   AND tgrelid IN ('public.eventos_auditoria'::regclass, 'public.hilo_versiones'::regclass)
 ORDER BY tgname;
@@ -403,15 +407,15 @@ SQL
 
 - Estado al día y `No difference detected.`, salida 0. Una diferencia devuelve
   2: no es una advertencia aceptable.
-- Organizaciones, usuarios y configuraciones: **1** cada una. Las otras siete
+- Organizaciones, usuarios y configuraciones: **1** cada una. Las otras seis
   tablas de la consulta: **0**. Correo y nombre coinciden con la profesional.
-- `inicio_ms | double precision | YES`, default vacío.
+- `sin_audio_segmentos = t`: la tabla del grabador por segmentos no existe
+  (la retiró `20260918120000_grabador_restaurado`).
 - Tres triggers: `eventos_auditoria_inmutable`,
   `hilo_versiones_contenido_inmutable`, `hilo_versiones_sin_borrado`.
 - Los dos índices pedidos.
-- Cinco CHECK: `audio_segmentos_bytes_check`,
-  `audio_segmentos_indice_check`, `cupos_ayuda_usadas_check`,
-  `hilo_versiones_version_check`, `turnos_duracion_check`.
+- Tres CHECK: `cupos_ayuda_usadas_check`, `hilo_versiones_version_check`,
+  `turnos_duracion_check`.
 
 Prisma no comprueba los triggers ni los índices parciales: por eso hay
 consultas separadas. Si no coincide, parar antes del audio y de Publicar.
@@ -719,6 +723,18 @@ presentar esta recuperación como una recuperación completa del audio.
 
 ## Evidencia y límites de las pruebas de este documento
 
-Ver [prueba local del procedimiento](prueba-reconstruccion.md).
-Los pasos de Neon, R2, cambios de secretos, Publicar, Vercel y Railway se
-documentan para ejecución posterior del dueño: no se ejecutaron al redactar.
+El 17 de septiembre de 2026 se ejecutaron los bloques Bash de este documento
+sobre un Postgres 17 local en Docker, nunca contra Neon, con un respaldo y
+contraseñas ficticios: restauración del dump cifrado, vaciado, interrupción con
+rollback, migraciones, alta manual y sus rechazos, verificación, recuperación
+hacia base vacía y ocupada, archivo gpg dañado y login HTTP real. En esa fecha
+había tres migraciones. Los valores de §4 y §6 se actualizaron el 24 de
+septiembre contra las ocho actuales en un Postgres 17 local; el resto de los
+bloques no se volvió a ejecutar. La prueba completa está en el historial de Git
+(commit `70f0875`).
+
+**No probado en proveedores:** ramas reales de Neon, permisos y TLS; R2 real
+(credenciales, listado paginado, permisos de borrado); cambio de variables y
+secretos, ejecución de Publicar, avance de release, despliegue y rollback de
+Vercel y Railway; el respaldo real de producción; teléfono y proveedores
+clínicos o de SMS. Esos pasos se documentan para ejecución del dueño.

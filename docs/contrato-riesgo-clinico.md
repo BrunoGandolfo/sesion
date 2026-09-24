@@ -1,13 +1,13 @@
 # Contrato de riesgo clínico — señal graduada `riesgoDetectado`
 
-**Estado:** Wave Riesgo 0 completada (contrato + tipos + normalización de lectura). Wave Riesgo 1 implementa prompt y processor.
+**Estado:** implementado. El worker produce la señal con el prompt de la nota clínica (`processor/prompts/`) y la valida con `processor/schemas_llm.py`; la app la normaliza al leer.
 **Fuente de verdad de tipos:** `src/types/domain.ts`
 
 ---
 
 ## 1. El problema y la forma de la solución
 
-Hoy el pipeline marca riesgo con `FlagsRiesgo`: booleanos por categoría (ideación
+Antes de esta señal, el pipeline marcaba riesgo sólo con `FlagsRiesgo` (que sigue en `datosEstructurados`): booleanos por categoría (ideación
 suicida, autolesión, violencia a terceros, síntomas psicóticos, crisis de pánico) más un
 `detalle` textual único. Eso alcanza para alertar, pero no gradúa (todo flag pesa igual)
 ni ancla cada señal a su evidencia textual por separado.
@@ -127,7 +127,7 @@ etiqueta ("episodio depresivo", "alcoholismo") ni prescribe conducta clínica.
 
 ---
 
-## 4. Obligaciones de Wave Riesgo 1 (processor)
+## 4. Reglas para el processor
 
 - El `<output_schema>` del prompt DEBE producir JSON que cumpla exactamente la interfaz
   `RiesgoDetectado` de `src/types/domain.ts`, con el criterio conservador de la regla 3

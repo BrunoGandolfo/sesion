@@ -6,7 +6,8 @@ Respuestas cortas, con el documento donde está el detalle.
 
 **1. ¿Puedo grabar sin que la paciente firme nada?**
 No. Sin autorización vigente la app no deja empezar ni reanudar la grabación. Se
-firma en la ficha, en el momento. Además hace falta un turno agendado.
+firma en la ficha, en el momento. El turno no hace falta: si no hay uno hoy,
+**Grabar** en la ficha lo crea cuando empezás a grabar.
 → `04-pacientes-y-ficha.md`
 
 **2. ¿La paciente escucha su sesión o ve la nota?**
@@ -19,10 +20,10 @@ accesos o la retención de los proveedores. Hay que verificar sus condiciones
 vigentes. → `12-camino-del-audio-y-privacidad.md`
 
 **4. ¿Cuándo se borra el audio?**
-Al aprobar la nota se programa el borrado del audio remoto, con hasta 20
-reintentos durante unos 15 días; si no lo logra, el borrado queda marcado como
-fallido. La app no cifra el audio: mientras ese archivo exista se puede escuchar
-con acceso al almacén. Los respaldos diarios se conservan 30 días y los
+Al aprobar la nota, o al eliminar la sesión, se programa el borrado del audio
+remoto, con hasta 20 reintentos durante unos 15 días; si no lo logra, el
+borrado queda marcado como fallido. La app no cifra el audio: mientras ese
+archivo exista se puede escuchar con acceso al almacén. Los respaldos diarios se conservan 30 días y los
 mensuales hasta 12 meses; no contienen audio. La copia del teléfono se borra
 cuando el servidor confirma que el archivo llegó.
 → `12-camino-del-audio-y-privacidad.md`
@@ -35,8 +36,9 @@ autorización que firma la paciente. → `12-camino-del-audio-y-privacidad.md`
 Mejor no: dejá la pantalla encendida y Sesión abierta. La app pide mantenerla
 encendida, y si el teléfono no lo permite te lo avisa antes de empezar. Con la
 pantalla apagada el teléfono puede dejar de entregar sonido: la app no corta la
-grabación por eso, pero ese rato no se graba. Cada segundo que sí entró queda
-guardado, así que lo grabado no se pierde. Al volver, la pantalla te dice entre
+grabación por eso, pero ese rato no se graba. Lo que sí entró queda en la
+grabación. Si el teléfono cierra la app, se recupera lo que llegó a guardarse en
+el teléfono, que puede no ser todo. Al volver, la pantalla te dice entre
 qué horas no se grabó y podés seguir o terminar.
 → `07-grabar-una-sesion.md`
 
@@ -183,7 +185,7 @@ src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/app/(dashboard)/pacientes/[id]/_components/ficha-tab.tsx
 src/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
-src/lib/audio/grabadora.ts
+src/lib/grabacion-captura.ts
 src/components/clinico/MencionesNota.tsx
 src/components/clinico/HiloView.tsx
 src/lib/recordatorios-programacion.ts

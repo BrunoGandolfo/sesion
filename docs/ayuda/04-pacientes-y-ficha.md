@@ -29,9 +29,10 @@ deuda, *"Próxima: …"* o *"Sin próximo turno"*, y **Editar datos**. Si falta 
 autorización, ahí mismo aparece un aviso dorado —**"Falta la autorización** para
 grabar las sesiones. La paciente la firma acá mismo."*— con el botón **Firmar
 autorización**. El botón **Grabar** está en la cabecera de la ficha, junto
-a las acciones del paciente; no es un botón flotante. Si la paciente no tiene
-turno hoy, **Grabar** lleva a *"Agendá el turno para grabar la sesión"* con el
-enlace **Ir a la agenda**: primero hay que agendar.
+a las acciones del paciente; no es un botón flotante. Si la paciente tiene
+turno hoy, **Grabar** abre ese turno. Si no, abre la pantalla de grabar igual y
+el turno se crea recién cuando tocás **Grabar sesión**. No hace falta agendar
+antes. Ver `07-grabar-una-sesion.md`.
 
 ### Pestaña **Sesiones**
 
@@ -43,7 +44,9 @@ una sola vez y la cuenta coincide con lo que la lista muestra.
 - Cada fila: la **fecha y la hora** (dos sesiones del mismo día se distinguen),
   duración, modalidad, un chip **Para revisar** o **Nota guardada**, el resumen
   **entero** —no se corta— y **Ver nota** (o **Revisar nota**). Tocar la fila
-  abre la nota. Si la sesión tiene análisis, también está **Para vos**.
+  abre la nota. Si la sesión tiene análisis, también está **Para vos**. Dentro
+  de la sesión, el selector de arriba tiene **Nota clínica**, **Para vos** y
+  **Transcripción**, que muestra lo que se dijo. Ver `08-la-nota-clinica.md`.
 - La sesión de **hoy** está en la misma lista, arriba, marcada **Hoy** y con su
   botón adentro según el momento: **Grabar sesión**, *Procesando la sesión de
   …*, **Revisar nota**, **Cobrar** o **Ver nota**. Si la grabación quedó sin
@@ -85,23 +88,18 @@ Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
 
 1. En la ficha, tocá **Firmar autorización**.
 2. Se abre **Autorización para grabar las sesiones**. **La lee la paciente**:
-   qué se graba, para qué y por dónde pasa: el cifrado en el teléfono, el almacenamiento en Cloudflare R2, el proceso en Railway, la base
-   en Neon, que AssemblyAI recibe audio y vocabulario, y que Anthropic recibe
-   la transcripción y el resumen del proceso y, después de aprobar, la nota
-   aprobada. También explica que el borrador de la IA se guarda antes de que lo
-   apruebes, que el resumen del proceso lo propone la IA y solo queda vigente
-   cuando lo aceptás, que el servidor descifra el audio en un archivo temporal
-   que se borra al terminar, cómo se pide el borrado en AssemblyAI y hasta
-   cuándo se reintenta, que al aprobar se destruye la clave del audio y el
-   borrado se reintenta durante unos 15 días, que en el teléfono queda una copia
-   cifrada, los respaldos (diarios de 30 días y mensuales de hasta 12 meses, que
-   pueden conservar la clave), qué queda guardado (nota,
-   transcripción, resumen del proceso, autorización y firma), que podés imprimir
-   el resumen del proceso para tu propio archivo, qué puede pedirte (que le
-   muestres sus notas aprobadas y el resumen de su proceso, y que corrijas sus
-   datos de contacto o ese resumen) y qué no se puede hacer desde la app (borrar
-   sus datos, corregir una nota aprobada, ver la transcripción o la autorización
-   firmada), que puede revocarla cuando quiera y que aceptar no es obligatorio.
+   qué se graba, para qué y por dónde pasa (Cloudflare R2, Railway, Neon,
+   AssemblyAI y Anthropic), que el resumen del proceso lo propone la IA y solo
+   queda vigente cuando lo aceptás, quién puede leerlo, cuándo se borra, los
+   respaldos, qué queda guardado, qué puede pedirte (que le muestres sus notas
+   aprobadas y el resumen de su proceso, y que corrijas sus datos de contacto o
+   ese resumen) y qué no se puede hacer desde la app (borrar sus datos,
+   corregir una nota aprobada, ver la transcripción o la autorización firmada),
+   que puede revocarla cuando quiera y que aceptar no es obligatorio.
+   **Ojo: la 2.6 todavía describe el cifrado del audio que la app ya no
+   hace** (que se cifra en el teléfono y que su clave se destruye al aprobar),
+   y dice que la transcripción no se puede ver, aunque hoy la ves en la vista
+   **Transcripción**. Está pendiente de corrección. Ver `12-camino-del-audio-y-privacidad.md`.
    Se enmarca en la **Ley 18.331**.
 3. La paciente marca **"Leí y entiendo la información anterior"**.
 4. Firma con el dedo donde dice **Firmá acá**.
@@ -110,7 +108,7 @@ Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
 Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
 La versión vigente del texto es **2.6**. Las firmas anteriores, incluidas la
 2.1, la 2.2, la 2.3, la 2.4 y la 2.5, siguen sirviendo para grabar y no hace falta revocarlas,
-pero **necesitan que la paciente firme la 2.6**: no cuentan cómo graba y sube el grabador de hoy, el acceso de Lupita a la agenda ni lo que corrige la
+pero **necesitan que la paciente firme la 2.6**: no cuentan que el audio se sube entero al terminar, el acceso de Lupita a la agenda ni lo que corrige la
 versión nueva. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
 en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
 pidas vos.
@@ -148,5 +146,8 @@ src/lib/consentimiento.ts
 src/app/api/pacientes/route.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
+src/lib/consentimiento-hechos.ts
 src/lib/glosario.ts
 -->

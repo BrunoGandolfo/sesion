@@ -17,8 +17,10 @@ tiene límite. Más detalles en `11-tu-consultorio.md`.
 
 ## Entrar
 
-1. Abrí la app. Vas a ver el título **Sesión**, abajo *Un lugar para tu trabajo
-   clínico*, y tres frases sobre lo que hace la app.
+1. Abrí la app. Vas a ver arriba **Sesión**, el título *Un lugar para tu
+   trabajo clínico* y una frase sobre lo que hace. Al lado (en el teléfono,
+   debajo) está el recuadro **Entrar a tu cuenta**. Más abajo, la portada
+   cuenta las funciones y qué hace Lupita.
 2. Escribí tu **Email** y tu **Contraseña**.
 3. Tocá **Entrar** (mientras carga dice *Entrando…*).
 
@@ -28,10 +30,9 @@ bloqueado unos minutos."* Ese mensaje es el mismo, a propósito, para contraseñ
 equivocada, email que no existe y acceso bloqueado. También aparece si el
 servidor tuvo un problema momentáneo.
 
-La pantalla de entrada muestra además una frase sobre el audio: *"Al terminar, el
-audio se cifra antes de subirse. La copia local previa no está cifrada."* **Esa
-frase quedó vieja**: hoy el audio se cifra en el teléfono mientras grabás. Ver
-`12-camino-del-audio-y-privacidad.md`.
+La portada dice además: *"El audio viaja por una conexión cifrada. Las notas,
+las transcripciones, el análisis y el Recorrido se guardan cifrados."* La app no
+cifra el audio. Ver `12-camino-del-audio-y-privacidad.md`.
 
 La sesión abierta dura hasta **30 días**, pero se cierra antes si pasás **14
 días** sin usar la app en ese dispositivo.
@@ -114,6 +115,7 @@ para adivinarla a fuerza de probar.
 
 <!-- fuentes:
 src/app/(auth)/login/page.tsx
+src/app/(auth)/login/_components/portada.tsx
 src/lib/login-intentos.ts
 src/lib/password.ts
 src/app/api/cuenta/password/route.ts

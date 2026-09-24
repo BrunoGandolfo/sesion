@@ -14,8 +14,10 @@ antes de tocar nada. Es corto a propósito.
 ## Ramas y carpetas
 
 - Tres tipos de rama y nada más: `release` (producción; Vercel publica desde ahí; no se
-  toca a mano), `main` (mesa de trabajo; puede estar rota mientras se reconstruye), y
-  una rama por agente que se borra al fusionar. Sin pull requests.
+  toca a mano; se avanza con el workflow Publicar, `docs/operaciones.md`), `main`
+  (mesa de trabajo) y una rama por agente. Sin pull requests. Al fusionar una rama,
+  el orquestador borra la rama remota y el worktree en el mismo acto: sin PR,
+  GitHub no la borra solo.
 - Cada agente trabaja en su propio worktree: `~/proyectos/sesion-<rama>`, creado con
   `git worktree add ../sesion-<rama> -b <rama> origin/main`. Nunca dos agentes en la
   misma carpeta. Si al entrar ves cambios que no son tuyos, no los toques: avisá.

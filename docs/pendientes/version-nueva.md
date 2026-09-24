@@ -1,5 +1,6 @@
-# Aviso de versión nueva
+# Aviso de versión nueva: texto sin integrar
 
-Texto para integrar al glosario: «Hay una versión nueva. Tocá para actualizar».
-
-Aparece cuando la pestaña detecta otro build al abrir o volver a primer plano. Se actualiza sólo al tocar. En /grabar y sus subrutas espera hasta salir. Sin conexión no interrumpe el trabajo. No reemplaza el guardado de formularios ni agrega un service worker.
+«Hay una versión nueva. Tocá para actualizar» sigue escrito en
+`src/components/layout/aviso-version.tsx`. Falta pasarlo al glosario. El aviso
+funciona: aparece al volver a la pestaña con otro build, espera fuera de
+`/grabar` y se actualiza sólo al tocar.

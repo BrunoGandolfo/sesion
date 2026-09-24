@@ -45,9 +45,12 @@ recuerda: *"Dejá la pantalla encendida mientras grabás."*
 
 ## Mientras grabás
 
-El navegador entrega el audio **cada segundo** y cada entrega se guarda en el
-teléfono apenas llega. Es una sola grabación, un solo archivo, de punta a punta:
-pausar no la corta en pedazos. Nada se envía hasta que terminás.
+El navegador entrega el audio **cada segundo** y la app intenta guardar cada
+entrega en el teléfono apenas llega. Si el navegador no deja guardar (por falta
+de espacio, por ejemplo), la grabación sigue sin avisar, pero queda solo en la
+memoria de la pantalla abierta: si se cierra, se pierde. Es una sola grabación, un solo
+archivo, de punta a punta: pausar no la corta en pedazos. Nada se envía hasta
+que terminás.
 
 **Dejá la pantalla encendida y Sesión abierta.** La app pide mantener la
 pantalla encendida mientras grabás y mientras envía; si el teléfono la apaga
@@ -87,7 +90,7 @@ recuperar.
 
 ## Terminar
 
-1. Tocá **Terminar la sesión** (el botón rojo). No hay pantalla intermedia.
+1. Tocá **Terminar la sesión** (el botón verde salvia). No hay pantalla intermedia.
 2. La pantalla entera pasa a decir *"Preparando la grabación…"* y enseguida
    *"Enviando la grabación… 37 %. No cierres esta pantalla."*, con un indicador
    que gira y una barra. Mientras envía, el menú de abajo no está: no hay nada
@@ -142,7 +145,8 @@ Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
 - **La app no cifra el audio.** Mientras grabás queda en el almacenamiento del
   navegador de tu teléfono, protegido por el bloqueo del teléfono. Viaja al
   servidor por una conexión cifrada (TLS), el almacén donde espera lo cifra en
-  reposo, y se borra después de procesarse. Las notas y la transcripción sí las
+  reposo. Se pide borrarlo cuando aprobás la nota o eliminás la sesión, no
+  apenas termina de procesarse. Las notas y la transcripción sí las
   cifra la app. Ver `12-camino-del-audio-y-privacidad.md`.
 - El archivo se envía tal como se grabó, sin copiarlo entero a la memoria: por
   eso una sesión de dos horas no congela la pantalla.

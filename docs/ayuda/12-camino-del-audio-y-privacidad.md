@@ -10,7 +10,9 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
 1. Mientras grabás, cada trozo que entrega el micrófono, cada segundo, se guarda
    tal cual en el almacenamiento del navegador de tu teléfono. Lo protege el
    bloqueo del teléfono: quien pueda desbloquearlo y abrir el navegador puede
-   llegar a ese audio mientras esté ahí.
+   llegar a ese audio mientras esté ahí. Si el navegador no deja guardar (por
+   falta de espacio, por ejemplo), la grabación queda solo en la memoria de la
+   pantalla abierta, sin aviso.
 2. Al terminar, el archivo se envía entero por una conexión cifrada (**TLS**).
    Mientras grabás no se sube nada.
 3. La copia queda en el navegador hasta que el servidor confirma que el archivo
@@ -18,8 +20,9 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
    conserva para reintentar.
 
 > **El consentimiento 2.6 todavía dice otra cosa.** Afirma que cada trozo se
-> cifra en el teléfono con una clave de la sesión y que esa clave se destruye al
-> aprobar. Eso dejó de ser cierto y el texto está pendiente de corrección por
+> cifra en el teléfono con una clave de la sesión, que el servidor lo descifra en
+> memoria, que esa clave se destruye al aprobar y que los respaldos pueden
+> conservarla. Eso dejó de ser cierto y el texto está pendiente de corrección por
 > quien administra Sesión. Hasta que salga la versión nueva, no le leas esas
 > frases a una paciente como si describieran lo que pasa hoy.
 
@@ -50,11 +53,12 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
    nota aprobada con el Recorrido vigente para preparar una propuesta del
    Recorrido. El resumen del proceso lo propone la misma IA que redacta la nota;
    solo queda vigente cuando lo aceptás.
-6. Al aprobar la nota, la app intenta borrar el archivo en R2 y comprueba que ya
-   no esté. Si falla, reintenta **hasta 20 veces**, durante **unos 15 días**;
-   después el borrado queda marcado como fallido. Mientras el archivo no se
-   borre, se puede escuchar con acceso al almacén: ya no hay una clave cuya
-   destrucción lo vuelva ilegible. La transcripción y la nota se conservan.
+6. Al aprobar la nota, o al eliminar la sesión, la app intenta borrar el
+   archivo en R2 y comprueba que ya no esté. Si falla, reintenta **hasta 20
+   veces**, durante **unos 15 días**; después el borrado queda marcado como
+   fallido. Mientras el archivo no se borre, se puede escuchar con acceso al
+   almacén: no hay una clave cuya destrucción lo vuelva ilegible. Al aprobar,
+   la transcripción y la nota se conservan.
 
 ## La agenda y Lupita
 
@@ -113,8 +117,9 @@ consentimiento 2.6 se lo cuenta a la paciente. Ver
 Hay dos clases de respaldo de la base:
 
 - Los **diarios** se conservan **30 días**.
-- El primer día de cada mes se guarda además una copia **mensual**, que se
-  conserva **12 meses**.
+- El primer respaldo diario que sale bien en cada mes se copia además como
+  **mensual**, que se conserva **12 meses**. Si el día 1 falla, la copia
+  mensual sale del primer respaldo exitoso de los días siguientes.
 
 No contienen audio ni ninguna clave de audio: las sesiones grabadas desde esta
 versión no tienen clave. Un respaldo anterior puede conservar, cifrada, la clave
@@ -141,16 +146,18 @@ La autorización le cuenta a la paciente lo que puede pedirte y la app hace:
   las anteriores se conservan.
 
 Y le dice lo que **no se puede hacer desde la app**: borrar sus datos, corregir
-una nota ya aprobada, y ver la transcripción o la autorización firmada. Hasta la
+una nota ya aprobada, y ver la transcripción o la autorización firmada. Lo de la
+transcripción quedó viejo: hoy la ves en la vista **Transcripción** de cada
+sesión (ver `08-la-nota-clinica.md`). Hasta la
 versión 2.3 el texto decía que tenía derecho a pedir que sus datos se eliminen;
 la app no lo ejecuta, y la 2.4 dejó de prometerlo.
 
 ## Firmas anteriores
 
 **Las firmas de versiones anteriores, incluida la 2.5, necesitan que la paciente firme la 2.6**. La 2.5 decía
-que el audio se iba subiendo en partes mientras se grababa, que el servidor lo descifraba en un archivo temporal y
-que la copia cifrada del teléfono no se borraba: el grabador de hoy sube el archivo entero al terminar, el
-servidor lo descifra en memoria y la copia del teléfono se borra al confirmar la subida. Las anteriores a la 2.5
+que el audio se iba subiendo en partes mientras se grababa, que el servidor lo escribía en un archivo temporal y
+que la copia del teléfono no se borraba: el grabador de hoy sube el archivo entero al terminar, el
+servidor lo tiene solo en memoria y la copia del teléfono se borra al confirmar la subida. Las anteriores a la 2.5
 no explican la consulta de agenda de Lupita
 ni que los datos de agenda pueden enviarse en el historial del chat. Las anteriores a la 2.4 prometen
 derechos que la app no ejecuta. Las anteriores a la 2.3 no cuentan cómo ocurre el
@@ -171,9 +178,11 @@ src/lib/glosario.ts
 src/lib/prisma-encryption.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/app/api/_lib/casos-uso/sesion/aprobar.ts
+src/app/api/_lib/casos-uso/sesion/eliminar.ts
 src/app/api/_lib/casos-uso/trabajos/politica.ts
 src/app/api/_lib/casos-uso/trabajos/ejecutar-borrado-r2.ts
 src/app/api/_lib/casos-uso/hilo/exportar.ts
+src/app/(dashboard)/sesiones/[id]/_components/transcripcion-view.tsx
 processor/asr_assemblyai.py
 processor/processor.py
 prisma/migrations/20260916013000_inmutabilidad/migration.sql

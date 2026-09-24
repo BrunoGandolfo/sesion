@@ -1,13 +1,11 @@
 # Sesión
 
 Aplicación para una consulta de psicoterapia: agenda, pacientes, cobros por sesión,
-avisos por SMS, grabación cifrada de sesiones, documentación clínica asistida por
+avisos por SMS, grabación de sesiones, documentación clínica asistida por
 IA y el Recorrido longitudinal de cada paciente.
 
-Estado documentado: **main 1667576, 16 de septiembre de 2026**. Según el dueño,
-el sitio está desplegado con una cuenta y datos de prueba. Este documento describe
-el código de esa base; no certifica lo que esté desplegado en release ni la
-configuración de los proveedores.
+Este documento describe el código de main. No certifica lo que esté desplegado
+en release ni la configuración de los proveedores.
 
 ## Qué está disponible
 
@@ -25,26 +23,22 @@ configuración de los proveedores.
 
 ## Pendiente o a medias
 
-- **Retención de respaldos:** `.github/workflows/backup.yml` conserva diarios 30
-  días y mensuales 12 meses; el consentimiento solo menciona 30 días.
+- **Consentimiento y audio:** el texto del consentimiento todavía promete que el
+  audio se cifra en el teléfono, y la app ya no lo hace. Decisión del dueño
+  pendiente: `docs/pendientes/consentimiento-sin-cifrado-de-audio.md`.
 - **Re-firma:** la API devuelve `sugiereRefirmar`, pero ninguna pantalla lo muestra.
 - **Pantalla bloqueada:** el grabador no garantiza seguir capturando con la
   pantalla apagada; pausa y avisa.
 - **Borrados externos:** los trabajos de borrado en R2 y AssemblyAI se rinden a
   los 20 intentos (`src/app/api/_lib/casos-uso/trabajos/politica.ts`), y queda
   una ventana entre crear el transcript y registrar su borrado durable.
-- **Transcripción:** existe la ruta de lectura auditada, pero ninguna pantalla
-  la ofrece.
 - **Grabación abandonada:** la transición `abandonar` de
   `src/lib/sesion-clinica/estados.ts` ya tiene un usuario —la confirmación de
   subida la aplica cuando el audio es más corto que el mínimo— pero sigue sin
   haber forma de que la profesional abandone una grabación a mano.
-- **Hoy:** cobrar desde la fila un turno programado con la hora pasada registra
-  el cobro, pero la pantalla no se actualiza.
 - **Restauración:** todavía no hay acta de ensayo en `docs/operaciones/actas/`;
-  la guarda la exige desde el 20 de diciembre de 2026. La copia mensual del
-  respaldo nunca existió hasta ahora y la primera se espera en octubre:
-  auditoría y evidencia en `docs/respaldos.md`.
+  la guarda la exige desde el 20 de diciembre de 2026. Las comprobaciones
+  pendientes de los respaldos están en `docs/operaciones.md` §4.
 
 ## Arquitectura
 
@@ -52,17 +46,17 @@ configuración de los proveedores.
 | --- | --- |
 | Frontend/API | Next 16.3.3, React 19, TypeScript, Tailwind 4; versiones resueltas en `package-lock.json`. |
 | Identidad | Cookie opaca y revocable, con hash en sesiones_acceso; vence a los 30 días o tras 14 sin uso. Cambiar o restablecer la contraseña cierra todas las sesiones. |
-| Datos | Prisma 5.22, Postgres 17; esquema en `prisma/schema.prisma` y tres migraciones en `prisma/migrations/`. |
+| Datos | Prisma 5.22, Postgres 17; esquema en `prisma/schema.prisma` y ocho migraciones en `prisma/migrations/`. |
 | Cifrado de columnas | AES-256-GCM, ENC2 y AAD por fila; extensión de `src/lib/prisma-encryption.ts`. |
-| Audio/proceso | Archivo cifrado en el navegador, R2 y worker Python en Railway; AssemblyAI para transcripción y Anthropic para nota, feedback y propuestas del Recorrido. Contrato y límites en `docs/pipeline.md`. |
+| Audio/proceso | Archivo sin cifrar por la app (R2 lo cifra en reposo), worker Python en Railway; AssemblyAI para transcripción y Anthropic para nota, feedback y propuestas del Recorrido. Contrato y límites en `docs/pipeline.md`. |
 | SMS/correo | Twilio y Resend. La persistencia del envío vive en envios_sms. Los recordatorios se dispersan de 0 a 14 minutos por turno (`src/lib/recordatorios-programacion.ts`). |
 | Crons | `vercel.json`: recordatorios cada 5 minutos, trabajos cada 10, salud cada hora y mantenimiento diario. |
 | Entrega y operación | GitHub Actions (CI, backup diario, ensayo mensual de restauración, latido cada 15 minutos, aviso de CI rojo y publicación manual), Vercel, Sentry y backups cifrados en R2; `docs/operaciones.md`. |
 
 Las rutas HTTP validan y llaman a casos de uso en
-`src/app/api/_lib/casos-uso/`. Quedan tres excepciones explícitas en
-`src/lib/__tests__/rutas-sin-prisma.test.ts`; no se afirma que la migración
-de todas las rutas ya terminó. El proxy de `src/proxy.ts` no consulta la base.
+`src/app/api/_lib/casos-uso/`. Quedan dos excepciones explícitas en
+`src/lib/__tests__/rutas-sin-prisma.test.ts`: `cuenta/password` y
+`pacientes/[id]/documentacion`. El proxy de `src/proxy.ts` no consulta la base.
 
 ## Arranque local con datos de prueba
 
@@ -130,19 +124,18 @@ promesa de producto ya esté cumplida.
 
 ## Trabajo y documentación
 
-Leé `docs/como-trabajamos.md`, `docs/esquema.md` y `AGENTS.md`.
-Se trabaja en ramas propias; main es la integración y release es la publicación.
-Sin PR. El CI verde por sí solo no sustituye la prueba del dueño en teléfono.
+Para trabajar y entregar cambios, leé `docs/como-trabajamos.md` y `AGENTS.md`.
 
 - `docs/ayuda/`: la ayuda de la profesional y la fuente de Lupita.
-- `docs/pipeline.md`: contrato clínico existente y partes pendientes.
-- `docs/encryption.md`: columnas, formato y rotación.
-- `docs/operaciones.md`: despliegue, alertas, backup y diagnóstico.
-- `docs/respaldos.md`: qué de los respaldos está probado y qué no.
+- `docs/pipeline.md`: flujo clínico, del audio a la nota y el Recorrido.
+- `docs/esquema.md`: catálogo de tablas y columnas.
+- `docs/encryption.md`: columnas cifradas, formato y rotación.
+- `docs/operaciones.md`: publicación, variables, respaldos, incidentes, SMS y CSP.
 - `docs/contrato-finanzas.md`: qué devuelve el tablero y qué significa cada número.
 - `docs/contrato-pendientes-historial-cobros.md`: los campos y parámetros
   nuevos de Pendientes, el historial de la ficha y los cobros del mes.
 - `docs/contrato-respuestas-api.md`: las dos formas de respuesta y cuál usar.
-- `docs/pendientes/`: decisiones y textos pendientes de integración.
+- `docs/pendientes/`: decisiones abiertas y textos pendientes de integrar al
+  glosario. No guarda informes de entrega: la historia está en Git.
 
 Privado.

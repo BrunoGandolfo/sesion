@@ -234,7 +234,7 @@ jobs:
       #    mensual" (issue #33). No era un permiso ni la retención: de las 74
       #    corridas del respaldo, CERO cayeron un día 1. El mecanismo era más
       #    joven que su primer disparo posible, el 1 de octubre.
-      #    El detalle, con la evidencia, en docs/respaldos.md.
+      #    El procedimiento y las comprobaciones pendientes, en docs/operaciones.md §4.
       #
       #    Pero además era frágil por diseño, y eso es lo que se arregla acá:
       #    dependía de que UNA corrida puntual saliera bien. Si el día 1 la
