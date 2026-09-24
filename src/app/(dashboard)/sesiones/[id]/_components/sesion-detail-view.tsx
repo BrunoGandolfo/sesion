@@ -26,7 +26,7 @@ import type {
 
 import { BarraAcciones } from "./barra-acciones";
 import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
-import { CAMBIOS_SIN_APROBAR_MENSAJE, FALTA_REVISAR_RIESGO, FALTA_REVISAR_MENCIONES, FALTA_REVISAR_AMBAS, FALTA_REVISAR_VERSION, FEEDBACK_REINTENTAR_ERROR } from "@/lib/glosario";
+import { CAMBIOS_SIN_APROBAR_MENSAJE, FALTA_REVISAR_RIESGO, FALTA_REVISAR_MENCIONES, FALTA_REVISAR_AMBAS, FALTA_REVISAR_VERSION, FEEDBACK_REINTENTAR_ERROR, SESION_FALLO_LABEL } from "@/lib/glosario";
 import { NotaSesionView } from "./nota-sesion-view";
 import { ParaVosView } from "./para-vos-view";
 import { TranscripcionView } from "./transcripcion-view";
@@ -138,6 +138,15 @@ export function SesionDetailView({
   const [enviando, setEnviando] = React.useState(false);
   const [errorAccion, setErrorAccion] = React.useState<string | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = React.useState(false);
+
+  // El detalle del fallo es diagnóstico (a veces lo escribe el worker, con
+  // recortes del pipeline): va a la consola, no a la pantalla. A ella se le
+  // dice el motivo por su código, en castellano.
+  const falloDetalle = sesion?.estado === "fallida" ? sesion.falloDetalle : null;
+  React.useEffect(() => {
+    if (falloDetalle) console.warn(`[sesion ${id}] fallo: ${falloDetalle}`);
+  }, [id, falloDetalle]);
+  const motivoFallo = sesion?.falloCodigo ? (SESION_FALLO_LABEL[sesion.falloCodigo] ?? null) : null;
   // "Volver" con correcciones sin aprobar: pregunta antes de irse.
   const confirmarSalida = useSalidaProtegida();
   // La nota se acaba de aprobar en esta pantalla. No es lo mismo que
@@ -455,7 +464,7 @@ export function SesionDetailView({
 
         {sesion && sesion.estado === "fallida" ? (
           <div className="flex flex-col gap-4">
-            <Aviso titulo={NOTA_NO_ESCRITA} detalle={sesion.falloDetalle}>
+            <Aviso titulo={NOTA_NO_ESCRITA} detalle={motivoFallo}>
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   variant="secondary"

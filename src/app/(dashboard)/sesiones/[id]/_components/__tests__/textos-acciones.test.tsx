@@ -17,6 +17,6 @@ it("aprobar informa el borrado en segundo plano y mantiene la confirmación", ()
   const aprobar = vi.fn();
   render(<BarraAcciones puedeAprobar enviando={false} onAprobar={aprobar} onDescartar={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", {name:/Aprobar nota/}));
-  expect(screen.getByText(/borrado sigue en segundo plano, con reintentos/)).toBeTruthy();
+  expect(screen.getByText(/se borra ahora, en segundo plano y con reintentos/)).toBeTruthy();
   expect(aprobar).not.toHaveBeenCalled();
 });
