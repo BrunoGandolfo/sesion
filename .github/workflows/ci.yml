@@ -286,6 +286,17 @@ jobs:
           cache-dependency-path: processor/requirements-dev.txt
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt pip-audit
+      # processor/audio_asr.py normaliza el audio con ffmpeg antes del ASR y
+      # sus tests generan y miden WebM reales. Sin versión fija: los tests no
+      # dependen de una (sólo de libopus y del filtro asetpts), la imagen del
+      # worker (python:3.12-slim, Debian) ya trae otra, y fijar sólo el
+      # paquete ffmpeg puede chocar con bibliotecas actualizadas del runner.
+      - name: Instalar ffmpeg y ffprobe
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
+          ffmpeg -version
+          ffprobe -version
       - name: Ejecutar pytest
         run: python -m pytest tests -q
       # Nadie auditaba las dependencias de Python. Bloqueante desde el primer

@@ -40,7 +40,10 @@ para repetir una subida que falló. El turno pasa a realizado por
 
 `duracion_audio_seg` es lo que midió el teléfono. La duración que informa el
 ASR no la pisa: queda en el detalle de `sesion.transcripcion_guardada`
-(`duracionAsrSeg`). Cuando difieren, esa diferencia es el dato.
+(`duracionAsrSeg`). Cuando difieren, esa diferencia es el dato. Si la del ASR
+supera a la del teléfono en más de 10 % y en más de 60 s, el mismo detalle trae además
+`avisoDuracion: "asr_inflada"`, `duracionTelefonoSeg` y `excesoPct` (ver
+"Qué se manda al ASR").
 
 La key de R2 se calcula como organización/sesión/0, sin persistir una key
 enviada por el cliente: `src/lib/sesion-clinica/estados.ts`.
@@ -112,9 +115,46 @@ seguido de su tamaño y del elemento `EBMLVersion`, para no confundirlo con esos
 cuatro bytes dentro del audio). Con más de una falla antes del ASR con el
 código definitivo `audio_varias_cabeceras`: son grabaciones pegadas y
 transcribirlas daría una nota de una parte de la sesión sin avisar.
-`transcribir` manda los bytes al ASR desde memoria. No se escribe audio en disco y
-no hace falta ffmpeg (la imagen `processor/Dockerfile` todavía lo instala; no
-se usa).
+Después, `preparar_para_asr` normaliza el archivo (abajo) y `transcribir`
+lo manda al ASR desde memoria. No se escribe audio en disco.
+
+### Qué se manda al ASR, y por qué
+
+No el archivo del teléfono tal cual: `processor/audio_asr.py` lo pasa por
+ffmpeg, en pipes, y lo que va a AssemblyAI es **Ogg/Opus, mono, 16 kHz,
+32 kbit/s, con cada sello de tiempo reescrito desde la cuenta de muestras**
+(`asetpts=N/SR/TB`).
+
+Por qué: AssemblyAI mide (y factura) la duración por los sellos de tiempo del
+contenedor, no por las muestras. Con el teléfono bloqueado, el sistema
+suspende el proceso de Chrome y los sellos del WebM saltan hacia adelante
+mientras las muestras no. El 24-09-2026 una sesión de 54 minutos (3.232 s
+medidos) se facturó como 16.269 s; el 19-09, 1.590 s como 4.143 s. Las dos
+fueron las únicas con el teléfono bloqueado durante la grabación. Reproducido
+con ffmpeg: 60 s de muestras con la segunda mitad corrida declaran 10.800 s
+según ffprobe; normalizado, 60,0 s. El salto se descarta, no se rellena con
+silencio: esas horas nunca tuvieron audio.
+
+Por qué Ogg/Opus: Ogg escribe la duración de corrido (posiciones de gránulo)
+y sale entera por un pipe; FLAC por pipe queda sin duración en la cabecera y
+WAV pesa 230 MB en dos horas. Opus a 32 kbit/s en banda ancha es transparente
+para voz. Dos horas tardan ~65 s y ~55 MB de memoria (medido con ffmpeg
+6.1.1).
+
+Si ffmpeg falla (no está en la imagen, el archivo no se puede leer, pasan
+10 minutos) se manda el original, como antes, y queda `normalizacion_fallida`
+en el log con el motivo. La sesión no falla por esto.
+
+**Guardia.** Al volver el ASR, `aviso_duracion` compara su duración con
+`duracionAudioSeg` (la del teléfono). Si la supera en más de 10 % y en más de
+60 s (el piso evita avisos por uno o dos segundos en grabaciones cortas), el worker
+lo escribe en el log (`duracion_asr_inflada`) y lo manda en el checkpoint;
+la app lo deja en el detalle de `sesion.transcripcion_guardada`. La sesión
+sigue. Que aparezca es la señal de que la normalización dejó de funcionar,
+o de que algo nuevo infla la duración.
+
+La imagen del worker (`processor/Dockerfile`) instala ffmpeg por apt, y el
+job `worker-tests` de CI también: los tests generan y miden archivos reales.
 
 `processor/asr_assemblyai.py` usa la API REST de AssemblyAI. Los defaults
 de `processor/config.py` son universal-3-5-pro con fallback universal-2,

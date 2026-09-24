@@ -391,6 +391,16 @@ export const registrarTranscripcionSchema = z.object({
   modeloAsr: z.string().max(120),
   duracionSeg: z.number().int().nonnegative().optional(),
   asrTranscriptId: z.string().max(120).optional(),
+  /** El worker lo manda cuando la duración del ASR supera a la que midió el
+   *  teléfono en más de 10 % y más de 60 s (processor.aviso_duracion): el ASR factura esa
+   *  duración. Va sólo al detalle de la auditoría. */
+  avisoDuracion: z
+    .object({
+      duracionTelefonoSeg: z.number().int().positive(),
+      excesoPct: z.number().nonnegative(),
+    })
+    .strict()
+    .optional(),
 });
 
 /** POST [id]/resultado, rama "nota": sin feedback (lo pide otro trabajo). */
