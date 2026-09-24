@@ -16,8 +16,8 @@ Son exactamente dos. Están en `_FEEDBACK_POR_ORIENTACION`
 
 | `orientacionTeorica` | Instrumento | Prompt | Schema (processor) |
 | --- | --- | --- | --- |
-| `"cbt_mi"` (default) | MITI 4.2.1 (4 globales + 10 conteos) + subset CTS-R de 4 ítems | `prompts/therapist_feedback_v1.0.md` | `SCHEMA_FEEDBACK_CBT_MI` |
-| `"gestalt"` | GTFS (Gestalt Therapy Fidelity Scale) | `prompts/therapist_feedback_gestalt_v1.0.md` | `SCHEMA_FEEDBACK_GESTALT` |
+| `"cbt_mi"` (default) | MITI 4.2.1 (4 globales + 10 conteos) + subset CTS-R de 4 ítems | `prompts/therapist_feedback_v1.1.md` | `SCHEMA_FEEDBACK_CBT_MI` |
+| `"gestalt"` | GTFS (Gestalt Therapy Fidelity Scale) | `prompts/therapist_feedback_gestalt_v1.1.md` | `SCHEMA_FEEDBACK_GESTALT` |
 
 ## 2. Cómo se elige
 
