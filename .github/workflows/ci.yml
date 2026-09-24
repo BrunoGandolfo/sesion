@@ -15,7 +15,8 @@
 #                corrida, ni con la laptop de nadie, ni con Neon.
 #   - guardias:  drift de migraciones, migraciones destructivas sin marca,
 #                maxDuration en toda ruta, acta de restauración vigente.
-#   - audit:     npm audit, BLOQUEANTE en high; moderate informa y no frena.
+#   - audit:     npm audit, BLOQUEANTE en high; moderate informa y no frena;
+#                si npm no responde, reintenta y avisa sin frenar.
 #                Con npm 11 instalado en el runner: es el que habla sólo con
 #                el endpoint de avisos en lote (el `quick` está retirado).
 #   - worker-tests: pytest + pip-audit del worker Python.
@@ -27,14 +28,17 @@
 #     conecta): la dummy alcanza. El job `test` la pisa a nivel step con la
 #     del contenedor para `migrate deploy`.
 #   - src/lib/db.ts construye el cliente Prisma al importarse y la extensión
-#     de cifrado valida la clave al construirse. Van claves dummy (32 bytes en
-#     cero, base64) en las DOS variables que conviven durante la
-#     reconstrucción: NOTES_ENCRYPTION_KEY (formato ENC1) y CLAVES_CIFRADO
-#     (llavero "1=<base64>", formato ENC2). No cifran nada real.
+#     de cifrado valida la clave al construirse. Va un llavero dummy en
+#     CLAVES_CIFRADO ("1=<base64>", 32 bytes en cero, formato ENC2). No cifra
+#     nada real.
+#   - Todos los jobs fijan ubuntu-24.04: ubuntu-latest pasa a Ubuntu 26 desde
+#     el 19 de octubre de 2026, y el cliente de Postgres 17 se instala del
+#     repositorio PGDG con el nombre de la versión. Se cambia a propósito,
+#     con una corrida manual, no cuando GitHub mueva la etiqueta.
 #   - No hay `concurrency` en `test`: con base propia por corrida no hay nada
 #     que serializar. La de arriba sólo cancela corridas viejas del mismo ref.
 #   - Dependabot no recibe secrets: este workflow no usa ninguno, así que sus
-#     PRs corren la suite completa y un verde de Dependabot es mergeable.
+#     PRs corren la suite completa. Un verde no reemplaza leer qué sube.
 # ============================================================================
 
 name: CI
@@ -58,18 +62,17 @@ permissions:
 
 env:
   DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
-  NOTES_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
   CLAVES_CIFRADO: "1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 jobs:
   typecheck:
     name: Typecheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Setup Node 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -82,12 +85,12 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Setup Node 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -100,12 +103,12 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Setup Node 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -116,7 +119,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Postgres 17 efímero: nace con el job y muere con él. Es lo que hace que
     # un rojo sea un rojo y un verde sea un verde (antes, una corrida local
@@ -143,9 +146,9 @@ jobs:
       # cliente 16, que no puede volcar un Postgres 17).
       PG_BIN: /usr/lib/postgresql/17/bin
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Setup Node 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -175,7 +178,7 @@ jobs:
 
   guardias:
     name: Guardias
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Base sombra para `prisma migrate diff --from-migrations`: aplica las
     # migraciones en una base vacía y la compara con schema.prisma.
@@ -193,13 +196,13 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Historia completa: el guardián de migraciones compara contra
           # origin/release para saber qué archivos .sql son nuevos.
           fetch-depth: 0
       - name: Setup Node 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -216,12 +219,12 @@ jobs:
 
   audit:
     name: Audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Setup Node 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -245,11 +248,8 @@ jobs:
       # (npm/cli#7911). Verificado en el fuente de npm 11.19.1.
       #
       # Con npm 11 el log deja de mentir y no se hace una llamada de más a un
-      # endpoint que ya no existe. La FRECUENCIA de rojos no cambia: sigue
-      # dependiendo del endpoint vigente, y un fallo del SERVICIO de npm
-      # frena la publicación igual que una vulnerabilidad real. Eso es una
-      # decisión del dueño y está propuesta en el reporte de la rama, sin
-      # aplicar.
+      # endpoint que ya no existe. Un fallo del SERVICIO de npm sigue
+      # pasando; el paso de abajo lo separa de una vulnerabilidad real.
       #
       # Es una herramienta del runner, no una dependencia del proyecto:
       # package.json no se toca, y este job no corre `npm ci` ni escribe el
@@ -258,16 +258,54 @@ jobs:
         run: npm install -g npm@^11
 
       # Sin `npm ci`: audit resuelve el árbol desde package-lock.json.
-      # Bloqueante en high: una vulnerabilidad alta no se mergea, se arregla
-      # o se documenta por qué no se puede (y entonces se ignora acá con
-      # nombre y fecha, no bajando el nivel).
-      - name: Auditar dependencias (high bloquea)
-        run: npm audit --audit-level=high
+      #
+      # Dos resultados que antes se confundían:
+      #   - HAY una vulnerabilidad alta o crítica → rojo. No se publica: se
+      #     arregla, o se documenta por qué no se puede.
+      #   - npm NO DEVOLVIÓ informe (el servicio de avisos cayó) → tres
+      #     intentos con 30 s entre uno y otro y, si sigue sin contestar,
+      #     warning y verde. Una caída de npm no es una vulnerabilidad y no
+      #     debe frenar Publicar, que exige la corrida entera en verde.
+      # Se distinguen por el JSON: con informe trae metadata.vulnerabilities
+      # (verificado con npm 11.19.1); sin informe trae `message`/`error`.
+      # Cada pedido tiene 60 s (`timeout`: el fetch-timeout de npm no acota
+      # una conexión que no contesta). Peor caso: 3 × 60 + 2 × 30 s, más los
+      # 60 del paso moderate: entra en el timeout-minutes del job.
+      # El costo: un SHA puede publicarse sin auditoría si npm estuvo caído
+      # justo en ese push; el push siguiente la vuelve a correr.
+      - name: Auditar dependencias (high bloquea; caída de npm avisa)
+        # GitHub corre el paso con `bash -e`: sin `set +e`, el primer npm
+        # audit que falla corta el paso antes de reintentar.
+        run: |
+          set +e
+          set -uo pipefail
+          for intento in 1 2 3; do
+            timeout 60 npm audit --audit-level=high --json > audit.json
+            altas="$(node -e '
+              const d = JSON.parse(require("fs").readFileSync("audit.json", "utf8"));
+              const v = d.metadata && d.metadata.vulnerabilities;
+              if (!v) process.exit(2);
+              console.log((v.high || 0) + (v.critical || 0));
+            ' 2>/dev/null)"
+            if [ $? -eq 0 ]; then
+              if [ "${altas}" -eq 0 ]; then
+                echo "Sin vulnerabilidades altas ni críticas."
+                exit 0
+              fi
+              timeout 60 npm audit --audit-level=high || true
+              echo "::error::npm audit encontró ${altas} vulnerabilidad(es) alta(s) o crítica(s)."
+              exit 1
+            fi
+            echo "Intento ${intento}: npm no devolvió un informe ($(head -c 300 audit.json | tr '\n' ' '))."
+            if [ "${intento}" -lt 3 ]; then sleep 30; fi
+          done
+          echo "::warning::No se pudo auditar: el servicio de avisos de npm no respondió en 3 intentos. No es una vulnerabilidad; el próximo push vuelve a auditar."
+          exit 0
       # Informativo: se ve en el log, no frena. Cuando aparece algo acá con
       # arreglo disponible, se arregla en el próximo PR de dependencias.
       - name: Auditar dependencias (moderate informa)
         continue-on-error: true
-        run: npm audit --audit-level=moderate
+        run: timeout 60 npm audit --audit-level=moderate
 
   worker-tests:
     name: Worker tests
@@ -277,9 +315,9 @@ jobs:
       run:
         working-directory: processor
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Setup Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"

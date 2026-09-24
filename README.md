@@ -51,7 +51,7 @@ en release ni la configuración de los proveedores.
 | Audio/proceso | Archivo sin cifrar por la app (R2 lo cifra en reposo), worker Python en Railway; AssemblyAI para transcripción y Anthropic para nota, feedback y propuestas del Recorrido. Contrato y límites en `docs/pipeline.md`. |
 | SMS/correo | Twilio y Resend. La persistencia del envío vive en envios_sms. Los recordatorios se dispersan de 0 a 14 minutos por turno (`src/lib/recordatorios-programacion.ts`). |
 | Crons | `vercel.json`: recordatorios cada 5 minutos, trabajos cada 10, salud cada hora y mantenimiento diario. |
-| Entrega y operación | GitHub Actions (CI, backup diario, ensayo mensual de restauración, latido cada 15 minutos, aviso de CI rojo y publicación manual), Vercel, Sentry y backups cifrados en R2; `docs/operaciones.md`. |
+| Entrega y operación | GitHub Actions (CI, backup diario, ensayo mensual de restauración, latido varias veces por día, aviso de CI rojo y publicación manual), Vercel, Sentry y backups cifrados en R2; `docs/operaciones.md`. |
 
 Las rutas HTTP validan y llaman a casos de uso en
 `src/app/api/_lib/casos-uso/`. Quedan dos excepciones explícitas en

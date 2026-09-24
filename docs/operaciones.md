@@ -73,8 +73,11 @@ El CI verde no sustituye la prueba de teléfono ni confirma entrega de SMS.
 
 Todos usan `CRON_SECRET`. `GET /api/health` comprueba salud y
 configuración operativa; `GET /api/estado-worker` expone el estado del worker.
-El latido externo corre cada quince minutos según
-`.github/workflows/latido.yml`. Un health verde no prueba el micrófono,
+`.github/workflows/latido.yml` consulta los dos: su cron pide cada quince
+minutos, pero GitHub posterga los `schedule` y en la práctica corre entre cinco
+y ocho veces por día. Para enterarse de una caída en minutos hace falta un
+monitor externo contra esas dos rutas. El latido distingue el worker caído
+(503), la ruta inalcanzable (redirect o 404) y la app sin respuesta. Un health verde no prueba el micrófono,
 el PUT del navegador ni la entrega de una nota.
 
 ## 2. Variables y secretos por entorno

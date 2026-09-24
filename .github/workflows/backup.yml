@@ -47,7 +47,7 @@ permissions:
 jobs:
   backup:
     name: Backup Postgres → R2
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     env:
@@ -63,7 +63,7 @@ jobs:
 
     steps:
       # Sólo para la acción compuesta de alerta (vive en el repo).
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # ---------------------------------------------------------------------
       # 0. Sin credenciales de respaldo se aborta antes de tocar la base.
@@ -98,7 +98,7 @@ jobs:
           echo "Secrets del respaldo presentes."
 
       # ---------------------------------------------------------------------
-      # 1. postgresql-client-17 (ubuntu-latest no lo trae). pg_dump debe ser
+      # 1. postgresql-client-17 (el runner no lo trae). pg_dump debe ser
       #    >= al server. TODO: cuando Neon pase a Postgres 18, cambiar acá,
       #    en ensayo-restauracion.yml, en ci.yml y en docker-compose.yml.
       # ---------------------------------------------------------------------
