@@ -61,7 +61,7 @@ describe("la tabla de campos cifrados es la del anexo de docs/esquema.md", () =>
       ["ConsentimientoGrabacion", "HiloVersion", "HotWord", "Paciente", "SesionClinica", "Turno"].sort(),
     );
     expect(Object.keys(CAMPOS_CIFRADOS.SesionClinica.campos).sort()).toEqual(
-      ["audioClave", "datos", "feedback", "notaFinal", "notaIa", "notasEdicion", "transcripcion"].sort(),
+      ["datos", "feedback", "notaFinal", "notaIa", "notasEdicion", "transcripcion"].sort(),
     );
     expect(CAMPOS_CIFRADOS.HotWord.campos.termino.columnaSql).toBe("termino_encrypted");
     expect(CAMPOS_CIFRADOS.HiloVersion.tabla).toBe("hilo_versiones");
@@ -299,7 +299,7 @@ describe.skipIf(!hayBaseDeTest())("extensión contra la base de test", () => {
     expect((await db.paciente.findUnique({ where: { id: p.id }, select: { notas: true } }))?.notas).toBeNull();
   });
 
-  it("sesión clínica: los siete campos lógicos van y vuelven; audioClave se destruye con null", async () => {
+  it("sesión clínica: los seis campos lógicos van y vuelven", async () => {
     const org = await organizacion();
     const p = await paciente(org.id);
     const t = await prisma.turno.create({
@@ -311,7 +311,6 @@ describe.skipIf(!hayBaseDeTest())("extensión contra la base de test", () => {
         turnoId: t.id,
         organizationId: org.id,
         ...cifrarSesion(id, {
-          audioClave: "Y2xhdmU=",
           transcripcion: "T: hola\nP: hola",
           notaIa: { subjetivo: "s", objetivo: "o", analisis: "a", plan: "p" },
           datos: { riesgoDetectado: { nivel: "ninguno" } },
@@ -323,10 +322,9 @@ describe.skipIf(!hayBaseDeTest())("extensión contra la base de test", () => {
     });
     const s = await db.sesionClinica.findUniqueOrThrow({
       where: { id },
-      select: { audioClave: true, transcripcion: true, notaIa: true, datos: true, feedback: true, notaFinal: true, notasEdicion: true },
+      select: { transcripcion: true, notaIa: true, datos: true, feedback: true, notaFinal: true, notasEdicion: true },
     });
     expect(s).toMatchObject({
-      audioClave: "Y2xhdmU=",
       transcripcion: "T: hola\nP: hola",
       notaIa: { subjetivo: "s", objetivo: "o", analisis: "a", plan: "p" },
       datos: { riesgoDetectado: { nivel: "ninguno" } },
@@ -337,10 +335,9 @@ describe.skipIf(!hayBaseDeTest())("extensión contra la base de test", () => {
 
     await db.sesionClinica.updateMany({
       where: { id, organizationId: org.id },
-      data: { estado: "aprobada", ...cifrarSesion(id, { audioClave: null, notaFinal: { subjetivo: "s2", objetivo: null, analisis: null, plan: null }, notasEdicion: "ok" }) },
+      data: { estado: "aprobada", ...cifrarSesion(id, { notaFinal: { subjetivo: "s2", objetivo: null, analisis: null, plan: null }, notasEdicion: "ok" }) },
     });
-    const s2 = await db.sesionClinica.findUniqueOrThrow({ where: { id }, select: { audioClave: true, notaFinal: true, notasEdicion: true } });
-    expect(s2.audioClave).toBeNull();
+    const s2 = await db.sesionClinica.findUniqueOrThrow({ where: { id }, select: { notaFinal: true, notasEdicion: true } });
     expect(s2.notaFinal?.subjetivo).toBe("s2");
     expect(s2.notasEdicion).toBe("ok");
   });
@@ -430,9 +427,13 @@ describe.skipIf(!hayBaseDeTest())("mantenimiento contra la base de test", () => 
   });
   afterAll(() => prisma.$disconnect());
 
-  it("celdasCifradas enumera las trece columnas del anexo", () => {
-    expect(celdasCifradas()).toHaveLength(13);
+  // Doce: audio_clave_encrypted salió de la tabla de campos cifrados cuando
+  // la app dejó de cifrar el audio (5c1bfe2). La columna sigue en la base
+  // hasta la migración que la borra, pero ya nadie la lee ni la recifra.
+  it("celdasCifradas enumera las doce columnas cifradas vivas", () => {
+    expect(celdasCifradas()).toHaveLength(12);
     expect(celdasCifradas()).toContainEqual({ tabla: "hilo_versiones", columna: "contenido_encrypted" });
+    expect(celdasCifradas()).not.toContainEqual({ tabla: "sesiones_clinicas", columna: "audio_clave_encrypted" });
   });
 
   it("purga lo operativo con más de 30 días y las reservas huérfanas; conserva lo vivo y lo clínico", async () => {

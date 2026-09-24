@@ -87,7 +87,6 @@ async function crearOrgUnaVez(prisma: PrismaClient, orientacion: "cbt_mi" | "ges
 
 export const NOTA: NotaSoap = { subjetivo: "S", objetivo: "O", analisis: "A", plan: "P" };
 export const TRANSCRIPCION = "[00:00] S0: hola\n[00:05] S1: hola";
-export const CLAVE_AUDIO = Buffer.alloc(32, 7).toString("base64");
 
 export interface OpcionesSesion {
   estado: EstadoSesion;
@@ -124,7 +123,6 @@ async function crearSesionUnaVez(
   const sesionId = randomUUID();
   const conAudio = opciones.audio ?? true;
   const campos: Partial<CamposSesionClinica> = {
-    audioClave: conAudio ? CLAVE_AUDIO : null,
     transcripcion: opciones.transcripcion ?? null,
     notaIa: opciones.notaIa ?? null,
     datos: opciones.datos ?? null,
@@ -154,7 +152,6 @@ async function crearSesionUnaVez(
           feedbackEstado: opciones.feedbackEstado ?? "no_pedido",
           falloCodigo: opciones.falloCodigo ?? null,
           ...cifrarSesion(sesionId, campos),
-          audioIv: conAudio ? randomBytes(12) : null,
         },
       },
     },
@@ -208,7 +205,6 @@ export function camposDe(db: ClienteCifrado, sesionId: string) {
   return db.sesionClinica.findUniqueOrThrow({
     where: { id: sesionId },
     select: {
-      audioClave: true,
       transcripcion: true,
       notaIa: true,
       datos: true,

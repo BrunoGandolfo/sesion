@@ -119,7 +119,6 @@ export async function aprobarSesion({
         ...cifrarSesion(sesionId, {
           notaFinal,
           notasEdicion: notasEdicion ?? null,
-          audioClave: null,
         }),
       },
     });
