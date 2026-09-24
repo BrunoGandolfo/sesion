@@ -1,9 +1,0 @@
-# Textos pendientes — 15 de septiembre de 2026
-
-Base: origin/main e247d8b. Rama: textos-pendientes.
-
-- Integrados el consentimiento 2.0, los estados clínicos y del SMS, series, invitaciones y revocación de sesiones en ayuda y glosario. La acción visible «Descartar» pasa a «Volver a escribirla», conservando la operación existente.
-- Quitadas afirmaciones viejas de ayuda sobre WhatsApp, reintento manual de SMS y contraseñas que conservaban sesiones. Los mensajes de API conservan su valor y las exportaciones previas siguen disponibles. No se cambió ningún contrato.
-- Verificación: TypeScript sin errores; lint sin errores (queda el aviso previo de navegación en Configuración); 1311 tests unitarios y 316 de integración contra pg-sesion-textos-pendientes, puerto 60522. Pruebas editoriales del consentimiento y ayuda, estados del glosario y confirmaciones de acciones clínicas. La revisión detectó P1/P2 por promesas de cifrado y controles aún ausentes: se corrigieron y se agregaron guardas editoriales. La revisión final no encontró regresiones. Por un archivo .codex vacío en el repositorio principal, se ejecutó codex review --uncommitted en una copia temporal del mismo HEAD y diff (comparados byte a byte), sin modificar otro worktree.
-- Los cuatro documentos de pendientes contienen solamente las conexiones o verificaciones que faltan. No se puede cumplir todavía la coincidencia entre consentimiento y captura real: el consentimiento promete cifrado durante la grabación y el grabador guarda fragmentos sin cifrar. La ayuda informa explícitamente esa diferencia; cerrarla exige reconstruir el grabador, fuera del alcance autorizado.
-- No se modificaron grabador, Recorrido, schema, worker, dependencias ni servicios externos. La conexión de menciones, transcripción y reintento de feedback sigue pendiente. Los arreglos de SMS de e2e-main requieren su propia fusión.
