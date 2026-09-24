@@ -22,12 +22,13 @@ import { withSentryConfig } from "@sentry/nextjs";
 // permitir los suyos sin permitirlos todos.
 //
 // Ahora la política lleva un nonce por request, y un nonce por request no
-// puede salir de una cabecera estática: se emite desde src/middleware.ts,
-// con la política en src/lib/csp.ts. Sigue siendo Report-Only.
+// puede salir de una cabecera estática: se emite desde src/proxy.ts, con la
+// política en src/lib/csp.ts. Sigue siendo Report-Only; el paso a bloqueo
+// está en docs/operaciones.md §8.
 //
-// Consecuencia a tener presente: las rutas que el matcher del middleware
-// excluye (estáticos, /api/auth, los endpoints del cron y los M2M) ya no
-// llevan CSP. Ninguna devuelve HTML, así que no hay nada que una CSP pueda
+// Consecuencia a tener presente: las rutas que el matcher del proxy excluye
+// (estáticos, los endpoints del cron, los M2M y los monitores) no llevan
+// CSP. Ninguna devuelve HTML, así que no hay nada que una CSP pueda
 // proteger ahí; los headers de esta lista sí las siguen cubriendo.
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Frame-Options", value: "DENY" },
   // Enforzada y mínima: una CSP report-only NO impide el embebido, así que
-  // esta tiene que existir aparte de la del middleware.
+  // esta tiene que existir aparte de la del proxy.
   { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
   {
     key: "Permissions-Policy",

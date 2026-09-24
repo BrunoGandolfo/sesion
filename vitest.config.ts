@@ -5,11 +5,10 @@ import path from 'path'
 //
 //   - unitarios: puros, sin red ni base. Corren en cualquier lado.
 //   - integración: los archivos de INTEGRACION, que se conectan a una base
-//     Postgres de test (DATABASE_URL_TEST) y la vacían entre casos. En CI es
-//     un contenedor efímero por corrida; en local, el de docker-compose.yml o
-//     —sin Docker— la rama `test` de Neon declarada con
-//     PERMITIR_BASE_REMOTA_DE_TEST=1 (ver .env.test.example). La guarda vive
-//     en src/lib/__tests__/db-test.ts.
+//     Postgres 17 de test (DATABASE_URL_TEST) y la vacían entre casos. En CI
+//     es un contenedor efímero por corrida; en local, un contenedor propio
+//     (docker-compose.yml o `docker run`, ver .env.test.example). La guarda
+//     vive en src/lib/__tests__/db-test.ts.
 //
 // `npm test` corre las dos (es lo que corre CI). `npm run test:unit` y
 // `npm run test:integration` eligen una, vía VITEST_SUITE. La lista vive acá
@@ -69,7 +68,6 @@ const INTEGRACION = [
   'src/lib/__tests__/recordar-cobro.test.ts',
   'src/lib/__tests__/pendientes-terapeuta.test.ts',
   'src/lib/__tests__/cobrar-turno.test.ts',
-  'src/lib/__tests__/contexto-clinico.test.ts',
   'src/lib/__tests__/multi-tenant.test.ts',
   // Los filtros del historial clínico y el mes de cobros, contra la base real.
   'src/lib/__tests__/historial-filtros.test.ts',
@@ -109,8 +107,8 @@ export default defineConfig({
     // se podría dar un esquema por worker, pero es complejidad que hoy no
     // compra nada.
     fileParallelism: false,
-    // Cuando la base es la rama de Neon, el primer connect tarda (suspensión
-    // por inactividad); 5 s (el default) no alcanza.
+    // Los casos de integración contra un Postgres real (migrar, restaurar un
+    // respaldo) pasan de los 5 s del default.
     testTimeout: 30_000,
     ...(suite === 'integration' ? { include: INTEGRACION } : {}),
     ...(suite === 'unit'
