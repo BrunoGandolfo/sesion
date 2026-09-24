@@ -20,6 +20,10 @@ Reglas con la app (contrato Area 2, src/app/api/_lib/casos-uso/sesion/*):
     recibir la nota y llega por /api/trabajos/pendientes con la transcripcion
     adjunta.
 
+Cada resultado (nota o fallo) y cada trabajo lleva `uso` (uso.py): tokens
+por llamada al modelo, segundos de ASR, duracion de cada paso, reintentos de
+forma y advertencias de saneo. Solo numeros y codigos.
+
 Privacidad de logs: solo ids, conteos, codigos y status. Nunca clave, iv,
 texto de transcripcion/nota ni datos del paciente.
 """
@@ -27,7 +31,7 @@ import re
 import io
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import requests
 
@@ -43,6 +47,7 @@ import speech_analytics
 from clinical_analyzer import mensaje_error_api
 from errores import LeasePerdido, PipelineError
 from transcripcion import formatear_para_llm
+from uso import Uso
 
 logger = logging.getLogger(__name__)
 
@@ -175,14 +180,11 @@ class Analisis:
     nota: dict
     datos_estructurados: dict
     prompt_nota: str
-    # Escalas que llegaron fuera de rango y se anularon. La sesion sale igual.
-    advertencias: list[str] = field(default_factory=list)
-    # Veces que hubo que pedirle al modelo la nota de nuevo por forma invalida.
-    reintentos_llm: int = 0
 
 
 def procesar_sesion(sesion: SesionReclamada) -> None:
     etiqueta = sesion.sesion_clinica_id
+    uso = Uso()
     with Lease(sesion) as lease:
         try:
             if sesion.checkpoint:
@@ -190,27 +192,35 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
                 transcripto = desde_checkpoint(sesion.checkpoint)
             else:
                 lease.comprobar("audio")
-                audio = descargar_audio(etiqueta, sesion.audio, sesion.intento)
+                with uso.medir("descarga", etiqueta):
+                    audio = descargar_audio(etiqueta, sesion.audio, sesion.intento)
                 lease.comprobar("normalizar")
-                audio = preparar_para_asr(etiqueta, audio)
+                with uso.medir("normalizacion", etiqueta):
+                    audio = preparar_para_asr(etiqueta, audio)
                 lease.comprobar("asr")
-                transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr)
+                with uso.medir("asr", etiqueta):
+                    transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr)
                 del audio
+                duracion_asr = transcripcion.get("duration_seconds")
+                if isinstance(duracion_asr, int) and not isinstance(duracion_asr, bool):
+                    uso.asr_segundos = duracion_asr
                 transcripto = registrar_checkpoint(sesion, transcripcion)
             lease.comprobar("nota")
-            analisis = analizar(etiqueta, transcripto, sesion.paciente_id, sesion.ticket)
+            analisis = analizar(etiqueta, transcripto, sesion.paciente_id, sesion.ticket, uso=uso)
             lease.comprobar("resultado")
-            reportar_nota(sesion, analisis, MODELO_LLM)
+            reportar_nota(sesion, analisis, MODELO_LLM, uso=uso)
         except LeasePerdido:
             logger.warning(f"[{etiqueta}] el intento {sesion.intento} ya no es el vigente; se abandona sin informar")
         except PipelineError as e:
             logger.error(f"[{etiqueta}] {e.codigo}: {e.mensaje_publico} ({'definitivo' if e.definitivo else 'transitorio'})")
-            reportar_fallo(sesion, e, lease.paso)
+            reportar_fallo(sesion, e, lease.paso, uso=uso)
         except Exception as e:
             # Sin traza: la cadena de excepciones puede arrastrar cuerpos de
             # respuesta de proveedores. Solo tipo y mensaje acotado.
             logger.error(f"[{etiqueta}] error_interno {type(e).__name__}: {_describir(e)}")
-            reportar_fallo(sesion, PipelineError("error_interno", "Error interno del worker", definitivo=False), lease.paso)
+            reportar_fallo(
+                sesion, PipelineError("error_interno", "Error interno del worker", definitivo=False), lease.paso, uso=uso
+            )
 
 
 # Pasos ─────────────────────────────────────────────────────────────────────
@@ -383,8 +393,14 @@ def desde_checkpoint(checkpoint: dict) -> Transcripto:
     )
 
 
-def analizar(etiqueta: str, transcripto: Transcripto, paciente_id: str | None, ticket: str) -> Analisis:
-    """Recorrido validado + nota SOAP. Una lectura fallida impide usar historia falsa."""
+def analizar(
+    etiqueta: str, transcripto: Transcripto, paciente_id: str | None, ticket: str, uso: Uso | None = None
+) -> Analisis:
+    """
+    Recorrido validado + nota SOAP. Una lectura fallida impide usar historia
+    falsa. Las llamadas al modelo y las advertencias de saneo quedan en `uso`.
+    """
+    uso = uso if uso is not None else Uso()
     if not paciente_id:
         raise PipelineError("contexto_invalido", "Falta la paciente del Recorrido", definitivo=False)
     try:
@@ -399,7 +415,9 @@ def analizar(etiqueta: str, transcripto: Transcripto, paciente_id: str | None, t
         transcripto.transcripcion_fmt,
         contexto_clinico=contexto_llm,
         speech_analytics=transcripto.speech_metrics,
+        llamadas=uso.llamadas,
     )
+    uso.advertencias.extend(diag.advertencias)
     nota = resultado.get("nota")
     if not isinstance(nota, dict):
         raise PipelineError("llm_invalido", "El modelo no devolvio una nota")
@@ -408,16 +426,10 @@ def analizar(etiqueta: str, transcripto: Transcripto, paciente_id: str | None, t
     datos["speechAnalytics"] = transcripto.speech_metrics
     if diag.advertencias:
         logger.info(f"[{etiqueta}] {len(diag.advertencias)} advertencia(s) de forma")
-    return Analisis(
-        nota=nota,
-        datos_estructurados=datos,
-        prompt_nota=prompt_nota,
-        advertencias=list(diag.advertencias),
-        reintentos_llm=diag.reintentos,
-    )
+    return Analisis(nota=nota, datos_estructurados=datos, prompt_nota=prompt_nota)
 
 
-def reportar_nota(sesion: SesionReclamada, analisis: Analisis, modelo_llm: str) -> None:
+def reportar_nota(sesion: SesionReclamada, analisis: Analisis, modelo_llm: str, uso: Uso | None = None) -> None:
     """Resultado "nota". Si la app rechaza, otro intento ya es el vigente."""
     payload = {
         "intento": sesion.intento,
@@ -426,6 +438,7 @@ def reportar_nota(sesion: SesionReclamada, analisis: Analisis, modelo_llm: str) 
         "datos": analisis.datos_estructurados,
         "modeloLlm": modelo_llm,
         "promptVersion": analisis.prompt_nota,
+        "uso": (uso or Uso()).payload(),
     }
     res = app_client.enviar_resultado(sesion.sesion_clinica_id, sesion.ticket, payload)
     if res.rechazado:
@@ -436,8 +449,12 @@ def reportar_nota(sesion: SesionReclamada, analisis: Analisis, modelo_llm: str) 
     logger.info(f"[{sesion.sesion_clinica_id}] Completado")
 
 
-def reportar_fallo(sesion: SesionReclamada, error: PipelineError, paso: str) -> None:
-    """Resultado "fallo", best-effort: si tambien falla solo se loguea."""
+def reportar_fallo(sesion: SesionReclamada, error: PipelineError, paso: str, uso: Uso | None = None) -> None:
+    """
+    Resultado "fallo", best-effort: si tambien falla solo se loguea. Lleva el
+    `uso` de lo que se alcanzo a hacer: un ASR o un truncado se pagan aunque
+    la sesion falle.
+    """
     payload = {
         "intento": sesion.intento,
         "resultado": "fallo",
@@ -445,6 +462,7 @@ def reportar_fallo(sesion: SesionReclamada, error: PipelineError, paso: str) -> 
         "definitivo": error.definitivo,
         "paso": paso[:40],
         "detalle": error.mensaje_publico[:500],
+        "uso": (uso or Uso()).payload(),
     }
     try:
         app_client.enviar_resultado(sesion.sesion_clinica_id, sesion.ticket, payload)
@@ -458,19 +476,23 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
     """
     Ejecuta un trabajo entregado por GET /api/trabajos/pendientes y devuelve
     el payload para POST /api/trabajos/[id]/resultado ({ok: true, ...} o
-    {ok: false, error}). Nunca lanza.
+    {ok: false, error}), siempre con `uso`. Nunca lanza.
     """
     tipo = trabajo.get("tipo")
+    uso = Uso()
     try:
-        if tipo == "borrar_transcript_asr":
-            return borrar_transcript_asr(trabajo.get("payload") or {})
-        if tipo == "generar_feedback":
-            return generar_feedback(trabajo.get("adjunto") or {})
-        if tipo == "integrar_contexto":
-            return integrar_contexto(trabajo.get("adjunto"), trabajo.get("payload"))
-        return {"ok": False, "error": f"tipo no soportado: {tipo}"}
+        with uso.medir(str(tipo)):
+            if tipo == "borrar_transcript_asr":
+                resultado = borrar_transcript_asr(trabajo.get("payload") or {})
+            elif tipo == "generar_feedback":
+                resultado = generar_feedback(trabajo.get("adjunto") or {}, uso)
+            elif tipo == "integrar_contexto":
+                resultado = integrar_contexto(trabajo.get("adjunto"), trabajo.get("payload"), uso)
+            else:
+                resultado = {"ok": False, "error": f"tipo no soportado: {tipo}"}
     except Exception as e:
-        return {"ok": False, "error": f"{type(e).__name__}: {_describir(e)}"[:500]}
+        resultado = {"ok": False, "error": f"{type(e).__name__}: {_describir(e)}"[:500]}
+    return {**resultado, "uso": uso.payload()}
 
 
 def borrar_transcript_asr(payload: dict) -> dict:
@@ -489,7 +511,7 @@ def borrar_transcript_asr(payload: dict) -> dict:
     return {"ok": False, "error": f"AssemblyAI respondio HTTP {response.status_code}"}
 
 
-def generar_feedback(adjunto: dict) -> dict:
+def generar_feedback(adjunto: dict, uso: Uso | None = None) -> dict:
     """Llamada C con lo que la app adjunta: transcripcion, metricas y orientacion."""
     transcripcion_fmt = adjunto.get("transcripcionFormateada")
     if not isinstance(transcripcion_fmt, str) or not transcripcion_fmt.strip():
@@ -499,7 +521,10 @@ def generar_feedback(adjunto: dict) -> dict:
         transcripcion_fmt,
         speech_analytics=speech if isinstance(speech, dict) else None,
         orientacion=adjunto.get("orientacionTeorica") or "cbt_mi",
+        llamadas=uso.llamadas if uso is not None else None,
     )
+    if uso is not None and feedback:
+        uso.advertencias.extend(diag.advertencias)
     if not feedback:
         motivo = "; ".join(diag.advertencias) or "feedback_no_generado"
         return {"ok": False, "error": motivo[:500]}
@@ -511,7 +536,7 @@ def generar_feedback(adjunto: dict) -> dict:
     }
 
 
-def integrar_contexto(adjunto: dict, payload: dict) -> dict:
+def integrar_contexto(adjunto: dict, payload: dict, uso: Uso | None = None) -> dict:
     """La app entrega una base inmutable y la nota aprobada; la IA solo propone."""
     from datetime import date
     campos = {"tipo", "pacienteId", "sesionId", "version", "contextoVigente", "notaFinal", "datos", "fechaSesion"}
@@ -541,6 +566,7 @@ def integrar_contexto(adjunto: dict, payload: dict) -> dict:
     datos = {k: v for k, v in adjunto["datos"].items() if k != "riesgoLexico"}
     propuesta, prompt = clinical_analyzer.actualizar_contexto_clinico(
         contexto or {}, nota, datos, adjunto["sesionId"], fecha,
+        llamadas=uso.llamadas if uso is not None else None,
     )
     validar_estructura_contexto(propuesta)
     return {"ok": True, "propuesta": propuesta, "promptVersion": prompt, "modeloLlm": MODELO_LLM}

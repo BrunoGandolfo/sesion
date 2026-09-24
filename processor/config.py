@@ -5,6 +5,7 @@ Ola 3: ASR en AssemblyAI, LLM en Anthropic, worker hosteado en Railway.
 Todo se lee de variables de entorno; ver .env.example.
 """
 import os
+from urllib.parse import urlsplit
 
 # App Sesión (Vercel) ───────────────────────────────────────────────────────
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3001")
@@ -112,7 +113,19 @@ LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "300"))
 # Worker ────────────────────────────────────────────────────────────────────
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "30"))
 PROMPTS_DIR = os.getenv("PROMPTS_DIR", os.path.join(os.path.dirname(__file__), "prompts"))
-WORKER_VERSION = os.getenv("WORKER_VERSION", "ola3")
+# Viaja como X-Worker-Version en cada latido y como `worker` en cada `uso`:
+# es lo que dice que codigo produjo una nota. Orden: la variable explicita (si
+# alguien la carga, manda), el commit que desplego Railway, y "local". Railway
+# inyecta RAILWAY_GIT_COMMIT_SHA solo en los deploys disparados desde GitHub
+# (docs.railway.com/reference/variables); un `railway up` a mano no la trae.
+WORKER_VERSION = (
+    os.getenv("WORKER_VERSION", "").strip()
+    or os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip()[:7]
+    or "local"
+)
+# Railway inyecta RAILWAY_ENVIRONMENT_ID siempre (build y deploy). Sin ella,
+# el worker corre en una maquina de desarrollo.
+EN_RAILWAY = bool(os.getenv("RAILWAY_ENVIRONMENT_ID", "").strip())
 
 # Endpoints de la app ───────────────────────────────────────────────────────
 PENDIENTES_URL = f"{APP_BASE_URL}/api/sesion-clinica/pendientes"
@@ -126,8 +139,26 @@ def r2_configurado() -> bool:
     return all([R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME])
 
 
+_HOSTS_LOCALES = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _app_base_url_valida(url: str, en_railway: bool) -> bool:
+    """
+    https:// con host, siempre. La unica excepcion es http:// contra la propia
+    maquina, y solo fuera de Railway: en Railway el default de localhost
+    significa que APP_BASE_URL no se cargo, y el worker se quedaria para
+    siempre logueando "Error consultando pendientes (ConnectionError)".
+    """
+    partes = urlsplit(url)
+    if partes.scheme == "https" and partes.hostname:
+        return True
+    return partes.scheme == "http" and partes.hostname in _HOSTS_LOCALES and not en_railway
+
+
 def validar_config() -> None:
     errores = []
+    if not _app_base_url_valida(APP_BASE_URL, EN_RAILWAY):
+        errores.append("APP_BASE_URL tiene que ser https:// (http solo contra localhost fuera de Railway)")
     if not PROCESSING_SECRET:
         errores.append("PROCESSING_SECRET no configurado")
     if not ANTHROPIC_API_KEY:

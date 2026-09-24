@@ -92,6 +92,9 @@ def test_registra_el_asr_y_el_checkpoint_antes_del_modelo_y_entrega_la_nota(paso
     pasos["resultado"].assert_called_once()
     sid, ticket, payload = pasos["resultado"].call_args.args
     assert (sid, ticket) == ("s1", TICKET)
+    uso = payload.pop("uso")
+    assert uso["asrSegundos"] == 3
+    assert set(uso["pasosMs"]) == {"descarga", "normalizacion", "asr"}
     assert payload == {
         "intento": 2,
         "resultado": "nota",
@@ -139,6 +142,9 @@ def test_fallo_transitorio_en_asr_se_informa_como_no_definitivo_con_el_paso(paso
     processor.procesar_sesion(sesion())
 
     payload = pasos["resultado"].call_args.args[2]
+    uso = payload.pop("uso")
+    # El ASR fallo: se sabe cuanto tardo, no cuanto se facturo.
+    assert "asrSegundos" not in uso and "asr" in uso["pasosMs"]
     assert payload == {
         "intento": 2,
         "resultado": "fallo",
@@ -348,7 +354,9 @@ def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
     delete = mocker.patch("processor.requests.delete")
     for status in (200, 404):
         delete.return_value = mocker.Mock(status_code=status)
-        assert processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}}) == {"ok": True}
+        res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
+        assert res.pop("uso")["llamadas"] == []
+        assert res == {"ok": True}
     assert delete.call_args.args[0].endswith("/transcript/tr1")
     assert delete.call_args.kwargs["headers"] == {"authorization": config.ASSEMBLYAI_API_KEY}
 
@@ -373,9 +381,11 @@ def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):
             "adjunto": {"transcripcionFormateada": "[00:00] T: hola", "speechAnalytics": {"ratio": 1}, "orientacionTeorica": "gestalt"},
         }
     )
+    assert "uso" in res
+    del res["uso"]
     assert res == {"ok": True, "feedback": {"mitiCounts": {}}, "promptVersion": "therapist_feedback_v1.1.md", "modeloLlm": LLM}
     assert generar.call_args.args[0] == "[00:00] T: hola"
-    assert generar.call_args.kwargs == {"speech_analytics": {"ratio": 1}, "orientacion": "gestalt"}
+    assert generar.call_args.kwargs == {"speech_analytics": {"ratio": 1}, "orientacion": "gestalt", "llamadas": []}
 
 
 def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
@@ -384,6 +394,7 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
         return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"])),
     )
     res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x"}})
+    del res["uso"]
     assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado"}
 
     assert processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})["ok"] is False
