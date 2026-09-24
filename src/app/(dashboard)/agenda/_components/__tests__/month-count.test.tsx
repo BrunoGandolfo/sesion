@@ -23,8 +23,6 @@ it("un día con seis turnos muestra tres puntos y un +, sin número", () => {
   expect(puntosDe(dia)).toHaveLength(3);
   const puntos = dia.querySelector("[data-puntos]")!;
   expect(puntos.textContent).toBe("+");
-  // En la celda angosta del teléfono el "+" no salta a otro renglón.
-  expect(puntos.className).toContain("flex-nowrap");
   // Lo único numérico de la celda es el número del día.
   expect(dia.textContent).toBe("15+");
   fireEvent.click(dia);

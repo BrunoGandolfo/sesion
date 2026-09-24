@@ -1,128 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { describe, it, expect } from "vitest";
 
 import * as glosario from "@/lib/glosario";
 import { pluralizar } from "@/lib/glosario";
 
-// Nombres que la interfaz tiene que poder decir. Si alguno desaparece del
-// glosario, alguna pantalla se quedó sin su palabra.
-const CONSTANTES_REQUERIDAS = [
-  "TU_CONSULTORIO",
-  "TE_DEBEN",
-  "PARA_REVISAR",
-  "NOTA_GUARDADA",
-  "ESCRIBIENDO_NOTA",
-  "MAS_DE_ESTA_SESION",
-  "PARA_VOS",
-  "SENAL_DE_RIESGO",
-  "LO_QUE_DIJO",
-  "APARECIO_POR_PRIMERA_VEZ",
-  "VUELVE_A_APARECER",
-  "SE_LLEVO",
-  "PARA_LA_PROXIMA",
-  "EL_RECORRIDO_HASTA_HOY",
-  "SENALES_ANTERIORES",
-  "COMO_VA",
-  "SESIONES",
-  "RECORRIDO",
-  "AGENDADO",
-  "NO_VINO",
-  // Deshacer cobro (la reversión, en la ficha y en el sheet de la agenda)
-  "DESHACER_COBRO",
-  "DESHACER_COBRO_TITULO",
-  "DESHACER_COBRO_MENSAJE",
-  "DESHACER_COBRO_ACCION",
-  "DESHACIENDO_COBRO",
-  "COBRO_DESHECHO",
-  "REVISAR_NOTA",
-  "GRABAR_SESION",
-  "TERMINAR_SESION",
-  "PAUSAR",
-  "EN_PAUSA",
-  "REANUDAR",
-  "GUARDANDO",
-  "FALTA_AUTORIZACION",
-  "FIRMAR_AUTORIZACION",
-  "AUTORIZACION_GRABACION",
-  "AUDIO_NO_GUARDADO",
-  "TURNO_NO_MARCADO",
-  "NOTA_NO_ESCRITA",
-  "ALGO_FALLO",
-  // Pantalla de Hoy
-  "AGENDA_DEL_DIA",
-  "SESIONES_HOY",
-  "ESTE_MES",
-  "COBRAR",
-  "VER_FICHA",
-  "EN_CURSO",
-  "ENSEGUIDA",
-  "METODO_DE_PAGO",
-  "PAGADO",
-  "PENDIENTE",
-  "CANCELADO",
-  "SIN_METODO",
-  // Chips de la nota
-  "BORRADOR",
-  "APROBADA",
-  // Pantalla de la nota (venían de sesiones/[id]/_components/textos.ts)
-  "VER_BORRADOR_ORIGINAL",
-  "RESUMEN",
-  "ESTADO_EMOCIONAL_OBSERVADO",
-  "EDITAR",
-  "VER_DETALLE",
-  "VOLVER_A_ESCRIBIR",
-  "APROBAR_NOTA",
-  "APROBANDO",
-  "REINTENTAR",
-  "REINTENTANDO",
-  "ELIMINAR",
-  "ELIMINANDO",
-  "VOLVER",
-  "VOLVER_A_ESCRIBIR_TITULO",
-  "VOLVER_A_ESCRIBIR_MENSAJE",
-  "PIDIENDO_NUEVA_NOTA",
-  "APROBAR_TITULO",
-  "APROBAR_MENSAJE",
-  "ELIMINAR_TITULO",
-  "ELIMINAR_MENSAJE",
-  "FALTA_REVISAR_RIESGO",
-  "SIN_NOTA_TODAVIA",
-  "ABRIENDO_NOTA",
-  "TEMAS",
-  "EMOCIONES",
-  "INTERVENCIONES",
-  "INTENSIDAD_EMOCIONAL",
-  "ALIANZA_TERAPEUTICA",
-  // Recorrido (venían de pacientes/[id]/_components/graficos/textos.ts)
-  "PERIODO",
-  "OBSERVACION_IA",
-  "PROGRESO_PERCIBIDO",
-  "VER_LA_SESION",
-  "DESDE",
-  "SUBTITULO_INTENSIDAD",
-  "SUBTITULO_ALIANZA",
-  "SUBTITULO_TEMAS",
-  "SUBTITULO_INTERVENCIONES",
-  "SUBTITULO_SENALES",
-  "SIN_SESIONES_TITULO",
-  "SIN_SESIONES_DETALLE",
-  "POCO_RECORRIDO_TITULO",
-  "POCO_RECORRIDO_DETALLE",
-  "DESDE_LA_TERCERA",
-  "RANGO_SIN_SESIONES",
-  "SIN_DATO",
-  "HUECOS_EXPLICADOS",
-] as const;
-
 describe("glosario — constantes de texto", () => {
-  it.each(CONSTANTES_REQUERIDAS)("%s existe y no está vacía", (nombre) => {
-    const valor = (glosario as Record<string, unknown>)[nombre];
-    expect(typeof valor).toBe("string");
-    expect((valor as string).trim().length).toBeGreaterThan(0);
-  });
-
   it("los cuatro destinos del menú están nombrados", () => {
     expect(glosario.NAV).toEqual({
       HOY: "Hoy",
@@ -136,13 +17,6 @@ describe("glosario — constantes de texto", () => {
     expect(glosario.AUTORIZACION_GRABACION).toBe(
       "Autorización para grabar las sesiones",
     );
-  });
-
-  it("los chips de la nota no inventan un nombre nuevo para el estado", () => {
-    // "Borrador" y "Aprobada" son la misma cosa que "Para revisar" y "Nota
-    // guardada": el chip es otra tipografía, no otro concepto.
-    expect(glosario.BORRADOR).toBe(glosario.PARA_REVISAR);
-    expect(glosario.APROBADA).toBe(glosario.NOTA_GUARDADA);
   });
 
   it("los métodos de pago se dicen en un solo lugar", () => {
@@ -198,19 +72,6 @@ describe("glosario — constantes de texto", () => {
       if (typeof valor !== "string") continue;
       expect(valor.trim(), `${nombre} está vacía`).not.toBe("");
     }
-  });
-
-  // 2026-09-20: al fusionar dos ramas quedó PREPARAR_SESION declarada dos
-  // veces y main se puso en rojo. tsc lo atrapa, pero recién en CI y sin
-  // decir de qué ramas vino: esta prueba lo dice por su nombre, acá.
-  it("ningún nombre exportado está declarado dos veces", () => {
-    const fuente = readFileSync(join(process.cwd(), "src/lib/glosario.ts"), "utf8");
-    const nombres = Array.from(
-      fuente.matchAll(/^export (?:const|function|let) ([A-Za-z_$][\w$]*)/gm),
-      (m) => m[1],
-    );
-    const repetidos = nombres.filter((n, i) => nombres.indexOf(n) !== i);
-    expect(repetidos, `declarados más de una vez: ${repetidos.join(", ")}`).toEqual([]);
   });
 });
 

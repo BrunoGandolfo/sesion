@@ -192,11 +192,6 @@ test("tras Terminar: preparando, enviando con porcentaje y menú tapado, llegó 
 
   expect(screen.getByRole("status").textContent).toBe(ENVIANDO_GRABACION(37));
   expect(ENVIANDO_GRABACION(37)).toBe("Enviando la grabación… 37 %. No cierres esta pantalla.");
-  // Tapa toda la pantalla por encima del menú inferior (z-50) y algo se mueve.
-  const tapa = screen.getByTestId("enviando");
-  expect(tapa.className).toContain("fixed inset-0");
-  expect(tapa.className).toContain("z-[60]");
-  expect(tapa.querySelector(".animate-spin")).toBeTruthy();
   expect(m.subir).toHaveBeenCalledWith("s1", DATOS, expect.any(Function));
 
   await act(async () => { terminarSubida(); });

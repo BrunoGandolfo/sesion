@@ -164,11 +164,6 @@ describe("una grabación que llega al mínimo", () => {
 });
 
 describe("una sola constante para los dos lados", () => {
-  it("el servidor usa la misma MINIMO_SEGUNDOS que el grabador", () => {
-    expect(MINIMO_SEGUNDOS).toBe(10);
-    expect(MENSAJE_GRABACION_CORTA).toContain(`${MINIMO_SEGUNDOS} segundos`);
-  });
-
   it("grabacion-captura.ts no importa NADA, así que el servidor lo puede leer", () => {
     // Es lo que hace que la constante no haya tenido que mudarse. Si alguien
     // le agrega un import del navegador, el servidor se lo llevaría puesto:

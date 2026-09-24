@@ -4,7 +4,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ConfigView } from '../config-view';
 const api=vi.hoisted(()=>({patch:vi.fn()}));
 vi.mock('@/lib/api-client', async original=>({...await original<typeof import('@/lib/api-client')>(),apiPatch:api.patch,apiGet:async()=>({nombreProfesional:'Mariana',direccion:'Dirección de prueba',whatsappOrigen:'099123456',tarifaDefault:1500,recordatorioModo:'dia_anterior',templateRecordatorio:'Hola {nombre}',orientacionTeorica:'gestalt'})}));
-vi.mock('next-auth/react',()=>({getSession:async()=>({user:{email:'prueba@example.invalid'}}),signOut:vi.fn()}));
 vi.mock('@/components/layout/cabecera-usuario',()=>({AccesoConsultorio:()=>null}));
 vi.mock('../vocabulario-seccion',()=>({VocabularioSeccion:()=>null}));
 vi.mock('../invitar-colega',()=>({InvitarColega:()=>null}));

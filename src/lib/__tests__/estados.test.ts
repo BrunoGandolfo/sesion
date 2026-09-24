@@ -124,3 +124,11 @@ describe("huérfanas y backoff", () => {
     expect(backoffSesionMs(1)).toBe(60_000);
   });
 });
+
+describe("el sondeo de la UI usa los estados de la tabla", () => {
+  it("ESTADOS_ACTIVOS es ESTADOS_EN_PIPELINE, y es el conjunto que estaba escrito a mano", async () => {
+    const { ESTADOS_ACTIVOS } = await import("@/hooks/useSesionClinicaPolling");
+    expect(ESTADOS_ACTIVOS).toBe(ESTADOS_EN_PIPELINE);
+    expect([...ESTADOS_EN_PIPELINE].sort()).toEqual(["grabando", "procesando", "subiendo"]);
+  });
+});

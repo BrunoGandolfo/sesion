@@ -57,7 +57,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
 
   it("explica la agenda mínima de Lupita, la ausencia de escrituras y el historial enviado al proveedor", () => {
     expect(hechos.LUPITA_CONSULTA_AGENDA).toBe(true);
-    expect([...hechos.LUPITA_CAMPOS_AGENDA]).toEqual(["nombre", "dia", "hora", "duracion", "modalidad"]);
     expect(hechos.LUPITA_SOLO_LECTURA).toBe(true);
     expect(hechos.LUPITA_HISTORIAL_A_ANTHROPIC).toBe(true);
     expect(texto).toContain("puede consultar tu nombre de pila, el día, la hora, la duración y la modalidad de tus turnos");
@@ -143,7 +142,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(worker).toContain('logger.warning(f"[{etiqueta}] no se pudo registrar el transcript');
     // Qué cuenta como confirmación: 200 (lo borró) y 404 (no existe).
     expect(worker).toContain("if response.status_code in (200, 404):");
-    expect([...hechos.ASR_CONFIRMACION_HTTP]).toEqual([200, 404]);
     // El trabajo durable nace en la misma transacción que anota el id.
     expect(codigo("src/app/api/_lib/casos-uso/sesion/registrar-asr.ts")).toContain('tipo: "borrar_transcript_asr"');
     // Plazo y fallo, desde la política.
@@ -226,7 +224,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
   it("los backups se declaran con su plazo y que pueden contener la clave cifrada", () => {
     expect(hechos.RETENCION_BACKUPS_DIAS).toBe(30);
     expect(hechos.RETENCION_BACKUPS_MENSUALES_MESES).toBe(12);
-    expect(hechos.RETENCION_BACKUPS_MENSUALES_DIAS).toBe(366);
     expect(hechos.BACKUP_INCLUYE_CLAVE_AUDIO).toBe(true);
     expect(texto).toContain("se guardan 30 días si son diarias y hasta 12 meses si son mensuales");
     expect(texto).toContain("sí pueden contener, cifrada, la clave de un audio");

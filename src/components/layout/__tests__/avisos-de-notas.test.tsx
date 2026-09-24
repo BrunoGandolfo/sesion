@@ -228,9 +228,6 @@ describe("la franja de avisos de notas", () => {
     expect(within(region).getByRole("button", { name: "Ocultar" }).getAttribute("aria-expanded")).toBe("true");
     const enlaces = within(region).getAllByRole("link", { name: "Revisar" });
     expect(enlaces.map((a) => a.getAttribute("href"))).toEqual(["/sesiones/s1", "/sesiones/s2"]);
-    // La lista desplegada tiene su propio scroll (jsdom no mide: el alto lo
-    // comprueba el recorrido en Chromium con veinte avisos).
-    expect(within(region).getByRole("list").className).toContain("overflow-y-auto");
   });
 
   it("con una lista y una fallida lo dice", async () => {

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { ESTADOS_EN_PIPELINE } from "@/lib/sesion-clinica/estados";
 import {
   parseDatosEstructurados,
   type DatosEstructurados,
@@ -17,13 +18,9 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Estados en los que la sesión sigue en el pipeline (grabación → subida →
- *  worker) y conviene seguir consultando. Única definición, tipada por el
- *  enum del contrato (src/lib/sesion-clinica/schema.ts). */
-export const ESTADOS_ACTIVOS: ReadonlySet<EstadoSesion> = new Set<EstadoSesion>([
-  "grabando",
-  "subiendo",
-  "procesando",
-]);
+ *  worker) y conviene seguir consultando. No se escriben acá: salen de la
+ *  tabla de operaciones (ESTADOS_EN_PIPELINE, en sesion-clinica/estados.ts). */
+export const ESTADOS_ACTIVOS: ReadonlySet<EstadoSesion> = ESTADOS_EN_PIPELINE;
 
 /** Campos del contrato que devuelven TODOS los endpoints que entregan una
  *  sesión a la UI (GET ?turnoId, GET [id], POST).
