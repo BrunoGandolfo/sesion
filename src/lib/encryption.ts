@@ -72,17 +72,6 @@ export function estaCifrado(blob: Buffer | Uint8Array | null | undefined): boole
   );
 }
 
-/** Id de la clave con la que se cifró el blob (byte 4). */
-export function idClaveDe(blob: Buffer): number {
-  if (!estaCifrado(blob)) {
-    throw new ErrorDescifrado(
-      "formato",
-      "el blob no tiene el prefijo ENC2: dato corrupto o sin cifrar",
-    );
-  }
-  return blob[POS_ID];
-}
-
 /**
  * Cifra `texto` con la clave activa del llavero, atado a `aad`.
  * `aad` es obligatorio y no vacío: cifrar sin rótulo es exactamente el

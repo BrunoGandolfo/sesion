@@ -8,11 +8,12 @@ import {
   descifrar,
   ErrorDescifrado,
   estaCifrado,
-  idClaveDe,
   LARGO_MINIMO_BLOB,
   MAGIC_ENC2,
 } from "@/lib/encryption";
 import { __resetLlaveroForTests } from "@/lib/llavero";
+
+import { idClaveDe } from "./ayudantes";
 
 const K1 = randomBytes(32).toString("base64");
 const K2 = randomBytes(32).toString("base64");

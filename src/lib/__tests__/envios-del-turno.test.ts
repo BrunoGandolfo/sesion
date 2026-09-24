@@ -16,8 +16,6 @@ import {
   claveDeCobro,
   claveDelTurno,
   enviosDelTurno,
-  MOTIVO_REPROGRAMADO,
-  MOTIVO_SIN_TELEFONO,
   MOTIVO_TURNO_CERRADO,
   programarEnvioDeCobro,
   programarEnvioDelTurno,
@@ -27,6 +25,7 @@ import { __resetLlaveroForTests } from "@/lib/llavero";
 import { calcularProgramadoEn } from "@/lib/recordatorios-programacion";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
+import { MOTIVO_REPROGRAMADO, MOTIVO_SIN_TELEFONO } from "@/lib/glosario";
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;

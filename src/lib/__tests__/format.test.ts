@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 
 import {
   money,
-  moneyShort,
   fechaLarga,
   fechaCorta,
   fechaCompleta,
@@ -29,24 +28,6 @@ describe("money", () => {
 
   it("formatea valores chicos sin separador", () => {
     expect(money(50)).toBe("$ 50");
-  });
-});
-
-describe("moneyShort", () => {
-  it("usa 'k' redondo cuando el valor es múltiplo de 1000", () => {
-    expect(moneyShort(2000)).toBe("$ 2k");
-  });
-
-  it("usa un decimal cuando el valor no es múltiplo de 1000", () => {
-    expect(moneyShort(1500)).toBe("$ 1.5k");
-  });
-
-  it("muestra el valor literal cuando es menor a 1000", () => {
-    expect(moneyShort(500)).toBe("$ 500");
-  });
-
-  it("muestra cero como '$ 0'", () => {
-    expect(moneyShort(0)).toBe("$ 0");
   });
 });
 

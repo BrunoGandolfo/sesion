@@ -20,7 +20,8 @@ import { ESPERA_ENTRE_INVITACIONES_MS, TOPE_INVITACIONES_TOTAL } from "@/lib/lim
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { BCRYPT_RONDAS } from "@/lib/password";
 import { buscarSesionViva, hashTokenSesion, nuevoTokenSesion } from "@/lib/sesion-acceso";
-import { nombreCookie, tokenDeCookieHeader } from "@/lib/sesion-cookie";
+import { nombreCookie } from "@/lib/sesion-cookie";
+import { tokenDeCookieHeader } from "./ayudantes";
 
 import { CLAVES_CIFRADO_TEST, conectarBaseIdentidad, vaciarBaseIdentidad, type BaseIdentidad } from "./base-identidad";
 

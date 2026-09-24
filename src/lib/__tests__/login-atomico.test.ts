@@ -26,7 +26,8 @@ import {
   hashTokenSesion,
   listarSesionesVivas,
 } from "@/lib/sesion-acceso";
-import { nombreCookie, tokenDeCookieHeader } from "@/lib/sesion-cookie";
+import { nombreCookie } from "@/lib/sesion-cookie";
+import { tokenDeCookieHeader } from "./ayudantes";
 
 import {
   CLAVES_CIFRADO_TEST,

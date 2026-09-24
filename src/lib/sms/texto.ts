@@ -18,22 +18,10 @@ import {
   formatearHoraMvd,
 } from "@/lib/fechas-montevideo";
 
-/** El encabezado identifica al consultorio; el contacto indica cómo llamar.
- *  Se preparan igual para la vista previa y para el envío. */
-export { LINEA_CONTACTO } from "@/lib/glosario";
-
 /** Plantilla sugerida, también usada como valor inicial del formulario.
  *  Los nombres propios pueden forzar UCS-2 aunque la plantilla use GSM-7. */
 export { TEMPLATE_SMS_SUGERIDO } from "@/lib/glosario";
 
-/**
- * Plantilla del aviso de CAMBIO DE HORARIO. No es configurable: cuando la
- * profesional mueve un turno cuyo recordatorio ya salió, la paciente tiene
- * que enterarse de que cambió, no recibir un segundo "te recordamos". Un
- * mensaje que dice "cambió" es lo que evita que se presente al horario
- * viejo; por eso el texto es fijo y lo dice después del remitente.
- */
-export { PLANTILLA_CAMBIO_DE_HORARIO } from "@/lib/glosario";
 
 export interface SmsTemplateData {
   nombre: string;

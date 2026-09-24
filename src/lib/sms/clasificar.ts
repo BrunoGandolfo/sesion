@@ -146,14 +146,6 @@ const NO_ENTREGADO: Record<number, { motivoNoEnvio: string; alerta?: "aviso" }> 
   30007: { motivoNoEnvio: SMS_MOTIVOS.BLOQUEADO, alerta: "aviso" },
 };
 
-/** Referencias de los códigos de callback, para el que lea el código. */
-export const REFERENCIAS_CALLBACK: Record<number, string> = {
-  30003: `${ERRORES}/30003`,
-  30005: `${ERRORES}/30005`,
-  30006: `${ERRORES}/30006`,
-  30007: `${ERRORES}/30007`,
-};
-
 /**
  * `MessageStatus` y `ErrorCode` del callback → qué escribir en la fila.
  * `queued`, `sending`, `sent` son intermedios y no cambian nada: la fila ya

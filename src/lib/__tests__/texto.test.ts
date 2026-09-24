@@ -4,11 +4,10 @@ import {
   prepararPlantillaRecordatorio,
   buildSmsMessage,
   contarLongitudSms,
-  LINEA_CONTACTO,
-  PLANTILLA_CAMBIO_DE_HORARIO,
   TEMPLATE_SMS_SUGERIDO,
   textoDelEnvio,
 } from "@/lib/sms/texto";
+import { LINEA_CONTACTO, PLANTILLA_CAMBIO_DE_HORARIO } from "@/lib/glosario";
 
 const baseData = {
   nombre: "Ana",

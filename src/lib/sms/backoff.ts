@@ -60,10 +60,6 @@ export interface ParamsDecision {
   jitterMayor?: boolean;
 }
 
-export { MOTIVO_VENTANA_AGOTADA } from "@/lib/glosario";
-/** Para un aviso sin turno (cobro): la ventana es un día, no "la sesión". */
-export { MOTIVO_VENTANA_AGOTADA_SIN_TURNO } from "@/lib/glosario";
-export { MOTIVO_TURNO_PASADO } from "@/lib/glosario";
 
 export function decidirTrasFalloTransitorio({
   intentos,

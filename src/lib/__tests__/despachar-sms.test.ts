@@ -24,20 +24,22 @@ import type { PrismaClient } from "@prisma/client";
 
 import {
   despacharEnvios,
-  MENSAJE_ENVIADO_TRAS_CANCELACION,
   MOTIVO_BAJA,
-  MOTIVO_RESERVA_HUERFANA,
-  MOTIVO_TURNO_PASADO,
   type DespacharParams,
 } from "@/app/api/_lib/casos-uso/despachar-sms";
 import { MOTIVO_TURNO_CERRADO } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import { textoDeCobro } from "@/app/api/_lib/casos-uso/texto-de-cobro";
 import { __resetLlaveroForTests } from "@/lib/llavero";
-import { MOTIVO_VENTANA_AGOTADA } from "@/lib/sms/backoff";
 import { URL_CALLBACK } from "@/lib/sms/firma";
 import type { EnviadorSms, ResultadoTwilio } from "@/lib/sms/twilio";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
+import {
+  MENSAJE_ENVIADO_TRAS_CANCELACION,
+  MOTIVO_RESERVA_HUERFANA,
+  MOTIVO_TURNO_PASADO,
+  MOTIVO_VENTANA_AGOTADA,
+} from "@/lib/glosario";
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;

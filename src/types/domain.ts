@@ -27,7 +27,6 @@ import type {
   DatosEstructurados as DatosEstructuradosSchema,
   EstadoSesion,
   NivelRiesgo,
-  NotaSoap,
 } from "@/lib/sesion-clinica/schema";
 
 export type {
@@ -352,15 +351,6 @@ export type { ConfianzaModelo };
  *  evidencia textual explícita no se gradúa riesgo. */
 export type { NivelRiesgo };
 
-/** Nota clínica en formato SOAP */
-export type NotaSOAP = NotaSoap;
-
-/** Intervención del terapeuta detectada por IA. `timestampAprox` ("MM:SS")
- *  es opcional: el worker no siempre lo manda. */
-export type IntervencionTerapeuta = NonNullable<
-  DatosEstructuradosSchema["intervenciones"]
->[number];
-
 /** Flags de riesgo clínico — cada uno requiere dismissal explícito.
  *  `detalle`: segmento textual donde se detectó, vacío si todos false. */
 export type FlagsRiesgo = NonNullable<DatosEstructuradosSchema["flagsRiesgo"]>;
@@ -544,9 +534,4 @@ export interface FeedbackTerapeutaLegacy {
 // ─── Normalización al leer (implementación en src/lib/sesion-clinica/normalizar.ts)
 
 /** @deprecated Importar desde "@/lib/sesion-clinica/normalizar". */
-export {
-  esFeedbackLegacy,
-  esRiesgoDetectadoValido,
-  normalizarFeedback,
-  normalizarRiesgo,
-} from "@/lib/sesion-clinica/normalizar";
+export { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";

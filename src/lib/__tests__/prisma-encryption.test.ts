@@ -10,7 +10,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { aadDe, cifrar, descifrar, ErrorDescifrado, idClaveDe } from "@/lib/encryption";
+import { aadDe, cifrar, descifrar, ErrorDescifrado } from "@/lib/encryption";
+import { idClaveDe } from "./ayudantes";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import {
   assertConsultaSinCifrados,

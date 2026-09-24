@@ -6,7 +6,6 @@ import { whereTransicion } from "@/app/api/_lib/casos-uso/sesion/transicion";
 import {
   backoffSesionMs,
   esHuerfana,
-  ESTADO_TERMINAL,
   ESTADOS_EN_PIPELINE,
   ESTADOS_SESION,
   keyAudio,
@@ -24,7 +23,7 @@ import {
 function estadosSinSalida(): string[] {
   return ESTADOS_SESION.filter(
     (estado) =>
-      estado !== ESTADO_TERMINAL &&
+      estado !== "aprobada" &&
       !LISTA_OPERACIONES.some(
         (op) => op.desde.includes(estado) && op.hacia !== "mismo" && op.hacia !== estado,
       ),
@@ -38,7 +37,6 @@ describe("tabla de transiciones", () => {
 
   it("aprobada es terminal: ninguna operación la saca de ahí", () => {
     const desdeAprobada = LISTA_OPERACIONES.filter((op) => op.desde.includes("aprobada"));
-    expect(ESTADO_TERMINAL).toBe("aprobada");
     expect(desdeAprobada.map((op) => op.nombre)).toEqual(["reintentar_feedback"]);
     expect(desdeAprobada.every((op) => op.hacia === "mismo")).toBe(true);
   });

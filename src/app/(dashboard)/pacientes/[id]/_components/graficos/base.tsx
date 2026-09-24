@@ -185,25 +185,6 @@ export function ChartCard({
 // Eje X por fecha
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Cuántas etiquetas de fecha entran sin encimarse en 600px de ancho. */
-const MAX_ETIQUETAS_X = 5;
-
-/** Índices que llevan etiqueta: siempre el primero y el último, y hasta tres
- *  intermedios repartidos parejo. Con 40 sesiones el eje dice cinco fechas,
- *  no cuarenta. */
-export function indicesConEtiqueta(cantidad: number): number[] {
-  if (cantidad <= 0) return [];
-  if (cantidad <= MAX_ETIQUETAS_X) {
-    return Array.from({ length: cantidad }, (_, i) => i);
-  }
-  const paso = (cantidad - 1) / (MAX_ETIQUETAS_X - 1);
-  const indices = new Set<number>();
-  for (let i = 0; i < MAX_ETIQUETAS_X; i++) {
-    indices.add(Math.round(i * paso));
-  }
-  return [...indices].sort((a, b) => a - b);
-}
-
 /** Más de esto y los marcadores se reducen a extremos + señales de riesgo. */
 export const MAX_MARCADORES = 12;
 

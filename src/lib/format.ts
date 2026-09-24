@@ -21,14 +21,6 @@ export function money(n: number): string {
   return "$ " + n.toLocaleString("es-UY");
 }
 
-/** "$ 2.2k" para KPIs */
-export function moneyShort(n: number): string {
-  if (n >= 1000) {
-    return "$ " + (n % 1000 === 0 ? (n / 1000).toFixed(0) : (n / 1000).toFixed(1)) + "k";
-  }
-  return "$ " + n;
-}
-
 // ============================================
 // Fechas — es-UY, hora de Montevideo SIEMPRE.
 //
