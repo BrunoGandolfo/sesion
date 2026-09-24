@@ -27,7 +27,7 @@ const BOTTOM_DESKTOP = 104;
  *                    ("Cobrado. Ese ya está.").
  *   "aviso"        — sin ícono. Es lo que va cuando el mensaje es un error:
  *                    un tilde verde sobre "No se pudo cobrar" es la peor
- *                    confirmación posible (01-auditoria-frontend.md, (d)).
+ *                    confirmación posible.
  *
  * ACÁ NO ENTRA LUPITA, Y NO ES POR LA REGLA DEL RIESGO
  *
@@ -59,8 +59,7 @@ export function Toast({
   variante = "confirmacion",
 }: ToastProps) {
   // Entra y sale sin desplazamiento con la preferencia declarada: aparece y
-  // desaparece, que es lo que pide 03-plan-de-movimiento.md (D2). El texto y
-  // el aria-live no cambian.
+  // desaparece. El texto y el aria-live no cambian.
   const reducido = useMovimientoReducido();
 
   const entrada = reducido

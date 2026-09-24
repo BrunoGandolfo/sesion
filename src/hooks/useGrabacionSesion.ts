@@ -31,13 +31,12 @@ async function parseError(res: Response): Promise<string> {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Subida directa a R2 en tres pasos. Exportada para que cualquier pantalla
-// que grabe (historia-tab, paciente-detail-view vía este hook) use el mismo
+// que grabe (hoy, /grabar/[turnoId]) use el mismo
 // flujo. El audio NUNCA pasa por Vercel: el límite de 4,5 MB por request de
 // las funciones hacía fallar toda sesión real con 413.
 //
 //   1. POST [id]/upload-url       → { url, key, headers }  (grabando → subiendo)
-//      Lleva el IV del archivo; la clave ya la tiene el servidor (es él
-//      quien la generó y se la entregó al grabador por POST [id]/clave).
+//      El audio va tal cual: la app no lo cifra.
 //   2. PUT  url (XHR, con progreso) → R2
 //   3. POST [id]/upload-confirmar → fila actualizada       (subiendo → procesando)
 // ────────────────────────────────────────────────────────────────────────────

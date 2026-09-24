@@ -18,7 +18,7 @@
 //     href>` que abre otra pestaña (eso no es connect-src).
 //
 // Un host que no esté en ninguna lista falla con la instrucción de dónde
-// declararlo. Es lo mismo que hace middleware-edge.test.ts con los imports:
+// declararlo. Es lo mismo que hace proxy-liviano.test.ts con los imports:
 // una convención que se verifica sola.
 //
 // LÍMITES (dichos a propósito)

@@ -14,7 +14,7 @@
 //
 // CÓMO LLEGA EL NONCE A LOS SCRIPTS DE NEXT
 //
-// El middleware lo pone en las CABECERAS DEL PEDIDO (no en las de la
+// El proxy (src/proxy.ts) lo pone en las CABECERAS DEL PEDIDO (no en las de la
 // respuesta: esas van al navegador, aquéllas son el canal interno hacia el
 // renderizador). Next lee `Content-Security-Policy` del pedido, le saca el
 // `'nonce-…'` y se lo pone a sus propios scripts.
@@ -36,11 +36,11 @@
 //
 // AGENTS.md tiene el plan para pasar a enforce y qué mirar antes.
 //
-// Sin `node:*`: esto lo importa el middleware, que corre en el runtime edge
-// (regla 9 de AGENTS.md). El nonce sale de Web Crypto.
+// Sin `node:*`: esto lo importa el proxy, que no puede arrastrar built-ins
+// de Node (regla 9 de AGENTS.md). El nonce sale de Web Crypto.
 
 /** Dónde se reciben las violaciones. Pública: el navegador la postea sin
- *  sesión, así que está fuera del matcher del middleware. */
+ *  sesión, así que está fuera del matcher del proxy. */
 export const RUTA_REPORTE_CSP = "/api/csp-report";
 
 /** Nombre del endpoint para la Reporting API (cabecera Reporting-Endpoints). */
@@ -71,7 +71,7 @@ export function generarNonce(): string {
 // src/lib/__tests__/csp-destinos.test.ts recorre src/** y falla ante un host
 // nuevo que no esté declarado en ningún lado.
 //
-// R2: el navegador hace PUT del audio cifrado DIRECTO al bucket (la URL la
+// R2: el navegador hace PUT del audio DIRECTO al bucket (la URL la
 // firma /api/sesion-clinica/[id]/upload-url). Va como host EXACTO, de la
 // variable R2_PUBLIC_HOST. OJO con la forma: el SDK de S3 firma en estilo
 // "virtual-hosted", así que la URL prefirmada tiene el BUCKET como primer
@@ -80,8 +80,8 @@ export function generarNonce(): string {
 // (verificado generando una URL con src/lib/r2.ts; csp-destinos.test.ts lo
 // vuelve a verificar en cada corrida). Una fuente exacta de CSP no cubre
 // subdominios: con el host de la cuenta a secas, la subida sigue afuera.
-//   - explícito y no derivado de R2_ACCOUNT_ID, porque el middleware corre en
-//     edge y no tiene por qué saber cómo Cloudflare arma sus nombres;
+//   - explícito y no derivado de R2_ACCOUNT_ID, porque el proxy no tiene por
+//     qué saber cómo Cloudflare arma sus nombres;
 //   - exacto y no `https://*.r2.cloudflarestorage.com`, porque un comodín
 //     abre la política a cualquier cuenta de R2 del mundo, y "igual la URL la
 //     firma nuestro servidor" es cierto sólo mientras no haya un XSS, que es

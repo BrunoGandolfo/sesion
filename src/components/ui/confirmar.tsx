@@ -23,8 +23,8 @@ import { AlturaAnimada, MS_PLIEGUE } from "./movimiento";
 //
 // Y se abre con su altura, no de golpe: el panel sale de donde estaba el
 // botón en vez de aparecer y correr todo lo de abajo de un salto. En la barra
-// fija de la nota ese salto ocurría debajo del pulgar
-// (docs/diseno/03-plan-de-movimiento.md, D8). Es el mismo AlturaAnimada de
+// fija de la nota ese salto ocurría debajo del pulgar. Es el mismo
+// AlturaAnimada de
 // los plegables, con sus mismos 220 ms, así que con movimiento reducido no
 // hay transición: está o no está, exactamente como antes.
 

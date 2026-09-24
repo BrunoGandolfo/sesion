@@ -81,7 +81,7 @@ describe("construirCsp — connect-src son los destinos declarados, exactamente"
   });
 
   it("R2 está, como host exacto, cuando R2_PUBLIC_HOST está cargada", () => {
-    // El navegador hace PUT del audio cifrado directo a R2: sin esto, el día
+    // El navegador hace PUT del audio directo a R2: sin esto, el día
     // del enforce no se sube ninguna grabación.
     const connect = directiva(construirCsp(NONCE, { destinos: DESTINOS }), "connect-src");
     expect(connect).toContain(R2);

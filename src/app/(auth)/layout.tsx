@@ -3,7 +3,7 @@
 //
 // POR QUÉ IMPORTA
 //
-// La CSP lleva un nonce distinto por request, que el middleware genera y le
+// La CSP lleva un nonce distinto por request, que el proxy genera y le
 // pasa al renderizador por las cabeceras del PEDIDO (ver src/lib/csp.ts).
 // Next lee ese nonce y se lo pone a sus propios <script>. Una página
 // PRERENDERIZADA en el build no participa de eso: su HTML se armó una vez,

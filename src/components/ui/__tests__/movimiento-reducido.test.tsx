@@ -6,8 +6,7 @@
 // Qué se verifica acá: que con `prefers-reduced-motion: reduce` puesto, las
 // dos piezas que más se abren en el día —el sheet y el toast— no se muevan.
 // No "se muevan menos": no se muevan. Es la regla que declara la cabecera de
-// movimiento.tsx y la que 03-plan-de-movimiento.md pide terminar de cumplir
-// en D1 y D2.
+// movimiento.tsx.
 //
 // La preferencia se simula mockeando window.matchMedia ANTES del primer
 // render del archivo: framer-motion se suscribe a la media query una sola vez

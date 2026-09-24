@@ -74,8 +74,7 @@ export interface NuevoTurnoData {
   frecuencia: FrecuenciaTurno;
 }
 
-// Texto nuevo de pantalla (pendiente de glosario.ts, ver
-// docs/pendientes/06-estructura.md).
+// Texto de pantalla que todavía no se mudó a glosario.ts.
 const OPCIONES_FRECUENCIA = FRECUENCIAS_TURNO.map((value) => ({ value, label: FRECUENCIA_LABEL[value] }));
 
 

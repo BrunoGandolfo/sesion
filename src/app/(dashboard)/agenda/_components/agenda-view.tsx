@@ -336,9 +336,9 @@ export function AgendaView() {
 
   // El FAB tapaba la tarjeta punteada del día vacío, a centímetros del botón
   // "Agendar" que esa misma tarjeta ofrece: dos botones para lo mismo, uno
-  // sobre el otro (docs/diseno/01-auditoria-frontend.md, sección 2). Cuando
-  // el estado vacío está en pantalla, el flotante no aparece: el camino a un
-  // turno nuevo sigue siendo uno solo, el que ya se está mirando.
+  // sobre el otro. Cuando el estado vacío está en pantalla, el flotante no
+  // aparece: el camino a un turno nuevo sigue siendo uno solo, el que ya se
+  // está mirando.
   const diaVacio =
     isReady &&
     view === "día" &&

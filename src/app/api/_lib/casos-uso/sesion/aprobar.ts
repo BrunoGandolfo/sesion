@@ -1,9 +1,7 @@
 // Aprobar la nota: revision → aprobada.
 //
 // En UNA transacción: nota final (la editada, o la de la IA si no editó),
-// comentarios, fecha, destrucción de la clave del audio (crypto-shredding:
-// aunque el borrado en R2 tarde, el audio ya no se puede abrir) y los dos
-// trabajos que nacen de aprobar: `borrar_audio_r2` (si hay audio) e
+// comentarios, fecha y los dos trabajos que nacen de aprobar: `borrar_audio_r2` (si hay audio) e
 // `integrar_contexto` (la propuesta al Recorrido, diseño 04). El request no
 // llama a R2 ni a nadie: o quedan todas las escrituras, o ninguna.
 //

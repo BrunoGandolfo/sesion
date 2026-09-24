@@ -8,8 +8,8 @@
 //
 // Este test camina los archivos que animan y falla si aparece el literal
 // fuera de movimiento.tsx, que es de donde se importa. No es un test de
-// comportamiento: es el guardián de una decisión, como el de los módulos de
-// Node en el edge.
+// comportamiento: es el guardián de una decisión, como proxy-liviano.test.ts
+// con los imports del proxy.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";

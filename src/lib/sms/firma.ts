@@ -1,5 +1,5 @@
 // Validación de `X-Twilio-Signature`. Puro (node:crypto): lo usan las rutas
-// Node /api/sms/callback y /api/sms/entrante, nunca el middleware.
+// Node /api/sms/callback y /api/sms/entrante, nunca el proxy.
 //
 // Cómo firma Twilio (https://www.twilio.com/docs/usage/webhooks/webhooks-security
 // y https://www.twilio.com/docs/usage/security#validating-requests):

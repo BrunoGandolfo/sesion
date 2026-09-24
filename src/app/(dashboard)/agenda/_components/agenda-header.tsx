@@ -96,8 +96,7 @@ export function AgendaHeader({
           >
             {/* Sin `truncate`: era el único lugar donde se dice qué día se
                 está mirando y decía "lunes 7 de septiem…". Envuelve en dos
-                renglones antes que recortarse
-                (docs/diseno/01-auditoria-frontend.md, sección 2). */}
+                renglones antes que recortarse. */}
             <span className="min-w-0 font-[family-name:var(--font-display)] text-[16px] font-medium leading-tight text-ink-900">
               {labelMobile}
             </span>

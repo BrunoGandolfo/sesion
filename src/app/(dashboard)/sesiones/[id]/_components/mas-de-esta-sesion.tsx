@@ -84,7 +84,7 @@ function Rotulo({ children }: { children: React.ReactNode }) {
  * "devolución diagnóstica e inestabilidad emocional" produce un chip más
  * ancho que el teléfono y se sale por el borde derecho, en un layout
  * `overflow-hidden` donde no hay scroll horizontal que lo rescate. O sea:
- * texto clínico recortado (docs/diseno/01-auditoria-frontend.md, sección 0).
+ * texto clínico recortado.
  *
  * Los chips de estado del bloque —el nombre de la intervención, la alianza—
  * siguen sin envolver: son tres palabras cerradas y partirlas se lee peor.

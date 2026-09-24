@@ -55,8 +55,7 @@ export function Presencia() {
       {/* Tres afirmaciones, tres puntos del mismo tamaño. No crecen ni se
           unen con un hilo aunque la marca esté hecha de eso: acá no hay
           ninguna progresión que contar entre una y otra, y un movimiento o
-          una jerarquía que no significan nada se sacan
-          (docs/diseno/02-referencias.md, principio 8). */}
+          una jerarquía que no significan nada se sacan. */}
       <ul className="mt-8 flex flex-col gap-[14px] lg:mt-10">
         {ENTRADA_AFIRMACIONES.map((afirmacion) => (
           <li key={afirmacion} className="flex items-start gap-3">

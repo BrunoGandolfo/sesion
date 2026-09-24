@@ -38,7 +38,7 @@ export const dynamic = "force-dynamic";
 //
 //   - `overflow-x-clip` en el `main` hace el recorte horizontal que hacía el
 //     `overflow-hidden` del contenedor (el chip del brief que mide 464 px en
-//     un viewport de 390, ver 01-auditoria-frontend.md §0). `clip` y no
+//     un viewport de 390). `clip` y no
 //     `hidden` a propósito: `hidden` volvería a crear un contenedor de
 //     scroll y estaríamos donde empezamos.
 //   - La barra lateral queda pegada arriba con `sticky` y su alto de

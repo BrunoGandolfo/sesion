@@ -1,6 +1,6 @@
 // Cliente de Anthropic para la ayuda de Sesión.
 // Usa el SDK oficial: MessageStream interpreta SSE y entrega deltas tipados.
-// Runtime nodejs. No es alcanzable desde src/middleware.ts (regla 9).
+// Runtime nodejs. No es alcanzable desde src/proxy.ts (regla 9).
 
 import Anthropic from "@anthropic-ai/sdk";
 import type {

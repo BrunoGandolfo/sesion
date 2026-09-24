@@ -62,8 +62,7 @@ import { estadoClinicoDe } from "@/components/ui/session-row";
 // modalidad, notas): mismo schema y mismo componente, turno-editar-campos.
 type EditValues = CamposTurnoValores;
 
-// Textos nuevos de pantalla (pendientes de glosario.ts: ver
-// docs/pendientes/06-estructura.md).
+// Textos de pantalla que todavía no se mudaron a glosario.ts.
 
 
 

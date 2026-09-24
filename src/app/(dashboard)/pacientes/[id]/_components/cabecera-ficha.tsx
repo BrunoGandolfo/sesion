@@ -10,9 +10,8 @@
 // Era un botón `fixed bottom-24 right-5`, opaco, que en las tres pestañas
 // tapaba texto clínico: el resumen de la última sesión, el título "El
 // recorrido hasta hoy" y —lo peor— el rótulo de la autorización y parte del
-// botón "Revocar" (docs/diseno/01-auditoria-frontend.md, sección 4). Un
-// flotante que tapa una acción irreversible no se arregla corriéndolo cinco
-// píxeles.
+// botón "Revocar". Un flotante que tapa una acción irreversible no se
+// arregla corriéndolo cinco píxeles.
 //
 // De los dos caminos posibles —una barra de acciones fija al pie, o traer el
 // botón al flujo del documento— se eligió el segundo, porque el primero

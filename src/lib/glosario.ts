@@ -925,7 +925,7 @@ export const COBRASTE_ESTE_MES = "Cobraste este mes";
  * Dice "Sin cobrar" y no TE_DEBEN a propósito: "Te deben" es el nombre de
  * una vista —la pestaña con la lista de deudoras— y usarlo también para un
  * número dejaba el mismo rótulo nombrando dos cosas distintas en la misma
- * pantalla (01-auditoria-frontend.md, 5).
+ * pantalla.
  */
 export const SIN_COBRAR = "Sin cobrar";
 
@@ -1234,7 +1234,7 @@ export const ENTRADA_QUE_HACE =
  *
  * La primera nombra a la profesional como quien decide ("la aprobás vos"):
  * es la misma regla que sostiene toda la app —el borrador se llama borrador
- * hasta que ella lo firma, ver [[BORRADOR]] y docs/diseno/02-referencias.md—
+ * hasta que ella lo firma, ver [[BORRADOR]]—
  * y en la pantalla de entrada es, además, la respuesta a la primera objeción
  * que tiene cualquier psicóloga frente a una nota escrita por una máquina.
  */
@@ -1250,7 +1250,8 @@ export const ENTRADA_AFIRMACIONES = [
 export const ENTRADA_CONFIDENCIALIDAD =
   "El audio viaja por una conexión cifrada. Las notas, las transcripciones, el análisis y el Recorrido se guardan cifrados.";
 
-// Portada. Respaldo de cada afirmación: docs/pendientes/portada.md.
+// Portada. Cada afirmación tiene que ser cierta en el código de hoy: si el
+// comportamiento cambia, el texto cambia con él.
 export const PORTADA_ACCESO = "Entrar a tu cuenta";
 export const PORTADA_FUNCIONES_TITULO = "De la agenda al Recorrido";
 export const PORTADA_FUNCIONES = [

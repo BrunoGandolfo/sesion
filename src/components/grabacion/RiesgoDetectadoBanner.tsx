@@ -38,7 +38,8 @@ import type { FlagsRiesgo, NivelRiesgo } from "@/types/domain";
 // prefers-reduced-motion: con la preferencia puesta o sin ella, se ve igual.
 //
 // Si algún día alguien envuelve esta sección en Aparece o en una cascada,
-// está rompiendo docs/diseno/03-plan-de-movimiento.md, D10.
+// rompe la única regla de movimiento sin excepción: la señal de riesgo no se
+// anticipa ni se anima.
 
 /** Clave de la casilla de la señal graduada (riesgoDetectado). Las demás
  *  claves son las de FlagsRiesgo, que ya son únicas. */

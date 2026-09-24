@@ -51,7 +51,7 @@ interface SessionRowProps {
    * mientras dura el respiro de `useConfirmacionDibujada`: el sheet se cierra
    * y la fila que originó el cobro queda con su marca, en vez de cambiar de
    * chip sin que nada diga que ese cambio es consecuencia de lo que ella
-   * acaba de tocar (docs/diseno/03-plan-de-movimiento.md, D9).
+   * acaba de tocar.
    *
    * No agrega tiempo: ocurre mientras el sheet se va. Con movimiento
    * reducido el chip cambia sin trazo, porque el trazo lo dibuja
@@ -97,9 +97,9 @@ export function estadoClinicoDe(
 }
 
 /** Ocultan "Grabar sesión": el audio ya salió del navegador y el pipeline
- *  siguió, así que volver a grabar pisaría la nota. En "pendiente",
- *  "grabando", "subiendo" y "error" la grabación quedó a medias y
- *  GrabarView.asegurarSesion sabe retomarla. */
+ *  siguió, así que volver a grabar pisaría la nota. En "grabando" y
+ *  "subiendo" la grabación quedó a medias y GrabarView.asegurarSesion sabe
+ *  retomarla. */
 const ESTADOS_PASADA_LA_GRABACION: ReadonlyArray<string> = [
   ...ESTADOS_PROCESANDO,
   "revision",

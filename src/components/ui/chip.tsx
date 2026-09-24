@@ -16,7 +16,7 @@ type ChipSize = "default" | "sm";
  * 423 px en el brief pre-sesión y la ficha desbordaba 74 px sobre un
  * viewport de 390, dentro de un layout `overflow-hidden`. O sea: texto
  * clínico recortado, en la pantalla que ella lee un minuto antes de que
- * entre la paciente (docs/diseno/01-auditoria-frontend.md, sección 0).
+ * entre la paciente.
  *
  * El dibujo de "libre" no es nuevo: es el que el Recorrido ya usaba a mano
  * para el mismo dato (ContextoGoldenThreadView), que por eso envolvía bien.

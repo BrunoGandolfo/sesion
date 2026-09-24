@@ -286,7 +286,7 @@ export function PacientesView({
       )}
 
       {/* El FAB es fijo y opaco: sin este colchón tapaba la última fila de
-          la lista (docs/diseno/01-auditoria-frontend.md, sección 3). */}
+          la lista. */}
       <div aria-hidden="true" className="h-24 lg:hidden" />
 
       <Fab label={NUEVO_PACIENTE} onClick={openNuevoPaciente} />

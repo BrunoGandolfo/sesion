@@ -17,7 +17,7 @@
 // (la misma lista negra de la auditoría) antes de entrar al correo.
 //
 // Sólo la importan rutas Node (crons, health): auditoria-pura usa
-// node:crypto y correo.ts habla con Resend. Nunca desde el middleware.
+// node:crypto y correo.ts habla con Resend. Nunca desde el proxy.
 
 import * as Sentry from "@sentry/nextjs";
 

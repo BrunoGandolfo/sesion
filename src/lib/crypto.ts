@@ -10,8 +10,8 @@ function bytesAHex(bytes: Uint8Array): string {
 
 /**
  * sha256 de un texto, en hex minúscula. Web Crypto, no `node:crypto`: este
- * módulo lo importa código que el middleware arrastra al bundle edge, donde
- * `node:*` no existe (ver regla 9 de AGENTS.md).
+ * módulo lo importa código que también corre en el navegador
+ * (HotWordsManager, vía hot-words.ts), donde `node:*` no existe.
  *
  * Devuelve exactamente lo mismo que
  * `createHash("sha256").update(texto, "utf8").digest("hex")` —mismo
