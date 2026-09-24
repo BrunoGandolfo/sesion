@@ -6,7 +6,7 @@ faltante, enum invalido) se pide una segunda vez citandole al modelo el error.
 Si la segunda tampoco valida, ahi si falla la sesion. Los fallos de transporte
 no se reintentan aca: de eso se ocupa `max_retries` del SDK.
 
-Sin red: se mockea _llamar_llm, que es la frontera con Anthropic.
+Sin red: se mockea _llamar_anthropic, que es la frontera con Anthropic.
 """
 import pytest
 
@@ -47,7 +47,7 @@ def _nota_sin_analisis() -> dict:
 @pytest.fixture
 def llm(mocker):
     """Frontera con Anthropic. Cada test define su secuencia de respuestas."""
-    return mocker.patch("clinical_analyzer._llamar_llm")
+    return mocker.patch("clinical_analyzer._llamar_anthropic")
 
 
 @pytest.fixture
@@ -292,10 +292,6 @@ def test_feedback_gestalt_usa_su_prompt_y_su_validador(llm, prompt):
 # son las tres: el techo propio del feedback, el reintento, y la advertencia
 # con clave estable cuando aun asi no sale.
 
-def _truncado(tope: int = 8192) -> PipelineError:
-    return PipelineError("llm_truncado", f"Respuesta truncada en {tope} tokens")
-
-
 def test_feedback_truncado_reintenta_y_sale(llm, prompt):
     llm.side_effect = [_truncado(), _feedback_cbt_mi()]
 
@@ -497,7 +493,7 @@ def test_los_cuatro_prompts_se_cargan():
 
 
 def _truncado(techo: int = 8000, razonamiento: str = "7100") -> PipelineError:
-    """El error tal como lo arma _llamar_llm ante stop_reason=max_tokens."""
+    """El error tal como lo arma _llamar_anthropic ante stop_reason=max_tokens."""
     return PipelineError(
         "llm_truncado",
         f"Respuesta truncada contra el techo de {techo} tokens"

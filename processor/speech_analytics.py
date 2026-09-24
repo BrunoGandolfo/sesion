@@ -1,4 +1,4 @@
-"""Compute speech analytics from diarized ASR segments (WhisperX)."""
+"""Compute speech analytics from diarized ASR segments (AssemblyAI, normalizados por asr_assemblyai)."""
 
 SILENCIO_UMBRAL_SEG = 3.0
 

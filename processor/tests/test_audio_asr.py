@@ -135,7 +135,7 @@ TICKET = "a" * 64
 def _sesion(duracion_audio_seg: int | None = 60) -> SesionReclamada:
     return SesionReclamada(
         sesion_clinica_id="s1", intento=1, ticket=TICKET, paciente_id="p1",
-        orientacion_teorica="cbt_mi", terminos_asr=[], audio={"key": "org/s1/0"},
+        terminos_asr=[], audio={"key": "org/s1/0"},
         checkpoint=None, duracion_audio_seg=duracion_audio_seg,
     )
 

@@ -20,7 +20,6 @@ CODIGOS_DEFINITIVOS = frozenset(
         "audio_sin_key",
         "audio_varias_cabeceras",
         "asr_vacio",
-        "asr_rechazado",
         "llm_invalido",
         "llm_truncado",
         "checkpoint_invalido",

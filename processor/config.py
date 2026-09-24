@@ -10,7 +10,7 @@ import os
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3001")
 PROCESSING_SECRET = os.getenv("PROCESSING_SECRET", "")
 
-# Cloudflare R2 (audio cifrado) ─────────────────────────────────────────────
+# Cloudflare R2 (audio del telefono, tal cual) ─────────────────────────────
 R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "")
@@ -22,7 +22,7 @@ ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 # (el singular `speech_model` esta deprecado). Identificadores vigentes:
 #   https://www.assemblyai.com/docs/pre-recorded-audio/select-the-speech-model
 #   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro
-# ASR_MODEL_ID se reporta en el callback como modeloASR.
+# ASR_MODEL_ID se reporta en el checkpoint como modeloAsr.
 ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "universal-3-5-pro")
 ASR_MODEL_FALLBACK = os.getenv("ASR_MODEL_FALLBACK", "universal-2")
 # Prompt de contexto (`prompt`, solo Universal-3.5 Pro; hasta 1.500 palabras,
@@ -43,7 +43,6 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # cada pedido (sin ella la API responde 400). Opcional: vacío = no se manda
 # ninguna cabecera y el cliente se construye exactamente como antes.
 ANTHROPIC_WORKSPACE_ID = os.getenv("ANTHROPIC_WORKSPACE_ID", "").strip()
-LLM_BACKEND = os.getenv("LLM_BACKEND", "anthropic")
 LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "claude-sonnet-5")
 # Nivel de esfuerzo (low|medium|high|xhigh|max). Vacío = no enviar el parámetro.
 LLM_EFFORT = os.getenv("LLM_EFFORT", "medium")

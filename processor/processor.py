@@ -55,6 +55,10 @@ TIPOS_TRABAJO = ["borrar_transcript_asr", "generar_feedback", "integrar_contexto
 
 TIMEOUT_ASR_DELETE_SEG = 30
 
+# modeloLlm que se reporta a la app. El prefijo "anthropic:" es contrato:
+# la app lo guarda y lo muestra tal cual.
+MODELO_LLM = f"anthropic:{config.LLM_MODEL_ID}"
+
 
 # Sesion reclamada ──────────────────────────────────────────────────────────
 
@@ -65,7 +69,6 @@ class SesionReclamada:
     intento: int
     ticket: str
     paciente_id: str | None
-    orientacion_teorica: str
     terminos_asr: list[str]
     # {key, organizationId, pausas} o None si hay checkpoint. El audio no viene
     # cifrado por la app: no hay clave ni iv.
@@ -95,7 +98,6 @@ class SesionReclamada:
             intento=intento,
             ticket=ticket,
             paciente_id=item.get("pacienteId") or None,
-            orientacion_teorica=item.get("orientacionTeorica") or "cbt_mi",
             terminos_asr=terminos_asr_de(item),
             audio=audio,
             checkpoint=checkpoint,
@@ -181,7 +183,6 @@ class Analisis:
 
 def procesar_sesion(sesion: SesionReclamada) -> None:
     etiqueta = sesion.sesion_clinica_id
-    modelo_llm = f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"
     with Lease(sesion) as lease:
         try:
             if sesion.checkpoint:
@@ -199,7 +200,7 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
             lease.comprobar("nota")
             analisis = analizar(etiqueta, transcripto, sesion.paciente_id, sesion.ticket)
             lease.comprobar("resultado")
-            reportar_nota(sesion, analisis, modelo_llm)
+            reportar_nota(sesion, analisis, MODELO_LLM)
         except LeasePerdido:
             logger.warning(f"[{etiqueta}] el intento {sesion.intento} ya no es el vigente; se abandona sin informar")
         except PipelineError as e:
@@ -506,7 +507,7 @@ def generar_feedback(adjunto: dict) -> dict:
         "ok": True,
         "feedback": feedback,
         "promptVersion": prompt_feedback,
-        "modeloLlm": f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}",
+        "modeloLlm": MODELO_LLM,
     }
 
 
@@ -542,7 +543,7 @@ def integrar_contexto(adjunto: dict, payload: dict) -> dict:
         contexto or {}, nota, datos, adjunto["sesionId"], fecha,
     )
     validar_estructura_contexto(propuesta)
-    return {"ok": True, "propuesta": propuesta, "promptVersion": prompt, "modeloLlm": f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"}
+    return {"ok": True, "propuesta": propuesta, "promptVersion": prompt, "modeloLlm": MODELO_LLM}
 
 
 def _describir(e: Exception) -> str:

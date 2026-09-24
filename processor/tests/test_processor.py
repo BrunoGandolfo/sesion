@@ -22,7 +22,7 @@ TRANSCRIPCION = {
 }
 
 NOTA = {"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"}
-LLM = f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"
+LLM = f"anthropic:{config.LLM_MODEL_ID}"
 TICKET = "a" * 64
 
 
@@ -32,7 +32,6 @@ def sesion(**extra) -> SesionReclamada:
         intento=2,
         ticket=TICKET,
         paciente_id="p1",
-        orientacion_teorica="cbt_mi",
         terminos_asr=["GTFS"],
         audio={"key": "org/s1/0"},
         checkpoint=None,

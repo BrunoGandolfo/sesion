@@ -131,7 +131,7 @@ def loop_principal() -> None:
     logger.info("=== Sesion Processor Worker iniciado ===")
     logger.info(f"  App:    {config.APP_BASE_URL}")
     logger.info(f"  ASR:    assemblyai:{config.ASR_MODEL_ID}")
-    logger.info(f"  LLM:    {config.LLM_BACKEND}:{config.LLM_MODEL_ID}")
+    logger.info(f"  LLM:    {processor.MODELO_LLM}")
     logger.info(f"  Worker: {config.WORKER_VERSION} ({app_client.WORKER_ID})")
     logger.info(f"  R2:     {'si' if config.r2_configurado() else 'NO'}")
     logger.info(f"  Poll:   cada {config.POLL_INTERVAL_SECONDS}s")

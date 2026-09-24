@@ -107,8 +107,7 @@ def mensaje_error_api(e: Exception) -> str:
     ({"error": {"type", "message"}}). Es diagnostico de la API, no contenido
     clinico; se trunca a 300 chars por si algun dia incluyera eco del input.
     Para excepciones que no son de la API (sin `body` ni `message`) devuelve
-    "": es el mensaje acotado que usan processor y contexto_worker en vez de
-    volcar trazas con cuerpos de respuesta.
+    "".
     """
     mensaje = ""
     body = getattr(e, "body", None)
@@ -228,14 +227,6 @@ def _llamar_anthropic(
         raise PipelineError("llm_json_invalido", "El LLM no devolvio JSON valido") from e
 
 
-def _llamar_llm(
-    system_prompt: str, user_content: str, schema: dict, max_tokens: int
-) -> dict:
-    if config.LLM_BACKEND == "anthropic":
-        return _llamar_anthropic(system_prompt, user_content, schema, max_tokens)
-    raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
-
-
 # Reintento por forma ───────────────────────────────────────────────────────
 
 def _bloque_correccion(motivo: str) -> str:
@@ -296,11 +287,10 @@ def _llamar_validando(
             else f"{user_content}\n\n{_bloque_correccion(correccion)}"
         )
 
-        # Los dos try van separados a proposito: `_llamar_llm` tambien lanza
-        # ValueError (backend no soportado), y eso es un error de
-        # configuracion, no una salida mal formada del modelo.
+        # Los dos try van separados a proposito: el primero es la llamada, el
+        # segundo la validacion de forma de lo que volvio.
         try:
-            resultado = _llamar_llm(system_prompt, contenido, schema, tope)
+            resultado = _llamar_anthropic(system_prompt, contenido, schema, tope)
         except PipelineError as e:
             if (
                 e.codigo not in CODIGOS_QUE_REINTENTAN
@@ -455,12 +445,11 @@ def actualizar_contexto_clinico(
 
 # Llamada C — feedback terapeuta ────────────────────────────────────────────
 
-# Clave estable de la advertencia cuando la sesion se queda sin "Para vos".
-# Se lee sola en `_pipeline.advertencias` y se puede grepear en los logs de
-# Railway: `feedback_no_generado: llm_truncado`. Reemplaza al texto anterior
-# ("feedbackTerapeuta no disponible: ..."), que decia lo mismo sin ser una
-# clave. Lo que sigue a los dos puntos es el codigo de PipelineError o, si el
-# fallo no vino del pipeline, el nombre de la excepcion.
+# Clave estable del motivo cuando la sesion se queda sin "Para vos". Viaja
+# como `error` del trabajo generar_feedback y se puede grepear en los logs de
+# Railway: `feedback_no_generado: llm_truncado`. Lo que sigue a los dos puntos
+# es el codigo de PipelineError o, si el fallo no vino del pipeline, el nombre
+# de la excepcion.
 ADVERTENCIA_FEEDBACK = "feedback_no_generado"
 
 def generar_feedback_terapeuta(
