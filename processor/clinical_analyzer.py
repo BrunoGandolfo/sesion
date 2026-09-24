@@ -89,7 +89,7 @@ def _cliente() -> anthropic.Anthropic:
     if _cliente_anthropic is None:
         kwargs: dict = {
             "api_key": config.ANTHROPIC_API_KEY,
-            "max_retries": 3,
+            "max_retries": config.LLM_MAX_RETRIES,
             "timeout": config.LLM_TIMEOUT_SECONDS,
         }
         # Keys "identity-linked": la API exige anthropic-workspace-id en cada
@@ -173,13 +173,11 @@ def _llamar_anthropic(
         response = _cliente().messages.create(
             model=config.LLM_MODEL_ID,
             max_tokens=max_tokens,
-            system=[
-                {
-                    "type": "text",
-                    "text": system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
+            # Sin cache_control: con este trafico la cache casi nunca se lee
+            # (TTL de 5 min, sesiones mas separadas que eso, un system prompt
+            # distinto por llamada) y cada escritura cuesta 1,25x la entrada.
+            # Forense 04-worker.md §8. uso.llamadas[].cacheLectura lo confirma.
+            system=system_prompt,
             messages=[{"role": "user", "content": user_content}],
             output_config=output_config,
         )
@@ -311,8 +309,8 @@ def _llamar_validando(
     Ante un fallo de FORMA —JSON no parseable, seccion SOAP faltante, enum
     invalido, respuesta truncada— repite la llamada una sola vez. Los fallos de
     transporte (timeout, HTTP, conexion) no se reintentan aca: de eso ya se
-    ocupa `max_retries` del SDK, y repetir una llamada de 8k tokens porque la
-    red se cayo no arregla nada.
+    ocupa `max_retries` del SDK (config.LLM_MAX_RETRIES), y repetir una llamada
+    de 16k tokens porque la red se cayo no arregla nada.
 
     `max_tokens` None = el techo comun (config.LLM_MAX_TOKENS). La nota y el
     feedback pasan el suyo.

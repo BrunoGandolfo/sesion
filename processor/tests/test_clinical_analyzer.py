@@ -444,17 +444,18 @@ def test_la_nota_truncada_dos_veces_sigue_fallando(llm, prompt):
     assert llm.call_count == 2
 
 
-def test_la_segunda_pasada_no_pasa_del_tope_sin_streaming(llm, prompt):
-    # 20480: el SDK exige streaming por encima de 21333 tokens
-    # (expected_time = 3600 * max_tokens / 128000 > 600 s). Este worker no
-    # usa streaming.
+def test_la_segunda_pasada_no_pasa_del_tope_de_reintento(llm, prompt):
     llm.side_effect = [_truncado(config.LLM_MAX_TOKENS_FEEDBACK), _feedback_cbt_mi()]
 
     clinical_analyzer.generar_feedback_terapeuta("t")
 
     assert config.LLM_MAX_TOKENS_REINTENTO == 20480
-    assert config.LLM_MAX_TOKENS_REINTENTO <= 21333
     assert llm.call_args_list[1].args[3] == config.LLM_MAX_TOKENS_REINTENTO
+
+
+def test_el_timeout_alcanza_para_la_segunda_pasada_a_35_tokens_por_segundo():
+    # Sin streaming la respuesta llega entera al final (config.py).
+    assert config.LLM_TIMEOUT_SECONDS >= config.LLM_MAX_TOKENS_REINTENTO / 35
 
 
 def test_el_contexto_truncado_reintenta_con_el_doble(llm, prompt):

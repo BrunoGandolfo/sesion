@@ -87,12 +87,20 @@ LLM_MAX_TOKENS_NOTA = int(os.getenv("LLM_MAX_TOKENS_NOTA", "16384"))
 # no podia terminar distinto: dos truncados seguidos y la sesion quedaba
 # fallida. Ahora la segunda pasada duplica el techo, hasta este tope.
 #
-# 20480 es el maximo que admite una peticion SIN streaming. El SDK calcula
-# `expected_time = 3600 * max_tokens / 128000` y exige streaming si eso pasa de
-# 10 minutos (anthropic/_base_client.py, _calculate_nonstreaming_timeout), o
-# sea max_tokens > 21333. Este worker no usa streaming, asi que 20480 es el
-# ultimo escalon que entra. OJO: tambien tiene que entrar en
-# LLM_TIMEOUT_SECONDS, que es de 300 s.
+# El limite real de este numero es el tiempo, no el SDK. El SDK tiene un
+# chequeo (`_calculate_nonstreaming_timeout`: exige streaming si
+# 3600 * max_tokens / 128000 pasa de 600 s, o sea max_tokens > 21333), pero
+# SOLO corre si el cliente usa el timeout por defecto del SDK
+# (resources/messages/messages.py, `self._client.timeout == DEFAULT_TIMEOUT`,
+# verificado en anthropic 1.8.0). Este worker construye el cliente con
+# LLM_TIMEOUT_SECONDS, asi que ese chequeo no corre nunca.
+#
+# Lo que manda es que, sin streaming, la respuesta llega entera al final: el
+# pedido tiene que terminar de generar dentro de LLM_TIMEOUT_SECONDS. 20480
+# tokens a 35 tok/s son ~585 s, y por eso el timeout es 600 (hay un test que
+# ata los dos numeros). Subir este techo sin subir el timeout, o sin pasar a
+# streaming, es fabricar timeouts. `uso.llamadas[].ms` dice cuanto tarda de
+# verdad cada llamada.
 LLM_MAX_TOKENS_REINTENTO = int(os.getenv("LLM_MAX_TOKENS_REINTENTO", "20480"))
 
 # Techo propio para la Llamada C (feedback de auto-supervision).
@@ -103,12 +111,20 @@ LLM_MAX_TOKENS_REINTENTO = int(os.getenv("LLM_MAX_TOKENS_REINTENTO", "20480"))
 # largo de los tres tipos de llamada y no entra en 8192. El prompt no se toca:
 # cuanto dura el feedback lo decide Mariana, asi que lo que sube es el techo.
 #
-# 16384 es holgado y sigue siendo seguro sin streaming: claude-sonnet-5 admite
-# hasta 128K tokens de salida, y la guia del SDK recomienda ~16000 como maximo
-# para peticiones NO streaming (por encima de eso hay que usar .stream() para
-# no chocar con el timeout HTTP del cliente). Este worker no usa streaming.
+# 16384 es holgado: claude-sonnet-5 admite hasta 128K tokens de salida. Sin
+# streaming, lo que acota el techo es LLM_TIMEOUT_SECONDS (ver arriba).
 LLM_MAX_TOKENS_FEEDBACK = int(os.getenv("LLM_MAX_TOKENS_FEEDBACK", "16384"))
-LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "300"))
+
+# Espera HTTP de cada pedido a Anthropic. Sin streaming es, en la practica, la
+# duracion total de la generacion: tiene que cubrir la segunda pasada de
+# LLM_MAX_TOKENS_REINTENTO a una velocidad de salida conservadora (35 tok/s;
+# no esta documentada, HIPOTESIS a confirmar con uso.llamadas[].ms).
+LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "600"))
+# Reintentos del SDK ante 429, 5xx, conexion y TIMEOUT. Con 600 s por pedido,
+# los 3 de antes daban 4 x 600 s = 40 min de cola bloqueada en el peor caso
+# (el worker procesa en serie). Con 1, 20 min. Los fallos que igual quedan
+# vuelven como transitorios y la app los reencola con backoff.
+LLM_MAX_RETRIES = 1
 
 # Worker ────────────────────────────────────────────────────────────────────
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "30"))
