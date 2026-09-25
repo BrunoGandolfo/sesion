@@ -6,8 +6,11 @@ faltante, enum invalido) se pide una segunda vez citandole al modelo el error.
 Si la segunda tampoco valida, ahi si falla la sesion. Los fallos de transporte
 no se reintentan aca: de eso se ocupa `max_retries` del SDK.
 
-Sin red: se mockea _llamar_llm, que es la frontera con Anthropic.
+Sin red: se mockea _llamar_anthropic, que es la frontera con Anthropic.
 """
+import logging
+from types import SimpleNamespace
+
 import pytest
 
 import clinical_analyzer
@@ -47,7 +50,7 @@ def _nota_sin_analisis() -> dict:
 @pytest.fixture
 def llm(mocker):
     """Frontera con Anthropic. Cada test define su secuencia de respuestas."""
-    return mocker.patch("clinical_analyzer._llamar_llm")
+    return mocker.patch("clinical_analyzer._llamar_anthropic")
 
 
 @pytest.fixture
@@ -292,10 +295,6 @@ def test_feedback_gestalt_usa_su_prompt_y_su_validador(llm, prompt):
 # son las tres: el techo propio del feedback, el reintento, y la advertencia
 # con clave estable cuando aun asi no sale.
 
-def _truncado(tope: int = 8192) -> PipelineError:
-    return PipelineError("llm_truncado", f"Respuesta truncada en {tope} tokens")
-
-
 def test_feedback_truncado_reintenta_y_sale(llm, prompt):
     llm.side_effect = [_truncado(), _feedback_cbt_mi()]
 
@@ -448,17 +447,18 @@ def test_la_nota_truncada_dos_veces_sigue_fallando(llm, prompt):
     assert llm.call_count == 2
 
 
-def test_la_segunda_pasada_no_pasa_del_tope_sin_streaming(llm, prompt):
-    # 20480: el SDK exige streaming por encima de 21333 tokens
-    # (expected_time = 3600 * max_tokens / 128000 > 600 s). Este worker no
-    # usa streaming.
+def test_la_segunda_pasada_no_pasa_del_tope_de_reintento(llm, prompt):
     llm.side_effect = [_truncado(config.LLM_MAX_TOKENS_FEEDBACK), _feedback_cbt_mi()]
 
     clinical_analyzer.generar_feedback_terapeuta("t")
 
     assert config.LLM_MAX_TOKENS_REINTENTO == 20480
-    assert config.LLM_MAX_TOKENS_REINTENTO <= 21333
     assert llm.call_args_list[1].args[3] == config.LLM_MAX_TOKENS_REINTENTO
+
+
+def test_el_timeout_alcanza_para_la_segunda_pasada_a_35_tokens_por_segundo():
+    # Sin streaming la respuesta llega entera al final (config.py).
+    assert config.LLM_TIMEOUT_SECONDS >= config.LLM_MAX_TOKENS_REINTENTO / 35
 
 
 def test_el_contexto_truncado_reintenta_con_el_doble(llm, prompt):
@@ -497,7 +497,7 @@ def test_los_cuatro_prompts_se_cargan():
 
 
 def _truncado(techo: int = 8000, razonamiento: str = "7100") -> PipelineError:
-    """El error tal como lo arma _llamar_llm ante stop_reason=max_tokens."""
+    """El error tal como lo arma _llamar_anthropic ante stop_reason=max_tokens."""
     return PipelineError(
         "llm_truncado",
         f"Respuesta truncada contra el techo de {techo} tokens"
@@ -582,3 +582,22 @@ def test_el_detalle_entra_en_los_500_caracteres_que_guarda_la_app(llm):
     # processor.py corta en 500 al mandarlo: si el texto creciera, se
     # perderia justo la parte que se agrego al final.
     assert len(exc.value.mensaje_publico) < 200
+
+
+# Logs sin texto de la sesion ───────────────────────────────────────────────
+
+def test_un_fallo_inesperado_del_feedback_solo_loguea_el_tipo(mocker, caplog):
+    secreto = "ANA-SECRETA dijo que no duerme"
+    mocker.patch("clinical_analyzer._cargar_prompt", side_effect=KeyError(secreto))
+    with caplog.at_level(logging.DEBUG):
+        feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+    assert feedback is None
+    assert diagnostico.advertencias == ["feedback_no_generado: KeyError"]
+    assert all(secreto not in r.getMessage() for r in caplog.records)
+
+
+def test_el_mensaje_de_error_de_la_api_se_corta_en_160():
+    error = SimpleNamespace(body={"error": {"type": "invalid_request_error", "message": "x" * 500}})
+    mensaje = clinical_analyzer.mensaje_error_api(error)
+    assert len(mensaje) == 160
+    assert mensaje.startswith("invalid_request_error: ")

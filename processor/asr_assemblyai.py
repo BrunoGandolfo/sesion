@@ -445,7 +445,7 @@ def _normalizar(data: dict, transcript_id: str, modelo_solicitado: str) -> dict:
 
 def transcribir(audio: BinaryIO, keyterms: list[str] | None = None) -> dict:
     """
-    Transcribe y diariza el audio (bytes ya descifrados) via AssemblyAI.
+    Transcribe y diariza el audio (el ya normalizado por audio_asr) via AssemblyAI.
     El endpoint de upload recibe el audio como application/octet-stream y
     detecta el formato solo: no hace falta declarar el content-type.
 

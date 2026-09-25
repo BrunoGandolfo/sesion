@@ -9,6 +9,7 @@ pipeline reporte la version de prompt usada.
 import json
 import logging
 import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -16,6 +17,7 @@ import anthropic
 
 import config
 from errores import PipelineError
+from uso import ms_desde
 from schemas_llm import (
     SCHEMA_CONTEXTO,
     SCHEMA_FEEDBACK_CBT_MI,
@@ -87,7 +89,7 @@ def _cliente() -> anthropic.Anthropic:
     if _cliente_anthropic is None:
         kwargs: dict = {
             "api_key": config.ANTHROPIC_API_KEY,
-            "max_retries": 3,
+            "max_retries": config.LLM_MAX_RETRIES,
             "timeout": config.LLM_TIMEOUT_SECONDS,
         }
         # Keys "identity-linked": la API exige anthropic-workspace-id en cada
@@ -105,10 +107,9 @@ def mensaje_error_api(e: Exception) -> str:
     """
     Texto de validacion que devuelve la API en el cuerpo del error
     ({"error": {"type", "message"}}). Es diagnostico de la API, no contenido
-    clinico; se trunca a 300 chars por si algun dia incluyera eco del input.
+    clinico; se trunca a 160 chars por si algun dia incluyera eco del input.
     Para excepciones que no son de la API (sin `body` ni `message`) devuelve
-    "": es el mensaje acotado que usan processor y contexto_worker en vez de
-    volcar trazas con cuerpos de respuesta.
+    "".
     """
     mensaje = ""
     body = getattr(e, "body", None)
@@ -123,55 +124,82 @@ def mensaje_error_api(e: Exception) -> str:
             mensaje = str(body.get("message") or "")
     if not mensaje:
         mensaje = str(getattr(e, "message", "") or "")
-    return mensaje[:300]
+    return mensaje[:160]
+
+
+def _entero(valor: object) -> int | None:
+    """Un contador del `usage`, o None si no vino (bool no es un contador)."""
+    return valor if isinstance(valor, int) and not isinstance(valor, bool) else None
 
 
 def _llamar_anthropic(
-    system_prompt: str, user_content: str, schema: dict, max_tokens: int
+    system_prompt: str,
+    user_content: str,
+    schema: dict,
+    max_tokens: int,
+    llamadas: list[dict] | None = None,
+    nombre: str = "llm#1",
 ) -> dict:
     """
     Una llamada a la Messages API con structured output (json_schema).
-    El system prompt lleva cache_control: es identico entre sesiones y
-    representa la mayor parte del input.
 
     `max_tokens` es por llamada: la nota usa config.LLM_MAX_TOKENS_NOTA, el
     feedback config.LLM_MAX_TOKENS_FEEDBACK y el contexto el techo comun
     config.LLM_MAX_TOKENS. Los dos primeros son mas altos porque sus salidas no
     entraban en el comun (ver los comentarios de config.py).
+
+    Si se pasa `llamadas`, agrega una entrada con lo que costo el pedido
+    (tokens, techo, stop, ms, requestId; ver uso.py), tambien cuando falla:
+    un truncado o un timeout se pagan igual y son justo los que hay que ver.
+    Si fallo, la entrada lleva `error` con el codigo.
     """
+    llamada: dict = {"nombre": nombre, "entrada": 0, "salida": 0, "techo": max_tokens}
+    if llamadas is not None:
+        llamadas.append(llamada)
+
+    def fallar(codigo: str, mensaje: str) -> PipelineError:
+        llamada["error"] = codigo
+        return PipelineError(codigo, mensaje)
+
     output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
     # `effort` vive dentro de output_config en la API actual. Los niveles
     # aceptados dependen del modelo; vacio = no enviar y usar el default.
     if config.LLM_EFFORT:
         output_config["effort"] = config.LLM_EFFORT
 
-    logger.info(f"Llamando Anthropic ({config.LLM_MODEL_ID}, effort={config.LLM_EFFORT or 'default'})...")
+    logger.info(f"Llamando Anthropic ({config.LLM_MODEL_ID}, effort={config.LLM_EFFORT or 'default'}, {nombre})...")
+    inicio = time.monotonic()
     try:
         response = _cliente().messages.create(
             model=config.LLM_MODEL_ID,
             max_tokens=max_tokens,
-            system=[
-                {
-                    "type": "text",
-                    "text": system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
+            # Sin cache_control: con este trafico la cache casi nunca se lee
+            # (TTL de 5 min, sesiones mas separadas que eso, un system prompt
+            # distinto por llamada) y cada escritura cuesta 1,25x la entrada.
+            # Forense 04-worker.md §8. uso.llamadas[].cacheLectura lo confirma.
+            system=system_prompt,
             messages=[{"role": "user", "content": user_content}],
             output_config=output_config,
         )
     except anthropic.APITimeoutError as e:
-        logger.error(f"Anthropic timeout tras {config.LLM_TIMEOUT_SECONDS}s")
-        raise PipelineError("llm_timeout", "Anthropic no respondio a tiempo") from e
+        llamada["ms"] = ms_desde(inicio)
+        logger.error(f"Anthropic timeout tras {llamada['ms']} ms (timeout {config.LLM_TIMEOUT_SECONDS}s)")
+        raise fallar("llm_timeout", "Anthropic no respondio a tiempo") from e
     except anthropic.APIStatusError as e:
+        llamada["ms"] = ms_desde(inicio)
+        request_id = getattr(e, "request_id", None)
+        if isinstance(request_id, str):
+            llamada["requestId"] = request_id
         logger.error(
-            f"Anthropic HTTP {e.status_code} (request_id={getattr(e, 'request_id', None)}): "
+            f"Anthropic HTTP {e.status_code} (request_id={request_id}): "
             f"{mensaje_error_api(e) or 'sin mensaje en el cuerpo'}"
         )
-        raise PipelineError("llm_error", f"Anthropic respondio {e.status_code}") from e
+        raise fallar("llm_error", f"Anthropic respondio {e.status_code}") from e
     except anthropic.APIConnectionError as e:
+        llamada["ms"] = ms_desde(inicio)
         logger.error(f"Anthropic sin conexion ({type(e).__name__})")
-        raise PipelineError("llm_error", "Anthropic no responde") from e
+        raise fallar("llm_error", "Anthropic no responde") from e
+    llamada["ms"] = ms_desde(inicio)
 
     usage = response.usage
     # `tope` es lo unico que distingue las tres llamadas en el log (la nota y
@@ -184,13 +212,29 @@ def _llamar_anthropic(
     # de sobra, cuando lo que paso es que el razonamiento se comio el techo.
     detalles = getattr(usage, "output_tokens_details", None)
     pensamiento = getattr(detalles, "thinking_tokens", None)
+    request_id = getattr(response, "_request_id", None)
+    llamada["entrada"] = _entero(getattr(usage, "input_tokens", None)) or 0
+    llamada["salida"] = _entero(getattr(usage, "output_tokens", None)) or 0
+    for clave, atributo in (
+        ("cacheLectura", "cache_read_input_tokens"),
+        ("cacheEscritura", "cache_creation_input_tokens"),
+    ):
+        valor = _entero(getattr(usage, atributo, None))
+        if valor is not None:
+            llamada[clave] = valor
+    if _entero(pensamiento) is not None:
+        llamada["razonamiento"] = pensamiento
+    if isinstance(response.stop_reason, str):
+        llamada["stop"] = response.stop_reason
+    if isinstance(request_id, str):
+        llamada["requestId"] = request_id
     logger.info(
-        f"Anthropic OK (request_id={getattr(response, '_request_id', None)}): "
+        f"Anthropic OK (request_id={request_id}, {nombre}): "
         f"input={usage.input_tokens} output={usage.output_tokens}/{max_tokens} "
         f"pensamiento={pensamiento} "
         f"cache_read={getattr(usage, 'cache_read_input_tokens', None)} "
         f"cache_write={getattr(usage, 'cache_creation_input_tokens', None)} "
-        f"stop={response.stop_reason}"
+        f"stop={response.stop_reason} ms={llamada['ms']}"
     )
 
     if response.stop_reason == "max_tokens":
@@ -201,17 +245,17 @@ def _llamar_anthropic(
         # respuesta. Son dos enteros del `usage`: no hay una palabra de la
         # sesion en este texto.
         gastado = pensamiento if pensamiento is not None else "desconocido"
-        raise PipelineError(
+        raise fallar(
             "llm_truncado",
             f"Respuesta truncada contra el techo de {max_tokens} tokens"
             f" (razonamiento: {gastado})",
         )
     if response.stop_reason == "refusal":
-        raise PipelineError("llm_rechazo", "El modelo rechazo la solicitud")
+        raise fallar("llm_rechazo", "El modelo rechazo la solicitud")
 
     texto = next((b.text for b in response.content if b.type == "text"), None)
     if texto is None:
-        raise PipelineError("llm_sin_texto", "La respuesta no contiene bloque de texto")
+        raise fallar("llm_sin_texto", "La respuesta no contiene bloque de texto")
 
     try:
         return json.loads(texto)
@@ -225,15 +269,7 @@ def _llamar_anthropic(
             f"empieza_con_llave={stripped.startswith('{')}, "
             f"termina_con_llave={stripped.endswith('}')})"
         )
-        raise PipelineError("llm_json_invalido", "El LLM no devolvio JSON valido") from e
-
-
-def _llamar_llm(
-    system_prompt: str, user_content: str, schema: dict, max_tokens: int
-) -> dict:
-    if config.LLM_BACKEND == "anthropic":
-        return _llamar_anthropic(system_prompt, user_content, schema, max_tokens)
-    raise ValueError(f"Backend no soportado: {config.LLM_BACKEND}")
+        raise fallar("llm_json_invalido", "El LLM no devolvio JSON valido") from e
 
 
 # Reintento por forma ───────────────────────────────────────────────────────
@@ -264,6 +300,8 @@ def _llamar_validando(
     schema: dict,
     validar: Callable[[object], None] | None = None,
     max_tokens: int | None = None,
+    llamadas: list[dict] | None = None,
+    nombre: str = "llm",
 ) -> tuple[dict, int]:
     """
     Llama al LLM y verifica la estructura del resultado.
@@ -271,8 +309,8 @@ def _llamar_validando(
     Ante un fallo de FORMA —JSON no parseable, seccion SOAP faltante, enum
     invalido, respuesta truncada— repite la llamada una sola vez. Los fallos de
     transporte (timeout, HTTP, conexion) no se reintentan aca: de eso ya se
-    ocupa `max_retries` del SDK, y repetir una llamada de 8k tokens porque la
-    red se cayo no arregla nada.
+    ocupa `max_retries` del SDK (config.LLM_MAX_RETRIES), y repetir una llamada
+    de 16k tokens porque la red se cayo no arregla nada.
 
     `max_tokens` None = el techo comun (config.LLM_MAX_TOKENS). La nota y el
     feedback pasan el suyo.
@@ -280,6 +318,9 @@ def _llamar_validando(
     Ante `llm_truncado` la segunda pasada va con el DOBLE de techo (tope en
     config.LLM_MAX_TOKENS_REINTENTO). Repetir con el mismo max_tokens era hacer
     otra vez la pregunta que acababa de no entrar.
+
+    Cada pasada se anota en `llamadas` (si se pasa) como "<nombre>#1" y
+    "<nombre>#2".
 
     Devuelve (resultado, reintentos), con reintentos en 0 o 1.
     """
@@ -296,11 +337,12 @@ def _llamar_validando(
             else f"{user_content}\n\n{_bloque_correccion(correccion)}"
         )
 
-        # Los dos try van separados a proposito: `_llamar_llm` tambien lanza
-        # ValueError (backend no soportado), y eso es un error de
-        # configuracion, no una salida mal formada del modelo.
+        # Los dos try van separados a proposito: el primero es la llamada, el
+        # segundo la validacion de forma de lo que volvio.
         try:
-            resultado = _llamar_llm(system_prompt, contenido, schema, tope)
+            resultado = _llamar_anthropic(
+                system_prompt, contenido, schema, tope, llamadas, f"{nombre}#{intento + 1}"
+            )
         except PipelineError as e:
             if (
                 e.codigo not in CODIGOS_QUE_REINTENTAN
@@ -330,6 +372,8 @@ def _llamar_validando(
             try:
                 validar(resultado)
             except ValueError as e:
+                if llamadas and llamadas[-1]["nombre"] == f"{nombre}#{intento + 1}":
+                    llamadas[-1]["error"] = "llm_estructura_invalida"
                 if intento == MAX_REINTENTOS_ESTRUCTURA:
                     raise PipelineError("llm_estructura_invalida", str(e)) from e
                 correccion = str(e)
@@ -352,6 +396,7 @@ def analizar(
     transcripcion_formateada: str,
     contexto_clinico: str | None = None,
     speech_analytics: dict | None = None,
+    llamadas: list[dict] | None = None,
 ) -> tuple[dict, str, DiagnosticoLLM]:
     """
     Genera la nota SOAP usando el prompt de PROMPTS["nota"]. Arma el user
@@ -390,6 +435,8 @@ def analizar(
         SCHEMA_NOTA,
         validar_estructura_nota,
         max_tokens=config.LLM_MAX_TOKENS_NOTA,
+        llamadas=llamadas,
+        nombre="nota",
     )
     advertencias = sanear_datos_nota(resultado)
     for advertencia in advertencias:
@@ -407,6 +454,7 @@ def actualizar_contexto_clinico(
     datos_estructurados: dict,
     sesion_clinica_id: str,
     fecha: str,
+    llamadas: list[dict] | None = None,
 ) -> tuple[dict, str]:
     """
     Propone una nueva versión del Recorrido tras una nota SOAP aprobada, con el
@@ -447,7 +495,12 @@ def actualizar_contexto_clinico(
     # pasada con el doble (16384), que es justo lo que no existia: hasta el
     # 19-sep el reintento repetia el pedido con el mismo techo.
     actualizado, reintentos = _llamar_validando(
-        system_prompt, user_content, SCHEMA_CONTEXTO, validar_estructura_contexto
+        system_prompt,
+        user_content,
+        SCHEMA_CONTEXTO,
+        validar_estructura_contexto,
+        llamadas=llamadas,
+        nombre="contexto",
     )
     logger.info(f"Contexto clinico actualizado ({nombre_prompt}, reintentos={reintentos})")
     return actualizado, nombre_prompt
@@ -455,18 +508,18 @@ def actualizar_contexto_clinico(
 
 # Llamada C — feedback terapeuta ────────────────────────────────────────────
 
-# Clave estable de la advertencia cuando la sesion se queda sin "Para vos".
-# Se lee sola en `_pipeline.advertencias` y se puede grepear en los logs de
-# Railway: `feedback_no_generado: llm_truncado`. Reemplaza al texto anterior
-# ("feedbackTerapeuta no disponible: ..."), que decia lo mismo sin ser una
-# clave. Lo que sigue a los dos puntos es el codigo de PipelineError o, si el
-# fallo no vino del pipeline, el nombre de la excepcion.
+# Clave estable del motivo cuando la sesion se queda sin "Para vos". Viaja
+# como `error` del trabajo generar_feedback y se puede grepear en los logs de
+# Railway: `feedback_no_generado: llm_truncado`. Lo que sigue a los dos puntos
+# es el codigo de PipelineError o, si el fallo no vino del pipeline, el nombre
+# de la excepcion.
 ADVERTENCIA_FEEDBACK = "feedback_no_generado"
 
 def generar_feedback_terapeuta(
     transcripcion_formateada: str,
     speech_analytics: dict | None = None,
     orientacion: str = "cbt_mi",
+    llamadas: list[dict] | None = None,
 ) -> tuple[dict | None, str, DiagnosticoLLM]:
     """
     Reporte de auto-supervision segun orientacion teorica (MITI/CTS-R para
@@ -503,6 +556,8 @@ def generar_feedback_terapeuta(
             schema,
             validar,
             max_tokens=config.LLM_MAX_TOKENS_FEEDBACK,
+            llamadas=llamadas,
+            nombre="feedback",
         )
         advertencias = sanear_feedback(feedback, orientacion)
         for advertencia in advertencias:
@@ -516,7 +571,7 @@ def generar_feedback_terapeuta(
             advertencias=[f"{ADVERTENCIA_FEEDBACK}: {e.codigo}"]
         )
     except Exception as e:
-        logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}: {str(e)[:200]}")
+        logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}")
         return None, nombre_prompt, DiagnosticoLLM(
             advertencias=[f"{ADVERTENCIA_FEEDBACK}: {type(e).__name__}"]
         )

@@ -3,7 +3,7 @@
 Worker Python que procesa las sesiones grabadas: descarga el audio de R2 (la
 app no lo cifra), comprueba que sea una sola grabación (una cabecera EBML),
 transcribe con AssemblyAI, genera la nota SOAP
-y el feedback con Anthropic y reporta el resultado al callback de la app.
+y el feedback con Anthropic y reporta el resultado a la app (POST /resultado).
 Toda la comunicación con la app pasa por `app_client.py`.
 
 ## Correr el worker localmente

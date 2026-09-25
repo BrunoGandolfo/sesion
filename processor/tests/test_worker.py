@@ -24,7 +24,6 @@ def test_el_item_se_traduce_con_terminos_saneados():
     assert s is not None
     assert (s.sesion_clinica_id, s.intento, s.ticket) == ("s1", 2, "a" * 64)
     assert s.terminos_asr == ["GTFS", "MITI 4.2.1"]
-    assert s.orientacion_teorica == "gestalt"
     assert s.audio == ITEM["audio"] and s.checkpoint is None
 
 

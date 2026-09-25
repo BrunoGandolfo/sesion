@@ -22,7 +22,7 @@ TRANSCRIPCION = {
 }
 
 NOTA = {"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"}
-LLM = f"{config.LLM_BACKEND}:{config.LLM_MODEL_ID}"
+LLM = f"anthropic:{config.LLM_MODEL_ID}"
 TICKET = "a" * 64
 
 
@@ -32,7 +32,6 @@ def sesion(**extra) -> SesionReclamada:
         intento=2,
         ticket=TICKET,
         paciente_id="p1",
-        orientacion_teorica="cbt_mi",
         terminos_asr=["GTFS"],
         audio={"key": "org/s1/0"},
         checkpoint=None,
@@ -93,6 +92,9 @@ def test_registra_el_asr_y_el_checkpoint_antes_del_modelo_y_entrega_la_nota(paso
     pasos["resultado"].assert_called_once()
     sid, ticket, payload = pasos["resultado"].call_args.args
     assert (sid, ticket) == ("s1", TICKET)
+    uso = payload.pop("uso")
+    assert uso["asrSegundos"] == 3
+    assert set(uso["pasosMs"]) == {"descarga", "normalizacion", "asr"}
     assert payload == {
         "intento": 2,
         "resultado": "nota",
@@ -140,6 +142,9 @@ def test_fallo_transitorio_en_asr_se_informa_como_no_definitivo_con_el_paso(paso
     processor.procesar_sesion(sesion())
 
     payload = pasos["resultado"].call_args.args[2]
+    uso = payload.pop("uso")
+    # El ASR fallo: se sabe cuanto tardo, no cuanto se facturo.
+    assert "asrSegundos" not in uso and "asr" in uso["pasosMs"]
     assert payload == {
         "intento": 2,
         "resultado": "fallo",
@@ -349,7 +354,9 @@ def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
     delete = mocker.patch("processor.requests.delete")
     for status in (200, 404):
         delete.return_value = mocker.Mock(status_code=status)
-        assert processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}}) == {"ok": True}
+        res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
+        assert res.pop("uso")["llamadas"] == []
+        assert res == {"ok": True}
     assert delete.call_args.args[0].endswith("/transcript/tr1")
     assert delete.call_args.kwargs["headers"] == {"authorization": config.ASSEMBLYAI_API_KEY}
 
@@ -374,9 +381,11 @@ def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):
             "adjunto": {"transcripcionFormateada": "[00:00] T: hola", "speechAnalytics": {"ratio": 1}, "orientacionTeorica": "gestalt"},
         }
     )
+    assert "uso" in res
+    del res["uso"]
     assert res == {"ok": True, "feedback": {"mitiCounts": {}}, "promptVersion": "therapist_feedback_v1.1.md", "modeloLlm": LLM}
     assert generar.call_args.args[0] == "[00:00] T: hola"
-    assert generar.call_args.kwargs == {"speech_analytics": {"ratio": 1}, "orientacion": "gestalt"}
+    assert generar.call_args.kwargs == {"speech_analytics": {"ratio": 1}, "orientacion": "gestalt", "llamadas": []}
 
 
 def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
@@ -385,6 +394,7 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
         return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"])),
     )
     res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x"}})
+    del res["uso"]
     assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado"}
 
     assert processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})["ok"] is False
@@ -393,3 +403,37 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
 def test_un_tipo_desconocido_no_lanza():
     res = processor.ejecutar_trabajo({"tipo": "desconocido"})
     assert res["ok"] is False and "desconocido" in res["error"]
+
+
+# Logs y errores sin texto de la sesion ─────────────────────────────────────
+#
+# Una excepcion inesperada puede citar un valor sacado del contenido (una
+# KeyError con una clave, un eco del proveedor). De esas solo viaja y se
+# loguea el tipo; un PipelineError trae su codigo y su mensaje publico.
+
+SECRETO = "ANA-SECRETA dijo que no duerme"
+
+
+def test_una_excepcion_inesperada_en_un_trabajo_solo_deja_el_tipo(mocker, caplog):
+    mocker.patch("processor.generar_feedback", side_effect=KeyError(SECRETO))
+    with caplog.at_level(logging.DEBUG):
+        res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})
+    assert res["error"] == "KeyError"
+    assert all(SECRETO not in r.getMessage() for r in caplog.records)
+
+
+def test_una_excepcion_inesperada_en_la_sesion_solo_loguea_el_tipo(pasos, caplog):
+    pasos["mocker"].patch("processor.transcribir", side_effect=RuntimeError(SECRETO))
+    with caplog.at_level(logging.DEBUG):
+        processor.procesar_sesion(sesion())
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload["codigo"] == "error_interno"
+    assert any("error_interno RuntimeError" in r.getMessage() for r in caplog.records)
+    assert all(SECRETO not in r.getMessage() for r in caplog.records)
+    assert SECRETO not in str(payload)
+
+
+def test_un_adjunto_de_recorrido_invalido_dice_por_que(mocker):
+    res = processor.ejecutar_trabajo({"tipo": "integrar_contexto", "adjunto": {}, "payload": {}})
+    assert res["ok"] is False
+    assert res["error"] == "adjunto_invalido: Adjunto de Recorrido inválido"

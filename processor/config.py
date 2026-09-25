@@ -5,12 +5,13 @@ Ola 3: ASR en AssemblyAI, LLM en Anthropic, worker hosteado en Railway.
 Todo se lee de variables de entorno; ver .env.example.
 """
 import os
+from urllib.parse import urlsplit
 
 # App Sesión (Vercel) ───────────────────────────────────────────────────────
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3001")
 PROCESSING_SECRET = os.getenv("PROCESSING_SECRET", "")
 
-# Cloudflare R2 (audio cifrado) ─────────────────────────────────────────────
+# Cloudflare R2 (audio del telefono, tal cual) ─────────────────────────────
 R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "")
@@ -22,7 +23,7 @@ ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 # (el singular `speech_model` esta deprecado). Identificadores vigentes:
 #   https://www.assemblyai.com/docs/pre-recorded-audio/select-the-speech-model
 #   https://www.assemblyai.com/docs/pre-recorded-audio/universal-3-5-pro
-# ASR_MODEL_ID se reporta en el callback como modeloASR.
+# ASR_MODEL_ID se reporta en el checkpoint como modeloAsr.
 ASR_MODEL_ID = os.getenv("ASR_MODEL_ID", "universal-3-5-pro")
 ASR_MODEL_FALLBACK = os.getenv("ASR_MODEL_FALLBACK", "universal-2")
 # Prompt de contexto (`prompt`, solo Universal-3.5 Pro; hasta 1.500 palabras,
@@ -43,7 +44,6 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # cada pedido (sin ella la API responde 400). Opcional: vacío = no se manda
 # ninguna cabecera y el cliente se construye exactamente como antes.
 ANTHROPIC_WORKSPACE_ID = os.getenv("ANTHROPIC_WORKSPACE_ID", "").strip()
-LLM_BACKEND = os.getenv("LLM_BACKEND", "anthropic")
 LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "claude-sonnet-5")
 # Nivel de esfuerzo (low|medium|high|xhigh|max). Vacío = no enviar el parámetro.
 LLM_EFFORT = os.getenv("LLM_EFFORT", "medium")
@@ -87,12 +87,20 @@ LLM_MAX_TOKENS_NOTA = int(os.getenv("LLM_MAX_TOKENS_NOTA", "16384"))
 # no podia terminar distinto: dos truncados seguidos y la sesion quedaba
 # fallida. Ahora la segunda pasada duplica el techo, hasta este tope.
 #
-# 20480 es el maximo que admite una peticion SIN streaming. El SDK calcula
-# `expected_time = 3600 * max_tokens / 128000` y exige streaming si eso pasa de
-# 10 minutos (anthropic/_base_client.py, _calculate_nonstreaming_timeout), o
-# sea max_tokens > 21333. Este worker no usa streaming, asi que 20480 es el
-# ultimo escalon que entra. OJO: tambien tiene que entrar en
-# LLM_TIMEOUT_SECONDS, que es de 300 s.
+# El limite real de este numero es el tiempo, no el SDK. El SDK tiene un
+# chequeo (`_calculate_nonstreaming_timeout`: exige streaming si
+# 3600 * max_tokens / 128000 pasa de 600 s, o sea max_tokens > 21333), pero
+# SOLO corre si el cliente usa el timeout por defecto del SDK
+# (resources/messages/messages.py, `self._client.timeout == DEFAULT_TIMEOUT`,
+# verificado en anthropic 1.8.0). Este worker construye el cliente con
+# LLM_TIMEOUT_SECONDS, asi que ese chequeo no corre nunca.
+#
+# Lo que manda es que, sin streaming, la respuesta llega entera al final: el
+# pedido tiene que terminar de generar dentro de LLM_TIMEOUT_SECONDS. 20480
+# tokens a 35 tok/s son ~585 s, y por eso el timeout es 600 (hay un test que
+# ata los dos numeros). Subir este techo sin subir el timeout, o sin pasar a
+# streaming, es fabricar timeouts. `uso.llamadas[].ms` dice cuanto tarda de
+# verdad cada llamada.
 LLM_MAX_TOKENS_REINTENTO = int(os.getenv("LLM_MAX_TOKENS_REINTENTO", "20480"))
 
 # Techo propio para la Llamada C (feedback de auto-supervision).
@@ -103,17 +111,37 @@ LLM_MAX_TOKENS_REINTENTO = int(os.getenv("LLM_MAX_TOKENS_REINTENTO", "20480"))
 # largo de los tres tipos de llamada y no entra en 8192. El prompt no se toca:
 # cuanto dura el feedback lo decide Mariana, asi que lo que sube es el techo.
 #
-# 16384 es holgado y sigue siendo seguro sin streaming: claude-sonnet-5 admite
-# hasta 128K tokens de salida, y la guia del SDK recomienda ~16000 como maximo
-# para peticiones NO streaming (por encima de eso hay que usar .stream() para
-# no chocar con el timeout HTTP del cliente). Este worker no usa streaming.
+# 16384 es holgado: claude-sonnet-5 admite hasta 128K tokens de salida. Sin
+# streaming, lo que acota el techo es LLM_TIMEOUT_SECONDS (ver arriba).
 LLM_MAX_TOKENS_FEEDBACK = int(os.getenv("LLM_MAX_TOKENS_FEEDBACK", "16384"))
-LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "300"))
+
+# Espera HTTP de cada pedido a Anthropic. Sin streaming es, en la practica, la
+# duracion total de la generacion: tiene que cubrir la segunda pasada de
+# LLM_MAX_TOKENS_REINTENTO a una velocidad de salida conservadora (35 tok/s;
+# no esta documentada, HIPOTESIS a confirmar con uso.llamadas[].ms).
+LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "600"))
+# Reintentos del SDK ante 429, 5xx, conexion y TIMEOUT. Con 600 s por pedido,
+# los 3 de antes daban 4 x 600 s = 40 min de cola bloqueada en el peor caso
+# (el worker procesa en serie). Con 1, 20 min. Los fallos que igual quedan
+# vuelven como transitorios y la app los reencola con backoff.
+LLM_MAX_RETRIES = 1
 
 # Worker ────────────────────────────────────────────────────────────────────
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "30"))
 PROMPTS_DIR = os.getenv("PROMPTS_DIR", os.path.join(os.path.dirname(__file__), "prompts"))
-WORKER_VERSION = os.getenv("WORKER_VERSION", "ola3")
+# Viaja como X-Worker-Version en cada latido y como `worker` en cada `uso`:
+# es lo que dice que codigo produjo una nota. Orden: la variable explicita (si
+# alguien la carga, manda), el commit que desplego Railway, y "local". Railway
+# inyecta RAILWAY_GIT_COMMIT_SHA solo en los deploys disparados desde GitHub
+# (docs.railway.com/reference/variables); un `railway up` a mano no la trae.
+WORKER_VERSION = (
+    os.getenv("WORKER_VERSION", "").strip()
+    or os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip()[:7]
+    or "local"
+)
+# Railway inyecta RAILWAY_ENVIRONMENT_ID siempre (build y deploy). Sin ella,
+# el worker corre en una maquina de desarrollo.
+EN_RAILWAY = bool(os.getenv("RAILWAY_ENVIRONMENT_ID", "").strip())
 
 # Endpoints de la app ───────────────────────────────────────────────────────
 PENDIENTES_URL = f"{APP_BASE_URL}/api/sesion-clinica/pendientes"
@@ -127,8 +155,26 @@ def r2_configurado() -> bool:
     return all([R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME])
 
 
+_HOSTS_LOCALES = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _app_base_url_valida(url: str, en_railway: bool) -> bool:
+    """
+    https:// con host, siempre. La unica excepcion es http:// contra la propia
+    maquina, y solo fuera de Railway: en Railway el default de localhost
+    significa que APP_BASE_URL no se cargo, y el worker se quedaria para
+    siempre logueando "Error consultando pendientes (ConnectionError)".
+    """
+    partes = urlsplit(url)
+    if partes.scheme == "https" and partes.hostname:
+        return True
+    return partes.scheme == "http" and partes.hostname in _HOSTS_LOCALES and not en_railway
+
+
 def validar_config() -> None:
     errores = []
+    if not _app_base_url_valida(APP_BASE_URL, EN_RAILWAY):
+        errores.append("APP_BASE_URL tiene que ser https:// (http solo contra localhost fuera de Railway)")
     if not PROCESSING_SECRET:
         errores.append("PROCESSING_SECRET no configurado")
     if not ANTHROPIC_API_KEY:

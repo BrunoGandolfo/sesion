@@ -125,7 +125,7 @@ _SPEECH_ANALYTICS_INFERIDO = _obj({
     "comentario": _STR_NULL,
 })
 
-# Nota clínica SOAP — clinical_note_v3.1.md ─────────────────────────────────
+# Nota clínica SOAP — clinical_note_v3.1.1.md ───────────────────────────────
 
 SCHEMA_NOTA = _obj({
     "nota": _obj({
@@ -201,7 +201,7 @@ SCHEMA_CONTEXTO = _obj({
     "cambios": _arr(_STR),
 })
 
-# Feedback terapeuta CBT/MI — therapist_feedback_v1.0.md ────────────────────
+# Feedback terapeuta CBT/MI — therapist_feedback_v1.1.md ────────────────────
 
 DISCLAIMER_CBT_MI = (
     "Estas métricas son orientativas, derivadas de la transcripción de audio. "
@@ -249,7 +249,7 @@ SCHEMA_FEEDBACK_CBT_MI = _obj({
     "disclaimer": _enum(DISCLAIMER_CBT_MI),
 })
 
-# Feedback terapeuta Gestalt — therapist_feedback_gestalt_v1.0.md ───────────
+# Feedback terapeuta Gestalt — therapist_feedback_gestalt_v1.1.md ───────────
 
 DISCLAIMER_GESTALT = (
     "Este análisis fue generado por IA aplicando la Gestalt Therapy Fidelity "
@@ -304,8 +304,8 @@ SCHEMA_FEEDBACK_GESTALT = _obj({
 # Por que se DESCARTA la clave en vez de mandarla en null: el contrato de la
 # app (src/lib/sesion-clinica/schema.ts:125,126,143) declara estos tres campos
 # como `.optional()`, no `.nullable()`. Un null explicito hace fallar la
-# validacion Zod del callback y devuelve 400, que para el worker es terminal
-# (processor/callback.py no reintenta ante 4xx). Omitir la clave es lo unico
+# validacion Zod de POST /resultado y devuelve 400, que para el worker es
+# terminal (app_client.py no reintenta ante 4xx). Omitir la clave es lo unico
 # que la app acepta como "este dato no esta".
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -522,8 +522,7 @@ def _sanear_entero_en_rango(
 def sanear_datos_nota(resultado: dict) -> list[str]:
     """
     Normaliza las tres escalas de valoracion de la nota. Nunca lanza: devuelve
-    la lista de advertencias que el pipeline guarda en
-    datosEstructurados._pipeline.advertencias.
+    la lista de advertencias, que el pipeline manda a la app dentro de `uso`.
     """
     advertencias: list[str] = []
     datos = resultado.get("datosEstructurados")
