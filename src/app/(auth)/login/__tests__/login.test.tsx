@@ -149,7 +149,7 @@ describe("Pantalla de entrada", () => {
   });
 });
 
-it("identifica a Mariana Roldán en el pie", () => {
+it("firma el pie con el nombre del producto", () => {
   render(<LoginPage />);
-  expect(screen.getByText("© Mariana Roldán").closest("footer")).not.toBeNull();
+  expect(screen.getByText("© Sesión").closest("footer")).not.toBeNull();
 });
