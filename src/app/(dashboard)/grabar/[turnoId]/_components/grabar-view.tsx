@@ -37,7 +37,7 @@ import {
 } from "@/components/grabacion/GrabadorSesion";
 import { AvisoPrueba } from "@/components/layout/aviso-prueba";
 import { Button, Confirmar, Toast } from "@/components/ui";
-import { Aparece, Latido } from "@/components/ui/movimiento";
+import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
 import {
   marcarTurnoRealizado,
   subirAudio,
@@ -821,7 +821,9 @@ function PantallaEnviando({
       data-testid="enviando"
       className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-cream-50 px-6 text-center"
     >
-      <Loader2 size={34} strokeWidth={1.8} aria-hidden="true" className="animate-spin text-sage-500" />
+      <span className="gira-procesando inline-flex text-sage-500">
+        <AnilloProgreso tamano={34} />
+      </span>
       <p role="status" aria-live="polite" className="max-w-[320px] font-sans tabular-nums text-[16px] font-semibold leading-[1.45] text-ink-900">
         {texto}
       </p>
