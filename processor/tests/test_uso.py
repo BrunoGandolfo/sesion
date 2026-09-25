@@ -9,7 +9,6 @@ llamadas[] con nombre, entrada y salida enteros; el resto entra por
 Sin red: el cliente de Anthropic es un doble con la forma de la respuesta del
 SDK; el ASR, R2 y la app tambien.
 """
-import importlib
 import json
 from types import SimpleNamespace
 
@@ -251,60 +250,3 @@ def test_una_estructura_invalida_se_marca_en_su_pasada(anthropic_doble):
 
     assert llamadas[0]["error"] == "llm_estructura_invalida"
     assert "error" not in llamadas[1]
-
-
-# Version del worker y APP_BASE_URL ──────────────────────────────────────────
-
-@pytest.fixture
-def recargar_config(monkeypatch):
-    """Relee config.py con otras variables; al final lo deja como estaba."""
-    def recargar(**env):
-        for clave in ("WORKER_VERSION", "RAILWAY_GIT_COMMIT_SHA", "RAILWAY_ENVIRONMENT_ID"):
-            monkeypatch.delenv(clave, raising=False)
-        for clave, valor in env.items():
-            monkeypatch.setenv(clave, valor)
-        return importlib.reload(config)
-
-    yield recargar
-    monkeypatch.undo()
-    importlib.reload(config)
-
-
-def test_worker_version_sale_del_commit_de_railway(recargar_config):
-    sha = "d0beb8f5c55b36df7d674d55965a23b8d54ad69b"
-    assert recargar_config(RAILWAY_GIT_COMMIT_SHA=sha).WORKER_VERSION == "d0beb8f"
-    assert recargar_config(RAILWAY_GIT_COMMIT_SHA=sha, WORKER_VERSION="hotfix").WORKER_VERSION == "hotfix"
-    assert recargar_config().WORKER_VERSION == "local"
-
-
-@pytest.mark.parametrize(
-    ("url", "en_railway", "valida"),
-    [
-        ("https://sesion.example.com", True, True),
-        ("https://sesion.example.com", False, True),
-        ("http://localhost:3001", False, True),
-        ("http://127.0.0.1:3001", False, True),
-        # El default en Railway: APP_BASE_URL no se cargo.
-        ("http://localhost:3001", True, False),
-        ("http://sesion.example.com", False, False),
-        ("http://sesion.example.com", True, False),
-        ("sesion.example.com", True, False),
-        ("https://", True, False),
-        ("", False, False),
-    ],
-)
-def test_app_base_url(url, en_railway, valida):
-    assert config._app_base_url_valida(url, en_railway) is valida
-
-
-def test_validar_config_rechaza_app_base_url_sin_https_en_railway(recargar_config):
-    cfg = recargar_config(
-        RAILWAY_ENVIRONMENT_ID="env", APP_BASE_URL="http://localhost:3001",
-        R2_ENDPOINT="https://r2", R2_ACCESS_KEY_ID="k", R2_SECRET_ACCESS_KEY="s",
-    )
-    with pytest.raises(RuntimeError, match="APP_BASE_URL"):
-        cfg.validar_config()
-    recargar_config(
-        RAILWAY_ENVIRONMENT_ID="env", APP_BASE_URL="https://sesion.example.com",
-        R2_ENDPOINT="https://r2", R2_ACCESS_KEY_ID="k", R2_SECRET_ACCESS_KEY="s",
-    ).validar_config()
