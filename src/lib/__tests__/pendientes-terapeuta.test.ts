@@ -171,7 +171,7 @@ afterAll(async () => {
 });
 
 describe("pendientesTerapeuta — sin nada pendiente", () => {
-  it("devuelve las cuatro listas vacías", async () => {
+  it("devuelve todas las listas vacías", async () => {
     const orgId = await crearOrg();
 
     const pendientes = await pendientesDe(orgId);
@@ -182,6 +182,7 @@ describe("pendientesTerapeuta — sin nada pendiente", () => {
       totalSinCobrar: { sesiones: 0, monto: 0, pacientes: 0 },
       sinAutorizacion: [],
       notasFallidas: [],
+      grabacionesSinTerminar: [],
     });
   });
 });
@@ -836,13 +837,13 @@ describe("GET dashboard y turnos — inicio y acceso a notas", () => {
     expect(respuesta.status).toBe(200);
     const { data } = await respuesta.json();
     expect(data.inicio).toEqual({ tarifaCargada: true, tienePacientes: true, tieneTurnos: true });
-    expect(data.sesionesHoy.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobada" });
+    expect(data.sesionesHoy.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobada", actualizadaEn: expect.any(String) });
     expect(data.sesionesHoy.find((t: { id: string }) => t.id === sinNotaId).sesionClinica).toBeNull();
     const params = new URLSearchParams({ desde: new Date(fecha.getTime() - 60000).toISOString(), hasta: new Date(fecha.getTime() + 60000).toISOString() });
     const agenda = await leerTurnos(new Request(`http://localhost/api/turnos?${params}`));
     expect(agenda.status).toBe(200);
     const lista = (await agenda.json()).data;
-    expect(lista.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobada" });
+    expect(lista.find((t: { id: string }) => t.id === turnoId).sesionClinica).toEqual({ id: sesionId, estado: "aprobada", actualizadaEn: expect.any(String) });
     expect(lista.find((t: { id: string }) => t.id === sinNotaId).sesionClinica).toBeNull();
     await prismaRaw.paciente.update({ where: { id: pacienteId }, data: { activo: false } });
     await prismaRaw.turno.updateMany({ where: { organizationId: cuentaActual.id }, data: { fecha: SEMANA_PASADA } });

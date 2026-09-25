@@ -32,7 +32,7 @@ type ClientePrisma = typeof db;
 
 /** Lo que la agenda necesita de cada turno además de la fila. */
 const INCLUDE_AGENDA = {
-  sesionClinica: { select: { id: true, estado: true } },
+  sesionClinica: { select: { id: true, estado: true, actualizadaEn: true } },
   paciente: {
     select: { id: true, nombre: true, apellido: true, telefono: true },
   },

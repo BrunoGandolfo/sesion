@@ -29,6 +29,7 @@ import { fechaInputMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
 import { Button, Card, Chip } from "@/components/ui";
 import { IndicadorProcesando } from "@/components/ui/procesando";
 import { enProceso } from "@/lib/notas-en-proceso";
+import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
@@ -39,6 +40,7 @@ import {
   ALGO_FALLO,
   ESCRIBIENDO_NOTA,
   GRABAR_SESION,
+  GRABACION_SIN_TERMINAR,
   NOTA_GUARDADA,
   NOTA_NO_ESCRITA,
   PARA_REVISAR,
@@ -516,13 +518,20 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
   const { sesion, cargando, paciente } = hoy;
   // En proceso el indicador de abajo ya lo dice con el nombre: el chip
   // repetiría lo mismo con otras palabras.
-  const chip =
-    sesion && !enProceso(sesion.estado) ? chipDeEstado(sesion.estado) : null;
+  // Grabación o subida que quedó a medias (esGrabacionSinTerminar). Se dice así
+  // (no "Grabando…" ni "Procesando") y se ofrece grabar, que retoma la
+  // copia guardada en el teléfono.
+  const sinTerminar = esGrabacionSinTerminar(sesion, new Date());
+  const chip = sinTerminar
+    ? { variant: "terracotta" as const, label: GRABACION_SIN_TERMINAR }
+    : sesion && !enProceso(sesion.estado)
+      ? chipDeEstado(sesion.estado)
+      : null;
 
   let accion: React.ReactNode;
   if (cargando) {
     accion = <p className="font-sans text-[13px] text-ink-500">Cargando…</p>;
-  } else if (!sesion || sesion.estado === "grabando") {
+  } else if (!sesion || sesion.estado === "grabando" || sinTerminar) {
     accion = (
       <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
         <Mic size={16} strokeWidth={1.8} aria-hidden="true" />

@@ -107,7 +107,7 @@ export function Dashboard() {
   // (avisos-de-notas.tsx) y, cuando alguna termina, Hoy se vuelve a leer
   // para que la fila pase de "Procesando" a "Revisar nota" sin recargar.
   const enProcesoHoy = React.useMemo(
-    () => (estado ? sesionesEnProceso(estado.data.sesionesHoy) : []),
+    () => (estado ? sesionesEnProceso(estado.data.sesionesHoy, estado.ahora) : []),
     [estado],
   );
   React.useEffect(() => {
@@ -280,7 +280,7 @@ export function Dashboard() {
           riesgoEnElDia={riesgoEnElDia}
           />
 
-          <Pendientes pendientes={pendientes} inicio={inicio} />
+          <Pendientes pendientes={pendientes} inicio={inicio} onCambio={recargar} />
 
           <Kpis ahora={ahora} data={data} />
 

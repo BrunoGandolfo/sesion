@@ -104,7 +104,7 @@ export async function obtenerDashboard({
         estado: { not: "cancelado" },
       },
       include: {
-        sesionClinica: { select: { id: true, estado: true } },
+        sesionClinica: { select: { id: true, estado: true, actualizadaEn: true } },
         paciente: {
           select: { id: true, nombre: true, apellido: true, telefono: true },
         },

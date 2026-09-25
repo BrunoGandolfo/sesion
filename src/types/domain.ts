@@ -161,7 +161,9 @@ export interface PacienteConDeuda extends Paciente {
 }
 
 export interface TurnoConPaciente extends Turno {
-  sesionClinica: { id: string; estado: string } | null;
+  /** `actualizadaEn` dice si una grabación quedó quieta (grabación sin
+   *  terminar, estados.ts). Por la red llega como string ISO. */
+  sesionClinica: { id: string; estado: string; actualizadaEn?: Date | string } | null;
   paciente: Pick<Paciente, "id" | "nombre" | "apellido" | "telefono">;
 }
 
@@ -263,6 +265,20 @@ export interface NotaFallida {
   puedeReintentarse: boolean;
 }
 
+/** Una sesión que quedó a medias en `grabando` o `subiendo`
+ *  (esGrabacionSinTerminar): el teléfono murió, se cerró el navegador o se
+ *  cortó la subida. Se sube desde el teléfono que la grabó o se descarta. */
+export interface GrabacionSinTerminar {
+  sesionId: string;
+  /** Para "Subir desde este teléfono": /grabar/[turnoId]. */
+  turnoId: string;
+  pacienteId: string;
+  /** "Ana López" — nombre y apellido ya unidos. */
+  pacienteNombre: string;
+  /** Fecha y hora del turno, ISO. */
+  fecha: string;
+}
+
 export interface PendientesTerapeuta {
   notasParaRevisar: NotaParaRevisar[];
   /** Agrupado por paciente, de la deuda más grande a la más chica. */
@@ -278,6 +294,9 @@ export interface PendientesTerapeuta {
    * `PendientesTerapeuta` a mano. Es un agregado, no un cambio de forma.
    */
   notasFallidas?: NotaFallida[];
+  /** Grabaciones sin terminar, de la más vieja a la más nueva y con tope.
+   *  Opcional por lo mismo que `notasFallidas`. */
+  grabacionesSinTerminar?: GrabacionSinTerminar[];
 }
 
 /**

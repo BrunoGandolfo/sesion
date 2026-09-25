@@ -1,11 +1,16 @@
 // Unitario: la máquina de estados como entidad de dominio.
 import { describe, expect, it } from "vitest";
 
+import { LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
+
 import { limiteReclamo } from "@/app/api/_lib/casos-uso/sesion/reclamar";
 import { whereTransicion } from "@/app/api/_lib/casos-uso/sesion/transicion";
 import {
   backoffSesionMs,
   esHuerfana,
+  esGrabacionSinTerminar,
+  UMBRAL_GRABANDO_SIN_TERMINAR_MS,
+  UMBRAL_HUERFANA_HORAS,
   ESTADOS_EN_PIPELINE,
   ESTADOS_SESION,
   keyAudio,
@@ -111,11 +116,31 @@ describe("key del audio", () => {
 
 describe("huérfanas y backoff", () => {
   const ahora = new Date("2026-09-14T12:00:00Z");
-  it("una subida de hace 5 horas es huérfana; una de hace 5 minutos no", () => {
-    expect(esHuerfana({ estado: "subiendo", actualizadaEn: new Date("2026-09-14T07:00:00Z") }, ahora)).toBe(true);
-    expect(esHuerfana({ estado: "subiendo", actualizadaEn: new Date("2026-09-14T11:55:00Z") }, ahora)).toBe(false);
+  it("una subida de hace más de 7 días es huérfana; una de 6 días o de 5 horas no (el teléfono todavía puede subirla)", () => {
+    expect(UMBRAL_HUERFANA_HORAS).toBe(168);
+    expect(esHuerfana({ estado: "subiendo", actualizadaEn: new Date("2026-09-07T11:59:00Z") }, ahora)).toBe(true);
+    expect(esHuerfana({ estado: "grabando", actualizadaEn: new Date("2026-09-08T12:00:00Z") }, ahora)).toBe(false);
+    expect(esHuerfana({ estado: "subiendo", actualizadaEn: new Date("2026-09-14T07:00:00Z") }, ahora)).toBe(false);
     expect(esHuerfana({ estado: "fallida" }, ahora)).toBe(true);
     expect(esHuerfana({ estado: "procesando", actualizadaEn: new Date(0) }, ahora)).toBe(false);
+  });
+
+  it("grabación sin terminar: subiendo con más de 30 min quieta; 29 min todavía no", () => {
+    const hace = (min: number) => new Date(ahora.getTime() - min * 60_000);
+    expect(esGrabacionSinTerminar({ estado: "subiendo", actualizadaEn: hace(31).toISOString() }, ahora)).toBe(true);
+    expect(esGrabacionSinTerminar({ estado: "subiendo", actualizadaEn: hace(29) }, ahora)).toBe(false);
+    expect(esGrabacionSinTerminar({ estado: "procesando", actualizadaEn: hace(600) }, ahora)).toBe(false);
+    expect(esGrabacionSinTerminar({ estado: "grabando" }, ahora)).toBe(false);
+    expect(esGrabacionSinTerminar(null, ahora)).toBe(false);
+  });
+
+  it("grabando: mientras se graba nada llega al servidor, así que espera el tope de grabación más 30 min", () => {
+    const hace = (min: number) => new Date(ahora.getTime() - min * 60_000);
+    expect(UMBRAL_GRABANDO_SIN_TERMINAR_MS).toBe(LIMITE_SEGUNDOS * 1000 + 30 * 60_000);
+    // Una sesión de 50 min en curso: quieta desde el minuto cero.
+    expect(esGrabacionSinTerminar({ estado: "grabando", actualizadaEn: hace(31) }, ahora)).toBe(false);
+    expect(esGrabacionSinTerminar({ estado: "grabando", actualizadaEn: hace(179) }, ahora)).toBe(false);
+    expect(esGrabacionSinTerminar({ estado: "grabando", actualizadaEn: hace(181) }, ahora)).toBe(true);
   });
 
   it("el backoff crece y se estabiliza", () => {

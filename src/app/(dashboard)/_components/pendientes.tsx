@@ -23,18 +23,41 @@
 // Del fallo se muestra si todavía se puede reintentar, nunca el detalle
 // técnico (ese texto no viaja: ver docs/contrato-pendientes-historial-cobros.md).
 //
+// Las grabaciones sin terminar van antes que todo: una subida cortada hace
+// más de 30 minutos, o una grabación abierta más allá de su tope, no se va a
+// resolver sola (la regla es esGrabacionSinTerminar, estados.ts), y
+// antes se veía "Procesando" para siempre. Tiene dos salidas acá mismo:
+// subirla desde el teléfono que la grabó (la pantalla de grabar ofrece la
+// copia que quedó guardada ahí) o descartarla, con confirmación.
+//
 // Los pasos iniciales requieren datos explícitos de la cuenta: no tener
 // pendientes hoy no significa que todavía falten pacientes o turnos.
 // Cuando todas las tareas se cumplieron, el bloque desaparece.
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, FileText, ShieldAlert, Wallet } from "lucide-react";
+import { AlertTriangle, FileText, MicOff, ShieldAlert, Wallet } from "lucide-react";
 
-import { Card } from "@/components/ui";
+import { Card, Confirmar } from "@/components/ui";
+import { apiPost } from "@/lib/api-client";
 import { fechaCorta, money } from "@/lib/format";
-import { INICIO_AGENDAR_SESION, INICIO_CARGAR_PACIENTE, INICIO_CARGAR_TARIFA, NAV, VER_QUE_PASO, pluralizar } from "@/lib/glosario";
-import type { DashboardData, PendientesTerapeuta } from "@/types/domain";
+import {
+  DESCARTANDO_GRABACION,
+  DESCARTAR_GRABACION,
+  DESCARTAR_GRABACION_ACCION,
+  DESCARTAR_GRABACION_MENSAJE,
+  DESCARTAR_GRABACION_TITULO,
+  INICIO_AGENDAR_SESION,
+  INICIO_CARGAR_PACIENTE,
+  INICIO_CARGAR_TARIFA,
+  NAV,
+  NO_SE_PUDO_DESCARTAR,
+  SUBIR_DESDE_ESTE_TELEFONO,
+  VER_QUE_PASO,
+  grabacionesSinTerminar as tituloSinTerminar,
+  pluralizar,
+} from "@/lib/glosario";
+import type { DashboardData, GrabacionSinTerminar, PendientesTerapeuta } from "@/types/domain";
 
 import { NO_SE_PUEDE_REINTENTAR, notasQueFallaron } from "./textos";
 
@@ -45,6 +68,9 @@ const MAX_VISIBLES = 3;
 interface PendientesProps {
   pendientes: PendientesTerapeuta;
   inicio?: DashboardData["inicio"];
+  /** Algo de la lista se resolvió acá (se descartó una grabación): quien
+   *  muestra Pendientes vuelve a leer. */
+  onCambio?: () => void;
 }
 
 function fecha(iso: string): string {
@@ -89,10 +115,90 @@ function Fila({
 const ITEM =
   "flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left transition-colors duration-[var(--duration-fast)] hover:bg-cream-50";
 
-export function Pendientes({ pendientes, inicio }: PendientesProps) {
+/**
+ * Una grabación sin terminar, con sus dos salidas. "Descartar" no actúa de
+ * una: abre la confirmación, y recién ahí va a la ruta.
+ */
+function ItemSinTerminar({
+  grabacion,
+  onDescartada,
+}: {
+  grabacion: GrabacionSinTerminar;
+  onDescartada?: () => void;
+}) {
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [enviando, setEnviando] = React.useState(false);
+  const [error, setError] = React.useState(false);
+
+  const descartar = async () => {
+    setEnviando(true);
+    setError(false);
+    try {
+      await apiPost(`/api/sesion-clinica/${grabacion.sesionId}/abandonar`, {});
+      setConfirmando(false);
+      onDescartada?.();
+    } catch {
+      setError(true);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <li className="flex flex-col gap-1 px-2 py-2">
+      <span className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate font-sans text-[13px] text-ink-900">
+          {grabacion.pacienteNombre}
+        </span>
+        <span className="shrink-0 font-sans text-[12px] tabular-nums text-ink-500">
+          {fecha(grabacion.fecha)}
+        </span>
+      </span>
+      {confirmando ? (
+        <Confirmar
+          titulo={DESCARTAR_GRABACION_TITULO}
+          mensaje={DESCARTAR_GRABACION_MENSAJE}
+          accion={DESCARTAR_GRABACION_ACCION}
+          variante="peligro"
+          enviando={enviando}
+          enviandoLabel={DESCARTANDO_GRABACION}
+          onConfirmar={descartar}
+          onCancelar={() => {
+            setConfirmando(false);
+            setError(false);
+          }}
+        />
+      ) : (
+        <span className="flex flex-wrap items-center gap-x-4">
+          <Link
+            href={`/grabar/${grabacion.turnoId}`}
+            className="inline-flex min-h-11 items-center font-sans text-[12px] font-semibold text-sage-600 hover:text-sage-700"
+          >
+            {SUBIR_DESDE_ESTE_TELEFONO} →
+          </Link>
+          <button
+            type="button"
+            onClick={() => setConfirmando(true)}
+            className="inline-flex min-h-11 items-center font-sans text-[12px] font-semibold text-terracotta-600 hover:text-terracotta-500"
+          >
+            {DESCARTAR_GRABACION}
+          </button>
+        </span>
+      )}
+      {error ? (
+        <p role="alert" className="font-sans text-[12px] text-terracotta-600">
+          {NO_SE_PUDO_DESCARTAR}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+export function Pendientes({ pendientes, inicio, onCambio }: PendientesProps) {
   const { notasParaRevisar, sinCobrar, sinAutorizacion, totalSinCobrar } =
     pendientes;
   const notasFallidas = pendientes.notasFallidas ?? [];
+  const sinTerminar = pendientes.grabacionesSinTerminar ?? [];
 
   // Un mismo turno se cuenta una vez, pero la autorización es de la paciente:
   // dos turnos de la misma persona en el día son un solo pendiente.
@@ -112,6 +218,7 @@ export function Pendientes({ pendientes, inicio }: PendientesProps) {
   ].filter((paso) => !paso.completo) : [];
 
   if (
+    sinTerminar.length === 0 &&
     notasFallidas.length === 0 &&
     notasParaRevisar.length === 0 &&
     sinCobrar.length === 0 &&
@@ -135,6 +242,29 @@ export function Pendientes({ pendientes, inicio }: PendientesProps) {
             ))}
           </ol>
         ) : null}
+        {sinTerminar.length > 0 ? (
+          <Fila
+            icono={
+              <MicOff
+                size={16}
+                strokeWidth={1.8}
+                aria-hidden="true"
+                className="text-terracotta-500"
+              />
+            }
+            titulo={tituloSinTerminar(sinTerminar.length)}
+            restantes={sinTerminar.length - MAX_VISIBLES}
+          >
+            {sinTerminar.slice(0, MAX_VISIBLES).map((grabacion) => (
+              <ItemSinTerminar
+                key={grabacion.sesionId}
+                grabacion={grabacion}
+                onDescartada={onCambio}
+              />
+            ))}
+          </Fila>
+        ) : null}
+
         {notasFallidas.length > 0 ? (
           <Fila
             icono={
