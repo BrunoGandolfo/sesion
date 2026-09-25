@@ -5,7 +5,7 @@
 // pipeline) no se muestra: queda en la consola.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 
 import { apiGet } from "@/lib/api-client";
 import { NOTA_NO_ESCRITA, SESION_FALLO_LABEL } from "@/lib/glosario";
@@ -77,7 +77,7 @@ describe("sesión fallida", () => {
     expect(await screen.findByText(NOTA_NO_ESCRITA)).toBeTruthy();
     expect(screen.getByText(SESION_FALLO_LABEL.intentos_agotados)).toBeTruthy();
     expect(document.body.textContent).not.toContain("AssemblyAI");
-    expect(warn.mock.calls.some(([m]) => String(m).includes(DETALLE))).toBe(true);
+    await waitFor(() => expect(warn.mock.calls.some(([m]) => String(m).includes(DETALLE))).toBe(true));
   });
 
   it("con un código sin rótulo no inventa un motivo ni muestra el detalle", async () => {
