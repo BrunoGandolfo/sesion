@@ -1,40 +1,9 @@
 # El plano de la base de datos de Sesión
 
-Fecha: 11 de septiembre de 2026 · Rama `esquema` · Archivos: `prisma/schema.prisma`,
-`prisma/migrations/0_init/migration.sql`, `prisma/seed.ts`.
-
-Este documento explica, en lenguaje llano, qué guarda la base de datos nueva de
-Sesión, por qué está armada así, y qué decisiones tomé donde los seis diseños de
-la Fase 1 no coincidían. Está escrito para que lo apruebe el dueño; los seis
-agentes de la Fase 3 construyen sobre lo que dice acá y sobre el archivo
-`prisma/schema.prisma`, que tiene el mismo contenido en forma técnica y con un
-comentario en cada decisión que no sea obvia.
-
-**Qué se descartó.** El esquema anterior y sus 13 migraciones desaparecen
-enteros. No hay datos reales ni usuarias: no hay nada que conservar ni que
-convertir. La base se crea desde cero con una sola migración inicial.
-
-**Cómo se verificó.** `prisma validate` y `prisma generate` en verde. La
-migración se aplicó desde cero contra un Postgres 17.10 real y limpio, se cargó
-el seed dos veces (la segunda no duplica nada), y se probó con SQL que las
-restricciones escritas a mano rechazan lo que tienen que rechazar (una duración
-de 33 minutos, una segunda propuesta abierta de la IA para la misma paciente,
-un término de vocabulario repetido sin paciente, una versión 0 del hilo).
-`prisma migrate diff` entre la base aplicada y el esquema no detecta diferencias:
-los índices parciales y los CHECK escritos a mano no rompen el control de drift
-que el área 5 quiere poner en CI. Una nota honesta: la consigna pedía Docker; en
-esta máquina Docker no está disponible en WSL y no hay permisos de
-administrador, así que usé los binarios oficiales de Postgres 17.10 que trae el
-paquete `embedded-postgres`, instalado fuera del repositorio. Es el mismo
-Postgres, sin contenedor.
-
-**Cómo correr el seed.** `DATABASE_URL=… node prisma/seed.ts` (Node 22.18 o
-más nuevo quita los tipos solo; también sirve `npx tsx prisma/seed.ts`). Crea una
-organización, una profesional (`profesional@sesion.test`, contraseña
-`sesion-dev-1234`), tres pacientes, ocho turnos (tres pasados, uno futuro suelto
-y una serie semanal de cuatro) y dos SMS programados. No escribe ninguna columna
-cifrada: el seed no depende del código de cifrado de `src/`, que todavía habla
-con el esquema viejo. Que `tsc` falle en esta rama es esperado.
+Qué guarda la base de datos de Sesión, tabla por tabla, y por qué está armada
+así. La forma técnica es `prisma/schema.prisma`, con un comentario en cada
+decisión que no sea obvia; las migraciones están en `prisma/migrations/`. Cómo
+levantar una base local y correr el seed está en el README.
 
 ---
 
@@ -52,8 +21,8 @@ abrir.
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `organizaciones` | El consultorio: nombre y fecha de alta. | Es la raíz de todo; hoy una profesional por organización. | El alta de cuenta. | Toda consulta filtra por ella. |
-| `usuarios` | La profesional: email, hash de contraseña, nombre, **rol** (hoy un único valor, `titular`). | Entrar, y decidir quién puede invitar. | Alta, cambio de contraseña. | Entrar, invitaciones, auditoría. |
+| `organizaciones` | El consultorio: nombre, fecha de alta, si nació de una invitación (`de_invitacion`) y cuántas grabaciones inició en toda su vida (`grabaciones_iniciadas`). | Es la raíz de todo; hoy una profesional por organización. Un consultorio de invitación es una prueba con un tope de grabaciones (`src/lib/limites-prueba.ts`); el contador no baja al eliminar una sesión. | El alta de cuenta; iniciar una grabación suma al contador. | Toda consulta filtra por ella; grabar mira el tope. |
+| `usuarios` | La profesional: email, hash de contraseña, nombre, **rol** (hoy un único valor, `titular`), cuántas invitaciones generó en la vida de la cuenta y cuándo la última. | Entrar, decidir quién puede invitar y limitar las invitaciones. El contador vive en la cuenta porque el mantenimiento purga las filas de `invitaciones` a los 30 días. | Alta, cambio de contraseña, crear invitación. | Entrar, invitaciones, auditoría. |
 | `sesiones_acceso` | Cada dispositivo desde el que está entrada: hash del token de la cookie, cuándo se creó, último uso, vencimiento, cuándo y por qué se cerró, IP y navegador de la creación. | Reemplaza al token firmado de 30 días que no se podía apagar. Cerrar sesión cierra de verdad; cambiar la contraseña cierra todas. | Entrar (crea), salir, cambio o restablecimiento de contraseña (cierran), cron de mantenimiento (vence y purga a los 30 días). | Cada request (una consulta indexada), la pantalla "desde dónde estás entrada" (sin IP). |
 | `intentos_acceso` | Cada intento **fallido** de entrar, cambiar contraseña o pedir recuperación, con la clave que se cuenta (email hasheado, IP, usuaria) e IP/navegador. | Bloqueo por intentos. Antes vivía mezclado en la auditoría clínica, con IPs adentro. | Las tres rutas de cuenta. | El contador de bloqueo; el cron purga a los 30 días. |
 | `password_resets` | Enlaces de recuperación: hash del token, vencimiento, cuándo se usó y **cuándo salió el correo**. | Un enlace cuyo correo no salió no vale y no gasta el cupo. | Recuperar (crea y marca enviado), restablecer (marca usado), cron (purga). | Restablecer, el cupo de tres por hora. |
@@ -86,7 +55,7 @@ abrir.
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), duración medida por el teléfono (el ASR no la pisa), pausas, cuándo se borró. `audio_clave_encrypted` y `audio_iv` quedan en el esquema **sin usarse** (aceptan null): la app ya no cifra el audio, y sólo tienen valor en sesiones grabadas con la versión que sí cifraba. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. La clave del audio se destruye en la misma transacción que aprueba. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
+| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), duración medida por el teléfono (el ASR no la pisa), pausas, cuándo se borró. `audio_clave_encrypted` y `audio_iv` quedan en el esquema **sin usarse** (aceptan null): la app ya no cifra el audio, y sólo tienen valor en sesiones grabadas con la versión que sí cifraba. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. Aprobar anula, en la misma transacción, la clave de audio que pudiera quedar de una grabación anterior al cambio. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
 
 ### Trabajo durable y worker
 
@@ -132,10 +101,10 @@ borrado por antigüedad. Las únicas purgas son operativas y las hace un cron:
 
 ---
 
-## 2. Choques entre los diseños y cómo quedaron
+## 2. Decisiones del esquema
 
-Los once primeros los resolvió el dueño en la consigna; los aplico tal cual y
-anoto cómo se ven en el esquema. Del 12 en adelante son los que encontré yo.
+Por qué cada pieza quedó como está. Los números del 01 al 06 son los diseños de
+la Fase 1 que el esquema reconcilió; la historia completa está en Git.
 
 1. **Audio.** No se adopta el formato binario `SAP1` ni el manifiesto con hash
    del diseño 01. La sesión lleva `audio_estado`; las columnas de la clave
@@ -224,7 +193,7 @@ anoto cómo se ven en el esquema. Del 12 en adelante son los que encontré yo.
 
 ---
 
-## 3. Qué pidieron los diseños y NO incluí, con el motivo
+## 3. Qué pidieron los diseños y no está, con el motivo
 
 Regla aplicada: si nadie lo lee hoy, no va. Cada uno se puede agregar el día
 que aparezca el lector, con una migración aditiva.
@@ -247,52 +216,7 @@ que aparezca el lector, con una migración aditiva.
 
 ---
 
-## 4. Preguntas al dueño
-
-Ninguna bloquea el esquema; lo escribí completo con las decisiones que siguen.
-Las dejo por si alguna está mal:
-
-1. **`hora_ancla` de la serie como instante del primer turno** (fecha y hora)
-   en vez de un texto "HH:mm". Si preferís que la serie guarde solo la hora,
-   es un cambio de una columna.
-2. **`bajas_sms` sin organización.** La baja es del teléfono: si el mismo
-   número fuera paciente de dos consultorios, la baja vale para los dos. Me
-   parece lo correcto legalmente; confirmalo.
-
----
-
-## 5. Desacuerdos
-
-Revisados por el dueño el 11-09-2026: el 1 se aceptó y se aplicó; el 2, el 3
-y el 4 se aceptaron sin cambios. Las dos preguntas de §4 quedan como están.
-
-1. **Un solo IV para un audio en segmentos** (aceptado por el dueño el
-   11-09-2026, aplicado, y retirado el 18-09-2026 con el grabador de un solo
-   archivo). El argumento sigue valiendo: con AES-GCM, dos cifrados distintos
-   con la misma clave y el mismo IV recuperan texto claro. Hoy el punto es
-   histórico: la app no cifra el audio, así que no hay ni clave ni IV de audio
-   (`sesiones_clinicas.audio_iv` queda sin usarse).
-2. **Nombre, apellido y teléfono en claro.** Es la decisión del 03 y la
-   respeto porque la búsqueda y la agenda los necesitan en SQL. Dejo constancia
-   de que es la única información que identifica a una persona y que queda sin
-   cifrar en la base: Neon cifra el disco y la conexión, pero un volcado de la
-   tabla los muestra. Si algún día hay más de un consultorio, el camino es un
-   índice ciego (hash de los trigramas normalizados) y cifrar las columnas.
-3. **`motivo_no_envio` como texto para la pantalla.** La consigna lista
-   `sid`, `codigoProveedor`, `segmentos` y "sin texto". Interpreté "sin texto"
-   como el cuerpo del SMS, y conservé este campo porque hay fallos sin código
-   de Twilio (teléfono vacío, ventana útil agotada, paciente dada de baja) que
-   la pantalla tiene que poder explicar. Si lo preferís como un código cerrado
-   (enum) en vez de texto, es un cambio chico.
-4. **Sobre `speech_analytics` en claro.** Son proporciones y silencios, no
-   palabras; lo dejé sin cifrar como pide el 04 porque el worker lo necesita
-   junto a la transcripción en el reclamo. Es un dato derivado de una sesión
-   clínica: si querés que vaya cifrado, es una columna `Bytes` más y un campo
-   lógico en la extensión.
-
----
-
-## Anexo: contrato para los seis agentes
+## 4. Reglas técnicas para quien toca la base
 
 - **Campos lógicos que la extensión de cifrado tiene que exponer** (columna →
   campo): `pacientes.notas_encrypted` → `notas`; `turnos.notas_encrypted` →

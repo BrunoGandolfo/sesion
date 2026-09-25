@@ -107,8 +107,10 @@ El brief usa **solo la última nota aprobada** y la versión vigente del Recorri
 Si hay una nota sin aprobar, avisa: *"Hay una nota pendiente de aprobación;
 todavía no se incorpora a este resumen."* Si hay una propuesta sin revisar:
 *"Hay una propuesta del Recorrido sin revisar. Este resumen usa la versión
-vigente."* Estos avisos no aparecen en la versión corta. Abrir el brief no genera
-una nota nueva.
+vigente."* La versión corta avisa lo mismo, más breve: *"Hay una nota sin revisar
+que este resumen todavía no incluye."* y *"El Recorrido tiene una propuesta sin
+revisar."*, con el enlace **Preparar sesión**. Abrir el brief no genera una nota
+nueva.
 
 ## Indicadores por sesión
 

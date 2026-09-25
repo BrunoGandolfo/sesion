@@ -8,147 +8,20 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Reglas del repositorio
+# Sesión
 
-1. El proxy (`src/proxy.ts`, convención de Next 16; ya no hay
-   `src/middleware.ts`) importa EXACTAMENTE dos módulos propios:
-   `@/lib/csp` y `@/lib/sesion-cookie`, y de paquetes solo `next/server`.
-   No conoce la base, la autenticación, el correo ni el glosario, y ninguno
-   de los tres archivos importa un built-in de Node (ni `node:crypto` ni
-   `crypto` pelado; Web Crypto sí). Alcanzable incluye los `await import()`
-   dinámicos: el empaquetador los sigue igual.
-   Por qué: un proxy que arrastre la base hace una consulta por request para
-   todos los estáticos y prefetches, y no puede caer sin tirar la app entera.
-   Verificar la sesión es trabajo de `getSessionActor()` en cada ruta y del
-   layout del dashboard; el proxy solo mira si hay cookie y arma la CSP.
-   Historia: en la versión anterior el middleware corría en Edge y
-   `src/lib/login-eventos.ts` importaba `node:crypto` por el import dinámico
-   de `authorize()` de Auth.js; pasó CI entero y reventó en el deploy de
-   Vercel. Auth.js, `login-eventos` y el middleware ya no existen.
-   El guardián que lo atrapa antes del merge es
-   `src/lib/__tests__/proxy-liviano.test.ts`: camina el grafo de imports
-   desde `src/proxy.ts`, exige que el conjunto sea exactamente esos tres
-   archivos y falla ante cualquier módulo built-in, con o sin prefijo (la
-   lista sale de `builtinModules` de `node:module`, no está escrita a mano).
+Leé `docs/como-trabajamos.md` para trabajar y verificar. Las operaciones de
+producción están en `docs/operaciones.md` y requieren autorización del dueño.
 
-2. Ningún archivo `route.ts` bajo `src/app/api/**` llama a `db.` o `prisma.`
-   directamente. Una ruta solo hace: leer la sesión/organización, validar el
-   body con Zod (`src/app/api/_lib/schemas.ts`), llamar a una función de
-   `src/app/api/_lib/casos-uso/*` pasándole `prisma: db`, y responder con
-   `_lib/responses.ts`. Toda regla de negocio, incluida una sola consulta de
-   lectura, vive en un caso de uso: ahí se testea sin levantar la ruta.
-   El guardián es `src/lib/__tests__/rutas-sin-prisma.test.ts`: recorre cada
-   `route.ts` del disco y falla ante cualquier `db.<modelo>.<operación>(` o
-   `db.$transaction(`. Tiene una lista de excepciones temporales con las
-   rutas de las áreas que todavía no migraron, cada una con su dueño; la
-   lista tiene que quedar vacía, y el propio test falla si una excepción ya
-   está limpia y sigue anotada.
-
-3. Las listas cerradas del turno (duraciones, modalidades, estados, métodos
-   de pago, frecuencias de serie) se declaran UNA vez, en
-   `src/lib/constantes-turno.ts`; los tipos, los schemas Zod y los
-   formularios derivan de ahí. Los enums de Postgres y el CHECK de
-   `turnos.duracion` son la única copia que no puede derivar, y
-   `src/lib/__tests__/constantes-turno.test.ts` los compara con los arrays.
-   Lo mismo para los enums clínicos que comparten la app y el worker
-   (`tipoIntervencion`, `flagRiesgo`, `nivelRiesgo`, `alianzaTerapeutica`,
-   `confianzaModelo`): la única copia es `processor/contrato/enums-clinicos.json`,
-   que leen tanto `src/lib/sesion-clinica/schema.ts` como
-   `processor/schemas_llm.py`. Un valor nuevo se agrega ahí y en ningún otro
-   lado; los tests de los dos lados lo verifican.
-
-# Content-Security-Policy: el plan para pasar a enforce
-
-Hoy la CSP sale del proxy (`src/proxy.ts`, política en
-`src/lib/csp.ts`) en modo **Report-Only**: el navegador no bloquea nada y
-postea las violaciones a `/api/csp-report`, que las deja en el log de la
-función (no en `eventos_auditoria`: son ruido de diagnóstico, no rastro
-clínico).
-
-Pasar a enforce es cambiar `Content-Security-Policy-Report-Only` por
-`Content-Security-Policy` en `conReporteCsp`. **Pero antes de enforzar hay
-que verificar que `DESTINOS_EXTERNOS` (`src/lib/csp.ts`) cubre todo lo que
-el navegador usa.** Cuando esta política se escribió, no cubría R2 y
-enforzar habría roto la subida de toda grabación: el navegador hace PUT del
-audio cifrado directo al bucket, y `connect-src` gobierna ese PUT. Hoy R2
-entra por `R2_PUBLIC_HOST` (origen exacto de la URL prefirmada, que lleva el
-**bucket** como primer subdominio:
-`https://<bucket>.<accountId>.r2.cloudflarestorage.com`; sin comodín;
-obligatoria en producción) y `src/lib/__tests__/csp-destinos.test.ts` falla ante cualquier
-host `https://` nuevo en `src/**` que no esté declarado. Ese test es la
-condición previa; el log de reportes es la confirmación.
-
-## Qué mirar en los reportes
-
-Cada línea del log tiene la forma:
-
-```
-[csp] directiva="script-src-elem" bloqueado="https://…" documento="https://…" archivo="…:42" disposicion="report"
-```
-
-Se clasifican en tres montones, y cada uno se resuelve distinto:
-
-1. **`directiva="script-src-elem"` o `"script-src"` con `bloqueado="inline"`**
-   — un `<script>` sin nonce. Es el montón que decide todo. Si aparece con
-   `documento` de una página de la app, hay un script que Next no está
-   nonciando y **no se puede enforzar**: hay que averiguar cuál y por qué.
-   La causa más probable es una página que quedó **prerenderizada en el
-   build**: sin request no hay nonce que ponerle a los scripts. Hoy
-   `src/app/(dashboard)/layout.tsx` y `src/app/(auth)/layout.tsx` declaran
-   `dynamic = "force-dynamic"` y entre los dos cubren todas las páginas; una
-   página nueva fuera de esos dos grupos tiene que declararlo también, o
-   aparece en este montón para siempre.
-   Si el `documento` es de una extensión (`chrome-extension://`, `moz-…`) o
-   el `archivo` no es del dominio, es ruido del navegador de quien mira y no
-   cuenta.
-
-2. **`directiva="style-src"` o `"style-src-attr"`** — esperables y hoy
-   permitidos: la política conserva `'unsafe-inline'` en `style-src` porque
-   Tailwind v4 y framer-motion escriben en el atributo `style`, que los
-   nonces no cubren (sólo cubren elementos `<style>`). **Sacar ese
-   `'unsafe-inline'` es una pelea aparte y posterior**: no bloquea el paso a
-   enforce de `script-src`, que es lo que de verdad importa contra un XSS.
-
-3. **`connect-src`, `img-src`, `media-src`, `font-src`** — algo que la app
-   pide y la política no contempla. Se agrega el destino a
-   `DESTINOS_EXTERNOS` en `src/lib/csp.ts` con un comentario que diga qué lo
-   pide, y a `csp-destinos.test.ts` si es un host que sólo usa el servidor.
-   **Un reporte de `connect-src` con `bloqueado` en
-   `r2.cloudflarestorage.com` ya debería haber aparecido** en el log desde
-   que existe la política (cada grabación subida generaba uno, hasta que
-   R2 entró a la política). Si en el log no hay ninguno de antes de ese
-   cambio, eso significa que nadie estaba mirando el log, no que no
-   existiera: revisar cómo se leen los reportes antes de confiar en las
-   cuatro semanas de abajo.
-
-## Cuánto tiempo
-
-**Cuatro semanas de uso real**, contadas desde el deploy, no desde el merge.
-No es un número mágico: es lo que hace falta para que la profesional haya
-pasado al menos una vez por cada pantalla —agenda, ficha de paciente,
-grabación, aprobación de nota, configuración, cobros— en su teléfono y en su
-computadora, y para que hayan entrado uno o dos ciclos de dependencias de
-Next.
-
-Antes de cambiar la línea, cuatro condiciones:
-
-- `csp-destinos.test.ts` en verde y `R2_PUBLIC_HOST` cargada en Vercel con
-  el host exacto de la cuenta (`/api/health` contesta 503 si falta);
-- **cero** reportes del montón 1 que vengan del dominio propio en las últimas
-  dos semanas;
-- se hizo al menos una grabación completa de una sesión real bajo la política
-  (la pantalla de grabar es la que más JavaScript mueve, y la subida a R2 es
-  el único `connect-src` externo con datos clínicos);
-- se leyó el log después del último deploy de Next o de una dependencia
-  grande: una versión nueva puede inyectar un script nuevo.
-
-## Cuando se enforce
-
-Dejar `Content-Security-Policy-Report-Only` **también**, con la misma
-política, durante un mes más. Las dos cabeceras conviven: la enforzada
-bloquea y la de reporte sigue avisando, así queda el rastro de qué habría
-bloqueado si algo se rompe. Después se saca la de reporte.
-
-Y en ese momento se puede fusionar la CSP mínima de `next.config.ts`
-(`frame-ancestors 'none'`, que hoy existe aparte porque una política
-report-only no impide el embebido) con la del proxy.
+- `src/proxy.ts` sólo importa `@/lib/csp`, `@/lib/sesion-cookie` y
+  `next/server`. No arrastres Node, DB ni autenticación; verificá
+  `src/lib/__tests__/proxy-liviano.test.ts`.
+- Las rutas validan, autorizan y llaman casos de uso; las consultas y reglas
+  viven en `src/app/api/_lib/casos-uso/`. No agregues excepciones al guardián
+  `rutas-sin-prisma.test.ts`; retiralas cuando migres su ruta.
+- Las listas del turno salen de `src/lib/constantes-turno.ts`; los enums
+  clínicos, de `processor/contrato/enums-clinicos.json`. Si cambia la base,
+  verificá la correspondencia con enums y CHECK.
+- No actives el bloqueo CSP sin completar su procedimiento en
+  `docs/operaciones.md`. Los destinos del navegador se declaran en
+  `src/lib/csp.ts` y se verifican con `csp-destinos.test.ts`.

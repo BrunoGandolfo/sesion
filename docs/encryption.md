@@ -1,9 +1,9 @@
 # Cifrado en reposo de datos clínicos y personales
 
-Base: main e247d8b, 15 de septiembre de 2026. Qué se cifra, cómo, y qué hacer con las claves. Describe el estado vigente
-tras la reconstrucción (esquema nuevo, formato `ENC2`). El formato anterior
-(`ENC1`, una sola clave, sin rótulo por fila) no tiene datos que leer: la base
-se creó desde cero.
+Qué se cifra, cómo, y qué hacer con las claves. Describe el formato vigente,
+`ENC2`. El anterior (`ENC1`, una sola clave, sin rótulo por fila) no lo escribe
+ni lo lee la app; sólo puede aparecer en un respaldo de la base anterior a la
+reconstrucción, y el ensayo de restauración lo reconoce (`docs/operaciones.md` §4).
 
 ## 1. Qué se cifra
 
@@ -38,9 +38,9 @@ fechas y montos, `speech_analytics` (números), IP y navegador en
 `sesiones_acceso` e `intentos_acceso` (purgas según fecha y estado; no son treinta días desde la creación en todos los casos). La lista completa está en
 `docs/esquema.md`.
 
-**La app no cifra el audio.** Se guarda como `Blob` en IndexedDB mientras se graba (`src/lib/grabacion-storage.ts`), viaja a R2 por TLS con un PUT prefirmado, R2 lo cifra en reposo (cifrado del proveedor, no de la app) y se borra al aprobar la nota. El campo lógico `audioClave` (`audio_clave_encrypted`) y la columna `audio_iv` siguen en el esquema sin usarse: sólo tienen valor en sesiones grabadas con la versión que cifraba en el teléfono. Consecuencia que hay que saber: ya no existe una clave cuya destrucción vuelva ilegible un audio que no se pudo borrar. Ver `docs/pipeline.md`.
+**La app no cifra el audio.** Se guarda como `Blob` en IndexedDB mientras se graba (`src/lib/grabacion-storage.ts`), viaja a R2 por TLS con un PUT prefirmado, R2 lo cifra en reposo (cifrado del proveedor, no de la app) y se pide borrarlo al aprobar o eliminar la sesión. El campo lógico `audioClave` (`audio_clave_encrypted`) y la columna `audio_iv` siguen en el esquema sin usarse: sólo tienen valor en sesiones grabadas con la versión que cifraba en el teléfono. Consecuencia que hay que saber: ya no existe una clave cuya destrucción vuelva ilegible un audio que no se pudo borrar. Ver `docs/pipeline.md`.
 
-Los backups de la base se cifran con gpg (`docs/operaciones.md`). El workflow retiene diarios treinta días y mensuales 366 días; el consentimiento sólo informa treinta. Una copia anterior puede conservar la clave de un audio grabado con la versión que cifraba; las sesiones nuevas no tienen clave de audio.
+Los backups de la base se cifran con gpg (`docs/operaciones.md`). El workflow retiene diarios treinta días y mensuales 366 días (doce meses), lo mismo que informa el consentimiento. Una copia anterior puede conservar la clave de un audio grabado con la versión que cifraba; las sesiones nuevas no tienen clave de audio.
 
 ## 2. Cómo funciona
 

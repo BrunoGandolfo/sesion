@@ -157,13 +157,9 @@ Es hasta dónde puede ir el botón "Todo". `null` si no hay un solo turno.
 
 - las sesiones **trabajadas** de un mes: `GET /api/turnos?desde=…&hasta=…`
   con los bordes del mes (caso de uso `listarTurnos`);
-- las sesiones **cobradas** de un mes: `GET /api/turnos/cobros`, que usa
-  `cobrosDelMes({ enElMesDe })` y sirve para cualquier mes, no sólo el actual
-  (el parámetro se llamaba `ahora` y eso lo escondía).
-
-La ruta de cobros de hoy no recibe el mes por query; cuando la pantalla de
-Finanzas lo necesite, es agregarle un parámetro a esa ruta, no una lectura
-nueva.
+- las sesiones **cobradas** de un mes: `GET /api/turnos/cobros?mes=AAAA-MM`
+  (también acepta un día, `AAAA-MM-DD`, y toma su mes, en hora de Montevideo).
+  Sin `mes` contesta el mes actual, que es lo que pide la pantalla de Cobros.
 
 ## Lo que este endpoint NO incluye
 
@@ -187,8 +183,8 @@ distintas, y el primer turno/pago) más la lista de deuda que comparte con
 `/api/deudores`. No hay una consulta por mes. Medido con 12.960 turnos
 repartidos en diez años: **99 ms**.
 
-Falta un índice; está anotado en el reporte de la rama y **no** se creó acá
-porque es una migración.
+Lo cobrado en un mes usa el índice `(organization_id, pago_fecha)`, migración
+`20260923120100_turnos_pago_fecha_idx`.
 
 ## Ejemplo de respuesta
 

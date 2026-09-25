@@ -1,61 +1,61 @@
 # Actualizaciones automáticas de dependencias.
 #
 # Tres ecosistemas: npm en la raíz (la app Next.js), pip en /processor (el
-# worker Python) y las propias GitHub Actions de .github/workflows. Semanal y
-# no diario: con 5 PRs abiertos como tope, diario solo cambia la fecha del
-# mismo trabajo.
+# worker Python) y las propias GitHub Actions de .github/workflows.
 #
-# El límite de 5 es a propósito: Dependabot abre PRs que corren el CI entero,
-# y una cola de 30 PRs no se revisa, se cierra en bloque.
+# Cómo se agrupa, y por qué:
+#   - Nada de versiones mayores: esas se deciden y se hacen en una rama propia.
+#     Prisma queda en 5.22: tampoco sube de menor.
+#   - Next y React van juntos, porque se prueban juntos. Los paquetes de AWS,
+#     juntos.
+#   - El grupo grande de la semana es SOLO de parches. Las menores de lo demás
+#     llegan de a una, y el cupo de PRs abiertos las limita.
+#   - pip usa increase-if-necessary: los requisitos son rangos (>=x,<y) y sólo
+#     vale abrir un PR cuando la versión nueva queda AFUERA del rango. Subir el
+#     piso de un rango que ya la incluía no cambia nada de lo que se instala.
 #
-# Los updates de seguridad NO respetan open-pull-requests-limit: entran
-# igual aunque la cola esté llena.
-#
-# Desde que el CI usa un Postgres efímero y ningún secret, los PRs de
-# Dependabot corren la suite completa: un PR verde de Dependabot se mergea
-# sin leer el diff, que es el punto entero de tenerlo.
+# Un PR de Dependabot se revisa como cualquier cambio (docs/como-trabajamos.md):
+# un CI verde no reemplaza leer qué sube. Las actualizaciones de seguridad
+# entran igual aunque haya reglas de ignore o el cupo esté lleno.
 
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    # Un solo PR por semana con todo lo menor y de parche: son los que se
-    # mergean sin leer diff y no vale la pena revisarlos de a uno. Los mayores
-    # quedan sueltos, que son los que rompen.
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 4
+    commit-message: { prefix: "deps" }
+    ignore:
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
-      menores:
+      next-react:
+        patterns: ["next", "eslint-config-next", "react", "react-dom", "@types/react", "@types/react-dom"]
+      aws:
+        patterns: ["@aws-sdk/*"]
+      parches:
         patterns: ["*"]
-        update-types: ["minor", "patch"]
-    commit-message:
-      prefix: "deps"
+        exclude-patterns: ["next", "eslint-config-next", "react", "react-dom", "@aws-sdk/*", "playwright"]
+        update-types: ["patch"]
 
   - package-ecosystem: "pip"
     directory: "/processor"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    groups:
-      menores:
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-    commit-message:
-      prefix: "deps(processor)"
+    schedule: { interval: "monthly" }
+    open-pull-requests-limit: 2
+    versioning-strategy: "increase-if-necessary"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    commit-message: { prefix: "deps(processor)" }
 
-  # Las acciones (checkout, setup-node, setup-python…) también son
-  # dependencias: sin esto nunca se actualizan ni se auditan.
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+    schedule: { interval: "monthly" }
+    open-pull-requests-limit: 2
     groups:
-      acciones:
-        patterns: ["*"]
-    commit-message:
-      prefix: "ci"
+      acciones: { patterns: ["*"] }
+    commit-message: { prefix: "ci" }

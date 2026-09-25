@@ -16,9 +16,10 @@ cada paciente.
 5. **Tu consultorio** — tu nombre, tu dirección, tu teléfono, la tarifa, el
    enfoque teórico, el recordatorio, el vocabulario, invitar a una colega y tu
    cuenta.
-6. **Grabar** — con un turno agendado y la autorización firmada, grabás la
-   sesión; la app escribe un borrador de nota clínica (SOAP) que vos revisás,
-   editás y aprobás, y después propone cómo actualizar el Recorrido.
+6. **Grabar** — con la autorización firmada, grabás la sesión. Si no hay
+   turno, se crea en el momento de grabar. La app escribe un borrador de nota
+   clínica (SOAP) que vos revisás, editás y aprobás, y después propone cómo
+   actualizar el Recorrido.
 7. **Lupita** — explica cómo usar la app con estos documentos. También puede
    consultar los turnos de hoy, mañana o esta semana de tu consultorio, solo
    con nombre de pila, día, hora, duración y modalidad. No modifica nada.
@@ -49,9 +50,9 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 - **La app no cifra el audio.** Mientras grabás queda en tu teléfono, protegido
   por el bloqueo del teléfono; viaja por una conexión cifrada (TLS) y el almacén
   donde espera lo cifra en reposo.
-- Al aprobar la nota se pide borrar el audio remoto; si falla, se reintenta
-  hasta 20 veces, durante unos 15 días, y después el borrado queda marcado como
-  fallido. Hasta que se borra, ese archivo se puede escuchar con acceso al
+- Al aprobar la nota, o al eliminar la sesión, se pide borrar el audio remoto;
+  si falla, se reintenta hasta 20 veces, durante unos 15 días, y después el
+  borrado queda marcado como fallido. Hasta que se borra, ese archivo se puede escuchar con acceso al
   almacén.
 - La nota, la transcripción, el Recorrido, las notas privadas, las notas del
   turno, el vocabulario y la autorización con su firma se guardan cifrados. Los
@@ -66,7 +67,8 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
   en ningún archivo.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
 - La autorización vigente es la **2.6**. Las firmas anteriores necesitan que la
-  paciente firme la nueva. Ver `12-camino-del-audio-y-privacidad.md`.
+  paciente firme la nueva. La 2.6 todavía describe un cifrado del audio que la
+  app ya no hace. Ver `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.
 
@@ -97,6 +99,7 @@ src/lib/deudas.ts
 src/app/(dashboard)/_components/kpis.tsx
 src/app/(dashboard)/config/_components/config-view.tsx
 src/lib/grabacion-storage.ts
+src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
 src/app/api/_lib/casos-uso/trabajos/politica.ts
 src/components/clinico/HiloView.tsx
 src/lib/ayuda-corpus.ts

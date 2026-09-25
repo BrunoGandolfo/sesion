@@ -1,9 +1,9 @@
 # Operación de Sesión
 
-Base: main con las seis ramas de Fase 4, 15 de septiembre de 2026. Los archivos citados describen
-automatismos del repositorio. No demuestran que una corrida, entrega o ajuste
-de consola haya ocurrido. Grabador y Recorrido siguen pendientes según
-`docs/pipeline.md`.
+Manual de producción: publicar, variables, respaldos, incidentes, SMS y CSP.
+Los archivos citados describen automatismos del repositorio; no demuestran que
+una corrida, entrega o ajuste de consola haya ocurrido. Cómo se trabaja y se
+entrega un cambio está en `docs/como-trabajamos.md`.
 
 ## 1. Servicios y publicación
 
@@ -11,7 +11,7 @@ de consola haya ocurrido. Grabador y Recorrido siguen pendientes según
 | --- | --- |
 | Vercel | Next y API. `vercel.json` deshabilita deploys de main; la rama de producción debe estar configurada como release en el panel. |
 | Postgres | Prisma y esquema de `prisma/schema.prisma`. CI utiliza Postgres 17 efímero; local usa un contenedor propio por rama. |
-| R2 | Audio cifrado y backups. La app usa `src/lib/r2.ts`; el worker, `processor/r2_client.py`. |
+| R2 | Audio de las sesiones y backups. La app no cifra el audio: lo sube tal cual y R2 lo guarda cifrado en reposo (cifrado del proveedor). Los backups sí van cifrados con gpg. La app usa `src/lib/r2.ts`; el worker, `processor/r2_client.py`. |
 | Railway | Worker Python: `processor/railway.json` y `processor/worker.py`. |
 | AssemblyAI / Anthropic | Configuración del worker en `processor/config.py`. Lupita es una llamada aparte de la app, con `src/lib/anthropic-mensajes.ts`. |
 | Twilio / Resend | `src/lib/sms/` y `src/lib/correo.ts`. Requieren configuración de cuenta, número y dominio fuera de Git. |
@@ -73,8 +73,11 @@ El CI verde no sustituye la prueba de teléfono ni confirma entrega de SMS.
 
 Todos usan `CRON_SECRET`. `GET /api/health` comprueba salud y
 configuración operativa; `GET /api/estado-worker` expone el estado del worker.
-El latido externo corre cada quince minutos según
-`.github/workflows/latido.yml`. Un health verde no prueba el micrófono,
+`.github/workflows/latido.yml` consulta los dos: su cron pide cada quince
+minutos, pero GitHub posterga los `schedule` y en la práctica corre entre cinco
+y ocho veces por día. Para enterarse de una caída en minutos hace falta un
+monitor externo contra esas dos rutas. El latido distingue el worker caído
+(503), la ruta inalcanzable (redirect o 404) y la app sin respuesta. Un health verde no prueba el micrófono,
 el PUT del navegador ni la entrega de una nota.
 
 ## 2. Variables y secretos por entorno
@@ -142,21 +145,21 @@ y ejecución manual. Hace dump custom con cliente Postgres 17, verifica el índi
 con pg_restore, cifra con gpg AES-256, sube a R2 y compara tamaño remoto/local.
 La PRIMERA corrida lograda de cada mes guarda además una copia mensual: la
 condición es que no haya ninguna bajo `backups/mensuales/sesion-backup-<AAAA-MM>-`,
-no la fecha de la corrida. Antes era "si hoy es día 1" y por eso nunca hubo
-ninguna; la auditoría con la evidencia está en `docs/respaldos.md`.
+no la fecha de la corrida. Si el día 1 GitHub se saltea la corrida o falla, la
+siguiente corrida exitosa cubre el mes. Un listado de R2 que falla aborta el
+paso: no se lee como "no hay ninguna".
 
-**Retención real:** diarios, 30 días; mensuales, 366 días (el workflow los
-describe como doce meses). La limpieza se ejecuta cuando llega a ese paso
-una corrida: no garantiza borrado puntual si el workflow está fallando.
-El consentimiento de `src/lib/consentimiento.ts`, generado desde
-`src/lib/consentimiento-hechos.ts`, sólo declara 30 días. Esta diferencia
-queda pendiente de decisión; no se modifica aquí ni la política ni el texto.
+**Retención:** diarios, 30 días; mensuales, 366 días (doce meses). Es lo mismo
+que declara el consentimiento, generado desde `src/lib/consentimiento-hechos.ts`.
+La limpieza se ejecuta cuando una corrida llega a ese paso: si el workflow está
+fallando, no hay borrado puntual.
 
-El dump no incluye los archivos de audio, pero sí puede incluir la clave cifrada
-de una sesión que todavía no estaba aprobada. Destruir la clave de la fila actual
-no elimina esa copia. Para restaurar hacen falta la passphrase del backup y
-todas las claves ENC2 usadas por ese dump: conservarlas hasta que no quede
-ninguna copia que las necesite, incluidas mensuales y copias retenidas por fallos.
+El dump no incluye los archivos de audio. Las grabaciones actuales no tienen
+clave de audio: la app dejó de cifrar el audio. Sólo filas de grabaciones
+anteriores pueden conservar la columna de clave, cifrada con ENC2. Para
+restaurar hacen falta la passphrase del backup y todas las claves ENC2 usadas
+por ese dump: conservarlas hasta que no quede ninguna copia que las necesite,
+incluidas mensuales y copias retenidas por fallos.
 
 Restaurar siempre primero en una base aislada y vacía. El ensayo a mano
 trimestral es exactamente esto, en la máquina del dueño y con su llavero:
@@ -208,13 +211,48 @@ es corrupción. Sin esa variable, el workflow falla antes de bajar nada.
 respaldos generados contra la base de test: bueno, vacío, corrupto, truncado y
 uno leído con un llavero al que se le retiró la clave.
 
+**Qué prueba el ensayo automático y qué no.** Prueba que el archivo de R2 se
+descifra con `BACKUP_ENCRYPTION_KEY`, que `pg_restore --exit-on-error` lo abre
+entero en una base vacía, que las tablas tienen filas por encima de un piso,
+que las columnas cifradas tienen formato válido y que ninguna clave foránea
+quedó huérfana. No prueba que una nota se pueda leer: no recibe ninguna clave
+clínica. Con blobs ENC1 (sin id de clave) sólo confirma el formato. Por eso el
+ensayo manual con el llavero no se reemplaza.
+
 El ensayo manual trimestral deja acta en
 `docs/operaciones/actas/`; `scripts/ci/acta-vigente.mjs` exige un acta
 con antigüedad máxima de cien días cuando ya existe alguna. Mientras no
 haya ninguna, sólo advierte hasta el 20 de diciembre de 2026 y luego falla.
-En esta base no hay un acta: un verde hoy no acredita restauración ni
-descifrado de una nota. La existencia del workflow tampoco prueba una corrida:
-al 15 de septiembre de 2026 el ensayo automático nunca se ejecutó.
+
+### Comprobaciones pendientes del dueño
+
+Ninguna se puede hacer desde el repositorio.
+
+1. **Acta manual antes del 20 de diciembre de 2026.** `docs/operaciones/actas/`
+   sólo tiene la plantilla. Sin un acta real, ese día el CI empieza a fallar
+   y no se puede publicar.
+2. **La primera copia mensual.** Después del 1 de octubre, confirmar que hay un
+   objeto bajo `backups/mensuales/` en el bucket de R2. Hasta septiembre de
+   2026 nunca hubo copia mensual; el ensayo automático del 16 de septiembre
+   falló por eso, y en la misma corrida la copia diaria se restauró y verificó
+   entera.
+3. **El ensayo automático con las dos copias en verde.** Después del punto 2,
+   correr a mano Actions → Ensayo de restauración.
+4. **`CLAVES_CIFRADO_IDS` cargada** en Settings → Variables de Actions: sin ella
+   el ensayo falla antes de bajar nada. Son sólo ids, nunca claves.
+
+### Reversiones administrativas
+
+Dos SQL retiran lo que agregó una migración. No los ejecuta la app ni Publicar;
+sólo se corren a mano, con la conexión directa y después de decidirlo.
+
+- `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
+  `20260916013000_inmutabilidad`: la auditoría y las versiones del Recorrido
+  vuelven a poder modificarse. No borra datos. Para restituir la garantía se
+  vuelve a aplicar el SQL de esa migración.
+- `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de
+  `20260917120000_limites_invitados` y su registro en `_prisma_migrations`.
+  Es destructivo: antes hay que desplegar un código que no lea esas columnas.
 
 ## 5. Incidentes y límites conocidos
 
@@ -229,8 +267,7 @@ migrate dev sobre producción. La guarda de
 `scripts/ci/migraciones.mjs` inspecciona cambios destructivos y drift;
 no sustituye evaluar el efecto de una migración.
 
-**PUT a R2 rechazado.** En main aún falta la subida nueva. Para diagnosticar
-un despliegue que sí la implemente, comparar la petición real del navegador,
+**PUT a R2 rechazado.** Para diagnosticar, comparar la petición real del navegador,
 el preflight y una petición equivalente fuera del navegador. Registrar status,
 cabeceras y código XML del proveedor, redactando firmas. No clasificar cualquier
 403 como CORS: revisar origen/métodos/headers del bucket, credenciales, expiración
@@ -302,6 +339,73 @@ está configurado.
 node scripts/ci/documentacion-vigente.mjs
 ~~~
 
-Valida los cuatro documentos de esta tanda contra archivos, exports HTTP y
+Valida `README.md`, `docs/pipeline.md`, `docs/encryption.md` y este documento contra archivos, exports HTTP y
 el catálogo de variables. No conecta a proveedores, no ejecuta migraciones
 remotas, no manda mensajes y no acredita disponibilidad de funciones pendientes.
+
+## 8. Content-Security-Policy: pasar de reporte a bloqueo
+
+La CSP sale del proxy (`src/proxy.ts`, política en `src/lib/csp.ts`) en modo
+**Report-Only**: el navegador no bloquea nada y postea las violaciones a
+`POST /api/csp-report`, que las deja en el log de la función (no en
+`eventos_auditoria`: son diagnóstico, no rastro clínico). La cabecera
+`frame-ancestors 'none'` de `next.config.ts` existe aparte porque una política
+report-only no impide el embebido.
+
+Pasar a bloqueo es cambiar `Content-Security-Policy-Report-Only` por
+`Content-Security-Policy` en `conReporteCsp` (`src/proxy.ts`). Antes, la lista de destinos externos (**DESTINOS_EXTERNOS**)
+(`src/lib/csp.ts`) tiene que cubrir todo lo que usa el navegador. El caso que
+importa es R2: el navegador hace PUT del audio directo al bucket y
+`connect-src` gobierna ese PUT. R2 entra por `R2_PUBLIC_HOST`, el origen exacto
+de la URL prefirmada, con el bucket como primer subdominio
+(`https://<bucket>.<accountId>.r2.cloudflarestorage.com`, sin comodín,
+obligatoria en producción). `src/lib/__tests__/csp-destinos.test.ts` falla
+ante cualquier host `https://` nuevo en `src/` que no esté declarado.
+
+### Qué mirar en los reportes
+
+Cada línea del log tiene la forma:
+
+```
+[csp] directiva="script-src-elem" bloqueado="https://…" documento="https://…" archivo="…:42" disposicion="report"
+```
+
+1. **`script-src-elem` o `script-src` con `bloqueado="inline"`:** un `<script>`
+   sin nonce. Si el `documento` es una página de la app, no se puede pasar a
+   bloqueo hasta encontrar cuál y por qué. La causa más probable es una página
+   prerenderizada en el build: sin request no hay nonce. Los layouts de
+   `(dashboard)`, `(auth)` e `(impresion)` declaran `dynamic = "force-dynamic"`;
+   una página fuera de esos grupos tiene que declararlo también. Si el
+   `documento` es de una extensión (`chrome-extension://`, `moz-…`) o el
+   `archivo` no es del dominio, es ruido del navegador de quien mira.
+2. **`style-src` o `style-src-attr`:** esperables. La política conserva
+   `'unsafe-inline'` en `style-src` porque Tailwind 4 y framer-motion escriben
+   en el atributo `style`, que los nonces no cubren. Sacarlo es un trabajo
+   aparte y no bloquea el paso de `script-src`.
+3. **`connect-src`, `img-src`, `media-src`, `font-src`:** algo que la app pide y
+   la política no contempla. Se agrega el destino a esa lista con un
+   comentario que diga qué lo pide, y a `src/lib/__tests__/csp-destinos.test.ts` si es un host
+   que sólo usa el servidor.
+
+### Cuándo
+
+Después de cuatro semanas de uso real contadas desde el deploy, para que la
+profesional haya pasado por cada pantalla (agenda, ficha, grabación,
+aprobación, configuración, cobros) en el teléfono y en la computadora. El
+plazo no está acreditado: hay que fijar la fecha de inicio. Además:
+
+- `src/lib/__tests__/csp-destinos.test.ts` en verde y `R2_PUBLIC_HOST` cargada en Vercel con el
+  host exacto (`GET /api/health` contesta 503 si falta);
+- cero reportes del tipo 1 del dominio propio en las últimas dos semanas;
+- al menos una grabación completa de una sesión real bajo la política;
+- el log leído después del último deploy de Next o de una dependencia grande.
+
+Antes de confiar en el log, comprobar que se lee: grabar una sesión de prueba
+y buscar su línea de `connect-src` o confirmar que no hay ninguna.
+
+### Al pasar a bloqueo
+
+Dejar también `Content-Security-Policy-Report-Only`, con la misma política,
+un mes más: la de bloqueo bloquea y la de reporte sigue avisando. Después se
+saca la de reporte, y se puede fusionar `frame-ancestors 'none'` de
+`next.config.ts` con la política del proxy.

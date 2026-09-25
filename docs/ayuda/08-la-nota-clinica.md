@@ -94,11 +94,11 @@ La aprobación no se puede deshacer."* Guarda la nota editada. Aparece **Nota
 guardada** y permanecés en la nota, con el aviso *"Nota aprobada. El audio se
 borra en segundo plano."* y, si hay análisis, **Leer Para vos**.
 
-La clave que abre el audio se destruye en ese momento; el borrado remoto queda
-en segundo plano y se reintenta durante unos 15 días, hasta marcarse como fallido
-si no lo logra. No equivale a borrar los respaldos anteriores, que pueden
-conservar la clave hasta 12 meses.
-Ver `12-camino-del-audio-y-privacidad.md`.
+**La mención de la clave quedó vieja**: la app ya no cifra el audio, así que las
+grabaciones de hoy no tienen clave que destruir. Aprobar pide borrar el archivo
+remoto; el borrado sigue en segundo plano y se reintenta durante unos 15 días,
+hasta marcarse como fallido si no lo logra. Hasta que se borra, el archivo se
+puede escuchar con acceso al almacén. Ver `12-camino-del-audio-y-privacidad.md`.
 
 Si la nota cambió mientras la revisabas (por ejemplo, porque llegó una nueva
 redacción), no se aprueba: la pantalla ofrece **Revisar nota actual** y conserva
@@ -126,10 +126,6 @@ deshacer."* La eliminación queda registrada en la auditoría.
 
 Si se agotaron los reintentos automáticos, el motivo lo dice: *"Se agotaron los
 reintentos automáticos (5 fallos seguidos). Reintentá o eliminá la sesión."*
-
-Si eliminaste la sesión y querés grabar de nuevo ese turno en el mismo teléfono,
-la pantalla de grabar ofrece **Conservar copia y habilitar otra grabación**. Ver
-`07-grabar-una-sesion.md`.
 
 ## Ver transcripción
 

@@ -9,7 +9,9 @@ en Hoy, Agenda, Pacientes, Cobros y la ficha. Tocar tu nombre no lleva a ningún
 lado.
 
 Los cambios válidos se guardan un segundo y medio después de que dejás de escribir.
-Esperá a ver **Guardado** antes de salir; salir antes puede cancelar lo pendiente.
+Si salís antes, la app manda en ese momento lo que faltaba guardar, también al
+cerrar o recargar la pestaña. Lo único que no se puede mandar es un dato
+inválido o un guardado que falló: eso se avisa antes de salir.
 Arriba a la derecha aparece *Guardando…* y después *Guardado.* Si algo falla:
 *"Hay cambios sin guardar. Revisá los datos y reintentá."*, con **Reintentar**.
 

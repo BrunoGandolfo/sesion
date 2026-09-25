@@ -69,7 +69,7 @@ describe("publicación manual", () => {
     expect(aviso.jobs["ci-rojo"].if).toContain("conclusion == 'failure'");
     expect(aviso.jobs["ci-rojo"].if).toContain("event == 'push'");
     expect(aviso.jobs["ci-rojo"].steps.map((p) => p.uses))
-      .toEqual(["actions/checkout@v5", "./.github/actions/alerta-correo"]);
+      .toEqual(["actions/checkout@v7", "./.github/actions/alerta-correo"]);
     expect(JSON.stringify(aviso)).not.toMatch(/DATABASE_URL|git push|migrate/);
   });
 });

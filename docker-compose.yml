@@ -1,6 +1,6 @@
-# Postgres 17 para los tests de integración, en la máquina de quien tenga
-# Docker. Es OPCIONAL: sin Docker, la alternativa es la rama `test` de Neon
-# (ver .env.test.example y docs/operaciones.md §5).
+# Postgres 17 para los tests de integración. Los tests corren siempre contra
+# un Postgres propio y local, nunca contra Neon ni una base compartida (ver
+# .env.test.example).
 #
 #   npm run db:test:up     levanta el contenedor y aplica las migraciones
 #   npm run test:integration

@@ -21,15 +21,20 @@ Son exactamente dos. Están en `_FEEDBACK_POR_ORIENTACION`
 
 ## 2. Cómo se elige
 
-1. `GET /api/sesion-clinica/pendientes` → `reclamarPendientes` lee
-   `Configuracion.orientacionTeorica` de la organización de cada sesión y la
-   incluye en el payload. Si la organización no tiene configuración, manda
+1. "Para vos" es un trabajo durable propio, `generar_feedback`, que nace al
+   entregarse la nota. Al entregárselo al worker, la app le adjunta la
+   transcripción, las métricas de habla y `Configuracion.orientacionTeorica`
+   de la organización (`src/app/api/_lib/casos-uso/trabajos/entregar.ts`,
+   `adjuntoFeedback`). Si la organización no tiene configuración, manda
    `"cbt_mi"`.
 2. El worker la pasa a `generar_feedback_terapeuta(orientacion=...)`. Un valor
    desconocido cae a `"cbt_mi"`. El processor no decide orientación por su
    cuenta.
-3. La Llamada C es best-effort: si falla, `datosEstructurados` sale sin
-   `feedbackTerapeuta` y la nota igual llega a revisión.
+3. El resultado se guarda aparte de la nota: `feedback_encrypted` y
+   `feedback_estado` (`pendiente` / `listo` / `fallido`), escrito sólo si la
+   generación de la nota no cambió
+   (`src/app/api/_lib/casos-uso/trabajos/resultado-worker.ts`). Si falla, la
+   nota no se entera: "Para vos" queda `fallido` y se puede pedir de nuevo.
 4. Al leer, la UI pasa el feedback por `normalizarFeedback()` y hace
    narrowing por `instrumento` (`FeedbackTerapeutaView.tsx`). El mapper
    `toConfiguracion` (`src/app/api/_lib/domain.ts`) también estrecha a la

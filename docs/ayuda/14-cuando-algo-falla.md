@@ -41,7 +41,7 @@ Pasa cuando el teléfono se bloquea o pone a dormir al navegador: deja de
 entregar audio y la app no lo puede evitar. La grabación NO se corta sola.
 
 **Qué hacer:** tocá **Seguir grabando** o **Terminar la sesión**. Ese rato no se
-grabó y no cuenta como tiempo grabado; lo demás está guardado. La recuperación
+grabó y no cuenta como tiempo grabado; lo demás sigue en la grabación. La recuperación
 completa no está garantizada: lo que el teléfono no llegó a capturar no se puede
 recuperar.
 
@@ -94,7 +94,8 @@ solo el paso que marca el turno como realizado.
 
 **Ves:** *"No se pudo capturar audio de la sesión."*
 
-Se grabó silencio o el micrófono no entregó nada. **Ese audio no se recupera.**
+El micrófono no entregó nada: la grabación quedó vacía. **Ese audio no se
+recupera.**
 
 ### No puedo empezar a grabar
 
@@ -104,19 +105,10 @@ Se grabó silencio o el micrófono no entregó nada. **Ese audio no se recupera.
   micrófono. Habilitalo y probá de nuevo."*, *"No encontramos un micrófono
   disponible en este dispositivo."* o *"No pudimos acceder al micrófono. Cerrá
   otras apps que lo estén usando y probá de nuevo."*
-- *"Este navegador no permite grabar Opus ni AAC"* o *"Este navegador no puede
-  impedir dos grabaciones simultáneas. Usá un navegador actualizado."*:
-  actualizá el navegador o usá otro.
 - Si negaste el permiso del micrófono o no hay micrófono, el navegador puede
   mostrar su propio mensaje, a veces en inglés. Habilitá el permiso del
   micrófono para Sesión en la configuración del navegador y volvé a tocar
   **Grabar sesión**.
-
-### Eliminé la sesión y quiero grabar de nuevo
-
-En el mismo teléfono puede aparecer **Conservar copia y habilitar otra
-grabación**. Guarda la copia anterior aparte, sin borrarla, y deja grabar de
-nuevo el turno.
 
 ---
 
@@ -228,11 +220,6 @@ pasada no genera recordatorio. Detalle en `06-recordatorios-sms.md`.
 - **"No pudimos abrir la ficha."** — lo mismo, con el motivo y **Reintentar**.
 - **"No se pudo cobrar. Probá de nuevo."** (en Hoy) — mirá el turno antes de
   reintentar: puede que el cobro sí haya quedado registrado.
-- **Cobraste desde una fila de Hoy y la fila sigue ofreciendo Cobrar.** Pasa con
-  un turno que seguía **Agendado** cuando ya había pasado su hora: el cobro quedó
-  registrado, pero la pantalla no se actualiza. **No vuelvas a cobrar**: recargá
-  la pantalla o revisalo en Cobros. Si tocás de nuevo, aparece *"No se pudo
-  cobrar"*.
 - **"Hay cambios sin guardar. Revisá los datos y reintentá."** (en Tu consultorio)
   — algún campo quedó vacío o inválido: el nombre, la tarifa o el mensaje del
   recordatorio. Arreglalo y tocá **Reintentar**.
@@ -258,8 +245,9 @@ src/lib/login-intentos.ts
 src/lib/intentos-acceso.ts
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
-src/lib/audio/grabadora.ts
-src/lib/audio/captura.ts
+src/components/grabacion/GrabadorSesion.tsx
+src/lib/grabacion-microfono.ts
+src/lib/grabacion-captura.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx

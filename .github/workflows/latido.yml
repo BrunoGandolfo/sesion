@@ -1,5 +1,5 @@
 # ============================================================================
-# Latido de respaldo: cada 15 minutos, ¿la app y el worker responden?
+# Latido de respaldo: ¿la app y el worker responden?
 #
 # Es la RED DE LA RED. El monitor primario es un servicio de uptime externo
 # (lo contrata el dueño; ver docs/operaciones.md §2) contra /api/health cada
@@ -7,13 +7,20 @@
 # solo alcanza, y tiene una limitación que hay que decir: GitHub deshabilita
 # los `schedule` tras 60 días sin actividad en el repositorio (le pasó a
 # backup.yml entre julio y septiembre de 2026). Por eso es el respaldo y no
-# el primario.
+# el primario. Y el cron pide cada 15 minutos, pero GitHub posterga los
+# `schedule`: entre el 18 y el 24 de septiembre de 2026 corrió entre 5 y 8
+# veces por día. No sirve para enterarse de una caída en minutos.
 #
 # Qué mira:
 #   GET /api/health         200 = la base responde y no falta ninguna variable
 #   GET /api/estado-worker  200 = el worker hizo poll hace menos de 10 min
 #
-# Si alguno no da 200, alerta por correo con la acción compuesta.
+# Si alguno no da 200, alerta por correo con la acción compuesta. El aviso
+# distingue tres cosas que antes se confundían en una sola: el worker caído
+# (503, la ruta contestó y dice que no hay poll), la ruta inalcanzable
+# (redirect o 404: no se sabe nada del worker) y la app sin responder (000).
+# En septiembre de 2026 avisó doce veces "el worker no responde" cuando lo que
+# había era un 307 a /login.
 #
 # Variable de repositorio (Settings → Variables): APP_URL, opcional; default
 # https://sesionapp.app. Secrets: RESEND_API_KEY, ALERTA_CORREO.
@@ -32,18 +39,19 @@ permissions:
 jobs:
   latido:
     name: Consultar /api/health y /api/estado-worker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       APP_URL: ${{ vars.APP_URL || 'https://sesionapp.app' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: /api/health
         id: health
         run: |
           set -uo pipefail
-          codigo="$(curl --silent --show-error --max-time 20 -o /tmp/health.json -w '%{http_code}' "${APP_URL}/api/health" || echo "000")"
+          # Si curl falla ya imprimió 000: se fija en 000, sin concatenar otro.
+          codigo="$(curl --silent --show-error --max-time 20 -o /tmp/health.json -w '%{http_code}' "${APP_URL}/api/health")" || codigo="000"
           echo "health=${codigo}" >> "$GITHUB_OUTPUT"
           echo "/api/health → HTTP ${codigo}"
           cat /tmp/health.json 2>/dev/null || true
@@ -54,11 +62,47 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
-          codigo="$(curl --silent --show-error --max-time 20 -o /tmp/worker.json -w '%{http_code}' "${APP_URL}/api/estado-worker" || echo "000")"
+          codigo="$(curl --silent --show-error --max-time 20 -o /tmp/worker.json -w '%{http_code}' "${APP_URL}/api/estado-worker")" || codigo="000"
           echo "worker=${codigo}" >> "$GITHUB_OUTPUT"
           echo "/api/estado-worker → HTTP ${codigo}"
           cat /tmp/worker.json 2>/dev/null || true
-          [ "${codigo}" = "200" ]
+          echo
+
+          case "${codigo}" in
+            200)
+              # El contrato de la ruta: JSON con status y edadSegundos.
+              if jq -e '.status == "ok" and has("edadSegundos")' /tmp/worker.json > /dev/null 2>&1; then
+                echo "motivo=El worker responde: hizo poll dentro de la ventana." >> "$GITHUB_OUTPUT"
+                echo "OK: el worker hizo poll dentro de la ventana."
+                exit 0
+              fi
+              motivo="200 con un cuerpo que no es el de /api/estado-worker. Algo contesta en esa ruta, pero no es la ruta. Del worker no se sabe nada."
+              ;;
+            503)
+              # La ruta contesta 503 en dos casos: el worker sin poll (con
+              # edadSegundos) o la base que no respondió (sólo status).
+              if jq -e 'has("edadSegundos")' /tmp/worker.json > /dev/null 2>&1; then
+                motivo="CAIDA REAL DEL WORKER: la ruta contestó y dice que no hay poll dentro de la ventana."
+              else
+                motivo="503 sin datos del latido: la ruta no pudo leer la base. Del worker NO SE SABE NADA; mirar /api/health."
+              fi
+              ;;
+            301|302|303|307|308)
+              motivo="Redirect HTTP ${codigo} (a /login). La ruta no llegó a ejecutarse, asi que del worker NO SE SABE NADA. Causa habitual: lo desplegado todavia no tiene /api/estado-worker, o la ruta quedó dentro del matcher de src/proxy.ts."
+              ;;
+            404)
+              motivo="404: la ruta no existe en lo que está desplegado. Del worker NO SE SABE NADA."
+              ;;
+            000)
+              motivo="Sin respuesta (timeout o DNS): no contestó ni la app."
+              ;;
+            *)
+              motivo="HTTP ${codigo} inesperado."
+              ;;
+          esac
+          echo "motivo=${motivo}" >> "$GITHUB_OUTPUT"
+          echo "FALLA: ${motivo}" >&2
+          exit 1
 
       - name: Avisar si algo no responde
         if: failure()
@@ -68,7 +112,8 @@ jobs:
           texto: |
             /api/health → HTTP ${{ steps.health.outputs.health || 'sin respuesta' }}
             /api/estado-worker → HTTP ${{ steps.worker.outputs.worker || 'sin respuesta' }}
-            Un 503 en health es la base o una variable de operación faltante; en estado-worker, el worker sin poll hace más de 10 minutos.
+            ${{ steps.worker.outputs.motivo || 'Sin diagnóstico del worker: el paso no llegó a correr.' }}
+            Un 503 en health es la base o una variable de operación faltante.
             Corrida: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

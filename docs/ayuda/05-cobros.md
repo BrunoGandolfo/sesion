@@ -9,8 +9,9 @@ El cobro es **por sesión**. Si la paciente te paga una sesión que ya pasó, lo
 directo es **Cobros → Te deben → Registrar pago** (más abajo). Además, **Cobrar**
 aparece en el turno, en varios lugares:
 
-- En **Hoy**, en la fila del turno en cuanto pasó su hora, y en la tarjeta de
-  ahora cuando la sesión ya quedó realizada.
+- En **Hoy**, en la fila del turno y en la tarjeta de ahora, en cuanto pasó su
+  hora, esté *Agendado* o ya realizado. En la tarjeta, **Cobrar** aparece al
+  lado de **Grabar sesión**, no en lugar de.
 - En la **Agenda**, abriendo el turno.
 - En la **ficha**, en **Turnos y pagos** para los turnos realizados sin cobrar, y
   en la sesión de hoy de la pestaña **Sesiones** cuando la nota ya está
@@ -32,9 +33,8 @@ cancela.
 
 Si el pago no entra, no se dibuja ningún tilde. En **Hoy** el aviso siempre es
 *"No se pudo cobrar. Probá de nuevo."*; en la Agenda y en la ficha aparece el
-motivo concreto. Después de cobrar desde una fila de Hoy un turno que seguía
-**Agendado**, la fila puede seguir ofreciendo **Cobrar**: el cobro ya quedó
-registrado, recargá antes de volver a tocar.
+motivo concreto. En **Hoy**, el turno cobrado se actualiza en la pantalla sin
+recargar, y **Este mes** suma el cobro.
 
 ## Cuándo NO se puede cobrar
 
@@ -134,6 +134,8 @@ turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
 src/app/(dashboard)/cobros/_components/cobros-view.tsx
 src/app/(dashboard)/_components/sheet-metodo-pago.tsx
 src/app/(dashboard)/_components/dashboard.tsx
+src/app/(dashboard)/_components/datos.ts
+src/app/(dashboard)/_components/card-ahora.tsx
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
 src/app/(dashboard)/pacientes/[id]/_components/turnos-pagos-tab.tsx
 src/app/api/_lib/casos-uso/cobrar-turno.ts

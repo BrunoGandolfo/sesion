@@ -19,16 +19,14 @@ import {
   RECORDAR_COBRO,
 } from "../../src/lib/glosario";
 import { DURACIONES } from "../../src/lib/constantes-turno";
+import { ARCHIVOS_CORPUS } from "../../src/lib/ayuda-corpus";
 
 const RAIZ = join(import.meta.dirname, "..", "..");
 
-// Todas las páginas de ayuda y el recorrido automático.
+// Todas las páginas de ayuda —la misma lista que lee Lupita, así una página
+// nueva entra sola— y el recorrido automático.
 const ARCHIVOS = [
-  ...["00-que-es-sesion", "01-entrar-y-cuenta", "02-pantalla-hoy", "03-agenda-y-turnos",
-    "04-pacientes-y-ficha", "05-cobros",
-    "06-recordatorios-sms", "07-grabar-una-sesion", "08-la-nota-clinica", "09-para-vos-feedback",
-    "10-el-hilo-y-el-recorrido", "11-tu-consultorio", "12-camino-del-audio-y-privacidad",
-    "13-preguntas-frecuentes", "14-cuando-algo-falla", "_indice"].map((n) => `docs/ayuda/${n}.md`),
+  ...ARCHIVOS_CORPUS.map((n) => `docs/ayuda/${n}`),
   "pruebas/e2e/recorrido.mjs",
   "pruebas/e2e/README.md",
 ];
