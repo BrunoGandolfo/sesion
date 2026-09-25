@@ -161,13 +161,14 @@ tres horas: el teléfono se apagó, se cerró el navegador o se cortó la subida
   pantalla de grabar de ese turno y, si la copia está, ofrece **Guardarla
   ahora**. Si grabaste con otro teléfono, abrí la app en ese.
 - Si esa grabación no sirve o no se puede recuperar, tocá **Descartar** y
-  confirmá con **Descartar la grabación**. Si el audio había llegado, se borra
-  y la sesión queda entre las notas que no se pudieron escribir (*"La grabación
-  quedó a medias."*), para **Eliminar**. Si no había llegado, la sesión se
-  quita y el turno queda libre para grabar de nuevo. No se puede deshacer y
-  queda un registro de auditoría.
+  confirmá con **Descartar la grabación**. La sesión se quita y el turno queda
+  libre para grabar de nuevo; si el audio había llegado, también se borra. No
+  se puede deshacer y queda un registro de auditoría.
 
-Si no hacés nada, a los **siete días** la app la descarta sola.
+Si no hacés nada, a los **siete días** la app la abandona sola. Si el audio
+había llegado, se borra y la sesión aparece entre las notas que no se pudieron
+escribir (*"La grabación quedó a medias."*), para **Eliminar**; si no, se
+quita.
 
 ### Dice "No pudimos escribir la nota"
 

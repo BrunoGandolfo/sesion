@@ -1,7 +1,18 @@
-// Abandonar una grabación sin terminar: la sesión quedó en `grabando` o
+// Cerrar una grabación sin terminar: la sesión quedó en `grabando` o
 // `subiendo` (el teléfono murió, se cerró el navegador, se cortó la subida)
-// y nadie la va a terminar. La descarta la usuaria desde Pendientes, o el
-// mantenimiento pasados UMBRAL_HUERFANA_HORAS (siete días).
+// y nadie la va a terminar. Dos entradas, una regla:
+//
+//   LO QUE ELLA DESCARTA A MANO DESAPARECE; LO QUE EL SISTEMA ABANDONA SOLO
+//   QUEDA VISIBLE COMO FALLIDA.
+//
+//   - descartarSesion (la usuaria, "Descartar" en Pendientes): la fila se
+//     borra SIEMPRE (`abandonar_y_borrar`) y el turno queda libre para grabar
+//     de nuevo. Ella ya dijo que no la quiere: dejarle una fallida para
+//     "Eliminar" después era pedirle dos veces lo mismo.
+//   - abandonarSesion (el mantenimiento, pasados UMBRAL_HUERFANA_HORAS): con
+//     audio queda `fallida` con CODIGO_GRABACION_ABANDONADA (`abandonar`),
+//     para que ella se entere de que se perdió una sesión grabada; sin audio
+//     no hay nada que mostrar y la fila se borra.
 //
 // ─── CON AUDIO O SIN AUDIO LO DICE R2, NO LA FILA ──────────────────────────
 //
@@ -12,17 +23,15 @@
 // transacción —es red, no va adentro—, y recién después de verificar que la
 // sesión es de esta organización: a una sesión ajena no se le consulta nada.
 //
-//   - con audio → `abandonar`: queda `fallida` con CODIGO_GRABACION_ABANDONADA
-//     y el trabajo `borrar_audio_r2` inmediato. `audioEstado` NO pasa a
-//     `en_r2`: el audio se está borrando, y `en_r2` la haría reintentable
-//     (HAY_MATERIAL) contra un archivo que va a desaparecer. El trabajo la
-//     deja en `borrado` cuando termina.
-//   - sin audio → `abandonar_sin_audio`: la fila se borra (como eliminar) y el
-//     turno queda libre para grabar de nuevo. Igual se anota un
-//     `borrar_audio_r2`, DIFERIDO: una URL de subida firmada vale una hora
-//     (EXPIRA_URL_SUBIDA_SEGUNDOS) y un PUT lento todavía en vuelo dejaría un
-//     audio clínico en R2 sin ninguna fila que lo nombre. Borrar una key que
-//     no existe no cuesta nada; el trabajo lo confirma con HeadObject.
+//   - con audio → `borrar_audio_r2` inmediato. Si la fila queda (`fallida`),
+//     `audioEstado` NO pasa a `en_r2`: el audio se está borrando, y `en_r2`
+//     la haría reintentable (HAY_MATERIAL) contra un archivo que va a
+//     desaparecer. El trabajo la deja en `borrado` cuando termina.
+//   - sin audio → igual se anota un `borrar_audio_r2`, DIFERIDO: una URL de
+//     subida firmada vale una hora (EXPIRA_URL_SUBIDA_SEGUNDOS) y un PUT lento
+//     todavía en vuelo dejaría un audio clínico en R2 sin ninguna fila que lo
+//     nombre. Borrar una key que no existe no cuesta nada; el trabajo lo
+//     confirma con HeadObject.
 //
 // Todo lo de la base —la transición o el DELETE, el trabajo y el evento de
 // auditoría— va en UNA transacción: si el rastro no se puede escribir, no
@@ -38,6 +47,7 @@ import {
 } from "@/lib/sesion-clinica/estados";
 
 import { auditar } from "../../auditoria";
+import type { ActorAuditoria } from "../../auditoria-pura";
 import { ApiError } from "../../responses";
 import type { AlmacenAudio } from "../audio";
 import { EXPIRA_URL_SUBIDA_SEGUNDOS } from "../audio";
@@ -51,6 +61,9 @@ import {
   type ClienteTransaccional,
 } from "./transicion";
 
+/** Ella la descartó desde Pendientes. */
+export const ACCION_DESCARTAR = "sesion.descartar_grabacion";
+/** El mantenimiento la abandonó pasados los siete días. */
 export const ACCION_ABANDONAR = "sesion.abandonar";
 
 export const MENSAJE_NO_SIN_TERMINAR =
@@ -60,34 +73,35 @@ export const MENSAJE_NO_SIN_TERMINAR =
  *  el doble de lo que vale la URL de subida. */
 export const ESPERA_BORRADO_SIN_AUDIO_MS = 2 * EXPIRA_URL_SUBIDA_SEGUNDOS * 1000;
 
-export type ActorAbandono =
-  | { tipo: "usuario"; id: string }
-  | { tipo: "sistema" };
-
-export interface AbandonarSesionInput {
+interface CerrarSinTerminarBase {
   prisma: ClienteTransaccional;
   almacen: Pick<AlmacenAudio, "existe">;
   sesionId: string;
   organizationId: string;
-  actor: ActorAbandono;
   ahora?: Date;
 }
 
-export interface SesionAbandonada {
-  /** `fallida` si había audio (queda en Pendientes para eliminarla);
-   *  `borrada` si no había nada que conservar. */
+export interface SesionCerrada {
+  /** `fallida` sólo si la abandonó el sistema y había audio. */
   resultado: "fallida" | "borrada";
   conAudio: boolean;
 }
 
-export async function abandonarSesion({
+async function cerrarSinTerminar({
   prisma,
   almacen,
   sesionId,
   organizationId,
-  actor,
   ahora = new Date(),
-}: AbandonarSesionInput): Promise<SesionAbandonada> {
+  conservarConAudio,
+  actor,
+  accion,
+}: CerrarSinTerminarBase & {
+  /** Con audio, la fila queda `fallida` en vez de borrarse. */
+  conservarConAudio: boolean;
+  actor: { tipo: ActorAuditoria; id: string | null };
+  accion: string;
+}): Promise<SesionCerrada> {
   const fila = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
     select: { estado: true, turno: { select: { pacienteId: true } } },
@@ -98,11 +112,10 @@ export async function abandonarSesion({
   }
 
   const { existe: conAudio } = await almacen.existe(keyAudio(organizationId, sesionId, 0));
-  const payload = { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] };
-  const pacienteId = fila.turno.pacienteId;
+  const resultado = conAudio && conservarConAudio ? "fallida" : "borrada";
 
   return prisma.$transaction(async (tx) => {
-    if (conAudio) {
+    if (resultado === "fallida") {
       await transicionar({
         prisma: tx,
         operacion: "abandonar",
@@ -114,36 +127,28 @@ export async function abandonarSesion({
           proximoIntentoEn: null,
         },
       });
-      await crearTrabajo({
-        prisma: tx,
-        tipo: "borrar_audio_r2",
-        payload,
-        organizationId,
-        sesionId,
-        pacienteId,
-      });
     } else {
       const { count } = await tx.sesionClinica.deleteMany({
-        where: whereTransicion({ operacion: "abandonar_sin_audio", sesionId, organizationId }),
+        where: whereTransicion({ operacion: "abandonar_y_borrar", sesionId, organizationId }),
       });
       if (count === 0) throw new ApiError(MENSAJE_CONFLICTO, 409);
-      await crearTrabajo({
-        prisma: tx,
-        tipo: "borrar_audio_r2",
-        payload,
-        organizationId,
-        sesionId,
-        pacienteId,
-        proximoIntentoEn: new Date(ahora.getTime() + ESPERA_BORRADO_SIN_AUDIO_MS),
-      });
     }
 
-    const resultado = conAudio ? "fallida" : "borrada";
+    await crearTrabajo({
+      prisma: tx,
+      tipo: "borrar_audio_r2",
+      payload: { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] },
+      organizationId,
+      sesionId,
+      pacienteId: fila.turno.pacienteId,
+      ...(conAudio ? {} : { proximoIntentoEn: new Date(ahora.getTime() + ESPERA_BORRADO_SIN_AUDIO_MS) }),
+    });
+
     await auditar(tx, {
       organizationId,
       actorTipo: actor.tipo,
-      actorId: actor.tipo === "usuario" ? actor.id : null,
-      accion: ACCION_ABANDONAR,
+      actorId: actor.id,
+      accion,
       entidad: "sesion_clinica",
       entidadId: sesionId,
       creadoEn: ahora,
@@ -151,5 +156,28 @@ export async function abandonarSesion({
     });
 
     return { resultado, conAudio };
+  });
+}
+
+/** "Descartar" de la usuaria: la sesión desaparece, haya audio o no. */
+export function descartarSesion({
+  usuarioId,
+  ...input
+}: CerrarSinTerminarBase & { usuarioId: string }): Promise<SesionCerrada> {
+  return cerrarSinTerminar({
+    ...input,
+    conservarConAudio: false,
+    actor: { tipo: "usuario", id: usuarioId },
+    accion: ACCION_DESCARTAR,
+  });
+}
+
+/** La red de seguridad del mantenimiento: con audio queda `fallida`. */
+export function abandonarSesion(input: CerrarSinTerminarBase): Promise<SesionCerrada> {
+  return cerrarSinTerminar({
+    ...input,
+    conservarConAudio: true,
+    actor: { tipo: "sistema", id: null },
+    accion: ACCION_ABANDONAR,
   });
 }

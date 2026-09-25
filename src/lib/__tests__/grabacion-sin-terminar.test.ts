@@ -8,12 +8,14 @@
  *   - Pendientes la muestra: una subida quieta más de 30 min; una grabación
  *     abierta, recién pasado el tope de grabación más 30 min (mientras se
  *     graba nada llega al servidor). Antes, no.
- *   - POST /api/sesion-clinica/[id]/abandonar la descarta: con audio en R2
- *     queda `fallida` + borrado encolado; sin audio, se borra. Todo con su
- *     evento de auditoría en la misma transacción.
+ *   - POST /api/sesion-clinica/[id]/abandonar ("Descartar", de ella): la
+ *     sesión se borra SIEMPRE; si había audio en R2, además se encola su
+ *     borrado. Todo con su evento de auditoría en la misma transacción.
  *   - Lo que no está sin terminar (revisión, aprobada) da 409 y no cambia.
  *   - Otra organización recibe 404 y R2 ni se consulta.
- *   - El mantenimiento abandona solo las de más de siete días.
+ *   - El mantenimiento abandona solo las de más de siete días, y a esas
+ *     (con audio) sí las deja `fallida`: lo que el sistema abandona solo
+ *     queda visible; lo que ella descarta a mano desaparece.
  *
  * R2 es un doble: `existe` lo decide cada caso.
  *
@@ -30,6 +32,7 @@ import { mantenimiento } from "@/app/api/_lib/casos-uso/mantenimiento";
 import { pendientesTerapeuta } from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
 import {
   ACCION_ABANDONAR,
+  ACCION_DESCARTAR,
   ESPERA_BORRADO_SIN_AUDIO_MS,
 } from "@/app/api/_lib/casos-uso/sesion/abandonar";
 import { SESION_FALLO_LABEL } from "@/lib/glosario";
@@ -121,7 +124,8 @@ async function crearSesion(f: Fixture, estado: EstadoSesion, quietaMs: number) {
 
 const leer = (id: string) => prismaRaw.sesionClinica.findUnique({ where: { id } });
 const trabajos = () => prismaRaw.trabajo.findMany({ orderBy: { creadoEn: "asc" } });
-const eventos = () => prismaRaw.eventoAuditoria.findMany({ where: { accion: ACCION_ABANDONAR } });
+const eventos = () =>
+  prismaRaw.eventoAuditoria.findMany({ where: { accion: { in: [ACCION_ABANDONAR, ACCION_DESCARTAR] } } });
 
 function pedirAbandono(sesionId: string, como: Fixture) {
   sesionActual.organizationId = como.orgId;
@@ -226,7 +230,7 @@ describe("Pendientes: grabación sin terminar", () => {
 });
 
 describe("POST /api/sesion-clinica/[id]/abandonar", () => {
-  it("con audio en R2: queda fallida con grabacion_abandonada, borrado encolado y evento de auditoría", async () => {
+  it("con audio en R2: la sesión se borra igual, el borrado del audio queda encolado ya y hay evento de auditoría", async () => {
     const f = await crearOrg();
     const { sesionId } = await crearSesion(f, "subiendo", 45 * MIN);
     r2.existe = true;
@@ -234,13 +238,11 @@ describe("POST /api/sesion-clinica/[id]/abandonar", () => {
     const respuesta = await pedirAbandono(sesionId, f);
 
     expect(respuesta.status).toBe(200);
-    expect((await respuesta.json()).data).toEqual({ resultado: "fallida", conAudio: true });
+    expect((await respuesta.json()).data).toEqual({ resultado: "borrada", conAudio: true });
     expect(r2.consultadas).toEqual([keyAudio(f.orgId, sesionId, 0)]);
 
-    const sesion = await leer(sesionId);
-    expect(sesion).toMatchObject({ estado: "fallida", falloCodigo: CODIGO_GRABACION_ABANDONADA });
-    // No queda reintentable: el audio se está borrando.
-    expect(sesion?.audioEstado).toBe("sin_audio");
+    // Ella la descartó: no le queda una fallida para "Eliminar" después.
+    expect(await leer(sesionId)).toBeNull();
 
     const [trabajo, ...otros] = await trabajos();
     expect(otros).toHaveLength(0);
@@ -258,9 +260,10 @@ describe("POST /api/sesion-clinica/[id]/abandonar", () => {
       organizationId: f.orgId,
       actorTipo: "usuario",
       actorId: f.userId,
+      accion: ACCION_DESCARTAR,
       entidad: "sesion_clinica",
       entidadId: sesionId,
-      detalle: { desde: "subiendo", hacia: "fallida", conAudio: true },
+      detalle: { desde: "subiendo", hacia: "borrada", conAudio: true },
     });
   });
 
@@ -281,7 +284,11 @@ describe("POST /api/sesion-clinica/[id]/abandonar", () => {
     expect(trabajo.proximoIntentoEn.getTime()).toBeGreaterThanOrEqual(antes + ESPERA_BORRADO_SIN_AUDIO_MS - 1000);
 
     const [evento] = await eventos();
-    expect(evento).toMatchObject({ entidadId: sesionId, detalle: { desde: "grabando", hacia: "borrada", conAudio: false } });
+    expect(evento).toMatchObject({
+      accion: ACCION_DESCARTAR,
+      entidadId: sesionId,
+      detalle: { desde: "grabando", hacia: "borrada", conAudio: false },
+    });
   });
 
   it.each(["revision", "aprobada"] as const)("sobre una sesión en %s responde 409 y no cambia nada", async (estado) => {
@@ -349,14 +356,18 @@ describe("mantenimiento: red de seguridad a los siete días", () => {
     const { huerfanas } = await mantenimiento({ prisma: db, ahora: AHORA, almacen });
 
     expect(huerfanas).toEqual({ fallidas: 2, borradas: 0, errores: 0 });
-    expect((await leer(ocho.sesionId))?.estado).toBe("fallida");
+    // Lo abandonó el sistema: queda visible como fallida, sin quedar
+    // reintentable contra un audio que se está borrando.
+    expect(await leer(ocho.sesionId)).toMatchObject({ estado: "fallida", audioEstado: "sin_audio" });
     expect((await leer(sieteYPico.sesionId))?.falloCodigo).toBe(CODIGO_GRABACION_ABANDONADA);
     expect((await leer(seis.sesionId))?.estado).toBe("grabando");
     expect(r2.consultadas).not.toContain(keyAudio(f.orgId, seis.sesionId, 0));
 
     const registrados = await eventos();
     expect(registrados).toHaveLength(2);
-    for (const evento of registrados) expect(evento).toMatchObject({ actorTipo: "sistema", actorId: null });
+    for (const evento of registrados) {
+      expect(evento).toMatchObject({ accion: ACCION_ABANDONAR, actorTipo: "sistema", actorId: null });
+    }
     expect(await trabajos()).toHaveLength(2);
   });
 

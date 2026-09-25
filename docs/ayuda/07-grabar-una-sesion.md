@@ -153,17 +153,18 @@ pendientes, aparece con el nombre de la paciente y dos opciones:
   copia quedó en ese teléfono, ofrece **Guardarla ahora**. Si grabaste en otro
   teléfono, abrilo desde ese.
 - **Descartar** pregunta *"¿Descartar esta grabación?"* y, al confirmar con
-  **Descartar la grabación**, la da por perdida. Si el audio llegó a subirse,
-  se borra y la sesión pasa a las notas que no se pudieron escribir, con el
-  motivo *"La grabación quedó a medias."*; ahí sólo se puede **Eliminar**. Si
-  no llegó, la sesión se quita y el turno queda libre para volver a grabar. No
-  se puede deshacer.
+  **Descartar la grabación**, la sesión se quita y el turno queda libre para
+  volver a grabar. Si el audio llegó a subirse, también se borra. No queda
+  nada para eliminar después. No se puede deshacer.
 
 Antes no aparece: puede estar grabando o enviando ahora mismo. Mientras grabás
 no llega nada al servidor, por eso una grabación abierta tiene más margen.
 
-Si nadie hace nada, **a los siete días la app la descarta sola**, de la misma
-manera. Mientras tanto la copia del teléfono todavía se puede enviar.
+Si nadie hace nada, **a los siete días la app la abandona sola**. Si el audio
+había llegado, se borra y la sesión queda entre las notas que no se pudieron
+escribir, con el motivo *"La grabación quedó a medias."*, para que te enteres;
+ahí sólo se puede **Eliminar**. Si no había llegado, la sesión se quita.
+Mientras tanto la copia del teléfono todavía se puede enviar.
 
 ## Qué hace la app por detrás
 

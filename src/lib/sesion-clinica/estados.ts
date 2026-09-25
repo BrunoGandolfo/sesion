@@ -52,14 +52,17 @@ export const OPERACIONES = {
   volver_a_grabar: { actor: "usuaria", desde: ["subiendo"], hacia: "grabando" },
   /** Única entrada a `procesando`: el audio está completo en R2. */
   audio_listo: { actor: "servidor", desde: ["subiendo"], hacia: "procesando" },
-  /** Huérfana con audio: queda `fallida` (código grabacion_abandonada). */
+  /** Con audio y abandonada por el mantenimiento, o grabación demasiado
+   *  corta: queda `fallida` (grabacion_abandonada / grabacion_corta). */
   abandonar: {
     actor: "usuaria",
     desde: ["grabando", "subiendo"],
     hacia: "fallida",
   },
-  /** Huérfana sin audio: no queda nada que conservar. */
-  abandonar_sin_audio: {
+  /** La fila se borra: la usuaria descartó una grabación sin terminar (con
+   *  o sin audio; el audio va por borrar_audio_r2), o el mantenimiento
+   *  abandonó una sin audio. */
+  abandonar_y_borrar: {
     actor: "usuaria",
     desde: ["grabando", "subiendo"],
     hacia: "borrada",

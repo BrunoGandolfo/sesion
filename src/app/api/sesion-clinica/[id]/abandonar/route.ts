@@ -1,12 +1,12 @@
 // POST /api/sesion-clinica/[id]/abandonar — la usuaria descarta una
-// grabación sin terminar (grabando/subiendo). Con audio en R2 queda
-// `fallida` y el audio se borra; sin audio, la sesión se borra. La regla
-// vive en casos-uso/sesion/abandonar.ts.
+// grabación sin terminar (grabando/subiendo). La sesión se borra siempre y,
+// si el audio llegó a R2, se encola su borrado. La regla vive en
+// casos-uso/sesion/abandonar.ts.
 import { db } from "@/lib/db";
 import { almacenAudio, r2Configurado } from "@/lib/r2";
 
 import { getSessionActor } from "../../../_lib/auth";
-import { abandonarSesion } from "../../../_lib/casos-uso/sesion/abandonar";
+import { descartarSesion } from "../../../_lib/casos-uso/sesion/abandonar";
 import { ApiError, errorResponse, ok } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
@@ -23,12 +23,12 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (!r2Configurado()) {
       throw new ApiError("El almacenamiento de audio (R2) no está configurado en este entorno", 503);
     }
-    const resultado = await abandonarSesion({
+    const resultado = await descartarSesion({
       prisma: db,
       almacen: almacenAudio,
       sesionId: id,
       organizationId,
-      actor: { tipo: "usuario", id: userId },
+      usuarioId: userId,
     });
     return ok(resultado);
   } catch (error) {

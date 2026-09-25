@@ -14,10 +14,10 @@
 //      debe conservarse hasta tener un procedimiento administrativo de rotación.
 //   3. RED DE SEGURIDAD de las grabaciones sin terminar: una sesión quieta
 //      en `grabando`/`subiendo` más de UMBRAL_HUERFANA_HORAS (siete días) se
-//      abandona sola, con la MISMA regla que el botón "Descartar"
-//      (casos-uso/sesion/abandonar.ts) y actor sistema. Es lo último que
-//      corre: la usuaria la vio en Pendientes mucho antes y tuvo
-//      siete días para subirla o descartarla. Solo corre si la ruta le pasa
+//      abandona sola (casos-uso/sesion/abandonar.ts, actor sistema): con
+//      audio queda `fallida` para que ella se entere; sin audio se borra.
+//      Es lo último que corre: la usuaria la vio en Pendientes mucho antes
+//      y tuvo siete días para subirla o descartarla. Solo corre si la ruta le pasa
 //      el almacén (R2): sin él no se sabe si hay audio.
 //
 // El re-cifrado va por SQL crudo: la extensión de Prisma prohíbe (con razón)
@@ -217,7 +217,6 @@ export async function abandonarHuerfanas(params: {
         almacen,
         sesionId: sesion.id,
         organizationId: sesion.organizationId,
-        actor: { tipo: "sistema" },
         ahora,
       });
       if (final === "fallida") resultado.fallidas += 1;

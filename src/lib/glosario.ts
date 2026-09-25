@@ -1583,7 +1583,7 @@ export const SUBIR_DESDE_ESTE_TELEFONO = "Subir desde este teléfono";
 export const DESCARTAR_GRABACION = "Descartar";
 export const DESCARTAR_GRABACION_TITULO = "¿Descartar esta grabación?";
 export const DESCARTAR_GRABACION_MENSAJE =
-  "Si el audio llegó a subirse, se borra y la sesión queda sin nota. Si no llegó, la sesión se quita y el turno queda libre para volver a grabar. No se puede deshacer.";
+  "La sesión se quita y el turno queda libre para volver a grabar. Si el audio llegó a subirse, también se borra. No se puede deshacer.";
 export const DESCARTAR_GRABACION_ACCION = "Descartar la grabación";
 export const DESCARTANDO_GRABACION = "Descartando…";
 export const NO_SE_PUDO_DESCARTAR = "No se pudo descartar la grabación. Probá de nuevo.";
