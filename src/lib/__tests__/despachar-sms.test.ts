@@ -528,3 +528,50 @@ describe("aviso de cobro", () => {
     expect((await leer(envioId)).estado).toBe("cancelado");
   });
 });
+
+describe("paciente archivada (defensa en profundidad)", () => {
+  // Archivar ya cancela lo pendiente (archivar-paciente.test.ts). Esto cubre
+  // lo que haya quedado vivo igual: la paciente archivada no es candidata.
+  const archivarAMano = (pacienteId: string) =>
+    prismaRaw.paciente.update({ where: { id: pacienteId }, data: { activo: false } });
+
+  it("un envío pendiente de una paciente archivada no se lee ni se manda", async () => {
+    const archivada = await crearEnvio();
+    await archivarAMano(archivada.pacienteId);
+    const activa = await crearEnvio({ destino: "+59899000111" });
+    const stub = vi.fn(aceptaOk);
+
+    const r = await correr(stub);
+
+    expect(r.procesados).toBe(1);
+    expect(stub).toHaveBeenCalledTimes(1);
+    expect(stub.mock.calls[0][0].destino).toBe("+59899000111");
+    expect((await leer(archivada.envioId)).estado).toBe("pendiente");
+    expect((await leer(activa.envioId)).estado).toBe("aceptado");
+  });
+
+  it("tampoco se rescata una reserva huérfana de una paciente archivada", async () => {
+    const { envioId, pacienteId } = await crearEnvio({ estado: "enviando" });
+    await envejecer(envioId, new Date(AHORA.getTime() - 10 * MIN));
+    await archivarAMano(pacienteId);
+    const stub = vi.fn(aceptaOk);
+
+    const r = await correr(stub);
+
+    expect(r.procesados).toBe(0);
+    expect(stub).not.toHaveBeenCalled();
+    expect((await leer(envioId)).estado).toBe("enviando");
+  });
+
+  it("un aviso de cobro de una paciente archivada no sale", async () => {
+    const { envioId, pacienteId } = await crearEnvio({ motivo: "recordatorio_cobro" });
+    await archivarAMano(pacienteId);
+    const stub = vi.fn(aceptaOk);
+
+    const r = await correr(stub, { textoDeCobro: async () => "debe algo" });
+
+    expect(r.procesados).toBe(0);
+    expect(stub).not.toHaveBeenCalled();
+    expect((await leer(envioId)).estado).toBe("pendiente");
+  });
+});

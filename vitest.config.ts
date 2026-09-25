@@ -64,6 +64,8 @@ const INTEGRACION = [
   'src/lib/__tests__/feedback-trabajos.test.ts',
   'src/lib/__tests__/despachar-sms.test.ts',
   'src/lib/__tests__/envios-del-turno.test.ts',
+  // Archivar a la paciente apaga sus SMS, con auditoría, en una transacción.
+  'src/lib/__tests__/archivar-paciente.test.ts',
   'src/lib/__tests__/sms-callback.test.ts',
   'src/lib/__tests__/recordar-cobro.test.ts',
   'src/lib/__tests__/pendientes-terapeuta.test.ts',

@@ -41,6 +41,7 @@
 //     en el nivel más bajo, en TODO envío: es una obligación legal y no
 //     puede depender de que cada llamador se acuerde.
 //   - El turno: cerrado o pasado → `cancelado`, sin gastar nada.
+//   - La paciente archivada: ni siquiera es candidata (leerCandidatos).
 //
 // ─── LOS CIERRES NO PISAN UNA CANCELACIÓN ───────────────────────────────────
 //
@@ -142,6 +143,10 @@ type Candidato = Awaited<ReturnType<typeof leerCandidatos>>[number];
 async function leerCandidatos(prisma: ClientePrisma, ahora: Date, corteRescate: Date, lote: number) {
   return prisma.envioSms.findMany({
     where: {
+      // Defensa en profundidad: archivar ya cancela lo pendiente
+      // (cancelarEnviosDeLaPaciente), pero a una paciente archivada no le
+      // sale un SMS aunque algo haya quedado vivo.
+      paciente: { activo: true },
       OR: [
         { estado: "pendiente", proximoIntentoEn: { lte: ahora } },
         { estado: "enviando", actualizadoEn: { lt: corteRescate } },
