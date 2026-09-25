@@ -37,7 +37,6 @@ Hipótesis y resumen sin información son `null`.
   léxica aislada nunca implica riesgo, diagnóstico ni evaluación del sistema.
 - `cambios` resume en frases breves qué agregaste o modificaste respecto de la
   versión recibida. Debe permitir revisar la propuesta. No afirma aceptación.
-- No incluyas `ultimaSesionId`: el origen lo registra el servidor.
 
 ## Campos
 

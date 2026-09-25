@@ -200,13 +200,147 @@ entrado en un backup. Su alcance está en `docs/encryption.md`.
 
 ## Recorrido y propuestas
 
-Aprobar encola integrar_contexto. `processor/processor.py` lo ejecuta con la
-versión vigente y la nota aprobada adjuntas al trabajo; el aplicador guarda
-una propuesta cifrada sin cambiar la vigente. La profesional acepta, edita
-o rechaza. Las escrituras insertan versiones y preservan las anteriores.
-La lectura de `processor/app_client.py` exige un ticket de sesión, JSON
-validado y ausencia de redirecciones. Una lectura fallida es un error, no
-un contexto vacío. Contratos y verificación: `docs/pendientes/04-recorrido.md`.
+El contenido clínico del Recorrido vive sólo en `hilo_versiones.contenido_encrypted`
+(`cifrarHiloVersion`). Cada edición inserta una fila: nada se sobrescribe. Las
+resoluciones sólo cambian estado, autora y fecha. El puntero vigente y la
+numeración se actualizan bajo el bloqueo de la fila de la paciente en `hilos`;
+el orden de locks es siempre hilo y después trabajo.
+
+Aprobar una nota crea `integrar_contexto` en la misma transacción
+(`src/app/api/_lib/casos-uso/hilo/trabajo.ts`). La IA sólo **propone**: la
+propuesta no cambia la vigente. Si la vigente cambió mientras la IA trabajaba,
+la propuesta entra como desactualizada; si la profesional edita mientras hay
+una propuesta abierta, la desactualiza en la misma transacción. Aceptar con
+ediciones crea una versión profesional con `propuestaOrigenId`. Rechazar
+termina el asunto: regenerar y reintentar son pedidos explícitos.
+
+Las intervenciones referencian sesiones por UUID (`sesiones`), nunca por un
+número calculado al contar aprobaciones; toda referencia tiene que ser una
+nota aprobada de esa paciente.
+
+### Qué recibe y qué devuelve `integrar_contexto`
+
+El reclamo (`trabajos/reclamar.ts`) toma el lock del hilo y fija
+`basadaEnVersion` en el payload con la versión vigente. **Concurrencia:** no
+se entrega un `integrar_contexto` si la paciente tiene una propuesta abierta
+o un trabajo anterior del mismo tipo sin terminar; la cola se pagina para
+que una paciente bloqueada no oculte los trabajos de otras.
+
+El adjunto que recibe el worker tiene exactamente estos campos:
+
+| Campo | Qué es |
+| --- | --- |
+| `tipo` | `"integrar_contexto"` |
+| `pacienteId`, `sesionId` | Tienen que coincidir con los del payload |
+| `version` | La vigente al reclamar (= `payload.basadaEnVersion`); 0 si no hay Recorrido |
+| `contextoVigente` | El contenido de esa versión, o `null` con versión 0 |
+| `notaFinal` | La nota aprobada: `subjetivo`, `objetivo`, `analisis`, `plan` |
+| `datos` | `datosEstructurados` de la sesión, sin `riesgoLexico` |
+| `fechaSesion` | Día del turno en Montevideo (`AAAA-MM-DD`, `src/lib/fechas-montevideo.ts`) |
+
+`processor.integrar_contexto` valida identidad, versión, forma del contexto
+vigente, nota y fecha **antes** de llamar al modelo (si no, devuelve
+`{ok: false, error: "adjunto_invalido: …"}`), usa
+`processor/prompts/update_context_v2.1.md` y devuelve
+`{ok: true, propuesta, promptVersion, modeloLlm, uso}`. El servidor vuelve a
+validar la propuesta con `contenidoHiloSchema`; resolver el trabajo y guardar
+la propuesta son una sola transacción, y repetir un resultado ya resuelto
+responde 409.
+
+### La lectura para la nota
+
+La nota de cada sesión nueva lleva el Recorrido vigente como
+`<contexto_previo>`. El worker lo lee con
+`GET /api/pacientes/[id]/hilo?format=llm&sesionId=…`, autenticado con el ticket
+de esa sesión en procesamiento (sólo esa paciente y esa organización):
+
+```json
+{"data":{"tipo":"hilo_vigente","pacienteId":"...","version":0,"contenido":null}}
+```
+
+`version: 0, contenido: null` es la única forma del hilo vacío. Con versión
+positiva el contenido tiene que validar completo. `processor/app_client.py`
+no sigue redirecciones, exige 200 y `application/json` y valida identidad,
+envoltura, tipos, enums, fechas y límites. HTML, 404, JSON inválido o una
+estructura distinta son errores (`contexto_no_disponible`, transitorio):
+nunca se genera una nota sin historia porque falló la lectura.
+
+### Endpoints de la pantalla
+
+Respuestas `{ data }` / `{ error }`; lecturas con `Cache-Control: no-store`.
+`/hilo` está fuera del proxy, así que sesión y origen propio los controla la
+ruta (`src/app/api/_lib/hilo-http.ts`).
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET /api/pacientes/[id]/hilo` | Vigente, propuesta, desactualizadas, historial paginado, cantidad de aprobadas y trabajos pendientes/fallidos |
+| `GET /api/pacientes/[id]/hilo/versiones?antes=N` | Hasta 30 metadatos de versiones y `hayMas` |
+| `GET /api/pacientes/[id]/hilo/versiones/[version]` | Contenido y metadatos de una versión |
+| `POST /api/pacientes/[id]/hilo/versiones` | `{ basadaEnVersion, contenido }`: inserta una versión profesional |
+| `POST /api/pacientes/[id]/hilo/propuestas/[propuestaId]/aceptar` | `{ basadaEnVersion, contenido? }`; con contenido inserta la edición propia |
+| `POST /api/pacientes/[id]/hilo/propuestas/[propuestaId]/rechazar` | `{ basadaEnVersion }` |
+| `POST /api/pacientes/[id]/hilo/regenerar` | `{ basadaEnVersion, propuestaId }` o `{ basadaEnVersion, trabajoId }` para un fallo; devuelve `trabajoId` |
+| `POST /api/pacientes/[id]/hilo/exportar` | Exporta el Recorrido y lo audita (POST para que un enlace o un prefetch no lo dispare) |
+| `GET /api/pacientes/[id]/brief` | Última nota aprobada, sólo hilo vigente, próximo turno y avisos de nota/propuesta pendientes |
+
+`basadaEnVersion` es **la vigente**, no el contador que también cuenta
+propuestas. Una pantalla que guardó sobre otra versión recibe 409, conserva
+su borrador y tiene que leer la vigente nueva antes de seguir.
+
+## Consumo y diagnóstico: `uso`
+
+Cada resultado de sesión (`nota` y `fallo`) y cada resultado de trabajo lleva
+`uso` (`processor/uso.py`), con la forma de `usoSchema`
+(`src/lib/sesion-clinica/schema.ts`). La app lo guarda tal cual en la columna
+`uso` de la sesión o del trabajo, **sin cifrar**: sólo lleva números, códigos
+e ids, nunca texto de la sesión. Ejemplo (una nota que se truncó en la primera
+pasada):
+
+```json
+{
+  "worker": "1a2b3c4",
+  "asrSegundos": 3232,
+  "pasosMs": {"descarga": 812, "normalizacion": 61234, "asr": 245000},
+  "llamadas": [
+    {"nombre": "nota#1", "entrada": 21000, "salida": 16384, "techo": 16384,
+     "ms": 212000, "cacheLectura": 0, "cacheEscritura": 0, "razonamiento": 15900,
+     "stop": "max_tokens", "requestId": "req_01", "error": "llm_truncado"},
+    {"nombre": "nota#2", "entrada": 21000, "salida": 9000, "techo": 20480,
+     "ms": 131000, "cacheLectura": 0, "cacheEscritura": 0, "razonamiento": 6500,
+     "stop": "end_turn", "requestId": "req_02"}
+  ],
+  "reintentos": 1,
+  "advertencias": ["intensidadEmocional=0 fuera de rango 1..10, anulado"]
+}
+```
+
+- `worker`: la versión del worker (WORKER_VERSION en
+  `processor/.env.example`), que por defecto son los 7 primeros caracteres
+  del commit que desplegó Railway (RAILWAY_GIT_COMMIT_SHA, que Railway
+  inyecta en los deploys disparados desde GitHub). Es también el
+  `X-Worker-Version` de cada latido.
+- `asrSegundos`: la duración que informó (y factura) AssemblyAI. No está
+  cuando la corrida vino con checkpoint o el ASR falló.
+- `pasosMs`: descarga, normalización y ASR en la sesión; en un trabajo, el
+  nombre del tipo. Medido con `time.monotonic()`.
+- `llamadas[]`: una por pedido a Anthropic, `nota#1`/`nota#2`,
+  `feedback#1`/`feedback#2`, `contexto#1`/`contexto#2`. `entrada` y `salida`
+  son tokens facturados; `razonamiento` es la parte de la salida que se fue en
+  pensar. `error` aparece si esa pasada falló (un truncado o un timeout se
+  pagan igual). Un timeout tiene `entrada` y `salida` en 0: no hay `usage`.
+- `reintentos`: segundas pasadas por forma. `advertencias`: escalas fuera de
+  rango que `schemas_llm` anuló.
+
+Un fallo lleva el `uso` de lo que se alcanzó a hacer. Hoy cada resultado
+**reemplaza** el `uso` de la sesión: el de un intento anterior se pierde.
+Nada en la app lo lee todavía.
+
+Tiempo de cada llamada: sin streaming la respuesta llega entera al final, así
+que el timeout de cada pedido (LLM_TIMEOUT_SECONDS en
+`processor/config.py`, 600 s) es el techo de la generación; alcanza para la
+segunda pasada de 20.480 tokens a 35 tok/s. El SDK reintenta una vez
+(429, 5xx, conexión, timeout). No hay `cache_control`: con este tráfico la
+caché de prompt no se lee y cada escritura cobra 1,25×.
 
 ## Verificación y operación
 
