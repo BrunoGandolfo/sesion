@@ -978,5 +978,9 @@ model EventoAuditoria {
   @@index([organizationId, creadoEn])
   // Historia de una entidad (una sesión, una paciente).
   @@index([entidad, entidadId])
+  // La métrica horaria de rastros perdidos cuenta eventos por acción y fecha
+  // para todas las organizaciones (auditoria-metricas.ts): sin este índice
+  // recorre entera la única tabla que nunca se purga.
+  @@index([accion, creadoEn])
   @@map("eventos_auditoria")
 }
