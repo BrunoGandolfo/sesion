@@ -45,7 +45,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, integracion]
   pull_request:
     branches: [main]
   # A mano sobre cualquier rama (gh workflow run CI --ref <rama>): es como un
