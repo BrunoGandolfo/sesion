@@ -16,6 +16,9 @@ import { join } from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
+import type { crearMensajeStreaming, PedidoMensajes } from "@/lib/anthropic-mensajes";
+import { responderAyudaStreaming } from "@/app/api/_lib/casos-uso/responder-ayuda";
+
 import {
   ARCHIVOS_CORPUS,
   DIRECTORIO_CORPUS,
@@ -147,5 +150,39 @@ describe("systemPromptAyuda", () => {
     const dos = systemPromptAyuda();
     // Byte a byte: es lo que hace que el prompt caching sirva.
     expect(dos).toBe(uno);
+  });
+
+  it("es el mismo para dos consultorios y no lleva el nombre de ninguna profesional", async () => {
+    // El caso de uso no recibe la configuración: esa ausencia es lo que se
+    // prueba. Si algún día la recibe, este test tiene que pasársela.
+    const consultorios = [
+      { nombreProfesional: "Mariana Roldán" },
+      { nombreProfesional: "Ana Pereira" },
+    ];
+    const pedidos: PedidoMensajes[] = [];
+    const crear: typeof crearMensajeStreaming = async (pedido) => {
+      pedidos.push(pedido);
+      return {
+        fragmentos: (async function* () {})(),
+        resultado: Promise.resolve({ texto: "", tokensEntrada: 0, tokensSalida: 0, cacheLeido: 0, cacheEscrito: 0, motivoDeCorte: "end_turn" as const }),
+        cancelar: () => {},
+      };
+    };
+    for (const consultorio of consultorios) {
+      // Sin memoria entre uno y otro: si el prompt dependiera del consultorio,
+      // el segundo no podría heredar el texto del primero.
+      olvidarCorpus();
+      await responderAyudaStreaming({
+        pregunta: "¿Dónde cambio la tarifa?",
+        apiKey: "sk-ant-de-prueba",
+        crearStreaming: crear,
+        consultarAgenda: async () => [],
+      });
+      expect(pedidos.at(-1)?.system.map((b) => b.text).join("")).not.toContain(consultorio.nombreProfesional);
+    }
+    expect(pedidos).toHaveLength(2);
+    expect(pedidos[1].system).toEqual(pedidos[0].system);
+    expect(systemPromptAyuda()).not.toMatch(/Mariana/);
+    expect(LIMITES_ASISTENTE[2]).toContain("la profesional está entre paciente y paciente");
   });
 });

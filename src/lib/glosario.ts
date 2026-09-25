@@ -1287,7 +1287,7 @@ export const PORTADA_LUPITA =
   "Lupita explica cómo usar Sesión y consulta tu agenda de hoy, mañana o esta semana: nombres, días, horas, duración y modalidad. No lee fichas, teléfonos, montos, notas, transcripciones, Recorrido ni consentimientos. No cambia nada.";
 export const PORTADA_LUPITA_CUIDADO =
   "Sí recibe lo que escribís en el chat: evitá incluir datos clínicos o personales.";
-export const PORTADA_PIE = "© Mariana Roldán";
+export const PORTADA_PIE = "© Sesión";
 
 /** Los rótulos del formulario. Estaban escritos a mano en la página. */
 export const ENTRADA_EMAIL = "Email";
