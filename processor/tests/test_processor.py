@@ -403,3 +403,37 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
 def test_un_tipo_desconocido_no_lanza():
     res = processor.ejecutar_trabajo({"tipo": "desconocido"})
     assert res["ok"] is False and "desconocido" in res["error"]
+
+
+# Logs y errores sin texto de la sesion ─────────────────────────────────────
+#
+# Una excepcion inesperada puede citar un valor sacado del contenido (una
+# KeyError con una clave, un eco del proveedor). De esas solo viaja y se
+# loguea el tipo; un PipelineError trae su codigo y su mensaje publico.
+
+SECRETO = "ANA-SECRETA dijo que no duerme"
+
+
+def test_una_excepcion_inesperada_en_un_trabajo_solo_deja_el_tipo(mocker, caplog):
+    mocker.patch("processor.generar_feedback", side_effect=KeyError(SECRETO))
+    with caplog.at_level(logging.DEBUG):
+        res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})
+    assert res["error"] == "KeyError"
+    assert all(SECRETO not in r.getMessage() for r in caplog.records)
+
+
+def test_una_excepcion_inesperada_en_la_sesion_solo_loguea_el_tipo(pasos, caplog):
+    pasos["mocker"].patch("processor.transcribir", side_effect=RuntimeError(SECRETO))
+    with caplog.at_level(logging.DEBUG):
+        processor.procesar_sesion(sesion())
+    payload = pasos["resultado"].call_args.args[2]
+    assert payload["codigo"] == "error_interno"
+    assert any("error_interno RuntimeError" in r.getMessage() for r in caplog.records)
+    assert all(SECRETO not in r.getMessage() for r in caplog.records)
+    assert SECRETO not in str(payload)
+
+
+def test_un_adjunto_de_recorrido_invalido_dice_por_que(mocker):
+    res = processor.ejecutar_trabajo({"tipo": "integrar_contexto", "adjunto": {}, "payload": {}})
+    assert res["ok"] is False
+    assert res["error"] == "adjunto_invalido: Adjunto de Recorrido inválido"

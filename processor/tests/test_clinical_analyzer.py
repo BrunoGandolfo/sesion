@@ -8,6 +8,9 @@ no se reintentan aca: de eso se ocupa `max_retries` del SDK.
 
 Sin red: se mockea _llamar_anthropic, que es la frontera con Anthropic.
 """
+import logging
+from types import SimpleNamespace
+
 import pytest
 
 import clinical_analyzer
@@ -579,3 +582,22 @@ def test_el_detalle_entra_en_los_500_caracteres_que_guarda_la_app(llm):
     # processor.py corta en 500 al mandarlo: si el texto creciera, se
     # perderia justo la parte que se agrego al final.
     assert len(exc.value.mensaje_publico) < 200
+
+
+# Logs sin texto de la sesion ───────────────────────────────────────────────
+
+def test_un_fallo_inesperado_del_feedback_solo_loguea_el_tipo(mocker, caplog):
+    secreto = "ANA-SECRETA dijo que no duerme"
+    mocker.patch("clinical_analyzer._cargar_prompt", side_effect=KeyError(secreto))
+    with caplog.at_level(logging.DEBUG):
+        feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+    assert feedback is None
+    assert diagnostico.advertencias == ["feedback_no_generado: KeyError"]
+    assert all(secreto not in r.getMessage() for r in caplog.records)
+
+
+def test_el_mensaje_de_error_de_la_api_se_corta_en_160():
+    error = SimpleNamespace(body={"error": {"type": "invalid_request_error", "message": "x" * 500}})
+    mensaje = clinical_analyzer.mensaje_error_api(error)
+    assert len(mensaje) == 160
+    assert mensaje.startswith("invalid_request_error: ")

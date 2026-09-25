@@ -107,7 +107,7 @@ def mensaje_error_api(e: Exception) -> str:
     """
     Texto de validacion que devuelve la API en el cuerpo del error
     ({"error": {"type", "message"}}). Es diagnostico de la API, no contenido
-    clinico; se trunca a 300 chars por si algun dia incluyera eco del input.
+    clinico; se trunca a 160 chars por si algun dia incluyera eco del input.
     Para excepciones que no son de la API (sin `body` ni `message`) devuelve
     "".
     """
@@ -124,7 +124,7 @@ def mensaje_error_api(e: Exception) -> str:
             mensaje = str(body.get("message") or "")
     if not mensaje:
         mensaje = str(getattr(e, "message", "") or "")
-    return mensaje[:300]
+    return mensaje[:160]
 
 
 def _entero(valor: object) -> int | None:
@@ -571,7 +571,7 @@ def generar_feedback_terapeuta(
             advertencias=[f"{ADVERTENCIA_FEEDBACK}: {e.codigo}"]
         )
     except Exception as e:
-        logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}: {str(e)[:200]}")
+        logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}")
         return None, nombre_prompt, DiagnosticoLLM(
             advertencias=[f"{ADVERTENCIA_FEEDBACK}: {type(e).__name__}"]
         )

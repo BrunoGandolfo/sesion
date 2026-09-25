@@ -44,7 +44,6 @@ import r2_client
 from schemas_llm import validar_estructura_contexto
 from riesgo_lexico import buscar_menciones
 import speech_analytics
-from clinical_analyzer import mensaje_error_api
 from errores import LeasePerdido, PipelineError
 from transcripcion import formatear_para_llm
 from uso import Uso
@@ -215,9 +214,9 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
             logger.error(f"[{etiqueta}] {e.codigo}: {e.mensaje_publico} ({'definitivo' if e.definitivo else 'transitorio'})")
             reportar_fallo(sesion, e, lease.paso, uso=uso)
         except Exception as e:
-            # Sin traza: la cadena de excepciones puede arrastrar cuerpos de
-            # respuesta de proveedores. Solo tipo y mensaje acotado.
-            logger.error(f"[{etiqueta}] error_interno {type(e).__name__}: {_describir(e)}")
+            # Sin traza ni mensaje: la cadena de excepciones puede arrastrar
+            # cuerpos de respuesta de proveedores o un valor de la sesion.
+            logger.error(f"[{etiqueta}] error_interno {type(e).__name__}")
             reportar_fallo(
                 sesion, PipelineError("error_interno", "Error interno del worker", definitivo=False), lease.paso, uso=uso
             )
@@ -491,7 +490,7 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
             else:
                 resultado = {"ok": False, "error": f"tipo no soportado: {tipo}"}
     except Exception as e:
-        resultado = {"ok": False, "error": f"{type(e).__name__}: {_describir(e)}"[:500]}
+        resultado = {"ok": False, "error": _describir(e)[:500]}
     return {**resultado, "uso": uso.payload()}
 
 
@@ -536,6 +535,11 @@ def generar_feedback(adjunto: dict, uso: Uso | None = None) -> dict:
     }
 
 
+def _adjunto_invalido(motivo: str) -> PipelineError:
+    """Rechazo del adjunto antes de llamar al modelo. `motivo` es texto fijo."""
+    return PipelineError("adjunto_invalido", motivo)
+
+
 def integrar_contexto(adjunto: dict, payload: dict, uso: Uso | None = None) -> dict:
     """La app entrega una base inmutable y la nota aprobada; la IA solo propone."""
     from datetime import date
@@ -546,23 +550,26 @@ def integrar_contexto(adjunto: dict, payload: dict, uso: Uso | None = None) -> d
             or adjunto["pacienteId"] != payload.get("pacienteId")
             or type(adjunto["version"]) is not int or adjunto["version"] < 0
             or adjunto["version"] != payload.get("basadaEnVersion")):
-        raise ValueError("Adjunto de Recorrido inválido")
+        raise _adjunto_invalido("Adjunto de Recorrido inválido")
     contexto = adjunto["contextoVigente"]
     if contexto is not None:
-        validar_estructura_contexto(contexto)
+        try:
+            validar_estructura_contexto(contexto)
+        except ValueError:
+            raise _adjunto_invalido("Recorrido vigente con forma inválida") from None
     if (contexto is None) != (adjunto["version"] == 0):
-        raise ValueError("Base de Recorrido incompatible")
+        raise _adjunto_invalido("Base de Recorrido incompatible")
     nota = adjunto["notaFinal"]
     if not isinstance(nota, dict) or set(nota) != {"subjetivo", "objetivo", "analisis", "plan"} or any(not isinstance(v, str) for v in nota.values()):
-        raise ValueError("Nota aprobada inválida")
+        raise _adjunto_invalido("Nota aprobada inválida")
     if not isinstance(adjunto["datos"], dict):
-        raise ValueError("Datos de sesión inválidos")
+        raise _adjunto_invalido("Datos de sesión inválidos")
     fecha = adjunto["fechaSesion"]
     try:
         if not isinstance(fecha, str) or len(fecha) != 10 or date.fromisoformat(fecha).isoformat() != fecha:
             raise ValueError()
     except ValueError:
-        raise ValueError("Día de sesión inválido") from None
+        raise _adjunto_invalido("Día de sesión inválido") from None
     datos = {k: v for k, v in adjunto["datos"].items() if k != "riesgoLexico"}
     propuesta, prompt = clinical_analyzer.actualizar_contexto_clinico(
         contexto or {}, nota, datos, adjunto["sesionId"], fecha,
@@ -573,5 +580,12 @@ def integrar_contexto(adjunto: dict, payload: dict, uso: Uso | None = None) -> d
 
 
 def _describir(e: Exception) -> str:
-    """Mensaje acotado: el de la API de Anthropic si lo hay, si no str(e) truncado."""
-    return mensaje_error_api(e) or str(e)[:200]
+    """
+    Lo que viaja como `error` de un trabajo. Un PipelineError trae codigo y
+    mensaje publico, escritos para eso. De cualquier otra excepcion, solo el
+    tipo: su texto puede traer un valor sacado del contenido (una KeyError con
+    una clave, un eco del proveedor).
+    """
+    if isinstance(e, PipelineError):
+        return f"{e.codigo}: {e.mensaje_publico}"
+    return type(e).__name__
