@@ -2,9 +2,6 @@
 // `loading.tsx` y la rama "cargando" de su componente cliente.
 // Ver la cabecera de base.tsx.
 
-export { Esqueleto, FilaHueco, Hueco, TARJETA } from "./base";
-export type { TonoHueco } from "./base";
-
 export { EsqueletoHoy } from "./hoy";
 export { EsqueletoPacientes, EsqueletoListaPacientes } from "./pacientes";
 export { EsqueletoCobros, EsqueletoCobrosCuerpo } from "./cobros";

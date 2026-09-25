@@ -1,6 +1,6 @@
 // Cliente de Anthropic para la ayuda de Sesión.
 // Usa el SDK oficial: MessageStream interpreta SSE y entrega deltas tipados.
-// Runtime nodejs. No es alcanzable desde src/middleware.ts (regla 9).
+// Runtime nodejs. No es alcanzable desde src/proxy.ts (regla 9).
 
 import Anthropic from "@anthropic-ai/sdk";
 import type {
@@ -12,8 +12,6 @@ import type {
 
 export const MODELO_AYUDA = "claude-sonnet-5";
 export const TIMEOUT_MS = 30_000;
-export const URL_MENSAJES = "https://api.anthropic.com/v1/messages";
-export const VERSION_API_ANTHROPIC = "2023-06-01";
 
 export interface BloqueSystem extends TextBlockParam {
   type: "text";
@@ -132,23 +130,6 @@ function envolverError(error: unknown): ErrorAnthropic {
   const detalle =
     error instanceof Error ? error.message.slice(0, 500) : "desconocido";
   return new ErrorAnthropic(detalle, status);
-}
-
-/** Camino no incremental conservado para pruebas y consumidores internos. */
-export async function crearMensaje(
-  pedido: PedidoMensajes,
-  opciones: OpcionesMensajes,
-): Promise<ResultadoMensajes> {
-  try {
-    const mensaje = await cliente(opciones).messages.create({
-      ...pedido,
-      system: pedido.system,
-      messages: pedido.messages as MessageParam[],
-    });
-    return resultadoDe(mensaje, Boolean(pedido.tools?.length));
-  } catch (error) {
-    throw envolverError(error);
-  }
 }
 
 /**

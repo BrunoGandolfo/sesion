@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { EL_HILO, EL_RECORRIDO_HASTA_HOY, PREPARAR_SESION, SENAL_DE_RIESGO } from "@/lib/glosario";
+import { EL_RECORRIDO_HASTA_HOY, PREPARAR_SESION, SENAL_DE_RIESGO } from "@/lib/glosario";
 
 import { BriefPreSesion } from "../brief-pre-sesion";
 
@@ -61,7 +61,7 @@ it("arranca cerrado, se llama 'Preparar sesión' y al abrirlo está todo, entero
   expect(screen.getByText(/Próxima:/)).toBeTruthy();
 
   // Los nombres viejos no están en este bloque.
-  expect(screen.queryByText(EL_HILO, { exact: false })).toBeNull();
+  expect(screen.queryByText("El hilo", { exact: false })).toBeNull();
   expect(screen.getByText(EL_RECORRIDO_HASTA_HOY)).toBeTruthy();
 });
 

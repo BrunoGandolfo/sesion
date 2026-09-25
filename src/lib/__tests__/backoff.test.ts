@@ -7,11 +7,9 @@ import {
   ESPERA_MAXIMA_MS,
   esperaMs,
   limiteUtilDelTurno,
-  MOTIVO_TURNO_PASADO,
-  MOTIVO_VENTANA_AGOTADA,
-  MOTIVO_VENTANA_AGOTADA_SIN_TURNO,
   VENTANA_MINIMA_MS,
 } from "@/lib/sms/backoff";
+import { MOTIVO_TURNO_PASADO, MOTIVO_VENTANA_AGOTADA, MOTIVO_VENTANA_AGOTADA_SIN_TURNO } from "@/lib/glosario";
 
 const MIN = 60_000;
 const AHORA = new Date("2026-09-11T20:00:00.000Z");

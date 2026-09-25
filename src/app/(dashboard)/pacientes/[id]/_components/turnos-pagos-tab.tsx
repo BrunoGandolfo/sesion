@@ -1,6 +1,6 @@
 "use client";
 
-// Turnos y pagos del paciente (sección plegada de la pestaña Ficha) y el
+// Turnos y pagos del paciente (sección plegada de la pestaña Datos) y el
 // sheet de cobro, que también usa la card de la sesión de hoy en Sesiones.
 
 import * as React from "react";

@@ -1,10 +1,8 @@
 // La marca de Sesión: el hilo.
 //
 // Tres cuentas de tamaño creciente enhebradas en una diagonal. Las sesiones
-// se ensartan en un solo hilo y cada una es un poco más que la anterior —es
-// EL_HILO del glosario, el contexto longitudinal que la app arrastra de
-// sesión en sesión—. La decisión y el porqué están en
-// docs/diseno/05-icono.md (propuesta A).
+// se ensartan en un solo hilo y cada una es un poco más que la anterior: el
+// Recorrido, el contexto que la app arrastra de sesión en sesión.
 //
 // POR QUÉ VIVE ACÁ Y NO EN CADA ARCHIVO
 //
@@ -59,8 +57,7 @@ export interface MedidasMarca {
 }
 
 /**
- * Las medidas de la propuesta, tal como está dibujada en
- * docs/diseno/05-icono.md. Valen de 180 px para arriba.
+ * Las medidas del dibujo original de la marca. Valen de 180 px para arriba.
  */
 export const MEDIDAS_BASE: MedidasMarca = {
   hilo: 3.5,

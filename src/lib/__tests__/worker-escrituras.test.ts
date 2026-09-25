@@ -363,7 +363,6 @@ describe("reprocesar (Volver a escribirla)", () => {
     const campos = await camposDe(base.db, sesionId);
     expect(campos.notaIa?.plan).toBe("Plan 1");
     expect(campos.transcripcion).toBe(TRANSCRIPCION);
-    expect(fila?.audioClaveEncrypted).not.toBeNull();
 
     const [segunda] = (
       await reclamarSesiones({ prisma: base.db, ahora: AHORA, limite: 10, terminosAsr: async () => [] })

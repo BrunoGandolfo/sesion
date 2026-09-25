@@ -20,7 +20,6 @@ import type { PrismaClient } from "@prisma/client";
 import { claveDeCobro } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import {
   ACCION_AVISO,
-  MOTIVO_PACIENTE_DADA_DE_BAJA,
   recordarCobro,
   ultimoAvisoPorPaciente,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
@@ -28,6 +27,7 @@ import { ApiError } from "@/app/api/_lib/responses";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
+import { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;

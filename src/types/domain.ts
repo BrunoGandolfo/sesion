@@ -27,7 +27,6 @@ import type {
   DatosEstructurados as DatosEstructuradosSchema,
   EstadoSesion,
   NivelRiesgo,
-  NotaSoap,
 } from "@/lib/sesion-clinica/schema";
 
 export type {
@@ -50,7 +49,7 @@ export type PagoEstado = EstadoPago;
  * "enviando" es la RESERVA del cron: una corrida lo tomó y lo está
  * trabajando. No dice que se haya llamado a Twilio — eso lo dice `intentos`.
  * Si la corrida se corta, la fila queda ahí y la siguiente la rescata (ver
- * src/app/api/_lib/casos-uso/enviar-recordatorios.ts). En la base `estado` es
+ * src/app/api/_lib/casos-uso/despachar-sms.ts). En la base `estado` es
  * un String sin enum, así que este valor no necesita migración.
  */
 export type RecordatorioEstado =
@@ -352,15 +351,6 @@ export type { ConfianzaModelo };
  *  evidencia textual explícita no se gradúa riesgo. */
 export type { NivelRiesgo };
 
-/** Nota clínica en formato SOAP */
-export type NotaSOAP = NotaSoap;
-
-/** Intervención del terapeuta detectada por IA. `timestampAprox` ("MM:SS")
- *  es opcional: el worker no siempre lo manda. */
-export type IntervencionTerapeuta = NonNullable<
-  DatosEstructuradosSchema["intervenciones"]
->[number];
-
 /** Flags de riesgo clínico — cada uno requiere dismissal explícito.
  *  `detalle`: segmento textual donde se detectó, vacío si todos false. */
 export type FlagsRiesgo = NonNullable<DatosEstructuradosSchema["flagsRiesgo"]>;
@@ -389,7 +379,7 @@ export type SpeechAnalytics = NonNullable<
 // unión discriminada por `instrumento`: núcleo panteórico común + bloque
 // específico del instrumento. Ver docs/contrato-multi-orientacion.md.
 //
-// Shape MITI/CTS-R definido por processor/prompts/therapist_feedback_v1.0.md
+// Shape MITI/CTS-R definido por processor/prompts/therapist_feedback_v1.1.md
 // El schema del tablero lo transporta como `unknown`; la forma se valida al
 // leer con normalizarFeedback (src/lib/sesion-clinica/normalizar.ts).
 // ============================================
@@ -489,7 +479,9 @@ export interface FeedbackNucleoPanteorico {
 // ─── Bloque específico MITI 4.2.1 + CTS-R (orientación cbt_mi) ───────
 
 export interface FeedbackMitiCtsr extends FeedbackNucleoPanteorico {
-  instrumento: "cbt_mi";
+  /** El worker no lo manda (SCHEMA_FEEDBACK_CBT_MI no tiene el campo):
+   *  sin instrumento, leerFeedback lo trata como cbt_mi. */
+  instrumento?: "cbt_mi";
   mitiGlobales: MITIGlobales;
   mitiCounts: MITICounts;
   ratiosDerivados: RatiosDerivadosMITI;
@@ -497,7 +489,7 @@ export interface FeedbackMitiCtsr extends FeedbackNucleoPanteorico {
 }
 
 // ─── Bloque específico GTFS (orientación gestalt) ────────────────────
-// Gestalt Therapy Fidelity Scale — 21 ítems (Fogarty et al. 2019).
+// Gestalt Therapy Fidelity Scale — 20 ítems (Fogarty et al. 2019).
 // Estructura preparada en Wave 1; los ítems concretos se definen en
 // Wave 2 tras el análisis del instrumento original.
 
@@ -518,8 +510,8 @@ export interface FeedbackGestalt extends FeedbackNucleoPanteorico {
 // ─── Unión discriminada ──────────────────────────────────────────────
 
 /** Reporte de auto-supervisión generado por la Llamada C.
- *  Unión discriminada por `instrumento`. Se embebe en datosEstructurados
- *  antes de persistir cifrado. */
+ *  Unión discriminada por `instrumento`. Se guarda cifrado en su propia
+ *  columna (sesiones_clinicas.feedback_encrypted), no en datosEstructurados. */
 export type FeedbackTerapeuta = FeedbackMitiCtsr | FeedbackGestalt;
 
 // ─── Compatibilidad con datos persistidos pre-contrato ───────────────
@@ -544,9 +536,4 @@ export interface FeedbackTerapeutaLegacy {
 // ─── Normalización al leer (implementación en src/lib/sesion-clinica/normalizar.ts)
 
 /** @deprecated Importar desde "@/lib/sesion-clinica/normalizar". */
-export {
-  esFeedbackLegacy,
-  esRiesgoDetectadoValido,
-  normalizarFeedback,
-  normalizarRiesgo,
-} from "@/lib/sesion-clinica/normalizar";
+export { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";

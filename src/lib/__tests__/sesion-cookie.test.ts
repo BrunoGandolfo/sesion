@@ -8,9 +8,10 @@ import {
   nombreCookie,
   RUTAS_PUBLICAS,
   TOKEN_SESION,
-  tokenDeCookieHeader,
   VIGENCIA_SESION_SEGUNDOS,
 } from "@/lib/sesion-cookie";
+
+import { tokenDeCookieHeader } from "./ayudantes";
 
 const TOKEN = "a".repeat(43);
 

@@ -1,6 +1,6 @@
 // Receptor de violaciones de la Content-Security-Policy.
 //
-// La política vive en src/lib/csp.ts y la emite el middleware en modo
+// La política vive en src/lib/csp.ts y la emite el proxy en modo
 // Report-Only: nada se bloquea, el navegador sólo avisa. Acá se recibe ese
 // aviso y se lo deja en el log. Cómo se lee y cómo se recorta está en
 // src/lib/csp-reportes.ts, que es donde se puede testear.
@@ -18,7 +18,7 @@
 // ES UN ENDPOINT PÚBLICO
 //
 // Tiene que serlo: el navegador postea sin sesión (y con la Reporting API,
-// sin cookies). Está fuera del matcher del middleware. De ahí las tres
+// sin cookies). Está fuera del matcher del proxy. De ahí las tres
 // defensas:
 //   - se lee el cuerpo de a pedazos, con el tope puesto antes de tenerlo
 //     entero en memoria;

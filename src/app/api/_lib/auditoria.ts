@@ -34,13 +34,6 @@ import type { db } from "@/lib/db";
 import { detalleSeguro } from "./auditoria-pura";
 import type { EventoAuditoriaInput } from "./auditoria-pura";
 
-export {
-  detalleSeguro,
-  hashTexto,
-  DETALLE_MAX_ARRAY,
-  DETALLE_MAX_STRING,
-} from "./auditoria-pura";
-export type { ActorAuditoria, EventoAuditoriaInput } from "./auditoria-pura";
 
 /** Lo mínimo que necesita escribir un evento: `db` o el `tx` de cualquier
  *  transacción lo cumplen. */

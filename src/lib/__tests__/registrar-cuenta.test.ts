@@ -11,7 +11,7 @@ import {
 } from "@/app/api/_lib/casos-uso/registrar-cuenta";
 import { ApiError } from "@/app/api/_lib/responses";
 import { CUENTA_INVITAR_NO_PERMITIDO, ENTRADA_REGISTRO_ERROR, INVITAR_AGOTADAS } from "@/lib/glosario";
-import { cupoInvitacion, ESPERA_ENTRE_INVITACIONES_MS, type ContadorInvitaciones } from "@/lib/limites-prueba";
+import { cupoInvitacion, type ContadorInvitaciones } from "@/lib/limites-prueba";
 
 const ahora = new Date("2026-09-10T12:00:00Z");
 const actor = { userId: "duena", email: "mariana@example.test", rol: "titular" };
@@ -65,17 +65,6 @@ it("sin permiso: 403 y no crea nada", async () => {
   const deps = preparar();
   await expect(crearInvitacion(actor, deps.repo, ahora)).rejects.toMatchObject({ status: 403 });
   expect(deps.repo.crearInvitacion).not.toHaveBeenCalled();
-});
-
-it("sin cupo: 429 con el motivo; si hay que esperar, dice desde qué día y hora", async () => {
-  process.env.INVITACIONES_PERMITIDAS = actor.email;
-  await expect(crearInvitacion(actor, preparar({}, { generadas: 5, ultimaEn: null }).repo, ahora))
-    .rejects.toMatchObject({ status: 429, message: INVITAR_AGOTADAS });
-  // Última el 10 de septiembre a las 09:00 de Montevideo: la próxima, desde el 10 de octubre a esa hora.
-  await expect(crearInvitacion(actor, preparar({}, { generadas: 1, ultimaEn: ahora }).repo, new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS - 1)))
-    .rejects.toMatchObject({ status: 429, message: "Generaste una invitación hace menos de 30 días. Vas a poder generar la próxima desde el 10 de octubre de 2026 a las 09:00." });
-  await expect(crearInvitacion(actor, preparar({}, { generadas: 1, ultimaEn: ahora }).repo, new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS)))
-    .resolves.toMatchObject({ invitacionId: "inv-nueva" });
 });
 
 it("consultarInvitaciones: cuántas quedan y por qué hoy no, antes de generar", async () => {

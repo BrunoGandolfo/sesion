@@ -62,7 +62,6 @@ export const INICIO_AGENDAR_SESION = "Agendá la primera sesión";
 
 export const SESIONES = "Sesiones";
 export const RECORRIDO = "Recorrido";
-export const FICHA = "Ficha";
 /** La tercera pestaña. Se llamó "Ficha" adentro de la ficha, y lo que tiene
  *  son datos administrativos: contacto, tarifa, autorización, pagos. */
 export const DATOS = "Datos";
@@ -211,9 +210,6 @@ export const PARA_LA_PROXIMA = "Para la próxima";
 // Contexto longitudinal
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Reemplaza a "Contexto longitudinal" y a "Golden Thread". */
-export const EL_HILO = "El hilo";
-
 /** Reemplaza a "Resumen acumulativo". */
 export const EL_RECORRIDO_HASTA_HOY = "El recorrido hasta hoy";
 
@@ -311,14 +307,6 @@ export const RECORDATORIO_ESTADO: Readonly<Record<string, string>> = {
   entregado: "Entregado", no_entregado: "No llegó", cancelado: "Cancelado",
   fallido: "No salió", desconocido: "No sabemos si salió",
 };
-
-/** Acción de volver a poner en cola un recordatorio que falló. */
-export const REINTENTAR_RECORDATORIO = "Volver a intentarlo";
-export const REINTENTANDO_RECORDATORIO = "Poniéndolo en cola…";
-
-export const REINTENTAR_RECORDATORIO_TITULO = "¿Volver a mandar el recordatorio?";
-export const REINTENTAR_RECORDATORIO_MENSAJE =
-  "Se pone otra vez en la cola y sale en la próxima pasada, en unos minutos. Si vuelve a fallar, lo vas a ver acá.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Grabación
@@ -432,10 +420,6 @@ export const AGENDA_DEL_DIA = "Agenda del día";
 
 /** KPI: cuántas sesiones tiene el día. */
 export const SESIONES_HOY = "Sesiones hoy";
-
-/** KPI: deuda acumulada. Es el mismo concepto que TE_DEBEN, dicho como
- *  número: el bloque se llama "Te deben" y el KPI "Por cobrar". */
-export const POR_COBRAR = "Por cobrar";
 
 /** KPI: lo cobrado en el mes corriente. */
 export const ESTE_MES = "Este mes";
@@ -560,7 +544,7 @@ export const PIDIENDO_NUEVA_NOTA = "Pidiendo otra nota…";
 /** Confirmación de aprobación: el audio se va para siempre. */
 export const APROBAR_TITULO = "¿Aprobar esta nota?";
 export const APROBAR_MENSAJE =
-  "La nota queda aprobada. Se destruye la clave del audio y su borrado sigue en segundo plano, con reintentos. La aprobación no se puede deshacer.";
+  "La nota queda aprobada y el audio se borra: del teléfono ya se borró al subirse, y del almacenamiento se borra ahora, en segundo plano y con reintentos. La aprobación no se puede deshacer.";
 
 /** Confirmación de borrado definitivo desde el estado de error. */
 export const ELIMINAR_TITULO = "¿Eliminar esta sesión?";
@@ -710,24 +694,12 @@ export const ENVIAR_SMS = "Enviar SMS";
 
 export const ENVIANDO_SMS = "Enviando…";
 
-/** Toast de éxito. */
-export const SMS_ENVIADO = "Aviso enviado";
-
 /** Rótulo del número destino en la confirmación. */
 export const SMS_DESTINO = "Sale a";
 
 /** Lo que muestra la fila cuando ya se le avisó. Se completa con
  *  textoAtraso(): "Avisado hace 3 días". */
 export const AVISADO = "Avisado";
-
-/** El aviso no salió. Es el ÚNICO texto que la pantalla muestra cuando falla
- *  el envío, pase lo que pase del otro lado: el motivo real de Twilio puede
- *  ser "falta TWILIO_SMS_FROM" o un código de la API, y eso no es algo que
- *  ella pueda leer ni arreglar. Dice las tres cosas que sí le importan: no
- *  salió, no se perdió, se puede volver a intentar. El motivo entero queda en
- *  la auditoría y en el log, que es donde sirve. */
-export const SMS_NO_ENVIADO =
-  "No pudimos enviar el SMS. Quedó registrado; probá más tarde.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Vocabulario clínico (hot words)
@@ -781,9 +753,6 @@ export const VOCABULARIO_PACIENTE_AYUDA =
  *  asistente (ayuda-corpus.ts), para que no se llame de dos maneras según
  *  quién hable. */
 export const LUPITA = "Lupita";
-
-/** La entrada del menú, en mobile y en desktop. */
-export const AYUDA = "Ayuda";
 
 /** Rótulo accesible del panel, para el lector de pantalla que anuncia el
  *  diálogo: "Ayuda" solo no dice ayuda de qué. */
@@ -956,7 +925,7 @@ export const COBRASTE_ESTE_MES = "Cobraste este mes";
  * Dice "Sin cobrar" y no TE_DEBEN a propósito: "Te deben" es el nombre de
  * una vista —la pestaña con la lista de deudoras— y usarlo también para un
  * número dejaba el mismo rótulo nombrando dos cosas distintas en la misma
- * pantalla (01-auditoria-frontend.md, 5).
+ * pantalla.
  */
 export const SIN_COBRAR = "Sin cobrar";
 
@@ -1265,7 +1234,7 @@ export const ENTRADA_QUE_HACE =
  *
  * La primera nombra a la profesional como quien decide ("la aprobás vos"):
  * es la misma regla que sostiene toda la app —el borrador se llama borrador
- * hasta que ella lo firma, ver [[BORRADOR]] y docs/diseno/02-referencias.md—
+ * hasta que ella lo firma, ver [[BORRADOR]]—
  * y en la pantalla de entrada es, además, la respuesta a la primera objeción
  * que tiene cualquier psicóloga frente a una nota escrita por una máquina.
  */
@@ -1281,7 +1250,8 @@ export const ENTRADA_AFIRMACIONES = [
 export const ENTRADA_CONFIDENCIALIDAD =
   "El audio viaja por una conexión cifrada. Las notas, las transcripciones, el análisis y el Recorrido se guardan cifrados.";
 
-// Portada. Respaldo de cada afirmación: docs/pendientes/portada.md.
+// Portada. Cada afirmación tiene que ser cierta en el código de hoy: si el
+// comportamiento cambia, el texto cambia con él.
 export const PORTADA_ACCESO = "Entrar a tu cuenta";
 export const PORTADA_FUNCIONES_TITULO = "De la agenda al Recorrido";
 export const PORTADA_FUNCIONES = [
@@ -1359,7 +1329,6 @@ export const CORREO_RECUPERAR_VENCE = "El enlace vence en una hora y se puede us
 export const CORREO_RECUPERAR_IGNORAR = "Si no lo pediste vos, ignorá este correo. Tu contraseña sigue igual.";
 export const CORREO_FIRMA = `Sesión · ${ESLOGAN}`;
 
-
 // Entrada — invitaciones, alta y términos provisionales
 export const ENTRADA_REGISTRO = "Crear mi cuenta";
 export const ENTRADA_NOMBRE = "Tu nombre";
@@ -1368,7 +1337,6 @@ export const ENTRADA_TERMINOS_REQUERIDOS = "Para crear tu cuenta necesitás acep
 export const ENTRADA_INVITACION_INVALIDA = "Este enlace venció o ya se usó.";
 export const ENTRADA_PEDIR_INVITACION = "Pedile otro a quien te invitó";
 export const ENTRADA_REGISTRO_ERROR = "No pudimos crear la cuenta con esos datos. Revisalos o probá entrar con tu cuenta.";
-export const ENTRADA_CUENTA_CREADA_SIN_SESION = "Tu cuenta ya está creada. Entrá con tu email y contraseña. Si el acceso está bloqueado por intentos, esperá antes de volver a probar.";
 export const INVITAR_COLEGA = "Invitar a una colega";
 export const INVITAR_DESCRIPCION = "La invitación es para que una colega pruebe Sesión, no para usarla como su consultorio. Crea un consultorio de prueba, separado del tuyo, que puede grabar hasta " + TOPE_GRABACIONES_PRUEBA + " sesiones en total. El enlace vence en 7 días y se usa una sola vez. Compartilo sólo con ella.";
 export const INVITAR_LIMITES = "Podés generar " + TOPE_INVITACIONES_TOTAL + " invitaciones en total, una cada " + ESPERA_ENTRE_INVITACIONES_DIAS + " días.";
@@ -1393,7 +1361,7 @@ export const TERMINOS_BORRADOR = "BORRADOR PENDIENTE DE REVISIÓN LEGAL";
 export const TERMINOS_SECCIONES = [
   { titulo: "Qué hace Sesión", texto: "Sesión ayuda a organizar el consultorio: agenda, pacientes, cobros y recordatorios. Puede transcribir una grabación y preparar un borrador de nota clínica que la profesional revisa y aprueba. La aplicación no reemplaza su criterio profesional." },
   { titulo: "Qué información guarda", texto: "La app guarda los datos de la cuenta y del consultorio, los datos de pacientes que cargás, turnos, cobros, consentimientos y registros de actividad. Si grabás una sesión, procesa audio, transcripción y notas. El audio se cifra antes de salir del dispositivo y se borra al aprobar la nota; las notas y transcripciones se guardan cifradas en la base." },
-  { titulo: "Dónde se procesa y se guarda", texto: "Vercel ejecuta la aplicación; Neon aloja la base de datos; Cloudflare R2 guarda el audio cifrado y las copias de respaldo cifradas. Railway ejecuta el proceso que coordina el trabajo con los audios. AssemblyAI transcribe el audio; Anthropic genera borradores y respuestas de ayuda; Twilio envía recordatorios por SMS; Resend envía los correos para recuperar el acceso. Cada servicio recibe la información necesaria para su tarea. Este borrador no establece países de alojamiento ni plazos contractuales: deben revisarse antes de publicar el texto definitivo." },
+  { titulo: "Dónde se procesa y se guarda", texto: "Vercel ejecuta la aplicación; Neon aloja la base de datos; Cloudflare R2 guarda el audio, cifrado en reposo por el proveedor, y las copias de respaldo cifradas. Railway ejecuta el proceso que coordina el trabajo con los audios. AssemblyAI transcribe el audio; Anthropic genera borradores y respuestas de ayuda; Twilio envía recordatorios por SMS; Resend envía los correos para recuperar el acceso. Cada servicio recibe la información necesaria para su tarea. Este borrador no establece países de alojamiento ni plazos contractuales: deben revisarse antes de publicar el texto definitivo." },
   { titulo: "El consentimiento de tus pacientes", texto: "La profesional es responsable de obtener el consentimiento de sus pacientes para cargar y procesar sus datos y para grabar las sesiones, y de explicarles cómo se usa la aplicación. Revisar y aprobar cada nota también queda a su cargo." },
   { titulo: "Cómo pedir la baja", texto: "Para pedir la baja de tu cuenta, contactá a quien administra Sesión por el canal con el que recibiste acceso. Hoy no hay una baja automática en la app. Quedan pendientes de definir y publicar el canal de contacto definitivo, los pasos para entregar o eliminar la información y el tratamiento de las copias de respaldo." },
   { titulo: "Texto pendiente", texto: "Este contenido es un borrador de trabajo para que el responsable de Sesión lo reescriba y lo revise con asesoramiento legal. No presenta condiciones jurídicas definitivas ni certifica cumplimiento de una norma." },
@@ -1436,16 +1404,7 @@ export const MENSAJE_FALTA_PACIENTE =
   "pacienteId es obligatorio cuando scope === 'paciente'";
 
 export const SE_REPITE = "Se repite";
-export const NOTA_ESCRIBIENDO_DE_NUEVO = "Se está escribiendo de nuevo.";
-export const NOTA_REINTENTAR_AYUDA = "Vuelve a intentar con lo que ya hay: si la transcripción está hecha, no se transcribe de nuevo.";
-export const SESION_FALLO_GENERICO = "No se pudo procesar.";
-export const PEDIR_FEEDBACK_DE_NUEVO = "Pedir de nuevo";
-export const VER_TRANSCRIPCION = "Ver transcripción";
-export const TRANSCRIPCION_LECTURA_REGISTRADA = "Cada lectura queda registrada.";
 export const LEI_LAS_MENCIONES = "Leí las menciones";
-export const MENCIONES_AYUDA = "La transcripción tiene frases a revisar y el modelo no graduó riesgo.";
-export const SUBIDA_NO_TERMINO = "La subida no terminó.";
-export const CONSENTIMIENTO_NUEVO_TEXTO = "Hay un texto nuevo. Sugerí firmarlo en la próxima sesión.";
 export const CUENTA_INVITAR_NO_PERMITIDO = "No podés invitar desde esta cuenta.";
 export const CUENTA_PASSWORD_INCORRECTA = "La contraseña actual no es correcta";
 export const CUENTA_PASSWORD_NO_DISPONIBLE = "No se pudo procesar el cambio de contraseña en este momento. Probá de nuevo.";
@@ -1521,8 +1480,6 @@ export const FEEDBACK_NO_DISPONIBLE = "El análisis figura listo, pero no pudimo
 
 export const SALIDA_NOTAS_PRIVADAS = "Las notas privadas todavía no se guardaron. Quedate hasta que aparezca «Guardado» o salí descartando estos cambios.";
 export const DESCARTAR_PROPUESTA = "Esta propuesta queda descartada. El Recorrido vigente y las versiones anteriores se conservan.";
-export const GRABACION_ROTULO = "Sesión clínica";
-export const GRABACION_ESTADOS = { capturando: "Grabando", pausada: "En pausa", cerrada: "Pendiente de envío", entregada: "Audio recibido", preparada: "Todo listo para empezar" } as const;
 
 export const DESCARTAR_BORRADOR_ACCION = "Descartar borrador";
 export const QUITAR_ELEMENTO_BORRADOR = "Se quita este elemento del borrador. Las versiones guardadas del Recorrido se conservan.";
@@ -1557,14 +1514,7 @@ export function notaFallidaDe(paciente: string): string {
   return `No pudimos escribir la nota de ${paciente}`;
 }
 
-/** Lo que se hace con el fallo: el botón de reintentar está en la nota. */
-export const NOTA_FALLIDA_DETALLE =
-  "La grabación está guardada. Entrá y tocá Reintentar.";
-
 export const VER_QUE_PASO = "Ver qué pasó";
-
-/** Nombre accesible de la cruz del aviso. */
-export const CERRAR_AVISO = "Cerrar aviso";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pantalla de la sesión: transcripción, índice de la nota e instrumento

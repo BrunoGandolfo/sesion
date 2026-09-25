@@ -13,7 +13,6 @@
 import type { NotaSoap } from "@/lib/sesion-clinica/schema";
 
 export {
-  ABRIENDO_NOTA,
   ALGO_FALLO,
   ALIANZA_TERAPEUTICA,
   APARECIO_POR_PRIMERA_VEZ,
@@ -31,7 +30,6 @@ export {
   BUSCAR_SIGUIENTE,
   CAMBIOS_SIN_APROBAR_MENSAJE,
   CAMBIOS_SIN_APROBAR_TITULO,
-  CTSR,
   PIDIENDO_NUEVA_NOTA,
   VOLVER_A_ESCRIBIR,
   VOLVER_A_ESCRIBIR_MENSAJE,
@@ -44,22 +42,17 @@ export {
   EMOCIONES,
   ESCRIBIENDO_NOTA,
   ESTADO_EMOCIONAL_OBSERVADO,
-  FALTA_REVISAR_RIESGO,
-  GTFS,
   INDICE_NOTA,
   INTENSIDAD_EMOCIONAL,
   INTERVENCIONES,
   IR_IGUAL,
   LEER_PARA_VOS,
-  LO_QUE_DIJO,
   MAS_DE_ESTA_SESION,
-  MITI,
   NOTA_APROBADA_AVISO,
   NOTA_CLINICA,
   NOTA_GUARDADA,
   NOTA_NO_ESCRITA,
   PARA_LA_PROXIMA,
-  PARA_REVISAR,
   PARA_VOS,
   PARA_VOS_SIN_ANALISIS,
   PARA_VOS_SUBTITULO,
@@ -67,10 +60,8 @@ export {
   REINTENTANDO,
   REINTENTAR,
   RESUMEN,
-  REVISE_ESTA_SENAL,
   SE_LLEVO,
   SELECTOR_VISTA_SESION,
-  SENAL_DE_RIESGO,
   SIN_NOTA_TODAVIA,
   TEMAS,
   TRANSCRIPCION,
@@ -81,29 +72,19 @@ export {
   TRANSCRIPCION_SIN_TEXTO_TITULO,
   TRANSCRIPCION_SUBTITULO,
   VER_BORRADOR_ORIGINAL,
-  VER_DETALLE,
   VISTA_NOTA,
   VOLVER,
   VUELVE_A_APARECER,
   busquedaSinResultados,
-  pluralizar,
   resultadoDeBusqueda,
 } from "@/lib/glosario";
 
 import {
-  APROBADA,
-  BORRADOR,
   SOAP_A,
   SOAP_O,
   SOAP_P,
   SOAP_S,
 } from "@/lib/glosario";
-
-/** @deprecated Importar `BORRADOR` de "@/lib/glosario". */
-export const CHIP_BORRADOR = BORRADOR;
-
-/** @deprecated Importar `APROBADA` de "@/lib/glosario". */
-export const CHIP_APROBADA = APROBADA;
 
 /**
  * Las cuatro secciones SOAP con la clave de la nota que edita cada una.

@@ -124,10 +124,9 @@ export function PuntosDelDia({
 }
 
 /**
- * Qué significan el punto dorado y el verde. La grilla no dice otra cosa que
- * puntos, y el código de color —dorado agendado, verde pagado— sólo estaba
- * escrito en session-row, tres pantallas más allá
- * (docs/diseno/01-auditoria-frontend.md, sección 2).
+ * Qué significan el punto oscuro y el verde. La grilla no dice otra cosa que
+ * puntos, y sin esta leyenda el código de color —oscuro agendado o sin
+ * cobrar, verde pagado— había que adivinarlo.
  */
 function Leyenda() {
   return (

@@ -2,9 +2,10 @@
 import * as React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { prepararPlantillaRecordatorio, buildSmsMessage, LINEA_CONTACTO } from "@/lib/sms/texto";
+import { prepararPlantillaRecordatorio, buildSmsMessage } from "@/lib/sms/texto";
 import { htmlATemplate } from "../editor-recordatorio";
 import { MensajeRecordatorio } from "../mensaje-recordatorio";
+import { LINEA_CONTACTO } from "@/lib/glosario";
 
 const datos = { profesional: "Mariana Roldán", direccion: "Calle 123", telefono: "+59899123456" };
 const templatePegado = "{{profesional}}Hola {{nombre}}, tu sesión es el {{fecha}} a las {{hora}}.";

@@ -1,6 +1,6 @@
 // GET /api/sms/envios?turnoId=<id> — los SMS de un turno, para la pantalla.
 //
-// Con sesión (queda dentro del matcher del middleware: sólo /api/sms/callback
+// Con sesión (queda dentro del matcher del proxy: sólo /api/sms/callback
 // y /api/sms/entrante son públicos, porque los llama Twilio). Reemplaza a
 // GET /api/recordatorios?turnoId=: mismo uso, sobre envios_sms, con el
 // estado real (aceptado no es entregado) y el motivo en castellano cuando no

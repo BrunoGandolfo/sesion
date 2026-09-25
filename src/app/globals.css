@@ -151,7 +151,7 @@ body {
    Apagar la animación no borra el elemento: el bloque crema queda quieto y
    sigue diciendo "esto todavía no es el dato", y el spinner queda como un
    anillo incompleto. La preferencia elimina el movimiento, no la
-   información (docs/diseno/03-plan-de-movimiento.md, D2).
+   información.
 
    Va fuera de @layer a propósito: las utilidades de Tailwind v4 viven en la
    capa `utilities` y una regla sin capa le gana a cualquiera de ellas sin

@@ -1,4 +1,4 @@
-// Única salida de correo. Sólo la importan rutas Node, nunca auth/middleware.
+// Única salida de correo. Sólo la importan rutas Node, nunca el proxy.
 // API HTTP oficial: https://resend.com/docs/api-reference/emails/send-email
 export const REMITENTE_CORREO = "Sesión <no-responder@sesionapp.app>";
 export const TIMEOUT_CORREO_MS = 8000;

@@ -14,14 +14,7 @@ import { diagnosticoGrabacionSchema, pausasGrabacionSchema } from "@/lib/sesion-
 
 // Las listas cerradas del turno se declaran una sola vez en
 // src/lib/constantes-turno.ts; acá solo se re-exportan para las rutas.
-export {
-  duracionSchema,
-  frecuenciaSerieSchema,
-  frecuenciaTurnoSchema,
-  metodoPagoSchema,
-  modalidadSchema,
-  estadoTurnoSchema as turnoEstadoSchema,
-} from "@/lib/constantes-turno";
+export { metodoPagoSchema } from "@/lib/constantes-turno";
 
 export const isoDateTimeSchema = z.string().refine(
   (value) => !Number.isNaN(Date.parse(value)),

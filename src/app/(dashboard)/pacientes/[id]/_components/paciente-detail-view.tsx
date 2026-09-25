@@ -218,7 +218,7 @@ export function PacienteDetailView({ id }: { id: string }) {
   // Sesión de hoy: carga por turno y polling mientras está en el pipeline.
   // Las acciones (iniciar, subir, reintentar) viven en /grabar/[turnoId].
   const { sesionClinica: sesionHoy, loading: sesionHoyCargando } =
-    useGrabacionSesion({ turno: turnoHoy, onTurnoActualizado: refetchData });
+    useGrabacionSesion({ turno: turnoHoy });
 
   // La nota de hoy se está escribiendo: que la siga el aviso del panel, así
   // ella se entera aunque se vaya de la ficha (avisos-de-notas.tsx).

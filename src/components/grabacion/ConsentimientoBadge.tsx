@@ -3,7 +3,7 @@
 // Único componente de estado de la autorización de grabación + sheet de
 // firma. Dos variantes:
 //   - "completo": chip de estado, fecha de firma, Revocar (con confirmación
-//     inline) o Firmar. Es la sección de la pestaña Ficha.
+//     inline) o Firmar. Es la sección de la pestaña Datos.
 //   - "aviso": solo aparece cuando falta la autorización, como aviso corto
 //     con el botón de firmar. Es el bloque bajo la cabecera de la ficha.
 

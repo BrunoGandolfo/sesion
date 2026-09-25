@@ -31,14 +31,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { ApiError } from "@/app/api/_lib/responses";
 import {
   cancelarRestoDeSerie,
-  MENSAJE_SIN_SERIE,
 } from "@/app/api/_lib/casos-uso/cancelar-serie-turno";
 import { crearTurno } from "@/app/api/_lib/casos-uso/crear-turno";
 import { fechasDeSerie } from "@/app/api/_lib/casos-uso/serie-turnos";
 import { actualizarTurno } from "@/app/api/_lib/casos-uso/turnos";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { agregarDiasMvd, instanteMvd } from "@/lib/fechas-montevideo";
-import { TURNO_SOLAPADO_CON } from "@/lib/glosario";
+import { MENSAJE_SIN_SERIE, TURNO_SOLAPADO_CON } from "@/lib/glosario";
 
 import { PrismaClient } from "@prisma/client";
 

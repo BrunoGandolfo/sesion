@@ -60,7 +60,6 @@ export interface RecordarCobroResultado {
   monto: number;
 }
 
-export { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 
 /**
  * Valida y crea el envío del aviso de cobro.

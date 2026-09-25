@@ -53,22 +53,6 @@ export function cookieBorrada(produccion: boolean = esProduccion()): string {
   return partes.join("; ");
 }
 
-/** El token de la cabecera Cookie, o null si no viene o no tiene la forma. */
-export function tokenDeCookieHeader(
-  header: string | null | undefined,
-  nombre: string = nombreCookie(),
-): string | null {
-  if (!header) return null;
-  for (const par of header.split(";")) {
-    const i = par.indexOf("=");
-    if (i < 0) continue;
-    if (par.slice(0, i).trim() !== nombre) continue;
-    const valor = par.slice(i + 1).trim();
-    return TOKEN_SESION.test(valor) ? valor : null;
-  }
-  return null;
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Rutas públicas: las que se pueden abrir sin sesión. Coincidencia exacta.
 // ────────────────────────────────────────────────────────────────────────────

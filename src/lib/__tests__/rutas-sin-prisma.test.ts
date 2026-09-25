@@ -7,7 +7,7 @@
  * consulta de lectura, vive en un caso de uso. Pasar `db` como parámetro
  * (`prisma: db`) está bien; `db.turno.findMany(...)` en la ruta, no.
  *
- * Mismo patrón que middleware-edge.test.ts: la lista de rutas sale del
+ * Mismo patrón que proxy-liviano.test.ts: la lista de rutas sale del
  * disco (fs), no de una lista escrita a mano, así una ruta nueva entra sola.
  *
  * EXCEPCIONES TEMPORALES. Las rutas de sesión clínica, recordatorios/SMS,
@@ -28,8 +28,8 @@ const RAIZ_API = join(process.cwd(), "src", "app", "api");
  *  src/app/api, con el área dueña. Quitar cada una al migrarla. */
 const EXCEPCIONES_TEMPORALES: Record<string, string> = {
   "cuenta/password/route.ts": "área 3 (identidad)",
-  // Las dos leen sesiones para la ficha y el recorrido: se rehacen en la
-  // Ola 2 con el grabador y el Recorrido (docs/pendientes/cierre-ola-1.md).
+  // Lee sesiones para la ficha y el Recorrido: sale de esta lista cuando
+  // pase a un caso de uso.
   "pacientes/[id]/documentacion/route.ts": "Ola 2 (sesión clínica)",
 };
 

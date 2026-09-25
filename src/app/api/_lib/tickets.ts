@@ -16,8 +16,8 @@
 // el resultado.
 //
 // Comparación por hash indexado (@unique), no en tiempo constante: el hash
-// ya lo hace innecesario. Runtime nodejs (node:crypto); ninguna ruta del
-// edge importa este módulo.
+// ya lo hace innecesario. Runtime nodejs (node:crypto): el proxy no importa
+// este módulo.
 
 import { createHash, randomBytes } from "node:crypto";
 

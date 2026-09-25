@@ -46,9 +46,9 @@ async function grabar(organizationId: string, pacienteId: string) {
 
 test("el grabador crea la sesión por POST /api/sesion-clinica, que pasa por el contador de prepararAudio", () => {
   const codigo = (ruta: string) => readFileSync(join(process.cwd(), ruta), "utf8");
-  // La pantalla restaurada y el hook no tienen otro camino para crear la sesión.
+  // La pantalla de grabar es la única que crea la sesión, y no tiene otro camino.
   expect(codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx")).toContain('apiPost<SesionApi>("/api/sesion-clinica"');
-  expect(codigo("src/hooks/useGrabacionSesion.ts")).toContain('fetch("/api/sesion-clinica"');
+  expect(codigo("src/hooks/useGrabacionSesion.ts")).not.toContain('fetch("/api/sesion-clinica",');
   // La ruta delega en prepararAudio, y prepararAudio es quien cuenta.
   const ruta = codigo("src/app/api/sesion-clinica/route.ts");
   expect(ruta).toMatch(/export async function POST[\s\S]*await prepararAudio\(\{ prisma: db, organizationId, turnoId \}\)/);

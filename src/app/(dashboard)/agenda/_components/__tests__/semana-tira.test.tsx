@@ -17,11 +17,6 @@ vi.mock("@/lib/api-client", async (original) => ({
   apiGet: m.get,
   apiPost: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  usePathname: () => "/agenda",
-  useSearchParams: () => new URLSearchParams(),
-}));
 vi.mock("framer-motion", async (original) => ({
   ...(await original<typeof import("framer-motion")>()),
   useReducedMotion: () => true,

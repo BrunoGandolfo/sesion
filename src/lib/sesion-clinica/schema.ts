@@ -78,7 +78,6 @@ export const confianzaModeloSchema = enumDelContrato(ENUMS_CLINICOS.confianzaMod
 export type ConfianzaModelo = z.infer<typeof confianzaModeloSchema>;
 
 export const rolesOrigenSchema = z.enum(["asr_role", "posicional"]);
-export type RolesOrigen = z.infer<typeof rolesOrigenSchema>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Nota SOAP

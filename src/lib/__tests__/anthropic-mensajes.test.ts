@@ -7,17 +7,13 @@
 // LANZAR, no devolver una respuesta vacía que la usuaria vería como un
 // silencio.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
-  crearMensaje,
   crearMensajeStreaming,
   ErrorAnthropic,
   MODELO_AYUDA,
   systemCacheado,
-  TIMEOUT_MS,
-  URL_MENSAJES,
-  VERSION_API_ANTHROPIC,
   type FetchLike,
   type PedidoMensajes,
 } from "@/lib/anthropic-mensajes";
@@ -30,34 +26,6 @@ const PEDIDO: PedidoMensajes = {
   system: systemCacheado("corpus de mentira"),
   messages: [{ role: "user", content: "¿cómo cobro un turno?" }],
 };
-
-const CUERPO_OK = {
-  content: [{ type: "text", text: "Entrá a Agenda y tocá “Cobrar”." }],
-  usage: {
-    input_tokens: 12,
-    output_tokens: 34,
-    cache_creation_input_tokens: 0,
-    cache_read_input_tokens: 20_000,
-  },
-  stop_reason: "end_turn",
-};
-
-/** fetch de mentira que contesta lo que se le diga. */
-function fetchQueContesta(
-  cuerpo: unknown,
-  init: { status?: number; texto?: string } = {},
-): { fetchImpl: FetchLike; llamadas: Array<[string, RequestInit]> } {
-  const llamadas: Array<[string, RequestInit]> = [];
-  const fetchImpl: FetchLike = async (url, opciones) => {
-    llamadas.push([url, opciones]);
-    const texto = init.texto ?? JSON.stringify(cuerpo);
-    return new Response(texto, {
-      status: init.status ?? 200,
-      headers: { "content-type": "application/json" },
-    });
-  };
-  return { fetchImpl, llamadas };
-}
 
 /**
  * El error que lanzó una promesa, tipado. `.catch(e => e as X)` deja una
@@ -158,167 +126,5 @@ describe("crearMensajeStreaming", () => {
       cacheLeido: 20_000,
       motivoDeCorte: "end_turn",
     });
-  });
-});
-
-describe("crearMensaje — lo que manda", () => {
-  it("postea a /v1/messages con la clave y la versión", async () => {
-    const { fetchImpl, llamadas } = fetchQueContesta(CUERPO_OK);
-    await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
-
-    const [url, opciones] = llamadas[0];
-    expect(url).toBe(URL_MENSAJES);
-    expect(opciones.method).toBe("POST");
-    const headers = new Headers(opciones.headers);
-    expect(headers.get("x-api-key")).toBe(API_KEY);
-    expect(headers.get("anthropic-version")).toBe(VERSION_API_ANTHROPIC);
-    expect(headers.get("content-type")).toBe("application/json");
-  });
-
-  it("no manda la cabecera beta de prompt caching (salió de beta)", async () => {
-    const { fetchImpl, llamadas } = fetchQueContesta(CUERPO_OK);
-    await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
-
-    const headers = new Headers(llamadas[0][1].headers);
-    expect(headers.has("anthropic-beta")).toBe(false);
-  });
-
-  it("manda el pedido tal cual, con el cache_control adentro", async () => {
-    const { fetchImpl, llamadas } = fetchQueContesta(CUERPO_OK);
-    await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
-
-    const enviado = JSON.parse(llamadas[0][1].body as string);
-    expect(enviado).toEqual(PEDIDO);
-    expect(enviado.system[0].cache_control).toEqual({ type: "ephemeral" });
-  });
-
-  it("aborta con una señal de timeout", async () => {
-    const { fetchImpl, llamadas } = fetchQueContesta(CUERPO_OK);
-    await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
-
-    expect(llamadas[0][1].signal).toBeInstanceOf(AbortSignal);
-  });
-
-  it("el timeout por defecto son 30 s", () => {
-    expect(TIMEOUT_MS).toBe(30_000);
-  });
-});
-
-describe("crearMensaje — lo que lee", () => {
-  it("devuelve el texto y las métricas de uso", async () => {
-    const { fetchImpl } = fetchQueContesta(CUERPO_OK);
-    const r = await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
-
-    expect(r).toEqual({
-      texto: "Entrá a Agenda y tocá “Cobrar”.",
-      tokensEntrada: 12,
-      tokensSalida: 34,
-      cacheLeido: 20_000,
-      cacheEscrito: 0,
-      motivoDeCorte: "end_turn",
-    });
-  });
-
-  it("concatena varios bloques de texto y descarta los que no lo son", async () => {
-    const { fetchImpl } = fetchQueContesta({
-      content: [
-        { type: "thinking", thinking: "…" },
-        { type: "text", text: "uno " },
-        { type: "text", text: "dos" },
-      ],
-      usage: { input_tokens: 1, output_tokens: 2 },
-    });
-    const r = await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
-    expect(r.texto).toBe("uno dos");
-  });
-
-  it("con usage ausente devuelve ceros, no undefined", async () => {
-    const { fetchImpl } = fetchQueContesta({
-      content: [{ type: "text", text: "hola" }],
-    });
-    const r = await crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl });
-    expect(r.tokensEntrada).toBe(0);
-    expect(r.tokensSalida).toBe(0);
-    expect(r.cacheLeido).toBe(0);
-    expect(r.motivoDeCorte).toBeNull();
-  });
-});
-
-describe("crearMensaje — los errores", () => {
-  it("lanza con el status ante un 4xx", async () => {
-    const { fetchImpl } = fetchQueContesta(null, {
-      status: 401,
-      texto: '{"error":{"message":"invalid x-api-key"}}',
-    });
-    await expect(
-      crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl }),
-    ).rejects.toMatchObject({ name: "ErrorAnthropic", status: 401 });
-  });
-
-  it("lanza ante un 5xx", async () => {
-    const { fetchImpl } = fetchQueContesta(null, {
-      status: 529,
-      texto: "overloaded",
-    });
-    await expect(
-      crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl }),
-    ).rejects.toBeInstanceOf(ErrorAnthropic);
-  });
-
-  it("recorta el cuerpo del error: un 500 puede venir con una página entera", async () => {
-    const { fetchImpl } = fetchQueContesta(null, {
-      status: 500,
-      texto: "x".repeat(5000),
-    });
-    const error = await atrapar<ErrorAnthropic>(
-      crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl }),
-    );
-
-    expect(error.message.length).toBeLessThan(600);
-  });
-
-  it("lanza si el cuerpo no es JSON", async () => {
-    const fetchImpl: FetchLike = async () =>
-      new Response("<html>502</html>", { status: 200 });
-    await expect(
-      crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl }),
-    ).rejects.toBeInstanceOf(ErrorAnthropic);
-  });
-
-  it("lanza si la respuesta no trae texto, en vez de devolver vacío", async () => {
-    const { fetchImpl } = fetchQueContesta({
-      content: [],
-      usage: { input_tokens: 1, output_tokens: 0 },
-      stop_reason: "refusal",
-    });
-    await expect(
-      crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl }),
-    ).rejects.toThrow(/refusal/);
-  });
-
-  it("envuelve un fallo de red en ErrorAnthropic", async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new TypeError("fetch failed");
-    }) as unknown as FetchLike;
-
-    const error = await atrapar<ErrorAnthropic>(
-      crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl }),
-    );
-
-    expect(error).toBeInstanceOf(ErrorAnthropic);
-    expect(error.status).toBeUndefined();
-  });
-
-  it("respeta el timeout: una llamada que no contesta rechaza", async () => {
-    const fetchImpl: FetchLike = (_url, opciones) =>
-      new Promise((_resolver, rechazar) => {
-        opciones.signal?.addEventListener("abort", () => {
-          rechazar(new DOMException("aborted", "TimeoutError"));
-        });
-      });
-
-    await expect(
-      crearMensaje(PEDIDO, { apiKey: API_KEY, fetchImpl, timeoutMs: 10 }),
-    ).rejects.toBeInstanceOf(ErrorAnthropic);
   });
 });

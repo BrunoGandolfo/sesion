@@ -49,8 +49,7 @@ type ToastState = { open: boolean; message: string; variante: VarianteToast };
 // Intl.DateTimeFormat("es-UY") que tenía acá decía "05 de setiembre de 2026"
 // mientras la agenda decía "7 de septiembre" y Cobros "Septiembre 2026": dos
 // ortografías del mismo mes en la misma sesión de uso. Y de paso se saltaba
-// la regla de zona horaria de Montevideo que respeta el resto del proyecto
-// (docs/diseno/01-auditoria-frontend.md, sección 4).
+// la regla de zona horaria de Montevideo que respeta el resto del proyecto.
 
 export function FichaTab({
   paciente,

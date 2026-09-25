@@ -44,16 +44,3 @@ export function validarEnvOperacion(
   return { faltantes, produccion: env.NODE_ENV === "production" };
 }
 
-/**
- * Lanza si en producción falta alguna. En desarrollo y test no lanza: la
- * app tiene que poder arrancar sin Twilio para tocar la agenda.
- */
-export function exigirEnvOperacion(env: Record<string, string | undefined> = process.env): void {
-  const { faltantes, produccion } = validarEnvOperacion(env);
-  if (produccion && faltantes.length > 0) {
-    throw new Error(
-      `Faltan variables de operación en producción: ${faltantes.join(", ")}. ` +
-        "Sin ellas no hay alertas, o no hay SMS, o la CSP no cubre R2. Ver docs/operaciones.md §2.",
-    );
-  }
-}

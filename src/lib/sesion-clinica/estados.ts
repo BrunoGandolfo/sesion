@@ -20,9 +20,6 @@ export type { EstadoSesion };
 export const ESTADOS_SESION: ReadonlyArray<EstadoSesion> =
   estadoSesionSchema.options;
 
-/** El único estado del que no se sale desde la app. */
-export const ESTADO_TERMINAL: EstadoSesion = "aprobada";
-
 export type ActorOperacion = "usuaria" | "servidor" | "worker" | "sistema";
 
 /**
@@ -118,14 +115,6 @@ export const LISTA_OPERACIONES: ReadonlyArray<
   ...(OPERACIONES[nombre] as Operacion),
 }));
 
-/** true si la operación vale desde ese estado. Tolera strings desconocidos. */
-export function esTransicionValida(
-  nombre: NombreOperacion,
-  desde: EstadoSesion | string,
-): boolean {
-  return (OPERACIONES[nombre].desde as ReadonlyArray<string>).includes(desde);
-}
-
 /** Estados en los que la sesión sigue en el pipeline y conviene seguir
  *  consultando: los que tienen alguna salida automática (servidor, worker o
  *  sistema) y ninguna acción de la usuaria salvo esperar. */
@@ -182,7 +171,6 @@ export function backoffSesionMs(fallosSeguidos: number): number {
 }
 
 export const CODIGO_INTENTOS_AGOTADOS = "intentos_agotados";
-export const CODIGO_GRABACION_ABANDONADA = "grabacion_abandonada";
 /** La grabación no llegó al mínimo: no se transcribe y el audio se borra.
  *  El teléfono ya no la sube, pero una PWA vieja cacheada sí (19/9). */
 export const CODIGO_GRABACION_CORTA = "grabacion_corta";

@@ -87,7 +87,6 @@ describe("aprobar", () => {
     const fila = await filaDe(base.prisma, sesionId);
     expect(fila?.estado).toBe("aprobada");
     expect(fila?.aprobadaEn).not.toBeNull();
-    expect(fila?.audioClaveEncrypted).toBeNull();
     // El audio sigue anotado como en R2 hasta que el trabajo lo borre.
     expect(fila?.audioEstado).toBe("en_r2");
     const campos = await camposDe(base.db, sesionId);
@@ -204,7 +203,6 @@ describe("aprobar", () => {
       expect(trabajos).toHaveLength(2);
     } else {
       expect(fila?.estado).toBe("procesando");
-      expect(fila?.audioClaveEncrypted).not.toBeNull();
       expect(trabajos).toEqual([]);
     }
   });
@@ -245,7 +243,6 @@ describe("aprobar", () => {
 
     const fila = await filaDe(base.prisma, sesionId);
     expect(fila?.estado).toBe("revision");
-    expect(fila?.audioClaveEncrypted).not.toBeNull();
     expect(fila?.notaFinalEncrypted).toBeNull();
     expect(await trabajosDe(base.prisma, sesionId)).toEqual([]);
   });

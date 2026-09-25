@@ -129,8 +129,6 @@ export interface ActualizarTurnoInput {
   ahora: Date;
 }
 
-export { MENSAJE_NO_REABRIR } from "@/lib/glosario";
-export { MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
 
 function ocupa(estado: string): boolean {
   return ESTADOS_QUE_OCUPAN.includes(

@@ -15,19 +15,11 @@ import type { Turno } from "@/types/domain";
 
 interface UseGrabacionSesionOptions {
   turno: Turno | null;
-  onTurnoActualizado?: () => void;
-  /** Se invoca con el mismo mensaje cada vez que el hook setea `error`. */
-  onError?: (mensaje: string) => void;
 }
 
 interface UseGrabacionSesionResult {
   sesionClinica: SesionClinicaEnsamblada | null;
   loading: boolean;
-  submitting: boolean;
-  error: string | null;
-  iniciar: () => Promise<void>;
-  reintentar: () => Promise<void>;
-  refrescar: () => Promise<void>;
 }
 
 async function parseError(res: Response): Promise<string> {
@@ -39,13 +31,12 @@ async function parseError(res: Response): Promise<string> {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Subida directa a R2 en tres pasos. Exportada para que cualquier pantalla
-// que grabe (historia-tab, paciente-detail-view vía este hook) use el mismo
+// que grabe (hoy, /grabar/[turnoId]) use el mismo
 // flujo. El audio NUNCA pasa por Vercel: el límite de 4,5 MB por request de
 // las funciones hacía fallar toda sesión real con 413.
 //
 //   1. POST [id]/upload-url       → { url, key, headers }  (grabando → subiendo)
-//      Lleva el IV del archivo; la clave ya la tiene el servidor (es él
-//      quien la generó y se la entregó al grabador por POST [id]/clave).
+//      El audio va tal cual: la app no lo cifra.
 //   2. PUT  url (XHR, con progreso) → R2
 //   3. POST [id]/upload-confirmar → fila actualizada       (subiendo → procesando)
 // ────────────────────────────────────────────────────────────────────────────
@@ -230,28 +221,9 @@ type CargaSesion = {
 
 export function useGrabacionSesion({
   turno,
-  onTurnoActualizado,
-  onError,
 }: UseGrabacionSesionOptions): UseGrabacionSesionResult {
   const [carga, setCarga] = React.useState<CargaSesion | null>(null);
-  const [submitting, setSubmitting] = React.useState<boolean>(false);
-  const [error, setError] = React.useState<string | null>(null);
   const turnoId = turno?.id ?? null;
-  const onTurnoActualizadoRef = React.useRef(onTurnoActualizado);
-  React.useEffect(() => {
-    onTurnoActualizadoRef.current = onTurnoActualizado;
-  }, [onTurnoActualizado]);
-  const onErrorRef = React.useRef(onError);
-  React.useEffect(() => {
-    onErrorRef.current = onError;
-  }, [onError]);
-
-  // Único punto que setea `error`: el estado sigue expuesto para los
-  // consumidores existentes y, además, se avisa al callback (para toasts).
-  const reportarError = React.useCallback((mensaje: string) => {
-    setError(mensaje);
-    onErrorRef.current?.(mensaje);
-  }, []);
 
   const sesionClinica =
     carga && carga.turnoId === turnoId ? carga.sesion : null;
@@ -302,76 +274,5 @@ export function useGrabacionSesion({
     onSesion: ({ sesion }) => guardarSesion(sesion),
   });
 
-  const iniciar = React.useCallback(async () => {
-    if (!turnoId) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      const createRes = await fetch("/api/sesion-clinica", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ turnoId }),
-      });
-      if (!createRes.ok) throw new Error(await parseError(createRes));
-      // La sesión nace en "grabando": no hay PATCH.
-      const createBody = (await createRes.json()) as {
-        data: SesionClinicaApiBase;
-      };
-      guardarSesion(normalizarSesionClinica(createBody.data));
-    } catch (err) {
-      reportarError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo iniciar la grabación",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [turnoId, guardarSesion, reportarError]);
-
-  const reintentar = React.useCallback(async () => {
-    if (!sesionClinica) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      // fallida → procesando es una ruta con nombre, no un PATCH de estado.
-      const res = await fetch(`/api/sesion-clinica/${sesionClinica.id}/reintentar`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error(await parseError(res));
-      const body = (await res.json()) as { data: SesionClinicaApiBase };
-      guardarSesion(normalizarSesionClinica(body.data));
-    } catch (err) {
-      reportarError(
-        err instanceof Error ? err.message : "No se pudo reintentar",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [sesionClinica, guardarSesion, reportarError]);
-
-  const refrescar = React.useCallback(async () => {
-    if (!sesionClinica) return;
-    try {
-      const res = await fetch(`/api/sesion-clinica/${sesionClinica.id}`, {
-        cache: "no-store",
-      });
-      if (!res.ok) return;
-      const body = (await res.json()) as { data: SesionClinicaApiBase };
-      guardarSesion(normalizarSesionClinica(body.data));
-      onTurnoActualizadoRef.current?.();
-    } catch {
-      // tragar
-    }
-  }, [sesionClinica, guardarSesion]);
-
-  return {
-    sesionClinica,
-    loading,
-    submitting,
-    error,
-    iniciar,
-    reintentar,
-    refrescar,
-  };
+  return { sesionClinica, loading };
 }

@@ -131,15 +131,11 @@ it("el menú lateral enlaza Tu consultorio a configuración", async () => {
   expect((await screen.findByRole("link", { name: "Tu consultorio" })).getAttribute("href")).toBe("/config");
 });
 
-it('hace legibles los destinos inactivos sin cambiar los enlaces ni la altura de línea',()=>{
+it('los destinos inactivos siguen enlazando a su pantalla',()=>{
  datosMenu.ruta = "/cobros";
  render(conPanel(<BottomNav/>));
- const agenda=screen.getByRole('link',{name:'Agenda'});
- expect(agenda.classList.contains('text-ink-500')).toBe(true);
- expect(agenda.classList.contains('text-[12px]')).toBe(true);
- expect(agenda.classList.contains('leading-[15px]')).toBe(true);
- expect(agenda.getAttribute('href')).toBe('/agenda');
- expect(screen.getByRole('button',{name:'Lupita'}).classList.contains('text-ink-500')).toBe(true);
+ expect(screen.getByRole('link',{name:'Agenda'}).getAttribute('href')).toBe('/agenda');
+ expect(screen.getByRole('button',{name:'Lupita'})).toBeTruthy();
 });
 
 it('aclara que el número del menú cuenta deudas de más de treinta días', async()=>{

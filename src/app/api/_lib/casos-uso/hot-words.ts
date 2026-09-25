@@ -63,8 +63,6 @@ function aRespuesta(fila: {
   };
 }
 
-export { MENSAJE_HOT_WORD_DUPLICADA } from "@/lib/glosario";
-export { MENSAJE_FALTA_PACIENTE } from "@/lib/glosario";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Lectura

@@ -616,19 +616,16 @@ model SesionClinica {
   estado EstadoSesion @default(grabando)
 
   // ── Audio ──────────────────────────────────────────────────────────────
-  // Un solo archivo por sesión, cifrado en el teléfono con esta clave al
-  // terminar de grabar y subido entero a R2 (key `<org>/<sesion>/0`,
-  // calculada en estados.ts). Mientras se graba, cada trozo se cifra con la
-  // misma clave y un IV propio antes de guardarse en el navegador.
+  // Un solo archivo por sesión, subido entero a R2 al terminar de grabar
+  // (key `<org>/<sesion>/0`, calculada en estados.ts). La app no lo cifra
+  // desde 5c1bfe2 (18/9/2026); R2 lo cifra en reposo.
   audioEstado         EstadoAudio @default(sin_audio) @map("audio_estado")
-  /// Campo lógico `audioClave`: clave AES-256 del audio, cifrada por la
-  /// extensión. La genera el servidor al crear la sesión y el teléfono la
-  /// pide para cifrar. Se destruye (NULL) en la misma transacción que
-  /// aprueba: aunque el borrado en R2 tarde, el audio ya no se puede abrir.
-  audioClaveEncrypted Bytes?      @map("audio_clave_encrypted")
-  /// IV (12 bytes, en claro: no es secreto) con que el teléfono cifró el
-  /// archivo que subió. Lo escribe upload-url; el worker lo recibe al reclamar.
-  audioIv             Bytes?      @map("audio_iv")
+  /// Restos del cifrado de audio en el teléfono (15 al 18/9/2026). Nada los
+  /// lee ni los escribe: @ignore los saca del cliente de Prisma y las
+  /// columnas siguen en la base hasta la migración que las borra (fase 2 de
+  /// la limpieza, en un despliegue posterior).
+  audioClaveEncrypted Bytes?      @map("audio_clave_encrypted") @ignore
+  audioIv             Bytes?      @map("audio_iv") @ignore
   duracionAudioSeg    Int?        @map("duracion_audio_seg")
   /// Tramos en pausa tal como los reporta el teléfono: [{ inicio, fin }].
   /// Sin cifrar: marcas de tiempo, no contenido.
@@ -981,5 +978,9 @@ model EventoAuditoria {
   @@index([organizationId, creadoEn])
   // Historia de una entidad (una sesión, una paciente).
   @@index([entidad, entidadId])
+  // La métrica horaria de rastros perdidos cuenta eventos por acción y fecha
+  // para todas las organizaciones (auditoria-metricas.ts): sin este índice
+  // recorre entera la única tabla que nunca se purga.
+  @@index([accion, creadoEn])
   @@map("eventos_auditoria")
 }

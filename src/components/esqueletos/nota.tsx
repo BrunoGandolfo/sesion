@@ -11,7 +11,7 @@
 // las cuatro secciones SOAP y los plegados. Deliberadamente NO dibuja el
 // bloque de riesgo: un rectángulo donde a veces va una señal de riesgo
 // insinúa una señal que puede no existir, y esa es la única cosa de la app
-// que no se anticipa (docs/diseno/03-plan-de-movimiento.md, D10). Cuando la
+// que no se anticipa. Cuando la
 // nota llega con señal, el bloque entra empujando; es el único salto que
 // vale la pena.
 //

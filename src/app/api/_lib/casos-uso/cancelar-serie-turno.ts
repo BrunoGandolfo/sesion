@@ -22,7 +22,6 @@ import { tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
 
-export { MENSAJE_SIN_SERIE } from "@/lib/glosario";
 
 export interface CancelarRestoDeSerieInput {
   prisma: ClientePrisma;

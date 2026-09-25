@@ -1,26 +1,28 @@
 // Unitario: toda ruta del área declara runtime nodejs, force-dynamic y un
-// maxDuration (H-29): ninguna función puede colgarse sin límite.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+// maxDuration (H-29): ninguna función puede colgarse sin límite. Las rutas
+// salen del disco: una ruta nueva del área entra sola.
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+const RAIZ = process.cwd();
+
+function rutasBajo(dir: string): string[] {
+  const absoluto = resolve(RAIZ, dir);
+  return readdirSync(absoluto).flatMap((nombre) => {
+    const ruta = join(absoluto, nombre);
+    if (statSync(ruta).isDirectory()) return rutasBajo(relative(RAIZ, ruta));
+    return nombre === "route.ts" ? [relative(RAIZ, ruta)] : [];
+  });
+}
+
+/** El área 2: la sesión clínica, la cola de trabajos y su cron. */
 const RUTAS = [
-  "src/app/api/sesion-clinica/[id]/route.ts",
-  "src/app/api/sesion-clinica/[id]/aprobar/route.ts",
-  "src/app/api/sesion-clinica/[id]/reprocesar/route.ts",
-  "src/app/api/sesion-clinica/[id]/reintentar/route.ts",
-  "src/app/api/sesion-clinica/[id]/eliminar/route.ts",
-  "src/app/api/sesion-clinica/[id]/feedback/reintentar/route.ts",
-  "src/app/api/sesion-clinica/[id]/transcripcion/route.ts",
-  "src/app/api/sesion-clinica/[id]/lease/route.ts",
-  "src/app/api/sesion-clinica/[id]/asr/route.ts",
-  "src/app/api/sesion-clinica/[id]/resultado/route.ts",
-  "src/app/api/sesion-clinica/pendientes/route.ts",
-  "src/app/api/trabajos/pendientes/route.ts",
-  "src/app/api/trabajos/[id]/resultado/route.ts",
+  ...rutasBajo("src/app/api/sesion-clinica"),
+  ...rutasBajo("src/app/api/trabajos"),
   "src/app/api/cron/trabajos/route.ts",
-];
+].sort();
 
 describe("rutas del área 2", () => {
   it.each(RUTAS)("%s declara runtime, dynamic y maxDuration", (ruta) => {
@@ -93,10 +95,16 @@ describe("rutas del área 2", () => {
     }
   });
 
-  it("sólo el cron de trabajos llama a R2 para borrar", () => {
-    const importan = RUTAS.filter((ruta) =>
-      /from "@\/lib\/r2"/.test(readFileSync(resolve(process.cwd(), ruta), "utf8")),
+  it("sólo el cron de trabajos borra de R2", () => {
+    const borran = rutasBajo("src/app/api").filter((ruta) =>
+      /import \{[^}]*\bborrarAudio\b[^}]*\} from "@\/lib\/r2"/.test(readFileSync(resolve(RAIZ, ruta), "utf8")),
     );
-    expect(importan).toEqual(["src/app/api/cron/trabajos/route.ts"]);
+    expect(borran).toEqual(["src/app/api/cron/trabajos/route.ts"]);
+  });
+
+  it("encuentra las rutas del área en el disco", () => {
+    // La lista escrita a mano tenía 14; el disco no puede traer menos.
+    expect(RUTAS.length).toBeGreaterThanOrEqual(14);
+    expect(RUTAS).toContain("src/app/api/sesion-clinica/[id]/aprobar/route.ts");
   });
 });

@@ -88,10 +88,6 @@ export const LOTE = 100;
 export const VENTANA_COBRO_MS = 24 * 60 * 60_000;
 
 export { MOTIVO_BAJA } from "@/lib/glosario";
-export { MOTIVO_TURNO_PASADO } from "@/lib/glosario";
-export { MOTIVO_RESERVA_HUERFANA } from "@/lib/glosario";
-export { MOTIVO_SIN_TEXTO_DE_COBRO } from "@/lib/glosario";
-export { MENSAJE_ENVIADO_TRAS_CANCELACION } from "@/lib/glosario";
 
 export interface AlertaDespacho {
   nivel: NivelAlerta;

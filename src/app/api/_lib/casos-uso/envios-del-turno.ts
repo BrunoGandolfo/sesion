@@ -54,9 +54,7 @@ export type ClienteEnvios = Pick<typeof db, "envioSms" | "paciente" | "configura
 /** Estados desde los que un envío TODAVÍA puede terminar mandando un SMS. */
 export const ESTADOS_CON_ENVIO_PENDIENTE = ["pendiente", "enviando"] as const;
 
-export { MOTIVO_SIN_TELEFONO } from "@/lib/glosario";
 export { MOTIVO_TURNO_CERRADO } from "@/lib/glosario";
-export { MOTIVO_REPROGRAMADO } from "@/lib/glosario";
 
 export function claveDelTurno(turnoId: string, fechaTurno: Date): string {
   return `turno:${turnoId}:${fechaTurno.toISOString()}`;

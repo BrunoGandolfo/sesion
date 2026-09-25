@@ -11,27 +11,39 @@
 // de --ease-out: no prueba comportamiento, prueba que el número no vuelva a
 // estar escrito en dos lados.
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { TIEMPOS, VARIABLES_MOVIMIENTO } from "@/lib/movimiento";
-import { DURACION_NAVEGACION, DURACION_BREVE, DURACION_PANEL, MS_NAVEGACION } from "@/components/ui/movimiento";
+import { DURACION_NAVEGACION, DURACION_BREVE, DURACION_PANEL } from "@/components/ui/movimiento";
 
 const RAIZ = path.resolve(__dirname, "../../../..");
 
 /** Donde vive la constante. Es el único archivo que puede escribir el número. */
 const FUENTE = "src/lib/movimiento.ts";
 
-const ARCHIVOS_DE_NAVEGACION = [
-  "src/app/(dashboard)/template.tsx",
-  "src/components/layout/bottom-nav.tsx",
-  "src/components/layout/sidebar.tsx",
-];
+/** El número usado como duración, en ms o en segundos: `duration: 0.18`,
+ *  `duration-[180ms]`, `"180ms"`. Solo en ese contexto: 180 a secas también
+ *  es un giro de flecha o seis meses de agenda. */
+const COMO_DURACION = new RegExp(
+  [TIEMPOS.navegacion, TIEMPOS.navegacion / 1000]
+    .map((n) => String(n).replace(".", "\\."))
+    .flatMap((n) => [`duration\\W{0,4}${n}\\b`, `\\b${n}m?s\\b`])
+    .join("|"),
+);
 
-/** El número, en las dos unidades y escrito como lo escribiría prettier. */
-const LITERALES = [String(TIEMPOS.navegacion), String(TIEMPOS.navegacion / 1000)];
+/** Todo el código de la app, sin los tests. */
+function fuentesDe(dir: string): string[] {
+  return readdirSync(path.join(RAIZ, dir)).flatMap((nombre) => {
+    const relativo = path.join(dir, nombre);
+    if (statSync(path.join(RAIZ, relativo)).isDirectory()) {
+      return nombre === "__tests__" ? [] : fuentesDe(relativo);
+    }
+    return /\.(ts|tsx)$/.test(nombre) && !/\.test\./.test(nombre) ? [relativo] : [];
+  });
+}
 
 function leer(relativo: string): string {
   return readFileSync(path.join(RAIZ, relativo), "utf8");
@@ -47,37 +59,21 @@ function codigoDe(relativo: string): string {
 }
 
 describe("la duración de una navegación", () => {
-  it("es un solo número, en milisegundos y en segundos", () => {
-    expect(MS_NAVEGACION).toBe(TIEMPOS.navegacion);
-    expect(DURACION_NAVEGACION).toBe(TIEMPOS.navegacion / 1000);
-    // La conversión no se escribe a mano en ningún lado.
-    expect(DURACION_NAVEGACION).toBe(MS_NAVEGACION / 1000);
-  });
-
-  it("mantiene navegación y subrayado dentro del tiempo medio", () => {
-    // Si algún día el subrayado cambia de duración, este número lo sigue.
-    // Lo que no puede volver a pasar es que sean dos.
-
-    expect(MS_NAVEGACION).toBe(TIEMPOS.navegacion);
+  it("el detector reconoce el número escrito como duración", () => {
+    for (const copia of ["duration: 0.18", "duration-[180ms]", 'transition: "opacity 180ms"', "{ duration: 180 }"]) {
+      expect(COMO_DURACION.test(copia), copia).toBe(true);
+    }
+    for (const otro of ['"rotate-180"', "agregarDiasMvd(ahora, -180)", "width: 180"]) {
+      expect(COMO_DURACION.test(otro), otro).toBe(false);
+    }
   });
 
   it("se escribe una sola vez, en lib/movimiento.ts", () => {
-    const copias = ARCHIVOS_DE_NAVEGACION.filter((archivo) => {
-      if (archivo === FUENTE) return false;
-      const fuente = codigoDe(archivo);
-      return LITERALES.some((literal) => fuente.includes(literal));
-    });
+    const copias = fuentesDe("src").filter(
+      (archivo) => archivo !== FUENTE && COMO_DURACION.test(codigoDe(archivo)),
+    );
 
     expect(copias).toEqual([]);
-  });
-
-  it("la importa cada archivo que la usa", () => {
-    for (const archivo of ARCHIVOS_DE_NAVEGACION) {
-      if (archivo === FUENTE) continue;
-      expect(leer(archivo)).toMatch(
-        /import \{[\s\S]*?DURACION_NAVEGACION[\s\S]*?\} from "[^"]*movimiento"/,
-      );
-    }
   });
 });
 

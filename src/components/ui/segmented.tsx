@@ -12,7 +12,7 @@
 // angosto que la suma de los tres —la ficha a 390 px, el `Segmented` de
 // Cobros—, el fondo crema quedaba recortado por el padre y el botón activo,
 // blanco y con sombra, seguía dibujándose por afuera: la pastilla asomaba a
-// la derecha del riel (docs/diseno/01-auditoria-frontend.md, sección (d)).
+// la derecha del riel.
 //
 // El arreglo es de caja, no de movimiento: el riel nunca pasa del ancho
 // disponible (`max-w-full`), los botones pueden achicarse (`min-w-0` +
@@ -23,8 +23,7 @@
 //
 // SIN INDICADOR DESLIZANTE, A PROPÓSITO
 //
-// docs/diseno/03-plan-de-movimiento.md, sección 3, lo descarta explícito:
-// es un control que se toca poco y el fondo blanco con sombra ya dice cuál
+// Es un control que se toca poco y el fondo blanco con sombra ya dice cuál
 // está elegida; un `layoutId` más es superficie que mantener. Acá sólo
 // cambian el color y la sombra, en los 150 ms de siempre.
 

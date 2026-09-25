@@ -76,8 +76,6 @@ export interface CamposHotWord {
 }
 
 export interface CamposSesionClinica {
-  /** Clave AES del audio, en base64. NULL después de aprobar. */
-  audioClave: string | null;
   transcripcion: string | null;
   /** Nota tal como la generó la IA en la generación vigente. */
   notaIa: NotaSoap | null;
@@ -152,7 +150,6 @@ export const CAMPOS_CIFRADOS = {
   SesionClinica: {
     tabla: "sesiones_clinicas",
     campos: {
-      audioClave: campo("audioClaveEncrypted", "audio_clave_encrypted", "texto"),
       transcripcion: campo("transcripcionEncrypted", "transcripcion_encrypted", "texto"),
       notaIa: campo("notaIaEncrypted", "nota_ia_encrypted", "nota"),
       datos: campo("datosEncrypted", "datos_encrypted", "json"),
@@ -315,7 +312,6 @@ export type ColumnasCifradasHotWord = ConId &
 export type ColumnasCifradasSesion = ConId &
   Pick<
     Prisma.SesionClinicaUncheckedCreateInput,
-    | "audioClaveEncrypted"
     | "transcripcionEncrypted"
     | "notaIaEncrypted"
     | "datosEncrypted"
@@ -641,10 +637,6 @@ export function withEncryption<C extends PrismaClient>(client: C) {
         },
       },
       sesionClinica: {
-        audioClave: {
-          needs: { id: true, audioClaveEncrypted: true },
-          compute: (f) => leer("SesionClinica", "audioClave", f.id, f.audioClaveEncrypted) as string | null,
-        },
         transcripcion: {
           needs: { id: true, transcripcionEncrypted: true },
           compute: (f) => leer("SesionClinica", "transcripcion", f.id, f.transcripcionEncrypted) as string | null,

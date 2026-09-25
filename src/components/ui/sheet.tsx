@@ -192,7 +192,7 @@ export function Sheet({
   // prefers-reduced-motion: el overlay aparece sin fundido y el panel sin
   // desplazamiento ni escala. Está o no está. No es un fundido más corto:
   // quien pide menos movimiento no quiere 90 vh de pantalla desplazándose,
-  // ni rápido ni despacio (docs/diseno/03-plan-de-movimiento.md, D1).
+  // ni rápido ni despacio.
   //
   // Lo que NO cambia es el foco: el panel se sigue enfocando al abrir, la
   // trampa de Tab sigue igual y el foco vuelve al disparador al cerrar. Eso

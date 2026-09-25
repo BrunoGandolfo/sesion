@@ -3,7 +3,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  exigirEnvOperacion,
   validarEnvOperacion,
   VARIABLES_OPERACION,
 } from "@/lib/env-operacion";
@@ -33,18 +32,5 @@ describe("validarEnvOperacion", () => {
     for (const v of ["ALERTA_CORREO", "RESEND_API_KEY", "CRON_SECRET", "R2_PUBLIC_HOST", "TWILIO_SMS_FROM"]) {
       expect(VARIABLES_OPERACION).toContain(v);
     }
-  });
-});
-
-describe("exigirEnvOperacion", () => {
-  it("en producción lanza y dice cuáles faltan", () => {
-    expect(() =>
-      exigirEnvOperacion({ ...COMPLETO, NODE_ENV: "production", R2_PUBLIC_HOST: "" }),
-    ).toThrow(/R2_PUBLIC_HOST/);
-  });
-
-  it("en desarrollo y test no lanza: la app arranca sin Twilio", () => {
-    expect(() => exigirEnvOperacion({ NODE_ENV: "development" })).not.toThrow();
-    expect(() => exigirEnvOperacion({ NODE_ENV: "test" })).not.toThrow();
   });
 });

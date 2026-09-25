@@ -338,9 +338,9 @@ function Marco({
 //
 // La grilla decía cuatro cosas que eran dos: "Cobraste este mes $26.3k /
 // 12 sesiones" y "Sesiones cobradas 12 / este mes" son el mismo hecho, y
-// "Te deben $45.3k" y "Sin cobrar 21 sesiones" también
-// (01-auditoria-frontend.md, 5). Cada hecho quedó en una celda, con el monto
-// arriba y las sesiones abajo, que es donde ya vivía el subtexto.
+// "Te deben $45.3k" y "Sin cobrar 21 sesiones" también. Cada hecho quedó en
+// una celda, con el monto arriba y las sesiones abajo, que es donde ya vivía
+// el subtexto.
 //
 // Y el rótulo de la deuda dejó de ser "Te deben": ese nombre es de la
 // pestaña de al lado. Acá dice "Sin cobrar", que es el número.
@@ -561,7 +561,7 @@ function ZonaIndicador({ dias }: { dias: number }) {
     return (
       // 12 px y el mismo tracking que ui/chip.tsx: era el único chip de la
       // app por debajo del piso que ese archivo documenta, y a un brazo de
-      // distancia 11 px no se leen (01-auditoria-frontend.md, (d)).
+      // distancia 11 px no se leen.
       <span className="inline-flex items-center rounded-full bg-terracotta-50 px-2 py-0.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-terracotta-600">
         {texto}
       </span>

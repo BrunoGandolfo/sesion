@@ -39,9 +39,7 @@ type TurnoCreadoJson = Partial<
   }
 >;
 
-// Textos nuevos de pantalla (pendientes de glosario.ts: ver
-// docs/pendientes/06-estructura.md). Se quedan acá hasta que quien integra
-// el glosario los mueva.
+// Textos de pantalla que todavía no se mudaron a glosario.ts.
 
 
 
