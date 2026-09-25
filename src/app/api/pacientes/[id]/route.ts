@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../../_lib/auth";
+import { getOrganizationId, getSessionActor } from "../../_lib/auth";
 import { actualizarPaciente, obtenerPaciente } from "../../_lib/casos-uso/pacientes";
 import { errorResponse, ok, validationError } from "../../_lib/responses";
 import { pacienteUpdateSchema } from "../../_lib/schemas";
@@ -29,7 +29,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    // El usuario va al evento de auditoría de archivar.
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
     const body = await request.json();
     const parsed = pacienteUpdateSchema.safeParse(body);
@@ -44,6 +45,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       organizationId,
       pacienteId: id,
       cambios: parsed.data,
+      usuarioId: userId,
     });
 
     return ok(paciente);

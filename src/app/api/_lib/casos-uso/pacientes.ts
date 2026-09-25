@@ -1,5 +1,10 @@
 // Casos de uso de la ficha: listar, crear, leer y editar pacientes.
 //
+// Archivar (`activo: false`) no es sólo esconderla de la lista: apaga sus SMS
+// pendientes y deja un evento de auditoría, los tres en UNA transacción. Si
+// el evento no se puede escribir, la paciente no queda archivada. Volver a
+// activarla no revive los SMS apagados (`cancelado` es terminal).
+//
 // Vivían dentro de GET/POST /api/pacientes y GET/PATCH /api/pacientes/[id].
 // Las rutas ahora solo validan y llaman. Sin request ni Response.
 //
@@ -15,8 +20,10 @@ import type { db } from "@/lib/db";
 import { cifrarPaciente } from "@/lib/prisma-encryption";
 import type { Paciente, PacienteConDeuda, Turno } from "@/types/domain";
 
+import { auditar } from "../auditoria";
 import { toPacienteConDeuda, toTurno } from "../domain";
 import { ApiError } from "../responses";
+import { cancelarEnviosDeLaPaciente, MOTIVO_PACIENTE_ARCHIVADA } from "./envios-del-turno";
 
 type ClientePrisma = typeof db;
 
@@ -162,13 +169,21 @@ export interface ActualizarPacienteInput {
   pacienteId: string;
   /** Los campos ausentes no se tocan. `activo` es el alta y la baja lógica. */
   cambios: Partial<DatosPaciente> & { activo?: boolean };
+  /** Quién archiva, para el evento de auditoría. */
+  usuarioId?: string | null;
+  /** Momento del acto. Inyectado para que el caso sea determinista. */
+  ahora?: Date;
 }
+
+export const ACCION_ARCHIVAR = "paciente.archivar";
 
 export async function actualizarPaciente({
   prisma,
   organizationId,
   pacienteId,
   cambios,
+  usuarioId,
+  ahora = new Date(),
 }: ActualizarPacienteInput): Promise<Paciente> {
   const { notas, ...resto } = cambios;
   // El `id` que devuelve cifrarPaciente es para los create: acá el WHERE ya
@@ -180,7 +195,48 @@ export async function actualizarPaciente({
   const data = { ...resto, ...notasCifradas };
   const hayCambios = Object.values(data).some((v) => v !== undefined);
 
-  if (hayCambios) {
+  if (cambios.activo === false) {
+    await prisma.$transaction(async (tx) => {
+      // Primero la transición activa → archivada, condicionada: el count dice
+      // si ESTE pedido la archivó (dos pedidos a la vez no auditan dos veces).
+      const { count: archivada } = await tx.paciente.updateMany({
+        where: { id: pacienteId, organizationId, activo: true },
+        data,
+      });
+      if (archivada === 0) {
+        // Ya estaba archivada (o no existe): se aplican los demás cambios.
+        const { count } = await tx.paciente.updateMany({
+          where: { id: pacienteId, organizationId },
+          data,
+        });
+        if (count === 0) {
+          throw new ApiError("Paciente no encontrado", 404);
+        }
+      }
+
+      // Se apaga aunque ya estuviera archivada: limpia lo que haya quedado
+      // pendiente de antes de que archivar cancelara los SMS.
+      const enviosCancelados = await cancelarEnviosDeLaPaciente(
+        tx,
+        { organizationId, pacienteId },
+        MOTIVO_PACIENTE_ARCHIVADA,
+        ahora,
+      );
+
+      if (archivada > 0 || enviosCancelados > 0) {
+        await auditar(tx, {
+          organizationId,
+          actorTipo: "usuario",
+          actorId: usuarioId ?? null,
+          entidad: "paciente",
+          entidadId: pacienteId,
+          accion: ACCION_ARCHIVAR,
+          creadoEn: ahora,
+          detalle: { enviosCancelados, yaEstabaArchivada: archivada === 0 },
+        });
+      }
+    });
+  } else if (hayCambios) {
     // La organización va en el WHERE de la escritura, no sólo en un chequeo
     // previo: `update({ where: { id } })` escribe la fila aunque sea de otra
     // organización, y entre el chequeo y la escritura hay una ventana. Con

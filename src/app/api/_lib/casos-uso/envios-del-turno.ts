@@ -13,6 +13,9 @@
 //   cancelarEnviosDelTurno(tx, turnoId, motivo)
 //     el turno dejó de estar programado (cancelado, realizado, ausente).
 //
+// Y uno con el área de pacientes: cancelarEnviosDeLaPaciente(tx, { organizationId,
+// pacienteId }) apaga todo lo pendiente de la paciente al archivarla.
+//
 // ─── LA CLAVE DE IDEMPOTENCIA ES LO QUE IMPIDE EL DUPLICADO ─────────────────
 //
 //   turno:<turnoId>:<fechaTurno ISO>
@@ -178,6 +181,29 @@ export async function cancelarEnviosDelTurno(
 ): Promise<number> {
   const { count } = await tx.envioSms.updateMany({
     where: { turnoId, estado: { in: [...ESTADOS_CON_ENVIO_PENDIENTE] } },
+    data: { estado: "cancelado", motivoNoEnvio: motivo, cerradoEn: ahora },
+  });
+  return count;
+}
+
+/** Por qué se apagó un envío al archivar a la paciente. Distinto del de la
+ *  baja: la baja la pidió la paciente, archivar lo decidió la profesional. */
+export const MOTIVO_PACIENTE_ARCHIVADA = "la paciente está archivada";
+
+/**
+ * Apaga los envíos de la paciente que todavía pueden mandar un SMS, de
+ * cualquier motivo (turno o cobro). Es lo que hace archivar, dentro de su
+ * transacción. `cancelado` es terminal: volver a activar a la paciente no
+ * los revive. Devuelve cuántos apagó. Idempotente.
+ */
+export async function cancelarEnviosDeLaPaciente(
+  tx: Pick<ClienteEnvios, "envioSms">,
+  { organizationId, pacienteId }: { organizationId: string; pacienteId: string },
+  motivo: string = MOTIVO_PACIENTE_ARCHIVADA,
+  ahora: Date = new Date(),
+): Promise<number> {
+  const { count } = await tx.envioSms.updateMany({
+    where: { pacienteId, organizationId, estado: { in: [...ESTADOS_CON_ENVIO_PENDIENTE] } },
     data: { estado: "cancelado", motivoNoEnvio: motivo, cerradoEn: ahora },
   });
   return count;
