@@ -147,6 +147,29 @@ Es lo mismo que *"No pudimos escribir la nota"* de abajo, avisado desde
 cualquier pantalla. **Ver qué pasó** abre la sesión con el motivo y los
 botones. La franja se va cuando la abrís.
 
+### Dice "Grabación sin terminar"
+
+**Ves:** en **Hoy**, en el bloque de pendientes, *"1 grabación sin terminar"*
+con el nombre de la paciente; en la fila del turno y en la ficha, **Grabación
+sin terminar** en lugar de *"Procesando"*.
+
+El envío se cortó hace más de 30 minutos, o la grabación quedó abierta más de
+tres horas: el teléfono se apagó, se cerró el navegador o se cortó la subida.
+
+**Qué hacer:**
+- Si grabaste con este teléfono, tocá **Subir desde este teléfono**: abre la
+  pantalla de grabar de ese turno y, si la copia está, ofrece **Guardarla
+  ahora**. Si grabaste con otro teléfono, abrí la app en ese.
+- Si esa grabación no sirve o no se puede recuperar, tocá **Descartar** y
+  confirmá con **Descartar la grabación**. La sesión se quita y el turno queda
+  libre para grabar de nuevo; si el audio había llegado, también se borra. No
+  se puede deshacer y queda un registro de auditoría.
+
+Si no hacés nada, a los **siete días** la app la abandona sola. Si el audio
+había llegado, se borra y la sesión aparece entre las notas que no se pudieron
+escribir (*"La grabación quedó a medias."*), para **Eliminar**; si no, se
+quita.
+
 ### Dice "No pudimos escribir la nota"
 
 La sesión quedó **fallida** y debajo figura el motivo. **Reintentar** usa lo que
@@ -249,6 +272,11 @@ src/components/grabacion/GrabadorSesion.tsx
 src/lib/grabacion-microfono.ts
 src/lib/grabacion-captura.ts
 src/app/api/_lib/casos-uso/audio.ts
+src/app/api/_lib/casos-uso/sesion/abandonar.ts
+src/app/api/_lib/casos-uso/mantenimiento.ts
+src/app/api/_lib/casos-uso/pendientes-terapeuta.ts
+src/app/(dashboard)/_components/pendientes.tsx
+src/lib/sesion-clinica/estados.ts
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx

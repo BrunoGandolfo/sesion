@@ -46,6 +46,7 @@ export type SesionClinicaApiBase = Pick<
   | "procesadaEn"
   | "aprobadaEn"
   | "creadaEn"
+  | "actualizadaEn"
 >;
 
 export type { SesionClinicaApi };
@@ -69,6 +70,8 @@ export interface SesionClinicaEnsamblada {
   procesadoEn: string | null;
   aprobadoEn: string | null;
   error: string | null;
+  /** ISO. Dice si una grabación quedó quieta (esGrabacionSinTerminar). */
+  actualizadaEn?: string;
 }
 
 /**
@@ -92,6 +95,7 @@ export function normalizarSesionClinica(
     procesadoEn: fila.procesadaEn,
     aprobadoEn: fila.aprobadaEn,
     error: fila.falloDetalle,
+    actualizadaEn: fila.actualizadaEn,
   };
 }
 

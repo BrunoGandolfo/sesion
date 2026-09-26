@@ -1564,3 +1564,26 @@ export const INSTRUMENTO_Y_PUNTAJE = "El instrumento y su puntaje";
 // del turno (reprogramar, cancelar, cobrar) queda en un control aparte, a la
 // derecha. La fila es la misma en Hoy y en Agenda.
 export const VER_TURNO = "Ver turno";
+
+// ── grabacion-sin-terminar ──────────────────────────────────────────────
+// Una sesión que quedó a medias en "grabando" o "subiendo" (el teléfono
+// murió, se cerró el navegador, se cortó la subida). Antes se veía
+// "Procesando" para siempre; ahora se nombra y tiene dos salidas: subirla
+// desde el teléfono que la grabó, o descartarla. La regla del umbral vive en
+// src/lib/sesion-clinica/estados.ts (esGrabacionSinTerminar).
+export const GRABACION_SIN_TERMINAR = "Grabación sin terminar";
+
+/** Título de la fila de Pendientes. */
+export function grabacionesSinTerminar(cantidad: number): string {
+  return pluralizar(cantidad, "grabación sin terminar", "grabaciones sin terminar");
+}
+
+/** Lleva a /grabar/[turnoId], que ofrece la copia guardada en ese teléfono. */
+export const SUBIR_DESDE_ESTE_TELEFONO = "Subir desde este teléfono";
+export const DESCARTAR_GRABACION = "Descartar";
+export const DESCARTAR_GRABACION_TITULO = "¿Descartar esta grabación?";
+export const DESCARTAR_GRABACION_MENSAJE =
+  "La sesión se quita y el turno queda libre para volver a grabar. Si el audio llegó a subirse, también se borra. No se puede deshacer.";
+export const DESCARTAR_GRABACION_ACCION = "Descartar la grabación";
+export const DESCARTANDO_GRABACION = "Descartando…";
+export const NO_SE_PUDO_DESCARTAR = "No se pudo descartar la grabación. Probá de nuevo.";

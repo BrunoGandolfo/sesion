@@ -1,4 +1,4 @@
-// Caso de uso: el mantenimiento diario. Dos cosas, y ninguna decide política:
+// Caso de uso: el mantenimiento diario. Tres cosas, y ninguna decide política:
 //
 //   1. PURGAS operativas a 30 días (las únicas purgas del sistema; nada
 //      clínico se borra por antigüedad): intentos_acceso; sesiones_acceso
@@ -12,6 +12,13 @@
 //      vieja (docs/encryption.md §3). Las versiones inmutables del Recorrido
 //      no se reescriben: siguen contando como pendientes y errores. Su clave
 //      debe conservarse hasta tener un procedimiento administrativo de rotación.
+//   3. RED DE SEGURIDAD de las grabaciones sin terminar: una sesión quieta
+//      en `grabando`/`subiendo` más de UMBRAL_HUERFANA_HORAS (siete días) se
+//      abandona sola (casos-uso/sesion/abandonar.ts, actor sistema): con
+//      audio queda `fallida` para que ella se entere; sin audio se borra.
+//      Es lo último que corre: la usuaria la vio en Pendientes mucho antes
+//      y tuvo siete días para subirla o descartarla. Solo corre si la ruta le pasa
+//      el almacén (R2): sin él no se sabe si hay audio.
 //
 // El re-cifrado va por SQL crudo: la extensión de Prisma prohíbe (con razón)
 // filtrar por una columna cifrada, y acá hay que encontrar las filas por el
@@ -24,6 +31,14 @@ import { Prisma } from "@prisma/client";
 import { aadDe, cifrar, descifrar, ErrorDescifrado } from "@/lib/encryption";
 import { claveActiva } from "@/lib/llavero";
 import { CAMPOS_CIFRADOS, MODELOS_CIFRADOS, type ClienteCifrado } from "@/lib/prisma-encryption";
+import {
+  ESTADOS_SIN_TERMINAR,
+  esHuerfana,
+  UMBRAL_HUERFANA_HORAS,
+} from "@/lib/sesion-clinica/estados";
+
+import type { AlmacenAudio } from "./audio";
+import { abandonarSesion } from "./sesion/abandonar";
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
 
@@ -161,9 +176,65 @@ export async function recifrarTanda(
   return { recifradas, pendientes: await contarPendientes(prisma, idActiva), errores };
 }
 
+export interface ResultadoHuerfanas {
+  /** Tenían audio: quedaron `fallida` con su borrado de R2 encolado. */
+  fallidas: number;
+  /** No tenían audio: se borraron. */
+  borradas: number;
+  /** No se pudieron abandonar (R2 no contestó, la fila cambió): se reintenta
+   *  en la corrida siguiente. */
+  errores: number;
+}
+
+/** Tope por corrida: cada una pregunta a R2. Lo que sobra, mañana. */
+export const TOPE_HUERFANAS_POR_CORRIDA = 50;
+
+/**
+ * Abandona las grabaciones sin terminar que pasaron UMBRAL_HUERFANA_HORAS
+ * quietas. La consulta preselecciona por fecha; `esHuerfana` es la regla que
+ * decide, la misma de siempre. Una fila que falla no corta las demás.
+ */
+export async function abandonarHuerfanas(params: {
+  prisma: ClienteCifrado;
+  almacen: Pick<AlmacenAudio, "existe">;
+  ahora: Date;
+}): Promise<ResultadoHuerfanas> {
+  const { prisma, almacen, ahora } = params;
+  const limite = new Date(ahora.getTime() - UMBRAL_HUERFANA_HORAS * 60 * 60 * 1000);
+  const candidatas = await prisma.sesionClinica.findMany({
+    where: { estado: { in: [...ESTADOS_SIN_TERMINAR] }, actualizadaEn: { lt: limite } },
+    select: { id: true, organizationId: true, estado: true, actualizadaEn: true },
+    orderBy: { actualizadaEn: "asc" },
+    take: TOPE_HUERFANAS_POR_CORRIDA,
+  });
+
+  const resultado: ResultadoHuerfanas = { fallidas: 0, borradas: 0, errores: 0 };
+  for (const sesion of candidatas) {
+    if (!esHuerfana(sesion, ahora)) continue;
+    try {
+      const { resultado: final } = await abandonarSesion({
+        prisma,
+        almacen,
+        sesionId: sesion.id,
+        organizationId: sesion.organizationId,
+        ahora,
+      });
+      if (final === "fallida") resultado.fallidas += 1;
+      else resultado.borradas += 1;
+    } catch (error) {
+      resultado.errores += 1;
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[mantenimiento] no se pudo abandonar la sesión ${sesion.id}: ${msg}`);
+    }
+  }
+  return resultado;
+}
+
 export interface ResultadoMantenimiento {
   purga: ResultadoPurga;
   recifrado: ResultadoRecifrado;
+  /** Ausente si la corrida no tenía almacén (R2) para decidir. */
+  huerfanas?: ResultadoHuerfanas;
 }
 
 /**
@@ -175,6 +246,8 @@ export async function mantenimiento(params: {
   ahora: Date;
   todo?: boolean;
   presupuestoMs?: number;
+  /** R2. Sin él no se abandonan huérfanas: no se sabría si hay audio. */
+  almacen?: Pick<AlmacenAudio, "existe">;
 }): Promise<ResultadoMantenimiento> {
   const purga = await purgarOperativas(params.prisma, params.ahora);
   const inicio = Date.now();
@@ -192,5 +265,11 @@ export async function mantenimiento(params: {
       errores: recifrado.errores + otra.errores,
     };
   }
-  return { purga, recifrado };
+  // Lo último: ella tuvo siete días para subirla o descartarla. Si el
+  // re-cifrado (`todo`) ya gastó el presupuesto, quedan para mañana.
+  const conTiempo = Date.now() - inicio <= (params.presupuestoMs ?? 50_000);
+  const huerfanas = params.almacen && conTiempo
+    ? await abandonarHuerfanas({ prisma: params.prisma, almacen: params.almacen, ahora: params.ahora })
+    : undefined;
+  return { purga, recifrado, ...(huerfanas ? { huerfanas } : {}) };
 }

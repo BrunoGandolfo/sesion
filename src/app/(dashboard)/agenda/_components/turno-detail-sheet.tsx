@@ -51,12 +51,14 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
   PAGADO,
   PENDIENTE,
   NOTA_PROCESANDO,
+  GRABACION_SIN_TERMINAR,
   RECORDATORIO,
 } from "@/lib/glosario";
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 import { estadoClinicoDe } from "@/components/ui/session-row";
+import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 
 // Los campos de "Reprogramar" son los del alta (fecha, hora, duración,
 // modalidad, notas): mismo schema y mismo componente, turno-editar-campos.
@@ -121,7 +123,7 @@ function mensajeDe(err: unknown): string {
   return err instanceof ApiClientError ? err.mensaje : ALGO_FALLO;
 }
 
-type SesionDelTurno = { id: string; estado?: string } | null;
+type SesionDelTurno = { id: string; estado?: string; actualizadaEn?: string } | null;
 
 export function TurnoDetailSheet({
   open,
@@ -228,8 +230,12 @@ export function TurnoDetailSheet({
   // nota", y una nota que no se pudo escribir parecía una nota para leer.
   const sesionDatos = sesion !== "sin-dato" ? sesion : null;
   const notaClinica = estadoClinicoDe(sesionDatos);
+  // Una subida o una grabación que quedó a medias no se está procesando
+  // (la regla y sus umbrales: esGrabacionSinTerminar, estados.ts).
+  const sinTerminar = esGrabacionSinTerminar(sesionDatos, new Date());
   const notaEnProceso =
-    sesionDatos?.estado === "procesando" || sesionDatos?.estado === "subiendo";
+    !sinTerminar &&
+    (sesionDatos?.estado === "procesando" || sesionDatos?.estado === "subiendo");
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
 
   /**
@@ -443,6 +449,13 @@ export function TurnoDetailSheet({
                   >
                     <Link href={`/sesiones/${notaClinica.sesionId}`}>
                       {notaClinica.rotulo}
+                      <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
+                    </Link>
+                  </Button>
+                ) : sinTerminar ? (
+                  <Button asChild variant="secondary" className="!text-terracotta-600">
+                    <Link href={`/grabar/${turno.id}`}>
+                      {GRABACION_SIN_TERMINAR}
                       <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
                     </Link>
                   </Button>

@@ -12,6 +12,8 @@
 // el estado de partida y la organización y, para el worker, el `intento`
 // vigente. count = 0 ⇒ 409 y no se toca nada.
 
+import { LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
+
 import { estadoSesionSchema, type EstadoSesion } from "./schema";
 
 export type { EstadoSesion };
@@ -50,14 +52,17 @@ export const OPERACIONES = {
   volver_a_grabar: { actor: "usuaria", desde: ["subiendo"], hacia: "grabando" },
   /** Única entrada a `procesando`: el audio está completo en R2. */
   audio_listo: { actor: "servidor", desde: ["subiendo"], hacia: "procesando" },
-  /** Huérfana con audio: queda `fallida` (código grabacion_abandonada). */
+  /** Con audio y abandonada por el mantenimiento, o grabación demasiado
+   *  corta: queda `fallida` (grabacion_abandonada / grabacion_corta). */
   abandonar: {
     actor: "usuaria",
     desde: ["grabando", "subiendo"],
     hacia: "fallida",
   },
-  /** Huérfana sin audio: no queda nada que conservar. */
-  abandonar_sin_audio: {
+  /** La fila se borra: la usuaria descartó una grabación sin terminar (con
+   *  o sin audio; el audio va por borrar_audio_r2), o el mantenimiento
+   *  abandonó una sin audio. */
+  abandonar_y_borrar: {
     actor: "usuaria",
     desde: ["grabando", "subiendo"],
     hacia: "borrada",
@@ -174,15 +179,20 @@ export const CODIGO_INTENTOS_AGOTADOS = "intentos_agotados";
 /** La grabación no llegó al mínimo: no se transcribe y el audio se borra.
  *  El teléfono ya no la sube, pero una PWA vieja cacheada sí (19/9). */
 export const CODIGO_GRABACION_CORTA = "grabacion_corta";
+/** La grabación quedó en `grabando`/`subiendo` y se abandonó (la usuaria la
+ *  descartó, o el mantenimiento pasados UMBRAL_HUERFANA_HORAS). */
+export const CODIGO_GRABACION_ABANDONADA = "grabacion_abandonada";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Huérfanas
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Una sesión real dura como mucho ~90 min; pasadas 4 h sin actualización en
- *  `grabando` o `subiendo`, el navegador murió. Umbral compartido con el
- *  Área 1 (abandonar). */
-export const UMBRAL_HUERFANA_HORAS = 4;
+/** Pasado este tiempo sin actualización en `grabando` o `subiendo`, el
+ *  mantenimiento la abandona solo. Siete días y no horas: mientras la fila
+ *  exista el teléfono todavía puede subir la copia que guardó, y abandonarla
+ *  antes destruiría una grabación recuperable. La usuaria la ve mucho antes
+ *  (esGrabacionSinTerminar) y puede resolverla ella. */
+export const UMBRAL_HUERFANA_HORAS = 7 * 24;
 
 const UMBRAL_HUERFANA_MS = UMBRAL_HUERFANA_HORAS * 60 * 60 * 1000;
 
@@ -215,4 +225,57 @@ export function esHuerfana(
   const referencia = aEpochMs(sesion.actualizadaEn) ?? aEpochMs(sesion.creadaEn);
   if (referencia === null) return false;
   return ahora.getTime() - referencia > UMBRAL_HUERFANA_MS;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Grabación sin terminar
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cuánto puede estar quieta la fila antes de decirle a la usuaria "Grabación
+ * sin terminar". Depende del estado, porque lo que mueve la fila es distinto:
+ *
+ * - `subiendo`: la subida escribe al empezar y al confirmar. Treinta minutos
+ *   quieta es una subida que se cortó.
+ * - `grabando`: MIENTRAS SE GRABA NADA LLEGA AL SERVIDOR (el archivo sale
+ *   entero al terminar; el latido del grabador es local). Una sesión de 50
+ *   minutos en curso está "quieta" desde el minuto cero: con 30 minutos se le
+ *   ofrecería descartar una grabación viva. El umbral es el tope de grabación
+ *   (LIMITE_SEGUNDOS, 150 min) más el mismo margen de 30.
+ *
+ * Menos que eso puede estar grabando o subiendo ahora mismo.
+ */
+export const UMBRAL_SIN_TERMINAR_MINUTOS = 30;
+
+export const UMBRAL_SIN_TERMINAR_MS = UMBRAL_SIN_TERMINAR_MINUTOS * 60 * 1000;
+
+export const UMBRAL_GRABANDO_SIN_TERMINAR_MS =
+  LIMITE_SEGUNDOS * 1000 + UMBRAL_SIN_TERMINAR_MS;
+
+/** Estados en los que la grabación todavía no terminó de llegar. */
+export const ESTADOS_SIN_TERMINAR: ReadonlyArray<EstadoSesion> = ["grabando", "subiendo"];
+
+/** El umbral de quietud de cada estado sin terminar. */
+export function umbralSinTerminarMs(estado: "grabando" | "subiendo"): number {
+  return estado === "grabando" ? UMBRAL_GRABANDO_SIN_TERMINAR_MS : UMBRAL_SIN_TERMINAR_MS;
+}
+
+/**
+ * ¿Esta sesión es una grabación sin terminar? `subiendo` quieta más de 30
+ * min, o `grabando` quieta más del tope de grabación más 30 min. Sin fecha,
+ * no: nunca se le ofrece descartar una grabación que puede estar activa.
+ */
+export function esGrabacionSinTerminar(
+  sesion: {
+    estado?: EstadoSesion | string;
+    actualizadaEn?: Date | string | null;
+  } | null | undefined,
+  ahora: Date,
+): boolean {
+  if (!sesion || (sesion.estado !== "grabando" && sesion.estado !== "subiendo")) {
+    return false;
+  }
+  const referencia = aEpochMs(sesion.actualizadaEn);
+  if (referencia === null) return false;
+  return ahora.getTime() - referencia > umbralSinTerminarMs(sesion.estado);
 }

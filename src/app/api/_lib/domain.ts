@@ -111,7 +111,7 @@ export function toTurno(turno: FilaTurno): Turno {
 export function toTurnoConPaciente(
   turno: FilaTurno & {
     paciente: Pick<PrismaPaciente, "id" | "nombre" | "apellido" | "telefono">;
-    sesionClinica: { id: string; estado: string } | null;
+    sesionClinica: { id: string; estado: string; actualizadaEn?: Date } | null;
   },
 ): TurnoConPaciente {
   return {

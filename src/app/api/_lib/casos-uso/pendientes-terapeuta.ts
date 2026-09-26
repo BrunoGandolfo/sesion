@@ -1,7 +1,8 @@
 // Caso de uso: lo que espera a la terapeuta cuando abre la app.
 //
 // Tres listas, cada una con una acción posible y un final: revisar la nota,
-// cobrar la sesión, hacer firmar la autorización. Cuando las tres están
+// cobrar la sesión, hacer firmar la autorización. Más dos de problemas: las
+// notas que fallaron y las grabaciones sin terminar. Cuando todas están
 // vacías no hay nada pendiente y la pantalla de Hoy no muestra el bloque.
 //
 // Por qué existe: hoy la única forma de encontrar una nota sin aprobar es
@@ -38,9 +39,11 @@ import type { db } from "@/lib/db";
 import { esConsentimientoVigente } from "@/lib/consentimiento";
 import { finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
 import { porMontoYAntiguedad } from "@/lib/orden-deuda";
+import { umbralSinTerminarMs } from "@/lib/sesion-clinica/estados";
 
 import type {
   DeudaPaciente,
+  GrabacionSinTerminar,
   NotaFallida,
   NotaParaRevisar,
   PacienteSinCobrar,
@@ -185,7 +188,12 @@ export async function pendientesTerapeuta({
   const inicioDelDia = inicioDelDiaMvd(ahora);
   const finDelDia = finDelDiaMvd(ahora);
 
-  const [sesionesEnRevision, sesionesFallidas, turnosImpagos, turnosDeHoy] = await Promise.all([
+  // Cada estado con su umbral (estados.ts): mientras se graba nada llega al
+  // servidor, así que `grabando` espera el tope de grabación.
+  const quietaDesde = (estado: "grabando" | "subiendo") =>
+    new Date(ahora.getTime() - umbralSinTerminarMs(estado));
+
+  const [sesionesEnRevision, sesionesFallidas, turnosImpagos, turnosDeHoy, sesionesSinTerminar] = await Promise.all([
     // 1. Notas generadas que todavía nadie aprobó. De cualquier fecha: una
     //    nota del jueves pasado sigue siendo trabajo clínico pendiente.
     prisma.sesionClinica.findMany({
@@ -244,6 +252,33 @@ export async function pendientesTerapeuta({
         paciente: { select: { id: true, nombre: true, apellido: true } },
       },
     }),
+
+    // 5. Grabaciones sin terminar: `subiendo` quieta más de 30 min, o
+    //    `grabando` quieta más del tope de grabación más 30 min (la regla es
+    //    esGrabacionSinTerminar). Sin esto se veían "Procesando" para siempre
+    //    y no había salida. Antes no: puede estar grabando o subiendo ahora
+    //    mismo. Misma forma y tope que las fallidas.
+    prisma.sesionClinica.findMany({
+      where: {
+        organizationId,
+        OR: [
+          { estado: "subiendo", actualizadaEn: { lt: quietaDesde("subiendo") } },
+          { estado: "grabando", actualizadaEn: { lt: quietaDesde("grabando") } },
+        ],
+      },
+      select: {
+        id: true,
+        turnoId: true,
+        turno: {
+          select: {
+            fecha: true,
+            paciente: { select: { id: true, nombre: true, apellido: true } },
+          },
+        },
+      },
+      orderBy: { turno: { fecha: "asc" } },
+      take: TOPE_NOTAS_FALLIDAS,
+    }),
   ]);
 
   const notasParaRevisar: NotaParaRevisar[] = sesionesEnRevision
@@ -266,6 +301,14 @@ export async function pendientesTerapeuta({
     // límites, modelos y tamaños que no son asunto de esta pantalla.
     codigo: sesion.falloCodigo,
     puedeReintentarse: hayMaterial(sesion),
+  }));
+
+  const grabacionesSinTerminar: GrabacionSinTerminar[] = sesionesSinTerminar.map((sesion) => ({
+    sesionId: sesion.id,
+    turnoId: sesion.turnoId,
+    pacienteId: sesion.turno.paciente.id,
+    pacienteNombre: nombreCompleto(sesion.turno.paciente),
+    fecha: sesion.turno.fecha.toISOString(),
   }));
 
   const { sinCobrar, totalSinCobrar } = deudaDeHoy(turnosImpagos, ahora);
@@ -301,5 +344,6 @@ export async function pendientesTerapeuta({
     totalSinCobrar,
     sinAutorizacion,
     notasFallidas,
+    grabacionesSinTerminar,
   };
 }

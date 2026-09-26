@@ -6,7 +6,7 @@ import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consen
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
 import { DISPERSION_MINUTOS } from "@/lib/recordatorios-programacion";
-import { ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_AGOTADAS, INVITAR_ESPERA, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
+import { DESCARTAR_GRABACION, DESCARTAR_GRABACION_ACCION, DESCARTAR_GRABACION_TITULO, ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_AGOTADAS, INVITAR_ESPERA, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
 import { AVISO_GRABACIONES_RESTANTES, ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, TOPE_INVITACIONES_TOTAL } from "@/lib/limites-prueba";
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -280,8 +280,13 @@ it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
 
 it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar la contraseña", () => {
   // Los únicos usos vigentes de esas palabras son botones que existen hoy.
-  const vigentes = [INVITAR_WHATSAPP, "Descartar propuesta", "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta"];
+  const vigentes = [INVITAR_WHATSAPP, "Descartar propuesta", "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta", `**${DESCARTAR_GRABACION_ACCION}**`, DESCARTAR_GRABACION_TITULO];
   expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Descartar propuesta");
+  // La grabación sin terminar, en Pendientes de Hoy: el botón y su confirmación.
+  const pendientes = codigo("src/app/(dashboard)/_components/pendientes.tsx");
+  expect(DESCARTAR_GRABACION).toBe("Descartar");
+  expect(pendientes).toContain("DESCARTAR_GRABACION_ACCION");
+  expect(pendientes).toContain("DESCARTAR_GRABACION_TITULO");
   // Los del grabador: la copia pendiente y la grabación en curso.
   const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
   expect(vista).toContain("Descartarla");

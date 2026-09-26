@@ -4,6 +4,7 @@
 // Vive fuera de dashboard.tsx porque no es pantalla: es el borde entre
 // /api/dashboard y el render. Sin estado, sin efectos, sin React.
 
+import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { clavesDeRiesgo } from "@/components/grabacion/RiesgoDetectadoBanner";
 import { apiGet } from "@/lib/api-client";
@@ -344,9 +345,14 @@ export interface SesionEnProceso {
  */
 export function sesionesEnProceso(
   turnos: TurnoConPaciente[],
+  /** Con él, una subida quieta más de 30 min no cuenta: es una grabación
+   *  sin terminar (Pendientes), no una nota que se está escribiendo. */
+  ahora?: Date,
 ): SesionEnProceso[] {
   return turnos.flatMap((turno) =>
-    turno.sesionClinica && enProceso(turno.sesionClinica.estado)
+    turno.sesionClinica &&
+    enProceso(turno.sesionClinica.estado) &&
+    !(ahora && esGrabacionSinTerminar(turno.sesionClinica, ahora))
       ? [
           {
             turnoId: turno.id,

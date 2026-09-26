@@ -6,11 +6,13 @@ import { ChevronRight } from "lucide-react";
 import type { TurnoConPaciente } from "@/types/domain";
 import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 import { hora, money } from "@/lib/format";
+import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import {
   AGENDADO,
   CANCELADO,
   COBRAR,
   FALTA_AUTORIZACION,
+  GRABACION_SIN_TERMINAR,
   GRABAR_SESION,
   NO_VINO,
   NOTA_FALLIDA,
@@ -209,6 +211,10 @@ export function SessionRow(props: SessionRowProps) {
   const sesion = turno.sesionClinica;
   const nota = estadoClinicoDe(sesion);
   const procesando = sesion && ESTADOS_PROCESANDO.includes(sesion.estado);
+  // Grabación o subida que quedó a medias (esGrabacionSinTerminar): no se
+  // está procesando. Lleva a la pantalla de grabar, que ofrece la copia guardada en
+  // el teléfono. Sin `ahora` (Agenda) vale el reloj del navegador.
+  const sinTerminar = esGrabacionSinTerminar(sesion, props.ahora ?? new Date());
   const nombre = `${turno.paciente.nombre} ${turno.paciente.apellido}`;
 
   const base = `w-full flex flex-wrap items-center gap-3 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-[var(--duration-fast)] border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;
@@ -258,6 +264,13 @@ export function SessionRow(props: SessionRowProps) {
             }`}
           >
             {nota.rotulo}
+          </Link>
+        ) : sinTerminar ? (
+          <Link
+            href={`/grabar/${turno.id}`}
+            className="inline-flex min-h-11 items-center rounded-md px-2 text-[13px] font-semibold text-terracotta-600 hover:bg-terracotta-50"
+          >
+            {GRABACION_SIN_TERMINAR}
           </Link>
         ) : procesando ? (
           <span className="text-[13px] text-ink-500" role="status">{NOTA_PROCESANDO}</span>

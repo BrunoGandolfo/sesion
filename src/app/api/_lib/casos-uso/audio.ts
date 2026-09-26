@@ -169,7 +169,11 @@ export async function confirmarSubida(input: Sesion & { key: string; duracionAud
         sesionId,
         organizationId,
         data: {
-          audioEstado: "en_r2",
+          // `sin_audio` y no `en_r2`: el audio se está borrando (el trabajo
+          // de abajo), y `en_r2` la dejaría reintentable (HAY_MATERIAL)
+          // contra un archivo que va a desaparecer. Pendientes ofrece sólo
+          // eliminarla. El trabajo la deja en `borrado` cuando termina.
+          audioEstado: "sin_audio",
           duracionAudioSeg,
           falloCodigo: CODIGO_GRABACION_CORTA,
           proximoIntentoEn: null,

@@ -23,6 +23,8 @@ import {
   MENSAJE_GRABACION_CORTA,
   type AlmacenAudio,
 } from "@/app/api/_lib/casos-uso/audio";
+import { hayMaterial } from "@/app/api/_lib/casos-uso/sesion/reprocesar";
+import { reintentarSesion } from "@/app/api/_lib/casos-uso/sesion/reintentar";
 import { ApiError } from "@/app/api/_lib/responses";
 import { MINIMO_SEGUNDOS } from "@/lib/grabacion-captura";
 import { __resetLlaveroForTests } from "@/lib/llavero";
@@ -145,6 +147,22 @@ describe("una grabación más corta que el mínimo", () => {
     const fila = await prismaRaw.sesionClinica.findUniqueOrThrow({ where: { id: sesionId } });
     expect(fila.estado).toBe("fallida");
     expect(await trabajosDe(sesionId)).toHaveLength(1);
+  });
+
+  it("no queda reintentable: el audio se está borrando, así que no figura como en R2", async () => {
+    const { orgId, sesionId } = await sesionSubiendo();
+    await confirmar(orgId, sesionId, 3).catch(() => undefined);
+
+    const fila = await prismaRaw.sesionClinica.findUniqueOrThrow({ where: { id: sesionId } });
+    expect(fila.audioEstado).toBe("sin_audio");
+    // La misma regla que Pendientes usa para ofrecer "Reintentar".
+    expect(hayMaterial(fila)).toBe(false);
+
+    const error = await reintentarSesion({ prisma: db, sesionId, organizationId: orgId, usuarioId: "u" }).catch(
+      (e) => e as ApiError,
+    );
+    expect((error as ApiError).status).toBe(409);
+    expect((await prismaRaw.sesionClinica.findUniqueOrThrow({ where: { id: sesionId } })).estado).toBe("fallida");
   });
 });
 

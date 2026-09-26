@@ -140,6 +140,32 @@ la app borra sola la copia del teléfono en vez de ofrecerla otra vez.
 
 Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
 
+## Si quedó una grabación sin terminar
+
+Si el envío de una grabación se cortó hace **más de 30 minutos**, o una
+grabación quedó abierta **más de tres horas** (el tope de dos horas y media más
+un margen), la app entiende que quedó a medias —el teléfono se apagó, se cerró
+el navegador, se cortó la subida— y deja de decir *"Procesando"*: en **Hoy** y
+en la ficha dice **Grabación sin terminar**, y en **Hoy**, en el bloque de
+pendientes, aparece con el nombre de la paciente y dos opciones:
+
+- **Subir desde este teléfono** abre la pantalla de grabar de ese turno. Si la
+  copia quedó en ese teléfono, ofrece **Guardarla ahora**. Si grabaste en otro
+  teléfono, abrilo desde ese.
+- **Descartar** pregunta *"¿Descartar esta grabación?"* y, al confirmar con
+  **Descartar la grabación**, la sesión se quita y el turno queda libre para
+  volver a grabar. Si el audio llegó a subirse, también se borra. No queda
+  nada para eliminar después. No se puede deshacer.
+
+Antes no aparece: puede estar grabando o enviando ahora mismo. Mientras grabás
+no llega nada al servidor, por eso una grabación abierta tiene más margen.
+
+Si nadie hace nada, **a los siete días la app la abandona sola**. Si el audio
+había llegado, se borra y la sesión queda entre las notas que no se pudieron
+escribir, con el motivo *"La grabación quedó a medias."*, para que te enteres;
+ahí sólo se puede **Eliminar**. Si no había llegado, la sesión se quita.
+Mientras tanto la copia del teléfono todavía se puede enviar.
+
 ## Qué hace la app por detrás
 
 - **La app no cifra el audio.** Mientras grabás queda en el almacenamiento del
@@ -186,6 +212,11 @@ src/lib/grabacion-storage.ts
 src/hooks/usePantallaEncendida.ts
 src/lib/grabacion-captura.ts
 src/app/api/_lib/casos-uso/audio.ts
+src/app/api/_lib/casos-uso/sesion/abandonar.ts
+src/app/api/_lib/casos-uso/mantenimiento.ts
+src/app/api/_lib/casos-uso/pendientes-terapeuta.ts
+src/app/(dashboard)/_components/pendientes.tsx
+src/lib/sesion-clinica/estados.ts
 src/lib/limites-prueba.ts
 src/lib/glosario.ts
 src/components/layout/avisos-de-notas.tsx

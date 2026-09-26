@@ -31,6 +31,7 @@ import { Avatar, Button, Card, Chip } from "@/components/ui";
 import { Latido } from "@/components/ui/movimiento";
 import { IndicadorProcesando } from "@/components/ui/procesando";
 import { estadoClinicoDe, puedeGrabarseHoy } from "@/components/ui/session-row";
+import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
 import {
@@ -48,7 +49,11 @@ import {
 import type { EstadoProcesamiento, TurnoConPaciente } from "@/types/domain";
 
 /** Lo único que esta card necesita de /api/sesion-clinica. */
-type SesionDelTurno = { id: string; estado: EstadoProcesamiento | string } | null;
+type SesionDelTurno = {
+  id: string;
+  estado: EstadoProcesamiento | string;
+  actualizadaEn?: Date | string;
+} | null;
 
 /** Lo único que esta card necesita de /api/pacientes/[id]/brief. */
 type RespuestaBrief = {
@@ -118,10 +123,17 @@ export function accionDe(
   if (sesion?.estado === "revision") {
     return { tipo: "revisar", sesionId: sesion.id };
   }
-  if (sesion?.estado === "subiendo" || sesion?.estado === "procesando") {
+  // Una subida quieta más de 30 min no se está escribiendo: quedó a medias,
+  // y se retoma como una grabación (la pantalla de grabar ofrece la copia
+  // guardada en el teléfono).
+  const sinTerminar = esGrabacionSinTerminar(sesion, ahora);
+  if (
+    (sesion?.estado === "subiendo" && !sinTerminar) ||
+    sesion?.estado === "procesando"
+  ) {
     return { tipo: "escribiendo" };
   }
-  const sinGrabar = sesion === null || sesion.estado === "grabando";
+  const sinGrabar = sesion === null || sesion.estado === "grabando" || sinTerminar;
   const grabable = sinGrabar && puedeGrabarseHoy(turno, ahora);
   const grabar = grabable ? (sinAutorizacion ? "autorizar" : "grabar") : null;
   const firma =
