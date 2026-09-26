@@ -167,6 +167,29 @@ body {
 @keyframes gira-procesando { to { transform: rotate(360deg); } }
 .gira-procesando { animation: gira-procesando 1.2s linear infinite; }
 
+/* La portada (/login), una sola vez al cargar; después, quieta
+   (docs/diseno/07-portada.md). Con movimiento reducido la regla de abajo
+   apaga todo y la página aparece completa.
+
+   `brota` es el mismo movimiento que Lupita (lupita.tsx): sube 4 px y
+   aparece en el tiempo de pliegue, con la curva común. Los keyframes sólo
+   declaran el punto de partida: el final es el estilo normal del elemento.
+
+   La marca: la primera cuenta aparece, el hilo se traza hacia arriba y las
+   otras dos aparecen a mitad y al final del trazo; el nombre brota después
+   (~600 ms en total). El titular y el párrafo brotan desde el primer cuadro,
+   escalonados 80 ms: el único tiempo de acá que no sale de movimiento.ts. */
+@keyframes brota { from { opacity: 0; transform: translateY(4px); } }
+@keyframes traza-hilo { from { stroke-dashoffset: 1; } }
+@keyframes aparece-cuenta { from { opacity: 0; } }
+.marca-trazada line { stroke-dasharray: 1; animation: traza-hilo var(--duration-pliegue) var(--ease-out) both; }
+.marca-trazada circle { animation: aparece-cuenta var(--duration-fast) var(--ease-out) both; }
+.marca-trazada circle:nth-of-type(2) { animation-delay: calc(var(--duration-pliegue) / 2); }
+.marca-trazada circle:nth-of-type(3) { animation-delay: var(--duration-pliegue); }
+.brota { animation: brota var(--duration-pliegue) var(--ease-out) both; }
+.brota-despues-de-la-marca { animation-delay: calc(var(--duration-pliegue) + var(--duration-fast)); }
+.brota-escalon { animation-delay: 80ms; }
+
 *, *::before, *::after { transition-timing-function: var(--ease-out); }
 
 @media (prefers-reduced-motion: reduce) {

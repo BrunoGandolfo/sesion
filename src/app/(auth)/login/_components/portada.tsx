@@ -17,7 +17,14 @@ import {
   PORTADA_PIE,
 } from "@/lib/glosario";
 
+import { LupitaPortada } from "./lupita-portada";
+
 // Solo presentación. El formulario llega intacto desde la página de entrada.
+//
+// Movimiento (docs/diseno/07-portada.md): la marca se traza y el nombre brota
+// después; el titular y el párrafo brotan escalonados; Lupita brota cuando
+// su sección entra en la vista. Todo una vez. El formulario no se mueve: está
+// quieto y usable desde el primer cuadro.
 export function Portada({ children }: { children: ReactNode }) {
   return (
     <main className="min-h-screen bg-cream-50">
@@ -25,9 +32,9 @@ export function Portada({ children }: { children: ReactNode }) {
         <header className="flex items-center justify-between gap-4 border-b border-[color:var(--border-subtle)] py-5 lg:py-8">
           <div className="flex items-center gap-3">
             <span aria-hidden="true" className="shrink-0">
-              <Marca lado={44} medidas={medidasPara(44)} />
+              <Marca lado={44} medidas={medidasPara(44)} trazada />
             </span>
-            <span className="font-display text-3xl font-medium text-ink-900">{NOMBRE_PRODUCTO}</span>
+            <span className="brota brota-despues-de-la-marca font-display text-3xl font-medium text-ink-900">{NOMBRE_PRODUCTO}</span>
           </div>
           <a href="#ingresar" className="inline-flex min-h-11 items-center rounded-sm px-2 text-sm font-semibold text-sage-600 underline decoration-sage-200 underline-offset-4 hover:decoration-sage-600">
             {ENTRAR}
@@ -36,10 +43,10 @@ export function Portada({ children }: { children: ReactNode }) {
 
         <div className="grid gap-7 py-7 sm:gap-10 sm:py-10 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center lg:gap-20 lg:py-16">
           <div>
-            <h1 className="max-w-[14ch] text-balance font-display text-4xl font-medium leading-[1.12] tracking-tight text-ink-900 lg:text-6xl">
+            <h1 className="brota max-w-[14ch] text-balance font-display text-4xl font-medium leading-[1.12] tracking-tight text-ink-900 lg:text-6xl">
               {ESLOGAN}
             </h1>
-            <p className="mt-5 max-w-[48ch] text-base leading-relaxed text-ink-700 lg:mt-6 lg:text-lg">
+            <p className="brota brota-escalon mt-5 max-w-[48ch] text-base leading-relaxed text-ink-700 lg:mt-6 lg:text-lg">
               {ENTRADA_QUE_HACE}
             </p>
           </div>
@@ -73,10 +80,13 @@ export function Portada({ children }: { children: ReactNode }) {
             <h2 id="titulo-cifrado" className="font-display text-2xl font-medium text-sage-800">{PORTADA_CIFRADO}</h2>
             <p className="mt-3 text-sm leading-7 text-ink-700">{ENTRADA_CONFIDENCIALIDAD}</p>
           </section>
-          <section aria-labelledby="titulo-lupita">
-            <h2 id="titulo-lupita" className="font-display text-2xl font-medium text-sage-800">{PORTADA_LUPITA_TITULO}</h2>
-            <p className="mt-3 text-sm leading-7 text-ink-700">{PORTADA_LUPITA}</p>
-            <p className="mt-3 text-sm leading-7 text-ink-700">{PORTADA_LUPITA_CUIDADO}</p>
+          <section aria-labelledby="titulo-lupita" className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+            <LupitaPortada />
+            <div>
+              <h2 id="titulo-lupita" className="font-display text-2xl font-medium text-sage-800">{PORTADA_LUPITA_TITULO}</h2>
+              <p className="mt-3 text-sm leading-7 text-ink-700">{PORTADA_LUPITA}</p>
+              <p className="mt-3 text-sm leading-7 text-ink-700">{PORTADA_LUPITA_CUIDADO}</p>
+            </div>
           </section>
         </div>
 
