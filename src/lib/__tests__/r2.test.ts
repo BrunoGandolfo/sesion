@@ -1,16 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-// vi.mock se hoistea por encima de los imports, por eso usamos vi.hoisted
-// para compartir el mock de send entre la factory y los tests.
-const { sendMock, getSignedUrlMock } = vi.hoisted(() => ({
-  sendMock: vi.fn(),
-  getSignedUrlMock: vi.fn(),
-}));
-
-vi.mock("@aws-sdk/s3-request-presigner", () => ({
-  getSignedUrl: getSignedUrlMock,
-}));
-
 interface S3CommandInput {
   Bucket?: string;
   Key?: string;
@@ -19,29 +8,48 @@ interface S3CommandInput {
   ContentLength?: number;
 }
 
-vi.mock("@aws-sdk/client-s3", () => {
-  class S3Client {
-    send = sendMock;
-  }
-  class PutObjectCommand {
-    readonly __cmd = "Put" as const;
-    constructor(public input: S3CommandInput) {}
-  }
-  class DeleteObjectCommand {
-    readonly __cmd = "Delete" as const;
-    constructor(public input: S3CommandInput) {}
-  }
-  class HeadObjectCommand {
-    readonly __cmd = "Head" as const;
-    constructor(public input: S3CommandInput) {}
-  }
-  return {
-    S3Client,
-    PutObjectCommand,
-    DeleteObjectCommand,
-    HeadObjectCommand,
-  };
-});
+// vi.mock se hoistea por encima de los imports, por eso usamos vi.hoisted
+// para compartir el mock de send entre la factory y los tests. Las factories
+// son nombradas porque el describe del SDK real las vuelve a registrar al
+// terminar (vi.doMock).
+const { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3 } =
+  vi.hoisted(() => {
+    const sendMock = vi.fn();
+    const getSignedUrlMock = vi.fn();
+
+    const fabricaPresigner = () => ({
+      getSignedUrl: getSignedUrlMock,
+    });
+
+    const fabricaClienteS3 = () => {
+      class S3Client {
+        send = sendMock;
+      }
+      class PutObjectCommand {
+        readonly __cmd = "Put" as const;
+        constructor(public input: S3CommandInput) {}
+      }
+      class DeleteObjectCommand {
+        readonly __cmd = "Delete" as const;
+        constructor(public input: S3CommandInput) {}
+      }
+      class HeadObjectCommand {
+        readonly __cmd = "Head" as const;
+        constructor(public input: S3CommandInput) {}
+      }
+      return {
+        S3Client,
+        PutObjectCommand,
+        DeleteObjectCommand,
+        HeadObjectCommand,
+      };
+    };
+
+    return { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3 };
+  });
+
+vi.mock("@aws-sdk/s3-request-presigner", fabricaPresigner);
+vi.mock("@aws-sdk/client-s3", fabricaClienteS3);
 
 const ENV_KEYS = [
   "R2_ACCOUNT_ID",
@@ -190,6 +198,40 @@ describe("R2 client", () => {
       const { existeAudio } = await import("@/lib/r2");
 
       await expect(existeAudio("audio/x.enc")).rejects.toThrow(/audio\/x\.enc/);
+    });
+  });
+
+  // Con el SDK real, sin red: getSignedUrl firma en local. Protege
+  // `requestChecksumCalculation: "WHEN_REQUIRED"` de r2.ts: sin eso el SDK
+  // agrega a la URL un checksum del cuerpo vacío y R2 rechaza el PUT del
+  // navegador con el audio real. Corre con cada versión del SDK que traiga
+  // Dependabot.
+  describe("generarUrlSubida con el SDK real (checksum)", () => {
+    beforeEach(() => {
+      vi.doUnmock("@aws-sdk/client-s3");
+      vi.doUnmock("@aws-sdk/s3-request-presigner");
+    });
+
+    afterEach(() => {
+      vi.doMock("@aws-sdk/client-s3", fabricaClienteS3);
+      vi.doMock("@aws-sdk/s3-request-presigner", fabricaPresigner);
+    });
+
+    it("la URL firmada no lleva checksum del cuerpo y sí la firma", async () => {
+      setR2Env();
+      const { generarUrlSubida } = await import("@/lib/r2");
+
+      const { url } = await generarUrlSubida("org/sesion/0", {
+        contentType: "audio/webm",
+        contentLength: 12345,
+        expiraEnSegundos: 600,
+      });
+
+      const query = new URL(url).searchParams;
+      expect(query.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
+      expect(query.has("x-amz-checksum-crc32")).toBe(false);
+      expect(query.has("x-amz-sdk-checksum-algorithm")).toBe(false);
+      expect(getSignedUrlMock).not.toHaveBeenCalled();
     });
   });
 });
