@@ -826,6 +826,57 @@ export const AYUDA_TOPE_DIARIO =
 // texto propio a algo que para ella es exactamente lo mismo que cualquier
 // otro fallo.
 
+// ─── Lupita como presencia (docs/diseno/06-lupita-presencia.md) ─────────────
+//
+// Lo que dice fuera del chat. Es poco a propósito: la única frase que dice
+// sin que se la pidan es la del día, en Hoy, una vez por día y por
+// dispositivo. Nunca nombra a una paciente, nunca comenta cantidades como
+// logro, nunca felicita.
+
+/** Lo que Hoy sabe del día, para la línea de Lupita. */
+export interface DiaParaLupita {
+  /** Sesiones del día. */
+  sesiones: number;
+  /** Las que todavía no empezaron. */
+  porDelante: number;
+  /** Notas escritas que esperan que ella las revise. */
+  notasParaRevisar: number;
+}
+
+/**
+ * La línea del día, debajo del día de la semana en Hoy. `null` si no hay
+ * nada que decir: entonces no hay línea ni saludo.
+ *
+ * Sin "Buen día" ni "Buenas tardes" adelante, aunque 06 los proponía: la
+ * cabecera de Hoy ya saluda con la hora (format.ts, `saludo`), y dos saludos
+ * seguidos son uno de más. "Hoy tenés" mientras no empezó ninguna; "te
+ * quedan" cuando ya arrancó el día.
+ */
+export function lineaDelDiaDeLupita(dia: DiaParaLupita): string | null {
+  if (dia.sesiones === 0) return "Hoy no hay agenda. Buen momento para ponerte al día.";
+  if (dia.porDelante > 0) {
+    const cuantas = pluralizar(dia.porDelante, "sesión", "sesiones");
+    return dia.porDelante === dia.sesiones ? `Hoy tenés ${cuantas}.` : `Te quedan ${cuantas} por delante.`;
+  }
+  if (dia.notasParaRevisar > 0) {
+    return `Te quedaron ${pluralizar(dia.notasParaRevisar, "nota", "notas")} para revisar.`;
+  }
+  return null;
+}
+
+/** Grabar, antes de empezar, al lado de Lupita. Si el teléfono ya dijo que
+ *  no mantiene la pantalla encendida, no va: manda el aviso de siempre. */
+export const LUPITA_PANTALLA_PRENDIDA = "Dejá la pantalla prendida mientras grabás.";
+
+/** Pacientes: la búsqueda no trajo a nadie. */
+export const PACIENTES_SIN_RESULTADOS = "No encontré a nadie con ese nombre.";
+export const PACIENTES_SIN_RESULTADOS_LINEA = "Probá otro nombre.";
+
+/** Pacientes: la vista de archivados, vacía. */
+export const PACIENTES_SIN_ARCHIVADOS = "No archivaste a nadie todavía.";
+export const PACIENTES_SIN_ARCHIVADOS_LINEA =
+  "Los pacientes que dejan de asistir se archivan, no se borran.";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Ficha, Pacientes y Agenda
 //

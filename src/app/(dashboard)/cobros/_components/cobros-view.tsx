@@ -501,7 +501,7 @@ function TeDeben({
         // La única confirmación alegre que 04-personaje.md le permite a
         // Cobros: nadie debe nada. Lupita a 96 px, celebrando, y el círculo
         // crema crece para recibirla.
-        lupita
+        lupita="celebra"
         titulo={NADIE_TE_DEBE}
         lineas={NADIE_TE_DEBE_LINEAS}
         accion={{ label: VER_COBROS_DEL_MES, onClick: onVerCobros }}
@@ -915,8 +915,9 @@ function CobrosDelMes({
     return (
       <EstadoVacio
         // Este no se celebra: un mes sin cobrar nada no es una buena
-        // noticia. Ícono de siempre, sin personaje.
-        icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
+        // noticia. Lupita está (06-lupita-presencia.md: en los estados
+        // vacíos ella es la ilustración), pero saluda, no celebra.
+        lupita="saluda"
         titulo={SIN_COBROS_ESTE_MES}
         lineas={SIN_COBROS_ESTE_MES_LINEAS}
         accion={{ label: VER_TE_DEBEN, onClick: onVerTeDeben }}
@@ -958,20 +959,20 @@ function CobrosDelMes({
 // la agenda, y no aparece un cuarto formato.
 //
 // Lo único que cambia entre uno y otro es quién ocupa el círculo: un ícono
-// de 28 px en el círculo de 56, o Lupita a 96 px en el círculo agrandado,
-// donde la pantalla tiene algo que celebrar.
+// de 28 px en el círculo de 56 (el error, donde Lupita no va: no tiene pose
+// de error), o Lupita a 96 px en el círculo agrandado.
 // ============================================
 function EstadoVacio({
   icono,
-  lupita = false,
+  lupita,
   titulo,
   lineas,
   accion,
 }: {
   icono?: React.ReactNode;
-  /** Lupita celebrando en vez del ícono. Sólo donde 04-personaje.md la deja
-   *  entrar; en Cobros, sólo en "Nadie te debe". */
-  lupita?: boolean;
+  /** Lupita en vez del ícono, en esa pose: celebrando en "Nadie te debe",
+   *  saludando en el mes sin cobros. Nunca en el error. */
+  lupita?: "celebra" | "saluda";
   titulo: string;
   lineas: readonly [string, string, string];
   accion: { label: string; onClick: () => void };
@@ -980,7 +981,7 @@ function EstadoVacio({
     <Card className="flex flex-col items-center rounded-[8px] px-6 py-12 text-center">
       {lupita ? (
         <span className="inline-flex h-[128px] w-[128px] items-center justify-center rounded-full bg-cream-100">
-          <Lupita pose="celebra" tamano={TAMANOS_LUPITA.vacio} />
+          <Lupita pose={lupita} tamano={TAMANOS_LUPITA.vacio} movimiento="respira" />
         </span>
       ) : (
         <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-cream-100 text-sage-600">

@@ -5,7 +5,7 @@
 // la posada. Y como Hoy lee el día de forma asíncrona, mientras carga —o si
 // la lectura falla— tampoco: no se sabe todavía.
 
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -15,6 +15,7 @@ import {
   reiniciarLupitaParaTests,
 } from "@/lib/lupita-presencia";
 import { Dashboard } from "../dashboard";
+import { olvidarSaludoParaTests, tocaElGestoDelSaludo, tocaSaludarHoy } from "../saludo";
 import { leerHoy, SIN_PENDIENTES, type EstadoHoy } from "../datos";
 
 vi.mock("@/lib/api-client", async (original) => ({
@@ -29,7 +30,20 @@ vi.mock("framer-motion", async (original) => ({
   ...await original<typeof import("framer-motion")>(), useReducedMotion: () => true,
 }));
 vi.mock("@/components/layout/cabecera-usuario", () => ({ CabeceraUsuario: () => null }));
-vi.mock("../agenda-del-dia", () => ({ AgendaDelDia: () => <p>Agenda del día</p> }));
+vi.mock("../agenda-del-dia", () => ({
+  AgendaDelDia: ({ onCobrar }: { onCobrar: (id: string) => void }) => (
+    <>
+      <p>Agenda del día</p>
+      <button onClick={() => onCobrar("t1")}>Cobrar</button>
+    </>
+  ),
+}));
+// El sheet del método, como el de verdad: cobra y, cuando terminó, se cierra.
+vi.mock("../sheet-metodo-pago", () => ({
+  SheetMetodoPago: ({ open, onElegir, onClose }: {
+    open: boolean; onElegir: (m: string) => Promise<void>; onClose: () => void;
+  }) => (open ? <button onClick={async () => { await onElegir("efectivo"); onClose(); }}>Efectivo</button> : null),
+}));
 
 function dia(riesgoEnElDia: boolean): EstadoHoy {
   return {
@@ -52,6 +66,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   reiniciarLupitaParaTests();
   anotarRutaLupita("/");
+  olvidarSaludoParaTests();
+  window.localStorage.clear();
 });
 
 describe("Hoy decide si la posada aparece", () => {
@@ -86,5 +102,69 @@ describe("Hoy decide si la posada aparece", () => {
     await screen.findByText("Agenda del día");
     unmount();
     expect(obtenerLupita().riesgoDelDia).toBeNull();
+  });
+});
+
+describe("la línea del día", () => {
+  it("la primera vez del día hay línea y la posada saluda; la segunda, nada", async () => {
+    vi.mocked(leerHoy).mockResolvedValue(dia(false));
+    const { unmount } = render(<Dashboard />);
+    expect(await screen.findByText("Hoy no hay agenda. Buen momento para ponerte al día.")).toBeTruthy();
+    expect(obtenerLupita().gesto?.tipo).toBe("saludo");
+    unmount();
+
+    reiniciarLupitaParaTests();
+    anotarRutaLupita("/");
+    render(<Dashboard />);
+    await screen.findByText("Agenda del día");
+    expect(screen.queryByText(/Buen momento/)).toBeNull();
+    expect(obtenerLupita().gesto).toBeNull();
+  });
+
+  it("el gesto sale una vez aunque Hoy se vuelva a leer en la misma visita", () => {
+    // Hoy se relee al agendar o cuando una nota termina, sin desmontarse: la
+    // línea puede cambiar de texto y el efecto volver a correr.
+    const ahora = new Date("2026-09-10T14:00:00Z");
+    expect(tocaSaludarHoy(ahora)).toBe(true);
+    expect(tocaElGestoDelSaludo()).toBe(true);
+    expect(tocaSaludarHoy(ahora)).toBe(true);
+    expect(tocaElGestoDelSaludo()).toBe(false);
+  });
+
+  it("también al día siguiente de otro día guardado en este dispositivo", async () => {
+    window.localStorage.setItem("lupita:saludo", "2026-09-09");
+    vi.mocked(leerHoy).mockResolvedValue(dia(false));
+    render(<Dashboard />);
+    expect(await screen.findByText(/Buen momento/)).toBeTruthy();
+  });
+
+  it("un día con riesgo no hay línea ni saludo", async () => {
+    vi.mocked(leerHoy).mockResolvedValue(dia(true));
+    render(<Dashboard />);
+    await screen.findByText("Agenda del día");
+    expect(screen.queryByText(/Buen momento/)).toBeNull();
+    expect(obtenerLupita().gesto).toBeNull();
+  });
+});
+
+describe("el cobro", () => {
+  async function cobrarEnHoy(riesgo: boolean) {
+    // Ya saludó hoy: el gesto que se mire es el del cobro.
+    window.localStorage.setItem("lupita:saludo", "2026-09-10");
+    vi.mocked(leerHoy).mockResolvedValue(dia(riesgo));
+    render(<Dashboard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cobrar" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Efectivo" })); });
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+  }
+
+  it("cobrar en Hoy hace el gesto cuando el sheet se cerró", async () => {
+    await cobrarEnHoy(false);
+    expect(obtenerLupita().gesto?.tipo).toBe("cobro");
+  });
+
+  it("un día con riesgo, cobrar no la hace celebrar", async () => {
+    await cobrarEnHoy(true);
+    expect(obtenerLupita().gesto).toBeNull();
   });
 });

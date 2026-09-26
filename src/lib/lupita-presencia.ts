@@ -64,7 +64,7 @@ export const ENFRIAMIENTO_MS = 10_000;
 export const VENCE_APROBACION_MS = 10 * 60_000;
 
 export type GestoPosada = "saludo" | "cobro" | "asiente";
-export type EventoLupita = "toque" | "cobrada" | "aprobada";
+export type EventoLupita = "toque" | "saludo-del-dia" | "cobrada" | "aprobada";
 export type MotivoRetiro = "sheet" | "teclado";
 
 export interface EstadoLupita {
@@ -165,6 +165,7 @@ export function anotarRiesgo(e: EstadoLupita, riesgo: boolean | null, ahora: num
 export function avisar(e: EstadoLupita, evento: EventoLupita, ahora: number): EstadoLupita {
   switch (evento) {
     case "toque":
+    case "saludo-del-dia":
       return gesticular(e, "saludo", ahora);
     case "cobrada":
       return gesticular(e, "cobro", ahora);
