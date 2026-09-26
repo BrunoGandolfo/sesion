@@ -30,7 +30,8 @@ import {
 import { Avatar, Button, Card, Chip } from "@/components/ui";
 import { Latido } from "@/components/ui/movimiento";
 import { IndicadorProcesando } from "@/components/ui/procesando";
-import { estadoClinicoDe, puedeGrabarseHoy } from "@/components/ui/session-row";
+import { sePuedeGrabar } from "@/app/api/_lib/domain";
+import { estadoClinicoDe } from "@/components/ui/session-row";
 import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
@@ -134,7 +135,7 @@ export function accionDe(
     return { tipo: "escribiendo" };
   }
   const sinGrabar = sesion === null || sesion.estado === "grabando" || sinTerminar;
-  const grabable = sinGrabar && puedeGrabarseHoy(turno, ahora);
+  const grabable = sinGrabar && sePuedeGrabar(turno, ahora);
   const grabar = grabable ? (sinAutorizacion ? "autorizar" : "grabar") : null;
   const firma =
     sinAutorizacion && !grabable ? (sinCobrar ? "aviso" : "boton") : null;

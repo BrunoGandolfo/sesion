@@ -5,7 +5,7 @@
 // /api/dashboard y el render. Sin estado, sin efectos, sin React.
 
 import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
-import { esDeudaPendiente } from "@/app/api/_lib/domain";
+import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
 import { clavesDeRiesgo } from "@/components/grabacion/RiesgoDetectadoBanner";
 import { apiGet } from "@/lib/api-client";
 import { enProceso } from "@/lib/notas-en-proceso";
@@ -110,15 +110,13 @@ export interface DiaRepartido {
  * pura: no aplica ninguna regla nueva, solo indexa lo que ya vino resuelto
  * por casos-uso/pendientes-terapeuta.ts.
  *
- * `sinCobrar` viene agrupado por paciente (quien debe seis sesiones es un
- * pendiente, no seis), así que para el turno de AHORA se cruza la pertenencia
- * del paciente con el estado de pago del propio turno: eso es lo que decide
- * si hay algo que cobrar en ESTE turno.
- *
- * Además, como en la fila de la agenda, un turno todavía "programado" cuya
- * hora ya empezó y sigue impago se puede cobrar: el caso de uso de cobrar lo
- * marca realizado (casos-uso/cobrar-turno.ts). Todavía no es deuda —no está
- * en `sinCobrar`—, pero la sesión ya está ocurriendo y la tarjeta lo ofrece.
+ * Si el turno de AHORA tiene algo que cobrar lo decide sePuedeCobrar
+ * (domain.ts), la misma regla con que el servidor acepta el cobro y con que
+ * la fila de la agenda ofrece Cobrar: realizado e impago, o todavía
+ * "programado" con la hora ya empezada —el caso de uso de cobrar lo marca
+ * realizado (casos-uso/cobrar-turno.ts)—. Antes se cruzaba además con
+ * `sinCobrar` por paciente, que no agregaba nada: un turno realizado e impago
+ * es deuda de su paciente por definición.
  */
 export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
   const pendientes = data.pendientes ?? SIN_PENDIENTES;
@@ -134,8 +132,6 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
   const ahoraTurno =
     abierto ?? turnos.find((t) => t.fecha.getTime() >= ahora.getTime()) ?? null;
 
-  const debenPacientes = new Set(pendientes.sinCobrar.map((d) => d.pacienteId));
-
   return {
     inicio: data.inicio,
     pendientes,
@@ -148,11 +144,7 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
     ),
     ahoraTurno,
     enCurso: Boolean(abierto),
-    ahoraSinCobrar:
-      ahoraTurno !== null &&
-      ((debenPacientes.has(ahoraTurno.paciente.id) &&
-        esDeudaPendiente(ahoraTurno)) ||
-        empezoSinCobrar(ahoraTurno, ahora)),
+    ahoraSinCobrar: ahoraTurno !== null && sePuedeCobrar(ahoraTurno, ahora),
   };
 }
 

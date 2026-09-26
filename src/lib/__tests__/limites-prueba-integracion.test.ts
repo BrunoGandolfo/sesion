@@ -34,10 +34,11 @@ async function consultorio(deInvitacion: boolean) {
   return { organizationId, pacienteId };
 }
 
-let minuto = 0;
+// Turnos de ahora: solo se graba un turno de hoy (sePuedeGrabar). Antes eran
+// de ayer, espaciados por hora; sin choque de agenda en juego, la fecha no
+// importa acá más que por eso.
 async function turno(organizationId: string, pacienteId: string) {
-  minuto += 60;
-  return (await base.prisma.turno.create({ data: { organizationId, pacienteId, fecha: new Date(ayer.getTime() + minuto * 60_000), tarifaCobrada: 100 } })).id;
+  return (await base.prisma.turno.create({ data: { organizationId, pacienteId, fecha: new Date(), tarifaCobrada: 100 } })).id;
 }
 
 async function grabar(organizationId: string, pacienteId: string) {

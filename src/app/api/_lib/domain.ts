@@ -14,7 +14,7 @@ import { esDuracion } from "@/lib/constantes-turno";
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
-import { diasEnterosMvd } from "@/lib/fechas-montevideo";
+import { diasEnterosMvd, esMismoDiaMvd } from "@/lib/fechas-montevideo";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -178,7 +178,8 @@ export function diasDesde(fecha: Date | null, ahora: Date): number {
 // Deuda — única fuente de la regla "sesión impaga": turno realizado con pago
 // pendiente. La llaman toPacienteConDeuda y calcularDeudores acá, la query de
 // buscarTurnosConDeuda la aplica en SQL, y de la UI la usan datos.ts (Hoy),
-// ficha-tab, sesiones-tab y turnos-pagos-tab.
+// ficha-tab, turnos-pagos-tab y cobros-view. Si se OFRECE cobrar es otra
+// regla, más ancha: sePuedeCobrar, abajo.
 //
 // La regla estaba escrita DOS veces: acá como comparación y abajo, otra vez,
 // como literal en el `where` de buscarTurnosConDeuda. Si alguien decidía que
@@ -203,6 +204,51 @@ export function esDeudaPendiente(turno: {
     turno.estado === DEUDA_PENDIENTE.estado &&
     turno.pagoEstado === DEUDA_PENDIENTE.pagoEstado
   );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Qué se puede hacer con un turno — la regla que aplica el servidor, escrita
+// una vez para que las pantallas ofrezcan exactamente lo que el servidor
+// acepta. Antes el detalle de Agenda ofrecía Cobrar a un turno programado de
+// más tarde y el servidor contestaba 400; y la hoja dejaba grabar un turno de
+// ayer que el servidor tampoco impedía.
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Si el turno se puede cobrar en `ahora`: sin cobrar y realizado, o sin
+ * cobrar y programado con la hora ya llegada (cobrarlo lo cierra, ver
+ * casos-uso/cobrar-turno.ts). Nunca cancelado, ausente ni pagado.
+ *
+ * Es más ancha que esDeudaPendiente: un programado cuya hora empezó se puede
+ * cobrar pero todavía no es deuda.
+ */
+export function sePuedeCobrar(
+  turno: { estado: string; pagoEstado: string; fecha: Date },
+  ahora: Date,
+): boolean {
+  if (turno.pagoEstado !== "pendiente") return false;
+  if (turno.estado === "realizado") return true;
+  return (
+    turno.estado === "programado" && turno.fecha.getTime() <= ahora.getTime()
+  );
+}
+
+/**
+ * Si se puede grabar el turno en `ahora`: programado o realizado, y del mismo
+ * día de calendario de MONTEVIDEO que `ahora`. La hora no cuenta —una sesión
+ * que empezó tarde se graba igual—; el día sí: un turno de ayer no se graba.
+ *
+ * Un turno que nace al grabar (`alGrabar` en POST /api/turnos) se crea con
+ * la fecha del momento, así que es de hoy por construcción.
+ */
+export function sePuedeGrabar(
+  turno: { estado: string; fecha: Date },
+  ahora: Date,
+): boolean {
+  if (turno.estado !== "programado" && turno.estado !== "realizado") {
+    return false;
+  }
+  return esMismoDiaMvd(turno.fecha, ahora);
 }
 
 export interface TurnoParaDeuda {

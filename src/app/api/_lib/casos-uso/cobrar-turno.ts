@@ -17,7 +17,7 @@
 import type { db } from "@/lib/db";
 import type { MetodoPago, Turno } from "@/types/domain";
 
-import { toTurno } from "../domain";
+import { sePuedeCobrar, toTurno } from "../domain";
 import { ApiError } from "../responses";
 import { cancelarEnviosDelTurno } from "./envios-del-turno";
 
@@ -52,6 +52,15 @@ export const MENSAJE_CONFLICTO =
   "El turno cambió mientras se cobraba. Probá de nuevo.";
 export const MENSAJE_NO_COBRADO = "El turno no está cobrado";
 
+/** Por qué no se puede cobrar un turno que sePuedeCobrar rechazó. El orden
+ *  es el de siempre: primero el pago, después el estado, al final la hora. */
+function motivoDelRechazo(turno: { estado: string; pagoEstado: string }): string {
+  if (turno.pagoEstado === "pagado") return MENSAJE_YA_COBRADO;
+  if (turno.estado === "cancelado") return MENSAJE_CANCELADO;
+  if (turno.estado === "ausente") return MENSAJE_AUSENTE;
+  return MENSAJE_NO_EMPEZO;
+}
+
 /**
  * Registra el pago de un turno.
  *
@@ -78,24 +87,14 @@ export async function cobrarTurno({
     throw new ApiError("Turno no encontrado", 404);
   }
 
-  if (existente.pagoEstado === "pagado") {
-    throw new ApiError(MENSAJE_YA_COBRADO, 400);
-  }
-
-  if (existente.estado === "cancelado") {
-    throw new ApiError(MENSAJE_CANCELADO, 400);
-  }
-
-  if (existente.estado === "ausente") {
-    throw new ApiError(MENSAJE_AUSENTE, 400);
+  // La decisión es sePuedeCobrar, la misma que usan las pantallas para
+  // ofrecer Cobrar; acá solo se elige cuál de los rechazos explicar.
+  if (!sePuedeCobrar(existente, fecha)) {
+    throw new ApiError(motivoDelRechazo(existente), 400);
   }
 
   // Único caso en que el cobro además cierra el turno.
   const cierraElTurno = existente.estado === "programado";
-
-  if (cierraElTurno && existente.fecha.getTime() > fecha.getTime()) {
-    throw new ApiError(MENSAJE_NO_EMPEZO, 400);
-  }
 
   return prisma.$transaction(async (tx) => {
     // updateMany condicionado al estado y al pago que se leyeron: si otra

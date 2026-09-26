@@ -32,7 +32,7 @@ import { enProceso } from "@/lib/notas-en-proceso";
 import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
-import { esDeudaPendiente } from "@/app/api/_lib/domain";
+import { sePuedeCobrar } from "@/app/api/_lib/domain";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaLarga, hora } from "@/lib/format";
@@ -548,7 +548,7 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
       </Link>
     );
   } else if (sesion.estado === "aprobada") {
-    accion = esDeudaPendiente(turno) ? (
+    accion = sePuedeCobrar(turno, new Date()) ? (
       <Button variant="primary" onClick={hoy.onCobrar}>
         Cobrar
       </Button>
@@ -619,7 +619,7 @@ function FilaSesion({ sesion, hoy }: { sesion: DocSesion; hoy: Hoy | null }) {
   const esRevision = sesion.estado === "revision";
   const conParaVos = hayParaVos(sesion.feedback);
   const href = `/sesiones/${sesion.sesionClinicaId}`;
-  const cobrable = hoy?.turno ? esDeudaPendiente(hoy.turno) : false;
+  const cobrable = hoy?.turno ? sePuedeCobrar(hoy.turno, new Date()) : false;
 
   return (
     <div

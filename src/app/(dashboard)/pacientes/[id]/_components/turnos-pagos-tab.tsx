@@ -16,7 +16,7 @@ import {
   CheckDibujado,
   useConfirmacionDibujada,
 } from "@/components/ui/movimiento";
-import { esDeudaPendiente } from "@/app/api/_lib/domain";
+import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
 import { apiDelete, apiPost } from "@/lib/api-client";
 import { fechaCorta, hora, money } from "@/lib/format";
 import {
@@ -323,7 +323,9 @@ function TurnoRow({
   onError: (mensaje: string) => void;
 }) {
   const reducido = useMovimientoReducido();
-  const mostrarCobrar = esDeudaPendiente(turno);
+  // La regla del servidor: también un programado cuya hora ya llegó (cobrarlo
+  // lo cierra); nunca uno que todavía no empezó.
+  const mostrarCobrar = sePuedeCobrar(turno, new Date());
   const mostrarPagado = turno.estado === "realizado" && turno.pagoEstado === "pagado";
 
   // La confirmación se abre debajo de la fila, no en un sheet: es una

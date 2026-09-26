@@ -23,6 +23,7 @@ import type { DiagnosticoGrabacion, PausaGrabacion } from "@/lib/sesion-clinica/
 
 import { DETALLE_MAX_ARRAY } from "../auditoria-pura";
 
+import { sePuedeGrabar } from "../domain";
 import { ApiError } from "../responses";
 import { SESION_SELECT, toSesionClinicaResponse } from "../sesion-clinica";
 
@@ -66,18 +67,32 @@ export async function leerSesionPorTurno({ prisma, organizationId, turnoId }: Ba
   return fila ? toSesionClinicaResponse(fila) : null;
 }
 
-export async function prepararAudio({ prisma, organizationId, turnoId }: Base & { turnoId: string }) {
+/** Por qué no se crea la grabación de un turno que no es de hoy. */
+export const MENSAJE_GRABAR_OTRO_DIA =
+  "Solo se puede grabar un turno el mismo día. Para grabar ahora, empezá desde la ficha de la paciente.";
+
+/**
+ * Crea la sesión clínica de un turno, o devuelve la que ya está grabando.
+ *
+ * Una grabación NUEVA solo se crea si el turno es de hoy en Montevideo
+ * (sePuedeGrabar, la misma regla con que las pantallas ofrecen Grabar).
+ * Reanudar una que ya está en "grabando" no pasa por esa regla: la
+ * grabación empezó el día del turno y cortarla pasada la medianoche dejaría
+ * el audio en el teléfono sin a dónde ir.
+ */
+export async function prepararAudio({ prisma, organizationId, turnoId, ahora = new Date() }: Base & { turnoId: string; ahora?: Date }) {
   return prisma.$transaction(async (tx) => {
     // Serializa dos inicios del mismo turno sin reemplazar su identidad.
     const tocado = await tx.turno.updateMany({ where: { id: turnoId, organizationId, estado: { in: ["programado", "realizado"] } }, data: { actualizadoEn: new Date() } });
     if (!tocado.count) throw new ApiError("El turno no está disponible para grabar", 409);
-    const turno = await tx.turno.findUniqueOrThrow({ where: { id: turnoId }, select: { pacienteId: true } });
+    const turno = await tx.turno.findUniqueOrThrow({ where: { id: turnoId }, select: { pacienteId: true, estado: true, fecha: true } });
     if (!await consentimientoVigenteDe(tx, turno.pacienteId, organizationId)) throw new ApiError("Falta consentimiento vigente para grabar", 400);
     const existente = await tx.sesionClinica.findUnique({ where: { turnoId }, select: { id: true, estado: true } });
     if (existente) {
       if (existente.estado !== "grabando") throw new ApiError("La grabación ya se cerró. Revisá su estado.", 409);
       return { id: existente.id };
     }
+    if (!sePuedeGrabar(turno, ahora)) throw new ApiError(MENSAJE_GRABAR_OTRO_DIA, 400);
     // Una grabación nueva suma al contador del consultorio. En un consultorio
     // de prueba, sólo si no llegó al tope: el UPDATE toma el lock de la fila y
     // vuelve a mirar la condición, así dos inicios a la vez no pasan del tope.
