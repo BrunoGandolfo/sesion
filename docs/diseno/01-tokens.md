@@ -34,8 +34,10 @@ cuentas están escritas al lado de cada valor en `globals.css`.
 
 | Familia | Dónde se usa | Pesos |
 |---|---|---|
-| Fraunces | Sólo títulos: el título de cada pantalla, de cada sheet, de cada sección (`src/lib/fonts.ts:3-8`, `globals.css:78`) | 400 a 700; en la app, 500 |
-| Plus Jakarta Sans | Todo lo demás: texto, botones, rótulos, campos, números (`src/lib/fonts.ts:10-15`, `globals.css:79`, `:101`) | 400 a 700 |
+| Fraunces | Sólo títulos: el título de cada pantalla, de cada sheet, de cada sección (`src/lib/fonts.ts:3-9`, `globals.css:78`) | 400 a 700; en la app, 500 |
+| Plus Jakarta Sans | Todo lo demás: texto, botones, rótulos, campos, números (`src/lib/fonts.ts:11-16`, `globals.css:79`, `:101`) | 400 a 700 |
+
+Las dos salen de archivos del repo (`src/app/fuentes/`, woff2 variable del subconjunto latin bajado de Google Fonts, con su licencia OFL), cargados con `next/font/local`: ningún build depende de Google.
 
 Los números van siempre en Jakarta con cifras de ancho fijo (`tabular-nums`),
 para que una columna de importes quede alineada (`globals.css:113-121`).
