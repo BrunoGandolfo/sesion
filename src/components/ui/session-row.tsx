@@ -4,7 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { TurnoConPaciente } from "@/types/domain";
-import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
+import {
+  esDeudaPendiente,
+  sePuedeCobrar,
+  sePuedeGrabar,
+} from "@/app/api/_lib/domain";
 import { hora, money } from "@/lib/format";
 import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import {
@@ -118,25 +122,6 @@ function statusFor(turno: TurnoConPaciente): Status {
 
 
 /**
- * Se puede grabar mientras el turno siga vivo —programado o realizado— y sea
- * del día de hoy en Montevideo (no en la zona del dispositivo: una sesión de
- * las 21:30 es de hoy aunque el reloj UTC ya diga mañana).
- *
- * La hora del turno no entra en la cuenta. Antes la fila escondía "Grabar
- * sesión" apenas pasaba la hora, y una sesión que empezó diez minutos tarde
- * quedaba sin botón para grabarla —mientras la API y el FAB de la ficha la
- * dejaban grabar igual. El límite real es el día: grabar el turno de ayer no
- * es grabar una sesión, es otra cosa.
- */
-export function puedeGrabarseHoy(
-  turno: Pick<TurnoConPaciente, "estado" | "fecha">,
-  ahora: Date,
-): boolean {
-  if (turno.estado !== "programado" && turno.estado !== "realizado") return false;
-  return esMismoDiaMvd(turno.fecha, ahora);
-}
-
-/**
  * Grabar y cobrar son independientes. Antes, pasada la hora con el pago
  * pendiente, la única acción era Cobrar y Grabar desaparecía: una sesión que
  * empezó cinco minutos tarde quedaba sin botón para grabarla. Ahora:
@@ -162,16 +147,13 @@ export function accionesDe({
 }: SessionRowProps): Accion[] {
   if (turno.estado === "cancelado" || turno.estado === "ausente") return [];
 
-  const horaPasada = ahora
-    ? turno.fecha.getTime() <= ahora.getTime()
-    : turno.estado === "realizado";
-  const cobrable = horaPasada && turno.pagoEstado === "pendiente" && !!onCobrar;
-
-  // Sin `ahora` no se puede saber si el turno es de hoy: se conserva la regla
-  // vieja (se graba lo que todavía figura como programado).
-  const puedeGrabar = ahora
-    ? puedeGrabarseHoy(turno, ahora)
-    : turno.estado === "programado";
+  // Las dos reglas son las del servidor (sePuedeCobrar, sePuedeGrabar de
+  // domain.ts): la fila no ofrece nada que la API vaya a rechazar. Sin
+  // `ahora` no se sabe si la hora llegó ni si el turno es de hoy: se cobra
+  // solo lo ya realizado y no se ofrece grabar.
+  const cobrable =
+    (ahora ? sePuedeCobrar(turno, ahora) : esDeudaPendiente(turno)) && !!onCobrar;
+  const puedeGrabar = ahora ? sePuedeGrabar(turno, ahora) : false;
   const estadoSesion = turno.sesionClinica?.estado;
   const yaPasoLaGrabacion =
     estadoSesion !== undefined &&

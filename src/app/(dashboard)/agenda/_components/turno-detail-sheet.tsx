@@ -57,6 +57,7 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
+import { sePuedeCobrar, sePuedeGrabar } from "@/app/api/_lib/domain";
 import { estadoClinicoDe } from "@/components/ui/session-row";
 import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 
@@ -218,8 +219,11 @@ export function TurnoDetailSheet({
   const esRealizado = turno.estado === "realizado";
   const esCancelado = turno.estado === "cancelado";
   const esAusente = turno.estado === "ausente";
-  const sinCobrar = turno.pagoEstado === "pendiente";
-  const puedeCobrar = (esProgramado || esRealizado) && sinCobrar;
+  // Las reglas del servidor (domain.ts): no se ofrece Cobrar a un turno cuya
+  // hora no llegó, ni Grabar a uno que no es de hoy.
+  const ahora = new Date();
+  const puedeCobrar = sePuedeCobrar(turno, ahora);
+  const puedeGrabar = sePuedeGrabar(turno, ahora);
   // Se puede deshacer mientras el turno siga cobrado. Es una reversión: el
   // turno vuelve a quedar sin cobrar y se puede volver a cobrar.
   const puedeDeshacerCobro = turno.pagoEstado === "pagado";
@@ -463,7 +467,7 @@ export function TurnoDetailSheet({
                   <p className="text-[13px] text-ink-500" role="status">
                     {NOTA_PROCESANDO}
                   </p>
-                ) : sesionDatos ? null : (
+                ) : sesionDatos || !puedeGrabar ? null : (
                   <Button asChild variant="secondary">
                     <Link href={`/grabar/${turno.id}`}>
                       <Mic size={16} strokeWidth={1.8} aria-hidden="true" />

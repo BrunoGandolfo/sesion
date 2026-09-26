@@ -15,6 +15,10 @@ el borrador de la nota clínica.
   tocás **Grabar sesión** (ese turno no genera recordatorio). Ese turno se crea
   aunque a esa hora haya otro en la agenda: la sesión está ocurriendo, y un
   choque de horarios no impide grabarla.
+- **Un turno se graba el día que está agendado.** El de ayer ya no ofrece
+  **Grabar sesión** en la agenda. Si la sesión es ahora, grabala desde la
+  ficha con **Grabar**: se crea el turno de hoy, como arriba. Una grabación
+  que ya estaba en marcha se puede retomar aunque haya pasado la medianoche.
 - **Una cuenta de prueba graba hasta 15 sesiones.** Si tu consultorio se creó
   con una invitación, arriba dice cuántas llevás. Al llegar a 15, dice
   *"Llegaste a las 15 sesiones grabadas de la prueba y no podés grabar más.
@@ -154,8 +158,8 @@ pendientes, aparece con el nombre de la paciente y dos opciones:
   teléfono, abrilo desde ese.
 - **Descartar** pregunta *"¿Descartar esta grabación?"* y, al confirmar con
   **Descartar la grabación**, la sesión se quita y el turno queda libre para
-  volver a grabar. Si el audio llegó a subirse, también se borra. No queda
-  nada para eliminar después. No se puede deshacer.
+  volver a grabar, si es de hoy. Si el audio llegó a subirse, también se
+  borra. No queda nada para eliminar después. No se puede deshacer.
 
 Antes no aparece: puede estar grabando o enviando ahora mismo. Mientras grabás
 no llega nada al servidor, por eso una grabación abierta tiene más margen.

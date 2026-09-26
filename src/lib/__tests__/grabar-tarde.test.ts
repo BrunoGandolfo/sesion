@@ -1,5 +1,6 @@
 /**
- * `puedeGrabarseHoy` — cuándo la fila de sesión ofrece grabar.
+ * `sePuedeGrabar` (domain.ts) — cuándo se puede grabar un turno: la fila
+ * de sesión lo ofrece y el servidor lo acepta con la misma regla.
  *
  * La fila escondía "Grabar sesión" apenas pasaba la hora del turno, mientras
  * la API y el FAB de la ficha la dejaban grabar igual: una sesión que empezó
@@ -14,7 +15,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { puedeGrabarseHoy } from "@/components/ui/session-row";
+import { sePuedeGrabar } from "@/app/api/_lib/domain";
 import type { TurnoEstado } from "@/types/domain";
 
 /** Reloj de pared de Montevideo → instante. */
@@ -26,43 +27,43 @@ function turno(estado: TurnoEstado, fecha: Date) {
   return { estado, fecha };
 }
 
-describe("puedeGrabarseHoy", () => {
+describe("sePuedeGrabar", () => {
   it("sí: el turno es de hoy y todavía no llegó su hora", () => {
     expect(
-      puedeGrabarseHoy(turno("programado", mvd(9, 5, 16)), mvd(9, 5, 15)),
+      sePuedeGrabar(turno("programado", mvd(9, 5, 16)), mvd(9, 5, 15)),
     ).toBe(true);
   });
 
   it("sí: la hora ya pasó pero el turno es de hoy — el caso que se rompía", () => {
     expect(
-      puedeGrabarseHoy(turno("programado", mvd(9, 5, 15)), mvd(9, 5, 15, 40)),
+      sePuedeGrabar(turno("programado", mvd(9, 5, 15)), mvd(9, 5, 15, 40)),
     ).toBe(true);
   });
 
   it("sí: el turno ya está realizado y es de hoy", () => {
     expect(
-      puedeGrabarseHoy(turno("realizado", mvd(9, 5, 15)), mvd(9, 5, 18)),
+      sePuedeGrabar(turno("realizado", mvd(9, 5, 15)), mvd(9, 5, 18)),
     ).toBe(true);
   });
 
   it("no: el turno es de ayer", () => {
     expect(
-      puedeGrabarseHoy(turno("programado", mvd(9, 4, 15)), mvd(9, 5, 10)),
+      sePuedeGrabar(turno("programado", mvd(9, 4, 15)), mvd(9, 5, 10)),
     ).toBe(false);
   });
 
   it("no: el turno es de mañana", () => {
     expect(
-      puedeGrabarseHoy(turno("programado", mvd(9, 6, 15)), mvd(9, 5, 10)),
+      sePuedeGrabar(turno("programado", mvd(9, 6, 15)), mvd(9, 5, 10)),
     ).toBe(false);
   });
 
   it("no: cancelado o ausente, aunque sea de hoy", () => {
     expect(
-      puedeGrabarseHoy(turno("cancelado", mvd(9, 5, 15)), mvd(9, 5, 14)),
+      sePuedeGrabar(turno("cancelado", mvd(9, 5, 15)), mvd(9, 5, 14)),
     ).toBe(false);
     expect(
-      puedeGrabarseHoy(turno("ausente", mvd(9, 5, 15)), mvd(9, 5, 14)),
+      sePuedeGrabar(turno("ausente", mvd(9, 5, 15)), mvd(9, 5, 14)),
     ).toBe(false);
   });
 
@@ -71,18 +72,18 @@ describe("puedeGrabarseHoy", () => {
     // mañana y la fila no ofrecería grabarlo.
     const sesion = mvd(9, 5, 21, 30);
     expect(sesion.toISOString()).toBe("2026-09-06T00:30:00.000Z");
-    expect(puedeGrabarseHoy(turno("programado", sesion), mvd(9, 5, 21))).toBe(true);
+    expect(sePuedeGrabar(turno("programado", sesion), mvd(9, 5, 21))).toBe(true);
   });
 
   it("a las 23:59 de Montevideo sigue siendo el mismo día", () => {
     expect(
-      puedeGrabarseHoy(turno("programado", mvd(9, 5, 9)), mvd(9, 5, 23, 59)),
+      sePuedeGrabar(turno("programado", mvd(9, 5, 9)), mvd(9, 5, 23, 59)),
     ).toBe(true);
   });
 
   it("un minuto después, ya no", () => {
     expect(
-      puedeGrabarseHoy(turno("programado", mvd(9, 5, 9)), mvd(9, 6, 0, 1)),
+      sePuedeGrabar(turno("programado", mvd(9, 5, 9)), mvd(9, 6, 0, 1)),
     ).toBe(false);
   });
 });
