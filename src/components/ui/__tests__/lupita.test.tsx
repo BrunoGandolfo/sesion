@@ -12,7 +12,6 @@ import { SUAVE, TIEMPOS, TIEMPOS_LUPITA } from "@/lib/movimiento";
 import { obtenerLupita, parpadear, reiniciarLupitaParaTests } from "@/lib/lupita-presencia";
 import {
   Lupita,
-  LupitaMenu,
   POSES_LUPITA,
   SEMICICLOS_PIENSA,
   TAMANOS_LUPITA,
@@ -263,15 +262,6 @@ it("recibir otro fragmento conserva el dibujo quieto", () => {
   expect(container.querySelector("[data-motion-span]")).toBeNull();
 });
 
-it("el menú hace un bob de 3 px por toque, sin loop ni movimiento reducido", () => {
-  const { container, rerender } = render(<LupitaMenu toque={0} />);
-  const antes = container.firstElementChild;
-  expect(JSON.parse(antes!.getAttribute("data-animate")!)).toEqual({ y: 0 });
-  rerender(<LupitaMenu toque={1} />);
-  expect(container.firstElementChild).not.toBe(antes);
-  expect(JSON.parse(container.firstElementChild!.getAttribute("data-animate")!)).toEqual({ y: [0, -3, 0] });
-  expect(JSON.parse(container.firstElementChild!.getAttribute("data-transition")!)).toEqual({ duration: 0.15, ease: [...SUAVE] });
-  preferencias.reducido = true;
-  rerender(<LupitaMenu toque={2} />);
-  expect(container.querySelector("span")).toBeNull();
-});
+// El saltito de 150 ms del ítem del menú (LupitaMenu) se fue con la posada:
+// el ítem es quieto y la que vive es la posada (06, D0). Su prueba está en
+// layout/__tests__/presencia-lupita.test.tsx.

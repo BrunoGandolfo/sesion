@@ -5,6 +5,7 @@ import {
   ESTADO_INICIAL,
   VENCE_APROBACION_MS,
   admitePosada,
+  anotarRiesgo,
   anotarRutaLupita,
   avisar,
   avisarLupita,
@@ -21,8 +22,10 @@ import {
 
 const T0 = 1_000_000;
 
+/** Una ruta con la posada a la vista. En Hoy, con el día ya leído sin
+ *  riesgo: si no, no aparece. */
 function en(ruta: string): EstadoLupita {
-  return cambiarRuta(ESTADO_INICIAL, ruta, T0);
+  return cambiarRuta({ ...ESTADO_INICIAL, riesgoDelDia: false }, ruta, T0);
 }
 
 describe("rutas con posada (06, D0: lista de permitidas)", () => {
@@ -58,8 +61,19 @@ describe("rutas con posada (06, D0: lista de permitidas)", () => {
 });
 
 describe("retiro", () => {
-  it("un sheet, el teclado o el riesgo del día la retiran aunque la ruta la admita", () => {
-    for (const motivo of ["sheet", "teclado", "riesgo-del-dia"] as const) {
+  it("en Hoy no aparece hasta que Hoy confirma que no hay riesgo en el día (R1)", () => {
+    const hoy = cambiarRuta(ESTADO_INICIAL, "/", T0);
+    expect(posadaVisible(hoy)).toBe(false);
+    expect(posadaVisible(anotarRiesgo(hoy, true, T0))).toBe(false);
+    expect(posadaVisible(anotarRiesgo(hoy, false, T0))).toBe(true);
+    // Si se va de Hoy o la lectura falla, vuelve a no saberse.
+    expect(posadaVisible(anotarRiesgo(anotarRiesgo(hoy, false, T0), null, T0))).toBe(false);
+    // El riesgo del día es cosa de Hoy: en las otras cuatro no la retira.
+    expect(posadaVisible(cambiarRuta(ESTADO_INICIAL, "/agenda", T0))).toBe(true);
+  });
+
+  it("un sheet o el teclado la retiran aunque la ruta la admita", () => {
+    for (const motivo of ["sheet", "teclado"] as const) {
       const retirada = retirar(en("/"), motivo, true, T0);
       expect(posadaVisible(retirada)).toBe(false);
       expect(posadaVisible(retirar(retirada, motivo, false, T0))).toBe(true);
@@ -68,10 +82,10 @@ describe("retiro", () => {
 
   it("vuelve sólo cuando se levantan todos los motivos", () => {
     let e = retirar(en("/"), "sheet", true, T0);
-    e = retirar(e, "riesgo-del-dia", true, T0);
+    e = retirar(e, "teclado", true, T0);
     e = retirar(e, "sheet", false, T0);
     expect(posadaVisible(e)).toBe(false);
-    e = retirar(e, "riesgo-del-dia", false, T0);
+    e = retirar(e, "teclado", false, T0);
     expect(posadaVisible(e)).toBe(true);
   });
 
@@ -131,15 +145,15 @@ describe("aprobación guardada", () => {
     e = avisar(e, "aprobada", T0);
     e = cambiarRuta(e, "/sesiones/s2", T0 + 10);
     e = avisar(e, "aprobada", T0 + 20);
-    e = cambiarRuta(e, "/", T0 + 30);
+    e = cambiarRuta(e, "/agenda", T0 + 30);
     expect(e.gesto).toEqual({ tipo: "asiente", n: 1 });
-    e = cambiarRuta(cambiarRuta(e, "/sesiones/s3", T0 + 40), "/", T0 + ENFRIAMIENTO_MS + 50);
+    e = cambiarRuta(cambiarRuta(e, "/sesiones/s3", T0 + 40), "/agenda", T0 + ENFRIAMIENTO_MS + 50);
     expect(e.gesto).toEqual({ tipo: "asiente", n: 1 });
   });
 
   it("vencida a los 10 minutos, se descarta sin gesto", () => {
     let e = avisar(cambiarRuta(ESTADO_INICIAL, "/sesiones/s1", T0), "aprobada", T0);
-    e = cambiarRuta(e, "/", T0 + VENCE_APROBACION_MS);
+    e = cambiarRuta(e, "/agenda", T0 + VENCE_APROBACION_MS);
     expect(e.gesto).toBeNull();
     expect(e.aprobacionGuardada).toBeNull();
   });
@@ -151,6 +165,14 @@ describe("aprobación guardada", () => {
     expect(e.gesto?.tipo).toBe("cobro");
   });
 
+  it("en Hoy espera a que Hoy confirme el día sin riesgo, y ahí asiente", () => {
+    let e = avisar(cambiarRuta(ESTADO_INICIAL, "/sesiones/s1", T0), "aprobada", T0);
+    e = cambiarRuta(e, "/", T0 + 1);
+    expect(e.gesto).toBeNull();
+    e = anotarRiesgo(e, false, T0 + 2);
+    expect(e.gesto?.tipo).toBe("asiente");
+  });
+
   it("si la posada está a la vista, asiente ahí mismo", () => {
     expect(avisar(en("/"), "aprobada", T0).gesto?.tipo).toBe("asiente");
   });
@@ -158,7 +180,7 @@ describe("aprobación guardada", () => {
   it("volver con un sheet abierto no la gasta: espera a que se vea", () => {
     let e = avisar(cambiarRuta(ESTADO_INICIAL, "/sesiones/s1", T0), "aprobada", T0);
     e = retirar(e, "sheet", true, T0 + 1);
-    e = cambiarRuta(e, "/", T0 + 2);
+    e = cambiarRuta(e, "/agenda", T0 + 2);
     expect(e.gesto).toBeNull();
     e = retirar(e, "sheet", false, T0 + 3);
     expect(e.gesto?.tipo).toBe("asiente");
@@ -169,7 +191,7 @@ describe("almacén", () => {
   beforeEach(() => reiniciarLupitaParaTests());
 
   it("avisarLupita dice si hubo gesto, para que el toque espere el saludo", () => {
-    anotarRutaLupita("/");
+    anotarRutaLupita("/agenda");
     expect(avisarLupita("toque")).toBe(true);
     expect(avisarLupita("toque")).toBe(false);
     expect(obtenerLupita().gesto?.tipo).toBe("saludo");

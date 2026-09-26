@@ -218,7 +218,6 @@ export function trazosDe(pose: PoseLupita, chicaPlegada = false) {
 /** Gestos finitos; el panel usa las mismas duraciones para su secuencia. */
 export const DURACION_BROTA = TIEMPOS.pliegue / 1000;
 export const DURACION_CELEBRA = TIEMPOS.pliegue / 1000;
-export const DURACION_TOQUE_MENU = TIEMPOS.breve / 1000;
 /** Saludo y cobro: ida y vuelta, 450 ms. */
 export const DURACION_GESTO = TIEMPOS_LUPITA.gesto / 1000;
 /** Asiente: el mismo gesto un poco más corto (06, sección 3: ~400 ms). */
@@ -489,26 +488,6 @@ export function Lupita({
       initial={ENTRADA[movimiento].initial}
       animate={ENTRADA[movimiento].animate}
       transition={TRANSICION}
-    >
-      {dibujo}
-    </motion.span>
-  );
-}
-
-/** Única reacción del menú: el botón incrementa toque, también con teclado.
- * No cambia estados del panel ni activa sus loops. */
-export function LupitaMenu({ toque }: { toque: number }) {
-  const reducido = useMovimientoReducido();
-  const dibujo = <Lupita pose="saluda" tamano={TAMANOS_LUPITA.inline} />;
-  if (reducido) return dibujo;
-  return (
-    <motion.span
-      key={toque}
-      aria-hidden="true"
-      className="inline-flex"
-      initial={{ y: 0 }}
-      animate={{ y: toque === 0 ? 0 : [0, -3, 0] }}
-      transition={{ duration: DURACION_TOQUE_MENU, ease: SUAVE }}
     >
       {dibujo}
     </motion.span>

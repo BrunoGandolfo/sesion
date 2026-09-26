@@ -65,13 +65,16 @@ export const VENCE_APROBACION_MS = 10 * 60_000;
 
 export type GestoPosada = "saludo" | "cobro" | "asiente";
 export type EventoLupita = "toque" | "cobrada" | "aprobada";
-export type MotivoRetiro = "sheet" | "riesgo-del-dia" | "teclado";
+export type MotivoRetiro = "sheet" | "teclado";
 
 export interface EstadoLupita {
   /** La ruta actual, la anota la posada desde el layout. */
   ruta: string | null;
   /** Motivos que la sacan aunque la ruta la admita. */
   retiradaPor: readonly MotivoRetiro[];
+  /** Si alguna sesión de hoy trae una señal de riesgo, según Hoy. `null`
+   *  mientras Hoy no lo haya dicho (cargando, falló, o no está montada). */
+  riesgoDelDia: boolean | null;
   /** El último gesto aceptado. `n` sube en cada uno para reiniciar la
    *  animación aunque se repita el tipo. */
   gesto: { tipo: GestoPosada; n: number } | null;
@@ -87,14 +90,22 @@ export interface EstadoLupita {
 export const ESTADO_INICIAL: EstadoLupita = {
   ruta: null,
   retiradaPor: [],
+  riesgoDelDia: null,
   gesto: null,
   ultimoGestoEn: null,
   aprobacionGuardada: null,
   vivasEnContenido: 0,
 };
 
+/**
+ * En Hoy la regla de 04 es "ese día Lupita no aparece", y Hoy lee el riesgo
+ * del día de forma asíncrona. Si la posada se retirara cuando llega el dato,
+ * un día con riesgo se la vería mientras carga. Por eso es al revés: en Hoy
+ * NO aparece hasta que la pantalla confirma que no hay riesgo (R1).
+ */
 export function posadaVisible(e: EstadoLupita): boolean {
-  return admitePosada(e.ruta) && e.retiradaPor.length === 0;
+  if (!admitePosada(e.ruta) || e.retiradaPor.length > 0) return false;
+  return e.ruta !== "/" || e.riesgoDelDia === false;
 }
 
 /** Visible y sin otra Lupita viva en pantalla: respira y parpadea. */
@@ -143,6 +154,12 @@ export function retirar(
     ? [...e.retiradaPor, motivo]
     : e.retiradaPor.filter((m) => m !== motivo);
   return alVolver(e, { ...e, retiradaPor }, ahora);
+}
+
+/** Lo que dice Hoy del riesgo del día; `null` al irse o si no pudo leerlo. */
+export function anotarRiesgo(e: EstadoLupita, riesgo: boolean | null, ahora: number): EstadoLupita {
+  if (e.riesgoDelDia === riesgo) return e;
+  return alVolver(e, { ...e, riesgoDelDia: riesgo }, ahora);
 }
 
 export function avisar(e: EstadoLupita, evento: EventoLupita, ahora: number): EstadoLupita {
@@ -200,6 +217,12 @@ export function avisarLupita(evento: EventoLupita): boolean {
 
 export function retirarLupita(motivo: MotivoRetiro, activo: boolean): void {
   actualizar((e) => retirar(e, motivo, activo, Date.now()));
+}
+
+/** Hoy: `false` cuando leyó el día y no hay ninguna señal de riesgo, `true`
+ *  si la hay, `null` mientras carga, si falló y al desmontarse. */
+export function anotarRiesgoDelDiaLupita(riesgo: boolean | null): void {
+  actualizar((e) => anotarRiesgo(e, riesgo, Date.now()));
 }
 
 export function anotarRutaLupita(ruta: string | null): void {

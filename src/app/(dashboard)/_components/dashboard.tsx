@@ -10,6 +10,7 @@ import { EsqueletoHoy } from "@/components/esqueletos";
 import { useSeguimientoNotas } from "@/components/layout/avisos-de-notas";
 import { IndicadorProcesando } from "@/components/ui/procesando";
 import { seguirNota } from "@/lib/notas-en-proceso";
+import { anotarRiesgoDelDiaLupita } from "@/lib/lupita-presencia";
 import { Toast } from "@/components/ui";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
 import type { VarianteToast } from "@/components/ui/toast";
@@ -102,6 +103,15 @@ export function Dashboard() {
       cancelado = true;
     };
   }, [reloadKey]);
+
+  // Lupita posada (06-lupita-presencia.md, R1): en Hoy no aparece hasta que
+  // esta pantalla dice que el día no trae ninguna señal de riesgo. Mientras
+  // carga o si la lectura falló, no se sabe, y no aparece.
+  const riesgoDelDia = estado ? estado.riesgoEnElDia : null;
+  React.useEffect(() => {
+    anotarRiesgoDelDiaLupita(fallo ? null : riesgoDelDia);
+  }, [riesgoDelDia, fallo]);
+  React.useEffect(() => () => anotarRiesgoDelDiaLupita(null), []);
 
   // Las notas del día que se están escribiendo: las sigue el aviso del panel
   // (avisos-de-notas.tsx) y, cuando alguna termina, Hoy se vuelve a leer
