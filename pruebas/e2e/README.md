@@ -96,3 +96,13 @@ Ese test usa HTML mínimo para probar las aserciones de desborde y alertas; no i
 - Safari, Firefox, teléfonos físicos, teclado nativo, instalación PWA, pantalla bloqueada y gestos del sistema. 390 × 500 no equivale a un teclado real.
 - Calidad clínica o exactitud de IA, ortografía general, contraste, comparación pixel a pixel ni toda superposición vertical. Ellipsis intencionales y grillas desplazables no se consideran automáticamente roturas.
 - Concurrencia con otra persona, la disponibilidad futura del servicio ni atomicidad frente a una caída durante la limpieza. Verde certifica esta ejecución y los pasos listados, no que toda la aplicación funcione.
+
+## Capturas para diseño
+
+`capturas.spec.ts` saca capturas de pantalla a 390 × 844 y 1280 × 900 para el cierre de cada tarea de frontend (`.claude/skills/diseno-sesion/SKILL.md`). Hoy cubre solo `/login`, sin sesión; las pantallas con sesión se sumarán cuando haya una usuaria E2E para esto.
+
+Con `npm run dev` levantado en el puerto 3000:
+
+    CAPTURAS_URL=http://localhost:3000 npx vitest run pruebas/e2e/capturas.spec.ts
+
+Deja `login-390.png` y `login-1280.png` en `pruebas/e2e/resultados/capturas/`, una carpeta que Git ignora. Usa vitest y la librería `playwright` que ya están en el repo, con Chromium instalado como en el recorrido. Si `CAPTURAS_URL` no está definida, el archivo se omite: `npm test` lo recolecta como cualquier `*.spec.ts` sin abrir un navegador. Contra `next dev`, la captura de 1280 puede incluir el indicador de desarrollo de Next abajo a la izquierda.
