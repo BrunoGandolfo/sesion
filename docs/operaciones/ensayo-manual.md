@@ -1,7 +1,7 @@
 # Ensayo manual de restauración: procedimiento para el dueño
 
-Para correr **antes de vaciar la base** (`docs/operaciones/reconstruir-produccion.md`
-§3) y, después, cada tres meses. Es el único ensayo que prueba que la
+Para correr **antes de vaciar la base de prueba** y, después, cada tres meses.
+Es el único ensayo que prueba que la
 historia clínica de un respaldo **se puede leer**: el automático
 (`.github/workflows/ensayo-restauracion.yml`) restaura y cuenta, pero no tiene
 ninguna clave clínica, a propósito, y no descifra nada.
@@ -13,9 +13,25 @@ está marcado como **no verificado** en §7.
 Qué hace, en una línea: bajar de R2 la copia diaria más reciente y la mensual
 más vieja, descifrar cada una con gpg, restaurarla en un Postgres 17 local en
 Docker, comprobar el esquema, filas y claves foráneas, **descifrar con el
-llavero** la nota clínica y el contexto longitudinal más viejos y más nuevos
+llavero** la nota clínica y la versión del Recorrido más viejas y más nuevas
 (`scripts/ensayo/ensayo-manual.sh`) y la transcripción más vieja y más nueva
 (bloque de §3.5), y dejar un acta sin texto clínico.
+
+**Qué hay en R2.** Producción se reconstruyó el 17-sep-2026: se vació el
+esquema y se aplicó el nuevo (`prisma/migrations/0_init` y siguientes), con
+cifrado **ENC2** y el llavero `CLAVES_CIFRADO`. Los logs de
+`.github/workflows/backup.yml` lo muestran: la copia del 17-sep a las 11:26 UTC
+(`backups/sesion-backup-2026-09-17-112606.dump.gpg`) todavía tiene 14 tablas
+con datos, la del 18-sep ya tiene 22. Entonces:
+
+- la diaria más reciente y la mensual `2026-09-22-112134` son del **esquema
+  nuevo, ENC2**: se abren con el `CLAVES_CIFRADO` real de producción;
+- las diarias hasta la `2026-09-17-112606` inclusive son de la base
+  **anterior** (esquema `produccion-d02ae0e`, **ENC1**, clave
+  `NOTES_ENCRYPTION_KEY`). La retención de 30 días las borra: la última
+  desaparece con la corrida del respaldo del 17 o del 18 de octubre, según la
+  hora. Mientras exista, se puede ensayar una como tercera prueba (§3.6b),
+  **opcional**.
 
 ---
 
@@ -30,30 +46,22 @@ cargan con `read -rs` en la misma terminal (§3.1) y se borran al final (§3.7).
 | `R2_BUCKET` | Bucket de **respaldos** (no confundir con `R2_BUCKET_NAME`, el de audio; pueden coincidir) | Copia del dueño del secret de Actions `R2_BUCKET`. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Token de R2 con lectura sobre ese bucket | Copia del dueño de los secrets `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`. GitHub **no deja leer** un secret ya cargado. Si no hay copia: crear en Cloudflare un token nuevo de sólo lectura (*Object Read*) para ese bucket y borrarlo al terminar; no reemplazar el de Actions. |
 | `BACKUP_ENCRYPTION_KEY` | Passphrase de gpg de los respaldos | La copia **offline** que pide `.github/workflows/backup.yml` (línea 22). El secret de Actions se cargó el 3-sep-2026 y no cambió desde entonces, así que todas las copias que hay en R2 hoy usan ese mismo valor. Si no existe copia offline, **parar**: ni este ensayo ni una restauración real son posibles, y eso es un hallazgo más grave que cualquier otro. |
-| `CLAVES_CIFRADO` | El llavero, formato `id=<32 bytes base64>[,id=…]` | Ver abajo: para las copias de **hoy** es la clave ENC1 de la app vieja. |
+| `CLAVES_CIFRADO` | El llavero ENC2, formato `id=<32 bytes base64>[,id=…]` | La variable `CLAVES_CIFRADO` de **Vercel → proyecto de Sesión → Production**, completa (con todas las claves que tenga, incluidas las retiradas que se conserven para respaldos). Si está marcada *Sensitive* no se puede leer: sale del gestor de contraseñas del dueño. La variable de Actions `CLAVES_CIFRADO_IDS` (hoy `1`) dice qué ids se esperan; el llavero tiene que traer al menos esos. |
+| `CLAVE_ENC1` | Sólo para la prueba opcional §3.6b: la `NOTES_ENCRYPTION_KEY` de la app anterior (32 bytes base64) | Gestor de contraseñas del dueño, o la variable del proyecto de Vercel si todavía existe y no es *Sensitive*. |
 
-**Qué va en `CLAVES_CIFRADO` para estas copias.** Todas las copias que hay hoy
-en R2 son de la base de producción anterior (esquema `produccion-d02ae0e`,
-cifrado **ENC1**): así lo dice el acta automática del 16-sep (issue #33, "123
-blobs sin identificador de clave", "blobs por clave: ninguna"). ENC1 se cifraba
-con **`NOTES_ENCRYPTION_KEY`** de la versión anterior (32 bytes en base64, igual
-formato que una entrada del llavero; ver `git show 1e9312e^:src/lib/encryption.ts`).
-Entonces:
+**Por qué `CLAVE_ENC1` va aparte.** ENC1 no guarda id de clave: el verificador
+prueba cada clave del llavero. Para esa prueba se arma un llavero de una sola
+entrada, `1=<NOTES_ENCRYPTION_KEY>` (el formato es el mismo; ver
+`git show 1e9312e^:src/lib/encryption.ts`). No se mezcla con el llavero real
+porque el id `1` ya lo usa la clave ENC2 y el llavero rechaza ids repetidos.
 
-```
-CLAVES_CIFRADO = "1=<valor de NOTES_ENCRYPTION_KEY>"
-```
-
-El id `1` es arbitrario para ENC1 (el blob no guarda id: el verificador prueba
-cada clave del llavero). Se puede agregar la clave ENC2 de la app nueva como
-`2=…`; no molesta.
-
-`NOTES_ENCRYPTION_KEY` sale del proyecto de Vercel de producción (si la
-variable no está marcada *Sensitive*, se puede ver) o del gestor de contraseñas
-del dueño. **Atención:** `docs/pendientes/03-identidad.md` pide verificar que en
-Vercel no quede "la clave ENC1". Sacarla de Vercel está bien; **perderla no**:
-la copia mensual de septiembre de 2026 es ENC1 y se retiene doce meses
-(hasta septiembre de 2027). Guardarla offline antes de borrarla de Vercel.
+**Cuánto conservar `NOTES_ENCRYPTION_KEY`.** `docs/pendientes/03-identidad.md`
+pide verificar que en Vercel no quede "la clave ENC1". Sacarla de Vercel está
+bien. Guardada aparte, hace falta mientras exista algún dato ENC1: las diarias
+de R2 anteriores al 18-sep (hasta mediados de octubre) y la rama anterior de
+Neon mientras no se borre (`docs/operaciones/reconstruir-produccion.md` la deja
+intacta como vuelta atrás; no se verificó si sigue). Ninguna copia **mensual**
+es ENC1.
 
 No hacen falta: `DATABASE_URL` de Neon (el ensayo nunca toca Neon),
 `CLAVES_CIFRADO_IDS` (es del automático), ni nada de Vercel, Railway o Resend.
@@ -108,8 +116,10 @@ read -rp  'Bucket de respaldos (R2_BUCKET): ' R2_BUCKET
 read -rsp 'R2 access key id: ' AWS_ACCESS_KEY_ID; printf '\n'
 read -rsp 'R2 secret access key: ' AWS_SECRET_ACCESS_KEY; printf '\n'
 read -rsp 'Passphrase del respaldo (BACKUP_ENCRYPTION_KEY): ' BACKUP_ENCRYPTION_KEY; printf '\n'
-read -rsp 'Llavero (CLAVES_CIFRADO, "1=<NOTES_ENCRYPTION_KEY>"): ' CLAVES_CIFRADO; printf '\n'
-export R2_ENDPOINT R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO
+read -rsp 'Llavero ENC2 (CLAVES_CIFRADO de Vercel Production): ' CLAVES_CIFRADO; printf '\n'
+# Sólo si se va a hacer la prueba opcional §3.6b; si no, Enter vacío.
+read -rsp 'Clave ENC1 (NOTES_ENCRYPTION_KEY, opcional): ' CLAVE_ENC1; printf '\n'
+export R2_ENDPOINT R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO CLAVE_ENC1
 export AWS_DEFAULT_REGION=auto AWS_PAGER=""
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
 unset AWS_SESSION_TOKEN DATABASE_URL
@@ -200,19 +210,35 @@ y corre `scripts/ensayo/verificar-restauracion.mjs` con el llavero, que:
    si no coincide con ninguna, dice "esquema restaurado desconocido" y falla;
 1. cuenta filas por tabla contra mínimos;
 2. revisa el formato de toda columna `*_encrypted`;
-3. **descifra** la nota clínica (`nota_soap_encrypted`) más vieja y más nueva
-   y, en el esquema de producción, el contexto longitudinal
-   (`paciente_contexto_clinico`) más viejo y más nuevo; en el esquema nuevo
-   serían las versiones del Recorrido. Valida la forma (SOAP con sus cuatro
-   claves, JSON o texto según la columna). No imprime contenido;
+3. **descifra** con id de clave y AAD la nota clínica
+   (`nota_final_encrypted`, o `nota_ia_encrypted` si no hay ninguna final)
+   más vieja y más nueva, y la versión del Recorrido (`hilo_versiones`) más
+   vieja y más nueva. Valida la forma (SOAP con sus cuatro claves; objeto JSON
+   para el Recorrido). No imprime contenido. Con una copia ENC1 (§3.6b)
+   descifra en cambio `nota_soap_encrypted` y el contexto longitudinal;
 4. cuenta filas huérfanas por cada clave foránea.
 
 **Bien:** termina con `restauración verificada: OK`, dice `esquema restaurado:
-produccion-d02ae0e`, `muestras descifradas: 4/4`, `violaciones 0`, y deja
-`resultado-manual.json`. **Si dice "ENC1 no descifra con ninguna clave del
-llavero":** la clave cargada no es la `NOTES_ENCRYPTION_KEY` de esa época (o
-está mal copiada); no es corrupción hasta que se descarte eso. Seguir igual con
-§3.5 para tener el dato de la transcripción, y reportarlo.
+nuevo`, `columnas cifradas: … (ENC2, … por clave {"1":…}, inválidos 0)`,
+`muestras descifradas: 4/4`, `violaciones 0`, y deja `resultado-manual.json`.
+
+**Si falla, leer el motivo antes de concluir nada:**
+
+- `falta la clave N en el llavero`: hay datos cifrados con una clave que el
+  `CLAVES_CIFRADO` cargado no trae (una retirada o una copia incompleta del
+  llavero). No es corrupción: conseguir esa clave y repetir.
+- `no descifra con la clave N`: la clave con ese id no es la de esa época, o
+  está mal copiada, o el dato está alterado. Descartar primero lo de la copia.
+- `tabla hilos vacía` / `tabla hilo_versiones vacía` / `no hay ninguna versión
+  del Recorrido`: el verificador exige al menos un Recorrido. Si producción
+  todavía no generó ninguno, el fallo es real pero no es del respaldo: anotar en
+  el acta que la muestra del Recorrido no se pudo probar.
+- `esquema restaurado desconocido`: la copia no coincide columna por columna
+  con `prisma/schema.prisma` del checkout. Pasa si producción y `main` tienen
+  esquemas distintos; comprobar que `origin/release` sea igual a `origin/main`
+  en `prisma/` antes de ensayar.
+
+Seguir igual con §3.5 para tener el dato de la transcripción.
 
 ### 3.5 Copia diaria: descifrar la transcripción más vieja y más nueva
 
@@ -308,16 +334,50 @@ cd "$OLDPWD"
 node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/mensual/transcripcion.txt"
 ```
 
-Mismo criterio de **Bien** que 3.4 y 3.5. Ahora es el momento de copiar al
-acta lo que haga falta de `$TRABAJO_ENSAYO/{diaria,mensual}/` (`salida.txt`,
-`resultado-manual.json`, `transcripcion.txt`): en §3.7 se borra todo.
+Mismo criterio de **Bien** que 3.4 y 3.5: la mensual del 22-sep también es
+del esquema nuevo (desde entonces las migraciones sólo agregaron un CHECK y dos
+índices, ninguna columna).
+
+### 3.6b Opcional, sólo hasta mediados de octubre: una copia ENC1 de la base anterior
+
+La última diaria de la base anterior es
+`backups/sesion-backup-2026-09-17-112606.dump.gpg`. Probarla demuestra que
+`NOTES_ENCRYPTION_KEY` abre lo que había antes de la reconstrucción. No es
+condición para el acta ni para vaciar la base de prueba. Necesita `CLAVE_ENC1`.
+
+```bash
+ENC1_KEY=backups/sesion-backup-2026-09-17-112606.dump.gpg
+if [ -n "$CLAVE_ENC1" ] && aws s3api head-object --bucket "$R2_BUCKET" --key "$ENC1_KEY"      --endpoint-url "$R2_ENDPOINT" > /dev/null 2>&1; then
+  mkdir -p "$TRABAJO_ENSAYO/enc1"
+  aws s3 cp "s3://$R2_BUCKET/$ENC1_KEY" "$TRABAJO_ENSAYO/enc1/copia.dump.gpg"     --endpoint-url "$R2_ENDPOINT" --only-show-errors
+  sha256sum "$TRABAJO_ENSAYO/enc1/copia.dump.gpg"
+  psql -X -q -v ON_ERROR_STOP=1 -c 'DROP DATABASE ensayo_manual' "$DATABASE_URL"
+  cd "$TRABAJO_ENSAYO/enc1"
+  CLAVES_CIFRADO="1=$CLAVE_ENC1" "$OLDPWD/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
+  cd "$OLDPWD"
+  CLAVES_CIFRADO="1=$CLAVE_ENC1" node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/enc1/transcripcion.txt"
+else
+  echo "Sin CLAVE_ENC1 o la copia ENC1 ya no está en R2: prueba ENC1 salteada."
+fi
+```
+
+**Bien:** `esquema restaurado: produccion-d02ae0e`, `ENC1`, `muestras
+descifradas: 4/4` (nota clínica y contexto longitudinal, viejos y nuevos) y
+dos transcripciones `sí`. El 16-sep esa base tenía 36 pacientes, 113 turnos y
+43 sesiones clínicas (issue #33). **Si dice "ENC1 no descifra con ninguna clave
+del llavero":** la clave cargada no es la `NOTES_ENCRYPTION_KEY` de esa época o
+está mal copiada; no es corrupción hasta descartar eso.
+
+Ahora es el momento de copiar al acta lo que haga falta de
+`$TRABAJO_ENSAYO/{diaria,mensual,enc1}/` (`salida.txt`, `resultado-manual.json`,
+`transcripcion.txt`): en §3.7 se borra todo.
 
 ### 3.7 Limpiar (correr siempre, aunque algo haya fallado)
 
 ```bash
 docker rm -f "$CONTENEDOR_ENSAYO" > /dev/null 2>&1 || true
 rm -rf "$TRABAJO_ENSAYO"
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO \
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO CLAVE_ENC1 \
       DATABASE_URL DB_ENSAYO R2_ENDPOINT R2_BUCKET
 docker ps -a --filter "name=sesion-ensayo" --format '{{.Names}}'
 ```
@@ -352,17 +412,18 @@ Consecuencias:
 
 - Fecha, quién ejecutó, SHA de `main` usado (3.1), destino: *contenedor
   postgres:17 local en tmpfs*; duración total.
-- Por cada copia (diaria y mensual): la clave de R2 y su `sha256`, el esquema
-  que informó el guion (`produccion-d02ae0e` esperado) y la última migración.
+- Por cada copia (diaria y mensual, y la ENC1 si se hizo 3.6b): la clave de
+  R2 y su `sha256`, el esquema que informó el guion (`nuevo` esperado; la ENC1,
+  `produccion-d02ae0e`) y la última migración.
 - Conteo de filas por tabla (la tabla que imprime el guion, o
-  `resultado-manual.json`) comparado a ojo con lo esperable: la diaria del
-  16-sep tenía 36 pacientes, 113 turnos y 43 sesiones clínicas.
-- Formato de cifrado: `ENC1` en todas las columnas `*_encrypted`, inválidos: 0.
+  `resultado-manual.json`) comparado a ojo con lo que tiene hoy el consultorio.
+- Formato de cifrado: `ENC2` en todas las columnas `*_encrypted`, blobs por id
+  de clave, inválidos: 0; ningún id fuera del llavero.
 - Claves foráneas: verificadas / violaciones (0).
 - **Descifrado**, por copia, con ids y sí/no, sin texto:
   - nota clínica más vieja y más nueva;
-  - contexto longitudinal más viejo y más nuevo (en el esquema de producción
-    ocupa el lugar que la plantilla llama "versión del Recorrido");
+  - versión del Recorrido más vieja y más nueva (en la copia ENC1 su lugar lo
+    ocupa el contexto longitudinal);
   - transcripción más vieja y más nueva (3.5; la plantilla no la tiene:
     agregar las dos líneas);
   - ids de clave del llavero usados (el número, nunca el valor).
@@ -383,7 +444,7 @@ cadena de conexión ni texto clínico. Ids de filas sí (ya figuran en el issue 
 | Juntar los secretos (§1) | 5–15 min si están en el gestor; indefinido si no |
 | Bajar las dos copias | < 1 min: la diaria del 26-sep pesa 1,5 MB y la mensual del 22-sep, 0,9 MB (logs de `.github/workflows/backup.yml`) |
 | Primer `docker pull postgres:17` | 1–3 min |
-| Restaurar y verificar cada copia (3.4–3.6) | < 1 min cada una a este tamaño (hipótesis: no se cronometró con una copia real) |
+| Restaurar y verificar cada copia (3.4–3.6b) | < 1 min cada una a este tamaño (hipótesis: no se cronometró con una copia real) |
 | Escribir el acta, PR y merge | 20–30 min |
 
 **Total: alrededor de una hora**, la mayor parte en preparar y en el acta.
@@ -400,20 +461,24 @@ cadena de conexión ni texto clínico. Ids de filas sí (ya figuran en el issue 
   prefijo vacío, que ya está corregido). La cuarta (corrida `35127235936`,
   issue #33) **restauró y verificó entera la diaria** (esquema
   `produccion-d02ae0e`, 13 tablas, 17 FK sin violaciones, 123 blobs ENC1 con
-  formato válido) y falló porque **no existía ninguna copia mensual**.
+  formato válido) y falló porque **no existía ninguna copia mensual**. Esa
+  diaria era de la base **anterior**: al día siguiente producción se
+  reconstruyó.
 - Esa causa ya no está. El cambio `583e112` (21-sep) hizo que la primera corrida
   lograda de cada mes deje la copia mensual, y el log de `.github/workflows/backup.yml` del 22-sep
   (corrida `35720959243`) dice `Copia mensual de 2026-09:
   …/backups/mensuales/sesion-backup-2026-09-22-112134.dump.gpg`; la del 26-sep
   dice `Ya hay copia mensual de 2026-09 (1)`. `.github/workflows/backup.yml` está en verde
   todos los días desde el 15-sep.
-- Pero el ensayo automático **no volvió a correr** desde entonces: nadie
-  comprobó con él que la mensual se restaura. La próxima corrida por
+- Pero el ensayo automático **no volvió a correr** desde entonces. O sea:
+  **ninguna copia del esquema nuevo (ENC2) se restauró nunca**, ni a mano ni
+  en automático. Nadie comprobó todavía que la mensual se restaura. La próxima corrida por
   calendario es el **2-oct 07:00 UTC**. El issue #33 sigue abierto y su texto
   dice "día 1", que quedó viejo (el cron es el día 2).
 - La variable `CLAVES_CIFRADO_IDS` existe (valor `1`, cargada el 16-sep). Con
-  copias ENC1 no sirve de mucho: ENC1 no guarda id de clave y el automático
-  sólo puede confirmar el formato.
+  las copias ENC2 de ahora sí sirve: el automático cuenta los blobs por id y
+  falla si aparece uno que no está en esa lista. Si el llavero de producción
+  tiene más de una clave, la variable tiene que listarlas todas.
 - **Lo que el automático no prueba y no va a probar:** que una nota se lea.
   No tiene clave clínica, por decisión del dueño. Tampoco toca transcripciones.
 
@@ -443,6 +508,11 @@ documento no lo dispara.
   descifra ENC1 probando cada clave del llavero y ENC2 con id y AAD, y **no**
   descifra transcripciones.
 - Que ENC1 usaba `NOTES_ENCRYPTION_KEY` en base64 de 32 bytes (`1e9312e^`).
+- Que la reconstrucción del 17-sep se ve en los respaldos: el índice del dump
+  pasa de 14 tablas con datos (`2026-09-17-112606`, la última ENC1) a 22 (18-sep
+  en adelante), y `origin/release` es igual a `origin/main` (`a6f6e74`,
+  publicado el 26-sep). Las migraciones posteriores al 22-sep no cambian
+  columnas.
 - Que la copia mensual `2026-09-22-112134` existe (log de Actions) y que el
   guardián sólo lee el nombre del archivo.
 - Nombres de secrets en Actions; `BACKUP_ENCRYPTION_KEY` sin cambios desde el
@@ -453,15 +523,16 @@ documento no lo dispara.
 
 - Que el dueño tenga copia offline de `BACKUP_ENCRYPTION_KEY` y que coincida
   con la del secret de Actions.
-- Que tenga `NOTES_ENCRYPTION_KEY` y que sea la misma con la que se cifró
-  **todo** lo que hay en las copias (ENC1 no admitía rotación; se supone una
-  sola clave en toda la vida de producción, pero no se puede comprobar sin
-  descifrar).
-- Que las copias actuales sigan siendo del esquema `produccion-d02ae0e`
-  (es lo esperable, porque producción no se reconstruyó; la última verificación
-  es del 16-sep).
-- Que las notas, contextos y transcripciones descifren: es justamente lo que
-  el ensayo tiene que mostrar.
+- Que el `CLAVES_CIFRADO` que el dueño cargue sea el llavero completo de
+  producción: que traiga todos los ids que aparecen en las copias.
+- Que la base nueva ya tenga al menos un Recorrido, una nota clínica y una
+  transcripción: el verificador exige muestras y falla sin ellas.
+- Que la copia mensual del 22-sep coincida exactamente con `prisma/schema.prisma`
+  de `main` (se infiere de las migraciones, no se restauró).
+- Para 3.6b: que el dueño tenga `NOTES_ENCRYPTION_KEY` y que sea la misma con
+  la que se cifró todo lo de la base anterior (ENC1 no admitía rotación).
+- Que notas, versiones del Recorrido y transcripciones descifren: es justamente
+  lo que el ensayo tiene que mostrar.
 - Los tiempos de restauración de §5.
 - El comportamiento de `docker port` y de la red en WSL con Docker Desktop:
   hoy Docker no responde en esta distribución y no se pudo ensayar el bloque
