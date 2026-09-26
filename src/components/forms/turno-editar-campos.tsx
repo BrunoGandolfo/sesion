@@ -23,6 +23,7 @@ import {
   modalidadSchema,
   type Modalidad,
 } from "@/lib/constantes-turno";
+import { horaEnPalabras, horaParaRevisar } from "@/lib/format";
 
 export const camposTurnoSchema = z.object({
   fecha: z.string().min(1, "Falta la fecha"),
@@ -72,6 +73,13 @@ export function TurnoEditarCampos({
   } = useFormContext<CamposTurnoValores>();
   const duracion = useWatch({ control, name: "duracion" });
   const modalidad = useWatch({ control, name: "modalidad" });
+  const horaValor = useWatch({ control, name: "hora" }) ?? "";
+  const horaDicha = horaEnPalabras(horaValor);
+  const horaDeRevisar = horaParaRevisar(horaValor);
+  // El id propio del campo deja colgar la línea en palabras de su
+  // aria-describedby, junto al error que Input ya describe con `${id}-error`.
+  const horaId = React.useId();
+  const horaDichaId = `${horaId}-palabras`;
 
   // El onChange propio se compone con el de react-hook-form en vez de pasarlo
   // por las opciones de register: así el aviso sale del evento real del
@@ -99,13 +107,35 @@ export function TurnoEditarCampos({
           {...campoFecha}
           onChange={conAviso(campoFecha.onChange)}
         />
-        <Input
-          label="Hora"
-          type="time"
-          error={errors.hora?.message}
-          {...campoHora}
-          onChange={conAviso(campoHora.onChange)}
-        />
+        <div className="flex flex-col gap-2">
+          <Input
+            id={horaId}
+            label="Hora"
+            type="time"
+            error={errors.hora?.message}
+            aria-describedby={
+              [errors.hora ? `${horaId}-error` : "", horaDicha ? horaDichaId : ""]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
+            {...campoHora}
+            onChange={conAviso(campoHora.onChange)}
+          />
+          {/* La hora con su franja, porque el selector de Android puede dejar
+              el PM pegado y "10:58" no dice que es de noche. Es aviso, no
+              error: no bloquea el guardado. */}
+          {horaDicha && (
+            <p
+              id={horaDichaId}
+              className={`font-sans text-[13px] leading-[1.5] tabular-nums ${
+                horaDeRevisar ? "text-terracotta-500" : "text-ink-500"
+              }`}
+            >
+              {horaDicha}
+              {horaDeRevisar && ". Revisá si es de mañana o de noche."}
+            </p>
+          )}
+        </div>
       </div>
 
       {children}

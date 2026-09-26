@@ -49,6 +49,41 @@ export function hora(d: Date): string {
   return formatearHoraMvd(d);
 }
 
+/** Horas y minutos de "HH:MM" (con segundos opcionales, como puede
+ *  entregarlos un `<input type="time">`); null si no es una hora válida. */
+function partesHoraInput(hhmm: string): { h: number; m: number } | null {
+  const partes = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(hhmm);
+  return partes ? { h: Number(partes[1]), m: Number(partes[2]) } : null;
+}
+
+/**
+ * "22:58" → "10:58 de la noche". El selector de hora de Android abre en el
+ * AM/PM de lo que ya tiene cargado y ella ve "10:58" sin ver que es de noche:
+ * escrito en palabras, la franja no se pierde.
+ *
+ * Franjas: 00–05 madrugada, 06–11 mañana, 12–19 tarde, 20–23 noche; las
+ * 12:00 justas son "del mediodía". "" si el texto no es una hora.
+ */
+export function horaEnPalabras(hhmm: string): string {
+  const partes = partesHoraInput(hhmm);
+  if (!partes) return "";
+  const { h, m } = partes;
+  const reloj = `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")}`;
+  if (h === 12 && m === 0) return `${reloj} del mediodía`;
+  const franja = h < 6 ? "madrugada" : h < 12 ? "mañana" : h < 20 ? "tarde" : "noche";
+  return `${reloj} de la ${franja}`;
+}
+
+/**
+ * Una hora en la que un consultorio rara vez atiende y que es fácil cargar
+ * cambiada por el AM/PM: la madrugada y la noche enteras, y además la franja
+ * de 06:00 a 06:59. Es aviso, no error: la hora se puede guardar igual.
+ */
+export function horaParaRevisar(hhmm: string): boolean {
+  const partes = partesHoraInput(hhmm);
+  return partes !== null && (partes.h < 7 || partes.h >= 20);
+}
+
 /**
  * "4 de marzo de 2026". Con años de proceso, el año no es opcional: es la
  * fecha con la que se ubica una señal de riesgo vieja dentro del recorrido.
