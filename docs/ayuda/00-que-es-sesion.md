@@ -66,9 +66,9 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 - Para transcribirlo, el servidor tiene el audio solo en memoria: no lo escribe
   en ningún archivo.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
-- La autorización vigente es la **2.6**. Las firmas anteriores necesitan que la
-  paciente firme la nueva. La 2.6 todavía describe un cifrado del audio que la
-  app ya no hace. Ver `12-camino-del-audio-y-privacidad.md`.
+- La autorización vigente es la **2.7**. Las firmas anteriores necesitan que la
+  paciente firme la nueva: la 2.6 describía un cifrado del audio que la app ya
+  no hace. Ver `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.
 

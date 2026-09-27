@@ -19,12 +19,9 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
    llegó: con esa confirmación, la app la borra. Si la subida falla, la copia se
    conserva para reintentar.
 
-> **El consentimiento 2.6 todavía dice otra cosa.** Afirma que cada trozo se
-> cifra en el teléfono con una clave de la sesión, que el servidor lo descifra en
-> memoria, que esa clave se destruye al aprobar y que los respaldos pueden
-> conservarla. Eso dejó de ser cierto y el texto está pendiente de corrección por
-> quien administra Sesión. Hasta que salga la versión nueva, no le leas esas
-> frases a una paciente como si describieran lo que pasa hoy.
+El consentimiento 2.7 le cuenta esto a la paciente así: el audio queda en el
+teléfono hasta que se sube por una conexión cifrada, el almacén lo guarda
+cifrado y se borra del teléfono.
 
 ## En los servicios
 
@@ -69,7 +66,7 @@ Solo consulta; no modifica nada.
 
 El servidor prepara esos listados. Si seguís conversando, las preguntas y
 respuestas anteriores se envían a Anthropic, y pueden incluir esos nombres y
-horarios. Evitá pegar datos clínicos o personales. El consentimiento 2.6 explica
+horarios. Evitá pegar datos clínicos o personales. El consentimiento 2.7 explica
 este uso de la agenda. El acceso de Lupita no abre los registros clínicos.
 
 ## Nombres y proveedores
@@ -109,7 +106,7 @@ lo impide también.
 El PDF que exportás desde el Recorrido sale de la app **sin cifrar**: queda bajo
 tu cuidado, como cualquier registro en papel. Queda registrada la preparación de
 la copia; volver a imprimir desde la hoja ya abierta no agrega otro registro. El
-consentimiento 2.6 se lo cuenta a la paciente. Ver
+consentimiento 2.7 se lo cuenta a la paciente. Ver
 `10-el-hilo-y-el-recorrido.md`.
 
 ## Respaldos y eliminación
@@ -131,7 +128,7 @@ restauración de los respaldos requieren comprobación.
 
 ## Autorización y revocación
 
-La versión vigente del texto de autorización es la **2.6**. Revocar la
+La versión vigente del texto de autorización es la **2.7**. Revocar la
 autorización impide grabaciones futuras. No borra la historia que ya quedó
 guardada.
 
@@ -139,25 +136,26 @@ guardada.
 
 La autorización le cuenta a la paciente lo que puede pedirte y la app hace:
 
-- **Que le muestres** sus notas clínicas aprobadas y el resumen de su proceso,
-  en pantalla o impreso.
+- **Que le muestres** sus notas clínicas aprobadas, su transcripción (vista
+  **Transcripción** de cada sesión) y el resumen de su proceso, en pantalla o
+  impreso.
 - **Que corrijas** sus datos de contacto, con **Editar datos**, o el resumen de
   su proceso, con **Editar Recorrido**. Corregir el resumen agrega una versión:
   las anteriores se conservan.
 
 Y le dice lo que **no se puede hacer desde la app**: borrar sus datos, corregir
-una nota ya aprobada, y ver la transcripción o la autorización firmada. Lo de la
-transcripción quedó viejo: hoy la ves en la vista **Transcripción** de cada
-sesión (ver `08-la-nota-clinica.md`). Hasta la
+una nota ya aprobada, ni ver la autorización firmada. Hasta la
 versión 2.3 el texto decía que tenía derecho a pedir que sus datos se eliminen;
 la app no lo ejecuta, y la 2.4 dejó de prometerlo.
 
 ## Firmas anteriores
 
-**Las firmas de versiones anteriores, incluida la 2.5, necesitan que la paciente firme la 2.6**. La 2.5 decía
+**Las firmas de versiones anteriores, incluida la 2.6, necesitan que la paciente firme la 2.7**. La 2.6 decía
+que cada trozo se cifraba en el teléfono con una clave de la sesión, que esa clave se destruía al aprobar, que
+los respaldos podían conservarla y que la transcripción no se podía ver: la app no cifra el audio, aprobar
+programa su borrado y la transcripción se ve en su vista. La 2.5 decía
 que el audio se iba subiendo en partes mientras se grababa, que el servidor lo escribía en un archivo temporal y
-que la copia del teléfono no se borraba: el grabador de hoy sube el archivo entero al terminar, el
-servidor lo tiene solo en memoria y la copia del teléfono se borra al confirmar la subida. Las anteriores a la 2.5
+que la copia del teléfono no se borraba. Las anteriores a la 2.5
 no explican la consulta de agenda de Lupita
 ni que los datos de agenda pueden enviarse en el historial del chat. Las anteriores a la 2.4 prometen
 derechos que la app no ejecuta. Las anteriores a la 2.3 no cuentan cómo ocurre el

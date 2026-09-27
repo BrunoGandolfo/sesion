@@ -49,8 +49,7 @@ aws() {
     // 366 días es la implementación de los 12 meses informados.
     expect([RETENCION_BACKUPS_MENSUALES_DIAS, RETENCION_BACKUPS_MENSUALES_MESES]).toEqual([366, 12]);
     const texto = generarTextoConsentimiento({ nombrePaciente: "Ana", nombreProfesional: "Lic. Prueba", direccionConsultorio: "Consultorio" });
-    expect(texto).toContain(`se guardan ${RETENCION_BACKUPS_DIAS} días si son diarias y hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses si son mensuales`);
-    expect(texto).toContain(`Esa clave puede conservarse hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses`);
+    expect(texto).toContain(`Las diarias se guardan ${RETENCION_BACKUPS_DIAS} días y las mensuales hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses.`);
   } finally {
     rmSync(carpeta, { recursive: true, force: true });
   }

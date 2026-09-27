@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { TRANSCRIPCION_VISIBLE_EN_PANTALLA, BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_EN_ARCHIVO_DEL_SERVIDOR, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
 import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
@@ -157,9 +157,10 @@ it("la ayuda dice que la app NO cifra el audio, y qué lo protege en cada tramo"
   const privacidad = documento("12-camino-del-audio-y-privacidad.md");
   expect(privacidad).toContain("TLS");
   expect(privacidad).toContain("cifra en reposo");
-  // El consentimiento todavía promete lo contrario: la ayuda lo dice.
-  expect(RESPALDO_LOCAL_CIFRADO).toBe(true);
-  expect(privacidad).toContain("El consentimiento 2.6 todavía dice otra cosa");
+  // Desde la 2.7 el consentimiento dice lo mismo: la ayuda ya no advierte una diferencia.
+  expect(RESPALDO_LOCAL_CIFRADO).toBe(false);
+  expect(privacidad).toContain(`El consentimiento ${CONSENTIMIENTO_VERSION} le cuenta esto a la paciente así`);
+  expect(leerCorpus().replace(/\s+/g, " ")).not.toMatch(/todavía dice otra cosa|todavía describe (el|un) cifrado|pendiente de corrección/);
   // Mientras la pantalla de entrada conserve el texto viejo, la ayuda lo desmiente.
   if (ENTRADA_CONFIDENCIALIDAD.includes("no está cifrada")) {
     expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("Ese texto quedó de la versión anterior del grabador");
@@ -376,23 +377,23 @@ describe("la ayuda sigue al consentimiento vigente", () => {
   });
 
   it("los plazos de respaldo son los del consentimiento", () => {
-    expect(consentimiento).toContain(`${RETENCION_BACKUPS_DIAS} días si son diarias y hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses si son mensuales`);
+    expect(consentimiento).toContain(`Las diarias se guardan ${RETENCION_BACKUPS_DIAS} días y las mensuales hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses.`);
     for (const archivo of ["00-que-es-sesion.md", "12-camino-del-audio-y-privacidad.md", "13-preguntas-frecuentes.md"]) {
       expect(documento(archivo)).toContain(`${RETENCION_BACKUPS_DIAS} días`);
       expect(documento(archivo)).toContain(`${RETENCION_BACKUPS_MENSUALES_MESES} meses`);
     }
-    // El consentimiento todavía habla de una clave de audio en los respaldos
-    // (pendiente del dueño); la ayuda ya cuenta que las sesiones nuevas no tienen.
-    expect(BACKUP_INCLUYE_CLAVE_AUDIO).toBe(true);
-    expect(consentimiento).toContain("esa copia de la clave podría permitir abrirlo");
+    // Ni el consentimiento ni la ayuda hablan de una clave de audio en los respaldos nuevos.
+    expect(BACKUP_INCLUYE_CLAVE_AUDIO).toBe(false);
+    expect(consentimiento).toContain("sin el audio");
+    expect(consentimiento).not.toMatch(/clave/i);
     expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("No contienen audio ni ninguna clave de audio");
     expect(ayuda()).not.toMatch(/consentimiento menciona solo|sin la clave no se puede abrir|Sin la clave, que se destruye al aprobar, no se puede abrir/i);
   });
 
   it("el borrado del audio se rinde a los días que dice el consentimiento", () => {
-    expect(CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(true);
+    expect(CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(false);
     expect(POLITICA_POR_TIPO.borrar_audio_r2.tope).toBe(LIMPIEZA_AUDIO_MAX_INTENTOS);
-    expect(consentimiento).toContain(`durante unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; después el borrado queda marcado como fallido`);
+    expect(consentimiento).toContain(`reintenta unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; si no lo logra, el borrado queda marcado como fallido`);
     for (const archivo of ["00-que-es-sesion.md", "08-la-nota-clinica.md", "12-camino-del-audio-y-privacidad.md", "13-preguntas-frecuentes.md"]) {
       expect(documento(archivo)).toContain(`unos ${LIMPIEZA_AUDIO_DIAS_APROX} días`);
     }
@@ -401,16 +402,16 @@ describe("la ayuda sigue al consentimiento vigente", () => {
 
   it("el resumen del Recorrido lo propone la IA y decide la profesional", () => {
     expect(RESUMEN_PROPUESTO_POR_IA).toBe(true);
-    expect(consentimiento).toContain("Lo propone la misma inteligencia artificial que redacta la nota");
+    expect(consentimiento).toMatch(/Anthropic recibe ese texto[^.]*redacta un borrador de la nota[^.]*propone cómo actualizar el resumen/);
     expect(documento("10-el-hilo-y-el-recorrido.md")).toContain("La redacta la misma IA que escribe la nota");
     expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("lo propone la misma IA que redacta la nota");
     expect(documento("04-pacientes-y-ficha.md")).toContain("lo propone la IA y solo queda vigente cuando lo aceptás");
   });
 
   it("el servidor tiene el audio sólo en memoria, sin archivo temporal", () => {
-    expect(AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL).toBe(false);
-    // El consentimiento dice "lo descifra": ya no hay nada que descifrar (pendiente del dueño).
-    expect(consentimiento).toContain("lo descifra solo en memoria y lo manda a transcribir");
+    expect(AUDIO_EN_ARCHIVO_DEL_SERVIDOR).toBe(false);
+    expect(consentimiento).toContain("sin guardarlo en otro archivo");
+    expect(consentimiento).not.toMatch(/descifr/);
     expect(documento("12-camino-del-audio-y-privacidad.md").replace(/\s+/g, " ")).toContain("lo tiene **en memoria** para transcribir");
     expect(documento("00-que-es-sesion.md")).toContain("solo en memoria");
     expect(ayuda()).not.toMatch(/archivo temporal del servidor|temporal del servidor/);
@@ -418,7 +419,7 @@ describe("la ayuda sigue al consentimiento vigente", () => {
 
   it("la exportación a PDF: registra la preparación de la copia", () => {
     expect(RECORRIDO_EXPORTABLE).toBe(true);
-    expect(consentimiento).toContain("La preparación de esa copia queda registrada por la aplicación");
+    expect(consentimiento).toContain("sin cifrar y bajo su cuidado, y queda registrado");
     expect(documento("10-el-hilo-y-el-recorrido.md")).toContain("Queda registrada la preparación de la copia");
     expect(documento("12-camino-del-audio-y-privacidad.md")).toContain("Queda registrada la preparación de la copia");
     expect(documento("13-preguntas-frecuentes.md")).toContain("registrada la preparación de cada copia");
@@ -428,12 +429,14 @@ describe("la ayuda sigue al consentimiento vigente", () => {
   it("lo que la paciente puede pedir: lo mismo que el consentimiento, y nada que la app no haga", () => {
     expect(PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN && PACIENTE_PUEDE_CORREGIR_CONTACTO && PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES).toBe(true);
     expect(BORRADO_DE_DATOS_A_PEDIDO || NOTA_APROBADA_CORREGIBLE).toBe(false);
-    expect(consentimiento).toContain("que te muestre tus notas clínicas aprobadas y el resumen de tu proceso, y que corrija tus datos de contacto o el resumen de tu proceso");
+    expect(TRANSCRIPCION_VISIBLE_EN_PANTALLA).toBe(true);
+    expect(consentimiento).toContain("que te muestre tus notas aprobadas, tu transcripción y el resumen de tu proceso, y que corrija tus datos de contacto o el resumen");
     expect(consentimiento).not.toMatch(/que se eliminen|Tenés derecho/);
     const privacidad = documento("12-camino-del-audio-y-privacidad.md");
-    expect(privacidad).toContain("sus notas clínicas aprobadas y el resumen de su proceso");
+    expect(privacidad.replace(/\s+/g, " ")).toContain("sus notas clínicas aprobadas, su transcripción (vista **Transcripción** de cada sesión) y el resumen de su proceso");
     expect(privacidad).toContain("sus datos de contacto, con **Editar datos**, o el resumen de su proceso, con **Editar Recorrido**");
-    expect(privacidad).toContain("borrar sus datos, corregir una nota ya aprobada, y ver la transcripción o la autorización firmada");
+    expect(privacidad.replace(/\s+/g, " ")).toContain("borrar sus datos, corregir una nota ya aprobada, ni ver la autorización firmada");
+    expect(ayuda()).not.toMatch(/(no se puede|no podés)[^.]*ver la transcripción/);
     // Los botones que nombra existen.
     expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Editar Recorrido");
     expect(codigo("src/lib/glosario.ts")).toContain('EDITAR_DATOS = "Editar datos"');
@@ -447,7 +450,7 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     // confirmación, y la ayuda lo advertía. Desde la 2.3 dice el tope, y la
     // advertencia no puede volver.
     expect(consentimiento).not.toContain("repite el pedido hasta que el servicio confirma que lo hizo");
-    expect(consentimiento).toContain(`repite ese pedido durante unos ${ASR_BORRADO_DIAS_APROX} días, hasta que el servicio responde que lo borró o que ya no existe`);
+    expect(consentimiento).toContain(`y, si se completó, repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días`);
     expect(POLITICA_POR_TIPO.borrar_transcript_asr.tope).toBe(ASR_BORRADO_MAX_INTENTOS);
     const privacidad = documento("12-camino-del-audio-y-privacidad.md");
     expect(privacidad).not.toMatch(/Esa frase del consentimiento|no menciona ese tope/);

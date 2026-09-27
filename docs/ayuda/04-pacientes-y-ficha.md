@@ -92,24 +92,22 @@ Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
    AssemblyAI y Anthropic), que el resumen del proceso lo propone la IA y solo
    queda vigente cuando lo aceptás, quién puede leerlo, cuándo se borra, los
    respaldos, qué queda guardado, qué puede pedirte (que le muestres sus notas
-   aprobadas y el resumen de su proceso, y que corrijas sus datos de contacto o
-   ese resumen) y qué no se puede hacer desde la app (borrar sus datos,
-   corregir una nota aprobada, ver la transcripción o la autorización firmada),
-   que puede revocarla cuando quiera y que aceptar no es obligatorio.
-   **Ojo: la 2.6 todavía describe el cifrado del audio que la app ya no
-   hace** (que se cifra en el teléfono y que su clave se destruye al aprobar),
-   y dice que la transcripción no se puede ver, aunque hoy la ves en la vista
-   **Transcripción**. Está pendiente de corrección. Ver `12-camino-del-audio-y-privacidad.md`.
+   aprobadas, su transcripción y el resumen de su proceso, y que corrijas sus
+   datos de contacto o ese resumen) y qué no se puede hacer desde la app (borrar
+   sus datos, corregir una nota aprobada o ver la autorización firmada), que
+   puede revocarla cuando quiera y que aceptar no es obligatorio. Cuenta que la
+   app no cifra el audio: viaja por una conexión cifrada y el almacén lo guarda
+   cifrado. Ver `12-camino-del-audio-y-privacidad.md`.
    Se enmarca en la **Ley 18.331**.
 3. La paciente marca **"Leí y entiendo la información anterior"**.
 4. Firma con el dedo donde dice **Firmá acá**.
 5. Tocá **Firmar**.
 
 Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
-La versión vigente del texto es **2.6**. Las firmas anteriores, incluidas la
-2.1, la 2.2, la 2.3, la 2.4 y la 2.5, siguen sirviendo para grabar y no hace falta revocarlas,
-pero **necesitan que la paciente firme la 2.6**: no cuentan que el audio se sube entero al terminar, el acceso de Lupita a la agenda ni lo que corrige la
-versión nueva. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
+La versión vigente del texto es **2.7**. Las firmas anteriores, incluida la
+2.6, siguen sirviendo para grabar y no hace falta revocarlas,
+pero **necesitan que la paciente firme la 2.7**: la 2.6 describía un cifrado del
+audio que la app ya no hace y decía que la transcripción no se podía ver. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
 en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
 pidas vos.
 

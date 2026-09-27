@@ -1,63 +1,50 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.6.
+// Texto del consentimiento informado para grabar sesiones, versión 2.7.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
-// hace verdadera, y consentimiento.test.ts las ata. Lo que la 1.1 decía mal
-// (que no viajaban nombres, que AssemblyAI "borra de sus servidores" sin
-// comprobarlo, que "cualquier copia sería imposible de abrir") acá se dice
-// como es.
+// hace verdadera, y consentimiento.test.ts las ata. El historial de versiones
+// anteriores (1.1 a 2.6) está en Git.
 //
-// La 2.1 agrega que la profesional puede imprimir o guardar como archivo el
-// resumen del proceso para su propio archivo (RECORRIDO_EXPORTABLE). Una
-// firma anterior no cubre esa salida: hay que volver a firmar.
+// La 2.7 (decisión del dueño) persigue dos cosas:
 //
-// La 2.2 corrige retención, reintentos, propuesta de la IA y archivo temporal,
-// e incluye el párrafo de exportación de la 2.1.
+// - VERDAD. La app dejó de cifrar el audio el 18/9/2026 y la 2.6 seguía
+//   diciendo que cada trozo se cifraba en el teléfono con una clave de la
+//   sesión, que el servidor lo "descifraba" y que la clave se destruía al
+//   aprobar. Nada de eso existe: el audio viaja por una conexión cifrada, el
+//   almacén lo cifra en reposo y aprobar programa su borrado. La 2.6 también
+//   decía que la transcripción no se podía ver, y hoy se ve.
+// - BREVEDAD. Una pantalla y media de teléfono (tope en el test: 3.500
+//   caracteres). Un párrafo corto por tema, de vos, sin jerga.
 //
-// La 2.3 cuenta el borrado en AssemblyAI como ocurre (un pedido inmediato y
-// reintentos acotados sólo si la transcripción se completó), la copia cifrada
-// que queda en el teléfono y que el borrador de la IA se guarda antes de
-// aprobar.
-//
-// La 2.4 deja de prometer lo que la app no ejecuta (decisión del dueño): en
-// lugar de "derecho a acceder, corregir y eliminar", dice qué puede pedir la
-// paciente que la app sí hace y qué no se puede hacer desde la app. Las firmas
-// anteriores necesitan refirma. La vigencia técnica no se cambia en esta tanda: la API
-// devuelve sugiereRefirmar y la profesional debe pedir la nueva firma.
-// La 2.5 explica la consulta acotada de agenda de Lupita y que los datos de
-// agenda pueden llegar a Anthropic en el historial del chat. Requiere refirma.
-//
-// La 2.6 vuelve al grabador de un solo archivo: cada trozo se cifra en el
-// teléfono antes de guardarse y el archivo entero se cifra y se sube al
-// terminar (no por tramos mientras se graba); el servidor lo descifra en
-// memoria, sin archivo temporal; y la copia cifrada del teléfono se borra
-// cuando la subida se confirma. Tres frases de la 2.5 dejaban de ser
-// ciertas: por eso cambia la versión y las firmas anteriores necesitan refirma.
+// Las firmas anteriores siguen vigentes para grabar; sugiereRefirmar pide la
+// nueva.
 
 import type { db } from "@/lib/db";
 
 import {
+  ALMACEN_CIFRA_EN_REPOSO,
+  ANALISIS_DE_LA_PROFESIONAL_POR_IA,
   ANTHROPIC_RETENCION_CERO,
   ASR_BORRADO_CON_REINTENTO,
   ASR_BORRADO_DIAS_APROX,
   ASR_BORRADO_INMEDIATO,
   ASR_REINTENTO_SOLO_SI_SE_COMPLETO,
-  AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL,
+  AUDIO_EN_ARCHIVO_DEL_SERVIDOR,
   AUDIO_SE_SUBE_AL_TERMINAR,
-  BACKUP_INCLUYE_CLAVE_AUDIO,
+  AUDIO_VIAJA_POR_CONEXION_CIFRADA,
+  BACKUP_INCLUYE_AUDIO,
   BORRADO_DE_DATOS_A_PEDIDO,
   BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR,
   CLAVE_AUDIO_DESTRUIDA_AL_APROBAR,
-  CLAVE_POR_SESION,
   CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA,
-  COPIA_LOCAL_CIFRADA_SE_CONSERVA,
+  COPIA_LOCAL_SE_CONSERVA_TRAS_SUBIR,
   LIMPIEZA_AUDIO_DIAS_APROX,
   LIMPIEZA_AUDIO_REINTENTA,
   LLM_RECIBE_CONTEXTO,
   LLM_RECIBE_NOTA_APROBADA,
   LUPITA_CONSULTA_AGENDA,
-  LUPITA_SOLO_LECTURA,
   LUPITA_HISTORIAL_A_ANTHROPIC,
+  LUPITA_SOLO_LECTURA,
   MARCO_LEGAL,
   MEDIOS_CAPTURA,
   NOTA_APROBADA_CORREGIBLE,
@@ -65,8 +52,8 @@ import {
   PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES,
   PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN,
   PROVEEDORES,
-  RESPALDO_LOCAL_CIFRADO,
   RECORRIDO_EXPORTABLE,
+  RESPALDO_LOCAL_CIFRADO,
   RESUMEN_PROPUESTO_POR_IA,
   RETENCION_BACKUPS_DIAS,
   RETENCION_BACKUPS_MENSUALES_MESES,
@@ -74,14 +61,22 @@ import {
   TRANSCRIPCION_VISIBLE_EN_PANTALLA,
   VOCABULARIO_A_ASR,
   VOCABULARIO_INCLUYE_NOMBRES,
-  VOCABULARIO_SOLO_A_ASR,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.6";
+export const CONSENTIMIENTO_VERSION = "2.7";
+/** Fecha de la versión, tal como se lee al pie del texto. */
+export const CONSENTIMIENTO_FECHA = "27 de septiembre de 2026";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
   return textoVersion !== CONSENTIMIENTO_VERSION;
+}
+
+/** Une con comas y una "y" (o la conjunción que se pida) antes del último. */
+function enumerar(partes: readonly (string | null | false)[], conjuncion = "y"): string {
+  const reales = partes.filter((p): p is string => Boolean(p));
+  if (reales.length <= 1) return reales.join("");
+  return `${reales.slice(0, -1).join(", ")} ${conjuncion} ${reales.at(-1)}`;
 }
 
 export function generarTextoConsentimiento(params: {
@@ -89,140 +84,93 @@ export function generarTextoConsentimiento(params: {
   nombreProfesional: string;
   direccionConsultorio: string;
 }): string {
-  const { nombrePaciente, nombreProfesional, direccionConsultorio } = params;
+  const { nombrePaciente, nombreProfesional: prof, direccionConsultorio } = params;
   const { assemblyai, anthropic, r2, railway, neon } = PROVEEDORES;
-
   const soloAudio = MEDIOS_CAPTURA.length === 1 && MEDIOS_CAPTURA[0] === "audio";
 
-  const respaldoLocal = RESPALDO_LOCAL_CIFRADO
-    ? `1. Mientras se graba, cada trozo de audio se cifra en el teléfono de ${nombreProfesional} antes de guardarse, ${CLAVE_POR_SESION ? "con una clave que se crea para esa sesión" : "con la clave de la aplicación"}. ${AUDIO_SE_SUBE_AL_TERMINAR ? "Al terminar, el archivo completo se cifra con esa misma clave y recién entonces se sube." : "Se va subiendo ya cifrado."} En el teléfono no queda audio sin cifrar.`
-    : `1. Mientras se graba, el audio queda en el teléfono de ${nombreProfesional}. En esa etapa todavía no está cifrado. Al terminar se cifra en el teléfono, antes de salir, ${CLAVE_POR_SESION ? "con una clave que se crea para esa sesión" : "con la clave de la aplicación"}.`;
+  // ¿Qué se graba?
+  const queSeGraba = `${soloAudio ? "Solo el audio, nunca video" : "La sesión"}, y solo si aceptás. Si no, la sesión sigue igual y ${prof} toma notas como siempre.`;
 
-  const vocabulario = VOCABULARIO_A_ASR
-    ? VOCABULARIO_INCLUYE_NOMBRES
-      ? ` Recibe además una lista de palabras que ${nombreProfesional} carga para que se escriban bien: términos clínicos y nombres propios, que pueden incluir el tuyo y el de personas que nombrás en las sesiones.`
-      : ` Recibe además una lista de términos clínicos que ${nombreProfesional} carga para que se escriban bien; esa lista no incluye nombres de personas.`
+  // ¿A dónde va y quién lo procesa?
+  const telefono = `El audio queda${RESPALDO_LOCAL_CIFRADO ? " cifrado" : ""} en el teléfono de ${prof} ${AUDIO_SE_SUBE_AL_TERMINAR ? "hasta que termina la sesión y se sube" : "y se va subiendo"}${AUDIO_VIAJA_POR_CONEXION_CIFRADA ? " por una conexión cifrada" : ""} a ${r2.nombre}, un almacenamiento${ALMACEN_CIFRA_EN_REPOSO ? " que lo guarda cifrado" : ""}${COPIA_LOCAL_SE_CONSERVA_TRAS_SUBIR ? "" : ", y se borra del teléfono"}.`;
+  const asr = ` Un programa de esta aplicación en ${railway.nombre} lo manda, ${AUDIO_EN_ARCHIVO_DEL_SERVIDOR ? "desde un archivo temporal" : "sin guardarlo en otro archivo"}, a ${assemblyai.nombre}, que lo pasa a texto${VOCABULARIO_A_ASR ? ` con ayuda de una lista de palabras que ${prof} carga${VOCABULARIO_INCLUYE_NOMBRES ? " y que puede incluir tu nombre" : ""}` : ""}.`;
+  const ia = ` ${anthropic.nombre} recibe ese texto${LLM_RECIBE_CONTEXTO ? " y el resumen de tu proceso" : ""}: ${enumerar([
+    "redacta un borrador de la nota",
+    ANALISIS_DE_LA_PROFESIONAL_POR_IA ? `prepara un análisis del trabajo de ${prof} que solo ella ve` : null,
+    RESUMEN_PROPUESTO_POR_IA ? `propone cómo actualizar el resumen${LLM_RECIBE_NOTA_APROBADA ? " cuando ella aprueba la nota" : ""}` : null,
+  ])}.`;
+  const ley = MARCO_LEGAL.ley.split(" de ")[0];
+  const exterior = MARCO_LEGAL.transferenciaInternacional
+    ? ` ${assemblyai.nombre} y ${anthropic.nombre} están en ${assemblyai.pais === anthropic.pais ? anthropic.pais : `${assemblyai.pais} y ${anthropic.pais}`}: al firmar autorizás esa transferencia internacional (${ley}).`
     : "";
 
-  const borradoAsr = ASR_BORRADO_INMEDIATO && ASR_BORRADO_CON_REINTENTO && ASR_REINTENTO_SOLO_SI_SE_COMPLETO
-    ? ` Apenas termina, bien o mal, la aplicación le pide que borre el audio y el texto. Si la transcripción se completó, además repite ese pedido durante unos ${ASR_BORRADO_DIAS_APROX} días, hasta que el servicio responde que lo borró o que ya no existe; si aun así no lo logra, el borrado queda marcado como fallido. Si la transcripción falla, o el programa se interrumpe o no logra dejar anotado el reintento, ese pedido se hace una sola vez o no llega a hacerse, y esta aplicación no puede comprobar que el servicio lo haya borrado.`
-    : " Cuando termina, la aplicación le pide que borre el audio y el texto; esta aplicación no puede comprobar si lo hizo.";
-
-  const contexto = (LLM_RECIBE_CONTEXTO
-    ? "recibe el texto de la sesión y el resumen de tu proceso hasta ese día, y redacta el borrador de la nota"
-    : "recibe el texto de la sesión y redacta el borrador de la nota")
-    + (LLM_RECIBE_NOTA_APROBADA
-      ? `. Cuando ${nombreProfesional} aprueba la nota, recibe esa nota, con sus correcciones, y el resumen vigente, para proponer cómo actualizarlo`
-      : "");
-
+  // ¿Qué queda guardado y cómo?
+  const guardado = `La transcripción, la nota y el resumen de tu proceso se guardan cifrados en la base de datos (${neon.nombre}), con esta autorización y tu firma.${BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR ? " Ella revisa, corrige y aprueba el borrador de la IA, que también queda guardado" : ""}${RESUMEN_PROPUESTO_POR_IA ? "; el resumen solo cambia si acepta la propuesta" : ""}.`;
+  const borradoAudio = ` Al aprobar la nota, la aplicación ${CLAVE_AUDIO_DESTRUIDA_AL_APROBAR ? "destruye la clave del audio y " : ""}manda borrar el audio${LIMPIEZA_AUDIO_REINTENTA ? ` y reintenta unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; si no lo logra, el borrado queda marcado como fallido` : ""}.`;
+  const borradoAsr = ASR_BORRADO_INMEDIATO
+    ? ` Al terminar la transcripción le pide a ${assemblyai.nombre} que borre el audio y el texto${ASR_BORRADO_CON_REINTENTO && ASR_REINTENTO_SOLO_SI_SE_COMPLETO ? ` y, si se completó, repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días; si algo falla, puede pedirlo una vez o ninguna` : ""}, y no puede comprobar que se haya borrado.`
+    : "";
   const retencion = ANTHROPIC_RETENCION_CERO
-    ? ` La cuenta que usa esta aplicación está configurada para que ${anthropic.nombre} no conserve ese contenido ni lo use para entrenar sus sistemas.`
+    ? ` ${anthropic.nombre} está configurada para no conservar el contenido ni usarlo para entrenar.`
     : "";
 
-  const clave = CLAVE_AUDIO_DESTRUIDA_AL_APROBAR
-    ? "En ese momento la aplicación destruye siempre la clave del audio en la base que usa para trabajar. Desde entonces no puede abrir ese archivo, aunque siga pendiente de borrado. "
-    : "";
-  const limpieza = clave + (LIMPIEZA_AUDIO_REINTENTA
-    ? `La aplicación intenta borrar el archivo. Si no lo logra, repite los intentos durante unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; después el borrado queda marcado como fallido.`
-    : "La aplicación intenta borrar el archivo.");
+  // Copias de seguridad
+  const respaldos = `Las diarias se guardan ${RETENCION_BACKUPS_DIAS} días y las mensuales hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses. Tienen lo mismo que la base, cifrado${BACKUP_INCLUYE_AUDIO ? ", con el audio" : ", sin el audio"}.`;
 
-  const plazos = `Las copias de respaldo de la base de datos se guardan ${RETENCION_BACKUPS_DIAS} días si son diarias y hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses si son mensuales.`;
-  const copiaLocal = COPIA_LOCAL_CIFRADA_SE_CONSERVA
-    ? ` En el teléfono de ${nombreProfesional} queda una copia cifrada de la grabación: la aplicación no la borra, y desde la aprobación ya no puede abrirla.`
-    : "";
-  const backups = BACKUP_INCLUYE_CLAVE_AUDIO
-    ? ` ${plazos} No contienen el audio, pero sí pueden contener, cifrada, la clave de un audio que todavía no se había borrado. Esa clave puede conservarse hasta ${RETENCION_BACKUPS_MENSUALES_MESES} meses, aunque ya se haya eliminado de la base que usa la aplicación. Si el archivo no se pudo borrar, esa copia de la clave podría permitir abrirlo${COPIA_LOCAL_CIFRADA_SE_CONSERVA ? ", y lo mismo vale para la copia cifrada del teléfono" : ""}.`
-    : ` ${plazos} No contienen el audio ni su clave.`;
+  // ¿Quién puede ver?
+  const quien = `Solo ${prof}, desde su cuenta, y cada vez que abre tu nota${TRANSCRIPCION_VISIBLE_EN_PANTALLA ? " o tu transcripción" : ""} queda registrado. ${assemblyai.nombre} y ${anthropic.nombre} procesan en forma automática; dicen que nadie accede al contenido, pero la aplicación no puede verificarlo.${RECORRIDO_EXPORTABLE ? ` Si ella imprime o guarda como PDF el resumen de tu proceso, esa copia queda fuera de la aplicación, sin cifrar y bajo su cuidado, y queda registrado.` : ""}`;
 
-  const nota = BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR
-    ? `el registro escrito que ${nombreProfesional} guarda en tu historia clínica. Primero la inteligencia artificial escribe un borrador, que queda guardado, cifrado; ${nombreProfesional} lo revisa, lo corrige y lo aprueba antes de que forme parte de tu historia clínica.`
-    : `el registro escrito que ${nombreProfesional} guarda en tu historia clínica y que ella revisa y aprueba antes de que quede guardado.`;
-
-  const resumen = RESUMEN_PROPUESTO_POR_IA
-    ? `También para preparar, a partir de varias sesiones, un resumen de tu proceso. Lo propone la misma inteligencia artificial que redacta la nota; ${nombreProfesional} lo revisa, lo corrige o lo descarta. Solo queda vigente cuando ella lo acepta. La decisión sigue siendo suya.`
-    : "También para preparar, a partir de varias sesiones, un resumen de tu proceso que solo ella ve y edita.";
-
-  const descifrado = AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL
-    ? "lo descifra en un archivo temporal del servidor y lo manda a transcribir. Ese archivo temporal se borra al terminar"
-    : "lo descifra solo en memoria y lo manda a transcribir";
-
-  const exportacion = RECORRIDO_EXPORTABLE
-    ? `\n\n${nombreProfesional} puede imprimir el resumen de tu proceso, o guardarlo como archivo en su teléfono o su computadora, para su propio archivo profesional. Esa copia ya no está dentro de la aplicación ni cifrada: queda bajo su cuidado, como cualquier registro de tu historia clínica en papel. La preparación de esa copia queda registrada por la aplicación.`
-    : "";
-
+  // Lupita
   const lupita = LUPITA_CONSULTA_AGENDA
-    ? `\n\nLa ayuda de la aplicación\nLupita es el asistente que responde preguntas sobre cómo usar la aplicación. Si ${nombreProfesional} le pregunta por la agenda de hoy, mañana o esta semana, puede consultar tu nombre de pila, el día, la hora, la duración y la modalidad de tus turnos. No consulta tu teléfono, tarifas, deudas, cobros, notas clínicas, transcripciones, resumen del proceso, consentimientos ni tu ficha.${LUPITA_SOLO_LECTURA ? " Solo lee: no agenda, cancela ni modifica turnos o datos." : ""}${LUPITA_HISTORIAL_A_ANTHROPIC ? ` Las preguntas y respuestas del chat se envían a ${anthropic.nombre} para continuar la conversación; por eso ese servicio puede recibir esos datos de agenda. La profesional debe evitar pegar información clínica o personal en el chat.` : ""}`
+    ? `\n\nLupita\nLa ayuda de la aplicación. Cuando ella le pregunta por la agenda, puede ver tu nombre y el día, la hora, la duración y la modalidad de tus turnos${LUPITA_HISTORIAL_A_ANTHROPIC ? `, y esa conversación pasa por ${anthropic.nombre}` : ""}. Nunca lee tus notas, tu transcripción ni tu resumen${LUPITA_SOLO_LECTURA ? ", y no cambia nada" : ""}.`
     : "";
 
-  const pedidos = [
-    PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN ? "que te muestre tus notas clínicas aprobadas y el resumen de tu proceso" : null,
-    PACIENTE_PUEDE_CORREGIR_CONTACTO || PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES
-      ? `que corrija ${[PACIENTE_PUEDE_CORREGIR_CONTACTO ? "tus datos de contacto" : null, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES ? "el resumen de tu proceso" : null].filter(Boolean).join(" o ")}`
-      : null,
-  ].filter(Boolean);
-  const noSePuede = [
+  // ¿Qué podés pedir?
+  const mostrar = PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN
+    ? `que te muestre ${enumerar(["tus notas aprobadas", TRANSCRIPCION_VISIBLE_EN_PANTALLA ? "tu transcripción" : null, "el resumen de tu proceso"])}`
+    : null;
+  const corregir = PACIENTE_PUEDE_CORREGIR_CONTACTO || PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES
+    ? `que corrija ${enumerar([PACIENTE_PUEDE_CORREGIR_CONTACTO ? "tus datos de contacto" : null, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES ? "el resumen" : null], "o")}`
+    : null;
+  const noSePuede = enumerar([
     !BORRADO_DE_DATOS_A_PEDIDO ? "borrar tus datos" : null,
-    !NOTA_APROBADA_CORREGIBLE ? "corregir las notas ya aprobadas" : null,
-    !TRANSCRIPCION_VISIBLE_EN_PANTALLA || !CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA
-      ? `ver ${[!TRANSCRIPCION_VISIBLE_EN_PANTALLA ? "la transcripción" : null, !CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA ? "esta autorización firmada" : null].filter(Boolean).join(" ni ")}`
-      : null,
-  ].filter(Boolean);
-  const queSePuedePedir = `\n\n¿Qué podés pedir?\nPodés pedirle a ${nombreProfesional} ${pedidos.join(", y ")}.${PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES ? " Corregir el resumen agrega una versión nueva: las anteriores se conservan." : ""}${noSePuede.length ? ` Desde la aplicación no se puede ${noSePuede.join(", ni ")}.` : ""}`;
+    !NOTA_APROBADA_CORREGIBLE ? "corregir una nota ya aprobada" : null,
+    !CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA ? "ver esta autorización firmada" : null,
+    !TRANSCRIPCION_VISIBLE_EN_PANTALLA ? "ver la transcripción" : null,
+  ], "ni");
+  const pedidos = `Podés pedirle a ${prof} ${[mostrar, corregir].filter(Boolean).join(", y ")}.${PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES ? " Corregir el resumen agrega una versión nueva: las anteriores se conservan." : ""}${noSePuede ? ` Desde la aplicación no se pueden ${noSePuede}.` : ""}`;
 
-  const revocar = REVOCAR_BORRA_HISTORIA
-    ? "Lo ya guardado se elimina de tu historia clínica."
-    : "Lo ya guardado sigue formando parte de tu historia clínica.";
+  // Revocar
+  const revocar = `Podés revocar esta autorización cuando quieras, sin explicar por qué: alcanza con avisarle. Desde ese momento no se graba más. ${REVOCAR_BORRA_HISTORIA ? "Lo ya guardado se borra." : "Lo ya guardado no se borra: sigue siendo parte de tu historia clínica."} Tu tratamiento no cambia.`;
 
-  return `Consentimiento informado para grabación de sesiones
-Versión ${CONSENTIMIENTO_VERSION}
+  return `Autorización para grabar tus sesiones
 
-Hola ${nombrePaciente}.
+Hola ${nombrePaciente}. ${prof} te pide autorización para grabar tus sesiones en ${direccionConsultorio}. Leelo con calma: son tus datos de salud.
 
-Antes de empezar queremos contarte cómo funciona la grabación de las sesiones y pedirte que la autorices por escrito. Tomate el tiempo de leerlo: se trata de tus datos y de tu intimidad.
+Qué se graba
+${queSeGraba}
 
-¿Qué se graba?
-El audio de tu sesión de psicoterapia con ${nombreProfesional}, en el consultorio ubicado en ${direccionConsultorio}.${soloAudio ? " No se graba video." : ""}
+A dónde va y quién lo procesa
+${telefono}${asr}${ia}${exterior}
 
-¿Para qué?
-Para escribir, con ayuda de inteligencia artificial, la nota clínica de la sesión: ${nota} ${resumen} También se prepara un análisis de su propio trabajo que solo ella ve.
+Qué queda guardado
+${guardado}${borradoAudio}${borradoAsr}${retencion}
 
-¿Por dónde pasa el audio?
-${respaldoLocal}
-2. Ya cifrado, se guarda en un servicio de almacenamiento (${r2.nombre}) y de ahí lo toma un programa de esta aplicación que corre en un servidor (${railway.nombre}), ${descifrado}.
-3. ${assemblyai.nombre}, una empresa de ${assemblyai.pais}, convierte el audio en texto. Recibe el audio sin cifrar.${vocabulario}${borradoAsr}
-4. ${anthropic.nombre}, otra empresa de ${anthropic.pais}, ${contexto}.${retencion}
+Copias de seguridad
+${respaldos}
 
-No se les envía tu teléfono ni tu documento. Lo que sí reciben es lo que se dice en la sesión${VOCABULARIO_A_ASR ? (VOCABULARIO_SOLO_A_ASR ? `; además, ${assemblyai.nombre} recibe las palabras de la lista` : " y las palabras de la lista") : ""}${LLM_RECIBE_CONTEXTO || LLM_RECIBE_NOTA_APROBADA ? `, y ${anthropic.nombre}, el resumen de tu proceso y la nota aprobada` : ""}.
+Quién puede ver
+${quien}${lupita}
 
-¿Quién puede escuchar o leer?
-${nombreProfesional}, desde su cuenta. Nadie más de su consultorio. ${assemblyai.nombre} y ${anthropic.nombre} procesan de forma automática; sus condiciones dicen que ninguna persona accede al contenido, pero eso depende de ellos y esta aplicación no puede verificarlo.
-${lupita}
+Qué podés pedir
+${pedidos}
 
-¿Cuánto tiempo queda el audio?
-Hasta que ${nombreProfesional} revisa y aprueba la nota, en general el mismo día. ${limpieza}${copiaLocal}${backups}
+Si cambiás de opinión
+${revocar}
 
-¿Qué queda guardado?
-En la base de datos de la aplicación (${neon.nombre}), cifrado, y accesible solo para ${nombreProfesional}:
-- La nota clínica, como parte de tu historia clínica.
-- La transcripción de la sesión.
-- El resumen de tu proceso que ella mantiene.
-- Este consentimiento y tu firma.
-El borrado del audio sigue los pasos y plazos explicados arriba.${exportacion}${queSePuedePedir}
+Al firmar, declaro que leí esta información y autorizo la grabación de mis sesiones y el tratamiento de mis datos aquí descriptos.
 
-¿Podés cambiar de opinión?
-Sí, en cualquier momento y sin dar explicaciones. Alcanza con avisarle a ${nombreProfesional}. A partir de ese momento no se graban más sesiones. ${revocar} Esto no afecta tu tratamiento ni tu relación con ella.
-
-¿Es obligatorio aceptar?
-No. Si preferís que no se grabe, la sesión sigue igual y ${nombreProfesional} toma notas como siempre.
-
-Marco legal
-${MARCO_LEGAL.ley}: el tratamiento de datos de salud exige tu consentimiento previo, libre, expreso e informado.${MARCO_LEGAL.transferenciaInternacional ? " Parte del procesamiento ocurre fuera del país; esta autorización incluye esa transferencia internacional." : ""}
-
-Al firmar, declaro que:
-- Leí y entendí esta información.
-- Autorizo la grabación de mis sesiones con ${nombreProfesional}.
-- Entiendo que el audio${VOCABULARIO_A_ASR ? ", la lista de palabras" : ""} y el texto de la sesión se procesan en los servicios del exterior mencionados.
-- Sé que puedo revocar esta autorización cuando quiera.
+Versión ${CONSENTIMIENTO_VERSION}, ${CONSENTIMIENTO_FECHA}.
 `;
 }
 
