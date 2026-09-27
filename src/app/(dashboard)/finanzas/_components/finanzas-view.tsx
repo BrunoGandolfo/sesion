@@ -38,6 +38,7 @@ import {
   VOLVER_A_COBROS,
 } from "@/lib/glosario";
 
+import { ComoTePagan, LoQueEntro, LoQueTrabajaste, NotaAlPie, TeDebenHoy } from "./bloques";
 import {
   PERIODO_INICIAL,
   aniosElegibles,
@@ -153,10 +154,22 @@ export function FinanzasView() {
   );
 }
 
-/** Lo que se dibuja con una respuesta en la mano. */
+/** Lo que se dibuja con una respuesta en la mano. En la computadora, las
+ *  dos platas lado a lado y, más abajo, la deuda de hoy junto a los métodos. */
 function Tablero({ datos }: { datos: ResumenFinanzas }) {
-  void datos;
-  return null;
+  return (
+    <>
+      <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
+        <LoQueEntro datos={datos} />
+        <LoQueTrabajaste datos={datos} />
+      </div>
+      <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
+        <TeDebenHoy deuda={datos.deudaHoy} />
+        <ComoTePagan totales={datos.totales} />
+      </div>
+      <NotaAlPie />
+    </>
+  );
 }
 
 // ============================================

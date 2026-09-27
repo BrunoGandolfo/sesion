@@ -1061,6 +1061,75 @@ export const SIN_SESIONES_REGISTRADAS_LINEAS = [
 ] as const;
 export const IR_A_LA_AGENDA = "Ir a la agenda";
 
+// ─── Los bloques de números ────────────────────────────────────────────────
+
+export const LO_QUE_ENTRO = "Lo que entró";
+export const LO_QUE_TRABAJASTE = "Lo que trabajaste";
+export const TE_DEBEN_HOY = "Te deben hoy";
+export const COMO_TE_PAGAN = "Cómo te pagan";
+
+/** Las comparaciones de lo que entró. Con un mes solo se dice "mes"; con
+ *  más, "período". */
+export function CONTRA_ANTERIOR(unMes: boolean): string {
+  return unMes ? "Contra el mes anterior" : "Contra el período anterior";
+}
+export function CONTRA_ANIO_PASADO(unMes: boolean): string {
+  return unMes ? "Contra el mismo mes del año pasado" : "Contra el mismo período del año pasado";
+}
+/** La comparación no existe cuando en aquella ventana no hay ningún dato:
+ *  un cero ahí diría "ganaste cero" cuando todavía no había consultorio. */
+export const SIN_DATOS_PARA_COMPARAR = "Sin datos para comparar";
+export const SIN_CAMBIO = "Igual";
+
+export const SESIONES_REALIZADAS = "Sesiones realizadas";
+export const PACIENTES_DISTINTAS = "Pacientes";
+export const TARIFA_PROMEDIO = "Tarifa promedio";
+
+/** "De cada diez sesiones que diste, cobraste siete." La cifra va en número:
+ *  es un dato, no prosa. */
+export function DE_CADA_DIEZ(n: number): string {
+  return `De cada diez sesiones que diste, cobraste ${n}.`;
+}
+export const NO_DISTE_SESIONES = "No diste sesiones en este período.";
+
+/** Lo ya cobrado y lo que falta, de lo trabajado en el período. */
+export function COBRADO_Y_FALTA(cobrado: string, falta: string): string {
+  return `Ya cobraste ${cobrado} de esto; faltan ${falta}.`;
+}
+
+/** Ausencias y canceladas, aparte: no suman a lo trabajado. Lo que entró sí
+ *  puede incluir una ausencia, si se cobró: lo cobrado no mira el estado del
+ *  turno (docs/contrato-finanzas.md). */
+export function AUSENCIAS_Y_CANCELADAS(
+  ausencias: number,
+  montoAusencias: string,
+  canceladas: number,
+): string {
+  const vino = ausencias === 0
+    ? "Nadie faltó"
+    : `${pluralizar(ausencias, "turno", "turnos")} con ${NO_VINO} (${montoAusencias})`;
+  const cancel = canceladas === 0
+    ? "ninguno cancelado"
+    : pluralizar(canceladas, "cancelado", "cancelados");
+  return `Aparte: ${vino} y ${cancel}. No suman a lo trabajado; una ausencia que cobraste sí está en lo que entró.`;
+}
+
+/** Los tramos de la deuda de hoy, por días desde la sesión. */
+export const TRAMOS_DEUDA = {
+  hasta30: "Hasta 30 días",
+  de31a90: "De 31 a 90 días",
+  mas90: "Más de 90 días",
+} as const;
+export const PACIENTES_EN_DOS_TRAMOS = "Una paciente con sesiones viejas y nuevas aparece en más de un tramo.";
+export const VER_A_QUIENES = "Ver a quiénes";
+export const VER_A_QUIENES_EN_COBROS = "Ver a quiénes te deben, en Cobros";
+
+export const SIN_COBROS_EN_EL_PERIODO = "No entró ningún cobro en este período.";
+
+/** La nota fija al pie: lo que estos números no son. */
+export const NOTA_FINANZAS =
+  "Los montos son en pesos corrientes, sin ajuste por inflación, y no incluyen los gastos del consultorio.";
+
 /** Los meses, para rotular barras y períodos. Enero es el 0, como en
  *  partesMvd. */
 export const MESES = [
