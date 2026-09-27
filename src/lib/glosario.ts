@@ -1130,6 +1130,34 @@ export const SIN_COBROS_EN_EL_PERIODO = "No entró ningún cobro en este períod
 export const NOTA_FINANZAS =
   "Los montos son en pesos corrientes, sin ajuste por inflación, y no incluyen los gastos del consultorio.";
 
+// ─── Las barras y el detalle de un período ─────────────────────────────────
+
+export const MES_A_MES = "Mes a mes";
+export const ANIO_A_ANIO = "Año a año";
+
+/** La leyenda de las barras: una barra, dos platas. */
+export const BARRAS_QUE_SON = "Cada barra es lo que trabajaste en ese período.";
+export const BARRA_COBRADO = "Ya cobrado";
+export const BARRA_SIN_COBRAR = "Falta cobrar";
+export const TOCA_UNA_BARRA = "Tocá una barra para ver el detalle.";
+
+/** El nombre accesible de una barra: todo lo que dice su dibujo. */
+export function BARRA_ARIA(periodo: string, trabajado: string, cobrado: string, falta: string): string {
+  return `${periodo}: trabajaste ${trabajado}; ya cobrado ${cobrado}, falta cobrar ${falta}. Ver el detalle.`;
+}
+
+/** El detalle de un período, en el sheet. */
+export const DETALLE_DEL_PERIODO = "Detalle del período";
+export function LO_QUE_ENTRO_EN(periodo: string): string {
+  return `Lo que entró en ${periodo}`;
+}
+export const BUSCANDO_COBROS = "Buscando los cobros…";
+export const COBROS_DEL_PERIODO_NO_CARGARON = "No pudimos traer los cobros de ese mes.";
+export function SIN_COBROS_EN(periodo: string): string {
+  return `No entró ningún cobro en ${periodo}.`;
+}
+export const CERRAR_DETALLE = "Cerrar";
+
 /** Los meses, para rotular barras y períodos. Enero es el 0, como en
  *  partesMvd. */
 export const MESES = [

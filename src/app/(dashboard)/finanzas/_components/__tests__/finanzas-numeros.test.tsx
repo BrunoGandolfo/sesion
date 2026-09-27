@@ -22,7 +22,9 @@ vi.mock("@/lib/api-client", async (original) => ({
   apiGet,
 }));
 
-beforeEach(() => apiGet.mockReset());
+beforeEach(() => {
+  apiGet.mockReset();
+});
 
 async function mostrar(respuesta: ResumenFinanzas) {
   apiGet.mockResolvedValue(respuesta);

@@ -38,6 +38,7 @@ import {
   VOLVER_A_COBROS,
 } from "@/lib/glosario";
 
+import { Barras, type EntradaSerie } from "./barras";
 import { ComoTePagan, LoQueEntro, LoQueTrabajaste, NotaAlPie, TeDebenHoy } from "./bloques";
 import {
   PERIODO_INICIAL,
@@ -46,6 +47,7 @@ import {
   queryDe,
   type Periodo,
 } from "./periodo";
+import { SheetPeriodo } from "./sheet-periodo";
 
 type Carga = "cargando" | "listo" | "error";
 type TipoPeriodo = Periodo["tipo"];
@@ -155,14 +157,18 @@ export function FinanzasView() {
 }
 
 /** Lo que se dibuja con una respuesta en la mano. En la computadora, las
- *  dos platas lado a lado y, más abajo, la deuda de hoy junto a los métodos. */
+ *  dos platas lado a lado, las barras a lo ancho y, más abajo, la deuda de
+ *  hoy junto a los métodos. */
 function Tablero({ datos }: { datos: ResumenFinanzas }) {
+  const [elegida, setElegida] = React.useState<EntradaSerie | null>(null);
   return (
     <>
       <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
         <LoQueEntro datos={datos} />
         <LoQueTrabajaste datos={datos} />
       </div>
+      <Barras serie={datos.serie} granularidad={datos.granularidad} onElegir={setElegida} />
+      <SheetPeriodo entrada={elegida} onClose={() => setElegida(null)} />
       <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
         <TeDebenHoy deuda={datos.deudaHoy} />
         <ComoTePagan totales={datos.totales} />
