@@ -48,7 +48,9 @@ En **Hoy** estos motivos no se ven: aparece el aviso general.
 ## La pantalla de Cobros
 
 Arriba, dos importes: **Cobraste este mes** y **Sin cobrar**. Debajo de cada
-importe aparece la cantidad de sesiones correspondiente. Más abajo hay dos
+importe aparece la cantidad de sesiones correspondiente. Después viene la
+tarjeta **Finanzas del consultorio**, que lleva a Finanzas: lo que entró y lo
+que trabajaste por mes o por año (ver `15-finanzas.md`). Más abajo hay dos
 solapas:
 
 - **Te deben** — *"Son N sesiones sin cobrar."* y la lista **ordenada por monto**,
@@ -147,4 +149,5 @@ src/app/api/_lib/casos-uso/despachar-sms.ts
 src/app/(dashboard)/pacientes/[id]/_components/sesiones-tab.tsx
 src/types/domain.ts
 src/components/layout/sidebar.tsx
+src/app/(dashboard)/cobros/_components/tarjeta-finanzas.tsx
 -->

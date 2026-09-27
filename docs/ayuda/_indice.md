@@ -16,8 +16,9 @@ también lo que la app **no** hace.
 - [10 · El Recorrido](10-el-hilo-y-el-recorrido.md) — las propuestas de la IA y tu revisión, las versiones, el brief antes de la sesión, los gráficos y la exportación a PDF.
 - [11 · Tu consultorio](11-tu-consultorio.md) — cada ajuste y su efecto real.
 - [12 · El camino del audio y la privacidad](12-camino-del-audio-y-privacidad.md) — qué protege el audio (la app no lo cifra), quién procesa qué, cuándo se borra el audio, qué queda guardado y registrado, y los respaldos.
-- [13 · Preguntas frecuentes](13-preguntas-frecuentes.md) — 30 preguntas con respuesta corta y el documento donde está el detalle.
+- [13 · Preguntas frecuentes](13-preguntas-frecuentes.md) — 31 preguntas con respuesta corta y el documento donde está el detalle.
 - [14 · Cuando algo falla](14-cuando-algo-falla.md) — no puedo entrar, la grabación se cortó, la nota no llega, no puedo aprobar, el SMS no salió.
+- [15 · Finanzas](15-finanzas.md) — lo que entró y lo que trabajaste, los períodos, las barras, lo que te deben hoy y qué no calcula.
 
 <!-- fuentes:
 docs/ayuda/00-que-es-sesion.md
@@ -35,4 +36,5 @@ docs/ayuda/11-tu-consultorio.md
 docs/ayuda/12-camino-del-audio-y-privacidad.md
 docs/ayuda/13-preguntas-frecuentes.md
 docs/ayuda/14-cuando-algo-falla.md
+docs/ayuda/15-finanzas.md
 -->

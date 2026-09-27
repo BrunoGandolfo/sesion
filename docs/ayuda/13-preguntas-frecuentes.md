@@ -169,6 +169,13 @@ que puede grabar hasta 15 sesiones; lo demás de su consultorio no tiene límite
 Al llegar a 15, la app le dice que hable con quien la invitó.
 → `11-tu-consultorio.md`
 
+**31. ¿Cómo veo cuánto gané este año?**
+En **Cobros**, tocá **Finanzas del consultorio** (en la computadora, **Finanzas**
+en el menú del costado) y elegí **Este año**. **Lo que entró** es lo que te
+pagaron; **Lo que trabajaste**, el valor de las sesiones que diste. No es
+ganancia: la app no conoce tus gastos ni ajusta por inflación.
+→ `15-finanzas.md`
+
 <!-- fuentes:
 src/lib/glosario.ts
 src/lib/limites-prueba.ts

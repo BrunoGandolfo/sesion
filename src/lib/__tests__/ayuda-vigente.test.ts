@@ -7,6 +7,7 @@ import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura"
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
 import { DISPERSION_MINUTOS } from "@/lib/recordatorios-programacion";
 import { DESCARTAR_GRABACION, DESCARTAR_GRABACION_ACCION, DESCARTAR_GRABACION_TITULO, ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_AGOTADAS, INVITAR_ESPERA, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
+import * as glosario from "@/lib/glosario";
 import { AVISO_GRABACIONES_RESTANTES, ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, TOPE_INVITACIONES_TOTAL } from "@/lib/limites-prueba";
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -456,5 +457,38 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     expect(privacidad).toContain(`**hasta ${ASR_BORRADO_MAX_INTENTOS} veces**, durante **unos ${ASR_BORRADO_DIAS_APROX} días**, hasta que AssemblyAI responde que lo borró o que ya no existe`);
     expect(privacidad).toContain("la app no puede comprobar que AssemblyAI lo haya borrado");
     expect(documento("00-que-es-sesion.md")).toContain(`se reintenta durante unos ${ASR_BORRADO_DIAS_APROX} días`);
+  });
+});
+
+describe("la ayuda de Finanzas nombra lo que la pantalla muestra", () => {
+  it("cada nombre en negrita sale del glosario o es una pantalla del menú", () => {
+    const texto = documento("15-finanzas.md");
+    const enNegrita = [...texto.matchAll(/\*\*([^*]+?)\*\*/g)].map((m) => m[1].replace(/[.:]$/, ""));
+    const textos = new Set(
+      Object.values(glosario).flatMap((v) =>
+        typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v).filter((x) => typeof x === "string") : [],
+      ),
+    );
+    // Los rótulos que el glosario arma con una función.
+    for (const unMes of [true, false]) {
+      textos.add(glosario.CONTRA_ANTERIOR(unMes));
+      textos.add(glosario.CONTRA_ANIO_PASADO(unMes));
+    }
+    // Lo que no es un nombre de la pantalla sino un énfasis de la prosa.
+    const PROSA = new Set([
+      "Para qué sirve", "En el teléfono", "En la computadora", "registraste como pagado", "ocurrió",
+      "hoy", "entró", "No ajusta por inflación", "No conoce gastos, metas ni presupuestos",
+      "No exporta", "No deja elegir un rango de fechas a mano", "No muestra nada clínico",
+      "Lupita no ve tus números",
+    ]);
+    const faltan = enNegrita.filter((n) => !PROSA.has(n) && !textos.has(n));
+    expect(faltan).toEqual([]);
+  });
+
+  it("explica las dos platas con el ejemplo del contrato", () => {
+    const texto = documento("15-finanzas.md");
+    expect(texto).toContain("20 de agosto");
+    expect(texto).toContain("3 de septiembre");
+    expect(codigo("docs/contrato-finanzas.md")).toMatch(/20 de agosto y cobrada el 3 de\s+septiembre/);
   });
 });
