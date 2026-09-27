@@ -1019,6 +1019,60 @@ export const CARGANDO = "Cargando…";
 // en la sección de Hoy, que es la pantalla desde donde se cobra.
 
 // ────────────────────────────────────────────────────────────────────────────
+// Finanzas — el tablero del consultorio (/finanzas)
+// Las dos platas se nombran siempre igual: lo que ENTRÓ (cobrado, por fecha
+// de pago) y lo que TRABAJASTE (sesiones realizadas, por fecha de sesión).
+// Ver docs/contrato-finanzas.md.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** El título de la pantalla y el ítem del lateral. No es uno de los cuatro
+ *  destinos de NAV: en el teléfono se llega desde Cobros. */
+export const FINANZAS = "Finanzas";
+
+export const CARGANDO_FINANZAS = "Cargando tus finanzas…";
+
+/** Los cuatro períodos del selector, en el orden en que se ofrecen. */
+export const PERIODOS_FINANZAS = {
+  MES: "Este mes",
+  ANIO: "Este año",
+  DOCE_MESES: "12 meses",
+  TODO: "Todo",
+} as const;
+
+export const ELEGIR_PERIODO = "Elegir el período";
+export const ANIO_ANTERIOR = "Año anterior";
+export const ANIO_SIGUIENTE = "Año siguiente";
+
+/** El enlace de vuelta, en el teléfono: Finanzas no está en el menú de abajo. */
+export const VOLVER_A_COBROS = "Volver a Cobros";
+
+export const FINANZAS_NO_CARGARON = [
+  "No pudimos traer tus finanzas.",
+  "Puede ser la conexión.",
+  "Tus datos no se perdieron.",
+] as const;
+
+/** Estado vacío: la organización no tiene un solo turno ni un solo pago. */
+export const SIN_SESIONES_REGISTRADAS = "Todavía no hay sesiones registradas";
+export const SIN_SESIONES_REGISTRADAS_LINEAS = [
+  "Cuando agendes y cobres tus primeras sesiones, acá vas a ver lo que entró y lo que trabajaste.",
+  "Los números salen solos de la agenda y de los cobros: no hay nada que cargar aparte.",
+  "Para empezar, agendá un turno.",
+] as const;
+export const IR_A_LA_AGENDA = "Ir a la agenda";
+
+/** Los meses, para rotular barras y períodos. Enero es el 0, como en
+ *  partesMvd. */
+export const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+] as const;
+export const MESES_CORTOS = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+] as const;
+
+// ────────────────────────────────────────────────────────────────────────────
 // Errores — en castellano, sin HTTP, sin R2, sin CORS.
 // Cada uno dice qué pasó, si se perdió algo y qué puede hacer ella.
 // ────────────────────────────────────────────────────────────────────────────

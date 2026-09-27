@@ -5,5 +5,6 @@
 export { EsqueletoHoy } from "./hoy";
 export { EsqueletoPacientes, EsqueletoListaPacientes } from "./pacientes";
 export { EsqueletoCobros, EsqueletoCobrosCuerpo } from "./cobros";
+export { EsqueletoFinanzas, EsqueletoFinanzasCuerpo } from "./finanzas";
 export { EsqueletoNota, EsqueletoNotaCuerpo } from "./nota";
 export { EsqueletoPantalla } from "./pantalla";

@@ -16,9 +16,9 @@
 //
 // `loading.tsx` puede serlo (lo dice la doc del archivo) y acá hace falta,
 // porque este fallback no cubre sólo a Hoy: cubre a toda ruta de
-// `(dashboard)` que no tenga el suyo. Pacientes, Cobros y la nota tienen
-// uno propio y no llegan hasta acá; Agenda, Tu consultorio, Grabar,
-// deudores y finanzas sí. Mostrarles el dibujo de Hoy sería anunciarles una
+// `(dashboard)` que no tenga el suyo. Pacientes, Cobros, Finanzas y la nota
+// tienen uno propio y no llegan hasta acá; Agenda, Tu consultorio, Grabar y
+// deudores sí. Mostrarles el dibujo de Hoy sería anunciarles una
 // pantalla que no es la que viene, así que se mira la ruta y sólo Hoy —que
 // es `/` exacto— recibe su esqueleto; el resto recibe el neutro.
 //

@@ -1,7 +1,8 @@
-import { redirect } from "next/navigation";
+import { FinanzasView } from "./_components/finanzas-view";
 
-// Finanzas y Deudores se unieron en /cobros. La ruta vieja queda solo para
-// que el menú y los links guardados sigan llegando.
+// Dinámica como el resto del dashboard: sin request no hay nonce para la CSP.
+export const dynamic = "force-dynamic";
+
 export default function FinanzasPage() {
-  redirect("/cobros");
+  return <FinanzasView />;
 }

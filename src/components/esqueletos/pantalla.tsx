@@ -4,9 +4,10 @@
 //
 // `loading.tsx` no cubre sólo a su `page.tsx`: cubre también todas las rutas
 // que cuelgan debajo y no tengan uno propio. El de `(dashboard)/` alcanza
-// entonces a Agenda, Tu consultorio, Grabar, deudores y finanzas.
+// entonces a Agenda, Tu consultorio, Grabar y deudores (Finanzas tiene el
+// suyo).
 //
-// Ninguna de esas cinco tiene esqueleto propio —Agenda a propósito: ya
+// Ninguna de esas cuatro tiene esqueleto propio —Agenda a propósito: ya
 // cachea sus rangos y avisa "Actualizando…", y un esqueleto encima sería
 // desandar eso—, así que en vez de mostrarles el dibujo de Hoy (que sería
 // mentirles sobre lo que viene) se les muestra esto: el ancho y el aire de

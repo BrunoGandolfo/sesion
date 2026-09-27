@@ -24,6 +24,8 @@ import { render, screen } from "@testing-library/react";
 import {
   EsqueletoCobros,
   EsqueletoCobrosCuerpo,
+  EsqueletoFinanzas,
+  EsqueletoFinanzasCuerpo,
   EsqueletoHoy,
   EsqueletoListaPacientes,
   EsqueletoNota,
@@ -34,6 +36,7 @@ import {
 import {
   ABRIENDO_NOTA,
   CARGANDO_COBROS,
+  CARGANDO_FINANZAS,
   CARGANDO_HOY,
   CARGANDO_PACIENTES,
   CARGANDO_PANTALLA,
@@ -49,6 +52,7 @@ const PANTALLAS = [
   ["Hoy", <EsqueletoHoy key="hoy" />, CARGANDO_HOY],
   ["Pacientes", <EsqueletoPacientes key="pac" />, CARGANDO_PACIENTES],
   ["Cobros", <EsqueletoCobros key="cob" />, CARGANDO_COBROS],
+  ["Finanzas", <EsqueletoFinanzas key="fin" />, CARGANDO_FINANZAS],
   ["la nota", <EsqueletoNota key="nota" />, ABRIENDO_NOTA],
   ["el resto del dashboard", <EsqueletoPantalla key="gen" />, CARGANDO_PANTALLA],
 ] as const;
@@ -134,6 +138,13 @@ describe("un esqueleto, dos usos", () => {
     expect(pantalla).toContain(soloCuerpo);
   });
 
+  it("la pantalla de Finanzas contiene exactamente el cuerpo del cliente", () => {
+    const soloCuerpo = render(<EsqueletoFinanzasCuerpo />).container.innerHTML;
+    const pantalla = render(<EsqueletoFinanzas />).container.innerHTML;
+
+    expect(pantalla).toContain(soloCuerpo);
+  });
+
   it("la pantalla de la nota contiene exactamente el cuerpo del cliente", () => {
     const soloCuerpo = render(<EsqueletoNotaCuerpo />).container.innerHTML;
     const pantalla = render(<EsqueletoNota />).container.innerHTML;
@@ -145,10 +156,12 @@ describe("un esqueleto, dos usos", () => {
     "src/app/(dashboard)/loading.tsx",
     "src/app/(dashboard)/pacientes/loading.tsx",
     "src/app/(dashboard)/cobros/loading.tsx",
+    "src/app/(dashboard)/finanzas/loading.tsx",
     "src/app/(dashboard)/sesiones/[id]/loading.tsx",
     "src/app/(dashboard)/_components/dashboard.tsx",
     "src/app/(dashboard)/pacientes/_components/pacientes-view.tsx",
     "src/app/(dashboard)/cobros/_components/cobros-view.tsx",
+    "src/app/(dashboard)/finanzas/_components/finanzas-view.tsx",
     "src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx",
   ];
 
