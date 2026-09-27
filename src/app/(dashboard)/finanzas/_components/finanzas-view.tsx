@@ -85,8 +85,13 @@ export function FinanzasView() {
     setReloadKey((k) => k + 1);
   };
 
+  // Dos períodos pueden pedir lo mismo (en enero, "Este mes" y "Este año"):
+  // ahí no sale pedido nuevo, así que no se entra en "cargando", que nadie
+  // cerraría. Si lo último falló, cuenta como reintento.
   const elegir = (nuevo: Periodo) => {
-    setCarga("cargando");
+    const mismaQuery = queryDe(nuevo, hoy ?? mesDeHoy(new Date()), primerMes) === query;
+    if (!mismaQuery) setCarga("cargando");
+    else if (carga === "error") reintentar();
     setPeriodo(nuevo);
   };
 

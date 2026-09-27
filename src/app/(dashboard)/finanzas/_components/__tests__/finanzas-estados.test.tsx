@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Carga, error, reintento, vacío y el pedido que sale de cada chip.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ALGO_FALLO,
@@ -88,4 +88,39 @@ it("cada chip pide su período, con el mes de hoy que dice el servidor", async (
     expect(apiGet).toHaveBeenLastCalledWith("/api/finanzas/resumen?desde=2025-01&hasta=2025-12", expect.anything()),
   );
   expect((screen.getByRole("button", { name: "Año anterior" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+// En enero "Este mes" y "Este año" piden lo mismo: no sale pedido nuevo, y la
+// pantalla no puede quedar ocupada esperando una respuesta que no viene.
+describe("dos chips que piden lo mismo", () => {
+  const enero = {
+    ...RESPUESTA_EJEMPLO,
+    deudaHoy: { ...RESPUESTA_EJEMPLO.deudaHoy, alDia: "2026-01" },
+  };
+  const QUERY_ENERO = "/api/finanzas/resumen?desde=2026-01&hasta=2026-01";
+
+  it("no deja la pantalla cargando", async () => {
+    apiGet.mockResolvedValue(enero);
+    const { container } = render(<FinanzasView />);
+    await screen.findByRole("tablist");
+    fireEvent.click(screen.getByRole("tab", { name: "Este mes" }));
+    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith(QUERY_ENERO, expect.anything()));
+    await waitFor(() => expect(container.querySelector("[aria-busy='true']")).toBeNull());
+    const pedidos = apiGet.mock.calls.length;
+    fireEvent.click(screen.getByRole("tab", { name: "Este año" }));
+    expect(container.querySelector("[aria-busy='true']")).toBeNull();
+    expect(apiGet).toHaveBeenCalledTimes(pedidos);
+  });
+
+  it("si lo último falló, reintenta en vez de esconder el error", async () => {
+    apiGet.mockResolvedValueOnce(enero).mockRejectedValueOnce(new Error("red")).mockResolvedValue(enero);
+    render(<FinanzasView />);
+    await screen.findByRole("tablist");
+    fireEvent.click(screen.getByRole("tab", { name: "Este mes" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Este año" }));
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(3));
+    expect(apiGet).toHaveBeenLastCalledWith(QUERY_ENERO, expect.anything());
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
 });
