@@ -27,8 +27,6 @@ import type {
 import { BarraAcciones } from "./barra-acciones";
 import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 import { CAMBIOS_SIN_APROBAR_MENSAJE, FALTA_REVISAR_RIESGO, FALTA_REVISAR_MENCIONES, FALTA_REVISAR_AMBAS, FALTA_REVISAR_VERSION, FEEDBACK_REINTENTAR_ERROR, SESION_FALLO_LABEL } from "@/lib/glosario";
-import { avisarLupita } from "@/lib/lupita-presencia";
-
 import { NotaSesionView } from "./nota-sesion-view";
 import { ParaVosView } from "./para-vos-view";
 import { TranscripcionView } from "./transcripcion-view";
@@ -314,17 +312,6 @@ export function SesionDetailView({
         },
       );
       aplicar(fila);
-      // Lupita (06-lupita-presencia.md): la posada no está en la nota —es
-      // clínica—, así que el almacén guarda el gesto y lo hace al volver a
-      // una de sus pantallas. Sólo si la sesión no trae ninguna señal de
-      // riesgo: esa sesión no se acompaña con el personaje en ningún lado.
-      // Acá no se dibuja nada; se importa el almacén, nunca el dibujo.
-      if (
-        clavesRiesgo.length === 0 &&
-        clavesDeRiesgo(fila.datos?.riesgoDetectado, fila.datos?.flagsRiesgo).length === 0
-      ) {
-        avisarLupita("aprobada");
-      }
       setBorradorAnterior(null);
       setAprobadaAhora(true);
       setEnviando(false);

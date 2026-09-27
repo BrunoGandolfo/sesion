@@ -8,10 +8,10 @@ import { motion } from "framer-motion";
 import { Home, Calendar, Users, Wallet } from "lucide-react";
 
 import { DURACION_NAVEGACION, SUAVE } from "@/components/ui/movimiento";
-import { Lupita, TAMANOS_LUPITA } from "@/components/ui/lupita";
+import { LupitaMenu } from "@/components/ui/lupita";
 import { LUPITA, NAV } from "@/lib/glosario";
 
-import { useTocarLupita } from "./presencia-lupita";
+import { useAbrirAyuda } from "./ayuda-del-panel";
 import { GlobitoHoy, GlobitoHoyTexto } from "./globito-hoy";
 
 // Los cuatro destinos, con el nombre que usa toda la app (glosario NAV).
@@ -28,10 +28,6 @@ const NAV_ITEMS = [
 // Lupita es el quinto ítem por decisión de producto. Abre el panel sobre
 // la pantalla actual (uno solo para todo el panel: ayuda-del-panel.tsx); la
 // configuración tiene su engranaje en la cabecera.
-//
-// El ítem es QUIETO: la Lupita que vive es la posada, que se apoya sobre
-// este menú justo arriba del ítem (presencia-lupita.tsx, 06 D0). Tocar el
-// ítem hace lo mismo que tocar la posada: saluda, si está, y abre el chat.
 
 /** Identidad compartida del subrayado: framer-motion lo desliza entre
  *  pestañas en vez de apagarlo acá y prenderlo allá. */
@@ -40,7 +36,8 @@ const INDICADOR = "nav-activo";
 export function BottomNav() {
   const pathname = usePathname();
   const reducido = useMovimientoReducido();
-  const tocarLupita = useTocarLupita();
+  const [toquesLupita, setToquesLupita] = React.useState(0);
+  const abrirAyuda = useAbrirAyuda();
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -94,10 +91,13 @@ export function BottomNav() {
 
       <button
         type="button"
-        onClick={tocarLupita}
+        onClick={() => {
+          setToquesLupita((toques) => toques + 1);
+          abrirAyuda();
+        }}
         className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[12px] leading-[15px] font-semibold text-ink-500 transition-colors duration-[var(--duration-fast)]"
       >
-        <Lupita pose="saluda" tamano={TAMANOS_LUPITA.inline} />
+        <LupitaMenu toque={toquesLupita} />
         {LUPITA}
       </button>
     </nav>

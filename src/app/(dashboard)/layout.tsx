@@ -5,7 +5,6 @@ import { AvisosDeNotas } from "@/components/layout/avisos-de-notas";
 import { AyudaDelPanel } from "@/components/layout/ayuda-del-panel";
 import { AvisoVersion } from "@/components/layout/aviso-version";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { PresenciaLupita } from "@/components/layout/presencia-lupita";
 import { Providers } from "@/components/layout/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { PARAM_SESION_VENCIDA } from "@/lib/sesion-cookie";
@@ -46,10 +45,8 @@ export const dynamic = "force-dynamic";
 //     pantalla; el envoltorio va acá y no en sidebar.tsx para no tocar un
 //     archivo ajeno. En mobile el `<aside>` ya es `hidden`, así que el
 //     envoltorio no ocupa nada.
-//   - El menú inferior era `fixed` y lo sigue siendo, y el `pb-28` del
-//     `main` le reserva su franja y la de Lupita posada encima (62 + 34 px;
-//     antes era `pb-20`, sólo el menú): al final del scroll el último
-//     renglón queda por arriba de ella.
+//   - El menú inferior era `fixed` y lo sigue siendo, y el `pb-20` del
+//     `main` le sigue reservando su franja.
 //
 // Efecto lateral bueno: el bloqueo de scroll de fondo que `ui/sheet.tsx` ya
 // escribía (`document.body.style.overflow = "hidden"`) recién ahora hace
@@ -66,13 +63,6 @@ export const dynamic = "force-dynamic";
 //
 // La franja de avisos de notas (`AvisosDeNotas`) es el primer hijo del
 // <main>: arriba de cualquier pantalla, en el teléfono y en la computadora.
-//
-// LUPITA POSADA
-//
-// `PresenciaLupita` es la presencia de Lupita (docs/diseno/06-lupita-
-// presencia.md): una sola, montada acá, dentro de AyudaDelPanel porque al
-// tocarla abre el chat. En el teléfono se posa sobre el menú de abajo; en la
-// computadora, por portal, en un hueco del lateral.
 
 export default async function DashboardLayout({
   children,
@@ -92,13 +82,12 @@ export default async function DashboardLayout({
           <div className="shrink-0 lg:sticky lg:top-0 lg:flex lg:h-screen">
             <Sidebar />
           </div>
-          <main className="min-w-0 flex-1 overflow-x-clip pb-28 lg:pb-0">
+          <main className="min-w-0 flex-1 overflow-x-clip pb-20 lg:pb-0">
             <AvisosDeNotas />
             <AvisoVersion />
             {children}
           </main>
           <BottomNav />
-          <PresenciaLupita />
         </div>
       </AyudaDelPanel>
     </Providers>

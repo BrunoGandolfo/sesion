@@ -20,10 +20,10 @@ import type { DeudaPaciente } from "@/types/domain";
 import { apiGet } from "@/lib/api-client";
 import { zonaDeuda } from "@/lib/deudas";
 import { DURACION_NAVEGACION, SUAVE } from "@/components/ui/movimiento";
-import { Lupita, TAMANOS_LUPITA } from "@/components/ui/lupita";
+import { Lupita } from "@/components/ui/lupita";
 import { LUPITA, NAV, TU_CONSULTORIO } from "@/lib/glosario";
 
-import { ID_HUECO_LATERAL, useEsEscritorio, useTocarLupita } from "./presencia-lupita";
+import { useAbrirAyuda } from "./ayuda-del-panel";
 import { GlobitoHoy, GlobitoHoyTexto } from "./globito-hoy";
 
 // Mismos destinos que el menú de mobile, más la configuración, que en
@@ -66,8 +66,7 @@ export function Sidebar() {
   // La ayuda no es un destino: se abre encima de la pantalla en la que ella
   // está y se cierra ahí mismo. El panel es uno solo y lo monta el layout
   // (ayuda-del-panel.tsx): este menú y el de abajo están montados a la vez.
-  // Tocar el ítem es tocar a Lupita: saluda la posada, si está, y abre.
-  const tocarLupita = useTocarLupita();
+  const abrirAyuda = useAbrirAyuda();
   const escritorio = useEsEscritorio();
 
   const name = usuaria?.nombre.trim() || "Usuario";
@@ -176,10 +175,10 @@ export function Sidebar() {
             pueda estarlo. */}
         <button
           type="button"
-          onClick={tocarLupita}
+          onClick={abrirAyuda}
           className="flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm font-medium text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"
         >
-          <Lupita pose="saluda" tamano={TAMANOS_LUPITA.inline} />
+          <Lupita pose="saluda" tamano={20} />
           <span className="flex-1">{LUPITA}</span>
         </button>
         <Link
@@ -193,13 +192,8 @@ export function Sidebar() {
         </Link>
       </nav>
 
-      {/* El hueco de la posada en la computadora: el equivalente del lugar
-          sobre el menú de abajo (06, D0). Lo llena presencia-lupita.tsx por
-          portal; vacío, no ocupa nada. Alineado con los íconos. */}
-      <div id={ID_HUECO_LATERAL} className="mt-auto flex px-5 pb-2" />
-
       {/* Footer */}
-      <div className="border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="mt-auto border-t px-4 py-4" style={{ borderColor: "var(--border-subtle)" }}>
         <div className="flex items-center gap-3 px-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sage-100 font-sans text-xs font-medium text-sage-700">
             {initials}
@@ -220,5 +214,26 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+/** El ancho en que este menú se ve (`lg`, 64rem: el `hidden lg:flex` del
+ *  <aside>). En el servidor, falso: el conteo se pide ya en el navegador. */
+const CONSULTA_ESCRITORIO = "(min-width: 64rem)";
+
+function suscribirAncho(avisar: () => void): () => void {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const consulta = window.matchMedia(CONSULTA_ESCRITORIO);
+  consulta.addEventListener("change", avisar);
+  return () => consulta.removeEventListener("change", avisar);
+}
+
+function useEsEscritorio(): boolean {
+  return React.useSyncExternalStore(
+    suscribirAncho,
+    () =>
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(CONSULTA_ESCRITORIO).matches,
+    () => false,
   );
 }

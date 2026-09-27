@@ -26,10 +26,6 @@ import {
   ALGO_FALLO,
   DEBE,
   NUEVO_PACIENTE,
-  PACIENTES_SIN_ARCHIVADOS,
-  PACIENTES_SIN_ARCHIVADOS_LINEA,
-  PACIENTES_SIN_RESULTADOS,
-  PACIENTES_SIN_RESULTADOS_LINEA,
   PACIENTES_VACIO_LINEA,
   PACIENTES_VACIO_TITULO,
 } from "@/lib/glosario";
@@ -522,24 +518,22 @@ function EmptyState({
 }) {
   return (
     <div className="bg-white border border-[color:var(--border-subtle)] rounded-lg px-6 py-14 flex flex-col items-center text-center">
-      {/* Los tres vacíos llevan a Lupita (06-lupita-presencia.md: en los
-          estados vacíos ella es la ilustración), a 96 px en el círculo crema.
-          Buscar un nombre no es clínico: la lista no muestra nada de nadie. */}
       {kind === "search" && (
         <>
-          <span className="inline-flex h-[132px] w-[132px] items-center justify-center rounded-full bg-cream-100">
-            <Lupita pose="senala" tamano={TAMANOS_LUPITA.vacio} movimiento="respira" />
-          </span>
-          <p className="mt-4 font-display text-[18px] text-ink-900 font-medium">
-            {PACIENTES_SIN_RESULTADOS}
+          <p className="font-display text-[18px] text-ink-900 font-medium">
+            Sin resultados.
           </p>
-          <p className="mt-1 text-[13px] text-ink-500">{PACIENTES_SIN_RESULTADOS_LINEA}</p>
+          <p className="mt-1 text-[13px] text-ink-500">Probá otro nombre.</p>
         </>
       )}
       {kind === "noPatients" && (
         <>
+          {/* El único estado vacío de esta pantalla donde entra Lupita: la
+              lista sin nadie es una pantalla que enseña el próximo paso, no
+              una pantalla clínica (docs/diseno/04-personaje.md). Va a 96 px
+              dentro del círculo crema, como manda el documento. */}
           <span className="inline-flex h-[132px] w-[132px] items-center justify-center rounded-full bg-cream-100">
-            <Lupita pose="saluda" tamano={TAMANOS_LUPITA.vacio} movimiento="respira" />
+            <Lupita pose="saluda" tamano={TAMANOS_LUPITA.vacio} />
           </span>
           <p className="mt-4 font-display italic text-[22px] text-ink-900 font-medium">
             {PACIENTES_VACIO_TITULO}
@@ -559,13 +553,12 @@ function EmptyState({
       )}
       {kind === "noArchived" && (
         <>
-          <span className="inline-flex h-[132px] w-[132px] items-center justify-center rounded-full bg-cream-100">
-            <Lupita pose="saluda" tamano={TAMANOS_LUPITA.vacio} movimiento="respira" />
-          </span>
-          <p className="mt-4 font-display text-[18px] text-ink-900 font-medium">
-            {PACIENTES_SIN_ARCHIVADOS}
+          <p className="font-display text-[18px] text-ink-900 font-medium">
+            No tenés pacientes archivados.
           </p>
-          <p className="mt-1 text-[13px] text-ink-500">{PACIENTES_SIN_ARCHIVADOS_LINEA}</p>
+          <p className="mt-1 text-[13px] text-ink-500">
+            Los pacientes que dejan de asistir se archivan, no se borran.
+          </p>
         </>
       )}
     </div>

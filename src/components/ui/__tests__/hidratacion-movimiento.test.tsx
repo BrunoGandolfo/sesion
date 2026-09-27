@@ -4,7 +4,7 @@ import { act } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { Lupita } from "../lupita";
+import { LupitaMenu } from "../lupita";
 import { AlturaAnimada } from "../movimiento";
 import Template from "@/app/(dashboard)/template";
 
@@ -14,9 +14,6 @@ vi.mock("framer-motion", async original => ({
   useReducedMotion: () => preferencia.reducida,
 }));
 
-// Lupita que respira: antes era el ítem del menú (LupitaMenu), que se fue
-// con la posada. Una Lupita viva lee el reloj del parpadeo con
-// useSyncExternalStore y tiene que hidratar igual que la versión quieta.
 it.each([false, true])("hidrata sin remontar ni ocultar contenido, reducida=%s", async reducida => {
   preferencia.reducida = reducida;
   const montar = vi.fn();
@@ -25,7 +22,7 @@ it.each([false, true])("hidrata sin remontar ni ocultar contenido, reducida=%s",
     React.useEffect(() => { montar(); return desmontar; }, []);
     return <p>Agenda de hoy</p>;
   }
-  const contenido = <><Template><AlturaAnimada abierto><Pantalla /></AlturaAnimada></Template><Lupita pose="saluda" movimiento="respira" tamano={34} enPosada /></>;
+  const contenido = <><Template><AlturaAnimada abierto><Pantalla /></AlturaAnimada></Template><LupitaMenu toque={0} /></>;
   const nodo = document.createElement("div");
   nodo.innerHTML = renderToString(contenido);
   document.body.appendChild(nodo);

@@ -37,7 +37,6 @@ import {
 } from "@/components/grabacion/GrabadorSesion";
 import { AvisoPrueba } from "@/components/layout/aviso-prueba";
 import { Button, Confirmar, Toast } from "@/components/ui";
-import { Lupita, TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
 import {
   marcarTurnoRealizado,
@@ -69,7 +68,6 @@ import {
   GRABACION_TERMINO_MICROFONO,
   GRABAR_SESION,
   GUARDAR_LO_GRABADO,
-  LUPITA_PANTALLA_PRENDIDA,
   PAUSAR,
   PREPARANDO_GRABACION,
   REANUDAR,
@@ -570,21 +568,6 @@ function PantallaPrevia({
             {AVISO_SIN_PANTALLA_ENCENDIDA}
           </Aviso>
         </div>
-      ) : pendienteMinutos === null && !muyCorta ? (
-        // Lupita recuerda la pantalla prendida (06-lupita-presencia.md).
-        // Quieta y sin saludo: la paciente puede estar enfrente mirando el
-        // teléfono (06, R3). Entra brotando y, al tocar "Grabar sesión", se
-        // va igual; mientras se graba no está en ningún lado. Si el teléfono
-        // ya dijo que no mantiene la pantalla encendida, manda el aviso de
-        // arriba, que dice más.
-        <p className="flex items-center gap-2 text-left font-sans text-[14px] leading-[1.5] text-ink-700">
-          <Lupita
-            pose="senala"
-            tamano={TAMANOS_LUPITA.junto}
-            movimiento={preparando ? "retira" : "brota"}
-          />
-          {LUPITA_PANTALLA_PRENDIDA}
-        </p>
       ) : null}
     </div>
   );

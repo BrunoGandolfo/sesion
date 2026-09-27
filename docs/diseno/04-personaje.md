@@ -7,19 +7,11 @@ tokens de color que ya existen en `src/app/globals.css`: no se agrega un color
 a la paleta para que entre un personaje. Los otros conceptos que se evaluaron
 (el canto rodado, el hornero) están en el historial de Git.
 
-Desde el 26-sep-2026 Lupita es además una **presencia**: vive posada sobre
-el menú de abajo (en la computadora, en el lateral) en cinco pantallas,
-respira, parpadea y hace tres gestos. Cómo, dónde y con qué límites está en
-`docs/diseno/06-lupita-presencia.md`, que manda sobre este documento donde
-difieren; lo de abajo quedó actualizado a esa decisión.
-
 ## La regla de tono, escrita como se va a aplicar
 
 **Aparece en:** la ayuda (`docs/ayuda/*` y cualquier pantalla de ayuda que
-salga de ahí), los estados vacíos, el onboarding, las confirmaciones
-alegres —cobrar y sesión aprobada, como gesto de la posada— y, como
-presencia, posada en Hoy, Agenda, Pacientes, Cobros y Tu consultorio
-(06, D0). Fuera de esas cinco pantallas la posada se retira.
+salga de ahí), los estados vacíos, el onboarding y las confirmaciones
+alegres —cobrar y sesión aprobada—.
 
 **No aparece nunca en:**
 
@@ -31,9 +23,6 @@ presencia, posada en Hoy, Agenda, Pacientes, Cobros y Tu consultorio
 - El brief pre-sesión: `brief-pre-sesion.tsx` y `components/clinico/brief-corto.tsx`,
   incluido su uso dentro de la card de Hoy (`card-ahora.tsx`).
 - El Recorrido: `recorrido-tab.tsx` y todo `pacientes/[id]/_components/graficos/`.
-- La ficha entera y `/grabar/*` como presencia: ahí la posada se retira y el
-  panel de ayuda se abre sin dibujo (06, D3). La única excepción es el
-  recordatorio de la pantalla prendida, antes de empezar a grabar, quieto.
 - A menos de una pantalla de una señal de riesgo. En código, eso es
   concreto: si `clavesDeRiesgo(...)` (`RiesgoDetectadoBanner.tsx`)
   devuelve algo distinto de una lista vacía para esa sesión, la sesión no
@@ -43,11 +32,7 @@ presencia, posada en Hoy, Agenda, Pacientes, Cobros y Tu consultorio
 
 Ese último punto es el que decide si el personaje puede existir: no alcanza
 con que no esté en la pantalla del riesgo, tiene que no estar en el camino
-de esa sesión. Con la posada, en código: en Hoy no aparece hasta que la
-pantalla confirmó que el día no trae ninguna señal; aprobar una nota sólo le
-avisa si `clavesDeRiesgo` está vacío; y el aviso de "nota lista" y el cobro
-fuera de Hoy no la llevan hasta que la respuesta del aviso traiga el dato
-de riesgo (06, D2). Lo vigila `src/lib/__tests__/lupita-sin-riesgo.test.ts`.
+de esa sesión.
 
 ## Cómo entra al código
 
@@ -93,23 +78,14 @@ es lo que hace quien busca en la ayuda.
 
 ## Movimiento
 
-Hasta el 26-sep-2026 Lupita se dibujaba quieta en reposo. Desde entonces
-(06, sección 3), con los tiempos de `TIEMPOS_LUPITA` en
-`src/lib/movimiento.ts`, que sólo pueden usar sus archivos:
+El panel de ayuda decide la secuencia (`movimiento` en `lupita.tsx`), con los
+tiempos de `src/lib/movimiento.ts`:
 
-- **Reposo:** respira (escala de 1 a 1,02 desde la base, un ciclo de 4 s,
-  en CSS: `.lupita-respira`) y parpadea (la hoja chica se pliega 120 ms,
-  cada 4 a 9 s, con un solo reloj para la app). Sólo desde 32 px; a 20 px
-  —menú, líneas del chat— siempre quieta. **Una sola Lupita viva por
-  pantalla**: con una de contenido a la vista, la posada se queda quieta.
-- **Gestos**, de 600 ms como mucho y con 10 s de enfriamiento, sin cola:
-  saludo (450 ms), cobro (450 ms), asiente (~400 ms). **brota** y su
-  inverso, 220 ms. **celebra**, al completar una respuesta del chat.
-- **piensa**, en el chat: vaivén `senala ↔ piensa` de 900 ms por semiciclo,
-  con tope de 15 s. Es el único movimiento que no es reposo ni gesto.
-- El ítem del menú es quieto: la que vive es la posada.
-- Con `prefers-reduced-motion` no se anima nada: los estados se ven en su
-  pose fija y los gestos no se ven.
+- **brota**, al abrir la ayuda, y **celebra**, al completar una respuesta:
+  aparece subiendo en `TIEMPOS.pliegue` (220 ms), una sola vez.
+- Reposo, espera y texto se muestran **quietos**: sin pulsos ni loops.
+- En el menú, un gesto breve (`TIEMPOS.breve`, 150 ms) al tocar el ítem, sin loop.
+- Con `prefers-reduced-motion` no se anima nada: la pose cambia en su lugar.
 
 ## Cómo habla
 
@@ -134,16 +110,9 @@ usa "usuario", "sistema", "procesando".
   pantalla que más vas a mirar."
 
 **Confirmaciones alegres**
-- "Cobrado. Ese ya está." *(toast del cobro, `toast.tsx`, sin dibujo: el
-  toast es `ink-900`; en Hoy la posada celebra con un gesto)*
-- "Nota guardada." *(en la nota, sin dibujo; la posada asiente cuando
-  vuelve a una de sus pantallas, sólo si la sesión no tuvo señal de riesgo)*
-
-**La línea del día** *(Hoy, la primera vez del día en el dispositivo;
-nunca un día con riesgo; sin "Buen día" adelante, porque la cabecera ya
-saluda)*
-- "Hoy tenés 3 sesiones." / "Te quedan 2 sesiones por delante."
-- "Hoy no hay agenda. Buen momento para ponerte al día."
+- "Cobrado. Ese ya está." *(toast del cobro, `toast.tsx`)*
+- "Nota guardada." *(toast de vuelta en Hoy, sólo si la sesión no tuvo
+  señal de riesgo)*
 
 Lo que **no** dice, en ningún contexto: nada sobre el contenido de una
 sesión, nada sobre una paciente, ningún "¡bien ahí!", ningún chiste sobre
@@ -156,21 +125,12 @@ el trabajo clínico, ninguna felicitación por una racha.
 - **Formato.** SVG propio sobre una grilla de 24 (`viewBox="0 0 24 24"`, como
   el resto de los íconos). Un componente con una prop `pose`; nunca archivos
   de imagen.
-- **Tamaños** (`TAMANOS_LUPITA`): 20 px inline en una línea de ayuda o en el
-  menú, 32 px junto al "procesando" de Hoy y al recordatorio de Grabar, 34 px
-  la posada (`LADO_POSADA`), 72 px en el encabezado del panel de ayuda, 96 px
-  en un estado vacío dentro del círculo crema. Debajo de 32 px
-  (`TAMANO_CON_DETALLE`) se dibuja sin el punto dorado del brote, porque a ese
-  tamaño ensucia, y no se mueve.
-- **Poses.** Siete (06, sección 1): **saluda** (también el reposo),
-  **señala**, **celebra**, **saluda-alto** y **asiente** (cuadros del medio
-  de un gesto), **concentrada** (sentada junto a la nota que se escribe) y
-  **piensa** (el otro extremo del vaivén del chat). Todas con los mismos
-  comandos de trazo, para que cualquiera morfe a cualquiera
-  (`lupita-formas.test.ts`). Sin ojos ni cara (06, D1): el parpadeo es la
-  hoja chica plegada. No hay pose triste, de error ni de carga: en un error
-  hablan las palabras y en una espera habla el indicador de progreso.
+- **Tamaños** (`TAMANOS_LUPITA`): 20 px inline en una línea de ayuda, 72 px en
+  el encabezado del panel de ayuda, 96 px en un estado vacío dentro del círculo
+  crema. Debajo de 32 px (`TAMANO_CON_DETALLE`) se dibuja sin el punto dorado
+  del brote, porque a ese tamaño ensucia.
+- **Poses.** Tres, no más: **saluda**, **señala** y **celebra**. No hay pose
+  triste, de error ni de carga: en un error hablan las palabras y en una espera
+  habla el indicador de progreso.
 - **Accesibilidad.** Siempre `aria-hidden="true"`: es decoración de un texto
   que ya dice todo. Si alguna vez queda sola, sin texto al lado, está mal puesta.
-  La posada es la excepción que confirma la regla: es un atajo de puntero,
-  fuera del tabulador, del ítem "Lupita" del menú, que sí tiene su rótulo.

@@ -48,13 +48,13 @@ Reglas:
   apuntan a la variante AA (`globals.css:123-133`). No uses `sage-400` ni más
   claro para texto.
 - Terracota significa plata que falta o riesgo. No la uses para decorar ni
-  para un botón neutro (`docs/diseno/04-personaje.md:87-88`).
+  para un botón neutro (`docs/diseno/04-personaje.md:72-73`).
 - Foco: contorno 2 px `sage-500` con 2 px de separación, global
   (`globals.css:137-140`). No lo saques ni lo reemplaces por un `ring` propio.
 
 ## Tipografía
 
-Dos familias, cada una con su rol (`src/lib/fonts.ts:3-16`, `globals.css:78-79`):
+Dos familias, cada una con su rol (`src/lib/fonts.ts:3-15`, `globals.css:78-79`):
 
 - **Fraunces** (`font-display`) — **sólo títulos**: h1/h2/h3 de pantalla, de
   sheet y de sección. Pesos 400–700; en la app se usa `font-medium`.
@@ -133,16 +133,14 @@ Una sola fuente: `src/lib/movimiento.ts`, publicada como variables CSS en
 
 | Tiempo | Valor | Variable CSS | En JS | Para qué |
 |---|---|---|---|---|
-| breve | 150 ms | `--duration-fast` (también el default de `transition`) | `DURACION_BREVE` | Hover, color, aparece, check, toast (`src/lib/movimiento.ts:2`, `:17`, `:21`) |
-| navegación | 180 ms | `--duration-normal` | `DURACION_NAVEGACION` | Cambio de pantalla, indicador de la barra (`movimiento.ts:2`, `:18`) |
-| pliegue | 220 ms | `--duration-pliegue` | `DURACION_PANEL` / `MS_PLIEGUE` | Abrir y cerrar alturas, sheets (`movimiento.ts:2`, `:19`) |
+| breve | 150 ms | `--duration-fast` (también el default de `transition`) | `DURACION_BREVE` | Hover, color, aparece, check, toast (`src/lib/movimiento.ts:2`, `:6`, `:10`) |
+| navegación | 180 ms | `--duration-normal` | `DURACION_NAVEGACION` | Cambio de pantalla, indicador de la barra (`movimiento.ts:2`, `:7`) |
+| pliegue | 220 ms | `--duration-pliegue` | `DURACION_PANEL` / `MS_PLIEGUE` | Abrir y cerrar alturas, sheets (`movimiento.ts:2`, `:8`) |
 
 **La curva** es una: `cubic-bezier(0.16, 1, 0.3, 1)` — `SUAVE` en JS,
-`--ease-out` en CSS (`src/lib/movimiento.ts:3`, `:20`). Ya se aplica a toda
+`--ease-out` en CSS (`src/lib/movimiento.ts:3`, `:9`). Ya se aplica a toda
 transición por `globals.css:170`; no escribas `ease-in`, `ease-in-out`,
-`linear` ni resortes. La única otra curva es la de la respiración de Lupita
-(senoidal, en su bloque al final de `globals.css`): una respiración no
-arranca de golpe y frena. No se copia a otra cosa.
+`linear` ni resortes.
 
 Primitivos (`src/components/ui/movimiento.tsx`), usá estos y no framer-motion
 suelto:
@@ -162,50 +160,37 @@ En Tailwind: `transition-colors duration-[var(--duration-fast)]`, o
 queda quieto (`globals.css:172-178`) y los primitivos lo consultan en JS
 (`movimiento.tsx:73`).
 
-Las únicas animaciones en loop permitidas son dos y ya existen:
-`.gira-procesando` (1,2 s), para la nota que se está escribiendo
-(`src/components/ui/procesando.tsx`), y `.lupita-respira`, la respiración de
-Lupita, con su parpadeo (`src/components/ui/lupita.tsx`, al final de
-`globals.css`). No se crea otra. Lupita tiene sus propios tiempos,
-`TIEMPOS_LUPITA` (`src/lib/movimiento.ts`), que sólo pueden usar sus archivos
-(lo vigila `limites-movimiento.test.tsx`).
+La única animación en loop permitida es `.gira-procesando` (1,2 s), para la
+nota que se está escribiendo, y ya existe en `src/components/ui/procesando.tsx`
+(`globals.css:163-168`). No se crea otra.
 
 ## Lupita
 
 Personaje de la app: SVG propio en `src/components/ui/lupita.tsx`. Resumen de
 `docs/diseno/04-personaje.md`; ante la duda, leé ese archivo.
 
-- **Aparece en:** la ayuda, los estados vacíos, el onboarding, las
-  confirmaciones alegres (cobrar, sesión aprobada) y, como presencia, posada
-  sobre el menú en Hoy, Agenda, Pacientes, Cobros y Tu consultorio
-  (`docs/diseno/06-lupita-presencia.md`, `src/components/layout/presencia-lupita.tsx`).
-  La posada es una sola, la monta el layout: no se agrega otra en una pantalla.
+- **Aparece en:** la ayuda, los estados vacíos, el onboarding y las
+  confirmaciones alegres (cobrar, sesión aprobada) (`04-personaje.md:12-14`).
 - **Nunca en:** la nota clínica (`src/app/(dashboard)/sesiones/[id]/` entero,
   con la barra de acciones), el brief pre-sesión y su uso en la card de Hoy,
   el Recorrido y sus gráficos, ni en ninguna pantalla del camino de una sesión
   con señal de riesgo (`clavesDeRiesgo(...)` no vacío): ahí se confirma sólo
-  con `CheckDibujado` (`04-personaje.md:24-50`).
-- **Poses:** siete: saluda, señala, celebra, saluda-alto, concentrada, piensa
-  y asiente, todas con los mismos comandos de trazo. Sin ojos ni cara; sin
-  pose triste, de error ni de carga (`06-lupita-presencia.md`, sección 1;
-  `PoseLupita` en `lupita.tsx`).
-- **Tamaños:** 20 px inline y en el menú, 32 px junto a un texto, 34 px la
-  posada, 72 px en el encabezado de la ayuda, 96 px en un estado vacío;
-  debajo de 32 px sin el punto dorado y sin movimiento (`TAMANOS_LUPITA`,
-  `TAMANO_CON_DETALLE` en `src/components/ui/lupita.tsx`).
+  con `CheckDibujado` (`04-personaje.md:16-35`).
+- **Poses:** tres, no más: saluda, señala, celebra. Sin pose triste, de error
+  ni de carga (`04-personaje.md:132-134`, `lupita.tsx:28`).
+- **Tamaños:** 20 px inline, 72 px en el encabezado de la ayuda, 96 px en un
+  estado vacío; debajo de 32 px sin el punto dorado
+  (`src/components/ui/lupita.tsx:44`, `:47`).
 - **Colores:** hoja grande `sage-500`, chica `sage-300`, brote `gold-500`,
   círculo `cream-100`; neutro en `ink-300`. **Nunca terracota**
-  (`04-personaje.md:73-88`).
-- **Movimiento:** en reposo respira y parpadea (sólo desde 32 px, una sola
-  Lupita viva por pantalla); gestos de 600 ms como mucho con 10 s de
-  enfriamiento; brota y se retira en 220 ms; el vaivén del chat, finito. Con
-  `prefers-reduced-motion`, nada (`06-lupita-presencia.md`, sección 3).
-  Usá `movimiento="respira"` en una Lupita de contenido; no animes el
-  dibujo desde afuera.
+  (`04-personaje.md:58-73`).
+- **Movimiento:** brota y celebra una vez en 220 ms; gesto de menú en 150 ms;
+  reposo quieto, sin pulsos ni loops (`04-personaje.md:79-88`,
+  `lupita.tsx:98-103`).
 - Siempre `aria-hidden="true"` y al lado de un texto que ya dice todo
-  (`04-personaje.md:173-174`).
+  (`04-personaje.md:135-136`).
 - Habla de vos, rioplatense, frases cortas; nunca "usuario", "sistema",
-  "procesando" (`04-personaje.md:116-118`).
+  "procesando" (`04-personaje.md:92-94`).
 
 ## Prohibido
 
@@ -218,9 +203,8 @@ Personaje de la app: SVG propio en `src/components/ui/lupita.tsx`. Resumen de
 - `rounded-lg` en todo. El radio sigue al tamaño (tabla de radios).
 - Glassmorphism: `backdrop-blur`, fondos translúcidos sobre contenido.
 - Pulsos (`animate-pulse`, `animate-ping`, `animate-bounce`), latidos que
-  laten, respiraciones (salvo la de Lupita, que ya existe).
-- Loops de cualquier tipo, salvo `.gira-procesando` y la respiración y el
-  parpadeo de Lupita, que ya existen.
+  laten, respiraciones.
+- Loops de cualquier tipo, salvo `.gira-procesando` que ya existe.
 - Confeti, destellos, partículas, celebraciones que no sean el
   `CheckDibujado` o la pose "celebra" de Lupita.
 - Duraciones literales: `duration-300`, `duration-200`, `duration-150`,

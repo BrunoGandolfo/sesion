@@ -47,7 +47,7 @@ export function DayView({
     // los dos estados vacíos donde entra Lupita (docs/diseno/04-personaje.md).
     return (
       <EstadoVacio
-        icono={<Lupita pose="saluda" tamano={TAMANOS_LUPITA.vacio} movimiento="respira" />}
+        icono={<Lupita pose="saluda" tamano={TAMANOS_LUPITA.vacio} />}
         circulo="grande"
         titulo={AGENDA_DIA_VACIO_TITULO}
         lineas={AGENDA_DIA_VACIO_LINEAS}

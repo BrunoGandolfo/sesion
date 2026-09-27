@@ -105,7 +105,7 @@ export function AgendaDelDia({
         <Card className="flex flex-col items-center rounded-[8px] p-4 text-center">
           {riesgoEnElDia ? null : (
             <span className="mb-2 inline-flex h-20 w-20 items-center justify-center rounded-full bg-cream-100">
-              <Lupita pose="saluda" tamano={TAMANOS_LUPITA.encabezado} movimiento="respira" />
+              <Lupita pose="saluda" tamano={TAMANOS_LUPITA.encabezado} />
             </span>
           )}
           <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-900">
