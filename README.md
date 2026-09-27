@@ -23,9 +23,6 @@ en release ni la configuración de los proveedores.
 
 ## Pendiente o a medias
 
-- **Consentimiento y audio:** el texto del consentimiento todavía promete que el
-  audio se cifra en el teléfono, y la app ya no lo hace. Decisión del dueño
-  pendiente: `docs/pendientes/consentimiento-sin-cifrado-de-audio.md`.
 - **Re-firma:** la API devuelve `sugiereRefirmar`, pero ninguna pantalla lo muestra.
 - **Pantalla bloqueada:** el grabador no garantiza seguir capturando con la
   pantalla apagada; pausa y avisa.

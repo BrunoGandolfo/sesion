@@ -13,7 +13,7 @@
 
 /** Proveedores externos que tocan datos de la sesión. */
 export const PROVEEDORES = {
-  r2: { nombre: "Cloudflare R2", rol: "almacenamiento del audio cifrado" },
+  r2: { nombre: "Cloudflare R2", rol: "almacenamiento del audio (cifrado en reposo por el proveedor)" },
   railway: { nombre: "Railway", rol: "servidor del proceso que transcribe y redacta" },
   neon: { nombre: "Neon", rol: "base de datos" },
   assemblyai: { nombre: "AssemblyAI", rol: "transcripción", pais: "Estados Unidos" },
@@ -24,23 +24,31 @@ export const PROVEEDORES = {
 export const MEDIOS_CAPTURA = ["audio"] as const;
 
 /**
- * DESACTUALIZADO A PROPÓSITO (rama grabador-dhh, 18/9/2026). La app dejó de
- * cifrar el audio: los trozos se guardan como Blob (src/lib/grabacion-storage.ts)
- * y el archivo se sube tal cual. Estas tres banderas NO se cambiaron porque
- * cambiarlas cambia el texto del consentimiento, y una versión nueva del texto
- * —que las pacientes vuelven a firmar— la decide el dueño. Las frases que
- * dejaron de ser ciertas están en
- * docs/pendientes/consentimiento-sin-cifrado-de-audio.md.
+ * La app NO cifra el audio (desde el 18/9/2026, rama grabador-dhh): cada trozo
+ * se guarda como Blob tal como lo entrega el MediaRecorder
+ * (src/lib/grabacion-storage.ts, guardarChunk) y el archivo se sube tal cual
+ * (useGrabacionSesion.subirAudio). En el teléfono lo protege el bloqueo del
+ * dispositivo. La versión 2.7 del consentimiento lo dice así.
  */
-export const RESPALDO_LOCAL_CIFRADO = true;
+export const RESPALDO_LOCAL_CIFRADO = false;
+
+/** La subida es un PUT a una URL prefirmada de R2 por HTTPS (TLS):
+ * useGrabacionSesion.subirAudio → upload-url → PUT → upload-confirmar. */
+export const AUDIO_VIAJA_POR_CONEXION_CIFRADA = true;
+
+/** Cloudflare R2 cifra en reposo todo objeto que guarda (documentación del
+ * proveedor; la app no lo controla ni lo puede desactivar). Es cifrado del
+ * proveedor, no de la app: no hay clave de la aplicación de por medio. */
+export const ALMACEN_CIFRA_EN_REPOSO = true;
 
 /** El archivo se sube entero al terminar, no por tramos mientras se graba
  * (useGrabacionSesion.subirAudio: upload-url → PUT → upload-confirmar). Esto
  * sigue siendo cierto. */
 export const AUDIO_SE_SUBE_AL_TERMINAR = true;
 
-/** Ver la nota de RESPALDO_LOCAL_CIFRADO: ya no hay clave por sesión. */
-export const CLAVE_POR_SESION = true;
+/** Sin cifrado de la app no hay clave por sesión: upload-url
+ * (casos-uso/audio.ts) ya no genera audioClave. */
+export const CLAVE_POR_SESION = false;
 
 /**
  * El vocabulario que la profesional carga (hot words) viaja a AssemblyAI
@@ -101,10 +109,11 @@ export const LUPITA_HISTORIAL_A_ANTHROPIC = true;
  * la decisión de la profesional para hacerla vigente o rechazarla. */
 export const RESUMEN_PROPUESTO_POR_IA = true;
 
-/** processor.py: descargar_y_descifrar descifra en memoria y transcribir
- * manda esos bytes al ASR desde memoria (io.BytesIO). No se escribe ningún
- * archivo con audio en claro en el servidor. */
-export const AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL = false;
+/** processor.py: descargar_audio trae los bytes de R2 a memoria, audio_asr
+ * normaliza por pipes de ffmpeg y transcribir manda los bytes al ASR desde
+ * memoria (io.BytesIO). No se escribe ningún archivo con audio en el
+ * servidor. */
+export const AUDIO_EN_ARCHIVO_DEL_SERVIDOR = false;
 
 /** sesion/resultado.ts guarda la nota de la IA (notaIa), cifrada, apenas
  * llega: antes de que la profesional la apruebe. Al aprobar se guarda aparte
@@ -112,27 +121,28 @@ export const AUDIO_DESCIFRADO_EN_ARCHIVO_TEMPORAL = false;
 export const BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR = true;
 
 /** grabar-view.tsx llama a limpiarGrabacion (grabacion-storage.ts) apenas
- * upload-confirmar responde OK: la copia cifrada del teléfono se borra con
- * la subida confirmada. Hasta ese momento se conserva, cifrada, para poder
+ * la subida termina bien: la copia del teléfono (sin cifrar por la app) se
+ * borra con la subida confirmada. Hasta ese momento se conserva para poder
  * reintentar. */
-export const COPIA_LOCAL_CIFRADA_SE_CONSERVA = false;
+export const COPIA_LOCAL_SE_CONSERVA_TRAS_SUBIR = false;
 
 /** Workspace de Anthropic con retención deshabilitada. Verificado en la
  *  consola el 2026-09-04 (docs/operaciones.md §1). Renovar la fecha a mano. */
 export const ANTHROPIC_RETENCION_CERO = true;
 export const ANTHROPIC_RETENCION_VERIFICADA_EL = "2026-09-04";
 
-/** El borrado del audio en R2 es un trabajo durable (borrar_audio_r2) y la
- *  clave se destruye en la transacción que aprueba la nota. Área 2. */
+/** El borrado del audio en R2 es un trabajo durable (borrar_audio_r2) que
+ *  nace en la transacción que aprueba la nota (sesion/aprobar.ts). Área 2. */
 export const LIMPIEZA_AUDIO_REINTENTA = true;
 /** trabajos/politica.ts: 20 intentos, con unas dos semanas de esperas.
  * trabajos/resolver.ts deja el trabajo fallido cuando se agotan. No es un
  * plazo exacto: depende también de que corra el servicio de borrado. */
 export const LIMPIEZA_AUDIO_MAX_INTENTOS = 20;
 export const LIMPIEZA_AUDIO_DIAS_APROX = 15;
-/** sesion/aprobar.ts: audioClave:null dentro de la transacción, haya o no
- * archivo en R2. No elimina las claves incluidas en respaldos anteriores. */
-export const CLAVE_AUDIO_DESTRUIDA_AL_APROBAR = true;
+/** Sin clave de audio no hay nada que destruir: aprobar sólo programa el
+ * borrado (sesion/aprobar.ts crea borrar_audio_r2). Mientras el archivo no se
+ * borre, sigue existiendo en R2. */
+export const CLAVE_AUDIO_DESTRUIDA_AL_APROBAR = false;
 
 /** Backups diarios de la base (.github/workflows/backup.yml), retención en días. */
 export const RETENCION_BACKUPS_DIAS = 30;
@@ -141,14 +151,27 @@ export const RETENCION_BACKUPS_DIAS = 30;
  * y compara sus plazos con estos hechos y con el texto generado. */
 export const RETENCION_BACKUPS_MENSUALES_DIAS = 366;
 export const RETENCION_BACKUPS_MENSUALES_MESES = 12;
-/** El dump incluye la clave del audio (cifrada) de las sesiones no aprobadas. */
-export const BACKUP_INCLUYE_CLAVE_AUDIO = true;
+/** El dump es la base: no contiene audio (backup.yml hace pg_dump; el audio
+ * vive en R2). Las sesiones grabadas desde el 18/9/2026 no tienen clave de
+ * audio, así que un respaldo nuevo tampoco la contiene. Sólo un respaldo
+ * anterior puede conservar la de una sesión grabada con la versión que
+ * cifraba; eso no le toca a quien firma la 2.7. */
+export const BACKUP_INCLUYE_AUDIO = false;
+export const BACKUP_INCLUYE_CLAVE_AUDIO = false;
 
 /** Revocar el consentimiento no borra lo ya guardado (DELETE solo revoca). */
 export const REVOCAR_BORRA_HISTORIA = false;
 
-/** Cada lectura de una nota queda registrada (eventos_auditoria). */
+/** Cada lectura de una nota queda registrada (eventos_auditoria):
+ * api/sesion-clinica/[id]/route.ts escribe sesion.ver al abrirla y
+ * casos-uso/sesion/ver-transcripcion.ts, sesion.ver_transcripcion. */
 export const ACCION_VER_SESION = "sesion.ver";
+export const ACCION_VER_TRANSCRIPCION = "sesion.ver_transcripcion";
+
+/** Para vos: processor.generar_feedback manda la transcripción a Anthropic
+ * (clinical_analyzer.generar_feedback_terapeuta) y el análisis del trabajo de
+ * la profesional se muestra sólo en su vista Para vos. */
+export const ANALISIS_DE_LA_PROFESIONAL_POR_IA = true;
 
 /**
  * La profesional puede imprimir el Recorrido o guardarlo como PDF para su
@@ -182,13 +205,17 @@ export const PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES = true;
  *   migración 20260916013000_inmutabilidad impide borrar versiones del
  *   Recorrido y eventos de auditoría.
  * - Corregir una nota aprobada: `aprobada` es terminal (sesion-clinica/estados).
- * - Ver la transcripción: ningún componente llama a su ruta de lectura.
  * - Ver esta autorización firmada: GET /api/pacientes/[id]/consentimiento no
  *   devuelve el texto ni la firma.
+ *
+ * La transcripción SÍ se ve: la vista Transcripción de cada sesión
+ * (sesiones/[id]/_components/transcripcion-view.tsx) la lee por
+ * GET /api/sesion-clinica/[id]/transcripcion, en revisión y aprobada, y cada
+ * lectura queda registrada (ACCION_VER_TRANSCRIPCION). La 2.6 decía que no.
  */
 export const BORRADO_DE_DATOS_A_PEDIDO = false;
 export const NOTA_APROBADA_CORREGIBLE = false;
-export const TRANSCRIPCION_VISIBLE_EN_PANTALLA = false;
+export const TRANSCRIPCION_VISIBLE_EN_PANTALLA = true;
 export const CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA = false;
 
 export const MARCO_LEGAL = {

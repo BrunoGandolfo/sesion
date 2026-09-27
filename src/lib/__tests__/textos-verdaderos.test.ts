@@ -20,4 +20,10 @@ describe("textos que describen el audio", () => {
     expect(donde?.texto).toContain("cifrado en reposo por el proveedor");
     expect(donde?.texto).not.toContain("guarda el audio cifrado");
   });
+
+  it("los términos no dicen que el audio se cifra en el dispositivo", () => {
+    const guarda = TERMINOS_SECCIONES.find((s) => s.titulo === "Qué información guarda");
+    expect(guarda?.texto).toContain("El audio viaja por una conexión cifrada, el proveedor de almacenamiento lo guarda cifrado en reposo");
+    expect(TERMINOS_SECCIONES.map((s) => s.texto).join(" ")).not.toMatch(/se cifra antes de salir del dispositivo/);
+  });
 });

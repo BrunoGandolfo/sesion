@@ -1,8 +1,5 @@
 # Identidad y consentimiento: lo que sigue abierto
 
-- **Consentimiento y audio:** el texto todavía promete cifrado del audio en el
-  teléfono y la app ya no lo hace. Es la misma decisión que
-  `consentimiento-sin-cifrado-de-audio.md`; se resuelve ahí.
 - **Re-firma:** la API devuelve `sugiereRefirmar` para firmas de versiones
   anteriores, pero ninguna pantalla lo muestra. `CONSENTIMIENTO_NUEVO_TEXTO`
   está en el glosario sin uso. Las firmas anteriores siguen válidas; no se
