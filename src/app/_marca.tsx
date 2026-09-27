@@ -112,13 +112,19 @@ export function medidasPara(lado: number): MedidasMarca {
 /**
  * La marca, como SVG puro. Sin texto, sin fuentes, sin imágenes externas:
  * un rect, una línea y tres círculos.
+ *
+ * `trazada` es sólo para la portada: el hilo se dibuja y las cuentas aparecen
+ * una vez al cargar (`.marca-trazada` en globals.css). El dibujo no cambia;
+ * el ícono y el favicon no lo pasan, y Satori nunca ve la clase.
  */
 export function Marca({
   lado,
   medidas,
+  trazada = false,
 }: {
   lado: number;
   medidas: MedidasMarca;
+  trazada?: boolean;
 }) {
   const { hilo, cuentas, radioEsquina, margen } = medidas;
   const vista = LIENZO + margen * 2;
@@ -130,6 +136,7 @@ export function Marca({
       viewBox={`${-margen} ${-margen} ${vista} ${vista}`}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      className={trazada ? "marca-trazada" : undefined}
     >
       <rect
         x={-margen}
@@ -147,6 +154,8 @@ export function Marca({
         stroke={CREMA}
         strokeWidth={hilo}
         strokeLinecap="round"
+        // Largo normalizado a 1: el trazo se anima de 1 a 0 sin medir el hilo.
+        pathLength={trazada ? 1 : undefined}
       />
       {CENTROS.map((centro, i) => (
         <circle
