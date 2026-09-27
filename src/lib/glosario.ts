@@ -1158,6 +1158,22 @@ export function SIN_COBROS_EN(periodo: string): string {
 }
 export const CERRAR_DETALLE = "Cerrar";
 
+// ─── La entrada desde Cobros ────────────────────────────────────────────────
+
+/** La tarjeta de Cobros que lleva a Finanzas. */
+export const FINANZAS_DEL_CONSULTORIO = "Finanzas del consultorio";
+/** Lo que dice la tarjeta cuando no pudo traer el número: igual se toca. */
+export const FINANZAS_TARJETA_SIN_DATO = "Lo que entró, lo que trabajaste y cómo te pagan, mes a mes.";
+export function COBRASTE_EN(mes: string): string {
+  return `Cobraste en ${mes}`;
+}
+export function CONTRA_MES(mes: string): string {
+  return `contra ${mes}`;
+}
+export function SIN_DATOS_CONTRA(mes: string): string {
+  return `Sin datos para comparar con ${mes}`;
+}
+
 /** Los meses, para rotular barras y períodos. Enero es el 0, como en
  *  partesMvd. */
 export const MESES = [

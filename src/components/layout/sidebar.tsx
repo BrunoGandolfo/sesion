@@ -10,6 +10,7 @@ import { cerrarSesion } from "@/lib/sesion-cliente";
 import { motion } from "framer-motion";
 import {
   Calendar,
+  ChartColumn,
   Home,
   LogOut,
   Settings,
@@ -21,19 +22,22 @@ import { apiGet } from "@/lib/api-client";
 import { zonaDeuda } from "@/lib/deudas";
 import { DURACION_NAVEGACION, SUAVE } from "@/components/ui/movimiento";
 import { Lupita } from "@/components/ui/lupita";
-import { LUPITA, NAV, TU_CONSULTORIO } from "@/lib/glosario";
+import { FINANZAS, LUPITA, NAV, TU_CONSULTORIO } from "@/lib/glosario";
 
 import { useAbrirAyuda } from "./ayuda-del-panel";
 import { GlobitoHoy, GlobitoHoyTexto } from "./globito-hoy";
 
-// Mismos destinos que el menú de mobile, más la configuración, que en
-// desktop se dice como la diría ella: "Tu consultorio". "Finanzas" pasó a
-// ser Cobros y la ruta de deudores salió de la navegación.
+// Mismos destinos que el menú de mobile, más Finanzas debajo de Cobros y la
+// configuración, que en desktop se dice como la diría ella: "Tu
+// consultorio". En el teléfono a Finanzas se llega desde la tarjeta de
+// Cobros: el menú de abajo no tiene lugar para un quinto destino. La ruta
+// de deudores salió de la navegación.
 const NAV_ITEMS = [
   { href: "/", label: NAV.HOY, icon: Home },
   { href: "/agenda", label: NAV.AGENDA, icon: Calendar },
   { href: "/pacientes", label: NAV.PACIENTES, icon: Users },
   { href: "/cobros", label: NAV.COBROS, icon: Wallet },
+  { href: "/finanzas", label: FINANZAS, icon: ChartColumn },
 ] as const;
 
 /** La misma identidad compartida que en el menú de mobile: framer-motion

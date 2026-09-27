@@ -54,11 +54,13 @@ function conPanel(ui: React.ReactElement) {
 }
 
 describe.each([BottomNav, Sidebar])("Menú %s", (Menu) => {
-  it("ofrece Lupita en quinto lugar y abre y cierra el panel", async () => {
+  it("ofrece Lupita después de los destinos y abre y cierra el panel", async () => {
     render(conPanel(<Menu />));
     const nav = screen.getByRole("navigation");
     const lupita = within(nav).getByRole("button", { name: "Lupita" });
-    expect(nav.children[4]).toBe(lupita);
+    // Los cuatro destinos de los dos menús y, en el lateral, Finanzas debajo
+    // de Cobros: Lupita va quinta abajo y sexta al costado.
+    expect(nav.children[Menu === Sidebar ? 5 : 4]).toBe(lupita);
     fireEvent.click(lupita);
     expect(await screen.findByRole("dialog", { name: "Lupita" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));

@@ -98,6 +98,7 @@ import type {
 } from "@/types/domain";
 
 import { SheetMetodoPago } from "../../_components/sheet-metodo-pago";
+import { TarjetaFinanzas } from "./tarjeta-finanzas";
 
 // ============================================
 // Tipos de fetch — JSON → Date donde la UI lo necesita
@@ -239,6 +240,10 @@ export function CobrosView() {
         cobradasCount={cobros.length}
         sinCobrarCount={sesionesSinCobrar}
       />
+
+      {/* La entrada a Finanzas, arriba de la lista: con un dato vivo, y sin
+          romper Cobros si ese dato no llega. */}
+      <TarjetaFinanzas recarga={reloadKey} />
 
       <Segmented<Pestana>
         options={[

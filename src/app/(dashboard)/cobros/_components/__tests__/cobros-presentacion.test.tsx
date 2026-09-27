@@ -32,3 +32,14 @@ it.each([1,2])('muestra importes completos y nombra bien %s sesiones sin cobrar'
  expect(within(fila).getByText('11 sep · Efectivo')).toBeTruthy();
  expect(nombre.getAttribute('href')).toBe('/pacientes/p1');
 });
+
+it('la tarjeta de Finanzas está arriba de la lista, aunque su número no llegue', async () => {
+ caso.cantidad=2;
+ render(<CobrosView />);
+ const ficha=await screen.findByRole('link',{name:'Abrir ficha de María de los Ángeles Apellido Largo'});
+ const tarjeta=screen.getByRole('link',{name:/Finanzas del consultorio/});
+ expect(tarjeta.getAttribute('href')).toBe('/finanzas');
+ // El mock responde {ok:false} a lo que no conoce: la tarjeta se ve sin cifra.
+ expect(tarjeta.textContent).not.toContain('$');
+ expect(tarjeta.compareDocumentPosition(ficha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
