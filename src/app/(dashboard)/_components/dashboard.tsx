@@ -10,6 +10,7 @@ import { EsqueletoHoy } from "@/components/esqueletos";
 import { useSeguimientoNotas } from "@/components/layout/avisos-de-notas";
 import { IndicadorProcesando } from "@/components/ui/procesando";
 import { seguirNota } from "@/lib/notas-en-proceso";
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import { anotarRiesgoDelDiaLupita, avisarLupita } from "@/lib/lupita-presencia";
 import { Toast } from "@/components/ui";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
@@ -106,13 +107,17 @@ export function Dashboard() {
   }, [reloadKey]);
 
   // Lupita posada (06-lupita-presencia.md, R1): en Hoy no aparece hasta que
-  // esta pantalla dice que el día no trae ninguna señal de riesgo. Mientras
-  // carga o si la lectura falló, no se sabe, y no aparece.
-  const riesgoDelDia = estado ? estado.riesgoEnElDia : null;
+  // una lectura de HOY dice que el día no trae ninguna señal de riesgo. Cada
+  // lectura se anota con su fecha y reemplaza a la anterior; una lectura
+  // fallida la borra. Mientras carga no se anota nada y al irse de Hoy
+  // tampoco: el almacén recuerda la última, y al volver el mismo día sin
+  // riesgo la posada no se va y vuelve (lib/lupita-presencia.ts).
   React.useEffect(() => {
-    anotarRiesgoDelDiaLupita(fallo ? null : riesgoDelDia);
-  }, [riesgoDelDia, fallo]);
-  React.useEffect(() => () => anotarRiesgoDelDiaLupita(null), []);
+    if (fallo) anotarRiesgoDelDiaLupita(null);
+    else if (estado) {
+      anotarRiesgoDelDiaLupita({ dia: fechaInputMvd(estado.ahora), hay: estado.riesgoEnElDia });
+    }
+  }, [estado, fallo]);
 
   // La línea del día y el saludo de la posada: la primera vez del día, y
   // nunca un día con riesgo. Se decide en el render (tocaSaludarHoy es

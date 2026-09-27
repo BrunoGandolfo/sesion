@@ -65,7 +65,8 @@ function dia(riesgoEnElDia: boolean): EstadoHoy {
 beforeEach(() => {
   vi.clearAllMocks();
   reiniciarLupitaParaTests();
-  anotarRutaLupita("/");
+  // El día de `dia()` (2026-09-10 en Montevideo), como lo anota la posada.
+  anotarRutaLupita("/", "2026-09-10");
   olvidarSaludoParaTests();
   window.localStorage.clear();
 });
@@ -96,12 +97,31 @@ describe("Hoy decide si la posada aparece", () => {
     expect(posadaVisible(obtenerLupita())).toBe(false);
   });
 
-  it("al irse de Hoy, lo que dijo del día se olvida", async () => {
+  // Corrección del dueño (27-sep-2026): al irse de Hoy la lectura NO se
+  // borra, para que al volver el mismo día la posada no se vaya y vuelva.
+  it("al irse de Hoy, lo que leyó del día queda anotado con su fecha", async () => {
     vi.mocked(leerHoy).mockResolvedValue(dia(false));
     const { unmount } = render(<Dashboard />);
     await screen.findByText("Agenda del día");
     unmount();
-    expect(obtenerLupita().riesgoDelDia).toBeNull();
+    expect(obtenerLupita().riesgoDelDia).toEqual({ dia: "2026-09-10", hay: false });
+  });
+
+  it("al volver el mismo día sin riesgo, la posada está desde el primer cuadro", async () => {
+    anotarRutaLupita("/agenda", "2026-09-10");
+    vi.mocked(leerHoy).mockResolvedValue(dia(false));
+    const { unmount } = render(<Dashboard />);
+    await screen.findByText("Agenda del día");
+    unmount();
+    anotarRutaLupita("/", "2026-09-10");
+    let entregar!: (e: EstadoHoy) => void;
+    vi.mocked(leerHoy).mockReturnValue(new Promise((r) => { entregar = r; }));
+    render(<Dashboard />);
+    // Todavía cargando: se queda igual.
+    expect(posadaVisible(obtenerLupita())).toBe(true);
+    // Si la lectura nueva trae riesgo, se retira.
+    await act(async () => entregar(dia(true)));
+    expect(posadaVisible(obtenerLupita())).toBe(false);
   });
 });
 
@@ -114,7 +134,7 @@ describe("la línea del día", () => {
     unmount();
 
     reiniciarLupitaParaTests();
-    anotarRutaLupita("/");
+    anotarRutaLupita("/", "2026-09-10");
     render(<Dashboard />);
     await screen.findByText("Agenda del día");
     expect(screen.queryByText(/Buen momento/)).toBeNull();

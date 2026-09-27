@@ -67,14 +67,25 @@ export type GestoPosada = "saludo" | "cobro" | "asiente";
 export type EventoLupita = "toque" | "saludo-del-dia" | "cobrada" | "aprobada";
 export type MotivoRetiro = "sheet" | "teclado";
 
+/** Lo que Hoy leyó del riesgo del día, y de qué día (fecha local de
+ *  Montevideo, "AAAA-MM-DD"). */
+export interface LecturaRiesgo {
+  dia: string;
+  hay: boolean;
+}
+
 export interface EstadoLupita {
   /** La ruta actual, la anota la posada desde el layout. */
   ruta: string | null;
+  /** El día local de Montevideo ("AAAA-MM-DD") en que se anotó la ruta: con
+   *  él se sabe si la última lectura de Hoy es de hoy. */
+  hoy: string | null;
   /** Motivos que la sacan aunque la ruta la admita. */
   retiradaPor: readonly MotivoRetiro[];
-  /** Si alguna sesión de hoy trae una señal de riesgo, según Hoy. `null`
-   *  mientras Hoy no lo haya dicho (cargando, falló, o no está montada). */
-  riesgoDelDia: boolean | null;
+  /** La última lectura de Hoy sobre el riesgo del día. Sobrevive a que Hoy
+   *  se desmonte: la reemplaza la lectura siguiente. `null` si nunca leyó o
+   *  si la última lectura falló. */
+  riesgoDelDia: LecturaRiesgo | null;
   /** El último gesto aceptado. `n` sube en cada uno para reiniciar la
    *  animación aunque se repita el tipo. */
   gesto: { tipo: GestoPosada; n: number } | null;
@@ -89,6 +100,7 @@ export interface EstadoLupita {
 
 export const ESTADO_INICIAL: EstadoLupita = {
   ruta: null,
+  hoy: null,
   retiradaPor: [],
   riesgoDelDia: null,
   gesto: null,
@@ -101,11 +113,19 @@ export const ESTADO_INICIAL: EstadoLupita = {
  * En Hoy la regla de 04 es "ese día Lupita no aparece", y Hoy lee el riesgo
  * del día de forma asíncrona. Si la posada se retirara cuando llega el dato,
  * un día con riesgo se la vería mientras carga. Por eso es al revés: en Hoy
- * NO aparece hasta que la pantalla confirma que no hay riesgo (R1).
+ * NO aparece hasta que una lectura DE HOY dice que no hay riesgo (R1).
+ *
+ * La lectura se recuerda al salir de Hoy (corrección del dueño, 27-sep-2026):
+ * al volver desde Agenda, si lo último que leyó es de hoy y sin riesgo, la
+ * posada se queda desde el primer cuadro en vez de irse y volver a brotar
+ * cuando llegan los datos. Si es de otro día, si había riesgo o si no hay
+ * lectura, espera como antes. Y si la lectura nueva trae riesgo, se retira.
  */
 export function posadaVisible(e: EstadoLupita): boolean {
   if (!admitePosada(e.ruta) || e.retiradaPor.length > 0) return false;
-  return e.ruta !== "/" || e.riesgoDelDia === false;
+  if (e.ruta !== "/") return true;
+  const lectura = e.riesgoDelDia;
+  return lectura !== null && !lectura.hay && e.hoy !== null && lectura.dia === e.hoy;
 }
 
 /** Visible y sin otra Lupita viva en pantalla: respira y parpadea. */
@@ -137,9 +157,16 @@ function alVolver(previo: EstadoLupita, e: EstadoLupita, ahora: number): EstadoL
   return vigente ? gesticular(sin, "asiente", ahora) : sin;
 }
 
-export function cambiarRuta(e: EstadoLupita, ruta: string | null, ahora: number): EstadoLupita {
-  if (e.ruta === ruta) return e;
-  return alVolver(e, { ...e, ruta }, ahora);
+/** `hoy`: el día local de Montevideo al cambiar de ruta; sin él, queda el
+ *  que había. */
+export function cambiarRuta(
+  e: EstadoLupita,
+  ruta: string | null,
+  ahora: number,
+  hoy: string | null = e.hoy,
+): EstadoLupita {
+  if (e.ruta === ruta && e.hoy === hoy) return e;
+  return alVolver(e, { ...e, ruta, hoy }, ahora);
 }
 
 export function retirar(
@@ -156,10 +183,20 @@ export function retirar(
   return alVolver(e, { ...e, retiradaPor }, ahora);
 }
 
-/** Lo que dice Hoy del riesgo del día; `null` al irse o si no pudo leerlo. */
-export function anotarRiesgo(e: EstadoLupita, riesgo: boolean | null, ahora: number): EstadoLupita {
-  if (e.riesgoDelDia === riesgo) return e;
-  return alVolver(e, { ...e, riesgoDelDia: riesgo }, ahora);
+/**
+ * Una lectura nueva de Hoy reemplaza la anterior; `null` si falló.
+ *
+ * Una lectura recién hecha es del día de ahora: si su fecha es más nueva que
+ * el `hoy` anotado —Hoy quedó abierta y pasó la medianoche, y la ruta no
+ * cambió—, adelanta `hoy`. Si no, la lectura fresca de un día sin riesgo se
+ * compararía contra ayer y la posada se iría sin motivo.
+ */
+export function anotarRiesgo(e: EstadoLupita, lectura: LecturaRiesgo | null, ahora: number): EstadoLupita {
+  const antes = e.riesgoDelDia;
+  const hoy = lectura && (e.hoy === null || lectura.dia > e.hoy) ? lectura.dia : e.hoy;
+  const igual = antes === lectura || (antes && lectura && antes.dia === lectura.dia && antes.hay === lectura.hay);
+  if (igual && hoy === e.hoy) return e;
+  return alVolver(e, { ...e, riesgoDelDia: lectura, hoy }, ahora);
 }
 
 export function avisar(e: EstadoLupita, evento: EventoLupita, ahora: number): EstadoLupita {
@@ -220,14 +257,16 @@ export function retirarLupita(motivo: MotivoRetiro, activo: boolean): void {
   actualizar((e) => retirar(e, motivo, activo, Date.now()));
 }
 
-/** Hoy: `false` cuando leyó el día y no hay ninguna señal de riesgo, `true`
- *  si la hay, `null` mientras carga, si falló y al desmontarse. */
-export function anotarRiesgoDelDiaLupita(riesgo: boolean | null): void {
-  actualizar((e) => anotarRiesgo(e, riesgo, Date.now()));
+/** Hoy, cada vez que termina de leer el día: de qué día es la lectura y si
+ *  trae riesgo; `null` si la lectura falló. Mientras carga no se anota nada,
+ *  y al desmontarse tampoco: queda la última. */
+export function anotarRiesgoDelDiaLupita(lectura: LecturaRiesgo | null): void {
+  actualizar((e) => anotarRiesgo(e, lectura, Date.now()));
 }
 
-export function anotarRutaLupita(ruta: string | null): void {
-  actualizar((e) => cambiarRuta(e, ruta, Date.now()));
+/** La posada, al cambiar de ruta, con el día local de Montevideo. */
+export function anotarRutaLupita(ruta: string | null, hoy?: string): void {
+  actualizar((e) => cambiarRuta(e, ruta, Date.now(), hoy ?? e.hoy));
 }
 
 export function anotarLupitaViva(delta: 1 | -1): void {

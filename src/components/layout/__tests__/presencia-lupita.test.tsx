@@ -19,7 +19,10 @@ import {
   anotarRiesgoDelDiaLupita,
   reiniciarLupitaParaTests,
 } from "@/lib/lupita-presencia";
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import { TIEMPOS, TIEMPOS_LUPITA } from "@/lib/movimiento";
+
+const hoy = () => fechaInputMvd(new Date());
 
 const entorno = vi.hoisted(() => ({ ruta: "/", reducido: false, escritorio: false }));
 
@@ -55,7 +58,7 @@ beforeEach(() => {
   reiniciarLupitaParaTests();
   // Como si Hoy ya hubiera leído un día sin riesgo; el caso contrario tiene
   // su propia prueba.
-  anotarRiesgoDelDiaLupita(false);
+  anotarRiesgoDelDiaLupita({ dia: hoy(), hay: false });
   entorno.ruta = "/";
   entorno.reducido = false;
   entorno.escritorio = false;
@@ -149,9 +152,11 @@ describe("cuándo se va", () => {
     montar();
     act(() => anotarRiesgoDelDiaLupita(null));
     expect(posada()).toBeNull();
-    act(() => anotarRiesgoDelDiaLupita(true));
+    act(() => anotarRiesgoDelDiaLupita({ dia: hoy(), hay: true }));
     expect(posada()).toBeNull();
-    act(() => anotarRiesgoDelDiaLupita(false));
+    act(() => anotarRiesgoDelDiaLupita({ dia: "2000-01-01", hay: false }));
+    expect(posada()).toBeNull();
+    act(() => anotarRiesgoDelDiaLupita({ dia: hoy(), hay: false }));
     expect(posada()).not.toBeNull();
   });
 
@@ -165,15 +170,18 @@ describe("cuándo se va", () => {
 });
 
 describe("gestos", () => {
-  it("al tocarla saluda y abre el chat cuando termina el saludo", async () => {
+  // Antes el chat esperaba el saludo entero (450 ms, "en secuencia" en 06);
+  // el dueño lo corrigió el 27-sep-2026: se abre a la mitad del gesto.
+  it("al tocarla saluda y abre el chat a la mitad del saludo", async () => {
     montar();
     // Pasado el brota de entrada.
     await act(() => vi.advanceTimersByTimeAsync(300));
     fireEvent.click(posada()!);
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(movimiento()).toBe("saludo");
+    await act(() => vi.advanceTimersByTimeAsync(TIEMPOS_LUPITA.gesto / 2 - 1));
     expect(screen.queryByRole("dialog")).toBeNull();
-    await act(() => vi.advanceTimersByTimeAsync(TIEMPOS_LUPITA.gesto));
+    await act(() => vi.advanceTimersByTimeAsync(1));
     expect(screen.getByRole("dialog", { name: "Lupita" })).toBeTruthy();
   });
 

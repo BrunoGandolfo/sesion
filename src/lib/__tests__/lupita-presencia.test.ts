@@ -24,8 +24,11 @@ const T0 = 1_000_000;
 
 /** Una ruta con la posada a la vista. En Hoy, con el día ya leído sin
  *  riesgo: si no, no aparece. */
+const HOY = "2026-09-27";
+const AYER = "2026-09-26";
+
 function en(ruta: string): EstadoLupita {
-  return cambiarRuta({ ...ESTADO_INICIAL, riesgoDelDia: false }, ruta, T0);
+  return cambiarRuta({ ...ESTADO_INICIAL, riesgoDelDia: { dia: HOY, hay: false } }, ruta, T0, HOY);
 }
 
 describe("rutas con posada (06, D0: lista de permitidas)", () => {
@@ -60,14 +63,75 @@ describe("rutas con posada (06, D0: lista de permitidas)", () => {
   });
 });
 
+// Corrección del dueño (27-sep-2026): la lectura de Hoy se recuerda con su
+// fecha, para que al volver a Hoy desde otra pantalla la posada no se vaya y
+// vuelva a brotar cuando llegan los datos.
+describe("la lectura del riesgo del día se recuerda con su fecha", () => {
+  const sinRiesgoHoy = cambiarRuta(
+    anotarRiesgo(cambiarRuta(ESTADO_INICIAL, "/", T0, HOY), { dia: HOY, hay: false }, T0),
+    "/agenda",
+    T0 + 1,
+    HOY,
+  );
+
+  it("mismo día y sin riesgo: al volver a Hoy se queda desde el primer cuadro", () => {
+    expect(posadaVisible(cambiarRuta(sinRiesgoHoy, "/", T0 + 2, HOY))).toBe(true);
+  });
+
+  it("lectura de otro día: al volver a Hoy espera la lectura nueva", () => {
+    expect(posadaVisible(cambiarRuta(sinRiesgoHoy, "/", T0 + 2, "2026-09-28"))).toBe(false);
+    const deAyer = anotarRiesgo(ESTADO_INICIAL, { dia: AYER, hay: false }, T0);
+    expect(posadaVisible(cambiarRuta(deAyer, "/", T0 + 1, HOY))).toBe(false);
+  });
+
+  it("lectura de hoy con riesgo: espera", () => {
+    const conRiesgo = anotarRiesgo(sinRiesgoHoy, { dia: HOY, hay: true }, T0 + 2);
+    expect(posadaVisible(cambiarRuta(conRiesgo, "/", T0 + 3, HOY))).toBe(false);
+  });
+
+  it("sin lectura: espera", () => {
+    expect(posadaVisible(cambiarRuta(ESTADO_INICIAL, "/", T0, HOY))).toBe(false);
+  });
+
+  it("pasada la medianoche con Hoy abierta, la lectura fresca adelanta el día", () => {
+    // Hoy quedó abierta desde ayer: la ruta no cambió y `hoy` quedó en AYER.
+    let e = anotarRiesgo(cambiarRuta(ESTADO_INICIAL, "/", T0, AYER), { dia: AYER, hay: false }, T0);
+    expect(posadaVisible(e)).toBe(true);
+    // Hoy se relee después de medianoche: la lectura es de HOY y sin riesgo.
+    e = anotarRiesgo(e, { dia: HOY, hay: false }, T0 + 1);
+    expect(e.hoy).toBe(HOY);
+    expect(posadaVisible(e)).toBe(true);
+    // Una lectura vieja nunca atrasa el día.
+    e = anotarRiesgo(e, { dia: AYER, hay: false }, T0 + 2);
+    expect(e.hoy).toBe(HOY);
+    expect(posadaVisible(e)).toBe(false);
+  });
+
+  it("una lectura nueva reemplaza la vieja", () => {
+    let e = cambiarRuta(sinRiesgoHoy, "/", T0 + 2, HOY);
+    e = anotarRiesgo(e, { dia: HOY, hay: true }, T0 + 3);
+    expect(e.riesgoDelDia).toEqual({ dia: HOY, hay: true });
+    expect(posadaVisible(e)).toBe(false);
+    e = anotarRiesgo(e, { dia: HOY, hay: false }, T0 + 4);
+    expect(posadaVisible(e)).toBe(true);
+    e = anotarRiesgo(e, null, T0 + 5);
+    expect(e.riesgoDelDia).toBeNull();
+    expect(posadaVisible(e)).toBe(false);
+  });
+
+  it("irse de Hoy no la borra", () => {
+    expect(sinRiesgoHoy.riesgoDelDia).toEqual({ dia: HOY, hay: false });
+  });
+});
+
 describe("retiro", () => {
   it("en Hoy no aparece hasta que Hoy confirma que no hay riesgo en el día (R1)", () => {
-    const hoy = cambiarRuta(ESTADO_INICIAL, "/", T0);
+    const hoy = cambiarRuta(ESTADO_INICIAL, "/", T0, HOY);
     expect(posadaVisible(hoy)).toBe(false);
-    expect(posadaVisible(anotarRiesgo(hoy, true, T0))).toBe(false);
-    expect(posadaVisible(anotarRiesgo(hoy, false, T0))).toBe(true);
-    // Si se va de Hoy o la lectura falla, vuelve a no saberse.
-    expect(posadaVisible(anotarRiesgo(anotarRiesgo(hoy, false, T0), null, T0))).toBe(false);
+    expect(posadaVisible(anotarRiesgo(hoy, { dia: HOY, hay: true }, T0))).toBe(false);
+    expect(posadaVisible(anotarRiesgo(hoy, { dia: HOY, hay: false }, T0))).toBe(true);
+    // Si la lectura falla, vuelve a no saberse.
+    expect(posadaVisible(anotarRiesgo(anotarRiesgo(hoy, { dia: HOY, hay: false }, T0), null, T0))).toBe(false);
     // El riesgo del día es cosa de Hoy: en las otras cuatro no la retira.
     expect(posadaVisible(cambiarRuta(ESTADO_INICIAL, "/agenda", T0))).toBe(true);
   });
@@ -167,9 +231,9 @@ describe("aprobación guardada", () => {
 
   it("en Hoy espera a que Hoy confirme el día sin riesgo, y ahí asiente", () => {
     let e = avisar(cambiarRuta(ESTADO_INICIAL, "/sesiones/s1", T0), "aprobada", T0);
-    e = cambiarRuta(e, "/", T0 + 1);
+    e = cambiarRuta(e, "/", T0 + 1, HOY);
     expect(e.gesto).toBeNull();
-    e = anotarRiesgo(e, false, T0 + 2);
+    e = anotarRiesgo(e, { dia: HOY, hay: false }, T0 + 2);
     expect(e.gesto?.tipo).toBe("asiente");
   });
 

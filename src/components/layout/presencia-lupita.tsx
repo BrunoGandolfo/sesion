@@ -48,6 +48,7 @@ import {
   suscribirLupita,
   type EstadoLupita,
 } from "@/lib/lupita-presencia";
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import { SUAVE, TIEMPOS_LUPITA } from "@/lib/movimiento";
 
 import { useAbrirAyuda } from "./ayuda-del-panel";
@@ -96,15 +97,18 @@ export function useEsEscritorio(): boolean {
 // ─── Tocarla ────────────────────────────────────────────────────────────────
 
 /** Tocar a Lupita, desde la posada o desde el ítem del menú: si la posada
- *  está a la vista saluda, y el chat se abre cuando termina el saludo (06:
- *  "450 ms + 220 ms, en secuencia"). Si no hubo saludo —otra ruta, el
- *  enfriamiento, movimiento reducido—, se abre enseguida. */
+ *  está a la vista saluda, y el chat se abre a la MITAD del saludo: ella
+ *  levanta la hoja y el panel ya viene. La spec (06) decía "450 ms + 220 ms,
+ *  en secuencia"; esperar el saludo entero se sentía como demora después
+ *  de un toque, y el dueño lo corrigió el 27-sep-2026. La posada se retira
+ *  igual al abrirse el sheet, como con cualquier sheet. Si no hubo saludo
+ *  —otra ruta, el enfriamiento, movimiento reducido—, se abre enseguida. */
 export function useTocarLupita(): () => void {
   const abrir = useAbrirAyuda();
   const reducido = useMovimientoReducido();
   return React.useCallback(() => {
     const saludo = avisarLupita("toque");
-    if (saludo && !reducido) window.setTimeout(abrir, TIEMPOS_LUPITA.gesto);
+    if (saludo && !reducido) window.setTimeout(abrir, TIEMPOS_LUPITA.gesto / 2);
     else abrir();
   }, [abrir, reducido]);
 }
@@ -219,7 +223,7 @@ export function PresenciaLupita() {
   const tocar = useTocarLupita();
 
   React.useEffect(() => {
-    anotarRutaLupita(pathname);
+    anotarRutaLupita(pathname, fechaInputMvd(new Date()));
   }, [pathname]);
   useRetiroPorSheet();
   useRetiroPorTeclado(escritorio);
