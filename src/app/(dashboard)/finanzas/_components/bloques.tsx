@@ -38,7 +38,7 @@ import {
   pluralizar,
 } from "@/lib/glosario";
 
-import { nombreRango } from "./periodo";
+import { largoEnMeses, nombreRango } from "./periodo";
 
 type Comparacion = NonNullable<ResumenFinanzas["comparaciones"]["periodoAnterior"]>;
 type Metodo = ResumenFinanzas["totales"]["cobradoPorMetodo"][number]["metodo"];
@@ -86,6 +86,9 @@ function variacionEnPorcentaje(porcentaje: number | null): string | null {
 export function LoQueEntro({ datos }: { datos: ResumenFinanzas }) {
   const { totales, comparaciones } = datos;
   const unMes = datos.desde === datos.hasta;
+  // Con doce meses, "el período anterior" y "el mismo del año pasado" son la
+  // misma ventana: dos líneas iguales. Queda una.
+  const doceMeses = largoEnMeses(datos.desde, datos.hasta) === 12;
   return (
     <Bloque titulo={LO_QUE_ENTRO}>
       <p className="mt-1 text-[12px] text-ink-500">{nombreRango(datos.desde, datos.hasta)}</p>
@@ -96,7 +99,9 @@ export function LoQueEntro({ datos }: { datos: ResumenFinanzas }) {
         {pluralizar(totales.sesionesCobradas, "sesión cobrada", "sesiones cobradas")}
       </p>
       <dl className="mt-4 flex flex-col divide-y divide-[color:var(--border-subtle)] border-t border-[color:var(--border-subtle)]">
-        <LineaComparacion rotulo={CONTRA_ANTERIOR(unMes)} comparacion={comparaciones.periodoAnterior} />
+        {doceMeses ? null : (
+          <LineaComparacion rotulo={CONTRA_ANTERIOR(unMes)} comparacion={comparaciones.periodoAnterior} />
+        )}
         <LineaComparacion rotulo={CONTRA_ANIO_PASADO(unMes)} comparacion={comparaciones.mismoPeriodoAnioAnterior} />
       </dl>
     </Bloque>
@@ -151,7 +156,6 @@ export function LoQueTrabajaste({ datos }: { datos: ResumenFinanzas }) {
   ];
   return (
     <Bloque titulo={LO_QUE_TRABAJASTE}>
-      <p className="mt-1 text-[12px] text-ink-500">{nombreRango(datos.desde, datos.hasta)}</p>
       <p data-dato="trabajado" className="mt-3 text-[22px] font-medium leading-none tabular-nums text-ink-900">
         {money(totales.trabajado)}
       </p>

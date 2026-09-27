@@ -73,6 +73,12 @@ export function aniosElegibles(
   return { min: primerMesConDatos ? Math.min(anioDe(primerMesConDatos), max) : max, max };
 }
 
+/** Cuántos meses van de `desde` a `hasta`, los dos incluidos. */
+export function largoEnMeses(desde: string, hasta: string): number {
+  const meses = (c: string) => anioDe(c) * 12 + Number(c.slice(5, 7));
+  return meses(hasta) - meses(desde) + 1;
+}
+
 /** "agosto 2026" para "2026-08"; "2026" para "2026". */
 export function nombrePeriodo(clave: string): string {
   if (clave.length === 4) return clave;

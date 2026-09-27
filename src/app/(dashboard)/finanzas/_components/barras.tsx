@@ -58,18 +58,18 @@ export function Barras({
         </li>
       </ul>
 
-      <ol className="mt-4 flex h-44 items-stretch gap-1 border-b border-[color:var(--border-subtle)] lg:h-52 lg:gap-2">
+      <ol className="mt-4 flex h-44 items-stretch gap-0.5 border-b border-[color:var(--border-subtle)] lg:h-52 lg:gap-2">
         {serie.map((entrada) => (
           <li key={entrada.clave} className="flex min-w-0 max-w-16 flex-1">
             <Barra entrada={entrada} maximo={maximo} onElegir={onElegir} />
           </li>
         ))}
       </ol>
-      <ol aria-hidden="true" className="mt-1.5 flex gap-1 lg:gap-2">
+      <ol aria-hidden="true" className="mt-1.5 flex gap-0.5 lg:gap-2">
         {serie.map((entrada) => (
           <li
             key={entrada.clave}
-            className="min-w-0 max-w-16 flex-1 truncate text-center text-[12px] tabular-nums text-ink-500"
+            className="min-w-0 max-w-16 flex-1 whitespace-nowrap text-center text-[12px] tabular-nums text-ink-500"
           >
             {rotuloBarra(entrada.clave)}
           </li>

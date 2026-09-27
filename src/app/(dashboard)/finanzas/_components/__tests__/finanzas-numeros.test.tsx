@@ -136,3 +136,16 @@ it("la nota del pie dice que no hay ajuste por inflación ni gastos", async () =
   await mostrar(RESPUESTA_EJEMPLO);
   expect(screen.getByText(NOTA_FINANZAS)).toBeTruthy();
 });
+
+it("con doce meses queda una sola comparación: las dos ventanas son la misma", async () => {
+  const anioPasado = { ...RESPUESTA_EJEMPLO.comparaciones.mismoPeriodoAnioAnterior!, desde: "2024-10", hasta: "2025-09" };
+  await mostrar({
+    ...RESPUESTA_EJEMPLO,
+    desde: "2025-10",
+    hasta: "2026-09",
+    comparaciones: { periodoAnterior: anioPasado, mismoPeriodoAnioAnterior: anioPasado },
+  });
+  const entro = within(bloque("Lo que entró"));
+  expect(entro.queryByText("Contra el período anterior")).toBeNull();
+  expect(entro.getByText("Contra el mismo período del año pasado")).toBeTruthy();
+});

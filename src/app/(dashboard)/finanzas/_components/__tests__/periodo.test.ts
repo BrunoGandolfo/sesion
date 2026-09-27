@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   aniosElegibles,
+  largoEnMeses,
   mesDeHoy,
   nombrePeriodo,
   nombreRango,
@@ -63,4 +64,9 @@ describe("rótulos", () => {
     // 1 de octubre a las 01:00 UTC es 30 de septiembre a las 22:00 en Montevideo.
     expect(mesDeHoy(new Date("2026-10-01T01:00:00Z"))).toBe("2026-09");
   });
+});
+
+it("cuenta los meses de un período con los dos bordes", () => {
+  expect(largoEnMeses("2025-10", "2026-09")).toBe(12);
+  expect(largoEnMeses("2026-09", "2026-09")).toBe(1);
 });
