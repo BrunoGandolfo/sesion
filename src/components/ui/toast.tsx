@@ -4,18 +4,24 @@ import * as React from "react";
 import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { ALTO_FAB, BOTTOM_FAB_MOVIL } from "@/lib/lupita-presencia";
+
 import { CheckDibujado, SUAVE, DURACION_BREVE } from "./movimiento";
 
 // Posición: por encima del botón flotante, nunca sobre él.
 //
 // En mobile hay dos flotantes y no siempre el mismo: el "+" de agendar
-// (ui/fab.tsx: bottom-20, alto 56 → borde superior a 136px) y el de grabar
-// de la ficha de paciente (paciente-detail-view: bottom-24, alto 56 → borde
-// superior a 152px). El toast se apoya arriba del más alto de los dos.
+// (ui/fab.tsx: apoyado arriba de Lupita posada, a BOTTOM_FAB_MOVIL = 108,
+// alto 56 → borde superior a 164px) y el de grabar de la ficha de paciente
+// (paciente-detail-view: bottom-24, alto 56 → borde superior a 152px). El
+// toast se apoya arriba del más alto de los dos.
 //
 // Antes vivía en bottom-[96px]: quedaba justo encima del "+" pero pisaba el
 // de grabar, y por ~3 segundos tapaba el botón más importante de la app.
-const BOTTOM_MOBILE = 160; // 152 del flotante más alto + 8 de aire
+// Después, en 160, hasta que el "+" subió para dejarle la esquina a Lupita
+// (docs/diseno/06-lupita-presencia.md, D0).
+const TOPE_FLOTANTE_FICHA = 152;
+const BOTTOM_MOBILE = Math.max(BOTTOM_FAB_MOVIL + ALTO_FAB, TOPE_FLOTANTE_FICHA) + 8; // 8 de aire
 // En desktop solo existe el de grabar (lg:bottom-8, alto 48 → tope a 80px).
 const BOTTOM_DESKTOP = 104;
 

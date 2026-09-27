@@ -189,3 +189,23 @@ body {
     font-size: 16px;
   }
 }
+
+/* ============================================
+   Lupita: la respiración (docs/diseno/06-lupita-presencia.md, sección 3)
+   Es la segunda excepción a "sin loops", junto a .gira-procesando, y es
+   sólo de ella: la posada y las Lupitas de contenido de 32 px o más en
+   reposo. Escala de 1 a 1,02 desde la base del tallo (en la grilla de 24,
+   el tallo arranca en y = 21,5: el 90 %), un ciclo de
+   --lupita-respiracion (4 s), con curva senoidal: una respiración no
+   arranca de golpe y frena, que es lo que hace --ease-out. Corre en el
+   compositor, no pasa por React, y con movimiento reducido la regla de
+   arriba la apaga (el componente, además, no pone la clase).
+   ============================================ */
+@keyframes lupita-respira {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+.lupita-respira {
+  transform-origin: 50% 90%;
+  animation: lupita-respira var(--lupita-respiracion) cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}

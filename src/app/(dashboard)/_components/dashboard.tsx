@@ -10,6 +10,8 @@ import { EsqueletoHoy } from "@/components/esqueletos";
 import { useSeguimientoNotas } from "@/components/layout/avisos-de-notas";
 import { IndicadorProcesando } from "@/components/ui/procesando";
 import { seguirNota } from "@/lib/notas-en-proceso";
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
+import { anotarRiesgoDelDiaLupita, avisarLupita } from "@/lib/lupita-presencia";
 import { Toast } from "@/components/ui";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
 import type { VarianteToast } from "@/components/ui/toast";
@@ -23,6 +25,7 @@ import {
   HOY_SIN_PROXIMA,
   NO_SE_PUDO_AGENDAR,
   NO_SE_PUDO_COBRAR,
+  lineaDelDiaDeLupita,
 } from "@/lib/glosario";
 import type {
   Configuracion,
@@ -45,7 +48,7 @@ import {
 import { FalloDeCarga } from "./estados-carga";
 import { Kpis } from "./kpis";
 import { Pendientes } from "./pendientes";
-import { Saludo } from "./saludo";
+import { Saludo, saludoVisto, tocaElGestoDelSaludo, tocaSaludarHoy } from "./saludo";
 import { SheetMetodoPago } from "./sheet-metodo-pago";
 import { SheetNuevoTurno } from "./sheet-nuevo-turno";
 
@@ -102,6 +105,52 @@ export function Dashboard() {
       cancelado = true;
     };
   }, [reloadKey]);
+
+  // Lupita posada (06-lupita-presencia.md, R1): en Hoy no aparece hasta que
+  // una lectura de HOY dice que el día no trae ninguna señal de riesgo. Cada
+  // lectura se anota con su fecha y reemplaza a la anterior; una lectura
+  // fallida la borra. Mientras carga no se anota nada y al irse de Hoy
+  // tampoco: el almacén recuerda la última, y al volver el mismo día sin
+  // riesgo la posada no se va y vuelve (lib/lupita-presencia.ts).
+  React.useEffect(() => {
+    if (fallo) anotarRiesgoDelDiaLupita(null);
+    else if (estado) {
+      anotarRiesgoDelDiaLupita({ dia: fechaInputMvd(estado.ahora), hay: estado.riesgoEnElDia });
+    }
+  }, [estado, fallo]);
+
+  // La línea del día y el saludo de la posada: la primera vez del día, y
+  // nunca un día con riesgo. Se decide en el render (tocaSaludarHoy es
+  // idempotente) y el gesto va DESPUÉS del efecto de arriba, que es el que
+  // deja a la posada a la vista en Hoy.
+  const lineaDeLupita = React.useMemo(() => {
+    if (!estado || estado.riesgoEnElDia || !tocaSaludarHoy(estado.ahora)) return null;
+    const dia = repartirElDia(estado.data, estado.ahora);
+    return lineaDelDiaDeLupita({
+      sesiones: dia.turnos.length,
+      porDelante: dia.turnos.filter(
+        (t) => t.estado === "programado" && t.fecha.getTime() > estado.ahora.getTime(),
+      ).length,
+      notasParaRevisar: dia.pendientes.notasParaRevisar.length,
+    });
+  }, [estado]);
+  React.useEffect(() => {
+    if (lineaDeLupita && tocaElGestoDelSaludo()) avisarLupita("saludo-del-dia");
+  }, [lineaDeLupita]);
+  React.useEffect(() => () => saludoVisto(), []);
+
+  // El gesto del cobro (06: sólo en Hoy, sólo sin riesgo en el día). El
+  // cobro entra con el sheet del método abierto, y con un sheet abierto la
+  // posada no está: el gesto va cuando el sheet se cerró, un turno después
+  // de que el body vuelve a scrollear (que es lo que la posada mira).
+  const celebrado = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (cobrando !== null || cobroConfirmado === null || celebrado.current === cobroConfirmado) return;
+    if (!estado || estado.riesgoEnElDia) return;
+    celebrado.current = cobroConfirmado;
+    const timer = window.setTimeout(() => avisarLupita("cobrada"), 0);
+    return () => window.clearTimeout(timer);
+  }, [cobrando, cobroConfirmado, estado]);
 
   // Las notas del día que se están escribiendo: las sigue el aviso del panel
   // (avisos-de-notas.tsx) y, cuando alguna termina, Hoy se vuelve a leer
@@ -236,7 +285,7 @@ export function Dashboard() {
           se leen es el orden en que aparecen. El saludo va fuera de la
           cascada porque es lo primero que tiene que estar, sin espera. */}
       <div className="mx-auto flex min-h-full w-full max-w-[1200px] flex-col gap-7 p-5 lg:gap-10 lg:p-14">
-        <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
+        <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} lineaDeLupita={lineaDeLupita} />
 
         <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
           {/* Primero quién viene ahora o después: es lo que se busca entre
@@ -263,8 +312,14 @@ export function Dashboard() {
             <div className="flex flex-col gap-2">
               {enProcesoHoy
                 .filter((s) => s.turnoId !== ahoraTurno?.id)
-                .map((s) => (
-                  <IndicadorProcesando key={s.sesionId} paciente={s.paciente} />
+                .map((s, i) => (
+                  // Lupita se sienta sólo junto a la primera: una sola viva
+                  // por pantalla (06). Las demás, con el anillo de siempre.
+                  <IndicadorProcesando
+                    key={s.sesionId}
+                    paciente={s.paciente}
+                    conLupita={!riesgoEnElDia && i === 0}
+                  />
                 ))}
             </div>
           ) : null}

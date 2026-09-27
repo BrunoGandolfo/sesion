@@ -30,27 +30,19 @@ import {
   type MovimientoLupita,
 } from "@/components/ui/lupita";
 import { AnilloProgreso } from "@/components/ui/movimiento";
+// La única definición de superficies clínicas, la misma que retira a la
+// posada (06, D3): ahí el panel se abre sin dibujo, como siempre.
+import { esRutaClinica } from "@/lib/lupita-presencia";
 import { Sheet } from "@/components/ui/sheet";
 
 const LARGO_MAX_PREGUNTA = 600;
 const MAX_TURNOS_ENVIADOS = 12;
 const STATUS_TOPE_DIARIO = 429;
 
-/** Única definición de superficies donde el personaje no puede aparecer. */
-export const PREFIJOS_RUTA_CLINICA = [
-  "/sesiones/",
-  "/grabar/",
-  "/pacientes/",
-] as const;
-
 interface Turno {
   rol: "usuaria" | "asistente";
   texto: string;
   completo?: boolean;
-}
-
-export function esRutaClinica(pathname: string): boolean {
-  return PREFIJOS_RUTA_CLINICA.some((prefijo) => pathname.startsWith(prefijo));
 }
 
 export function textoDeError(error: unknown): string {
