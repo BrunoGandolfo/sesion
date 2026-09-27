@@ -72,9 +72,6 @@ rama).
   (`globals.css`) porque el pedido era exactamente ese valor y
   `movimiento.ts` quedaba fuera del alcance de la rama. Si se consolida,
   mudarlo a `TIEMPOS` y publicarlo como variable.
-- Los rótulos `01`–`04` sobre las funciones contradicen la prohibición de
-  numerados decorativos de `.claude/skills/diseno-sesion/SKILL.md`. Ya
-  estaban; no se tocaron.
 
 ## Dónde está
 

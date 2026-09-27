@@ -63,9 +63,8 @@ export function Portada({ children }: { children: ReactNode }) {
             {PORTADA_FUNCIONES_TITULO}
           </h2>
           <div className="grid gap-x-16 gap-y-9 md:grid-cols-2 lg:gap-y-12">
-            {PORTADA_FUNCIONES.map(({ titulo, parrafos }, i) => (
+            {PORTADA_FUNCIONES.map(({ titulo, parrafos }) => (
               <article key={titulo} className="border-t border-[color:var(--border-subtle)] pt-5">
-                <p aria-hidden="true" className="mb-3 text-xs font-semibold tracking-widest text-sage-600">0{i + 1}</p>
                 <h3 className="font-display text-2xl font-medium leading-tight text-ink-900">{titulo}</h3>
                 {parrafos.map((parrafo) => (
                   <p key={parrafo} className="mt-3 text-sm leading-7 text-ink-700">{parrafo}</p>
