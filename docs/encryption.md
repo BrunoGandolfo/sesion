@@ -124,11 +124,18 @@ adivinan ids. Cambiar el id de una fila cifrada se rechaza para no invalidar el
 AAD de las columnas existentes. El SQL crudo no pasa por estas guardas.
 
 La base protege además `eventos_auditoria` contra UPDATE, DELETE y TRUNCATE, y
-`hilo_versiones` contra borrado y cambios de cualquier columna salvo `estado`,
-`resuelta_en` y `resuelta_por_user_id`. Son triggers de la migración
-`20260916013000_inmutabilidad`, también efectivos ante SQL crudo. El contenido
-cifrado de una versión del Recorrido no se reemplaza ni siquiera por otro blob
-válido para la misma fila.
+`hilo_versiones` contra borrado y contra cualquier UPDATE que no sea uno de
+estos dos: la resolución (`estado`, `resuelta_en`, `resuelta_por_user_id`), o
+el cambio de envoltorio, en el que la ÚNICA columna que cambia es
+`contenido_encrypted`, el blob nuevo es ENC2 y su id de clave (byte 4) es
+distinto del anterior. Una versión se reescribe solo para cambiar la clave con
+que está cifrada, nunca su contenido: otro blob con el mismo id de clave se
+rechaza aunque sea válido para la fila, y las dos cosas en un mismo UPDATE
+también. Son triggers de `20260916013000_inmutabilidad`, con la función
+reemplazada por `20260928120000_hilo_versiones_recifrado`, efectivos también
+ante SQL crudo (ERRCODE 55000). La base no tiene la clave: garantiza que solo
+cambie la clave, no puede comparar los textos. Que el texto sea el mismo lo
+asegura el re-cifrado del cron, que descifra y vuelve a cifrar lo mismo.
 
 ## 3. Rotación de claves
 

@@ -243,13 +243,19 @@ Ninguna se puede hacer desde el repositorio.
 
 ### Reversiones administrativas
 
-Dos SQL retiran lo que agregó una migración. No los ejecuta la app ni Publicar;
+Tres SQL retiran lo que agregó una migración. No los ejecuta la app ni Publicar;
 sólo se corren a mano, con la conexión directa y después de decidirlo.
 
 - `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
-  `20260916013000_inmutabilidad`: la auditoría y las versiones del Recorrido
-  vuelven a poder modificarse. No borra datos. Para restituir la garantía se
-  vuelve a aplicar el SQL de esa migración.
+  `20260916013000_inmutabilidad` y, con su función, lo que le cambió
+  `20260928120000_hilo_versiones_recifrado`: la auditoría y las versiones del
+  Recorrido vuelven a poder modificarse. No borra datos. Para restituir la
+  garantía se vuelven a aplicar los SQL de esas dos migraciones, en ese orden.
+- `scripts/mantenimiento/revertir-hilo-versiones-recifrado.sql` revierte solo
+  `20260928120000_hilo_versiones_recifrado`: las versiones del Recorrido
+  vuelven a admitir únicamente la resolución, y el cron deja de poder
+  recifrarlas (cuentan como errores; su clave vieja no se puede retirar).
+  Las garantías siguen puestas. No borra datos.
 - `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de
   `20260917120000_limites_invitados` y su registro en `_prisma_migrations`.
   Es destructivo: antes hay que desplegar un código que no lea esas columnas.
