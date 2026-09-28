@@ -9,9 +9,11 @@
 //      es la activa del llavero se descifran y vuelven a cifrar, de a tandas.
 //      Es lo que hace posible rotar CLAVES_CIFRADO sin ventana: se agrega la
 //      clave nueva, el cron migra, y cuando `pendientes` da 0 se saca la
-//      vieja (docs/encryption.md §3). Las versiones inmutables del Recorrido
-//      no se reescriben: siguen contando como pendientes y errores. Su clave
-//      debe conservarse hasta tener un procedimiento administrativo de rotación.
+//      vieja (docs/encryption.md §3). Incluye las versiones del Recorrido:
+//      la base (proteger_hilo_version, 20260928120000) les admite un UPDATE
+//      que cambie solo el blob y a otro id de clave, que es exactamente lo
+//      que se hace acá. El contenido no cambia: se descifra y se vuelve a
+//      cifrar el mismo texto con el mismo AAD.
 //   3. RED DE SEGURIDAD de las grabaciones sin terminar: una sesión quieta
 //      en `grabando`/`subiendo` más de UMBRAL_HUERFANA_HORAS (siete días) se
 //      abandona sola (casos-uso/sesion/abandonar.ts, actor sistema): con
@@ -106,8 +108,7 @@ export interface ResultadoRecifrado {
   /** Filas con una clave que no es la activa y que TODAVÍA quedan (contando
    *  después de esta tanda). 0 = se puede sacar la clave vieja. */
   pendientes: number;
-  /** Blobs que no se pudieron descifrar o reescribir por inmutabilidad:
-   * se dejan como están y se avisa. */
+  /** Blobs que no se pudieron descifrar: se dejan como están y se avisa. */
   errores: number;
 }
 
@@ -145,11 +146,6 @@ export async function recifrarTanda(
         LIMIT ${tope - recifradas - errores}`,
     );
     for (const fila of filas) {
-      if (tabla === "hilo_versiones") {
-        errores += 1;
-        console.error(`[mantenimiento] hilo_versiones ${fila.id}: contenido inmutable; conservar la clave anterior`);
-        continue;
-      }
       const aad = aadDe(tabla, columna, fila.id);
       let texto: string;
       try {
