@@ -30,13 +30,8 @@ import {
 import { Avatar, Button, Card, Chip } from "@/components/ui";
 import { Latido } from "@/components/ui/movimiento";
 import { IndicadorProcesando } from "@/components/ui/procesando";
-import { sePuedeGrabar } from "@/app/api/_lib/domain";
 import { estadoClinicoDe } from "@/components/ui/session-row";
-import {
-  esGrabacionSinTerminar,
-  estaEnProceso,
-  puede,
-} from "@/lib/sesion-clinica/estados";
+import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
 import {
@@ -109,7 +104,8 @@ type Accion =
     };
 
 /**
- * Qué ofrece la tarjeta. Una nota que FALLÓ va antes que todo (es un
+ * Qué ofrece la tarjeta. La parte clínica es accionClinicaDe, la misma de la
+ * fila y del detalle del turno: una nota que FALLÓ va antes que todo (es un
  * problema clínico, no una deuda); una nota escrita espera revisión; y
  * mientras el pipeline trabaja no hay nada que apretar. Fuera de eso, Grabar
  * y Cobrar no se excluyen: Grabar mientras el turno sea de hoy y no se haya
@@ -124,20 +120,17 @@ export function accionDe(
   sinAutorizacion: boolean,
   sinCobrar: boolean,
 ): Accion {
-  if (sesion?.estado === "fallida") return { tipo: "fallida", sesionId: sesion.id };
-  if (sesion?.estado === "revision") {
-    return { tipo: "revisar", sesionId: sesion.id };
+  const clinica = accionClinicaDe(sesion, turno, ahora);
+  if (clinica.tipo === "nota" && clinica.estado === "fallida") {
+    return { tipo: "fallida", sesionId: clinica.sesionId };
   }
-  // Una subida quieta más de 30 min no se está escribiendo: quedó a medias,
-  // y se retoma como una grabación (la pantalla de grabar ofrece la copia
-  // guardada en el teléfono).
-  const sinTerminar = esGrabacionSinTerminar(sesion, ahora);
-  if (estaEnProceso(sesion?.estado) && !sinTerminar) {
-    return { tipo: "escribiendo" };
+  if (clinica.tipo === "nota" && clinica.estado === "revision") {
+    return { tipo: "revisar", sesionId: clinica.sesionId };
   }
-  const sinGrabar =
-    sesion === null || puede("empezar_subida", sesion.estado) || sinTerminar;
-  const grabable = sinGrabar && sePuedeGrabar(turno, ahora);
+  if (clinica.tipo === "escribiendo") return { tipo: "escribiendo" };
+  // Una grabación a medias se retoma como una grabación: la pantalla de
+  // grabar ofrece la copia guardada en el teléfono.
+  const grabable = clinica.tipo === "grabar";
   const grabar = grabable ? (sinAutorizacion ? "autorizar" : "grabar") : null;
   const firma =
     sinAutorizacion && !grabable ? (sinCobrar ? "aviso" : "boton") : null;

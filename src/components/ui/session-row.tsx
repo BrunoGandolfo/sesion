@@ -4,16 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { TurnoConPaciente } from "@/types/domain";
-import {
-  esDeudaPendiente,
-  sePuedeCobrar,
-  sePuedeGrabar,
-} from "@/app/api/_lib/domain";
+import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
 import { hora, money } from "@/lib/format";
-import {
-  esGrabacionSinTerminar,
-  ESTADOS_CON_NOTA,
-} from "@/lib/sesion-clinica/estados";
+import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 import {
   AGENDADO,
   CANCELADO,
@@ -102,15 +95,6 @@ export function estadoClinicoDe(
   return null;
 }
 
-/** Ocultan "Grabar sesión": el audio ya salió del navegador y el pipeline
- *  siguió, así que volver a grabar pisaría la nota. En "grabando" y
- *  "subiendo" la grabación quedó a medias y GrabarView.asegurarSesion sabe
- *  retomarla. */
-const ESTADOS_PASADA_LA_GRABACION: ReadonlyArray<string> = [
-  "procesando",
-  ...ESTADOS_CON_NOTA,
-];
-
 function statusFor(turno: TurnoConPaciente): Status {
   if (turno.estado === "cancelado") return { variant: "neutral", label: CANCELADO };
   if (turno.estado === "ausente") return { variant: "neutral", label: NO_VINO };
@@ -125,9 +109,12 @@ function statusFor(turno: TurnoConPaciente): Status {
  * pendiente, la única acción era Cobrar y Grabar desaparecía: una sesión que
  * empezó cinco minutos tarde quedaba sin botón para grabarla. Ahora:
  *
- * - Grabar se ofrece mientras el turno sea de hoy y su grabación no haya
- *   salido del navegador, pase la hora que pase. Sin autorización firmada, en
- *   su lugar va el aviso "Falta autorización".
+ * - Grabar se ofrece cuando la acción clínica del turno es grabar
+ *   (accionClinicaDe, la misma regla de la card de Ahora y del detalle del
+ *   turno): sin sesión o con la grabación en curso, y el turno de hoy, pase
+ *   la hora que pase. Una grabación a medias no suma el botón: la fila ya
+ *   ofrece "Grabación sin terminar", que lleva al mismo lugar. Sin
+ *   autorización firmada, en su lugar va el aviso "Falta autorización".
  * - Cobrar se ofrece además, no en lugar de, cuando la hora pasó y el pago
  *   sigue pendiente —aunque el turno todavía figure como programado, porque
  *   el caso de uso de cobrar lo marca realizado—. No depende de la firma: una
@@ -152,12 +139,8 @@ export function accionesDe({
   // solo lo ya realizado y no se ofrece grabar.
   const cobrable =
     (ahora ? sePuedeCobrar(turno, ahora) : esDeudaPendiente(turno)) && !!onCobrar;
-  const puedeGrabar = ahora ? sePuedeGrabar(turno, ahora) : false;
-  const estadoSesion = turno.sesionClinica?.estado;
-  const yaPasoLaGrabacion =
-    estadoSesion !== undefined &&
-    ESTADOS_PASADA_LA_GRABACION.includes(estadoSesion);
-  const grabable = puedeGrabar && !yaPasoLaGrabacion;
+  const clinica = ahora ? accionClinicaDe(turno.sesionClinica, turno, ahora) : null;
+  const grabable = clinica?.tipo === "grabar" && !clinica.retomar;
 
   const acciones: Accion[] = [];
   // La firma que falta se avisa donde iría Grabar, y al lado de Cobrar: no
@@ -191,11 +174,13 @@ export function SessionRow(props: SessionRowProps) {
   const acciones = accionesDe(props);
   const sesion = turno.sesionClinica;
   const nota = estadoClinicoDe(sesion);
-  const procesando = sesion?.estado === "procesando";
-  // Grabación o subida que quedó a medias (esGrabacionSinTerminar): no se
-  // está procesando. Lleva a la pantalla de grabar, que ofrece la copia guardada en
-  // el teléfono. Sin `ahora` (Agenda) vale el reloj del navegador.
-  const sinTerminar = esGrabacionSinTerminar(sesion, props.ahora ?? new Date());
+  // La acción clínica (accionClinicaDe): la misma que la card y el detalle.
+  // Una grabación o subida que quedó a medias no se está procesando: lleva a
+  // la pantalla de grabar, que ofrece la copia guardada en el teléfono. Sin
+  // `ahora` (Agenda) vale el reloj del navegador.
+  const clinica = accionClinicaDe(sesion, turno, props.ahora ?? new Date());
+  const procesando = clinica.tipo === "escribiendo";
+  const sinTerminar = clinica.tipo === "grabar" && clinica.retomar;
   const nombre = `${turno.paciente.nombre} ${turno.paciente.apellido}`;
 
   const base = `w-full flex flex-wrap items-center gap-3 bg-white border border-[color:var(--border-subtle)] rounded-md pl-[13px] pr-4 py-[14px] text-left transition-colors duration-[var(--duration-fast)] border-l-[3px] ${leftClass} hover:bg-cream-50 hover:border-l-sage-300 ${className}`;

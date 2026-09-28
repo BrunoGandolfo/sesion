@@ -6,7 +6,8 @@
 //     condicionado y las pre-lecturas, src/app/api/_lib/casos-uso/sesion/
 //     transicion.ts), y `aplicarResultadoSesion`, que devuelve el `hacia` de
 //     la tabla;
-//   - las pantallas, a través de `puede`: qué botón ofrecer.
+//   - las pantallas, a través de `puede` y de `accionClinicaDe`
+//     (accion-clinica.ts): qué botón ofrecer.
 // Ninguna ruta ni pantalla escribe su propia tabla de transiciones; ningún
 // PATCH genérico puede pedir un estado.
 //
