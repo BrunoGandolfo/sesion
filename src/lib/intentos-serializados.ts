@@ -44,7 +44,7 @@
 // la secuencia se lee mejor en cada llamador.
 
 /** Lo mínimo que este módulo necesita de un cliente de transacción. */
-export interface EjecutorSql {
+interface EjecutorSql {
   $executeRaw(
     query: TemplateStringsArray,
     ...valores: unknown[]
@@ -55,8 +55,8 @@ export interface EjecutorSql {
  * Cuánto espera un intento a que se libere una conexión del pool, y cuánto
  * puede durar la transacción entera (esperar el lock + un bcrypt).
  */
-export const LOCK_MAX_WAIT_MS = 10_000;
-export const LOCK_TIMEOUT_MS = 10_000;
+const LOCK_MAX_WAIT_MS = 10_000;
+const LOCK_TIMEOUT_MS = 10_000;
 
 /** Opciones de `$transaction` para todo intento serializado. */
 export const OPCIONES_TRANSACCION = {

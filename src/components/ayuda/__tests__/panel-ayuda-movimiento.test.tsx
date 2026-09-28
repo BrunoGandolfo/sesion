@@ -16,9 +16,9 @@ vi.mock("@/components/ui/sheet", () => ({
 }));
 vi.mock("@/components/ui/lupita", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/components/ui/lupita")>(),
-  Lupita: ({ pose, movimiento = "quieta", tamano, pulso }: LupitaProps) => (
+  Lupita: ({ pose, movimiento = "quieta", tamano }: LupitaProps) => (
     <span data-testid={tamano === 72 ? "encabezado" : "inline"}
-      data-pose={pose} data-movimiento={movimiento} data-pulso={pulso} />
+      data-pose={pose} data-movimiento={movimiento} />
   ),
 }));
 
@@ -38,18 +38,18 @@ function proveedor() {
   return flujo;
 }
 
-it("brota al abrir, respira y vuelve a brotar al reabrir; cerrado no hay loop", async () => {
+it("brota al abrir, queda quieta y vuelve a brotar al reabrir; cerrado no hay loop", async () => {
   const { rerender } = render(<PanelAyuda abierto alCerrar={() => {}} />);
   expect(movimiento()).toBe("brota");
   await act(() => vi.advanceTimersByTimeAsync(DURACION_BROTA * 1000));
-  expect(movimiento()).toBe("respira");
+  expect(movimiento()).toBe("quieta");
   rerender(<PanelAyuda abierto={false} alCerrar={() => {}} />);
   expect(screen.queryByTestId("encabezado")).toBeNull();
   rerender(<PanelAyuda abierto alCerrar={() => {}} />);
   expect(movimiento()).toBe("brota");
 });
 
-it("piensa hasta el primer fragmento, pulsa por cada uno y celebra una vez", async () => {
+it("piensa hasta el primer fragmento, lee quieta y celebra una vez", async () => {
   const flujo = proveedor();
   render(<PanelAyuda abierto alCerrar={() => {}} />);
   preguntar();
@@ -58,17 +58,17 @@ it("piensa hasta el primer fragmento, pulsa por cada uno y celebra una vez", asy
   await act(() => vi.advanceTimersByTimeAsync(1000));
   expect(movimiento()).toBe("piensa");
   await act(async () => { flujo.enqueue(new TextEncoder().encode("Hola ")); });
-  expect(movimiento()).toBe("habla");
-  expect(screen.getByTestId("encabezado").getAttribute("data-pulso")).toBe("1");
+  expect(movimiento()).toBe("quieta");
+  expect(screen.getByTestId("encabezado").getAttribute("data-pose")).toBe("saluda");
   await act(async () => { flujo.enqueue(new TextEncoder().encode("Mariana")); });
-  expect(screen.getByTestId("encabezado").getAttribute("data-pulso")).toBe("2");
+  expect(movimiento()).toBe("quieta");
   expect(screen.getAllByTestId("inline").every(nodo => nodo.getAttribute("data-movimiento") === "quieta")).toBe(true);
   await act(async () => { flujo.close(); });
   expect(movimiento()).toBe("celebra");
   await act(() => vi.advanceTimersByTimeAsync(DURACION_CELEBRA * 1000));
-  expect(movimiento()).toBe("respira");
+  expect(movimiento()).toBe("quieta");
   await act(() => vi.advanceTimersByTimeAsync(5000));
-  expect(movimiento()).toBe("respira");
+  expect(movimiento()).toBe("quieta");
 });
 
 it("un error interrumpe la espera y vuelve al reposo sin celebrar", async () => {
@@ -76,7 +76,7 @@ it("un error interrumpe la espera y vuelve al reposo sin celebrar", async () => 
   render(<PanelAyuda abierto alCerrar={() => {}} />);
   preguntar();
   await act(async () => { flujo.error(new Error("sin conexión")); });
-  expect(movimiento()).toBe("respira");
+  expect(movimiento()).toBe("quieta");
 });
 
 it("con movimiento reducido mantiene señala al pensar y celebra al terminar", async () => {

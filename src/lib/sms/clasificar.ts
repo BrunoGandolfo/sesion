@@ -18,7 +18,7 @@
 import { SMS_MOTIVOS, SMS_CON_CODIGO } from "@/lib/glosario";
 import type { MotivoBajaSms } from "@prisma/client";
 
-export type ClaseRespuesta = "transitorio" | "definitivo";
+type ClaseRespuesta = "transitorio" | "definitivo";
 
 export interface Clasificacion {
   clase: ClaseRespuesta;

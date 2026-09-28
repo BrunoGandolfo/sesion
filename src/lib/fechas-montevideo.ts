@@ -39,7 +39,7 @@ const MS_POR_DIA = 86_400_000;
 const OFFSET_MS = OFFSET_MONTEVIDEO_MIN * MS_POR_MINUTO;
 
 /** Componentes del reloj de pared de Montevideo para un instante dado. */
-export interface PartesMvd {
+interface PartesMvd {
   anio: number;
   /** 0-11, como en Date. */
   mes: number;

@@ -32,7 +32,7 @@ import { clasificarRespuesta, type Clasificacion } from "./clasificar";
  *  de 45 s por corrida, un Twilio colgado no consume la corrida entera. */
 export const TIMEOUT_TWILIO_MS = 10_000;
 
-export interface PedidoSms {
+interface PedidoSms {
   /** E.164. */
   destino: string;
   texto: string;
@@ -48,7 +48,7 @@ export type ResultadoTwilio =
 
 export type EnviadorSms = (pedido: PedidoSms) => Promise<ResultadoTwilio>;
 
-export type SmsConfigStatus =
+type SmsConfigStatus =
   | { ok: true }
   | { ok: false; motivo: "falta_from" | "faltan_credenciales" };
 
@@ -80,7 +80,7 @@ function codigoDeRed(error: unknown): string | null {
   return typeof causa?.code === "string" ? causa.code : null;
 }
 
-export interface OpcionesTwilio {
+interface OpcionesTwilio {
   fetcher?: typeof fetch;
   env?: Record<string, string | undefined>;
   timeoutMs?: number;

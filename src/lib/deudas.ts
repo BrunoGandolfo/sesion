@@ -34,7 +34,7 @@ export { textoAtraso } from "@/lib/glosario";
  */
 export { TEMPLATE_COBRO_DEFAULT } from "@/lib/glosario";
 
-export interface InterpolarTemplateCobroVars {
+interface InterpolarTemplateCobroVars {
   nombre: string;
   sesiones: number;
   monto: string;

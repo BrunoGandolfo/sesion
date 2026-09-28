@@ -26,7 +26,7 @@ import { enviarCorreo } from "@/lib/correo";
 import { detalleDeError } from "@/lib/detalle-error";
 import type { NivelAlerta } from "@/lib/salud-metricas";
 
-export type { NivelAlerta };
+
 
 /** Cuántas veces se intenta mandar el correo antes de caer a Sentry. */
 export const INTENTOS_ALERTA = 3;
@@ -34,9 +34,9 @@ export const INTENTOS_ALERTA = 3;
 /** Espera entre intentos, en ms: 0.5 s y después 2 s. */
 export const ESPERAS_MS: readonly number[] = [500, 2000];
 
-export type DetalleAlerta = Record<string, string | number | boolean | null>;
+type DetalleAlerta = Record<string, string | number | boolean | null>;
 
-export interface OpcionesAlerta {
+interface OpcionesAlerta {
   /** Para tests: el fetch que usa el correo. */
   fetcher?: typeof fetch;
   /** Para tests: no esperar entre reintentos. */

@@ -40,7 +40,7 @@ async function parseError(res: Response): Promise<string> {
 //   3. POST [id]/upload-confirmar → fila actualizada       (subiendo → procesando)
 // ────────────────────────────────────────────────────────────────────────────
 
-export type PasoSubida = "url" | "put" | "confirmar";
+type PasoSubida = "url" | "put" | "confirmar";
 
 export class ErrorSubida extends Error {
   constructor(

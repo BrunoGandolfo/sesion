@@ -27,9 +27,9 @@ export const VARIABLES_OPERACION = [
   "TWILIO_SMS_FROM",
 ] as const;
 
-export type VariableOperacion = (typeof VARIABLES_OPERACION)[number];
+type VariableOperacion = (typeof VARIABLES_OPERACION)[number];
 
-export interface ResultadoEnvOperacion {
+interface ResultadoEnvOperacion {
   /** Las que faltan o están vacías. */
   faltantes: VariableOperacion[];
   /** true si estamos en producción, donde faltar una es un error. */

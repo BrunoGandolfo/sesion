@@ -26,7 +26,7 @@ export const PASSWORD_MIN = 10;
  */
 export const PASSWORD_MAX_BYTES = 72;
 
-export type ResultadoPassword = { ok: true } | { ok: false; motivo: string };
+type ResultadoPassword = { ok: true } | { ok: false; motivo: string };
 
 const OK: ResultadoPassword = { ok: true };
 

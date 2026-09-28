@@ -16,8 +16,8 @@
 // Origin de esOrigenPropio), Max-Age de 30 días (el vencimiento absoluto que
 // además guarda la fila).
 
-export const NOMBRE_COOKIE_PRODUCCION = "__Host-sesion";
-export const NOMBRE_COOKIE_DESARROLLO = "sesion";
+const NOMBRE_COOKIE_PRODUCCION = "__Host-sesion";
+const NOMBRE_COOKIE_DESARROLLO = "sesion";
 
 /** Vigencia absoluta de una sesión: 30 días. */
 export const VIGENCIA_SESION_SEGUNDOS = 30 * 24 * 60 * 60;
@@ -25,7 +25,7 @@ export const VIGENCIA_SESION_SEGUNDOS = 30 * 24 * 60 * 60;
 /** 32 bytes en base64url, sin padding. */
 export const TOKEN_SESION = /^[A-Za-z0-9_-]{43}$/;
 
-export function esProduccion(): boolean {
+function esProduccion(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
@@ -94,7 +94,7 @@ export const PARAM_SESION_VENCIDA = "sesion";
 
 const METODOS_SEGUROS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-export function esMetodoSeguro(metodo: string): boolean {
+function esMetodoSeguro(metodo: string): boolean {
   return METODOS_SEGUROS.has(metodo.toUpperCase());
 }
 

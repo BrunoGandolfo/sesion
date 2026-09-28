@@ -13,9 +13,9 @@ import type {
 import { detalleDeError } from "@/lib/detalle-error";
 
 export const MODELO_AYUDA = "claude-sonnet-5";
-export const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 30_000;
 
-export interface BloqueSystem extends TextBlockParam {
+interface BloqueSystem extends TextBlockParam {
   type: "text";
   text: string;
   cache_control?: { type: "ephemeral" };
@@ -36,7 +36,7 @@ export interface PedidoMensajes {
   tool_choice?: { type: "auto"; disable_parallel_tool_use: boolean };
 }
 
-export interface LlamadaHerramienta {
+interface LlamadaHerramienta {
   nombre: string;
   entrada: unknown;
 }
@@ -66,7 +66,7 @@ export type FetchLike = (
   init: RequestInit,
 ) => Promise<Response>;
 
-export interface OpcionesMensajes {
+interface OpcionesMensajes {
   apiKey: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;

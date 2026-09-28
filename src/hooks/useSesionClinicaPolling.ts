@@ -110,7 +110,7 @@ interface UseSesionClinicaPollingOptions {
   onSesion?: (resultado: ResultadoPolling) => void;
 }
 
-export interface ResultadoPolling {
+interface ResultadoPolling {
   fila: SesionClinicaApi;
   sesion: SesionClinicaEnsamblada;
 }

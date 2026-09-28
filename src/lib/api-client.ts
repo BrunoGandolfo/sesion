@@ -10,7 +10,7 @@
 
 import { ALGO_FALLO } from "@/lib/glosario";
 
-export interface OpcionesApi {
+interface OpcionesApi {
   signal?: AbortSignal;
 }
 

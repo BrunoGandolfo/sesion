@@ -23,7 +23,6 @@ import type {
 import type { RecordatorioModo } from "@/lib/recordatorios-programacion";
 import type {
   AlianzaTerapeutica,
-  ConfianzaModelo,
   DatosEstructurados as DatosEstructuradosSchema,
   EstadoSesion,
   NivelRiesgo,
@@ -336,7 +335,7 @@ export type EstadoProcesamiento = EstadoSesion;
 export type { AlianzaTerapeutica };
 
 /** Confianza del modelo en la nota generada */
-export type { ConfianzaModelo };
+
 
 /** Nivel de la señal de riesgo. "ninguno" es el default seguro: sin
  *  evidencia textual explícita no se gradúa riesgo. */
@@ -403,7 +402,7 @@ export interface MITIGlobales {
 }
 
 /** Conteos MITI 4.2.1 — 10 categorías de comportamiento */
-export interface MITICounts {
+interface MITICounts {
   Q: number;   // Question
   SR: number;  // Simple Reflection
   CR: number;  // Complex Reflection
@@ -416,9 +415,9 @@ export interface MITICounts {
   C: number;   // Confront
 }
 
-export type BenchmarkMITI = "insufficient" | "fair" | "good";
+type BenchmarkMITI = "insufficient" | "fair" | "good";
 
-export interface RatiosDerivadosMITI {
+interface RatiosDerivadosMITI {
   rq: number | null;            // (SR + CR) / Q; null si Q === 0
   porcentajeCR: number | null;  // CR / (SR + CR) * 100; null si SR+CR === 0
   benchmarkRQ: BenchmarkMITI;
@@ -433,7 +432,7 @@ export interface CTSRSubset {
   guidedDiscovery: ScoreCTSR;
 }
 
-export interface SpeechAnalyticsInferido {
+interface SpeechAnalyticsInferido {
   ratioHablaTerapeutaPaciente: number | null;
   comentario: string | null;
 }
@@ -454,7 +453,7 @@ export interface AreaCrecimientoFeedback {
 // longitudinalmente sin importar el instrumento con que se generó cada
 // sesión. Los bloques específicos de instrumento extienden este núcleo.
 
-export interface FeedbackNucleoPanteorico {
+interface FeedbackNucleoPanteorico {
   fortalezas: FortalezaFeedback[];              // máx 3
   areasCrecimiento: AreaCrecimientoFeedback[];  // máx 3
   sugerenciaProximaSesion: string;
@@ -464,7 +463,7 @@ export interface FeedbackNucleoPanteorico {
 
 // ─── Bloque específico MITI 4.2.1 + CTS-R (orientación cbt_mi) ───────
 
-export interface FeedbackMitiCtsr extends FeedbackNucleoPanteorico {
+interface FeedbackMitiCtsr extends FeedbackNucleoPanteorico {
   /** El worker no lo manda (SCHEMA_FEEDBACK_CBT_MI no tiene el campo):
    *  sin instrumento, leerFeedback lo trata como cbt_mi. */
   instrumento?: "cbt_mi";
@@ -487,7 +486,7 @@ export interface ItemGTFS {
   evidence: EvidenciaFeedback[];
 }
 
-export interface FeedbackGestalt extends FeedbackNucleoPanteorico {
+interface FeedbackGestalt extends FeedbackNucleoPanteorico {
   instrumento: "gestalt";
   itemsGTFS: ItemGTFS[];
   adherenciaGlobal: number | null; // suma GTFS de ítems evaluables

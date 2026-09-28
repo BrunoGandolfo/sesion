@@ -35,12 +35,12 @@ import {
 import type { ClienteCifrado } from "@/lib/prisma-encryption";
 
 /** El cliente de una transacción interactiva del cliente de la app. */
-export type TxCifrado = Omit<ClienteCifrado, ITXClientDenyList>;
+type TxCifrado = Omit<ClienteCifrado, ITXClientDenyList>;
 
 /** Lo mínimo que hace falta para leer y escribir intentos. */
 export type ClienteIntentos = Pick<TxCifrado, "intentoAcceso">;
 
-export type TipoIntento = "login" | "password" | "recuperar";
+type TipoIntento = "login" | "password" | "recuperar";
 
 const MS_POR_HORA = 3_600_000;
 
@@ -123,14 +123,14 @@ export async function registrarIntentoFallido(
 
 // ─── El login, serializado ──────────────────────────────────────────────────
 
-export interface IntentoLogin {
+interface IntentoLogin {
   /** Ya normalizado: trim + minúsculas. */
   email: string;
   huella: Huella;
   ahora: Date;
 }
 
-export type Verificacion<T> =
+type Verificacion<T> =
   | { ok: true; resultado: T }
   | { ok: false; motivo: "email" | "password" };
 
@@ -139,7 +139,7 @@ export type ResultadoLogin<T> =
   | { estado: "rechazado" }
   | { estado: "indisponible" };
 
-export interface ProcesarIntentoLoginParams<T> {
+interface ProcesarIntentoLoginParams<T> {
   prisma: ClienteCifrado;
   intento: IntentoLogin;
   /**
@@ -191,7 +191,7 @@ export async function procesarIntentoLogin<T>({
 
 // ─── El cambio de contraseña, serializado ───────────────────────────────────
 
-export type ResultadoCambioPassword =
+type ResultadoCambioPassword =
   | { estado: "bloqueado" }
   | { estado: "credencial-incorrecta" }
   | { estado: "sin-usuario" }
@@ -200,7 +200,7 @@ export type ResultadoCambioPassword =
    *  escritura de la nueva tiene que condicionarse a que siga siendo ese. */
   | { estado: "ok"; hashVerificado: string };
 
-export interface ProcesarCambioPasswordParams {
+interface ProcesarCambioPasswordParams {
   prisma: ClienteCifrado;
   organizationId: string;
   userId: string;

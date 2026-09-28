@@ -51,7 +51,7 @@ export const ETIQUETA_NIVEL: Record<NivelRiesgo, string> = {
   alto: "nivel alto",
 };
 
-export interface RiesgoCorto {
+interface RiesgoCorto {
   nivel: NivelRiesgo;
   flagsActivos: string[];
   indicadores: string[];
@@ -72,7 +72,7 @@ export interface UltimaSesionCorta {
 }
 
 /** true cuando hay algo que avisar: nivel graduado o flag activo. */
-export function hayRiesgo(riesgo: RiesgoCorto | undefined | null): boolean {
+function hayRiesgo(riesgo: RiesgoCorto | undefined | null): boolean {
   return (
     !!riesgo && (riesgo.nivel !== "ninguno" || riesgo.flagsActivos.length > 0)
   );
@@ -84,7 +84,7 @@ export function hayRiesgo(riesgo: RiesgoCorto | undefined | null): boolean {
  * de la última sesión cae en los registros históricos, que es lo que muestra
  * el sheet del turno.
  */
-export function textoRiesgo(
+function textoRiesgo(
   riesgo: RiesgoCorto | undefined | null,
   registrosHistoricos = 0,
 ): string | null {
@@ -109,7 +109,7 @@ export function textoRiesgo(
   return null;
 }
 
-export interface BriefCortoProps {
+interface BriefCortoProps {
   ultimaSesion: UltimaSesionCorta | null;
   /** Señales de riesgo de sesiones anteriores (hiloLongitudinal). */
   riesgosHistoricos?: number;

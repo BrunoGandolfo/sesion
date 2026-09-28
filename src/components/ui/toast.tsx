@@ -43,11 +43,13 @@ const BOTTOM_DESKTOP = 104;
  */
 export type VarianteToast = "confirmacion" | "aviso";
 
+/** Cuánto queda a la vista antes de irse solo. */
+const DURACION_TOAST_MS = 2800;
+
 interface ToastProps {
   open: boolean;
   message: string;
   onClose: () => void;
-  duration?: number;
   variante?: VarianteToast;
 }
 
@@ -55,7 +57,6 @@ export function Toast({
   open,
   message,
   onClose,
-  duration = 2800,
   variante = "confirmacion",
 }: ToastProps) {
   // Entra y sale sin desplazamiento con la preferencia declarada: aparece y
@@ -73,9 +74,9 @@ export function Toast({
 
   React.useEffect(() => {
     if (!open) return;
-    const timer = window.setTimeout(onClose, duration);
+    const timer = window.setTimeout(onClose, DURACION_TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [open, duration, onClose]);
+  }, [open, onClose]);
 
   return (
     <AnimatePresence>

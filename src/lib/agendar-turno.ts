@@ -10,7 +10,7 @@ import { fechaCorta } from "@/lib/format";
 import { SERIE_AGENDADA, SERIE_OMITIDAS, TURNO_AGENDADO } from "@/lib/glosario";
 import type { FrecuenciaTurno, TurnoCreado } from "@/types/domain";
 
-export interface PayloadNuevoTurno {
+interface PayloadNuevoTurno {
   pacienteId: string;
   /** ISO. La hora del formulario es la del consultorio, no la del aparato. */
   fecha: string;

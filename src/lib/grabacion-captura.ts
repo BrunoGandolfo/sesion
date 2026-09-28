@@ -57,7 +57,7 @@ export function crearReloj(pared: () => number = Date.now, monotonico: () => num
 }
 
 /** Tramo de reloj en el que no llegó audio. Epoch ms. */
-export interface Hueco {
+interface Hueco {
   desde: number;
   hasta: number;
 }
@@ -122,7 +122,7 @@ export function sinChunksDesde(medida: Medida, ahora: number): number | null {
   return ahora - medida.ultimoChunkEn > HUECO_MS ? medida.ultimoChunkEn : null;
 }
 
-export type EstadoLimite = "ok" | "aviso" | "limite";
+type EstadoLimite = "ok" | "aviso" | "limite";
 
 export function estadoLimite(segundosGrabados: number): EstadoLimite {
   if (segundosGrabados >= LIMITE_SEGUNDOS) return "limite";

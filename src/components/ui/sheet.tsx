@@ -18,7 +18,7 @@ import estilosFormulario from "./sheet-formulario.module.css";
  * inferior del panel. Por eso el contenido reserva esta altura al final:
  * sin ella, el último botón de cada sheet queda debajo del menú.
  */
-export const ALTURA_NAV_MOBILE = 64;
+const ALTURA_NAV_MOBILE = 64;
 
 /**
  * UN SOLO PANEL.
@@ -53,7 +53,7 @@ function focusablesDe(panel: HTMLElement | null): HTMLElement[] {
  *                deslizándose. Para lo que acompaña a la pantalla de atrás
  *                en vez de interrumpirla: hoy, la ayuda.
  */
-export type VarianteSheet = "centrado" | "lateral";
+type VarianteSheet = "centrado" | "lateral";
 
 const CONSULTA_ESCRITORIO = "(min-width: 1024px)";
 

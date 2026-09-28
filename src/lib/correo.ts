@@ -1,7 +1,7 @@
 // Única salida de correo. Sólo la importan rutas Node, nunca el proxy.
 // API HTTP oficial: https://resend.com/docs/api-reference/emails/send-email
 export const REMITENTE_CORREO = "Sesión <no-responder@sesionapp.app>";
-export const TIMEOUT_CORREO_MS = 8000;
+const TIMEOUT_CORREO_MS = 8000;
 
 export interface Correo {
   para: string;
@@ -10,7 +10,7 @@ export interface Correo {
   html: string;
 }
 
-export class ErrorCorreo extends Error {
+class ErrorCorreo extends Error {
   constructor(public readonly codigo: "sin-clave" | "proveedor" | "red") {
     super(`No se pudo enviar el correo (${codigo}).`);
     this.name = "ErrorCorreo";

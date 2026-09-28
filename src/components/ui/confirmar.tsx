@@ -28,7 +28,7 @@ import { AlturaAnimada, MS_PLIEGUE } from "./movimiento";
 // los plegables, con sus mismos 220 ms, así que con movimiento reducido no
 // hay transición: está o no está, exactamente como antes.
 
-export interface ConfirmarProps {
+interface ConfirmarProps {
   /** Pregunta corta, en una línea. Ej: "¿Cancelar este turno?" */
   titulo: string;
   /** Qué va a pasar y qué se conserva. Una o dos frases, o un bloque propio

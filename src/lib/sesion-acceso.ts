@@ -27,9 +27,9 @@ export const INACTIVIDAD_MAX_MS = 14 * MS_POR_DIA;
 export const ACTUALIZAR_USO_CADA_MS = 5 * 60 * 1000;
 
 /** Lo mínimo del cliente que hace falta acá; entra también el de una transacción. */
-export type ClienteSesiones = Pick<ClienteCifrado, "sesionAcceso">;
+type ClienteSesiones = Pick<ClienteCifrado, "sesionAcceso">;
 
-export interface FilaSesion {
+interface FilaSesion {
   cerradaEn: Date | null;
   venceEn: Date;
   ultimoUsoEn: Date;
@@ -63,14 +63,14 @@ export function nuevoTokenSesion(): string {
 
 export const hashTokenSesion = sha256Hex;
 
-export interface CrearSesionParams {
+interface CrearSesionParams {
   userId: string;
   ip: string | null;
   userAgent: string | null;
   ahora: Date;
 }
 
-export interface SesionCreada {
+interface SesionCreada {
   /** El token que va a la cookie. Es la única vez que existe en claro. */
   token: string;
   id: string;
@@ -98,7 +98,7 @@ export async function crearSesion(
   return { token, id: sesion.id, venceEn };
 }
 
-export interface SesionConUsuaria {
+interface SesionConUsuaria {
   id: string;
   ultimoUsoEn: Date;
   user: {
@@ -148,7 +148,7 @@ export async function tocarSesion(
   return true;
 }
 
-export type MotivoCierre =
+type MotivoCierre =
   | "salida"
   | "salida_todas"
   | "cambio_password"

@@ -79,7 +79,7 @@ const OPCIONES_FRECUENCIA = FRECUENCIAS_TURNO.map((value) => ({ value, label: FR
 
 type PacienteOpcion = Pick<Paciente, "id" | "nombre" | "apellido" | "tarifa">;
 
-export interface NuevoTurnoFormProps {
+interface NuevoTurnoFormProps {
   pacientes: PacienteOpcion[];
   /** Tarifa por sesión de Tu consultorio, para "Crear a X". null si no se
    *  pudo leer (o no se pidió): en ese caso no se pueden crear pacientes

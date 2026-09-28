@@ -44,7 +44,7 @@ export type PoseLupita = "saluda" | "senala" | "celebra";
 export const TAMANOS_LUPITA = { inline: 20, encabezado: 72, vacio: 96 } as const;
 
 /** Debajo de este tamaño no se dibuja el brote dorado. */
-export const TAMANO_CON_DETALLE = 32;
+const TAMANO_CON_DETALLE = 32;
 
 /** El punto del brote, el único elemento relleno del dibujo. Mide 2 px. */
 const RADIO_BROTE = 1;
@@ -96,9 +96,12 @@ const FORMAS: Record<PoseLupita, FormaPose> = {
 /** Gestos finitos; el panel usa las mismas duraciones para su secuencia. */
 export const DURACION_BROTA = TIEMPOS.pliegue / 1000;
 export const DURACION_CELEBRA = TIEMPOS.pliegue / 1000;
-export const DURACION_TOQUE_MENU = TIEMPOS.breve / 1000;
+const DURACION_TOQUE_MENU = TIEMPOS.breve / 1000;
 
-export type MovimientoLupita = "brota" | "respira" | "piensa" | "habla" | "celebra" | "quieta";
+/** Dos gestos finitos (brota, celebra), una pose de espera (piensa) y el
+ *  reposo. Esperar y recibir texto se ven quietos: no hay un estado aparte
+ *  para "respirar" ni para "hablar", porque se dibujaban igual que quieta. */
+export type MovimientoLupita = "brota" | "piensa" | "celebra" | "quieta";
 
 // Esperar y recibir texto se expresan con una pose, sin pulsos ni loops.
 const ANIMACIONES: Partial<Record<MovimientoLupita, TargetAndTransition>> = {
@@ -113,8 +116,6 @@ export interface LupitaProps {
   tamano?: number;
   className?: string;
   movimiento?: MovimientoLupita;
-  /** Se conserva la prop del panel; recibir texto ya no reinicia un gesto. */
-  pulso?: number;
 }
 
 /**
