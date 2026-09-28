@@ -1,3 +1,6 @@
 -r requirements.txt
 pytest>=8,<9
 pytest-mock>=3.14,<4
+# Lo usa tests/test_ensayo_listado.py (las --query de aws). Hoy llega por
+# boto3; se declara para no depender de eso.
+jmespath>=1,<2

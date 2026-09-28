@@ -1,5 +1,5 @@
 """Clasificacion transitorio / definitivo de los fallos del pipeline."""
-from errores import CODIGOS_DEFINITIVOS, LeasePerdido, PipelineError
+from errores import CODIGOS_DEFINITIVOS, PipelineError
 
 
 def test_los_codigos_de_la_lista_son_definitivos_y_el_resto_transitorio():
@@ -40,4 +40,3 @@ def test_la_bandera_explicita_gana_sobre_el_codigo():
 def test_el_mensaje_lleva_codigo_y_texto_publico():
     e = PipelineError("asr_timeout", "AssemblyAI no completo")
     assert str(e) == "asr_timeout: AssemblyAI no completo"
-    assert isinstance(LeasePerdido(), Exception)

@@ -11,6 +11,7 @@ import pytest
 
 import clinical_analyzer
 import config
+from dobles import respuesta_sdk
 from errores import PipelineError
 from schemas_llm import SCHEMA_NOTA
 
@@ -22,13 +23,13 @@ def cliente_nuevo(mocker):
     return mocker.patch("clinical_analyzer.anthropic.Anthropic")
 
 
-def test_el_cliente_va_con_timeout_de_600_y_un_solo_reintento(cliente_nuevo, mocker):
+def test_el_cliente_va_con_el_timeout_configurado_y_un_solo_reintento(cliente_nuevo, mocker):
     mocker.patch("clinical_analyzer.config.ANTHROPIC_WORKSPACE_ID", "")
 
     clinical_analyzer._cliente()
 
     kwargs = cliente_nuevo.call_args.kwargs
-    assert kwargs["timeout"] == config.LLM_TIMEOUT_SECONDS == 600
+    assert kwargs["timeout"] == config.LLM_TIMEOUT_SECONDS
     assert kwargs["max_retries"] == 1
     assert "default_headers" not in kwargs
 
@@ -43,11 +44,7 @@ def test_con_workspace_el_cliente_manda_la_cabecera(cliente_nuevo, mocker):
 
 def test_el_pedido_no_lleva_cache_control(mocker):
     cliente = mocker.Mock()
-    cliente.messages.create.return_value = SimpleNamespace(
-        usage=SimpleNamespace(input_tokens=10, output_tokens=5),
-        stop_reason="end_turn",
-        content=[SimpleNamespace(type="text", text=json.dumps({"ok": True}))],
-    )
+    cliente.messages.create.return_value = respuesta_sdk({"ok": True})
     mocker.patch("clinical_analyzer._cliente", return_value=cliente)
 
     clinical_analyzer._llamar_anthropic("SYSTEM", "user", SCHEMA_NOTA, 16384)
@@ -113,9 +110,7 @@ def test_el_error_http_anota_el_request_id_y_el_status_en_el_detalle(mocker):
 
 def test_un_rechazo_del_modelo_es_llm_rechazo(mocker):
     cliente = mocker.Mock()
-    cliente.messages.create.return_value = SimpleNamespace(
-        usage=SimpleNamespace(input_tokens=10, output_tokens=1), stop_reason="refusal", content=[]
-    )
+    cliente.messages.create.return_value = respuesta_sdk("{}", stop="refusal")
     mocker.patch("clinical_analyzer._cliente", return_value=cliente)
 
     with pytest.raises(PipelineError) as exc:

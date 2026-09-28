@@ -18,6 +18,7 @@ import pytest
 import clinical_analyzer
 import config
 import processor
+from dobles import respuesta_sdk
 from app_client import RespuestaApp
 from processor import SesionReclamada
 
@@ -34,23 +35,6 @@ NOTA_OK = {
         "riesgoDetectado": {"nivel": "ninguno", "indicadores": [], "evidencia": [], "notaParaTerapeuta": None},
     },
 }
-
-
-def respuesta_sdk(cuerpo: dict | str, stop="end_turn", entrada=21000, salida=9000, razonamiento=6500, request_id="req_01"):
-    """Lo que devuelve messages.create del SDK 1.x, con los campos que se leen."""
-    texto = cuerpo if isinstance(cuerpo, str) else json.dumps(cuerpo)
-    return SimpleNamespace(
-        usage=SimpleNamespace(
-            input_tokens=entrada,
-            output_tokens=salida,
-            cache_read_input_tokens=0,
-            cache_creation_input_tokens=0,
-            output_tokens_details=SimpleNamespace(thinking_tokens=razonamiento),
-        ),
-        stop_reason=stop,
-        content=[SimpleNamespace(type="text", text=texto)],
-        _request_id=request_id,
-    )
 
 
 @pytest.fixture

@@ -1,6 +1,7 @@
 """
-Traduccion de los items de /pendientes y /trabajos/pendientes a las llamadas
-de processor. Sin red.
+worker.py: la traduccion de los items de /pendientes y /trabajos/pendientes
+a las llamadas de processor, el loop con sus senales y apagado ordenado, el
+modo manual y main. Sin red.
 """
 import json
 import signal

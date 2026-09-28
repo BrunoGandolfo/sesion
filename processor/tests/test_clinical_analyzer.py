@@ -16,30 +16,10 @@ import pytest
 import clinical_analyzer
 import config
 from clinical_analyzer import DiagnosticoLLM
+from dobles import nota as _nota
+from dobles import respuesta_sdk
 from errores import PipelineError
 from schemas_llm import SCHEMA_NOTA, validar_estructura_nota
-
-RIESGO_SIN_SEÑAL = {
-    "nivel": "ninguno",
-    "indicadores": [],
-    "evidencia": [],
-    "notaParaTerapeuta": None,
-}
-
-
-def _nota(**datos) -> dict:
-    base = {
-        "intensidadEmocional": 7,
-        "alianzaTerapeutica": "estable",
-        "duracionRealMin": 50,
-        "riesgoDetectado": dict(RIESGO_SIN_SEÑAL),
-    }
-    base.update(datos)
-    return {
-        "nota": {"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"},
-        "datosEstructurados": base,
-    }
-
 
 def _nota_sin_analisis() -> dict:
     resultado = _nota()
@@ -352,13 +332,15 @@ def test_la_nota_truncada_dos_veces_propaga_el_codigo(llm):
 
 # El techo de tokens de cada llamada ────────────────────────────────────────
 
-def test_el_feedback_pide_16384_tokens(llm, prompt):
+# Los valores por defecto de cada techo se prueban en test_config.py, con el
+# entorno limpio: aca se prueba que cada llamada use el suyo.
+
+def test_el_feedback_pide_su_propio_techo(llm, prompt):
     llm.side_effect = [_feedback_cbt_mi()]
 
     clinical_analyzer.generar_feedback_terapeuta("t")
 
-    assert config.LLM_MAX_TOKENS_FEEDBACK == 16384
-    assert llm.call_args.args[3] == 16384
+    assert llm.call_args.args[3] == config.LLM_MAX_TOKENS_FEEDBACK
 
 
 def test_el_feedback_gestalt_usa_el_mismo_techo(llm, prompt):
@@ -382,9 +364,7 @@ def test_la_nota_pide_su_propio_techo(llm, prompt):
 
     clinical_analyzer.analizar("[00:00] Terapeuta: hola")
 
-    assert config.LLM_MAX_TOKENS_NOTA == 16384
     assert llm.call_args.args[3] == config.LLM_MAX_TOKENS_NOTA
-    assert config.LLM_MAX_TOKENS_NOTA > config.LLM_MAX_TOKENS
 
 
 def test_el_contexto_sigue_con_el_techo_comun(llm, prompt):
@@ -404,7 +384,6 @@ def test_el_contexto_sigue_con_el_techo_comun(llm, prompt):
     clinical_analyzer.actualizar_contexto_clinico({}, {}, {}, "s1", "2026-09-19")
 
     assert llm.call_args.args[3] == config.LLM_MAX_TOKENS
-    assert config.LLM_MAX_TOKENS == 8192
 
 
 # El techo de la segunda pasada ─────────────────────────────────────────────
@@ -427,8 +406,7 @@ def test_una_nota_truncada_y_despues_completa_termina_en_nota(llm, prompt):
     primero = llm.call_args_list[0].args[3]
     segundo = llm.call_args_list[1].args[3]
     assert primero == config.LLM_MAX_TOKENS_NOTA
-    assert segundo > primero
-    assert segundo == config.LLM_MAX_TOKENS_REINTENTO
+    assert segundo == min(2 * primero, config.LLM_MAX_TOKENS_REINTENTO)
 
 
 def test_la_nota_truncada_dos_veces_sigue_fallando(llm, prompt):
@@ -451,8 +429,7 @@ def test_la_segunda_pasada_no_pasa_del_tope_de_reintento(llm, prompt):
 
     clinical_analyzer.generar_feedback_terapeuta("t")
 
-    assert config.LLM_MAX_TOKENS_REINTENTO == 20480
-    assert llm.call_args_list[1].args[3] == config.LLM_MAX_TOKENS_REINTENTO
+    assert llm.call_args_list[1].args[3] == min(2 * config.LLM_MAX_TOKENS_FEEDBACK, config.LLM_MAX_TOKENS_REINTENTO)
 
 
 def test_el_timeout_alcanza_para_la_segunda_pasada_a_35_tokens_por_segundo():
@@ -473,8 +450,8 @@ def test_el_contexto_truncado_reintenta_con_el_doble(llm, prompt):
 
     clinical_analyzer.actualizar_contexto_clinico({}, {}, {}, "s1", "2026-09-19")
 
-    assert llm.call_args_list[0].args[3] == 8192
-    assert llm.call_args_list[1].args[3] == 16384
+    assert llm.call_args_list[0].args[3] == config.LLM_MAX_TOKENS
+    assert llm.call_args_list[1].args[3] == min(2 * config.LLM_MAX_TOKENS, config.LLM_MAX_TOKENS_REINTENTO)
 
 
 # Los prompts que declara PROMPTS existen en disco ──────────────────────────
@@ -495,18 +472,29 @@ def test_los_cuatro_prompts_se_cargan():
 # ────────────────────────────────────────────────────────────────────────────
 
 
-def _truncado(techo: int = 8000, razonamiento: str = "7100") -> PipelineError:
-    """El error tal como lo arma _llamar_anthropic ante stop_reason=max_tokens."""
-    return PipelineError(
-        "llm_truncado",
-        f"Respuesta truncada contra el techo de {techo} tokens"
-        f" (razonamiento: {razonamiento})",
-    )
+# La funcion real: el fixture `llm` la reemplaza por un doble.
+_LLAMAR_ANTHROPIC = clinical_analyzer._llamar_anthropic
+
+
+def _truncado(techo: int = 8000, razonamiento: int | None = 7100) -> PipelineError:
+    """El error que arma el _llamar_anthropic real ante stop_reason=max_tokens."""
+    cliente = SimpleNamespace(messages=SimpleNamespace(
+        create=lambda **_kw: respuesta_sdk("{", stop="max_tokens", salida=techo, razonamiento=razonamiento)
+    ))
+    original = clinical_analyzer._cliente
+    clinical_analyzer._cliente = lambda: cliente
+    try:
+        _LLAMAR_ANTHROPIC("sys", "user", SCHEMA_NOTA, techo)
+    except PipelineError as e:
+        return e
+    finally:
+        clinical_analyzer._cliente = original
+    raise AssertionError("un stop_reason=max_tokens tiene que ser llm_truncado")
 
 
 def test_truncado_en_las_dos_pasadas_dice_techo_razonamiento_y_segunda_pasada(llm):
     # La segunda va con el techo duplicado: son dos numeros distintos.
-    llm.side_effect = [_truncado(8000, "7100"), _truncado(16000, "15200")]
+    llm.side_effect = [_truncado(8000, 7100), _truncado(16000, 15200)]
 
     with pytest.raises(PipelineError) as exc:
         _validando()
@@ -534,7 +522,7 @@ def test_un_fallo_que_no_reintenta_queda_marcado_como_primera_pasada(llm):
 
 def test_el_detalle_del_truncado_no_lleva_texto_de_la_sesion(llm):
     # Lo unico que entra son dos enteros del `usage` y el nombre de la pasada.
-    llm.side_effect = [_truncado(), _truncado(16000, "15900")]
+    llm.side_effect = [_truncado(), _truncado(16000, 15900)]
 
     with pytest.raises(PipelineError) as exc:
         _validando()
@@ -548,8 +536,8 @@ def test_el_detalle_del_truncado_no_lleva_texto_de_la_sesion(llm):
 
 def test_sin_dato_de_razonamiento_lo_dice_en_vez_de_inventar_un_cero(llm):
     llm.side_effect = [
-        _truncado(8000, "desconocido"),
-        _truncado(16000, "desconocido"),
+        _truncado(8000, None),
+        _truncado(16000, None),
     ]
 
     with pytest.raises(PipelineError) as exc:
@@ -573,7 +561,7 @@ def test_ampliar_detalle_no_toca_el_codigo_ni_lo_definitivo():
 
 
 def test_el_detalle_entra_en_los_500_caracteres_que_guarda_la_app(llm):
-    llm.side_effect = [_truncado(), _truncado(16000, "15900")]
+    llm.side_effect = [_truncado(), _truncado(16000, 15900)]
 
     with pytest.raises(PipelineError) as exc:
         _validando()
