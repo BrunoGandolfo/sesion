@@ -72,7 +72,7 @@ it("pide dejar la pantalla encendida, y no garantiza recuperar una interrupción
   // (AVISO_PANTALLA_APAGADA) y al volver dice entre qué horas no se grabó.
   const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
   expect(vista).toContain("Dejá la pantalla encendida mientras grabás.");
-  expect(codigo("src/lib/glosario.ts")).toContain("La pantalla se apagó. Con la pantalla apagada el teléfono puede dejar de grabar: mantenela encendida.");
+  expect(glosario.AVISO_PANTALLA_APAGADA.startsWith("La pantalla se apagó. Con la pantalla apagada el teléfono puede")).toBe(true);
   expect(documento("07-grabar-una-sesion.md")).toContain("La pantalla se apagó. Con la pantalla apagada el teléfono puede");
   expect(documento("07-grabar-una-sesion.md")).toContain("No se grabó entre las 10:12 y las 10:20");
   expect(documento("07-grabar-una-sesion.md")).toContain("Dejá la pantalla encendida");
@@ -168,8 +168,8 @@ it("la ayuda dice que la app NO cifra el audio, y qué lo protege en cada tramo"
   }
   const texto = documento("12-camino-del-audio-y-privacidad.md");
   expect(texto).toContain("**" + RETENCION_BACKUPS_DIAS + " días**");
-  // Los mensuales: 12 meses en backup.yml.
-  expect(codigo(".github/workflows/backup.yml")).toContain("366 days ago");
+  // Los mensuales: 12 meses. Que backup.yml los borra a los 366 días lo
+  // prueba consentimiento-retencion.test.ts ejecutando el paso.
   expect(texto).toContain("**12 meses**");
   expect(texto).toContain(ANTHROPIC_RETENCION_VERIFICADA_EL);
   for (const tipo of ["borrar_audio_r2", "borrar_transcript_asr"] as const) {
@@ -181,11 +181,10 @@ it("la ayuda dice que la app NO cifra el audio, y qué lo protege en cada tramo"
 
 it("la ayuda describe los botones del grabador que existen", () => {
   const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
-  const glosario = codigo("src/lib/glosario.ts");
   const texto = documento("07-grabar-una-sesion.md");
   // Los botones salen del glosario; la vista los usa por su constante.
   for (const [constante, boton] of [["GRABAR_SESION", "Grabar sesión"], ["PAUSAR", "Pausar"], ["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["GUARDAR_LO_GRABADO", "Guardar lo grabado"], ["SEGUIR_GRABANDO", "Seguir grabando"], ["VOLVER_A_LA_FICHA", "Volver a la ficha"], ["ENTENDIDO", "Entendido"]]) {
-    expect(glosario).toContain(`export const ${constante} = "${boton}"`);
+    expect((glosario as Record<string, unknown>)[constante]).toBe(boton);
     expect(vista).toContain(constante);
     expect(texto).toContain(boton);
   }
@@ -197,8 +196,8 @@ it("la ayuda describe los botones del grabador que existen", () => {
   expect(vista).toContain('await apiPost<TurnoApi>("/api/turnos"');
   expect(vista).toContain("DURACION_SIN_TURNO");
   expect(texto).toContain("crea uno de 50 minutos");
-  // Empezar de nuevo el mismo turno reemplaza lo guardado (iniciarSesionGrabacion borra los chunks previos).
-  expect(codigo("src/lib/grabacion-storage.ts")).toContain("tx.objectStore(STORE_CHUNKS).delete(rangoChunks(sesionClinicaId));");
+  // Empezar de nuevo el mismo turno reemplaza lo guardado: lo prueba
+  // grabacion-storage.test.ts ("empezar de nuevo el mismo turno reemplaza…").
   expect(texto).toContain("Empezar una grabación nueva del mismo turno reemplaza la copia anterior");
   // El medidor existe; la pantalla bloqueada no se promete.
   expect(vista).toContain("<MedidorAudio");

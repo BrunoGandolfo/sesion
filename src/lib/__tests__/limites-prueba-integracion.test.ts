@@ -2,8 +2,6 @@
  * Integración — el tope de grabaciones de un consultorio creado por invitación.
  * Contra la base de test (DATABASE_URL_TEST).
  */
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 
@@ -45,20 +43,10 @@ async function grabar(organizationId: string, pacienteId: string) {
   return prepararAudio({ prisma: base.db, organizationId, turnoId: await turno(organizationId, pacienteId) });
 }
 
-test("el grabador crea la sesión por POST /api/sesion-clinica, que pasa por el contador de prepararAudio", () => {
-  const codigo = (ruta: string) => readFileSync(join(process.cwd(), ruta), "utf8");
-  // La pantalla de grabar es la única que crea la sesión, y no tiene otro camino.
-  expect(codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx")).toContain('apiPost<SesionApi>("/api/sesion-clinica"');
-  expect(codigo("src/hooks/useGrabacionSesion.ts")).not.toContain('fetch("/api/sesion-clinica",');
-  // La ruta delega en prepararAudio, y prepararAudio es quien cuenta.
-  const ruta = codigo("src/app/api/sesion-clinica/route.ts");
-  expect(ruta).toMatch(/export async function POST[\s\S]*await prepararAudio\(\{ prisma: db, organizationId, turnoId \}\)/);
-  const casoDeUso = codigo("src/app/api/_lib/casos-uso/audio.ts");
-  const preparar = casoDeUso.slice(casoDeUso.indexOf("export async function prepararAudio("), casoDeUso.indexOf("export async function pedirUrlSubida("));
-  expect(preparar).toContain("grabacionesIniciadas: { lt: TOPE_GRABACIONES_PRUEBA }");
-  expect(preparar).toContain("grabacionesIniciadas: { increment: 1 }");
-  expect(preparar).toContain("throw new ApiError(PRUEBA_TOPE, 403)");
-});
+// Que la ruta POST /api/sesion-clinica pasa por prepararAudio lo prueba
+// grabar-el-dia.test.ts contra la base; que prepararAudio cuenta y corta en
+// el tope, los casos de abajo. Acá se leía el texto de la pantalla, del hook
+// y de la ruta: se rompía con un renombre y no con un cambio de conducta.
 
 test(`un consultorio invitado graba ${TOPE_GRABACIONES_PRUEBA} y no puede iniciar la siguiente; el rechazo lo explica`, async () => {
   const { organizationId, pacienteId } = await consultorio(true);

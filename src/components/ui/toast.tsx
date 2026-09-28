@@ -47,7 +47,7 @@ export type VarianteToast = "confirmacion" | "aviso";
 const DURACION_TOAST_MS = 2800;
 
 /** Lo que el Toast necesita: `<Toast {...toast.props} />`. */
-export interface ToastProps {
+interface ToastProps {
   open: boolean;
   message: string;
   onClose: () => void;
