@@ -1,7 +1,8 @@
-// Acceso a R2 (Cloudflare) por S3 API. Cuatro operaciones, las que usa el
-// pipeline: saber si está configurado, firmar el PUT del navegador
-// (generarUrlSubida), verificar que el objeto llegó (existeAudio) y borrarlo
-// cuando la nota se aprueba (borrarAudio).
+// Acceso a R2 (Cloudflare) por S3 API. Las operaciones que usa el pipeline:
+// saber si está configurado, firmar el PUT del navegador
+// (generarUrlSubida), verificar que el objeto llegó (existeAudio), y, para
+// el trabajo borrar_audio_r2, listar lo que hay bajo el prefijo de una
+// sesión (listarPorPrefijo) y borrarlo (borrarAudio).
 //
 // El audio NUNCA sube ni baja por acá: el navegador hace PUT directo a la
 // URL prefirmada (Vercel corta los requests en 4,5 MB) y el worker lo
@@ -15,6 +16,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { AlmacenAudio } from "@/app/api/_lib/casos-uso/audio";
@@ -86,8 +88,9 @@ export interface UrlSubida {
 }
 
 /**
- * URL prefirmada para que el NAVEGADOR haga PUT directo a R2 con el audio
- * cifrado. Content-Type y Content-Length quedan firmados: el navegador tiene
+ * URL prefirmada para que el NAVEGADOR haga PUT directo a R2 con el audio tal
+ * como lo grabó el teléfono (la app no lo cifra desde el 18/9; R2 lo cifra en
+ * reposo). Content-Type y Content-Length quedan firmados: el navegador tiene
  * que mandar exactamente esos headers.
  */
 export async function generarUrlSubida(
@@ -146,6 +149,35 @@ export async function existeAudio(
     const msg = error instanceof Error ? error.message : String(error);
     throw new Error(`No se pudo verificar el audio en R2 (${key}): ${msg}`);
   }
+}
+
+/**
+ * Todas las keys que hay bajo `prefijo`, paginando (ListObjectsV2 devuelve
+ * de a mil). Un prefijo vacío o sin barra final no se lista: listaría de más,
+ * y lo que se lista acá se borra.
+ */
+export async function listarPorPrefijo(prefijo: string): Promise<string[]> {
+  if (!prefijo || !prefijo.endsWith("/")) {
+    throw new Error(`Prefijo inválido para listar en R2: '${prefijo}'`);
+  }
+  const { cliente, bucket } = obtenerCliente();
+  const keys: string[] = [];
+  let token: string | undefined;
+  try {
+    do {
+      const respuesta = await cliente.send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: prefijo, ContinuationToken: token }),
+      );
+      for (const objeto of respuesta.Contents ?? []) {
+        if (objeto.Key) keys.push(objeto.Key);
+      }
+      token = respuesta.IsTruncated ? respuesta.NextContinuationToken : undefined;
+    } while (token);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`No se pudo listar el audio en R2 (${prefijo}): ${msg}`);
+  }
+  return keys;
 }
 
 /**

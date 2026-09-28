@@ -15,7 +15,8 @@ import { prefijoAudio } from "@/lib/sesion-clinica/estados";
 export type PayloadTrabajo =
   | {
       tipo: "borrar_audio_r2";
-      payload: { prefijo: string; indices: number[] };
+      /** `<org>/<sesion>/`: se borra todo lo que haya debajo. */
+      payload: { prefijo: string };
     }
   | { tipo: "borrar_transcript_asr"; payload: { transcriptId: string } }
   | {
@@ -74,7 +75,7 @@ export function trabajoBorrarAudio(
   return crearTrabajo({
     prisma,
     tipo: "borrar_audio_r2",
-    payload: { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] },
+    payload: { prefijo: prefijoAudio(organizationId, sesionId) },
     organizationId,
     sesionId,
     pacienteId,

@@ -221,10 +221,20 @@ describe("Para vos", () => {
   });
 });
 
+/** Un R2 en memoria: lista por prefijo y borra de verdad. */
+function almacenDoble(iniciales: string[]) {
+  const objetos = new Set(iniciales);
+  return {
+    listar: async (prefijo: string) => [...objetos].filter((k) => k.startsWith(prefijo)),
+    borrar: async (key: string) => { objetos.delete(key); },
+    objetos: () => [...objetos].sort(),
+  };
+}
+
 describe("trabajo durable", () => {
   it("dos consumidores a la vez: el claim se lleva cada trabajo una sola vez y el otro ejecutor no lo ve", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "fallida" });
-    await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/${sesionId}/`, indices: [0] }, organizationId: org.orgId, sesionId });
+    await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/${sesionId}/` }, organizationId: org.orgId, sesionId });
     const [a, b, w] = await Promise.all([
       reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 }),
       reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 }),
@@ -240,15 +250,20 @@ describe("trabajo durable", () => {
     expect(otraVez.some((t) => t.sesionId === sesionId)).toBe(false);
   });
 
-  it("borrar_audio_r2: hecho sólo cuando HeadObject dice 404; si el objeto sigue, reintenta con backoff", async () => {
+  it("borrar_audio_r2 borra TODO el prefijo de la sesión (…/0 y …/1) y es hecho sólo cuando el listado vuelve vacío", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "aprobada", notaIa: NOTA });
-    await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/${sesionId}/`, indices: [0, 1] }, organizationId: org.orgId, sesionId });
+    const prefijo = `${org.orgId}/${sesionId}/`;
+    await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo }, organizationId: org.orgId, sesionId });
     const [trabajo] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 })).filter((t) => t.sesionId === sesionId);
 
-    const borradas: string[] = [];
-    const terco = { borrar: async (k: string) => { borradas.push(k); }, existe: async () => true };
+    // El almacén tiene el archivo del grabador de hoy, un segmento de la época
+    // vieja y el audio de OTRA sesión, que no se toca.
+    const ajena = `${org.orgId}/otra-sesion/0`;
+    const r2 = almacenDoble([`${prefijo}0`, `${prefijo}1`, ajena]);
+
+    // Un R2 que responde 204 pero no borra: el listado sigue trayendo algo.
+    const terco = { listar: r2.listar, borrar: async () => {} };
     await expect(ejecutarBorradoR2({ prisma: base.db, r2: terco, trabajo, ahora: AHORA })).rejects.toBeInstanceOf(AudioNoBorradoError);
-    expect(borradas).toEqual([`${org.orgId}/${sesionId}/0`, `${org.orgId}/${sesionId}/1`]);
     expect((await filaDe(base.prisma, sesionId))?.audioEstado).toBe("en_r2");
     const r = await resolverTrabajo({ prisma: base.db, trabajo, resultado: { ok: false, error: new AudioNoBorradoError("k") }, ahora: AHORA });
     expect(r).toEqual({ estado: "pendiente", proximoIntentoEn: new Date(AHORA.getTime() + 60_000) });
@@ -257,8 +272,9 @@ describe("trabajo durable", () => {
     const despues = new Date(AHORA.getTime() + 61_000);
     const [segundo] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: despues, limite: 50 })).filter((t) => t.sesionId === sesionId);
     expect(segundo.intentos).toBe(2);
-    const obediente = { borrar: async () => {}, existe: async () => false };
-    await ejecutarBorradoR2({ prisma: base.db, r2: obediente, trabajo: segundo, ahora: despues });
+    const { keys } = await ejecutarBorradoR2({ prisma: base.db, r2, trabajo: segundo, ahora: despues });
+    expect([...keys].sort()).toEqual([`${prefijo}0`, `${prefijo}1`]);
+    expect(r2.objetos()).toEqual([ajena]);
     await resolverTrabajo({ prisma: base.db, trabajo: segundo, resultado: { ok: true }, ahora: despues });
     const fila = await filaDe(base.prisma, sesionId);
     expect(fila?.audioEstado).toBe("borrado");
@@ -266,51 +282,72 @@ describe("trabajo durable", () => {
     expect((await base.prisma.trabajo.findUniqueOrThrow({ where: { id: trabajo.id } })).estado).toBe("hecho");
   });
 
-  it("el borrado se completa aunque la sesión ya no exista", async () => {
-    const trabajo = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/inexistente/`, indices: [0] }, organizationId: org.orgId, sesionId: "inexistente" });
+  it("un trabajo anterior con `indices` en el payload se ejecuta igual: el listado cubre todo el prefijo", async () => {
+    const { sesionId } = await crearSesion(base.prisma, org, { estado: "aprobada", notaIa: NOTA });
+    const prefijo = `${org.orgId}/${sesionId}/`;
+    const viejo = { prefijo, indices: [1] } as unknown as { prefijo: string };
+    await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: viejo, organizationId: org.orgId, sesionId });
+    const [trabajo] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 })).filter((t) => t.sesionId === sesionId);
+    const r2 = almacenDoble([`${prefijo}0`, `${prefijo}1`]);
+    await ejecutarBorradoR2({ prisma: base.db, r2, trabajo, ahora: AHORA });
+    expect(r2.objetos()).toEqual([]);
+  });
+
+  it("un prefijo que no es <org>/<sesion>/ no se lista ni se borra", async () => {
+    const r2 = almacenDoble([`${org.orgId}/a/0`, `${org.orgId}/b/0`]);
+    for (const prefijo of [`${org.orgId}/`, "", `${org.orgId}/a`, "/a/"]) {
+      await expect(
+        ejecutarBorradoR2({ prisma: base.db, r2, trabajo: { sesionId: null, payload: { prefijo } }, ahora: AHORA }),
+      ).rejects.toThrow();
+    }
+    expect(r2.objetos()).toHaveLength(2);
+  });
+
+  it("el borrado se completa aunque la sesión ya no exista (y aunque no haya nada que borrar)", async () => {
+    const trabajo = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/inexistente/` }, organizationId: org.orgId, sesionId: "inexistente" });
     const [reclamado] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 })).filter((t) => t.id === trabajo.id);
-    const { keys } = await ejecutarBorradoR2({ prisma: base.db, r2: { borrar: async () => {}, existe: async () => false }, trabajo: reclamado, ahora: AHORA });
-    expect(keys).toEqual([`${org.orgId}/inexistente/0`]);
+    const { keys } = await ejecutarBorradoR2({ prisma: base.db, r2: almacenDoble([]), trabajo: reclamado, ahora: AHORA });
+    expect(keys).toEqual([]);
     await resolverTrabajo({ prisma: base.db, trabajo: reclamado, resultado: { ok: true }, ahora: AHORA });
     expect((await base.prisma.trabajo.findUniqueOrThrow({ where: { id: trabajo.id } })).estado).toBe("hecho");
   });
 
   it("un borrado largo se corta al vencer el plazo del trabajo, se reprograma y el reintento lo termina", async () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "aprobada", notaIa: NOTA });
-    const indices = Array.from({ length: 40 }, (_, i) => i);
-    await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/${sesionId}/`, indices }, organizationId: org.orgId, sesionId, proximoIntentoEn: new Date(0) });
+    const prefijo = `${org.orgId}/${sesionId}/`;
+    await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo }, organizationId: org.orgId, sesionId, proximoIntentoEn: new Date(0) });
     const [trabajo] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 })).filter((t) => t.sesionId === sesionId);
 
-    // Cada llamada a R2 "tarda" 1 s de reloj simulado: 80 llamadas no entran
-    // en un plazo de 20 s, y el trabajo se corta entre tandas.
+    // Cada llamada a R2 "tarda" 1 s de reloj simulado: listar y borrar 40
+    // objetos no entra en un plazo de 20 s, y el trabajo se corta entre tandas.
     let reloj = 0;
-    const borradas = new Set<string>();
+    const r2 = almacenDoble(Array.from({ length: 40 }, (_, i) => `${prefijo}${i}`));
     const lento = {
-      borrar: async (k: string) => { reloj += 1000; borradas.add(k); },
-      existe: async (k: string) => { reloj += 1000; return !borradas.has(k); },
+      listar: async (p: string) => { reloj += 1000; return r2.listar(p); },
+      borrar: async (k: string) => { reloj += 1000; await r2.borrar(k); },
     };
     await expect(
       ejecutarBorradoR2({ prisma: base.db, r2: lento, trabajo, ahora: AHORA, plazoMs: 20_000, reloj: () => reloj }),
     ).rejects.toBeInstanceOf(PlazoAgotadoError);
-    expect(borradas.size).toBeGreaterThan(0);
-    expect(borradas.size).toBeLessThan(40);
+    expect(r2.objetos().length).toBeGreaterThan(0);
+    expect(r2.objetos().length).toBeLessThan(40);
     expect((await filaDe(base.prisma, sesionId))?.audioEstado).toBe("en_r2");
 
-    const r = await resolverTrabajo({ prisma: base.db, trabajo, resultado: { ok: false, error: new PlazoAgotadoError(16, 80) }, ahora: AHORA });
+    const r = await resolverTrabajo({ prisma: base.db, trabajo, resultado: { ok: false, error: new PlazoAgotadoError(16, 42) }, ahora: AHORA });
     expect(r.estado).toBe("pendiente");
 
-    // El reintento arranca de cero pero lo ya borrado no se repite en R2
-    // (borrar es idempotente) y esta vez, con plazo, termina.
+    // El reintento vuelve a listar y sólo encuentra lo que falta; esta vez,
+    // con plazo, termina.
     const [segundo] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: new Date(AHORA.getTime() + 61_000), limite: 50 })).filter((t) => t.sesionId === sesionId);
     reloj = 0;
     await ejecutarBorradoR2({ prisma: base.db, r2: lento, trabajo: segundo, ahora: AHORA, plazoMs: 200_000, reloj: () => reloj });
     await resolverTrabajo({ prisma: base.db, trabajo: segundo, resultado: { ok: true }, ahora: AHORA });
-    expect(borradas.size).toBe(40);
+    expect(r2.objetos()).toEqual([]);
     expect((await filaDe(base.prisma, sesionId))?.audioEstado).toBe("borrado");
   });
 
   it("un resultado con intentos viejos no pisa un reclamo nuevo (409)", async () => {
-    const trabajo = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: "x/", indices: [] }, organizationId: org.orgId });
+    const trabajo = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: "x/" }, organizationId: org.orgId });
     const [primero] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 })).filter((t) => t.id === trabajo.id);
     const [segundo] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: new Date(AHORA.getTime() + 3 * 60_000), limite: 50 })).filter((t) => t.id === trabajo.id);
     expect(segundo.intentos).toBe(2);
@@ -322,7 +359,7 @@ describe("trabajo durable", () => {
     const { sesionId } = await crearSesion(base.prisma, org, { estado: "aprobada", notaIa: NOTA });
     const ids: string[] = [];
     for (let i = 0; i < 3; i += 1) {
-      const t = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/${sesionId}/`, indices: [i] }, organizationId: org.orgId, sesionId, proximoIntentoEn: new Date(0) });
+      const t = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/${sesionId}/` }, organizationId: org.orgId, sesionId, proximoIntentoEn: new Date(0) });
       ids.push(t.id);
     }
     // Reloj simulado: cada trabajo "tarda" 20 s; presupuesto 50 s con

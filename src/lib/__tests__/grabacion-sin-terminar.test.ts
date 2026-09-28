@@ -251,7 +251,7 @@ describe("POST /api/sesion-clinica/[id]/abandonar", () => {
       estado: "pendiente",
       sesionId,
       organizationId: f.orgId,
-      payload: { prefijo: prefijoAudio(f.orgId, sesionId), indices: [0] },
+      payload: { prefijo: prefijoAudio(f.orgId, sesionId) },
     });
     expect(trabajo.proximoIntentoEn.getTime()).toBeLessThanOrEqual(Date.now());
 

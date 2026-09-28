@@ -134,10 +134,7 @@ describe("una grabación más corta que el mínimo", () => {
     // Y el audio que ya está en R2 no queda huérfano.
     const trabajos = await trabajosDe(sesionId);
     expect(trabajos.map((t) => t.tipo)).toEqual(["borrar_audio_r2"]);
-    expect(trabajos[0].payload).toEqual({
-      prefijo: `${orgId}/${sesionId}/`,
-      indices: [0],
-    });
+    expect(trabajos[0].payload).toEqual({ prefijo: `${orgId}/${sesionId}/` });
   });
 
   it("el acto y el borrado quedan juntos: no hay sesión fallida sin su trabajo", async () => {

@@ -5,7 +5,7 @@
 // en vercel.json.
 
 import { db } from "@/lib/db";
-import { borrarAudio, existeAudio, r2Configurado } from "@/lib/r2";
+import { borrarAudio, listarPorPrefijo, r2Configurado } from "@/lib/r2";
 
 import { requireCron } from "../../_lib/auth";
 import {
@@ -39,8 +39,8 @@ function conTimeout<T>(promesa: Promise<T>, etiqueta: string): Promise<T> {
 }
 
 const r2: AdaptadorBorradoR2 = {
+  listar: (prefijo) => conTimeout(listarPorPrefijo(prefijo), "list"),
   borrar: (key) => conTimeout(borrarAudio(key), "delete"),
-  existe: async (key) => (await conTimeout(existeAudio(key), "head")).existe,
 };
 
 export async function GET(request: Request) {
