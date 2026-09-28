@@ -170,7 +170,6 @@ class Transcripto:
     """Lo que hace falta del ASR para el modelo, venga del checkpoint o de AssemblyAI."""
     transcripcion_fmt: str
     speech_metrics: dict
-    modelo_asr: str
 
 
 @dataclass
@@ -259,9 +258,12 @@ def descargar_audio(etiqueta: str, audio: dict | None, intento: int) -> bytes:
 
     logger.info(f"[{etiqueta}] Intento {intento}. Descargando el audio de R2")
     try:
-        datos, _ = r2_client.descargar_audio(audio["key"])
+        datos = r2_client.descargar_audio(audio["key"])
     except Exception as e:
-        logger.error(f"[{etiqueta}] R2 fallo ({type(e).__name__}): {str(e)[:300]}")
+        # Solo el tipo y, de R2, su codigo de error (NoSuchKey, AccessDenied):
+        # el texto de botocore trae la key, que lleva los ids de la sesion.
+        codigo = getattr(e, "codigo", None)
+        logger.error(f"[{etiqueta}] R2 fallo ({type(e).__name__}{f' {codigo}' if codigo else ''})")
         raise PipelineError("r2_error", "No se pudo descargar el audio de R2") from e
     cabeceras = cabeceras_ebml(datos)
     logger.info(f"[{etiqueta}] Descargado: {len(datos)} bytes, {cabeceras} cabecera(s) EBML")
@@ -407,7 +409,7 @@ def registrar_checkpoint(
         raise LeasePerdido()
     if not res.ok:
         raise PipelineError("app_error", f"La app no guardo la transcripcion (HTTP {res.status})", definitivo=False)
-    return Transcripto(transcripcion_fmt=transcripcion_fmt, speech_metrics=speech_metrics, modelo_asr=modelo_asr)
+    return Transcripto(transcripcion_fmt=transcripcion_fmt, speech_metrics=speech_metrics)
 
 
 def desde_checkpoint(checkpoint: dict) -> Transcripto:
@@ -418,7 +420,6 @@ def desde_checkpoint(checkpoint: dict) -> Transcripto:
     return Transcripto(
         transcripcion_fmt=transcripcion_fmt,
         speech_metrics=speech if isinstance(speech, dict) else {},
-        modelo_asr=str(checkpoint.get("modeloAsr") or f"assemblyai:{config.ASR_MODEL_ID}"),
     )
 
 
@@ -643,7 +644,9 @@ def integrar_contexto(adjunto: dict, payload: dict, uso: Uso | None = None) -> d
         contexto or {}, nota, datos, adjunto["sesionId"], fecha,
         llamadas=uso.llamadas if uso is not None else None,
     )
-    validar_estructura_contexto(propuesta)
+    # La propuesta ya viene validada con validar_estructura_contexto
+    # (clinical_analyzer._llamar_validando): si no la cumplia dos veces, es
+    # un PipelineError con codigo.
     return {"ok": True, "propuesta": propuesta, "promptVersion": prompt, "modeloLlm": MODELO_LLM}
 
 

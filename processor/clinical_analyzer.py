@@ -65,9 +65,11 @@ CODIGOS_QUE_REINTENTAN = ("llm_json_invalido", "llm_truncado")
 
 @dataclass
 class DiagnosticoLLM:
-    """Lo que el pipeline reporta de la llamada, mas alla del resultado."""
+    """
+    Lo que el pipeline reporta de la llamada, mas alla del resultado. Las
+    segundas pasadas no van aca: quedan en `llamadas` (uso.reintentos).
+    """
 
-    reintentos: int = 0
     advertencias: list[str] = field(default_factory=list)
 
 
@@ -443,7 +445,7 @@ def analizar(
         logger.warning(f"Nota clinica: {advertencia}")
 
     logger.info(f"Nota clinica generada ({nombre_prompt}, reintentos={reintentos})")
-    return resultado, nombre_prompt, DiagnosticoLLM(reintentos, advertencias)
+    return resultado, nombre_prompt, DiagnosticoLLM(advertencias)
 
 
 # Llamada B — contexto longitudinal ─────────────────────────────────────────
@@ -564,7 +566,7 @@ def generar_feedback_terapeuta(
             logger.warning(f"Feedback terapeuta: {advertencia}")
 
         logger.info(f"Feedback terapeuta generado ({nombre_prompt}, reintentos={reintentos})")
-        return feedback, nombre_prompt, DiagnosticoLLM(reintentos, advertencias)
+        return feedback, nombre_prompt, DiagnosticoLLM(advertencias)
     except PipelineError as e:
         logger.warning(f"Feedback terapeuta fallo: {e.codigo}: {e.mensaje_publico}")
         return None, nombre_prompt, DiagnosticoLLM(

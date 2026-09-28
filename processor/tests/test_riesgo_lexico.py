@@ -28,8 +28,8 @@ def test_el_pipeline_envia_menciones_aunque_el_modelo_no_gradue_riesgo(mocker):
     mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
     mocker.patch("processor.clinical_analyzer.analizar", return_value=(
         {"nota": {"subjetivo": "S", "objetivo": "O", "analisis": "A", "plan": "P"}, "datosEstructurados": {}},
-        "nota", DiagnosticoLLM(0, []),
+        "nota", DiagnosticoLLM([]),
     ))
-    r = processor.analizar("s1", processor.Transcripto("[00:10] S0: No quiero vivir", {}, "asr"), "p1", "ticket")
+    r = processor.analizar("s1", processor.Transcripto("[00:10] S0: No quiero vivir", {}), "p1", "ticket")
     assert r.datos_estructurados["riesgoLexico"]["coincidencias"][0]["termino"] == "no quiero vivir"
     assert "riesgoDetectado" not in r.datos_estructurados

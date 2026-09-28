@@ -175,7 +175,7 @@ def pipeline(mocker):
     checkpoint = mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok)
 
     def correr(audio: bytes, asr: AsrDoble, sesion: SesionReclamada | None = None):
-        mocker.patch("processor.r2_client.descargar_audio", return_value=(audio, {}))
+        mocker.patch("processor.r2_client.descargar_audio", return_value=audio)
         mocker.patch("processor.asr_assemblyai.transcribir", side_effect=asr)
         processor.procesar_sesion(sesion or _sesion())
         return checkpoint.call_args

@@ -187,7 +187,8 @@ def test_analizar_devuelve_diagnostico_limpio(llm, prompt):
     resultado, nombre, diagnostico = clinical_analyzer.analizar("[00:00] Terapeuta: hola")
 
     assert nombre == "clinical_note_v3.1.1.md"
-    assert diagnostico == DiagnosticoLLM(reintentos=0, advertencias=[])
+    assert diagnostico == DiagnosticoLLM(advertencias=[])
+    assert llm.call_count == 1
     assert resultado["datosEstructurados"]["intensidadEmocional"] == 7
 
 
@@ -197,7 +198,7 @@ def test_analizar_con_intensidad_cero_no_falla_y_deja_advertencia(llm, prompt):
 
     resultado, _, diagnostico = clinical_analyzer.analizar("[00:00] Terapeuta: hola")
 
-    assert diagnostico.reintentos == 0
+    assert llm.call_count == 1
     assert diagnostico.advertencias == [
         "intensidadEmocional=0 fuera de rango 1..10, anulado"
     ]
@@ -211,7 +212,7 @@ def test_analizar_cuenta_el_reintento_en_el_diagnostico(llm, prompt):
 
     _, _, diagnostico = clinical_analyzer.analizar("[00:00] Terapeuta: hola")
 
-    assert diagnostico.reintentos == 1
+    assert llm.call_count == 2
     assert len(diagnostico.advertencias) == 1
 
 
@@ -242,7 +243,7 @@ def test_feedback_reintenta_y_reporta_el_reintento(llm, prompt):
     feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
 
     assert nombre == "therapist_feedback_v1.1.md"
-    assert diagnostico.reintentos == 1
+    assert llm.call_count == 2
     assert feedback["mitiCounts"]["Q"] == 1
 
 
@@ -283,7 +284,7 @@ def test_feedback_gestalt_usa_su_prompt_y_su_validador(llm, prompt):
     )
 
     assert nombre == "therapist_feedback_gestalt_v1.1.md"
-    assert diagnostico.reintentos == 0
+    assert llm.call_count == 1
     assert feedback["itemsGTFS"][0]["score"] == 1
 
 
@@ -301,7 +302,6 @@ def test_feedback_truncado_reintenta_y_sale(llm, prompt):
     feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
 
     assert llm.call_count == 2
-    assert diagnostico.reintentos == 1
     assert diagnostico.advertencias == []
     assert feedback["mitiCounts"]["Q"] == 1
 
@@ -421,7 +421,6 @@ def test_una_nota_truncada_y_despues_completa_termina_en_nota(llm, prompt):
     resultado, nombre, diagnostico = clinical_analyzer.analizar("[00:00] Terapeuta: hola")
 
     assert llm.call_count == 2
-    assert diagnostico.reintentos == 1
     assert resultado["nota"]["analisis"] == "a"
     assert nombre == clinical_analyzer.PROMPTS["nota"]
 

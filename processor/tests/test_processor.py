@@ -64,10 +64,10 @@ def pasos(mocker):
     }
 
 
-def _diag(advertencias=None, reintentos=0):
+def _diag(advertencias=None):
     from clinical_analyzer import DiagnosticoLLM
 
-    return DiagnosticoLLM(reintentos=reintentos, advertencias=advertencias or [])
+    return DiagnosticoLLM(advertencias=advertencias or [])
 
 
 # Camino feliz ──────────────────────────────────────────────────────────────
@@ -360,7 +360,7 @@ CABECERA_FFMPEG = bytes.fromhex("1a45dfa3010000000000002342868101")
 def test_descargar_entrega_el_audio_tal_cual_sin_clave_ni_iv(mocker):
     descargas = []
     archivo = CABECERA_CHROME + b"opus" * 50
-    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or (archivo, {})))
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or archivo))
     assert processor.descargar_audio("s1", {"key": "org/s1/0"}, 1) == archivo
     assert descargas == ["org/s1/0"]
 
@@ -379,11 +379,28 @@ def test_descargar_con_r2_caido_es_transitorio(mocker):
     assert exc.value.codigo == "r2_error" and not exc.value.definitivo
 
 
+def test_el_log_de_un_fallo_de_r2_lleva_el_tipo_y_el_codigo_pero_no_la_key(mocker, caplog):
+    from r2_client import ErrorR2
+
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=ErrorR2("NoSuchKey"))
+    with caplog.at_level(logging.DEBUG), pytest.raises(PipelineError):
+        processor.descargar_audio("s1", {"key": "org-secreta/s1/0"}, 1)
+    assert any("ErrorR2 NoSuchKey" in r.getMessage() for r in caplog.records)
+
+    # Cualquier otra excepcion: solo el tipo, aunque su texto traiga la key.
+    caplog.clear()
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=OSError("leyendo org-secreta/s1/0"))
+    with caplog.at_level(logging.DEBUG), pytest.raises(PipelineError):
+        processor.descargar_audio("s1", {"key": "org-secreta/s1/0"}, 1)
+    assert any("(OSError)" in r.getMessage() for r in caplog.records)
+    assert all("org-secreta" not in r.getMessage() for r in caplog.records)
+
+
 @pytest.mark.parametrize("segunda", [CABECERA_CHROME, CABECERA_FFMPEG])
 def test_dos_grabaciones_pegadas_se_rechazan_antes_del_asr(mocker, segunda):
     # Lo que producia reanudar con un MediaRecorder nuevo: dos archivos pegados.
     pegado = CABECERA_CHROME + b"a" * 4000 + segunda + b"b" * 4000
-    mocker.patch("processor.r2_client.descargar_audio", return_value=(pegado, {}))
+    mocker.patch("processor.r2_client.descargar_audio", return_value=pegado)
     asr = mocker.patch("processor.asr_assemblyai.transcribir")
     with pytest.raises(PipelineError) as exc:
         processor.descargar_audio("s1", {"key": "k"}, 1)
@@ -395,7 +412,7 @@ def test_los_cuatro_bytes_del_id_sueltos_en_el_audio_no_son_una_cabecera(mocker)
     # En ~120 MB de Opus la secuencia 1A 45 DF A3 aparece por azar: sin el
     # elemento EBMLVersion detras no es una cabecera y no se rechaza.
     archivo = CABECERA_CHROME + b"x" * 500 + bytes.fromhex("1a45dfa3") + b"y" * 500
-    mocker.patch("processor.r2_client.descargar_audio", return_value=(archivo, {}))
+    mocker.patch("processor.r2_client.descargar_audio", return_value=archivo)
     assert processor.cabeceras_ebml(archivo) == 1
     assert processor.descargar_audio("s1", {"key": "k"}, 1) == archivo
 

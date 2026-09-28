@@ -5,8 +5,8 @@ JSON Schemas para structured outputs de Anthropic, derivados de los
 Reglas de structured outputs que respetan todos los schemas:
 - todo objeto lleva additionalProperties=false y required con TODAS sus
   propiedades;
-- sin minimum/maximum/minLength/maxLength (los rangos numéricos se validan
-  en código, ver validar_rangos_nota);
+- sin minimum/maximum/minLength/maxLength (los rangos numéricos se sanean
+  en código, ver _sanear_entero_en_rango);
 - nullable expresado como {"type": ["string", "null"]};
 - enums solo de primitivos, sin $ref.
 
@@ -25,7 +25,8 @@ from pathlib import Path
 # Los valores de tipoIntervencion, flagRiesgo, nivelRiesgo, alianzaTerapeutica
 # y confianzaModelo NO se escriben acá: se leen de contrato/enums-clinicos.json,
 # el mismo archivo que importa src/lib/sesion-clinica/schema.ts. Un valor nuevo
-# se agrega en el JSON y los dos lados lo ven (AGENTS.md, regla 3). Si el
+# se agrega en el JSON y los dos lados lo ven (lo atan test_contrato_enums.py
+# y src/lib/__tests__/enums-clinicos.test.ts). Si el
 # archivo falta o le falta una clave, el worker no arranca: mejor eso que
 # validar contra una lista vieja.
 

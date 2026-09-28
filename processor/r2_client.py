@@ -7,6 +7,7 @@ borrar_audio_r2, al aprobar o al eliminar la sesion), nunca desde el worker.
 """
 import boto3
 from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 import config
 
 _client = None
@@ -26,11 +27,22 @@ def _get_client():
         )
     return _client
 
-def descargar_audio(key: str) -> tuple[bytes, dict]:
+class ErrorR2(Exception):
+    """
+    Fallo de R2 al bajar el audio. Lleva solo el codigo de error de S3
+    (NoSuchKey, AccessDenied, ...): el mensaje de botocore repite la key, que
+    lleva los ids de la organizacion y la sesion, y no va a los logs.
+    """
+
+    def __init__(self, codigo: str):
+        self.codigo = codigo
+        super().__init__(codigo)
+
+
+def descargar_audio(key: str) -> bytes:
+    """Los bytes del objeto, todo en memoria. Un error del servicio es ErrorR2."""
     try:
         response = _get_client().get_object(Bucket=config.R2_BUCKET_NAME, Key=key)
-        datos = response["Body"].read()
-        metadata = response.get("Metadata", {})
-        return datos, metadata
-    except Exception as e:
-        raise RuntimeError(f"Error descargando {key} de R2: {e}")
+    except ClientError as e:
+        raise ErrorR2(str(e.response.get("Error", {}).get("Code") or "desconocido")[:60]) from None
+    return response["Body"].read()

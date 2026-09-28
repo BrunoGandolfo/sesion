@@ -38,22 +38,24 @@ def test_descarga_los_bytes_de_la_key_del_bucket(r2):
         {"Bucket": BUCKET, "Key": "org/s1/0"},
     )
 
-    datos, metadata = r2_client.descargar_audio("org/s1/0")
-
-    assert datos == audio
-    assert metadata == {"origen": "telefono"}
+    assert r2_client.descargar_audio("org/s1/0") == audio
 
 
-def test_sin_metadata_devuelve_un_dict_vacio(r2):
-    r2.add_response("get_object", {"Body": _cuerpo(b"x")}, {"Bucket": BUCKET, "Key": "k"})
-    assert r2_client.descargar_audio("k") == (b"x", {})
+def test_un_error_de_r2_lleva_solo_su_codigo(r2):
+    r2.add_client_error(
+        "get_object",
+        service_error_code="NoSuchKey",
+        service_message="The specified key does not exist: org-secreta/s1/0",
+        http_status_code=404,
+    )
 
+    with pytest.raises(r2_client.ErrorR2) as exc:
+        r2_client.descargar_audio("org-secreta/s1/0")
 
-def test_un_error_de_r2_se_convierte_en_runtime_error(r2):
-    r2.add_client_error("get_object", service_error_code="NoSuchKey", http_status_code=404)
-
-    with pytest.raises(RuntimeError):
-        r2_client.descargar_audio("org/s1/0")
+    assert exc.value.codigo == "NoSuchKey"
+    assert str(exc.value) == "NoSuchKey"
+    # Sin cadena hacia el ClientError, que repite la key.
+    assert exc.value.__cause__ is None and exc.value.__suppress_context__
 
 
 def test_el_cliente_se_crea_una_vez(r2):

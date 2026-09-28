@@ -84,3 +84,18 @@ def test_validar_config_junta_todos_los_errores(recargar_config):
         cfg.validar_config()
     mensaje = str(exc.value)
     assert "APP_BASE_URL" in mensaje and "PROCESSING_SECRET" in mensaje and "R2 incompleto" in mensaje
+
+
+def test_cada_variable_que_lee_el_worker_esta_en_env_example():
+    # Las que inyecta Railway no se cargan a mano.
+    import pathlib
+    import re
+
+    raiz = pathlib.Path(__file__).resolve().parent.parent
+    codigo = "".join(p.read_text(encoding="utf-8") for p in raiz.glob("*.py"))
+    leidas = set(re.findall(r'os\.getenv\(\s*"([A-Z][A-Z0-9_]*)"', codigo))
+    ejemplo = (raiz / ".env.example").read_text(encoding="utf-8")
+    documentadas = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", ejemplo, re.MULTILINE))
+
+    assert leidas - {n for n in leidas if n.startswith("RAILWAY_")} <= documentadas
+    assert {"LLM_MAX_TOKENS_NOTA", "LLM_MAX_TOKENS_FEEDBACK", "LLM_MAX_TOKENS_REINTENTO", "PROMPTS_DIR", "WORKER_ID"} <= leidas
