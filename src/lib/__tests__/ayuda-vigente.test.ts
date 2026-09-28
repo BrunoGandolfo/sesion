@@ -282,8 +282,7 @@ it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
 
 it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar la contraseña", () => {
   // Los únicos usos vigentes de esas palabras son botones que existen hoy.
-  const vigentes = [INVITAR_WHATSAPP, "Descartar propuesta", "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta", `**${DESCARTAR_GRABACION_ACCION}**`, DESCARTAR_GRABACION_TITULO];
-  expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Descartar propuesta");
+  const vigentes = [INVITAR_WHATSAPP, glosario.DESCARTAR_PROPUESTA_ACCION, "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta", `**${DESCARTAR_GRABACION_ACCION}**`, DESCARTAR_GRABACION_TITULO];
   // La grabación sin terminar, en Pendientes de Hoy: el botón y su confirmación.
   const pendientes = codigo("src/app/(dashboard)/_components/pendientes.tsx");
   expect(DESCARTAR_GRABACION).toBe("Descartar");
@@ -434,12 +433,10 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     expect(consentimiento).not.toMatch(/que se eliminen|Tenés derecho/);
     const privacidad = documento("12-camino-del-audio-y-privacidad.md");
     expect(privacidad.replace(/\s+/g, " ")).toContain("sus notas clínicas aprobadas, su transcripción (vista **Transcripción** de cada sesión) y el resumen de su proceso");
-    expect(privacidad).toContain("sus datos de contacto, con **Editar datos**, o el resumen de su proceso, con **Editar Recorrido**");
+    // Los botones que nombra son los del glosario, que es de donde los leen las pantallas.
+    expect(privacidad).toContain(`sus datos de contacto, con **${glosario.EDITAR_DATOS}**, o el resumen de su proceso, con **${glosario.RECORRIDO_EDITAR}**`);
     expect(privacidad.replace(/\s+/g, " ")).toContain("borrar sus datos, corregir una nota ya aprobada, ni ver la autorización firmada");
     expect(ayuda()).not.toMatch(/(no se puede|no podés)[^.]*ver la transcripción/);
-    // Los botones que nombra existen.
-    expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Editar Recorrido");
-    expect(codigo("src/lib/glosario.ts")).toContain('EDITAR_DATOS = "Editar datos"');
     expect(documento("04-pacientes-y-ficha.md")).toContain("qué no se puede hacer desde la app (borrar sus datos");
     // Ninguna página le ofrece a la paciente borrar o corregir lo que la app no hace.
     expect(ayuda()).not.toMatch(/derecho a (acceder|pedir que se (corrijan|eliminen))|puede pedir que se borren/i);

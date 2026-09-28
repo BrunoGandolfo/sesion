@@ -39,10 +39,6 @@ type TurnoCreadoJson = Partial<
   }
 >;
 
-// Textos de pantalla que todavía no se mudaron a glosario.ts.
-
-
-
 /**
  * "Turno agendado" para un turno suelto. Para una serie, cuántos quedaron y,
  * si alguna fecha chocó con otro turno, cuáles: la profesional decide si las

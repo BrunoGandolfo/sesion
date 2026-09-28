@@ -18,6 +18,7 @@ import {
   TERMINO_MUY_LARGO,
 } from "@/lib/hot-words";
 import {
+  REINTENTAR,
   VOCABULARIO_CARGA_MASIVA,
   VOCABULARIO_CARGA_MASIVA_AYUDA,
   VOCABULARIO_QUITAR,
@@ -431,7 +432,7 @@ export function HotWordsManager({
               size="sm"
               onClick={reintentarCarga}
             >
-              Reintentar
+              {REINTENTAR}
             </Button>
           </div>
         ) : items.length === 0 ? (

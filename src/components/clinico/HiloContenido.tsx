@@ -1,10 +1,24 @@
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import Link from "next/link";
-import { formatearFechaCompletaMvd, instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
-import { EL_RECORRIDO_HASTA_HOY, RELATO_UN_PARRAFO_POR_SESION, SIN_INTERVENCIONES, SIN_OBJETIVOS, SIN_SENALES_ANTERIORES, SIN_TEMAS } from "@/lib/glosario";
+import { instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
+import { fechaCompleta } from "@/lib/format";
+import {
+  EL_RECORRIDO_HASTA_HOY,
+  INTERVENCIONES,
+  RECORRIDO_HIPOTESIS,
+  RECORRIDO_OBJETIVOS,
+  RECORRIDO_TEMAS,
+  RELATO_UN_PARRAFO_POR_SESION,
+  SENALES_ANTERIORES,
+  SIN_INTERVENCIONES,
+  SIN_OBJETIVOS,
+  SIN_SENALES_ANTERIORES,
+  SIN_TEMAS,
+  VER_NOTA_DE_ORIGEN,
+} from "@/lib/glosario";
 import type { ContenidoHilo } from "@/lib/hilo/contenido";
 
-const dia = (valor: string) => formatearFechaCompletaMvd(instanteDesdeFechaHoraMvd(valor, "12:00"));
+const dia = (valor: string) => fechaCompleta(instanteDesdeFechaHoraMvd(valor, "12:00"));
 
 // Lo mismo se lee en pantalla y se imprime (la hoja del Recorrido). Para el
 // papel: una sección corta no se parte entre páginas, un título no queda
@@ -37,14 +51,14 @@ export function HiloContenido({ contenido, anterior, sesiones = [], solo, pantal
   // En pantalla una lista vacía lo dice; en el papel queda como estaba.
   const lista = (items: React.ReactNode[], vacio: string) => pantalla && items.length === 0 ? <p className="text-ink-500">{vacio}</p> : <ul>{items}</ul>;
   const cuerpos: Partial<Record<Campo, { titulo: string; cuerpo: React.ReactNode; partible?: boolean }>> = {
-    hipotesisDiagnostica: { titulo: "Hipótesis clínica", cuerpo: <Parrafos texto={contenido.hipotesisDiagnostica} vacio="Sin hipótesis registrada." /> },
+    hipotesisDiagnostica: { titulo: RECORRIDO_HIPOTESIS, cuerpo: <Parrafos texto={contenido.hipotesisDiagnostica} vacio="Sin hipótesis registrada." /> },
     resumenAcumulativo: { titulo: EL_RECORRIDO_HASTA_HOY, cuerpo: <Parrafos texto={contenido.resumenAcumulativo} vacio="Sin resumen registrado." />, partible: true },
-    objetivosTerapeuticos: { titulo: "Objetivos", cuerpo: lista(contenido.objetivosTerapeuticos.map(o => <li key={o.id} className="mb-2 break-inside-avoid">{o.descripcion} · {o.estado}<br /><span className="text-ink-500">Desde {dia(o.fechaInicio)}{o.fechaCierre ? ` · Cierre: ${dia(o.fechaCierre)}` : ""}</span></li>), SIN_OBJETIVOS) },
-    intervencionesProbadas: { titulo: "Intervenciones", cuerpo: lista(contenido.intervencionesProbadas.map((x, i) => <li key={i} className="break-inside-avoid">{formatearEtiqueta(x.tecnica)} · Eficacia registrada: {x.eficaciaPercibida}
-      <ul>{x.sesiones.map(id => { const s = sesiones.find(s => s.id === id); return <li key={id}><Link className="underline" href={`/sesiones/${id}`}>{s ? `Nota del ${formatearFechaCompletaMvd(new Date(s.fecha))}` : "Ver nota de origen"}</Link></li>; })}</ul>
+    objetivosTerapeuticos: { titulo: RECORRIDO_OBJETIVOS, cuerpo: lista(contenido.objetivosTerapeuticos.map(o => <li key={o.id} className="mb-2 break-inside-avoid">{o.descripcion} · {o.estado}<br /><span className="text-ink-500">Desde {dia(o.fechaInicio)}{o.fechaCierre ? ` · Cierre: ${dia(o.fechaCierre)}` : ""}</span></li>), SIN_OBJETIVOS) },
+    intervencionesProbadas: { titulo: INTERVENCIONES, cuerpo: lista(contenido.intervencionesProbadas.map((x, i) => <li key={i} className="break-inside-avoid">{formatearEtiqueta(x.tecnica)} · Eficacia registrada: {x.eficaciaPercibida}
+      <ul>{x.sesiones.map(id => { const s = sesiones.find(s => s.id === id); return <li key={id}><Link className="underline" href={`/sesiones/${id}`}>{s ? `Nota del ${fechaCompleta(new Date(s.fecha))}` : VER_NOTA_DE_ORIGEN}</Link></li>; })}</ul>
     </li>), SIN_INTERVENCIONES) },
-    temasRecurrentes: { titulo: "Temas recurrentes", cuerpo: lista(contenido.temasRecurrentes.map((x, i) => <li key={i} className="break-inside-avoid">{x.tema} · {x.conteo} sesiones</li>), SIN_TEMAS) },
-    riesgosHistoricos: { titulo: "Señales anteriores", cuerpo: lista(contenido.riesgosHistoricos.map((x, i) => <li key={i} className="mb-2 break-inside-avoid">{dia(x.fecha)} · {formatearEtiqueta(x.flag)}<blockquote>{x.detalle}</blockquote></li>), SIN_SENALES_ANTERIORES) },
+    temasRecurrentes: { titulo: RECORRIDO_TEMAS, cuerpo: lista(contenido.temasRecurrentes.map((x, i) => <li key={i} className="break-inside-avoid">{x.tema} · {x.conteo} sesiones</li>), SIN_TEMAS) },
+    riesgosHistoricos: { titulo: SENALES_ANTERIORES, cuerpo: lista(contenido.riesgosHistoricos.map((x, i) => <li key={i} className="mb-2 break-inside-avoid">{dia(x.fecha)} · {formatearEtiqueta(x.flag)}<blockquote>{x.detalle}</blockquote></li>), SIN_SENALES_ANTERIORES) },
   };
   const seccion = (campo: Campo) => {
     const { titulo, cuerpo, partible = false } = cuerpos[campo]!;

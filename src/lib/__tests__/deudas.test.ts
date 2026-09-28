@@ -63,7 +63,15 @@ describe("textoAtraso", () => {
 
   it("de dos en adelante, plural", () => {
     expect(textoAtraso(2)).toBe("hace 2 días");
-    expect(textoAtraso(45)).toBe("hace 45 días");
+    expect(textoAtraso(6)).toBe("hace 6 días");
+  });
+
+  it("escala como fechaRelativa: semanas, meses y años, no 'hace 95 días'", () => {
+    expect(textoAtraso(7)).toBe("hace 1 semana");
+    expect(textoAtraso(29)).toBe("hace 4 semanas");
+    expect(textoAtraso(45)).toBe("hace 1 mes");
+    expect(textoAtraso(95)).toBe("hace 3 meses");
+    expect(textoAtraso(400)).toBe("hace 1 año");
   });
 
   it("un atraso negativo se cuenta como hoy, no como 'hace -3 días'", () => {

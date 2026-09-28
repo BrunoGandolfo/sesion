@@ -99,14 +99,6 @@ describe("glosario — la nota sigue siendo SOAP", () => {
     },
   );
 
-  it("las cuatro secciones van en orden S, O, A, P", () => {
-    expect(glosario.SOAP_SECCIONES.map((s) => s.titulo)).toEqual([
-      "Subjetivo (S)",
-      "Objetivo (O)",
-      "Análisis (A)",
-      "Plan (P)",
-    ]);
-  });
 
   it("la nota se sigue llamando nota clínica SOAP", () => {
     expect(glosario.NOTA_CLINICA).toContain("SOAP");
@@ -172,3 +164,26 @@ describe("pluralizar", () => {
     );
   });
 });
+
+describe("horaCorta: la hora del consultorio, no la del proceso", () => {
+  it("22:58 UTC del 28 de septiembre son las 19:58 en Montevideo, con cualquier TZ", () => {
+    const anterior = process.env.TZ;
+    for (const zona of ["UTC", "Europe/Madrid", "America/Montevideo"]) {
+      process.env.TZ = zona;
+      try {
+        expect(glosario.horaCorta("2026-09-28T22:58:00Z"), zona).toBe("19:58");
+        expect(glosario.horaCorta(Date.parse("2026-09-28T22:58:00Z")), zona).toBe("19:58");
+      } finally {
+        if (anterior === undefined) delete process.env.TZ;
+        else process.env.TZ = anterior;
+      }
+    }
+  });
+
+  it("los avisos de grabación la usan", () => {
+    const desde = Date.parse("2026-09-28T22:58:00Z");
+    expect(glosario.AVISO_SIN_AUDIO_DESDE(desde)).toContain("desde las 19:58");
+    expect(glosario.AVISO_HUECO(desde, desde + 5 * 60_000)).toContain("entre las 19:58 y las 20:03");
+  });
+});
+

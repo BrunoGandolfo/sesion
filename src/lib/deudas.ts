@@ -16,12 +16,9 @@ export function zonaDeuda(diasAtraso: number): ZonaDeuda {
   return "sage";
 }
 
-/** Texto humano: "hoy", "hace 1 día", "hace N días". */
-export function textoAtraso(diasAtraso: number): string {
-  if (diasAtraso <= 0) return "hoy";
-  if (diasAtraso === 1) return "hace 1 día";
-  return `hace ${diasAtraso} días`;
-}
+/** El texto vive en el glosario; se re-exporta para Cobros, que lo importa
+ *  de acá junto con zonaDeuda. */
+export { textoAtraso } from "@/lib/glosario";
 
 /**
  * Template default del recordatorio de cobro. Es el texto que sale por SMS y

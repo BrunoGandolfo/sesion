@@ -24,6 +24,7 @@ import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaRelativa } from "@/lib/format";
 import {
+  CARGANDO,
   NOTA_SIN_INCORPORAR,
   PARA_LA_PROXIMA,
   PREPARAR_SESION,
@@ -289,7 +290,7 @@ export function BriefCortoDePaciente({ pacienteId }: { pacienteId: string }) {
   if (estado.tipo === "cargando") {
     return (
       <Marco>
-        <p className="mt-2 text-[13px] text-ink-500">Cargando…</p>
+        <p className="mt-2 text-[13px] text-ink-500">{CARGANDO}</p>
       </Marco>
     );
   }

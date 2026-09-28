@@ -1,9 +1,18 @@
 "use client";
 
 import { useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
-import { EL_RECORRIDO_HASTA_HOY, QUITAR_ELEMENTO_BORRADOR } from "@/lib/glosario";
+import {
+  EL_RECORRIDO_HASTA_HOY,
+  INTERVENCIONES,
+  QUITAR_ELEMENTO_BORRADOR,
+  RECORRIDO_HIPOTESIS,
+  RECORRIDO_OBJETIVOS,
+  RECORRIDO_TEMAS,
+  SENALES_ANTERIORES,
+} from "@/lib/glosario";
 import { Button, Input, Textarea } from "@/components/ui";
-import { fechaInputMvd, formatearFechaCompletaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
+import { fechaCompleta, hora } from "@/lib/format";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import type { ContenidoHilo } from "@/lib/hilo/contenido";
 import { flagRiesgoSchema, tipoIntervencionSchema, confianzaModeloSchema } from "@/lib/sesion-clinica/schema";
@@ -15,7 +24,7 @@ export function HiloEditor({ valor, cambiar, disabled, sesiones }: { valor: Cont
   const poner = <K extends keyof ContenidoHilo>(clave: K, dato: ContenidoHilo[K]) => cambiar({ ...valor, [clave]: dato });
   return <fieldset disabled={disabled} className="space-y-5">
     {/* El mismo orden en que se lee en pantalla (ORDEN_PANTALLA): el relato acumulado, al final. */}
-    <section className="space-y-3"><h4 className="font-semibold">Objetivos</h4>
+    <section className="space-y-3"><h4 className="font-semibold">{RECORRIDO_OBJETIVOS}</h4>
       {valor.objetivosTerapeuticos.map((o, i) => {
         const editar = (parche: Partial<typeof o>) => poner("objetivosTerapeuticos", valor.objetivosTerapeuticos.map((x, j) => j === i ? { ...x, ...parche } : x));
         return <fieldset key={o.id} className="rounded-md border border-[color:var(--border-subtle)] p-3"><legend>Objetivo {i + 1}</legend>
@@ -28,8 +37,8 @@ export function HiloEditor({ valor, cambiar, disabled, sesiones }: { valor: Cont
       })}
       <Button type="button" variant="ghost" onClick={() => poner("objetivosTerapeuticos", [...valor.objetivosTerapeuticos, { id: crypto.randomUUID(), descripcion: "", estado: "activo", fechaInicio: fechaInputMvd(new Date()), fechaCierre: null }])}>Agregar objetivo</Button>
     </section>
-    <Textarea label="Hipótesis clínica" rows={3} value={valor.hipotesisDiagnostica ?? ""} onChange={e => poner("hipotesisDiagnostica", e.target.value || null)} />
-    <section className="space-y-3"><h4 className="font-semibold">Temas recurrentes</h4>
+    <Textarea label={RECORRIDO_HIPOTESIS} rows={3} value={valor.hipotesisDiagnostica ?? ""} onChange={e => poner("hipotesisDiagnostica", e.target.value || null)} />
+    <section className="space-y-3"><h4 className="font-semibold">{RECORRIDO_TEMAS}</h4>
       {valor.temasRecurrentes.map((x, i) => <fieldset key={i} className="rounded-md border border-[color:var(--border-subtle)] p-3"><legend>Tema {i + 1}</legend>
         <Input label="Tema" value={x.tema} onChange={e => poner("temasRecurrentes", valor.temasRecurrentes.map((v, j) => i === j ? { ...v, tema: e.target.value } : v))} />
         <Input label="Cantidad de sesiones" type="number" min={1} value={x.conteo} onChange={e => poner("temasRecurrentes", valor.temasRecurrentes.map((v, j) => i === j ? { ...v, conteo: Number(e.target.value) } : v))} />
@@ -37,19 +46,19 @@ export function HiloEditor({ valor, cambiar, disabled, sesiones }: { valor: Cont
       </fieldset>)}
       <Button type="button" variant="ghost" onClick={() => poner("temasRecurrentes", [...valor.temasRecurrentes, { tema: "", conteo: 1 }])}>Agregar tema</Button>
     </section>
-    <section className="space-y-3"><h4 className="font-semibold">Intervenciones</h4>
+    <section className="space-y-3"><h4 className="font-semibold">{INTERVENCIONES}</h4>
       {valor.intervencionesProbadas.map((x, i) => {
         const editar = (parche: Partial<typeof x>) => poner("intervencionesProbadas", valor.intervencionesProbadas.map((v, j) => i === j ? { ...v, ...parche } : v));
         return <fieldset key={i} className="rounded-md border border-[color:var(--border-subtle)] p-3"><legend>Intervención {i + 1}</legend>
           <Select label="Técnica" value={x.tecnica} onChange={e => editar({ tecnica: e.target.value as typeof x.tecnica })}>{tipoIntervencionSchema.options.map(v => <option key={v} value={v}>{formatearEtiqueta(v)}</option>)}</Select>
           <Select label="Eficacia registrada" value={x.eficaciaPercibida} onChange={e => editar({ eficaciaPercibida: e.target.value as typeof x.eficaciaPercibida })}>{confianzaModeloSchema.options.map(v => <option key={v}>{v}</option>)}</Select>
-          <fieldset className="my-3"><legend>Notas de origen</legend>{sesiones.map(s => <label key={s.id} className="flex items-center gap-2"><input type="checkbox" checked={x.sesiones.includes(s.id)} onChange={e => editar({ sesiones: e.target.checked ? [...x.sesiones, s.id] : x.sesiones.filter(id => id !== s.id) })} />{formatearFechaCompletaMvd(new Date(s.fecha))}, {formatearHoraMvd(new Date(s.fecha))}</label>)}</fieldset>
+          <fieldset className="my-3"><legend>Notas de origen</legend>{sesiones.map(s => <label key={s.id} className="flex items-center gap-2"><input type="checkbox" checked={x.sesiones.includes(s.id)} onChange={e => editar({ sesiones: e.target.checked ? [...x.sesiones, s.id] : x.sesiones.filter(id => id !== s.id) })} />{fechaCompleta(new Date(s.fecha))}, {hora(new Date(s.fecha))}</label>)}</fieldset>
           <Button type="button" variant="ghost" onClick={() => quitar(() => poner("intervencionesProbadas", valor.intervencionesProbadas.filter((_, j) => j !== i)))}>Quitar intervención {i + 1}</Button>
         </fieldset>;
       })}
       <Button type="button" variant="ghost" onClick={() => poner("intervencionesProbadas", [...valor.intervencionesProbadas, { tecnica: "otra", eficaciaPercibida: "media", sesiones: [] }])}>Agregar intervención</Button>
     </section>
-    <section className="space-y-3"><h4 className="font-semibold">Señales anteriores</h4>
+    <section className="space-y-3"><h4 className="font-semibold">{SENALES_ANTERIORES}</h4>
       {valor.riesgosHistoricos.map((x, i) => {
         const editar = (parche: Partial<typeof x>) => poner("riesgosHistoricos", valor.riesgosHistoricos.map((v, j) => i === j ? { ...v, ...parche } : v));
         return <fieldset key={i} className="rounded-md border border-[color:var(--border-subtle)] p-3"><legend>Señal {i + 1}</legend>

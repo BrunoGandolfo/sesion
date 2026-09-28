@@ -7,7 +7,7 @@
 import * as React from "react";
 
 import { useAvisosPendientes } from "./avisos-de-notas";
-import { avisosEnHoy } from "./textos";
+import { avisosEnHoy } from "@/lib/glosario";
 
 /** El punto que se ve. `className` lo ubica: sobre el ícono en el menú de
  *  abajo, al final del renglón en el lateral. El lector de pantalla no lo lee:

@@ -46,10 +46,6 @@ export const ALMACEN_CIFRA_EN_REPOSO = true;
  * sigue siendo cierto. */
 export const AUDIO_SE_SUBE_AL_TERMINAR = true;
 
-/** Sin cifrado de la app no hay clave por sesión: upload-url
- * (casos-uso/audio.ts) ya no genera audioClave. */
-export const CLAVE_POR_SESION = false;
-
 /**
  * El vocabulario que la profesional carga (hot words) viaja a AssemblyAI
  * como keyterms_prompt, y puede incluir nombres propios (decisión del
@@ -81,9 +77,6 @@ export const ASR_BORRADO_INMEDIATO = true;
 export const ASR_REINTENTO_SOLO_SI_SE_COMPLETO = true;
 export const ASR_BORRADO_MAX_INTENTOS = 20;
 export const ASR_BORRADO_DIAS_APROX = 15;
-/** processor.borrar_transcript_asr: 200 (borrado) y 404 (no existe) son hecho.
- * Un 404 no distingue "lo borró antes" de "nunca existió con ese id". */
-export const ASR_CONFIRMACION_HTTP = [200, 404] as const;
 
 /** Anthropic recibe la transcripción y el hilo vigente del paciente. */
 export const LLM_RECIBE_CONTEXTO = true;
@@ -93,7 +86,6 @@ export const LLM_RECIBE_CONTEXTO = true;
  * profesional), sus datos y el Recorrido vigente. La lista de palabras no le
  * llega: sólo va a AssemblyAI (clinical_analyzer.py no la usa). */
 export const LLM_RECIBE_NOTA_APROBADA = true;
-export const VOCABULARIO_SOLO_A_ASR = true;
 
 /** ayuda/agenda.ts: select cerrado y organización de la sesión autenticada.
  * Lupita no recibe fichas ni registros clínicos. La respuesta la arma el

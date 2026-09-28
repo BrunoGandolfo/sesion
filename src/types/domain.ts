@@ -43,22 +43,6 @@ export type TurnoEstado = EstadoTurno;
 /** Estados de pago de una sesión realizada (nombre histórico de EstadoPago). */
 export type PagoEstado = EstadoPago;
 
-/**
- * Estados del recordatorio por SMS.
- *
- * "enviando" es la RESERVA del cron: una corrida lo tomó y lo está
- * trabajando. No dice que se haya llamado a Twilio — eso lo dice `intentos`.
- * Si la corrida se corta, la fila queda ahí y la siguiente la rescata (ver
- * src/app/api/_lib/casos-uso/despachar-sms.ts). En la base `estado` es
- * un String sin enum, así que este valor no necesita migración.
- */
-export type RecordatorioEstado =
-  | "pendiente"
-  | "enviando"
-  | "enviado"
-  | "fallido"
-  | "cancelado";
-
 // ============================================
 // Entidades
 // ============================================
@@ -116,18 +100,6 @@ export interface SerieCreada {
  *  grabar) sigue leyendo `id` y `fecha` igual. */
 export type TurnoCreado = Turno & { serie: SerieCreada | null };
 
-export interface Recordatorio {
-  id: string;
-  turnoId: string;
-  programadoEn: Date;      // cuándo debe enviarse
-  enviadoEn: Date | null;  // cuándo se envió realmente
-  estado: RecordatorioEstado;
-  textoEnviado: string | null;
-  error: string | null;
-  intentos: number;
-  creadoEn: Date;
-  actualizadoEn: Date;
-}
 
 export interface Configuracion {
   id: string;
@@ -384,11 +356,6 @@ export type RiesgoDetectado = NonNullable<
 /** Cita literal de la transcripción que ancla un indicador de riesgo */
 export type EvidenciaRiesgo = RiesgoDetectado["evidencia"][number];
 
-/** Speech analytics derivado de diarización (ratios en 0-100;
- *  `speakersDetectados` < 2 = colapso; ausente en payloads legacy). */
-export type SpeechAnalytics = NonNullable<
-  DatosEstructuradosSchema["speechAnalytics"]
->;
 
 // ============================================
 // Feedback terapeuta (Llamada C) — contrato multi-orientación
@@ -551,8 +518,3 @@ export interface FeedbackTerapeutaLegacy {
   sugerenciaProximaSesion: string;
   disclaimer: string;
 }
-
-// ─── Normalización al leer (implementación en src/lib/sesion-clinica/normalizar.ts)
-
-/** @deprecated Importar desde "@/lib/sesion-clinica/normalizar". */
-export { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";

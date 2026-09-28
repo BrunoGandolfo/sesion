@@ -71,7 +71,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
 
   it("la app no cifra el audio: queda en el teléfono, sube por conexión cifrada y el almacén lo cifra en reposo", () => {
     expect(hechos.RESPALDO_LOCAL_CIFRADO).toBe(false);
-    expect(hechos.CLAVE_POR_SESION).toBe(false);
     expect(hechos.AUDIO_SE_SUBE_AL_TERMINAR).toBe(true);
     expect(hechos.AUDIO_VIAJA_POR_CONEXION_CIFRADA).toBe(true);
     expect(hechos.ALMACEN_CIFRA_EN_REPOSO).toBe(true);
@@ -125,7 +124,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
   it("el vocabulario, que puede tener su nombre, viaja solo a AssemblyAI", () => {
     expect(hechos.VOCABULARIO_A_ASR).toBe(true);
     expect(hechos.VOCABULARIO_INCLUYE_NOMBRES).toBe(true);
-    expect(hechos.VOCABULARIO_SOLO_A_ASR).toBe(true);
     expect(codigo("processor/asr_assemblyai.py")).toContain('payload["keyterms_prompt"] = terminos');
     expect(codigo("processor/clinical_analyzer.py")).not.toMatch(/keyterms|terminos_asr/);
     expect(texto).toContain("con ayuda de una lista de palabras que Lic. Ana Pérez carga y que puede incluir tu nombre");
