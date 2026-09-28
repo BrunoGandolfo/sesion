@@ -115,10 +115,20 @@ describe("cobros — el mes por query", () => {
   it("sin el parámetro contesta el mes actual, como siempre", async () => {
     const org = await crearOrg();
     sesionActual.organizationId = org.orgId;
-    await crearCobro(org, new Date(), 1500);
-    await crearCobro(org, instanteMvd(2020, 0, 15, 12), 999);
+    // "Hoy" congelado a mitad de mes: con el reloj real, un cobro creado el
+    // último día a las 23:59 y leído un instante después caía en otro mes.
+    // Sólo se falsea Date: Prisma sigue con sus timers reales.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(instanteMvd(2026, 8, 15, 12));
+      await crearCobro(org, new Date(), 1500);
+      await crearCobro(org, instanteMvd(2026, 7, 31, 23, 30), 800);
+      await crearCobro(org, instanteMvd(2020, 0, 15, 12), 999);
 
-    expect(await tarifas(await cobros())).toEqual([1500]);
+      expect(await tarifas(await cobros())).toEqual([1500]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("con ?mes= contesta ese mes, y el 30 a las 23:30 de Montevideo es de ese mes", async () => {

@@ -105,4 +105,4 @@ Con `npm run dev` levantado en el puerto 3000:
 
     CAPTURAS_URL=http://localhost:3000 npx vitest run pruebas/e2e/capturas.spec.ts
 
-Deja `login-390.png` y `login-1280.png` en `pruebas/e2e/resultados/capturas/`, una carpeta que Git ignora. Usa vitest y la librería `playwright` que ya están en el repo, con Chromium instalado como en el recorrido. Si `CAPTURAS_URL` no está definida, el archivo se omite: `npm test` lo recolecta como cualquier `*.spec.ts` sin abrir un navegador. Contra `next dev`, la captura de 1280 puede incluir el indicador de desarrollo de Next abajo a la izquierda.
+Deja `login-390.png` y `login-1280.png` en `pruebas/e2e/resultados/capturas/`, una carpeta que Git ignora. Usa vitest y la librería `playwright` que ya están en el repo, con Chromium instalado como en el recorrido. Sin `CAPTURAS_URL`, vitest ni lo recolecta (`vitest.config.ts` lo excluye): `npm test` no abre un navegador ni lo cuenta como saltado. Contra `next dev`, la captura de 1280 puede incluir el indicador de desarrollo de Next abajo a la izquierda.

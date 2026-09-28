@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import {
   money,
@@ -99,9 +99,17 @@ describe("fechaRelativa", () => {
     expect(fechaRelativa(mvd(2026, 4, 19, 23, 30), ref)).toBe("Ayer");
   });
 
-  it("sin referencia usa el reloj real", () => {
-    expect(fechaRelativa(new Date())).toBe("Hoy");
-    expect(fechaRelativa(new Date(Date.now() - 86_400_000))).toBe("Ayer");
+  it("sin referencia usa el reloj", () => {
+    // El reloj, congelado a mediodía: con el real, correr el test justo a
+    // medianoche partía "Hoy" y "Ayer" entre dos días.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(ref);
+      expect(fechaRelativa(new Date())).toBe("Hoy");
+      expect(fechaRelativa(new Date(Date.now() - 86_400_000))).toBe("Ayer");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("dice 'Hace N días' para 2..6 días atrás", () => {

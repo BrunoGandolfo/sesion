@@ -83,16 +83,6 @@ function cargarEnvTest(): void {
   }
 }
 
-/**
- * True si hay una DATABASE_URL_TEST disponible (del ambiente o de .env.test).
- * Para los archivos que prefieren saltear el bloque de integración en vez de
- * fallar. No valida la URL: eso lo hace conectarBaseDeTest antes de conectar.
- */
-export function hayBaseDeTest(): boolean {
-  cargarEnvTest();
-  return Boolean(process.env.DATABASE_URL_TEST);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Guarda
 // ────────────────────────────────────────────────────────────────────────────
