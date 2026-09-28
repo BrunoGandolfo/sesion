@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import {
   agregarDiasMvd,
   fechaInputMvd,
+  mesIsoMvd,
   horaInputMvd,
   inicioFinDiaMvd,
   instanteDesdeFechaHoraMvd,
@@ -438,3 +439,14 @@ describe("inicioFinDiaMvd — el rango de un día de la agenda", () => {
     }
   });
 });
+
+describe("mesIsoMvd — la clave de mes del consultorio", () => {
+  it("el 31/8 a las 22:30 de Montevideo sigue siendo agosto, aunque en UTC ya sea septiembre", () => {
+    expect(mesIsoMvd(new Date("2026-09-01T01:30:00Z"))).toBe("2026-08");
+  });
+  it("con dos dígitos y el año que corresponde al fin de año", () => {
+    expect(mesIsoMvd(new Date("2026-03-15T15:00:00Z"))).toBe("2026-03");
+    expect(mesIsoMvd(new Date("2027-01-01T02:59:00Z"))).toBe("2026-12");
+  });
+});
+

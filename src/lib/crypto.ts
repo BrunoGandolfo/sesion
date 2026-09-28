@@ -1,6 +1,7 @@
 const HEX = "0123456789abcdef";
 
-function bytesAHex(bytes: Uint8Array): string {
+/** Bytes en hex minúscula, dos dígitos por byte. */
+export function bytesAHex(bytes: Uint8Array): string {
   let hex = "";
   for (const byte of bytes) {
     hex += HEX[byte >> 4] + HEX[byte & 0x0f];

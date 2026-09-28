@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { X } from "lucide-react";
-import { useReducedMotion } from "framer-motion";
 import { usePathname } from "next/navigation";
 
 import { ApiClientError, esAbort } from "@/lib/api-client";
@@ -30,6 +29,7 @@ import {
   type MovimientoLupita,
 } from "@/components/ui/lupita";
 import { AnilloProgreso } from "@/components/ui/movimiento";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import { Sheet } from "@/components/ui/sheet";
 
 const LARGO_MAX_PREGUNTA = 600;
@@ -68,7 +68,7 @@ interface PanelAyudaProps {
 export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
   const pathname = usePathname();
   const sinPersonaje = esRutaClinica(pathname);
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
   const [turnos, setTurnos] = React.useState<Turno[]>([]);
   const [borrador, setBorrador] = React.useState("");
   const [esperando, setEsperando] = React.useState(false);
