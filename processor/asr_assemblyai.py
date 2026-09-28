@@ -125,12 +125,20 @@ def _codigo_error(response: requests.Response) -> str:
 
 
 def _fallo_http(response: requests.Response, etapa: str) -> PipelineError:
+    """
+    Un 4xx que no sea 429 es un rechazo de la request (payload, audio,
+    credencial): repetirla da lo mismo, y cada vuelta volveria a subir el
+    audio. Es `asr_rechazado`, definitivo. El 429 y los 5xx son `asr_error`,
+    transitorio: la sesion vuelve a la cola con backoff.
+    """
     codigo = _codigo_error(response)
     logger.error(
         f"AssemblyAI {etapa}: HTTP {response.status_code}"
         + (f" error={codigo}" if codigo else "")
     )
-    return PipelineError("asr_error", f"AssemblyAI respondio {response.status_code} en {etapa}")
+    status = response.status_code
+    codigo_pipeline = "asr_rechazado" if 400 <= status < 500 and status != 429 else "asr_error"
+    return PipelineError(codigo_pipeline, f"AssemblyAI respondio {status} en {etapa}")
 
 
 def _fallo_red(e: Exception, etapa: str) -> PipelineError:

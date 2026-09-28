@@ -161,6 +161,42 @@ def test_un_fallo_lleva_lo_que_ya_se_pago(pipeline, anthropic_doble):
     assert set(payload["uso"]["pasosMs"]) == {"descarga", "normalizacion", "asr"}
 
 
+@pytest.mark.parametrize(
+    "respuestas, codigo",
+    [
+        # La nota sin una seccion SOAP, dos veces: no cumple validar_estructura_nota.
+        ([{"nota": {"subjetivo": "s"}, "datosEstructurados": {}}] * 2, "llm_estructura_invalida"),
+        (["no es json", "tampoco"], "llm_json_invalido"),
+    ],
+)
+def test_una_nota_que_falla_dos_veces_por_forma_no_vuelve_a_la_cola(pipeline, anthropic_doble, respuestas, codigo):
+    # Repetir la sesion volveria a pagar las dos pasadas y daria lo mismo.
+    anthropic_doble.side_effect = [respuesta_sdk(r) for r in respuestas]
+
+    payload = pipeline()
+
+    assert anthropic_doble.call_count == 2
+    assert payload["resultado"] == "fallo"
+    assert payload["codigo"] == codigo
+    assert payload["definitivo"] is True
+
+
+@pytest.mark.parametrize(
+    "respuesta, codigo",
+    [
+        (lambda: respuesta_sdk("{}", stop="refusal"), "llm_rechazo"),
+        (lambda: SimpleNamespace(**{**vars(respuesta_sdk("{}")), "content": []}), "llm_sin_texto"),
+    ],
+)
+def test_un_rechazo_o_una_respuesta_sin_texto_no_vuelven_a_la_cola(pipeline, anthropic_doble, respuesta, codigo):
+    anthropic_doble.side_effect = [respuesta()]
+
+    payload = pipeline()
+
+    assert anthropic_doble.call_count == 1
+    assert (payload["codigo"], payload["definitivo"]) == (codigo, True)
+
+
 def test_un_timeout_queda_anotado_con_su_duracion(pipeline, anthropic_doble):
     anthropic_doble.side_effect = anthropic.APITimeoutError(request=SimpleNamespace())
 

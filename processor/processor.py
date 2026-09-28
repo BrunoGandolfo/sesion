@@ -447,9 +447,9 @@ def analizar(
         llamadas=uso.llamadas,
     )
     uso.advertencias.extend(diag.advertencias)
-    nota = resultado.get("nota")
-    if not isinstance(nota, dict):
-        raise PipelineError("llm_invalido", "El modelo no devolvio una nota")
+    # clinical_analyzer.analizar ya valido la forma (validar_estructura_nota):
+    # `nota` es un objeto con las cuatro secciones.
+    nota = resultado["nota"]
     datos = resultado.get("datosEstructurados") or {}
     datos["riesgoLexico"] = buscar_menciones(transcripto.transcripcion_fmt)
     datos["speechAnalytics"] = transcripto.speech_metrics

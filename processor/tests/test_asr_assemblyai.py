@@ -74,9 +74,30 @@ def test_4xx_en_polling_corta_sin_reintentar(http):
     with pytest.raises(PipelineError) as exc:
         asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
-    assert exc.value.codigo == "asr_error"
+    assert exc.value.codigo == "asr_rechazado" and exc.value.definitivo
     assert get.call_count == 1
     delete.assert_called_once()
+
+
+@pytest.mark.parametrize("etapa", ["upload", "transcript"])
+@pytest.mark.parametrize(
+    "status, codigo, definitivo",
+    [(400, "asr_rechazado", True), (422, "asr_rechazado", True), (429, "asr_error", False), (503, "asr_error", False)],
+)
+def test_un_4xx_que_no_es_429_es_un_rechazo_definitivo(http, etapa, status, codigo, definitivo):
+    # Un 400 por payload repetiria la subida del audio en cada vuelta.
+    mocker, post, get, _ = http
+    malo = _resp(mocker, status, {"error": "bad request"})
+    if etapa == "upload":
+        post.side_effect = [malo]
+    else:
+        post.side_effect = [_resp(mocker, 200, {"upload_url": "https://cdn.test/u1"}), malo]
+
+    with pytest.raises(PipelineError) as exc:
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
+
+    assert (exc.value.codigo, exc.value.definitivo) == (codigo, definitivo)
+    get.assert_not_called()
 
 
 def test_5xx_en_polling_reintenta(http):
