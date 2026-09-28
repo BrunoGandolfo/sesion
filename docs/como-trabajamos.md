@@ -35,10 +35,32 @@ esquema parecen equivocados, se dice con fundamento antes de rodearlos.
 
 - Cada frase del criterio de salida tiene un test que la demuestra.
 - `codex review --uncommitted` antes de cada commit; los P1/P2 se arreglan con test.
-- El CI corre la suite completa con un Postgres propio; el recorrido automático de
-  Playwright (`pruebas/e2e`) recorre la app como la usuaria. Los dos son el juez de
-  cada rama antes de fusionar.
+- El CI corre la suite completa con un Postgres propio: es el juez de cada rama
+  antes de fusionar. El recorrido de Playwright (`pruebas/e2e`) recorre la app
+  como la usuaria, pero no corre en el CI: se lanza a mano contra una rama
+  desplegada o un servidor local (ver abajo).
 - La prueba final siempre es el dueño en el celular. Nada llega a `release` sin eso.
+
+### Herramientas manuales de `pruebas/`
+
+Salvo `pruebas/e2e/nombres-vigentes.test.mjs`, que vitest recolecta y corre en
+cada `npm test`, nada de `pruebas/` corre solo: son herramientas para lanzar a
+mano cuando se toca lo que prueban. Cada carpeta dice cómo en su README o en la
+cabecera del archivo.
+
+| Qué | Para qué | Cómo se corre |
+| --- | --- | --- |
+| `e2e/recorrido.mjs` | La app entera como la usuaria, a 1280 y 390 px, contra una rama desplegada o un servidor local, con una cuenta de prueba | `npm run e2e -- --url=…` (ver `pruebas/e2e/README.md`) |
+| `e2e/capturas.spec.ts` | Capturas a 390 y 1280 px para el cierre de una tarea de frontend | `CAPTURAS_URL=… npx vitest run pruebas/e2e/capturas.spec.ts` |
+| `e2e/comprobaciones.node.mjs` | Prueba del detector de desbordes que usa el recorrido | `node --test pruebas/e2e/comprobaciones.node.mjs` |
+| `e2e/sembrar-local.mjs` | Siembra una base local `sesion_e2e_*` para correr el recorrido en local | ver su cabecera |
+| `grabador-ajustes/` | Grabación real en Chromium contra `next dev` y un Postgres local: diagnóstico del grabador y grabación demasiado corta | `node pruebas/grabador-ajustes/verificar.mjs` (ver su README) |
+| `grabador-dhh/` | El hook real del grabador con micrófono sintético, pausa y página congelada, y el archivo que llega a "R2" medido con ffprobe | `node pruebas/grabador-dhh/verificar.mjs` (necesita Chromium y ffmpeg; usa `vite`, que llega por vitest y no está declarado) |
+| `vida/interacciones.test.tsx` | Mide cuánto tarda en responder un componente en el DOM | `MEDIR_UI=1 npx vitest run pruebas/vida/interacciones.test.tsx` (sin la variable se saltea) |
+
+Si una de estas deja de reflejar la app (una ruta, un nombre accesible, una
+versión del consentimiento), se corrige cuando se toca lo que prueba, no se
+deja podrir: no hay CI que avise.
 
 ## Fusión y cierre
 

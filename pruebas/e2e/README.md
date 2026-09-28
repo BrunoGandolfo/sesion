@@ -22,7 +22,7 @@ Requiere una cuenta exclusiva de prueba, con una nota aprobada que tenga Para vo
 - Entrada, recuperación sin envío de correo, invitación y restablecimiento sin token, términos; ingreso real una vez.
 - Hoy; Agenda día/semana/mes de escritorio y día/mes móvil; navegación de fechas, alta y detalle del turno; abrir reprogramación sin guardar.
 - Pacientes, búsqueda vacía y archivados; alta con validaciones; ficha, Sesiones, Recorrido, datos y pagos; edición; nota aprobada y Para vos.
-- Cobros, historial del mes y redirecciones anteriores; Tu consultorio, vocabulario, validación de contraseña sin enviarla, editor y vista previa del recordatorio.
+- Cobros, historial del mes y la redirección anterior de /deudores; Finanzas (pantalla propia); Tu consultorio, vocabulario, validación de contraseña sin enviarla, editor y vista previa del recordatorio.
 - Tres consultas reales a Lupita. Comprueba respuesta no vacía y ausencia de error, sin juzgar su calidad.
 - Cobrar y deshacer desde la interfaz en ambos tamaños, verificando pago, importe, método y fecha mediante lecturas del servidor.
 
