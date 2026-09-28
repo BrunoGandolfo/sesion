@@ -6,7 +6,7 @@ import { cerrarSesion } from "@/lib/sesion-acceso";
 import { cookieBorrada } from "@/lib/sesion-cookie";
 
 import { buscarActor } from "../../_lib/auth";
-import { errorResponse, ok } from "../../_lib/responses";
+import { errorResponse, okSinCache } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +18,8 @@ export async function POST() {
     if (actor) {
       await cerrarSesion(db, { id: actor.sesionId, userId: actor.userId, motivo: "salida", ahora: new Date() });
     }
-    const respuesta = ok({ ok: true });
+    const respuesta = okSinCache({ ok: true });
     respuesta.headers.append("Set-Cookie", cookieBorrada());
-    respuesta.headers.set("Cache-Control", "no-store");
     return respuesta;
   } catch (error) {
     return errorResponse(error);

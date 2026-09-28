@@ -11,7 +11,7 @@ import { huellaDeRequest } from "@/lib/request-huella";
 import { cookieDeSesion } from "@/lib/sesion-cookie";
 
 import { iniciarSesion } from "../../_lib/casos-uso/iniciar-sesion";
-import { ApiError, errorResponse, leerJson, ok } from "../../_lib/responses";
+import { ApiError, errorResponse, leerJson, okSinCache } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,9 +41,8 @@ export async function POST(request: Request) {
       throw new ApiError(ENTRADA_ERROR, 401);
     }
 
-    const respuesta = ok({ ok: true });
+    const respuesta = okSinCache({ ok: true });
     respuesta.headers.append("Set-Cookie", cookieDeSesion(resultado.resultado.token));
-    respuesta.headers.set("Cache-Control", "no-store");
     return respuesta;
   } catch (error) {
     return errorResponse(error);

@@ -13,7 +13,7 @@ import { hashTokenSesion, nuevoTokenSesion } from "@/lib/sesion-acceso";
 import { cookieDeSesion } from "@/lib/sesion-cookie";
 
 import { registrarCuenta } from "../../_lib/casos-uso/registrar-cuenta";
-import { ApiError, errorResponse, leerJson, ok } from "../../_lib/responses";
+import { ApiError, errorResponse, leerJson, okSinCache } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,9 +37,8 @@ export async function POST(request: Request) {
       hashTokenSesion,
       huella: huellaDeRequest(request),
     });
-    const respuesta = ok({ creada: true }, 201);
+    const respuesta = okSinCache({ creada: true }, 201);
     respuesta.headers.append("Set-Cookie", cookieDeSesion(tokenSesion));
-    respuesta.headers.set("Cache-Control", "no-store");
     return respuesta;
   } catch (error) {
     if (error instanceof ApiError || error instanceof z.ZodError) return errorResponse(error);

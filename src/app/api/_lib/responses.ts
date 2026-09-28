@@ -19,6 +19,19 @@ export function ok<T>(data: T, status = 200) {
   return Response.json({ data }, { status });
 }
 
+/**
+ * `ok` con `Cache-Control: no-store`: para lo que no puede quedar en ninguna
+ * caché intermedia ni del navegador. Lo usan las rutas de la cuenta (cookie
+ * de sesión, quién está entrada), el Recorrido y el brief (texto clínico) y
+ * /api/version (tiene que ver el build de ahora). Es el ÚNICO lugar que
+ * escribe esa cabecera en src/app/api.
+ */
+export function okSinCache<T>(data: T, status = 200) {
+  const respuesta = ok(data, status);
+  respuesta.headers.set("Cache-Control", "no-store");
+  return respuesta;
+}
+
 export function validationError(error: ZodError) {
   return Response.json(
     { error: "Datos inválidos", details: error.flatten() },

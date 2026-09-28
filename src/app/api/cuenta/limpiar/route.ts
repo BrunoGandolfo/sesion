@@ -9,7 +9,7 @@
 import { cookieBorrada } from "@/lib/sesion-cookie";
 
 import { buscarActor } from "../../_lib/auth";
-import { errorResponse, ok } from "../../_lib/responses";
+import { errorResponse, okSinCache } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +18,8 @@ export const maxDuration = 15;
 export async function POST() {
   try {
     const actor = await buscarActor();
-    const respuesta = ok({ viva: actor !== null });
+    const respuesta = okSinCache({ viva: actor !== null });
     if (!actor) respuesta.headers.append("Set-Cookie", cookieBorrada());
-    respuesta.headers.set("Cache-Control", "no-store");
     return respuesta;
   } catch (error) {
     return errorResponse(error);

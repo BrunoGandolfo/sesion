@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getSessionActor, type SessionActor } from "@/app/api/_lib/auth";
-import { autorizarEdicionHilo, responderHilo } from "@/app/api/_lib/hilo-http";
-import { ApiError } from "@/app/api/_lib/responses";
+import { autorizarEdicionHilo } from "@/app/api/_lib/hilo-http";
+import { ApiError, okSinCache } from "@/app/api/_lib/responses";
 
 // Solo se sustituye la sesión de Next: origen, respuestas y errores son reales.
 vi.mock("@/app/api/_lib/auth", () => ({ getSessionActor: vi.fn() }));
@@ -44,10 +44,10 @@ describe("autorizarEdicionHilo", () => {
   });
 });
 
-describe("responderHilo", () => {
+describe("okSinCache (lo que contestan las rutas del Recorrido)", () => {
   it("responde JSON con data y prohíbe almacenar la respuesta clínica en caché", async () => {
     const contenido = { version: 3, texto: "Historia clínica sintética" };
-    const respuesta = responderHilo(contenido);
+    const respuesta = okSinCache(contenido);
     expect(respuesta.status).toBe(200);
     expect(respuesta.headers.get("content-type")).toContain("application/json");
     expect(respuesta.headers.get("cache-control")).toBe("no-store");

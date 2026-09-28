@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { exportarRecorrido } from "@/app/api/_lib/casos-uso/hilo/exportar";
-import { autorizarEdicionHilo, responderHilo } from "@/app/api/_lib/hilo-http";
-import { errorResponse } from "@/app/api/_lib/responses";
+import { autorizarEdicionHilo } from "@/app/api/_lib/hilo-http";
+import { errorResponse, okSinCache } from "@/app/api/_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +14,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { organizationId, userId } = await autorizarEdicionHilo(request);
     const { id } = await params;
-    return responderHilo(await exportarRecorrido(db, { pacienteId: id, organizationId }, userId));
+    return okSinCache(await exportarRecorrido(db, { pacienteId: id, organizationId }, userId));
   } catch (error) { return errorResponse(error); }
 }

@@ -10,12 +10,12 @@
 // a "grabando" (POST [id]/volver-a-grabar) y repite desde acá con el mismo blob.
 
 import { db } from "@/lib/db";
-import { almacenAudio, r2Configurado } from "@/lib/r2";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
+import { exigirR2 } from "../../../_lib/exigir-r2";
 import { EXPIRA_URL_SUBIDA_SEGUNDOS, pedirUrlSubida } from "../../../_lib/casos-uso/audio";
-import { ApiError, errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { uploadUrlSchema } from "../../../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -31,11 +31,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const parsed = uploadUrlSchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
 
-    if (!r2Configurado()) {
-      throw new ApiError("El almacenamiento de audio (R2) no está configurado en este entorno", 503);
-    }
+    const almacen = exigirR2();
 
-    const subida = await pedirUrlSubida({ prisma: db, organizationId, sesionId: id, ...parsed.data, almacen: almacenAudio });
+    const subida = await pedirUrlSubida({ prisma: db, organizationId, sesionId: id, ...parsed.data, almacen });
 
     await registrarAuditoria(db, {
       organizationId,

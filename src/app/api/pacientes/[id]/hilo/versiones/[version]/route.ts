@@ -2,8 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getSessionActor } from "@/app/api/_lib/auth";
 import { leerVersion } from "@/app/api/_lib/casos-uso/hilo/base";
-import { responderHilo } from "@/app/api/_lib/hilo-http";
-import { errorResponse } from "@/app/api/_lib/responses";
+import { errorResponse, okSinCache } from "@/app/api/_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +12,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     const { id, version } = await params;
     const { organizationId } = await getSessionActor();
-    return responderHilo(await leerVersion(db, { pacienteId: id, organizationId }, z.coerce.number().int().positive().parse(version)));
+    return okSinCache(await leerVersion(db, { pacienteId: id, organizationId }, z.coerce.number().int().positive().parse(version)));
   } catch (error) { return errorResponse(error); }
 }
