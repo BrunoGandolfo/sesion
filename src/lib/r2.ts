@@ -20,6 +20,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { AlmacenAudio } from "@/app/api/_lib/casos-uso/audio";
+import type { AdaptadorBorradoR2 } from "@/app/api/_lib/casos-uso/trabajos/ejecutar-borrado-r2";
 
 interface R2Config {
   accountId: string;
@@ -195,6 +196,31 @@ export async function borrarAudio(key: string): Promise<void> {
     throw new Error(`No se pudo borrar el audio de R2 (${key}): ${msg}`);
   }
 }
+
+/** Presupuesto por llamada a R2 desde un cron: 3 s de conexión + 10 s de
+ *  request. Sin él, un R2 colgado se lleva la función entera. */
+export const TIMEOUT_R2_MS = 13_000;
+
+/** La promesa, o un error con la operación si R2 no contesta a tiempo. */
+export function conTimeout<T>(
+  promesa: Promise<T>,
+  etiqueta: string,
+  ms: number = TIMEOUT_R2_MS,
+): Promise<T> {
+  return new Promise<T>((resolver, rechazar) => {
+    const timer = setTimeout(
+      () => rechazar(new Error(`R2 no respondió en ${ms} ms (${etiqueta})`)),
+      ms,
+    );
+    promesa.then(resolver, rechazar).finally(() => clearTimeout(timer));
+  });
+}
+
+/** Lo que el trabajo borrar_audio_r2 pide de R2, con timeout por llamada. */
+export const adaptadorBorradoR2: AdaptadorBorradoR2 = {
+  listar: (prefijo) => conTimeout(listarPorPrefijo(prefijo), "list"),
+  borrar: (key) => conTimeout(borrarAudio(key), "delete"),
+};
 
 /** Lo que los casos de uso de la subida piden de R2. */
 export const almacenAudio: AlmacenAudio = {

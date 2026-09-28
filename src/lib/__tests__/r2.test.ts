@@ -144,6 +144,26 @@ describe("R2 client", () => {
     });
   });
 
+  describe("conTimeout y el adaptador del cron de trabajos", () => {
+    it("rechaza con la operación si R2 no contesta a tiempo, y deja pasar lo que llega antes", async () => {
+      const { conTimeout } = await import("@/lib/r2");
+      await expect(conTimeout(new Promise(() => {}), "list", 5)).rejects.toThrow("R2 no respondió en 5 ms (list)");
+      await expect(conTimeout(Promise.resolve("ok"), "delete", 50)).resolves.toBe("ok");
+      await expect(conTimeout(Promise.reject(new Error("AccessDenied")), "delete", 50)).rejects.toThrow("AccessDenied");
+    });
+
+    it("el adaptador lista y borra contra el bucket", async () => {
+      setR2Env();
+      sendMock.mockResolvedValueOnce({ Contents: [{ Key: "org/ses/0" }], IsTruncated: false });
+      const { adaptadorBorradoR2 } = await import("@/lib/r2");
+      expect(await adaptadorBorradoR2.listar("org/ses/")).toEqual(["org/ses/0"]);
+      await adaptadorBorradoR2.borrar("org/ses/0");
+      const ultimo = sendMock.mock.calls.at(-1)?.[0] as { __cmd: string; input: S3CommandInput };
+      expect(ultimo.__cmd).toBe("Delete");
+      expect(ultimo.input.Key).toBe("org/ses/0");
+    });
+  });
+
   describe("generarUrlSubida (PUT prefirmado para el navegador)", () => {
     it("firma un PutObject con bucket, key, Content-Type y Content-Length", async () => {
       setR2Env();

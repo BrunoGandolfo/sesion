@@ -97,7 +97,8 @@ describe("rutas del área 2", () => {
 
   it("sólo el cron de trabajos borra de R2", () => {
     const borran = rutasBajo("src/app/api").filter((ruta) =>
-      /import \{[^}]*\bborrarAudio\b[^}]*\} from "@\/lib\/r2"/.test(readFileSync(resolve(RAIZ, ruta), "utf8")),
+      // borrarAudio suelto, o el adaptador con timeout que lo envuelve.
+      /import \{[^}]*\b(borrarAudio|adaptadorBorradoR2)\b[^}]*\} from "@\/lib\/r2"/.test(readFileSync(resolve(RAIZ, ruta), "utf8")),
     );
     expect(borran).toEqual(["src/app/api/cron/trabajos/route.ts"]);
   });
