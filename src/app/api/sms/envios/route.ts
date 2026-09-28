@@ -1,7 +1,10 @@
 // GET /api/sms/envios?turnoId=<id> — los SMS de un turno, para la pantalla.
 //
-// Con sesión (queda dentro del matcher del proxy: sólo /api/sms/callback
-// y /api/sms/entrante son públicos, porque los llama Twilio). Reemplaza a
+// Con sesión: la exige la propia ruta (getOrganizationId → 401). NO pasa por
+// el proxy: su matcher excluye `api/sms` entero, porque callback y entrante
+// los llama Twilio sin cookie. Por eso tampoco tiene el control de origen
+// del proxy; hoy es sólo GET y no lo necesita, pero un método que escriba
+// acá tendría que hacerlo él mismo (como autorizarEdicionHilo). Reemplaza a
 // GET /api/recordatorios?turnoId=: mismo uso, sobre envios_sms, con el
 // estado real (aceptado no es entregado) y el motivo en castellano cuando no
 // salió. No hay POST /reintentar: con backoff hasta la ventana útil, un
