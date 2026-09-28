@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { TRANSCRIPCION_VISIBLE_EN_PANTALLA, BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_EN_ARCHIVO_DEL_SERVIDOR, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { TRANSCRIPCION_VISIBLE_EN_PANTALLA, BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_EN_ARCHIVO_DEL_SERVIDOR, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
 import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
@@ -391,7 +391,6 @@ describe("la ayuda sigue al consentimiento vigente", () => {
 
   it("el borrado del audio se rinde a los días que dice el consentimiento", () => {
     expect(CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(false);
-    expect(POLITICA_POR_TIPO.borrar_audio_r2.tope).toBe(LIMPIEZA_AUDIO_MAX_INTENTOS);
     expect(consentimiento).toContain(`reintenta unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; si no lo logra, el borrado queda marcado como fallido`);
     for (const archivo of ["00-que-es-sesion.md", "08-la-nota-clinica.md", "12-camino-del-audio-y-privacidad.md", "13-preguntas-frecuentes.md"]) {
       expect(documento(archivo)).toContain(`unos ${LIMPIEZA_AUDIO_DIAS_APROX} días`);
@@ -448,7 +447,6 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     // advertencia no puede volver.
     expect(consentimiento).not.toContain("repite el pedido hasta que el servicio confirma que lo hizo");
     expect(consentimiento).toContain(`y, si se completó, repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días`);
-    expect(POLITICA_POR_TIPO.borrar_transcript_asr.tope).toBe(ASR_BORRADO_MAX_INTENTOS);
     const privacidad = documento("12-camino-del-audio-y-privacidad.md");
     expect(privacidad).not.toMatch(/Esa frase del consentimiento|no menciona ese tope/);
     expect(ayuda()).not.toMatch(/Esa frase del consentimiento está pendiente de corregir/);

@@ -165,7 +165,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(aprobar).not.toContain("audioClave");
     const tipo = "borrar_audio_r2";
     const { tope } = POLITICA_POR_TIPO[tipo];
-    expect(tope).toBe(hechos.LIMPIEZA_AUDIO_MAX_INTENTOS);
     const esperas = Array.from({ length: tope - 1 }, (_, i) => backoffTrabajoMs(tipo, i + 1));
     expect(Math.ceil(esperas.reduce((suma, ms) => suma + ms, 0) / 86_400_000)).toBe(hechos.LIMPIEZA_AUDIO_DIAS_APROX);
     expect(decidirResolucion({ tipo, intentos: tope }, { ok: false, error: "R2 no responde" }, new Date("2026-09-16T12:00:00Z"))).toEqual({ estado: "fallido" });
@@ -188,7 +187,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(codigo("src/app/api/_lib/casos-uso/sesion/registrar-asr.ts")).toContain('tipo: "borrar_transcript_asr"');
     const tipo = "borrar_transcript_asr";
     const { tope } = POLITICA_POR_TIPO[tipo];
-    expect(tope).toBe(hechos.ASR_BORRADO_MAX_INTENTOS);
     const esperas = Array.from({ length: tope - 1 }, (_, i) => backoffTrabajoMs(tipo, i + 1));
     expect(Math.ceil(esperas.reduce((suma, ms) => suma + ms, 0) / 86_400_000)).toBe(hechos.ASR_BORRADO_DIAS_APROX);
     expect(texto).toContain(`Al terminar la transcripción le pide a AssemblyAI que borre el audio y el texto y, si se completó, repite el pedido unos ${hechos.ASR_BORRADO_DIAS_APROX} días; si algo falla, puede pedirlo una vez o ninguna, y no puede comprobar que se haya borrado.`);

@@ -3,6 +3,14 @@
 
 import type { EjecutorTrabajo, TipoTrabajo } from "@prisma/client";
 
+// Los dos topes de borrado los firma la paciente (el consentimiento dice
+// cuántas veces se insiste): viven en los hechos del consentimiento y la
+// política los toma de ahí, en vez de repetir el 20.
+import {
+  ASR_BORRADO_MAX_INTENTOS,
+  LIMPIEZA_AUDIO_MAX_INTENTOS,
+} from "@/lib/consentimiento-hechos";
+
 const MIN = 60 * 1000;
 const HORA = 60 * MIN;
 
@@ -19,11 +27,11 @@ export const POLITICA_POR_TIPO: Record<TipoTrabajo, Politica> = {
   // de salud.
   borrar_audio_r2: {
     backoffMs: [1 * MIN, 5 * MIN, 30 * MIN, 2 * HORA, 6 * HORA, 24 * HORA],
-    tope: 20,
+    tope: LIMPIEZA_AUDIO_MAX_INTENTOS,
   },
   borrar_transcript_asr: {
     backoffMs: [1 * MIN, 5 * MIN, 30 * MIN, 2 * HORA, 6 * HORA, 24 * HORA],
-    tope: 20,
+    tope: ASR_BORRADO_MAX_INTENTOS,
   },
   // Una llamada al modelo; al tope, "Para vos" queda `fallido` con botón.
   generar_feedback: { backoffMs: [5 * MIN, 30 * MIN, 2 * HORA], tope: 5 },
