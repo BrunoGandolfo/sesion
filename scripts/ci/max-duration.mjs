@@ -10,14 +10,37 @@
 // que hace que un proveedor lento termine en un 504 con diagnóstico y no en
 // una función cortada a la mitad de una transacción.
 //
-// LA CONVENCIÓN (segundos)
+// LA CONVENCIÓN (segundos), tal como la declara el código
 //
-//   Lecturas de UI (GET)                         15   una consulta y un mapper
-//   Escrituras de UI (POST/PATCH/DELETE)         30   puede llevar transacción
-//   Que hablan con R2 (upload-url, aprobar…)     30   una llamada de red externa
-//   ayuda (stream de Anthropic)                  60   es el techo del stream
-//   Crons                                        60   presupuesto explícito
-//   M2M del worker (pendientes, callback…)       60   lotes
+// Esta tabla describe lo que las rutas declaran hoy (revisada contra las 66
+// rutas el 28-09-2026), no un ideal: si una ruta nueva no entra en ninguna
+// fila, se agrega la fila con su porqué, no se fuerza el número.
+//
+//   15  Lecturas de UI (GET puro): una consulta y un mapper. dashboard,
+//       deudores, la ficha y el historial, el Recorrido y el brief, avisos,
+//       cobros, envíos de SMS, sesiones de acceso.
+//   15  Transiciones con nombre, una transacción corta sobre filas propias y
+//       sin red externa: eliminar, reintentar, reprocesar,
+//       feedback/reintentar y volver-a-grabar de la sesión; aceptar,
+//       rechazar, regenerar, versiones y exportar del Recorrido; salir,
+//       salir-todas y limpiar de la cuenta.
+//   15  Worker, de a un ítem con su ticket: lease, asr, transcripcion,
+//       resultado, trabajos/[id]/resultado.
+//   15  Públicas sin sesión, que no esperan a nadie: health, estado-worker,
+//       version, csp-report, sms/callback, sms/entrante.
+//   30  Altas y cambios con validación y transacción (a veces con lock):
+//       turnos, pacientes, config, hot-words, consentimiento,
+//       recordar-cobro, crear la sesión de grabación.
+//   30  Cuenta con bcrypt: entrar, registro, restablecer, recuperar,
+//       password, invitaciones.
+//   30  Hablan con R2 o encolan su borrado: upload-url, upload-confirmar,
+//       abandonar (HeadObject), aprobar.
+//   30  Lectura pesada: finanzas/resumen (agregados de hasta varios años).
+//   30  Worker, reparto de trabajos en lote: trabajos/pendientes.
+//   60  Reclamo del worker (sesion-clinica/pendientes): reclamo, términos del
+//       ASR y latido en un pedido.
+//   60  ayuda: es el techo del stream de Anthropic.
+//   60  Crons: cada uno reparte su presupuesto explícito dentro de los 60.
 //
 // Una ruta con GET y escritura toma el mayor de los dos. Este script NO
 // verifica la familia (eso es criterio, no sintaxis): verifica que la
