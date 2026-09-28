@@ -147,8 +147,10 @@ class AsrDoble:
         self.recibido: list[bytes] = []
         self.duracion_seg = duracion_seg
 
-    def __call__(self, audio: io.BufferedIOBase, keyterms) -> dict:
+    def __call__(self, audio: io.BufferedIOBase, keyterms, al_crear=None) -> dict:
         self.recibido.append(audio.read())
+        if al_crear is not None:
+            al_crear("tr1")
         return {
             "duration_seconds": self.duracion_seg,
             "segments": [

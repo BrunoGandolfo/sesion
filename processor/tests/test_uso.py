@@ -208,10 +208,10 @@ def test_cada_trabajo_lleva_uso(mocker, anthropic_doble):
     assert res["uso"]["reintentos"] == 1
     assert set(res["uso"]["pasosMs"]) == {"generar_feedback"}
 
-    delete = mocker.patch("processor.requests.delete", return_value=mocker.Mock(status_code=200))
+    # El borrado en si se prueba en test_processor; aca solo que lleva `uso`.
+    mocker.patch("processor.borrar_transcript_asr", return_value={"ok": True})
     res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
     assert res["ok"] is True and res["uso"]["llamadas"] == [] and "borrar_transcript_asr" in res["uso"]["pasosMs"]
-    delete.assert_called_once()
 
     res = processor.ejecutar_trabajo({"tipo": "desconocido"})
     assert res["ok"] is False and "uso" in res

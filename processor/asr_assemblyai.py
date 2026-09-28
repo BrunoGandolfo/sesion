@@ -21,7 +21,7 @@ sumo los primeros 80 caracteres (es un codigo tecnico).
 """
 import logging
 import time
-from typing import BinaryIO
+from typing import BinaryIO, Callable
 
 import requests
 
@@ -307,11 +307,13 @@ def _esperar(transcript_id: str) -> dict:
     )
 
 
-def _borrar(transcript_id: str) -> None:
+def _borrar(transcript_id: str) -> int | None:
     """
-    DELETE best-effort: solo se loguea el status, nunca falla.
-    Borra el transcript y el archivo subido via /upload:
+    DELETE best-effort: nunca falla; devuelve el status HTTP, o None si no
+    hubo respuesta. Borra el transcript y el archivo subido via /upload:
       https://www.assemblyai.com/docs/pre-recorded-audio/api-reference/transcripts/delete
+    Es el unico lugar que borra en AssemblyAI: lo usan el `finally` de
+    transcribir y el trabajo durable borrar_transcript_asr.
     """
     try:
         response = requests.delete(
@@ -319,9 +321,11 @@ def _borrar(transcript_id: str) -> None:
             headers=_headers(),
             timeout=TIMEOUT_HTTP_SEG,
         )
-        logger.info(f"AssemblyAI delete {transcript_id}: HTTP {response.status_code}")
     except Exception as e:
         logger.warning(f"AssemblyAI delete {transcript_id}: fallo ({type(e).__name__})")
+        return None
+    logger.info(f"AssemblyAI delete {transcript_id}: HTTP {response.status_code}")
+    return response.status_code
 
 
 # Normalizacion ─────────────────────────────────────────────────────────────
@@ -443,7 +447,11 @@ def _normalizar(data: dict, transcript_id: str, modelo_solicitado: str) -> dict:
 
 # API publica ───────────────────────────────────────────────────────────────
 
-def transcribir(audio: BinaryIO, keyterms: list[str] | None = None) -> dict:
+def transcribir(
+    audio: BinaryIO,
+    keyterms: list[str] | None = None,
+    al_crear: Callable[[str], None] | None = None,
+) -> dict:
     """
     Transcribe y diariza el audio (el ya normalizado por audio_asr) via AssemblyAI.
     El endpoint de upload recibe el audio como application/octet-stream y
@@ -453,6 +461,15 @@ def transcribir(audio: BinaryIO, keyterms: list[str] | None = None) -> dict:
     omitir —o pasar None, o vacia— y la request sale exactamente como antes:
     los llamadores que no lo usan no cambian. Lo que llega se sanea en
     _sanear_keyterms antes de salir a la red.
+
+    `al_crear(transcript_id)` se llama apenas existe el transcript, ANTES de
+    esperarlo: el polling puede durar hasta ASR_TIMEOUT_SECONDS y el proceso
+    puede morir en el medio (redeploy, OOM). Quien llama lo usa para que la
+    app anote el borrado durable. Si lanza, el transcript se borra igual.
+
+    Un upload cuyo transcript no llega a crearse queda en AssemblyAI sin id
+    con el cual borrarlo: la API no tiene DELETE para uploads sueltos (solo
+    se borran junto con su transcript).
     """
     audio.seek(0, 2)
     logger.info(f"AssemblyAI: subiendo {audio.tell()} bytes")
@@ -465,6 +482,8 @@ def transcribir(audio: BinaryIO, keyterms: list[str] | None = None) -> dict:
     modelos = _modelos()
     modelo_solicitado = modelos[0] if modelos else config.ASR_MODEL_ID
     try:
+        if al_crear is not None:
+            al_crear(transcript_id)
         data = _esperar(transcript_id)
         return _normalizar(data, transcript_id, modelo_solicitado)
     finally:

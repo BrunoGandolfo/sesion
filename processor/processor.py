@@ -32,6 +32,7 @@ import io
 import logging
 import threading
 from dataclasses import dataclass
+from typing import Callable
 
 import requests
 
@@ -56,8 +57,6 @@ LEASE_RENOVACION_SEG = 60
 
 # Tipos de trabajo que este worker sabe ejecutar.
 TIPOS_TRABAJO = ["borrar_transcript_asr", "generar_feedback", "integrar_contexto"]
-
-TIMEOUT_ASR_DELETE_SEG = 30
 
 # modeloLlm que se reporta a la app. El prefijo "anthropic:" es contrato:
 # la app lo guarda y lo muestra tal cual.
@@ -197,13 +196,21 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
                 with uso.medir("normalizacion", etiqueta):
                     audio = preparar_para_asr(etiqueta, audio)
                 lease.comprobar("asr")
+                registrados: set[str] = set()
+
+                def al_crear(transcript_id: str) -> None:
+                    if registrar_transcript_asr(sesion, transcript_id):
+                        registrados.add(transcript_id)
+
                 with uso.medir("asr", etiqueta):
-                    transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr)
+                    transcripcion = transcribir(etiqueta, audio, sesion.terminos_asr, al_crear=al_crear)
                 del audio
                 duracion_asr = transcripcion.get("duration_seconds")
                 if isinstance(duracion_asr, int) and not isinstance(duracion_asr, bool):
                     uso.asr_segundos = duracion_asr
-                transcripto = registrar_checkpoint(sesion, transcripcion)
+                transcripto = registrar_checkpoint(
+                    sesion, transcripcion, asr_registrado=transcripcion.get("asr_id") in registrados
+                )
             lease.comprobar("nota")
             analisis = analizar(etiqueta, transcripto, sesion.paciente_id, sesion.ticket, uso=uso)
             lease.comprobar("resultado")
@@ -308,15 +315,23 @@ def aviso_duracion(duracion_asr_seg, duracion_telefono_seg) -> dict | None:
     return {"duracionTelefonoSeg": int(duracion_telefono_seg), "excesoPct": round(exceso * 100, 1)}
 
 
-def transcribir(etiqueta: str, audio_bytes: bytes, terminos_asr: list[str] | None = None) -> dict:
-    """AssemblyAI: transcripcion diarizada normalizada (ver asr_assemblyai)."""
+def transcribir(
+    etiqueta: str,
+    audio_bytes: bytes,
+    terminos_asr: list[str] | None = None,
+    al_crear: Callable[[str], None] | None = None,
+) -> dict:
+    """
+    AssemblyAI: transcripcion diarizada normalizada (ver asr_assemblyai).
+    `al_crear` recibe el id del transcript antes de esperarlo.
+    """
     terminos = terminos_asr or []
     logger.info(
         f"[{etiqueta}] Transcribiendo ({len(audio_bytes)} bytes, "
         # Solo la cantidad: los terminos pueden ser nombres propios de la paciente.
         f"{len(terminos)} terminos ASR)..."
     )
-    transcripcion = asr_assemblyai.transcribir(io.BytesIO(audio_bytes), terminos)
+    transcripcion = asr_assemblyai.transcribir(io.BytesIO(audio_bytes), terminos, al_crear=al_crear)
     segments = transcripcion.get("segments") or []
     if not segments:
         raise PipelineError("asr_vacio", "La transcripcion no contiene segmentos")
@@ -328,24 +343,39 @@ def transcribir(etiqueta: str, audio_bytes: bytes, terminos_asr: list[str] | Non
     return transcripcion
 
 
-def registrar_checkpoint(sesion: SesionReclamada, transcripcion: dict) -> Transcripto:
+def registrar_transcript_asr(sesion: SesionReclamada, transcript_id: str) -> bool:
     """
-    Registra el transcript en AssemblyAI (para que la app lo borre con
-    reintentos) y guarda la transcripcion formateada como checkpoint. Los dos
-    van con ticket e intento: un rechazo es LeasePerdido; un 5xx es un fallo
-    transitorio (la sesion vuelve y se transcribe de nuevo, porque el
-    checkpoint no quedo).
+    Le pasa a la app el id del transcript de AssemblyAI para que anote el
+    trabajo durable de borrarlo. Va con ticket e intento: un rechazo es
+    LeasePerdido. True si la app lo registro.
+    """
+    etiqueta = sesion.sesion_clinica_id
+    res = app_client.registrar_asr(etiqueta, sesion.ticket, sesion.intento, transcript_id)
+    if res.rechazado:
+        raise LeasePerdido()
+    if not res.ok:
+        # Best-effort: el transcript igual se borra en asr_assemblyai al
+        # terminar; la app solo pierde el reintento durable.
+        logger.warning(f"[{etiqueta}] no se pudo registrar el transcript (status={res.status})")
+    return res.ok
+
+
+def registrar_checkpoint(
+    sesion: SesionReclamada, transcripcion: dict, asr_registrado: bool = False
+) -> Transcripto:
+    """
+    Guarda la transcripcion formateada como checkpoint, con ticket e
+    intento: un rechazo es LeasePerdido; un 5xx es un fallo transitorio (la
+    sesion vuelve y se transcribe de nuevo, porque el checkpoint no quedo).
+
+    El transcript de AssemblyAI se registra antes del polling (al_crear). Si
+    ese registro no llego a la app (`asr_registrado` False), se intenta de
+    nuevo aca.
     """
     etiqueta = sesion.sesion_clinica_id
     asr_id = transcripcion.get("asr_id")
-    if asr_id:
-        res = app_client.registrar_asr(etiqueta, sesion.ticket, sesion.intento, asr_id)
-        if res.rechazado:
-            raise LeasePerdido()
-        if not res.ok:
-            # Best-effort: el transcript ya se borra en asr_assemblyai al
-            # terminar; la app solo pierde el reintento durable.
-            logger.warning(f"[{etiqueta}] no se pudo registrar el transcript (status={res.status})")
+    if asr_id and not asr_registrado:
+        registrar_transcript_asr(sesion, asr_id)
 
     speech_metrics = speech_analytics.compute(transcripcion["segments"])
     speech_metrics["rolesOrigen"] = transcripcion["roles_origen"]
@@ -482,7 +512,7 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
     try:
         with uso.medir(str(tipo)):
             if tipo == "borrar_transcript_asr":
-                resultado = borrar_transcript_asr(trabajo.get("payload") or {})
+                resultado = borrar_transcript_asr(trabajo.get("payload") or {}, trabajo.get("intentos"))
             elif tipo == "generar_feedback":
                 resultado = generar_feedback(trabajo.get("adjunto") or {}, uso)
             elif tipo == "integrar_contexto":
@@ -494,20 +524,58 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
     return {**resultado, "uso": uso.payload()}
 
 
-def borrar_transcript_asr(payload: dict) -> dict:
-    """DELETE en AssemblyAI. 200 y 404 son "hecho" (idempotente)."""
+# El trabajo borrar_transcript_asr nace cuando el worker dueno registra el id,
+# ANTES de esperar el transcript. Si lo borrara enseguida, otro worker (un
+# redeploy que se solapa) podria borrarlo mientras el dueno todavia lo espera
+# o antes de que lo lea. El dueno deja de esperar a los ASR_TIMEOUT_SECONDS
+# (mas su ultimo GET y una pausa); el trabajo recien borra en el primer
+# intento que, por la politica de la app, no puede llegar antes de eso.
+#
+# Espejo de src/app/api/_lib/casos-uso/trabajos/politica.ts:
+# POLITICA_POR_TIPO.borrar_transcript_asr.backoffMs y LEASE_TRABAJO_MS.worker.
+# Entre un intento y el siguiente pasa el backoff, o el lease si el worker
+# murio sin resolver: lo que sea menor es lo minimo garantizado.
+BACKOFF_BORRADO_ASR_SEG = (60, 300, 1800, 7200, 21600, 86400)
+LEASE_TRABAJO_WORKER_SEG = 900
+
+
+def espera_minima_antes_del_intento(intento: int) -> int:
+    """Segundos que pasaron, como minimo, desde el intento 1 hasta el intento `intento`."""
+    total = 0
+    for k in range(1, intento):
+        backoff = BACKOFF_BORRADO_ASR_SEG[min(k, len(BACKOFF_BORRADO_ASR_SEG)) - 1]
+        total += min(backoff, LEASE_TRABAJO_WORKER_SEG)
+    return total
+
+
+def primer_intento_que_borra() -> int:
+    """El primer intento en que el worker dueno ya no puede estar esperando el transcript."""
+    necesario = config.ASR_TIMEOUT_SECONDS + config.ASR_POLL_SECONDS + asr_assemblyai.TIMEOUT_HTTP_SEG
+    intento = 1
+    while espera_minima_antes_del_intento(intento) < necesario:
+        intento += 1
+    return intento
+
+
+def borrar_transcript_asr(payload: dict, intentos: int | None = None) -> dict:
+    """
+    DELETE en AssemblyAI. 200 y 404 son "hecho" (idempotente).
+
+    `intentos` es el que entrega la app (cuenta este). Antes de
+    primer_intento_que_borra() se devuelve un fallo sin tocar AssemblyAI y la
+    app lo reintenta con su backoff: el transcript lo puede estar esperando
+    su worker. Si ese worker lo leyo, ya lo borro en su `finally`; este
+    trabajo es para cuando murio en el medio.
+    """
     transcript_id = payload.get("transcriptId")
     if not transcript_id:
         return {"ok": False, "error": "payload sin transcriptId"}
-    response = requests.delete(
-        f"{asr_assemblyai.API_BASE}/transcript/{transcript_id}",
-        headers={"authorization": config.ASSEMBLYAI_API_KEY},
-        timeout=TIMEOUT_ASR_DELETE_SEG,
-    )
-    logger.info(f"AssemblyAI delete {transcript_id}: HTTP {response.status_code}")
-    if response.status_code in (200, 404):
+    if not isinstance(intentos, int) or intentos < primer_intento_que_borra():
+        return {"ok": False, "error": "esperando_al_worker_del_transcript"}
+    status = asr_assemblyai._borrar(transcript_id)
+    if status in (200, 404):
         return {"ok": True}
-    return {"ok": False, "error": f"AssemblyAI respondio HTTP {response.status_code}"}
+    return {"ok": False, "error": f"AssemblyAI respondio HTTP {status}" if status else "AssemblyAI no respondio"}
 
 
 def generar_feedback(adjunto: dict, uso: Uso | None = None) -> dict:
