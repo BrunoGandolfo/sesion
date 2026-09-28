@@ -46,7 +46,7 @@ cargan con `read -rs` en la misma terminal (§3.1) y se borran al final (§3.7).
 | `R2_BUCKET` | Bucket de **respaldos** (no confundir con `R2_BUCKET_NAME`, el de audio; pueden coincidir) | Copia del dueño del secret de Actions `R2_BUCKET`. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Token de R2 con lectura sobre ese bucket | Copia del dueño de los secrets `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`. GitHub **no deja leer** un secret ya cargado. Si no hay copia: crear en Cloudflare un token nuevo de sólo lectura (*Object Read*) para ese bucket y borrarlo al terminar; no reemplazar el de Actions. |
 | `BACKUP_ENCRYPTION_KEY` | Passphrase de gpg de los respaldos | La copia **offline** que pide `.github/workflows/backup.yml` (línea 22). El secret de Actions se cargó el 3-sep-2026 y no cambió desde entonces, así que todas las copias que hay en R2 hoy usan ese mismo valor. Si no existe copia offline, **parar**: ni este ensayo ni una restauración real son posibles, y eso es un hallazgo más grave que cualquier otro. |
-| `CLAVES_CIFRADO` | El llavero ENC2, formato `id=<32 bytes base64>[,id=…]` | La variable `CLAVES_CIFRADO` de **Vercel → proyecto de Sesión → Production**, completa (con todas las claves que tenga, incluidas las retiradas que se conserven para respaldos). Si está marcada *Sensitive* no se puede leer: sale del gestor de contraseñas del dueño. La variable de Actions `CLAVES_CIFRADO_IDS` (hoy `1`) dice qué ids se esperan; el llavero tiene que traer al menos esos. |
+| `CLAVES_CIFRADO` | El llavero ENC2, formato `id=<32 bytes base64>[,id=…]` | El llavero del ensayo lleva **todas las claves de la época del respaldo, incluidas las retiradas**: un respaldo anterior a una rotación tiene blobs con la clave vieja. Salen del **gestor de contraseñas** del dueño, una entrada por id. No de Vercel: `CLAVES_CIFRADO` es *Sensitive* y no se puede leer, y en el estado final de una rotación (`docs/encryption.md` §3, paso 3) la variable de Vercel ya no tiene las claves retiradas. La variable de Actions `CLAVES_CIFRADO_IDS` (hoy `1`) dice qué ids se esperan; el llavero tiene que traer al menos esos. |
 | `CLAVE_ENC1` | Sólo para la prueba opcional §3.6b: la `NOTES_ENCRYPTION_KEY` de la app anterior (32 bytes base64) | Gestor de contraseñas del dueño, o la variable del proyecto de Vercel si todavía existe y no es *Sensitive*. |
 
 **Por qué `CLAVE_ENC1` va aparte.** ENC1 no guarda id de clave: el verificador
@@ -116,7 +116,7 @@ read -rp  'Bucket de respaldos (R2_BUCKET): ' R2_BUCKET
 read -rsp 'R2 access key id: ' AWS_ACCESS_KEY_ID; printf '\n'
 read -rsp 'R2 secret access key: ' AWS_SECRET_ACCESS_KEY; printf '\n'
 read -rsp 'Passphrase del respaldo (BACKUP_ENCRYPTION_KEY): ' BACKUP_ENCRYPTION_KEY; printf '\n'
-read -rsp 'Llavero ENC2 (CLAVES_CIFRADO de Vercel Production): ' CLAVES_CIFRADO; printf '\n'
+read -rsp 'Llavero ENC2 de la época del respaldo, del gestor (todas las claves): ' CLAVES_CIFRADO; printf '\n'
 # Sólo si se va a hacer la prueba opcional §3.6b; si no, Enter vacío.
 read -rsp 'Clave ENC1 (NOTES_ENCRYPTION_KEY, opcional): ' CLAVE_ENC1; printf '\n'
 export R2_ENDPOINT R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO CLAVE_ENC1

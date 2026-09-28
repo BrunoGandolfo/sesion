@@ -35,6 +35,10 @@ se pega su salida: descifra la nota clínica más vieja y más nueva y la versi�
 del Recorrido más vieja y más nueva, y dice sí/no por cada una.
 
 - Ids de clave conocidos (del llavero, nunca los valores):
+- Cada id del llavero salió de una entrada del gestor de contraseñas (no de
+  Vercel): sí / no. Si hubo una rotación desde el ensayo anterior, la entrada
+  de la clave nueva es de fecha anterior o igual a su carga en Vercel
+  (`docs/encryption.md` §3, paso 0): sí / no — id `<n>`, fecha de la entrada:
 - Nota clínica más vieja descifrada y leída: sí / no — sesión `<id>`, clave `<n>`
 - Nota clínica más nueva descifrada y leída: sí / no — sesión `<id>`, clave `<n>`
 - Versión del Recorrido más vieja descifrada y leída: sí / no — versión `<id>`, clave `<n>`

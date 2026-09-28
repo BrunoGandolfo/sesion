@@ -91,6 +91,7 @@ permanece en `processor/.env.example`.
 | --- | --- |
 | `DATABASE_URL` | Conexión a la base de la app. |
 | `CLAVES_CIFRADO` | Llavero ENC2. Conservar aparte las claves que necesitan los backups. |
+| `CLAVES_CIFRADO_NUEVAS` | Opcional, solo existe durante una rotación: la clave nueva, sin leer ni reescribir `CLAVES_CIFRADO` (`docs/encryption.md` §3). |
 | `INVITACIONES_PERMITIDAS` | Cuentas habilitadas para invitar; sin lista no se crean invitaciones. |
 | `PROCESSING_SECRET` | Autoriza reclamos del worker; las escrituras posteriores usan tickets. |
 | `CRON_SECRET` | Autoriza crons. |
@@ -127,9 +128,12 @@ de la sesión son constantes de `src/lib/sesion-clinica/estados.ts`.
   distintas: rotar el secreto de reclamo no los revoca automáticamente.
 - `CRON_SECRET` también admite lista. Coordinar el valor que envía el
   programador con el que acepta el despliegue.
-- Para `CLAVES_CIFRADO`, seguir `docs/encryption.md`: agregar una clave,
-  recifrar, comprobar pendientes y errores, retirar la vieja del servicio activo.
-  Conservarla de forma protegida mientras haya backups que la requieran.
+- Para `CLAVES_CIFRADO`, seguir `docs/encryption.md` §3: guardar la clave
+  nueva en el gestor, cargarla en `CLAVES_CIFRADO_NUEVAS` (la vigente no se
+  lee: es *Sensitive*), recifrar hasta que pendientes y errores den 0,
+  dejar la nueva como única `CLAVES_CIFRADO` y sumar su id a
+  `CLAVES_CIFRADO_IDS`. La vieja se conserva en el gestor mientras haya
+  backups que la requieran.
 - R2 y claves de proveedores: crear el reemplazo, actualizar todos los
   entornos consumidores y comprobarlos antes de revocar el anterior.
   Para Anthropic son dos consumidores: app y worker.
