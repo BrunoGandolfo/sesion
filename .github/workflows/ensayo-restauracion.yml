@@ -106,27 +106,10 @@ jobs:
           if [ -n "${faltan}" ]; then echo "ERROR: faltan secrets o variables:${faltan}" >&2; exit 1; fi
 
       - name: Instalar postgresql-client-17
-        run: |
-          set -euo pipefail
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl --fail --silent --show-error \
-            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-            https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          codename="$(lsb_release -cs)"
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client-17
-          "${PG_BIN}/pg_restore" --version
+        uses: ./.github/actions/postgres-cliente
 
       - name: Configurar credenciales AWS CLI para R2
-        run: |
-          set -euo pipefail
-          aws configure set aws_access_key_id "${R2_ACCESS_KEY_ID}"
-          aws configure set aws_secret_access_key "${R2_SECRET_ACCESS_KEY}"
-          aws configure set default.region auto
-          aws configure set default.s3.request_checksum_calculation when_required
-          aws configure set default.s3.response_checksum_validation when_required
+        uses: ./.github/actions/r2-cli
 
       - name: Ensayar las dos copias por separado
         run: |

@@ -165,18 +165,7 @@ jobs:
       - name: Generar Prisma Client
         run: npx prisma generate
       - name: Instalar postgresql-client-17
-        run: |
-          set -euo pipefail
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl --fail --silent --show-error \
-            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-            https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          codename="$(lsb_release -cs)"
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client-17
-          "${PG_BIN}/pg_dump" --version
+        uses: ./.github/actions/postgres-cliente
       - name: Aplicar migraciones a la base efímera
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_test

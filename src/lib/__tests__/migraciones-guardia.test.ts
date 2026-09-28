@@ -69,3 +69,23 @@ it.each(["UPDATE OR DELETE OR TRUNCATE", "TRUNCATE OR DELETE"])("un trigger de %
   sql(`CREATE TRIGGER prueba BEFORE ${eventos} ON ejemplo FOR EACH STATEMENT EXECUTE FUNCTION proteger();`);
   expect(ejecutar().status).toBe(0);
 });
+it.each([
+  'ALTER TABLE "turnos" RENAME COLUMN "notas" TO "observaciones";',
+  'ALTER TABLE turnos RENAME notas TO observaciones;',
+  'ALTER TABLE "turnos" RENAME TO "citas";',
+  'ALTER TABLE IF EXISTS turnos RENAME CONSTRAINT turnos_pkey TO citas_pkey;',
+  'ALTER TYPE "EstadoTurno" RENAME VALUE \'programado\' TO \'agendado\';',
+])("un renombre sin marca es destructivo: %s", (texto) => {
+  sql(texto);
+  const r = ejecutar();
+  expect(r.status).toBe(1);
+  expect(r.stderr).toContain("sentencia destructiva");
+});
+it("un renombre con la marca pasa", () => {
+  sql('-- DESTRUCTIVA: el código que usaba esto salió en abc1234\nALTER TABLE "turnos" RENAME COLUMN "notas" TO "observaciones";');
+  expect(ejecutar().status).toBe(0);
+});
+it("agregar un valor a un enum sigue siendo aditivo", () => {
+  sql('ALTER TYPE "EstadoTurno" ADD VALUE \'reprogramado\';');
+  expect(ejecutar().status).toBe(0);
+});

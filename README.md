@@ -43,7 +43,7 @@ en release ni la configuración de los proveedores.
 | --- | --- |
 | Frontend/API | Next 16.3.3, React 19, TypeScript, Tailwind 4; versiones resueltas en `package-lock.json`. |
 | Identidad | Cookie opaca y revocable, con hash en sesiones_acceso; vence a los 30 días o tras 14 sin uso. Cambiar o restablecer la contraseña cierra todas las sesiones. |
-| Datos | Prisma 5.22, Postgres 17; esquema en `prisma/schema.prisma` y ocho migraciones en `prisma/migrations/`. |
+| Datos | Prisma 5.22, Postgres 17; esquema en `prisma/schema.prisma` y nueve migraciones en `prisma/migrations/`. |
 | Cifrado de columnas | AES-256-GCM, ENC2 y AAD por fila; extensión de `src/lib/prisma-encryption.ts`. |
 | Audio/proceso | Archivo sin cifrar por la app (R2 lo cifra en reposo), worker Python en Railway; AssemblyAI para transcripción y Anthropic para nota, feedback y propuestas del Recorrido. Contrato y límites en `docs/pipeline.md`. |
 | SMS/correo | Twilio y Resend. La persistencia del envío vive en envios_sms. Los recordatorios se dispersan de 0 a 14 minutos por turno (`src/lib/recordatorios-programacion.ts`). |

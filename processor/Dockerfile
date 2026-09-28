@@ -4,6 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
+# El ÚNICO comando de arranque del worker. railway.json no lo repite (y ya no
+# hay Procfile): así arranca igual en Railway —lea o no railway.json— y con
+# un `docker run` local. Los patrones de watch viven en railway.json.
 CMD ["python", "worker.py"]
-
-# Redespliegue: patrón de watch corregido, build por Dockerfile con ffmpeg (17-09-2026)

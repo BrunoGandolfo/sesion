@@ -346,7 +346,8 @@ export type SesionClinicaResponse = z.infer<typeof sesionClinicaResponseSchema>;
 // "definitivo" lo decide el worker; la app sólo aplica su política.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Consumo de una corrida: lo suma el reporte mensual. Forma abierta. */
+/** Consumo de una corrida, tal como lo manda el worker. Forma abierta. La
+ *  app lo guarda y no lo lee: no hay reporte mensual que lo sume. */
 export const usoSchema = z
   .object({
     asrSegundos: z.number().nonnegative().optional(),

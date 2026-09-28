@@ -36,9 +36,10 @@
 // podía estar). Dos problemas: eran identificadores de infraestructura en un
 // repositorio público, y ataban el repositorio a un proveedor. En CI ya no
 // hay Neon: cada corrida levanta un Postgres 17 propio (ver ci.yml), y en
-// local la opción por defecto es el contenedor de docker-compose.yml. La
-// rama `test` de Neon sigue sirviendo para quien no tenga Docker, pero hay
-// que pedirla explícitamente.
+// local es un contenedor propio (docker-compose.yml o `docker run`) o, sin
+// Docker, un Postgres 17 local. La rama `test` de Neon ya no se ofrece: la
+// vaciaban suites de otras máquinas a mitad de corrida. El permiso remoto
+// queda para quien tenga un Postgres de test propio en otro host.
 //
 // Este archivo NO es un test (no matchea *.test.ts): vitest no lo colecta.
 
@@ -102,8 +103,8 @@ const AYUDA = [
   "Cómo arreglarlo:",
   `  - Con Docker: \`npm run db:test:up\` y DATABASE_URL_TEST del .env.test.example,`,
   `    o un contenedor propio con POSTGRES_DB=${NOMBRE_BASE_DE_TEST} y el puerto que te asigne.`,
-  `  - Sin Docker: una base llamada ${NOMBRE_BASE_DE_TEST} en la rama \`test\` de Neon, con`,
-  `    conexión directa, y ${VARIABLE_PERMISO_REMOTO}=1 para declarar que es remota.`,
+  `  - Sin Docker: un Postgres 17 local (servidor propio, no uno compartido) con una`,
+  `    base llamada ${NOMBRE_BASE_DE_TEST}. Si está en otro host tuyo, ${VARIABLE_PERMISO_REMOTO}=1.`,
   "  - CI: el job `test` levanta un Postgres propio y define la variable.",
   "  - Nunca renombres ni crees esa base dentro de un servidor que no sea tuyo:",
   "    la guarda confía en el nombre.",
@@ -176,7 +177,7 @@ export function validarUrlDeBaseDeTest(
       "",
       "Los tests de integración vacían TODAS las tablas con TRUNCATE ...",
       "CASCADE. Por defecto sólo se acepta localhost / 127.0.0.1 / ::1.",
-      `Si es a propósito (la rama test de Neon), poné ${VARIABLE_PERMISO_REMOTO}=1.`,
+      `Si es a propósito (un Postgres de test tuyo en otro host), poné ${VARIABLE_PERMISO_REMOTO}=1.`,
       "Abortado antes de abrir la conexión: no se ejecutó nada.",
       "",
       AYUDA,
@@ -240,14 +241,15 @@ export function conectarBaseDeTest(): BaseDeTest {
  * envejecía una reserva 30 segundos, la base la guardaba con tres horas y
  * media, y el rescate —que se dispara a los 5 minutos— se la llevaba.
  *
- * `npm test` ya fija `TZ=UTC` para el proceso de Node. Esto es la otra mitad:
+ * Los scripts de npm (`test`, `test:unit`, `test:integration`) ya fijan
+ * `TZ=UTC` para el proceso de Node. Esto es la otra mitad:
  * el reloj de la BASE. Con las dos, la suite da el mismo veredicto en la
  * laptop del dueño, en Docker y en CI, y el veredicto es el de producción
  * (Neon corre en UTC).
  *
  * Se aplica a la conexión y no a la base (`ALTER DATABASE`) a propósito: no
  * hay que tocar la configuración de una base que puede ser de otra persona,
- * y así vale también para la rama `test` de Neon.
+ * y así vale también para una base de test remota.
  */
 function enUtc(url: string): string {
   const u = new URL(url);

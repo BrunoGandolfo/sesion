@@ -106,8 +106,10 @@ model User {
   @@map("usuarios")
 }
 
-/// Por qué se cerró una sesión de acceso. `vencimiento` lo escribe el cron;
-/// `incidente` se escribe a mano (SQL) cuando se sospecha un token filtrado.
+/// Por qué se cerró una sesión de acceso. `vencimiento` hoy no lo escribe
+/// nadie: una sesión vencida no se cierra, la borra el mantenimiento a los 30
+/// días (casos-uso/mantenimiento.ts). `incidente` se escribe a mano (SQL)
+/// cuando se sospecha un token filtrado.
 enum MotivoCierreSesion {
   salida
   salida_todas
@@ -200,8 +202,9 @@ model PasswordReset {
 }
 
 /// Invitación a abrir un consultorio propio. Solo puede crearla quien tenga
-/// permiso (rol titular); tope de invitaciones vigentes por creadora en una
-/// constante del código (marcada como temporal). Crear y usar una invitación
+/// permiso (rol titular), con los límites de src/lib/limites-prueba.ts: un
+/// tope en total por creadora y una espera entre una y la siguiente (no un
+/// tope de vigentes). Crear y usar una invitación
 /// dejan evento en eventos_auditoria (sin token, sin email).
 /// Sin `email` ni `organizationId`: hoy siempre eran null (código muerto).
 model Invitacion {
@@ -506,7 +509,10 @@ model EnvioSms {
 
   // Cron de despacho y conciliación: WHERE estado IN (…) AND proximo_intento_en <= now().
   @@index([estado, proximoIntentoEn])
-  // Conteo mensual por consultorio: WHERE organization_id = ? AND aceptado_en BETWEEN …
+  // Pensado para el conteo mensual por consultorio. La consulta real
+  // (src/lib/sms/metricas.ts) filtra sólo por aceptado_en en el mes y agrupa
+  // por organization_id, así que este orden de columnas no la sirve;
+  // reordenarlo es una migración aparte.
   @@index([organizationId, aceptadoEn])
   // Cancelar / reprogramar los envíos de un turno.
   @@index([turnoId])
@@ -680,7 +686,8 @@ model SesionClinica {
   promptVersion          String?        @map("prompt_version")
   procesadaEn            DateTime?      @map("procesada_en")
   /// Consumo: { asrSegundos, llamadas: [{ nombre, entrada, salida,
-  /// cacheLectura, cacheEscritura }] }. Lo suma el reporte mensual.
+  /// cacheLectura, cacheEscritura }] }. Hoy la app sólo lo escribe: no hay
+  /// reporte mensual que lo sume; sirve para estimar costos por SQL.
   uso                    Json?
 
   // ── Aprobación ─────────────────────────────────────────────────────────

@@ -11,9 +11,10 @@
  * la API— para que la pantalla lo diga y ofrezca reintentar.
  *
  * Es una función de módulo, no un hook: se prueba con un doble de `fetch` en
- * el global. El proyecto no tiene jsdom ni @testing-library, así que la
- * pantalla en sí (el toast, el botón "Reintentar") no se puede renderizar en
- * un test; lo que sí queda fijado es el contrato del que depende.
+ * el global. Acá se fija el contrato del que depende la pantalla; el toast y
+ * el botón "Reintentar" se podrían renderizar con jsdom y
+ * @testing-library/react (ya están, ver vitest.config.ts), pero este archivo
+ * no lo hace.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
