@@ -245,7 +245,9 @@ it("describe el Recorrido como versiones que la IA propone y no reemplaza", () =
   // El trabajo de la IA deja una propuesta; no aplica la versión vigente.
   expect(codigo("src/app/api/_lib/casos-uso/hilo/trabajo.ts")).not.toContain("aplicarVigente");
   // El brief lee solo notas aprobadas.
-  expect(codigo("src/app/api/_lib/casos-uso/hilo/brief.ts")).toContain('estado: "aprobada"');
+  expect(codigo("src/app/api/_lib/casos-uso/hilo/brief.ts")).toContain("whereAprobadasDe(identidad)");
+  const base = codigo("src/app/api/_lib/casos-uso/hilo/base.ts");
+  expect(base.slice(base.indexOf("export function whereAprobadasDe("))).toMatch(/^[^\n]*\n\s*return \{[^}]*estado: "aprobada"/);
   const texto = documento("10-el-hilo-y-el-recorrido.md");
   expect(texto).toContain("La propuesta no cambia nada por sí sola");
   expect(texto).toContain("las anteriores no se pueden modificar ni borrar");

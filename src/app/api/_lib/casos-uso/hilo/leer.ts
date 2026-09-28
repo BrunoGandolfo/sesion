@@ -2,7 +2,7 @@ import { type Recorrido } from "@/lib/hilo/contenido";
 
 import { ApiError } from "../../responses";
 import type { SesionAutorizada } from "../../tickets";
-import { exigirPaciente, filtroHilo, leerVersion, resumenSelect, type BaseHilo, type ClienteHilo, type IdentidadHilo } from "./base";
+import { aResumen, exigirPaciente, filtroHilo, leerVersion, resumenSelect, whereAprobadasDe, type BaseHilo, type ClienteHilo, type IdentidadHilo } from "./base";
 
 export async function historialHilo(prisma: ClienteHilo, identidad: IdentidadHilo, antes?: number) {
   await exigirPaciente(prisma, identidad);
@@ -11,7 +11,7 @@ export async function historialHilo(prisma: ClienteHilo, identidad: IdentidadHil
     select: resumenSelect, orderBy: { version: "desc" }, take: 31,
   });
   return {
-    historial: filas.slice(0, 30).map(f => ({ ...f, creadaEn: f.creadaEn.toISOString(), resueltaEn: f.resueltaEn?.toISOString() ?? null })),
+    historial: filas.slice(0, 30).map(aResumen),
     hayMas: filas.length > 30,
   };
 }
@@ -29,14 +29,14 @@ export async function leerRecorrido(prisma: BaseHilo, identidad: IdentidadHilo):
       select: { id: true, sesionId: true, estado: true }, orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
     });
     const sesiones = await tx.sesionClinica.findMany({
-      where: { organizationId: identidad.organizationId, estado: "aprobada", turno: { pacienteId: identidad.pacienteId } },
+      where: whereAprobadasDe(identidad),
       select: { id: true, turno: { select: { fecha: true } } }, orderBy: [{ turno: { fecha: "desc" } }, { id: "desc" }],
     });
     return {
       pacienteId: identidad.pacienteId,
       vigente: hilo?.vigente ? await leerVersion(tx, identidad, hilo.vigente.version) : null,
       propuesta: propuesta ? await leerVersion(tx, identidad, propuesta.version) : null,
-      desactualizadas: desactualizadas.map(f => ({ ...f, creadaEn: f.creadaEn.toISOString(), resueltaEn: f.resueltaEn?.toISOString() ?? null })),
+      desactualizadas: desactualizadas.map(aResumen),
       ...await historialHilo(tx, identidad),
       totalSesionesAprobadas: sesiones.length,
       sesionesAprobadas: sesiones.map(s => ({ id: s.id, fecha: s.turno.fecha.toISOString() })),

@@ -9,6 +9,7 @@
 import type { Prisma, EjecutorTrabajo, TipoTrabajo } from "@prisma/client";
 
 import type { db } from "@/lib/db";
+import { prefijoAudio } from "@/lib/sesion-clinica/estados";
 
 /** Payload por tipo. Es lo que se persiste en `trabajos.payload`. */
 export type PayloadTrabajo =
@@ -47,6 +48,39 @@ export type CrearTrabajoInput = PayloadTrabajo & {
   /** Por defecto ahora. */
   proximoIntentoEn?: Date;
 };
+
+/**
+ * El borrado del audio de una sesión en R2: el mismo trabajo lo piden
+ * aprobar, eliminar, abandonar o descartar, y una grabación demasiado corta.
+ * El payload lleva todo lo que hace falta porque la sesión puede borrarse de
+ * la base en la misma transacción. Se llama DENTRO de la transacción de la
+ * operación, como crearTrabajo.
+ */
+export function trabajoBorrarAudio(
+  prisma: CrearTrabajoInput["prisma"],
+  {
+    organizationId,
+    sesionId,
+    pacienteId,
+    proximoIntentoEn,
+  }: {
+    organizationId: string;
+    sesionId: string;
+    pacienteId?: string | null;
+    /** Diferido (una sesión sin audio: ver sesion/abandonar.ts). */
+    proximoIntentoEn?: Date;
+  },
+): Promise<{ id: string }> {
+  return crearTrabajo({
+    prisma,
+    tipo: "borrar_audio_r2",
+    payload: { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] },
+    organizationId,
+    sesionId,
+    pacienteId,
+    ...(proximoIntentoEn ? { proximoIntentoEn } : {}),
+  });
+}
 
 export async function crearTrabajo(input: CrearTrabajoInput): Promise<{ id: string }> {
   const trabajo = await input.prisma.trabajo.create({

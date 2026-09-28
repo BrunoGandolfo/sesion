@@ -17,7 +17,6 @@ import { MINIMO_SEGUNDOS } from "@/lib/grabacion-captura";
 import {
   CODIGO_GRABACION_CORTA,
   keyAudio,
-  prefijoAudio,
 } from "@/lib/sesion-clinica/estados";
 import type { DiagnosticoGrabacion, PausaGrabacion } from "@/lib/sesion-clinica/schema";
 
@@ -29,7 +28,7 @@ import { SESION_SELECT, toSesionClinicaResponse } from "../sesion-clinica";
 
 import { leerSesion } from "./sesion/leer";
 import { exigirEstado, MENSAJE_NO_ENCONTRADA, transicionar } from "./sesion/transicion";
-import { crearTrabajo } from "./trabajos/crear";
+import { trabajoBorrarAudio } from "./trabajos/crear";
 
 type Base = { prisma: typeof db; organizationId: string };
 type Sesion = Base & { sesionId: string };
@@ -194,13 +193,7 @@ export async function confirmarSubida(input: Sesion & { key: string; duracionAud
         },
         conflicto: "La sesión cambió de estado durante la confirmación",
       });
-      await crearTrabajo({
-        prisma: tx,
-        tipo: "borrar_audio_r2",
-        payload: { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] },
-        organizationId,
-        sesionId,
-      });
+      await trabajoBorrarAudio(tx, { organizationId, sesionId });
     });
     throw new ApiError(MENSAJE_GRABACION_CORTA, 422, CODIGO_GRABACION_CORTA);
   }

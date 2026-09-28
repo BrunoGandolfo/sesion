@@ -12,7 +12,6 @@
 
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
-import { prefijoAudio } from "@/lib/sesion-clinica/estados";
 import {
   parseDatosEstructurados,
   type NotaSoap,
@@ -22,7 +21,7 @@ import { registrarAuditoria } from "../../auditoria";
 import { hashTexto } from "../../auditoria-pura";
 import { ApiError } from "../../responses";
 import type { FilaSesionClinica } from "../../sesion-clinica";
-import { crearTrabajo } from "../trabajos/crear";
+import { crearTrabajo, trabajoBorrarAudio } from "../trabajos/crear";
 
 import { leerSesion } from "./leer";
 import {
@@ -128,17 +127,7 @@ export async function aprobarSesion({
 
     const creados: string[] = [];
     if (conAudio) {
-      await crearTrabajo({
-        prisma: tx,
-        tipo: "borrar_audio_r2",
-        payload: {
-          prefijo: prefijoAudio(organizationId, sesionId),
-          indices: [0],
-        },
-        organizationId,
-        sesionId,
-        pacienteId,
-      });
+      await trabajoBorrarAudio(tx, { organizationId, sesionId, pacienteId });
       creados.push("borrar_audio_r2");
     }
     await crearTrabajo({

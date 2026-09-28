@@ -21,6 +21,8 @@
 
 import { createHash, randomBytes } from "node:crypto";
 
+import type { TipoTrabajo } from "@prisma/client";
+
 import type { db } from "@/lib/db";
 
 import { ApiError } from "./responses";
@@ -90,7 +92,7 @@ export async function autorizarTicketSesion(
 export interface TrabajoAutorizado {
   trabajoId: string;
   organizationId: string;
-  tipo: "borrar_audio_r2" | "borrar_transcript_asr" | "generar_feedback" | "integrar_contexto";
+  tipo: TipoTrabajo;
   sesionId: string | null;
   pacienteId: string | null;
   intentos: number;

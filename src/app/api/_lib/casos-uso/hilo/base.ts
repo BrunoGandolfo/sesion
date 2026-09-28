@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { db } from "@/lib/db";
 import { contenidoHiloSchema, type ContenidoHilo, type VersionHilo } from "@/lib/hilo/contenido";
+import { OPERACIONES_VERSION } from "@/lib/hilo/versiones";
 import { cifrarHiloVersion } from "@/lib/prisma-encryption";
 
 import { ApiError } from "../../responses";
@@ -13,6 +14,14 @@ export type ClienteHilo = Pick<typeof db,
 export type BaseHilo = ClienteHilo & Pick<typeof db, "$transaction">;
 export interface IdentidadHilo { pacienteId: string; organizationId: string }
 export function filtroHilo({ pacienteId, organizationId }: IdentidadHilo) { return { pacienteId, organizationId }; }
+/** Las notas aprobadas de la paciente: lo único que el Recorrido lee, cita o integra. */
+export function whereAprobadasDe({ pacienteId, organizationId }: IdentidadHilo) {
+  return { organizationId, estado: "aprobada" as const, turno: { pacienteId } };
+}
+/** Una fila de versión, con las fechas en ISO como viajan a la pantalla. */
+export function aResumen<T extends { creadaEn: Date; resueltaEn: Date | null }>(fila: T) {
+  return { ...fila, creadaEn: fila.creadaEn.toISOString(), resueltaEn: fila.resueltaEn?.toISOString() ?? null };
+}
 export const CONFLICTO_HILO = "El Recorrido cambió mientras lo revisabas. Tu borrador sigue en esta pantalla; leé la versión actual antes de volver a guardar.";
 
 export async function exigirPaciente(tx: Pick<ClienteHilo, "paciente">, identidad: IdentidadHilo) {
@@ -49,10 +58,7 @@ export const resumenSelect = {
 export async function leerVersion(tx: Pick<ClienteHilo, "hiloVersion">, identidad: IdentidadHilo, version: number): Promise<VersionHilo> {
   const fila = await tx.hiloVersion.findFirst({ where: { ...filtroHilo(identidad), version }, select: { ...resumenSelect, contenido: true } });
   if (!fila) throw new ApiError("Versión no encontrada", 404);
-  return {
-    ...fila, creadaEn: fila.creadaEn.toISOString(), resueltaEn: fila.resueltaEn?.toISOString() ?? null,
-    contenido: contenidoHiloSchema.parse(fila.contenido),
-  };
+  return { ...aResumen(fila), contenido: contenidoHiloSchema.parse(fila.contenido) };
 }
 
 export async function insertarVersion(tx: ClienteHilo, identidad: IdentidadHilo, hilo: HiloBloqueado, datos: {
@@ -66,8 +72,7 @@ export async function insertarVersion(tx: ClienteHilo, identidad: IdentidadHilo,
     ...datos.contenido.riesgosHistoricos.map(r => r.sesionId),
   ])];
   if (referencias.length && await tx.sesionClinica.count({ where: {
-    id: { in: referencias }, organizationId: identidad.organizationId,
-    estado: "aprobada", turno: { pacienteId: identidad.pacienteId },
+    ...whereAprobadasDe(identidad), id: { in: referencias },
   } }) !== referencias.length) throw new ApiError("Las referencias deben ser notas aprobadas de esta paciente", 400);
   const id = randomUUID();
   const version = hilo.ultimaVersion + 1;
@@ -83,10 +88,12 @@ export async function insertarVersion(tx: ClienteHilo, identidad: IdentidadHilo,
 }
 
 export async function aplicarVigente(tx: ClienteHilo, identidad: IdentidadHilo, versionId: string, usuarioId: string, ahora: Date) {
-  const anteriores = await tx.hiloVersion.findMany({ where: { ...filtroHilo(identidad), estado: "propuesta", id: { not: versionId } }, select: { version: true } });
+  const { desde, hacia } = OPERACIONES_VERSION.desactualizar;
+  const abiertas = { ...filtroHilo(identidad), estado: { in: [...desde] }, id: { not: versionId } };
+  const anteriores = await tx.hiloVersion.findMany({ where: abiertas, select: { version: true } });
   await tx.hiloVersion.updateMany({
-    where: { ...filtroHilo(identidad), estado: "propuesta", id: { not: versionId } },
-    data: { estado: "desactualizada", resueltaEn: ahora, resueltaPorUserId: usuarioId },
+    where: abiertas,
+    data: { estado: hacia, resueltaEn: ahora, resueltaPorUserId: usuarioId },
   });
   await tx.hilo.update({ where: { pacienteId: identidad.pacienteId }, data: { vigenteId: versionId, actualizadoEn: ahora } });
   for (const anterior of anteriores) await auditarHilo(tx, identidad, "hilo.desactualizar", anterior.version, usuarioId, ahora);

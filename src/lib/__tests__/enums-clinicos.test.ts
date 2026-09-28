@@ -77,3 +77,15 @@ describe("contrato de enums clínicos", () => {
     }
   });
 });
+
+describe("orientación teórica", () => {
+  it("la lista del contrato es la del enum orientacion_teorica de Postgres, y el default está en ella", async () => {
+    const { OrientacionTeorica } = await import("@prisma/client");
+    const { ORIENTACIONES_TEORICAS, ORIENTACION_DEFAULT } = await import("@/lib/sesion-clinica/schema");
+    expect([...ORIENTACIONES_TEORICAS].sort()).toEqual(Object.values(OrientacionTeorica).sort());
+    expect(ORIENTACIONES_TEORICAS).toContain(ORIENTACION_DEFAULT);
+    const esquema = readFileSync(resolve(process.cwd(), "prisma", "schema.prisma"), "utf8");
+    expect(esquema).toMatch(/orientacionTeorica\s+OrientacionTeorica\s+@default\(cbt_mi\)/);
+    expect(ORIENTACION_DEFAULT).toBe("cbt_mi");
+  });
+});

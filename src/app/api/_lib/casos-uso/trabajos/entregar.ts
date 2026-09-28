@@ -9,6 +9,7 @@
 import type { Prisma, TipoTrabajo } from "@prisma/client";
 
 import type { db } from "@/lib/db";
+import { ORIENTACION_DEFAULT } from "@/lib/sesion-clinica/schema";
 
 import { reclamarTrabajos, type TrabajoReclamado } from "./reclamar";
 import { adjuntoContexto } from "../hilo/trabajo";
@@ -21,8 +22,6 @@ export type Adjuntador = (
   prisma: ClienteEntrega,
   trabajo: TrabajoReclamado,
 ) => Promise<unknown>;
-
-const ORIENTACION_DEFAULT = "cbt_mi";
 
 async function adjuntoFeedback(prisma: ClienteEntrega, trabajo: TrabajoReclamado): Promise<unknown> {
   if (!trabajo.sesionId) return null;

@@ -8,11 +8,9 @@
 // la tabla, `whereTransicion({ operacion: "eliminar" })`); si count = 0 la
 // transacción se deshace y el trabajo no queda.
 
-import { prefijoAudio } from "@/lib/sesion-clinica/estados";
-
 import { registrarAuditoria } from "../../auditoria";
 import { ApiError } from "../../responses";
-import { crearTrabajo } from "../trabajos/crear";
+import { trabajoBorrarAudio } from "../trabajos/crear";
 
 import {
   exigirEstado,
@@ -55,17 +53,7 @@ export async function eliminarSesion({
 
     const audioPorBorrar = existente.audioEstado === "en_r2";
     if (audioPorBorrar) {
-      await crearTrabajo({
-        prisma: tx,
-        tipo: "borrar_audio_r2",
-        payload: {
-          prefijo: prefijoAudio(organizationId, sesionId),
-          indices: [0],
-        },
-        organizationId,
-        sesionId,
-        pacienteId: existente.turno.pacienteId,
-      });
+      await trabajoBorrarAudio(tx, { organizationId, sesionId, pacienteId: existente.turno.pacienteId });
     }
 
     const { count } = await tx.sesionClinica.deleteMany({

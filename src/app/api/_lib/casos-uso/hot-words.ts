@@ -22,11 +22,14 @@ import { hashTermino } from "@/lib/hot-words";
 import { cifrarHotWord } from "@/lib/prisma-encryption";
 
 import { ApiError } from "../responses";
-import type { CATEGORIAS_HOT_WORD } from "../schemas";
+import type { z } from "zod";
+
+import type { CATEGORIAS_HOT_WORD, hotWordScopeSchema } from "../schemas";
 
 type ClientePrisma = typeof db;
 
-export type ScopeHotWord = "global" | "profesional" | "paciente";
+/** El alcance, tal como lo valida el schema de la ruta (una sola lista). */
+export type ScopeHotWord = z.infer<typeof hotWordScopeSchema>;
 export type CategoriaHotWord = (typeof CATEGORIAS_HOT_WORD)[number];
 
 /** Un término tal como lo ve la pantalla. */

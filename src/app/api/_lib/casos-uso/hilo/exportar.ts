@@ -24,7 +24,7 @@ import { contenidoHiloSchema, type ResumenVersionHilo, type VersionHilo } from "
 import { auditar } from "../../auditoria";
 import { ApiError } from "../../responses";
 import type { ProgresoClinico } from "../progreso-clinico";
-import { filtroHilo, resumenSelect, type BaseHilo, type IdentidadHilo } from "./base";
+import { aResumen, filtroHilo, resumenSelect, whereAprobadasDe, type BaseHilo, type IdentidadHilo } from "./base";
 import { leerProgreso } from "./progreso";
 
 export type ClienteExportacion = BaseHilo & Pick<typeof db, "configuracion">;
@@ -42,8 +42,6 @@ export interface ExportacionRecorrido {
   sesiones: { id: string; fecha: string }[];
   progreso: ProgresoClinico;
 }
-
-const iso = (d: Date | null) => d?.toISOString() ?? null;
 
 export async function exportarRecorrido(
   prisma: ClienteExportacion,
@@ -75,15 +73,13 @@ export async function exportarRecorrido(
     });
     const contenidoDe = new Map(contenidos.map(c => [c.id, contenidoHiloSchema.parse(c.contenido)]));
 
-    const resumen = (f: (typeof filas)[number]): ResumenVersionHilo => ({
-      ...f, creadaEn: f.creadaEn.toISOString(), resueltaEn: iso(f.resueltaEn),
-    });
+    const resumen = (f: (typeof filas)[number]): ResumenVersionHilo => aResumen(f);
     const completa = (f: (typeof filas)[number]): VersionHilo => ({ ...resumen(f), contenido: contenidoDe.get(f.id)! });
     const vigente = filas.find(f => f.id === hilo?.vigenteId);
     const anteriores = conContenido.filter(f => f.id !== hilo?.vigenteId);
 
     const sesiones = await tx.sesionClinica.findMany({
-      where: { organizationId: identidad.organizationId, estado: "aprobada", turno: { pacienteId: identidad.pacienteId } },
+      where: whereAprobadasDe(identidad),
       select: { id: true, turno: { select: { fecha: true } } },
       orderBy: [{ turno: { fecha: "asc" } }, { id: "asc" }],
     });

@@ -1,6 +1,6 @@
 import { parseDatosEstructurados, flagRiesgoSchema } from "@/lib/sesion-clinica/schema";
 import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
-import { exigirPaciente, filtroHilo, leerVersion, type BaseHilo, type IdentidadHilo } from "./base";
+import { exigirPaciente, filtroHilo, leerVersion, whereAprobadasDe, type BaseHilo, type IdentidadHilo } from "./base";
 
 /** Composición determinística: solo la nota aprobada y el Recorrido vigente. */
 export async function leerBrief(prisma: BaseHilo, identidad: IdentidadHilo, ahora = new Date()) {
@@ -10,7 +10,7 @@ export async function leerBrief(prisma: BaseHilo, identidad: IdentidadHilo, ahor
     const vigente = hilo?.vigente ? await leerVersion(tx, identidad, hilo.vigente.version) : null;
     const propuestaPendiente = await tx.hiloVersion.count({ where: { ...filtroHilo(identidad), estado: "propuesta" } }) > 0;
     const sesion = await tx.sesionClinica.findFirst({
-      where: { organizationId: identidad.organizationId, estado: "aprobada", turno: { pacienteId: identidad.pacienteId } },
+      where: whereAprobadasDe(identidad),
       orderBy: [{ turno: { fecha: "desc" } }, { id: "desc" }],
       select: { datos: true, notaFinal: true, turno: { select: { fecha: true } } },
     });
