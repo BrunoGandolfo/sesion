@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { mensajeParaElla } from "@/lib/api-client";
+import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { ESTADOS_EN_PIPELINE } from "@/lib/sesion-clinica/estados";
 import {
   parseDatosEstructurados,
@@ -187,21 +187,13 @@ export function useSesionClinicaPolling(
     actualizarEstado(id, { loading: true });
 
     try {
-      const res = await fetch(`/api/sesion-clinica/${id}`, {
-        signal: controller.signal,
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      // La API envuelve la sesión en { data: ... } (responses.ts → ok()).
-      const body = (await res.json()) as { data: SesionClinicaApi | null };
-      if (!body.data) {
+      const fila = await apiGet<SesionClinicaApi | null>(
+        `/api/sesion-clinica/${id}`,
+        { signal: controller.signal },
+      );
+      if (!fila) {
         throw new Error("Sesión clínica no disponible");
       }
-      const fila = body.data;
       const normalized = normalizarSesionClinica(fila);
 
       if (controller.signal.aborted) return;
@@ -210,8 +202,7 @@ export function useSesionClinicaPolling(
       actualizarEstado(id, { data: normalized, error: null });
       onSesionRef.current?.({ fila, sesion: normalized });
     } catch (err) {
-      if (controller.signal.aborted) return;
-      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (controller.signal.aborted || esAbort(err)) return;
       actualizarEstado(id, {
         error: mensajeParaElla(err),
       });

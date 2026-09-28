@@ -4,6 +4,15 @@ import * as React from "react";
 import { X } from "lucide-react";
 import { Button, Card, Chip, Input, Plegable } from "@/components/ui";
 import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  ApiClientError,
+  esAbort,
+  mensajeParaElla,
+} from "@/lib/api-client";
+import {
   excedeMaximoPalabras,
   MAX_PALABRAS_TERMINO,
   TERMINO_MUY_LARGO,
@@ -121,10 +130,7 @@ async function cargarHotWords(
 ): Promise<HotWord[]> {
   const params = new URLSearchParams({ scope });
   if (pacienteId) params.set("pacienteId", pacienteId);
-  const res = await fetch(`/api/hot-words?${params.toString()}`, { signal });
-  if (!res.ok) throw new Error("No se pudo cargar el vocabulario.");
-  const json = (await res.json()) as { data: HotWord[] };
-  return json.data;
+  return apiGet<HotWord[]>(`/api/hot-words?${params.toString()}`, { signal });
 }
 
 function tituloScope(scope: Scope, pacienteNombre?: string): string {
@@ -173,8 +179,7 @@ export function HotWordsManager({
         setLoading(false);
       })
       .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (controller.signal.aborted || esAbort(err)) return;
         setLoadError(true);
         setLoading(false);
       });
@@ -231,29 +236,20 @@ export function HotWordsManager({
     setAgregando(true);
     setErrorAgregar(null);
     try {
-      const res = await fetch("/api/hot-words", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          termino,
-          categoria: nuevaCategoria,
-          scope,
-          pacienteId: pacienteId ?? null,
-        }),
+      const creado = await apiPost<HotWord>("/api/hot-words", {
+        termino,
+        categoria: nuevaCategoria,
+        scope,
+        pacienteId: pacienteId ?? null,
       });
-      if (res.status === 409) {
-        setErrorAgregar("Este término ya existe");
-        return;
-      }
-      if (!res.ok) {
-        setErrorAgregar("No pudimos agregar el término. Intentá de nuevo.");
-        return;
-      }
-      const json = (await res.json()) as { data: HotWord };
-      setItems((prev) => [json.data, ...prev]);
+      setItems((prev) => [creado, ...prev]);
       setNuevoTermino("");
-    } catch {
-      setErrorAgregar("No pudimos agregar el término. Intentá de nuevo.");
+    } catch (err) {
+      setErrorAgregar(
+        err instanceof ApiClientError && err.status === 409
+          ? "Este término ya existe"
+          : mensajeParaElla(err, "No pudimos agregar el término. Intentá de nuevo."),
+      );
     } finally {
       setAgregando(false);
     }
@@ -265,12 +261,7 @@ export function HotWordsManager({
       prev.map((i) => (i.id === id ? { ...i, activo } : i)),
     );
     try {
-      const res = await fetch(`/api/hot-words/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activo }),
-      });
-      if (!res.ok) throw new Error();
+      await apiPatch(`/api/hot-words/${id}`, { activo });
     } catch {
       setItems(previous);
     }
@@ -285,8 +276,7 @@ export function HotWordsManager({
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
     try {
-      const res = await fetch(`/api/hot-words/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      await apiDelete(`/api/hot-words/${id}`);
     } catch {
       setItems(previous);
     }
@@ -307,28 +297,20 @@ export function HotWordsManager({
       // El POST masivo espera { hotWords: [...] }, un item completo por
       // término: mandaba { terminos, categoria, scope } —una forma que la
       // ruta nunca aceptó— y caía siempre en el 400 del item suelto.
-      const res = await fetch("/api/hot-words", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hotWords: terminosBulk.map((termino) => ({
-            termino,
-            scope,
-            categoria: bulkCategoria,
-            pacienteId: scope === "paciente" ? pacienteId ?? null : null,
-          })),
-        }),
+      await apiPost("/api/hot-words", {
+        hotWords: terminosBulk.map((termino) => ({
+          termino,
+          scope,
+          categoria: bulkCategoria,
+          pacienteId: scope === "paciente" ? pacienteId ?? null : null,
+        })),
       });
-      if (!res.ok) {
-        setBulkError("No pudimos importar la lista. Intentá de nuevo.");
-        return;
-      }
       // createMany devuelve { count }, no las filas: los repetidos se saltean
       // en silencio, así que la lista se relee en vez de adivinarla.
       setBulkText("");
       reintentarCarga();
-    } catch {
-      setBulkError("No pudimos importar la lista. Intentá de nuevo.");
+    } catch (err) {
+      setBulkError(mensajeParaElla(err, "No pudimos importar la lista. Intentá de nuevo."));
     } finally {
       setImportando(false);
     }
