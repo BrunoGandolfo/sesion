@@ -11,6 +11,7 @@ import {
   type SesionClinicaApiBase,
   type SesionClinicaEnsamblada,
 } from "@/hooks/useSesionClinicaPolling";
+import { errorDeRespuesta, mensajeParaElla } from "@/lib/api-client";
 import type { Turno } from "@/types/domain";
 
 interface UseGrabacionSesionOptions {
@@ -22,11 +23,9 @@ interface UseGrabacionSesionResult {
   loading: boolean;
 }
 
+/** El `error` de la API o un texto para ella; nunca "HTTP 500". */
 async function parseError(res: Response): Promise<string> {
-  const body = (await res.json().catch(() => null)) as
-    | { error?: string }
-    | null;
-  return body?.error ?? `HTTP ${res.status}`;
+  return mensajeParaElla(await errorDeRespuesta(res));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -196,7 +195,7 @@ export async function volverAGrabando(sesionClinicaId: string): Promise<void> {
  * sin que nadie se enterara — la nota llegaba igual, así que no había ni un
  * síntoma que hiciera sospechar.
  *
- * Lanza Error con el mensaje de la API (o `HTTP <status>`) si la respuesta no
+ * Lanza Error con el mensaje de la API (o uno genérico) si la respuesta no
  * es 2xx; el error de red de `fetch` se propaga tal cual.
  */
 export async function marcarTurnoRealizado(turnoId: string): Promise<void> {

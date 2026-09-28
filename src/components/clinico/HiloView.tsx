@@ -3,17 +3,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, Card } from "@/components/ui";
-import { apiGet, apiPost, ApiClientError, esAbort } from "@/lib/api-client";
+import { apiGet, apiPost, ApiClientError, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { formatearFechaCompletaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
 import { contenidoHiloSchema, hiloVacio, type ContenidoHilo, type Recorrido, type VersionHilo } from "@/lib/hilo/contenido";
 import { HiloContenido, ORDEN_PANTALLA } from "./HiloContenido";
 import { HiloEditor } from "./HiloEditor";
 import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
-import { SALIDA_RECORRIDO, DESCARTAR_BORRADOR, DESCARTAR_PROPUESTA, DESCARTAR_BORRADOR_ACCION } from "@/lib/glosario";
+import { SALIDA_RECORRIDO, DESCARTAR_BORRADOR, DESCARTAR_PROPUESTA, DESCARTAR_BORRADOR_ACCION, RECORRIDO_NO_CARGO } from "@/lib/glosario";
 
 type Borrador = { basadaEnVersion: number; contenido: ContenidoHilo; propuestaId?: string };
 const fecha = (iso: string) => `${formatearFechaCompletaMvd(new Date(iso))}, ${formatearHoraMvd(new Date(iso))}`;
-const mensaje = (e: unknown) => e instanceof Error ? e.message : "No pudimos cargar el Recorrido. Probá de nuevo.";
+const mensaje = (e: unknown) => mensajeParaElla(e, RECORRIDO_NO_CARGO);
 
 // El orden de la pantalla: la versión vigente (lo que el Recorrido tiene y la
 // lista de sesiones no), lo que está por resolverse —propuestas y tu borrador—,

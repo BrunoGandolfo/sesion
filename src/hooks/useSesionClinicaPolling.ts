@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { mensajeParaElla } from "@/lib/api-client";
 import { ESTADOS_EN_PIPELINE } from "@/lib/sesion-clinica/estados";
 import {
   parseDatosEstructurados,
@@ -212,7 +213,7 @@ export function useSesionClinicaPolling(
       if (controller.signal.aborted) return;
       if (err instanceof DOMException && err.name === "AbortError") return;
       actualizarEstado(id, {
-        error: err instanceof Error ? err.message : "Error al cargar la sesión",
+        error: mensajeParaElla(err),
       });
     } finally {
       if (!controller.signal.aborted) {

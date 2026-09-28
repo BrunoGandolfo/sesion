@@ -24,6 +24,8 @@
 // ANTES de conectar: DNS que no resuelve, conexión rechazada. Ahí el cuerpo
 // no viajó.
 
+import { detalleDeError } from "@/lib/detalle-error";
+
 import { clasificarRespuesta, type Clasificacion } from "./clasificar";
 
 /** Timeout de la llamada. Diez segundos: con concurrencia 5 y un deadline
@@ -146,7 +148,7 @@ export async function enviarSmsTwilio(
     if (error instanceof Error && error.name === "AbortError") {
       return { tipo: "desconocido", motivo: `Twilio no respondió en ${(opciones.timeoutMs ?? TIMEOUT_TWILIO_MS) / 1000} s` };
     }
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = detalleDeError(error);
     return { tipo: "desconocido", motivo: `la conexión con Twilio se cortó (${red ?? msg})` };
   }
   clearTimeout(timer);

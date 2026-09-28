@@ -23,6 +23,7 @@ import * as Sentry from "@sentry/nextjs";
 
 import { detalleSeguro } from "@/app/api/_lib/auditoria-pura";
 import { enviarCorreo } from "@/lib/correo";
+import { detalleDeError } from "@/lib/detalle-error";
 import type { NivelAlerta } from "@/lib/salud-metricas";
 
 export type { NivelAlerta };
@@ -120,7 +121,7 @@ export async function alertar(
       );
       return true;
     } catch (e) {
-      ultimo = e instanceof Error ? e.message : String(e);
+      ultimo = detalleDeError(e);
       const espera = ESPERAS_MS[intento];
       if (espera !== undefined) await esperar(espera);
     }

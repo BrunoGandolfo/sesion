@@ -1754,3 +1754,10 @@ export const DESCARTAR_GRABACION_MENSAJE =
 export const DESCARTAR_GRABACION_ACCION = "Descartar la grabación";
 export const DESCARTANDO_GRABACION = "Descartando…";
 export const NO_SE_PUDO_DESCARTAR = "No se pudo descartar la grabación. Probá de nuevo.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pantalla del Recorrido (src/components/clinico/HiloView.tsx)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Cualquier fallo del Recorrido que la API no explicó. */
+export const RECORRIDO_NO_CARGO = "No pudimos cargar el Recorrido. Probá de nuevo.";

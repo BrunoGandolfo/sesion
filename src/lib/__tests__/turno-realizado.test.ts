@@ -76,10 +76,12 @@ describe("marcarTurnoRealizado", () => {
     );
   });
 
-  it("lanza con el status cuando el error no trae mensaje", async () => {
+  it("sin mensaje de la API lanza un texto para ella, no el status", async () => {
     globalThis.fetch = fetchQueDevuelve(false, 500, null) as unknown as typeof fetch;
 
-    await expect(marcarTurnoRealizado(TURNO_ID)).rejects.toThrow("HTTP 500");
+    await expect(marcarTurnoRealizado(TURNO_ID)).rejects.toThrow(
+      "No pudimos completar la operación. Intentá de nuevo.",
+    );
   });
 
   it("propaga el error de red: la pantalla tiene que poder mostrarlo", async () => {
