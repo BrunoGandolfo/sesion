@@ -25,7 +25,12 @@ import type { FilaSesionClinica } from "../../sesion-clinica";
 import { crearTrabajo } from "../trabajos/crear";
 
 import { leerSesion } from "./leer";
-import { transicionar, type ClienteTransaccional } from "./transicion";
+import {
+  exigirEstado,
+  MENSAJE_NO_ENCONTRADA,
+  transicionar,
+  type ClienteTransaccional,
+} from "./transicion";
 
 export interface AprobarSesionInput {
   prisma: ClienteTransaccional;
@@ -70,10 +75,8 @@ export async function aprobarSesion({
       turno: { select: { pacienteId: true } },
     },
   });
-  if (!existente) throw new ApiError("Sesión clínica no encontrada", 404);
-  if (existente.estado !== "revision") {
-    throw new ApiError("Solo se puede aprobar una nota en revisión", 409);
-  }
+  if (!existente) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
+  exigirEstado(existente.estado, "aprobar", "Solo se puede aprobar una nota en revisión");
 
   if (existente.generacion !== generacion) {
     throw new ApiError("La nota cambió. Revisá la nota actual antes de aprobar; tu borrador se conserva en esta pantalla.", 409);

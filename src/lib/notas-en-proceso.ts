@@ -29,6 +29,8 @@
 // (src/lib/__tests__/notas-en-proceso.test.ts); el almacén de abajo es lo
 // mínimo para compartirlas entre pantallas con useSyncExternalStore.
 
+import { estaEnProceso } from "@/lib/sesion-clinica/estados";
+
 /** Lo que devuelve GET /api/sesion-clinica/avisos, fila por fila. */
 export interface AvisoServidor {
   id: string;
@@ -99,9 +101,10 @@ export const MARGEN_VISTA_MS = 5_000;
 /** Cuántas resueltas se recuerdan: las del día, con margen. */
 const MAX_RESUELTAS = 30;
 
-/** La sesión está en camino hacia la nota: subida o en manos del worker. */
+/** La sesión está en camino hacia la nota: subida o en manos del worker.
+ *  La lista es ESTADOS_EN_PROCESO (sesion-clinica/estados.ts). */
 export function enProceso(estado: string | null | undefined): boolean {
-  return estado === "subiendo" || estado === "procesando";
+  return estaEnProceso(estado);
 }
 
 /** Lo que dicen la franja y el globito: los avisos menos los ya abiertos acá. */

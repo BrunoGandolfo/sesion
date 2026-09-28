@@ -10,7 +10,10 @@ import {
   sePuedeGrabar,
 } from "@/app/api/_lib/domain";
 import { hora, money } from "@/lib/format";
-import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
+import {
+  esGrabacionSinTerminar,
+  ESTADOS_CON_NOTA,
+} from "@/lib/sesion-clinica/estados";
 import {
   AGENDADO,
   CANCELADO,
@@ -81,9 +84,6 @@ type Accion = {
   onClick: () => void;
 };
 
-/** Alias viejo de "procesando" que todavía llega en filas antiguas. */
-const ESTADOS_PROCESANDO: ReadonlyArray<string> = ["procesando", "transcribiendo"];
-
 /**
  * El estado clínico del turno, separado del pago. Son dos cosas distintas y
  * se dicen por separado: una nota que FALLÓ se veía en su fila sólo como
@@ -107,9 +107,8 @@ export function estadoClinicoDe(
  *  "subiendo" la grabación quedó a medias y GrabarView.asegurarSesion sabe
  *  retomarla. */
 const ESTADOS_PASADA_LA_GRABACION: ReadonlyArray<string> = [
-  ...ESTADOS_PROCESANDO,
-  "revision",
-  "aprobada",
+  "procesando",
+  ...ESTADOS_CON_NOTA,
 ];
 
 function statusFor(turno: TurnoConPaciente): Status {
@@ -192,7 +191,7 @@ export function SessionRow(props: SessionRowProps) {
   const acciones = accionesDe(props);
   const sesion = turno.sesionClinica;
   const nota = estadoClinicoDe(sesion);
-  const procesando = sesion && ESTADOS_PROCESANDO.includes(sesion.estado);
+  const procesando = sesion?.estado === "procesando";
   // Grabación o subida que quedó a medias (esGrabacionSinTerminar): no se
   // está procesando. Lleva a la pantalla de grabar, que ofrece la copia guardada en
   // el teléfono. Sin `ahora` (Agenda) vale el reloj del navegador.

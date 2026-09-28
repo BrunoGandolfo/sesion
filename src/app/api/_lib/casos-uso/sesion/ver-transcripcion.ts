@@ -7,7 +7,7 @@
 import { registrarAuditoria } from "../../auditoria";
 import { ApiError } from "../../responses";
 
-import type { ClienteSesion } from "./transicion";
+import { MENSAJE_NO_ENCONTRADA, type ClienteSesion } from "./transicion";
 
 /** Convención del worker: la terapeuta es siempre el hablante S0. */
 export const HABLANTE_TERAPEUTA = "S0";
@@ -35,7 +35,7 @@ export async function verTranscripcion({
     // `transcripcion` es el campo lógico: la extensión lo descifra al leer.
     select: { id: true, estado: true, transcripcion: true },
   });
-  if (!sesion) throw new ApiError("Sesión clínica no encontrada", 404);
+  if (!sesion) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
 
   const transcripcion = sesion.transcripcion;
   if (!transcripcion) {

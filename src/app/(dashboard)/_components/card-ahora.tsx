@@ -32,7 +32,11 @@ import { Latido } from "@/components/ui/movimiento";
 import { IndicadorProcesando } from "@/components/ui/procesando";
 import { sePuedeGrabar } from "@/app/api/_lib/domain";
 import { estadoClinicoDe } from "@/components/ui/session-row";
-import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
+import {
+  esGrabacionSinTerminar,
+  estaEnProceso,
+  puede,
+} from "@/lib/sesion-clinica/estados";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
 import {
@@ -128,13 +132,11 @@ export function accionDe(
   // y se retoma como una grabación (la pantalla de grabar ofrece la copia
   // guardada en el teléfono).
   const sinTerminar = esGrabacionSinTerminar(sesion, ahora);
-  if (
-    (sesion?.estado === "subiendo" && !sinTerminar) ||
-    sesion?.estado === "procesando"
-  ) {
+  if (estaEnProceso(sesion?.estado) && !sinTerminar) {
     return { tipo: "escribiendo" };
   }
-  const sinGrabar = sesion === null || sesion.estado === "grabando" || sinTerminar;
+  const sinGrabar =
+    sesion === null || puede("empezar_subida", sesion.estado) || sinTerminar;
   const grabable = sinGrabar && sePuedeGrabar(turno, ahora);
   const grabar = grabable ? (sinAutorizacion ? "autorizar" : "grabar") : null;
   const firma =

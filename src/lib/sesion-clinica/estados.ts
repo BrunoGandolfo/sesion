@@ -1,10 +1,14 @@
 // La máquina de estados de la sesión clínica, como entidad de dominio.
 //
 // ÚNICA fuente de verdad de qué operaciones existen, desde qué estado valen
-// y en qué estado dejan la fila. La consumen `transicionar` (que arma el
-// UPDATE condicionado, src/app/api/_lib/casos-uso/sesion/transicion.ts) y las
-// pantallas (qué botón ofrecer). Ninguna ruta ni pantalla escribe su propia
-// tabla de transiciones; ningún PATCH genérico puede pedir un estado.
+// y en qué estado dejan la fila. La consumen:
+//   - `transicionar`, `whereTransicion` y `exigirEstado` (el UPDATE
+//     condicionado y las pre-lecturas, src/app/api/_lib/casos-uso/sesion/
+//     transicion.ts), y `aplicarResultadoSesion`, que devuelve el `hacia` de
+//     la tabla;
+//   - las pantallas, a través de `puede`: qué botón ofrecer.
+// Ninguna ruta ni pantalla escribe su propia tabla de transiciones; ningún
+// PATCH genérico puede pedir un estado.
 //
 // Módulo puro: sin Prisma, sin Node. Lo importa código de cliente.
 //
@@ -112,6 +116,21 @@ export function operacion(nombre: NombreOperacion): Operacion {
   return OPERACIONES[nombre];
 }
 
+/**
+ * ¿Vale la operación sobre una sesión en `estado`? `null`/`undefined` es "no
+ * hay sesión": sólo vale una operación que crea la fila (`desde` vacío). Es
+ * la pregunta que se hacen las pantallas antes de ofrecer un botón y las
+ * pre-lecturas de los casos de uso antes de escribir.
+ */
+export function puede(
+  nombre: NombreOperacion,
+  estado: EstadoSesion | string | null | undefined,
+): boolean {
+  const { desde } = OPERACIONES[nombre] as Operacion;
+  if (estado == null) return desde.length === 0;
+  return (desde as ReadonlyArray<string>).includes(estado);
+}
+
 /** Todas las operaciones, con el tipo ancho (sin las tuplas literales). */
 export const LISTA_OPERACIONES: ReadonlyArray<
   Operacion & { nombre: NombreOperacion }
@@ -130,6 +149,26 @@ export const ESTADOS_EN_PIPELINE: ReadonlySet<EstadoSesion> = new Set(
     ),
   ),
 );
+
+/**
+ * La sesión está en camino hacia la nota: el audio se está subiendo o el
+ * worker la tiene. Las pantallas la muestran "escribiéndose" y no ofrecen
+ * nada (salvo que la subida haya quedado a medias: esGrabacionSinTerminar).
+ * A diferencia de ESTADOS_EN_PIPELINE, no incluye `grabando`: mientras se
+ * graba la nota todavía no empezó.
+ */
+export const ESTADOS_EN_PROCESO: ReadonlyArray<EstadoSesion> = ["subiendo", "procesando"];
+
+export function estaEnProceso(estado: EstadoSesion | string | null | undefined): boolean {
+  return estado != null && (ESTADOS_EN_PROCESO as ReadonlyArray<string>).includes(estado);
+}
+
+/** Estados en los que la sesión tiene una nota escrita: la que espera
+ *  revisión y la aprobada. Son los `hacia` de `resultado_nota` y `aprobar`. */
+export const ESTADOS_CON_NOTA: ReadonlyArray<EstadoSesion> = [
+  OPERACIONES.resultado_nota.hacia,
+  OPERACIONES.aprobar.hacia,
+];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Audio en R2: la key se calcula, nunca se persiste ni la manda un cliente.
@@ -203,12 +242,12 @@ function aEpochMs(valor: Date | string | null | undefined): number | null {
 }
 
 /**
- * Regla única de "sesión huérfana": necesita que alguien haga algo.
- *
- * - `fallida`: siempre (reintentar o eliminar).
- * - `grabando` o `subiendo`: si la última actualización fue hace más de
- *   UMBRAL_HUERFANA_HORAS. Sin fecha no se considera huérfana: nunca se
- *   ofrece abandonar una grabación posiblemente activa.
+ * ¿La abandona el mantenimiento? Una sesión en `grabando` o `subiendo` cuya
+ * última actualización fue hace más de UMBRAL_HUERFANA_HORAS. Sin fecha no
+ * se considera huérfana: nunca se abandona una grabación posiblemente
+ * activa. (Una `fallida` ya no cuenta: tenía una rama que su único llamador,
+ * casos-uso/mantenimiento.ts, nunca alcanzaba —preselecciona
+ * ESTADOS_SIN_TERMINAR—; la fallida la resuelve ella desde Pendientes.)
  */
 export function esHuerfana(
   sesion: {
@@ -218,8 +257,7 @@ export function esHuerfana(
   },
   ahora: Date = new Date(),
 ): boolean {
-  if (sesion.estado === "fallida") return true;
-  if (sesion.estado !== "grabando" && sesion.estado !== "subiendo") {
+  if (!(ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado)) {
     return false;
   }
   const referencia = aEpochMs(sesion.actualizadaEn) ?? aEpochMs(sesion.creadaEn);

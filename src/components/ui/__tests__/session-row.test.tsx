@@ -51,7 +51,9 @@ it.each([["revision", "Para revisar"], ["aprobada", "Nota lista"]])("enlaza la n
   expect(abrirTurno).toHaveBeenCalledOnce();
 });
 
-it.each(["procesando", "transcribiendo"])("muestra %s sin enlace ni opción de grabar de nuevo", (estado) => {
+// El alias viejo de "procesando" no es un estado del enum (estado_sesion): la
+// fila ya no lo reconoce.
+it.each(["procesando"])("muestra %s sin enlace ni opción de grabar de nuevo", (estado) => {
   render(<SessionRow turno={{ ...TURNO, estado: "programado", sesionClinica: { id: "nota-1", estado } }} onGrabar={vi.fn()} />);
   expect(screen.getByRole("status").textContent).toBe("Procesando");
   expect(enlacesANota()).toHaveLength(0);

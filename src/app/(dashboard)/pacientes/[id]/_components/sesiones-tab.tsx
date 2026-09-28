@@ -29,7 +29,11 @@ import { fechaInputMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
 import { Button, Card, Chip } from "@/components/ui";
 import { IndicadorProcesando } from "@/components/ui/procesando";
 import { enProceso } from "@/lib/notas-en-proceso";
-import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
+import {
+  ESTADOS_CON_NOTA,
+  esGrabacionSinTerminar,
+  puede,
+} from "@/lib/sesion-clinica/estados";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
@@ -234,7 +238,7 @@ export function SesionesTab({
   const listaActual =
     lista.pacienteId === pacienteId ? lista : listaInicial(pacienteId);
   const notaDeHoy =
-    sesionHoy && (sesionHoy.estado === "revision" || sesionHoy.estado === "aprobada")
+    sesionHoy && (ESTADOS_CON_NOTA as ReadonlyArray<string>).includes(sesionHoy.estado)
       ? sesionHoy.estado
       : null;
 
@@ -531,16 +535,16 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
   let accion: React.ReactNode;
   if (cargando) {
     accion = <p className="font-sans text-[13px] text-ink-500">Cargando…</p>;
-  } else if (!sesion || sesion.estado === "grabando" || sinTerminar) {
+  } else if (!sesion || puede("empezar_subida", sesion.estado) || sinTerminar) {
     accion = (
       <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
         <Mic size={16} strokeWidth={1.8} aria-hidden="true" />
         {GRABAR_SESION}
       </Link>
     );
-  } else if (sesion.estado === "subiendo" || sesion.estado === "procesando") {
+  } else if (enProceso(sesion.estado)) {
     accion = <IndicadorProcesando paciente={paciente} className="w-full" />;
-  } else if (sesion.estado === "revision") {
+  } else if (puede("aprobar", sesion.estado)) {
     // La lista todavía no la trajo con su nota (se está volviendo a pedir).
     accion = (
       <Link href={`/sesiones/${sesion.id}`} className={ENLACE_PRIMARIO}>

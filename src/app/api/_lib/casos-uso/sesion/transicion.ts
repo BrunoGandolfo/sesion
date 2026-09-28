@@ -18,6 +18,7 @@ import type { Prisma } from "@prisma/client";
 import type { db } from "@/lib/db";
 import {
   operacion,
+  puede,
   type EstadoSesion,
   type NombreOperacion,
 } from "@/lib/sesion-clinica/estados";
@@ -62,7 +63,22 @@ export interface TransicionInput {
 export const MENSAJE_CONFLICTO =
   "La sesión cambió mientras se procesaba el pedido. Volvé a abrirla.";
 
-export const MENSAJE_NO_ENCONTRADA = "Sesión no encontrada";
+/** El 404 de toda la máquina: la sesión no existe o es de otra organización. */
+export const MENSAJE_NO_ENCONTRADA = "Sesión clínica no encontrada";
+
+/**
+ * La pre-lectura de un caso de uso que quiere contestar con un mensaje
+ * propio ANTES de escribir: 409 con `mensaje` si la operación no vale desde
+ * `estado` (la tabla, no un literal). La escritura igual va condicionada
+ * (`transicionar` / `whereTransicion`): esto sólo elige las palabras.
+ */
+export function exigirEstado(
+  estado: EstadoSesion | string,
+  nombre: NombreOperacion,
+  mensaje: string,
+): void {
+  if (!puede(nombre, estado)) throw new ApiError(mensaje, 409);
+}
 
 /** `where` de una transición: id, organización, estados de partida e intento. */
 export function whereTransicion({
