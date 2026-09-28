@@ -4,7 +4,7 @@ import { notaSoapSchema } from "@/lib/sesion-clinica/schema";
 
 import { getSessionActor } from "../../../_lib/auth";
 import { aprobarSesion } from "../../../_lib/casos-uso/sesion/aprobar";
-import { errorResponse, ok, validationError } from "../../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { toSesionClinicaResponse } from "../../../_lib/sesion-clinica";
 
 export const runtime = "nodejs";
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const parsed = aprobarSchema.safeParse(await request.json());
+    const parsed = aprobarSchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
 
     const sesion = await aprobarSesion({

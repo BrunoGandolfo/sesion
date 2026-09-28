@@ -13,7 +13,7 @@ import { hashTokenSesion, nuevoTokenSesion } from "@/lib/sesion-acceso";
 import { cookieDeSesion } from "@/lib/sesion-cookie";
 
 import { registrarCuenta } from "../../_lib/casos-uso/registrar-cuenta";
-import { ApiError, errorResponse, ok } from "../../_lib/responses";
+import { ApiError, errorResponse, leerJson, ok } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const tokenSesion = nuevoTokenSesion();
-    await registrarCuenta(schema.parse(await request.json()), {
+    await registrarCuenta(schema.parse(await leerJson(request)), {
       repo: repositorioRegistro(db),
       hashear: (password) => bcrypt.hash(password, BCRYPT_RONDAS),
       tokenSesion,

@@ -11,7 +11,7 @@ import { huellaDeRequest } from "@/lib/request-huella";
 import { cookieDeSesion } from "@/lib/sesion-cookie";
 
 import { iniciarSesion } from "../../_lib/casos-uso/iniciar-sesion";
-import { ApiError, errorResponse, ok } from "../../_lib/responses";
+import { ApiError, errorResponse, leerJson, ok } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const datos = schema.parse(await request.json());
+    const datos = schema.parse(await leerJson(request));
     const resultado = await iniciarSesion({
       prisma: db,
       email: datos.email,

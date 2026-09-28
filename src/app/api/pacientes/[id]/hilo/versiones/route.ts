@@ -5,7 +5,7 @@ import { getSessionActor } from "@/app/api/_lib/auth";
 import { editarHilo } from "@/app/api/_lib/casos-uso/hilo/escribir";
 import { historialHilo } from "@/app/api/_lib/casos-uso/hilo/leer";
 import { autorizarEdicionHilo, responderHilo } from "@/app/api/_lib/hilo-http";
-import { errorResponse } from "@/app/api/_lib/responses";
+import { errorResponse, leerJson } from "@/app/api/_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: Contexto) {
   try {
     const { id } = await params;
     const { organizationId, userId } = await autorizarEdicionHilo(request);
-    const datos = editarHiloSchema.parse(await request.json());
+    const datos = editarHiloSchema.parse(await leerJson(request));
     return responderHilo(await editarHilo({ prisma: db, pacienteId: id, organizationId, usuarioId: userId, ...datos }));
   } catch (error) { return errorResponse(error); }
 }

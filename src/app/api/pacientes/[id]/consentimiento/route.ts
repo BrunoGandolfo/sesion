@@ -8,12 +8,7 @@ import {
   obtenerConsentimiento,
   revocarConsentimiento,
 } from "../../../_lib/casos-uso/consentimiento";
-import {
-  ApiError,
-  errorResponse,
-  ok,
-  validationError,
-} from "../../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,14 +22,6 @@ const createConsentimientoSchema = z.object({
   firmaDigital: z.string().trim().min(1, "Falta la firma digital"),
   textoVersion: z.string().trim().min(1, "Falta la versión del texto"),
 });
-
-async function parseJsonBody(request: Request) {
-  try {
-    return await request.json();
-  } catch {
-    throw new ApiError("JSON inválido", 400);
-  }
-}
 
 // getSessionActor y no getOrganizationId incluso en el GET: la ruta resuelve
 // la sesión una sola vez y el caso de uso necesita QUIÉN para el rastro.
@@ -63,9 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
-    const parsed = createConsentimientoSchema.safeParse(
-      await parseJsonBody(request),
-    );
+    const parsed = createConsentimientoSchema.safeParse(await leerJson(request));
     if (!parsed.success) {
       return validationError(parsed.error);
     }

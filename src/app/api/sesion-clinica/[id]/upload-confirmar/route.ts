@@ -8,7 +8,7 @@ import { almacenAudio, r2Configurado } from "@/lib/r2";
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { confirmarSubida, diagnosticoParaAuditoria, MENSAJE_NO_LLEGO } from "../../../_lib/casos-uso/audio";
-import { ApiError, errorResponse, ok, validationError } from "../../../_lib/responses";
+import { ApiError, errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { uploadConfirmarSchema } from "../../../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const parsed = uploadConfirmarSchema.safeParse(await request.json().catch(() => null));
+    const parsed = uploadConfirmarSchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
 
     if (!r2Configurado()) {
