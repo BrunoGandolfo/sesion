@@ -69,7 +69,7 @@ def test_fallback_de_modelo_reportado(http):
 
 def test_4xx_en_polling_corta_sin_reintentar(http):
     mocker, _, get, delete = http
-    get.return_value = _resp(mocker, 401, {"error": "unauthorized"})
+    get.return_value = _resp(mocker, 404, {"error": "not found"})
 
     with pytest.raises(PipelineError) as exc:
         asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
@@ -82,10 +82,19 @@ def test_4xx_en_polling_corta_sin_reintentar(http):
 @pytest.mark.parametrize("etapa", ["upload", "transcript"])
 @pytest.mark.parametrize(
     "status, codigo, definitivo",
-    [(400, "asr_rechazado", True), (422, "asr_rechazado", True), (429, "asr_error", False), (503, "asr_error", False)],
+    [
+        (400, "asr_rechazado", True),
+        (422, "asr_rechazado", True),
+        (401, "asr_error", False),
+        (403, "asr_error", False),
+        (429, "asr_error", False),
+        (503, "asr_error", False),
+    ],
 )
-def test_un_4xx_que_no_es_429_es_un_rechazo_definitivo(http, etapa, status, codigo, definitivo):
-    # Un 400 por payload repetiria la subida del audio en cada vuelta.
+def test_un_4xx_que_no_es_401_403_ni_429_es_un_rechazo_definitivo(http, etapa, status, codigo, definitivo):
+    # Un 400 por payload repetiria la subida del audio en cada vuelta. Una
+    # credencial revocada (401/403) se arregla desde afuera: la sesion
+    # reintenta sola.
     mocker, post, get, _ = http
     malo = _resp(mocker, status, {"error": "bad request"})
     if etapa == "upload":
@@ -415,3 +424,18 @@ def test_borrar_devuelve_el_status_o_none_sin_lanzar(mocker):
     assert asr_assemblyai._borrar("tr1") == 404
     delete.side_effect = requests.ConnectionError("caida")
     assert asr_assemblyai._borrar("tr1") is None
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_una_credencial_rechazada_en_polling_es_transitoria(http, status):
+    # La clave revocada en medio de una corrida: corta el polling, pero la
+    # sesion vuelve a la cola en vez de quedar fallida.
+    mocker, _, get, delete = http
+    get.return_value = _resp(mocker, status, {"error": "unauthorized"})
+
+    with pytest.raises(PipelineError) as exc:
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
+
+    assert (exc.value.codigo, exc.value.definitivo) == ("asr_error", False)
+    assert get.call_count == 1
+    delete.assert_called_once()

@@ -124,12 +124,19 @@ def _codigo_error(response: requests.Response) -> str:
     return str(err)[:80] if err else ""
 
 
+# 4xx que NO son un rechazo de la request: 401/403 son la credencial (una
+# clave revocada o sin permiso se arregla desde afuera, en operacion) y 429 es
+# el limite de tasa. En los tres, la misma request va a andar mas tarde.
+_4XX_TRANSITORIOS = frozenset({401, 403, 429})
+
+
 def _fallo_http(response: requests.Response, etapa: str) -> PipelineError:
     """
-    Un 4xx que no sea 429 es un rechazo de la request (payload, audio,
-    credencial): repetirla da lo mismo, y cada vuelta volveria a subir el
-    audio. Es `asr_rechazado`, definitivo. El 429 y los 5xx son `asr_error`,
-    transitorio: la sesion vuelve a la cola con backoff.
+    Un 4xx que no sea 401, 403 ni 429 es un rechazo de la request (payload,
+    audio): repetirla da lo mismo, y cada vuelta volveria a subir el audio. Es
+    `asr_rechazado`, definitivo. El 401 y el 403 (la credencial), el 429 y los
+    5xx son `asr_error`, transitorio: la sesion vuelve a la cola con backoff y
+    se reintenta sola cuando operacion repone la clave.
     """
     codigo = _codigo_error(response)
     logger.error(
@@ -137,7 +144,8 @@ def _fallo_http(response: requests.Response, etapa: str) -> PipelineError:
         + (f" error={codigo}" if codigo else "")
     )
     status = response.status_code
-    codigo_pipeline = "asr_rechazado" if 400 <= status < 500 and status != 429 else "asr_error"
+    rechazo = 400 <= status < 500 and status not in _4XX_TRANSITORIOS
+    codigo_pipeline = "asr_rechazado" if rechazo else "asr_error"
     return PipelineError(codigo_pipeline, f"AssemblyAI respondio {status} en {etapa}")
 
 
