@@ -2,14 +2,17 @@
 
 import * as React from "react";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { CalendarX2 } from "lucide-react";
 
 import { Fab, Sheet, Toast } from "@/components/ui";
 import { useConfirmacionDibujada } from "@/components/ui/movimiento";
+import { EstadoVacio } from "@/components/ui/estado-vacio";
+import { useEsEscritorio } from "@/hooks/useEsEscritorio";
 import { useHoy } from "@/hooks/useHoy";
 import { mensajeTurnoAgendado, payloadNuevoTurno } from "@/lib/agendar-turno";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import {
   agregarDiasMvd,
   finDelDiaMvd,
@@ -28,7 +31,7 @@ import type {
 } from "@/types/domain";
 
 import { AgendaHeader } from "./agenda-header";
-import { DayView, EstadoVacio } from "./day-view";
+import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
 import { SemanaTira } from "./semana-tira";
@@ -39,41 +42,6 @@ import {
 import { TurnoDetailSheet } from "./turno-detail-sheet";
 
 export type AgendaViewMode = "día" | "semana" | "mes";
-
-const MOBILE_QUERY = "(max-width: 1023px)";
-
-function subscribeMedia(cb: () => void) {
-  if (typeof window === "undefined") return () => {};
-  const mql = window.matchMedia(MOBILE_QUERY);
-  mql.addEventListener("change", cb);
-  return () => mql.removeEventListener("change", cb);
-}
-function getMobileSnapshot() {
-  return window.matchMedia(MOBILE_QUERY).matches;
-}
-function getMobileServerSnapshot() {
-  return false;
-}
-
-type RawTurno = Omit<
-  TurnoConPaciente,
-  "fecha" | "pagoFecha" | "creadoEn" | "actualizadoEn"
-> & {
-  fecha: string;
-  pagoFecha: string | null;
-  creadoEn: string;
-  actualizadoEn: string;
-};
-
-function parseTurno(raw: RawTurno): TurnoConPaciente {
-  return {
-    ...raw,
-    fecha: new Date(raw.fecha),
-    pagoFecha: raw.pagoFecha ? new Date(raw.pagoFecha) : null,
-    creadoEn: new Date(raw.creadoEn),
-    actualizadoEn: new Date(raw.actualizadoEn),
-  };
-}
 
 // El rango que se le pide a la API. Los bordes son los del día de
 // Montevideo, no los del dispositivo: con `setHours` un teléfono en Madrid
@@ -111,11 +79,7 @@ function Cargando() {
 }
 
 export function AgendaView() {
-  const isMobile = React.useSyncExternalStore(
-    subscribeMedia,
-    getMobileSnapshot,
-    getMobileServerSnapshot,
-  );
+  const isMobile = !useEsEscritorio();
   const [userView, setUserView] = React.useState<AgendaViewMode | null>(null);
   // `anchor` y `today` son null en el servidor para que el primer render sea
   // idéntico en server (UTC) y client (Montevideo). Renderizar
@@ -133,9 +97,7 @@ export function AgendaView() {
   // Mobile: el mes se despliega detrás del título de la fecha.
   const [mesAbierto, setMesAbierto] = React.useState(false);
   const [resultadoSerie, setResultadoSerie] = React.useState<TurnoCreado["serie"]>(null);
-  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>(
-    { open: false, message: "", variante: "aviso" },
-  );
+  const toast = useToast();
 
   // En mobile siempre se mira un día (la semana se dibuja como día). "mes"
   // en mobile vive en el desplegable, no como vista.
@@ -191,9 +153,9 @@ export function AgendaView() {
 
     const marcando = window.setTimeout(() => setTurnosStatus("loading"), 0);
 
-    apiGet<RawTurno[]>(url, { signal: controller.signal })
+    apiGet<TurnoJson<TurnoConPaciente>[]>(url, { signal: controller.signal })
       .then((data) => {
-        const parsed = data.map(parseTurno);
+        const parsed = data.map((t) => parseTurno(t));
         cacheRef.current.set(rangeKey, parsed);
         setTurnos(parsed);
         setTurnosStatus("idle");
@@ -289,7 +251,7 @@ export function AgendaView() {
 
   const handleTurnoUpdated = (message: string) => {
     setDetalleId(null);
-    setToast({ open: true, message, variante: "confirmacion" });
+    toast.confirmar(message);
     refetchTurnos();
   };
 
@@ -313,7 +275,7 @@ export function AgendaView() {
     }
     setSheetOpen(false);
     if (creado.serie) setResultadoSerie(creado.serie);
-    else setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
+    else toast.confirmar(mensajeTurnoAgendado(creado));
     // Si se creó un paciente en el camino, la lista tiene que reflejarlo.
     setPacientes(null);
     refetchTurnos();
@@ -475,12 +437,7 @@ export function AgendaView() {
 
       <ResultadoSerie serie={resultadoSerie} onClose={() => setResultadoSerie(null)} />
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((current) => ({ ...current, open: false }))}
-      />
+      <Toast {...toast.props} />
     </>
   );
 }

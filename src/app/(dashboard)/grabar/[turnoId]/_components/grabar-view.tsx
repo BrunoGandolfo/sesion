@@ -13,7 +13,7 @@
 // se leía como "no subió".
 
 import * as React from "react";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -134,7 +134,8 @@ export function GrabarView({
   const [progreso, setProgreso] = React.useState<number | null>(null);
   const [errorPantalla, setErrorPantalla] = React.useState<string | null>(null);
   const [confirmarDescarte, setConfirmarDescarte] = React.useState(false);
-  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>({ open: false, message: "", variante: "aviso" });
+  const toast = useToast();
+  const { avisar } = toast;
 
   // La grabación del último intento: lo que hace posible "Reintentar" sin
   // volver a grabar. Los chunks siguen en IndexedDB hasta que la confirmación
@@ -178,7 +179,7 @@ export function GrabarView({
             // dice y se puede repetir, en vez de tragarlo.
             console.warn("[grabar] el turno no quedó realizado", error);
             setErrorPantalla(TURNO_NO_MARCADO);
-            setToast({ open: true, message: TURNO_NO_MARCADO, variante: "aviso" });
+            avisar(TURNO_NO_MARCADO);
             setFase("turno-sin-marcar");
             return;
           }
@@ -197,7 +198,7 @@ export function GrabarView({
         setProgreso(null);
       }
     },
-    [],
+    [avisar],
   );
 
   const onListo = React.useCallback(
@@ -208,8 +209,8 @@ export function GrabarView({
   );
 
   const onErrorGrabacion = React.useCallback((mensaje: string) => {
-    setToast({ open: true, message: mensaje, variante: "aviso" });
-  }, []);
+    avisar(mensaje);
+  }, [avisar]);
 
   const grabador = useGrabador({
     claveGrabacion: turnoId,
@@ -307,7 +308,7 @@ export function GrabarView({
       setFase("previo");
     } catch (error) {
       setFase("previo");
-      setToast({ open: true, message: mensajeDe(error, ALGO_FALLO), variante: "aviso" });
+      avisar(mensajeDe(error, ALGO_FALLO));
     }
   }
 
@@ -317,7 +318,7 @@ export function GrabarView({
     const turno = turnoIdRef.current;
 
     if (!turno) {
-      setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
+      avisar(ALGO_FALLO);
       return;
     }
 
@@ -329,7 +330,7 @@ export function GrabarView({
       grabador.enviarPendiente();
     } catch (error) {
       setFase("previo");
-      setToast({ open: true, message: mensajeDe(error, ALGO_FALLO), variante: "aviso" });
+      avisar(mensajeDe(error, ALGO_FALLO));
     }
   }
 
@@ -344,7 +345,7 @@ export function GrabarView({
     const turno = turnoIdRef.current;
 
     if (!turno) {
-      setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
+      avisar(ALGO_FALLO);
       return;
     }
 
@@ -355,7 +356,7 @@ export function GrabarView({
       setFase("guardado");
     } catch (error) {
       console.warn("[grabar] el turno no quedó realizado", error);
-      setToast({ open: true, message: TURNO_NO_MARCADO, variante: "aviso" });
+      avisar(TURNO_NO_MARCADO);
     }
   }
 
@@ -363,7 +364,7 @@ export function GrabarView({
     const datos = audioRef.current;
 
     if (!datos) {
-      setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
+      avisar(ALGO_FALLO);
       return;
     }
 
@@ -469,12 +470,7 @@ export function GrabarView({
         )}
       </div>
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((actual) => ({ ...actual, open: false }))}
-      />
+      <Toast {...toast.props} />
     </div>
   );
 }

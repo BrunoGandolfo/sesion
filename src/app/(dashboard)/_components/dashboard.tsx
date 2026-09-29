@@ -12,7 +12,7 @@ import { IndicadorProcesando } from "@/components/ui/procesando";
 import { seguirNota } from "@/lib/notas-en-proceso";
 import { Toast } from "@/components/ui";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { ListaEnCascada, MS_CHECK_DIBUJADO } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { mensajeTurnoAgendado, payloadNuevoTurno } from "@/lib/agendar-turno";
@@ -31,16 +31,16 @@ import type {
   TurnoCreado,
 } from "@/types/domain";
 
+import { parsePaciente, type PacienteJson } from "@/lib/json-turno";
+
 import { AgendaDelDia } from "./agenda-del-dia";
 import { CardAhora } from "./card-ahora";
 import {
   aplicarCobro,
   leerHoy,
-  parsePaciente,
   repartirElDia,
   sesionesEnProceso,
   type EstadoHoy,
-  type JsonPaciente,
 } from "./datos";
 import { FalloDeCarga } from "./estados-carga";
 import { Kpis } from "./kpis";
@@ -54,11 +54,8 @@ export function Dashboard() {
   const [fallo, setFallo] = React.useState(false);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [resultadoSerie, setResultadoSerie] = React.useState<TurnoCreado["serie"]>(null);
-  const [toast, setToast] = React.useState<{
-    open: boolean;
-    message: string;
-    variante: VarianteToast;
-  }>({ open: false, message: "", variante: "confirmacion" });
+  const toast = useToast();
+  const { avisar, confirmar } = toast;
   const [turnoSheet, setTurnoSheet] = React.useState(false);
   const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
     null,
@@ -133,7 +130,7 @@ export function Dashboard() {
     // La tarifa es best-effort: sin ella el formulario agenda igual, solo
     // no deja crear pacientes desde ahí.
     Promise.all([
-      apiGet<JsonPaciente[]>("/api/pacientes"),
+      apiGet<PacienteJson[]>("/api/pacientes"),
       apiGet<Configuracion>("/api/config").catch(() => null),
     ])
       .then(([lista, config]) => {
@@ -142,9 +139,9 @@ export function Dashboard() {
       })
       .catch(() => {
         setPacientes([]);
-        setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
+        avisar(ALGO_FALLO);
       });
-  }, [pacientes]);
+  }, [pacientes, avisar]);
 
   // El sheet ya no se cierra acá: se cierra solo cuando terminó de dibujar
   // el check sobre el método elegido (ver SheetMetodoPago). Por eso `cobrar`
@@ -164,11 +161,7 @@ export function Dashboard() {
       try {
         await apiPost(`/api/turnos/${turnoId}/cobrar`, { metodo });
       } catch (error) {
-        setToast({
-          open: true,
-          message: NO_SE_PUDO_COBRAR,
-          variante: "aviso",
-        });
+        avisar(NO_SE_PUDO_COBRAR);
         throw error;
       }
       setEstado((previo) =>
@@ -180,9 +173,9 @@ export function Dashboard() {
           : previo,
       );
       setCobroConfirmado(turnoId);
-      setToast({ open: true, message: COBRADO, variante: "confirmacion" });
+      confirmar(COBRADO);
     },
-    [cobrando],
+    [cobrando, avisar, confirmar],
   );
 
   // Si la API rechaza (un 409 por solapamiento, por ejemplo) se relanza:
@@ -205,10 +198,10 @@ export function Dashboard() {
       }
       setTurnoSheet(false);
       if (creado.serie) setResultadoSerie(creado.serie);
-      else setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
+      else confirmar(mensajeTurnoAgendado(creado));
       recargar();
     },
-    [recargar],
+    [recargar, confirmar],
   );
 
   // La segunda espera: la ruta ya llegó (su loading.tsx mostró este mismo
@@ -304,12 +297,7 @@ export function Dashboard() {
 
       <ResultadoSerie serie={resultadoSerie} onClose={() => setResultadoSerie(null)} />
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((t) => ({ ...t, open: false }))}
-      />
+      <Toast {...toast.props} />
     </>
   );
 }

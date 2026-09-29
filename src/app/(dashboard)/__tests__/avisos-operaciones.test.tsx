@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { CONSULTA_ESCRITORIO } from "@/hooks/useEsEscritorio";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -98,7 +99,8 @@ beforeEach(() => {
   m.borrar.mockResolvedValue(jsonTurno());
   m.iniciar.mockResolvedValue(undefined);
   m.subir.mockResolvedValue(undefined);
-  vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  // Escritorio: la agenda en semana, el lateral y el sheet lateral.
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === CONSULTA_ESCRITORIO, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   m.get.mockImplementation(async (url) => {
     if (url === "/api/config") return { nombreProfesional: "Prueba", tarifaDefault: 1500 };
     if (url === "/api/dashboard") return { kpis: { sesionesHoy: 0, deudaAcumulada: 1500, ingresosMes: 0 } };

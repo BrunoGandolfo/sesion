@@ -3,7 +3,7 @@
 import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 
 import * as React from "react";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronRight, Plus, RotateCcw, Search } from "lucide-react";
 import {
@@ -21,6 +21,7 @@ import { EsqueletoListaPacientes } from "@/components/esqueletos";
 import { TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
+import { parsePaciente, type PacienteJson } from "@/lib/json-turno";
 import { fechaRelativa, money } from "@/lib/format";
 import {
   ALGO_FALLO,
@@ -34,29 +35,6 @@ import { NuevoPacienteForm } from "./nuevo-paciente-form";
 
 type Segment = "activos" | "archivados";
 
-type PacienteJson = Omit<
-  PacienteConDeuda,
-  "creadoEn" | "actualizadoEn" | "ultimaSesion"
-> & {
-  creadoEn: string;
-  actualizadoEn: string;
-  ultimaSesion: string | null;
-};
-
-type ToastState = {
-  open: boolean;
-  message: string;
-  variante: VarianteToast;
-};
-
-function parsePaciente(paciente: PacienteJson): PacienteConDeuda {
-  return {
-    ...paciente,
-    creadoEn: new Date(paciente.creadoEn),
-    actualizadoEn: new Date(paciente.actualizadoEn),
-    ultimaSesion: paciente.ultimaSesion ? new Date(paciente.ultimaSesion) : null,
-  };
-}
 
 async function fetchPacientes({
   segment,
@@ -101,11 +79,12 @@ export function PacientesView({
   // abrir el sheet; hasta que llega (o si falla) el campo arranca vacío.
   const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
   const [tarifaCargada, setTarifaCargada] = React.useState(false);
-  const [toast, setToast] = React.useState<ToastState>(() => ({
-    open: archivedToast,
-    message: archivedToast ? "Paciente archivado" : "",
-    variante: "confirmacion",
-  }));
+  const toast = useToast();
+  const { avisar, confirmar } = toast;
+  // Se llega desde la ficha después de archivar (?archivado=1).
+  React.useEffect(() => {
+    if (archivedToast) confirmar("Paciente archivado");
+  }, [archivedToast, confirmar]);
 
   const openNuevoPaciente = React.useCallback(() => {
     setShowNuevoPaciente(true);
@@ -126,10 +105,10 @@ export function PacientesView({
   );
   const handleNuevoPacienteSuccess = React.useCallback(() => {
     setShowNuevoPaciente(false);
-    setToast({ open: true, message: "Paciente creado", variante: "confirmacion" });
+    confirmar("Paciente creado");
     setSegment("activos");
     setReloadKey((current) => current + 1);
-  }, []);
+  }, [confirmar]);
 
   React.useEffect(() => {
     if (query === debouncedQuery) return;
@@ -170,16 +149,14 @@ export function PacientesView({
 
     try {
       await apiPatch(`/api/pacientes/${paciente.id}`, { activo: true });
-      setToast({ open: true, message: "Paciente reactivado", variante: "confirmacion" });
+      confirmar("Paciente reactivado");
     } catch (err) {
       setPacientes((current) =>
         [...current, paciente].sort((a, b) =>
           `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`),
         ),
       );
-      setToast({
-        open: true,
-        message: err instanceof ApiClientError ? err.mensaje : ALGO_FALLO, variante: "aviso" });
+      avisar(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
     } finally {
       setReactivatingId(null);
     }
@@ -310,12 +287,7 @@ export function PacientesView({
           )}
       </Sheet>
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((current) => ({ ...current, open: false }))}
-      />
+      <Toast {...toast.props} />
     </div>
   );
 }

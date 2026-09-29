@@ -17,7 +17,7 @@ import * as React from "react";
 import { LogOut } from "lucide-react";
 import { useSesionActual } from "@/components/layout/providers";
 import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
-import { cerrarSesion } from "@/lib/sesion-cliente";
+import { salir } from "@/lib/sesion-cliente";
 
 import { GuardadoCampo, type EstadoCampo } from "@/components/ui/guardado-campo";
 import { Button, Card, Input } from "@/components/ui";
@@ -595,7 +595,7 @@ export function ConfigView() {
                   icon={<LogOut size={16} strokeWidth={2} aria-hidden="true" />}
                   className="w-full sm:w-auto"
                   onClick={() => {
-                    void cerrarSesion("/login");
+                    void salir();
                   }}
                 >
                   Cerrar sesión

@@ -21,7 +21,3 @@ export async function salir(destino = "/login"): Promise<void> {
   window.location.assign(destino);
 }
 
-/** @deprecated Usar `salir`. Queda mientras config-view (pantalla, ola 2)
- *  importe el nombre viejo. */
-export const cerrarSesion = salir;
-

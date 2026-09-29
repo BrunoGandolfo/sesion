@@ -23,7 +23,7 @@
 // entero, con el número al que sale, antes de confirmar.
 
 import * as React from "react";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronRight, Send, Wallet } from "lucide-react";
 
@@ -32,15 +32,15 @@ import {
   Card,
   Confirmar,
   EditorialRule,
-  Lupita,
   Segmented,
   Toast,
 } from "@/components/ui";
 import { EsqueletoCobrosCuerpo } from "@/components/esqueletos";
-import { TAMANOS_LUPITA } from "@/components/ui/lupita";
+import { EstadoVacio } from "@/components/ui/estado-vacio";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import {
   TEMPLATE_COBRO_DEFAULT,
@@ -111,26 +111,6 @@ type DeudorItem = DeudaPaciente & {
   ultimoAvisoEn: string | null;
 };
 
-type JsonTurno = Omit<
-  TurnoConPaciente,
-  "fecha" | "pagoFecha" | "creadoEn" | "actualizadoEn"
-> & {
-  fecha: string;
-  pagoFecha: string | null;
-  creadoEn: string;
-  actualizadoEn: string;
-};
-
-function parseTurno(raw: JsonTurno): TurnoConPaciente {
-  return {
-    ...raw,
-    fecha: new Date(raw.fecha),
-    pagoFecha: raw.pagoFecha ? new Date(raw.pagoFecha) : null,
-    creadoEn: new Date(raw.creadoEn),
-    actualizadoEn: new Date(raw.actualizadoEn),
-  };
-}
-
 type Pestana = "te-deben" | "cobros";
 type Carga = "cargando" | "listo" | "error";
 
@@ -145,7 +125,7 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
   const [dashboard, deudores, cobros, config] = await Promise.all([
     apiGet<{ kpis: KPIsDashboard }>("/api/dashboard", { signal }),
     apiGet<DeudorItem[]>("/api/deudores", { signal }),
-    apiGet<JsonTurno[]>("/api/turnos/cobros", { signal }),
+    apiGet<TurnoJson<TurnoConPaciente>[]>("/api/turnos/cobros", { signal }),
     // La configuración puede no existir todavía: el recordatorio sale sin
     // firma y la pantalla igual se muestra.
     apiGet<Configuracion>("/api/config", { signal }).catch((err: unknown) => {
@@ -157,7 +137,7 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
   return {
     kpis: dashboard.kpis,
     deudores,
-    cobros: cobros.map(parseTurno),
+    cobros: cobros.map((t) => parseTurno(t)),
     nombreProfesional: config?.nombreProfesional ?? "",
   };
 }
@@ -169,7 +149,7 @@ export function CobrosView() {
   const [ahora, setAhora] = React.useState<Date | null>(null);
   const [carga, setCarga] = React.useState<Carga>("cargando");
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>({ open: false, message: "", variante: "aviso" });
+  const toast = useToast();
 
   // "cargando" es el estado inicial y el reintento lo vuelve a poner en su
   // propio handler: el efecto no toca estado antes de que responda la red.
@@ -266,28 +246,23 @@ export function CobrosView() {
             // La deuda y los ingresos del mes salen del servidor: se vuelve a
             // pedir todo. Los datos viejos quedan en pantalla mientras tanto.
             setReloadKey((k) => k + 1);
-            setToast({ open: true, message: COBRADO, variante: "confirmacion" });
+            toast.confirmar(COBRADO);
           }}
           onCobroIncompleto={(mensaje, huboCobros) => {
             if (huboCobros) setReloadKey((k) => k + 1);
-            setToast({ open: true, message: mensaje, variante: "aviso" });
+            toast.avisar(mensaje);
           }}
           onAvisado={(creado) => {
-            setToast({ open: true, message: creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.", variante: "confirmacion" });
+            toast.confirmar(creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.");
           }}
-          onError={(mensaje) => setToast({ open: true, message: mensaje, variante: "aviso" })}
+          onError={(mensaje) => toast.avisar(mensaje)}
           onVerCobros={() => setPestana("cobros")}
         />
       ) : (
         <CobrosDelMes cobros={cobros} onVerTeDeben={() => setPestana("te-deben")} />
       )}
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((actual) => ({ ...actual, open: false }))}
-      />
+      <Toast {...toast.props} />
     </Marco>
   );
 }
@@ -506,7 +481,7 @@ function TeDeben({
         // La única confirmación alegre que 04-personaje.md le permite a
         // Cobros: nadie debe nada. Lupita a 96 px, celebrando, y el círculo
         // crema crece para recibirla.
-        lupita
+        lupita="celebra"
         titulo={NADIE_TE_DEBE}
         lineas={NADIE_TE_DEBE_LINEAS}
         accion={{ label: VER_COBROS_DEL_MES, onClick: onVerCobros }}
@@ -755,8 +730,6 @@ function FilaDeudor({
 // por ella: anotar de más un cobro es peor que un toque extra, y "Marcar
 // todas" queda a mano. El método se elige después, una vez para todas.
 // ============================================
-type TurnoJson = Omit<Turno, "fecha"> & { fecha: string };
-
 function RegistrarPago({
   pacienteId,
   onElegirMetodo,
@@ -766,7 +739,7 @@ function RegistrarPago({
   onElegirMetodo: (turnoIds: string[]) => void;
   onCancelar: () => void;
 }) {
-  const [sesiones, setSesiones] = React.useState<TurnoJson[] | "error" | null>(null);
+  const [sesiones, setSesiones] = React.useState<Turno[] | "error" | null>(null);
   const [marcadas, setMarcadas] = React.useState<ReadonlySet<string>>(new Set());
   const [intento, setIntento] = React.useState(0);
   const tituloId = React.useId();
@@ -780,8 +753,9 @@ function RegistrarPago({
         // La misma regla que suma la deuda de la fila, y de la más vieja a
         // la más nueva: es el orden en que se pagan.
         const impagas = turnos
+          .map((t) => parseTurno(t))
           .filter(esDeudaPendiente)
-          .sort((a, b) => a.fecha.localeCompare(b.fecha));
+          .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
         setSesiones(impagas);
         setMarcadas(new Set(impagas.length === 1 ? [impagas[0].id] : []));
       })
@@ -853,7 +827,7 @@ function RegistrarPago({
                   className="h-[18px] w-[18px] shrink-0 cursor-pointer accent-sage-500"
                 />
                 <span className="min-w-0 flex-1 text-[14px] text-ink-900">
-                  Sesión del {fechaLarga(new Date(t.fecha))}
+                  Sesión del {fechaLarga(t.fecha)}
                 </span>
                 <span className="whitespace-nowrap text-[14px] font-medium tabular-nums text-ink-700">
                   {money(t.tarifaCobrada)}
@@ -958,58 +932,6 @@ function CobrosDelMes({
   );
 }
 
-// ============================================
-// Estado vacío: ícono, titular, tres líneas, un botón. La misma forma que en
-// la agenda, y no aparece un cuarto formato.
-//
-// Lo único que cambia entre uno y otro es quién ocupa el círculo: un ícono
-// de 28 px en el círculo de 56, o Lupita a 96 px en el círculo agrandado,
-// donde la pantalla tiene algo que celebrar.
-// ============================================
-function EstadoVacio({
-  icono,
-  lupita = false,
-  titulo,
-  lineas,
-  accion,
-}: {
-  icono?: React.ReactNode;
-  /** Lupita celebrando en vez del ícono. Sólo donde 04-personaje.md la deja
-   *  entrar; en Cobros, sólo en "Nadie te debe". */
-  lupita?: boolean;
-  titulo: string;
-  lineas: readonly [string, string, string];
-  accion: { label: string; onClick: () => void };
-}) {
-  return (
-    <Card className="flex flex-col items-center rounded-[8px] px-6 py-12 text-center">
-      {lupita ? (
-        <span className="inline-flex h-[128px] w-[128px] items-center justify-center rounded-full bg-cream-100">
-          <Lupita pose="celebra" tamano={TAMANOS_LUPITA.vacio} />
-        </span>
-      ) : (
-        <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-cream-100 text-sage-600">
-          {icono}
-        </span>
-      )}
-      <p className="mt-4 font-[family-name:var(--font-display)] text-[22px] font-medium italic leading-tight text-ink-900">
-        {titulo}
-      </p>
-      <div className="mt-3 flex max-w-[420px] flex-col gap-1">
-        {lineas.map((linea) => (
-          <p key={linea} className="text-[13px] leading-[1.5] text-ink-500">
-            {linea}
-          </p>
-        ))}
-      </div>
-      <div className="mt-6">
-        <Button variant="secondary" onClick={accion.onClick}>
-          {accion.label}
-        </Button>
-      </div>
-    </Card>
-  );
-}
 
 function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;

@@ -18,9 +18,9 @@ import { useRouter } from "next/navigation";
 import { ChartColumn, ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { ResumenFinanzas } from "@/app/api/_lib/casos-uso/finanzas";
-import { Button, Card, EditorialRule, Lupita, Segmented } from "@/components/ui";
+import { EditorialRule, Segmented } from "@/components/ui";
 import { EsqueletoFinanzasCuerpo } from "@/components/esqueletos";
-import { TAMANOS_LUPITA } from "@/components/ui/lupita";
+import { EstadoVacio } from "@/components/ui/estado-vacio";
 import { apiGet, esAbort } from "@/lib/api-client";
 import {
   ALGO_FALLO,
@@ -121,7 +121,7 @@ export function FinanzasView() {
     return (
       <Marco>
         <EstadoVacio
-          lupita
+          lupita="saluda"
           titulo={SIN_SESIONES_REGISTRADAS}
           lineas={SIN_SESIONES_REGISTRADAS_LINEAS}
           accion={{ label: IR_A_LA_AGENDA, onClick: () => router.push("/agenda") }}
@@ -274,50 +274,3 @@ function SelectorPeriodo({
   );
 }
 
-// ============================================
-// Estado vacío y error: la misma forma que en Cobros. En el vacío la
-// ilustración es Lupita (saluda, 96 px, círculo crema); en el error, un
-// ícono: Lupita no tiene pose de error.
-// ============================================
-function EstadoVacio({
-  icono,
-  lupita = false,
-  titulo,
-  lineas,
-  accion,
-}: {
-  icono?: React.ReactNode;
-  lupita?: boolean;
-  titulo: string;
-  lineas: readonly [string, string, string];
-  accion: { label: string; onClick: () => void };
-}) {
-  return (
-    <Card className="flex flex-col items-center rounded-md px-6 py-12 text-center">
-      {lupita ? (
-        <span className="inline-flex h-32 w-32 items-center justify-center rounded-full bg-cream-100">
-          <Lupita pose="saluda" tamano={TAMANOS_LUPITA.vacio} />
-        </span>
-      ) : (
-        <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-cream-100 text-sage-600">
-          {icono}
-        </span>
-      )}
-      <h2 className="mt-4 font-display text-[22px] font-medium leading-tight text-ink-900">
-        {titulo}
-      </h2>
-      <div className="mt-3 flex max-w-[420px] flex-col gap-1">
-        {lineas.map((linea) => (
-          <p key={linea} className="text-[13px] leading-[1.5] text-ink-500">
-            {linea}
-          </p>
-        ))}
-      </div>
-      <div className="mt-6">
-        <Button variant="secondary" onClick={accion.onClick}>
-          {accion.label}
-        </Button>
-      </div>
-    </Card>
-  );
-}

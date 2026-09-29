@@ -8,6 +8,7 @@ import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
 import { clavesDeRiesgo } from "@/components/grabacion/RiesgoDetectadoBanner";
 import { apiGet } from "@/lib/api-client";
+import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import { enProceso } from "@/lib/notas-en-proceso";
 import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 import type {
@@ -15,7 +16,6 @@ import type {
   DashboardData,
   DeudaPaciente,
   MetodoPago,
-  PacienteConDeuda,
   PendientesTerapeuta,
   SenalRiesgoDelDia,
   TurnoConPaciente,
@@ -29,51 +29,16 @@ export const SIN_PENDIENTES: PendientesTerapeuta = {
   totalSinCobrar: { sesiones: 0, monto: 0, pacientes: 0 },
 };
 
-// JSON convierte Date → string. Volvemos a Date solo donde el UI lo necesita.
-export type JsonTurno = Omit<
-  TurnoConPaciente,
-  "fecha" | "pagoFecha" | "creadoEn" | "actualizadoEn"
-> & {
-  fecha: string;
-  pagoFecha: string | null;
-  creadoEn: string;
-  actualizadoEn: string;
-};
-
-export type JsonPaciente = Omit<
-  PacienteConDeuda,
-  "creadoEn" | "actualizadoEn" | "ultimaSesion"
-> & { creadoEn: string; actualizadoEn: string; ultimaSesion: string | null };
-
 export type JsonDashboard = Omit<
   DashboardData,
   "sesionesHoy" | "proximaSesion"
 > & {
-  sesionesHoy: JsonTurno[];
-  proximaSesion: JsonTurno | null;
+  sesionesHoy: TurnoJson<TurnoConPaciente>[];
+  proximaSesion: TurnoJson<TurnoConPaciente> | null;
   /** La señal de riesgo de las sesiones del día (ver /api/dashboard). Puede
    *  no venir si la respuesta es de una versión anterior de la ruta. */
   riesgoDelDia?: SenalRiesgoDelDia[];
 };
-
-export function parseTurno(raw: JsonTurno): TurnoConPaciente {
-  return {
-    ...raw,
-    fecha: new Date(raw.fecha),
-    pagoFecha: raw.pagoFecha ? new Date(raw.pagoFecha) : null,
-    creadoEn: new Date(raw.creadoEn),
-    actualizadoEn: new Date(raw.actualizadoEn),
-  };
-}
-
-export function parsePaciente(raw: JsonPaciente): PacienteConDeuda {
-  return {
-    ...raw,
-    creadoEn: new Date(raw.creadoEn),
-    actualizadoEn: new Date(raw.actualizadoEn),
-    ultimaSesion: raw.ultimaSesion ? new Date(raw.ultimaSesion) : null,
-  };
-}
 
 export interface EstadoHoy {
   data: DashboardData;
@@ -309,8 +274,8 @@ export async function leerHoy(): Promise<EstadoHoy> {
   return {
     data: {
       ...raw,
-      sesionesHoy: raw.sesionesHoy.map(parseTurno),
-      proximaSesion: raw.proximaSesion ? parseTurno(raw.proximaSesion) : null,
+      sesionesHoy: raw.sesionesHoy.map((t) => parseTurno(t)),
+      proximaSesion: raw.proximaSesion ? parseTurno<TurnoConPaciente>(raw.proximaSesion) : null,
     },
     riesgoEnElDia: hayRiesgoEnElDia(raw.riesgoDelDia),
     // El nombre COMPLETO, no la primera palabra: la cabecera ya recorta lo
