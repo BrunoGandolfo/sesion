@@ -417,6 +417,17 @@ export const FALTA_AUTORIZACION = "Falta la autorización";
 /** Acción que abre el documento para firmar. */
 export const FIRMAR_AUTORIZACION = "Firmar autorización";
 
+/** La firma vigente es de un texto anterior (el servidor manda
+ *  `sugiereRefirmar`). Sigue sirviendo para grabar: no es un bloqueo. */
+export const CONVIENE_VOLVER_A_FIRMAR = "Conviene volver a firmar";
+export const TEXTO_ANTERIOR_FIRMADO =
+  "La paciente firmó una versión anterior del texto. Sigue sirviendo para grabar; conviene que firme la vigente.";
+/** Acción que abre el texto vigente para firmarlo de nuevo. */
+export const FIRMAR_TEXTO_VIGENTE = "Firmar el texto vigente";
+
+/** No se pudo leer si hay autorización: no se sabe si falta o no. */
+export const AUTORIZACION_NO_VERIFICADA = "No se pudo verificar la autorización para grabar.";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Pantalla de Hoy
 // Los rótulos que estaban sueltos en dashboard.tsx y card-ahora.tsx. Son las

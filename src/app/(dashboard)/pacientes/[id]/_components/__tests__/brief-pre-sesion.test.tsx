@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { EL_RECORRIDO_HASTA_HOY, PREPARAR_SESION, SENAL_DE_RIESGO } from "@/lib/glosario";
+import { ALGO_FALLO, EL_RECORRIDO_HASTA_HOY, PREPARAR_SESION, REINTENTAR, SENAL_DE_RIESGO } from "@/lib/glosario";
 
 import { BriefPreSesion } from "../brief-pre-sesion";
 
@@ -111,4 +111,14 @@ it("la señal de la última sesión se dice con la misma frase que el brief cort
   m.get.mockResolvedValue(brief(true));
   render(<BriefPreSesion pacienteId="p1" abrir />);
   expect(await screen.findByText(/Última sesión: Ideación suicida \(nivel moderado\) — Preguntar directamente\./)).toBeTruthy();
+});
+
+it("si /brief falla, 'Preparar sesión' no desaparece: abierto dice que falló y deja reintentar", async () => {
+  m.get.mockRejectedValueOnce(new Error("red")).mockResolvedValueOnce(brief(false));
+  render(<BriefPreSesion pacienteId="p1" abrir />);
+  expect(await screen.findByRole("button", { name: PREPARAR_SESION })).toBeTruthy();
+  expect(await screen.findByText(ALGO_FALLO)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: REINTENTAR }));
+  expect(await screen.findByText(RESUMEN.trim())).toBeTruthy();
+  expect(screen.queryByText(ALGO_FALLO)).toBeNull();
 });

@@ -4,8 +4,10 @@
 // firma. Dos variantes:
 //   - "completo": chip de estado, fecha de firma, Revocar (con confirmación
 //     inline) o Firmar. Es la sección de la pestaña Datos.
-//   - "aviso": solo aparece cuando falta la autorización, como aviso corto
-//     con el botón de firmar. Es el bloque bajo la cabecera de la ficha.
+//   - "aviso": el bloque bajo la cabecera de la ficha. Aparece cuando falta
+//     la autorización, cuando la firma es de un texto anterior
+//     (`sugiereRefirmar`, forense 03 P3-28) o cuando no se pudo leer
+//     (P3-22); si está todo en orden no dibuja nada.
 
 import * as React from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
@@ -15,8 +17,13 @@ import { apiDelete } from "@/lib/api-client";
 import { fechaCompleta } from "@/lib/format";
 import {
   ALGO_FALLO,
+  AUTORIZACION_NO_VERIFICADA,
+  CONVIENE_VOLVER_A_FIRMAR,
   FALTA_AUTORIZACION,
   FIRMAR_AUTORIZACION,
+  FIRMAR_TEXTO_VIGENTE,
+  REINTENTAR,
+  TEXTO_ANTERIOR_FIRMADO,
 } from "@/lib/glosario";
 
 import { ConsentimientoForm } from "./ConsentimientoForm";
@@ -102,7 +109,7 @@ export function ConsentimientoBadge({
   return (
     <>
       {variante === "aviso"
-        ? aviso(estado, abrirFirma)
+        ? aviso(estado, abrirFirma, onCambio)
         : completo(estado, {
             abrirFirma,
             confirmandoRevocar,
@@ -110,6 +117,7 @@ export function ConsentimientoBadge({
             revocando,
             errorRevocar,
             onRevocar: () => void handleRevocar(),
+            reintentar: onCambio,
           })}
       <Sheet
         open={sheetAbierto}
@@ -129,9 +137,59 @@ export function ConsentimientoBadge({
   );
 }
 
-/** Bajo la cabecera de la ficha: solo cuando falta la autorización. */
-function aviso(estado: EstadoConsentimiento, abrirFirma: () => void): React.ReactNode {
+/** Bajo la cabecera de la ficha: lo que hay que resolver de la
+ *  autorización, o nada. */
+function aviso(
+  estado: EstadoConsentimiento,
+  abrirFirma: () => void,
+  reintentar: () => void,
+): React.ReactNode {
+  if (estado.tipo === "error") {
+    return (
+      <Aviso texto={<span className="font-semibold">{AUTORIZACION_NO_VERIFICADA}</span>}>
+        <Button variant="secondary" size="sm" onClick={reintentar} className="sm:shrink-0">
+          {REINTENTAR}
+        </Button>
+      </Aviso>
+    );
+  }
+  if (estado.tipo === "vigente" && estado.consentimiento.sugiereRefirmar) {
+    return (
+      <Aviso
+        texto={
+          <>
+            <span className="font-semibold">{CONVIENE_VOLVER_A_FIRMAR}.</span>
+            <span className="text-ink-700"> {TEXTO_ANTERIOR_FIRMADO}</span>
+          </>
+        }
+      >
+        <Button variant="secondary" size="sm" onClick={abrirFirma} className="sm:shrink-0">
+          {FIRMAR_TEXTO_VIGENTE}
+        </Button>
+      </Aviso>
+    );
+  }
   if (estado.tipo !== "sin") return null;
+  return (
+    <Aviso
+      texto={
+        <>
+          <span className="font-semibold">{FALTA_AUTORIZACION}</span>
+          <span className="text-ink-700">
+            {" "}
+            para grabar las sesiones. La paciente la firma acá mismo.
+          </span>
+        </>
+      }
+    >
+      <Button variant="primary" size="sm" onClick={abrirFirma} className="sm:shrink-0">
+        {FIRMAR_AUTORIZACION}
+      </Button>
+    </Aviso>
+  );
+}
+
+function Aviso({ texto, children }: { texto: React.ReactNode; children: React.ReactNode }) {
   return (
     <div
       role="status"
@@ -144,17 +202,9 @@ function aviso(estado: EstadoConsentimiento, abrirFirma: () => void): React.Reac
           aria-hidden="true"
           className="mt-[2px] shrink-0 text-gold-500"
         />
-        <p className="font-sans text-[13px] leading-[1.5] text-ink-900">
-          <span className="font-semibold">{FALTA_AUTORIZACION}</span>
-          <span className="text-ink-700">
-            {" "}
-            para grabar las sesiones. La paciente la firma acá mismo.
-          </span>
-        </p>
+        <p className="font-sans text-[13px] leading-[1.5] text-ink-900">{texto}</p>
       </div>
-      <Button variant="primary" size="sm" onClick={abrirFirma} className="sm:shrink-0">
-        {FIRMAR_AUTORIZACION}
-      </Button>
+      {children}
     </div>
   );
 }
@@ -166,6 +216,8 @@ interface AccionesCompleto {
   revocando: boolean;
   errorRevocar: boolean;
   onRevocar: () => void;
+  /** Vuelve a leer la autorización (la lee la ficha). */
+  reintentar: () => void;
 }
 
 /** La sección de la pestaña Datos: estado, fecha, Revocar o Firmar. */
@@ -186,7 +238,14 @@ function completo(estado: EstadoConsentimiento, a: AccionesCompleto): React.Reac
   }
 
   if (estado.tipo === "error") {
-    return <p className="font-sans text-[13px] text-ink-500">{ALGO_FALLO}</p>;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <p role="alert" className="font-sans text-[13px] text-ink-700">{AUTORIZACION_NO_VERIFICADA}</p>
+        <Button variant="secondary" size="sm" onClick={a.reintentar}>
+          {REINTENTAR}
+        </Button>
+      </div>
+    );
   }
 
   if (estado.tipo === "vigente") {
@@ -214,6 +273,19 @@ function completo(estado: EstadoConsentimiento, a: AccionesCompleto): React.Reac
             Firmada el {fechaCompleta(firmadoEn)}
           </span>
         </div>
+        {estado.consentimiento.sugiereRefirmar ? (
+          <div className="flex flex-col gap-2 rounded-md border border-gold-50 bg-gold-50 px-3 py-2">
+            <p className="font-sans text-[13px] leading-[1.5] text-ink-900">
+              <span className="font-semibold">{CONVIENE_VOLVER_A_FIRMAR}.</span>{" "}
+              <span className="text-ink-700">{TEXTO_ANTERIOR_FIRMADO}</span>
+            </p>
+            <div>
+              <Button variant="secondary" size="sm" onClick={a.abrirFirma}>
+                {FIRMAR_TEXTO_VIGENTE}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {a.confirmandoRevocar ? (
           <Confirmar
             titulo="¿Revocar la autorización de grabación?"

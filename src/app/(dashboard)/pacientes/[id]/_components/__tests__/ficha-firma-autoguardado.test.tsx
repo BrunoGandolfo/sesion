@@ -10,11 +10,11 @@ import * as React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
-import { FIRMAR_AUTORIZACION } from "@/lib/glosario";
+import { AUTORIZACION_NO_VERIFICADA, FIRMAR_AUTORIZACION } from "@/lib/glosario";
 
 import { PacienteDetailView } from "../paciente-detail-view";
 
-const m = vi.hoisted(() => ({ pedidos: [] as string[], patch: vi.fn() }));
+const m = vi.hoisted(() => ({ pedidos: [] as string[], patch: vi.fn(), consentimientoFalla: false }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -32,7 +32,10 @@ vi.mock("@/lib/api-client", async (original) => ({
         turnos: [],
       };
     }
-    if (url === "/api/pacientes/p1/consentimiento") return { consentimiento: null };
+    if (url === "/api/pacientes/p1/consentimiento") {
+      if (m.consentimientoFalla) throw new Error("red");
+      return { consentimiento: null };
+    }
     if (url === "/api/config") return { nombreProfesional: "Lic. Prueba", direccion: "Calle 1" };
     return null;
   },
@@ -54,6 +57,7 @@ beforeAll(() => {
 });
 beforeEach(() => {
   m.pedidos = [];
+  m.consentimientoFalla = false;
   m.patch.mockReset();
   m.patch.mockResolvedValue({});
   window.history.replaceState(null, "", "/pacientes/p1?tab=datos");
@@ -89,4 +93,12 @@ it("autoguardar una nota privada con el sheet de firma abierto no lo cierra ni p
   expect((within(despues).getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
   // Una lectura por recarga, no tres.
   expect(lecturasDeConsentimiento()).toBe(2);
+});
+
+it("si falla la lectura de la autorización, la ficha lo dice arriba y en Datos (P3-22)", async () => {
+  m.consentimientoFalla = true;
+  render(<PacienteDetailView id="p1" />);
+  // Antes quedaba null y el aviso "falta autorización" no aparecía nunca.
+  await waitFor(() => expect(screen.getAllByText(AUTORIZACION_NO_VERIFICADA)).toHaveLength(2));
+  expect(screen.queryByRole("button", { name: FIRMAR_AUTORIZACION })).toBeNull();
 });
