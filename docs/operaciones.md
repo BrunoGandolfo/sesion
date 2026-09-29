@@ -91,6 +91,7 @@ permanece en `processor/.env.example`.
 | --- | --- |
 | `DATABASE_URL` | Conexión a la base de la app. |
 | `CLAVES_CIFRADO` | Llavero ENC2. Conservar aparte las claves que necesitan los backups. |
+| `CLAVES_CIFRADO_NUEVAS` | Opcional, solo existe durante una rotación: la clave nueva, sin leer ni reescribir `CLAVES_CIFRADO` (`docs/encryption.md` §3). |
 | `INVITACIONES_PERMITIDAS` | Cuentas habilitadas para invitar; sin lista no se crean invitaciones. |
 | `PROCESSING_SECRET` | Autoriza reclamos del worker; las escrituras posteriores usan tickets. |
 | `CRON_SECRET` | Autoriza crons. |
@@ -127,9 +128,12 @@ de la sesión son constantes de `src/lib/sesion-clinica/estados.ts`.
   distintas: rotar el secreto de reclamo no los revoca automáticamente.
 - `CRON_SECRET` también admite lista. Coordinar el valor que envía el
   programador con el que acepta el despliegue.
-- Para `CLAVES_CIFRADO`, seguir `docs/encryption.md`: agregar una clave,
-  recifrar, comprobar pendientes y errores, retirar la vieja del servicio activo.
-  Conservarla de forma protegida mientras haya backups que la requieran.
+- Para `CLAVES_CIFRADO`, seguir `docs/encryption.md` §3: guardar la clave
+  nueva en el gestor, cargarla en `CLAVES_CIFRADO_NUEVAS` (la vigente no se
+  lee: es *Sensitive*), recifrar hasta que pendientes y errores den 0,
+  dejar la nueva como única `CLAVES_CIFRADO` y sumar su id a
+  `CLAVES_CIFRADO_IDS`. La vieja se conserva en el gestor mientras haya
+  backups que la requieran.
 - R2 y claves de proveedores: crear el reemplazo, actualizar todos los
   entornos consumidores y comprobarlos antes de revocar el anterior.
   Para Anthropic son dos consumidores: app y worker.
@@ -243,13 +247,19 @@ Ninguna se puede hacer desde el repositorio.
 
 ### Reversiones administrativas
 
-Dos SQL retiran lo que agregó una migración. No los ejecuta la app ni Publicar;
+Tres SQL retiran lo que agregó una migración. No los ejecuta la app ni Publicar;
 sólo se corren a mano, con la conexión directa y después de decidirlo.
 
 - `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
-  `20260916013000_inmutabilidad`: la auditoría y las versiones del Recorrido
-  vuelven a poder modificarse. No borra datos. Para restituir la garantía se
-  vuelve a aplicar el SQL de esa migración.
+  `20260916013000_inmutabilidad` y, con su función, lo que le cambió
+  `20260928120000_hilo_versiones_recifrado`: la auditoría y las versiones del
+  Recorrido vuelven a poder modificarse. No borra datos. Para restituir la
+  garantía se vuelven a aplicar los SQL de esas dos migraciones, en ese orden.
+- `scripts/mantenimiento/revertir-hilo-versiones-recifrado.sql` revierte solo
+  `20260928120000_hilo_versiones_recifrado`: las versiones del Recorrido
+  vuelven a admitir únicamente la resolución, y el cron deja de poder
+  recifrarlas (cuentan como errores; su clave vieja no se puede retirar).
+  Las garantías siguen puestas. No borra datos.
 - `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de
   `20260917120000_limites_invitados` y su registro en `_prisma_migrations`.
   Es destructivo: antes hay que desplegar un código que no lea esas columnas.

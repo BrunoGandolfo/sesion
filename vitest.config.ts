@@ -46,6 +46,8 @@ const INTEGRACION = [
   'src/lib/__tests__/lupita-agenda-integracion.test.ts',
   'src/lib/__tests__/casos-huerfanos.test.ts',
   'src/lib/__tests__/endurecer-integracion.test.ts',
+  // Qué UPDATE admite hilo_versiones: la resolución o, sola, la clave.
+  'src/lib/__tests__/hilo-recifrado-integracion.test.ts',
   'src/lib/__tests__/cupo-ayuda-integracion.test.ts',
   'src/lib/__tests__/hilo-integracion.test.ts',
   'src/lib/__tests__/salud-trabajos.test.ts',

@@ -1,9 +1,20 @@
 // El llavero: las claves con que se cifran las columnas *_encrypted.
 //
-// Una sola variable de entorno, CLAVES_CIFRADO, con la lista de claves:
+// Normalmente una sola variable de entorno, CLAVES_CIFRADO, con la lista:
 //
 //   CLAVES_CIFRADO="1=<32 bytes en base64>"                 (normal)
-//   CLAVES_CIFRADO="1=<base64 vieja>,2=<base64 nueva>"      (rotando)
+//
+// Durante una rotación existe además CLAVES_CIFRADO_NUEVAS, mismo formato:
+//
+//   CLAVES_CIFRADO="1=<vieja>"  CLAVES_CIFRADO_NUEVAS="2=<nueva>"  (rotando)
+//
+// Las dos se fusionan en un solo llavero. La segunda existe porque en Vercel
+// CLAVES_CIFRADO es *Sensitive*: de solo escritura, ni el dueño puede leerla.
+// Agregar ",2=<nueva>" a esa variable obliga a reescribirla entera, o sea a
+// conocer la vigente. Con una variable aparte se agrega una clave sin leer
+// ni reescribir la vigente (docs/encryption.md §3). Un id presente en las dos
+// es un error: no se decide en silencio cuál de las dos claves vale. Sin
+// CLAVES_CIFRADO_NUEVAS (ausente o vacía) todo es exactamente como antes.
 //
 // La clave ACTIVA es la de id más alto: todo lo que se cifra de acá en más
 // sale con ella. Las demás siguen en el llavero solo para LEER lo que se
@@ -22,6 +33,8 @@
 import { Buffer } from "node:buffer";
 
 export const VARIABLE_LLAVERO = "CLAVES_CIFRADO";
+/** Solo existe durante una rotación: la clave nueva, sin tocar la vigente. */
+export const VARIABLE_LLAVERO_NUEVAS = "CLAVES_CIFRADO_NUEVAS";
 
 /** Largo de cada clave: AES-256. */
 export const LARGO_CLAVE_BYTES = 32;
@@ -44,8 +57,8 @@ export interface Llavero {
 }
 
 export class ErrorLlavero extends Error {
-  constructor(mensaje: string) {
-    super(`${VARIABLE_LLAVERO}: ${mensaje}`);
+  constructor(mensaje: string, variable: string = VARIABLE_LLAVERO) {
+    super(`${variable}: ${mensaje}`);
     this.name = "ErrorLlavero";
   }
 }
@@ -55,10 +68,14 @@ export class ErrorLlavero extends Error {
  * puede probar con cualquier valor. Lanza ErrorLlavero con un mensaje que
  * dice qué está mal (nunca el valor de una clave).
  */
-export function parsearLlavero(texto: string | undefined): Llavero {
+export function parsearLlavero(
+  texto: string | undefined,
+  variable: string = VARIABLE_LLAVERO,
+): Llavero {
   if (typeof texto !== "string" || texto.trim() === "") {
     throw new ErrorLlavero(
       `falta o está vacía (esperado "1=<32 bytes en base64>[,2=…]")`,
+      variable,
     );
   }
 
@@ -70,23 +87,24 @@ export function parsearLlavero(texto: string | undefined): Llavero {
 
     const separador = entrada.indexOf("=");
     if (separador <= 0) {
-      throw new ErrorLlavero(`entrada sin "id=clave"`);
+      throw new ErrorLlavero(`entrada sin "id=clave"`, variable);
     }
 
     const idTexto = entrada.slice(0, separador).trim();
     const claveTexto = entrada.slice(separador + 1).trim();
 
     if (!/^\d+$/.test(idTexto)) {
-      throw new ErrorLlavero(`id "${idTexto}" no es un entero`);
+      throw new ErrorLlavero(`id "${idTexto}" no es un entero`, variable);
     }
     const id = Number(idTexto);
     if (id < ID_CLAVE_MIN || id > ID_CLAVE_MAX) {
       throw new ErrorLlavero(
         `id ${id} fuera de rango (${ID_CLAVE_MIN}..${ID_CLAVE_MAX})`,
+        variable,
       );
     }
     if (claves.has(id)) {
-      throw new ErrorLlavero(`id ${id} repetido`);
+      throw new ErrorLlavero(`id ${id} repetido`, variable);
     }
 
     const clave = Buffer.from(claveTexto, "base64");
@@ -99,6 +117,7 @@ export function parsearLlavero(texto: string | undefined): Llavero {
     ) {
       throw new ErrorLlavero(
         `la clave ${id} no decodifica a ${LARGO_CLAVE_BYTES} bytes en base64`,
+        variable,
       );
     }
 
@@ -106,9 +125,13 @@ export function parsearLlavero(texto: string | undefined): Llavero {
   }
 
   if (claves.size === 0) {
-    throw new ErrorLlavero("no tiene ninguna clave");
+    throw new ErrorLlavero("no tiene ninguna clave", variable);
   }
 
+  return armarLlavero(claves);
+}
+
+function armarLlavero(claves: ReadonlyMap<number, Buffer>): Llavero {
   const ids = [...claves.keys()].sort((a, b) => a - b);
   const idActiva = ids[ids.length - 1];
 
@@ -122,11 +145,49 @@ export function parsearLlavero(texto: string | undefined): Llavero {
   };
 }
 
+/**
+ * Fusiona dos llaveros en uno. Función pura. La activa del resultado es la
+ * de id más alto del conjunto. Un id presente en los dos lanza ErrorLlavero
+ * aunque las claves coincidan: el mensaje nombra el id, nunca la clave.
+ */
+export function fusionarLlaveros(base: Llavero, nuevas: Llavero): Llavero {
+  const claves = new Map<number, Buffer>();
+  for (const id of base.ids) claves.set(id, base.porId(id)!.clave);
+  for (const id of nuevas.ids) {
+    if (claves.has(id)) {
+      throw new ErrorLlavero(
+        `id ${id} repetido en ${VARIABLE_LLAVERO} y ${VARIABLE_LLAVERO_NUEVAS}`,
+        VARIABLE_LLAVERO_NUEVAS,
+      );
+    }
+    claves.set(id, nuevas.porId(id)!.clave);
+  }
+  return armarLlavero(claves);
+}
+
+/**
+ * El llavero a partir de los textos de las dos variables. Pura. Sin
+ * `nuevas` (ausente o solo espacios) es exactamente parsearLlavero(base).
+ */
+export function llaveroDeVariables(
+  base: string | undefined,
+  nuevas: string | undefined,
+): Llavero {
+  const principal = parsearLlavero(base);
+  if (typeof nuevas !== "string" || nuevas.trim() === "") return principal;
+  return fusionarLlaveros(principal, parsearLlavero(nuevas, VARIABLE_LLAVERO_NUEVAS));
+}
+
+
 let cache: Llavero | null = null;
 
-/** El llavero del proceso, leído de CLAVES_CIFRADO una sola vez. */
+/** El llavero del proceso, leído de CLAVES_CIFRADO (y CLAVES_CIFRADO_NUEVAS
+ *  si existe) una sola vez. */
 export function llavero(): Llavero {
-  cache ??= parsearLlavero(process.env[VARIABLE_LLAVERO]);
+  cache ??= llaveroDeVariables(
+    process.env[VARIABLE_LLAVERO],
+    process.env[VARIABLE_LLAVERO_NUEVAS],
+  );
   return cache;
 }
 
