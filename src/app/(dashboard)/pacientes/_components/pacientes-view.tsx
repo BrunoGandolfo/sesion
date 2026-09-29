@@ -3,7 +3,7 @@
 import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 
 import * as React from "react";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronRight, Plus, RotateCcw, Search } from "lucide-react";
 import {
@@ -20,43 +20,22 @@ import {
 import { EsqueletoListaPacientes } from "@/components/esqueletos";
 import { TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { ListaEnCascada } from "@/components/ui/movimiento";
-import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
+import { apiGet, apiPatch, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { parsePaciente, type PacienteJson } from "@/lib/json-turno";
 import { fechaRelativa, money } from "@/lib/format";
 import {
-  ALGO_FALLO,
   DEBE,
   NUEVO_PACIENTE,
   PACIENTES_VACIO_LINEA,
   PACIENTES_VACIO_TITULO,
+  REINTENTAR,
+  CARGANDO,
 } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda } from "@/types/domain";
 import { NuevoPacienteForm } from "./nuevo-paciente-form";
+import { formatPhoneDisplay } from "@/lib/phone";
 
 type Segment = "activos" | "archivados";
-
-type PacienteJson = Omit<
-  PacienteConDeuda,
-  "creadoEn" | "actualizadoEn" | "ultimaSesion"
-> & {
-  creadoEn: string;
-  actualizadoEn: string;
-  ultimaSesion: string | null;
-};
-
-type ToastState = {
-  open: boolean;
-  message: string;
-  variante: VarianteToast;
-};
-
-function parsePaciente(paciente: PacienteJson): PacienteConDeuda {
-  return {
-    ...paciente,
-    creadoEn: new Date(paciente.creadoEn),
-    actualizadoEn: new Date(paciente.actualizadoEn),
-    ultimaSesion: paciente.ultimaSesion ? new Date(paciente.ultimaSesion) : null,
-  };
-}
 
 async function fetchPacientes({
   segment,
@@ -89,6 +68,10 @@ export function PacientesView({
   archivedToast?: boolean;
 }) {
   const [segment, setSegment] = React.useState<Segment>("activos");
+  // El segmento de la lista que se está mostrando, que no es el elegido
+  // mientras llega la nueva: con el elegido, al pasar a Archivados los
+  // activos aparecían un momento con "Reactivar" (forense 03, P3-21).
+  const [segmentoDeLaLista, setSegmentoDeLaLista] = React.useState<Segment>(segment);
   const [query, setQuery] = React.useState("");
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [pacientes, setPacientes] = React.useState<PacienteConDeuda[]>([]);
@@ -101,11 +84,12 @@ export function PacientesView({
   // abrir el sheet; hasta que llega (o si falla) el campo arranca vacío.
   const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
   const [tarifaCargada, setTarifaCargada] = React.useState(false);
-  const [toast, setToast] = React.useState<ToastState>(() => ({
-    open: archivedToast,
-    message: archivedToast ? "Paciente archivado" : "",
-    variante: "confirmacion",
-  }));
+  const toast = useToast();
+  const { avisar, confirmar } = toast;
+  // Se llega desde la ficha después de archivar (?archivado=1).
+  React.useEffect(() => {
+    if (archivedToast) confirmar("Paciente archivado");
+  }, [archivedToast, confirmar]);
 
   const openNuevoPaciente = React.useCallback(() => {
     setShowNuevoPaciente(true);
@@ -126,10 +110,10 @@ export function PacientesView({
   );
   const handleNuevoPacienteSuccess = React.useCallback(() => {
     setShowNuevoPaciente(false);
-    setToast({ open: true, message: "Paciente creado", variante: "confirmacion" });
+    confirmar("Paciente creado");
     setSegment("activos");
     setReloadKey((current) => current + 1);
-  }, []);
+  }, [confirmar]);
 
   React.useEffect(() => {
     if (query === debouncedQuery) return;
@@ -153,11 +137,12 @@ export function PacientesView({
     })
       .then((data) => {
         setPacientes(data);
+        setSegmentoDeLaLista(segment);
         setLoading(false);
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
-        setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
+        setError(mensajeParaElla(err));
         setLoading(false);
       });
 
@@ -170,16 +155,14 @@ export function PacientesView({
 
     try {
       await apiPatch(`/api/pacientes/${paciente.id}`, { activo: true });
-      setToast({ open: true, message: "Paciente reactivado", variante: "confirmacion" });
+      confirmar("Paciente reactivado");
     } catch (err) {
       setPacientes((current) =>
         [...current, paciente].sort((a, b) =>
           `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`),
         ),
       );
-      setToast({
-        open: true,
-        message: err instanceof ApiClientError ? err.mensaje : ALGO_FALLO, variante: "aviso" });
+      avisar(mensajeParaElla(err));
     } finally {
       setReactivatingId(null);
     }
@@ -207,7 +190,7 @@ export function PacientesView({
       ? null
       : debouncedQuery.trim()
         ? "search"
-        : segment === "activos"
+        : segmentoDeLaLista === "activos"
           ? "noPatients"
           : "noArchived";
 
@@ -272,13 +255,13 @@ export function PacientesView({
         <div className={loading ? "opacity-60 transition-opacity" : undefined}>
           <DesktopTable
             pacientes={pacientes}
-            archived={segment === "archivados"}
+            archived={segmentoDeLaLista === "archivados"}
             reactivatingId={reactivatingId}
             onReactivar={reactivarPaciente}
           />
           <MobileList
             pacientes={pacientes}
-            archived={segment === "archivados"}
+            archived={segmentoDeLaLista === "archivados"}
             reactivatingId={reactivatingId}
             onReactivar={reactivarPaciente}
           />
@@ -305,17 +288,12 @@ export function PacientesView({
             />
           ) : (
             <p className="py-16 text-center text-[14px] text-ink-500">
-              Cargando…
+              {CARGANDO}
             </p>
           )}
       </Sheet>
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((current) => ({ ...current, open: false }))}
-      />
+      <Toast {...toast.props} />
     </div>
   );
 }
@@ -340,7 +318,7 @@ function ErrorState({
       <p className="mt-1 text-[13px] text-ink-500">{message}</p>
       <div className="mt-5">
         <Button variant="secondary" onClick={onRetry}>
-          Reintentar
+          {REINTENTAR}
         </Button>
       </div>
     </div>
@@ -394,7 +372,7 @@ function DesktopTable({
               </span>
             </span>
             <span className="text-[13px] text-ink-700 tabular-nums">
-              {p.telefono}
+              {formatPhoneDisplay(p.telefono)}
             </span>
             <span className="text-[13px] text-ink-700 tabular-nums">
               {money(p.tarifa)}

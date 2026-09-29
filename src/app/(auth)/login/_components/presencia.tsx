@@ -1,11 +1,13 @@
 // La mitad institucional de la pantalla de entrada: quién es esto y qué
 // hace. La otra mitad es el formulario.
 //
-// POR QUÉ ESTÁ SEPARADO DE page.tsx
+// POR QUÉ ESTÁ SEPARADO
 //
-// page.tsx es "use client" porque el formulario tiene estado y llama a
-// signIn(). Esto no tiene estado ni handlers: es texto y un SVG. Separado,
-// se renderiza en el servidor y no viaja al navegador.
+// El formulario tiene estado y handlers; esto es texto y un SVG, sin
+// estado. Separado, lo comparten todas las pantallas de entrada (login,
+// registro, recuperar y restablecer, a través de entrada-marco.tsx). No se
+// renderiza sólo en el servidor: esas pantallas son de cliente, y la
+// importan desde ahí.
 //
 // LO QUE NO LLEVA
 //

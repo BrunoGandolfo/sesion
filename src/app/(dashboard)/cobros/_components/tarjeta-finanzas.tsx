@@ -14,6 +14,7 @@ import { ChevronRight } from "lucide-react";
 
 import type { ResumenFinanzas } from "@/app/api/_lib/casos-uso/finanzas";
 import { apiGet, esAbort } from "@/lib/api-client";
+import { mesIsoMvd } from "@/lib/fechas-montevideo";
 import { money } from "@/lib/format";
 import {
   COBRASTE_EN,
@@ -25,7 +26,6 @@ import {
   SIN_DATOS_CONTRA,
 } from "@/lib/glosario";
 
-import { mesDeHoy } from "../../finanzas/_components/periodo";
 
 interface Dato {
   mes: string;
@@ -39,6 +39,7 @@ function nombreMes(clave: string): string {
   return MESES[Number(clave.slice(5, 7)) - 1];
 }
 
+/** El mes anterior a una clave "AAAA-MM". */
 function mesAnteriorDe(clave: string): string {
   const anio = Number(clave.slice(0, 4));
   const mes = Number(clave.slice(5, 7));
@@ -46,15 +47,19 @@ function mesAnteriorDe(clave: string): string {
 }
 
 /** Se lee sólo lo que la tarjeta usa, y se descarta una respuesta que no
- *  tenga esa forma: mejor sin número que con uno inventado. */
-function leer(respuesta: unknown, mes: string): Dato | null {
+ *  tenga esa forma: mejor sin número que con uno inventado. Los meses salen
+ *  de la respuesta (el período que el servidor contó y el anterior contra
+ *  el que comparó), no de una cuenta en el teléfono. */
+function leer(respuesta: unknown): Dato | null {
   const r = respuesta as Partial<ResumenFinanzas> | null;
   const cobrado = r?.totales?.cobrado;
-  if (typeof cobrado !== "number") return null;
+  const mes = r?.desde;
+  if (typeof cobrado !== "number" || typeof mes !== "string") return null;
   const anterior = r?.comparaciones?.periodoAnterior ?? null;
   return {
     mes,
-    mesAnterior: mesAnteriorDe(mes),
+    // Sin comparación (el mes anterior no tuvo datos) igual hay que nombrarlo.
+    mesAnterior: anterior?.desde ?? mesAnteriorDe(mes),
     cobrado,
     variacion: typeof anterior?.variacionCobrado === "number" ? anterior.variacionCobrado : null,
     porcentaje: typeof anterior?.porcentajeCobrado === "number" ? anterior.porcentajeCobrado : null,
@@ -73,9 +78,9 @@ export function TarjetaFinanzas({ recarga = 0 }: { /** Cambia cuando Cobros vuel
 
   React.useEffect(() => {
     const controller = new AbortController();
-    const mes = mesDeHoy(new Date());
+    const mes = mesIsoMvd(new Date());
     apiGet<unknown>(`/api/finanzas/resumen?desde=${mes}&hasta=${mes}`, { signal: controller.signal })
-      .then((respuesta) => setDato(leer(respuesta, mes)))
+      .then((respuesta) => setDato(leer(respuesta)))
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
         setDato(null);

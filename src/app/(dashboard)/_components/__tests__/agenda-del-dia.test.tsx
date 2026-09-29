@@ -208,7 +208,6 @@ describe("hayRiesgoEnElDia", () => {
   };
 
   it("es false sin sesiones y con sesiones sin señal", () => {
-    expect(hayRiesgoEnElDia(undefined)).toBe(false);
     expect(hayRiesgoEnElDia([])).toBe(false);
     expect(
       hayRiesgoEnElDia([

@@ -12,66 +12,56 @@ import { IndicadorProcesando } from "@/components/ui/procesando";
 import { seguirNota } from "@/lib/notas-en-proceso";
 import { Toast } from "@/components/ui";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { ListaEnCascada, MS_CHECK_DIBUJADO } from "@/components/ui/movimiento";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
-import { mensajeTurnoAgendado, payloadNuevoTurno } from "@/lib/agendar-turno";
-import { ApiClientError, apiGet, apiPost } from "@/lib/api-client";
-import {
-  ALGO_FALLO,
-  COBRADO,
-  HOY_SIN_PROXIMA,
-  NO_SE_PUDO_AGENDAR,
-  NO_SE_PUDO_COBRAR,
-} from "@/lib/glosario";
-import type {
-  Configuracion,
-  MetodoPago,
-  PacienteConDeuda,
-  TurnoCreado,
-} from "@/types/domain";
+import { crearTurno, mensajeTurnoAgendado } from "@/lib/agendar-turno";
+import { SheetNuevoTurno } from "@/components/forms/sheet-nuevo-turno";
+import { COBRADO, HOY_SIN_PROXIMA } from "@/lib/glosario";
+import type { MetodoPago, TurnoCreado } from "@/types/domain";
+
+import { cobrarTurno } from "@/lib/cobrar-cliente";
+import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
+import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 
 import { AgendaDelDia } from "./agenda-del-dia";
 import { CardAhora } from "./card-ahora";
 import {
   aplicarCobro,
   leerHoy,
-  parsePaciente,
   repartirElDia,
   sesionesEnProceso,
   type EstadoHoy,
-  type JsonPaciente,
 } from "./datos";
 import { FalloDeCarga } from "./estados-carga";
+import { SegunLectura, type Carga } from "./segun-lectura";
 import { Kpis } from "./kpis";
 import { Pendientes } from "./pendientes";
 import { Saludo } from "./saludo";
-import { SheetMetodoPago } from "./sheet-metodo-pago";
-import { SheetNuevoTurno } from "./sheet-nuevo-turno";
 
 export function Dashboard() {
   const [estado, setEstado] = React.useState<EstadoHoy | null>(null);
-  const [fallo, setFallo] = React.useState(false);
+  const [carga, setCarga] = React.useState<Carga>("cargando");
+  // El reloj de la pantalla (ver el efecto de abajo). null hasta el primer
+  // minuto: mientras tanto vale el `ahora` de la lectura.
+  const [reloj, setReloj] = React.useState<Date | null>(null);
+  // El `ahora` de la última lectura, para que el tic sepa si cambió el día.
+  const leidoEn = React.useRef<Date | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [resultadoSerie, setResultadoSerie] = React.useState<TurnoCreado["serie"]>(null);
-  const [toast, setToast] = React.useState<{
-    open: boolean;
-    message: string;
-    variante: VarianteToast;
-  }>({ open: false, message: "", variante: "confirmacion" });
+  const toast = useToast();
+  const { confirmar } = toast;
   const [turnoSheet, setTurnoSheet] = React.useState(false);
-  const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
-    null,
-  );
-  // Tarifa de Tu consultorio, para "Crear a X" desde el formulario de turno.
-  const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
   const [cobrando, setCobrando] = React.useState<string | null>(null);
   // El turno cuyo cobro se está confirmando en su propia fila (delta D9).
   const [cobroConfirmado, setCobroConfirmado] = React.useState<string | null>(
     null,
   );
 
-  const recargar = React.useCallback(() => setReloadKey((k) => k + 1), []);
+  const recargar = React.useCallback(() => {
+    setCarga("cargando");
+    setReloadKey((k) => k + 1);
+  }, []);
 
   // La marca del cobro en la fila dura lo que el sheet tarda en irse —su
   // trazo más el respiro de 120 ms de useConfirmacionDibujada— más su propio
@@ -92,23 +82,59 @@ export function Dashboard() {
     leerHoy()
       .then((siguiente) => {
         if (cancelado) return;
+        leidoEn.current = siguiente.ahora;
         setEstado(siguiente);
-        setFallo(false);
+        setCarga("listo");
       })
       .catch(() => {
-        if (!cancelado) setFallo(true);
+        if (!cancelado) setCarga("error");
       });
     return () => {
       cancelado = true;
     };
   }, [reloadKey]);
 
+  // Hoy abierto no se queda en la hora en que se leyó (forense 03, P3-09):
+  // el reloj avanza al empezar cada minuto, así un turno que llega a su hora
+  // pasa a "En curso" y ofrece Cobrar sin recargar. Pasada la medianoche,
+  // "hoy" es otro día y se lee de nuevo; y al volver a la pestaña también:
+  // pudo haber pasado cualquier cosa.
+  React.useEffect(() => {
+    let intervalo: number | undefined;
+    const avanzar = () => {
+      const tic = new Date();
+      setReloj(tic);
+      if (leidoEn.current && !esMismoDiaMvd(tic, leidoEn.current)) recargar();
+    };
+    const primero = window.setTimeout(() => {
+      avanzar();
+      intervalo = window.setInterval(avanzar, 60_000);
+    }, 60_000 - (Date.now() % 60_000));
+    const alVolver = () => {
+      if (document.visibilityState === "visible") recargar();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      window.clearTimeout(primero);
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", alVolver);
+    };
+  }, [recargar]);
+
+  // El más nuevo entre el reloj y la lectura: una recarga trae su propio
+  // `ahora`, que puede ser posterior al último tic.
+  const ahora = estado
+    ? reloj && reloj.getTime() > estado.ahora.getTime()
+      ? reloj
+      : estado.ahora
+    : null;
+
   // Las notas del día que se están escribiendo: las sigue el aviso del panel
   // (avisos-de-notas.tsx) y, cuando alguna termina, Hoy se vuelve a leer
   // para que la fila pase de "Procesando" a "Revisar nota" sin recargar.
   const enProcesoHoy = React.useMemo(
-    () => (estado ? sesionesEnProceso(estado.data.sesionesHoy, estado.ahora) : []),
-    [estado],
+    () => (estado && ahora ? sesionesEnProceso(estado.data.sesionesHoy, ahora) : []),
+    [estado, ahora],
   );
   React.useEffect(() => {
     for (const sesion of enProcesoHoy) seguirNota(sesion);
@@ -127,28 +153,11 @@ export function Dashboard() {
     recargar();
   }, [enProcesoHoy, resueltas, recargar]);
 
-  const abrirTurno = React.useCallback(() => {
-    setTurnoSheet(true);
-    if (pacientes !== null) return;
-    // La tarifa es best-effort: sin ella el formulario agenda igual, solo
-    // no deja crear pacientes desde ahí.
-    Promise.all([
-      apiGet<JsonPaciente[]>("/api/pacientes"),
-      apiGet<Configuracion>("/api/config").catch(() => null),
-    ])
-      .then(([lista, config]) => {
-        setPacientes(lista.map(parsePaciente));
-        setTarifaDefault(config?.tarifaDefault ?? null);
-      })
-      .catch(() => {
-        setPacientes([]);
-        setToast({ open: true, message: ALGO_FALLO, variante: "aviso" });
-      });
-  }, [pacientes]);
+  const abrirTurno = React.useCallback(() => setTurnoSheet(true), []);
 
   // El sheet ya no se cierra acá: se cierra solo cuando terminó de dibujar
   // el check sobre el método elegido (ver SheetMetodoPago). Por eso `cobrar`
-  // devuelve la promesa y vuelve a lanzar el error: el sheet necesita saber
+  // devuelve la promesa y deja pasar el error: el selector necesita saber
   // si el cobro entró antes de confirmar nada.
   //
   // Cobrar NO recarga la pantalla (delta D12): el turno cobrado se actualiza
@@ -157,20 +166,15 @@ export function Dashboard() {
   // cascada y el fundido de página, varias veces por jornada, para cambiar
   // un renglón. La cuenta de la deuda la baja `aplicarCobro`, que toca el
   // turno, el KPI y la lista de deudores a la vez.
+  const turnoCobrando = cobrando
+    ? estado?.data.sesionesHoy.find((t) => t.id === cobrando)
+    : undefined;
   const cobrar = React.useCallback(
     async (metodo: MetodoPago) => {
       const turnoId = cobrando;
       if (!turnoId) return;
-      try {
-        await apiPost(`/api/turnos/${turnoId}/cobrar`, { metodo });
-      } catch (error) {
-        setToast({
-          open: true,
-          message: NO_SE_PUDO_COBRAR,
-          variante: "aviso",
-        });
-        throw error;
-      }
+      // Si falla, el selector se queda abierto y dice por qué.
+      await cobrarTurno(turnoId, metodo);
       setEstado((previo) =>
         previo
           ? {
@@ -180,45 +184,95 @@ export function Dashboard() {
           : previo,
       );
       setCobroConfirmado(turnoId);
-      setToast({ open: true, message: COBRADO, variante: "confirmacion" });
+      confirmar(COBRADO);
     },
-    [cobrando],
+    [cobrando, confirmar],
   );
 
-  // Si la API rechaza (un 409 por solapamiento, por ejemplo) se relanza:
-  // el formulario muestra el motivo y se queda abierto con lo escrito, igual
-  // que en la agenda. Lo que no es un error de la API sale como aviso
-  // general.
+  // Si la API rechaza (un 409 por solapamiento, por ejemplo), crearTurno
+  // relanza: el formulario muestra el motivo y se queda abierto con lo
+  // escrito, igual que en la agenda.
   const agendar = React.useCallback(
     async (valores: NuevoTurnoData) => {
-      let creado: TurnoCreado;
-      try {
-        // El body y el mensaje son los mismos que en la agenda
-        // (src/lib/agendar-turno.ts).
-        creado = await apiPost<TurnoCreado>(
-          "/api/turnos",
-          payloadNuevoTurno(valores),
-        );
-      } catch (error) {
-        if (error instanceof ApiClientError) throw error;
-        throw new ApiClientError(NO_SE_PUDO_AGENDAR, 0);
-      }
+      const creado = await crearTurno(valores);
       setTurnoSheet(false);
       if (creado.serie) setResultadoSerie(creado.serie);
-      else setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
+      else confirmar(mensajeTurnoAgendado(creado));
       recargar();
     },
-    [recargar],
+    [recargar, confirmar],
   );
 
-  // La segunda espera: la ruta ya llegó (su loading.tsx mostró este mismo
-  // esqueleto) y ahora falta /api/dashboard. Se dibuja lo mismo, así que la
-  // pantalla no parpadea entre una espera y la otra.
-  if (!estado) {
-    return fallo ? <FalloDeCarga onReintentar={recargar} /> : <EsqueletoHoy />;
-  }
+  return (
+    <>
+      <SegunLectura
+        carga={carga}
+        datos={estado && ahora ? { ...estado, ahora } : null}
+        // La segunda espera: la ruta ya llegó (su loading.tsx mostró este
+        // mismo esqueleto) y ahora falta /api/dashboard. Se dibuja lo mismo,
+        // así que la pantalla no parpadea entre una espera y la otra.
+        esqueleto={<EsqueletoHoy />}
+        error={<FalloDeCarga onReintentar={recargar} />}
+        onReintentar={recargar}
+      >
+        {(hoy, { aviso, ocupado }) => (
+          <DiaDeHoy
+            hoy={hoy}
+            aviso={aviso}
+            ocupado={ocupado}
+            enProcesoHoy={enProcesoHoy}
+            cobroConfirmado={cobroConfirmado}
+            reloadKey={reloadKey}
+            onCobrar={setCobrando}
+            onAgendar={abrirTurno}
+            onCambio={recargar}
+          />
+        )}
+      </SegunLectura>
 
-  const { data, nombre, ahora, riesgoEnElDia } = estado;
+      <SheetNuevoTurno
+        open={turnoSheet}
+        onClose={() => setTurnoSheet(false)}
+        onSubmit={agendar}
+      />
+
+      <SheetMetodoPago
+        open={cobrando !== null}
+        onClose={() => setCobrando(null)}
+        monto={turnoCobrando?.tarifaCobrada}
+        cierraElTurno={turnoCobrando?.estado === "programado"}
+        onElegir={cobrar}
+      />
+
+      <ResultadoSerie serie={resultadoSerie} onClose={() => setResultadoSerie(null)} />
+
+      <Toast {...toast.props} />
+    </>
+  );
+}
+
+function DiaDeHoy({
+  hoy,
+  aviso,
+  ocupado,
+  enProcesoHoy,
+  cobroConfirmado,
+  reloadKey,
+  onCobrar,
+  onAgendar,
+  onCambio,
+}: {
+  hoy: EstadoHoy;
+  aviso: React.ReactNode;
+  ocupado: boolean;
+  enProcesoHoy: ReturnType<typeof sesionesEnProceso>;
+  cobroConfirmado: string | null;
+  reloadKey: number;
+  onCobrar: (turnoId: string) => void;
+  onAgendar: () => void;
+  onCambio: () => void;
+}) {
+  const { data, nombre, ahora, riesgoEnElDia } = hoy;
   const {
     inicio,
     pendientes,
@@ -231,85 +285,67 @@ export function Dashboard() {
   } = repartirElDia(data, ahora);
 
   return (
-    <>
-      {/* Los bloques entran escalonados, de arriba abajo: el orden en que
-          se leen es el orden en que aparecen. El saludo va fuera de la
-          cascada porque es lo primero que tiene que estar, sin espera. */}
-      <div className="mx-auto flex min-h-full w-full max-w-[1200px] flex-col gap-7 p-5 lg:gap-10 lg:p-14">
-        <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
+    // Los bloques entran escalonados, de arriba abajo: el orden en que se
+    // leen es el orden en que aparecen. El saludo va fuera de la cascada
+    // porque es lo primero que tiene que estar, sin espera.
+    <div
+      aria-busy={ocupado}
+      className="mx-auto flex min-h-full w-full max-w-[1200px] flex-col gap-7 p-5 lg:gap-10 lg:p-14"
+    >
+      <Saludo ahora={ahora} nombre={nombre} sesiones={turnos.length} />
 
-        <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
-          {/* Primero quién viene ahora o después: es lo que se busca entre
-              pacientes, con el teléfono en la mano. La agenda del día y los
-              pendientes vienen después. */}
-          {ahoraTurno ? (
-            <CardAhora
-              turno={ahoraTurno}
-              ahora={ahora}
-              enCurso={enCurso}
-              sinAutorizacion={sinAutorizacion.has(ahoraTurno.id)}
-              sinCobrar={ahoraSinCobrar}
-              onCobrar={() => setCobrando(ahoraTurno.id)}
-              reloadKey={reloadKey}
-            />
-          ) : turnos.length > 0 ? (
-            <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-500">
-              {HOY_SIN_PROXIMA}
-            </p>
-          ) : null}
+      {aviso}
 
-          {/* La del turno de ahora la muestra su card, arriba. */}
-          {enProcesoHoy.some((s) => s.turnoId !== ahoraTurno?.id) ? (
-            <div className="flex flex-col gap-2">
-              {enProcesoHoy
-                .filter((s) => s.turnoId !== ahoraTurno?.id)
-                .map((s) => (
-                  <IndicadorProcesando key={s.sesionId} paciente={s.paciente} />
-                ))}
-            </div>
-          ) : null}
+      <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
+        {/* Primero quién viene ahora o después: es lo que se busca entre
+            pacientes, con el teléfono en la mano. La agenda del día y los
+            pendientes vienen después. */}
+        {ahoraTurno ? (
+          <CardAhora
+            // Cada turno con su card: sin la clave, al pasar de un turno al
+            // siguiente la card mostraba la sesión y el brief del anterior
+            // hasta que llegaba la lectura nueva (forense 03, P3-21).
+            key={ahoraTurno.id}
+            turno={ahoraTurno}
+            ahora={ahora}
+            enCurso={enCurso}
+            sinAutorizacion={sinAutorizacion.has(ahoraTurno.id)}
+            sinCobrar={ahoraSinCobrar}
+            onCobrar={() => onCobrar(ahoraTurno.id)}
+            reloadKey={reloadKey}
+          />
+        ) : turnos.length > 0 ? (
+          <p className="font-[family-name:var(--font-display)] text-[20px] font-medium italic text-ink-500">
+            {HOY_SIN_PROXIMA}
+          </p>
+        ) : null}
 
-          <AgendaDelDia
+        {/* La del turno de ahora la muestra su card, arriba. */}
+        {enProcesoHoy.some((s) => s.turnoId !== ahoraTurno?.id) ? (
+          <div className="flex flex-col gap-2">
+            {enProcesoHoy
+              .filter((s) => s.turnoId !== ahoraTurno?.id)
+              .map((s) => (
+                <IndicadorProcesando key={s.sesionId} paciente={s.paciente} />
+              ))}
+          </div>
+        ) : null}
+
+        <AgendaDelDia
           turnos={turnos}
           ahora={ahora}
           notaPorTurno={notaPorTurno}
           sinAutorizacion={sinAutorizacion}
-          onCobrar={setCobrando}
-          onAgendar={abrirTurno}
+          onCobrar={onCobrar}
+          onAgendar={onAgendar}
           turnoCobrado={cobroConfirmado}
           riesgoEnElDia={riesgoEnElDia}
-          />
+        />
 
-          <Pendientes pendientes={pendientes} inicio={inicio} onCambio={recargar} />
+        <Pendientes pendientes={pendientes} inicio={inicio} onCambio={onCambio} />
 
-          <Kpis ahora={ahora} data={data} />
-
-
-        </ListaEnCascada>
-      </div>
-
-      <SheetNuevoTurno
-        open={turnoSheet}
-        pacientes={pacientes}
-        tarifaDefault={tarifaDefault}
-        onClose={() => setTurnoSheet(false)}
-        onSubmit={agendar}
-      />
-
-      <SheetMetodoPago
-        open={cobrando !== null}
-        onClose={() => setCobrando(null)}
-        onElegir={cobrar}
-      />
-
-      <ResultadoSerie serie={resultadoSerie} onClose={() => setResultadoSerie(null)} />
-
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((t) => ({ ...t, open: false }))}
-      />
-    </>
+        <Kpis ahora={ahora} data={data} />
+      </ListaEnCascada>
+    </div>
   );
 }

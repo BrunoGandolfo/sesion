@@ -24,6 +24,7 @@ import {
   type Modalidad,
 } from "@/lib/constantes-turno";
 import { horaEnPalabras, horaParaRevisar } from "@/lib/format";
+import { MODALIDAD_LABEL } from "@/lib/glosario";
 
 export const camposTurnoSchema = z.object({
   fecha: z.string().min(1, "Falta la fecha"),
@@ -45,8 +46,8 @@ export const CAMPOS_TURNO_DEFAULT: CamposTurnoValores = {
 };
 
 const OPCIONES_MODALIDAD: { value: Modalidad; label: string }[] = [
-  { value: "presencial", label: "Presencial" },
-  { value: "online", label: "Online" },
+  { value: "presencial", label: MODALIDAD_LABEL.presencial },
+  { value: "online", label: MODALIDAD_LABEL.online },
 ];
 
 interface TurnoEditarCamposProps {

@@ -1,5 +1,6 @@
 "use client";
 
+import { NOMBRE_ALIANZA } from "@/lib/etiquetas";
 import { ALIANZA_TERAPEUTICA } from "@/lib/glosario";
 
 import { lecturaAlianza } from "../progreso-lecturas";
@@ -7,7 +8,6 @@ import {
   COLOR,
   ChartCard,
   LineaPorFecha,
-  NOMBRE_ALIANZA,
   detalleDePunto,
   fechaDe,
   nivelDeAlianza,

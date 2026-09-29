@@ -1,10 +1,10 @@
 "use client";
 
-// Lo que espera a la terapeuta cuando abre la app, arriba de todo.
+// Lo que espera a la terapeuta en Hoy, después de la agenda del día.
 //
-// Cuatro listas, cada una con una acción y un final: ver qué pasó con una
-// nota que falló, revisar la nota, ver quién debe, hacer firmar la
-// autorización. Los datos vienen tal cual de
+// Seis listas, cada una con una acción y un final: los primeros pasos,
+// retomar una grabación sin terminar, ver qué pasó con una nota que falló,
+// revisar la nota, ver quién debe y hacer firmar la autorización. Los datos vienen tal cual de
 // /api/dashboard → casos-uso/pendientes-terapeuta.ts: acá no se recalcula
 // ninguna regla clínica ni de cobro, solo se cuenta y se enlaza.
 //

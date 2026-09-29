@@ -3,7 +3,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input } from "@/components/ui";
-import { ApiClientError, apiPost } from "@/lib/api-client";
+import { useEnvio } from "@/hooks/useEnvio";
+import { apiPost } from "@/lib/api-client";
 import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
 import {
   ENTRADA_REGISTRO, ENTRADA_NOMBRE, ENTRADA_EMAIL, ENTRADA_CONTRASENA, ENTRADA_REPETIR,
@@ -18,21 +19,19 @@ export function RegistroForm({ token, valida }: { token: string; valida: boolean
   const router = useRouter();
   const [nombre, setNombre] = React.useState(""); const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState(""); const [repetida, setRepetida] = React.useState("");
-  const [acepta, setAcepta] = React.useState(false); const [enviando, setEnviando] = React.useState(false);
-  const [error, setError] = React.useState(""); const [creada, setCreada] = React.useState(false);
+  const [acepta, setAcepta] = React.useState(false); const [creada, setCreada] = React.useState(false);
+  const { enviar: registrar, enviando, error, setError } = useEnvio(async () => {
+    await apiPost("/api/cuenta/registro", { token, nombre, email, password, aceptaTerminos: true });
+    setCreada(true);
+    router.replace("/"); router.refresh();
+  }, ENTRADA_CUENTA_ERROR);
   async function enviar(evento: React.FormEvent) {
     evento.preventDefault(); if (enviando || creada) return;
     if (!acepta) { setError(ENTRADA_TERMINOS_REQUERIDOS); return; }
     const validacion = validarPasswordNueva(password);
     if (!validacion.ok) { setError(validacion.motivo); return; }
     if (password !== repetida) { setError(ENTRADA_PASSWORD_NO_COINCIDE); return; }
-    setEnviando(true); setError("");
-    try {
-      await apiPost("/api/cuenta/registro", { token, nombre, email, password, aceptaTerminos: true });
-      setCreada(true);
-      router.replace("/"); router.refresh();
-    } catch (e) { setError(e instanceof ApiClientError ? e.message : ENTRADA_CUENTA_ERROR); }
-    finally { setEnviando(false); }
+    await registrar();
   }
   return <EntradaMarco titulo={ENTRADA_REGISTRO}>
     {!valida ? <div role="alert"><p>{ENTRADA_INVITACION_INVALIDA}</p><p className="mt-2">{ENTRADA_PEDIR_INVITACION}</p></div>

@@ -1,8 +1,8 @@
 "use client";
 
 // Cobros: lo que entró este mes y lo que todavía te deben, en una sola
-// pantalla. Reúne lo que antes vivía en /finanzas (KPIs + cobros del mes) y
-// en /deudores (la lista con "Recordar cobro").
+// pantalla, con la entrada a Finanzas arriba de la lista. /deudores
+// redirige acá.
 //
 // No se calcula "trabajaste N horas gratis": la deuda se cuenta en sesiones,
 // que es como ella la piensa.
@@ -12,7 +12,8 @@
 // su ficha para anotarlo. El cobro sigue siendo por turno (POST
 // /api/turnos/[id]/cobrar): la fila trae la deuda sumada, sin ids, así que
 // al abrir el panel se lee el detalle de esa paciente y ella marca qué
-// sesiones le pagó. El método se elige con el mismo sheet que usa Hoy.
+// sesiones le pagó. El método se elige con el mismo selector que usan Hoy,
+// la Agenda y la ficha.
 //
 // El recordatorio de cobro es la acción secundaria. Sale por SMS desde acá, y lo aprieta ella: antes
 // abría el teléfono con el texto cargado y la app no se enteraba de nada
@@ -23,7 +24,7 @@
 // entero, con el número al que sale, antes de confirmar.
 
 import * as React from "react";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronRight, Send, Wallet } from "lucide-react";
 
@@ -32,15 +33,16 @@ import {
   Card,
   Confirmar,
   EditorialRule,
-  Lupita,
   Segmented,
   Toast,
 } from "@/components/ui";
 import { EsqueletoCobrosCuerpo } from "@/components/esqueletos";
-import { TAMANOS_LUPITA } from "@/components/ui/lupita";
+import { EstadoVacio } from "@/components/ui/estado-vacio";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
-import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { parseTurno, type TurnoJson } from "@/lib/json-turno";
+import { cobrarTurno } from "@/lib/cobrar-cliente";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import {
   TEMPLATE_COBRO_DEFAULT,
@@ -49,7 +51,7 @@ import {
   zonaDeuda,
   type ZonaDeuda,
 } from "@/lib/deudas";
-import { diasEnterosMvd, partesMvd } from "@/lib/fechas-montevideo";
+import { diasEnterosMvd, formatearMesMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaCorta, fechaLarga, money } from "@/lib/format";
 import {
   ALGO_FALLO,
@@ -97,8 +99,10 @@ import type {
   TurnoConPaciente,
 } from "@/types/domain";
 
-import { SheetMetodoPago } from "../../_components/sheet-metodo-pago";
+import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
+import { SegunLectura, type Carga } from "../../_components/segun-lectura";
 import { TarjetaFinanzas } from "./tarjeta-finanzas";
+import { formatPhoneDisplay } from "@/lib/phone";
 
 // ============================================
 // Tipos de fetch — JSON → Date donde la UI lo necesita
@@ -106,34 +110,11 @@ import { TarjetaFinanzas } from "./tarjeta-finanzas";
 
 type DeudorItem = DeudaPaciente & {
   telefono: string;
-  minutosTotales: number;
   /** ISO del último aviso que salió; null si nunca se le avisó. */
   ultimoAvisoEn: string | null;
 };
 
-type JsonTurno = Omit<
-  TurnoConPaciente,
-  "fecha" | "pagoFecha" | "creadoEn" | "actualizadoEn"
-> & {
-  fecha: string;
-  pagoFecha: string | null;
-  creadoEn: string;
-  actualizadoEn: string;
-};
-
-function parseTurno(raw: JsonTurno): TurnoConPaciente {
-  return {
-    ...raw,
-    fecha: new Date(raw.fecha),
-    pagoFecha: raw.pagoFecha ? new Date(raw.pagoFecha) : null,
-    creadoEn: new Date(raw.creadoEn),
-    actualizadoEn: new Date(raw.actualizadoEn),
-  };
-}
-
 type Pestana = "te-deben" | "cobros";
-type Carga = "cargando" | "listo" | "error";
-
 type DatosCobros = {
   kpis: KPIsDashboard;
   deudores: DeudorItem[];
@@ -145,7 +126,7 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
   const [dashboard, deudores, cobros, config] = await Promise.all([
     apiGet<{ kpis: KPIsDashboard }>("/api/dashboard", { signal }),
     apiGet<DeudorItem[]>("/api/deudores", { signal }),
-    apiGet<JsonTurno[]>("/api/turnos/cobros", { signal }),
+    apiGet<TurnoJson<TurnoConPaciente>[]>("/api/turnos/cobros", { signal }),
     // La configuración puede no existir todavía: el recordatorio sale sin
     // firma y la pantalla igual se muestra.
     apiGet<Configuracion>("/api/config", { signal }).catch((err: unknown) => {
@@ -157,7 +138,7 @@ async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
   return {
     kpis: dashboard.kpis,
     deudores,
-    cobros: cobros.map(parseTurno),
+    cobros: cobros.map((t) => parseTurno(t)),
     nombreProfesional: config?.nombreProfesional ?? "",
   };
 }
@@ -169,7 +150,7 @@ export function CobrosView() {
   const [ahora, setAhora] = React.useState<Date | null>(null);
   const [carga, setCarga] = React.useState<Carga>("cargando");
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>({ open: false, message: "", variante: "aviso" });
+  const toast = useToast();
 
   // "cargando" es el estado inicial y el reintento lo vuelve a poner en su
   // propio handler: el efecto no toca estado antes de que responda la red.
@@ -195,45 +176,77 @@ export function CobrosView() {
     setReloadKey((k) => k + 1);
   };
 
-  if (carga === "cargando" && !datos) {
-    return (
-      // La segunda espera: la ruta ya llegó y falta /api/cobros. El cuerpo
+  return (
+    <SegunLectura
+      carga={carga}
+      datos={datos && ahora ? { ...datos, ahora } : null}
+      // La segunda espera: la ruta ya llegó y faltan sus datos. El cuerpo
       // es el mismo que dibujó el loading.tsx de esta carpeta, y el Marco
       // acá ya es el de verdad.
-      <Marco ahora={null} nombreProfesional={null}>
-        <EsqueletoCobrosCuerpo />
-      </Marco>
-    );
-  }
-
-  if (carga === "error" && !datos) {
-    return (
-      <Marco ahora={null} nombreProfesional={null}>
-        <EstadoVacio
-          icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
-          titulo={ALGO_FALLO}
-          lineas={COBROS_NO_CARGARON}
-          accion={{ label: REINTENTAR, onClick: reintentar }}
+      esqueleto={
+        <Marco ahora={null} nombreProfesional={null}>
+          <EsqueletoCobrosCuerpo />
+        </Marco>
+      }
+      error={
+        <Marco ahora={null} nombreProfesional={null}>
+          <EstadoVacio
+            icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
+            titulo={ALGO_FALLO}
+            lineas={COBROS_NO_CARGARON}
+            accion={{ label: REINTENTAR, onClick: reintentar }}
+          />
+        </Marco>
+      }
+      onReintentar={reintentar}
+    >
+      {(cargados, { aviso, ocupado }) => (
+        <Pantalla
+          datos={cargados}
+          aviso={aviso}
+          ocupado={ocupado}
+          pestana={pestana}
+          onPestana={setPestana}
+          reloadKey={reloadKey}
+          onRecargar={reintentar}
+          toast={toast}
         />
-      </Marco>
-    );
-  }
+      )}
+    </SegunLectura>
+  );
+}
 
-  if (!datos || !ahora) return null;
-
+function Pantalla({
+  datos,
+  aviso,
+  ocupado,
+  pestana,
+  onPestana,
+  reloadKey,
+  onRecargar,
+  toast,
+}: {
+  datos: DatosCobros & { ahora: Date };
+  aviso: React.ReactNode;
+  ocupado: boolean;
+  pestana: Pestana;
+  onPestana: (pestana: Pestana) => void;
+  reloadKey: number;
+  onRecargar: () => void;
+  toast: ReturnType<typeof useToast>;
+}) {
+  const { ahora } = datos;
   const { kpis, deudores, cobros, nombreProfesional } = datos;
 
   const sesionesSinCobrar = deudores.reduce(
     (sum, d) => sum + d.sesionesImpagas,
     0,
   );
-  // Regla del pilar Cobros: ordenar por monto desc (no por días de atraso).
-  const deudoresPorMonto = [...deudores].sort(
-    (a, b) => b.montoTotal - a.montoTotal,
-  );
 
   return (
-    <Marco ahora={ahora} nombreProfesional={nombreProfesional}>
+    <Marco ahora={ahora} nombreProfesional={nombreProfesional} ocupado={ocupado}>
+      {aviso}
+
       <KpiGrid
         ingresosMes={kpis.ingresosMes}
         deudaTotal={kpis.deudaAcumulada}
@@ -251,43 +264,41 @@ export function CobrosView() {
           { value: "cobros", label: COBROS_DEL_MES },
         ]}
         value={pestana}
-        onChange={setPestana}
+        onChange={onPestana}
         ariaLabel={VISTA_DE_COBROS}
         className="self-start"
       />
 
       {pestana === "te-deben" ? (
         <TeDeben
-          deudores={deudoresPorMonto}
+          // En el orden en que llegan: el orden de la deuda lo decide el
+          // servidor, una sola vez para Hoy y para Cobros (forense 03,
+          // P3-15). Acá se ordenaba de nuevo, por monto y sin desempate.
+          deudores={deudores}
           sesionesSinCobrar={sesionesSinCobrar}
           nombreProfesional={nombreProfesional}
           ahora={ahora}
           onCobrado={() => {
             // La deuda y los ingresos del mes salen del servidor: se vuelve a
             // pedir todo. Los datos viejos quedan en pantalla mientras tanto.
-            setReloadKey((k) => k + 1);
-            setToast({ open: true, message: COBRADO, variante: "confirmacion" });
+            onRecargar();
+            toast.confirmar(COBRADO);
           }}
           onCobroIncompleto={(mensaje, huboCobros) => {
-            if (huboCobros) setReloadKey((k) => k + 1);
-            setToast({ open: true, message: mensaje, variante: "aviso" });
+            if (huboCobros) onRecargar();
+            toast.avisar(mensaje);
           }}
           onAvisado={(creado) => {
-            setToast({ open: true, message: creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.", variante: "confirmacion" });
+            toast.confirmar(creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.");
           }}
-          onError={(mensaje) => setToast({ open: true, message: mensaje, variante: "aviso" })}
-          onVerCobros={() => setPestana("cobros")}
+          onError={(mensaje) => toast.avisar(mensaje)}
+          onVerCobros={() => onPestana("cobros")}
         />
       ) : (
-        <CobrosDelMes cobros={cobros} onVerTeDeben={() => setPestana("te-deben")} />
+        <CobrosDelMes cobros={cobros} onVerTeDeben={() => onPestana("te-deben")} />
       )}
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((actual) => ({ ...actual, open: false }))}
-      />
+      <Toast {...toast.props} />
     </Marco>
   );
 }
@@ -299,20 +310,21 @@ export function CobrosView() {
 function Marco({
   ahora,
   nombreProfesional,
+  ocupado = false,
   children,
 }: {
   ahora: Date | null;
   /** null mientras carga: la cabecera muestra "Tu consultorio". */
   nombreProfesional: string | null;
+  /** Recargando con los datos anteriores en pantalla. */
+  ocupado?: boolean;
   children: React.ReactNode;
 }) {
-  const mesLargo = ahora
-    ? capitalize(fechaLarga(ahora).split(" de ").at(-1) ?? "")
-    : "";
+  const mesLargo = ahora ? capitalize(formatearMesMvd(ahora)) : "";
   const anio = ahora ? partesMvd(ahora).anio : "";
 
   return (
-    <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-7 px-5 py-6 lg:gap-10 lg:px-10 lg:py-10">
+    <div aria-busy={ocupado} className="mx-auto flex w-full max-w-[1100px] flex-col gap-7 px-5 py-6 lg:gap-10 lg:px-10 lg:py-10">
       {/* La misma cabecera que en Hoy, y por el mismo motivo: el menú de
           abajo no lleva a la configuración, y un engranaje suelto arriba a
           la derecha era el segundo acceso distinto a un mismo lugar.
@@ -443,61 +455,50 @@ function TeDeben({
   onVerCobros: () => void;
 }) {
   const [panel, setPanel] = React.useState<PanelAbierto>(null);
-  // Las sesiones marcadas, mientras el selector de método está abierto.
+  // Las sesiones marcadas que falta cobrar, mientras el selector está abierto.
   const [porCobrar, setPorCobrar] = React.useState<string[] | null>(null);
-  // Cómo terminó el cobro. Lo escribe `cobrar` y lo lee el cierre del sheet,
-  // que llega después: el sheet se queda abierto lo que dura el tilde.
-  const resultadoRef = React.useRef<
-    | { registradas: number; elegidas: number; error: string | null; terminado: boolean }
-    | null
-  >(null);
+  // Cuántas se eligieron y cuántas entraron. Lo escribe `cobrar` y lo lee el
+  // cierre del selector, que llega después (se sostiene lo que dura el tilde).
+  const resultadoRef = React.useRef<{ registradas: number; elegidas: number } | null>(null);
 
-  // El cobro es por turno: una llamada por sesión marcada, en orden. Si una
-  // falla se corta ahí y se dice cuántas entraron. Rechaza para que el sheet
-  // no dibuje el tilde sobre un cobro que no quedó completo.
+  // El cobro es por turno: una llamada por sesión marcada, en orden. Cada una
+  // que entra sale de `porCobrar`; si una falla se corta ahí, el selector se
+  // queda abierto con el error, y reintentar cobra sólo las que faltan.
   async function cobrar(metodo: MetodoPago) {
     const ids = porCobrar ?? [];
-    const resultado = {
-      registradas: 0,
-      elegidas: ids.length,
-      error: null as string | null,
-      terminado: false,
-    };
+    const resultado = resultadoRef.current ?? { registradas: 0, elegidas: ids.length };
     resultadoRef.current = resultado;
-    try {
-      for (const id of ids) {
-        await apiPost(`/api/turnos/${id}/cobrar`, { metodo });
-        resultado.registradas += 1;
-      }
-    } catch (error) {
-      resultado.error =
-        error instanceof ApiClientError ? error.mensaje : NO_SE_PUDO_COBRAR;
-      throw error;
-    } finally {
-      resultado.terminado = true;
+    for (const id of ids) {
+      await cobrarTurno(id, metodo);
+      resultado.registradas += 1;
+      setPorCobrar((actual) => actual?.filter((otro) => otro !== id) ?? null);
     }
   }
 
+  function describirError(err: unknown): string {
+    const resultado = resultadoRef.current;
+    return resultado && resultado.registradas > 0
+      ? COBRO_INCOMPLETO(resultado.registradas, resultado.elegidas)
+      : mensajeParaElla(err, NO_SE_PUDO_COBRAR);
+  }
+
+  // Se cierra con todo cobrado (después del tilde) o porque ella volvió.
   function alCerrarMetodo() {
     const resultado = resultadoRef.current;
-    // Con cobros en vuelo el sheet no se cierra (Escape, tocar afuera): se
-    // cierra solo cuando terminan, y recién ahí se sabe qué decir.
-    if (resultado && !resultado.terminado) return;
+    const faltan = porCobrar?.length ?? 0;
     resultadoRef.current = null;
     setPorCobrar(null);
-    if (!resultado) return; // cerró sin elegir: el panel sigue como estaba
-    if (resultado.error === null) {
+    if (!resultado) return; // se fue sin elegir: el panel sigue como estaba
+    if (faltan === 0) {
       setPanel(null);
       onCobrado();
       return;
     }
-    if (resultado.registradas > 0) setPanel(null);
-    onCobroIncompleto(
-      resultado.registradas > 0
-        ? COBRO_INCOMPLETO(resultado.registradas, resultado.elegidas)
-        : resultado.error,
-      resultado.registradas > 0,
-    );
+    // Volvió con algunas cobradas y otras no: se dice cuántas entraron.
+    if (resultado.registradas > 0) {
+      setPanel(null);
+      onCobroIncompleto(COBRO_INCOMPLETO(resultado.registradas, resultado.elegidas), true);
+    }
   }
 
   if (deudores.length === 0) {
@@ -506,7 +507,7 @@ function TeDeben({
         // La única confirmación alegre que 04-personaje.md le permite a
         // Cobros: nadie debe nada. Lupita a 96 px, celebrando, y el círculo
         // crema crece para recibirla.
-        lupita
+        lupita="celebra"
         titulo={NADIE_TE_DEBE}
         lineas={NADIE_TE_DEBE_LINEAS}
         accion={{ label: VER_COBROS_DEL_MES, onClick: onVerCobros }}
@@ -554,6 +555,7 @@ function TeDeben({
         open={porCobrar !== null}
         onClose={alCerrarMetodo}
         onElegir={cobrar}
+        describirError={describirError}
       />
     </div>
   );
@@ -634,7 +636,7 @@ function FilaDeudor({
     } catch (error) {
       // El servidor rechazó programarlo. El envío lo resuelve el despachador.
       setConfirmando(false);
-      onError(error instanceof ApiClientError ? error.mensaje : ALGO_FALLO);
+      onError(mensajeParaElla(error));
     } finally {
       setEnviando(false);
     }
@@ -733,7 +735,7 @@ function FilaDeudor({
               <span className="mt-2 block text-[12px] text-ink-500">
                 {SMS_DESTINO}{" "}
                 <span className="font-medium tabular-nums text-ink-700">
-                  {telefono}
+                  {formatPhoneDisplay(telefono)}
                 </span>
               </span>
             </>
@@ -755,8 +757,6 @@ function FilaDeudor({
 // por ella: anotar de más un cobro es peor que un toque extra, y "Marcar
 // todas" queda a mano. El método se elige después, una vez para todas.
 // ============================================
-type TurnoJson = Omit<Turno, "fecha"> & { fecha: string };
-
 function RegistrarPago({
   pacienteId,
   onElegirMetodo,
@@ -766,7 +766,7 @@ function RegistrarPago({
   onElegirMetodo: (turnoIds: string[]) => void;
   onCancelar: () => void;
 }) {
-  const [sesiones, setSesiones] = React.useState<TurnoJson[] | "error" | null>(null);
+  const [sesiones, setSesiones] = React.useState<Turno[] | "error" | null>(null);
   const [marcadas, setMarcadas] = React.useState<ReadonlySet<string>>(new Set());
   const [intento, setIntento] = React.useState(0);
   const tituloId = React.useId();
@@ -780,8 +780,9 @@ function RegistrarPago({
         // La misma regla que suma la deuda de la fila, y de la más vieja a
         // la más nueva: es el orden en que se pagan.
         const impagas = turnos
+          .map((t) => parseTurno(t))
           .filter(esDeudaPendiente)
-          .sort((a, b) => a.fecha.localeCompare(b.fecha));
+          .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
         setSesiones(impagas);
         setMarcadas(new Set(impagas.length === 1 ? [impagas[0].id] : []));
       })
@@ -853,7 +854,7 @@ function RegistrarPago({
                   className="h-[18px] w-[18px] shrink-0 cursor-pointer accent-sage-500"
                 />
                 <span className="min-w-0 flex-1 text-[14px] text-ink-900">
-                  Sesión del {fechaLarga(new Date(t.fecha))}
+                  Sesión del {fechaLarga(t.fecha)}
                 </span>
                 <span className="whitespace-nowrap text-[14px] font-medium tabular-nums text-ink-700">
                   {money(t.tarifaCobrada)}
@@ -954,59 +955,6 @@ function CobrosDelMes({
           );
         })}
       </ul>
-    </Card>
-  );
-}
-
-// ============================================
-// Estado vacío: ícono, titular, tres líneas, un botón. La misma forma que en
-// la agenda, y no aparece un cuarto formato.
-//
-// Lo único que cambia entre uno y otro es quién ocupa el círculo: un ícono
-// de 28 px en el círculo de 56, o Lupita a 96 px en el círculo agrandado,
-// donde la pantalla tiene algo que celebrar.
-// ============================================
-function EstadoVacio({
-  icono,
-  lupita = false,
-  titulo,
-  lineas,
-  accion,
-}: {
-  icono?: React.ReactNode;
-  /** Lupita celebrando en vez del ícono. Sólo donde 04-personaje.md la deja
-   *  entrar; en Cobros, sólo en "Nadie te debe". */
-  lupita?: boolean;
-  titulo: string;
-  lineas: readonly [string, string, string];
-  accion: { label: string; onClick: () => void };
-}) {
-  return (
-    <Card className="flex flex-col items-center rounded-[8px] px-6 py-12 text-center">
-      {lupita ? (
-        <span className="inline-flex h-[128px] w-[128px] items-center justify-center rounded-full bg-cream-100">
-          <Lupita pose="celebra" tamano={TAMANOS_LUPITA.vacio} />
-        </span>
-      ) : (
-        <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-cream-100 text-sage-600">
-          {icono}
-        </span>
-      )}
-      <p className="mt-4 font-[family-name:var(--font-display)] text-[22px] font-medium italic leading-tight text-ink-900">
-        {titulo}
-      </p>
-      <div className="mt-3 flex max-w-[420px] flex-col gap-1">
-        {lineas.map((linea) => (
-          <p key={linea} className="text-[13px] leading-[1.5] text-ink-500">
-            {linea}
-          </p>
-        ))}
-      </div>
-      <div className="mt-6">
-        <Button variant="secondary" onClick={accion.onClick}>
-          {accion.label}
-        </Button>
-      </div>
     </Card>
   );
 }

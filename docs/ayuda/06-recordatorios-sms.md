@@ -9,22 +9,22 @@ mensaje y qué hacer si no salió.
 En **Tu consultorio → Recordatorio → Cuándo se avisa** elegís uno de tres
 momentos, y vale para todos los turnos:
 
-- **El día anterior** — la pantalla dice *"A las 20:00 del día antes"*.
-- **Dos días antes** — *"A las 20:00 de dos días antes"*.
-- **La misma mañana** — *"A las 8:00 del día del turno"*.
+- **El día anterior** — la pantalla dice *"Entre las 20:00 y las 20:14 del día antes"*.
+- **Dos días antes** — *"Entre las 20:00 y las 20:14 de dos días antes"*.
+- **La misma mañana** — *"Entre las 08:00 y las 08:14 del día del turno"*.
 
 **No salen todos a la hora en punto.** Para no mandar todos los avisos del día
 en el mismo instante, cada turno tiene su propio corrimiento, de **0 a 14
-minutos** después de esa hora, siempre el mismo para ese turno. Además el envío
-se revisa cada 5 minutos. Un aviso "de las 20:00" sale en la práctica entre las
-20:00 y las 20:20, aproximadamente. En el turno, el recordatorio muestra la hora
-que le tocó, por ejemplo *20:07*.
+minutos** después de esa hora, siempre el mismo para ese turno: por eso la
+pantalla dice "entre". Además el envío se revisa cada 5 minutos, así que un
+aviso de la tarde sale en la práctica entre las 20:00 y las 20:20,
+aproximadamente. En el turno, el recordatorio muestra la hora que le tocó, por
+ejemplo *20:07*.
 
 Una excepción, y la app la dice cuando elegís **La misma mañana**: *"Si el turno
-es antes de las 8:00, el aviso sale la tarde anterior a las 20:00: a esa hora la
-paciente ya estaría viniendo."* Por el corrimiento, lo mismo puede pasar con un
-turno entre las 8:00 y las 8:14: si el aviso de la mañana no llega a salir antes
-del turno, sale la tarde anterior.
+es antes de las 08:15, el aviso puede salir la tarde anterior, entre las 20:00 y
+las 20:14: a la mañana no llegaría antes del turno."* Antes de las 8:00 pasa
+siempre; entre las 8:00 y las 8:14 depende del corrimiento de ese turno.
 
 El momento se fija **cuando agendás o reprogramás** el turno. Cambiar la opción
 no mueve los avisos ya programados. Si agendás un turno cuando la hora del aviso

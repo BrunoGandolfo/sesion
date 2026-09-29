@@ -26,19 +26,17 @@ import {
   horaInputMvd,
   instanteDesdeFechaHoraMvd,
 } from "@/lib/fechas-montevideo";
-import {
-  ApiClientError,
-  apiDelete,
-  apiGet,
-  apiPatch,
-  apiPost,
-  esAbort,
-} from "@/lib/api-client";
+import { apiGet, apiPatch, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { fechaCorta, fechaLarga, hora, money } from "@/lib/format";
-import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR_SERIE_ACCION, SERIE_CANCELADA,
+import {
+  CANCELAR_SERIE,
+  CANCELAR_SERIE_TITULO,
+  CANCELAR_SERIE_MENSAJE,
+  CANCELAR_SERIE_ACCION,
+  SERIE_CANCELADA,
   AGENDADO,
-  ALGO_FALLO,
   CANCELADO,
+  COBRADO,
   COBRO_DESHECHO,
   DESHACER_COBRO,
   DESHACER_COBRO_ACCION,
@@ -46,18 +44,24 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   GRABAR_SESION,
-  METODOS_PAGO,
   NO_VINO,
   PAGADO,
   PENDIENTE,
   NOTA_PROCESANDO,
   GRABACION_SIN_TERMINAR,
   RECORDATORIO,
+  RECORDATORIO_ESTADO,
+  VOLVER,
+  COBRAR,
+  CARGANDO,
+  MODALIDAD_LABEL,
 } from "@/lib/glosario";
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
+import { SelectorMetodoPago } from "@/components/cobro/sheet-metodo-pago";
+import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
 import { estadoClinicoDe } from "@/components/ui/session-row";
 import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 
@@ -66,11 +70,6 @@ import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 type EditValues = CamposTurnoValores;
 
 // Textos de pantalla que todavía no se mudaron a glosario.ts.
-
-
-
-
-
 
 type Modo =
   | "ver"
@@ -118,10 +117,6 @@ function chipDe(turno: TurnoConPaciente) {
   if (turno.estado === "realizado")
     return { variant: "terracotta" as const, label: PENDIENTE };
   return { variant: "gold" as const, label: AGENDADO };
-}
-
-function mensajeDe(err: unknown): string {
-  return err instanceof ApiClientError ? err.mensaje : ALGO_FALLO;
 }
 
 type SesionDelTurno = { id: string; estado?: string; actualizadaEn?: string } | null;
@@ -209,7 +204,7 @@ export function TurnoDetailSheet({
   if (!turno) {
     return (
       <Sheet open={open} onClose={onClose} ariaLabel="Detalle del turno">
-        <p className="py-10 text-center text-[14px] text-ink-500">Cargando…</p>
+        <p className="py-10 text-center text-[14px] text-ink-500">{CARGANDO}</p>
       </Sheet>
     );
   }
@@ -231,7 +226,10 @@ export function TurnoDetailSheet({
   // Agenda (estadoClinicoDe): "Nota fallida · Ver qué pasó", "Para revisar",
   // "Nota lista". Antes cualquier sesión, fallida incluida, ofrecía "Revisar
   // nota", y una nota que no se pudo escribir parecía una nota para leer.
-  const sesionDatos = sesion !== "sin-dato" ? sesion : null;
+  // Mientras la lectura no contestó vale lo que trae el turno de la agenda:
+  // con null ofrecía "Grabar sesión" sobre un turno ya grabado hasta que
+  // llegaba la respuesta (forense 03, P3-21).
+  const sesionDatos = sesion !== "sin-dato" ? sesion : (turno.sesionClinica ?? null);
   const notaClinica = estadoClinicoDe(sesionDatos);
   // La acción clínica, la misma que la fila y la card de Ahora
   // (accionClinicaDe): una subida o una grabación que quedó a medias no se
@@ -258,7 +256,7 @@ export function TurnoDetailSheet({
     try {
       await pedido(turno);
     } catch (err) {
-      setError(mensajeDe(err));
+      setError(mensajeParaElla(err));
     } finally {
       setEnviando(false);
     }
@@ -284,21 +282,21 @@ export function TurnoDetailSheet({
     });
   }
 
-  function cobrar(metodo: MetodoPago) {
-    return ejecutar(async (actual) => {
-      await apiPost<Turno>(`/api/turnos/${actual.id}/cobrar`, { metodo });
-      // Primero la marca en la fila, después el cierre: el trazo empieza
-      // mientras el sheet se va, no después.
-      onCobrado?.(actual.id);
-      onUpdated("Cobro registrado");
-    });
+  // Si falla, el selector se queda abierto y lo dice ahí. Si entra, se
+  // avisa en el acto y no al terminar el tilde: el detalle se puede cerrar
+  // en el medio (Escape, tocar afuera) y la agenda tiene que enterarse igual.
+  // Primero la marca en la fila, después el cierre: el trazo de la fila
+  // empieza mientras el sheet se va.
+  async function cobrar(metodo: MetodoPago) {
+    if (!turno) return;
+    await cobrarTurno(turno.id, metodo);
+    onCobrado?.(turno.id);
+    onUpdated(COBRADO);
   }
 
-  function deshacerCobro() {
+  function deshacer() {
     return ejecutar(async (actual) => {
-      await apiDelete<Turno>(`/api/turnos/${actual.id}/cobrar`, {
-        actualizadoEn: actual.actualizadoEn,
-      });
+      await deshacerCobro(actual.id, actual.actualizadoEn);
       onUpdated(COBRO_DESHECHO);
     });
   }
@@ -353,7 +351,7 @@ export function TurnoDetailSheet({
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[color:var(--border-subtle)] pt-4">
               <Dato etiqueta="Duración">{turno.duracion} min</Dato>
               <Dato etiqueta="Modalidad">
-                {turno.modalidad === "online" ? "Online" : "Presencial"}
+                {MODALIDAD_LABEL[turno.modalidad]}
               </Dato>
               <Dato etiqueta="Tarifa">
                 <span className="tabular-nums">{money(turno.tarifaCobrada)}</span>
@@ -389,7 +387,7 @@ export function TurnoDetailSheet({
                         : "text-ink-900"
                     }`}
                   >
-                    {({pendiente:"Programado",enviando:"Enviando",aceptado:"En camino",entregado:"Entregado",no_entregado:"No llegó",cancelado:"Cancelado",fallido:"No salió",desconocido:"No sabemos si salió"} as Record<string,string>)[aviso.estado] ?? aviso.estado}
+                    {RECORDATORIO_ESTADO[aviso.estado] ?? aviso.estado}
                   </span>
                   <span className="text-[13px] tabular-nums text-ink-500">
                     ·{" "}
@@ -425,7 +423,7 @@ export function TurnoDetailSheet({
                     }}
                     disabled={enviando}
                   >
-                    Cobrar
+                    {COBRAR}
                   </Button>
                 ) : null}
 
@@ -531,37 +529,13 @@ export function TurnoDetailSheet({
         {/* Cobrar: elegir método */}
         {modo === "cobrar" ? (
           <div className="border-t border-[color:var(--border-subtle)] pt-5">
-            <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-              ¿Cómo pagó?
-            </p>
-            <p className="mt-1 tabular-nums text-[13px] text-ink-700">
-              {money(turno.tarifaCobrada)}
-              {esProgramado ? " · al cobrar, el turno queda como realizado." : ""}
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {METODOS_PAGO.map((m) => (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => void cobrar(m.value)}
-                  disabled={enviando}
-                  className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-[var(--duration-fast)] hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex justify-end">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setModo("ver")}
-                disabled={enviando}
-              >
-                Volver
-              </Button>
-            </div>
+            <SelectorMetodoPago
+              monto={turno.tarifaCobrada}
+              cierraElTurno={esProgramado}
+              onElegir={cobrar}
+              onListo={() => {}}
+              onVolver={() => setModo("ver")}
+            />
           </div>
         ) : null}
 
@@ -584,7 +558,7 @@ export function TurnoDetailSheet({
             titulo="¿Cancelar este turno?"
             mensaje="Se cancela el recordatorio por SMS. El turno queda en la ficha como cancelado y no se puede reabrir."
             accion="Cancelar el turno"
-            cancelar="Volver"
+            cancelar={VOLVER}
             variante="peligro"
             enviando={enviando}
             enviandoLabel="Cancelando…"
@@ -600,7 +574,7 @@ export function TurnoDetailSheet({
             titulo={CANCELAR_SERIE_TITULO}
             mensaje={CANCELAR_SERIE_MENSAJE}
             accion={CANCELAR_SERIE_ACCION}
-            cancelar="Volver"
+            cancelar={VOLVER}
             variante="peligro"
             enviando={enviando}
             enviandoLabel="Cancelando…"
@@ -614,14 +588,13 @@ export function TurnoDetailSheet({
             titulo={DESHACER_COBRO_TITULO}
             mensaje={DESHACER_COBRO_MENSAJE}
             accion={DESHACER_COBRO_ACCION}
-            cancelar="Volver"
+            cancelar={VOLVER}
             enviando={enviando}
             enviandoLabel={DESHACIENDO_COBRO}
-            onConfirmar={() => void deshacerCobro()}
+            onConfirmar={() => void deshacer()}
             onCancelar={() => setModo("ver")}
           />
         ) : null}
-
 
         {/* Reprogramar */}
         {modo === "reprogramar" ? (
@@ -636,7 +609,7 @@ export function TurnoDetailSheet({
                 onClick={() => setModo("ver")}
                 disabled={enviando}
               >
-                Volver
+                {VOLVER}
               </Button>
               <Button type="submit" disabled={enviando}>
                 {enviando ? "Guardando…" : "Guardar"}

@@ -24,7 +24,7 @@ import * as React from "react";
 import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, Mic } from "lucide-react";
-import { fechaInputMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
+import { formatearMesMvd, mesIsoMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Card, Chip } from "@/components/ui";
 import { IndicadorProcesando } from "@/components/ui/procesando";
@@ -37,11 +37,13 @@ import {
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
-import { apiGet, esAbort } from "@/lib/api-client";
+import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { cobrarTurno } from "@/lib/cobrar-cliente";
+import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaLarga, hora } from "@/lib/format";
 import {
-  ALGO_FALLO,
+  COBRADO,
   ESCRIBIENDO_NOTA,
   GRABAR_SESION,
   GRABACION_SIN_TERMINAR,
@@ -53,6 +55,10 @@ import {
   SESION_DE_HOY,
   VER_NOTA,
   pluralizar,
+  REINTENTAR,
+  COBRAR,
+  CARGANDO,
+  MODALIDAD_LABEL,
 } from "@/lib/glosario";
 import type {
   DatosEstructurados,
@@ -63,7 +69,6 @@ import type { SesionClinicaEnsamblada } from "@/hooks/useSesionClinicaPolling";
 import type { EstadoProcesamiento, Modalidad, Turno } from "@/types/domain";
 
 import { BriefPreSesion } from "./brief-pre-sesion";
-import { CobrarSheet } from "./turnos-pagos-tab";
 
 interface SesionesTabProps {
   pacienteId: string;
@@ -202,7 +207,7 @@ function tituloDeMes(fecha: Date): string {
 function agruparPorMes(filas: Fila[]): GrupoMes[] {
   const grupos: GrupoMes[] = [];
   for (const fila of filas) {
-    const clave = fechaInputMvd(fila.fecha).slice(0, 7);
+    const clave = mesIsoMvd(fila.fecha);
     const ultimo = grupos[grupos.length - 1];
     if (ultimo && ultimo.clave === clave) {
       ultimo.filas.push(fila);
@@ -248,14 +253,26 @@ export function SesionesTab({
       signal: controller.signal,
     })
       .then((data) =>
-        setLista({
-          pacienteId,
-          docs: data.sesiones,
-          totalPages: data.totalPages,
-          totalSesiones: data.totalSesiones,
-          page: 1,
-          loading: false,
-          error: null,
+        setLista((prev) => {
+          // Si ya había páginas cargadas con "Cargar más" (se vuelve a pedir
+          // cuando llega la nota de hoy), la primera se funde con lo que
+          // había en vez de reemplazarlo: antes la lista volvía sola a diez
+          // y el mes que ella estaba leyendo desaparecía (forense 03, P3-21).
+          const conservar =
+            prev.pacienteId === pacienteId && prev.page > 1
+              ? prev.docs.filter(
+                  (doc) => !data.sesiones.some((nuevo) => nuevo.sesionClinicaId === doc.sesionClinicaId),
+                )
+              : [];
+          return {
+            pacienteId,
+            docs: [...data.sesiones, ...conservar],
+            totalPages: data.totalPages,
+            totalSesiones: data.totalSesiones,
+            page: conservar.length > 0 ? prev.page : 1,
+            loading: false,
+            error: null,
+          };
         }),
       )
       .catch((err: unknown) => {
@@ -263,7 +280,7 @@ export function SesionesTab({
         setLista({
           ...listaInicial(pacienteId),
           loading: false,
-          error: err instanceof Error ? err.message : ALGO_FALLO,
+          error: mensajeParaElla(err),
         });
       });
     return () => controller.abort();
@@ -318,19 +335,31 @@ export function SesionesTab({
     setLista((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const data = await apiGet<DocResponse>(urlDocumentacion(pacienteId, next));
-      setLista((prev) => ({
-        ...prev,
-        docs: [...prev.docs, ...data.sesiones],
-        page: next,
-        totalPages: data.totalPages,
-        totalSesiones: data.totalSesiones,
-        loading: false,
-      }));
+      setLista((prev) =>
+        // Una respuesta que llega con otra paciente en pantalla no se mezcla.
+        prev.pacienteId !== pacienteId
+          ? prev
+          : {
+              ...prev,
+              // Sin repetidos: si entró una nota nueva arriba, la primera de
+              // esta página es la última de la anterior.
+              docs: [
+                ...prev.docs,
+                ...data.sesiones.filter(
+                  (nuevo) => !prev.docs.some((doc) => doc.sesionClinicaId === nuevo.sesionClinicaId),
+                ),
+              ],
+              page: next,
+              totalPages: data.totalPages,
+              totalSesiones: data.totalSesiones,
+              loading: false,
+            },
+      );
     } catch (err) {
       setLista((prev) => ({
         ...prev,
         loading: false,
-        error: err instanceof Error ? err.message : ALGO_FALLO,
+        error: mensajeParaElla(err),
       }));
     }
   }
@@ -358,13 +387,13 @@ export function SesionesTab({
               {listaActual.error}
             </p>
             <Button variant="ghost" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
-              Reintentar
+              {REINTENTAR}
             </Button>
           </div>
         ) : null}
 
         {listaActual.loading && listaActual.docs.length === 0 ? (
-          <p className="font-sans text-[13px] text-ink-500">Cargando…</p>
+          <p className="font-sans text-[13px] text-ink-500">{CARGANDO}</p>
         ) : null}
 
         {!listaActual.loading && grupos.length === 0 && !listaActual.error ? (
@@ -404,20 +433,23 @@ export function SesionesTab({
               onClick={() => void cargarMas()}
               disabled={listaActual.loading}
             >
-              {listaActual.loading ? "Cargando…" : "Cargar más"}
+              {listaActual.loading ? CARGANDO : "Cargar más"}
             </Button>
           </div>
         ) : null}
       </section>
 
-      <CobrarSheet
-        turno={cobroTarget}
+      <SheetMetodoPago
+        open={cobroTarget !== null}
         onClose={() => setCobroTarget(null)}
-        onCobrado={() => {
-          onAviso("Cobrado", "confirmacion");
+        monto={cobroTarget?.tarifaCobrada}
+        cierraElTurno={cobroTarget?.estado === "programado"}
+        onElegir={async (metodo) => {
+          if (!cobroTarget) return;
+          await cobrarTurno(cobroTarget.id, metodo);
+          onAviso(COBRADO, "confirmacion");
           onTurnoActualizado();
         }}
-        onError={onAviso}
       />
     </div>
   );
@@ -446,7 +478,7 @@ function MarcaDeHoy() {
 }
 
 function modalidadTexto(modalidad: Modalidad): string {
-  return modalidad === "online" ? "Online" : "Presencial";
+  return MODALIDAD_LABEL[modalidad];
 }
 
 /** Un mes de la lista. El más reciente arranca abierto; los anteriores,
@@ -534,7 +566,7 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
 
   let accion: React.ReactNode;
   if (cargando) {
-    accion = <p className="font-sans text-[13px] text-ink-500">Cargando…</p>;
+    accion = <p className="font-sans text-[13px] text-ink-500">{CARGANDO}</p>;
   } else if (!sesion || puede("empezar_subida", sesion.estado) || sinTerminar) {
     accion = (
       <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
@@ -554,7 +586,7 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
   } else if (sesion.estado === "aprobada") {
     accion = sePuedeCobrar(turno, new Date()) ? (
       <Button variant="primary" onClick={hoy.onCobrar}>
-        Cobrar
+        {COBRAR}
       </Button>
     ) : (
       <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
@@ -671,7 +703,7 @@ function FilaSesion({ sesion, hoy }: { sesion: DocSesion; hoy: Hoy | null }) {
         )}
         {hoy && !esRevision && cobrable ? (
           <Button variant="primary" size="sm" className="relative" onClick={hoy.onCobrar}>
-            Cobrar
+            {COBRAR}
           </Button>
         ) : null}
         {conParaVos ? (

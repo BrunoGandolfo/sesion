@@ -300,6 +300,35 @@ export const COBRO_DESHECHO = "Cobro deshecho";
 
 export const RECORDATORIO = "Recordatorio";
 
+/** Cuándo se avisa, en Configuración. La hora la pone la pantalla, sacada de
+ *  calcularProgramadoEn (recordatorios-programacion.ts): el aviso sale entre
+ *  `desde` y `hasta` porque los del día se reparten unos minutos. */
+export const RECORDATORIO_MOMENTOS = {
+  dia_anterior: {
+    label: "El día anterior",
+    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} del día antes`,
+  },
+  dos_dias_antes: {
+    label: "Dos días antes",
+    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} de dos días antes`,
+  },
+  misma_manana: {
+    label: "La misma mañana",
+    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} del día del turno`,
+  },
+} as const;
+
+/** La excepción de "La misma mañana": si el aviso de la mañana no llegaría
+ *  antes del turno, sale la tarde anterior. `limite` es el primer minuto en
+ *  que eso ya no puede pasar. */
+export function RECORDATORIO_MISMA_MANANA_EXCEPCION(
+  limite: string,
+  tardeDesde: string,
+  tardeHasta: string,
+): string {
+  return `Si el turno es antes de las ${limite}, el aviso puede salir la tarde anterior, entre las ${tardeDesde} y las ${tardeHasta}: a la mañana no llegaría antes del turno.`;
+}
+
 /** Cómo se dice cada estado del recordatorio en la pantalla del turno.
  *  "enviando" es la reserva interna del cron: para ella es "saliendo". */
 export const RECORDATORIO_ESTADO: Readonly<Record<string, string>> = {
@@ -340,6 +369,14 @@ export const ENVIANDO_GRABACION = (porcentaje: number) =>
 export const GRABACION_LLEGO =
   "La grabación llegó bien. La nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando esté.";
 export const VOLVER_A_LA_FICHA = "Volver a la ficha";
+/** La sesión del turno ya se subió o se está escribiendo: no se graba de nuevo. */
+export const SESION_EN_CAMINO = "Esta sesión ya está en camino.";
+/** No se pudo armar el PDF del Recorrido. */
+export const PDF_RECORRIDO_NO_SALIO = "No pudimos preparar el PDF. Probá de nuevo.";
+/** El turno está cancelado o la paciente no vino: no hay sesión que grabar.
+ *  (El de otro día es MENSAJE_GRABAR_OTRO_DIA, el mismo del servidor.) */
+export const TURNO_SIN_SESION_PARA_GRABAR =
+  "Este turno no se puede grabar: está cancelado o la paciente no vino. Para grabar ahora, empezá desde la ficha de la paciente.";
 
 /** Se tocó Terminar con menos de diez segundos grabados: un toque accidental.
  *  No se sube ni se transcribe nada, y se puede volver a grabar ahí mismo. */
@@ -454,8 +491,14 @@ export const EN_CURSO = "En curso";
 /** El turno es el próximo del día y todavía no empezó. */
 export const ENSEGUIDA = "Enseguida";
 
-/** Título del sheet que pregunta cómo pagó. */
+/** Nombre accesible del sheet que pregunta cómo pagó. */
 export const METODO_DE_PAGO = "Método de pago";
+/** El titular del selector de método de pago: el mismo en Hoy, Agenda,
+ *  Cobros y la ficha. */
+export const COMO_PAGO = "¿Cómo pagó?";
+/** Al lado del monto, cuando se cobra un turno que sigue programado: el
+ *  servidor lo marca realizado al cobrarlo (casos-uso/cobrar-turno.ts). */
+export const AL_COBRAR_QUEDA_REALIZADO = "Al cobrar, el turno queda como realizado.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Estado del turno en chips y listas
@@ -467,6 +510,16 @@ export const METODO_DE_PAGO = "Método de pago";
 export const PAGADO = "Pagado";
 export const PENDIENTE = "Sin cobrar";
 export const CANCELADO = "Cancelado";
+export const REALIZADO = "Realizado";
+/** Cómo se dice la modalidad de un turno, en todas las pantallas. */
+export const MODALIDAD_LABEL: Readonly<Record<"presencial" | "online", string>> = {
+  presencial: "Presencial",
+  online: "Online",
+};
+/** El aviso de la ficha sobre lo que ya pasó y no se cobró: cuenta lo mismo
+ *  que ofrece el botón Cobrar (sePuedeCobrar), también un turno agendado
+ *  cuya hora ya pasó. */
+export const SESIONES_SIN_COBRAR_DETALLE = "Sesiones que ya pasaron y todavía no se cobraron.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Estado clínico del turno, separado del pago
@@ -904,6 +957,14 @@ export const AGENDA_DIA_VACIO_LINEAS: [string, string, string] = [
 
 /** El botón que agenda un turno, desde el estado vacío o desde el header. */
 export const AGENDAR = "Agendar";
+/** Nombre accesible del sheet de agendar, el mismo en Hoy y en la Agenda. */
+export const AGENDAR_TURNO = "Agendar turno";
+/** La lista de pacientes del formulario de agendar no llegó. */
+export const PACIENTES_NO_CARGARON = [
+  "No pudimos traer tus pacientes.",
+  "Sin la lista no se puede agendar.",
+  "Probá de nuevo en un momento.",
+] as const;
 
 /**
  * "Crear a X" crea la paciente con la tarifa de Tu consultorio. Si esa tarifa
@@ -1047,6 +1108,9 @@ export const COBROS_NO_CARGARON = [
 /** Mientras la pantalla trae los datos. Nunca "cargando datos" ni
  *  "procesando". */
 export const CARGANDO = "Cargando…";
+/** Una recarga falló y la pantalla sigue con lo que tenía. Va con
+ *  Reintentar, arriba de los datos. */
+export const DATOS_SIN_ACTUALIZAR = "No se pudo actualizar: lo que ves es de antes.";
 
 // La confirmación del cobro (COBRADO) y su fallo (NO_SE_PUDO_COBRAR) viven
 // en la sección de Hoy, que es la pantalla desde donde se cobra.

@@ -2,14 +2,18 @@
 
 import * as React from "react";
 import { ResultadoSerie } from "@/components/forms/resultado-serie";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { CalendarX2 } from "lucide-react";
 
-import { Fab, Sheet, Toast } from "@/components/ui";
+import { Fab, Toast } from "@/components/ui";
 import { useConfirmacionDibujada } from "@/components/ui/movimiento";
+import { EstadoVacio } from "@/components/ui/estado-vacio";
+import { useEsEscritorio } from "@/hooks/useEsEscritorio";
 import { useHoy } from "@/hooks/useHoy";
-import { mensajeTurnoAgendado, payloadNuevoTurno } from "@/lib/agendar-turno";
-import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { crearTurno, mensajeTurnoAgendado } from "@/lib/agendar-turno";
+import { SheetNuevoTurno } from "@/components/forms/sheet-nuevo-turno";
+import { apiGet, esAbort } from "@/lib/api-client";
+import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import {
   agregarDiasMvd,
   finDelDiaMvd,
@@ -19,61 +23,23 @@ import {
   agregarMesesMvd,
   esMismoDiaMvd,
 } from "@/lib/fechas-montevideo";
-import { AGENDAR, ALGO_FALLO } from "@/lib/glosario";
-import type {
-  Configuracion,
-  PacienteConDeuda,
-  TurnoCreado,
-  TurnoConPaciente,
-} from "@/types/domain";
+import {
+  AGENDAR,
+  ALGO_FALLO,
+  REINTENTAR,
+  CARGANDO,
+} from "@/lib/glosario";
+import type { TurnoCreado, TurnoConPaciente } from "@/types/domain";
 
 import { AgendaHeader } from "./agenda-header";
-import { DayView, EstadoVacio } from "./day-view";
+import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
 import { SemanaTira } from "./semana-tira";
-import {
-  NuevoTurnoForm,
-  type NuevoTurnoData,
-} from "@/components/forms/nuevo-turno-form";
+import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { TurnoDetailSheet } from "./turno-detail-sheet";
 
 export type AgendaViewMode = "día" | "semana" | "mes";
-
-const MOBILE_QUERY = "(max-width: 1023px)";
-
-function subscribeMedia(cb: () => void) {
-  if (typeof window === "undefined") return () => {};
-  const mql = window.matchMedia(MOBILE_QUERY);
-  mql.addEventListener("change", cb);
-  return () => mql.removeEventListener("change", cb);
-}
-function getMobileSnapshot() {
-  return window.matchMedia(MOBILE_QUERY).matches;
-}
-function getMobileServerSnapshot() {
-  return false;
-}
-
-type RawTurno = Omit<
-  TurnoConPaciente,
-  "fecha" | "pagoFecha" | "creadoEn" | "actualizadoEn"
-> & {
-  fecha: string;
-  pagoFecha: string | null;
-  creadoEn: string;
-  actualizadoEn: string;
-};
-
-function parseTurno(raw: RawTurno): TurnoConPaciente {
-  return {
-    ...raw,
-    fecha: new Date(raw.fecha),
-    pagoFecha: raw.pagoFecha ? new Date(raw.pagoFecha) : null,
-    creadoEn: new Date(raw.creadoEn),
-    actualizadoEn: new Date(raw.actualizadoEn),
-  };
-}
 
 // El rango que se le pide a la API. Los bordes son los del día de
 // Montevideo, no los del dispositivo: con `setHours` un teléfono en Madrid
@@ -106,16 +72,12 @@ const SIN_NADA_QUE_HACER = () => {};
 /** Un solo copy de carga para toda la agenda. */
 function Cargando() {
   return (
-    <p className="py-16 text-center text-[14px] text-ink-500">Cargando…</p>
+    <p className="py-16 text-center text-[14px] text-ink-500">{CARGANDO}</p>
   );
 }
 
 export function AgendaView() {
-  const isMobile = React.useSyncExternalStore(
-    subscribeMedia,
-    getMobileSnapshot,
-    getMobileServerSnapshot,
-  );
+  const isMobile = !useEsEscritorio();
   const [userView, setUserView] = React.useState<AgendaViewMode | null>(null);
   // `anchor` y `today` son null en el servidor para que el primer render sea
   // idéntico en server (UTC) y client (Montevideo). Renderizar
@@ -133,9 +95,7 @@ export function AgendaView() {
   // Mobile: el mes se despliega detrás del título de la fecha.
   const [mesAbierto, setMesAbierto] = React.useState(false);
   const [resultadoSerie, setResultadoSerie] = React.useState<TurnoCreado["serie"]>(null);
-  const [toast, setToast] = React.useState<{ open: boolean; message: string; variante: VarianteToast }>(
-    { open: false, message: "", variante: "aviso" },
-  );
+  const toast = useToast();
 
   // En mobile siempre se mira un día (la semana se dibuja como día). "mes"
   // en mobile vive en el desplegable, no como vista.
@@ -160,7 +120,17 @@ export function AgendaView() {
     : null;
 
   const cacheRef = React.useRef<Map<string, TurnoConPaciente[]>>(new Map());
-  const [turnos, setTurnos] = React.useState<TurnoConPaciente[] | null>(null);
+  // Los turnos con la clave del rango que los pidió. Al cambiar de rango la
+  // lectura anterior queda un momento: sin la clave, el día nuevo se dibujaba
+  // "sin turnos" con los datos del rango viejo, y el botón Agendar invitaba a
+  // tocarlo en un día que tenía turnos (forense 03, P3-21).
+  const [lectura, setLectura] = React.useState<{
+    clave: string;
+    turnos: TurnoConPaciente[];
+  } | null>(null);
+  // Solo los del rango que se está mirando; los de otro, como si no hubieran
+  // llegado todavía.
+  const turnos = lectura && lectura.clave === rangeKey ? lectura.turnos : null;
   const [turnosStatus, setTurnosStatus] = React.useState<LoadState>("idle");
   const [refreshKey, setRefreshKey] = React.useState(0);
 
@@ -173,7 +143,7 @@ export function AgendaView() {
       // Servir caché es un cambio de datos, no de estado de carga: se hace
       // en un microtask para no encadenar renders desde el efecto.
       const id = window.setTimeout(() => {
-        setTurnos(cached);
+        setLectura({ clave: rangeKey, turnos: cached });
         setTurnosStatus("idle");
       }, 0);
       return () => window.clearTimeout(id);
@@ -191,11 +161,11 @@ export function AgendaView() {
 
     const marcando = window.setTimeout(() => setTurnosStatus("loading"), 0);
 
-    apiGet<RawTurno[]>(url, { signal: controller.signal })
+    apiGet<TurnoJson<TurnoConPaciente>[]>(url, { signal: controller.signal })
       .then((data) => {
-        const parsed = data.map(parseTurno);
+        const parsed = data.map((t) => parseTurno(t));
         cacheRef.current.set(rangeKey, parsed);
-        setTurnos(parsed);
+        setLectura({ clave: rangeKey, turnos: parsed });
         setTurnosStatus("idle");
       })
       .catch((err: unknown) => {
@@ -208,30 +178,6 @@ export function AgendaView() {
       controller.abort();
     };
   }, [rangeKey, range, refreshKey]);
-
-  // Pacientes y configuración: se piden al abrir el sheet de agendar.
-  const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
-    null,
-  );
-  const [pacientesStatus, setPacientesStatus] =
-    React.useState<LoadState>("idle");
-  const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
-
-  const fetchPacientes = React.useCallback(() => {
-    setPacientesStatus("loading");
-    Promise.all([
-      apiGet<PacienteConDeuda[]>("/api/pacientes"),
-      apiGet<Configuracion>("/api/config").catch(() => null),
-    ])
-      .then(([lista, config]) => {
-        setPacientes(lista);
-        setTarifaDefault(config ? config.tarifaDefault : null);
-        setPacientesStatus("idle");
-      })
-      .catch(() => {
-        setPacientesStatus("error");
-      });
-  }, []);
 
   const handlePrev = () => {
     setAnchorUsuario((elegido) => {
@@ -289,33 +235,20 @@ export function AgendaView() {
 
   const handleTurnoUpdated = (message: string) => {
     setDetalleId(null);
-    setToast({ open: true, message, variante: "confirmacion" });
+    toast.confirmar(message);
     refetchTurnos();
   };
 
-  const openSheet = () => {
-    setSheetOpen(true);
-    if (pacientes === null && pacientesStatus !== "loading") {
-      fetchPacientes();
-    }
-  };
+  const openSheet = () => setSheetOpen(true);
   const closeSheet = () => setSheetOpen(false);
 
-  // Lanza ApiClientError si la API rechaza: el formulario lo muestra.
+  // crearTurno relanza el ApiClientError si la API rechaza: el formulario
+  // lo muestra. El body y el mensaje son los mismos que en Hoy.
   const handleCreateTurno = async (data: NuevoTurnoData) => {
-    // El body y el mensaje son los mismos que en Hoy (src/lib/agendar-turno.ts).
-    let creado: TurnoCreado;
-    try {
-      creado = await apiPost<TurnoCreado>("/api/turnos", payloadNuevoTurno(data));
-    } catch (err) {
-      if (err instanceof ApiClientError) throw err;
-      throw new ApiClientError(ALGO_FALLO, 0);
-    }
+    const creado = await crearTurno(data);
     setSheetOpen(false);
     if (creado.serie) setResultadoSerie(creado.serie);
-    else setToast({ open: true, message: mensajeTurnoAgendado(creado), variante: "confirmacion" });
-    // Si se creó un paciente en el camino, la lista tiene que reflejarlo.
-    setPacientes(null);
+    else toast.confirmar(mensajeTurnoAgendado(creado));
     refetchTurnos();
   };
 
@@ -405,7 +338,7 @@ export function AgendaView() {
                 "Puede ser la conexión.",
                 "Tus turnos no se perdieron.",
               ]}
-              accion={{ label: "Reintentar", onClick: retryTurnos }}
+              accion={{ label: REINTENTAR, onClick: retryTurnos }}
             />
           ) : turnos !== null ? (
             view === "día" ? (
@@ -437,32 +370,12 @@ export function AgendaView() {
 
       {mostrarFab ? <Fab label={AGENDAR} onClick={openSheet} /> : null}
 
-      <Sheet open={sheetOpen} onClose={closeSheet} ariaLabel="Agendar" formulario>
-        <div className="px-6 pt-3 lg:px-7 lg:pt-7">
-        {pacientes === null && pacientesStatus === "error" ? (
-          <EstadoVacio
-            icono={<CalendarX2 size={28} strokeWidth={1.6} aria-hidden="true" />}
-            titulo={ALGO_FALLO}
-            lineas={[
-              "No pudimos traer tus pacientes.",
-              "Sin la lista no se puede agendar.",
-              "Probá de nuevo en un momento.",
-            ]}
-            accion={{ label: "Reintentar", onClick: fetchPacientes }}
-          />
-        ) : pacientes === null ? (
-          <Cargando />
-        ) : (
-          <NuevoTurnoForm
-            pacientes={pacientes}
-            tarifaDefault={tarifaDefault}
-            fechaInicial={anchor}
-            onSubmit={handleCreateTurno}
-            onCancel={closeSheet}
-          />
-        )}
-        </div>
-      </Sheet>
+      <SheetNuevoTurno
+        open={sheetOpen}
+        fechaInicial={anchor}
+        onClose={closeSheet}
+        onSubmit={handleCreateTurno}
+      />
 
       <TurnoDetailSheet
         key={detalleId ?? "closed"}
@@ -475,12 +388,7 @@ export function AgendaView() {
 
       <ResultadoSerie serie={resultadoSerie} onClose={() => setResultadoSerie(null)} />
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((current) => ({ ...current, open: false }))}
-      />
+      <Toast {...toast.props} />
     </>
   );
 }
