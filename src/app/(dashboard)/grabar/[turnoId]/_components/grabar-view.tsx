@@ -39,6 +39,7 @@ import { AvisoPrueba } from "@/components/layout/aviso-prueba";
 import { Button, Confirmar, Toast } from "@/components/ui";
 import { AnilloProgreso, Aparece, Latido } from "@/components/ui/movimiento";
 import {
+  ErrorSubida,
   marcarTurnoRealizado,
   subirAudio,
   volverAGrabando,
@@ -47,6 +48,7 @@ import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
+import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import type { EstadoPrueba } from "@/lib/limites-prueba";
 import {
   ALGO_FALLO,
@@ -82,13 +84,23 @@ import { MedidorAudio } from "./medidor-audio";
 /** Duración por defecto del turno creado al vuelo. */
 const DURACION_SIN_TURNO = 50;
 
-/** Estados de la sesión en los que todavía tiene sentido enviar una
- *  grabación que quedó en el teléfono. */
-const ADMITE_AUDIO = new Set(["grabando", "subiendo"]);
+/** Un rechazo del servidor a la subida (409 o 422 al pedir la URL o al
+ *  confirmar) PUEDE ser definitivo. El PUT a R2 no entra: un 4xx de R2 (una
+ *  URL vencida) se arregla pidiendo otra. */
+function esRechazoDelServidor(error: unknown): error is ErrorSubida {
+  return (
+    error instanceof ErrorSubida &&
+    error.paso !== "put" &&
+    (error.status === 409 || error.status === 422)
+  );
+}
 
 interface GrabarViewProps {
   /** null cuando la ruta es /grabar/nuevo?pacienteId=… */
   turnoId: string | null;
+  /** Por qué este turno no se puede grabar (otro día, cancelado), o null.
+   *  Lo decide la página con la regla del servidor. */
+  motivoSinGrabar?: string | null;
   /** El turno pasa a "realizado" al confirmar la subida solo si venía así. */
   turnoProgramado: boolean;
   horaTexto: string | null;
@@ -100,12 +112,15 @@ interface GrabarViewProps {
   prueba?: EstadoPrueba | null;
 }
 
-type Fase =
+export type Fase =
   | "previo"
   | "preparando"
   | "enviando"
   | "guardado"
   | "no-guardado"
+  // El servidor rechazó la subida por algo que reintentar no arregla: se
+  // dice por qué y se vuelve a la ficha.
+  | "rechazada"
   // El audio ya está en R2 y la nota está en camino; lo único que falló es
   // marcar el turno como realizado. No se vuelve a la ficha hasta resolverlo.
   | "turno-sin-marcar";
@@ -119,6 +134,7 @@ function mensajeDe(error: unknown, porDefecto: string) {
 
 export function GrabarView({
   turnoId: turnoIdInicial,
+  motivoSinGrabar = null,
   turnoProgramado,
   horaTexto: horaInicial,
   pacienteId,
@@ -187,10 +203,33 @@ export function GrabarView({
 
         setFase("guardado");
       } catch (error) {
+        console.warn("[grabar] falló la subida", error);
+        // Lo que decide es el estado de la sesión, no el código: un 409 de
+        // "no llegó" deja la sesión en grabando a propósito para reintentar,
+        // y uno de upload-url con la sesión en subiendo se arregla volviendo
+        // a grabando. Definitivo es que la sesión ya no admita audio (la
+        // cerró el mantenimiento, quedó fallida por corta, ya se procesa):
+        // reintentar fallaría igual cada vez. Si no se puede leer, se
+        // reintenta como siempre.
+        if (esRechazoDelServidor(error)) {
+          const sesion = await apiGet<SesionApi | null>(
+            `/api/sesion-clinica?turnoId=${turno}`,
+          ).catch(() => undefined);
+          const admiteAudio =
+            sesion === undefined ||
+            (sesion !== null &&
+              (ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado));
+          if (!admiteAudio) {
+            // Se dice lo que contestó el servidor, que está escrito para
+            // ella, y se vuelve a la ficha.
+            setErrorPantalla(error.message);
+            setFase("rechazada");
+            return;
+          }
+        }
         // Nada se borra: la grabación sigue en memoria y sus chunks en
         // IndexedDB. La sesión vuelve a "grabando" para repetir desde
         // upload-url con el mismo blob.
-        console.warn("[grabar] falló la subida", error);
         setErrorPantalla(AUDIO_NO_GUARDADO);
         setFase("no-guardado");
         await volverAGrabando(sesionId);
@@ -234,7 +273,7 @@ export function GrabarView({
     let cancelado = false;
     void apiGet<SesionApi | null>(`/api/sesion-clinica?turnoId=${turnoId}`)
       .then((sesion) => {
-        if (!cancelado && sesion && !ADMITE_AUDIO.has(sesion.estado)) descartarPendiente();
+        if (!cancelado && sesion && !(ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado)) descartarPendiente();
       })
       .catch(() => {});
     return () => {
@@ -402,72 +441,90 @@ export function GrabarView({
           ) : null}
         </header>
 
-        {enviandoAhora ? (
-          <PantallaEnviando
-            progreso={fase === "enviando" ? (progreso ?? 0) : null}
-            pantallaApagada={pantalla.seApago}
-            onCerrarAvisoPantalla={pantalla.cerrarAviso}
-          />
-        ) : fase === "guardado" ? (
-          <PantallaLlego onVolver={volver} />
-        ) : fase === "no-guardado" ? (
-          <PantallaConReintento
-            mensaje={errorPantalla ?? AUDIO_NO_GUARDADO}
-            onReintentar={reintentarSubida}
-          />
-        ) : fase === "turno-sin-marcar" ? (
-          <PantallaConReintento
-            mensaje={errorPantalla ?? TURNO_NO_MARCADO}
-            onReintentar={() => void reintentarMarcarRealizado()}
-          />
-        ) : enCursoAhora ? (
-          <PantallaGrabando
-            estado={grabador.estado}
-            segundos={grabador.segundos}
-            nivel={grabador.nivelAudio}
-            silencioso={grabador.audioSilencioso}
-            microfonoSilenciado={grabador.microfonoSilenciado}
-            hueco={grabador.hueco}
-            pantallaApagada={pantalla.seApago}
-            avisoLimite={grabador.avisoLimite}
-            limiteAlcanzado={grabador.limiteAlcanzado}
-            conmutando={grabador.conmutando}
-            confirmando={confirmarDescarte}
-            onPausar={grabador.pausar}
-            onReanudar={grabador.reanudar}
-            onTerminar={grabador.terminar}
-            onCerrarAvisoHueco={grabador.cerrarAvisoHueco}
-            onCerrarAvisoPantalla={pantalla.cerrarAviso}
-            onPedirDescarte={() => setConfirmarDescarte(true)}
-            onCancelarDescarte={() => setConfirmarDescarte(false)}
-            onDescartar={descartar}
-          />
-        ) : grabador.estado === "error" ? (
-          <PantallaErrorMicrofono
-            mensaje={grabador.mensajeError ?? ALGO_FALLO}
-            onReintentar={() => {
-              grabador.resetear();
-              setFase("previo");
-            }}
-          />
-        ) : (
-          <PantallaPrevia
-            autorizacionVigente={autorizacionVigente}
-            pacienteId={pacienteId}
-            preparando={fase === "preparando"}
-            sinCupo={sinCupo}
-            sinPantallaEncendida={pantalla.estado === "rechazada"}
-            muyCorta={grabador.muyCorta}
-            pendienteMinutos={
-              grabador.pendienteSeg !== null
-                ? Math.max(1, Math.round(grabador.pendienteSeg / 60))
-                : null
-            }
-            onEmpezar={() => void empezar()}
-            onEnviarPendiente={() => void enviarPendiente()}
-            onDescartarPendiente={grabador.descartarPendiente}
-          />
-        )}
+        {(() => {
+          switch (pantallaDe(fase, grabador.estado)) {
+            case "enviando":
+              return (
+                <PantallaEnviando
+                  progreso={fase === "enviando" ? (progreso ?? 0) : null}
+                  pantallaApagada={pantalla.seApago}
+                  onCerrarAvisoPantalla={pantalla.cerrarAviso}
+                />
+              );
+            case "llego":
+              return <PantallaLlego onVolver={volver} />;
+            case "reintentar-subida":
+              return (
+                <PantallaConReintento
+                  mensaje={errorPantalla ?? AUDIO_NO_GUARDADO}
+                  onReintentar={reintentarSubida}
+                />
+              );
+            case "reintentar-turno":
+              return (
+                <PantallaConReintento
+                  mensaje={errorPantalla ?? TURNO_NO_MARCADO}
+                  onReintentar={() => void reintentarMarcarRealizado()}
+                />
+              );
+            case "rechazada":
+              return <PantallaRechazada mensaje={errorPantalla ?? ALGO_FALLO} onVolver={volver} />;
+            case "grabando":
+              return (
+                <PantallaGrabando
+                  estado={grabador.estado}
+                  segundos={grabador.segundos}
+                  nivel={grabador.nivelAudio}
+                  silencioso={grabador.audioSilencioso}
+                  microfonoSilenciado={grabador.microfonoSilenciado}
+                  hueco={grabador.hueco}
+                  pantallaApagada={pantalla.seApago}
+                  avisoLimite={grabador.avisoLimite}
+                  limiteAlcanzado={grabador.limiteAlcanzado}
+                  conmutando={grabador.conmutando}
+                  confirmando={confirmarDescarte}
+                  onPausar={grabador.pausar}
+                  onReanudar={grabador.reanudar}
+                  onTerminar={grabador.terminar}
+                  onCerrarAvisoHueco={grabador.cerrarAvisoHueco}
+                  onCerrarAvisoPantalla={pantalla.cerrarAviso}
+                  onPedirDescarte={() => setConfirmarDescarte(true)}
+                  onCancelarDescarte={() => setConfirmarDescarte(false)}
+                  onDescartar={descartar}
+                />
+              );
+            case "error-mic":
+              return (
+                <PantallaErrorMicrofono
+                  mensaje={grabador.mensajeError ?? ALGO_FALLO}
+                  onReintentar={() => {
+                    grabador.resetear();
+                    setFase("previo");
+                  }}
+                />
+              );
+            case "previa":
+              return (
+                <PantallaPrevia
+                  autorizacionVigente={autorizacionVigente}
+                  motivoSinGrabar={motivoSinGrabar}
+                  pacienteId={pacienteId}
+                  preparando={fase === "preparando"}
+                  sinCupo={sinCupo}
+                  sinPantallaEncendida={pantalla.estado === "rechazada"}
+                  muyCorta={grabador.muyCorta}
+                  pendienteMinutos={
+                    grabador.pendienteSeg !== null
+                      ? Math.max(1, Math.round(grabador.pendienteSeg / 60))
+                      : null
+                  }
+                  onEmpezar={() => void empezar()}
+                  onEnviarPendiente={() => void enviarPendiente()}
+                  onDescartarPendiente={grabador.descartarPendiente}
+                />
+              );
+          }
+        })()}
       </div>
 
       <Toast {...toast.props} />
@@ -475,8 +532,36 @@ export function GrabarView({
   );
 }
 
+/** Qué pantalla toca. La precedencia: lo que está subiendo, después el
+ *  resultado de la subida, después la grabación en curso, el error del
+ *  micrófono y, si no, la previa. Antes eran seis ternarios encadenados que
+ *  mezclaban `fase` y el estado del grabador. */
+export type Pantalla =
+  | "enviando"
+  | "llego"
+  | "reintentar-subida"
+  | "reintentar-turno"
+  | "rechazada"
+  | "grabando"
+  | "error-mic"
+  | "previa";
+
+export function pantallaDe(fase: Fase, estadoGrabador: EstadoGrabador): Pantalla {
+  if (estadoGrabador === "preparando" || fase === "enviando") return "enviando";
+  if (fase === "guardado") return "llego";
+  if (fase === "no-guardado") return "reintentar-subida";
+  if (fase === "turno-sin-marcar") return "reintentar-turno";
+  if (fase === "rechazada") return "rechazada";
+  if (estadoGrabador === "grabando" || estadoGrabador === "pausado" || estadoGrabador === "terminada") {
+    return "grabando";
+  }
+  if (estadoGrabador === "error") return "error-mic";
+  return "previa";
+}
+
 function PantallaPrevia({
   autorizacionVigente,
+  motivoSinGrabar,
   pacienteId,
   preparando,
   sinCupo,
@@ -488,6 +573,7 @@ function PantallaPrevia({
   onDescartarPendiente,
 }: {
   autorizacionVigente: boolean;
+  motivoSinGrabar: string | null;
   pacienteId: string;
   preparando: boolean;
   /** Tope de grabaciones de la prueba alcanzado: Grabar sesión apagado. */
@@ -501,6 +587,19 @@ function PantallaPrevia({
   onEnviarPendiente: () => void;
   onDescartarPendiente: () => void;
 }) {
+  if (motivoSinGrabar) {
+    return (
+      <div className="flex flex-col items-center gap-4">
+        <p className="max-w-[340px] font-sans text-[15px] leading-[1.55] text-ink-900">
+          {motivoSinGrabar}
+        </p>
+        <Button asChild variant="secondary">
+          <Link href={`/pacientes/${pacienteId}`}>{VOLVER_A_LA_FICHA}</Link>
+        </Button>
+      </div>
+    );
+  }
+
   if (!autorizacionVigente) {
     return (
       <div className="flex flex-col items-center gap-4">
@@ -882,6 +981,20 @@ function PantallaConReintento({
       </p>
       <Button className="w-full sm:w-auto" onClick={onReintentar}>
         Reintentar
+      </Button>
+    </div>
+  );
+}
+
+/** Una subida que el servidor no va a aceptar: sin Reintentar. */
+function PantallaRechazada({ mensaje, onVolver }: { mensaje: string; onVolver: () => void }) {
+  return (
+    <div className="flex w-full flex-col items-center gap-5">
+      <p role="alert" className="max-w-[340px] font-sans text-[15px] leading-[1.55] text-ink-900">
+        {mensaje}
+      </p>
+      <Button className="w-full sm:w-auto" onClick={onVolver}>
+        {VOLVER_A_LA_FICHA}
       </Button>
     </div>
   );

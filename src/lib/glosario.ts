@@ -340,6 +340,10 @@ export const ENVIANDO_GRABACION = (porcentaje: number) =>
 export const GRABACION_LLEGO =
   "La grabación llegó bien. La nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando esté.";
 export const VOLVER_A_LA_FICHA = "Volver a la ficha";
+/** El turno está cancelado o la paciente no vino: no hay sesión que grabar.
+ *  (El de otro día es MENSAJE_GRABAR_OTRO_DIA, el mismo del servidor.) */
+export const TURNO_SIN_SESION_PARA_GRABAR =
+  "Este turno no se puede grabar: está cancelado o la paciente no vino. Para grabar ahora, empezá desde la ficha de la paciente.";
 
 /** Se tocó Terminar con menos de diez segundos grabados: un toque accidental.
  *  No se sube ni se transcribe nada, y se puede volver a grabar ahí mismo. */

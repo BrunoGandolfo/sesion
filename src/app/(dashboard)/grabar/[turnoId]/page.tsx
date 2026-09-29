@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 import { hora } from "@/lib/format";
 
 import { GrabarView } from "./_components/grabar-view";
+import { motivoSinGrabar } from "./_components/motivo-sin-grabar";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,7 @@ export default async function GrabarPage({
       id: true,
       fecha: true,
       estado: true,
+      sesionClinica: { select: { estado: true } },
       paciente: { select: { id: true, nombre: true, apellido: true } },
     },
   });
@@ -101,6 +103,7 @@ export default async function GrabarPage({
     <GrabarView
       turnoId={turno.id}
       turnoProgramado={turno.estado === "programado"}
+      motivoSinGrabar={motivoSinGrabar(turno, new Date())}
       horaTexto={hora(turno.fecha)}
       pacienteId={turno.paciente.id}
       pacienteNombre={`${turno.paciente.nombre} ${turno.paciente.apellido}`.trim()}
