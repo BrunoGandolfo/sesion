@@ -48,7 +48,7 @@ import {
   parseTurno,
   type PacienteJson,
   type TurnoJson,
-} from "./json-ficha";
+} from "@/lib/json-turno";
 import { FichaTab } from "./ficha-tab";
 import { RecorridoTab } from "./recorrido-tab";
 import { SesionesTab } from "./sesiones-tab";
