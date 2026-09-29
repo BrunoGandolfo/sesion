@@ -19,7 +19,6 @@ import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { fechaCorta, hora, money } from "@/lib/format";
 import {
   AGENDADO,
-  ALGO_FALLO,
   COBRADO,
   COBRO_DESHECHO,
   DESHACER_COBRO,
@@ -43,13 +42,12 @@ import type {
   Turno,
   TurnoEstado,
 } from "@/types/domain";
-
+import { mensajeParaElla } from "@/lib/api-client";
 
 interface TurnosPagosTabProps {
   turnos: Turno[];
   onTurnoActualizado?: () => void;
 }
-
 
 const ESTADO_LABEL: Record<TurnoEstado, string> = {
   programado: AGENDADO,
@@ -57,7 +55,6 @@ const ESTADO_LABEL: Record<TurnoEstado, string> = {
   cancelado: CANCELADO,
   ausente: NO_VINO,
 };
-
 
 function estadoChipVariant(
   estado: TurnoEstado,
@@ -249,7 +246,7 @@ function TurnoRow({
       setConfirmando(false);
       onDeshecho(actualizado);
     } catch (err) {
-      onError(err instanceof Error ? err.message : ALGO_FALLO);
+      onError(mensajeParaElla(err));
     } finally {
       setDeshaciendo(false);
     }

@@ -38,7 +38,7 @@ import { TemasTable } from "@/app/(dashboard)/pacientes/[id]/_components/grafico
 import type { ExportacionRecorrido } from "@/app/api/_lib/casos-uso/hilo/exportar";
 import { HiloContenido } from "@/components/clinico/HiloContenido";
 import { Button } from "@/components/ui";
-import { apiPost } from "@/lib/api-client";
+import { apiPost, mensajeParaElla } from "@/lib/api-client";
 import { formatearFechaCompletaMvd, formatearFechaCortaMvd, formatearHoraMvd, partesMvd } from "@/lib/fechas-montevideo";
 import {
   COMO_VA,
@@ -48,6 +48,7 @@ import {
   RECORRIDO,
   pieRecorridoPdf,
   pluralizar,
+  PDF_RECORRIDO_NO_SALIO,
 } from "@/lib/glosario";
 import type { ResumenVersionHilo } from "@/lib/hilo/contenido";
 
@@ -90,7 +91,7 @@ export function RecorridoImprimible({ pacienteId }: { pacienteId: string }) {
     pedido.current = true;
     apiPost<Exportacion>(`/api/pacientes/${pacienteId}/hilo/exportar`, {})
       .then(setDatos)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "No pudimos preparar el PDF. Probá de nuevo."));
+      .catch((e: unknown) => setError(mensajeParaElla(e, PDF_RECORRIDO_NO_SALIO)));
   }, [pacienteId]);
 
   React.useEffect(() => {

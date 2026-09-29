@@ -40,7 +40,7 @@ import { EsqueletoCobrosCuerpo } from "@/components/esqueletos";
 import { EstadoVacio } from "@/components/ui/estado-vacio";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
-import { ApiClientError, apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import { cobrarTurno } from "@/lib/cobrar-cliente";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
@@ -102,6 +102,7 @@ import type {
 import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { SegunLectura, type Carga } from "../../_components/segun-lectura";
 import { TarjetaFinanzas } from "./tarjeta-finanzas";
+import { formatPhoneDisplay } from "@/lib/phone";
 
 // ============================================
 // Tipos de fetch — JSON → Date donde la UI lo necesita
@@ -635,7 +636,7 @@ function FilaDeudor({
     } catch (error) {
       // El servidor rechazó programarlo. El envío lo resuelve el despachador.
       setConfirmando(false);
-      onError(error instanceof ApiClientError ? error.mensaje : ALGO_FALLO);
+      onError(mensajeParaElla(error));
     } finally {
       setEnviando(false);
     }
@@ -734,7 +735,7 @@ function FilaDeudor({
               <span className="mt-2 block text-[12px] text-ink-500">
                 {SMS_DESTINO}{" "}
                 <span className="font-medium tabular-nums text-ink-700">
-                  {telefono}
+                  {formatPhoneDisplay(telefono)}
                 </span>
               </span>
             </>
@@ -957,7 +958,6 @@ function CobrosDelMes({
     </Card>
   );
 }
-
 
 function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;

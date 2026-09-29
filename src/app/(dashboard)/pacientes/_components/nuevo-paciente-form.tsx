@@ -5,9 +5,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { Button, Input, Textarea } from "@/components/ui";
-import { ApiClientError, apiPost } from "@/lib/api-client";
-import { ALGO_FALLO } from "@/lib/glosario";
+import { CamposPaciente } from "@/components/forms/campos-paciente";
+import { Button, Textarea } from "@/components/ui";
+import { apiPost, mensajeParaElla } from "@/lib/api-client";
+
 import { pacienteCreateSchema } from "@/app/api/_lib/schemas";
 import type { Paciente } from "@/types/domain";
 
@@ -30,7 +31,6 @@ export function NuevoPacienteForm({
   onSuccess,
   onCancel,
 }: NuevoPacienteFormProps) {
-  const tarifaId = React.useId();
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   const {
@@ -65,7 +65,7 @@ export function NuevoPacienteForm({
       reset();
       onSuccess(paciente);
     } catch (err) {
-      setSubmitError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
+      setSubmitError(mensajeParaElla(err));
     }
   }
 
@@ -87,69 +87,11 @@ export function NuevoPacienteForm({
       >
         <div className="flex-1 overflow-y-auto px-6 py-5 md:px-8 md:py-6">
           <div className="flex flex-col gap-4">
-            <Input
-              label="Nombre"
-              autoComplete="given-name"
-              error={errors.nombre?.message}
-              {...register("nombre")}
+            <CamposPaciente
+              register={register}
+              errors={errors}
+              sinTarifaDefault={tarifaDefault === null}
             />
-            <Input
-              label="Apellido"
-              autoComplete="family-name"
-              error={errors.apellido?.message}
-              {...register("apellido")}
-            />
-            <Input
-              label="Teléfono"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="+598 99 123 456"
-              error={errors.telefono?.message}
-              {...register("telefono")}
-            />
-
-            <div>
-              <label
-                htmlFor={tarifaId}
-                className="mb-2 block font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500"
-              >
-                Tarifa por sesión
-              </label>
-              <div className="relative">
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-[14px] top-1/2 z-10 -translate-y-1/2 text-[14px] font-semibold text-ink-500"
-                >
-                  $UYU
-                </span>
-                <Input
-                  id={tarifaId}
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  className="pl-[56px] tabular-nums"
-                  aria-invalid={errors.tarifa ? true : undefined}
-                  aria-describedby={errors.tarifa ? `${tarifaId}-error` : undefined}
-                  {...register("tarifa", { valueAsNumber: true })}
-                />
-              </div>
-              {tarifaDefault === null && !errors.tarifa ? (
-                <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
-                  Podés fijar una tarifa por defecto en Tu consultorio.
-                </p>
-              ) : null}
-              {errors.tarifa?.message && (
-                <p
-                  id={`${tarifaId}-error`}
-                  role="alert"
-                  className="mt-2 font-sans text-[12px] text-[color:var(--color-error)]"
-                >
-                  {errors.tarifa.message}
-                </p>
-              )}
-            </div>
 
             <Textarea
               label="Notas (opcional)"

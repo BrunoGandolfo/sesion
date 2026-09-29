@@ -5,9 +5,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
-import { Button, Card, Input } from "@/components/ui";
-import { apiPatch } from "@/lib/api-client";
-import { ALGO_FALLO } from "@/lib/glosario";
+import { CamposPaciente } from "@/components/forms/campos-paciente";
+import { Button, Card } from "@/components/ui";
+import { apiPatch, mensajeParaElla } from "@/lib/api-client";
+
 import { pacienteCreateSchema } from "@/app/api/_lib/schemas";
 
 // La misma regla del alta y del servidor. La copia que vivía acá aceptaba
@@ -64,7 +65,7 @@ export function EditarPacienteForm({
       });
       onSuccess();
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : ALGO_FALLO);
+      setApiError(mensajeParaElla(err));
     }
   }
 
@@ -77,44 +78,13 @@ export function EditarPacienteForm({
       </div>
 
       <Card className="m-0 flex-1 overflow-y-auto !rounded-none !border-0 !p-0 !shadow-none">
-        <form className="flex min-h-full flex-col" onSubmit={handleSubmit(submit)}>
+        <form className="flex min-h-full flex-col" onSubmit={handleSubmit(submit)} noValidate>
           <div className="flex-1 overflow-y-auto px-6 py-5 md:px-8 md:py-6">
             <div className="space-y-5">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input
-                  label="Nombre"
-                  autoComplete="given-name"
-                  error={errors.nombre?.message}
-                  {...register("nombre")}
-                />
-                <Input
-                  label="Apellido"
-                  autoComplete="family-name"
-                  error={errors.apellido?.message}
-                  {...register("apellido")}
-                />
-              </div>
-
-              <Input
-                label="Teléfono"
-                autoComplete="tel"
-                error={errors.telefono?.message}
-                {...register("telefono")}
-              />
-
-              <Input
-                label="Tarifa"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                prefix="$"
-                error={errors.tarifa?.message}
-                {...register("tarifa", { valueAsNumber: true })}
-              />
+              <CamposPaciente register={register} errors={errors} nombreEnFila />
 
               {apiError && (
-                <p className="text-[12px] text-[color:var(--color-error)]">{apiError}</p>
+                <p role="alert" className="text-[12px] text-[color:var(--color-error)]">{apiError}</p>
               )}
             </div>
           </div>

@@ -3,12 +3,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 
-import { apiPost } from "@/lib/api-client";
+import { ApiClientError, apiPost } from "@/lib/api-client";
+import { PDF_RECORRIDO_NO_SALIO } from "@/lib/glosario";
 import { hiloVacio, type ContenidoHilo, type ResumenVersionHilo } from "@/lib/hilo/contenido";
 
 import { RecorridoImprimible } from "../recorrido-imprimible";
 
-vi.mock("@/lib/api-client", () => ({ apiPost: vi.fn() }));
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  apiPost: vi.fn(),
+}));
 
 const SESION_A = "7b0c7e0a-1c4e-4d8a-9a51-0f5d7a9b2c11";
 const SESION_B = "c3d9a4f2-6b1e-4f7a-8c2d-5e6f7a8b9c01";
@@ -91,9 +95,15 @@ describe("la hoja del Recorrido", () => {
   });
 
   it("si la exportación falla, lo dice y no abre el diálogo", async () => {
-    vi.mocked(apiPost).mockRejectedValue(new Error("No autorizado"));
+    vi.mocked(apiPost).mockRejectedValue(new ApiClientError("No autorizado", 403));
     render(<RecorridoImprimible pacienteId="p" />);
     expect((await screen.findByRole("alert")).textContent).toBe("No autorizado");
     expect(window.print).not.toHaveBeenCalled();
+  });
+
+  it("un error que no es de la API no se muestra en crudo", async () => {
+    vi.mocked(apiPost).mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<RecorridoImprimible pacienteId="p" />);
+    expect((await screen.findByRole("alert")).textContent).toBe(PDF_RECORRIDO_NO_SALIO);
   });
 });

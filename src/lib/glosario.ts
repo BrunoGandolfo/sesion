@@ -369,6 +369,10 @@ export const ENVIANDO_GRABACION = (porcentaje: number) =>
 export const GRABACION_LLEGO =
   "La grabación llegó bien. La nota va a estar lista en unos minutos: te avisamos acá, en la app, cuando esté.";
 export const VOLVER_A_LA_FICHA = "Volver a la ficha";
+/** La sesión del turno ya se subió o se está escribiendo: no se graba de nuevo. */
+export const SESION_EN_CAMINO = "Esta sesión ya está en camino.";
+/** No se pudo armar el PDF del Recorrido. */
+export const PDF_RECORRIDO_NO_SALIO = "No pudimos preparar el PDF. Probá de nuevo.";
 /** El turno está cancelado o la paciente no vino: no hay sesión que grabar.
  *  (El de otro día es MENSAJE_GRABAR_OTRO_DIA, el mismo del servidor.) */
 export const TURNO_SIN_SESION_PARA_GRABAR =

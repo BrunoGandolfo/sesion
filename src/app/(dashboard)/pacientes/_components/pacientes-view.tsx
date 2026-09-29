@@ -20,11 +20,10 @@ import {
 import { EsqueletoListaPacientes } from "@/components/esqueletos";
 import { TAMANOS_LUPITA } from "@/components/ui/lupita";
 import { ListaEnCascada } from "@/components/ui/movimiento";
-import { ApiClientError, apiGet, apiPatch, esAbort } from "@/lib/api-client";
+import { apiGet, apiPatch, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { parsePaciente, type PacienteJson } from "@/lib/json-turno";
 import { fechaRelativa, money } from "@/lib/format";
 import {
-  ALGO_FALLO,
   DEBE,
   NUEVO_PACIENTE,
   PACIENTES_VACIO_LINEA,
@@ -34,9 +33,9 @@ import {
 } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda } from "@/types/domain";
 import { NuevoPacienteForm } from "./nuevo-paciente-form";
+import { formatPhoneDisplay } from "@/lib/phone";
 
 type Segment = "activos" | "archivados";
-
 
 async function fetchPacientes({
   segment,
@@ -143,7 +142,7 @@ export function PacientesView({
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
-        setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
+        setError(mensajeParaElla(err));
         setLoading(false);
       });
 
@@ -163,7 +162,7 @@ export function PacientesView({
           `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`),
         ),
       );
-      avisar(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
+      avisar(mensajeParaElla(err));
     } finally {
       setReactivatingId(null);
     }
@@ -373,7 +372,7 @@ function DesktopTable({
               </span>
             </span>
             <span className="text-[13px] text-ink-700 tabular-nums">
-              {p.telefono}
+              {formatPhoneDisplay(p.telefono)}
             </span>
             <span className="text-[13px] text-ink-700 tabular-nums">
               {money(p.tarifa)}

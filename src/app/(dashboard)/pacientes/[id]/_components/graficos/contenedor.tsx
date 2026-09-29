@@ -21,8 +21,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 
 import { Button, Card, EditorialRule } from "@/components/ui";
-import { apiGet, esAbort } from "@/lib/api-client";
-import { ALGO_FALLO, REINTENTAR } from "@/lib/glosario";
+import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { REINTENTAR } from "@/lib/glosario";
 
 import { AlianzaChart } from "./alianza";
 import {
@@ -95,7 +95,7 @@ export function GraficosProgreso({ pacienteId }: { pacienteId: string }) {
         setCarga({
           tipo: "error",
           clave,
-          mensaje: err instanceof Error ? err.message : ALGO_FALLO,
+          mensaje: mensajeParaElla(err),
         });
       });
     return () => controller.abort();

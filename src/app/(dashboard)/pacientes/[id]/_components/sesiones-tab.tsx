@@ -24,7 +24,7 @@ import * as React from "react";
 import type { VarianteToast } from "@/components/ui/toast";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, Mic } from "lucide-react";
-import { fechaInputMvd, formatearMesMvd } from "@/lib/fechas-montevideo";
+import { formatearMesMvd, mesIsoMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Card, Chip } from "@/components/ui";
 import { IndicadorProcesando } from "@/components/ui/procesando";
@@ -37,13 +37,12 @@ import {
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
-import { apiGet, esAbort } from "@/lib/api-client";
+import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { cobrarTurno } from "@/lib/cobrar-cliente";
 import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaLarga, hora } from "@/lib/format";
 import {
-  ALGO_FALLO,
   COBRADO,
   ESCRIBIENDO_NOTA,
   GRABAR_SESION,
@@ -208,7 +207,7 @@ function tituloDeMes(fecha: Date): string {
 function agruparPorMes(filas: Fila[]): GrupoMes[] {
   const grupos: GrupoMes[] = [];
   for (const fila of filas) {
-    const clave = fechaInputMvd(fila.fecha).slice(0, 7);
+    const clave = mesIsoMvd(fila.fecha);
     const ultimo = grupos[grupos.length - 1];
     if (ultimo && ultimo.clave === clave) {
       ultimo.filas.push(fila);
@@ -281,7 +280,7 @@ export function SesionesTab({
         setLista({
           ...listaInicial(pacienteId),
           loading: false,
-          error: err instanceof Error ? err.message : ALGO_FALLO,
+          error: mensajeParaElla(err),
         });
       });
     return () => controller.abort();
@@ -360,7 +359,7 @@ export function SesionesTab({
       setLista((prev) => ({
         ...prev,
         loading: false,
-        error: err instanceof Error ? err.message : ALGO_FALLO,
+        error: mensajeParaElla(err),
       }));
     }
   }

@@ -18,7 +18,7 @@ import { z } from "zod";
 import { Plus } from "lucide-react";
 
 import { Avatar, Button, Input, Segmented } from "@/components/ui";
-import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { ApiClientError, apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import {
   frecuenciaTurnoSchema,
   FRECUENCIAS_TURNO,
@@ -408,7 +408,7 @@ export function NuevoTurnoForm({
         frecuencia: valores.frecuencia,
       });
     } catch (err) {
-      setErrorEnvio(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
+      setErrorEnvio(mensajeParaElla(err));
     } finally {
       setEnviando(false);
     }

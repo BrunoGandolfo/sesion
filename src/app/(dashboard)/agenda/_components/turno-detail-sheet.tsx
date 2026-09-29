@@ -26,13 +26,7 @@ import {
   horaInputMvd,
   instanteDesdeFechaHoraMvd,
 } from "@/lib/fechas-montevideo";
-import {
-  ApiClientError,
-  apiGet,
-  apiPatch,
-  apiPost,
-  esAbort,
-} from "@/lib/api-client";
+import { apiGet, apiPatch, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { fechaCorta, fechaLarga, hora, money } from "@/lib/format";
 import {
   CANCELAR_SERIE,
@@ -41,7 +35,6 @@ import {
   CANCELAR_SERIE_ACCION,
   SERIE_CANCELADA,
   AGENDADO,
-  ALGO_FALLO,
   CANCELADO,
   COBRADO,
   COBRO_DESHECHO,
@@ -77,11 +70,6 @@ import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 type EditValues = CamposTurnoValores;
 
 // Textos de pantalla que todavía no se mudaron a glosario.ts.
-
-
-
-
-
 
 type Modo =
   | "ver"
@@ -129,10 +117,6 @@ function chipDe(turno: TurnoConPaciente) {
   if (turno.estado === "realizado")
     return { variant: "terracotta" as const, label: PENDIENTE };
   return { variant: "gold" as const, label: AGENDADO };
-}
-
-function mensajeDe(err: unknown): string {
-  return err instanceof ApiClientError ? err.mensaje : ALGO_FALLO;
 }
 
 type SesionDelTurno = { id: string; estado?: string; actualizadaEn?: string } | null;
@@ -272,7 +256,7 @@ export function TurnoDetailSheet({
     try {
       await pedido(turno);
     } catch (err) {
-      setError(mensajeDe(err));
+      setError(mensajeParaElla(err));
     } finally {
       setEnviando(false);
     }
@@ -611,7 +595,6 @@ export function TurnoDetailSheet({
             onCancelar={() => setModo("ver")}
           />
         ) : null}
-
 
         {/* Reprogramar */}
         {modo === "reprogramar" ? (

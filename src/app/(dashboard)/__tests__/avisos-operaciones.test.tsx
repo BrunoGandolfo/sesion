@@ -190,7 +190,7 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
   });
 
   it.each([false, true])("deshacer desde Turnos y pagos: éxito=%s", async (exito) => {
-    if (!exito) m.borrar.mockRejectedValue(new Error(FALLO));
+    if (!exito) m.borrar.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<TurnosPagosTab turnos={[{ ...TURNO, pagoEstado: "pagado", pagoMetodo: "efectivo", pagoFecha: AHORA }]} />);
     fireEvent.click(screen.getByRole("button", { name: "Deshacer cobro" }));
     fireEvent.click(screen.getByRole("button", { name: "Deshacer el cobro" }));
@@ -248,7 +248,7 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
   });
 
   it("un inicio rechazado no muestra una confirmación", async () => {
-    m.get.mockRejectedValue(new Error(FALLO));
+    m.get.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<GrabarView turnoId="t1" turnoProgramado={false} horaTexto="12:00" pacienteId="p1" pacienteNombre="Paciente Sintética" autorizacionVigente />);
     fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
     await verificarAviso(FALLO, false);

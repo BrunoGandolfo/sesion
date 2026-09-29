@@ -269,7 +269,8 @@ describe("Te deben: recordar el cobro por SMS", () => {
     fireEvent.click(boton);
 
     expect(await screen.findByText(RECORDAR_COBRO_TITULO)).toBeTruthy();
-    expect(screen.getByText("+59899123456")).toBeTruthy();
+    // El número, como se lee (D5), no en E.164.
+    expect(screen.getByText("+598 99 123 456")).toBeTruthy();
     expect(smsPedidos()).toEqual([]);
 
     // Cancelar tampoco envía, y la fila vuelve a como estaba.

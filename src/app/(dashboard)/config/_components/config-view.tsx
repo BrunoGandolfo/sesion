@@ -18,10 +18,11 @@ import { LogOut } from "lucide-react";
 import { useSesionActual } from "@/components/layout/providers";
 import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
 import { salir } from "@/lib/sesion-cliente";
+import { useEnvio } from "@/hooks/useEnvio";
 
 import { GuardadoCampo, type EstadoCampo } from "@/components/ui/guardado-campo";
 import { Button, Card, Input } from "@/components/ui";
-import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
+import { apiGet, apiPatch, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import {
   RECORDATORIO_MISMA_MANANA_EXCEPCION,
   RECORDATORIO_MOMENTOS,
@@ -316,9 +317,7 @@ export function ConfigView() {
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
-        setErrorCarga(
-          err instanceof ApiClientError ? err.mensaje : ALGO_FALLO,
-        );
+        setErrorCarga(mensajeParaElla(err));
         setCargando(false);
       });
 
@@ -661,15 +660,16 @@ function CambiarPassword() {
   const [actual, setActual] = React.useState("");
   const [nueva, setNueva] = React.useState("");
   const [repetir, setRepetir] = React.useState("");
-  const [enviando, setEnviando] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
   const limpiar = () => {
     setActual("");
     setNueva("");
     setRepetir("");
-    setError(null);
+    setError("");
   };
+  const { enviar: cambiar, enviando, error, setError } = useEnvio(async () => {
+    await apiPost("/api/cuenta/password", { actual, nueva });
+  }, ALGO_FALLO);
+
 
   const cerrar = () => {
     limpiar();
@@ -691,22 +691,14 @@ function CambiarPassword() {
       return;
     }
 
-    setEnviando(true);
-    setError(null);
-    try {
-      await apiPost("/api/cuenta/password", { actual, nueva });
-      limpiar();
-      setAbierto(false);
-      // El servidor cerró todas las sesiones, incluida esta: la cookie ya no
-      // vale. A /login con el aviso, sin pasar por el proxy con cookie muerta.
-      // Recargar descarta el estado privado en memoria tras revocar la sesión.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- El cierre de sesión requiere una navegación completa.
-      window.location.assign("/login?aviso=password-cambiada");
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
-    } finally {
-      setEnviando(false);
-    }
+    if (!(await cambiar())) return;
+    limpiar();
+    setAbierto(false);
+    // El servidor cerró todas las sesiones, incluida esta: la cookie ya no
+    // vale. A /login con el aviso, sin pasar por el proxy con cookie muerta.
+    // Recargar descarta el estado privado en memoria tras revocar la sesión.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- El cierre de sesión requiere una navegación completa.
+    window.location.assign("/login?aviso=password-cambiada");
   }
 
   if (!abierto) {
@@ -791,23 +783,15 @@ function CambiarPassword() {
 // ────────────────────────────────────────────────────────────────────────────
 
 function CerrarOtrasSesiones() {
-  const [enviando, setEnviando] = React.useState(false);
   const [resultado, setResultado] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const { enviar, enviando, error } = useEnvio(async () => {
+    setResultado(null);
+    const { cerradas } = await apiPost<{ cerradas: number }>("/api/cuenta/salir-todas", {});
+    setResultado(otrasSesionesCerradas(cerradas));
+  }, ALGO_FALLO);
 
   async function cerrar() {
-    if (enviando) return;
-    setEnviando(true);
-    setError(null);
-    setResultado(null);
-    try {
-      const { cerradas } = await apiPost<{ cerradas: number }>("/api/cuenta/salir-todas", {});
-      setResultado(otrasSesionesCerradas(cerradas));
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.mensaje : ALGO_FALLO);
-    } finally {
-      setEnviando(false);
-    }
+    await enviar();
   }
 
   return (

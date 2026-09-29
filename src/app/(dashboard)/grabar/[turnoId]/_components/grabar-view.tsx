@@ -45,7 +45,7 @@ import {
   volverAGrabando,
 } from "@/hooks/useGrabacionSesion";
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { ApiClientError, apiGet, apiPost, mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
 import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
@@ -76,6 +76,7 @@ import {
   SEGUIR_GRABANDO,
   TERMINAR_SESION,
   TURNO_NO_MARCADO,
+  SESION_EN_CAMINO,
   VOLVER_A_LA_FICHA,
   REINTENTAR,
   VOLVER,
@@ -130,9 +131,6 @@ export type Fase =
 type TurnoApi = { id: string; fecha: string };
 type SesionApi = { id: string; estado: string };
 
-function mensajeDe(error: unknown, porDefecto: string) {
-  return error instanceof Error && error.message ? error.message : porDefecto;
-}
 
 export function GrabarView({
   turnoId: turnoIdInicial,
@@ -307,7 +305,7 @@ export function GrabarView({
     }
 
     if (sesion.estado !== "grabando") {
-      throw new Error("Esta sesión ya está en camino.");
+      throw new ApiClientError(SESION_EN_CAMINO, 409);
     }
 
     return sesion.id;
@@ -349,7 +347,7 @@ export function GrabarView({
       setFase("previo");
     } catch (error) {
       setFase("previo");
-      avisar(mensajeDe(error, ALGO_FALLO));
+      avisar(mensajeParaElla(error));
     }
   }
 
@@ -371,7 +369,7 @@ export function GrabarView({
       grabador.enviarPendiente();
     } catch (error) {
       setFase("previo");
-      avisar(mensajeDe(error, ALGO_FALLO));
+      avisar(mensajeParaElla(error));
     }
   }
 
