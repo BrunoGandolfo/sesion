@@ -24,11 +24,17 @@
  * autoriza por ticket, no por sesión— hay que anotarla en EXCEPCIONES con el
  * motivo; la lista es corta a propósito.
  *
- * LAS RUTAS SIN ID NO SE BARREN. No reciben id de recurso, así que no hay
- * nada que pedirles de otra organización: los crons (CRON_SECRET), /health,
- * /version, la reclamación del worker (PROCESSING_SECRET), /csp-report y todo
- * /cuenta (identidad: crear sesión, registrarse, recuperar). Su aislamiento
- * es otro problema y tiene otros tests.
+ * LAS RUTAS QUE RECIBEN EL ID POR QUERY O POR BODY no tienen `[id]` en el
+ * path y el barrido del disco no las ve: `sesion-clinica?turnoId`,
+ * `sms/envios?turnoId`, `hot-words` (`pacienteId`), `turnos` (`pacienteId`)
+ * y el `?format=llm&sesionId` del hilo. Van en IDS_EN_QUERY_O_BODY, más
+ * abajo, con el mismo criterio: la dueña no recibe 404; la ajena recibe 404,
+ * o una lista vacía cuando la ruta lista, y nunca un dato de la otra.
+ *
+ * Las rutas que no reciben ningún id de recurso no se barren: los crons
+ * (CRON_SECRET), /health, /version, la reclamación del worker
+ * (PROCESSING_SECRET), /csp-report y todo /cuenta (identidad). Su
+ * autenticación la prueba rutas-cron-m2m.test.ts.
  *
  * CÓMO SE CONECTAN LAS RUTAS A LA BASE DE TEST
  *
@@ -48,6 +54,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { emitirTicket } from "@/app/api/_lib/tickets";
 import { hashTermino } from "@/lib/hot-words";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import {
@@ -128,10 +135,9 @@ const CUERPOS: Record<string, Partial<Record<Metodo, unknown>>> = {
   "pacientes/[id]/hilo/versiones/route.ts": { POST: { contenido: contenidoHilo(), basadaEnVersion: 1 } },
   "turnos/[id]/route.ts": { PATCH: { estado: "cancelado" } },
   "turnos/[id]/cobrar/route.ts": {
-    POST: { metodo: "efectivo", fecha: "2026-09-01" },
+    POST: { metodo: "efectivo" },
     DELETE: { actualizadoEn: new Date("2026-09-01T14:00:00.000Z").toISOString() },
   },
-  "turnos/[id]/cancelar-serie/route.ts": { POST: { desde: "2026-09-01" } },
   "pacientes/[id]/hilo/regenerar/route.ts": { POST: { basadaEnVersion: 1, propuestaId: PROPUESTA_PLACEHOLDER } },
   "pacientes/[id]/hilo/propuestas/[propuestaId]/aceptar/route.ts": { POST: { basadaEnVersion: 1 } },
   "pacientes/[id]/hilo/propuestas/[propuestaId]/rechazar/route.ts": { POST: { basadaEnVersion: 1 } },
@@ -508,9 +514,167 @@ describe("aislamiento entre organizaciones — rutas sin id que listan sesiones"
   });
 });
 
+// ─── Rutas con el id en la query o en el body ──────────────────────────────
+// El id de la organización dueña viaja en la URL o en el cuerpo, no en el
+// path. Mismo criterio que el barrido: la dueña no recibe 404; la ajena
+// recibe 404 —o, si la ruta lista, una lista vacía— y el texto de la
+// respuesta no trae ningún id de la dueña.
+
+type Ajena = "404" | "vacia" | "401" | "como-inexistente";
+
+interface IdEnQueryOBody {
+  nombre: string;
+  ruta: string;
+  metodo: Metodo;
+  /** Lo que la ajena puede recibir. "401" sólo para el worker: su forma del
+   *  404 (autoriza por ticket; ver EXCEPCIONES). "como-inexistente": la
+   *  ruta no contesta 404 sino lo mismo que ante un id que no existe (estado
+   *  y cuerpo idénticos), así que tampoco confirma que el recurso exista. */
+  ajena: Ajena;
+  pedido: (duena: Org, extra: Extra) => { url: string; cuerpo?: unknown; ticket?: string };
+  params?: (duena: Org) => Record<string, string>;
+}
+
+/** Lo que algunos casos necesitan además de crearOrg, preparado por caso. */
+interface Extra {
+  /** Ticket vigente de la sesión de la dueña, en `procesando`. */
+  ticketDuena: string;
+  /** Sesión y ticket de la organización ajena, también en `procesando`. */
+  sesionAjena: string;
+  ticketAjena: string;
+}
+
+const DESDE = "2026-11-01T00:00:00.000Z";
+const HASTA = "2027-01-01T00:00:00.000Z";
+
+const IDS_EN_QUERY_O_BODY: IdEnQueryOBody[] = [
+  { nombre: "GET sesion-clinica?turnoId", ruta: "sesion-clinica", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `sesion-clinica?turnoId=${a.turnoId}` }) },
+  { nombre: "POST sesion-clinica {turnoId}", ruta: "sesion-clinica", metodo: "POST", ajena: "como-inexistente", pedido: (a) => ({ url: "sesion-clinica", cuerpo: { turnoId: a.turnoId } }) },
+  { nombre: "GET sms/envios?turnoId", ruta: "sms/envios", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `sms/envios?turnoId=${a.turnoId}` }) },
+  { nombre: "GET hot-words?pacienteId", ruta: "hot-words", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `hot-words?scope=paciente&pacienteId=${a.pacienteId}` }) },
+  { nombre: "POST hot-words {pacienteId}",
+    ruta: "hot-words", metodo: "POST", ajena: "404",
+    pedido: (a) => ({ url: "hot-words", cuerpo: { termino: "intrusión", scope: "paciente", pacienteId: a.pacienteId } }),
+  },
+  { nombre: "POST hot-words {hotWords: [{pacienteId}]}",
+    ruta: "hot-words", metodo: "POST", ajena: "404",
+    pedido: (a) => ({ url: "hot-words", cuerpo: { hotWords: [{ termino: "intrusión masiva", scope: "paciente", pacienteId: a.pacienteId }] } }),
+  },
+  { nombre: "GET turnos?pacienteId", ruta: "turnos", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `turnos?desde=${DESDE}&hasta=${HASTA}&pacienteId=${a.pacienteId}` }) },
+  { nombre: "POST turnos {pacienteId}",
+    ruta: "turnos", metodo: "POST", ajena: "404",
+    pedido: (a) => ({ url: "turnos", cuerpo: { pacienteId: a.pacienteId, fecha: "2026-12-10T15:00:00.000Z", duracion: 50, modalidad: "presencial" } }),
+  },
+  { nombre: "GET pacientes/[id]/hilo?format=llm&sesionId",
+    // El worker pide el Recorrido de la paciente de la sesión que reclamó.
+    // Con el ticket de una sesión de OTRA organización no puede leerlo.
+    ruta: "pacientes/[id]/hilo", metodo: "GET", ajena: "401",
+    params: (a) => ({ id: a.pacienteId }),
+    pedido: (a, extra) => ({ url: `pacientes/${a.pacienteId}/hilo?format=llm&sesionId=${extra.sesionAjena}`, ticket: extra.ticketAjena }),
+  },
+];
+
+/** El pedido de la dueña: igual, pero con su propia sesión y su ticket. */
+function pedidoDuena(caso: IdEnQueryOBody, a: Org, extra: Extra) {
+  const base = caso.pedido(a, extra);
+  if (!base.ticket) return base;
+  return { ...base, url: base.url.replace(extra.sesionAjena, a.sesionId), ticket: extra.ticketDuena };
+}
+
+async function enProcesando(sesionId: string): Promise<string> {
+  const { ticket, ticketHash } = emitirTicket();
+  await prismaRaw.sesionClinica.update({ where: { id: sesionId }, data: { estado: "procesando", ticketHash } });
+  return ticket;
+}
+
+/** Filas de la dueña que una lista ajena podría filtrar. */
+async function prepararDuena(a: Org) {
+  await db.hotWord.create({
+    data: {
+      organizationId: a.orgId,
+      alcance: "paciente",
+      pacienteId: a.pacienteId,
+      terminoHash: await hashTermino("término de la paciente"),
+      ...cifrarHotWord(randomUUID(), { termino: "término de la paciente" }),
+    },
+  });
+  await prismaRaw.envioSms.create({
+    data: {
+      organizationId: a.orgId,
+      claveIdempotencia: `turno:${a.turnoId}:${MANANA.toISOString()}`,
+      motivo: "recordatorio_turno",
+      pacienteId: a.pacienteId,
+      turnoId: a.turnoId,
+      destino: "+59899000000",
+      programadoEn: new Date("2026-11-30T21:00:00.000Z"),
+    },
+  });
+}
+
+async function llamarConId(caso: IdEnQueryOBody, quien: Org, dueña: Org, extra: Extra, comoDuena: boolean) {
+  como(quien);
+  const modulo = (await import(/* @vite-ignore */ `@/app/api/${caso.ruta}/route`)) as Record<string, Handler>;
+  const { url, cuerpo, ticket } = comoDuena ? pedidoDuena(caso, dueña, extra) : caso.pedido(dueña, extra);
+  const headers: Record<string, string> = {};
+  if (cuerpo !== undefined) headers["Content-Type"] = "application/json";
+  if (ticket) headers.Authorization = `Bearer ${ticket}`;
+  const res = await modulo[caso.metodo](
+    new Request(`http://localhost/api/${url}`, {
+      method: caso.metodo,
+      headers,
+      ...(cuerpo === undefined ? {} : { body: JSON.stringify(cuerpo) }),
+    }),
+    { params: Promise.resolve(caso.params?.(dueña) ?? {}) },
+  );
+  return { status: res.status, texto: await res.text() };
+}
+
+describe("aislamiento entre organizaciones — ids en la query o en el body", () => {
+  it.each(IDS_EN_QUERY_O_BODY.map((c) => [c.nombre, c] as const))(
+    "%s",
+    async (_nombre, caso) => {
+      const a = await crearOrg();
+      const b = await crearOrg();
+      await prepararDuena(a);
+      const extra: Extra = caso.ajena === "401"
+        ? { ticketDuena: await enProcesando(a.sesionId), sesionAjena: b.sesionId, ticketAjena: await enProcesando(b.sesionId) }
+        : EXTRA_VACIO;
+
+      const propia = await llamarConId(caso, a, a, extra, true);
+      expect(propia.status, `${caso.metodo} ${caso.ruta}: la organización DUEÑA recibió 404`).not.toBe(404);
+      if (caso.ajena === "vacia") {
+        expect(propia.status).toBe(200);
+        const { data } = JSON.parse(propia.texto) as { data: unknown };
+        const tieneAlgo = Array.isArray(data) ? data.length > 0 : data !== null;
+        expect(tieneAlgo, `${caso.nombre}: la dueña no ve su propio dato, el caso no prueba nada`).toBe(true);
+      }
+
+      const antes = await retrato(a);
+      const ajena = await llamarConId(caso, b, a, extra, false);
+      if (caso.ajena === "como-inexistente") {
+        const inexistente = await llamarConId(caso, b, { ...a, turnoId: randomUUID(), pacienteId: randomUUID() }, extra, false);
+        expect(ajena, `${caso.nombre}: la ajena recibe algo distinto que ante un id que no existe`).toEqual(inexistente);
+      } else if (caso.ajena === "vacia") {
+        expect(ajena.status, `${caso.metodo} ${caso.ruta}: la ajena no recibió una lista vacía`).toBe(200);
+        const { data } = JSON.parse(ajena.texto) as { data: unknown };
+        expect(data === null || (Array.isArray(data) && data.length === 0), `${caso.metodo} ${caso.ruta}: la ajena recibió datos`).toBe(true);
+      } else {
+        expect(ajena.status, `${caso.metodo} ${caso.ruta}: una sesión de OTRA organización no recibió ${caso.ajena}`).toBe(Number(caso.ajena));
+      }
+      for (const id of [a.pacienteId, a.turnoId, a.sesionId]) {
+        expect(ajena.texto, `${caso.metodo} ${caso.ruta}: la respuesta ajena nombra un id de la dueña`).not.toContain(id);
+      }
+      expect(ajena.texto).not.toContain("término de la paciente");
+      expect(await retrato(a), `${caso.metodo} ${caso.ruta}: la organización ajena tocó filas de A`).toEqual(antes);
+    },
+  );
+});
+
+const EXTRA_VACIO: Extra = { ticketDuena: "", sesionAjena: "", ticketAjena: "" };
+
 /** Lo que una organización ajena no puede cambiar. */
 async function retrato(org: Org) {
-  const [paciente, turno, sesion, hotWord, versiones, consentimientos] = await Promise.all([
+  const [paciente, turno, sesion, hotWord, versiones, consentimientos, turnosDeLaPaciente, vocabularioDeLaPaciente, sesionesDelTurno] = await Promise.all([
     prismaRaw.paciente.findUnique({ where: { id: org.pacienteId } }),
     prismaRaw.turno.findUnique({ where: { id: org.turnoId } }),
     prismaRaw.sesionClinica.findUnique({ where: { id: org.sesionId } }),
@@ -521,6 +685,10 @@ async function retrato(org: Org) {
       select: { id: true, revocadoEn: true },
       orderBy: { id: "asc" },
     }),
+    // Lo que una ruta con el id en el body podría crear colgado de A.
+    prismaRaw.turno.count({ where: { pacienteId: org.pacienteId } }),
+    prismaRaw.hotWord.count({ where: { pacienteId: org.pacienteId } }),
+    prismaRaw.sesionClinica.count({ where: { turnoId: org.turnoId } }),
   ]);
-  return { paciente, turno, sesion, hotWord, versiones, consentimientos };
+  return { paciente, turno, sesion, hotWord, versiones, consentimientos, turnosDeLaPaciente, vocabularioDeLaPaciente, sesionesDelTurno };
 }
