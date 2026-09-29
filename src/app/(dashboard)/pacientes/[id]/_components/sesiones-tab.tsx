@@ -250,14 +250,26 @@ export function SesionesTab({
       signal: controller.signal,
     })
       .then((data) =>
-        setLista({
-          pacienteId,
-          docs: data.sesiones,
-          totalPages: data.totalPages,
-          totalSesiones: data.totalSesiones,
-          page: 1,
-          loading: false,
-          error: null,
+        setLista((prev) => {
+          // Si ya había páginas cargadas con "Cargar más" (se vuelve a pedir
+          // cuando llega la nota de hoy), la primera se funde con lo que
+          // había en vez de reemplazarlo: antes la lista volvía sola a diez
+          // y el mes que ella estaba leyendo desaparecía (forense 03, P3-21).
+          const conservar =
+            prev.pacienteId === pacienteId && prev.page > 1
+              ? prev.docs.filter(
+                  (doc) => !data.sesiones.some((nuevo) => nuevo.sesionClinicaId === doc.sesionClinicaId),
+                )
+              : [];
+          return {
+            pacienteId,
+            docs: [...data.sesiones, ...conservar],
+            totalPages: data.totalPages,
+            totalSesiones: data.totalSesiones,
+            page: conservar.length > 0 ? prev.page : 1,
+            loading: false,
+            error: null,
+          };
         }),
       )
       .catch((err: unknown) => {
@@ -320,14 +332,26 @@ export function SesionesTab({
     setLista((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const data = await apiGet<DocResponse>(urlDocumentacion(pacienteId, next));
-      setLista((prev) => ({
-        ...prev,
-        docs: [...prev.docs, ...data.sesiones],
-        page: next,
-        totalPages: data.totalPages,
-        totalSesiones: data.totalSesiones,
-        loading: false,
-      }));
+      setLista((prev) =>
+        // Una respuesta que llega con otra paciente en pantalla no se mezcla.
+        prev.pacienteId !== pacienteId
+          ? prev
+          : {
+              ...prev,
+              // Sin repetidos: si entró una nota nueva arriba, la primera de
+              // esta página es la última de la anterior.
+              docs: [
+                ...prev.docs,
+                ...data.sesiones.filter(
+                  (nuevo) => !prev.docs.some((doc) => doc.sesionClinicaId === nuevo.sesionClinicaId),
+                ),
+              ],
+              page: next,
+              totalPages: data.totalPages,
+              totalSesiones: data.totalSesiones,
+              loading: false,
+            },
+      );
     } catch (err) {
       setLista((prev) => ({
         ...prev,

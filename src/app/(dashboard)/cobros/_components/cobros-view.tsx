@@ -241,10 +241,6 @@ function Pantalla({
     (sum, d) => sum + d.sesionesImpagas,
     0,
   );
-  // Regla del pilar Cobros: ordenar por monto desc (no por días de atraso).
-  const deudoresPorMonto = [...deudores].sort(
-    (a, b) => b.montoTotal - a.montoTotal,
-  );
 
   return (
     <Marco ahora={ahora} nombreProfesional={nombreProfesional} ocupado={ocupado}>
@@ -274,7 +270,10 @@ function Pantalla({
 
       {pestana === "te-deben" ? (
         <TeDeben
-          deudores={deudoresPorMonto}
+          // En el orden en que llegan: el orden de la deuda lo decide el
+          // servidor, una sola vez para Hoy y para Cobros (forense 03,
+          // P3-15). Acá se ordenaba de nuevo, por monto y sin desempate.
+          deudores={deudores}
           sesionesSinCobrar={sesionesSinCobrar}
           nombreProfesional={nombreProfesional}
           ahora={ahora}

@@ -115,7 +115,17 @@ export function AgendaView() {
     : null;
 
   const cacheRef = React.useRef<Map<string, TurnoConPaciente[]>>(new Map());
-  const [turnos, setTurnos] = React.useState<TurnoConPaciente[] | null>(null);
+  // Los turnos con la clave del rango que los pidió. Al cambiar de rango la
+  // lectura anterior queda un momento: sin la clave, el día nuevo se dibujaba
+  // "sin turnos" con los datos del rango viejo, y el botón Agendar invitaba a
+  // tocarlo en un día que tenía turnos (forense 03, P3-21).
+  const [lectura, setLectura] = React.useState<{
+    clave: string;
+    turnos: TurnoConPaciente[];
+  } | null>(null);
+  // Solo los del rango que se está mirando; los de otro, como si no hubieran
+  // llegado todavía.
+  const turnos = lectura && lectura.clave === rangeKey ? lectura.turnos : null;
   const [turnosStatus, setTurnosStatus] = React.useState<LoadState>("idle");
   const [refreshKey, setRefreshKey] = React.useState(0);
 
@@ -128,7 +138,7 @@ export function AgendaView() {
       // Servir caché es un cambio de datos, no de estado de carga: se hace
       // en un microtask para no encadenar renders desde el efecto.
       const id = window.setTimeout(() => {
-        setTurnos(cached);
+        setLectura({ clave: rangeKey, turnos: cached });
         setTurnosStatus("idle");
       }, 0);
       return () => window.clearTimeout(id);
@@ -150,7 +160,7 @@ export function AgendaView() {
       .then((data) => {
         const parsed = data.map((t) => parseTurno(t));
         cacheRef.current.set(rangeKey, parsed);
-        setTurnos(parsed);
+        setLectura({ clave: rangeKey, turnos: parsed });
         setTurnosStatus("idle");
       })
       .catch((err: unknown) => {

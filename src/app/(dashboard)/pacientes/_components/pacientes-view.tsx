@@ -67,6 +67,10 @@ export function PacientesView({
   archivedToast?: boolean;
 }) {
   const [segment, setSegment] = React.useState<Segment>("activos");
+  // El segmento de la lista que se está mostrando, que no es el elegido
+  // mientras llega la nueva: con el elegido, al pasar a Archivados los
+  // activos aparecían un momento con "Reactivar" (forense 03, P3-21).
+  const [segmentoDeLaLista, setSegmentoDeLaLista] = React.useState<Segment>(segment);
   const [query, setQuery] = React.useState("");
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [pacientes, setPacientes] = React.useState<PacienteConDeuda[]>([]);
@@ -132,6 +136,7 @@ export function PacientesView({
     })
       .then((data) => {
         setPacientes(data);
+        setSegmentoDeLaLista(segment);
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -184,7 +189,7 @@ export function PacientesView({
       ? null
       : debouncedQuery.trim()
         ? "search"
-        : segment === "activos"
+        : segmentoDeLaLista === "activos"
           ? "noPatients"
           : "noArchived";
 
@@ -249,13 +254,13 @@ export function PacientesView({
         <div className={loading ? "opacity-60 transition-opacity" : undefined}>
           <DesktopTable
             pacientes={pacientes}
-            archived={segment === "archivados"}
+            archived={segmentoDeLaLista === "archivados"}
             reactivatingId={reactivatingId}
             onReactivar={reactivarPaciente}
           />
           <MobileList
             pacientes={pacientes}
-            archived={segment === "archivados"}
+            archived={segmentoDeLaLista === "archivados"}
             reactivatingId={reactivatingId}
             onReactivar={reactivarPaciente}
           />

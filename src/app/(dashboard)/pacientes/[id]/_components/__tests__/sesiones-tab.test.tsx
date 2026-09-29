@@ -172,3 +172,46 @@ describe("la lista de sesiones", () => {
     expect(screen.getByText("Lo último que pasó.")).toBeTruthy();
   });
 });
+
+describe("Cargar más", () => {
+  const abrirLosMesesCerrados = () =>
+    screen.queryAllByRole("button", { expanded: false }).filter((b) => /\d{4}/.test(b.textContent ?? "")).forEach((b) => fireEvent.click(b));
+
+  // Dos páginas: la primera con dos sesiones, la segunda con una. Cuando la
+  // nota de hoy llega, la primera pasa a tener la de hoy arriba.
+  function paginado() {
+    let conHoy = false;
+    m.get.mockImplementation(async (url: string) => {
+      if (url.includes("/brief")) throw new Error("sin brief");
+      const pagina = Number(new URL(url, "http://x").searchParams.get("page") ?? "1");
+      const todas = conHoy ? [DOCS[0], DOCS[2], DOCS[3], DOCS[4]] : [DOCS[2], DOCS[3], DOCS[4]];
+      const sesiones = pagina === 1 ? todas.slice(0, 2) : todas.slice(2 * (pagina - 1), 2 * pagina);
+      return { pacienteId: "p1", totalSesiones: todas.length, sesiones, page: pagina, totalPages: Math.ceil(todas.length / 2) };
+    });
+    return { llegaLaNotaDeHoy: () => { conHoy = true; } };
+  }
+
+  it("cuando llega la nota de hoy no se pierde lo que ya se había cargado, ni se repite nada", async () => {
+    const servidor = paginado();
+    const { rerender } = montar({ turnoHoy: TURNO_HOY, sesionHoy: null });
+    await screen.findByText("Resumen de tarde");
+    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+    await waitFor(() => expect(m.get.mock.calls.some(([url]) => url.includes("page=2"))).toBe(true));
+    abrirLosMesesCerrados();
+    await screen.findByText("Resumen de agosto");
+
+    servidor.llegaLaNotaDeHoy();
+    rerender(
+      <SesionesTab
+        pacienteId="p1" pacienteNombre="Paciente Sintética" turnoHoy={TURNO_HOY}
+        sesionHoy={{ id: "hoy", turnoId: "t-hoy", estado: "revision" } as SesionClinicaEnsamblada}
+        sesionHoyCargando={false} onTurnoActualizado={() => {}} onAviso={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(filas().map((f) => f.dataset.sesionId)).toContain("hoy"));
+    abrirLosMesesCerrados();
+    expect(filas().map((f) => f.dataset.sesionId)).toEqual(["hoy", "tarde", "manana", "agosto"]);
+  });
+});
+

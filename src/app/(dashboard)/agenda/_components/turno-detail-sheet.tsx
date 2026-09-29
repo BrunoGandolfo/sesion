@@ -52,6 +52,7 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
   NOTA_PROCESANDO,
   GRABACION_SIN_TERMINAR,
   RECORDATORIO,
+  RECORDATORIO_ESTADO,
 } from "@/lib/glosario";
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
@@ -232,7 +233,10 @@ export function TurnoDetailSheet({
   // Agenda (estadoClinicoDe): "Nota fallida · Ver qué pasó", "Para revisar",
   // "Nota lista". Antes cualquier sesión, fallida incluida, ofrecía "Revisar
   // nota", y una nota que no se pudo escribir parecía una nota para leer.
-  const sesionDatos = sesion !== "sin-dato" ? sesion : null;
+  // Mientras la lectura no contestó vale lo que trae el turno de la agenda:
+  // con null ofrecía "Grabar sesión" sobre un turno ya grabado hasta que
+  // llegaba la respuesta (forense 03, P3-21).
+  const sesionDatos = sesion !== "sin-dato" ? sesion : (turno.sesionClinica ?? null);
   const notaClinica = estadoClinicoDe(sesionDatos);
   // La acción clínica, la misma que la fila y la card de Ahora
   // (accionClinicaDe): una subida o una grabación que quedó a medias no se
@@ -390,7 +394,7 @@ export function TurnoDetailSheet({
                         : "text-ink-900"
                     }`}
                   >
-                    {({pendiente:"Programado",enviando:"Enviando",aceptado:"En camino",entregado:"Entregado",no_entregado:"No llegó",cancelado:"Cancelado",fallido:"No salió",desconocido:"No sabemos si salió"} as Record<string,string>)[aviso.estado] ?? aviso.estado}
+                    {RECORDATORIO_ESTADO[aviso.estado] ?? aviso.estado}
                   </span>
                   <span className="text-[13px] tabular-nums text-ink-500">
                     ·{" "}

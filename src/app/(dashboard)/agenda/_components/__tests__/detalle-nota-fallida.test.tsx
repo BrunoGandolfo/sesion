@@ -60,3 +60,25 @@ it.each([
   const enlace = await screen.findByRole("link", { name: new RegExp(rotulo) });
   expect(enlace.getAttribute("href")).toBe("/sesiones/nota-1");
 });
+
+it("mientras la sesión no llegó vale la que trae el turno: no ofrece Grabar sobre un turno ya grabado", async () => {
+  // Hoy, con la nota aprobada según la agenda; la lectura del detalle tarda.
+  const hoy = new Date();
+  api.get.mockImplementation((ruta: string) =>
+    ruta.startsWith("/api/sesion-clinica") ? new Promise(() => {}) : Promise.resolve([]),
+  );
+  await act(async () => {
+    render(
+      <TurnoDetailSheet
+        open
+        turno={{ ...TURNO, fecha: hoy, sesionClinica: { id: "nota-1", estado: "aprobada" } }}
+        onClose={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
+    );
+  });
+
+  expect(screen.queryByRole("link", { name: /Grabar sesión/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Grabar sesión/ })).toBeNull();
+  expect(screen.getByRole("link", { name: /Nota lista/ }).getAttribute("href")).toBe("/sesiones/nota-1");
+});
