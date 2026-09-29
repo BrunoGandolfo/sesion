@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
 import { consultarInvitaciones, crearInvitacion } from "../../_lib/casos-uso/registrar-cuenta";
-import { errorResponse, ok } from "../../_lib/responses";
+import { errorResponse, okSinCache } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,12 +18,10 @@ export const maxDuration = 30; // segundos; la convención está en scripts/ci/m
 export async function GET() {
   try {
     const actor = await getSessionActor();
-    const respuesta = ok(await consultarInvitaciones(
+    return okSinCache(await consultarInvitaciones(
       { userId: actor.userId, email: actor.email, rol: actor.rol },
       repositorioRegistro(db),
     ));
-    respuesta.headers.set("Cache-Control", "no-store");
-    return respuesta;
   } catch (error) {
     return errorResponse(error);
   }
@@ -46,9 +44,7 @@ export async function POST() {
       entidadId: actor.userId,
       detalle: { invitacionId: creada.invitacionId, vence: creada.vence },
     });
-    const respuesta = ok({ enlace: creada.enlace, vence: creada.vence });
-    respuesta.headers.set("Cache-Control", "no-store");
-    return respuesta;
+    return okSinCache({ enlace: creada.enlace, vence: creada.vence });
   } catch (error) {
     return errorResponse(error);
   }

@@ -3,7 +3,7 @@
 Procedimiento para Bruno. Se ejecuta **una sola vez**, antes de admitir
 pacientes reales. No sirve para actualizar una base que ya tenga el esquema
 nuevo: para eso está Publicar (`docs/operaciones.md`). Los valores esperados de
-§4 y §6 corresponden a las ocho migraciones de `prisma/migrations/`; si se
+§4 y §6 corresponden a las nueve migraciones de `prisma/migrations/`; si se
 agrega una migración, actualizarlos antes de ejecutar.
 
 ## Decisiones y punto sin retorno
@@ -291,7 +291,7 @@ psql --dbname="$URL_NUEVA" -X -v ON_ERROR_STOP=1 -c \
   'SELECT migration_name, finished_at IS NOT NULL AS terminada, rolled_back_at IS NULL AS vigente FROM "_prisma_migrations" ORDER BY migration_name;'
 ~~~
 
-**Bien:** `Database schema is up to date!` y estas ocho filas, ambas columnas
+**Bien:** `Database schema is up to date!` y estas nueve filas, ambas columnas
 en `t`:
 
 1. `0_init`
@@ -302,6 +302,7 @@ en `t`:
 6. `20260918120000_grabador_restaurado`
 7. `20260923120000_turnos_duracion_120`
 8. `20260923120100_turnos_pago_fecha_idx`
+9. `20260924120000_eventos_auditoria_accion_idx`
 
 Si falla, no habilitar Publicar. La copia puede haber quedado a medias:
 abandonar esa copia y usar §11, no reparar el historial manualmente.
@@ -729,8 +730,12 @@ contraseñas ficticios: restauración del dump cifrado, vaciado, interrupción c
 rollback, migraciones, alta manual y sus rechazos, verificación, recuperación
 hacia base vacía y ocupada, archivo gpg dañado y login HTTP real. En esa fecha
 había tres migraciones. Los valores de §4 y §6 se actualizaron el 24 de
-septiembre contra las ocho actuales en un Postgres 17 local; el resto de los
-bloques no se volvió a ejecutar. La prueba completa está en el historial de Git
+septiembre contra las ocho de ese día en un Postgres 17 local. El 28 de
+septiembre, con la novena (`20260924120000_eventos_auditoria_accion_idx`, un
+índice que §6 no mira), se volvieron a correr contra un Postgres 17 local las
+consultas de §4 (las nueve filas, terminadas y vigentes) y las de triggers,
+índices, CHECK y `audio_segmentos` de §6: dan lo que dice el texto. El resto
+de los bloques no se volvió a ejecutar. La prueba completa está en el historial de Git
 (commit `70f0875`).
 
 **No probado en proveedores:** ramas reales de Neon, permisos y TLS; R2 real

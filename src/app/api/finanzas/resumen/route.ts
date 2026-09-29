@@ -42,6 +42,7 @@ export async function GET(request: Request) {
     const query = new URL(request.url).searchParams;
     const desde = query.get("desde");
     const hasta = query.get("hasta");
+    const granularidad = granularidadDe(query.get("granularidad"));
 
     return ok(
       await resumenFinanzas({
@@ -49,9 +50,7 @@ export async function GET(request: Request) {
         organizationId,
         ...(desde ? { desde: parsearMes(desde) } : {}),
         ...(hasta ? { hasta: parsearMes(hasta) } : {}),
-        ...(granularidadDe(query.get("granularidad")) !== undefined
-          ? { granularidad: granularidadDe(query.get("granularidad")) }
-          : {}),
+        ...(granularidad !== undefined ? { granularidad } : {}),
       }),
     );
   } catch (error) {

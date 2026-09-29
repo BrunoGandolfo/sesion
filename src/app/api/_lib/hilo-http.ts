@@ -1,6 +1,6 @@
 import { esOrigenPropio } from "@/lib/sesion-cookie";
 import { getSessionActor } from "./auth";
-import { ApiError, ok } from "./responses";
+import { ApiError } from "./responses";
 
 // /hilo queda fuera del proxy porque también recibe al worker. Las
 // escrituras humanas conservan aquí la misma protección de origen.
@@ -9,10 +9,4 @@ export async function autorizarEdicionHilo(request: Request) {
     throw new ApiError("Origen no permitido", 403);
   }
   return getSessionActor();
-}
-
-export function responderHilo<T>(contenido: T) {
-  const respuesta = ok(contenido);
-  respuesta.headers.set("Cache-Control", "no-store");
-  return respuesta;
 }

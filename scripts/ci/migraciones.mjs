@@ -20,7 +20,8 @@
 //        - una migración ADITIVA (tabla, columna nullable, índice) puede ir
 //          en el mismo despliegue que el código que la usa;
 //        - una migración DESTRUCTIVA (DROP COLUMN/TABLE/SCHEMA/TYPE, SET NOT
-//          NULL, ALTER COLUMN … TYPE, TRUNCATE, DELETE) sólo puede ir en un
+//          NULL, ALTER COLUMN … TYPE, RENAME de tabla, columna, restricción
+//          o valor de enum, TRUNCATE, DELETE) sólo puede ir en un
 //          despliegue POSTERIOR al que sacó el último código que leía eso, y
 //          lo declara en su primera línea:
 //
@@ -96,6 +97,11 @@ const DESTRUCTIVAS = [
   /\bALTER\s+TABLE\b[^;]*\bDROP\s+(COLUMN\s+)?"?\w+"?/i,
   /\bALTER\s+TABLE\b[^;]*\bSET\s+NOT\s+NULL\b/i,
   /\bALTER\s+TABLE\b[^;]*\bALTER\s+COLUMN\b[^;]*\bTYPE\b/i,
+  // Un renombre rompe al código viejo igual que un DROP: durante la ventana
+  // entre migrar y avanzar release, lo que corre busca el nombre anterior.
+  // Tabla (RENAME TO), columna (RENAME [COLUMN] a TO b), restricción, y el
+  // valor de un enum (ALTER TYPE … RENAME VALUE).
+  /\bALTER\s+(TABLE|TYPE)\b[^;]*\bRENAME\b/i,
   // En un trigger el evento sigue con ON u OR (palabras reservadas, no nombres
   // de tablas sin comillas). No anclar al inicio: puede haber comentarios SQL
   // antes de una sentencia destructiva. Mantener la detección conservadora.

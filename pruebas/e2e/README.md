@@ -22,7 +22,7 @@ Requiere una cuenta exclusiva de prueba, con una nota aprobada que tenga Para vo
 - Entrada, recuperación sin envío de correo, invitación y restablecimiento sin token, términos; ingreso real una vez.
 - Hoy; Agenda día/semana/mes de escritorio y día/mes móvil; navegación de fechas, alta y detalle del turno; abrir reprogramación sin guardar.
 - Pacientes, búsqueda vacía y archivados; alta con validaciones; ficha, Sesiones, Recorrido, datos y pagos; edición; nota aprobada y Para vos.
-- Cobros, historial del mes y redirecciones anteriores; Tu consultorio, vocabulario, validación de contraseña sin enviarla, editor y vista previa del recordatorio.
+- Cobros, historial del mes y la redirección anterior de /deudores; Finanzas (pantalla propia); Tu consultorio, vocabulario, validación de contraseña sin enviarla, editor y vista previa del recordatorio.
 - Tres consultas reales a Lupita. Comprueba respuesta no vacía y ausencia de error, sin juzgar su calidad.
 - Cobrar y deshacer desde la interfaz en ambos tamaños, verificando pago, importe, método y fecha mediante lecturas del servidor.
 
@@ -105,4 +105,4 @@ Con `npm run dev` levantado en el puerto 3000:
 
     CAPTURAS_URL=http://localhost:3000 npx vitest run pruebas/e2e/capturas.spec.ts
 
-Deja `login-390.png` y `login-1280.png` en `pruebas/e2e/resultados/capturas/`, una carpeta que Git ignora. Usa vitest y la librería `playwright` que ya están en el repo, con Chromium instalado como en el recorrido. Si `CAPTURAS_URL` no está definida, el archivo se omite: `npm test` lo recolecta como cualquier `*.spec.ts` sin abrir un navegador. Contra `next dev`, la captura de 1280 puede incluir el indicador de desarrollo de Next abajo a la izquierda.
+Deja `login-390.png` y `login-1280.png` en `pruebas/e2e/resultados/capturas/`, una carpeta que Git ignora. Usa vitest y la librería `playwright` que ya están en el repo, con Chromium instalado como en el recorrido. Sin `CAPTURAS_URL`, vitest ni lo recolecta (`vitest.config.ts` lo excluye): `npm test` no abre un navegador ni lo cuenta como saltado. Contra `next dev`, la captura de 1280 puede incluir el indicador de desarrollo de Next abajo a la izquierda.

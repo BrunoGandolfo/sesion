@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 
 import { getOrganizationId, getSessionActor } from "../../_lib/auth";
 import { actualizarPaciente, obtenerPaciente } from "../../_lib/casos-uso/pacientes";
-import { errorResponse, ok, validationError } from "../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../_lib/responses";
 import { pacienteUpdateSchema } from "../../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // El usuario va al evento de auditoría de archivar.
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const body = await request.json();
+    const body = await leerJson(request);
     const parsed = pacienteUpdateSchema.safeParse(body);
 
     if (!parsed.success) {

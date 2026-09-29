@@ -5,7 +5,7 @@ import {
   actualizarConfiguracion,
   obtenerConfiguracion,
 } from "../_lib/casos-uso/configuracion";
-import { errorResponse, ok, validationError } from "../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../_lib/responses";
 import { configUpdateSchema } from "../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -26,7 +26,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     const organizationId = await getOrganizationId();
-    const body = await request.json();
+    const body = await leerJson(request);
     const parsed = configUpdateSchema.safeParse(body);
 
     if (!parsed.success) {

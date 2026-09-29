@@ -57,7 +57,8 @@ const INTEGRACION = [
   // Solo se graba un turno de hoy: POST /api/sesion-clinica contra la base.
   'src/lib/__tests__/grabar-el-dia.test.ts',
   'src/lib/__tests__/recuperacion-atomica.test.ts',
-  'src/lib/__tests__/prisma-encryption.test.ts',
+  // La extensión de cifrado contra la base; su parte pura es unitaria.
+  'src/lib/__tests__/prisma-encryption-integracion.test.ts',
   // Área 2: vida de la sesión clínica y trabajos durables.
   'src/lib/__tests__/transicion.test.ts',
   'src/lib/__tests__/aprobar.test.ts',
@@ -102,7 +103,14 @@ const INTEGRACION = [
 // Repetidos a mano en vez de importar `defaultExclude`: al pasar `exclude`
 // se pisa el default de vitest, y sin estos tres se colectarían tests de
 // dependencias.
-const EXCLUIDOS_SIEMPRE = ['**/node_modules/**', '**/dist/**', '**/.next/**']
+//
+// Y los specs de pruebas/e2e (capturas.spec.ts): abren un navegador contra
+// un servidor y se corren a mano con CAPTURAS_URL (pruebas/e2e/README.md).
+// Sin la variable no entran al glob: antes aparecían como "saltados" en
+// cada corrida de la suite. Con la variable, `npx vitest run
+// pruebas/e2e/capturas.spec.ts` los encuentra como siempre.
+const E2E_A_MANO = process.env.CAPTURAS_URL ? [] : ['pruebas/e2e/**/*.spec.ts']
+const EXCLUIDOS_SIEMPRE = ['**/node_modules/**', '**/dist/**', '**/.next/**', ...E2E_A_MANO]
 
 const suite = process.env.VITEST_SUITE
 
@@ -119,9 +127,7 @@ export default defineConfig({
     // respaldo) pasan de los 5 s del default.
     testTimeout: 30_000,
     ...(suite === 'integration' ? { include: INTEGRACION } : {}),
-    ...(suite === 'unit'
-      ? { exclude: [...EXCLUIDOS_SIEMPRE, ...INTEGRACION] }
-      : {}),
+    exclude: suite === 'unit' ? [...EXCLUIDOS_SIEMPRE, ...INTEGRACION] : EXCLUIDOS_SIEMPRE,
   },
   resolve: {
     alias: {

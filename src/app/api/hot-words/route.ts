@@ -6,7 +6,7 @@ import {
   crearHotWords,
   listarHotWords,
 } from "../_lib/casos-uso/hot-words";
-import { errorResponse, ok, validationError } from "../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../_lib/responses";
 import {
   hotWordItemSchema,
   hotWordsBulkSchema,
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const organizationId = await getOrganizationId();
-    const body: unknown = await request.json();
+    const body: unknown = await leerJson(request);
 
     // Carga masiva: { hotWords: [...] }. Un término suelto: el objeto solo.
     if (typeof body === "object" && body !== null && "hotWords" in body) {

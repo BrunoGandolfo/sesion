@@ -99,22 +99,11 @@ jobs:
 
       # ---------------------------------------------------------------------
       # 1. postgresql-client-17 (el runner no lo trae). pg_dump debe ser
-      #    >= al server. TODO: cuando Neon pase a Postgres 18, cambiar acá,
-      #    en ensayo-restauracion.yml, en ci.yml y en docker-compose.yml.
+      #    >= al server. La versión se elige en un solo lugar: la acción
+      #    .github/actions/postgres-cliente (ahí dice qué más cambiar para 18).
       # ---------------------------------------------------------------------
       - name: Instalar postgresql-client-17
-        run: |
-          set -euo pipefail
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl --fail --silent --show-error \
-            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-            https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          codename="$(lsb_release -cs)"
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client-17
-          "${PG_BIN}/pg_dump" --version
+        uses: ./.github/actions/postgres-cliente
 
       # ---------------------------------------------------------------------
       # 2. Nombre del backup (UTC con segundos) y si hoy toca copia mensual.
@@ -190,18 +179,11 @@ jobs:
           ls -lh "${BACKUP_FILE}.gpg"
 
       # ---------------------------------------------------------------------
-      # 6. aws cli contra R2 (S3-compatible). Los flags de checksum
-      #    deshabilitan el comportamiento nuevo del aws-cli v2.23+ que R2 no
-      #    soporta en todas las rutas.
+      # 6. aws cli contra R2 (S3-compatible): credenciales y checksums en la
+      #    acción .github/actions/r2-cli, la misma del ensayo.
       # ---------------------------------------------------------------------
       - name: Configurar credenciales AWS CLI para R2
-        run: |
-          set -euo pipefail
-          aws configure set aws_access_key_id "${R2_ACCESS_KEY_ID}"
-          aws configure set aws_secret_access_key "${R2_SECRET_ACCESS_KEY}"
-          aws configure set default.region auto
-          aws configure set default.s3.request_checksum_calculation when_required
-          aws configure set default.s3.response_checksum_validation when_required
+        uses: ./.github/actions/r2-cli
 
       - name: Subir backup cifrado a R2
         run: |

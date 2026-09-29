@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { listarSesionesVivas } from "@/lib/sesion-acceso";
 
 import { getSessionActor } from "../../_lib/auth";
-import { errorResponse, ok } from "../../_lib/responses";
+import { errorResponse, okSinCache } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function GET() {
   try {
     const actor = await getSessionActor();
     const sesiones = await listarSesionesVivas(db, actor.userId, new Date());
-    const respuesta = ok({
+    return okSinCache({
       usuaria: { nombre: actor.nombre, email: actor.email, rol: actor.rol },
       sesiones: sesiones.map((s) => ({
         id: s.id,
@@ -24,8 +24,6 @@ export async function GET() {
         actual: s.id === actor.sesionId,
       })),
     });
-    respuesta.headers.set("Cache-Control", "no-store");
-    return respuesta;
   } catch (error) {
     return errorResponse(error);
   }

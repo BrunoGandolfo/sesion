@@ -77,7 +77,7 @@ try {
   // La autorización de las dos pacientes, por la API real.
   for (const paciente of [PACIENTE_A, PACIENTE_B]) {
     const r = await pagina.evaluate(async ([id]) => {
-      const res = await fetch(`/api/pacientes/${id}/consentimiento`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firmaDigital: "Paciente Sintética", textoVersion: "2.6" }) });
+      const res = await fetch(`/api/pacientes/${id}/consentimiento`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firmaDigital: "Paciente Sintética", textoVersion: "2.7" }) });
       return res.status;
     }, [paciente]);
     assert.ok(r === 201 || r === 200 || r === 409, `consentimiento: HTTP ${r}`);

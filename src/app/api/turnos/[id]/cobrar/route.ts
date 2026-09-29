@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getOrganizationId } from "../../../_lib/auth";
 import { metodoPagoSchema } from "../../../_lib/schemas";
 import { cobrarTurno, descobrarTurno } from "../../../_lib/casos-uso/cobrar-turno";
-import { errorResponse, ok, validationError } from "../../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();
     const { id } = await params;
-    const body = await request.json();
+    const body = await leerJson(request);
     const parsed = cobrarSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -50,7 +50,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const organizationId = await getOrganizationId();
     const { id } = await params;
 
-    const parsed = deshacerSchema.safeParse(await request.json().catch(() => null));
+    const parsed = deshacerSchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
     const turno = await descobrarTurno({
       actualizadoEn: new Date(parsed.data.actualizadoEn),

@@ -6,8 +6,9 @@
 // (npm run e2e) ya pasa por ellas a los mismos dos anchos.
 //
 // Corre con vitest y la librería `playwright` que ya están en el repo, sin
-// @playwright/test. Sin CAPTURAS_URL el bloque se omite: `npm test` lo
-// recolecta como a cualquier *.spec.ts y no tiene que abrir un navegador.
+// @playwright/test. Sin CAPTURAS_URL, vitest.config.ts lo deja fuera del
+// glob (`npm test` no lo ve); el skipIf de abajo queda por si alguien lo
+// nombra a mano sin la variable.
 //
 //     CAPTURAS_URL=http://localhost:3000 npx vitest run pruebas/e2e/capturas.spec.ts
 //

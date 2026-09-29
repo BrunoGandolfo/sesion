@@ -587,7 +587,9 @@ try {
       assert.equal(await page.getByRole('tab', {name:'Cobros del mes',exact:true}).getAttribute('aria-selected'), 'true');
       await page.getByRole('tab', {name:'Te deben',exact:true}).click();
     });
-    for (const ruta of ['/deudores','/finanzas']) await paso('Enlace anterior: ' + ruta, async () => {await ir(ruta); await page.waitForURL(origen + '/cobros');});
+    await paso('Enlace anterior: /deudores', async () => {await ir('/deudores'); await page.waitForURL(origen + '/cobros');});
+    // /finanzas dejó de redirigir a Cobros: es pantalla propia (a7765f5).
+    await paso('Finanzas', async () => { await ir('/finanzas'); assert.equal(new URL(page.url()).pathname, '/finanzas'); await visible(page.getByRole('heading', {name:'Finanzas',exact:true})); });
     await configuracion();
     await cobrarYDeshacer(prueba);
     await limpiarPacientes();

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getOrganizationId } from "../../_lib/auth";
 import { actualizarTurno } from "../../_lib/casos-uso/turnos";
 import { turnoUpdateSchema } from "../../_lib/schemas";
-import { errorResponse, ok, validationError } from "../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();
     const { id } = await params;
-    const body = await request.json();
+    const body = await leerJson(request);
     const parsed = turnoUpdateSchema.safeParse(body);
 
     if (!parsed.success) {
