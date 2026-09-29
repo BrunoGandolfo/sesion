@@ -5,13 +5,14 @@ import { ResultadoSerie } from "@/components/forms/resultado-serie";
 import { useToast } from "@/components/ui/toast";
 import { CalendarX2 } from "lucide-react";
 
-import { Fab, Sheet, Toast } from "@/components/ui";
+import { Fab, Toast } from "@/components/ui";
 import { useConfirmacionDibujada } from "@/components/ui/movimiento";
 import { EstadoVacio } from "@/components/ui/estado-vacio";
 import { useEsEscritorio } from "@/hooks/useEsEscritorio";
 import { useHoy } from "@/hooks/useHoy";
-import { mensajeTurnoAgendado, payloadNuevoTurno } from "@/lib/agendar-turno";
-import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { crearTurno, mensajeTurnoAgendado } from "@/lib/agendar-turno";
+import { SheetNuevoTurno } from "@/components/forms/sheet-nuevo-turno";
+import { apiGet, esAbort } from "@/lib/api-client";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import {
   agregarDiasMvd,
@@ -23,22 +24,14 @@ import {
   esMismoDiaMvd,
 } from "@/lib/fechas-montevideo";
 import { AGENDAR, ALGO_FALLO } from "@/lib/glosario";
-import type {
-  Configuracion,
-  PacienteConDeuda,
-  TurnoCreado,
-  TurnoConPaciente,
-} from "@/types/domain";
+import type { TurnoCreado, TurnoConPaciente } from "@/types/domain";
 
 import { AgendaHeader } from "./agenda-header";
 import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
 import { SemanaTira } from "./semana-tira";
-import {
-  NuevoTurnoForm,
-  type NuevoTurnoData,
-} from "@/components/forms/nuevo-turno-form";
+import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { TurnoDetailSheet } from "./turno-detail-sheet";
 
 export type AgendaViewMode = "día" | "semana" | "mes";
@@ -171,30 +164,6 @@ export function AgendaView() {
     };
   }, [rangeKey, range, refreshKey]);
 
-  // Pacientes y configuración: se piden al abrir el sheet de agendar.
-  const [pacientes, setPacientes] = React.useState<PacienteConDeuda[] | null>(
-    null,
-  );
-  const [pacientesStatus, setPacientesStatus] =
-    React.useState<LoadState>("idle");
-  const [tarifaDefault, setTarifaDefault] = React.useState<number | null>(null);
-
-  const fetchPacientes = React.useCallback(() => {
-    setPacientesStatus("loading");
-    Promise.all([
-      apiGet<PacienteConDeuda[]>("/api/pacientes"),
-      apiGet<Configuracion>("/api/config").catch(() => null),
-    ])
-      .then(([lista, config]) => {
-        setPacientes(lista);
-        setTarifaDefault(config ? config.tarifaDefault : null);
-        setPacientesStatus("idle");
-      })
-      .catch(() => {
-        setPacientesStatus("error");
-      });
-  }, []);
-
   const handlePrev = () => {
     setAnchorUsuario((elegido) => {
       const d = elegido ?? today;
@@ -255,29 +224,16 @@ export function AgendaView() {
     refetchTurnos();
   };
 
-  const openSheet = () => {
-    setSheetOpen(true);
-    if (pacientes === null && pacientesStatus !== "loading") {
-      fetchPacientes();
-    }
-  };
+  const openSheet = () => setSheetOpen(true);
   const closeSheet = () => setSheetOpen(false);
 
-  // Lanza ApiClientError si la API rechaza: el formulario lo muestra.
+  // crearTurno relanza el ApiClientError si la API rechaza: el formulario
+  // lo muestra. El body y el mensaje son los mismos que en Hoy.
   const handleCreateTurno = async (data: NuevoTurnoData) => {
-    // El body y el mensaje son los mismos que en Hoy (src/lib/agendar-turno.ts).
-    let creado: TurnoCreado;
-    try {
-      creado = await apiPost<TurnoCreado>("/api/turnos", payloadNuevoTurno(data));
-    } catch (err) {
-      if (err instanceof ApiClientError) throw err;
-      throw new ApiClientError(ALGO_FALLO, 0);
-    }
+    const creado = await crearTurno(data);
     setSheetOpen(false);
     if (creado.serie) setResultadoSerie(creado.serie);
     else toast.confirmar(mensajeTurnoAgendado(creado));
-    // Si se creó un paciente en el camino, la lista tiene que reflejarlo.
-    setPacientes(null);
     refetchTurnos();
   };
 
@@ -399,32 +355,12 @@ export function AgendaView() {
 
       {mostrarFab ? <Fab label={AGENDAR} onClick={openSheet} /> : null}
 
-      <Sheet open={sheetOpen} onClose={closeSheet} ariaLabel="Agendar" formulario>
-        <div className="px-6 pt-3 lg:px-7 lg:pt-7">
-        {pacientes === null && pacientesStatus === "error" ? (
-          <EstadoVacio
-            icono={<CalendarX2 size={28} strokeWidth={1.6} aria-hidden="true" />}
-            titulo={ALGO_FALLO}
-            lineas={[
-              "No pudimos traer tus pacientes.",
-              "Sin la lista no se puede agendar.",
-              "Probá de nuevo en un momento.",
-            ]}
-            accion={{ label: "Reintentar", onClick: fetchPacientes }}
-          />
-        ) : pacientes === null ? (
-          <Cargando />
-        ) : (
-          <NuevoTurnoForm
-            pacientes={pacientes}
-            tarifaDefault={tarifaDefault}
-            fechaInicial={anchor}
-            onSubmit={handleCreateTurno}
-            onCancel={closeSheet}
-          />
-        )}
-        </div>
-      </Sheet>
+      <SheetNuevoTurno
+        open={sheetOpen}
+        fechaInicial={anchor}
+        onClose={closeSheet}
+        onSubmit={handleCreateTurno}
+      />
 
       <TurnoDetailSheet
         key={detalleId ?? "closed"}

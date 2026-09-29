@@ -89,13 +89,17 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
     (a, b) => a.fecha.getTime() - b.fecha.getTime(),
   );
 
-  const abierto = turnos.find(
+  // La card es para quien viene: una paciente marcada "No vino" (o un turno
+  // cancelado) no ocupa el lugar grande aunque sea su hora (forense 03,
+  // P3-10). Sigue en la agenda del día, con su estado.
+  const quienViene = turnos.filter((t) => t.estado !== "ausente" && t.estado !== "cancelado");
+  const abierto = quienViene.find(
     (t) =>
       t.fecha.getTime() <= ahora.getTime() &&
       ahora.getTime() < t.fecha.getTime() + t.duracion * 60000,
   );
   const ahoraTurno =
-    abierto ?? turnos.find((t) => t.fecha.getTime() >= ahora.getTime()) ?? null;
+    abierto ?? quienViene.find((t) => t.fecha.getTime() >= ahora.getTime()) ?? null;
 
   return {
     inicio: data.inicio,

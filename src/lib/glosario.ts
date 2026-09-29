@@ -899,6 +899,14 @@ export const AGENDA_DIA_VACIO_LINEAS: [string, string, string] = [
 
 /** El botón que agenda un turno, desde el estado vacío o desde el header. */
 export const AGENDAR = "Agendar";
+/** Nombre accesible del sheet de agendar, el mismo en Hoy y en la Agenda. */
+export const AGENDAR_TURNO = "Agendar turno";
+/** La lista de pacientes del formulario de agendar no llegó. */
+export const PACIENTES_NO_CARGARON = [
+  "No pudimos traer tus pacientes.",
+  "Sin la lista no se puede agendar.",
+  "Probá de nuevo en un momento.",
+] as const;
 
 /**
  * "Crear a X" crea la paciente con la tarifa de Tu consultorio. Si esa tarifa
@@ -1042,6 +1050,9 @@ export const COBROS_NO_CARGARON = [
 /** Mientras la pantalla trae los datos. Nunca "cargando datos" ni
  *  "procesando". */
 export const CARGANDO = "Cargando…";
+/** Una recarga falló y la pantalla sigue con lo que tenía. Va con
+ *  Reintentar, arriba de los datos. */
+export const DATOS_SIN_ACTUALIZAR = "No se pudo actualizar: lo que ves es de antes.";
 
 // La confirmación del cobro (COBRADO) y su fallo (NO_SE_PUDO_COBRAR) viven
 // en la sección de Hoy, que es la pantalla desde donde se cobra.

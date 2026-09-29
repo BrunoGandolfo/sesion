@@ -3,13 +3,13 @@ import * as React from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { compile } from "tailwindcss";
-import { fireEvent, render, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Sheet } from "../sheet";
 import estilos from "../sheet-formulario.module.css";
 import { NuevoTurnoForm } from "@/components/forms/nuevo-turno-form";
 import { NuevoPacienteForm } from "@/app/(dashboard)/pacientes/_components/nuevo-paciente-form";
-import { SheetNuevoTurno } from "@/app/(dashboard)/_components/sheet-nuevo-turno";
+import { SheetNuevoTurno } from "@/components/forms/sheet-nuevo-turno";
 
 vi.mock("@/lib/api-client", async (original) => ({
   ...await original<typeof import("@/lib/api-client")>(),
@@ -99,11 +99,10 @@ describe("panel de alta con un solo scroll", () => {
     comprobarPanel(panel);
   });
 
-  it("activa el contenedor desde Hoy después de cargar la lista", async () => {
-    const props = { open: true, onClose: vi.fn(), onSubmit: vi.fn() };
-    const { rerender } = render(<SheetNuevoTurno {...props} pacientes={null} />);
+  it("activa el contenedor desde Hoy y la Agenda antes y después de cargar la lista", async () => {
+    render(<SheetNuevoTurno open onClose={vi.fn()} onSubmit={vi.fn()} />);
     expect(document.querySelectorAll(`.${estilos.contenido}`)).toHaveLength(1);
-    rerender(<SheetNuevoTurno {...props} pacientes={[]} />);
+    await screen.findByRole("button", { name: "Agendar" });
     await aplicarEstilos();
     document.querySelectorAll<HTMLElement>('[role="dialog"]').forEach(comprobarPanel);
   });

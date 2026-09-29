@@ -31,7 +31,7 @@ vi.mock("../agenda-del-dia", () => ({
 // entrega los mismos datos en cada intento para verificar que el rechazo
 // no cierra la edición ni transforma el pedido. Como el formulario real,
 // muestra el motivo del rechazo (ApiClientError.mensaje) en un alert.
-vi.mock("../sheet-nuevo-turno", async () => {
+vi.mock("@/components/forms/sheet-nuevo-turno", async () => {
   const React = await import("react");
   return {
     SheetNuevoTurno: ({ open, onSubmit }: { open: boolean; onSubmit: (d: NuevoTurnoData) => Promise<void> }) => {

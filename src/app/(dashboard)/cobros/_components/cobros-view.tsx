@@ -99,6 +99,7 @@ import type {
 } from "@/types/domain";
 
 import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
+import { SegunLectura, type Carga } from "../../_components/segun-lectura";
 import { TarjetaFinanzas } from "./tarjeta-finanzas";
 
 // ============================================
@@ -113,8 +114,6 @@ type DeudorItem = DeudaPaciente & {
 };
 
 type Pestana = "te-deben" | "cobros";
-type Carga = "cargando" | "listo" | "error";
-
 type DatosCobros = {
   kpis: KPIsDashboard;
   deudores: DeudorItem[];
@@ -176,32 +175,66 @@ export function CobrosView() {
     setReloadKey((k) => k + 1);
   };
 
-  if (carga === "cargando" && !datos) {
-    return (
+  return (
+    <SegunLectura
+      carga={carga}
+      datos={datos && ahora ? { ...datos, ahora } : null}
       // La segunda espera: la ruta ya llegó y falta /api/cobros. El cuerpo
       // es el mismo que dibujó el loading.tsx de esta carpeta, y el Marco
       // acá ya es el de verdad.
-      <Marco ahora={null} nombreProfesional={null}>
-        <EsqueletoCobrosCuerpo />
-      </Marco>
-    );
-  }
-
-  if (carga === "error" && !datos) {
-    return (
-      <Marco ahora={null} nombreProfesional={null}>
-        <EstadoVacio
-          icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
-          titulo={ALGO_FALLO}
-          lineas={COBROS_NO_CARGARON}
-          accion={{ label: REINTENTAR, onClick: reintentar }}
+      esqueleto={
+        <Marco ahora={null} nombreProfesional={null}>
+          <EsqueletoCobrosCuerpo />
+        </Marco>
+      }
+      error={
+        <Marco ahora={null} nombreProfesional={null}>
+          <EstadoVacio
+            icono={<Wallet size={28} strokeWidth={1.6} aria-hidden="true" />}
+            titulo={ALGO_FALLO}
+            lineas={COBROS_NO_CARGARON}
+            accion={{ label: REINTENTAR, onClick: reintentar }}
+          />
+        </Marco>
+      }
+      onReintentar={reintentar}
+    >
+      {(cargados, { aviso, ocupado }) => (
+        <Pantalla
+          datos={cargados}
+          aviso={aviso}
+          ocupado={ocupado}
+          pestana={pestana}
+          onPestana={setPestana}
+          reloadKey={reloadKey}
+          onRecargar={reintentar}
+          toast={toast}
         />
-      </Marco>
-    );
-  }
+      )}
+    </SegunLectura>
+  );
+}
 
-  if (!datos || !ahora) return null;
-
+function Pantalla({
+  datos,
+  aviso,
+  ocupado,
+  pestana,
+  onPestana,
+  reloadKey,
+  onRecargar,
+  toast,
+}: {
+  datos: DatosCobros & { ahora: Date };
+  aviso: React.ReactNode;
+  ocupado: boolean;
+  pestana: Pestana;
+  onPestana: (pestana: Pestana) => void;
+  reloadKey: number;
+  onRecargar: () => void;
+  toast: ReturnType<typeof useToast>;
+}) {
+  const { ahora } = datos;
   const { kpis, deudores, cobros, nombreProfesional } = datos;
 
   const sesionesSinCobrar = deudores.reduce(
@@ -214,7 +247,9 @@ export function CobrosView() {
   );
 
   return (
-    <Marco ahora={ahora} nombreProfesional={nombreProfesional}>
+    <Marco ahora={ahora} nombreProfesional={nombreProfesional} ocupado={ocupado}>
+      {aviso}
+
       <KpiGrid
         ingresosMes={kpis.ingresosMes}
         deudaTotal={kpis.deudaAcumulada}
@@ -232,7 +267,7 @@ export function CobrosView() {
           { value: "cobros", label: COBROS_DEL_MES },
         ]}
         value={pestana}
-        onChange={setPestana}
+        onChange={onPestana}
         ariaLabel={VISTA_DE_COBROS}
         className="self-start"
       />
@@ -246,21 +281,21 @@ export function CobrosView() {
           onCobrado={() => {
             // La deuda y los ingresos del mes salen del servidor: se vuelve a
             // pedir todo. Los datos viejos quedan en pantalla mientras tanto.
-            setReloadKey((k) => k + 1);
+            onRecargar();
             toast.confirmar(COBRADO);
           }}
           onCobroIncompleto={(mensaje, huboCobros) => {
-            if (huboCobros) setReloadKey((k) => k + 1);
+            if (huboCobros) onRecargar();
             toast.avisar(mensaje);
           }}
           onAvisado={(creado) => {
             toast.confirmar(creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.");
           }}
           onError={(mensaje) => toast.avisar(mensaje)}
-          onVerCobros={() => setPestana("cobros")}
+          onVerCobros={() => onPestana("cobros")}
         />
       ) : (
-        <CobrosDelMes cobros={cobros} onVerTeDeben={() => setPestana("te-deben")} />
+        <CobrosDelMes cobros={cobros} onVerTeDeben={() => onPestana("te-deben")} />
       )}
 
       <Toast {...toast.props} />
@@ -275,11 +310,14 @@ export function CobrosView() {
 function Marco({
   ahora,
   nombreProfesional,
+  ocupado = false,
   children,
 }: {
   ahora: Date | null;
   /** null mientras carga: la cabecera muestra "Tu consultorio". */
   nombreProfesional: string | null;
+  /** Recargando con los datos anteriores en pantalla. */
+  ocupado?: boolean;
   children: React.ReactNode;
 }) {
   const mesLargo = ahora
@@ -288,7 +326,7 @@ function Marco({
   const anio = ahora ? partesMvd(ahora).anio : "";
 
   return (
-    <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-7 px-5 py-6 lg:gap-10 lg:px-10 lg:py-10">
+    <div aria-busy={ocupado} className="mx-auto flex w-full max-w-[1100px] flex-col gap-7 px-5 py-6 lg:gap-10 lg:px-10 lg:py-10">
       {/* La misma cabecera que en Hoy, y por el mismo motivo: el menú de
           abajo no lleva a la configuración, y un engranaje suelto arriba a
           la derecha era el segundo acceso distinto a un mismo lugar.

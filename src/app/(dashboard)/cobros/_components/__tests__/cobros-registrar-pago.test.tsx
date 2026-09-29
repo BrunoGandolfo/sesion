@@ -13,12 +13,14 @@ import { ApiClientError } from "@/lib/api-client";
 import {
   COBRADO,
   COBRO_INCOMPLETO,
+  DATOS_SIN_ACTUALIZAR,
   ELEGIR_METODO_DE_PAGO,
   ENVIAR_SMS,
   MARCAR_TODAS,
   RECORDAR_COBRO,
   RECORDAR_COBRO_TITULO,
   REGISTRAR_PAGO,
+  REINTENTAR,
   VOLVER,
 } from "@/lib/glosario";
 
@@ -214,6 +216,31 @@ describe("Te deben: registrar pago", () => {
     await elegirMetodo("Efectivo");
     const sheet = screen.getByRole("dialog", { name: "Método de pago" });
     expect((await within(sheet).findByRole("alert")).textContent).toBe("El turno ya está cobrado");
+  });
+
+  it("si la recarga que sigue al cobro falla, lo dice y deja la lista que había", async () => {
+    const turnos = servidor();
+    api.post.mockImplementation(async (ruta: string) => {
+      turnos.find((t) => t.id === ruta.split("/")[3])!.pagoEstado = "pagado";
+      return {};
+    });
+    const panel = await abrirRegistrarPago();
+    fireEvent.click((await within(panel).findAllByRole("checkbox"))[0]);
+    const leer = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (url: string) => {
+      if (url === "/api/deudores") throw new ApiClientError("sin red", 503);
+      return leer(url);
+    });
+    await elegirMetodo("Efectivo");
+
+    expect(await screen.findByText(COBRADO)).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain(DATOS_SIN_ACTUALIZAR);
+    // La lista anterior sigue ahí: nada desaparece por un fallo de red.
+    expect(screen.getByRole("button", { name: `${REGISTRAR_PAGO} de ${LUCIA}` })).toBeTruthy();
+
+    api.get.mockImplementation(leer);
+    fireEvent.click(screen.getByRole("button", { name: REINTENTAR }));
+    await waitFor(() => expect(screen.queryByText(DATOS_SIN_ACTUALIZAR, { exact: false })).toBeNull());
   });
 
   it("cerrar el selector sin elegir método no cobra nada y deja lo marcado", async () => {
