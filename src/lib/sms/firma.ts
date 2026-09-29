@@ -23,10 +23,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 /** Origen público de la app. Twilio firma contra esta URL. */
-export const ORIGEN_PUBLICO = "https://sesionapp.app";
+const ORIGEN_PUBLICO = "https://sesionapp.app";
 
-export const RUTA_CALLBACK = "/api/sms/callback";
-export const RUTA_ENTRANTE = "/api/sms/entrante";
+const RUTA_CALLBACK = "/api/sms/callback";
+const RUTA_ENTRANTE = "/api/sms/entrante";
 
 export const URL_CALLBACK = `${ORIGEN_PUBLICO}${RUTA_CALLBACK}`;
 export const URL_ENTRANTE = `${ORIGEN_PUBLICO}${RUTA_ENTRANTE}`;

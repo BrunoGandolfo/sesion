@@ -10,7 +10,7 @@
  *  y lo que interesa es reconocer el dispositivo, no archivarlo entero. */
 export const USER_AGENT_MAX = 120;
 
-export interface HuellaRequest {
+interface HuellaRequest {
   /** IP del cliente, o `null` si el proxy no la mandó. */
   ip: string | null;
   /** User-agent recortado, o `null` si no vino. */

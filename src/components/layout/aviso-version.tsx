@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { VERSION_APP } from "@/lib/version-app";
 
-export function esRutaGrabacion(ruta: string) {
+function esRutaGrabacion(ruta: string) {
   return ruta === "/grabar" || ruta.startsWith("/grabar/");
 }
 

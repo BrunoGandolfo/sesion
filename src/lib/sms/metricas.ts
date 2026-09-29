@@ -22,10 +22,10 @@ import type { FuenteMetricas, MetricaSalud } from "@/lib/salud-metricas";
 const MS_POR_MINUTO = 60_000;
 const MS_POR_HORA = 60 * MS_POR_MINUTO;
 
-export const VENTANA_SMS_MS = 24 * MS_POR_HORA;
+const VENTANA_SMS_MS = 24 * MS_POR_HORA;
 
 /** Desde cuántos fallidos en 24 h se avisa. Uno ya es una paciente sin aviso. */
-export const UMBRAL_SMS_FALLIDOS = 1;
+const UMBRAL_SMS_FALLIDOS = 1;
 
 /** Desde cuántos desconocidos en 24 h se avisa. */
 export const UMBRAL_SMS_DESCONOCIDOS = 3;

@@ -39,7 +39,7 @@ const MS_POR_DIA = 86_400_000;
 const OFFSET_MS = OFFSET_MONTEVIDEO_MIN * MS_POR_MINUTO;
 
 /** Componentes del reloj de pared de Montevideo para un instante dado. */
-export interface PartesMvd {
+interface PartesMvd {
   anio: number;
   /** 0-11, como en Date. */
   mes: number;
@@ -257,6 +257,14 @@ export function formatearDiaSemanaMvd(instante: Date): string {
 export function fechaInputMvd(instante: Date): string {
   const { anio, mes, dia } = partesMvd(instante);
   return `${anio}-${dosDigitos(mes + 1)}-${dosDigitos(dia)}`;
+}
+
+/** "2026-09": el mes de Montevideo del instante. Es la clave de mes de
+ *  Finanzas, de los cobros y de la ficha, que la armaban a mano en cinco
+ *  lugares. */
+export function mesIsoMvd(instante: Date): string {
+  const { anio, mes } = partesMvd(instante);
+  return `${anio}-${dosDigitos(mes + 1)}`;
 }
 
 /** "15:15": la hora de Montevideo del instante, como la quiere un

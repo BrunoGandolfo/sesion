@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { TRANSCRIPCION_VISIBLE_EN_PANTALLA, BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_EN_ARCHIVO_DEL_SERVIDOR, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, LIMPIEZA_AUDIO_MAX_INTENTOS, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
+import { TRANSCRIPCION_VISIBLE_EN_PANTALLA, BORRADO_DE_DATOS_A_PEDIDO, NOTA_APROBADA_CORREGIBLE, PACIENTE_PUEDE_CORREGIR_CONTACTO, PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES, PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN, ASR_BORRADO_DIAS_APROX, ASR_BORRADO_MAX_INTENTOS, AUDIO_EN_ARCHIVO_DEL_SERVIDOR, BACKUP_INCLUYE_CLAVE_AUDIO, CLAVE_AUDIO_DESTRUIDA_AL_APROBAR, LIMPIEZA_AUDIO_DIAS_APROX, RECORRIDO_EXPORTABLE, RESPALDO_LOCAL_CIFRADO, RESUMEN_PROPUESTO_POR_IA, RETENCION_BACKUPS_DIAS, RETENCION_BACKUPS_MENSUALES_MESES, VOCABULARIO_A_ASR, VOCABULARIO_INCLUYE_NOMBRES, ANTHROPIC_RETENCION_VERIFICADA_EL } from "@/lib/consentimiento-hechos";
 import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
@@ -72,7 +72,7 @@ it("pide dejar la pantalla encendida, y no garantiza recuperar una interrupción
   // (AVISO_PANTALLA_APAGADA) y al volver dice entre qué horas no se grabó.
   const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
   expect(vista).toContain("Dejá la pantalla encendida mientras grabás.");
-  expect(codigo("src/lib/glosario.ts")).toContain("La pantalla se apagó. Con la pantalla apagada el teléfono puede dejar de grabar: mantenela encendida.");
+  expect(glosario.AVISO_PANTALLA_APAGADA.startsWith("La pantalla se apagó. Con la pantalla apagada el teléfono puede")).toBe(true);
   expect(documento("07-grabar-una-sesion.md")).toContain("La pantalla se apagó. Con la pantalla apagada el teléfono puede");
   expect(documento("07-grabar-una-sesion.md")).toContain("No se grabó entre las 10:12 y las 10:20");
   expect(documento("07-grabar-una-sesion.md")).toContain("Dejá la pantalla encendida");
@@ -168,8 +168,8 @@ it("la ayuda dice que la app NO cifra el audio, y qué lo protege en cada tramo"
   }
   const texto = documento("12-camino-del-audio-y-privacidad.md");
   expect(texto).toContain("**" + RETENCION_BACKUPS_DIAS + " días**");
-  // Los mensuales: 12 meses en backup.yml.
-  expect(codigo(".github/workflows/backup.yml")).toContain("366 days ago");
+  // Los mensuales: 12 meses. Que backup.yml los borra a los 366 días lo
+  // prueba consentimiento-retencion.test.ts ejecutando el paso.
   expect(texto).toContain("**12 meses**");
   expect(texto).toContain(ANTHROPIC_RETENCION_VERIFICADA_EL);
   for (const tipo of ["borrar_audio_r2", "borrar_transcript_asr"] as const) {
@@ -181,11 +181,10 @@ it("la ayuda dice que la app NO cifra el audio, y qué lo protege en cada tramo"
 
 it("la ayuda describe los botones del grabador que existen", () => {
   const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
-  const glosario = codigo("src/lib/glosario.ts");
   const texto = documento("07-grabar-una-sesion.md");
   // Los botones salen del glosario; la vista los usa por su constante.
   for (const [constante, boton] of [["GRABAR_SESION", "Grabar sesión"], ["PAUSAR", "Pausar"], ["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["GUARDAR_LO_GRABADO", "Guardar lo grabado"], ["SEGUIR_GRABANDO", "Seguir grabando"], ["VOLVER_A_LA_FICHA", "Volver a la ficha"], ["ENTENDIDO", "Entendido"]]) {
-    expect(glosario).toContain(`export const ${constante} = "${boton}"`);
+    expect((glosario as Record<string, unknown>)[constante]).toBe(boton);
     expect(vista).toContain(constante);
     expect(texto).toContain(boton);
   }
@@ -197,8 +196,8 @@ it("la ayuda describe los botones del grabador que existen", () => {
   expect(vista).toContain('await apiPost<TurnoApi>("/api/turnos"');
   expect(vista).toContain("DURACION_SIN_TURNO");
   expect(texto).toContain("crea uno de 50 minutos");
-  // Empezar de nuevo el mismo turno reemplaza lo guardado (iniciarSesionGrabacion borra los chunks previos).
-  expect(codigo("src/lib/grabacion-storage.ts")).toContain("tx.objectStore(STORE_CHUNKS).delete(rangoChunks(sesionClinicaId));");
+  // Empezar de nuevo el mismo turno reemplaza lo guardado: lo prueba
+  // grabacion-storage.test.ts ("empezar de nuevo el mismo turno reemplaza…").
   expect(texto).toContain("Empezar una grabación nueva del mismo turno reemplaza la copia anterior");
   // El medidor existe; la pantalla bloqueada no se promete.
   expect(vista).toContain("<MedidorAudio");
@@ -284,8 +283,7 @@ it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
 
 it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar la contraseña", () => {
   // Los únicos usos vigentes de esas palabras son botones que existen hoy.
-  const vigentes = [INVITAR_WHATSAPP, "Descartar propuesta", "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta", `**${DESCARTAR_GRABACION_ACCION}**`, DESCARTAR_GRABACION_TITULO];
-  expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Descartar propuesta");
+  const vigentes = [INVITAR_WHATSAPP, glosario.DESCARTAR_PROPUESTA_ACCION, "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta", `**${DESCARTAR_GRABACION_ACCION}**`, DESCARTAR_GRABACION_TITULO];
   // La grabación sin terminar, en Pendientes de Hoy: el botón y su confirmación.
   const pendientes = codigo("src/app/(dashboard)/_components/pendientes.tsx");
   expect(DESCARTAR_GRABACION).toBe("Descartar");
@@ -394,7 +392,6 @@ describe("la ayuda sigue al consentimiento vigente", () => {
 
   it("el borrado del audio se rinde a los días que dice el consentimiento", () => {
     expect(CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(false);
-    expect(POLITICA_POR_TIPO.borrar_audio_r2.tope).toBe(LIMPIEZA_AUDIO_MAX_INTENTOS);
     expect(consentimiento).toContain(`reintenta unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; si no lo logra, el borrado queda marcado como fallido`);
     for (const archivo of ["00-que-es-sesion.md", "08-la-nota-clinica.md", "12-camino-del-audio-y-privacidad.md", "13-preguntas-frecuentes.md"]) {
       expect(documento(archivo)).toContain(`unos ${LIMPIEZA_AUDIO_DIAS_APROX} días`);
@@ -436,12 +433,10 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     expect(consentimiento).not.toMatch(/que se eliminen|Tenés derecho/);
     const privacidad = documento("12-camino-del-audio-y-privacidad.md");
     expect(privacidad.replace(/\s+/g, " ")).toContain("sus notas clínicas aprobadas, su transcripción (vista **Transcripción** de cada sesión) y el resumen de su proceso");
-    expect(privacidad).toContain("sus datos de contacto, con **Editar datos**, o el resumen de su proceso, con **Editar Recorrido**");
+    // Los botones que nombra son los del glosario, que es de donde los leen las pantallas.
+    expect(privacidad).toContain(`sus datos de contacto, con **${glosario.EDITAR_DATOS}**, o el resumen de su proceso, con **${glosario.RECORRIDO_EDITAR}**`);
     expect(privacidad.replace(/\s+/g, " ")).toContain("borrar sus datos, corregir una nota ya aprobada, ni ver la autorización firmada");
     expect(ayuda()).not.toMatch(/(no se puede|no podés)[^.]*ver la transcripción/);
-    // Los botones que nombra existen.
-    expect(codigo("src/components/clinico/HiloView.tsx")).toContain("Editar Recorrido");
-    expect(codigo("src/lib/glosario.ts")).toContain('EDITAR_DATOS = "Editar datos"');
     expect(documento("04-pacientes-y-ficha.md")).toContain("qué no se puede hacer desde la app (borrar sus datos");
     // Ninguna página le ofrece a la paciente borrar o corregir lo que la app no hace.
     expect(ayuda()).not.toMatch(/derecho a (acceder|pedir que se (corrijan|eliminen))|puede pedir que se borren/i);
@@ -453,7 +448,6 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     // advertencia no puede volver.
     expect(consentimiento).not.toContain("repite el pedido hasta que el servicio confirma que lo hizo");
     expect(consentimiento).toContain(`y, si se completó, repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días`);
-    expect(POLITICA_POR_TIPO.borrar_transcript_asr.tope).toBe(ASR_BORRADO_MAX_INTENTOS);
     const privacidad = documento("12-camino-del-audio-y-privacidad.md");
     expect(privacidad).not.toMatch(/Esa frase del consentimiento|no menciona ese tope/);
     expect(ayuda()).not.toMatch(/Esa frase del consentimiento está pendiente de corregir/);

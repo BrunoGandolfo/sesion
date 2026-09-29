@@ -112,4 +112,23 @@ describe("enviarSmsTwilio", () => {
     const r = await enviarSmsTwilio(PEDIDO, { fetcher: fetchQueContesta(201, JSON.stringify({ sid: "SM2" })).fetcher, env: ENV });
     expect(r).toMatchObject({ tipo: "aceptado", sid: "SM2", segmentos: null });
   });
+
+  it("un 201 cuyo cuerpo no termina de llegar vence el plazo: desconocido, sin colgar la corrida", async () => {
+    // El status llegó; el JSON no. El cuerpo sólo se corta si alguien aborta
+    // la señal: antes el plazo se apagaba al llegar el status.
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const cuerpo = new ReadableStream<Uint8Array>({
+        start(control) {
+          control.enqueue(new TextEncoder().encode('{"sid":'));
+          init?.signal?.addEventListener("abort", () => control.error(new DOMException("aborted", "AbortError")));
+        },
+      });
+      return new Response(cuerpo, { status: 201 });
+    }) as unknown as typeof fetch;
+
+    const r = await enviarSmsTwilio(PEDIDO, { fetcher, env: ENV, timeoutMs: 30 });
+
+    expect(r.tipo).toBe("desconocido");
+  });
 });
+

@@ -22,9 +22,9 @@ import { MOTIVO_TURNO_PASADO, MOTIVO_VENTANA_AGOTADA, MOTIVO_VENTANA_AGOTADA_SIN
 
 export const VENTANA_MINIMA_MS = 2 * 60 * 60_000;
 
-export const ESPERA_BASE_MS = 2 * 60_000;
+const ESPERA_BASE_MS = 2 * 60_000;
 export const ESPERA_MAXIMA_MS = 30 * 60_000;
-export const JITTER = 0.25;
+const JITTER = 0.25;
 
 /**
  * Espera antes del intento `intentos + 1`, con `intentos` ya realizados
@@ -42,12 +42,12 @@ export function limiteUtilDelTurno(fechaTurno: Date): Date {
   return new Date(fechaTurno.getTime() - VENTANA_MINIMA_MS);
 }
 
-export type Decision =
+type Decision =
   | { accion: "reintentar"; proximoIntentoEn: Date }
   | { accion: "fallido"; motivo: string }
   | { accion: "cancelado"; motivo: string };
 
-export interface ParamsDecision {
+interface ParamsDecision {
   /** Intentos ya realizados, contando el que acaba de fallar. */
   intentos: number;
   ahora: Date;

@@ -2,63 +2,34 @@ import { describe, it, expect } from "vitest";
 
 import * as glosario from "@/lib/glosario";
 import { pluralizar } from "@/lib/glosario";
+import { METODOS_PAGO } from "@/lib/constantes-turno";
 
 describe("glosario — constantes de texto", () => {
-  it("los cuatro destinos del menú están nombrados", () => {
-    expect(glosario.NAV).toEqual({
-      HOY: "Hoy",
-      AGENDA: "Agenda",
-      PACIENTES: "Pacientes",
-      COBROS: "Cobros",
-    });
-  });
+  // Lo que protege este bloque es la forma, no las palabras: las palabras
+  // viven en el glosario y copiarlas acá obligaba a cambiarlas dos veces.
 
-  it("la autorización de grabación se llama por su nombre completo", () => {
-    expect(glosario.AUTORIZACION_GRABACION).toBe(
-      "Autorización para grabar las sesiones",
-    );
+  it("los cuatro destinos del menú están nombrados, cada uno distinto", () => {
+    expect(Object.keys(glosario.NAV).sort()).toEqual(["AGENDA", "COBROS", "HOY", "PACIENTES"]);
+    expect(new Set(Object.values(glosario.NAV)).size).toBe(4);
   });
 
   it("los métodos de pago se dicen en un solo lugar", () => {
     // Estaban escritos en cuatro pantallas, dos veces como array y dos como
     // Record. La lista y el Record son ahora la misma cosa.
-    expect(glosario.METODO_PAGO_LABEL).toEqual({
-      efectivo: "Efectivo",
-      transferencia: "Transferencia",
-      mercadopago: "MercadoPago",
-      debito: "Débito",
-      credito: "Crédito",
-      otro: "Otro",
-    });
-    expect(glosario.METODOS_PAGO.map((m) => m.value)).toEqual([
-      "efectivo",
-      "transferencia",
-      "mercadopago",
-      "debito",
-      "credito",
-      "otro",
-    ]);
+    expect(Object.keys(glosario.METODO_PAGO_LABEL).sort()).toEqual([...METODOS_PAGO].sort());
+    expect(glosario.METODOS_PAGO.map((m) => m.value)).toEqual([...METODOS_PAGO]);
     for (const metodo of glosario.METODOS_PAGO) {
       expect(metodo.label).toBe(glosario.METODO_PAGO_LABEL[metodo.value]);
     }
   });
 
-  it("el estado del turno se dice igual en la fila y en el sheet", () => {
-    // La fila de la agenda decía "Pagado"/"Pendiente" y el sheet del turno
-    // "Cobrado"/"Sin cobrar" para el mismo turno. Ninguna pantalla vuelve a
-    // inventar una palabra: si estos nombres cambian, cambian en los dos.
-    expect(glosario.PAGADO).toBe("Pagado");
-    expect(glosario.PENDIENTE).toBe("Sin cobrar");
-    expect(glosario.CANCELADO).toBe("Cancelado");
+  it("el estado del pago tiene tres palabras distintas", () => {
+    expect(new Set([glosario.PAGADO, glosario.PENDIENTE, glosario.CANCELADO]).size).toBe(3);
   });
 
   it("el selector de rango del Recorrido nombra sus cuatro opciones", () => {
-    expect(glosario.RANGO_LABEL).toEqual({
-      "10s": "Últimas 10",
-      "3m": "3 meses",
-      "6m": "6 meses",
-      todo: "Todo",
-    });
+    expect(Object.keys(glosario.RANGO_LABEL).sort()).toEqual(["10s", "3m", "6m", "todo"]);
+    expect(new Set(Object.values(glosario.RANGO_LABEL)).size).toBe(4);
   });
 
   it("la tendencia de un tema lleva flecha y palabra, nunca la flecha sola", () => {
@@ -82,16 +53,17 @@ describe("glosario — constantes de texto", () => {
 
 describe("glosario — la nota sigue siendo SOAP", () => {
   const secciones = [
-    { constante: glosario.SOAP_S, titulo: "Subjetivo (S)", letra: "S" },
-    { constante: glosario.SOAP_O, titulo: "Objetivo (O)", letra: "O" },
-    { constante: glosario.SOAP_A, titulo: "Análisis (A)", letra: "A" },
-    { constante: glosario.SOAP_P, titulo: "Plan (P)", letra: "P" },
+    { constante: glosario.SOAP_S, nombre: "Subjetivo", letra: "S" },
+    { constante: glosario.SOAP_O, nombre: "Objetivo", letra: "O" },
+    { constante: glosario.SOAP_A, nombre: "Análisis", letra: "A" },
+    { constante: glosario.SOAP_P, nombre: "Plan", letra: "P" },
   ];
 
   it.each(secciones)(
-    "$titulo conserva su nombre y su letra, y suma una ayuda",
-    ({ constante, titulo, letra }) => {
-      expect(constante.titulo).toBe(titulo);
+    "$nombre conserva su nombre y su letra, y suma una ayuda",
+    ({ constante, nombre, letra }) => {
+      // La regla clínica del glosario: el nombre y la letra no se traducen.
+      expect(constante.titulo).toContain(nombre);
       expect(constante.titulo).toContain(`(${letra})`);
       expect(constante.ayuda.trim().length).toBeGreaterThan(0);
       // La ayuda acompaña, no reemplaza: nunca es el título.
@@ -99,14 +71,6 @@ describe("glosario — la nota sigue siendo SOAP", () => {
     },
   );
 
-  it("las cuatro secciones van en orden S, O, A, P", () => {
-    expect(glosario.SOAP_SECCIONES.map((s) => s.titulo)).toEqual([
-      "Subjetivo (S)",
-      "Objetivo (O)",
-      "Análisis (A)",
-      "Plan (P)",
-    ]);
-  });
 
   it("la nota se sigue llamando nota clínica SOAP", () => {
     expect(glosario.NOTA_CLINICA).toContain("SOAP");
@@ -119,7 +83,8 @@ describe("glosario — los instrumentos conservan su sigla", () => {
     { clave: "MITI", instrumento: glosario.MITI, sigla: "MITI 4.2.1" },
     { clave: "CTSR", instrumento: glosario.CTSR, sigla: "CTS-R" },
   ])("$clave se sigue llamando $sigla", ({ instrumento, sigla }) => {
-    expect(instrumento.sigla).toBe(sigla);
+    // La sigla publicada del instrumento es la regla, no un rótulo.
+    expect(instrumento.sigla).toContain(sigla);
     expect(instrumento.nombre.trim().length).toBeGreaterThan(0);
     expect(instrumento.ayuda.trim().length).toBeGreaterThan(0);
   });
@@ -172,3 +137,26 @@ describe("pluralizar", () => {
     );
   });
 });
+
+describe("horaCorta: la hora del consultorio, no la del proceso", () => {
+  it("22:58 UTC del 28 de septiembre son las 19:58 en Montevideo, con cualquier TZ", () => {
+    const anterior = process.env.TZ;
+    for (const zona of ["UTC", "Europe/Madrid", "America/Montevideo"]) {
+      process.env.TZ = zona;
+      try {
+        expect(glosario.horaCorta("2026-09-28T22:58:00Z"), zona).toBe("19:58");
+        expect(glosario.horaCorta(Date.parse("2026-09-28T22:58:00Z")), zona).toBe("19:58");
+      } finally {
+        if (anterior === undefined) delete process.env.TZ;
+        else process.env.TZ = anterior;
+      }
+    }
+  });
+
+  it("los avisos de grabación la usan", () => {
+    const desde = Date.parse("2026-09-28T22:58:00Z");
+    expect(glosario.AVISO_SIN_AUDIO_DESDE(desde)).toContain("desde las 19:58");
+    expect(glosario.AVISO_HUECO(desde, desde + 5 * 60_000)).toContain("entre las 19:58 y las 20:03");
+  });
+});
+

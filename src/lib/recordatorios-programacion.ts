@@ -38,10 +38,10 @@ export type RecordatorioModo = (typeof RECORDATORIO_MODOS)[number];
 export const RECORDATORIO_MODO_DEFAULT: RecordatorioModo = "dia_anterior";
 
 /** Hora de la tarde en que sale el aviso del día anterior. */
-export const HORA_TARDE = 20;
+const HORA_TARDE = 20;
 
 /** Hora de la mañana del propio día del turno. */
-export const HORA_MANANA = 8;
+const HORA_MANANA = 8;
 
 /** True si el string es uno de los tres modos. Para narrowear lo que viene
  *  de la base (columna String) o del body de PATCH /api/config. */

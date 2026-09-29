@@ -14,6 +14,7 @@ import { join, relative } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { EJEMPLOS_DE_VOZ, olvidarCorpus, systemPromptAyuda } from "@/lib/ayuda-corpus";
+import * as glosario from "@/lib/glosario";
 
 const RAIZ = process.cwd();
 const codigo = (ruta: string) => readFileSync(join(RAIZ, ruta), "utf8");
@@ -78,29 +79,27 @@ describe("los ejemplos de voz de Lupita", () => {
     // Autoguardado: no hay botón de guardar en Tu consultorio.
     expect(configuracion).toContain("1500");
     expect(tarifa).toContain("se guarda sola");
-    // Cada turno copia la tarifa de la paciente al crearse.
-    expect(codigo("src/app/api/_lib/casos-uso/crear-turno.ts")).toContain("tarifaCobrada: paciente.tarifa");
+    // Que cada turno copia la tarifa de la paciente al crearse lo prueba
+    // crear-serie-turno.test.ts contra la base.
     expect(tarifa).toContain("conservan la tarifa que tenían");
   });
 
   it("el recordatorio: el momento se calcula al programar el aviso del turno", () => {
     const recordatorio = ejemplosBuenos().find((e) => e.includes("¿Cómo mando un recordatorio?"))!;
     expect(codigo("src/app/(dashboard)/config/_components/config-view.tsx")).toContain("<TituloSeccion>Recordatorio</TituloSeccion>");
-    expect(codigo("src/app/api/_lib/casos-uso/envios-del-turno.ts")).toContain("calcularProgramadoEn(fechaTurno");
+    // Que el momento se calcula al programar el envío lo prueba envios-del-turno.test.ts.
     expect(recordatorio).toContain("vale para los turnos que agendes o reprogrames");
   });
 
   it("la grabación cortada: lo guardado queda en el teléfono y los botones son los del grabador", () => {
     const grabacion = ejemplosBuenos().find((e) => e.includes("¿Qué pasa si se corta la grabación?"))!;
-    const storage = codigo("src/lib/grabacion-storage.ts");
-    // Cada chunk se guarda apenas llega, tal cual: la app no cifra el audio.
-    expect(storage).toContain("const registro: ChunkGrabacion = { sesionClinicaId, indice, blob: chunk };");
+    // Que cada chunk se guarda apenas llega, tal cual y sin cifrar, lo prueba
+    // grabacion-storage.test.ts ("el audio se guarda tal cual").
     expect(grabacion).toContain("queda guardado en el teléfono, segundo a segundo");
     expect(grabacion).not.toContain("cifrado");
     const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
-    const glosario = codigo("src/lib/glosario.ts");
     for (const [constante, boton] of [["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["SEGUIR_GRABANDO", "Seguir grabando"]]) {
-      expect(glosario).toContain(`export const ${constante} = "${boton}"`);
+      expect((glosario as Record<string, unknown>)[constante]).toBe(boton);
       expect(vista).toContain(constante);
       expect(grabacion).toContain(`"${boton}"`);
     }

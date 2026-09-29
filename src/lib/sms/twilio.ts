@@ -24,13 +24,15 @@
 // ANTES de conectar: DNS que no resuelve, conexión rechazada. Ahí el cuerpo
 // no viajó.
 
+import { detalleDeError } from "@/lib/detalle-error";
+
 import { clasificarRespuesta, type Clasificacion } from "./clasificar";
 
 /** Timeout de la llamada. Diez segundos: con concurrencia 5 y un deadline
  *  de 45 s por corrida, un Twilio colgado no consume la corrida entera. */
 export const TIMEOUT_TWILIO_MS = 10_000;
 
-export interface PedidoSms {
+interface PedidoSms {
   /** E.164. */
   destino: string;
   texto: string;
@@ -46,7 +48,7 @@ export type ResultadoTwilio =
 
 export type EnviadorSms = (pedido: PedidoSms) => Promise<ResultadoTwilio>;
 
-export type SmsConfigStatus =
+type SmsConfigStatus =
   | { ok: true }
   | { ok: false; motivo: "falta_from" | "faltan_credenciales" };
 
@@ -78,7 +80,7 @@ function codigoDeRed(error: unknown): string | null {
   return typeof causa?.code === "string" ? causa.code : null;
 }
 
-export interface OpcionesTwilio {
+interface OpcionesTwilio {
   fetcher?: typeof fetch;
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
@@ -120,58 +122,62 @@ export async function enviarSmsTwilio(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opciones.timeoutMs ?? TIMEOUT_TWILIO_MS);
 
-  let response: Response;
+  // El plazo cubre también la lectura del cuerpo: un Twilio que contesta el
+  // status y después no termina de mandar el JSON no puede colgar la corrida.
   try {
-    response = await (opciones.fetcher ?? fetch)(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: body.toString(),
-      signal: controller.signal,
-    });
-  } catch (error) {
+    let response: Response;
+    try {
+      response = await (opciones.fetcher ?? fetch)(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const red = codigoDeRed(error);
+      if (red && ANTES_DE_CONECTAR.has(red)) {
+        return {
+          tipo: "transitorio",
+          codigo: null,
+          httpStatus: null,
+          mensaje: `fallo de red antes de conectar (${red})`,
+          clasificacion: { clase: "transitorio", referencia: "red" },
+        };
+      }
+      if (error instanceof Error && error.name === "AbortError") {
+        return { tipo: "desconocido", motivo: `Twilio no respondió en ${(opciones.timeoutMs ?? TIMEOUT_TWILIO_MS) / 1000} s` };
+      }
+      const msg = detalleDeError(error);
+      return { tipo: "desconocido", motivo: `la conexión con Twilio se cortó (${red ?? msg})` };
+    }
+
+    if (response.status >= 400) {
+      const detalle = (await response.json().catch(() => null)) as TwilioError | null;
+      const codigo = typeof detalle?.code === "number" ? detalle.code : null;
+      const clasificacion = clasificarRespuesta(response.status, codigo);
+      const mensaje = detalle?.message ?? `HTTP ${response.status}`;
+      return clasificacion.clase === "transitorio"
+        ? { tipo: "transitorio", codigo, httpStatus: response.status, mensaje, clasificacion }
+        : { tipo: "definitivo", codigo, httpStatus: response.status, mensaje, clasificacion };
+    }
+
+    const creado = (await response.json().catch(() => null)) as TwilioMessageCreated | null;
+    if (!creado?.sid) {
+      // 2xx sin un cuerpo legible: Twilio probablemente lo aceptó y no
+      // tenemos el sid. No se reintenta.
+      return { tipo: "desconocido", motivo: `Twilio contestó ${response.status} sin un cuerpo legible` };
+    }
+    const segmentos = Number(creado.num_segments);
+    return {
+      tipo: "aceptado",
+      sid: creado.sid,
+      segmentos: Number.isFinite(segmentos) && segmentos > 0 ? segmentos : null,
+      estadoTwilio: creado.status ?? null,
+    };
+  } finally {
     clearTimeout(timer);
-    const red = codigoDeRed(error);
-    if (red && ANTES_DE_CONECTAR.has(red)) {
-      return {
-        tipo: "transitorio",
-        codigo: null,
-        httpStatus: null,
-        mensaje: `fallo de red antes de conectar (${red})`,
-        clasificacion: { clase: "transitorio", referencia: "red" },
-      };
-    }
-    if (error instanceof Error && error.name === "AbortError") {
-      return { tipo: "desconocido", motivo: `Twilio no respondió en ${(opciones.timeoutMs ?? TIMEOUT_TWILIO_MS) / 1000} s` };
-    }
-    const msg = error instanceof Error ? error.message : String(error);
-    return { tipo: "desconocido", motivo: `la conexión con Twilio se cortó (${red ?? msg})` };
   }
-  clearTimeout(timer);
-
-  if (response.status >= 400) {
-    const detalle = (await response.json().catch(() => null)) as TwilioError | null;
-    const codigo = typeof detalle?.code === "number" ? detalle.code : null;
-    const clasificacion = clasificarRespuesta(response.status, codigo);
-    const mensaje = detalle?.message ?? `HTTP ${response.status}`;
-    return clasificacion.clase === "transitorio"
-      ? { tipo: "transitorio", codigo, httpStatus: response.status, mensaje, clasificacion }
-      : { tipo: "definitivo", codigo, httpStatus: response.status, mensaje, clasificacion };
-  }
-
-  const creado = (await response.json().catch(() => null)) as TwilioMessageCreated | null;
-  if (!creado?.sid) {
-    // 2xx sin un cuerpo legible: Twilio probablemente lo aceptó y no
-    // tenemos el sid. No se reintenta.
-    return { tipo: "desconocido", motivo: `Twilio contestó ${response.status} sin un cuerpo legible` };
-  }
-  const segmentos = Number(creado.num_segments);
-  return {
-    tipo: "aceptado",
-    sid: creado.sid,
-    segmentos: Number.isFinite(segmentos) && segmentos > 0 ? segmentos : null,
-    estadoTwilio: creado.status ?? null,
-  };
 }

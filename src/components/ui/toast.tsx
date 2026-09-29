@@ -43,20 +43,26 @@ const BOTTOM_DESKTOP = 104;
  */
 export type VarianteToast = "confirmacion" | "aviso";
 
+/** Cuánto queda a la vista antes de irse solo. */
+const DURACION_TOAST_MS = 2800;
+
+/** Lo que el Toast necesita: `<Toast {...toast.props} />`. */
 interface ToastProps {
   open: boolean;
   message: string;
   onClose: () => void;
-  duration?: number;
   variante?: VarianteToast;
+  /** Cambia con cada aviso nuevo (lo pone useToast): el tiempo a la vista
+   *  vuelve a empezar aunque el toast ya estuviera abierto. */
+  clave?: number;
 }
 
 export function Toast({
   open,
   message,
   onClose,
-  duration = 2800,
   variante = "confirmacion",
+  clave,
 }: ToastProps) {
   // Entra y sale sin desplazamiento con la preferencia declarada: aparece y
   // desaparece. El texto y el aria-live no cambian.
@@ -73,9 +79,9 @@ export function Toast({
 
   React.useEffect(() => {
     if (!open) return;
-    const timer = window.setTimeout(onClose, duration);
+    const timer = window.setTimeout(onClose, DURACION_TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [open, duration, onClose]);
+  }, [open, onClose, clave]);
 
   return (
     <AnimatePresence>
@@ -104,3 +110,40 @@ export function Toast({
     </AnimatePresence>
   );
 }
+
+/**
+ * El estado de un toast, que cada pantalla escribía a mano (nueve copias de
+ * `useState<{ open, message, variante }>`). `onClose` es estable: el Toast
+ * arma su temporizador sobre él, y una flecha nueva en cada render lo
+ * reiniciaba cada vez que la pantalla se volvía a dibujar.
+ *
+ *   const toast = useToast();
+ *   toast.confirmar("Paciente creado");
+ *   <Toast {...toast.props} />
+ */
+export function useToast(): {
+  confirmar: (mensaje: string) => void;
+  avisar: (mensaje: string) => void;
+  cerrar: () => void;
+  props: ToastProps;
+} {
+  const [estado, setEstado] = React.useState<{
+    open: boolean;
+    message: string;
+    variante: VarianteToast;
+    clave: number;
+  }>({ open: false, message: "", variante: "confirmacion", clave: 0 });
+  const mostrar = React.useCallback(
+    (variante: VarianteToast) => (mensaje: string) =>
+      setEstado((actual) => ({ open: true, message: mensaje, variante, clave: actual.clave + 1 })),
+    [],
+  );
+  const confirmar = React.useMemo(() => mostrar("confirmacion"), [mostrar]);
+  const avisar = React.useMemo(() => mostrar("aviso"), [mostrar]);
+  const cerrar = React.useCallback(
+    () => setEstado((actual) => ({ ...actual, open: false })),
+    [],
+  );
+  return { confirmar, avisar, cerrar, props: { ...estado, onClose: cerrar } };
+}
+

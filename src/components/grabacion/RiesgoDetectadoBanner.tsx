@@ -8,8 +8,9 @@ import {
   REVISE_ESTA_SENAL,
   SENAL_DE_RIESGO,
 } from "@/lib/glosario";
+import { NOMBRE_FLAG } from "@/lib/etiquetas";
+import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
 import type { FlagRiesgo } from "@/lib/sesion-clinica/schema";
-import { normalizarRiesgo } from "@/types/domain";
 import type { FlagsRiesgo, NivelRiesgo } from "@/types/domain";
 
 // UN solo bloque de riesgo por nota.
@@ -52,15 +53,6 @@ const FLAGS_EN_ORDEN: readonly FlagRiesgo[] = [
   "sintomasPsicoticos",
   "crisisPanico",
 ];
-
-/** Nombre clínico de cada flag. No se ablandan ni se agrupan. */
-const NOMBRE_FLAG: Record<FlagRiesgo, string> = {
-  ideacionSuicida: "Ideación suicida",
-  autolesion: "Autolesión",
-  violenciaTerceros: "Violencia hacia terceros",
-  sintomasPsicoticos: "Síntomas psicóticos",
-  crisisPanico: "Crisis de pánico",
-};
 
 const NOMBRE_NIVEL: Record<Exclude<NivelRiesgo, "ninguno">, string> = {
   bajo: "nivel bajo",

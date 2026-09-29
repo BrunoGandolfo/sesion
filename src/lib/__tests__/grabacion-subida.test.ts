@@ -385,7 +385,7 @@ describe("subirAudio — cada paso falla distinto", () => {
     expect(error).toMatchObject({ paso: "confirmar", status: 502 });
   });
 
-  it("un error sin cuerpo JSON no se traga: queda el HTTP", async () => {
+  it("un error sin cuerpo JSON no se traga: queda el status y un texto para ella", async () => {
     globalThis.fetch = fetchQueDevuelve({
       ok: false,
       status: 500,
@@ -397,7 +397,8 @@ describe("subirAudio — cada paso falla distinto", () => {
       datosDeGrabacion(),
     ).catch((e: unknown) => e);
 
-    expect((error as ErrorSubida).message).toBe("HTTP 500");
+    expect((error as ErrorSubida).message).toBe("No pudimos completar la operación. Intentá de nuevo.");
+    expect((error as ErrorSubida).status).toBe(500);
   });
 });
 

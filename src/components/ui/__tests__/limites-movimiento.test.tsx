@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
-import { Contador, Latido, AnilloProgreso } from "../movimiento";
+import { Latido, AnilloProgreso } from "../movimiento";
 import { TIEMPOS } from "@/lib/movimiento";
 const excluidos = /(__tests__|\.test\.|\/grabacion\/|\/grabar\/|\/graficos\/|brief|contexto-clinico|ContextoGoldenThreadView|recorrido-tab)/;
 function fuentes(dir: string): string[] {
@@ -21,16 +21,10 @@ it("solo admite las tres duraciones y la curva común en el código editable", (
     expect(s, p).not.toMatch(/duration-\d+/);
   }
 });
-it("los totales se leen completos al montar y al cambiar, sin contar desde cero", () => {
-  const { rerender } = render(<Contador valor={2500} formato={n => "$" + n} />);
-  expect(screen.getByText("$2500")).toBeTruthy();
-  rerender(<Contador valor={4200} formato={n => "$" + n} />);
-  expect(screen.getByText("$4200")).toBeTruthy();
-});
-it("los indicadores conservan su significado sin pulsos ni giros", () => {
-  const { container } = render(<><Latido etiqueta="Grabando" /><AnilloProgreso etiqueta="Procesando" /></>);
-  expect(screen.getByRole("img", {name:"Grabando"})).toBeTruthy();
-  expect(screen.getByRole("img", {name:"Procesando"})).toBeTruthy();
+it("los indicadores son decorativos y quietos: el texto de al lado dice qué pasa", () => {
+  const { container } = render(<><Latido /><AnilloProgreso /></>);
+  expect(screen.queryByRole("img")).toBeNull();
+  expect(container.querySelectorAll("[aria-hidden='true']")).toHaveLength(2);
   expect(container.innerHTML).not.toMatch(/transform:|animation:/);
 });
 

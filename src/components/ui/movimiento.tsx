@@ -12,7 +12,7 @@ export { SUAVE } from "@/lib/movimiento";
 
 // Tres duraciones. La preferencia reducida deja la interfaz estática.
 // Totales e indicadores no animan, tampoco con movimiento habilitado.
-export const MS_NAVEGACION = TIEMPOS.navegacion;
+const MS_NAVEGACION = TIEMPOS.navegacion;
 export const DURACION_NAVEGACION = MS_NAVEGACION / 1000;
 export const DURACION_BREVE = TIEMPOS.breve / 1000;
 export const DURACION_PANEL = TIEMPOS.pliegue / 1000;
@@ -20,15 +20,12 @@ const DURACION_APARECE = DURACION_BREVE;
 
 const DESPLAZAMIENTO = 3;
 
-/** Sin espera entre filas: se pueden leer y tocar desde el primer cuadro. */
-export const PASO_CASCADA_MS = 0;
-
 /**
- * Cuántos elementos animan como máximo. A partir del noveno la lista entra
- * estática: encadenar cuarenta retrasos hace que el último aparezca casi dos
- * segundos después, y a esa altura ya no se lee como entrada sino como lag.
+ * Cuántos elementos animan como máximo; a partir del noveno la lista entra
+ * estática. No hay espera entre filas: se pueden leer y tocar desde el
+ * primer cuadro.
  */
-export const MAXIMO_EN_CASCADA = 8;
+const MAXIMO_EN_CASCADA = 8;
 
 // Elementos sobre los que se puede montar movimiento. La lista es corta a
 // propósito: un `motion.li` dentro de un `ul` y un `motion.div` suelto
@@ -38,20 +35,17 @@ const ELEMENTOS = {
   div: motion.div,
   ul: motion.ul,
   li: motion.li,
-  section: motion.section,
   span: motion.span,
 } as const;
 
-export type ElementoMovimiento = keyof typeof ELEMENTOS;
+type ElementoMovimiento = keyof typeof ELEMENTOS;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Aparece
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface ApareceProps {
+interface ApareceProps {
   children: React.ReactNode;
-  /** Segundos de espera antes de entrar. Lo usa ListaEnCascada. */
-  retraso?: number;
   /** Etiqueta a renderizar. `li` cuando el padre es una lista. */
   como?: ElementoMovimiento;
   /** false para renderizar la etiqueta sin animar (ítem fuera del tope). */
@@ -65,7 +59,6 @@ export interface ApareceProps {
  */
 export function Aparece({
   children,
-  retraso = 0,
   como = "div",
   animar = true,
   className,
@@ -79,7 +72,7 @@ export function Aparece({
       className={className}
       initial={quieto ? false : { opacity: 1, y: DESPLAZAMIENTO }}
       animate={quieto ? undefined : { opacity: 1, y: 0 }}
-      transition={{ duration: DURACION_APARECE, ease: SUAVE, delay: retraso }}
+      transition={{ duration: DURACION_APARECE, ease: SUAVE }}
     >
       {children}
     </Elemento>
@@ -90,16 +83,12 @@ export function Aparece({
 // ListaEnCascada
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface ListaEnCascadaProps {
+interface ListaEnCascadaProps {
   children: React.ReactNode;
   /** Etiqueta del contenedor. */
   contenedor?: ElementoMovimiento;
   /** Etiqueta de cada ítem. `li` si el contenedor es una lista. */
   item?: ElementoMovimiento;
-  /** Milisegundos entre ítems. */
-  pasoMs?: number;
-  /** Cuántos ítems animan antes de que el resto entre estático. */
-  maximo?: number;
   className?: string;
   /** Para que un `aria-controls` pueda apuntar al contenedor. */
   id?: string;
@@ -115,8 +104,6 @@ export function ListaEnCascada({
   children,
   contenedor = "div",
   item = "div",
-  pasoMs = PASO_CASCADA_MS,
-  maximo = MAXIMO_EN_CASCADA,
   className,
   id,
 }: ListaEnCascadaProps) {
@@ -129,8 +116,7 @@ export function ListaEnCascada({
         <Aparece
           key={hijo.key ?? indice}
           como={item}
-          animar={indice < maximo}
-          retraso={(indice * pasoMs) / 1000}
+          animar={indice < MAXIMO_EN_CASCADA}
         >
           {hijo}
         </Aparece>
@@ -151,7 +137,7 @@ export const MS_PLIEGUE = TIEMPOS.pliegue;
 /** Lo mismo en segundos, que es como lo pide framer-motion. */
 const DURACION_PLIEGUE = MS_PLIEGUE / 1000;
 
-export interface AlturaAnimadaProps {
+interface AlturaAnimadaProps {
   /** Estado del bloque. El componente anima la transición entre los dos. */
   abierto: boolean;
   /**
@@ -214,50 +200,29 @@ export function AlturaAnimada({
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Contador
-// ────────────────────────────────────────────────────────────────────────────
-
-export interface ContadorProps {
-  /** El número al que se llega. */
-  valor: number;
-  /** Cómo se escribe cada paso. Recibe el valor ya redondeado. */
-  formato?: (n: number) => string;
-  /** Compatibilidad con consumidores: el número ya no se anima. */
-  duracion?: number;
-  className?: string;
-}
-
-/** Los totales se leen completos desde el primer cuadro. */
-export function Contador({ valor, formato = (n) => String(n), className }: ContadorProps) {
-  return <span className={`tabular-nums ${className ?? ""}`}>{formato(valor)}</span>;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Latido
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface LatidoProps {
+interface LatidoProps {
   /** Lado del punto, en píxeles. */
   tamano?: number;
   /** Clase con el color de fondo. */
   className?: string;
-  /** Texto para lectores de pantalla; sin él, el punto es decorativo. */
-  etiqueta?: string;
 }
 
-/** Indicador de estado quieto; el texto explica qué está pasando. */
-export function Latido({ tamano = 8, className = "", etiqueta }: LatidoProps) {
+/** Indicador de estado quieto y decorativo: el texto de al lado explica qué
+ *  está pasando. */
+export function Latido({ tamano = 8, className = "" }: LatidoProps) {
   return <span className={"inline-block shrink-0 rounded-full " + className}
     style={{ width: tamano, height: tamano }}
-    role={etiqueta ? "img" : undefined} aria-label={etiqueta}
-    aria-hidden={etiqueta ? undefined : true} />;
+    aria-hidden="true" />;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // CheckDibujado
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface CheckDibujadoProps {
+interface CheckDibujadoProps {
   tamano?: number;
   className?: string;
 }
@@ -297,9 +262,6 @@ export function CheckDibujado({ tamano = 16, className }: CheckDibujadoProps) {
 /** Lo que tarda el trazo del check, en milisegundos. */
 export const MS_CHECK_DIBUJADO = TIEMPOS.breve;
 
-/** Un respiro después del trazo, para que el ojo lo termine de leer. */
-const MS_RESPIRO = 0;
-
 /**
  * "Lo que pediste se hizo, acá donde lo pediste."
  *
@@ -332,7 +294,7 @@ export function useConfirmacionDibujada<T>(
 
   React.useEffect(() => {
     if (confirmado === null) return;
-    const espera = reducido ? 0 : MS_CHECK_DIBUJADO + MS_RESPIRO;
+    const espera = reducido ? 0 : MS_CHECK_DIBUJADO;
     const timer = window.setTimeout(() => {
       setConfirmado(null);
       alTerminarRef.current();
@@ -347,11 +309,9 @@ export function useConfirmacionDibujada<T>(
 // AnilloProgreso
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface AnilloProgresoProps {
+interface AnilloProgresoProps {
   tamano?: number;
   className?: string;
-  /** Qué está pasando, para lectores de pantalla. */
-  etiqueta?: string;
 }
 
 /**
@@ -365,7 +325,6 @@ export interface AnilloProgresoProps {
 export function AnilloProgreso({
   tamano = 18,
   className,
-  etiqueta,
 }: AnilloProgresoProps) {
 
   return (
@@ -375,9 +334,7 @@ export function AnilloProgreso({
       viewBox="0 0 24 24"
       fill="none"
       className={className}
-      role={etiqueta ? "img" : undefined}
-      aria-label={etiqueta}
-      aria-hidden={etiqueta ? undefined : true}
+      aria-hidden="true"
     >
       <circle
         cx="12"

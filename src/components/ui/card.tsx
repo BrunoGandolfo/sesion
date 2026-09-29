@@ -1,27 +1,16 @@
 import * as React from "react";
 
-interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  clickable?: boolean;
-  elevated?: boolean;
-}
-
 export function Card({
-  clickable = false,
-  elevated = false,
   className = "",
   children,
   ...rest
-}: CardProps) {
+}: React.HTMLAttributes<HTMLDivElement>) {
   const base =
     "bg-white border border-[color:var(--border-subtle)] rounded-lg p-6 md:p-7";
-  const interactive = clickable
-    ? "cursor-pointer hover:border-sage-300 transition-colors duration-[var(--duration-fast)]"
-    : "";
-  const shadow = elevated ? "shadow-subtle" : "";
 
   return (
     <div
-      className={`${base} ${interactive} ${shadow} ${className}`}
+      className={`${base} ${className}`}
       {...rest}
     >
       {children}

@@ -23,7 +23,7 @@ import {
 export { TEMPLATE_SMS_SUGERIDO } from "@/lib/glosario";
 
 
-export interface SmsTemplateData {
+interface SmsTemplateData {
   nombre: string;
   apellido: string;
   fecha: Date;
@@ -85,7 +85,7 @@ export function prepararPlantillaRecordatorio(template: string): string {
 
 /** Los motivos de SMS que tienen plantilla acá (el de cobro vive en
  *  src/lib/deudas.ts y lo manda la pantalla de Cobros). */
-export type MotivoConPlantilla = "recordatorio_turno" | "cambio_de_horario";
+type MotivoConPlantilla = "recordatorio_turno" | "cambio_de_horario";
 
 /**
  * El texto de un envío según su motivo: el recordatorio usa la plantilla de
@@ -122,7 +122,7 @@ const GSM7_CONCATENADO = 153;
 const UCS2_SIMPLE = 70;
 const UCS2_CONCATENADO = 67;
 
-export interface LongitudSms {
+interface LongitudSms {
   /** Unidades cobradas: septetos en GSM-7 (extensión cuenta 2) o code units
    *  UTF-16 en UCS-2. */
   caracteres: number;
