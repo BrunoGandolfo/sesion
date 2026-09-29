@@ -7,6 +7,7 @@ import { AlertCircle, ChevronLeft } from "lucide-react";
 
 import { EsqueletoNotaCuerpo } from "@/components/esqueletos";
 import { Button, Confirmar, Toast } from "@/components/ui";
+import { useToast } from "@/components/ui/toast";
 import { AnilloProgreso } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import {
@@ -19,12 +20,14 @@ import {
   ESTADOS_ACTIVOS,
   useSesionClinicaPolling,
 } from "@/hooks/useSesionClinicaPolling";
-import { apiGet, apiPost, ApiClientError, esAbort } from "@/lib/api-client";
+import { apiGet, apiPost, ApiClientError, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { estaEnProceso } from "@/lib/sesion-clinica/estados";
 import type {
   NotaSoap,
   SesionClinicaResponse,
 } from "@/lib/sesion-clinica/schema";
 
+import { accionesDeUsuaria, cuerpoDe } from "./acciones-sesion";
 import { BarraAcciones } from "./barra-acciones";
 import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 import { CAMBIOS_SIN_APROBAR_MENSAJE, FALTA_REVISAR_RIESGO, FALTA_REVISAR_MENCIONES, FALTA_REVISAR_AMBAS, FALTA_REVISAR_VERSION, FEEDBACK_REINTENTAR_ERROR, SESION_FALLO_LABEL } from "@/lib/glosario";
@@ -45,6 +48,7 @@ import {
   NOTA_NO_ESCRITA,
   REINTENTANDO,
   REINTENTAR,
+  SECCIONES_SOAP,
   SIN_NOTA_TODAVIA,
   VOLVER,
 } from "./textos";
@@ -106,10 +110,6 @@ function mismaNota(a: NotaSoap, b: NotaSoap): boolean {
   );
 }
 
-function mensajeDeError(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : ALGO_FALLO;
-}
-
 /** Edición atada a la versión de la fila que la originó: si la sesión se
  *  reescribe (descarte, reproceso), el borrador viejo deja de aplicar sin
  *  necesidad de un efecto que lo resetee. */
@@ -157,7 +157,7 @@ export function SesionDetailView({
   const [pidiendoFeedback, setPidiendoFeedback] = React.useState(false);
   const [errorFeedback, setErrorFeedback] = React.useState<string | null>(null);
   const [lecturaFeedback, setLecturaFeedback] = React.useState(0);
-  const [toast, setToast] = React.useState({ open: false, mensaje: "" });
+  const toast = useToast();
 
   const aplicar = React.useCallback((fila: SesionClinicaResponse) => {
     setSesion(fila);
@@ -184,7 +184,7 @@ export function SesionDetailView({
       })
       .catch((error: unknown) => {
         if (esAbort(error) || controlador.signal.aborted) return;
-        setErrorCarga(mensajeDeError(error));
+        setErrorCarga(mensajeParaElla(error));
         setCargando(false);
       });
     return () => controlador.abort();
@@ -216,7 +216,7 @@ export function SesionDetailView({
         aplicar(fila); setErrorFeedback(null);
         if (fila.feedbackEstado === "pendiente") timer = setTimeout(leer, 10_000);
       } catch (e) {
-        if (!esAbort(e)) setErrorFeedback(mensajeDeError(e));
+        if (!esAbort(e)) setErrorFeedback(mensajeParaElla(e));
       }
     };
     timer = setTimeout(leer, lecturaFeedback ? 0 : 10_000);
@@ -278,7 +278,7 @@ export function SesionDetailView({
       setConflictoAprobacion(false);
       setErrorAccion(null);
     } catch (error) {
-      setErrorAccion(mensajeDeError(error));
+      setErrorAccion(mensajeParaElla(error));
     } finally {
       setEnviando(false);
     }
@@ -313,10 +313,10 @@ export function SesionDetailView({
       setBorradorAnterior(null);
       setAprobadaAhora(true);
       setEnviando(false);
-      setToast({ open: true, mensaje: NOTA_GUARDADA });
+      toast.confirmar(NOTA_GUARDADA);
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 409) setConflictoAprobacion(true);
-      setErrorAccion(mensajeDeError(error));
+      setErrorAccion(mensajeParaElla(error));
       setEnviando(false);
     }
   };
@@ -332,7 +332,7 @@ export function SesionDetailView({
       await apiPost(`/api/sesion-clinica/${id}/reprocesar`, {});
       setIntentoCarga((n) => n + 1);
     } catch (error) {
-      setErrorAccion(mensajeDeError(error));
+      setErrorAccion(mensajeParaElla(error));
     } finally {
       setEnviando(false);
     }
@@ -348,7 +348,7 @@ export function SesionDetailView({
       );
       aplicar(fila);
     } catch (error) {
-      setErrorAccion(mensajeDeError(error));
+      setErrorAccion(mensajeParaElla(error));
     } finally {
       setEnviando(false);
     }
@@ -362,19 +362,23 @@ export function SesionDetailView({
       await apiPost(`/api/sesion-clinica/${id}/eliminar`, {});
       router.back();
     } catch (error) {
-      setErrorAccion(mensajeDeError(error));
+      setErrorAccion(mensajeParaElla(error));
       setConfirmarEliminar(false);
       setEnviando(false);
     }
   };
 
+  // El cuerpo y las acciones salen de la tabla de operaciones
+  // (acciones-sesion.ts), no de literales: un estado nuevo no compila hasta
+  // ubicarlo en CUERPO.
+  const cuerpo = sesion ? cuerpoDe(sesion.estado) : null;
+  const acciones = sesion ? accionesDeUsuaria(sesion.estado) : null;
+
   // Sólo la nota se firma: "Para vos" es lectura.
-  const editable = vista === "nota" && sesion?.estado === "revision";
+  const editable = vista === "nota" && acciones?.aprobar === true;
 
   // La nota escrita y "Para vos" son las dos caras de la misma sesión.
-  const conNota =
-    sesion !== null &&
-    (sesion.estado === "revision" || sesion.estado === "aprobada");
+  const conNota = cuerpo === "nota";
 
   // Correcciones escritas y todavía no aprobadas. El borrador vive acá y sólo
   // se escribe al aprobar, así que irse de la pantalla lo borra.
@@ -442,7 +446,7 @@ export function SesionDetailView({
           </Aviso>
         ) : null}
 
-        {sesion && (sesion.estado === "procesando" || sesion.estado === "subiendo") ? (
+        {sesion && estaEnProceso(sesion.estado) ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AnilloProgreso tamano={30} className="text-gold-500" />
             <p
@@ -454,31 +458,35 @@ export function SesionDetailView({
           </div>
         ) : null}
 
-        {sesion && sesion.estado === "grabando" ? (
+        {cuerpo === "sin-nota" ? (
           <p role="status" className="font-sans text-[14px] text-ink-500">
             {SIN_NOTA_TODAVIA}
           </p>
         ) : null}
 
-        {sesion && sesion.estado === "fallida" ? (
+        {cuerpo === "fallida" ? (
           <div className="flex flex-col gap-4">
             <Aviso titulo={NOTA_NO_ESCRITA} detalle={motivoFallo}>
               <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  variant="secondary"
-                  onClick={() => void reintentar()}
-                  disabled={enviando || confirmarEliminar}
-                >
-                  {enviando && !confirmarEliminar ? REINTENTANDO : REINTENTAR}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setConfirmarEliminar(true)}
-                  disabled={enviando || confirmarEliminar}
-                  className="!text-terracotta-500"
-                >
-                  {ELIMINAR}
-                </Button>
+                {acciones?.reintentar ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => void reintentar()}
+                    disabled={enviando || confirmarEliminar}
+                  >
+                    {enviando && !confirmarEliminar ? REINTENTANDO : REINTENTAR}
+                  </Button>
+                ) : null}
+                {acciones?.eliminar ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setConfirmarEliminar(true)}
+                    disabled={enviando || confirmarEliminar}
+                    className="!text-terracotta-500"
+                  >
+                    {ELIMINAR}
+                  </Button>
+                ) : null}
               </div>
             </Aviso>
 
@@ -510,10 +518,8 @@ export function SesionDetailView({
           <NotaSesionView
             sesion={sesion}
             nota={edicion.nota}
-            editable={sesion.estado === "revision"}
-            onEditarSeccion={
-              sesion.estado === "revision" ? editarSeccion : undefined
-            }
+            editable={acciones?.aprobar === true}
+            onEditarSeccion={acciones?.aprobar ? editarSeccion : undefined}
             revisadas={revisadas}
             onRevisar={marcarRevisada}
             selector={selector}
@@ -532,8 +538,11 @@ export function SesionDetailView({
           <details className="mt-4 rounded-lg border border-[color:var(--border-subtle)] p-4">
             <summary>Tu borrador anterior</summary>
             <p>Lo conservamos acá para que puedas recuperar tus correcciones mientras revisás la nota actual.</p>
-            {Object.entries(borradorAnterior).map(([seccion, texto]) => (
-              <p key={seccion} className="mt-3 whitespace-pre-wrap">{texto}</p>
+            {SECCIONES_SOAP.map(({ clave, titulo }) => (
+              <div key={clave} className="mt-3">
+                <p className="font-sans text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500">{titulo}</p>
+                <p className="whitespace-pre-wrap">{borradorAnterior[clave]}</p>
+              </div>
             ))}
           </details>
         ) : null}
@@ -565,11 +574,7 @@ export function SesionDetailView({
         />
       ) : null}
 
-      <Toast
-        open={toast.open}
-        message={toast.mensaje}
-        onClose={() => setToast((previo) => ({ ...previo, open: false }))}
-      />
+      <Toast {...toast.props} />
     </>
   );
 }

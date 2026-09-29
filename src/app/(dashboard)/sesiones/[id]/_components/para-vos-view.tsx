@@ -33,6 +33,7 @@ import {
 } from "@/components/grabacion/FeedbackTerapeutaView";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
+import { sePuedePedirFeedback } from "./acciones-sesion";
 import { CabeceraSesion } from "./cabecera-sesion";
 import {
   PARA_VOS,
@@ -76,7 +77,7 @@ export function ParaVosView({ sesion, selector, onReintentar, pidiendo = false, 
 function SinAnalisis({ sesion, onReintentar, pidiendo, error, onActualizar }: ParaVosViewProps) {
   const estado = sesion.feedbackEstado;
   const pendiente = estado === "pendiente";
-  const puedePedir = (estado === "no_pedido" || estado === "fallido") && sesion.modeloAsr !== null;
+  const puedePedir = sePuedePedirFeedback(sesion);
   return (
     <section className="flex flex-col items-start gap-4 rounded-lg border border-[color:var(--border-subtle)] border-t-2 border-t-sage-500 bg-white px-5 py-6" aria-label={PARA_VOS}>
       <p className="font-display text-xl text-ink-900" role="status">{FEEDBACK_ESTADO_LABEL[estado]}</p>

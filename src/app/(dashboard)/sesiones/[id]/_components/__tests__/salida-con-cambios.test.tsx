@@ -26,6 +26,7 @@ import {
 
 import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
 import { FALTA_REVISAR_MENCIONES, FALTA_REVISAR_RIESGO, APROBAR_DESCARTA_ANTERIOR } from "@/lib/glosario";
+import { SECCIONES_SOAP } from "../textos";
 import { SesionDetailView } from "../sesion-detail-view";
 
 vi.mock("@/components/ui/sheet", () => ({ Sheet: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null }));
@@ -223,6 +224,11 @@ describe("aprobación de una generación obsoleta", () => {
     await screen.findByText("Nota actual nueva");
     expect(screen.getByText("Mi corrección anterior")).toBeTruthy();
     expect(screen.getByText("Tu borrador anterior")).toBeTruthy();
+    // El borrador se lee con sus rótulos, en el orden de la nota (P3-23):
+    // antes eran cuatro párrafos sueltos sin decir cuál era cuál.
+    const borrador = screen.getByText("Tu borrador anterior").closest("details")!;
+    const rotulos = SECCIONES_SOAP.map(({ titulo }) => titulo);
+    expect([...borrador.querySelectorAll("p.uppercase")].map((p) => p.textContent)).toEqual(rotulos);
     vi.mocked(apiPost).mockResolvedValueOnce({ ...sesionEnRevision(), estado: "aprobada", generacion: 2 });
     fireEvent.click(screen.getByRole("button", { name: /Aprobar/ }));
     expect(screen.getByText(APROBAR_DESCARTA_ANTERIOR)).toBeTruthy();
