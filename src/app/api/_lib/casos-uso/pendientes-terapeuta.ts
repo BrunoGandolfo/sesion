@@ -38,7 +38,6 @@
 import type { db } from "@/lib/db";
 import { esConsentimientoVigente } from "@/lib/consentimiento";
 import { finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
-import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 import { umbralSinTerminarMs } from "@/lib/sesion-clinica/estados";
 
 import type {
@@ -94,26 +93,25 @@ function porFechaAscendente(a: { fecha: string }, b: { fecha: string }): number 
 }
 
 /**
- * Los deudores ordenados y, aparte, el impago más viejo de cada una (ISO),
- * que PacienteSinCobrar pide y que desempata el orden. Todo sale de UNA
- * pasada de calcularDeudores, que ya calcula ese impago: antes se volvía a
- * recorrer la lista para sacarlo, dos veces por pedido.
+ * Los deudores en el orden de calcularDeudores (el único: monto y
+ * antigüedad) y, aparte, el impago más viejo de cada una (ISO), que
+ * PacienteSinCobrar pide. Todo sale de UNA pasada de calcularDeudores, que
+ * ya calcula ese impago: antes se volvía a recorrer la lista para sacarlo,
+ * dos veces por pedido, y se reordenaba acá.
  */
 function deudoresOrdenados(turnos: TurnoConDeuda[], ahora: Date) {
   const agrupados = calcularDeudores(turnos, ahora);
   const masAntiguo = new Map(
     agrupados.map((d) => [d.pacienteId, d.impagoMasAntiguo?.toISOString() ?? ""]),
   );
-  const deudores: DeudaPaciente[] = agrupados
-    .map((deudor) => ({
-      pacienteId: deudor.pacienteId,
-      nombre: deudor.nombre,
-      apellido: deudor.apellido,
-      sesionesImpagas: deudor.sesionesImpagas,
-      montoTotal: deudor.montoTotal,
-      diasAtraso: deudor.diasAtraso ?? 0,
-    }))
-    .sort(porMontoYAntiguedad((deudor) => deudor.montoTotal, masAntiguo));
+  const deudores: DeudaPaciente[] = agrupados.map((deudor) => ({
+    pacienteId: deudor.pacienteId,
+    nombre: deudor.nombre,
+    apellido: deudor.apellido,
+    sesionesImpagas: deudor.sesionesImpagas,
+    montoTotal: deudor.montoTotal,
+    diasAtraso: deudor.diasAtraso ?? 0,
+  }));
   return { deudores, masAntiguo };
 }
 

@@ -28,6 +28,7 @@ import {
   inicioDeMesMvd,
 } from "@/lib/fechas-montevideo";
 import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
+import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -476,9 +477,13 @@ export interface DeudorAgrupado {
 
 /**
  * Agrupa por paciente los turnos que son deuda pendiente. Devuelve cantidad,
- * monto y minutos por paciente, ordenado por monto descendente (a igual
- * monto, orden de aparición). Sin tope: el tope lo aplica el consumidor.
- * Un paciente sin turnos impagos no aparece.
+ * monto y minutos por paciente, en EL orden de la deuda: monto descendente
+ * y, a igual monto, el impago más viejo primero (lib/orden-deuda.ts; sin
+ * `fecha`, a igual monto queda el orden de aparición). Es el orden de Hoy y
+ * el de /api/deudores: antes esta función ordenaba sólo por monto, Hoy
+ * desempataba aparte y /api/deudores ordenaba por días de atraso. Sin tope:
+ * el tope lo aplica el consumidor. Un paciente sin turnos impagos no
+ * aparece.
  *
  * Si los turnos traen `fecha`, cada deudor sale además con su
  * `impagoMasAntiguo` y con `diasAtraso`, calculado con diasDesde() sobre esa
@@ -523,7 +528,12 @@ export function calcularDeudores(
     }
   }
 
-  return [...porPaciente.values()].sort((a, b) => b.montoTotal - a.montoTotal);
+  const masAntiguo = new Map(
+    [...impagoMasAntiguo].map(([pacienteId, fecha]) => [pacienteId, fecha.toISOString()]),
+  );
+  return [...porPaciente.values()].sort(
+    porMontoYAntiguedad((deudor) => deudor.montoTotal, masAntiguo),
+  );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -631,7 +641,7 @@ export async function deudaDePaciente(
  * Query única de los turnos que son deuda pendiente de una organización
  * (DEUDA_PENDIENTE, la misma regla que esDeudaPendiente, en la consulta). La consumen
  * /api/dashboard y /api/deudores, que después pasan el resultado por
- * calcularDeudores y aplican cada uno su orden y su tope.
+ * calcularDeudores (que da el orden) y aplican cada uno su tope.
  *
  * Con `pacienteId` acota a una sola paciente sin cambiar nada más: es lo que
  * necesita recordar-cobro para saber cuánto debe la persona a la que le va a
