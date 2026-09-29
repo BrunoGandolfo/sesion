@@ -12,7 +12,7 @@ entrega un cambio está en `docs/como-trabajamos.md`.
 | Vercel | Next y API. `vercel.json` deshabilita deploys de main; la rama de producción debe estar configurada como release en el panel. |
 | Postgres | Prisma y esquema de `prisma/schema.prisma`. CI utiliza Postgres 17 efímero; local usa un contenedor propio por rama. |
 | R2 | Audio de las sesiones y backups. La app no cifra el audio: lo sube tal cual y R2 lo guarda cifrado en reposo (cifrado del proveedor). Los backups sí van cifrados con gpg. La app usa `src/lib/r2.ts`; el worker, `processor/r2_client.py`. |
-| Railway | Worker Python: `processor/railway.json` y `processor/worker.py`. |
+| Railway | Worker Python: `processor/Dockerfile` (el arranque es su CMD, el único), `processor/railway.json` (build, reinicio y `watchPatterns: /processor/**`) y `processor/worker.py`. Con Root Directory `/processor`, confirmar en Settings → Config-as-code que el path sea `/processor/railway.json`; si no, Railway ignora el archivo. |
 | AssemblyAI / Anthropic | Configuración del worker en `processor/config.py`. Lupita es una llamada aparte de la app, con `src/lib/anthropic-mensajes.ts`. |
 | Twilio / Resend | `src/lib/sms/` y `src/lib/correo.ts`. Requieren configuración de cuenta, número y dominio fuera de Git. |
 
@@ -255,14 +255,13 @@ sólo se corren a mano, con la conexión directa y después de decidirlo.
   `20260928120000_hilo_versiones_recifrado`: la auditoría y las versiones del
   Recorrido vuelven a poder modificarse. No borra datos. Para restituir la
   garantía se vuelven a aplicar los SQL de esas dos migraciones, en ese orden.
+  No borra su fila de `_prisma_migrations`: después de revertir, `prisma migrate deploy` NO repone los triggers, porque cree que la migración sigue aplicada. Para restituirlos hay que correr a mano los `migration.sql` de `20260916013000_inmutabilidad` y `20260928120000_hilo_versiones_recifrado`.
 - `scripts/mantenimiento/revertir-hilo-versiones-recifrado.sql` revierte solo
   `20260928120000_hilo_versiones_recifrado`: las versiones del Recorrido
   vuelven a admitir únicamente la resolución, y el cron deja de poder
   recifrarlas (cuentan como errores; su clave vieja no se puede retirar).
   Las garantías siguen puestas. No borra datos.
-- `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de
-  `20260917120000_limites_invitados` y su registro en `_prisma_migrations`.
-  Es destructivo: antes hay que desplegar un código que no lea esas columnas.
+- `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de `20260917120000_limites_invitados` y su registro en `_prisma_migrations`. Obsoleto salvo reversión de código: hoy leen esas columnas `src/app/api/_lib/casos-uso/estado-prueba.ts`, `src/lib/cuenta-registro-db.ts` y `prepararAudio` (`src/app/api/_lib/casos-uso/audio.ts`). Correrlo con ese código publicado rompe el alta por invitación y la grabación.
 
 ## 5. Incidentes y límites conocidos
 

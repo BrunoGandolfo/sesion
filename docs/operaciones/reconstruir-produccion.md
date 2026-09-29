@@ -3,7 +3,7 @@
 Procedimiento para Bruno. Se ejecuta **una sola vez**, antes de admitir
 pacientes reales. No sirve para actualizar una base que ya tenga el esquema
 nuevo: para eso está Publicar (`docs/operaciones.md`). Los valores esperados de
-§4 y §6 corresponden a las nueve migraciones de `prisma/migrations/`; si se
+§4 y §6 corresponden a las diez migraciones de `prisma/migrations/`; si se
 agrega una migración, actualizarlos antes de ejecutar.
 
 ## Decisiones y punto sin retorno
@@ -291,7 +291,7 @@ psql --dbname="$URL_NUEVA" -X -v ON_ERROR_STOP=1 -c \
   'SELECT migration_name, finished_at IS NOT NULL AS terminada, rolled_back_at IS NULL AS vigente FROM "_prisma_migrations" ORDER BY migration_name;'
 ~~~
 
-**Bien:** `Database schema is up to date!` y estas nueve filas, ambas columnas
+**Bien:** `Database schema is up to date!` y estas diez filas, ambas columnas
 en `t`:
 
 1. `0_init`
@@ -303,6 +303,7 @@ en `t`:
 7. `20260923120000_turnos_duracion_120`
 8. `20260923120100_turnos_pago_fecha_idx`
 9. `20260924120000_eventos_auditoria_accion_idx`
+10. `20260928120000_hilo_versiones_recifrado`
 
 Si falla, no habilitar Publicar. La copia puede haber quedado a medias:
 abandonar esa copia y usar §11, no reparar el historial manualmente.
