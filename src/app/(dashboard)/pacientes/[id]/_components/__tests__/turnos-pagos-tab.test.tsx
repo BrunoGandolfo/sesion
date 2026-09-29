@@ -9,6 +9,8 @@ import { expect, it, vi } from "vitest";
 import { COBRAR, PENDIENTE, SESIONES_SIN_COBRAR_DETALLE } from "@/lib/glosario";
 import type { Turno } from "@/types/domain";
 
+import { deudaDeTurnos } from "@/app/api/_lib/domain";
+
 import { TurnosPagosTab } from "../turnos-pagos-tab";
 
 vi.mock("framer-motion", async (original) => ({
@@ -24,24 +26,23 @@ function turno(id: string, fecha: Date, extra: Partial<Turno> = {}): Turno {
   } as Turno;
 }
 
-it("un agendado que ya pasó figura sin cobrar y se cuenta; uno futuro no", () => {
+it("el aviso cuenta la deuda de la cabecera: un agendado que ya pasó se puede cobrar, pero no es deuda", () => {
   const haceUnaHora = new Date(Date.now() - 60 * 60 * 1000);
   const manana = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  render(
-    <TurnosPagosTab
-      turnos={[
-        turno("pasado", haceUnaHora),
-        turno("realizado", new Date(Date.now() - 48 * 60 * 60 * 1000), { estado: "realizado", tarifaCobrada: 1500 }),
-        turno("futuro", manana),
-      ]}
-    />,
-  );
+  const turnos = [
+    turno("pasado", haceUnaHora),
+    turno("realizado", new Date(Date.now() - 48 * 60 * 60 * 1000), { estado: "realizado", tarifaCobrada: 1500 }),
+    turno("futuro", manana),
+  ];
+  render(<TurnosPagosTab turnos={turnos} />);
 
+  // Las dos filas que se pueden cobrar dicen "Sin cobrar" y ofrecen Cobrar.
   expect(screen.getAllByText(PENDIENTE).length).toBeGreaterThanOrEqual(2);
   expect(screen.getAllByRole("button", { name: COBRAR })).toHaveLength(2);
+  // El aviso, lo mismo que deudaDeTurnos (la cabecera, deudaDePaciente): el realizado.
   const aviso = screen.getByRole("status");
-  expect(aviso.textContent).toContain("2 sesiones sin cobrar");
+  expect(deudaDeTurnos(turnos)).toEqual({ sesionesImpagas: 1, deudaTotal: 1500 });
+  expect(aviso.textContent).toContain("1 sesión sin cobrar");
   expect(aviso.textContent).toContain(SESIONES_SIN_COBRAR_DETALLE);
-  // El monto va una vez, no dos.
-  expect(aviso.textContent?.match(/\$ 3\.500/g)).toHaveLength(1);
+  expect(aviso.textContent?.match(/\$ 1\.500/g)).toHaveLength(1);
 });

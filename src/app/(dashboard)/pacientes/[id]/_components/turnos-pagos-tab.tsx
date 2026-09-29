@@ -13,7 +13,7 @@ import {
   DURACION_BREVE,
   SUAVE,
 } from "@/components/ui/movimiento";
-import { sePuedeCobrar } from "@/app/api/_lib/domain";
+import { deudaDeTurnos, sePuedeCobrar } from "@/app/api/_lib/domain";
 import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
 import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { fechaCorta, hora, money } from "@/lib/format";
@@ -104,22 +104,19 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
     [localTurnos],
   );
 
-  // Lo mismo que ofrece el botón Cobrar de cada fila (sePuedeCobrar): antes
-  // el aviso contaba solo los realizados y un turno agendado cuya hora ya
-  // pasó tenía "Cobrar" al lado de un "0 sin cobrar" (forense 03, P3-13).
-  const sesionesImpagas = React.useMemo(() => {
-    const ahora = new Date();
-    return localTurnos.filter((t) => sePuedeCobrar(t, ahora));
-  }, [localTurnos]);
-  const deudaTotal = React.useMemo(
-    () => sesionesImpagas.reduce((acc, t) => acc + t.tarifaCobrada, 0),
-    [sesionesImpagas],
+  // La deuda es la de la cabecera y la de Cobros (deudaDeTurnos, la cuenta
+  // de deudaDePaciente): realizados sin cobrar. Un turno agendado cuya hora
+  // pasó se puede cobrar (su fila dice "Sin cobrar" y ofrece Cobrar), pero no
+  // es deuda hasta que queda realizado.
+  const { sesionesImpagas, deudaTotal } = React.useMemo(
+    () => deudaDeTurnos(localTurnos),
+    [localTurnos],
   );
 
   return (
     <div className="flex flex-col gap-6">
-      {sesionesImpagas.length > 0 && (
-        <DeudaBanner monto={deudaTotal} cantidad={sesionesImpagas.length} />
+      {sesionesImpagas > 0 && (
+        <DeudaBanner monto={deudaTotal} cantidad={sesionesImpagas} />
       )}
 
       <HistorialList

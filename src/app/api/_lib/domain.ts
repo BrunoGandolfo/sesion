@@ -87,7 +87,7 @@ export function toPacienteConDeuda(
   const pagadas = paciente.turnos.filter(
     (turno) => turno.pagoEstado === "pagado",
   );
-  const impagas = paciente.turnos.filter(esDeudaPendiente);
+  const deuda = deudaDeTurnos(paciente.turnos);
 
   return {
     // toPaciente arma su objeto campo por campo: esparcir ESE objeto (no la
@@ -95,8 +95,7 @@ export function toPacienteConDeuda(
     ...toPaciente(paciente),
     sesionesRealizadas: realizadas.length,
     totalCobrado: sumTarifas(pagadas),
-    sesionesImpagas: impagas.length,
-    deudaTotal: sumTarifas(impagas),
+    ...deuda,
     ultimaSesion: maxFecha(realizadas),
   };
 }
@@ -168,7 +167,22 @@ export function toConfiguracion(
   };
 }
 
-function sumTarifas(turnos: TurnoStats[]) {
+/**
+ * La deuda de los turnos de UNA paciente: cuántos son deuda pendiente
+ * (esDeudaPendiente: realizados y sin cobrar) y cuánto suman. Es la cuenta
+ * de deudaDePaciente y de calcularDeudores, sin agrupar: la usan la cabecera
+ * de la ficha (toPacienteConDeuda → deudaTotal) y el aviso de Turnos y pagos,
+ * que antes contaba además un turno agendado cuya hora ya pasó y daba otro
+ * número que la cabecera.
+ */
+export function deudaDeTurnos(
+  turnos: ReadonlyArray<{ estado: string; pagoEstado: string; tarifaCobrada: number }>,
+): { sesionesImpagas: number; deudaTotal: number } {
+  const impagas = turnos.filter(esDeudaPendiente);
+  return { sesionesImpagas: impagas.length, deudaTotal: sumTarifas(impagas) };
+}
+
+function sumTarifas(turnos: ReadonlyArray<{ tarifaCobrada: number }>) {
   return turnos.reduce((total, turno) => total + turno.tarifaCobrada, 0);
 }
 

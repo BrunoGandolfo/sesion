@@ -516,10 +516,9 @@ export const MODALIDAD_LABEL: Readonly<Record<"presencial" | "online", string>> 
   presencial: "Presencial",
   online: "Online",
 };
-/** El aviso de la ficha sobre lo que ya pasó y no se cobró: cuenta lo mismo
- *  que ofrece el botón Cobrar (sePuedeCobrar), también un turno agendado
- *  cuya hora ya pasó. */
-export const SESIONES_SIN_COBRAR_DETALLE = "Sesiones que ya pasaron y todavía no se cobraron.";
+/** El aviso de deuda de la ficha: cuenta lo mismo que la cabecera, Cobros y
+ *  el SMS de cobro (deudaDeTurnos / deudaDePaciente). */
+export const SESIONES_SIN_COBRAR_DETALLE = "Deuda acumulada por sesiones realizadas sin cobrar.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Estado clínico del turno, separado del pago
