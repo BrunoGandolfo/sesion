@@ -30,6 +30,10 @@ import type { VarianteToast } from "@/components/ui/toast";
 import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 
 import { Button, Segmented, Sheet, Toast } from "@/components/ui";
+import type {
+  ConsentimientoVigente,
+  EstadoConsentimiento,
+} from "@/components/grabacion/ConsentimientoBadge";
 import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
 import { apiGet, esAbort } from "@/lib/api-client";
@@ -89,9 +93,12 @@ type FichaState =
 export function PacienteDetailView({ id }: { id: string }) {
   const [ficha, setFicha] = React.useState<FichaState>({ tipo: "cargando", id });
   const [config, setConfig] = React.useState<Configuracion | null>(null);
+  // La autorización, leída UNA vez por recarga y compartida por los dos
+  // Badges (cabecera y pestaña Datos). Mientras se relee queda la anterior:
+  // así el Badge no cambia de rama ni se desmonta a mitad de una firma.
   const [consentimiento, setConsentimiento] = React.useState<{
     id: string;
-    vigente: boolean;
+    estado: EstadoConsentimiento;
   } | null>(null);
   const searchParams = useSearchParams();
   const preparar = searchParams.get("preparar") === "1";
@@ -153,18 +160,19 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   React.useEffect(() => {
     const controller = new AbortController();
-    apiGet<{ consentimiento: { vigente: boolean } | null }>(
+    apiGet<{ consentimiento: ConsentimientoVigente | null }>(
       `/api/pacientes/${id}/consentimiento`,
       { signal: controller.signal },
     )
-      .then((data) =>
+      .then(({ consentimiento: c }) =>
         setConsentimiento({
           id,
-          vigente: data.consentimiento?.vigente === true,
+          estado: c && c.vigente ? { tipo: "vigente", consentimiento: c } : { tipo: "sin" },
         }),
       )
-      .catch(() => {
-        // Se vuelve a intentar en la próxima recarga.
+      .catch((err: unknown) => {
+        if (esAbort(err)) return;
+        setConsentimiento({ id, estado: { tipo: "error" } });
       });
     return () => controller.abort();
   }, [id, reloadKey]);
@@ -236,8 +244,8 @@ export function PacienteDetailView({ id }: { id: string }) {
     }
   }, [sesionHoy, nombrePaciente]);
 
-  const consentimientoVigente =
-    consentimiento && consentimiento.id === id ? consentimiento.vigente : null;
+  const estadoConsentimiento: EstadoConsentimiento =
+    consentimiento && consentimiento.id === id ? consentimiento.estado : { tipo: "cargando" };
 
   function handleEditarSuccess() {
     setEditarOpen(false);
@@ -285,9 +293,8 @@ export function PacienteDetailView({ id }: { id: string }) {
             <CabeceraFicha
               paciente={paciente}
               proximoTurno={proximoTurno}
-              consentimientoVigente={consentimientoVigente}
+              consentimiento={estadoConsentimiento}
               config={config}
-              reloadKey={reloadKey}
               hrefGrabar={hrefGrabar}
               onEditar={() => setEditarOpen(true)}
               onConsentimientoCambio={refetchData}
@@ -327,7 +334,7 @@ export function PacienteDetailView({ id }: { id: string }) {
                 paciente={paciente}
                 turnos={turnos}
                 config={config}
-                reloadKey={reloadKey}
+                consentimiento={estadoConsentimiento}
                 onPacienteActualizado={refetchData}
               />
             )}

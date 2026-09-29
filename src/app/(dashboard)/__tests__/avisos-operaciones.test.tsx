@@ -162,7 +162,7 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
 
   it.each([false, true])("reactivar desde la ficha: éxito=%s", async (exito) => {
     if (!exito) m.patch.mockRejectedValue(new Error(FALLO));
-    render(<FichaTab paciente={PACIENTE} turnos={[]} config={null} reloadKey={0} onPacienteActualizado={vi.fn()} />);
+    render(<FichaTab paciente={PACIENTE} turnos={[]} config={null} consentimiento={{ tipo: "cargando" }} onPacienteActualizado={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Reactivar" }));
     await verificarAviso(exito ? "Paciente reactivado" : FALLO, exito);
   });

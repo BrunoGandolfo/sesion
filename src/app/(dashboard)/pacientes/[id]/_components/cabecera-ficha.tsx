@@ -25,7 +25,10 @@ import Link from "next/link";
 
 import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 import { Avatar, Button, Chip } from "@/components/ui";
-import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge";
+import {
+  ConsentimientoBadge,
+  type EstadoConsentimiento,
+} from "@/components/grabacion/ConsentimientoBadge";
 import { fechaCorta, hora, money } from "@/lib/format";
 import { EDITAR_DATOS, GRABAR } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
@@ -33,11 +36,9 @@ import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 interface CabeceraFichaProps {
   paciente: PacienteConDeuda;
   proximoTurno: Turno | null;
-  /** null mientras se verifica. */
-  consentimientoVigente: boolean | null;
+  /** La autorización que leyó la ficha. */
+  consentimiento: EstadoConsentimiento;
   config: Configuracion | null;
-  /** Cambia cuando la ficha se recarga: remonta el aviso para que relea. */
-  reloadKey: number;
   /** A dónde lleva Grabar: el turno de hoy, o una sesión nueva. */
   hrefGrabar: string;
   onEditar: () => void;
@@ -47,9 +48,8 @@ interface CabeceraFichaProps {
 export function CabeceraFicha({
   paciente,
   proximoTurno,
-  consentimientoVigente,
+  consentimiento,
   config,
-  reloadKey,
   hrefGrabar,
   onEditar,
   onConsentimientoCambio,
@@ -107,17 +107,18 @@ export function CabeceraFicha({
         </div>
       </div>
 
-      {consentimientoVigente === false ? (
-        <ConsentimientoBadge
-          key={reloadKey}
-          variante="aviso"
-          pacienteId={paciente.id}
-          nombrePaciente={nombreCompleto}
-          nombreProfesional={config?.nombreProfesional ?? ""}
-          direccionConsultorio={config?.direccion ?? ""}
-          onCambio={onConsentimientoCambio}
-        />
-      ) : null}
+      {/* Montado siempre: el aviso aparece solo si falta la autorización, y
+          el sheet de firma vive adentro. Cuando la ficha relee, el Badge no
+          se desmonta y una firma en curso no se pierde (forense 03, P3-20). */}
+      <ConsentimientoBadge
+        variante="aviso"
+        pacienteId={paciente.id}
+        nombrePaciente={nombreCompleto}
+        nombreProfesional={config?.nombreProfesional ?? ""}
+        direccionConsultorio={config?.direccion ?? ""}
+        estado={consentimiento}
+        onCambio={onConsentimientoCambio}
+      />
     </header>
   );
 }

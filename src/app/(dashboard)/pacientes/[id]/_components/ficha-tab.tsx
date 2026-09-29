@@ -19,7 +19,10 @@ import {
 } from "lucide-react";
 
 import { Button, Confirmar, EditorialRule, Textarea, Toast } from "@/components/ui";
-import { ConsentimientoBadge } from "@/components/grabacion/ConsentimientoBadge";
+import {
+  ConsentimientoBadge,
+  type EstadoConsentimiento,
+} from "@/components/grabacion/ConsentimientoBadge";
 import { HotWordsManager } from "@/components/grabacion/HotWordsManager";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiPatch } from "@/lib/api-client";
@@ -38,8 +41,8 @@ interface FichaTabProps {
   paciente: PacienteConDeuda;
   turnos: Turno[];
   config: Configuracion | null;
-  /** Cambia cuando la ficha se recarga: remonta la autorización para que relea. */
-  reloadKey: number;
+  /** La autorización que leyó la ficha (una lectura por recarga). */
+  consentimiento: EstadoConsentimiento;
   onPacienteActualizado: () => void;
 }
 
@@ -55,7 +58,7 @@ export function FichaTab({
   paciente,
   turnos,
   config,
-  reloadKey,
+  consentimiento,
   onPacienteActualizado,
 }: FichaTabProps) {
   const router = useRouter();
@@ -135,12 +138,12 @@ export function FichaTab({
         <SectionTitle title={AUTORIZACION_GRABACION} />
         <div className="rounded-lg border border-[color:var(--border-subtle)] bg-white p-5">
           <ConsentimientoBadge
-            key={reloadKey}
             variante="completo"
             pacienteId={paciente.id}
             nombrePaciente={`${paciente.nombre} ${paciente.apellido}`}
             nombreProfesional={config?.nombreProfesional ?? ""}
             direccionConsultorio={config?.direccion ?? ""}
+            estado={consentimiento}
             onCambio={onPacienteActualizado}
           />
         </div>
