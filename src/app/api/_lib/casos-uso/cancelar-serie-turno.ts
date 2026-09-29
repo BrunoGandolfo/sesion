@@ -16,6 +16,7 @@
 import { MENSAJE_SIN_SERIE } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 
+import { TRANSICIONES_TURNO } from "../domain";
 import { ApiError } from "../responses";
 import { cancelarEnviosDelTurno } from "./envios-del-turno";
 import { tomarLockDeAgenda } from "./solapamiento-turnos";
@@ -64,7 +65,7 @@ export async function cancelarRestoDeSerie({
       where: {
         organizationId,
         serieId: desde.serieId,
-        estado: "programado",
+        estado: { in: [...TRANSICIONES_TURNO.cancelarSerie.desde] },
         fecha: { gte: desde.fecha },
       },
       select: { id: true },
@@ -78,17 +79,17 @@ export async function cancelarRestoDeSerie({
     // El predicado va también en la escritura: cobrar un turno no toma el
     // lock de agenda (lo cierra con un updateMany atómico), así que uno de
     // los candidatos puede haber pasado a "realizado" entre la lectura y
-    // esta línea. Con `estado: "programado"` en el WHERE, ese se queda como
+    // esta línea. Con el `desde` de la transición en el WHERE, ese se queda como
     // está y no cuenta.
     const { count } = await tx.turno.updateMany({
-      where: { id: { in: ids }, organizationId, estado: "programado" },
-      data: { estado: "cancelado" },
+      where: { id: { in: ids }, organizationId, estado: { in: [...TRANSICIONES_TURNO.cancelarSerie.desde] } },
+      data: { estado: TRANSICIONES_TURNO.cancelarSerie.hacia },
     });
 
     // Avisos sólo de los que efectivamente se cancelaron. Cancelar es
     // idempotente: si uno lo canceló un PATCH en el medio, ya lo apagó.
     const cancelados = await tx.turno.findMany({
-      where: { id: { in: ids }, estado: "cancelado" },
+      where: { id: { in: ids }, estado: TRANSICIONES_TURNO.cancelarSerie.hacia },
       select: { id: true },
     });
     for (const { id } of cancelados) {

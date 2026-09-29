@@ -106,10 +106,9 @@ export async function cancelarPendientesDelDestino(
   return count;
 }
 
-/** True si el turno sigue esperando a la paciente. */
-export function turnoSigueProgramado(estado: string): boolean {
-  return estado === "programado";
-}
+/** True si el turno sigue esperando a la paciente. La regla vive con las
+ *  demás del turno, en domain.ts; se re-exporta para despachar-sms. */
+export { turnoSigueProgramado } from "../domain";
 
 /** ¿Corresponde un aviso para un turno con esta fecha? No, si ya empezó. */
 export function correspondeEnvio(fechaTurno: Date, ahora: Date): boolean {

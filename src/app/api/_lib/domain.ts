@@ -10,11 +10,18 @@ import type {
   Turno,
   TurnoConPaciente,
 } from "@/types/domain";
-import { esDuracion } from "@/lib/constantes-turno";
+import {
+  esDuracion,
+  ESTADOS_QUE_OCUPAN,
+  type Duracion,
+  type EstadoTurno,
+  type Modalidad,
+} from "@/lib/constantes-turno";
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
 import { diasEnterosMvd, esMismoDiaMvd } from "@/lib/fechas-montevideo";
+import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -215,9 +222,43 @@ export function esDeudaPendiente(turno: {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Las transiciones de estado del turno, en una tabla. Antes estaban escritas
+ * sueltas en cada caso de uso: la guarda del PATCH en casos-uso/turnos.ts,
+ * el "cobrar un programado lo cierra" en cobrar-turno.ts y el "solo los
+ * programados" de cancelar-serie-turno.ts.
+ *
+ *   editarDatos    PATCH que mueve, cambia duración, modalidad o notas.
+ *   cambiarEstado  PATCH con `estado`: a cualquiera, salvo desde cancelado
+ *                  (un turno cancelado no se reabre).
+ *   cobrarCierra   Cobrar un programado cuya hora llegó lo deja realizado
+ *                  en la misma sentencia (un realizado se cobra sin cambiar
+ *                  de estado; ver sePuedeCobrar).
+ *   cancelarSerie  "Cancelar este y los siguientes": solo los programados.
+ */
+export const TRANSICIONES_TURNO = {
+  editarDatos: { desde: ["programado"] },
+  cambiarEstado: { desde: ["programado", "realizado", "ausente"] },
+  cobrarCierra: { desde: ["programado"], hacia: "realizado" },
+  cancelarSerie: { desde: ["programado"], hacia: "cancelado" },
+} as const satisfies Record<string, { desde: readonly EstadoTurno[]; hacia?: EstadoTurno }>;
+
+export type TransicionTurno = keyof typeof TRANSICIONES_TURNO;
+
+/** ¿La transición `op` sale de un turno en `estado`? */
+export function puedeTransicionTurno(op: TransicionTurno, estado: string): boolean {
+  return (TRANSICIONES_TURNO[op].desde as readonly string[]).includes(estado);
+}
+
+/** Un turno programado es el único que avisa: sus recordatorios siguen
+ *  vivos. Cualquier otro estado los apaga (casos-uso/envios-del-turno.ts). */
+export function turnoSigueProgramado(estado: string): boolean {
+  return estado === "programado";
+}
+
+/**
  * Si el turno se puede cobrar en `ahora`: sin cobrar y realizado, o sin
  * cobrar y programado con la hora ya llegada (cobrarlo lo cierra, ver
- * casos-uso/cobrar-turno.ts). Nunca cancelado, ausente ni pagado.
+ * TRANSICIONES_TURNO.cobrarCierra). Nunca cancelado, ausente ni pagado.
  *
  * Es más ancha que esDeudaPendiente: un programado cuya hora empezó se puede
  * cobrar pero todavía no es deuda.
@@ -227,10 +268,128 @@ export function sePuedeCobrar(
   ahora: Date,
 ): boolean {
   if (turno.pagoEstado !== "pendiente") return false;
-  if (turno.estado === "realizado") return true;
+  if (turno.estado === TRANSICIONES_TURNO.cobrarCierra.hacia) return true;
   return (
-    turno.estado === "programado" && turno.fecha.getTime() <= ahora.getTime()
+    puedeTransicionTurno("cobrarCierra", turno.estado) &&
+    turno.fecha.getTime() <= ahora.getTime()
   );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Editar un turno — la decisión, pura. casos-uso/turnos.ts (actualizarTurno)
+// solo aplica lo que sale de acá: toma el lock, relee, pregunta, escribe.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Lo que el PATCH puede cambiar de un turno. */
+export interface CambiosTurno {
+  fecha?: Date;
+  duracion?: Duracion;
+  modalidad?: Modalidad;
+  notas?: string | null;
+  estado?: EstadoTurno;
+}
+
+/** Qué pasa con el recordatorio por SMS después de editar. */
+export type EfectoEnvioTurno =
+  /** El turno quedó cerrado (realizado, ausente, cancelado): nada avisa. */
+  | "cancelar"
+  /** Sigue programado y cambió la fecha: se apaga el aviso viejo y se
+   *  programa el de la fecha nueva. */
+  | "reprogramar"
+  /** Venía cerrado y volvió a programado: el cierre apagó su aviso. */
+  | "revivir"
+  | null;
+
+type TurnoEnEdicion = { estado: string; fecha: Date; duracion: number };
+
+export type DecisionEdicionTurno =
+  | { tipo: "rechazo"; mensaje: string }
+  /** Un body vacío: no se escribe nada (un updateMany todo undefined
+   *  devolvería count 0 y se leería como "no existe"). */
+  | { tipo: "sinCambios" }
+  | {
+      tipo: "aplicar";
+      /** El intervalo a comprobar contra la agenda, o null si esta edición
+       *  no puede CREAR un solapamiento. */
+      verificarSolapamiento: { inicio: Date; duracionMin: number } | null;
+      efectoEnvio: EfectoEnvioTurno;
+    };
+
+function ocupaHorario(estado: string): boolean {
+  return (ESTADOS_QUE_OCUPAN as readonly string[]).includes(estado);
+}
+
+/**
+ * El efecto de una edición sobre el recordatorio, mirando el turno antes y
+ * después de escribir. `cambioFecha` dice si el PATCH mandó `fecha`: una
+ * fecha igual a la que tenía no reprograma nada.
+ *
+ * Es aparte de decidirEdicionTurno porque el caso de uso la vuelve a llamar
+ * con la fila YA ESCRITA: cobrar no toma el lock de agenda, así que el estado
+ * pudo cambiar entre la lectura y la escritura, y el aviso tiene que seguir
+ * lo que quedó en la base, no lo que se previó.
+ */
+export function efectoEnvioDeEdicion(
+  antes: { estado: string; fecha: Date },
+  despues: { estado: string; fecha: Date },
+  cambioFecha: boolean,
+): EfectoEnvioTurno {
+  if (!turnoSigueProgramado(despues.estado)) return "cancelar";
+  if (cambioFecha && despues.fecha.getTime() !== antes.fecha.getTime()) return "reprogramar";
+  if (!turnoSigueProgramado(antes.estado)) return "revivir";
+  return null;
+}
+
+/**
+ * Decide qué hacer con un PATCH sobre `actual` (la fila releída DESPUÉS del
+ * lock de agenda: decidir con una lectura previa dejaría reabrir un turno
+ * cancelado en el medio).
+ *
+ * - Cancelado y el PATCH trae `estado`: rechazo (no se reabre).
+ * - Cambia datos y el turno no está programado: rechazo.
+ * - Nada que cambiar: sinCambios.
+ * - Si no: aplicar. El solapamiento se comprueba sólo cuando la edición
+ *   puede crearlo —se movió el intervalo de un turno que ocupa, o el turno
+ *   pasa de no ocupar a ocupar (ausente → programado)—; no en cada edición,
+ *   o un turno que ya estaba solapado no podría ni cambiar sus notas.
+ */
+export function decidirEdicionTurno(
+  actual: TurnoEnEdicion,
+  cambios: CambiosTurno,
+): DecisionEdicionTurno {
+  const cambiaDatos =
+    cambios.fecha !== undefined ||
+    cambios.duracion !== undefined ||
+    cambios.modalidad !== undefined ||
+    cambios.notas !== undefined;
+
+  if (cambios.estado !== undefined && !puedeTransicionTurno("cambiarEstado", actual.estado)) {
+    return { tipo: "rechazo", mensaje: MENSAJE_NO_REABRIR };
+  }
+  if (cambiaDatos && !puedeTransicionTurno("editarDatos", actual.estado)) {
+    return { tipo: "rechazo", mensaje: MENSAJE_SOLO_PROGRAMADOS };
+  }
+  if (!cambiaDatos && cambios.estado === undefined) {
+    return { tipo: "sinCambios" };
+  }
+
+  const final = {
+    fecha: cambios.fecha ?? actual.fecha,
+    duracion: cambios.duracion ?? actual.duracion,
+    estado: cambios.estado ?? actual.estado,
+  };
+  const movioElIntervalo =
+    final.fecha.getTime() !== actual.fecha.getTime() || final.duracion !== actual.duracion;
+  const pasaAOcupar = !ocupaHorario(actual.estado) && ocupaHorario(final.estado);
+
+  return {
+    tipo: "aplicar",
+    verificarSolapamiento:
+      ocupaHorario(final.estado) && (movioElIntervalo || pasaAOcupar)
+        ? { inicio: final.fecha, duracionMin: final.duracion }
+        : null,
+    efectoEnvio: efectoEnvioDeEdicion(actual, final, cambios.fecha !== undefined),
+  };
 }
 
 /**

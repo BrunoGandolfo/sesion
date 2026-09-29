@@ -17,7 +17,7 @@
 import type { db } from "@/lib/db";
 import type { MetodoPago, Turno } from "@/types/domain";
 
-import { sePuedeCobrar, toTurno } from "../domain";
+import { puedeTransicionTurno, sePuedeCobrar, toTurno, TRANSICIONES_TURNO } from "../domain";
 import { ApiError } from "../responses";
 import { cancelarEnviosDelTurno } from "./envios-del-turno";
 
@@ -93,8 +93,8 @@ export async function cobrarTurno({
     throw new ApiError(motivoDelRechazo(existente), 400);
   }
 
-  // Único caso en que el cobro además cierra el turno.
-  const cierraElTurno = existente.estado === "programado";
+  // Único caso en que el cobro además cierra el turno (TRANSICIONES_TURNO).
+  const cierraElTurno = puedeTransicionTurno("cobrarCierra", existente.estado);
 
   return prisma.$transaction(async (tx) => {
     // updateMany condicionado al estado y al pago que se leyeron: si otra
@@ -112,7 +112,7 @@ export async function cobrarTurno({
         pagoEstado: "pendiente",
       },
       data: {
-        ...(cierraElTurno ? { estado: "realizado" } : {}),
+        ...(cierraElTurno ? { estado: TRANSICIONES_TURNO.cobrarCierra.hacia } : {}),
         pagoEstado: "pagado",
         pagoFecha: fecha,
         // La versión debe avanzar incluso si dos operaciones caen en el mismo ms.
