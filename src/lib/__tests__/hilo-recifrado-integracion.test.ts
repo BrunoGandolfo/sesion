@@ -9,13 +9,15 @@ import { aadDe, cifrar, descifrar } from "@/lib/encryption";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { cifrarHiloVersion, cifrarPaciente } from "@/lib/prisma-encryption";
 import { CLAVES_CIFRADO_TEST } from "./base-identidad";
-import { conectarBaseDeTest, hayBaseDeTest, vaciarTablas, type BaseDeTest } from "./db-test";
+import { conectarBaseDeTest, vaciarTablas, type BaseDeTest } from "./db-test";
 
 const K2 = randomBytes(32).toString("base64");
 const original = process.env.CLAVES_CIFRADO;
 const INMUTABLE = /55000[\s\S]*hilo_versiones es inmutable/;
 
-describe.skipIf(!hayBaseDeTest())("hilo_versiones: solo cambia la clave, nunca el contenido", () => {
+// Integración (lista INTEGRACION de vitest.config.ts): sin base falla, no se
+// saltea.
+describe("hilo_versiones: solo cambia la clave, nunca el contenido", () => {
   let base: BaseDeTest;
   let orgId: string;
   let pacienteId: string;
