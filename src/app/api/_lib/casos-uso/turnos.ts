@@ -8,7 +8,7 @@
 import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
 import type { Prisma } from "@prisma/client";
 
-import type { Duracion, EstadoTurno, Modalidad } from "@/lib/constantes-turno";
+import { ESTADOS_QUE_OCUPAN, type Duracion, type EstadoTurno, type Modalidad } from "@/lib/constantes-turno";
 import type { db } from "@/lib/db";
 import { finDeMesMvd, inicioDeMesMvd } from "@/lib/fechas-montevideo";
 import { cifrarTurno } from "@/lib/prisma-encryption";
@@ -22,11 +22,7 @@ import {
   reprogramarEnvioDelTurno,
   turnoSigueProgramado,
 } from "./envios-del-turno";
-import {
-  assertSinSolapamiento,
-  ESTADOS_QUE_OCUPAN,
-  tomarLockDeAgenda,
-} from "./solapamiento-turnos";
+import { assertSinSolapamiento, tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
 

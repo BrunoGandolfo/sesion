@@ -234,6 +234,14 @@ export function sePuedeCobrar(
 }
 
 /**
+ * Estados del turno en los que se puede grabar: la mitad "estado" de
+ * sePuedeGrabar. La usan también las consultas que no pueden llamar a la
+ * función fila por fila: el guard con lock de prepararAudio (casos-uso/
+ * audio.ts) y los turnos de hoy de Pendientes (pendientes-terapeuta.ts).
+ */
+export const ESTADOS_GRABABLES = ["programado", "realizado"] as const;
+
+/**
  * Si se puede grabar el turno en `ahora`: programado o realizado, y del mismo
  * día de calendario de MONTEVIDEO que `ahora`. La hora no cuenta —una sesión
  * que empezó tarde se graba igual—; el día sí: un turno de ayer no se graba.
@@ -245,7 +253,7 @@ export function sePuedeGrabar(
   turno: { estado: string; fecha: Date },
   ahora: Date,
 ): boolean {
-  if (turno.estado !== "programado" && turno.estado !== "realizado") {
+  if (!(ESTADOS_GRABABLES as readonly string[]).includes(turno.estado)) {
     return false;
   }
   return esMismoDiaMvd(turno.fecha, ahora);

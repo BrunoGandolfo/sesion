@@ -55,6 +55,7 @@ import type {
 import {
   buscarTurnosConDeuda,
   calcularDeudores,
+  ESTADOS_GRABABLES,
   type TurnoConDeuda,
 } from "../domain";
 import { hayMaterial } from "./sesion/reprocesar";
@@ -69,14 +70,6 @@ export interface PendientesTerapeutaParams {
    *  pasa para compartir la cuenta sin repetir la consulta. */
   turnosConDeuda?: TurnoConDeuda[];
 }
-
-/**
- * Estados de turno en los que todavía se puede grabar. Espejo del guard de
- * POST /api/sesion-clinica ("turno programado o realizado") y de cómo
- * paciente-detail-view elige el turno de hoy: pedir la autorización de un
- * turno cancelado o al que la paciente no vino sería ruido.
- */
-const ESTADOS_GRABABLES = ["programado", "realizado"] as const;
 
 /**
  * Cuántas sesiones fallidas entran en Pendientes.
