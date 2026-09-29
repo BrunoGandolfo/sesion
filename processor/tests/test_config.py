@@ -84,3 +84,39 @@ def test_validar_config_junta_todos_los_errores(recargar_config):
         cfg.validar_config()
     mensaje = str(exc.value)
     assert "APP_BASE_URL" in mensaje and "PROCESSING_SECRET" in mensaje and "R2 incompleto" in mensaje
+
+
+def test_cada_variable_que_lee_el_worker_esta_en_env_example():
+    # Las que inyecta Railway no se cargan a mano.
+    import pathlib
+    import re
+
+    raiz = pathlib.Path(__file__).resolve().parent.parent
+    codigo = "".join(p.read_text(encoding="utf-8") for p in raiz.glob("*.py"))
+    leidas = set(re.findall(r'os\.getenv\(\s*"([A-Z][A-Z0-9_]*)"', codigo))
+    ejemplo = (raiz / ".env.example").read_text(encoding="utf-8")
+    documentadas = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", ejemplo, re.MULTILINE))
+
+    assert leidas - {n for n in leidas if n.startswith("RAILWAY_")} <= documentadas
+    assert {"LLM_MAX_TOKENS_NOTA", "LLM_MAX_TOKENS_FEEDBACK", "LLM_MAX_TOKENS_REINTENTO", "PROMPTS_DIR", "WORKER_ID"} <= leidas
+
+
+def test_los_techos_y_el_timeout_del_modelo_por_defecto(recargar_config, monkeypatch):
+    # Con el entorno limpio de LLM_*: un valor exportado en el shell no
+    # puede hacer pasar ni fallar este test.
+    import os
+
+    for clave in [c for c in os.environ if c.startswith("LLM_")]:
+        monkeypatch.delenv(clave)
+    c = recargar_config()
+
+    assert c.LLM_MAX_TOKENS == 8192
+    # 2026-09-19: la nota salio del techo comun (llm_truncado en una sesion
+    # de 21 min). 2026-09-07: el feedback, por lo mismo.
+    assert c.LLM_MAX_TOKENS_NOTA == 16384 > c.LLM_MAX_TOKENS
+    assert c.LLM_MAX_TOKENS_FEEDBACK == 16384
+    assert c.LLM_MAX_TOKENS_REINTENTO == 20480
+    assert c.LLM_TIMEOUT_SECONDS == 600
+    # Sin streaming, la segunda pasada tiene que terminar dentro del timeout
+    # a una velocidad conservadora de 35 tok/s (ver config.py).
+    assert c.LLM_TIMEOUT_SECONDS >= c.LLM_MAX_TOKENS_REINTENTO / 35

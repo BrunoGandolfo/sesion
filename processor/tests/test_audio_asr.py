@@ -6,8 +6,9 @@ El que reproduce el bloqueo del telefono tiene 60 s de muestras y la segunda
 mitad con los sellos de tiempo corridos: ffprobe le cuenta 3 horas, igual que
 AssemblyAI contaba 4 h 31 min en una sesion de 54 minutos.
 
-Necesitan ffmpeg y ffprobe (el job worker-tests de CI los instala, la imagen
-del worker los trae). Sin red: el ASR es un doble.
+Los que generan o miden audio necesitan ffmpeg y ffprobe (el job
+worker-tests de CI los instala, la imagen del worker los trae): sin ellos se
+saltean, salvo en CI. Sin red: el ASR es un doble.
 """
 import io
 import json
@@ -20,9 +21,13 @@ import pytest
 import audio_asr
 import processor
 from app_client import RespuestaApp
+from dobles import requiere
 from processor import SesionReclamada
 
 TRES_HORAS = 3 * 3600
+
+# Los tests que generan o miden audio de verdad.
+FFMPEG = requiere("ffmpeg", "ffprobe")
 
 
 def _ffmpeg(*args: str) -> None:
@@ -69,6 +74,7 @@ def webm_con_salto(tmp_path_factory) -> bytes:
 
 # El archivo reproduce la falla ─────────────────────────────────────────────
 
+@FFMPEG
 def test_el_webm_con_salto_declara_tres_horas_con_sesenta_segundos_de_muestras(webm_con_salto, tmp_path):
     assert duracion_declarada(webm_con_salto, tmp_path) == pytest.approx(TRES_HORAS, rel=0.01)
     assert muestras_decodificadas(webm_con_salto) == pytest.approx(60, rel=0.02)
@@ -76,6 +82,7 @@ def test_el_webm_con_salto_declara_tres_horas_con_sesenta_segundos_de_muestras(w
 
 # La normalizacion ──────────────────────────────────────────────────────────
 
+@FFMPEG
 def test_normalizado_dura_lo_que_sus_muestras(webm_con_salto, tmp_path):
     salida = audio_asr.normalizar(webm_con_salto)
     assert duracion_declarada(salida, tmp_path) == pytest.approx(60, rel=0.02)
@@ -83,6 +90,7 @@ def test_normalizado_dura_lo_que_sus_muestras(webm_con_salto, tmp_path):
     assert muestras_decodificadas(salida) == pytest.approx(60, rel=0.02)
 
 
+@FFMPEG
 def test_un_webm_normal_sale_con_la_misma_duracion(webm_normal, tmp_path):
     entrada = duracion_declarada(webm_normal, tmp_path)
     salida = audio_asr.normalizar(webm_normal)
@@ -90,6 +98,7 @@ def test_un_webm_normal_sale_con_la_misma_duracion(webm_normal, tmp_path):
     assert muestras_decodificadas(salida) == pytest.approx(muestras_decodificadas(webm_normal), rel=0.01)
 
 
+@FFMPEG
 def test_la_salida_es_ogg_opus_mono_16k(webm_normal, tmp_path):
     archivo = tmp_path / "salida.ogg"
     archivo.write_bytes(audio_asr.normalizar(webm_normal))
@@ -103,6 +112,7 @@ def test_la_salida_es_ogg_opus_mono_16k(webm_normal, tmp_path):
     assert info["streams"][0]["channels"] == 1
 
 
+@FFMPEG
 def test_basura_o_sin_ffmpeg_es_normalizacion_fallida(mocker):
     with pytest.raises(audio_asr.NormalizacionFallida) as exc:
         audio_asr.normalizar(b"esto no es audio")
@@ -147,8 +157,10 @@ class AsrDoble:
         self.recibido: list[bytes] = []
         self.duracion_seg = duracion_seg
 
-    def __call__(self, audio: io.BufferedIOBase, keyterms) -> dict:
+    def __call__(self, audio: io.BufferedIOBase, keyterms, al_crear=None) -> dict:
         self.recibido.append(audio.read())
+        if al_crear is not None:
+            al_crear("tr1")
         return {
             "duration_seconds": self.duracion_seg,
             "segments": [
@@ -173,7 +185,7 @@ def pipeline(mocker):
     checkpoint = mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok)
 
     def correr(audio: bytes, asr: AsrDoble, sesion: SesionReclamada | None = None):
-        mocker.patch("processor.r2_client.descargar_audio", return_value=(audio, {}))
+        mocker.patch("processor.r2_client.descargar_audio", return_value=audio)
         mocker.patch("processor.asr_assemblyai.transcribir", side_effect=asr)
         processor.procesar_sesion(sesion or _sesion())
         return checkpoint.call_args
@@ -181,6 +193,7 @@ def pipeline(mocker):
     return correr
 
 
+@FFMPEG
 def test_al_asr_llega_el_archivo_normalizado_de_sesenta_segundos(pipeline, webm_con_salto, tmp_path):
     asr = AsrDoble()
     pipeline(webm_con_salto, asr)
@@ -188,6 +201,7 @@ def test_al_asr_llega_el_archivo_normalizado_de_sesenta_segundos(pipeline, webm_
     assert duracion_declarada(asr.recibido[0], tmp_path) == pytest.approx(60, rel=0.02)
 
 
+@FFMPEG
 def test_un_webm_normal_se_transcribe_igual_que_sin_normalizar(pipeline, webm_normal, tmp_path, mocker):
     asr = AsrDoble()
     con = pipeline(webm_normal, asr)
@@ -213,6 +227,7 @@ def test_si_ffmpeg_falla_va_el_original_y_queda_en_el_log(pipeline, mocker, capl
     assert any("normalizacion_fallida ffmpeg_ausente" in r.getMessage() for r in caplog.records)
 
 
+@FFMPEG
 def test_dos_cabeceras_se_rechazan_antes_de_normalizar_y_del_asr(pipeline, webm_normal, mocker):
     normalizar = mocker.patch("processor.audio_asr.normalizar")
     asr = AsrDoble()
@@ -246,6 +261,7 @@ def test_aviso_duracion(asr_seg, telefono_seg, aviso):
     assert processor.aviso_duracion(asr_seg, telefono_seg) == aviso
 
 
+@FFMPEG
 def test_asr_mas_de_diez_por_ciento_y_mas_de_un_minuto_mayor_registra_el_aviso_y_no_falla(pipeline, webm_normal, caplog, mocker):
     fallo = mocker.patch("processor.reportar_fallo")
     with caplog.at_level(logging.WARNING):
@@ -256,6 +272,7 @@ def test_asr_mas_de_diez_por_ciento_y_mas_de_un_minuto_mayor_registra_el_aviso_y
     fallo.assert_not_called()
 
 
+@FFMPEG
 def test_asr_menor_que_el_telefono_no_avisa(pipeline, webm_normal, caplog):
     with caplog.at_level(logging.WARNING):
         llamada = pipeline(webm_normal, AsrDoble(duracion_seg=58), _sesion(duracion_audio_seg=60))

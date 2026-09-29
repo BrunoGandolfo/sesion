@@ -74,9 +74,30 @@ def test_4xx_en_polling_corta_sin_reintentar(http):
     with pytest.raises(PipelineError) as exc:
         asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
-    assert exc.value.codigo == "asr_error"
+    assert exc.value.codigo == "asr_rechazado" and exc.value.definitivo
     assert get.call_count == 1
     delete.assert_called_once()
+
+
+@pytest.mark.parametrize("etapa", ["upload", "transcript"])
+@pytest.mark.parametrize(
+    "status, codigo, definitivo",
+    [(400, "asr_rechazado", True), (422, "asr_rechazado", True), (429, "asr_error", False), (503, "asr_error", False)],
+)
+def test_un_4xx_que_no_es_429_es_un_rechazo_definitivo(http, etapa, status, codigo, definitivo):
+    # Un 400 por payload repetiria la subida del audio en cada vuelta.
+    mocker, post, get, _ = http
+    malo = _resp(mocker, status, {"error": "bad request"})
+    if etapa == "upload":
+        post.side_effect = [malo]
+    else:
+        post.side_effect = [_resp(mocker, 200, {"upload_url": "https://cdn.test/u1"}), malo]
+
+    with pytest.raises(PipelineError) as exc:
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
+
+    assert (exc.value.codigo, exc.value.definitivo) == (codigo, definitivo)
+    get.assert_not_called()
 
 
 def test_5xx_en_polling_reintenta(http):
@@ -329,3 +350,68 @@ def test_sanear_no_toca_la_lista_que_recibe():
     entrada = ["GTFS", "GTFS"]
     asr_assemblyai._sanear_keyterms(entrada)
     assert entrada == ["GTFS", "GTFS"]
+
+
+# Registro del transcript antes del polling (al_crear) ────────────────────
+
+def test_al_crear_recibe_el_id_antes_de_la_primera_espera(http):
+    mocker, _, get, delete = http
+    orden: list[str] = []
+    get.side_effect = lambda *a, **k: orden.append("polling") or _resp(mocker, 200, COMPLETADO)
+
+    asr_assemblyai.transcribir(
+        __import__("io").BytesIO(b"audio"), al_crear=lambda tid: orden.append(f"registrado:{tid}")
+    )
+
+    assert orden == ["registrado:tr1", "polling"]
+    delete.assert_called_once()
+
+
+def test_si_el_proceso_muere_esperando_el_id_ya_estaba_registrado(http):
+    mocker, _, get, _ = http
+    registrados: list[str] = []
+    # SystemExit hace de "el proceso muere": no es Exception, nada lo atrapa.
+    get.side_effect = SystemExit(137)
+
+    with pytest.raises(SystemExit):
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), al_crear=registrados.append)
+
+    assert registrados == ["tr1"]
+
+
+def test_si_al_crear_lanza_no_se_espera_y_el_transcript_se_borra(http):
+    mocker, _, get, delete = http
+
+    def rechazar(_tid):
+        raise RuntimeError("lease perdido")
+
+    with pytest.raises(RuntimeError):
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), al_crear=rechazar)
+
+    get.assert_not_called()
+    delete.assert_called_once()
+    assert delete.call_args.args[0].endswith("/transcript/tr1")
+
+
+@pytest.mark.parametrize("falla", ["http", "red"])
+def test_si_falla_la_creacion_despues_del_upload_no_hay_id_que_registrar_ni_borrar(http, falla):
+    # El upload quedo en AssemblyAI y no hay DELETE para uploads sueltos: se
+    # documenta en transcribir(). Con un error de red ni siquiera se sabe si
+    # el transcript se creo del otro lado.
+    mocker, post, _, delete = http
+    segunda = _resp(mocker, 500) if falla == "http" else requests.ConnectionError("boom")
+    post.side_effect = [_resp(mocker, 200, {"upload_url": "https://cdn.test/u1"}), segunda]
+    al_crear = mocker.Mock()
+
+    with pytest.raises(PipelineError):
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"), al_crear=al_crear)
+
+    al_crear.assert_not_called()
+    delete.assert_not_called()
+
+
+def test_borrar_devuelve_el_status_o_none_sin_lanzar(mocker):
+    delete = mocker.patch("asr_assemblyai.requests.delete", return_value=_resp(mocker, 404))
+    assert asr_assemblyai._borrar("tr1") == 404
+    delete.side_effect = requests.ConnectionError("caida")
+    assert asr_assemblyai._borrar("tr1") is None

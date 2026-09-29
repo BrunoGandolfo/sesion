@@ -64,10 +64,10 @@ def pasos(mocker):
     }
 
 
-def _diag(advertencias=None, reintentos=0):
+def _diag(advertencias=None):
     from clinical_analyzer import DiagnosticoLLM
 
-    return DiagnosticoLLM(reintentos=reintentos, advertencias=advertencias or [])
+    return DiagnosticoLLM(advertencias=advertencias or [])
 
 
 # Camino feliz ──────────────────────────────────────────────────────────────
@@ -132,6 +132,83 @@ def test_con_checkpoint_no_descarga_ni_transcribe(pasos):
     payload = pasos["resultado"].call_args.args[2]
     assert payload["resultado"] == "nota"
     assert payload["datos"]["speechAnalytics"] == {"ratio": 2}
+
+
+# Registro del transcript antes del polling (H1) ──────────────────────────
+
+# La funcion real: el fixture `pasos` la reemplaza por un doble.
+TRANSCRIBIR_REAL = processor.transcribir
+
+
+def _asr_real(mocker, get_side_effect):
+    """processor.transcribir y asr_assemblyai de verdad, con la red de AssemblyAI mockeada."""
+    mocker.patch("processor.transcribir", side_effect=TRANSCRIBIR_REAL)
+    mocker.patch("asr_assemblyai.time.sleep")
+    mocker.patch(
+        "asr_assemblyai.requests.post",
+        side_effect=[
+            mocker.Mock(ok=True, status_code=200, **{"json.return_value": {"upload_url": "https://cdn.test/u1"}}),
+            mocker.Mock(ok=True, status_code=200, **{"json.return_value": {"id": "tr1"}}),
+        ],
+    )
+    mocker.patch("asr_assemblyai.requests.get", side_effect=get_side_effect)
+    return mocker.patch("asr_assemblyai.requests.delete", return_value=mocker.Mock(status_code=200))
+
+
+def test_con_el_proceso_muerto_en_el_polling_la_app_ya_tiene_el_transcript_id(pasos):
+    orden: list[str] = []
+    pasos["asr"].side_effect = lambda *a, **k: orden.append("registrar_asr") or RespuestaApp(True, 200)
+
+    def muere(*_a, **_k):
+        orden.append("polling")
+        raise SystemExit(137)  # SIGKILL/OOM: nada lo atrapa
+
+    _asr_real(pasos["mocker"], muere)
+
+    with pytest.raises(SystemExit):
+        processor.procesar_sesion(sesion())
+
+    assert orden == ["registrar_asr", "polling"]
+    pasos["asr"].assert_called_once_with("s1", TICKET, 2, "tr1")
+    pasos["resultado"].assert_not_called()
+
+
+def test_el_transcript_registrado_antes_del_polling_no_se_registra_de_nuevo(pasos):
+    completado = {"status": "completed", "audio_duration": 3, "speech_model_used": "universal-2", "utterances": [
+        {"speaker": "Terapeuta", "start": 0, "end": 1000, "text": "hola"}]}
+    _asr_real(pasos["mocker"], lambda *a, **k: pasos["mocker"].Mock(ok=True, status_code=200, **{"json.return_value": completado}))
+
+    processor.procesar_sesion(sesion())
+
+    pasos["asr"].assert_called_once_with("s1", TICKET, 2, "tr1")
+    assert pasos["checkpoint"].call_args.kwargs["asr_transcript_id"] == "tr1"
+    assert pasos["resultado"].call_args.args[2]["resultado"] == "nota"
+
+
+def test_si_el_registro_temprano_falla_se_reintenta_en_el_checkpoint(pasos):
+    def transcribir(_etiqueta, _audio, _terminos, al_crear=None):
+        al_crear("tr1")
+        return TRANSCRIPCION
+
+    pasos["mocker"].patch("processor.transcribir", side_effect=transcribir)
+    pasos["asr"].side_effect = [RespuestaApp(False, 503), RespuestaApp(True, 200)]
+
+    processor.procesar_sesion(sesion())
+
+    assert pasos["asr"].call_count == 2
+    assert pasos["resultado"].call_args.args[2]["resultado"] == "nota"
+
+
+def test_un_409_al_registrar_el_transcript_lo_borra_y_abandona(pasos):
+    delete = _asr_real(pasos["mocker"], lambda *a, **k: pytest.fail("no se espera un transcript ajeno"))
+    pasos["asr"].return_value = RespuestaApp(False, 409)
+
+    processor.procesar_sesion(sesion())
+
+    delete.assert_called_once()
+    assert delete.call_args.args[0].endswith("/transcript/tr1")
+    pasos["checkpoint"].assert_not_called()
+    pasos["resultado"].assert_not_called()
 
 
 # Fallos ────────────────────────────────────────────────────────────────────
@@ -283,7 +360,7 @@ CABECERA_FFMPEG = bytes.fromhex("1a45dfa3010000000000002342868101")
 def test_descargar_entrega_el_audio_tal_cual_sin_clave_ni_iv(mocker):
     descargas = []
     archivo = CABECERA_CHROME + b"opus" * 50
-    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or (archivo, {})))
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=lambda key: (descargas.append(key) or archivo))
     assert processor.descargar_audio("s1", {"key": "org/s1/0"}, 1) == archivo
     assert descargas == ["org/s1/0"]
 
@@ -302,11 +379,28 @@ def test_descargar_con_r2_caido_es_transitorio(mocker):
     assert exc.value.codigo == "r2_error" and not exc.value.definitivo
 
 
+def test_el_log_de_un_fallo_de_r2_lleva_el_tipo_y_el_codigo_pero_no_la_key(mocker, caplog):
+    from r2_client import ErrorR2
+
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=ErrorR2("NoSuchKey"))
+    with caplog.at_level(logging.DEBUG), pytest.raises(PipelineError):
+        processor.descargar_audio("s1", {"key": "org-secreta/s1/0"}, 1)
+    assert any("ErrorR2 NoSuchKey" in r.getMessage() for r in caplog.records)
+
+    # Cualquier otra excepcion: solo el tipo, aunque su texto traiga la key.
+    caplog.clear()
+    mocker.patch("processor.r2_client.descargar_audio", side_effect=OSError("leyendo org-secreta/s1/0"))
+    with caplog.at_level(logging.DEBUG), pytest.raises(PipelineError):
+        processor.descargar_audio("s1", {"key": "org-secreta/s1/0"}, 1)
+    assert any("(OSError)" in r.getMessage() for r in caplog.records)
+    assert all("org-secreta" not in r.getMessage() for r in caplog.records)
+
+
 @pytest.mark.parametrize("segunda", [CABECERA_CHROME, CABECERA_FFMPEG])
 def test_dos_grabaciones_pegadas_se_rechazan_antes_del_asr(mocker, segunda):
     # Lo que producia reanudar con un MediaRecorder nuevo: dos archivos pegados.
     pegado = CABECERA_CHROME + b"a" * 4000 + segunda + b"b" * 4000
-    mocker.patch("processor.r2_client.descargar_audio", return_value=(pegado, {}))
+    mocker.patch("processor.r2_client.descargar_audio", return_value=pegado)
     asr = mocker.patch("processor.asr_assemblyai.transcribir")
     with pytest.raises(PipelineError) as exc:
         processor.descargar_audio("s1", {"key": "k"}, 1)
@@ -318,7 +412,7 @@ def test_los_cuatro_bytes_del_id_sueltos_en_el_audio_no_son_una_cabecera(mocker)
     # En ~120 MB de Opus la secuencia 1A 45 DF A3 aparece por azar: sin el
     # elemento EBMLVersion detras no es una cabecera y no se rechaza.
     archivo = CABECERA_CHROME + b"x" * 500 + bytes.fromhex("1a45dfa3") + b"y" * 500
-    mocker.patch("processor.r2_client.descargar_audio", return_value=(archivo, {}))
+    mocker.patch("processor.r2_client.descargar_audio", return_value=archivo)
     assert processor.cabeceras_ebml(archivo) == 1
     assert processor.descargar_audio("s1", {"key": "k"}, 1) == archivo
 
@@ -350,23 +444,62 @@ def test_el_checkpoint_invalido_es_definitivo():
 
 # Trabajos durables ─────────────────────────────────────────────────────────
 
-def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
-    delete = mocker.patch("processor.requests.delete")
-    for status in (200, 404):
-        delete.return_value = mocker.Mock(status_code=status)
-        res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
-        assert res.pop("uso")["llamadas"] == []
-        assert res == {"ok": True}
-    assert delete.call_args.args[0].endswith("/transcript/tr1")
-    assert delete.call_args.kwargs["headers"] == {"authorization": config.ASSEMBLYAI_API_KEY}
+def _borrar_trabajo(intentos):
+    res = processor.ejecutar_trabajo(
+        {"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}, "intentos": intentos}
+    )
+    res.pop("uso")
+    return res
 
-    delete.return_value = mocker.Mock(status_code=500)
-    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
+
+def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
+    borrar = mocker.patch("processor.asr_assemblyai._borrar")
+    listo = processor.primer_intento_que_borra()
+    for status in (200, 404):
+        borrar.return_value = status
+        assert _borrar_trabajo(listo) == {"ok": True}
+    borrar.assert_called_with("tr1")
+
+    borrar.return_value = 500
+    res = _borrar_trabajo(listo)
     assert res["ok"] is False and "500" in res["error"]
 
-    delete.side_effect = RuntimeError("red caida")
-    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
-    assert res["ok"] is False and "RuntimeError" in res["error"]
+    borrar.return_value = None
+    assert _borrar_trabajo(listo + 3)["ok"] is False
+
+
+@pytest.mark.parametrize("intentos", [None, "3", 1, 2])
+def test_borrar_transcript_asr_no_borra_mientras_el_worker_dueno_puede_estar_esperando(mocker, intentos):
+    borrar = mocker.patch("processor.asr_assemblyai._borrar")
+    assert _borrar_trabajo(intentos) == {"ok": False, "error": "esperando_al_worker_del_transcript"}
+    borrar.assert_not_called()
+
+
+def test_el_primer_intento_que_borra_llega_despues_del_timeout_del_polling():
+    necesario = config.ASR_TIMEOUT_SECONDS + config.ASR_POLL_SECONDS + processor.asr_assemblyai.TIMEOUT_HTTP_SEG
+    n = processor.primer_intento_que_borra()
+    assert processor.espera_minima_antes_del_intento(n) >= necesario
+    assert processor.espera_minima_antes_del_intento(n - 1) < necesario
+    # Con la politica de hoy y 30 min de polling: el quinto intento (36 min
+    # como minimo, aun si dos workers murieron con el trabajo en la mano).
+    assert (n, processor.espera_minima_antes_del_intento(n)) == (5, 60 + 300 + 900 + 900)
+
+
+def test_la_espera_minima_usa_el_lease_cuando_es_menor_que_el_backoff():
+    assert processor.espera_minima_antes_del_intento(1) == 0
+    assert processor.espera_minima_antes_del_intento(2) == 60
+    assert processor.espera_minima_antes_del_intento(4) == 60 + 300 + 900
+
+
+def test_con_un_polling_mas_largo_espera_mas_intentos(mocker):
+    mocker.patch.object(config, "ASR_TIMEOUT_SECONDS", 3600)
+    assert processor.primer_intento_que_borra() == 7
+
+
+def test_borrar_transcript_asr_excepcion_solo_deja_el_tipo(mocker):
+    mocker.patch("processor.asr_assemblyai._borrar", side_effect=RuntimeError("red caida"))
+    res = _borrar_trabajo(processor.primer_intento_que_borra())
+    assert res == {"ok": False, "error": "RuntimeError"}
 
 
 def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):

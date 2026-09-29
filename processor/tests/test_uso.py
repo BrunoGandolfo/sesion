@@ -18,6 +18,7 @@ import pytest
 import clinical_analyzer
 import config
 import processor
+from dobles import respuesta_sdk
 from app_client import RespuestaApp
 from processor import SesionReclamada
 
@@ -34,23 +35,6 @@ NOTA_OK = {
         "riesgoDetectado": {"nivel": "ninguno", "indicadores": [], "evidencia": [], "notaParaTerapeuta": None},
     },
 }
-
-
-def respuesta_sdk(cuerpo: dict | str, stop="end_turn", entrada=21000, salida=9000, razonamiento=6500, request_id="req_01"):
-    """Lo que devuelve messages.create del SDK 1.x, con los campos que se leen."""
-    texto = cuerpo if isinstance(cuerpo, str) else json.dumps(cuerpo)
-    return SimpleNamespace(
-        usage=SimpleNamespace(
-            input_tokens=entrada,
-            output_tokens=salida,
-            cache_read_input_tokens=0,
-            cache_creation_input_tokens=0,
-            output_tokens_details=SimpleNamespace(thinking_tokens=razonamiento),
-        ),
-        stop_reason=stop,
-        content=[SimpleNamespace(type="text", text=texto)],
-        _request_id=request_id,
-    )
 
 
 @pytest.fixture
@@ -161,6 +145,42 @@ def test_un_fallo_lleva_lo_que_ya_se_pago(pipeline, anthropic_doble):
     assert set(payload["uso"]["pasosMs"]) == {"descarga", "normalizacion", "asr"}
 
 
+@pytest.mark.parametrize(
+    "respuestas, codigo",
+    [
+        # La nota sin una seccion SOAP, dos veces: no cumple validar_estructura_nota.
+        ([{"nota": {"subjetivo": "s"}, "datosEstructurados": {}}] * 2, "llm_estructura_invalida"),
+        (["no es json", "tampoco"], "llm_json_invalido"),
+    ],
+)
+def test_una_nota_que_falla_dos_veces_por_forma_no_vuelve_a_la_cola(pipeline, anthropic_doble, respuestas, codigo):
+    # Repetir la sesion volveria a pagar las dos pasadas y daria lo mismo.
+    anthropic_doble.side_effect = [respuesta_sdk(r) for r in respuestas]
+
+    payload = pipeline()
+
+    assert anthropic_doble.call_count == 2
+    assert payload["resultado"] == "fallo"
+    assert payload["codigo"] == codigo
+    assert payload["definitivo"] is True
+
+
+@pytest.mark.parametrize(
+    "respuesta, codigo",
+    [
+        (lambda: respuesta_sdk("{}", stop="refusal"), "llm_rechazo"),
+        (lambda: SimpleNamespace(**{**vars(respuesta_sdk("{}")), "content": []}), "llm_sin_texto"),
+    ],
+)
+def test_un_rechazo_o_una_respuesta_sin_texto_no_vuelven_a_la_cola(pipeline, anthropic_doble, respuesta, codigo):
+    anthropic_doble.side_effect = [respuesta()]
+
+    payload = pipeline()
+
+    assert anthropic_doble.call_count == 1
+    assert (payload["codigo"], payload["definitivo"]) == (codigo, True)
+
+
 def test_un_timeout_queda_anotado_con_su_duracion(pipeline, anthropic_doble):
     anthropic_doble.side_effect = anthropic.APITimeoutError(request=SimpleNamespace())
 
@@ -208,10 +228,10 @@ def test_cada_trabajo_lleva_uso(mocker, anthropic_doble):
     assert res["uso"]["reintentos"] == 1
     assert set(res["uso"]["pasosMs"]) == {"generar_feedback"}
 
-    delete = mocker.patch("processor.requests.delete", return_value=mocker.Mock(status_code=200))
+    # El borrado en si se prueba en test_processor; aca solo que lleva `uso`.
+    mocker.patch("processor.borrar_transcript_asr", return_value={"ok": True})
     res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
     assert res["ok"] is True and res["uso"]["llamadas"] == [] and "borrar_transcript_asr" in res["uso"]["pasosMs"]
-    delete.assert_called_once()
 
     res = processor.ejecutar_trabajo({"tipo": "desconocido"})
     assert res["ok"] is False and "uso" in res
