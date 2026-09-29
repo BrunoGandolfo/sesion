@@ -8,20 +8,12 @@
 // claves, sin texto libre.
 
 import type { db } from "@/lib/db";
-import {
-  finDeMesMvd,
-  finDelDiaMvd,
-  inicioDeMesMvd,
-  inicioDelDiaMvd,
-} from "@/lib/fechas-montevideo";
-import type {
-  DashboardData,
-  FlagsRiesgo,
-  KPIsDashboard,
-  SenalRiesgoDelDia,
-} from "@/types/domain";
+import { finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
+import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
+import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
+import type { DashboardData, KPIsDashboard, SenalRiesgoDelDia } from "@/types/domain";
 
-import { buscarTurnosConDeuda, toTurnoConPaciente } from "../domain";
+import { buscarTurnosConDeuda, cobradoEnMes, toTurnoConPaciente } from "../domain";
 import { deudaDeHoy, pendientesTerapeuta } from "./pendientes-terapeuta";
 
 type ClientePrisma = typeof db;
@@ -30,17 +22,20 @@ type ClientePrisma = typeof db;
 export const TOPE_DEUDORES = 10;
 
 /** Los dos campos que mira `clavesDeRiesgo`, sin el texto libre. La forma
- *  y el porqué están en `SenalRiesgoDelDia` (src/types/domain.ts). */
-export function aSenalDeRiesgo(datos: unknown): SenalRiesgoDelDia {
-  const objeto = (datos ?? {}) as {
-    riesgoDetectado?: { nivel?: unknown } | null;
-    flagsRiesgo?: FlagsRiesgo | null;
-  };
-  const flags = objeto.flagsRiesgo ?? null;
+ *  y el porqué están en `SenalRiesgoDelDia` (src/types/domain.ts).
+ *
+ *  Lee `datos` como lo leen aprobar y el brief: parseDatosEstructurados y
+ *  normalizarRiesgo. Antes lo casteaba crudo y un `nivel` inválido guardado
+ *  llegaba tal cual a Hoy; ahora llega como "ninguno", el mismo veredicto
+ *  que da la aprobación. (El worker entrega `datos` ya validado contra el
+ *  mismo schema, así que una fila real no se pierde por esto.) */
+export function aSenalDeRiesgo(crudo: unknown): SenalRiesgoDelDia {
+  const datos = parseDatosEstructurados(crudo);
+  const flags = datos?.flagsRiesgo ?? null;
   return {
-    riesgoDetectado: objeto.riesgoDetectado
+    riesgoDetectado: datos?.riesgoDetectado
       ? {
-          nivel: objeto.riesgoDetectado.nivel,
+          nivel: normalizarRiesgo(datos.riesgoDetectado).nivel,
           indicadores: [],
           evidencia: [],
           notaParaTerapeuta: null,
@@ -63,8 +58,6 @@ export async function obtenerDashboard({
 }: ObtenerDashboardInput): Promise<DashboardData> {
   const todayStart = inicioDelDiaMvd(ahora);
   const todayEnd = finDelDiaMvd(ahora);
-  const monthStart = inicioDeMesMvd(ahora);
-  const monthEnd = finDeMesMvd(ahora);
 
   // La deuda se lee y se cuenta UNA vez (deudaDeHoy) y la comparten el KPI,
   // la lista de "Te deben" y el bloque de pendientes. Antes se leía una vez
@@ -85,11 +78,7 @@ export async function obtenerDashboard({
   ] = await Promise.all([
     deuda,
     prisma.turno.aggregate({
-      where: {
-        organizationId,
-        pagoEstado: "pagado",
-        pagoFecha: { gte: monthStart, lte: monthEnd },
-      },
+      where: cobradoEnMes(organizationId, ahora),
       _sum: { tarifaCobrada: true },
     }),
     prisma.turno.findMany({

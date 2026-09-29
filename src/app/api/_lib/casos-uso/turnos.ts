@@ -8,11 +8,11 @@
 import type { Prisma } from "@prisma/client";
 
 import type { db } from "@/lib/db";
-import { finDeMesMvd, inicioDeMesMvd } from "@/lib/fechas-montevideo";
 import { cifrarTurno } from "@/lib/prisma-encryption";
 import type { Turno, TurnoConPaciente } from "@/types/domain";
 
 import {
+  cobradoEnMes,
   decidirEdicionTurno,
   efectoEnvioDeEdicion,
   toTurno,
@@ -96,11 +96,7 @@ export async function cobrosDelMes({
   enElMesDe,
 }: CobrosDelMesInput): Promise<TurnoConPaciente[]> {
   const turnos = await prisma.turno.findMany({
-    where: {
-      organizationId,
-      pagoEstado: "pagado",
-      pagoFecha: { gte: inicioDeMesMvd(enElMesDe), lte: finDeMesMvd(enElMesDe) },
-    },
+    where: cobradoEnMes(organizationId, enElMesDe),
     include: INCLUDE_AGENDA,
     orderBy: { pagoFecha: "desc" },
   });

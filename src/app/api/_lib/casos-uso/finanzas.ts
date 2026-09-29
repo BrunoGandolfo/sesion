@@ -64,6 +64,7 @@ import { OFFSET_MONTEVIDEO_MIN } from "@/lib/fechas-montevideo";
 
 import {
   buscarTurnosConDeuda,
+  COBRADO,
   deudaPorAntiguedad,
   TRAMOS_DEUDA,
 } from "../domain";
@@ -418,6 +419,8 @@ function consultaTrabajo(
   `);
 }
 
+/** Lo cobrado por mes de Montevideo y método: la condición es COBRADO (la
+ *  misma de cobradoEnMes, domain.ts), agregada en SQL por el mes del pago. */
 function consultaPagos(
   prisma: ClientePrisma,
   organizationId: string,
@@ -434,7 +437,7 @@ function consultaPagos(
       COALESCE(SUM(t.tarifa_cobrada), 0)::bigint AS monto
     FROM turnos t
     WHERE t.organization_id = ${organizationId}
-      AND t.pago_estado = 'pagado'
+      AND t.pago_estado = ${COBRADO.pagoEstado}::estado_pago
       AND t.pago_fecha IS NOT NULL
       AND t.pago_fecha >= ${sinZona(inicio)}::timestamp
       AND t.pago_fecha <= ${sinZona(fin)}::timestamp

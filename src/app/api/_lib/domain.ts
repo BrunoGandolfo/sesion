@@ -1,6 +1,7 @@
 import type {
   Configuracion as PrismaConfiguracion,
   Paciente as PrismaPaciente,
+  Prisma,
   Turno as PrismaTurno,
 } from "@prisma/client";
 import type {
@@ -20,7 +21,12 @@ import {
 // Solo el tipo del cliente (extendido con cifrado): este módulo no toca la
 // base por sí mismo, la recibe como parámetro en buscarTurnosConDeuda.
 import type { db } from "@/lib/db";
-import { diasEnterosMvd, esMismoDiaMvd } from "@/lib/fechas-montevideo";
+import {
+  diasEnterosMvd,
+  esMismoDiaMvd,
+  finDeMesMvd,
+  inicioDeMesMvd,
+} from "@/lib/fechas-montevideo";
 import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
 
 type TurnoStats = Pick<
@@ -211,6 +217,29 @@ export function esDeudaPendiente(turno: {
     turno.estado === DEUDA_PENDIENTE.estado &&
     turno.pagoEstado === DEUDA_PENDIENTE.pagoEstado
   );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cobrado en el mes — un turno cobrado cuenta en el mes de su PAGO (no el del
+// turno: una sesión de abril cobrada en mayo es de mayo), en meses de
+// calendario de Montevideo. Lo usan el KPI de Hoy (obtener-dashboard), la
+// lista "Cobros del mes" (turnos.ts, cobrosDelMes) y Finanzas (finanzas.ts,
+// que lo agrega en SQL por mes con la misma condición). Antes eran tres
+// caminos escritos por separado; cobrado-del-mes.test.ts prueba que los tres
+// dan el mismo número sobre la misma base.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Qué es "cobrado": el pago registrado. La fecha que cuenta es pagoFecha. */
+export const COBRADO = { pagoEstado: "pagado" } as const;
+
+/** Los turnos cobrados de la organización en el mes de `enElMesDe` (cualquier
+ *  instante del mes), por la fecha del pago. */
+export function cobradoEnMes(organizationId: string, enElMesDe: Date): Prisma.TurnoWhereInput {
+  return {
+    organizationId,
+    ...COBRADO,
+    pagoFecha: { gte: inicioDeMesMvd(enElMesDe), lte: finDeMesMvd(enElMesDe) },
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
