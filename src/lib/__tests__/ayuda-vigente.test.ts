@@ -447,7 +447,7 @@ describe("la ayuda sigue al consentimiento vigente", () => {
     // confirmación, y la ayuda lo advertía. Desde la 2.3 dice el tope, y la
     // advertencia no puede volver.
     expect(consentimiento).not.toContain("repite el pedido hasta que el servicio confirma que lo hizo");
-    expect(consentimiento).toContain(`y, si se completó, repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días`);
+    expect(consentimiento).toContain(`y repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días aunque este programa se corte a mitad de camino`);
     const privacidad = documento("12-camino-del-audio-y-privacidad.md");
     expect(privacidad).not.toMatch(/Esa frase del consentimiento|no menciona ese tope/);
     expect(ayuda()).not.toMatch(/Esa frase del consentimiento está pendiente de corregir/);

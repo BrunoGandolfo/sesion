@@ -26,20 +26,24 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 2.7 y sugiere re-firmar las anteriores", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("2.7");
+  it("la versión vigente del texto es la 2.8 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.8");
     for (const vieja of ["1.1", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"]) expect(sugiereRefirmar(vieja)).toBe(true);
     // La 2.6 prometía cifrado del audio en el teléfono, clave por sesión y su
     // destrucción al aprobar, y decía que la transcripción no se podía ver.
     expect(sugiereRefirmar("2.6")).toBe(true);
-    expect(sugiereRefirmar("2.7")).toBe(false);
+    // La 2.7 decía que el borrado en AssemblyAI se reintentaba sólo si la
+    // transcripción se completaba.
+    expect(sugiereRefirmar("2.7")).toBe(true);
+    expect(sugiereRefirmar("2.8")).toBe(false);
   });
 
   it("interpola los tres datos y cierra con versión y fecha", () => {
     const texto = generarTextoConsentimiento(baseParams);
     expect(texto).toContain("Hola María González.");
     expect(texto).toContain("Lic. Ana Pérez te pide autorización para grabar tus sesiones en Av. 18 de Julio 1234, Montevideo.");
-    expect(texto.trimEnd().endsWith(`Versión 2.7, ${CONSENTIMIENTO_FECHA}.`)).toBe(true);
+    expect(CONSENTIMIENTO_FECHA).toBe("29 de septiembre de 2026");
+    expect(texto.trimEnd().endsWith(`Versión 2.8, ${CONSENTIMIENTO_FECHA}.`)).toBe(true);
   });
 
   it("entra en una pantalla y media de teléfono: 3.500 caracteres como máximo", () => {
@@ -91,7 +95,7 @@ describe("cada frase tiene el hecho que la respalda", () => {
 
   it("el servidor tiene el audio solo en memoria", () => {
     const worker = codigo("processor/processor.py");
-    expect(worker).toContain("asr_assemblyai.transcribir(io.BytesIO(audio_bytes), terminos)");
+    expect(worker).toContain("asr_assemblyai.transcribir(io.BytesIO(audio_bytes), terminos, al_crear=al_crear)");
     expect(worker).not.toMatch(/TemporaryDirectory|NamedTemporaryFile|open\(.*"wb"/);
     const normalizar = codigo("processor/audio_asr.py");
     expect(normalizar).toContain('"pipe:0"');
@@ -108,7 +112,8 @@ describe("cada frase tiene el hecho que la respalda", () => {
   });
 
   it("el vocabulario, que puede tener su nombre, viaja solo a AssemblyAI", () => {
-    expect(codigo("processor/asr_assemblyai.py")).toContain('payload["keyterms_prompt"] = terminos');
+    // Que los términos viajan en keyterms_prompt lo prueba
+    // processor/tests/test_asr_assemblyai.py.
     expect(codigo("processor/clinical_analyzer.py")).not.toMatch(/keyterms|terminos_asr/);
     expect(texto).toContain("con ayuda de una lista de palabras que Lic. Ana Pérez carga y que puede incluir tu nombre");
   });
@@ -117,7 +122,8 @@ describe("cada frase tiene el hecho que la respalda", () => {
     const adjunto = codigo("src/app/api/_lib/casos-uso/hilo/trabajo.ts");
     expect(adjunto).toContain("notaFinal: sesion.notaFinal");
     expect(adjunto).toContain("contextoVigente:");
-    expect(codigo("processor/processor.py")).toContain("clinical_analyzer.generar_feedback_terapeuta(");
+    // Que el worker genera "Para vos" con clinical_analyzer lo prueba
+    // processor/tests/test_processor.py (test_generar_feedback_usa_el_adjunto_…).
     expect(texto).toContain("Anthropic recibe ese texto y el resumen de tu proceso: redacta un borrador de la nota, prepara un análisis del trabajo de Lic. Ana Pérez que solo ella ve y propone cómo actualizar el resumen cuando ella aprueba la nota.");
   });
 
@@ -150,21 +156,18 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).not.toMatch(/imposible de abrir|nadie puede abrir|hasta lograrlo/);
   });
 
-  it("el borrado en AssemblyAI: un pedido inmediato y reintentos acotados sólo si se completó", () => {
-    const cliente = codigo("processor/asr_assemblyai.py");
-    const transcribir = cliente.slice(cliente.indexOf("def transcribir("));
-    expect(transcribir).toMatch(/try:\s+data = _esperar\(transcript_id\)[\s\S]*finally:\s+_borrar\(transcript_id\)/);
-    expect(cliente).toContain("DELETE best-effort: solo se loguea el status, nunca falla.");
-    const worker = codigo("processor/processor.py");
-    expect(worker.indexOf("transcripcion = transcribir(")).toBeLessThan(worker.indexOf("transcripto = registrar_checkpoint("));
-    expect(worker).toContain("app_client.registrar_asr(etiqueta, sesion.ticket, sesion.intento, asr_id)");
-    expect(worker).toContain("if response.status_code in (200, 404):");
+  it("el borrado en AssemblyAI: un pedido inmediato y reintentos acotados aunque el proceso muera", () => {
+    // Que el worker registra el id del transcript antes de esperarlo, y que
+    // con el proceso muerto en el polling la app ya lo tiene, lo prueba
+    // processor/tests/test_processor.py
+    // (test_con_el_proceso_muerto_en_el_polling_la_app_ya_tiene_el_transcript_id).
     expect(codigo("src/app/api/_lib/casos-uso/sesion/registrar-asr.ts")).toContain('tipo: "borrar_transcript_asr"');
     const tipo = "borrar_transcript_asr";
     const { tope } = POLITICA_POR_TIPO[tipo];
     const esperas = Array.from({ length: tope - 1 }, (_, i) => backoffTrabajoMs(tipo, i + 1));
     expect(Math.ceil(esperas.reduce((suma, ms) => suma + ms, 0) / 86_400_000)).toBe(hechos.ASR_BORRADO_DIAS_APROX);
-    expect(texto).toContain(`Al terminar la transcripción le pide a AssemblyAI que borre el audio y el texto y, si se completó, repite el pedido unos ${hechos.ASR_BORRADO_DIAS_APROX} días; si algo falla, puede pedirlo una vez o ninguna, y no puede comprobar que se haya borrado.`);
+    expect(texto).toContain(`Al terminar la transcripción le pide a AssemblyAI que borre el audio y el texto, y repite el pedido unos ${hechos.ASR_BORRADO_DIAS_APROX} días aunque este programa se corte a mitad de camino; no puede comprobar que se haya borrado.`);
+    expect(texto).not.toMatch(/si se completó|una vez o ninguna/);
     expect(texto).not.toContain("borra de sus servidores");
   });
 
@@ -352,7 +355,7 @@ describe("la ruta de consentimiento", () => {
     const { descifrar, aadDe } = await import("@/lib/encryption");
     const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
     expect(texto).toContain("Hola María González.");
-    expect(texto).toContain("Versión 2.7");
+    expect(texto).toContain("Versión 2.8");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
   });

@@ -60,21 +60,27 @@ export const VOCABULARIO_INCLUYE_NOMBRES = true;
  * 1. Inmediato: asr_assemblyai.transcribir() pide DELETE en el `finally` que
  *    envuelve la espera del transcript, salga bien o mal. Es de mejor
  *    esfuerzo: un solo pedido, sin reintento, sólo loguea el status.
- * 2. Durable: sólo si la transcripción se completó, processor.py registra el
- *    id (registrar_asr) y la app crea borrar_transcript_asr en la misma
- *    transacción. Ese trabajo reintenta con la política de
- *    trabajos/politica.ts (20 intentos, unas dos semanas) y trabajos/resolver
- *    lo deja `fallido` al agotarlos.
+ * 2. Durable: apenas AssemblyAI crea el transcript —ANTES de esperar la
+ *    transcripción—, processor.py registra el id (registrar_asr, a través
+ *    del `al_crear` de asr_assemblyai.transcribir) y la app crea
+ *    borrar_transcript_asr en la misma transacción. Ese trabajo reintenta
+ *    con la política de trabajos/politica.ts (20 intentos, unas dos semanas)
+ *    y trabajos/resolver lo deja `fallido` al agotarlos.
  *
- * Lo que NO cubre el durable: una transcripción que falla o vence (queda sólo
- * el pedido inmediato), un proceso que muere antes de ese pedido, un audio
- * subido cuyo transcript no llegó a crearse (no hay id que borrar) y un
- * registro del id que falla (processor.py lo loguea y sigue).
+ * Lo que NO cubre el durable: un audio subido cuyo transcript no llegó a
+ * crearse (no hay id que borrar) y un registro del id que falla dos veces
+ * (al crearse y otra vez en el checkpoint; processor.py lo loguea y sigue).
  */
 export const ASR_BORRADO_CON_REINTENTO = true;
 export const ASR_BORRADO_INMEDIATO = true;
-/** El reintento durable existe sólo si la transcripción se completó. */
-export const ASR_REINTENTO_SOLO_SI_SE_COMPLETO = true;
+/**
+ * El reintento durable cubre también al proceso que muere a mitad de camino
+ * (redeploy, OOM, un corte durante el polling): el id se registra al CREARSE
+ * el transcript, no al terminar la transcripción. Lo prueba
+ * processor/tests/test_processor.py
+ * (test_con_el_proceso_muerto_en_el_polling_la_app_ya_tiene_el_transcript_id).
+ */
+export const ASR_REINTENTO_AUNQUE_EL_PROCESO_MUERA = true;
 export const ASR_BORRADO_MAX_INTENTOS = 20;
 export const ASR_BORRADO_DIAS_APROX = 15;
 

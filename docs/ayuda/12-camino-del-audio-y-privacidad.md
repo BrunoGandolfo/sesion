@@ -19,7 +19,7 @@ borra y cuándo, y qué necesita todavía verificación de quien administra Sesi
    llegó: con esa confirmación, la app la borra. Si la subida falla, la copia se
    conserva para reintentar.
 
-El consentimiento 2.7 le cuenta esto a la paciente así: el audio queda en el
+El consentimiento 2.8 le cuenta esto a la paciente así: el audio queda en el
 teléfono hasta que se sube por una conexión cifrada, el almacén lo guarda
 cifrado y se borra del teléfono.
 
@@ -35,14 +35,16 @@ cifrado y se borra del teléfono.
 3. **AssemblyAI** recibe el audio y el vocabulario.
 4. Apenas termina la transcripción, bien o mal, la app le pide a AssemblyAI que
    borre el audio y el texto. Ese primer pedido es uno solo.
-   - **Si la transcripción se completó**, la app además repite el pedido, cada
-     vez más espaciado, **hasta 20 veces**, durante **unos 15 días**, hasta que
-     AssemblyAI responde que lo borró o que ya no existe. Si aun así no lo
-     logra, el borrado queda marcado como fallido y avisa a quien administra
-     Sesión.
-   - **Si la transcripción falla**, o el proceso se interrumpe o no logra dejar
-     anotado ese reintento, queda solo el primer pedido, o ninguno si el proceso
-     se cortó antes, y la app no puede comprobar que AssemblyAI lo haya borrado.
+   - Además, apenas AssemblyAI crea la transcripción —antes de esperarla—, la
+     app anota un reintento: repite el pedido, cada vez más espaciado,
+     **hasta 20 veces**, durante **unos 15 días**, hasta que AssemblyAI responde que lo borró o que ya no existe.
+     Ese reintento sigue **aunque el proceso que transcribe se corte a mitad de
+     camino**. Si aun así no lo logra, el borrado queda marcado como fallido y
+     avisa a quien administra Sesión.
+   - Si el audio llegó a AssemblyAI pero la transcripción no llegó a crearse, no
+     hay nada que la app pueda pedir borrar. Si no logra anotar el reintento
+     (lo intenta dos veces), queda solo el primer pedido. Y, en cualquier caso,
+     la app no puede comprobar que AssemblyAI lo haya borrado.
    - Que AssemblyAI responda que el texto "ya no existe" cuenta como borrado: la
      app no puede distinguir si lo borró antes o si nunca llegó a existir.
 5. **Anthropic** recibe la transcripción y el Recorrido vigente de la paciente
@@ -66,7 +68,7 @@ Solo consulta; no modifica nada.
 
 El servidor prepara esos listados. Si seguís conversando, las preguntas y
 respuestas anteriores se envían a Anthropic, y pueden incluir esos nombres y
-horarios. Evitá pegar datos clínicos o personales. El consentimiento 2.7 explica
+horarios. Evitá pegar datos clínicos o personales. El consentimiento 2.8 explica
 este uso de la agenda. El acceso de Lupita no abre los registros clínicos.
 
 ## Nombres y proveedores
@@ -106,7 +108,7 @@ lo impide también.
 El PDF que exportás desde el Recorrido sale de la app **sin cifrar**: queda bajo
 tu cuidado, como cualquier registro en papel. Queda registrada la preparación de
 la copia; volver a imprimir desde la hoja ya abierta no agrega otro registro. El
-consentimiento 2.7 se lo cuenta a la paciente. Ver
+consentimiento 2.8 se lo cuenta a la paciente. Ver
 `10-el-hilo-y-el-recorrido.md`.
 
 ## Respaldos y eliminación
@@ -128,7 +130,7 @@ restauración de los respaldos requieren comprobación.
 
 ## Autorización y revocación
 
-La versión vigente del texto de autorización es la **2.7**. Revocar la
+La versión vigente del texto de autorización es la **2.8**. Revocar la
 autorización impide grabaciones futuras. No borra la historia que ya quedó
 guardada.
 
@@ -150,7 +152,9 @@ la app no lo ejecuta, y la 2.4 dejó de prometerlo.
 
 ## Firmas anteriores
 
-**Las firmas de versiones anteriores, incluida la 2.6, necesitan que la paciente firme la 2.7**. La 2.6 decía
+**Las firmas de versiones anteriores, incluidas la 2.7 y la 2.6, necesitan que la paciente firme la 2.8**. La 2.7
+decía que el borrado en AssemblyAI se reintentaba solo si la transcripción se completaba: hoy se reintenta aunque
+el proceso que transcribe se corte a mitad de camino. La 2.6 decía
 que cada trozo se cifraba en el teléfono con una clave de la sesión, que esa clave se destruía al aprobar, que
 los respaldos podían conservarla y que la transcripción no se podía ver: la app no cifra el audio, aprobar
 programa su borrado y la transcripción se ve en su vista. La 2.5 decía

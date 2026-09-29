@@ -60,15 +60,18 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 - **AssemblyAI** recibe audio y vocabulario, que puede incluir nombres propios.
   **Anthropic** recibe la transcripción y el Recorrido para redactar, y propone
   los cambios del Recorrido. A AssemblyAI se le pide borrar apenas termina la
-  transcripción y, si se completó, se reintenta durante unos 15 días.
+  transcripción, y se reintenta durante unos 15 días aunque el proceso que
+  transcribe se corte a mitad de camino.
 - Los respaldos diarios se conservan **30 días** y hay además una copia mensual
   que se conserva **hasta 12 meses**. No contienen audio.
 - Para transcribirlo, el servidor tiene el audio solo en memoria: no lo escribe
   en ningún archivo.
 - El PDF del Recorrido que exportás sale **sin cifrar** y queda bajo tu cuidado.
-- La autorización vigente es la **2.7**. Las firmas anteriores necesitan que la
-  paciente firme la nueva: la 2.6 describía un cifrado del audio que la app ya
-  no hace. Ver `12-camino-del-audio-y-privacidad.md`.
+- La autorización vigente es la **2.8**. Las firmas anteriores necesitan que la
+  paciente firme la nueva: la 2.7 decía que el borrado en AssemblyAI se
+  reintentaba solo si la transcripción se completaba, y la 2.6 describía un
+  cifrado del audio que la app ya no hace. Ver
+  `12-camino-del-audio-y-privacidad.md`.
 - Ver el alcance y la configuración de proveedores en
   `12-camino-del-audio-y-privacidad.md`.
 
