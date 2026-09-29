@@ -260,14 +260,3 @@ export function lecturaIntervenciones(
     tono: "neutral",
   };
 }
-
-// ============================================
-// Ratio de habla
-// ============================================
-/** Slot preparado con el mismo patrón que el resto de las lecturas. El dato
- *  del ratio está bajo diagnóstico (hoy el gráfico renderiza un 100/0 falso
- *  por doble escalado del porcentaje); hasta que el dato sea confiable esta
- *  función devuelve null y la card no muestra lectura. */
-export function lecturaRatioHabla(): Lectura | null {
-  return null;
-}

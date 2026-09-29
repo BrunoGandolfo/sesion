@@ -9,7 +9,7 @@
 // mismo mes que el servidor usa para la deuda. Hasta que llega la primera
 // respuesta se usa el reloj, en hora de Montevideo.
 
-import { partesMvd } from "@/lib/fechas-montevideo";
+import { mesIsoMvd } from "@/lib/fechas-montevideo";
 import { MESES, MESES_CORTOS } from "@/lib/glosario";
 
 export type Periodo =
@@ -22,10 +22,7 @@ export type Periodo =
 export const PERIODO_INICIAL: Periodo = { tipo: "doce" };
 
 /** "AAAA-MM" del instante dado, en hora de Montevideo. */
-export function mesDeHoy(ahora: Date): string {
-  const { anio, mes } = partesMvd(ahora);
-  return `${anio}-${String(mes + 1).padStart(2, "0")}`;
-}
+export const mesDeHoy = mesIsoMvd;
 
 function anioDe(clave: string): number {
   return Number(clave.slice(0, 4));

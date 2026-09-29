@@ -11,8 +11,9 @@ import { fechaCompleta } from "@/lib/format";
 // misma, o el back del navegador, vuelven a lo que estaba mirando. La carga
 // se dispara por el período, no por un botón.
 //
-// El ratio de habla no se muestra: el dato está bajo diagnóstico y hasta que
-// sea confiable no se grafica (ver progreso-lecturas.ts, lecturaRatioHabla).
+// El ratio de habla no se muestra: el dato está bajo diagnóstico (el gráfico
+// dibujaba un 100/0 falso por doble escalado del porcentaje) y hasta que sea
+// confiable no se grafica.
 
 import * as React from "react";
 import Link from "next/link";

@@ -45,6 +45,7 @@ import {
   PARA_REVISAR,
   PREPARAR_SESION,
   VER_FICHA,
+  MODALIDAD_LABEL,
 } from "@/lib/glosario";
 import type { EstadoProcesamiento, TurnoConPaciente } from "@/types/domain";
 
@@ -152,7 +153,7 @@ interface CardAhoraProps {
   enCurso: boolean;
   /** El turno está en pendientes.sinAutorizacion. */
   sinAutorizacion: boolean;
-  /** El turno está en pendientes.sinCobrar. */
+  /** El turno se puede cobrar (sePuedeCobrar, en repartirElDia). */
   sinCobrar: boolean;
   /** Abre el sheet de cobrar de la pantalla de Hoy. */
   onCobrar: () => void;
@@ -218,7 +219,7 @@ export function CardAhora({
             </h2>
             <p className="mt-1 flex flex-wrap items-center gap-1.5 font-sans tabular-nums text-[13px] text-ink-500">
               <ModalityIcon size={14} strokeWidth={1.8} aria-hidden="true" />
-              {turno.modalidad === "online" ? "Online" : "Presencial"} ·{" "}
+              {MODALIDAD_LABEL[turno.modalidad]} ·{" "}
               {turno.duracion}′ · {money(turno.tarifaCobrada)}
             </p>
           </div>

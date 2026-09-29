@@ -14,6 +14,18 @@ vi.mock("@/lib/api-client", async (original) => ({
   apiGet,
 }));
 
+// Lo que contesta el servidor a un pedido de un mes: el período es ese mes
+// y la comparación, el anterior.
+const SEPTIEMBRE = {
+  ...RESPUESTA_EJEMPLO,
+  desde: "2026-09",
+  hasta: "2026-09",
+  comparaciones: {
+    ...RESPUESTA_EJEMPLO.comparaciones,
+    periodoAnterior: { ...RESPUESTA_EJEMPLO.comparaciones.periodoAnterior!, desde: "2026-08", hasta: "2026-08" },
+  },
+};
+
 beforeEach(() => {
   apiGet.mockReset();
   // Sólo el reloj: las esperas de findBy siguen con timers de verdad.
@@ -25,7 +37,7 @@ afterEach(() => {
 });
 
 it("pide el mes de hoy y muestra lo cobrado y la variación contra el mes pasado", async () => {
-  apiGet.mockResolvedValue(RESPUESTA_EJEMPLO);
+  apiGet.mockResolvedValue(SEPTIEMBRE);
   render(<TarjetaFinanzas />);
   const tarjeta = screen.getByRole("link", { name: /Finanzas del consultorio/ });
   expect(tarjeta.getAttribute("href")).toBe("/finanzas");
@@ -36,7 +48,7 @@ it("pide el mes de hoy y muestra lo cobrado y la variación contra el mes pasado
 
 it("sin mes anterior con datos dice que no hay con qué comparar", async () => {
   apiGet.mockResolvedValue({
-    ...RESPUESTA_EJEMPLO,
+    ...SEPTIEMBRE,
     comparaciones: { periodoAnterior: null, mismoPeriodoAnioAnterior: null },
   });
   render(<TarjetaFinanzas />);
@@ -55,4 +67,14 @@ it.each([
   await Promise.resolve();
   expect(tarjeta.textContent).toContain(FINANZAS_TARJETA_SIN_DATO);
   expect(tarjeta.textContent).not.toContain("$");
+});
+
+it("los meses que nombra son los de la respuesta, no los del reloj del teléfono", async () => {
+  // El teléfono cree que es octubre; el servidor contestó septiembre.
+  vi.setSystemTime(new Date("2026-10-02T15:00:00Z"));
+  apiGet.mockResolvedValue(SEPTIEMBRE);
+  render(<TarjetaFinanzas />);
+  const tarjeta = screen.getByRole("link", { name: /Finanzas del consultorio/ });
+  await waitFor(() => expect(tarjeta.textContent).toContain("Cobraste en septiembre"));
+  expect(tarjeta.textContent).toContain("contra agosto");
 });

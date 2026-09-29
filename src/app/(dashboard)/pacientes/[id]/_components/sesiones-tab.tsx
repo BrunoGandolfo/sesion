@@ -56,6 +56,10 @@ import {
   SESION_DE_HOY,
   VER_NOTA,
   pluralizar,
+  REINTENTAR,
+  COBRAR,
+  CARGANDO,
+  MODALIDAD_LABEL,
 } from "@/lib/glosario";
 import type {
   DatosEstructurados,
@@ -384,13 +388,13 @@ export function SesionesTab({
               {listaActual.error}
             </p>
             <Button variant="ghost" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
-              Reintentar
+              {REINTENTAR}
             </Button>
           </div>
         ) : null}
 
         {listaActual.loading && listaActual.docs.length === 0 ? (
-          <p className="font-sans text-[13px] text-ink-500">Cargando…</p>
+          <p className="font-sans text-[13px] text-ink-500">{CARGANDO}</p>
         ) : null}
 
         {!listaActual.loading && grupos.length === 0 && !listaActual.error ? (
@@ -430,7 +434,7 @@ export function SesionesTab({
               onClick={() => void cargarMas()}
               disabled={listaActual.loading}
             >
-              {listaActual.loading ? "Cargando…" : "Cargar más"}
+              {listaActual.loading ? CARGANDO : "Cargar más"}
             </Button>
           </div>
         ) : null}
@@ -475,7 +479,7 @@ function MarcaDeHoy() {
 }
 
 function modalidadTexto(modalidad: Modalidad): string {
-  return modalidad === "online" ? "Online" : "Presencial";
+  return MODALIDAD_LABEL[modalidad];
 }
 
 /** Un mes de la lista. El más reciente arranca abierto; los anteriores,
@@ -563,7 +567,7 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
 
   let accion: React.ReactNode;
   if (cargando) {
-    accion = <p className="font-sans text-[13px] text-ink-500">Cargando…</p>;
+    accion = <p className="font-sans text-[13px] text-ink-500">{CARGANDO}</p>;
   } else if (!sesion || puede("empezar_subida", sesion.estado) || sinTerminar) {
     accion = (
       <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
@@ -583,7 +587,7 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
   } else if (sesion.estado === "aprobada") {
     accion = sePuedeCobrar(turno, new Date()) ? (
       <Button variant="primary" onClick={hoy.onCobrar}>
-        Cobrar
+        {COBRAR}
       </Button>
     ) : (
       <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
@@ -700,7 +704,7 @@ function FilaSesion({ sesion, hoy }: { sesion: DocSesion; hoy: Hoy | null }) {
         )}
         {hoy && !esRevision && cobrable ? (
           <Button variant="primary" size="sm" className="relative" onClick={hoy.onCobrar}>
-            Cobrar
+            {COBRAR}
           </Button>
         ) : null}
         {conParaVos ? (

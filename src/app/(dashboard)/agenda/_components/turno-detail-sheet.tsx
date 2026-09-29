@@ -34,7 +34,12 @@ import {
   esAbort,
 } from "@/lib/api-client";
 import { fechaCorta, fechaLarga, hora, money } from "@/lib/format";
-import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR_SERIE_ACCION, SERIE_CANCELADA,
+import {
+  CANCELAR_SERIE,
+  CANCELAR_SERIE_TITULO,
+  CANCELAR_SERIE_MENSAJE,
+  CANCELAR_SERIE_ACCION,
+  SERIE_CANCELADA,
   AGENDADO,
   ALGO_FALLO,
   CANCELADO,
@@ -53,6 +58,10 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
   GRABACION_SIN_TERMINAR,
   RECORDATORIO,
   RECORDATORIO_ESTADO,
+  VOLVER,
+  COBRAR,
+  CARGANDO,
+  MODALIDAD_LABEL,
 } from "@/lib/glosario";
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
@@ -211,7 +220,7 @@ export function TurnoDetailSheet({
   if (!turno) {
     return (
       <Sheet open={open} onClose={onClose} ariaLabel="Detalle del turno">
-        <p className="py-10 text-center text-[14px] text-ink-500">Cargando…</p>
+        <p className="py-10 text-center text-[14px] text-ink-500">{CARGANDO}</p>
       </Sheet>
     );
   }
@@ -358,7 +367,7 @@ export function TurnoDetailSheet({
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[color:var(--border-subtle)] pt-4">
               <Dato etiqueta="Duración">{turno.duracion} min</Dato>
               <Dato etiqueta="Modalidad">
-                {turno.modalidad === "online" ? "Online" : "Presencial"}
+                {MODALIDAD_LABEL[turno.modalidad]}
               </Dato>
               <Dato etiqueta="Tarifa">
                 <span className="tabular-nums">{money(turno.tarifaCobrada)}</span>
@@ -430,7 +439,7 @@ export function TurnoDetailSheet({
                     }}
                     disabled={enviando}
                   >
-                    Cobrar
+                    {COBRAR}
                   </Button>
                 ) : null}
 
@@ -565,7 +574,7 @@ export function TurnoDetailSheet({
             titulo="¿Cancelar este turno?"
             mensaje="Se cancela el recordatorio por SMS. El turno queda en la ficha como cancelado y no se puede reabrir."
             accion="Cancelar el turno"
-            cancelar="Volver"
+            cancelar={VOLVER}
             variante="peligro"
             enviando={enviando}
             enviandoLabel="Cancelando…"
@@ -581,7 +590,7 @@ export function TurnoDetailSheet({
             titulo={CANCELAR_SERIE_TITULO}
             mensaje={CANCELAR_SERIE_MENSAJE}
             accion={CANCELAR_SERIE_ACCION}
-            cancelar="Volver"
+            cancelar={VOLVER}
             variante="peligro"
             enviando={enviando}
             enviandoLabel="Cancelando…"
@@ -595,7 +604,7 @@ export function TurnoDetailSheet({
             titulo={DESHACER_COBRO_TITULO}
             mensaje={DESHACER_COBRO_MENSAJE}
             accion={DESHACER_COBRO_ACCION}
-            cancelar="Volver"
+            cancelar={VOLVER}
             enviando={enviando}
             enviandoLabel={DESHACIENDO_COBRO}
             onConfirmar={() => void deshacer()}
@@ -617,7 +626,7 @@ export function TurnoDetailSheet({
                 onClick={() => setModo("ver")}
                 disabled={enviando}
               >
-                Volver
+                {VOLVER}
               </Button>
               <Button type="submit" disabled={enviando}>
                 {enviando ? "Guardando…" : "Guardar"}

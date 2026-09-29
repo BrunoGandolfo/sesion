@@ -104,12 +104,6 @@ export type ProgresoResponse = {
 // poder dibujar una línea; el eje se rotula con los nombres, no con números.
 // ────────────────────────────────────────────────────────────────────────────
 
-export const NOMBRE_ALIANZA: Record<AlianzaTerapeutica, string> = {
-  fragil: "Frágil",
-  inestable: "Inestable",
-  estable: "Estable",
-  fuerte: "Fuerte",
-};
 
 const ORDEN_ALIANZA: Record<AlianzaTerapeutica, number> = {
   fragil: 1,

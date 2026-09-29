@@ -22,13 +22,32 @@ import { salir } from "@/lib/sesion-cliente";
 import { GuardadoCampo, type EstadoCampo } from "@/components/ui/guardado-campo";
 import { Button, Card, Input } from "@/components/ui";
 import { ApiClientError, apiGet, apiPatch, apiPost, esAbort } from "@/lib/api-client";
-import { otrasSesionesCerradas, PASSWORD_AVISO_CIERRE, OTRAS_SESIONES_BOTON, OTRAS_SESIONES_DESCRIPCION, OTRAS_SESIONES_CERRANDO, ALGO_FALLO, CONFIG_SIN_GUARDAR_SALIDA, CTSR, GTFS, MITI, TU_CONSULTORIO } from "@/lib/glosario";
+import {
+  RECORDATORIO_MISMA_MANANA_EXCEPCION,
+  RECORDATORIO_MOMENTOS,
+  otrasSesionesCerradas,
+  PASSWORD_AVISO_CIERRE,
+  OTRAS_SESIONES_BOTON,
+  OTRAS_SESIONES_DESCRIPCION,
+  OTRAS_SESIONES_CERRANDO,
+  ALGO_FALLO,
+  CONFIG_SIN_GUARDAR_SALIDA,
+  CTSR,
+  GTFS,
+  MITI,
+  TU_CONSULTORIO,
+  REINTENTAR,
+  CARGANDO,
+} from "@/lib/glosario";
 import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
 import {
+  DISPERSION_MINUTOS,
   RECORDATORIO_MODOS,
   RECORDATORIO_MODO_DEFAULT,
+  calcularProgramadoEn,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
+import { formatearHoraMvd, instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import { prepararPlantillaRecordatorio, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms/texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
@@ -394,7 +413,7 @@ export function ConfigView() {
   if (cargando) {
     return (
       <Marco>
-        <p className="py-16 text-center text-[14px] text-ink-500">Cargando…</p>
+        <p className="py-16 text-center text-[14px] text-ink-500">{CARGANDO}</p>
       </Marco>
     );
   }
@@ -411,7 +430,7 @@ export function ConfigView() {
               size="sm"
               onClick={reintentarCarga}
             >
-              Reintentar
+              {REINTENTAR}
             </Button>
           </div>
         </Card>
@@ -847,7 +866,7 @@ function IndicadorGuardado({
             Hay cambios sin guardar. Revisá los datos y reintentá.
           </span>
           <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
-            Reintentar
+            {REINTENTAR}
           </Button>
         </div>
       ) : null}
@@ -925,30 +944,28 @@ function SelectorEnfoque({
 }
 
 // ─── Cuándo se avisa ────────────────────────────────────────────────────────
-// Tres momentos, dichos como los diría ella, y los tres disponibles. Ya no se
-// guarda un número de horas: se guarda el momento (recordatorioModo) y la
-// hora exacta la calcula calcularProgramadoEn, una sola vez para toda la app.
+// Tres momentos, dichos como los diría ella. Ya no se guarda un número de
+// horas: se guarda el momento (recordatorioModo) y la hora exacta la calcula
+// calcularProgramadoEn, una sola vez para toda la app.
 //
-// El detalle de cada opción dice la hora real a la que sale el mensaje, no
-// una aproximación: es lo que la paciente va a ver en el teléfono.
+// La hora que se muestra sale de esa misma cuenta, con un turno de ejemplo
+// al mediodía, y el margen de DISPERSION_MINUTOS: los avisos del día se
+// reparten unos minutos. Antes decía "A las 20:00" escrito a mano (forense
+// 03, P3-14).
 
-const MOMENTOS: Record<
-  RecordatorioModo,
-  { label: string; detalle: string }
-> = {
-  dia_anterior: {
-    label: "El día anterior",
-    detalle: "A las 20:00 del día antes",
-  },
-  dos_dias_antes: {
-    label: "Dos días antes",
-    detalle: "A las 20:00 de dos días antes",
-  },
-  misma_manana: {
-    label: "La misma mañana",
-    detalle: "A las 8:00 del día del turno",
-  },
-};
+function ventanaDe(modo: RecordatorioModo): { desde: string; hasta: string; limite: string } {
+  const mediodia = instanteDesdeFechaHoraMvd("2026-01-15", "12:00");
+  const desde = calcularProgramadoEn(mediodia, modo);
+  const minuto = 60_000;
+  const hasta = new Date(desde.getTime() + (DISPERSION_MINUTOS - 1) * minuto);
+  // El primer minuto en que un turno ya siempre llega a su aviso del día.
+  const limite = new Date(desde.getTime() + DISPERSION_MINUTOS * minuto);
+  return {
+    desde: formatearHoraMvd(desde),
+    hasta: formatearHoraMvd(hasta),
+    limite: formatearHoraMvd(limite),
+  };
+}
 
 function CuandoAvisar({
   value,
@@ -966,7 +983,8 @@ function CuandoAvisar({
       </legend>
       <div className="flex flex-col gap-2 sm:flex-row">
         {RECORDATORIO_MODOS.map((modo) => {
-          const opcion = MOMENTOS[modo];
+          const opcion = RECORDATORIO_MOMENTOS[modo];
+          const { desde, hasta } = ventanaDe(modo);
           const activo = modo === value;
           return (
             <label
@@ -990,7 +1008,7 @@ function CuandoAvisar({
                   {opcion.label}
                 </span>
                 <span className="text-[12px] leading-[1.4] text-ink-500">
-                  {opcion.detalle}
+                  {opcion.detalle(desde, hasta)}
                 </span>
               </span>
             </label>
@@ -999,8 +1017,11 @@ function CuandoAvisar({
       </div>
       {value === "misma_manana" ? (
         <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
-          Si el turno es antes de las 8:00, el aviso sale la tarde anterior a
-          las 20:00: a esa hora la paciente ya estaría viniendo.
+          {RECORDATORIO_MISMA_MANANA_EXCEPCION(
+            ventanaDe("misma_manana").limite,
+            ventanaDe("dia_anterior").desde,
+            ventanaDe("dia_anterior").hasta,
+          )}
         </p>
       ) : null}
     </fieldset>

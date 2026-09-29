@@ -117,3 +117,17 @@ describe("B: los cambios no se pierden", () => {
     expect(screen.getByText("Hay cambios sin guardar. Revisá los datos y reintentá.")).toBeTruthy();
   });
 });
+
+describe("Cuándo se avisa", () => {
+  it("dice la ventana real de envío, la misma que calcula calcularProgramadoEn", async () => {
+    await abrir();
+    expect(screen.getByText("Entre las 20:00 y las 20:14 del día antes")).toBeTruthy();
+    expect(screen.getByText("Entre las 20:00 y las 20:14 de dos días antes")).toBeTruthy();
+    expect(screen.getByText("Entre las 08:00 y las 08:14 del día del turno")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: /La misma mañana/ }));
+    expect(
+      screen.getByText(/Si el turno es antes de las 08:15, el aviso puede salir la tarde anterior, entre las 20:00 y las 20:14/),
+    ).toBeTruthy();
+  });
+});

@@ -1,7 +1,10 @@
 // Error recuperable de la pantalla de Hoy.
 
 import { Button } from "@/components/ui";
-import { ALGO_FALLO } from "@/lib/glosario";
+import {
+  ALGO_FALLO,
+  REINTENTAR,
+} from "@/lib/glosario";
 
 export function FalloDeCarga({ onReintentar }: { onReintentar: () => void }) {
   return (
@@ -10,7 +13,7 @@ export function FalloDeCarga({ onReintentar }: { onReintentar: () => void }) {
         {ALGO_FALLO}
       </p>
       <Button variant="secondary" size="sm" onClick={onReintentar}>
-        Reintentar
+        {REINTENTAR}
       </Button>
     </div>
   );

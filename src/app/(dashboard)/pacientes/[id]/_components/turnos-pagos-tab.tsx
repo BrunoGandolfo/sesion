@@ -13,7 +13,7 @@ import {
   DURACION_BREVE,
   SUAVE,
 } from "@/components/ui/movimiento";
-import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
+import { sePuedeCobrar } from "@/app/api/_lib/domain";
 import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
 import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { fechaCorta, hora, money } from "@/lib/format";
@@ -30,10 +30,16 @@ import {
   METODO_PAGO_LABEL,
   NO_VINO,
   PENDIENTE,
+  PAGADO,
+  CANCELADO,
+  COBRAR,
+  REALIZADO,
+  SESIONES_SIN_COBRAR_DETALLE,
+  MODALIDAD_LABEL,
   pluralizar,
+  VOLVER,
 } from "@/lib/glosario";
 import type {
-  Modalidad,
   Turno,
   TurnoEstado,
 } from "@/types/domain";
@@ -45,15 +51,10 @@ interface TurnosPagosTabProps {
 }
 
 
-const MODALIDAD_LABEL: Record<Modalidad, string> = {
-  presencial: "Presencial",
-  online: "Online",
-};
-
 const ESTADO_LABEL: Record<TurnoEstado, string> = {
   programado: AGENDADO,
-  realizado: "Realizado",
-  cancelado: "Cancelado",
+  realizado: REALIZADO,
+  cancelado: CANCELADO,
   ausente: NO_VINO,
 };
 
@@ -106,13 +107,13 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
     [localTurnos],
   );
 
-  const sesionesImpagas = React.useMemo(
-    () =>
-      localTurnos.filter(
-        esDeudaPendiente,
-      ),
-    [localTurnos],
-  );
+  // Lo mismo que ofrece el botón Cobrar de cada fila (sePuedeCobrar): antes
+  // el aviso contaba solo los realizados y un turno agendado cuya hora ya
+  // pasó tenía "Cobrar" al lado de un "0 sin cobrar" (forense 03, P3-13).
+  const sesionesImpagas = React.useMemo(() => {
+    const ahora = new Date();
+    return localTurnos.filter((t) => sePuedeCobrar(t, ahora));
+  }, [localTurnos]);
   const deudaTotal = React.useMemo(
     () => sesionesImpagas.reduce((acc, t) => acc + t.tarifaCobrada, 0),
     [sesionesImpagas],
@@ -171,13 +172,9 @@ function DeudaBanner({ monto, cantidad }: { monto: number; cantidad: number }) {
           <span className="font-semibold text-ink-900">
             {pluralizar(cantidad, "sesión sin cobrar", "sesiones sin cobrar")}
           </span>
-          <span className="text-ink-500"> · </span>
-          <span className="tabular-nums text-terracotta-500 font-medium">
-            {money(monto)}
-          </span>
         </p>
         <p className="font-sans text-[12px] text-ink-500">
-          Deuda acumulada por sesiones realizadas y pendientes de cobro.
+          {SESIONES_SIN_COBRAR_DETALLE}
         </p>
       </div>
       <span className="text-[18px] font-medium tabular-nums text-terracotta-500 sm:text-[20px]">
@@ -284,9 +281,9 @@ function TurnoRow({
         <div className="flex flex-col items-start gap-1">
           {mostrarPagado ? (
             <Chip variant="sage" size="sm">
-              Pagado
+              {PAGADO}
             </Chip>
-          ) : turno.estado === "realizado" ? (
+          ) : mostrarCobrar ? (
             <Chip variant="terracotta" size="sm">
               {PENDIENTE}
             </Chip>
@@ -318,7 +315,7 @@ function TurnoRow({
                 whileTap={reducido ? undefined : { scale: 0.96 }}
                 className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-gold-50 px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-gold-500 transition-colors duration-[var(--duration-fast)] hover:bg-gold-50/80 lg:min-h-[36px]"
               >
-                Cobrar
+                {COBRAR}
               </motion.button>
             ) : mostrarPagado && !confirmando ? (
               <motion.button
@@ -345,7 +342,7 @@ function TurnoRow({
             titulo={DESHACER_COBRO_TITULO}
             mensaje={DESHACER_COBRO_MENSAJE}
             accion={DESHACER_COBRO_ACCION}
-            cancelar="Volver"
+            cancelar={VOLVER}
             enviando={deshaciendo}
             enviandoLabel={DESHACIENDO_COBRO}
             onConfirmar={() => void deshacer()}

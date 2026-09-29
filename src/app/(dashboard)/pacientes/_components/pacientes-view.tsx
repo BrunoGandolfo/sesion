@@ -29,6 +29,8 @@ import {
   NUEVO_PACIENTE,
   PACIENTES_VACIO_LINEA,
   PACIENTES_VACIO_TITULO,
+  REINTENTAR,
+  CARGANDO,
 } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda } from "@/types/domain";
 import { NuevoPacienteForm } from "./nuevo-paciente-form";
@@ -287,7 +289,7 @@ export function PacientesView({
             />
           ) : (
             <p className="py-16 text-center text-[14px] text-ink-500">
-              Cargando…
+              {CARGANDO}
             </p>
           )}
       </Sheet>
@@ -317,7 +319,7 @@ function ErrorState({
       <p className="mt-1 text-[13px] text-ink-500">{message}</p>
       <div className="mt-5">
         <Button variant="secondary" onClick={onRetry}>
-          Reintentar
+          {REINTENTAR}
         </Button>
       </div>
     </div>

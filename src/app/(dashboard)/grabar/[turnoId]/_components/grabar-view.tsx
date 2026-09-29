@@ -77,6 +77,8 @@ import {
   TERMINAR_SESION,
   TURNO_NO_MARCADO,
   VOLVER_A_LA_FICHA,
+  REINTENTAR,
+  VOLVER,
 } from "@/lib/glosario";
 
 import { MedidorAudio } from "./medidor-audio";
@@ -423,7 +425,7 @@ export function GrabarView({
           className="mb-6 inline-flex items-center gap-1 self-start text-[13px] text-ink-500 transition-colors duration-150 hover:text-ink-700"
         >
           <ChevronLeft size={16} strokeWidth={1.6} aria-hidden="true" />
-          <span>Volver</span>
+          <span>{VOLVER}</span>
         </Link>
       ) : null}
 
@@ -980,7 +982,7 @@ function PantallaConReintento({
         {mensaje}
       </p>
       <Button className="w-full sm:w-auto" onClick={onReintentar}>
-        Reintentar
+        {REINTENTAR}
       </Button>
     </div>
   );

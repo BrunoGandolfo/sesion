@@ -23,7 +23,12 @@ import {
   agregarMesesMvd,
   esMismoDiaMvd,
 } from "@/lib/fechas-montevideo";
-import { AGENDAR, ALGO_FALLO } from "@/lib/glosario";
+import {
+  AGENDAR,
+  ALGO_FALLO,
+  REINTENTAR,
+  CARGANDO,
+} from "@/lib/glosario";
 import type { TurnoCreado, TurnoConPaciente } from "@/types/domain";
 
 import { AgendaHeader } from "./agenda-header";
@@ -67,7 +72,7 @@ const SIN_NADA_QUE_HACER = () => {};
 /** Un solo copy de carga para toda la agenda. */
 function Cargando() {
   return (
-    <p className="py-16 text-center text-[14px] text-ink-500">Cargando…</p>
+    <p className="py-16 text-center text-[14px] text-ink-500">{CARGANDO}</p>
   );
 }
 
@@ -333,7 +338,7 @@ export function AgendaView() {
                 "Puede ser la conexión.",
                 "Tus turnos no se perdieron.",
               ]}
-              accion={{ label: "Reintentar", onClick: retryTurnos }}
+              accion={{ label: REINTENTAR, onClick: retryTurnos }}
             />
           ) : turnos !== null ? (
             view === "día" ? (

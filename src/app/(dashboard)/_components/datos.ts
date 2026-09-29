@@ -35,9 +35,8 @@ export type JsonDashboard = Omit<
 > & {
   sesionesHoy: TurnoJson<TurnoConPaciente>[];
   proximaSesion: TurnoJson<TurnoConPaciente> | null;
-  /** La señal de riesgo de las sesiones del día (ver /api/dashboard). Puede
-   *  no venir si la respuesta es de una versión anterior de la ruta. */
-  riesgoDelDia?: SenalRiesgoDelDia[];
+  /** La señal de riesgo de las sesiones del día (ver /api/dashboard). */
+  riesgoDelDia: SenalRiesgoDelDia[];
 };
 
 export interface EstadoHoy {
@@ -142,10 +141,8 @@ function empezoSinCobrar(
  * alcanza con que Lupita no esté en la pantalla del riesgo: tiene que no
  * estar en el camino de esa sesión.
  */
-export function hayRiesgoEnElDia(
-  senales: SenalRiesgoDelDia[] | undefined,
-): boolean {
-  return (senales ?? []).some(
+export function hayRiesgoEnElDia(senales: SenalRiesgoDelDia[]): boolean {
+  return senales.some(
     (senal) =>
       clavesDeRiesgo(senal.riesgoDetectado, senal.flagsRiesgo).length > 0,
   );

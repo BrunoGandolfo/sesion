@@ -1,8 +1,8 @@
 "use client";
 
 // Cobros: lo que entró este mes y lo que todavía te deben, en una sola
-// pantalla. Reúne lo que antes vivía en /finanzas (KPIs + cobros del mes) y
-// en /deudores (la lista con "Recordar cobro").
+// pantalla, con la entrada a Finanzas arriba de la lista. /deudores
+// redirige acá.
 //
 // No se calcula "trabajaste N horas gratis": la deuda se cuenta en sesiones,
 // que es como ella la piensa.
@@ -12,7 +12,8 @@
 // su ficha para anotarlo. El cobro sigue siendo por turno (POST
 // /api/turnos/[id]/cobrar): la fila trae la deuda sumada, sin ids, así que
 // al abrir el panel se lee el detalle de esa paciente y ella marca qué
-// sesiones le pagó. El método se elige con el mismo sheet que usa Hoy.
+// sesiones le pagó. El método se elige con el mismo selector que usan Hoy,
+// la Agenda y la ficha.
 //
 // El recordatorio de cobro es la acción secundaria. Sale por SMS desde acá, y lo aprieta ella: antes
 // abría el teléfono con el texto cargado y la app no se enteraba de nada
@@ -50,7 +51,7 @@ import {
   zonaDeuda,
   type ZonaDeuda,
 } from "@/lib/deudas";
-import { diasEnterosMvd, partesMvd } from "@/lib/fechas-montevideo";
+import { diasEnterosMvd, formatearMesMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaCorta, fechaLarga, money } from "@/lib/format";
 import {
   ALGO_FALLO,
@@ -108,7 +109,6 @@ import { TarjetaFinanzas } from "./tarjeta-finanzas";
 
 type DeudorItem = DeudaPaciente & {
   telefono: string;
-  minutosTotales: number;
   /** ISO del último aviso que salió; null si nunca se le avisó. */
   ultimoAvisoEn: string | null;
 };
@@ -179,7 +179,7 @@ export function CobrosView() {
     <SegunLectura
       carga={carga}
       datos={datos && ahora ? { ...datos, ahora } : null}
-      // La segunda espera: la ruta ya llegó y falta /api/cobros. El cuerpo
+      // La segunda espera: la ruta ya llegó y faltan sus datos. El cuerpo
       // es el mismo que dibujó el loading.tsx de esta carpeta, y el Marco
       // acá ya es el de verdad.
       esqueleto={
@@ -319,9 +319,7 @@ function Marco({
   ocupado?: boolean;
   children: React.ReactNode;
 }) {
-  const mesLargo = ahora
-    ? capitalize(fechaLarga(ahora).split(" de ").at(-1) ?? "")
-    : "";
+  const mesLargo = ahora ? capitalize(formatearMesMvd(ahora)) : "";
   const anio = ahora ? partesMvd(ahora).anio : "";
 
   return (

@@ -300,6 +300,35 @@ export const COBRO_DESHECHO = "Cobro deshecho";
 
 export const RECORDATORIO = "Recordatorio";
 
+/** Cuándo se avisa, en Configuración. La hora la pone la pantalla, sacada de
+ *  calcularProgramadoEn (recordatorios-programacion.ts): el aviso sale entre
+ *  `desde` y `hasta` porque los del día se reparten unos minutos. */
+export const RECORDATORIO_MOMENTOS = {
+  dia_anterior: {
+    label: "El día anterior",
+    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} del día antes`,
+  },
+  dos_dias_antes: {
+    label: "Dos días antes",
+    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} de dos días antes`,
+  },
+  misma_manana: {
+    label: "La misma mañana",
+    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} del día del turno`,
+  },
+} as const;
+
+/** La excepción de "La misma mañana": si el aviso de la mañana no llegaría
+ *  antes del turno, sale la tarde anterior. `limite` es el primer minuto en
+ *  que eso ya no puede pasar. */
+export function RECORDATORIO_MISMA_MANANA_EXCEPCION(
+  limite: string,
+  tardeDesde: string,
+  tardeHasta: string,
+): string {
+  return `Si el turno es antes de las ${limite}, el aviso puede salir la tarde anterior, entre las ${tardeDesde} y las ${tardeHasta}: a la mañana no llegaría antes del turno.`;
+}
+
 /** Cómo se dice cada estado del recordatorio en la pantalla del turno.
  *  "enviando" es la reserva interna del cron: para ella es "saliendo". */
 export const RECORDATORIO_ESTADO: Readonly<Record<string, string>> = {
@@ -466,6 +495,16 @@ export const AL_COBRAR_QUEDA_REALIZADO = "Al cobrar, el turno queda como realiza
 export const PAGADO = "Pagado";
 export const PENDIENTE = "Sin cobrar";
 export const CANCELADO = "Cancelado";
+export const REALIZADO = "Realizado";
+/** Cómo se dice la modalidad de un turno, en todas las pantallas. */
+export const MODALIDAD_LABEL: Readonly<Record<"presencial" | "online", string>> = {
+  presencial: "Presencial",
+  online: "Online",
+};
+/** El aviso de la ficha sobre lo que ya pasó y no se cobró: cuenta lo mismo
+ *  que ofrece el botón Cobrar (sePuedeCobrar), también un turno agendado
+ *  cuya hora ya pasó. */
+export const SESIONES_SIN_COBRAR_DETALLE = "Sesiones que ya pasaron y todavía no se cobraron.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Estado clínico del turno, separado del pago
