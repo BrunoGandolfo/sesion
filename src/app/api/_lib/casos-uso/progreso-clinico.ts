@@ -22,10 +22,8 @@
 // base ni conoce Request/Response, así que se testea sin DB.
 
 import { instanteMvd, partesMvd } from "@/lib/fechas-montevideo";
-import {
-  flagRiesgoSchema,
-  type DatosEstructurados,
-} from "@/lib/sesion-clinica/schema";
+import { flagsActivos } from "@/lib/sesion-clinica/normalizar";
+import type { DatosEstructurados } from "@/lib/sesion-clinica/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Rango
@@ -303,8 +301,7 @@ function armarRiesgos(sesiones: SesionCruda[]): RiesgoProgreso[] {
     const cita = riesgo?.evidencia?.[0]?.quote ?? flags.detalle ?? null;
     const fecha = sesion.fecha.toISOString();
 
-    for (const flag of flagRiesgoSchema.options) {
-      if (flags[flag as keyof typeof flags] !== true) continue;
+    for (const flag of flagsActivos(flags)) {
       riesgos.push({
         sesionId: sesion.sesionId,
         fecha,

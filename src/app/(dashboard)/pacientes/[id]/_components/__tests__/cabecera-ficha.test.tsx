@@ -35,10 +35,9 @@ function montar() {
     <CabeceraFicha
       paciente={PACIENTE}
       proximoTurno={null}
-      // true: el aviso de autorización no se monta y no sale a pedir nada.
-      consentimientoVigente
+      // Vigente: el aviso de autorización no se dibuja (la lectura la hace la ficha).
+      consentimiento={{ tipo: "vigente", consentimiento: { id: "c1", pacienteId: "p1", firmadoEn: "2026-09-05T15:00:00.000Z", textoVersion: "2.8", vigente: true } }}
       config={null}
-      reloadKey={0}
       hrefGrabar="/grabar/nuevo?pacienteId=p1"
       onEditar={() => {}}
       onConsentimientoCambio={() => {}}

@@ -67,12 +67,11 @@ export interface UltimaSesionCorta {
   riesgo: RiesgoCorto;
   /** Fallback del resumen cuando la nota no lo trae. */
   temas?: string[];
-  /** La última nota todavía no se aprobó: lo de arriba puede cambiar. */
-  pendienteAprobacion?: boolean;
 }
 
-/** true cuando hay algo que avisar: nivel graduado o flag activo. */
-function hayRiesgo(riesgo: RiesgoCorto | undefined | null): boolean {
+/** true cuando hay algo que avisar: nivel graduado o flag activo. Lo usa
+ *  también el brief completo (brief-pre-sesion.tsx). */
+export function hayRiesgo(riesgo: RiesgoCorto | undefined | null): boolean {
   return (
     !!riesgo && (riesgo.nivel !== "ninguno" || riesgo.flagsActivos.length > 0)
   );
@@ -82,9 +81,9 @@ function hayRiesgo(riesgo: RiesgoCorto | undefined | null): boolean {
  * Texto de la señal: los flags activos si los hay, si no los indicadores,
  * y entre paréntesis el nivel cuando está graduado. Sin flags ni indicadores
  * de la última sesión cae en los registros históricos, que es lo que muestra
- * el sheet del turno.
+ * el sheet del turno. El brief completo la usa con 0 registros históricos.
  */
-function textoRiesgo(
+export function textoRiesgo(
   riesgo: RiesgoCorto | undefined | null,
   registrosHistoricos = 0,
 ): string | null {
@@ -113,9 +112,6 @@ interface BriefCortoProps {
   ultimaSesion: UltimaSesionCorta | null;
   /** Señales de riesgo de sesiones anteriores (hiloLongitudinal). */
   riesgosHistoricos?: number;
-  /** Agrega la advertencia de que la última nota todavía no se aprobó. La
-   *  card AHORA no la muestra: ahí el brief son dos líneas y nada más. */
-  avisarNotaSinAprobar?: boolean;
   /** Con él, "Preparar sesión" enlaza a la ficha en modo preparación
    *  (/pacientes/[id]?preparar=1). Sin él no hay a dónde ir y no se ofrece. */
   pacienteId?: string;
@@ -154,7 +150,6 @@ function useRecortado(ref: React.RefObject<HTMLElement | null>, texto: string | 
 export function BriefCorto({
   ultimaSesion,
   riesgosHistoricos = 0,
-  avisarNotaSinAprobar = false,
   pacienteId,
   notaPendiente = false,
   propuestaPendiente = false,
@@ -215,12 +210,6 @@ export function BriefCorto({
         <p ref={focoRef} className="line-clamp-2 font-sans text-[13px] leading-[1.5] text-ink-700">
           <span className="text-ink-500">{PARA_LA_PROXIMA}:</span>{" "}
           {ultimaSesion.focoProximaSesion}
-        </p>
-      ) : null}
-
-      {avisarNotaSinAprobar && ultimaSesion?.pendienteAprobacion ? (
-        <p className="font-sans text-[12px] leading-[1.5] text-gold-500">
-          La última nota todavía no está aprobada: esto puede cambiar.
         </p>
       ) : null}
 
@@ -327,7 +316,6 @@ export function BriefCortoDePaciente({ pacienteId }: { pacienteId: string }) {
           className="mt-2"
           ultimaSesion={ultimaSesion}
           riesgosHistoricos={riesgosHistoricos}
-          avisarNotaSinAprobar
           pacienteId={pacienteId}
           notaPendiente={notaPendiente}
           propuestaPendiente={propuestaPendiente}

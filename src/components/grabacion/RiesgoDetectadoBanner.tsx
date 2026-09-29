@@ -9,9 +9,14 @@ import {
   SENAL_DE_RIESGO,
 } from "@/lib/glosario";
 import { NOMBRE_FLAG } from "@/lib/etiquetas";
-import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
-import type { FlagRiesgo } from "@/lib/sesion-clinica/schema";
+import {
+  CLAVE_RIESGO_GRADUADO,
+  confirmacionesParaAprobar,
+} from "@/lib/sesion-clinica/aprobacion";
+import { flagsActivos, normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
 import type { FlagsRiesgo, NivelRiesgo } from "@/types/domain";
+
+export { CLAVE_RIESGO_GRADUADO };
 
 // UN solo bloque de riesgo por nota.
 //
@@ -23,8 +28,9 @@ import type { FlagsRiesgo, NivelRiesgo } from "@/types/domain";
 //
 // El contrato de riesgo clínico no cambia: la señal acompaña el juicio
 // clínico, no lo reemplaza, y la casilla por señal es obligatoria antes de
-// aprobar (la exige quien renderiza la barra de acciones, con
-// clavesDeRiesgo).
+// aprobar. Qué casillas hay lo decide confirmacionesParaAprobar
+// (lib/sesion-clinica/aprobacion.ts), la MISMA regla con que el servidor
+// rechaza una aprobación sin confirmar.
 //
 // SIN MOVIMIENTO, Y ES A PROPÓSITO
 //
@@ -42,44 +48,26 @@ import type { FlagsRiesgo, NivelRiesgo } from "@/types/domain";
 // rompe la única regla de movimiento sin excepción: la señal de riesgo no se
 // anticipa ni se anima.
 
-/** Clave de la casilla de la señal graduada (riesgoDetectado). Las demás
- *  claves son las de FlagsRiesgo, que ya son únicas. */
-export const CLAVE_RIESGO_GRADUADO = "riesgoGraduado";
-
-const FLAGS_EN_ORDEN: readonly FlagRiesgo[] = [
-  "ideacionSuicida",
-  "autolesion",
-  "violenciaTerceros",
-  "sintomasPsicoticos",
-  "crisisPanico",
-];
-
 const NOMBRE_NIVEL: Record<Exclude<NivelRiesgo, "ninguno">, string> = {
   bajo: "nivel bajo",
   moderado: "nivel moderado",
   alto: "nivel alto",
 };
 
-function flagsActivos(flags: FlagsRiesgo | null | undefined): FlagRiesgo[] {
-  if (!flags) return [];
-  return FLAGS_EN_ORDEN.filter((clave) => flags[clave]);
-}
-
 /**
- * Claves de las casillas que hay que marcar antes de aprobar: una por flag
- * activo, más la de la señal graduada si el nivel no es "ninguno". Es la
- * misma cuenta que hace el banner al dibujarlas, expuesta para que quien
- * habilita "Aprobar nota" no la vuelva a escribir.
+ * Claves de las casillas de riesgo del banner: una por flag activo, más la
+ * de la señal graduada si el nivel no es "ninguno". Sale de
+ * confirmacionesParaAprobar; la usa también Hoy para saber si hubo señal.
  */
 export function clavesDeRiesgo(
   riesgoDetectado: unknown,
   flagsRiesgo?: FlagsRiesgo | null,
 ): string[] {
-  const claves: string[] = flagsActivos(flagsRiesgo);
-  if (normalizarRiesgo(riesgoDetectado).nivel !== "ninguno") {
-    claves.push(CLAVE_RIESGO_GRADUADO);
-  }
-  return claves;
+  const { flags, riesgoGraduado } = confirmacionesParaAprobar({
+    riesgoDetectado: riesgoDetectado as never,
+    flagsRiesgo: flagsRiesgo ?? undefined,
+  });
+  return [...flags, ...(riesgoGraduado ? [CLAVE_RIESGO_GRADUADO] : [])];
 }
 
 interface RiesgoDetectadoBannerProps {
@@ -119,6 +107,10 @@ export function RiesgoDetectadoBanner({
   const nota = notaParaTerapeuta?.trim();
   const detalleFlags = flagsRiesgo?.detalle?.trim();
   const conCasillas = editable && onRevisar !== undefined;
+  const exigidas = confirmacionesParaAprobar({
+    riesgoDetectado: riesgoDetectado as never,
+    flagsRiesgo: flagsRiesgo ?? undefined,
+  });
 
   const titulo =
     nivel === "ninguno"
@@ -226,8 +218,8 @@ export function RiesgoDetectadoBanner({
 
           {conCasillas && (
             <div className="flex flex-col gap-2">
-              {flags.map((clave) => casilla(clave, NOMBRE_FLAG[clave]))}
-              {nivel !== "ninguno"
+              {exigidas.flags.map((clave) => casilla(clave, NOMBRE_FLAG[clave]))}
+              {exigidas.riesgoGraduado
                 ? casilla(CLAVE_RIESGO_GRADUADO, titulo)
                 : null}
             </div>

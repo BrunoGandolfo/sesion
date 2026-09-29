@@ -4,7 +4,7 @@
 // única implementación runtime de esa regla; src/types/domain.ts la
 // re-exporta solo por compatibilidad con los importadores existentes.
 
-import { nivelRiesgoSchema } from "./schema";
+import { flagRiesgoSchema, nivelRiesgoSchema, type FlagRiesgo } from "./schema";
 import type {
   EvidenciaRiesgo,
   FeedbackTerapeuta,
@@ -77,4 +77,19 @@ export function normalizarRiesgo(raw: unknown): RiesgoDetectado {
     evidencia: [],
     notaParaTerapeuta: null,
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Flags de riesgo activos
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Los flags de riesgo en `true`, en el orden del contrato
+ *  (processor/contrato/enums-clinicos.json). Lo que no es un flag del
+ *  contrato (`detalle`, claves viejas o ajenas) no cuenta. Es la única cuenta
+ *  de "flags activos": la usan las casillas de aprobar, el brief y el
+ *  progreso clínico. */
+export function flagsActivos(flags: unknown): FlagRiesgo[] {
+  if (typeof flags !== "object" || flags === null) return [];
+  const valores = flags as Record<string, unknown>;
+  return (flagRiesgoSchema.options as FlagRiesgo[]).filter((flag) => valores[flag] === true);
 }

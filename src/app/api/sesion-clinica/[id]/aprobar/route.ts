@@ -17,8 +17,11 @@ const aprobarSchema = z.object({
   generacion: z.number().int().positive(),
   notaEditada: notaSoapSchema.optional(),
   notasEdicion: z.string().max(5000).optional(),
-  /** Riesgo graduado moderado/alto: la profesional declara que lo vio. */
+  /** Riesgo graduado (cualquier nivel salvo ninguno): la profesional
+   *  declara que lo vio. */
   confirmoRiesgo: z.boolean().optional(),
+  /** Un nombre por cada flag de riesgo activo que confirmó. */
+  confirmoFlags: z.array(z.string().max(60)).max(20).optional(),
   /** Menciones léxicas sin riesgo graduado: "Leí las menciones". */
   confirmoMenciones: z.boolean().optional(),
 });

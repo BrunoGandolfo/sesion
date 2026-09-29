@@ -12,7 +12,7 @@ import type {
 import { CabeceraSesion } from "./cabecera-sesion";
 import { IndiceNota, type EntradaIndice } from "./indice-nota";
 import { hayMasDeEstaSesion, MasDeEstaSesion } from "./mas-de-esta-sesion";
-import { Plegable } from "./plegable";
+import { Plegable } from "@/components/ui/plegable";
 import { SeccionSoap } from "./seccion-soap";
 import {
   ESTADO_EMOCIONAL_OBSERVADO,

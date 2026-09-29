@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { EL_RECORRIDO_HASTA_HOY, PREPARAR_SESION, SENAL_DE_RIESGO } from "@/lib/glosario";
+import { ALGO_FALLO, EL_RECORRIDO_HASTA_HOY, PREPARAR_SESION, REINTENTAR, SENAL_DE_RIESGO } from "@/lib/glosario";
 
 import { BriefPreSesion } from "../brief-pre-sesion";
 
@@ -26,7 +26,7 @@ function brief(riesgo: boolean) {
     pacienteId: "p1", propuestaPendiente: false, notaPendiente: false,
     proximoTurno: { fecha: "2026-09-27T13:00:00.000Z", duracion: 50, modalidad: "presencial" },
     ultimaSesion: {
-      fecha: "2026-09-17T13:00:00.000Z", pendienteAprobacion: false, resumenSesion: RESUMEN,
+      fecha: "2026-09-17T13:00:00.000Z", resumenSesion: RESUMEN,
       focoProximaSesion: "Retomar lo pendiente.", progresoPercibido: "Mejor que hace un mes.", temas: [],
       riesgo: riesgo
         ? { flagsActivos: ["ideacionSuicida"], nivel: "moderado", indicadores: [], notaParaTerapeuta: "Preguntar directamente." }
@@ -34,7 +34,7 @@ function brief(riesgo: boolean) {
     },
     hiloLongitudinal: {
       resumenAcumulativo: RECORRIDO, hipotesisDiagnostica: null, temasRecurrentes: [{ tema: "familia", conteo: 5 }],
-      objetivosActivos: OBJETIVOS, riesgosHistoricos: [], revisadoPorTerapeuta: true,
+      objetivosActivos: OBJETIVOS, riesgosHistoricos: [],
     },
   };
 }
@@ -99,4 +99,26 @@ it("sin señal de riesgo no dice nada de riesgo", async () => {
   render(<BriefPreSesion pacienteId="p1" />);
   await screen.findByRole("button", { name: PREPARAR_SESION });
   expect(screen.queryByText(SENAL_DE_RIESGO)).toBeNull();
+});
+
+it("una nota sin aprobar se avisa: lo dice `notaPendiente` del servidor (antes un campo fijo en false lo escondía)", async () => {
+  m.get.mockResolvedValue({ ...brief(false), notaPendiente: true });
+  render(<BriefPreSesion pacienteId="p1" abrir />);
+  expect(await screen.findByText(/Hay una nota pendiente de aprobación/)).toBeTruthy();
+});
+
+it("la señal de la última sesión se dice con la misma frase que el brief corto", async () => {
+  m.get.mockResolvedValue(brief(true));
+  render(<BriefPreSesion pacienteId="p1" abrir />);
+  expect(await screen.findByText(/Última sesión: Ideación suicida \(nivel moderado\) — Preguntar directamente\./)).toBeTruthy();
+});
+
+it("si /brief falla, 'Preparar sesión' no desaparece: abierto dice que falló y deja reintentar", async () => {
+  m.get.mockRejectedValueOnce(new Error("red")).mockResolvedValueOnce(brief(false));
+  render(<BriefPreSesion pacienteId="p1" abrir />);
+  expect(await screen.findByRole("button", { name: PREPARAR_SESION })).toBeTruthy();
+  expect(await screen.findByText(ALGO_FALLO)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: REINTENTAR }));
+  expect(await screen.findByText(RESUMEN.trim())).toBeTruthy();
+  expect(screen.queryByText(ALGO_FALLO)).toBeNull();
 });

@@ -25,15 +25,17 @@
 import * as React from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 
-import { ETIQUETA_NIVEL } from "@/components/clinico/brief-corto";
+import { hayRiesgo as hayRiesgoEn, textoRiesgo } from "@/components/clinico/brief-corto";
 import { Chip } from "@/components/ui";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaCorta, fechaRelativa, hora } from "@/lib/format";
 import {
+  ALGO_FALLO,
   EL_RECORRIDO_HASTA_HOY,
   PARA_LA_PROXIMA,
   PREPARAR_SESION,
+  REINTENTAR,
   SENAL_DE_RIESGO,
   pluralizar,
 } from "@/lib/glosario";
@@ -41,7 +43,6 @@ import type { NivelRiesgo } from "@/types/domain";
 
 type UltimaSesionBrief = {
   fecha: string;
-  pendienteAprobacion: boolean;
   resumenSesion: string | null;
   focoProximaSesion: string | null;
   progresoPercibido: string | null;
@@ -60,7 +61,6 @@ type HiloLongitudinalBrief = {
   temasRecurrentes: { tema: string; conteo: number }[];
   objetivosActivos: string[];
   riesgosHistoricos: { fecha: string; flag: string; detalle?: string }[];
-  revisadoPorTerapeuta: boolean;
 };
 
 type BriefResponse = {
@@ -76,14 +76,18 @@ type BriefResponse = {
   } | null;
 };
 
-// Los nombres de los flags salen de formatearEtiqueta y los del nivel de
-// ETIQUETA_NIVEL (brief-corto): acá había una tercera copia de las dos
-// tablas, con "Riesgo a terceros" donde el resto de la app dice "Violencia
+// Qué es riesgo y cómo se dice (hayRiesgo, textoRiesgo) sale de brief-corto:
+// acá había una copia de las dos, y antes una tercera de las tablas de
+// nombres, con "Riesgo a terceros" donde el resto de la app dice "Violencia
 // hacia terceros".
 
 // Brief atado al paciente que lo cargó: si cambia el id, el anterior deja de
-// aplicar por derivación, sin resetear estado en un efecto.
-type BriefCargado = { pacienteId: string; brief: BriefResponse };
+// aplicar por derivación, sin resetear estado en un efecto. `brief: null` es
+// que la lectura falló: el botón sigue y el panel lo dice (forense 03, P3-22),
+// en vez de desaparecer sin avisar, incluso cuando se llega con ?preparar=1.
+type BriefCargado =
+  | { pacienteId: string; fallo: false; brief: BriefResponse | null }
+  | { pacienteId: string; fallo: true; brief: null };
 
 export function BriefPreSesion({
   pacienteId,
@@ -98,38 +102,37 @@ export function BriefPreSesion({
   const panelId = React.useId();
   const panelRef = React.useRef<HTMLDivElement | null>(null);
   const yaSeMostro = React.useRef(false);
+  const [intento, setIntento] = React.useState(0);
 
   React.useEffect(() => {
     const controller = new AbortController();
     apiGet<BriefResponse>(`/api/pacientes/${pacienteId}/brief`, {
       signal: controller.signal,
     })
-      .then((brief) => setCargado({ pacienteId, brief }))
+      .then((brief) => setCargado({ pacienteId, fallo: false, brief }))
       .catch((err: unknown) => {
         if (esAbort(err)) return;
-        // Sin brief no hay bloque: la pestaña sigue funcionando sin él.
+        setCargado({ pacienteId, fallo: true, brief: null });
       });
     return () => controller.abort();
-  }, [pacienteId]);
+  }, [pacienteId, intento]);
 
-  const brief = cargado?.pacienteId === pacienteId ? cargado.brief : null;
+  const actual = cargado?.pacienteId === pacienteId ? cargado : null;
+  const brief = actual?.brief ?? null;
+  const fallo = actual?.fallo === true;
 
-  // Una sola vez, cuando el resumen llegó: después ella scrollea a donde quiera.
+  // Una sola vez, cuando el resumen llegó (o su error): después ella
+  // scrollea a donde quiera.
   React.useEffect(() => {
-    if (!abrir || !brief || yaSeMostro.current) return;
+    if (!abrir || (!brief && !fallo) || yaSeMostro.current) return;
     yaSeMostro.current = true;
     panelRef.current?.scrollIntoView?.({ block: "start" });
-  }, [abrir, brief]);
+  }, [abrir, brief, fallo]);
 
-  if (!brief) return null;
+  if (!brief && !fallo) return null;
 
-  const { ultimaSesion, hiloLongitudinal, proximoTurno } = brief;
-
-  const registrosRiesgo = hiloLongitudinal?.riesgosHistoricos.length ?? 0;
-  const riesgoUltima =
-    ultimaSesion !== null &&
-    (ultimaSesion.riesgo.nivel !== "ninguno" ||
-      ultimaSesion.riesgo.flagsActivos.length > 0);
+  const registrosRiesgo = brief?.hiloLongitudinal?.riesgosHistoricos.length ?? 0;
+  const riesgoUltima = brief ? hayRiesgoEn(brief.ultimaSesion?.riesgo) : false;
   const hayRiesgo = riesgoUltima || registrosRiesgo > 0;
 
   const boton = (
@@ -162,6 +165,30 @@ export function BriefPreSesion({
 
   const PANEL =
     "basis-full scroll-mt-[72px] rounded-lg border border-[color:var(--border-subtle)] bg-white p-5 lg:p-6";
+
+  if (!brief) {
+    return (
+      <>
+        {boton}
+        {open ? (
+          <div id={panelId} ref={panelRef} className={`${PANEL} flex flex-wrap items-center gap-3`}>
+            <p role="alert" className="font-sans text-[13px] leading-[1.5] text-ink-700">
+              {ALGO_FALLO}
+            </p>
+            <button
+              type="button"
+              onClick={() => setIntento((n) => n + 1)}
+              className="inline-flex min-h-[44px] items-center rounded-md border border-[color:var(--border-subtle)] bg-white px-4 font-sans text-[14px] font-semibold text-ink-900 hover:bg-cream-50"
+            >
+              {REINTENTAR}
+            </button>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
+  const { ultimaSesion, hiloLongitudinal, proximoTurno } = brief;
 
   if (!ultimaSesion && !hiloLongitudinal) {
     return (
@@ -215,15 +242,7 @@ export function BriefPreSesion({
                 </p>
                 {ultimaSesion && riesgoUltima ? (
                   <p className="font-sans text-[13px] leading-[1.55] text-ink-900">
-                    Última sesión:{" "}
-                    {ultimaSesion.riesgo.flagsActivos.length > 0
-                      ? ultimaSesion.riesgo.flagsActivos
-                          .map(formatearEtiqueta)
-                          .join(", ")
-                      : ultimaSesion.riesgo.indicadores.join(", ")}
-                    {ultimaSesion.riesgo.nivel !== "ninguno"
-                      ? ` (${ETIQUETA_NIVEL[ultimaSesion.riesgo.nivel]})`
-                      : ""}
+                    Última sesión: {textoRiesgo(ultimaSesion.riesgo)}
                     {ultimaSesion.riesgo.notaParaTerapeuta
                       ? ` — ${ultimaSesion.riesgo.notaParaTerapeuta}`
                       : ""}
@@ -276,9 +295,6 @@ export function BriefPreSesion({
             <div className="flex flex-col gap-3 border-t border-[color:var(--border-subtle)] pt-4">
               <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
                 {EL_RECORRIDO_HASTA_HOY}
-                {!hiloLongitudinal.revisadoPorTerapeuta
-                  ? " · actualizado tras la última sesión, revisalo"
-                  : ""}
               </p>
               {hiloLongitudinal.resumenAcumulativo ? (
                 <p className="font-sans text-[13px] leading-[1.6] text-ink-700">
@@ -310,12 +326,6 @@ export function BriefPreSesion({
             </div>
           ) : null}
 
-          {ultimaSesion?.pendienteAprobacion ? (
-            <p className="font-sans text-[12px] leading-[1.5] text-gold-500">
-              La última nota está para revisar: lo de arriba puede cambiar
-              cuando la apruebes.
-            </p>
-          ) : null}
         </div>
       ) : null}
     </>

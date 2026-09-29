@@ -3,13 +3,13 @@
 import * as React from "react";
 
 import { Chip } from "@/components/ui";
+import { Plegable } from "@/components/ui/plegable";
+import { NOMBRE_ALIANZA, NOMBRE_INTERVENCION } from "@/lib/etiquetas";
 import type {
   AlianzaTerapeutica,
   DatosEstructurados,
-  TipoIntervencion,
 } from "@/lib/sesion-clinica/schema";
 
-import { Plegable } from "./plegable";
 import {
   ALIANZA_TERAPEUTICA,
   APARECIO_POR_PRIMERA_VEZ,
@@ -29,25 +29,10 @@ import {
 // Nada se resume ni se recorta acá: si la API mandó ocho temas, se muestran
 // los ocho. Los bloques vacíos no se dibujan.
 
-// Los nombres técnicos de las intervenciones no se ablandan: son las
+// Los nombres de las intervenciones y de la alianza salen de
+// lib/etiquetas.ts (NOMBRE_INTERVENCION, NOMBRE_ALIANZA), donde viven para
+// toda la app: acá había una copia. Los técnicos no se ablandan: son las
 // palabras con las que ella piensa su trabajo.
-const NOMBRE_INTERVENCION: Record<TipoIntervencion, string> = {
-  reformulacion: "Reformulación",
-  senalamiento: "Señalamiento",
-  confrontacion: "Confrontación",
-  interpretacion: "Interpretación",
-  pregunta_circular: "Pregunta circular",
-  validacion: "Validación",
-  silencio_terapeutico: "Silencio terapéutico",
-  otra: "Otra",
-};
-
-const NOMBRE_ALIANZA: Record<AlianzaTerapeutica, string> = {
-  fragil: "Frágil",
-  inestable: "Inestable",
-  estable: "Estable",
-  fuerte: "Fuerte",
-};
 
 const TONO_ALIANZA: Record<
   AlianzaTerapeutica,

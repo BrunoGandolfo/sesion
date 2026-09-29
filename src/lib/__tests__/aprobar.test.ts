@@ -1,8 +1,10 @@
 /**
  * Integración — aprobar la nota (revision → aprobada) contra la base de test.
- * Garantías: no toca R2; nota final, clave destruida y los dos trabajos
- * quedan en UNA transacción; concurrencia y fallo de la base no dejan nada
- * a medias; aprobada es terminal.
+ * Garantías: no toca R2; nota final y los dos trabajos quedan en UNA
+ * transacción; concurrencia y fallo de la base no dejan nada a medias;
+ * aprobada es terminal; y el servidor exige las mismas confirmaciones que la
+ * pantalla (riesgo de cualquier nivel, cada flag activo, las menciones),
+ * también a una llamada directa a POST /aprobar.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -29,6 +31,19 @@ import {
   type Org,
 } from "./estados-fixtures";
 
+const actor = vi.hoisted(() => ({ organizationId: "", userId: "" }));
+vi.mock("@/app/api/_lib/auth", () => ({
+  getOrganizationId: async () => actor.organizationId,
+  getSessionActor: async () => ({
+    organizationId: actor.organizationId,
+    userId: actor.userId,
+    sesionId: "s",
+    rol: "titular",
+    nombre: "Mariana",
+    email: "mariana@test.uy",
+  }),
+}));
+
 vi.mock("@/lib/r2", () => ({
   borrarAudio: vi.fn(),
   existeAudio: vi.fn(),
@@ -38,11 +53,39 @@ vi.mock("@/lib/r2", () => ({
 let base!: BaseArea2;
 let org!: Org;
 let otra!: Org;
+let rutaAprobar!: typeof import("@/app/api/sesion-clinica/[id]/aprobar/route").POST;
 
 beforeAll(async () => {
   base = conectarArea2();
   org = await crearOrg(base.prisma);
   otra = await crearOrg(base.prisma);
+  actor.organizationId = org.orgId;
+  actor.userId = org.userId;
+  // La ruta ve el cliente de test por el cache global de src/lib/db.ts.
+  (globalThis as unknown as { prisma: unknown }).prisma = base.db;
+  rutaAprobar = (await import("@/app/api/sesion-clinica/[id]/aprobar/route")).POST;
+});
+
+/** POST /api/sesion-clinica/[id]/aprobar, como lo llamaría cualquiera. */
+async function postAprobar(sesionId: string, cuerpo: Record<string, unknown>): Promise<Response> {
+  return rutaAprobar(
+    new Request(`http://localhost/api/sesion-clinica/${sesionId}/aprobar`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(cuerpo),
+    }),
+    { params: Promise.resolve({ id: sesionId }) },
+  );
+}
+
+const RIESGO = (nivel: string) => ({ nivel, indicadores: [], evidencia: [], notaParaTerapeuta: null });
+const FLAGS = (activos: string[]) => ({
+  ideacionSuicida: activos.includes("ideacionSuicida"),
+  autolesion: activos.includes("autolesion"),
+  violenciaTerceros: activos.includes("violenciaTerceros"),
+  sintomasPsicoticos: activos.includes("sintomasPsicoticos"),
+  crisisPanico: activos.includes("crisisPanico"),
+  detalle: "",
 });
 
 afterAll(async () => {
@@ -161,6 +204,43 @@ describe("aprobar", () => {
       confirmoRiesgo: true,
     });
     expect((await filaDe(base.prisma, sesionId))?.estado).toBe("aprobada");
+  });
+
+  it("riesgo BAJO también exige confirmación (D1): sin ella, 400 y nada cambia", async () => {
+    const { sesionId } = await enRevision({ datos: { riesgoDetectado: RIESGO("bajo") } });
+    const sin = aprobarSesion({ generacion: 1, prisma: base.db, sesionId, organizationId: org.orgId, usuarioId: org.userId });
+    await expect(codigo(sin)).resolves.toBe(400);
+    expect((await filaDe(base.prisma, sesionId))?.estado).toBe("revision");
+    await aprobarSesion({ generacion: 1, prisma: base.db, sesionId, organizationId: org.orgId, usuarioId: org.userId, confirmoRiesgo: true });
+    expect((await filaDe(base.prisma, sesionId))?.estado).toBe("aprobada");
+  });
+
+  it("cada flag activo exige su propia confirmación; confirmar uno no alcanza para dos", async () => {
+    const { sesionId } = await enRevision({ datos: { flagsRiesgo: FLAGS(["ideacionSuicida", "autolesion"]) } });
+    const base1 = { generacion: 1, prisma: base.db, sesionId, organizationId: org.orgId, usuarioId: org.userId };
+    await expect(codigo(aprobarSesion(base1))).resolves.toBe(400);
+    const uno = aprobarSesion({ ...base1, confirmoFlags: ["ideacionSuicida"] });
+    await expect(uno).rejects.toThrow(/Autolesión|autolesion/i);
+    expect((await filaDe(base.prisma, sesionId))?.estado).toBe("revision");
+    await aprobarSesion({ ...base1, confirmoFlags: ["ideacionSuicida", "autolesion"] });
+    expect((await filaDe(base.prisma, sesionId))?.estado).toBe("aprobada");
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, sesionId);
+    expect(eventos.at(-1)?.detalle).toMatchObject({ flagsConfirmados: 2 });
+  });
+
+  it("una llamada directa a POST /aprobar sin confirmar riesgo bajo o un flag activo recibe 400", async () => {
+    const conBajo = await enRevision({ datos: { riesgoDetectado: RIESGO("bajo") } });
+    const conFlag = await enRevision({ datos: { flagsRiesgo: FLAGS(["crisisPanico"]) } });
+
+    const r1 = await postAprobar(conBajo.sesionId, { generacion: 1 });
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).error).toMatch(/nivel bajo/);
+    const r2 = await postAprobar(conFlag.sesionId, { generacion: 1, confirmoRiesgo: true });
+    expect(r2.status).toBe(400);
+    expect((await filaDe(base.prisma, conFlag.sesionId))?.estado).toBe("revision");
+
+    expect((await postAprobar(conBajo.sesionId, { generacion: 1, confirmoRiesgo: true })).status).toBe(200);
+    expect((await postAprobar(conFlag.sesionId, { generacion: 1, confirmoFlags: ["crisisPanico"] })).status).toBe(200);
   });
 
   it("menciones léxicas con el modelo en ninguno exigen 'Leí las menciones'", async () => {
