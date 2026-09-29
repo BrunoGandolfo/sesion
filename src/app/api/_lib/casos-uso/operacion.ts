@@ -4,6 +4,8 @@
 import type { db } from "@/lib/db";
 import { estadoDelWorker, type EstadoWorker } from "@/lib/salud-metricas";
 
+import { WORKER_ESTADO_ID } from "./sesion/latido";
+
 type ClientePrisma = Pick<typeof db, "$queryRaw" | "workerEstado">;
 
 /** Una consulta trivial: true si la base contesta. Lanza si no. */
@@ -18,7 +20,7 @@ export async function leerEstadoWorker(
   ahora: Date,
 ): Promise<EstadoWorker> {
   const fila = await prisma.workerEstado.findUnique({
-    where: { id: "worker" },
+    where: { id: WORKER_ESTADO_ID },
     select: { ultimoPollEn: true, version: true },
   });
   return estadoDelWorker(fila, ahora);

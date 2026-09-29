@@ -4,7 +4,7 @@
 import { ApiError } from "../../responses";
 import { SESION_SELECT, type FilaSesionClinica } from "../../sesion-clinica";
 
-import type { ClienteSesion } from "./transicion";
+import { MENSAJE_NO_ENCONTRADA, type ClienteSesion } from "./transicion";
 
 export async function leerSesion(
   prisma: ClienteSesion,
@@ -15,6 +15,6 @@ export async function leerSesion(
     where: { id: sesionId, organizationId },
     select: SESION_SELECT,
   });
-  if (!sesion) throw new ApiError("Sesión clínica no encontrada", 404);
+  if (!sesion) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
   return sesion;
 }

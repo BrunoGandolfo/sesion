@@ -13,7 +13,7 @@ import type { FilaSesionClinica } from "../../sesion-clinica";
 import { crearTrabajo } from "../trabajos/crear";
 
 import { leerSesion } from "./leer";
-import { transicionar, type ClienteTransaccional } from "./transicion";
+import { MENSAJE_NO_ENCONTRADA, transicionar, type ClienteTransaccional } from "./transicion";
 
 /** Estados del feedback desde los que se puede pedir de nuevo. */
 export const FEEDBACK_REPEDIBLE: ReadonlyArray<EstadoFeedback> = [
@@ -38,7 +38,7 @@ export async function reintentarFeedback({
     where: { id: sesionId, organizationId },
     select: { modeloAsr: true, generacion: true, turno: { select: { pacienteId: true } } },
   });
-  if (!existente) throw new ApiError("Sesión clínica no encontrada", 404);
+  if (!existente) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
   if (existente.modeloAsr === null) {
     throw new ApiError(
       "La sesión todavía no tiene transcripción: no hay de dónde generar Para vos",

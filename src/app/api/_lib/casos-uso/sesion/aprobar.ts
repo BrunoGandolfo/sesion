@@ -12,7 +12,6 @@
 
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
-import { prefijoAudio } from "@/lib/sesion-clinica/estados";
 import {
   parseDatosEstructurados,
   type NotaSoap,
@@ -22,10 +21,15 @@ import { registrarAuditoria } from "../../auditoria";
 import { hashTexto } from "../../auditoria-pura";
 import { ApiError } from "../../responses";
 import type { FilaSesionClinica } from "../../sesion-clinica";
-import { crearTrabajo } from "../trabajos/crear";
+import { crearTrabajo, trabajoBorrarAudio } from "../trabajos/crear";
 
 import { leerSesion } from "./leer";
-import { transicionar, type ClienteTransaccional } from "./transicion";
+import {
+  exigirEstado,
+  MENSAJE_NO_ENCONTRADA,
+  transicionar,
+  type ClienteTransaccional,
+} from "./transicion";
 
 export interface AprobarSesionInput {
   prisma: ClienteTransaccional;
@@ -70,10 +74,8 @@ export async function aprobarSesion({
       turno: { select: { pacienteId: true } },
     },
   });
-  if (!existente) throw new ApiError("Sesión clínica no encontrada", 404);
-  if (existente.estado !== "revision") {
-    throw new ApiError("Solo se puede aprobar una nota en revisión", 409);
-  }
+  if (!existente) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
+  exigirEstado(existente.estado, "aprobar", "Solo se puede aprobar una nota en revisión");
 
   if (existente.generacion !== generacion) {
     throw new ApiError("La nota cambió. Revisá la nota actual antes de aprobar; tu borrador se conserva en esta pantalla.", 409);
@@ -125,17 +127,7 @@ export async function aprobarSesion({
 
     const creados: string[] = [];
     if (conAudio) {
-      await crearTrabajo({
-        prisma: tx,
-        tipo: "borrar_audio_r2",
-        payload: {
-          prefijo: prefijoAudio(organizationId, sesionId),
-          indices: [0],
-        },
-        organizationId,
-        sesionId,
-        pacienteId,
-      });
+      await trabajoBorrarAudio(tx, { organizationId, sesionId, pacienteId });
       creados.push("borrar_audio_r2");
     }
     await crearTrabajo({

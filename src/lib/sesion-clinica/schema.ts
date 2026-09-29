@@ -79,6 +79,17 @@ export type ConfianzaModelo = z.infer<typeof confianzaModeloSchema>;
 
 export const rolesOrigenSchema = z.enum(["asr_role", "posicional"]);
 
+/** Orientación teórica de la profesional (enum `orientacion_teorica` de
+ *  Postgres): decide el instrumento de "Para vos". Una sola lista para el
+ *  PATCH de configuración, los tipos de la pantalla y lo que el worker recibe
+ *  al reclamar; enums-clinicos.test.ts la compara con el enum de Prisma. */
+export const ORIENTACIONES_TEORICAS = ["cbt_mi", "gestalt"] as const;
+export const orientacionTeoricaSchema = z.enum(ORIENTACIONES_TEORICAS);
+export type OrientacionTeorica = z.infer<typeof orientacionTeoricaSchema>;
+/** La que se usa si el consultorio no tiene configuración (el default de la
+ *  columna en schema.prisma). */
+export const ORIENTACION_DEFAULT: OrientacionTeorica = "cbt_mi";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Nota SOAP
 // ────────────────────────────────────────────────────────────────────────────

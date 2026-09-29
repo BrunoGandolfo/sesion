@@ -162,8 +162,13 @@ describe("cada frase tiene el hecho que la respalda", () => {
   it("al aprobar se programa el borrado del audio, con reintentos acotados; no hay clave que destruir", () => {
     expect(hechos.CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(false);
     expect(hechos.LIMPIEZA_AUDIO_REINTENTA).toBe(true);
+    // Aprobar encola el trabajo de borrado (trabajoBorrarAudio, el mismo que
+    // usan eliminar, abandonar y la grabación corta) y ese trabajo es
+    // borrar_audio_r2.
     const aprobar = codigo("src/app/api/_lib/casos-uso/sesion/aprobar.ts");
-    expect(aprobar).toContain('tipo: "borrar_audio_r2"');
+    expect(aprobar).toContain("trabajoBorrarAudio(");
+    const crear = codigo("src/app/api/_lib/casos-uso/trabajos/crear.ts");
+    expect(crear.slice(crear.indexOf("export function trabajoBorrarAudio("))).toContain('tipo: "borrar_audio_r2"');
     expect(aprobar).not.toContain("audioClave");
     const tipo = "borrar_audio_r2";
     const { tope } = POLITICA_POR_TIPO[tipo];

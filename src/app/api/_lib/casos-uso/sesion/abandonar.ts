@@ -43,7 +43,6 @@ import {
   CODIGO_GRABACION_ABANDONADA,
   ESTADOS_SIN_TERMINAR,
   keyAudio,
-  prefijoAudio,
 } from "@/lib/sesion-clinica/estados";
 
 import { auditar } from "../../auditoria";
@@ -51,7 +50,7 @@ import type { ActorAuditoria } from "../../auditoria-pura";
 import { ApiError } from "../../responses";
 import type { AlmacenAudio } from "../audio";
 import { EXPIRA_URL_SUBIDA_SEGUNDOS } from "../audio";
-import { crearTrabajo } from "../trabajos/crear";
+import { trabajoBorrarAudio } from "../trabajos/crear";
 
 import {
   MENSAJE_CONFLICTO,
@@ -134,15 +133,8 @@ async function cerrarSinTerminar({
       if (count === 0) throw new ApiError(MENSAJE_CONFLICTO, 409);
     }
 
-    await crearTrabajo({
-      prisma: tx,
-      tipo: "borrar_audio_r2",
-      payload: { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] },
-      organizationId,
-      sesionId,
-      pacienteId: fila.turno.pacienteId,
-      ...(conAudio ? {} : { proximoIntentoEn: new Date(ahora.getTime() + ESPERA_BORRADO_SIN_AUDIO_MS) }),
-    });
+    const diferido = conAudio ? undefined : new Date(ahora.getTime() + ESPERA_BORRADO_SIN_AUDIO_MS);
+    await trabajoBorrarAudio(tx, { organizationId, sesionId, pacienteId: fila.turno.pacienteId, proximoIntentoEn: diferido });
 
     await auditar(tx, {
       organizationId,

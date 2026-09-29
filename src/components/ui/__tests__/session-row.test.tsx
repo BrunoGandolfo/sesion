@@ -51,7 +51,9 @@ it.each([["revision", "Para revisar"], ["aprobada", "Nota lista"]])("enlaza la n
   expect(abrirTurno).toHaveBeenCalledOnce();
 });
 
-it.each(["procesando", "transcribiendo"])("muestra %s sin enlace ni opción de grabar de nuevo", (estado) => {
+// El alias viejo de "procesando" no es un estado del enum (estado_sesion): la fila ya no
+// lo reconoce. Una subida reciente sí se está escribiendo (P3-08).
+it.each(["procesando", "subiendo"])("muestra %s sin enlace ni opción de grabar de nuevo", (estado) => {
   render(<SessionRow turno={{ ...TURNO, estado: "programado", sesionClinica: { id: "nota-1", estado } }} onGrabar={vi.fn()} />);
   expect(screen.getByRole("status").textContent).toBe("Procesando");
   expect(enlacesANota()).toHaveLength(0);
@@ -64,17 +66,28 @@ it("sin sesión clínica no muestra estado ni acceso a una nota", () => {
   expect(enlacesANota()).toHaveLength(0);
 });
 
-it.each(["grabando", "subiendo"])("con la grabación cortada en %s sigue ofreciendo grabar", (estado) => {
+it("con la grabación en curso sigue ofreciendo grabar", () => {
   const grabar = vi.fn();
   render(
     <SessionRow
-      turno={{ ...TURNO, estado: "programado", sesionClinica: { id: "s1", estado } }}
+      turno={{ ...TURNO, estado: "programado", sesionClinica: { id: "s1", estado: "grabando" } }}
       ahora={new Date("2026-09-07T12:00:00.000Z")}
       onGrabar={grabar}
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
   expect(grabar).toHaveBeenCalledOnce();
+});
+
+it.each(["subiendo", "fallida"])("con la sesión en %s no ofrece grabar: el servidor contestaría 409 (P3-08)", (estado) => {
+  render(
+    <SessionRow
+      turno={{ ...TURNO, estado: "programado", sesionClinica: { id: "s1", estado, actualizadaEn: "2026-09-07T11:59:00.000Z" } }}
+      ahora={new Date("2026-09-07T12:00:00.000Z")}
+      onGrabar={vi.fn()}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Grabar sesión" })).toBeNull();
 });
 
 it("con la nota en revisión ya no ofrece grabar", () => {

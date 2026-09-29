@@ -19,14 +19,12 @@ import {
   LEASE_SESION_MS,
   MAX_FALLOS_SEGUIDOS,
 } from "@/lib/sesion-clinica/estados";
-import type { SpeechAnalytics } from "@/lib/sesion-clinica/schema";
+import { ORIENTACION_DEFAULT, type SpeechAnalytics } from "@/lib/sesion-clinica/schema";
 
 import { emitirTicket } from "../../tickets";
 
 import type { ClienteSesion } from "./transicion";
 import { transicionar } from "./transicion";
-
-const ORIENTACION_DEFAULT = "cbt_mi";
 
 /** Tope de sesiones por reclamo. */
 export const LIMITE_RECLAMO_MAX = 5;
@@ -41,6 +39,19 @@ export function limiteReclamo(valor: string | null | undefined): number {
   const n = Number(valor);
   if (!Number.isInteger(n) || n < 1) return 1;
   return Math.min(n, LIMITE_RECLAMO_MAX);
+}
+
+/** Lo que hace entregable una sesión en `procesando` en `ahora`: sin
+ *  backoff pendiente y sin un lease vivo de otro worker. Lo lee la búsqueda
+ *  de candidatas y lo reevalúa el claim con el lock de la fila. */
+function reclamable(ahora: Date) {
+  return {
+    estado: "procesando" as const,
+    AND: [
+      { OR: [{ proximoIntentoEn: null }, { proximoIntentoEn: { lte: ahora } }] },
+      { OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }] },
+    ],
+  };
 }
 
 export interface AudioEntregado {
@@ -87,13 +98,7 @@ export async function reclamarSesiones({
   terminosAsr,
 }: ReclamarSesionesInput): Promise<SesionReclamada[]> {
   const candidatas = await prisma.sesionClinica.findMany({
-    where: {
-      estado: "procesando",
-      AND: [
-        { OR: [{ proximoIntentoEn: null }, { proximoIntentoEn: { lte: ahora } }] },
-        { OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }] },
-      ],
-    },
+    where: reclamable(ahora),
     orderBy: { creadaEn: "asc" },
     take: limite,
     select: { id: true, organizationId: true, intento: true, fallosSeguidos: true },
@@ -114,14 +119,10 @@ export async function reclamarSesiones({
     // proximoIntentoEn. En los dos casos, count = 0 y no se roba nada.
     const { count } = await prisma.sesionClinica.updateMany({
       where: {
+        ...reclamable(ahora),
         id: c.id,
-        estado: "procesando",
         intento: c.intento,
         fallosSeguidos: c.fallosSeguidos,
-        AND: [
-          { OR: [{ proximoIntentoEn: null }, { proximoIntentoEn: { lte: ahora } }] },
-          { OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }] },
-        ],
       },
       data: {
         intento: { increment: 1 },

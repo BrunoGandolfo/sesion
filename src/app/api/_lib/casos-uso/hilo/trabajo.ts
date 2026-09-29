@@ -1,11 +1,12 @@
 import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import { contenidoHiloSchema } from "@/lib/hilo/contenido";
+import { estadoDePropuestaNueva } from "@/lib/hilo/versiones";
 import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
 
 import { ApiError } from "../../responses";
 import type { Adjuntador } from "../trabajos/entregar";
 import type { Aplicador } from "../trabajos/resultado-worker";
-import { auditarHilo, bloquearHilo, insertarVersion, leerVersion } from "./base";
+import { auditarHilo, bloquearHilo, insertarVersion, leerVersion, whereAprobadasDe } from "./base";
 
 export function versionDelTrabajo(payload: unknown): number {
   const version = (payload as { basadaEnVersion?: unknown } | null)?.basadaEnVersion;
@@ -18,7 +19,7 @@ export const adjuntoContexto: Adjuntador = async (prisma, trabajo) => {
   const identidad = { pacienteId: trabajo.pacienteId, organizationId: trabajo.organizationId };
   const version = versionDelTrabajo(trabajo.payload);
   const sesion = await prisma.sesionClinica.findFirst({
-    where: { id: trabajo.sesionId, organizationId: trabajo.organizationId, estado: "aprobada", turno: { pacienteId: trabajo.pacienteId } },
+    where: { ...whereAprobadasDe(identidad), id: trabajo.sesionId },
     select: { id: true, notaFinal: true, datos: true, turno: { select: { fecha: true } } },
   });
   if (!sesion?.notaFinal) throw new ApiError("La sesión aprobada ya no está disponible", 409);
@@ -41,12 +42,10 @@ export const aplicarPropuesta: Aplicador = async (tx, trabajo, resultado, _resol
   if (!resultado.promptVersion || !resultado.modeloLlm) throw new ApiError("La propuesta debe identificar prompt y modelo", 400);
   const identidad = { pacienteId: trabajo.pacienteId, organizationId: trabajo.organizationId };
   const hilo = await bloquearHilo(tx, identidad);
-  const sesion = await tx.sesionClinica.findFirst({ where: {
-    id: trabajo.sesionId, organizationId: trabajo.organizationId, estado: "aprobada", turno: { pacienteId: trabajo.pacienteId },
-  }, select: { id: true } });
+  const sesion = await tx.sesionClinica.findFirst({ where: { ...whereAprobadasDe(identidad), id: trabajo.sesionId }, select: { id: true } });
   if (!sesion) throw new ApiError("La sesión aprobada ya no está disponible", 409);
   const basadaEnVersion = versionDelTrabajo(trabajo.payload);
-  const estado = basadaEnVersion === (hilo.vigente?.version ?? 0) ? "propuesta" : "desactualizada";
+  const estado = estadoDePropuestaNueva(basadaEnVersion, hilo.vigente?.version ?? 0);
   if (estado === "propuesta" && await tx.hiloVersion.count({ where: { ...identidad, estado: "propuesta" } })) throw new ApiError("Ya hay una propuesta por revisar", 409);
   const nueva = await insertarVersion(tx, identidad, hilo, {
     contenido, actor: "ia", estado, basadaEnVersion, sesionOrigenId: trabajo.sesionId,

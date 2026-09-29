@@ -27,6 +27,7 @@ import type {
   DatosEstructurados as DatosEstructuradosSchema,
   EstadoSesion,
   NivelRiesgo,
+  OrientacionTeorica,
 } from "@/lib/sesion-clinica/schema";
 
 export type {
@@ -404,8 +405,8 @@ export type SpeechAnalytics = NonNullable<
 // ============================================
 
 /** Orientación teórica de la profesional — determina el instrumento
- *  de auto-supervisión. Fuente de verdad: Configuracion.orientacionTeorica. */
-export type OrientacionTeorica = "cbt_mi" | "gestalt";
+ *  de auto-supervisión. La lista vive en sesion-clinica/schema.ts. */
+export type { OrientacionTeorica };
 
 /** Cita literal de la transcripción que ancla un score */
 export interface EvidenciaFeedback {

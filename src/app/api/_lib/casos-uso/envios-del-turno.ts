@@ -71,6 +71,41 @@ export function claveDeCobro(pacienteId: string, ahora: Date): string {
   return `cobro:${pacienteId}:${anio}-${mm}-${dd}`;
 }
 
+/**
+ * Cómo nace (o revive) un envío: con teléfono, `pendiente` a su hora; sin
+ * teléfono, `fallido` en el acto con el motivo en castellano, para que la
+ * pantalla lo diga enseguida (ver arriba, "UN TELÉFONO VACÍO").
+ */
+export function estadoInicialDelEnvio(destino: string, programadoEn: Date, ahora: Date) {
+  return destino
+    ? { estado: "pendiente" as const, proximoIntentoEn: programadoEn, motivoNoEnvio: null, cerradoEn: null }
+    : { estado: "fallido" as const, proximoIntentoEn: null, motivoNoEnvio: MOTIVO_SIN_TELEFONO, cerradoEn: ahora };
+}
+
+/**
+ * Apaga todo lo que todavía puede salir hacia un teléfono, de cualquier
+ * motivo: es lo que hace una baja (por respuesta o por el código de Twilio).
+ * `excluirId` deja afuera el envío que se está cerrando en ese momento.
+ * Devuelve cuántos apagó. Idempotente.
+ */
+export async function cancelarPendientesDelDestino(
+  tx: Pick<ClienteEnvios, "envioSms">,
+  destino: string,
+  motivo: string,
+  ahora: Date,
+  excluirId?: string,
+): Promise<number> {
+  const { count } = await tx.envioSms.updateMany({
+    where: {
+      destino,
+      estado: { in: [...ESTADOS_CON_ENVIO_PENDIENTE] },
+      ...(excluirId ? { id: { not: excluirId } } : {}),
+    },
+    data: { estado: "cancelado", motivoNoEnvio: motivo, cerradoEn: ahora },
+  });
+  return count;
+}
+
 /** True si el turno sigue esperando a la paciente. */
 export function turnoSigueProgramado(estado: string): boolean {
   return estado === "programado";
@@ -135,9 +170,7 @@ export async function programarEnvioDelTurno(
     if (existente.estado === "cancelado" && existente.sid === null && existente.aceptadoEn === null) {
       await tx.envioSms.updateMany({
         where: { claveIdempotencia: clave, estado: "cancelado" },
-        data: destino
-          ? { estado: "pendiente", motivo, programadoEn, proximoIntentoEn: programadoEn, motivoNoEnvio: null, cerradoEn: null }
-          : { estado: "fallido", motivo, programadoEn, proximoIntentoEn: null, motivoNoEnvio: MOTIVO_SIN_TELEFONO, cerradoEn: ahora },
+        data: { motivo, programadoEn, ...estadoInicialDelEnvio(destino, programadoEn, ahora) },
       });
     }
     return;
@@ -153,9 +186,7 @@ export async function programarEnvioDelTurno(
         turnoId,
         destino,
         programadoEn,
-        ...(destino
-          ? { estado: "pendiente", proximoIntentoEn: programadoEn }
-          : { estado: "fallido", proximoIntentoEn: null, motivoNoEnvio: MOTIVO_SIN_TELEFONO, cerradoEn: ahora }),
+        ...estadoInicialDelEnvio(destino, programadoEn, ahora),
       },
     });
   } catch (error) {
@@ -298,9 +329,7 @@ export async function programarEnvioDeCobro(
       turnoId: null,
       destino,
       programadoEn: ahora,
-      ...(destino
-        ? { estado: "pendiente", proximoIntentoEn: ahora }
-        : { estado: "fallido", proximoIntentoEn: null, motivoNoEnvio: MOTIVO_SIN_TELEFONO, cerradoEn: ahora }),
+      ...estadoInicialDelEnvio(destino, ahora, ahora),
     },
     select: { id: true },
   });

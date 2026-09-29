@@ -74,6 +74,17 @@ async function bloqueadoPorEncadenado(
   return anterior > 0 || propuesta > 0;
 }
 
+/** Lo que hace reclamable un trabajo en `ahora`: pendiente (o en curso con
+ *  el lease vencido), sin backoff pendiente. Lo lee la búsqueda y lo
+ *  reevalúa el claim. */
+function reclamable(ahora: Date) {
+  return {
+    estado: { in: ["pendiente" as const, "en_curso" as const] },
+    proximoIntentoEn: { lte: ahora },
+    OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }],
+  };
+}
+
 export async function reclamarTrabajos({
   prisma,
   ejecutor,
@@ -88,10 +99,8 @@ export async function reclamarTrabajos({
   while (reclamados.length < limite) {
     const candidatos = await prisma.trabajo.findMany({
       where: {
+        ...reclamable(ahora),
         ejecutor,
-        estado: { in: ["pendiente", "en_curso"] },
-        proximoIntentoEn: { lte: ahora },
-        OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }],
         ...(tipos && tipos.length > 0 ? { tipo: { in: [...tipos] } } : {}),
       },
       orderBy: [{ creadoEn: "asc" }, { id: "asc" }],
@@ -116,13 +125,7 @@ export async function reclamarTrabajos({
       const ticket = ejecutor === "worker" ? emitirTicket() : null;
       const reclamar = async (tx: Pick<ClienteHilo, "trabajo">, payload: Prisma.JsonValue) => {
         const { count } = await tx.trabajo.updateMany({
-          where: {
-            id: c.id,
-            estado: { in: ["pendiente", "en_curso"] },
-            intentos: c.intentos,
-            proximoIntentoEn: { lte: ahora },
-            OR: [{ leaseVenceEn: null }, { leaseVenceEn: { lt: ahora } }],
-          },
+          where: { ...reclamable(ahora), id: c.id, intentos: c.intentos },
           data: {
             estado: "en_curso",
             intentos: { increment: 1 },
