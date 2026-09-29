@@ -23,6 +23,7 @@ import {
   recordarCobro,
   ultimoAvisoPorPaciente,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
+import { deudaDePaciente } from "@/app/api/_lib/domain";
 import { ApiError } from "@/app/api/_lib/responses";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
@@ -314,5 +315,25 @@ describe("ultimoAvisoPorPaciente", () => {
     const base = await crearBase();
     const mapa = await ultimoAvisoPorPaciente(db, base.orgId, []);
     expect(mapa.size).toBe(0);
+  });
+});
+
+describe("deudaDePaciente (la cuenta que usan recordarCobro y el texto del SMS)", () => {
+  it("suma sus impagos y trae el más viejo; sin deuda, null", async () => {
+    const base = await crearBase();
+    expect(await deudaDePaciente(db, base.orgId, base.pacienteId, AHORA)).toBeNull();
+
+    await crearImpago(base, 40);
+    await crearImpago(base, 12);
+    const deuda = await deudaDePaciente(db, base.orgId, base.pacienteId, AHORA);
+    expect(deuda).toMatchObject({ pacienteId: base.pacienteId, sesionesImpagas: 2, montoTotal: 2 * TARIFA, diasAtraso: 40 });
+    expect(deuda?.impagoMasAntiguo).toEqual(new Date(AHORA.getTime() - 40 * 86_400_000));
+  });
+
+  it("desde otra organización la paciente no debe nada", async () => {
+    const base = await crearBase();
+    const ajena = await crearBase();
+    await crearImpago(base, 5);
+    expect(await deudaDePaciente(db, ajena.orgId, base.pacienteId, AHORA)).toBeNull();
   });
 });

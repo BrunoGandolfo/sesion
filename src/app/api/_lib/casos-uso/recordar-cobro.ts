@@ -28,7 +28,7 @@ import { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 
 import { registrarAuditoria } from "../auditoria";
-import { buscarTurnosConDeuda, calcularDeudores } from "../domain";
+import { deudaDePaciente } from "../domain";
 import { ApiError } from "../responses";
 import { programarEnvioDeCobro } from "./envios-del-turno";
 
@@ -87,11 +87,10 @@ export async function recordarCobro({
     throw new ApiError("Paciente no encontrado", 404);
   }
 
-  // La misma consulta que alimenta /api/deudores, acotada a esta paciente.
-  const turnos = await buscarTurnosConDeuda(prisma, organizationId, pacienteId);
-  const [deuda] = calcularDeudores(turnos, ahora);
+  // La misma cuenta que /api/deudores, acotada a esta paciente.
+  const deuda = await deudaDePaciente(prisma, organizationId, pacienteId, ahora);
 
-  if (!deuda || deuda.sesionesImpagas === 0) {
+  if (!deuda) {
     throw new ApiError("Esta paciente no tiene sesiones sin cobrar", 409);
   }
 

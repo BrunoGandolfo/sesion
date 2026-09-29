@@ -66,9 +66,10 @@ export interface PendientesTerapeutaParams {
   prisma: ClientePrisma;
   organizationId: string;
   ahora: Date;
-  /** Los turnos con deuda, si quien llama ya los leyó. /api/dashboard los
-   *  pasa para compartir la cuenta sin repetir la consulta. */
-  turnosConDeuda?: TurnoConDeuda[];
+  /** La deuda ya calculada (deudaDeHoy), si quien llama la tiene.
+   *  /api/dashboard la pasa: la lee y la cuenta UNA vez, y la comparten su
+   *  lista de "Te deben", el KPI y este bloque. */
+  deuda?: DeudaDeHoy;
 }
 
 /**
@@ -92,33 +93,18 @@ function porFechaAscendente(a: { fecha: string }, b: { fecha: string }): number 
   return a.fecha.localeCompare(b.fecha);
 }
 
-/** Fecha del turno impago más viejo de cada paciente, ISO. Es lo que
- *  `PacienteSinCobrar` pide y lo que desempata el orden. */
-function masAntiguoPorPaciente(turnos: TurnoConDeuda[]): Map<string, string> {
-  const masAntiguo = new Map<string, string>();
-  for (const turno of turnos) {
-    const fecha = turno.fecha.toISOString();
-    const previa = masAntiguo.get(turno.pacienteId);
-    if (!previa || fecha < previa) masAntiguo.set(turno.pacienteId, fecha);
-  }
-  return masAntiguo;
-}
-
 /**
- * Los deudores de la organización, en la forma en que viajan por la red y en
- * el orden en que se muestran: monto descendente —el de `calcularDeudores`, el
- * mismo con el que Cobros dibuja su lista— y, a igual monto, la deuda más
- * vieja primero, para que el orden no dependa de cómo vino la consulta.
- *
- * Es la fuente única de la deuda de la pantalla de Hoy. Pura: recibe
- * los turnos que ya leyó `buscarTurnosConDeuda` y no vuelve a la base.
+ * Los deudores ordenados y, aparte, el impago más viejo de cada una (ISO),
+ * que PacienteSinCobrar pide y que desempata el orden. Todo sale de UNA
+ * pasada de calcularDeudores, que ya calcula ese impago: antes se volvía a
+ * recorrer la lista para sacarlo, dos veces por pedido.
  */
-export function deudoresDeHoy(
-  turnos: TurnoConDeuda[],
-  ahora: Date,
-): DeudaPaciente[] {
-  const masAntiguo = masAntiguoPorPaciente(turnos);
-  return calcularDeudores(turnos, ahora)
+function deudoresOrdenados(turnos: TurnoConDeuda[], ahora: Date) {
+  const agrupados = calcularDeudores(turnos, ahora);
+  const masAntiguo = new Map(
+    agrupados.map((d) => [d.pacienteId, d.impagoMasAntiguo?.toISOString() ?? ""]),
+  );
+  const deudores: DeudaPaciente[] = agrupados
     .map((deudor) => ({
       pacienteId: deudor.pacienteId,
       nombre: deudor.nombre,
@@ -128,6 +114,24 @@ export function deudoresDeHoy(
       diasAtraso: deudor.diasAtraso ?? 0,
     }))
     .sort(porMontoYAntiguedad((deudor) => deudor.montoTotal, masAntiguo));
+  return { deudores, masAntiguo };
+}
+
+/**
+ * Los deudores de la organización, en la forma en que viajan por la red y en
+ * el orden en que se muestran: monto descendente y, a igual monto, la deuda
+ * más vieja primero (lib/orden-deuda.ts), para que el orden no dependa de
+ * cómo vino la consulta. Es el orden de Hoy y el de /api/deudores
+ * (casos-uso/deudores.ts).
+ *
+ * Pura: recibe los turnos que ya leyó `buscarTurnosConDeuda` y no vuelve a
+ * la base.
+ */
+export function deudoresDeHoy(
+  turnos: TurnoConDeuda[],
+  ahora: Date,
+): DeudaPaciente[] {
+  return deudoresOrdenados(turnos, ahora).deudores;
 }
 
 function totalizar(sinCobrar: PacienteSinCobrar[]): TotalSinCobrar {
@@ -159,8 +163,7 @@ export function deudaDeHoy(
   turnos: TurnoConDeuda[],
   ahora: Date,
 ): DeudaDeHoy {
-  const deudores = deudoresDeHoy(turnos, ahora);
-  const masAntiguo = masAntiguoPorPaciente(turnos);
+  const { deudores, masAntiguo } = deudoresOrdenados(turnos, ahora);
   const sinCobrar: PacienteSinCobrar[] = deudores.map((deudor) => ({
     pacienteId: deudor.pacienteId,
     pacienteNombre: `${deudor.nombre} ${deudor.apellido}`,
@@ -176,7 +179,7 @@ export async function pendientesTerapeuta({
   prisma,
   organizationId,
   ahora,
-  turnosConDeuda,
+  deuda,
 }: PendientesTerapeutaParams): Promise<PendientesTerapeuta> {
   const inicioDelDia = inicioDelDiaMvd(ahora);
   const finDelDia = finDelDiaMvd(ahora);
@@ -186,7 +189,7 @@ export async function pendientesTerapeuta({
   const quietaDesde = (estado: "grabando" | "subiendo") =>
     new Date(ahora.getTime() - umbralSinTerminarMs(estado));
 
-  const [sesionesEnRevision, sesionesFallidas, turnosImpagos, turnosDeHoy, sesionesSinTerminar] = await Promise.all([
+  const [sesionesEnRevision, sesionesFallidas, deudaCalculada, turnosDeHoy, sesionesSinTerminar] = await Promise.all([
     // 1. Notas generadas que todavía nadie aprobó. De cualquier fecha: una
     //    nota del jueves pasado sigue siendo trabajo clínico pendiente.
     prisma.sesionClinica.findMany({
@@ -230,7 +233,7 @@ export async function pendientesTerapeuta({
     //    no una propia: la deuda de esta pantalla y la de Cobros tienen que
     //    ser la misma o el número no coincide consigo mismo. Si quien llama
     //    ya la leyó, no se vuelve a la base.
-    turnosConDeuda ?? buscarTurnosConDeuda(prisma, organizationId),
+    deuda ?? buscarTurnosConDeuda(prisma, organizationId).then((turnos) => deudaDeHoy(turnos, ahora)),
 
     // 4. Turnos de hoy, para cruzar contra las autorizaciones vigentes.
     prisma.turno.findMany({
@@ -304,7 +307,7 @@ export async function pendientesTerapeuta({
     fecha: sesion.turno.fecha.toISOString(),
   }));
 
-  const { sinCobrar, totalSinCobrar } = deudaDeHoy(turnosImpagos, ahora);
+  const { sinCobrar, totalSinCobrar } = deudaCalculada;
 
   // Una sola consulta de consentimientos para todas las pacientes del día.
   const pacientesDeHoy = [...new Set(turnosDeHoy.map((t) => t.paciente.id))];

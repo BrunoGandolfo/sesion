@@ -430,7 +430,7 @@ export interface TurnoParaDeuda {
   fecha?: Date;
 }
 
-interface DeudorAgrupado {
+export interface DeudorAgrupado {
   pacienteId: string;
   nombre: string;
   apellido: string;
@@ -439,6 +439,10 @@ interface DeudorAgrupado {
   minutosTotales: number;
   /** Solo presente cuando la entrada trae `fecha` (ver TurnoParaDeuda). */
   diasAtraso?: number;
+  /** Fecha del impago más viejo; solo cuando la entrada trae `fecha`. Es la
+   *  que da `diasAtraso` y la que desempata el orden de Hoy
+   *  (lib/orden-deuda.ts): quien la necesita no la vuelve a calcular. */
+  impagoMasAntiguo?: Date;
 }
 
 /**
@@ -447,9 +451,10 @@ interface DeudorAgrupado {
  * monto, orden de aparición). Sin tope: el tope lo aplica el consumidor.
  * Un paciente sin turnos impagos no aparece.
  *
- * Si los turnos traen `fecha`, cada deudor sale además con `diasAtraso`,
- * calculado con diasDesde() sobre el impago más antiguo respecto de `ahora`
- * (default: hoy). Sin `fecha` la salida es idéntica a la de antes.
+ * Si los turnos traen `fecha`, cada deudor sale además con su
+ * `impagoMasAntiguo` y con `diasAtraso`, calculado con diasDesde() sobre esa
+ * fecha respecto de `ahora` (default: hoy). Sin `fecha` no salen ninguno de
+ * los dos.
  */
 export function calcularDeudores(
   turnos: TurnoParaDeuda[],
@@ -483,7 +488,10 @@ export function calcularDeudores(
 
   for (const [pacienteId, fecha] of impagoMasAntiguo) {
     const deudor = porPaciente.get(pacienteId);
-    if (deudor) deudor.diasAtraso = diasDesde(fecha, ahora);
+    if (deudor) {
+      deudor.impagoMasAntiguo = fecha;
+      deudor.diasAtraso = diasDesde(fecha, ahora);
+    }
   }
 
   return [...porPaciente.values()].sort((a, b) => b.montoTotal - a.montoTotal);
@@ -573,6 +581,21 @@ export interface TurnoConDeuda extends TurnoParaDeuda {
   fecha: Date;
   duracionMin: number;
   paciente: { nombre: string; apellido: string; telefono: string };
+}
+
+/**
+ * La deuda de UNA paciente, o null si no debe nada. La misma consulta y la
+ * misma cuenta que /api/deudores y Hoy, acotadas a ella: lo que se le avisa
+ * por SMS (recordar-cobro, texto-de-cobro) es lo que se ve en pantalla.
+ */
+export async function deudaDePaciente(
+  prisma: typeof db,
+  organizationId: string,
+  pacienteId: string,
+  ahora: Date,
+): Promise<DeudorAgrupado | null> {
+  const [deuda] = calcularDeudores(await buscarTurnosConDeuda(prisma, organizationId, pacienteId), ahora);
+  return deuda && deuda.sesionesImpagas > 0 ? deuda : null;
 }
 
 /**

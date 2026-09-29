@@ -22,7 +22,7 @@ import type {
 } from "@/types/domain";
 
 import { buscarTurnosConDeuda, toTurnoConPaciente } from "../domain";
-import { deudoresDeHoy, pendientesTerapeuta } from "./pendientes-terapeuta";
+import { deudaDeHoy, pendientesTerapeuta } from "./pendientes-terapeuta";
 
 type ClientePrisma = typeof db;
 
@@ -66,13 +66,15 @@ export async function obtenerDashboard({
   const monthStart = inicioDeMesMvd(ahora);
   const monthEnd = finDeMesMvd(ahora);
 
-  // La deuda se lee UNA vez y la comparten el KPI, la lista de "Te deben" y
-  // el bloque de pendientes (ver casos-uso/pendientes-terapeuta.ts).
-  const deuda = buscarTurnosConDeuda(prisma, organizationId);
+  // La deuda se lee y se cuenta UNA vez (deudaDeHoy) y la comparten el KPI,
+  // la lista de "Te deben" y el bloque de pendientes. Antes se leía una vez
+  // pero se contaba dos: acá y otra vez dentro de pendientesTerapeuta.
+  const deuda = buscarTurnosConDeuda(prisma, organizationId).then((turnos) =>
+    deudaDeHoy(turnos, ahora),
+  );
 
   const [
-    sesionesHoyCount,
-    turnosConDeuda,
+    deudaCalculada,
     ingresosMes,
     sesionesHoyRows,
     pendientes,
@@ -81,13 +83,6 @@ export async function obtenerDashboard({
     pacientesActivos,
     totalTurnos,
   ] = await Promise.all([
-    prisma.turno.count({
-      where: {
-        organizationId,
-        fecha: { gte: todayStart, lte: todayEnd },
-        estado: { not: "cancelado" },
-      },
-    }),
     deuda,
     prisma.turno.aggregate({
       where: {
@@ -113,15 +108,8 @@ export async function obtenerDashboard({
     }),
     // Notas sin aprobar, sesiones sin cobrar y turnos de hoy sin
     // autorización: lo único de esta respuesta que pide una acción. La deuda
-    // le entra ya leída para no consultarla dos veces.
-    deuda.then((turnos) =>
-      pendientesTerapeuta({
-        prisma,
-        organizationId,
-        ahora,
-        turnosConDeuda: turnos,
-      }),
-    ),
+    // le entra ya contada.
+    deuda.then((d) => pendientesTerapeuta({ prisma, organizationId, ahora, deuda: d })),
     // Las sesiones del día, sólo para saber si alguna tuvo señal de riesgo.
     prisma.sesionClinica.findMany({
       where: {
@@ -140,12 +128,14 @@ export async function obtenerDashboard({
 
   const sesionesHoy = sesionesHoyRows.map(toTurnoConPaciente);
 
-  // La misma función y el mismo orden que consume el bloque de pendientes:
-  // monto descendente, como la lista de Cobros.
-  const deudores = deudoresDeHoy(turnosConDeuda, ahora).slice(0, TOPE_DEUDORES);
+  // La misma cuenta y el mismo orden que el bloque de pendientes y que
+  // /api/deudores: monto descendente y, a igual monto, la deuda más vieja.
+  const deudores = deudaCalculada.deudores.slice(0, TOPE_DEUDORES);
 
   const kpis: KPIsDashboard = {
-    sesionesHoy: sesionesHoyCount,
+    // Las mismas filas que se listan abajo: contarlas con otra consulta del
+    // mismo `where` era una ida más a la base.
+    sesionesHoy: sesionesHoyRows.length,
     // El mismo total que dice el bloque de pendientes, no una suma aparte.
     deudaAcumulada: pendientes.totalSinCobrar.monto,
     ingresosMes: ingresosMes._sum.tarifaCobrada ?? 0,

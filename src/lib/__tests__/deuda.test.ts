@@ -91,9 +91,9 @@ describe("calcularDeudores", () => {
     expect(turnos).toEqual(copia);
   });
 
-  it("sin fecha en los turnos no agrega diasAtraso", () => {
+  it("sin fecha en los turnos no agrega diasAtraso ni impagoMasAntiguo", () => {
     const deudores = calcularDeudores(turnos);
-    expect(deudores.every((d) => !("diasAtraso" in d))).toBe(true);
+    expect(deudores.every((d) => !("diasAtraso" in d) && !("impagoMasAntiguo" in d))).toBe(true);
   });
 });
 
@@ -125,6 +125,11 @@ describe("calcularDeudores — diasAtraso", () => {
   it("toma el impago más antiguo del paciente", () => {
     const deAna = calcularDeudores(turnos, hoy).find((d) => d.pacienteId === "ana");
     expect(deAna?.diasAtraso).toBe(10);
+  });
+
+  it("devuelve el impago más antiguo que usó, sin contar los pagados", () => {
+    const [deAna] = calcularDeudores(turnos, hoy).filter((d) => d.pacienteId === "ana");
+    expect(deAna.impagoMasAntiguo).toEqual(diasAntes(10));
   });
 
   it("un impago de hoy tiene 0 días de atraso", () => {
