@@ -7,6 +7,7 @@ import type {
 import type {
   Configuracion,
   DeudaPaciente,
+  Paciente,
   PacienteConDeuda,
   Turno,
   TurnoConPaciente,
@@ -58,6 +59,25 @@ type FilaTurno = Omit<PrismaTurno, "notasEncrypted"> & {
  * `...fila` lo mandaría al JSON de la respuesta. Que un campo nuevo de la
  * base no salga hasta que alguien lo agregue acá es a propósito.
  */
+
+/** Lo que la API devuelve de un paciente: la fila sin el blob cifrado. Vivía
+ *  en casos-uso/pacientes.ts con la misma lista de campos que
+ *  toPacienteConDeuda, escrita dos veces. */
+export function toPaciente(fila: FilaPaciente): Paciente {
+  return {
+    id: fila.id,
+    nombre: fila.nombre,
+    apellido: fila.apellido,
+    telefono: fila.telefono,
+    tarifa: fila.tarifa,
+    notas: fila.notas,
+    activo: fila.activo,
+    creadoEn: fila.creadoEn,
+    actualizadoEn: fila.actualizadoEn,
+    organizationId: fila.organizationId,
+  };
+}
+
 export function toPacienteConDeuda(
   paciente: PacienteConTurnos,
 ): PacienteConDeuda {
@@ -70,16 +90,9 @@ export function toPacienteConDeuda(
   const impagas = paciente.turnos.filter(esDeudaPendiente);
 
   return {
-    id: paciente.id,
-    nombre: paciente.nombre,
-    apellido: paciente.apellido,
-    telefono: paciente.telefono,
-    tarifa: paciente.tarifa,
-    notas: paciente.notas,
-    activo: paciente.activo,
-    creadoEn: paciente.creadoEn,
-    actualizadoEn: paciente.actualizadoEn,
-    organizationId: paciente.organizationId,
+    // toPaciente arma su objeto campo por campo: esparcir ESE objeto (no la
+    // fila) no arrastra el blob.
+    ...toPaciente(paciente),
     sesionesRealizadas: realizadas.length,
     totalCobrado: sumTarifas(pagadas),
     sesionesImpagas: impagas.length,
