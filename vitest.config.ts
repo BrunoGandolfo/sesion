@@ -76,8 +76,8 @@ const INTEGRACION = [
   'src/lib/__tests__/pendientes-terapeuta.test.ts',
   'src/lib/__tests__/cobrar-turno.test.ts',
   'src/lib/__tests__/multi-tenant.test.ts',
-  // Los filtros del historial clínico y el mes de cobros, contra la base real.
-  'src/lib/__tests__/historial-filtros.test.ts',
+  // El historial clínico y el mes de cobros, contra la base real.
+  'src/lib/__tests__/historial-documentacion.test.ts',
   'src/lib/__tests__/cobros-mes.test.ts',
   // Hoy, Cobros del mes y Finanzas: el mismo "cobrado del mes" sobre la misma base.
   'src/lib/__tests__/cobrado-del-mes.test.ts',

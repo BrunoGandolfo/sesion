@@ -1,13 +1,14 @@
 # Tres contratos que crecieron sin romperse
 
 Pendientes, el historial clínico de la ficha y los cobros del mes ganaron
-campos y parámetros nuevos. **Todos son aditivos**: una pantalla que no los
+campos y parámetros nuevos. **Todos fueron aditivos**: una pantalla que no los
 usa recibe exactamente lo que recibía antes, byte por byte. Hay un test por
 cada uno que lo demuestra pidiendo sin los parámetros nuevos y comparando.
+Los del historial (sección 2) se sacaron después: nadie los usaba.
 
-Los tres períodos se leen en **hora de Montevideo** (UTC-3, sin horario de
-verano) con el mismo parser: `src/app/api/_lib/periodo.ts`. Aceptan un mes
-(`2026-09`) o un día (`2026-09-30`).
+El período de los cobros del mes se lee en **hora de Montevideo** (UTC-3, sin
+horario de verano) con el parser de `src/app/api/_lib/periodo.ts`. Acepta un
+mes (`2026-09`) o un día (`2026-09-30`).
 
 ---
 
@@ -52,30 +53,18 @@ deje de compilar por un campo que no le importa.
 
 ---
 
-## 2. `GET /api/pacientes/[id]/documentacion` → tres parámetros opcionales
+## 2. `GET /api/pacientes/[id]/documentacion`: los filtros se sacaron
 
-Sin ninguno de los tres, **la respuesta es la de siempre**: página 1, diez por
-página, sin filtro de fechas, sólo `revision` y `aprobada`.
+Este endpoint tuvo tres parámetros opcionales, `desde`, `hasta` e
+`incluirFallidas`, que ninguna pantalla llegó a mandar. **Se sacaron el
+29-09-2026 por decisión del dueño (D4).** Hoy acepta sólo `page` y `limit`,
+como siempre; cualquier otro parámetro se ignora (no filtra ni da 400).
 
-| Parámetro | Valor | Qué hace |
-| --- | --- | --- |
-| `desde` | `2026-09` o `2026-09-14` | Desde el **principio** del período |
-| `hasta` | `2026-09` o `2026-09-30` | Hasta el **final** del período |
-| `incluirFallidas` | `"0"` \| `"1"` | Con `"1"` entran también las `fallida` |
+Sigue auditándose como exportación de documentación clínica, con `auditar`
+(si el rastro no se puede escribir, las notas no salen). El `detalle` del
+evento lleva `page`, `limit` y `total`.
 
-`desde=2026-09&hasta=2026-09` es el mes entero: una sesión del 30 a las 23:30
-entra. Filtran por la **fecha del turno**, que es la que ordena la lista y la
-que la profesional tiene en la cabeza, no por cuándo se procesó la nota.
-
-Un valor que no es un mes ni un día válido da **400** con el detalle de Zod,
-no una lista vacía.
-
-**El rastro de auditoría se lleva los filtros.** Este endpoint devuelve notas
-completas en lote: cuenta como exportación de documentación clínica y se
-audita con `auditar` (si el rastro no se puede escribir, las notas no salen).
-Ahora el `detalle` del evento incluye `desde`, `hasta` e `incluirFallidas`
-cuando vinieron: exportar tres meses y exportar todo no son el mismo acto, y
-el registro tiene que poder distinguirlos.
+Las sesiones fallidas se encuentran en **Pendientes** (sección 1), no acá.
 
 ---
 

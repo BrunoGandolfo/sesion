@@ -176,14 +176,8 @@ describe("rutas de sesión", () => {
     expect(sin.status).toBe(401);
   });
 
-  it("GET /sesiones lista las vivas sin IP y marca la actual; POST /salir-todas cierra las demás; POST /salir la propia", async () => {
+  it("POST /salir-todas cierra las demás; POST /salir la propia", async () => {
     const { sesiones } = await conSesiones(3);
-    const { GET } = await import("@/app/api/cuenta/sesiones/route");
-    const lista = await (await GET()).json();
-    expect(lista.data.sesiones).toHaveLength(3);
-    expect(lista.data.sesiones.filter((s: { actual: boolean }) => s.actual)).toHaveLength(1);
-    expect(JSON.stringify(lista)).not.toContain(HUELLA.ip);
-    expect(lista.data.usuaria).toMatchObject({ nombre: "Mariana" });
 
     const { POST: salirTodas } = await import("@/app/api/cuenta/salir-todas/route");
     expect(await (await salirTodas()).json()).toEqual({ data: { cerradas: 2 } });

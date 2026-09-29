@@ -1,14 +1,18 @@
 /**
- * Integración — los filtros nuevos del historial clínico de una paciente.
+ * Integración — el historial clínico de una paciente
+ * (GET /api/pacientes/[id]/documentacion), como lo llama la ficha: página y
+ * tamaño, nada más.
  *
- * La ruta ya existía y la ficha de hoy la llama sin parámetros. Lo que este
- * archivo protege, antes que nada, es que SIN parámetros nuevos la respuesta
- * sea exactamente la de antes; después, que con ellos haga lo que promete,
- * incluido el borde del mes en hora de Montevideo.
+ * Tuvo filtros `desde`, `hasta` e `incluirFallidas` que ninguna pantalla
+ * mandaba; se sacaron por decisión del dueño (D4, 29-09-2026). Este archivo
+ * se llamaba historial-filtros.test.ts: los casos de los filtros se fueron
+ * con ellos y quedan los que valen igual —la respuesta por defecto, el
+ * aislamiento entre organizaciones— y uno que prueba que esos parámetros ya
+ * no cambian nada.
  *
  * Ejecutar:
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
- *   npx vitest run src/lib/__tests__/historial-filtros.test.ts
+ *   npx vitest run src/lib/__tests__/historial-documentacion.test.ts
  */
 import { randomUUID } from "node:crypto";
 
@@ -121,7 +125,7 @@ afterAll(async () => {
 
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("historial clínico — sin parámetros nuevos, lo mismo que antes", () => {
+describe("historial clínico", () => {
   it("devuelve revision y aprobada, página 1 de a diez, sin las fallidas", async () => {
     const org = await crearOrg();
     sesionActual.organizationId = org.orgId;
@@ -150,120 +154,45 @@ describe("historial clínico — sin parámetros nuevos, lo mismo que antes", ()
     const con = await (await historial(org.pacienteId, "?page=1&limit=10")).json();
     expect(con).toEqual(sin);
   });
-});
 
-describe("historial clínico — desde y hasta", () => {
-  it("por mes: toma el mes entero, y el 30 a las 23:30 de Montevideo entra", async () => {
+  it("ignora desde, hasta e incluirFallidas: misma respuesta, y no entran al rastro", async () => {
     const org = await crearOrg();
     sesionActual.organizationId = org.orgId;
-    // 23:30 del 30/9 en Montevideo es 02:30 UTC del 1/10.
-    const borde = instanteMvd(2026, 8, 30, 23, 30);
-    expect(borde.toISOString()).toBe("2026-10-01T02:30:00.000Z");
-    await crearSesion(org, borde, "aprobada");
-    await crearSesion(org, instanteMvd(2026, 9, 1, 10), "aprobada");
-
-    const septiembre = await (await historial(org.pacienteId, "?desde=2026-09&hasta=2026-09")).json();
-    expect(septiembre.data.totalSesiones).toBe(1);
-    expect(septiembre.data.sesiones[0].fecha).toBe(borde.toISOString());
-
-    const octubre = await (await historial(org.pacienteId, "?desde=2026-10&hasta=2026-10")).json();
-    expect(octubre.data.totalSesiones).toBe(1);
-    expect(octubre.data.sesiones[0].fecha).toBe(
-      instanteMvd(2026, 9, 1, 10).toISOString(),
-    );
-  });
-
-  it("por día: toma el día entero de Montevideo, de 00:00 a 23:59:59.999", async () => {
-    const org = await crearOrg();
-    sesionActual.organizationId = org.orgId;
-    await crearSesion(org, instanteMvd(2026, 8, 30, 0, 0), "aprobada");
-    await crearSesion(org, instanteMvd(2026, 8, 30, 23, 59, 59), "aprobada");
-    await crearSesion(org, instanteMvd(2026, 8, 29, 23, 59, 59), "aprobada");
-
-    const { data } = await (
-      await historial(org.pacienteId, "?desde=2026-09-30&hasta=2026-09-30")
-    ).json();
-    expect(data.totalSesiones).toBe(2);
-  });
-
-  it("sólo `desde` deja abierto el final, y sólo `hasta` el principio", async () => {
-    const org = await crearOrg();
-    sesionActual.organizationId = org.orgId;
-    await crearSesion(org, instanteMvd(2026, 0, 10, 15), "aprobada");
-    await crearSesion(org, instanteMvd(2026, 5, 10, 15), "aprobada");
-    await crearSesion(org, instanteMvd(2026, 10, 10, 15), "aprobada");
-
-    expect((await (await historial(org.pacienteId, "?desde=2026-06")).json()).data.totalSesiones).toBe(2);
-    expect((await (await historial(org.pacienteId, "?hasta=2026-06")).json()).data.totalSesiones).toBe(2);
-  });
-
-  it("cruza el año sin perder nada", async () => {
-    const org = await crearOrg();
-    sesionActual.organizationId = org.orgId;
-    await crearSesion(org, instanteMvd(2025, 11, 31, 23, 30), "aprobada");
-    await crearSesion(org, instanteMvd(2026, 0, 2, 10), "aprobada");
-
-    const { data } = await (
-      await historial(org.pacienteId, "?desde=2025-12&hasta=2026-01")
-    ).json();
-    expect(data.totalSesiones).toBe(2);
-    expect((await (await historial(org.pacienteId, "?desde=2025-12&hasta=2025-12")).json()).data.totalSesiones).toBe(1);
-  });
-
-  it("un mes o un día inválidos dan 400 y no una lista vacía", async () => {
-    const org = await crearOrg();
-    sesionActual.organizationId = org.orgId;
-    for (const query of ["?desde=2026-13", "?desde=ayer", "?hasta=2026-02-31", "?desde=2026-9"]) {
-      expect((await historial(org.pacienteId, query)).status, query).toBe(400);
-    }
-  });
-});
-
-describe("historial clínico — incluirFallidas", () => {
-  it("con incluirFallidas=1 entran las fallidas; con 0 o sin el parámetro, no", async () => {
-    const org = await crearOrg();
-    sesionActual.organizationId = org.orgId;
-    await crearSesion(org, instanteMvd(2026, 8, 10, 15), "aprobada");
+    await crearSesion(org, instanteMvd(2026, 7, 10, 15), "aprobada");
+    await crearSesion(org, instanteMvd(2026, 8, 30, 23, 30), "aprobada");
     await crearSesion(org, instanteMvd(2026, 8, 11, 15), "fallida");
 
-    expect((await (await historial(org.pacienteId)).json()).data.totalSesiones).toBe(1);
-    expect((await (await historial(org.pacienteId, "?incluirFallidas=0")).json()).data.totalSesiones).toBe(1);
+    const sin = await (await historial(org.pacienteId)).json();
+    // Antes cualquiera de estos filtraba (o daba 400 si era inválido).
+    for (const query of [
+      "?desde=2026-09&hasta=2026-09",
+      "?desde=2026-10",
+      "?hasta=2026-01",
+      "?incluirFallidas=1",
+      "?desde=2026-13&hasta=ayer",
+    ]) {
+      const res = await historial(org.pacienteId, query);
+      expect(res.status, query).toBe(200);
+      expect(await res.json(), query).toEqual(sin);
+    }
+    expect(sin.data.totalSesiones).toBe(2);
 
-    const { data } = await (await historial(org.pacienteId, "?incluirFallidas=1")).json();
-    expect(data.totalSesiones).toBe(2);
-    expect(data.sesiones.map((s: { estado: string }) => s.estado)).toEqual([
-      "fallida",
-      "aprobada",
-    ]);
-  });
-
-  it("los filtros quedan en el rastro de la exportación", async () => {
-    const org = await crearOrg();
-    sesionActual.organizationId = org.orgId;
-    await crearSesion(org, instanteMvd(2026, 8, 10, 15), "aprobada");
-
-    await historial(org.pacienteId, "?desde=2026-09&hasta=2026-09&incluirFallidas=1");
-
-    const [evento] = await prismaRaw.eventoAuditoria.findMany({
+    const eventos = await prismaRaw.eventoAuditoria.findMany({
       where: { organizationId: org.orgId, accion: "sesion.exportar" },
     });
-    expect(evento.detalle).toMatchObject({
-      desde: "2026-09",
-      hasta: "2026-09",
-      incluirFallidas: true,
-    });
+    expect(eventos.length).toBeGreaterThan(0);
+    for (const evento of eventos) {
+      expect(Object.keys(evento.detalle as object).sort()).toEqual(["limit", "page", "total"]);
+    }
   });
 
-  it("los filtros no dejan ver la documentación de otra organización", async () => {
+  it("no deja ver la documentación de otra organización", async () => {
     const a = await crearOrg();
     const b = await crearOrg();
     await crearSesion(a, instanteMvd(2026, 8, 10, 15), "aprobada");
 
     sesionActual.organizationId = b.orgId;
-    const res = await leerHistorial(
-      new Request("http://localhost/api/pacientes/x/documentacion?desde=2026-01&incluirFallidas=1"),
-      { params: Promise.resolve({ id: a.pacienteId }) },
-    );
+    const res = await historial(a.pacienteId);
     expect(res.status).toBe(404);
   });
 });
