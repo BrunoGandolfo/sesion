@@ -39,8 +39,9 @@ import { EsqueletoCobrosCuerpo } from "@/components/esqueletos";
 import { EstadoVacio } from "@/components/ui/estado-vacio";
 import { CabeceraUsuario } from "@/components/layout/cabecera-usuario";
 import { ListaEnCascada } from "@/components/ui/movimiento";
-import { ApiClientError, apiGet, apiPost, esAbort } from "@/lib/api-client";
+import { ApiClientError, apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
+import { cobrarTurno } from "@/lib/cobrar-cliente";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import {
   TEMPLATE_COBRO_DEFAULT,
@@ -97,7 +98,7 @@ import type {
   TurnoConPaciente,
 } from "@/types/domain";
 
-import { SheetMetodoPago } from "../../_components/sheet-metodo-pago";
+import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { TarjetaFinanzas } from "./tarjeta-finanzas";
 
 // ============================================
@@ -418,61 +419,50 @@ function TeDeben({
   onVerCobros: () => void;
 }) {
   const [panel, setPanel] = React.useState<PanelAbierto>(null);
-  // Las sesiones marcadas, mientras el selector de método está abierto.
+  // Las sesiones marcadas que falta cobrar, mientras el selector está abierto.
   const [porCobrar, setPorCobrar] = React.useState<string[] | null>(null);
-  // Cómo terminó el cobro. Lo escribe `cobrar` y lo lee el cierre del sheet,
-  // que llega después: el sheet se queda abierto lo que dura el tilde.
-  const resultadoRef = React.useRef<
-    | { registradas: number; elegidas: number; error: string | null; terminado: boolean }
-    | null
-  >(null);
+  // Cuántas se eligieron y cuántas entraron. Lo escribe `cobrar` y lo lee el
+  // cierre del selector, que llega después (se sostiene lo que dura el tilde).
+  const resultadoRef = React.useRef<{ registradas: number; elegidas: number } | null>(null);
 
-  // El cobro es por turno: una llamada por sesión marcada, en orden. Si una
-  // falla se corta ahí y se dice cuántas entraron. Rechaza para que el sheet
-  // no dibuje el tilde sobre un cobro que no quedó completo.
+  // El cobro es por turno: una llamada por sesión marcada, en orden. Cada una
+  // que entra sale de `porCobrar`; si una falla se corta ahí, el selector se
+  // queda abierto con el error, y reintentar cobra sólo las que faltan.
   async function cobrar(metodo: MetodoPago) {
     const ids = porCobrar ?? [];
-    const resultado = {
-      registradas: 0,
-      elegidas: ids.length,
-      error: null as string | null,
-      terminado: false,
-    };
+    const resultado = resultadoRef.current ?? { registradas: 0, elegidas: ids.length };
     resultadoRef.current = resultado;
-    try {
-      for (const id of ids) {
-        await apiPost(`/api/turnos/${id}/cobrar`, { metodo });
-        resultado.registradas += 1;
-      }
-    } catch (error) {
-      resultado.error =
-        error instanceof ApiClientError ? error.mensaje : NO_SE_PUDO_COBRAR;
-      throw error;
-    } finally {
-      resultado.terminado = true;
+    for (const id of ids) {
+      await cobrarTurno(id, metodo);
+      resultado.registradas += 1;
+      setPorCobrar((actual) => actual?.filter((otro) => otro !== id) ?? null);
     }
   }
 
+  function describirError(err: unknown): string {
+    const resultado = resultadoRef.current;
+    return resultado && resultado.registradas > 0
+      ? COBRO_INCOMPLETO(resultado.registradas, resultado.elegidas)
+      : mensajeParaElla(err, NO_SE_PUDO_COBRAR);
+  }
+
+  // Se cierra con todo cobrado (después del tilde) o porque ella volvió.
   function alCerrarMetodo() {
     const resultado = resultadoRef.current;
-    // Con cobros en vuelo el sheet no se cierra (Escape, tocar afuera): se
-    // cierra solo cuando terminan, y recién ahí se sabe qué decir.
-    if (resultado && !resultado.terminado) return;
+    const faltan = porCobrar?.length ?? 0;
     resultadoRef.current = null;
     setPorCobrar(null);
-    if (!resultado) return; // cerró sin elegir: el panel sigue como estaba
-    if (resultado.error === null) {
+    if (!resultado) return; // se fue sin elegir: el panel sigue como estaba
+    if (faltan === 0) {
       setPanel(null);
       onCobrado();
       return;
     }
-    if (resultado.registradas > 0) setPanel(null);
-    onCobroIncompleto(
-      resultado.registradas > 0
-        ? COBRO_INCOMPLETO(resultado.registradas, resultado.elegidas)
-        : resultado.error,
-      resultado.registradas > 0,
-    );
+    // Volvió con algunas cobradas y otras no: se dice cuántas entraron.
+    if (resultado.registradas > 0) {
+      setPanel(null);
+      onCobroIncompleto(COBRO_INCOMPLETO(resultado.registradas, resultado.elegidas), true);
+    }
   }
 
   if (deudores.length === 0) {
@@ -529,6 +519,7 @@ function TeDeben({
         open={porCobrar !== null}
         onClose={alCerrarMetodo}
         onElegir={cobrar}
+        describirError={describirError}
       />
     </div>
   );

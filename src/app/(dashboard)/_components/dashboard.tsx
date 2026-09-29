@@ -22,7 +22,6 @@ import {
   COBRADO,
   HOY_SIN_PROXIMA,
   NO_SE_PUDO_AGENDAR,
-  NO_SE_PUDO_COBRAR,
 } from "@/lib/glosario";
 import type {
   Configuracion,
@@ -32,6 +31,8 @@ import type {
 } from "@/types/domain";
 
 import { parsePaciente, type PacienteJson } from "@/lib/json-turno";
+import { cobrarTurno } from "@/lib/cobrar-cliente";
+import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 
 import { AgendaDelDia } from "./agenda-del-dia";
 import { CardAhora } from "./card-ahora";
@@ -46,7 +47,6 @@ import { FalloDeCarga } from "./estados-carga";
 import { Kpis } from "./kpis";
 import { Pendientes } from "./pendientes";
 import { Saludo } from "./saludo";
-import { SheetMetodoPago } from "./sheet-metodo-pago";
 import { SheetNuevoTurno } from "./sheet-nuevo-turno";
 
 export function Dashboard() {
@@ -154,16 +154,15 @@ export function Dashboard() {
   // cascada y el fundido de página, varias veces por jornada, para cambiar
   // un renglón. La cuenta de la deuda la baja `aplicarCobro`, que toca el
   // turno, el KPI y la lista de deudores a la vez.
+  const turnoCobrando = cobrando
+    ? estado?.data.sesionesHoy.find((t) => t.id === cobrando)
+    : undefined;
   const cobrar = React.useCallback(
     async (metodo: MetodoPago) => {
       const turnoId = cobrando;
       if (!turnoId) return;
-      try {
-        await apiPost(`/api/turnos/${turnoId}/cobrar`, { metodo });
-      } catch (error) {
-        avisar(NO_SE_PUDO_COBRAR);
-        throw error;
-      }
+      // Si falla, el selector se queda abierto y dice por qué.
+      await cobrarTurno(turnoId, metodo);
       setEstado((previo) =>
         previo
           ? {
@@ -175,7 +174,7 @@ export function Dashboard() {
       setCobroConfirmado(turnoId);
       confirmar(COBRADO);
     },
-    [cobrando, avisar, confirmar],
+    [cobrando, confirmar],
   );
 
   // Si la API rechaza (un 409 por solapamiento, por ejemplo) se relanza:
@@ -292,6 +291,8 @@ export function Dashboard() {
       <SheetMetodoPago
         open={cobrando !== null}
         onClose={() => setCobrando(null)}
+        monto={turnoCobrando?.tarifaCobrada}
+        cierraElTurno={turnoCobrando?.estado === "programado"}
         onElegir={cobrar}
       />
 

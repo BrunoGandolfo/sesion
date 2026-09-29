@@ -38,10 +38,13 @@ import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
 import { apiGet, esAbort } from "@/lib/api-client";
+import { cobrarTurno } from "@/lib/cobrar-cliente";
+import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaLarga, hora } from "@/lib/format";
 import {
   ALGO_FALLO,
+  COBRADO,
   ESCRIBIENDO_NOTA,
   GRABAR_SESION,
   GRABACION_SIN_TERMINAR,
@@ -63,7 +66,6 @@ import type { SesionClinicaEnsamblada } from "@/hooks/useSesionClinicaPolling";
 import type { EstadoProcesamiento, Modalidad, Turno } from "@/types/domain";
 
 import { BriefPreSesion } from "./brief-pre-sesion";
-import { CobrarSheet } from "./turnos-pagos-tab";
 
 interface SesionesTabProps {
   pacienteId: string;
@@ -410,14 +412,17 @@ export function SesionesTab({
         ) : null}
       </section>
 
-      <CobrarSheet
-        turno={cobroTarget}
+      <SheetMetodoPago
+        open={cobroTarget !== null}
         onClose={() => setCobroTarget(null)}
-        onCobrado={() => {
-          onAviso("Cobrado", "confirmacion");
+        monto={cobroTarget?.tarifaCobrada}
+        cierraElTurno={cobroTarget?.estado === "programado"}
+        onElegir={async (metodo) => {
+          if (!cobroTarget) return;
+          await cobrarTurno(cobroTarget.id, metodo);
+          onAviso(COBRADO, "confirmacion");
           onTurnoActualizado();
         }}
-        onError={onAviso}
       />
     </div>
   );

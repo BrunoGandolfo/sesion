@@ -1,7 +1,6 @@
 "use client";
 
-// Turnos y pagos del paciente (sección plegada de la pestaña Datos) y el
-// sheet de cobro, que también usa la card de la sesión de hoy en Sesiones.
+// Turnos y pagos del paciente (sección plegada de la pestaña Datos).
 
 import * as React from "react";
 import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
@@ -9,39 +8,36 @@ import { useToast } from "@/components/ui/toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 
-import { Button, Chip, Confirmar, Sheet, Toast } from "@/components/ui";
+import { Chip, Confirmar, Toast } from "@/components/ui";
 import {
   DURACION_BREVE,
   SUAVE,
-  CheckDibujado,
-  useConfirmacionDibujada,
 } from "@/components/ui/movimiento";
 import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
-import { apiDelete, apiPost } from "@/lib/api-client";
+import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
+import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { fechaCorta, hora, money } from "@/lib/format";
 import {
   AGENDADO,
   ALGO_FALLO,
+  COBRADO,
   COBRO_DESHECHO,
   DESHACER_COBRO,
   DESHACER_COBRO_ACCION,
   DESHACER_COBRO_MENSAJE,
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
-  METODOS_PAGO,
   METODO_PAGO_LABEL,
   NO_VINO,
   PENDIENTE,
   pluralizar,
 } from "@/lib/glosario";
 import type {
-  MetodoPago,
   Modalidad,
   Turno,
   TurnoEstado,
 } from "@/types/domain";
 
-import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 
 interface TurnosPagosTabProps {
   turnos: Turno[];
@@ -69,29 +65,6 @@ function estadoChipVariant(
   if (estado === "cancelado") return "neutral";
   if (estado === "ausente") return "gold";
   return "neutral";
-}
-
-/** POST /api/turnos/[id]/cobrar → turno actualizado. */
-export async function cobrarTurno(
-  turnoId: string,
-  metodo: MetodoPago,
-): Promise<Turno> {
-  const json = await apiPost<TurnoJson>(`/api/turnos/${turnoId}/cobrar`, {
-    metodo,
-  });
-  return parseTurno(json);
-}
-
-/**
- * DELETE /api/turnos/[id]/cobrar → turno actualizado.
- *
- * Deshace el último cobro: el turno vuelve a `pagoEstado: "pendiente"` y su
- * monto vuelve a la deuda. No toca el estado del turno (sigue realizado) y no
- * borra nada, así que se puede volver a cobrar enseguida.
- */
-export async function deshacerCobroTurno(turnoId: string, actualizadoEn: Date): Promise<Turno> {
-  const json = await apiDelete<TurnoJson>(`/api/turnos/${turnoId}/cobrar`, { actualizadoEn });
-  return parseTurno(json);
 }
 
 // Cobros optimistas sobre la lista recibida por props. Van atados a la
@@ -164,75 +137,20 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
 
       <Toast {...toast.props} />
 
-      <CobrarSheet
-        turno={cobroTarget}
+      <SheetMetodoPago
+        open={cobroTarget !== null}
         onClose={() => setCobroTarget(null)}
-        onCobrado={(turno) => {
-          ajustarTurno(turno.id, turno);
-          toast.confirmar("Cobrado");
+        monto={cobroTarget?.tarifaCobrada}
+        cierraElTurno={cobroTarget?.estado === "programado"}
+        onElegir={async (metodo) => {
+          if (!cobroTarget) return;
+          const actualizado = await cobrarTurno(cobroTarget.id, metodo);
+          ajustarTurno(actualizado.id, actualizado);
+          toast.confirmar(COBRADO);
           onTurnoActualizado?.();
         }}
-        onError={(mensaje) => toast.avisar(mensaje)}
       />
     </div>
-  );
-}
-
-/**
- * Sheet de cobro: elige el método y hace el POST. Al confirmar avisa con el
- * turno actualizado; al fallar avisa con el mensaje y se queda abierto para
- * reintentar.
- *
- * El cierre ya no es inmediato: el check se traza sobre el método que ella
- * tocó y recién ahí el sheet se va (useConfirmacionDibujada). Antes la única
- * confirmación era el toast, abajo de todo y lejos del renglón.
- */
-export function CobrarSheet({
-  turno,
-  onClose,
-  onCobrado,
-  onError,
-}: {
-  turno: Turno | null;
-  onClose: () => void;
-  onCobrado: (turno: Turno) => void;
-  onError: (mensaje: string) => void;
-}) {
-  const [cobrando, setCobrando] = React.useState(false);
-  const [confirmado, confirmar] = useConfirmacionDibujada<MetodoPago>(onClose);
-
-  async function elegir(metodo: MetodoPago) {
-    if (!turno || cobrando || confirmado) return;
-    setCobrando(true);
-    try {
-      const actualizado = await cobrarTurno(turno.id, metodo);
-      confirmar(metodo);
-      onCobrado(actualizado);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : ALGO_FALLO);
-    } finally {
-      setCobrando(false);
-    }
-  }
-
-  return (
-    <Sheet
-      open={turno !== null}
-      onClose={onClose}
-      maxWidth={360}
-      ariaLabel="Elegir método de pago"
-      className="!h-auto"
-    >
-      {turno && (
-        <MetodoPagoSelector
-          monto={turno.tarifaCobrada}
-          deshabilitado={cobrando || confirmado !== null}
-          confirmado={confirmado}
-          onSelect={(metodo) => void elegir(metodo)}
-          onCancel={onClose}
-        />
-      )}
-    </Sheet>
   );
 }
 
@@ -330,7 +248,7 @@ function TurnoRow({
   async function deshacer() {
     setDeshaciendo(true);
     try {
-      const actualizado = await deshacerCobroTurno(turno.id, turno.actualizadoEn);
+      const actualizado = await deshacerCobro(turno.id, turno.actualizadoEn);
       setConfirmando(false);
       onDeshecho(actualizado);
     } catch (err) {
@@ -436,61 +354,5 @@ function TurnoRow({
         </div>
       ) : null}
     </li>
-  );
-}
-
-function MetodoPagoSelector({
-  monto,
-  deshabilitado,
-  confirmado,
-  onSelect,
-  onCancel,
-}: {
-  monto: number;
-  deshabilitado: boolean;
-  /** Método ya cobrado, mientras se dibuja el check sobre su botón. */
-  confirmado: MetodoPago | null;
-  onSelect: (metodo: MetodoPago) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="pb-2 pt-1">
-      <div className="mb-5">
-        <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-          Cobrar sesión
-        </p>
-        <h2 className="mt-1 font-display text-[22px] font-medium tracking-[-0.01em] text-ink-900">
-          Elegí el método
-        </h2>
-        <p className="mt-1 font-sans tabular-nums text-[13px] text-ink-500">{money(monto)}</p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {METODOS_PAGO.map((metodo) => (
-          <button
-            key={metodo.value}
-            type="button"
-            disabled={deshabilitado}
-            onClick={() => onSelect(metodo.value)}
-            className={`flex min-h-[44px] items-center justify-between gap-3 rounded-md border bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-[var(--duration-fast)] hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:opacity-60 ${
-              confirmado === metodo.value
-                ? "border-sage-500 bg-white !opacity-100"
-                : "border-[color:var(--border-subtle)]"
-            }`}
-          >
-            <span>{metodo.label}</span>
-            {confirmado === metodo.value ? (
-              <CheckDibujado tamano={18} className="shrink-0 text-sage-600" />
-            ) : null}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-5 flex justify-end">
-        <Button type="button" variant="ghost" onClick={onCancel} disabled={deshabilitado}>
-          Cancelar
-        </Button>
-      </div>
-    </div>
   );
 }

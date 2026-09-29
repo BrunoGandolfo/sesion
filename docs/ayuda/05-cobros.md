@@ -18,23 +18,20 @@ aparece en el turno, en varios lugares:
   aprobada.
 
 Hay seis métodos de pago: **Efectivo**, **Transferencia**, **MercadoPago**,
-**Débito**, **Crédito** y **Otro**. El selector se llama distinto según dónde
-estés: **Método de pago** en Hoy y en Cobros, *"¿Cómo pagó?"* en la Agenda y **Cobrar
-sesión** en la ficha. Al elegir uno:
-
-- En **Hoy** y en **Cobros** se dibuja un tilde verde, el sheet se cierra solo y
-  aparece *"Cobrado. Ese ya está."*
-- En la **Agenda** se cierra y aparece *"Cobro registrado"*.
-- En la **ficha** se dibuja un tilde y aparece *"Cobrado"*.
+**Débito**, **Crédito** y **Otro**. El selector es el mismo en todos lados, se
+llama *"¿Cómo pagó?"* y muestra el monto. Al elegir uno se dibuja un tilde verde
+sobre el método, el sheet se cierra solo y aparece *"Cobrado. Ese ya está."*
 
 **Cobrar cierra la sesión.** Si el turno todavía figuraba *Agendado* y la hora ya
 pasó, al cobrar queda **realizado** en el mismo movimiento, y su recordatorio se
-cancela.
+cancela. El selector lo avisa debajo del monto: *"Al cobrar, el turno queda como
+realizado."*
 
-Si el pago no entra, no se dibuja ningún tilde. En **Hoy** el aviso siempre es
-*"No se pudo cobrar. Probá de nuevo."*; en la Agenda y en la ficha aparece el
-motivo concreto. En **Hoy**, el turno cobrado se actualiza en la pantalla sin
-recargar, y **Este mes** suma el cobro.
+Si el pago no entra, no se dibuja ningún tilde y el selector **se queda
+abierto** con el motivo debajo de los métodos: podés elegir otro, probar de
+nuevo o volver. Si no hay un motivo concreto, dice *"No se pudo cobrar. Probá de
+nuevo."* En **Hoy**, el turno cobrado se actualiza en la pantalla sin recargar, y
+**Este mes** suma el cobro.
 
 ## Cuándo NO se puede cobrar
 
@@ -75,11 +72,12 @@ Cuando una paciente te paga, no hace falta ir a su ficha:
 Se dibuja el tilde, aparece *"Cobrado. Ese ya está."* y la pantalla se actualiza
 sola: baja **Sin cobrar**, sube **Cobraste este mes**, y la persona sale de la
 lista si ya no debe nada. Hasta que elegís el método no se registra nada:
-**Cancelar**, o cerrar el selector sin elegir, no cobra.
+**Volver**, o cerrar el selector sin elegir, no cobra.
 
-Si marcaste varias y una no se pudo registrar, la app se detiene ahí y te dice
-cuántas quedaron: *"Quedaron registradas 1 de 2. Probá de nuevo con las que
-faltan."*
+Si marcaste varias y una no se pudo registrar, la app se detiene ahí y el
+selector, que sigue abierto, te dice cuántas quedaron: *"Quedaron registradas 1
+de 2. Probá de nuevo con las que faltan."* Si elegís un método de nuevo se
+cobran solo las que faltan; si volvés, la lista se actualiza con lo que entró.
 
 ## Las tres zonas de la deuda
 
@@ -134,7 +132,8 @@ turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
 
 <!-- fuentes:
 src/app/(dashboard)/cobros/_components/cobros-view.tsx
-src/app/(dashboard)/_components/sheet-metodo-pago.tsx
+src/components/cobro/sheet-metodo-pago.tsx
+src/lib/cobrar-cliente.ts
 src/app/(dashboard)/_components/dashboard.tsx
 src/app/(dashboard)/_components/datos.ts
 src/app/(dashboard)/_components/card-ahora.tsx

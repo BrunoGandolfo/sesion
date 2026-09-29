@@ -443,8 +443,14 @@ export const EN_CURSO = "En curso";
 /** El turno es el próximo del día y todavía no empezó. */
 export const ENSEGUIDA = "Enseguida";
 
-/** Título del sheet que pregunta cómo pagó. */
+/** Nombre accesible del sheet que pregunta cómo pagó. */
 export const METODO_DE_PAGO = "Método de pago";
+/** El titular del selector de método de pago: el mismo en Hoy, Agenda,
+ *  Cobros y la ficha. */
+export const COMO_PAGO = "¿Cómo pagó?";
+/** Al lado del monto, cuando se cobra un turno que sigue programado: el
+ *  servidor lo marca realizado al cobrarlo (casos-uso/cobrar-turno.ts). */
+export const AL_COBRAR_QUEDA_REALIZADO = "Al cobrar, el turno queda como realizado.";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Estado del turno en chips y listas

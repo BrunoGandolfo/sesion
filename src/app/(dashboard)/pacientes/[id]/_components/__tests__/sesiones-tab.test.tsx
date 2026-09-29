@@ -24,7 +24,6 @@ vi.mock("framer-motion", async (original) => ({
   ...(await original<typeof import("framer-motion")>()),
   useReducedMotion: () => true,
 }));
-vi.mock("../turnos-pagos-tab", () => ({ CobrarSheet: () => null }));
 
 const LARGO =
   "Llegó contando que la semana fue más liviana que la anterior. ".repeat(8) + "Y esto es lo último que dice.";

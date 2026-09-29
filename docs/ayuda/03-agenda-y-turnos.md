@@ -81,8 +81,8 @@ paciente no vino a este turno."*
 
 - **Cobrar** — abre *"¿Cómo pagó?"* con los métodos de pago. Si el turno todavía
   figuraba *Agendado* y la hora ya pasó, **cobrar lo cierra**: pasa a realizado.
-  Mientras el turno está agendado, el propio sheet lo dice: *"al cobrar, el
-  turno queda como realizado"*. **El recordatorio se cancela.**
+  Mientras el turno está agendado, el propio sheet lo dice: *"Al cobrar, el
+  turno queda como realizado."* **El recordatorio se cancela.**
 - **Grabar sesión**, o el estado de la nota — **Grabar sesión** si el turno
   todavía no tiene sesión clínica. El botón **no desaparece cuando pasa la
   hora** del turno: si empezaste tarde, sigue ahí durante todo ese día. En

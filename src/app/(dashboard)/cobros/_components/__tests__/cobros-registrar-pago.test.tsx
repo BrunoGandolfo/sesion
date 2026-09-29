@@ -19,6 +19,7 @@ import {
   RECORDAR_COBRO,
   RECORDAR_COBRO_TITULO,
   REGISTRAR_PAGO,
+  VOLVER,
 } from "@/lib/glosario";
 
 import { CobrosView } from "../cobros-view";
@@ -150,7 +151,39 @@ describe("Te deben: registrar pago", () => {
     expect(await screen.findByText("Nadie te debe")).toBeTruthy();
   });
 
-  it("si una falla en el medio, dice cuántas quedaron y no confirma el cobro", async () => {
+  it("si una falla en el medio, lo dice en el selector, que sigue abierto, y reintentar cobra solo las que faltan", async () => {
+    const turnos = servidor();
+    let rechazar = true;
+    api.post.mockImplementation(async (ruta: string) => {
+      const id = ruta.split("/")[3];
+      if (id === "t-nuevo" && rechazar) throw new ApiClientError("El servidor no respondió", 503);
+      turnos.find((t) => t.id === id)!.pagoEstado = "pagado";
+      return {};
+    });
+
+    const panel = await abrirRegistrarPago();
+    fireEvent.click(await within(panel).findByRole("button", { name: MARCAR_TODAS }));
+    await elegirMetodo("Efectivo");
+
+    // El error va en el selector, sin tilde: todavía falta una.
+    const sheet = screen.getByRole("dialog", { name: "Método de pago" });
+    expect((await within(sheet).findByRole("alert")).textContent).toBe(COBRO_INCOMPLETO(1, 2));
+    expect(screen.queryByText(COBRADO)).toBeNull();
+
+    // Reintentar: sale solo la que faltaba, y ahí sí se confirma.
+    rechazar = false;
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Efectivo" }));
+    });
+    expect(cobros().map(([ruta]) => ruta)).toEqual([
+      "/api/turnos/t-viejo/cobrar",
+      "/api/turnos/t-nuevo/cobrar",
+      "/api/turnos/t-nuevo/cobrar",
+    ]);
+    expect(await screen.findByText(COBRADO)).toBeTruthy();
+  });
+
+  it("si vuelve con una sola cobrada, lo dice y la deuda se recalcula", async () => {
     const turnos = servidor();
     api.post.mockImplementation(async (ruta: string) => {
       const id = ruta.split("/")[3];
@@ -162,12 +195,25 @@ describe("Te deben: registrar pago", () => {
     const panel = await abrirRegistrarPago();
     fireEvent.click(await within(panel).findByRole("button", { name: MARCAR_TODAS }));
     await elegirMetodo("Efectivo");
+    const sheet = screen.getByRole("dialog", { name: "Método de pago" });
+    await within(sheet).findByRole("alert");
+    fireEvent.click(within(sheet).getByRole("button", { name: VOLVER }));
 
     expect(await screen.findByText(COBRO_INCOMPLETO(1, 2))).toBeTruthy();
     expect(screen.queryByText(COBRADO)).toBeNull();
     await waitFor(() => {
       expect(document.body.textContent).toContain("Es 1 sesión sin cobrar.");
     });
+  });
+
+  it("si la primera ya falla, dice el error de la API y no cobra nada", async () => {
+    servidor();
+    api.post.mockRejectedValue(new ApiClientError("El turno ya está cobrado", 400));
+    const panel = await abrirRegistrarPago();
+    fireEvent.click((await within(panel).findAllByRole("checkbox"))[0]);
+    await elegirMetodo("Efectivo");
+    const sheet = screen.getByRole("dialog", { name: "Método de pago" });
+    expect((await within(sheet).findByRole("alert")).textContent).toBe("El turno ya está cobrado");
   });
 
   it("cerrar el selector sin elegir método no cobra nada y deja lo marcado", async () => {

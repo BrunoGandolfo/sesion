@@ -1,20 +1,13 @@
 /**
- * `deshacerCobroTurno` — la reversión del cobro, del lado del navegador.
- *
- * La API (DELETE /api/turnos/[id]/cobrar) existía desde el principio y no la
- * llamaba ningún botón: un cobro con el método equivocado no se podía
- * arreglar desde la app. Lo que se prueba acá es el pedido que hacen los dos
- * botones nuevos (la ficha y el sheet de la agenda) y el parseo de la
- * respuesta, que es de dónde sale el ajuste optimista de la fila.
- *
- * El flujo de pantalla —tocar "Deshacer cobro", confirmar, ver el toast— no
- * se puede probar: el proyecto no tiene jsdom ni @testing-library y los tests
- * corren en `environment: "node"`, así que no hay forma de renderizar el
- * componente. Se prueba la función que el componente llama.
+ * `deshacerCobro` (src/lib/cobrar-cliente.ts) — la reversión del cobro, del
+ * lado del navegador. Es la única función que llama a DELETE
+ * /api/turnos/[id]/cobrar; la usan la ficha y el detalle del turno en la
+ * agenda. Se prueba el pedido y el parseo de la respuesta, que es de dónde
+ * sale el ajuste optimista de la fila.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { deshacerCobroTurno } from "@/app/(dashboard)/pacientes/[id]/_components/turnos-pagos-tab";
+import { deshacerCobro } from "@/lib/cobrar-cliente";
 
 const TURNO_ID = "turno_1";
 
@@ -60,13 +53,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("deshacerCobroTurno", () => {
+describe("deshacerCobro", () => {
   it("hace DELETE a la ruta de cobro del turno", async () => {
     globalThis.fetch = fetchQueDevuelve(true, 200, {
       data: TURNO_SIN_COBRO,
     }) as unknown as typeof fetch;
 
-    await deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn));
+    await deshacerCobro(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn));
 
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].url).toBe(`/api/turnos/${TURNO_ID}/cobrar`);
@@ -79,7 +72,7 @@ describe("deshacerCobroTurno", () => {
       data: TURNO_SIN_COBRO,
     }) as unknown as typeof fetch;
 
-    const turno = await deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn));
+    const turno = await deshacerCobro(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn));
 
     expect(turno.pagoEstado).toBe("pendiente");
     expect(turno.pagoMetodo).toBeNull();
@@ -95,7 +88,7 @@ describe("deshacerCobroTurno", () => {
       error: "El turno no está cobrado",
     }) as unknown as typeof fetch;
 
-    await expect(deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn))).rejects.toThrow(
+    await expect(deshacerCobro(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn))).rejects.toThrow(
       "El turno no está cobrado",
     );
   });
@@ -105,7 +98,7 @@ describe("deshacerCobroTurno", () => {
       error: "Turno no encontrado",
     }) as unknown as typeof fetch;
 
-    await expect(deshacerCobroTurno(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn))).rejects.toThrow(
+    await expect(deshacerCobro(TURNO_ID, new Date(TURNO_SIN_COBRO.actualizadoEn))).rejects.toThrow(
       "Turno no encontrado",
     );
   });

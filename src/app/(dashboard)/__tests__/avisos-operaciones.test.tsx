@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import { CONSULTA_ESCRITORIO } from "@/hooks/useEsEscritorio";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import type { PacienteConDeuda, Turno } from "@/types/domain";
 import { ApiClientError } from "@/lib/api-client";
-import { COBRO_DESHECHO, GRABACION_LLEGO, PRUEBA_TOPE } from "@/lib/glosario";
+import { COBRADO, COBRO_DESHECHO, GRABACION_LLEGO, METODO_DE_PAGO, NO_SE_PUDO_COBRAR, PRUEBA_TOPE } from "@/lib/glosario";
 
 import { CobrosView } from "../cobros/_components/cobros-view";
 import { GrabarView } from "../grabar/[turnoId]/_components/grabar-view";
@@ -126,6 +126,13 @@ async function verificarAviso(mensaje: string, confirma: boolean) {
     expect(aviso?.getAttribute("aria-live")).toBe("polite");
   });
 }
+/** El cobro que falla no es un toast: el selector sigue abierto, sin
+ *  tilde, y lo dice en línea para reintentar o volver. */
+async function verificarErrorEnElSelector(mensaje: string) {
+  const sheet = await screen.findByRole("dialog", { name: METODO_DE_PAGO });
+  await waitFor(() => expect(within(sheet).getByRole("alert").textContent).toBe(mensaje));
+  expect(sheet.querySelector("svg path")).toBeNull();
+}
 async function cobrar() {
   fireEvent.click(await screen.findByRole("button", { name: /^Cobrar/ }));
   fireEvent.click(await screen.findByRole("button", { name: /Efectivo/ }));
@@ -175,10 +182,11 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
   });
 
   it.each([false, true])("cobrar desde Turnos y pagos: éxito=%s", async (exito) => {
-    if (!exito) m.post.mockRejectedValue(new Error(FALLO));
+    if (!exito) m.post.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<TurnosPagosTab turnos={[TURNO]} />);
     await cobrar();
-    await verificarAviso(exito ? "Cobrado" : FALLO, exito);
+    if (exito) await verificarAviso(COBRADO, true);
+    else await verificarErrorEnElSelector(FALLO);
   });
 
   it.each([false, true])("deshacer desde Turnos y pagos: éxito=%s", async (exito) => {
@@ -190,10 +198,18 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
   });
 
   it.each([false, true])("cobrar desde Sesiones comunica el resultado a la ficha: éxito=%s", async (exito) => {
-    if (!exito) m.post.mockRejectedValue(new Error(FALLO));
+    if (!exito) m.post.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<PacienteDetailView id="p1" />);
     await cobrar();
-    await verificarAviso(exito ? "Cobrado" : FALLO, exito);
+    if (exito) await verificarAviso(COBRADO, true);
+    else await verificarErrorEnElSelector(FALLO);
+  });
+
+  it("un error que no viene de la API no se muestra en crudo", async () => {
+    m.post.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<TurnosPagosTab turnos={[TURNO]} />);
+    await cobrar();
+    await verificarErrorEnElSelector(NO_SE_PUDO_COBRAR);
   });
 
   it("agenda confirma lo que el detalle del turno resolvió", async () => {

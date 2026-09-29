@@ -28,7 +28,6 @@ import {
 } from "@/lib/fechas-montevideo";
 import {
   ApiClientError,
-  apiDelete,
   apiGet,
   apiPatch,
   apiPost,
@@ -39,6 +38,7 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
   AGENDADO,
   ALGO_FALLO,
   CANCELADO,
+  COBRADO,
   COBRO_DESHECHO,
   DESHACER_COBRO,
   DESHACER_COBRO_ACCION,
@@ -46,7 +46,6 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   GRABAR_SESION,
-  METODOS_PAGO,
   NO_VINO,
   PAGADO,
   PENDIENTE,
@@ -58,6 +57,8 @@ import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
+import { SelectorMetodoPago } from "@/components/cobro/sheet-metodo-pago";
+import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
 import { estadoClinicoDe } from "@/components/ui/session-row";
 import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 
@@ -284,21 +285,21 @@ export function TurnoDetailSheet({
     });
   }
 
-  function cobrar(metodo: MetodoPago) {
-    return ejecutar(async (actual) => {
-      await apiPost<Turno>(`/api/turnos/${actual.id}/cobrar`, { metodo });
-      // Primero la marca en la fila, después el cierre: el trazo empieza
-      // mientras el sheet se va, no después.
-      onCobrado?.(actual.id);
-      onUpdated("Cobro registrado");
-    });
+  // Si falla, el selector se queda abierto y lo dice ahí. Si entra, se
+  // avisa en el acto y no al terminar el tilde: el detalle se puede cerrar
+  // en el medio (Escape, tocar afuera) y la agenda tiene que enterarse igual.
+  // Primero la marca en la fila, después el cierre: el trazo de la fila
+  // empieza mientras el sheet se va.
+  async function cobrar(metodo: MetodoPago) {
+    if (!turno) return;
+    await cobrarTurno(turno.id, metodo);
+    onCobrado?.(turno.id);
+    onUpdated(COBRADO);
   }
 
-  function deshacerCobro() {
+  function deshacer() {
     return ejecutar(async (actual) => {
-      await apiDelete<Turno>(`/api/turnos/${actual.id}/cobrar`, {
-        actualizadoEn: actual.actualizadoEn,
-      });
+      await deshacerCobro(actual.id, actual.actualizadoEn);
       onUpdated(COBRO_DESHECHO);
     });
   }
@@ -531,37 +532,13 @@ export function TurnoDetailSheet({
         {/* Cobrar: elegir método */}
         {modo === "cobrar" ? (
           <div className="border-t border-[color:var(--border-subtle)] pt-5">
-            <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-              ¿Cómo pagó?
-            </p>
-            <p className="mt-1 tabular-nums text-[13px] text-ink-700">
-              {money(turno.tarifaCobrada)}
-              {esProgramado ? " · al cobrar, el turno queda como realizado." : ""}
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {METODOS_PAGO.map((m) => (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => void cobrar(m.value)}
-                  disabled={enviando}
-                  className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-left text-[14px] font-semibold text-ink-900 transition-colors duration-[var(--duration-fast)] hover:border-sage-500 hover:bg-white focus:outline-none focus:ring-[3px] focus:ring-sage-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex justify-end">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setModo("ver")}
-                disabled={enviando}
-              >
-                Volver
-              </Button>
-            </div>
+            <SelectorMetodoPago
+              monto={turno.tarifaCobrada}
+              cierraElTurno={esProgramado}
+              onElegir={cobrar}
+              onListo={() => {}}
+              onVolver={() => setModo("ver")}
+            />
           </div>
         ) : null}
 
@@ -617,7 +594,7 @@ export function TurnoDetailSheet({
             cancelar="Volver"
             enviando={enviando}
             enviandoLabel={DESHACIENDO_COBRO}
-            onConfirmar={() => void deshacerCobro()}
+            onConfirmar={() => void deshacer()}
             onCancelar={() => setModo("ver")}
           />
         ) : null}
