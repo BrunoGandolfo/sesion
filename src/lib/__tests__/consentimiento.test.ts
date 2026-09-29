@@ -26,20 +26,24 @@ const baseParams = {
 };
 
 describe("generarTextoConsentimiento", () => {
-  it("la versión vigente del texto es la 2.7 y sugiere re-firmar las anteriores", () => {
-    expect(CONSENTIMIENTO_VERSION).toBe("2.7");
+  it("la versión vigente del texto es la 2.8 y sugiere re-firmar las anteriores", () => {
+    expect(CONSENTIMIENTO_VERSION).toBe("2.8");
     for (const vieja of ["1.1", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"]) expect(sugiereRefirmar(vieja)).toBe(true);
     // La 2.6 prometía cifrado del audio en el teléfono, clave por sesión y su
     // destrucción al aprobar, y decía que la transcripción no se podía ver.
     expect(sugiereRefirmar("2.6")).toBe(true);
-    expect(sugiereRefirmar("2.7")).toBe(false);
+    // La 2.7 decía que el borrado en AssemblyAI se reintentaba sólo si la
+    // transcripción se completaba.
+    expect(sugiereRefirmar("2.7")).toBe(true);
+    expect(sugiereRefirmar("2.8")).toBe(false);
   });
 
   it("interpola los tres datos y cierra con versión y fecha", () => {
     const texto = generarTextoConsentimiento(baseParams);
     expect(texto).toContain("Hola María González.");
     expect(texto).toContain("Lic. Ana Pérez te pide autorización para grabar tus sesiones en Av. 18 de Julio 1234, Montevideo.");
-    expect(texto.trimEnd().endsWith(`Versión 2.7, ${CONSENTIMIENTO_FECHA}.`)).toBe(true);
+    expect(CONSENTIMIENTO_FECHA).toBe("29 de septiembre de 2026");
+    expect(texto.trimEnd().endsWith(`Versión 2.8, ${CONSENTIMIENTO_FECHA}.`)).toBe(true);
   });
 
   it("entra en una pantalla y media de teléfono: 3.500 caracteres como máximo", () => {
@@ -70,43 +74,28 @@ describe("cada frase tiene el hecho que la respalda", () => {
   });
 
   it("la app no cifra el audio: queda en el teléfono, sube por conexión cifrada y el almacén lo cifra en reposo", () => {
-    expect(hechos.RESPALDO_LOCAL_CIFRADO).toBe(false);
-    expect(hechos.CLAVE_POR_SESION).toBe(false);
-    expect(hechos.AUDIO_SE_SUBE_AL_TERMINAR).toBe(true);
-    expect(hechos.AUDIO_VIAJA_POR_CONEXION_CIFRADA).toBe(true);
-    expect(hechos.ALMACEN_CIFRA_EN_REPOSO).toBe(true);
-    // Cada trozo se guarda como Blob, tal cual: nada lo cifra antes del put.
-    const storage = codigo("src/lib/grabacion-storage.ts");
-    const desde = storage.indexOf("export async function guardarChunk(");
-    const guardar = storage.slice(desde, storage.indexOf("\n}\n", desde));
-    expect(guardar).toContain("blob: chunk");
-    expect(guardar).not.toMatch(/cifr|encrypt|subtle/i);
+    // Que cada trozo se guarda como el mismo Blob, sin cifrar, lo prueba
+    // grabacion-storage.test.ts ("el audio se guarda tal cual").
     // Sin clave por sesión: la URL de subida no genera ninguna.
     expect(codigo("src/app/api/_lib/casos-uso/audio.ts")).not.toMatch(/audioClave|randomBytes/);
-    // Un solo archivo al terminar, por PUT a la URL prefirmada de R2 sobre HTTPS.
-    const subida = codigo("src/hooks/useGrabacionSesion.ts");
-    expect(subida.indexOf("/upload-url")).toBeLessThan(subida.indexOf("/upload-confirmar"));
-    expect(subida).toContain('xhr.open("PUT", url, true)');
-    expect(codigo("src/lib/r2.ts")).toContain("endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`");
+    // Un solo archivo al terminar, por PUT a la URL prefirmada de R2: lo
+    // prueban grabacion-subida.test.ts (los tres pasos en orden, el PUT a R2)
+    // y csp-destinos.test.ts (la URL firmada es https al host del bucket).
     expect(texto).toContain("El audio queda en el teléfono de Lic. Ana Pérez hasta que termina la sesión y se sube por una conexión cifrada a Cloudflare R2, un almacenamiento que lo guarda cifrado");
     expect(texto).not.toMatch(/se cifra en el teléfono|clave|descifr|no queda audio sin cifrar/i);
   });
 
   it("la copia del teléfono se borra al confirmar la subida", () => {
-    expect(hechos.COPIA_LOCAL_SE_CONSERVA_TRAS_SUBIR).toBe(false);
     const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
     expect(vista.indexOf("await subirAudio(")).toBeGreaterThan(-1);
     expect(vista.indexOf("await subirAudio(")).toBeLessThan(vista.indexOf("void limpiarGrabacion(turno)"));
-    const storage = codigo("src/lib/grabacion-storage.ts");
-    const limpiar = storage.slice(storage.indexOf("export async function limpiarGrabacion("));
-    expect(limpiar).toContain("tx.objectStore(STORE_CHUNKS).delete(rangoChunks(sesionClinicaId));");
+    // Que limpiarGrabacion borra los trozos lo prueba grabacion-storage.test.ts.
     expect(texto).toContain(", y se borra del teléfono.");
   });
 
   it("el servidor tiene el audio solo en memoria", () => {
-    expect(hechos.AUDIO_EN_ARCHIVO_DEL_SERVIDOR).toBe(false);
     const worker = codigo("processor/processor.py");
-    expect(worker).toContain("asr_assemblyai.transcribir(io.BytesIO(audio_bytes), terminos)");
+    expect(worker).toContain("asr_assemblyai.transcribir(io.BytesIO(audio_bytes), terminos, al_crear=al_crear)");
     expect(worker).not.toMatch(/TemporaryDirectory|NamedTemporaryFile|open\(.*"wb"/);
     const normalizar = codigo("processor/audio_asr.py");
     expect(normalizar).toContain('"pipe:0"');
@@ -123,33 +112,26 @@ describe("cada frase tiene el hecho que la respalda", () => {
   });
 
   it("el vocabulario, que puede tener su nombre, viaja solo a AssemblyAI", () => {
-    expect(hechos.VOCABULARIO_A_ASR).toBe(true);
-    expect(hechos.VOCABULARIO_INCLUYE_NOMBRES).toBe(true);
-    expect(hechos.VOCABULARIO_SOLO_A_ASR).toBe(true);
-    expect(codigo("processor/asr_assemblyai.py")).toContain('payload["keyterms_prompt"] = terminos');
+    // Que los términos viajan en keyterms_prompt lo prueba
+    // processor/tests/test_asr_assemblyai.py.
     expect(codigo("processor/clinical_analyzer.py")).not.toMatch(/keyterms|terminos_asr/);
     expect(texto).toContain("con ayuda de una lista de palabras que Lic. Ana Pérez carga y que puede incluir tu nombre");
   });
 
   it("qué recibe Anthropic y para qué: borrador, análisis para la profesional y propuesta del resumen", () => {
-    expect(hechos.LLM_RECIBE_CONTEXTO).toBe(true);
-    expect(hechos.LLM_RECIBE_NOTA_APROBADA).toBe(true);
-    expect(hechos.RESUMEN_PROPUESTO_POR_IA).toBe(true);
-    expect(hechos.ANALISIS_DE_LA_PROFESIONAL_POR_IA).toBe(true);
     const adjunto = codigo("src/app/api/_lib/casos-uso/hilo/trabajo.ts");
     expect(adjunto).toContain("notaFinal: sesion.notaFinal");
     expect(adjunto).toContain("contextoVigente:");
-    expect(codigo("processor/processor.py")).toContain("clinical_analyzer.generar_feedback_terapeuta(");
+    // Que el worker genera "Para vos" con clinical_analyzer lo prueba
+    // processor/tests/test_processor.py (test_generar_feedback_usa_el_adjunto_…).
     expect(texto).toContain("Anthropic recibe ese texto y el resumen de tu proceso: redacta un borrador de la nota, prepara un análisis del trabajo de Lic. Ana Pérez que solo ella ve y propone cómo actualizar el resumen cuando ella aprueba la nota.");
   });
 
   it("Anthropic, con retención cero", () => {
-    expect(hechos.ANTHROPIC_RETENCION_CERO).toBe(true);
     expect(texto).toContain("Anthropic está configurada para no conservar el contenido ni usarlo para entrenar.");
   });
 
   it("qué queda guardado, cifrado en la base, y que el borrador se guarda antes de aprobar", () => {
-    expect(hechos.BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR).toBe(true);
     expect(codigo("src/app/api/_lib/casos-uso/sesion/resultado.ts")).toContain("notaIa: resultado.nota");
     const cifrado = codigo("src/lib/prisma-encryption.ts");
     for (const columna of ["transcripcion_encrypted", "nota_final_encrypted", "nota_ia_encrypted", "contenido_encrypted", "texto_completo_encrypted", "firma_digital_encrypted"]) {
@@ -160,14 +142,13 @@ describe("cada frase tiene el hecho que la respalda", () => {
   });
 
   it("al aprobar se programa el borrado del audio, con reintentos acotados; no hay clave que destruir", () => {
-    expect(hechos.CLAVE_AUDIO_DESTRUIDA_AL_APROBAR).toBe(false);
-    expect(hechos.LIMPIEZA_AUDIO_REINTENTA).toBe(true);
     const aprobar = codigo("src/app/api/_lib/casos-uso/sesion/aprobar.ts");
-    expect(aprobar).toContain('tipo: "borrar_audio_r2"');
+    expect(aprobar).toContain("trabajoBorrarAudio(");
+    const crear = codigo("src/app/api/_lib/casos-uso/trabajos/crear.ts");
+    expect(crear.slice(crear.indexOf("export function trabajoBorrarAudio("))).toContain('tipo: "borrar_audio_r2"');
     expect(aprobar).not.toContain("audioClave");
     const tipo = "borrar_audio_r2";
     const { tope } = POLITICA_POR_TIPO[tipo];
-    expect(tope).toBe(hechos.LIMPIEZA_AUDIO_MAX_INTENTOS);
     const esperas = Array.from({ length: tope - 1 }, (_, i) => backoffTrabajoMs(tipo, i + 1));
     expect(Math.ceil(esperas.reduce((suma, ms) => suma + ms, 0) / 86_400_000)).toBe(hechos.LIMPIEZA_AUDIO_DIAS_APROX);
     expect(decidirResolucion({ tipo, intentos: tope }, { ok: false, error: "R2 no responde" }, new Date("2026-09-16T12:00:00Z"))).toEqual({ estado: "fallido" });
@@ -175,43 +156,31 @@ describe("cada frase tiene el hecho que la respalda", () => {
     expect(texto).not.toMatch(/imposible de abrir|nadie puede abrir|hasta lograrlo/);
   });
 
-  it("el borrado en AssemblyAI: un pedido inmediato y reintentos acotados sólo si se completó", () => {
-    expect(hechos.ASR_BORRADO_INMEDIATO).toBe(true);
-    expect(hechos.ASR_BORRADO_CON_REINTENTO).toBe(true);
-    expect(hechos.ASR_REINTENTO_SOLO_SI_SE_COMPLETO).toBe(true);
-    const cliente = codigo("processor/asr_assemblyai.py");
-    const transcribir = cliente.slice(cliente.indexOf("def transcribir("));
-    expect(transcribir).toMatch(/try:\s+data = _esperar\(transcript_id\)[\s\S]*finally:\s+_borrar\(transcript_id\)/);
-    expect(cliente).toContain("DELETE best-effort: solo se loguea el status, nunca falla.");
-    const worker = codigo("processor/processor.py");
-    expect(worker.indexOf("transcripcion = transcribir(")).toBeLessThan(worker.indexOf("transcripto = registrar_checkpoint("));
-    expect(worker).toContain("app_client.registrar_asr(etiqueta, sesion.ticket, sesion.intento, asr_id)");
-    expect(worker).toContain("if response.status_code in (200, 404):");
+  it("el borrado en AssemblyAI: un pedido inmediato y reintentos acotados aunque el proceso muera", () => {
+    // Que el worker registra el id del transcript antes de esperarlo, y que
+    // con el proceso muerto en el polling la app ya lo tiene, lo prueba
+    // processor/tests/test_processor.py
+    // (test_con_el_proceso_muerto_en_el_polling_la_app_ya_tiene_el_transcript_id).
     expect(codigo("src/app/api/_lib/casos-uso/sesion/registrar-asr.ts")).toContain('tipo: "borrar_transcript_asr"');
     const tipo = "borrar_transcript_asr";
     const { tope } = POLITICA_POR_TIPO[tipo];
-    expect(tope).toBe(hechos.ASR_BORRADO_MAX_INTENTOS);
     const esperas = Array.from({ length: tope - 1 }, (_, i) => backoffTrabajoMs(tipo, i + 1));
     expect(Math.ceil(esperas.reduce((suma, ms) => suma + ms, 0) / 86_400_000)).toBe(hechos.ASR_BORRADO_DIAS_APROX);
-    expect(texto).toContain(`Al terminar la transcripción le pide a AssemblyAI que borre el audio y el texto y, si se completó, repite el pedido unos ${hechos.ASR_BORRADO_DIAS_APROX} días; si algo falla, puede pedirlo una vez o ninguna, y no puede comprobar que se haya borrado.`);
+    expect(texto).toContain(`Al terminar la transcripción le pide a AssemblyAI que borre el audio y el texto, y repite el pedido unos ${hechos.ASR_BORRADO_DIAS_APROX} días aunque este programa se corte a mitad de camino; no puede comprobar que se haya borrado.`);
+    expect(texto).not.toMatch(/si se completó|una vez o ninguna/);
     expect(texto).not.toContain("borra de sus servidores");
   });
 
   it("las copias de seguridad: plazos reales y sin audio ni clave", () => {
-    expect(hechos.RETENCION_BACKUPS_DIAS).toBe(30);
-    expect(hechos.RETENCION_BACKUPS_MENSUALES_MESES).toBe(12);
-    expect(hechos.BACKUP_INCLUYE_AUDIO).toBe(false);
-    expect(hechos.BACKUP_INCLUYE_CLAVE_AUDIO).toBe(false);
-    // El respaldo es un pg_dump de la base: el audio vive en R2.
-    expect(codigo(".github/workflows/backup.yml")).toContain('"${PG_BIN}/pg_dump"');
+    // Que el respaldo es un pg_dump de la base (sin R2) lo prueba backup.test.ts.
     expect(texto).toContain("Las diarias se guardan 30 días y las mensuales hasta 12 meses. Tienen lo mismo que la base, cifrado, sin el audio.");
   });
 
   it("quién puede ver, y que cada lectura de la nota o la transcripción queda registrada", () => {
-    expect(hechos.ACCION_VER_SESION).toBe("sesion.ver");
-    expect(hechos.ACCION_VER_TRANSCRIPCION).toBe("sesion.ver_transcripcion");
-    expect(codigo("src/app/api/sesion-clinica/[id]/route.ts")).toContain('accion: "sesion.ver"');
-    expect(codigo("src/app/api/_lib/casos-uso/sesion/ver-transcripcion.ts")).toContain('accion: "sesion.ver_transcripcion"');
+    // Las rutas todavía escriben la acción a mano (no importan el hecho):
+    // hasta que la importen, esto ata el hecho a lo que se registra.
+    expect(codigo("src/app/api/sesion-clinica/[id]/route.ts")).toContain(`accion: "${hechos.ACCION_VER_SESION}"`);
+    expect(codigo("src/app/api/_lib/casos-uso/sesion/ver-transcripcion.ts")).toContain(`accion: "${hechos.ACCION_VER_TRANSCRIPCION}"`);
     expect(texto).toContain("Solo Lic. Ana Pérez, desde su cuenta, y cada vez que abre tu nota o tu transcripción queda registrado.");
     expect(texto).toContain("dicen que nadie accede al contenido, pero la aplicación no puede verificarlo.");
     expect(texto).not.toContain("Ninguna persona además de");
@@ -222,44 +191,31 @@ describe("cada frase tiene el hecho que la respalda", () => {
   });
 
   it("el resumen del proceso se puede imprimir, sale sin cifrar y su preparación queda registrada", () => {
-    expect(hechos.RECORRIDO_EXPORTABLE).toBe(true);
-    expect(hechos.ACCION_EXPORTAR_RECORRIDO).toBe("hilo.exportar_pdf");
     expect(texto).toContain("Si ella imprime o guarda como PDF el resumen de tu proceso, esa copia queda fuera de la aplicación, sin cifrar y bajo su cuidado, y queda registrado.");
   });
 
   it("Lupita: solo la agenda mínima, sin escribir, y su conversación pasa por Anthropic", () => {
-    expect(hechos.LUPITA_CONSULTA_AGENDA).toBe(true);
     expect([...hechos.LUPITA_CAMPOS_AGENDA]).toEqual(["nombre", "dia", "hora", "duracion", "modalidad"]);
-    expect(hechos.LUPITA_SOLO_LECTURA).toBe(true);
-    expect(hechos.LUPITA_HISTORIAL_A_ANTHROPIC).toBe(true);
     expect(codigo("src/app/api/_lib/casos-uso/ayuda/agenda.ts")).toContain("paciente: { select: { nombre: true } }");
     expect(texto).toContain("puede ver tu nombre y el día, la hora, la duración y la modalidad de tus turnos, y esa conversación pasa por Anthropic. Nunca lee tus notas, tu transcripción ni tu resumen, y no cambia nada.");
   });
 
   it("sólo ofrece pedidos que la app ejecuta, y dice lo que no se puede hacer", () => {
-    expect(hechos.PACIENTE_PUEDE_VER_NOTAS_Y_RESUMEN).toBe(true);
-    expect(hechos.PACIENTE_PUEDE_CORREGIR_CONTACTO).toBe(true);
-    expect(hechos.PACIENTE_PUEDE_CORREGIR_RESUMEN_CON_VERSIONES).toBe(true);
     expect(codigo("src/app/api/pacientes/[id]/route.ts")).toMatch(/export async function PATCH/);
     expect(codigo("src/app/api/_lib/schemas.ts")).toMatch(/pacienteCreateSchema = z\.object\(\{\s+nombre:[\s\S]*apellido:[\s\S]*telefono:/);
     expect(codigo("src/app/api/_lib/schemas.ts")).toContain("export const pacienteUpdateSchema = pacienteCreateSchema.partial()");
     expect(codigo("src/app/api/pacientes/[id]/hilo/versiones/route.ts")).toMatch(/export async function POST/);
     // La transcripción SÍ se ve: la vista la pide a su ruta (la 2.6 decía que no).
-    expect(hechos.TRANSCRIPCION_VISIBLE_EN_PANTALLA).toBe(true);
     expect(codigo("src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx")).toContain("<TranscripcionView sesion={sesion} selector={selector} />");
     expect(codigo("src/app/api/sesion-clinica/[id]/transcripcion/route.ts")).toMatch(/export async function GET/);
     expect(texto).toContain("Podés pedirle a Lic. Ana Pérez que te muestre tus notas aprobadas, tu transcripción y el resumen de tu proceso, y que corrija tus datos de contacto o el resumen. Corregir el resumen agrega una versión nueva: las anteriores se conservan.");
-
-    expect(hechos.BORRADO_DE_DATOS_A_PEDIDO).toBe(false);
     expect(codigo("src/app/api/pacientes/[id]/route.ts")).not.toMatch(/export async function DELETE/);
     const inmutabilidad = codigo("prisma/migrations/20260916013000_inmutabilidad/migration.sql");
     expect(inmutabilidad).toContain("CREATE TRIGGER hilo_versiones_sin_borrado");
     expect(inmutabilidad).toContain("CREATE TRIGGER eventos_auditoria_inmutable");
-    expect(hechos.NOTA_APROBADA_CORREGIBLE).toBe(false);
     const estados = codigo("src/lib/sesion-clinica/estados.ts");
     expect([...estados.matchAll(/desde: \[([^\]]*)\]/g)].filter((m) => m[1].includes('"aprobada"'))).toHaveLength(1);
     expect(estados).toMatch(/reintentar_feedback: \{\s+actor: "usuaria",\s+desde: \["revision", "aprobada"\],\s+hacia: "mismo"/);
-    expect(hechos.CONSENTIMIENTO_FIRMADO_VISIBLE_EN_PANTALLA).toBe(false);
     const rutaConsentimiento = codigo("src/app/api/pacientes/[id]/consentimiento/route.ts");
     const select = rutaConsentimiento.slice(rutaConsentimiento.indexOf("const consentimientoSelect"), rutaConsentimiento.indexOf("} as const;"));
     expect(select).not.toMatch(/textoCompleto|firmaDigital/);
@@ -269,7 +225,6 @@ describe("cada frase tiene el hecho que la respalda", () => {
   });
 
   it("revocar deja de grabar y no borra lo guardado", () => {
-    expect(hechos.REVOCAR_BORRA_HISTORIA).toBe(false);
     expect(texto).toContain("Podés revocar esta autorización cuando quieras, sin explicar por qué: alcanza con avisarle. Desde ese momento no se graba más. Lo ya guardado no se borra: sigue siendo parte de tu historia clínica.");
   });
 });
@@ -400,7 +355,7 @@ describe("la ruta de consentimiento", () => {
     const { descifrar, aadDe } = await import("@/lib/encryption");
     const texto = descifrar(fila.textoCompletoEncrypted as Buffer, aadDe("consentimientos_grabacion", "texto_completo_encrypted", fila.id as string));
     expect(texto).toContain("Hola María González.");
-    expect(texto).toContain("Versión 2.7");
+    expect(texto).toContain("Versión 2.8");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
   });

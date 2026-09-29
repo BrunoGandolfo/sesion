@@ -19,13 +19,16 @@
 // interpretación, pregunta circular) no se traducen ni se ablandan: son
 // las palabras con las que la profesional piensa su trabajo.
 //
-// Módulo puro: solo strings. Lo puede importar cualquier componente
-// cliente sin arrastrar dependencias.
+// Módulo puro: strings y funciones que arman strings. Lo puede importar
+// cualquier componente cliente; lo único que trae es el motor de fechas de
+// Montevideo (para decir una hora) y los topes de la prueba.
 
-// El único import del módulo, y es de tipos: `MetodoPago` no existe en
-// tiempo de ejecución, así que el glosario sigue siendo sólo strings.
+// De tipos: `MetodoPago` no existe en tiempo de ejecución.
 import type { FrecuenciaTurno, MetodoPago } from "@/types/domain";
 import { ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, TOPE_INVITACIONES_TOTAL } from "@/lib/limites-prueba";
+// La hora, del motor de fechas y no de format.ts: format.ts ya importa
+// pluralizar de acá, y los dos módulos se importarían mutuamente.
+import { formatearHoraMvd } from "@/lib/fechas-montevideo";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Navegación
@@ -137,9 +140,6 @@ export const SOAP_P = {
   titulo: "Plan (P)",
   ayuda: "Para la próxima sesión",
 } as const;
-
-/** Las cuatro secciones en orden, para renderizar la nota completa. */
-export const SOAP_SECCIONES = [SOAP_S, SOAP_O, SOAP_A, SOAP_P] as const;
 
 /** Título de la nota. Sigue siendo una nota SOAP y se dice. */
 export const NOTA_CLINICA = "Nota clínica (SOAP)";
@@ -323,6 +323,11 @@ export const REANUDAR = "Reanudar";
 /** Un solo texto para los formularios que guardan. */
 export const GUARDANDO = "Guardando…";
 
+/** El estado de un campo que se guarda solo (ui/guardado-campo.tsx). */
+export const CAMPO_SIN_GUARDAR = "Sin guardar todavía.";
+export const CAMPO_GUARDADO = "Guardado.";
+export const CAMPO_NO_SE_GUARDO = "No se guardó. Revisá los campos y reintentá.";
+
 // ─── Después de Terminar ─────────────────────────────────────────────────────
 // Tres momentos, tres textos, y algo que se mueve en pantalla: una pantalla
 // quieta con un aviso de un segundo y medio se leyó como "no subió".
@@ -368,8 +373,10 @@ export const AVISO_SIN_SONIDO = "No está entrando sonido";
 export const AVISO_MICROFONO_SILENCIADO =
   "El teléfono silenció el micrófono (¿una llamada?). La grabación sigue abierta y vuelve sola cuando lo libere.";
 
-const horaCorta = (epoch: number) =>
-  new Date(epoch).toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
+/** "19:58": la hora del consultorio (Montevideo), no la del teléfono, como
+ *  toda hora de la app. Antes usaba la zona del dispositivo. */
+export const horaCorta = (instante: number | string | Date) =>
+  formatearHoraMvd(new Date(instante));
 
 /** Hubo un rato sin audio y ya volvió. Con las horas, para que sepa qué falta. */
 export const AVISO_HUECO = (desde: number, hasta: number) =>
@@ -700,6 +707,21 @@ export const SMS_DESTINO = "Sale a";
 /** Lo que muestra la fila cuando ya se le avisó. Se completa con
  *  textoAtraso(): "Avisado hace 3 días". */
 export const AVISADO = "Avisado";
+
+/**
+ * Cuánto hace, a partir de días enteros de atraso: "hoy", "hace 1 día",
+ * "hace 2 semanas", "hace 3 meses", "hace 1 año". La misma escala que
+ * fechaRelativa (format.ts), en minúscula porque va a mitad de frase. Antes
+ * decía "hace 95 días" en Cobros mientras las otras listas decían "Hace 3
+ * meses". Los meses son de 30 días: acá llega el número, no las fechas.
+ */
+export function textoAtraso(diasAtraso: number): string {
+  if (diasAtraso <= 0) return "hoy";
+  if (diasAtraso < 7) return `hace ${pluralizar(diasAtraso, "día", "días")}`;
+  if (diasAtraso < 30) return `hace ${pluralizar(Math.floor(diasAtraso / 7), "semana", "semanas")}`;
+  if (diasAtraso < 365) return `hace ${pluralizar(Math.floor(diasAtraso / 30), "mes", "meses")}`;
+  return `hace ${pluralizar(Math.floor(diasAtraso / 365), "año", "años")}`;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Vocabulario clínico (hot words)
@@ -1548,7 +1570,12 @@ export function otrasSesionesCerradas(n: number): string {
   if (n === 0) return "No había otras sesiones abiertas.";
   return n === 1 ? "Cerramos 1 sesión en otro dispositivo." : `Cerramos ${n} sesiones en otros dispositivos.`;
 }
-export const SERIE_AGENDADA = (n: number) => `${n} turnos agendados`;
+export const SERIE_AGENDADA = (n: number) => pluralizar(n, "turno agendado", "turnos agendados");
+/** La hoja que confirma una serie (forms/resultado-serie.tsx). */
+export const SERIE_AGENDADA_TITULO = "Serie agendada";
+export const SERIE_FECHAS_SIN_AGENDAR = "Estas fechas quedaron sin agendar por un choque de horario:";
+export const SERIE_AGENDAR_POR_SEPARADO = "Podés agendarlas por separado en otro horario.";
+export const SERIE_TODAS_AGENDADAS = "Se agendaron todas las fechas de la serie.";
 export const SERIE_OMITIDAS = (fechas: string[]) =>
   fechas.length === 1
     ? `No se agendó el ${fechas[0]}: ya había un turno a esa hora.`
@@ -1683,6 +1710,39 @@ export function notaFallidaDe(paciente: string): string {
 
 export const VER_QUE_PASO = "Ver qué pasó";
 
+/** Nombre de la región de la franja de avisos, para quien usa lector de
+ *  pantalla. */
+export const REGION_AVISOS = "Avisos de notas";
+
+/**
+ * El renglón de la franja con varios avisos: primero lo listo, después lo
+ * que falló, con los números.
+ *   2 notas listas · 2 notas que no pudimos escribir ·
+ *   1 nota lista y 1 que no pudimos escribir
+ */
+export function resumenDeAvisos(listas: number, fallidas: number): string {
+  const listo = `${pluralizar(listas, "nota", "notas")} ${listas === 1 ? "lista" : "listas"}`;
+  if (fallidas === 0) return listo;
+  if (listas === 0) return `${pluralizar(fallidas, "nota", "notas")} que no pudimos escribir`;
+  return `${listo} y ${fallidas} que no pudimos escribir`;
+}
+
+/** Los nombres debajo del resumen: "Lucía Fernández y Ana Pérez",
+ *  "Lucía Fernández, Ana Pérez y Marta Silva". */
+export function nombresDeAvisos(pacientes: string[]): string {
+  if (pacientes.length <= 1) return pacientes.join("");
+  return `${pacientes.slice(0, -1).join(", ")} y ${pacientes[pacientes.length - 1]}`;
+}
+
+/** Despliega y pliega la lista de avisos. */
+export const VER_AVISOS = "Ver";
+export const OCULTAR_AVISOS = "Ocultar";
+
+/** Lo que el lector de pantalla dice del globito de Hoy. */
+export function avisosEnHoy(n: number): string {
+  return pluralizar(n, "nota para mirar", "notas para mirar");
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Pantalla de la sesión: transcripción, índice de la nota e instrumento
 // ────────────────────────────────────────────────────────────────────────────
@@ -1754,3 +1814,76 @@ export const DESCARTAR_GRABACION_MENSAJE =
 export const DESCARTAR_GRABACION_ACCION = "Descartar la grabación";
 export const DESCARTANDO_GRABACION = "Descartando…";
 export const NO_SE_PUDO_DESCARTAR = "No se pudo descartar la grabación. Probá de nuevo.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pantalla del Recorrido (src/components/clinico/HiloView.tsx)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Cualquier fallo del Recorrido que la API no explicó. */
+export const RECORRIDO_NO_CARGO = "No pudimos cargar el Recorrido. Probá de nuevo.";
+export const RECORRIDO_CARGANDO = "Cargando Recorrido…";
+export const RECORRIDO_VOLVER_A_INTENTAR = "Volver a intentar";
+export const RECORRIDO_BORRADOR_INVALIDO =
+  "Revisá los campos: las descripciones no pueden estar vacías y las fechas y cantidades deben ser válidas.";
+
+/** Los títulos de cada parte, iguales al leer, al editar y en la hoja. */
+export const RECORRIDO_TITULO = "El Recorrido";
+export const RECORRIDO_OBJETIVOS = "Objetivos";
+export const RECORRIDO_HIPOTESIS = "Hipótesis clínica";
+export const RECORRIDO_TEMAS = "Temas recurrentes";
+
+/** Debajo del título: quién dejó la versión vigente y cuándo. */
+export function recorridoResueltoEl(porIa: boolean, cuando: string): string {
+  return `${porIa ? "Propuesta aceptada" : "Revisado por vos"} el ${cuando}`;
+}
+export const RECORRIDO_SIN_REVISAR = "Todavía no hay un Recorrido revisado.";
+export const RECORRIDO_EDITAR = "Editar Recorrido";
+export const RECORRIDO_VACIO = "Podés escribirlo o esperar una propuesta después de aprobar una nota.";
+
+export const PROPUESTA_NUEVA = "Hay una propuesta nueva";
+export const PROPUESTA_NUEVA_DETALLE =
+  "La IA la preparó a partir de una nota aprobada. Se incorpora al Recorrido cuando vos la aceptás.";
+export const VER_NOTA_DE_ORIGEN = "Ver nota de origen";
+export const VER_PROPUESTA = "Ver propuesta";
+export const CERRAR_COMPARACION = "Cerrar comparación";
+export const COMPARACION_VIGENTE = "Vigente";
+export const COMPARACION_PROPUESTA = "Propuesta";
+export const ACEPTAR_PROPUESTA = "Aceptar";
+export const EDITAR_Y_ACEPTAR = "Editar y aceptar";
+export const DESCARTAR_PROPUESTA_ACCION = "Descartar propuesta";
+export const DESCARTAR_PROPUESTA_VIEJA = "Descartar";
+export const PROPUESTA_VIEJA = "Hay una propuesta vieja: el Recorrido cambió después";
+export const VER_PROPUESTA_VIEJA = "Ver propuesta vieja";
+export const REGENERAR_SOBRE_ACTUAL = "Volver a generar sobre el Recorrido actual";
+export const PROPUESTA_NO_SE_PREPARO = "No se pudo preparar una propuesta.";
+export const PROPUESTA_EN_ESPERA = "Hay otra sesión esperando que resuelvas la propuesta anterior.";
+export const PREPARANDO_PROPUESTA = "Preparando una propuesta…";
+export const VER_SESION = "Ver sesión";
+
+export const EDITAR_PROPUESTA = "Editar propuesta";
+export const TU_EDICION_DEL_RECORRIDO = "Tu edición del Recorrido";
+export const GUARDAR_AGREGA_VERSION = "Al guardar se agrega una versión; las anteriores se conservan.";
+export const EDICION_DESACTUALIZA_PROPUESTA = "Guardar tu edición dejará desactualizada la propuesta abierta.";
+export const RECORRIDO_CAMBIO_EN_OTRA_PANTALLA =
+  "El Recorrido cambió en otra pantalla. Tu borrador se conserva abajo. Revisá la versión vigente antes de continuar.";
+export const CONTINUAR_CON_MI_BORRADOR = "Ya leí la versión actual; continuar con mi borrador";
+export const GUARDAR_Y_ACEPTAR = "Guardar y aceptar";
+export const GUARDAR_NUEVA_VERSION = "Guardar nueva versión";
+export const CANCELAR_EDICION = "Cancelar edición";
+
+export function historialDeVersiones(cantidad: number, hayMas: boolean): string {
+  return `Historial de versiones (${cantidad}${hayMas ? "+" : ""})`;
+}
+export function versionDelHistorial(version: number, porIa: boolean, estado: string): string {
+  return `Versión ${version} · ${porIa ? "Propuesta de IA" : "Edición profesional"} · ${estado}`;
+}
+export function resueltaEl(cuando: string): string {
+  return ` · Resuelta el ${cuando}`;
+}
+export const VER_VERSIONES_ANTERIORES = "Ver versiones anteriores";
+export function versionAbierta(version: number, estado: string): string {
+  return `Versión ${version} · ${estado}`;
+}
+export const USAR_COMO_BORRADOR = "Usar como borrador de una versión nueva";
+export const REGENERAR_PROPUESTA = "Volver a generar propuesta";
+export const CERRAR_VERSION = "Cerrar versión";

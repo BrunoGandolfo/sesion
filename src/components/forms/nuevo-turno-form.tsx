@@ -74,13 +74,12 @@ export interface NuevoTurnoData {
   frecuencia: FrecuenciaTurno;
 }
 
-// Texto de pantalla que todavía no se mudó a glosario.ts.
 const OPCIONES_FRECUENCIA = FRECUENCIAS_TURNO.map((value) => ({ value, label: FRECUENCIA_LABEL[value] }));
 
 
 type PacienteOpcion = Pick<Paciente, "id" | "nombre" | "apellido" | "tarifa">;
 
-export interface NuevoTurnoFormProps {
+interface NuevoTurnoFormProps {
   pacientes: PacienteOpcion[];
   /** Tarifa por sesión de Tu consultorio, para "Crear a X". null si no se
    *  pudo leer (o no se pidió): en ese caso no se pueden crear pacientes

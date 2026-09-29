@@ -17,8 +17,22 @@
 //   3. Regla genérica — guiones bajos a espacio, camelCase separado, primera
 //      mayúscula.
 //
+// Para las claves cerradas del contrato (intervenciones, flags, alianza) hay
+// además mapas tipados, NOMBRE_*, derivados del mismo DICCIONARIO: quien
+// necesita un Record completo lo importa de acá en vez de escribir el suyo.
+//
 // Lo que NO hace: traducir, resumir ni reagrupar. "Señalamiento" se muestra
 // "Señalamiento", no "Marcar algo". El vocabulario técnico queda intacto.
+
+// Las claves salen del contrato que comparten app y worker (el mismo JSON
+// que lee sesion-clinica/schema.ts); de schema solo se importan tipos, así
+// este módulo sigue sin zod.
+import enumsClinicos from "../../processor/contrato/enums-clinicos.json";
+import type {
+  AlianzaTerapeutica,
+  FlagRiesgo,
+  TipoIntervencion,
+} from "@/lib/sesion-clinica/schema";
 
 /** Quita los diacríticos combinantes (U+0300–U+036F) que NFD separa. */
 function sinTildes(texto: string): string {
@@ -228,3 +242,34 @@ export function mapaDeEtiquetas(
   for (const clave of claves) mapa[clave] = formatearEtiqueta(clave);
   return mapa;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Mapas tipados para las claves cerradas del contrato
+// ────────────────────────────────────────────────────────────────────────────
+
+/** El nombre de cada clave, sacado del DICCIONARIO. Si una clave del
+ *  contrato no está en el diccionario sale legible igual (formatearEtiqueta);
+ *  etiquetas.test.ts exige que estén todas. */
+function nombresDe<K extends string>(claves: readonly K[]): Readonly<Record<K, string>> {
+  return Object.fromEntries(claves.map((clave) => [clave, formatearEtiqueta(clave)])) as Record<K, string>;
+}
+
+/** Los tipos de intervención del contrato. */
+export const NOMBRE_INTERVENCION = nombresDe(
+  enumsClinicos.tipoIntervencion as readonly TipoIntervencion[],
+);
+
+/** Los flags de riesgo clínico. No se ablandan ni se agrupan. */
+export const NOMBRE_FLAG = nombresDe(enumsClinicos.flagRiesgo as readonly FlagRiesgo[]);
+
+/** Los niveles de la alianza terapéutica. */
+export const NOMBRE_ALIANZA = nombresDe(
+  enumsClinicos.alianzaTerapeutica as readonly AlianzaTerapeutica[],
+);
+
+/** Si una clave del contrato tiene su nombre en el DICCIONARIO (y no cayó en
+ *  la regla genérica). Para el test que ata el contrato al diccionario. */
+export function estaEnDiccionario(clave: string): boolean {
+  return DICCIONARIO[canonica(clave)] !== undefined;
+}
+

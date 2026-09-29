@@ -79,6 +79,17 @@ export type ConfianzaModelo = z.infer<typeof confianzaModeloSchema>;
 
 export const rolesOrigenSchema = z.enum(["asr_role", "posicional"]);
 
+/** Orientación teórica de la profesional (enum `orientacion_teorica` de
+ *  Postgres): decide el instrumento de "Para vos". Una sola lista para el
+ *  PATCH de configuración, los tipos de la pantalla y lo que el worker recibe
+ *  al reclamar; enums-clinicos.test.ts la compara con el enum de Prisma. */
+export const ORIENTACIONES_TEORICAS = ["cbt_mi", "gestalt"] as const;
+export const orientacionTeoricaSchema = z.enum(ORIENTACIONES_TEORICAS);
+export type OrientacionTeorica = z.infer<typeof orientacionTeoricaSchema>;
+/** La que se usa si el consultorio no tiene configuración (el default de la
+ *  columna en schema.prisma). */
+export const ORIENTACION_DEFAULT: OrientacionTeorica = "cbt_mi";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Nota SOAP
 // ────────────────────────────────────────────────────────────────────────────
@@ -346,7 +357,8 @@ export type SesionClinicaResponse = z.infer<typeof sesionClinicaResponseSchema>;
 // "definitivo" lo decide el worker; la app sólo aplica su política.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Consumo de una corrida: lo suma el reporte mensual. Forma abierta. */
+/** Consumo de una corrida, tal como lo manda el worker. Forma abierta. La
+ *  app lo guarda y no lo lee: no hay reporte mensual que lo sume. */
 export const usoSchema = z
   .object({
     asrSegundos: z.number().nonnegative().optional(),

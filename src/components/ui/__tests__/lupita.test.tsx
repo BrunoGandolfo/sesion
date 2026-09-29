@@ -82,7 +82,7 @@ describe("Lupita", () => {
   });
 
   it("conserva la pose cuando recibe cada movimiento con significado", () => {
-    const movimientos = ["brota", "respira", "piensa", "habla", "celebra", "quieta"] as const;
+    const movimientos = ["brota", "piensa", "celebra", "quieta"] as const;
     for (const movimiento of movimientos) {
       const { container } = render(
         <Lupita
@@ -95,9 +95,9 @@ describe("Lupita", () => {
   });
 });
 
-const MOVIMIENTOS = ["brota", "respira", "piensa", "habla", "celebra", "quieta"] as const;
+const MOVIMIENTOS = ["brota", "piensa", "celebra", "quieta"] as const;
 
-it.each(["quieta", "respira", "piensa", "habla"] as const)("el estado %s no activa movimiento continuo", (movimiento) => {
+it.each(["quieta", "piensa"] as const)("el estado %s no activa movimiento continuo", (movimiento) => {
   const { container } = render(<Lupita pose="saluda" movimiento={movimiento} />);
   expect(container.querySelector("[data-motion-span]")).toBeNull();
 });
@@ -116,13 +116,6 @@ it.each(MOVIMIENTOS)("con movimiento reducido %s muestra sólo la pose fija", (m
   );
 });
 
-it("recibir otro fragmento conserva el dibujo quieto", () => {
-  const { container, rerender } = render(<Lupita pose="saluda" movimiento="habla" pulso={1} />);
-  const primero = container.querySelector("svg");
-  rerender(<Lupita pose="saluda" movimiento="habla" pulso={2} />);
-  expect(container.querySelector("svg")).toBe(primero);
-  expect(container.querySelector("[data-motion-span]")).toBeNull();
-});
 
 it("el menú hace un bob de 3 px por toque, sin loop ni movimiento reducido", () => {
   const { container, rerender } = render(<LupitaMenu toque={0} />);

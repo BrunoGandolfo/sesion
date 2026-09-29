@@ -417,7 +417,7 @@ describe("reintentar y eliminar (desde fallida)", () => {
     expect(await base.prisma.turno.findUnique({ where: { id: turnoId } })).not.toBeNull();
     const [trabajo] = await trabajosDe(base.prisma, sesionId);
     expect(trabajo.tipo).toBe("borrar_audio_r2");
-    expect(trabajo.payload).toEqual({ prefijo: `${org.orgId}/${sesionId}/`, indices: [0] });
+    expect(trabajo.payload).toEqual({ prefijo: `${org.orgId}/${sesionId}/` });
     expect((await eventosAuditoriaDe(base.prisma, org.orgId, sesionId)).map((e) => e.accion)).toEqual(["sesion.eliminar"]);
   });
 

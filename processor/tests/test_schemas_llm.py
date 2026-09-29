@@ -15,12 +15,12 @@ import pytest
 
 import clinical_analyzer
 import config
+from dobles import RIESGO_SIN_SEÑAL, respuesta_sdk
+from dobles import nota as _nota
 from errores import PipelineError
 from schemas_llm import (
     ALIANZAS,
-    RUTA_CONTRATO,
     SCHEMA_NOTA,
-    TIPOS_INTERVENCION,
     sanear_datos_nota,
     sanear_feedback,
     validar_estructura_contexto,
@@ -28,44 +28,6 @@ from schemas_llm import (
     validar_estructura_feedback_gestalt,
     validar_estructura_nota,
 )
-
-# El enum de tipos de intervención no se copia acá: se lee del mismo JSON que
-# leen schemas_llm.py y src/lib/sesion-clinica/schema.ts. Antes había una
-# copia a mano en este test que se comparaba con otra copia a mano del
-# módulo: dos copias nacidas juntas siempre coinciden aunque las dos estén
-# viejas respecto de la app.
-with open(RUTA_CONTRATO, encoding="utf-8") as _f:
-    TIPOS_INTERVENCION_APP = tuple(json.load(_f)["tipoIntervencion"])
-
-RIESGO_SIN_SEÑAL = {
-    "nivel": "ninguno",
-    "indicadores": [],
-    "evidencia": [],
-    "notaParaTerapeuta": None,
-}
-
-
-def _nota(**datos) -> dict:
-    """Nota estructuralmente valida; `datos` pisa datosEstructurados."""
-    base = {
-        "intensidadEmocional": 7,
-        "alianzaTerapeutica": "estable",
-        "duracionRealMin": 50,
-        "riesgoDetectado": dict(RIESGO_SIN_SEÑAL),
-    }
-    base.update(datos)
-    return {
-        "nota": {"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"},
-        "datosEstructurados": base,
-    }
-
-
-def _respuesta(texto: str, stop_reason: str = "end_turn"):
-    return SimpleNamespace(
-        usage=SimpleNamespace(input_tokens=10, output_tokens=5),
-        stop_reason=stop_reason,
-        content=[SimpleNamespace(type="text", text=texto)],
-    )
 
 
 def _mockear_cliente(mocker, respuesta):
@@ -79,7 +41,7 @@ def _mockear_cliente(mocker, respuesta):
 
 def test_parsea_json_valido(mocker):
     esperado = _nota()
-    _mockear_cliente(mocker, _respuesta(json.dumps(esperado)))
+    _mockear_cliente(mocker, respuesta_sdk(json.dumps(esperado)))
     assert clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, config.LLM_MAX_TOKENS) == esperado
 
 
@@ -87,7 +49,7 @@ def test_texto_antes_del_json_es_llm_json_invalido(mocker):
     # Un modelo que "razona" antes del JSON rompe json.loads: se reporta como
     # llm_json_invalido sin volcar el texto en la excepcion.
     texto = "Claro, aca va la nota:\n" + json.dumps(_nota())
-    _mockear_cliente(mocker, _respuesta(texto))
+    _mockear_cliente(mocker, respuesta_sdk(texto))
     with pytest.raises(PipelineError) as exc:
         clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, config.LLM_MAX_TOKENS)
     assert exc.value.codigo == "llm_json_invalido"
@@ -95,7 +57,7 @@ def test_texto_antes_del_json_es_llm_json_invalido(mocker):
 
 
 def test_respuesta_truncada_es_llm_truncado(mocker):
-    _mockear_cliente(mocker, _respuesta("{", stop_reason="max_tokens"))
+    _mockear_cliente(mocker, respuesta_sdk("{", stop="max_tokens"))
     with pytest.raises(PipelineError) as exc:
         clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, config.LLM_MAX_TOKENS)
     assert exc.value.codigo == "llm_truncado"
@@ -104,13 +66,7 @@ def test_respuesta_truncada_es_llm_truncado(mocker):
 def test_el_truncado_dice_contra_que_techo_y_cuanto_se_fue_en_razonar(mocker):
     # Es lo que se lee despues para saber si el techo era chico o si el
     # razonamiento se lo comio. Los dos numeros salen del `usage`.
-    respuesta = _respuesta("{", stop_reason="max_tokens")
-    respuesta.usage = SimpleNamespace(
-        input_tokens=10,
-        output_tokens=8000,
-        output_tokens_details=SimpleNamespace(thinking_tokens=7100),
-    )
-    _mockear_cliente(mocker, respuesta)
+    _mockear_cliente(mocker, respuesta_sdk("{", stop="max_tokens", salida=8000, razonamiento=7100))
 
     with pytest.raises(PipelineError) as exc:
         clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, 8000)
@@ -123,7 +79,7 @@ def test_el_truncado_dice_contra_que_techo_y_cuanto_se_fue_en_razonar(mocker):
 def test_sin_detalle_de_razonamiento_el_truncado_lo_dice(mocker):
     # El SDK puede no traer output_tokens_details: se dice "desconocido" en
     # vez de inventar un cero, que se leeria como "no razono nada".
-    _mockear_cliente(mocker, _respuesta("{", stop_reason="max_tokens"))
+    _mockear_cliente(mocker, respuesta_sdk("{", stop="max_tokens", razonamiento=None))
 
     with pytest.raises(PipelineError) as exc:
         clinical_analyzer._llamar_anthropic("sys", "user", SCHEMA_NOTA, 8000)
@@ -132,7 +88,7 @@ def test_sin_detalle_de_razonamiento_el_truncado_lo_dice(mocker):
 
 
 def test_sin_bloque_de_texto_es_llm_sin_texto(mocker):
-    respuesta = _respuesta("ignorado")
+    respuesta = respuesta_sdk("ignorado")
     respuesta.content = [SimpleNamespace(type="tool_use", text=None)]
     _mockear_cliente(mocker, respuesta)
     with pytest.raises(PipelineError) as exc:
@@ -387,13 +343,6 @@ def test_sanear_feedback_tolera_formas_inesperadas():
 
 def _props_datos() -> dict:
     return SCHEMA_NOTA["properties"]["datosEstructurados"]["properties"]
-
-
-def test_enum_tipos_intervencion_coincide_con_la_app():
-    assert TIPOS_INTERVENCION == TIPOS_INTERVENCION_APP
-    enum = _props_datos()["intervenciones"]["items"]["properties"]["tipo"]["enum"]
-    assert tuple(enum) == TIPOS_INTERVENCION_APP
-    assert "psicoeducacion" not in enum
 
 
 def test_las_tres_escalas_admiten_null_en_el_schema():

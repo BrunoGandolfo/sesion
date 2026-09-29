@@ -92,7 +92,7 @@ export function generarNonce(): string {
 // enforzar habría roto la subida de toda grabación. Ver AGENTS.md.
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface DestinosExternos {
+interface DestinosExternos {
   sentry: readonly string[];
   /** Vacío si R2_PUBLIC_HOST falta o no es un host exacto. */
   r2: readonly string[];
@@ -148,9 +148,9 @@ export function hostsExternos(destinos: DestinosExternos): string[] {
  * enforce rompería la subida. Por eso la variable es obligatoria en
  * producción (src/lib/env-operacion.ts) y /api/health contesta 503 sin ella.
  */
-export const DESTINOS_EXTERNOS: DestinosExternos = construirDestinos();
+const DESTINOS_EXTERNOS: DestinosExternos = construirDestinos();
 
-export interface OpcionesCsp {
+interface OpcionesCsp {
   /** En desarrollo Next usa eval para React Refresh. Ver abajo. */
   desarrollo?: boolean;
   /** Para tests: los destinos en vez de los del ambiente. */

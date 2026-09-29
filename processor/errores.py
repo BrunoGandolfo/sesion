@@ -9,19 +9,33 @@ Cada fallo es TRANSITORIO o DEFINITIVO, y lo decide el worker (la app solo
 aplica su politica: un transitorio vuelve a la cola con backoff y se agota a
 los MAX fallos seguidos; un definitivo deja la sesion en `fallida` hasta que
 la profesional reintente o elimine). Se puede fijar por excepcion
-(`definitivo=`) o dejar que lo decida el codigo: los de CODIGOS_DEFINITIVOS
-no se arreglan solos con el tiempo (audio que son dos archivos pegados, respuesta
-del modelo con forma invalida dos veces), el resto si puede (red, timeouts,
-5xx de un proveedor, error interno).
+(`definitivo=`) o dejar que lo decida el codigo.
+
+Los de CODIGOS_DEFINITIVOS no se arreglan solos con el tiempo: repetir la
+sesion repite el mismo resultado, y en el caso del modelo lo paga de nuevo.
+El resto si puede (red, timeouts, 429 y 5xx de un proveedor, la app que no
+guardo, error interno).
 """
 
 CODIGOS_DEFINITIVOS = frozenset(
     {
+        # El archivo de audio: falta la key o son dos grabaciones pegadas.
         "audio_sin_key",
         "audio_varias_cabeceras",
+        # AssemblyAI: transcripcion sin segmentos, o un 4xx (que no sea 429)
+        # contra la request: payload, audio o credencial que no cambian solos.
         "asr_vacio",
-        "llm_invalido",
+        "asr_rechazado",
+        # El modelo: estas salidas llegan despues de agotar el reintento de
+        # forma de clinical_analyzer (JSON invalido o estructura invalida dos
+        # veces, truncado aun con el techo del reintento), o son un rechazo o
+        # una respuesta sin texto, que no se reintentan.
         "llm_truncado",
+        "llm_json_invalido",
+        "llm_estructura_invalida",
+        "llm_rechazo",
+        "llm_sin_texto",
+        # La app entrego un checkpoint sin transcripcion.
         "checkpoint_invalido",
     }
 )

@@ -21,14 +21,14 @@
 
 /** Lado del lienzo en el que está dibujada la marca. Todas las medidas de
  *  abajo son unidades de este lienzo, no píxeles. */
-export const LIENZO = 64;
+const LIENZO = 64;
 
 /** Salvia (sage-500), el fondo. */
-export const SALVIA = "#4F7A6A";
+const SALVIA = "#4F7A6A";
 /** Crema (cream-50), el hilo y las dos cuentas grandes. */
-export const CREMA = "#FAFAF6";
+const CREMA = "#FAFAF6";
 /** Sage-300, la cuenta chica: la sesión más vieja es la que menos pesa. */
-export const SAGE_300 = "#9BB6AA";
+const SAGE_300 = "#9BB6AA";
 
 /** Los extremos del hilo, de abajo-izquierda a arriba-derecha. */
 const HILO = { x1: 16, y1: 48, x2: 48, y2: 16 } as const;
@@ -40,7 +40,7 @@ const CENTROS = [
   { cx: 46, cy: 18 },
 ] as const;
 
-export interface MedidasMarca {
+interface MedidasMarca {
   /** Grosor del hilo. */
   hilo: number;
   /** Radio de cada cuenta, en el orden de CENTROS. */
@@ -83,7 +83,7 @@ export const MEDIDAS_BASE: MedidasMarca = {
  * cuenta. Con las cuentas un punto más grandes (6,5 / 8 / 9,5) el hueco de
  * arriba caía a 1,15 px y las dos cuentas grandes se tocaban.
  */
-export const MEDIDAS_CHICAS: MedidasMarca = {
+const MEDIDAS_CHICAS: MedidasMarca = {
   hilo: 2.2,
   cuentas: [6.5, 7.5, 9],
   radioEsquina: 14,

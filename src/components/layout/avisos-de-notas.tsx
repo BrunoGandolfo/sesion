@@ -46,10 +46,15 @@ import { AlertCircle, CheckCircle2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ApiClientError, apiGet } from "@/lib/api-client";
 import {
+  OCULTAR_AVISOS,
+  REGION_AVISOS,
   REVISAR,
+  VER_AVISOS,
   VER_QUE_PASO,
+  nombresDeAvisos,
   notaFallidaDe,
   notaListaDe,
+  resumenDeAvisos,
 } from "@/lib/glosario";
 import {
   RUTA_AVISOS,
@@ -68,14 +73,6 @@ import {
   type AvisoNota,
   type AvisoServidor,
 } from "@/lib/notas-en-proceso";
-
-import {
-  OCULTAR_AVISOS,
-  REGION_AVISOS,
-  VER_AVISOS,
-  nombresDeAvisos,
-  resumenDeAvisos,
-} from "./textos";
 
 export function useSeguimientoNotas() {
   return React.useSyncExternalStore(

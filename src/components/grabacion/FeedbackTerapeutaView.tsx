@@ -165,7 +165,7 @@ function leerItemsGTFS(valor: unknown): ItemGTFS[] | null {
 }
 
 /** Lo que se pudo leer del análisis, con la marca de si llegó entero. */
-export interface FeedbackLegible {
+interface FeedbackLegible {
   instrumento: OrientacionTeorica;
   fortalezas: FortalezaFeedback[];
   areasCrecimiento: AreaCrecimientoFeedback[];

@@ -3,12 +3,12 @@
 // responde 409 para que el teléfono repita. Si está, subiendo → procesando.
 
 import { db } from "@/lib/db";
-import { almacenAudio, r2Configurado } from "@/lib/r2";
 
 import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
+import { exigirR2 } from "../../../_lib/exigir-r2";
 import { confirmarSubida, diagnosticoParaAuditoria, MENSAJE_NO_LLEGO } from "../../../_lib/casos-uso/audio";
-import { ApiError, errorResponse, ok, validationError } from "../../../_lib/responses";
+import { ApiError, errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { uploadConfirmarSchema } from "../../../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -21,19 +21,17 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-    const parsed = uploadConfirmarSchema.safeParse(await request.json().catch(() => null));
+    const parsed = uploadConfirmarSchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
 
-    if (!r2Configurado()) {
-      throw new ApiError("El almacenamiento de audio (R2) no está configurado en este entorno", 503);
-    }
+    const almacen = exigirR2();
 
     const auditar = (detalle: Record<string, unknown>) =>
       registrarAuditoria(db, { organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.subir_audio_fin", entidad: "sesion_clinica", entidadId: id, detalle });
 
     try {
       const { diagnostico, ...cierre } = parsed.data;
-      const { bytes, sesion } = await confirmarSubida({ prisma: db, organizationId, sesionId: id, ...cierre, almacen: almacenAudio });
+      const { bytes, sesion } = await confirmarSubida({ prisma: db, organizationId, sesionId: id, ...cierre, almacen });
       // El diagnóstico del grabador queda acá y sólo acá: horas, motivos y
       // conteos para no volver a adivinar por qué se cortó una grabación. Va
       // aplanado: la auditoría descarta los objetos anidados sin avisar.

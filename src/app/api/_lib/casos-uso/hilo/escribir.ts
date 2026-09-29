@@ -1,5 +1,7 @@
 import { contenidoHiloSchema, type ContenidoHilo } from "@/lib/hilo/contenido";
 
+import { OPERACIONES_VERSION, puedeVersion } from "@/lib/hilo/versiones";
+
 import { ApiError } from "../../responses";
 import { aplicarVigente, auditarHilo, bloquearHilo, CONFLICTO_HILO, exigirVersion, insertarVersion, leerVersion, type BaseHilo, type IdentidadHilo } from "./base";
 
@@ -33,9 +35,9 @@ export async function aceptarPropuesta(input: Escritura & { propuestaId: string;
       where: { id: input.propuestaId, pacienteId: input.pacienteId, organizationId: input.organizationId },
     });
     if (!propuesta) throw new ApiError("Propuesta no encontrada", 404);
-    if (propuesta.estado !== "propuesta" || (propuesta.basadaEnVersion ?? 0) !== input.basadaEnVersion) throw new ApiError(CONFLICTO_HILO, 409);
+    if (!puedeVersion("aceptar", propuesta.estado) || (propuesta.basadaEnVersion ?? 0) !== input.basadaEnVersion) throw new ApiError(CONFLICTO_HILO, 409);
     await tx.hiloVersion.update({ where: { id: propuesta.id }, data: {
-      estado: "aplicada", resueltaEn: ahora, resueltaPorUserId: input.usuarioId,
+      estado: OPERACIONES_VERSION.aceptar.hacia, resueltaEn: ahora, resueltaPorUserId: input.usuarioId,
     } });
     const vigente = contenido === undefined ? propuesta : await insertarVersion(tx, input, hilo, {
       contenido: { ...contenido, cambios: [] }, actor: "profesional", estado: "aplicada",
@@ -57,9 +59,9 @@ export async function rechazarPropuesta(input: Escritura & { propuestaId: string
       id: input.propuestaId, pacienteId: input.pacienteId, organizationId: input.organizationId,
     } });
     if (!propuesta) throw new ApiError("Propuesta no encontrada", 404);
-    if (!["propuesta", "desactualizada"].includes(propuesta.estado)) throw new ApiError(CONFLICTO_HILO, 409);
+    if (!puedeVersion("rechazar", propuesta.estado)) throw new ApiError(CONFLICTO_HILO, 409);
     await tx.hiloVersion.update({ where: { id: propuesta.id }, data: {
-      estado: "rechazada", resueltaEn: ahora, resueltaPorUserId: input.usuarioId,
+      estado: OPERACIONES_VERSION.rechazar.hacia, resueltaEn: ahora, resueltaPorUserId: input.usuarioId,
     } });
     await auditarHilo(tx, input, "hilo.rechazar", propuesta.version, input.usuarioId, ahora);
     return { ok: true };

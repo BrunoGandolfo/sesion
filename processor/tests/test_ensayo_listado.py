@@ -13,6 +13,8 @@ import textwrap
 
 import pytest
 
+from dobles import requiere
+
 RAIZ = Path(__file__).resolve().parents[2]
 WORKFLOW = RAIZ / ".github/workflows/ensayo-restauracion.yml"
 VERIFICADOR = RAIZ / "scripts/ensayo/verificar-restauracion.mjs"
@@ -20,6 +22,9 @@ DIARIO = "backups/sesion-backup-"
 MENSUAL = "backups/mensuales/"
 ETAPAS = ["listado", "metadatos", "descarga", "base", "apertura", "verificacion"]
 NODE = shutil.which("node")
+
+# Los ensayos ejecutan el verificador con el Node real.
+pytestmark = requiere("node")
 
 
 @pytest.fixture(scope="module")

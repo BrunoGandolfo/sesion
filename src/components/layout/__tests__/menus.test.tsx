@@ -36,7 +36,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => datosMenu.ruta }));
 vi.mock("@/components/layout/providers", () => ({
   useSesionActual: () => ({ nombre: "Mariana Roldán", email: "mariana@example.test" }),
 }));
-vi.mock("@/lib/sesion-cliente", () => ({ cerrarSesion: vi.fn() }));
+vi.mock("@/lib/sesion-cliente", () => ({ salir: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({ apiGet }));
 
 // El panel queda montado aunque esté cerrado (como el de verdad, que

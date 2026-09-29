@@ -71,6 +71,7 @@
 
 import type { db } from "@/lib/db";
 import type { AvisoServidor } from "@/lib/notas-en-proceso";
+import { ESTADOS_EN_PROCESO, estaEnProceso } from "@/lib/sesion-clinica/estados";
 
 type ClientePrisma = Pick<typeof db, "sesionClinica" | "eventoAuditoria">;
 
@@ -91,7 +92,6 @@ export const VENTANA_SONDEO_MS = 20_000;
 
 export const ACCION_VER = "sesion.ver";
 const ACCION_REINTENTAR = "sesion.reintentar";
-const EN_PROCESO: ReadonlySet<string> = new Set(["subiendo", "procesando"]);
 const ENTIDAD = "sesion_clinica";
 
 export interface AvisosNotasParams {
@@ -115,7 +115,7 @@ export async function avisosNotas({
       organizationId,
       OR: [
         {
-          estado: { in: ["subiendo", "procesando"] },
+          estado: { in: [...ESTADOS_EN_PROCESO] },
           actualizadaEn: { gte: desdeProceso },
         },
         { estado: "revision", procesadaEn: { gte: desdeAvisos } },
@@ -178,7 +178,7 @@ export async function avisosNotas({
             );
 
     const enProceso = vers.filter((e) =>
-      EN_PROCESO.has(estadoDelDetalle(e.detalle) ?? ""),
+      estaEnProceso(estadoDelDetalle(e.detalle)),
     );
     return vers.some((e) => {
       if (estadoDelDetalle(e.detalle) !== fila.estado) return false;
@@ -191,9 +191,7 @@ export async function avisosNotas({
     });
   };
 
-  const enProceso = filas.filter(
-    (f) => f.estado === "subiendo" || f.estado === "procesando",
-  );
+  const enProceso = filas.filter((f) => estaEnProceso(f.estado));
   const sinVer = terminadas.filter((f) => !vista(f)).slice(-TOPE_AVISOS);
 
   return [...enProceso, ...sinVer].map((f) => ({

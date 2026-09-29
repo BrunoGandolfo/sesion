@@ -30,7 +30,6 @@ import * as React from "react";
 import { aRegistradas, formatearDuracion, type PausaRegistrada } from "@/lib/grabacion-cronometro";
 import { crearMediaRecorder, mensajeErrorGrabacion } from "@/lib/grabacion-microfono";
 import {
-  AVISO_LIMITE_SEGUNDOS,
   contarChunk,
   crearReloj,
   estadoLimite,
@@ -59,8 +58,7 @@ import {
   type EventoGrabacion,
 } from "@/lib/sesion-clinica/schema";
 
-export type { Pausa, PausaRegistrada };
-export { formatearDuracion, AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS };
+export { formatearDuracion };
 
 /** Lo que recibe la pantalla para subir. El Blob se sube tal cual. */
 export interface DatosGrabacion {
@@ -104,7 +102,7 @@ const UMBRAL_SILENCIO = 0.012;
 // no puede reanudar dos veces ni volver a pausar lo que acaba de reanudar.
 const GUARDA_TOQUE_MS = 800;
 
-export interface UseGrabadorOpciones {
+interface UseGrabadorOpciones {
   /** Con qué se guardan los chunks: el turnoId (turno ↔ sesión es 1:1). */
   claveGrabacion: string | null;
   /** Recibe la grabación lista para subir. Una sola vez por grabación. */

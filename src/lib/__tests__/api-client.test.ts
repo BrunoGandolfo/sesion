@@ -6,8 +6,11 @@ import {
   apiGet,
   apiPatch,
   apiPost,
+  errorDeRespuesta,
   esAbort,
+  mensajeParaElla,
 } from "@/lib/api-client";
+import { ALGO_FALLO } from "@/lib/glosario";
 
 function respuestaJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -194,5 +197,43 @@ describe("api-client", () => {
       expect(esAbort(null)).toBe(false);
       expect(esAbort("AbortError")).toBe(false);
     });
+  });
+});
+
+describe("mensajeParaElla", () => {
+  it("usa el texto que mandó la API", () => {
+    expect(mensajeParaElla(new ApiClientError("El turno ya está cancelado", 409))).toBe(
+      "El turno ya está cancelado",
+    );
+  });
+
+  it("nunca muestra el message técnico de otro error", () => {
+    expect(mensajeParaElla(new TypeError("Failed to fetch"))).toBe(ALGO_FALLO);
+    expect(mensajeParaElla(new Error("HTTP 500"))).toBe(ALGO_FALLO);
+    expect(mensajeParaElla("texto suelto")).toBe(ALGO_FALLO);
+  });
+
+  it("acepta un texto por defecto propio de la pantalla", () => {
+    expect(mensajeParaElla(new TypeError("Load failed"), "No pudimos cargar.")).toBe(
+      "No pudimos cargar.",
+    );
+  });
+});
+
+describe("errorDeRespuesta", () => {
+  it("toma el error y los details del cuerpo", async () => {
+    const err = await errorDeRespuesta(
+      respuestaJson({ error: "Datos inválidos", details: { campo: "x" } }, 400),
+    );
+    expect(err).toBeInstanceOf(ApiClientError);
+    expect(err.status).toBe(400);
+    expect(err.mensaje).toBe("Datos inválidos");
+    expect(err.details).toEqual({ campo: "x" });
+  });
+
+  it("sin cuerpo legible no inventa un 'HTTP 500'", async () => {
+    const err = await errorDeRespuesta(new Response("<html>", { status: 500 }));
+    expect(err.status).toBe(500);
+    expect(err.mensaje).not.toMatch(/HTTP/);
   });
 });

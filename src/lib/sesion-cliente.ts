@@ -7,7 +7,10 @@
 
 import { olvidarNotas } from "@/lib/notas-en-proceso";
 
-export async function cerrarSesion(destino = "/login"): Promise<void> {
+/** Se llama `salir` y no `cerrarSesion`: ese nombre es el del servidor
+ *  (sesion-acceso.ts, con Prisma), y un auto-import equivocado en un
+ *  componente cliente arrastraba la base al bundle. */
+export async function salir(destino = "/login"): Promise<void> {
   // El aviso de nota lista guarda el nombre de la paciente en la pestaña.
   olvidarNotas();
   try {
@@ -17,3 +20,8 @@ export async function cerrarSesion(destino = "/login"): Promise<void> {
   }
   window.location.assign(destino);
 }
+
+/** @deprecated Usar `salir`. Queda mientras config-view (pantalla, ola 2)
+ *  importe el nombre viejo. */
+export const cerrarSesion = salir;
+

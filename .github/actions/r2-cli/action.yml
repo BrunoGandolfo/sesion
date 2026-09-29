@@ -1,0 +1,36 @@
+# Deja el AWS CLI del runner listo para hablar con R2 (S3-compatible).
+#
+# Uso, con las credenciales en el env del job o del step:
+#
+#   - name: Configurar credenciales AWS CLI para R2
+#     uses: ./.github/actions/r2-cli
+#
+# Lee R2_ACCESS_KEY_ID y R2_SECRET_ACCESS_KEY del entorno (como
+# alerta-correo lee los suyos) y FALLA si falta alguna. El bucket y el
+# endpoint no se configuran acá: cada comando pasa `--endpoint-url
+# "${R2_ENDPOINT}"` y el bucket en la URL s3://.
+#
+# Los dos flags de checksum deshabilitan el comportamiento nuevo del
+# aws-cli v2.23+, que R2 no soporta en todas las rutas.
+#
+# Lo usan backup.yml y ensayo-restauracion.yml.
+
+name: AWS CLI para R2
+description: Configura credenciales, región y checksums del AWS CLI para R2.
+
+runs:
+  using: composite
+  steps:
+    - name: Configurar AWS CLI para R2
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
+          echo "ERROR: faltan R2_ACCESS_KEY_ID o R2_SECRET_ACCESS_KEY en el entorno" >&2
+          exit 1
+        fi
+        aws configure set aws_access_key_id "${R2_ACCESS_KEY_ID}"
+        aws configure set aws_secret_access_key "${R2_SECRET_ACCESS_KEY}"
+        aws configure set default.region auto
+        aws configure set default.s3.request_checksum_calculation when_required
+        aws configure set default.s3.response_checksum_validation when_required

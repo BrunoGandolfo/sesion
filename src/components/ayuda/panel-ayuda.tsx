@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { X } from "lucide-react";
-import { useReducedMotion } from "framer-motion";
 import { usePathname } from "next/navigation";
 
 import { ApiClientError, esAbort } from "@/lib/api-client";
@@ -30,6 +29,7 @@ import {
   type MovimientoLupita,
 } from "@/components/ui/lupita";
 import { AnilloProgreso } from "@/components/ui/movimiento";
+import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import { Sheet } from "@/components/ui/sheet";
 
 const LARGO_MAX_PREGUNTA = 600;
@@ -37,7 +37,7 @@ const MAX_TURNOS_ENVIADOS = 12;
 const STATUS_TOPE_DIARIO = 429;
 
 /** Única definición de superficies donde el personaje no puede aparecer. */
-export const PREFIJOS_RUTA_CLINICA = [
+const PREFIJOS_RUTA_CLINICA = [
   "/sesiones/",
   "/grabar/",
   "/pacientes/",
@@ -49,18 +49,18 @@ interface Turno {
   completo?: boolean;
 }
 
-export function esRutaClinica(pathname: string): boolean {
+function esRutaClinica(pathname: string): boolean {
   return PREFIJOS_RUTA_CLINICA.some((prefijo) => pathname.startsWith(prefijo));
 }
 
-export function textoDeError(error: unknown): string {
+function textoDeError(error: unknown): string {
   if (error instanceof ApiClientError) {
     return error.status === STATUS_TOPE_DIARIO ? AYUDA_TOPE_DIARIO : ALGO_FALLO;
   }
   return AYUDA_SIN_CONEXION;
 }
 
-export interface PanelAyudaProps {
+interface PanelAyudaProps {
   abierto: boolean;
   alCerrar: () => void;
 }
@@ -68,13 +68,12 @@ export interface PanelAyudaProps {
 export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
   const pathname = usePathname();
   const sinPersonaje = esRutaClinica(pathname);
-  const reducido = useReducedMotion();
+  const reducido = useMovimientoReducido();
   const [turnos, setTurnos] = React.useState<Turno[]>([]);
   const [borrador, setBorrador] = React.useState("");
   const [esperando, setEsperando] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [movimiento, setMovimiento] = React.useState<MovimientoLupita>(abierto ? "brota" : "quieta");
-  const [fragmentosRecibidos, setFragmentosRecibidos] = React.useState(0);
   const hilo = React.useRef<HTMLDivElement>(null);
   const peticion = React.useRef<AbortController | null>(null);
   const respuestaParcial = React.useRef("");
@@ -83,7 +82,6 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
   if (estabaAbierto !== abierto) {
     setEstabaAbierto(abierto);
     setMovimiento(abierto ? "brota" : "quieta");
-    setFragmentosRecibidos(0);
     if (!abierto) {
       setTurnos([]);
       setBorrador("");
@@ -106,7 +104,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
   React.useEffect(() => {
     if (!abierto || (movimiento !== "brota" && movimiento !== "celebra")) return;
     const duracion = movimiento === "brota" ? DURACION_BROTA : DURACION_CELEBRA;
-    const timer = window.setTimeout(() => setMovimiento("respira"), duracion * 1000);
+    const timer = window.setTimeout(() => setMovimiento("quieta"), duracion * 1000);
     return () => window.clearTimeout(timer);
   }, [abierto, movimiento]);
 
@@ -122,7 +120,6 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
     setError(null);
     setEsperando(true);
     setMovimiento("piensa");
-    setFragmentosRecibidos(0);
 
     const control = new AbortController();
     peticion.current = control;
@@ -152,8 +149,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
         if (!vigente()) return;
         const fragmento = decodificador.decode(value, { stream: true });
         if (fragmento === "") continue;
-        setMovimiento("habla");
-        setFragmentosRecibidos((cantidad) => cantidad + 1);
+        setMovimiento("quieta");
         respuestaParcial.current += fragmento;
         const acumulado = respuestaParcial.current;
         setTurnos((previos) => {
@@ -181,7 +177,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
       setMovimiento("celebra");
     } catch (e) {
       if (esAbort(e) || !vigente()) return;
-      setMovimiento("respira");
+      setMovimiento("quieta");
       if (respuestaParcial.current !== "") {
         setError(AYUDA_STREAM_CORTADO);
       } else {
@@ -227,7 +223,6 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
                     ? "celebra" : "saluda"}
                 tamano={TAMANOS_LUPITA.encabezado}
                 movimiento={movimiento}
-                pulso={fragmentosRecibidos}
               />
             </span>
           ) : null}

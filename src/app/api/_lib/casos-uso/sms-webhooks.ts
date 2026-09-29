@@ -6,6 +6,7 @@ import type { db } from "@/lib/db";
 import { clasificarCallback, type VeredictoCallback } from "@/lib/sms/clasificar";
 
 import { MOTIVO_BAJA } from "./despachar-sms";
+import { cancelarPendientesDelDestino } from "./envios-del-turno";
 
 type ClientePrisma = Pick<typeof db, "envioSms" | "bajaSms">;
 
@@ -93,9 +94,5 @@ export async function registrarBajaPorRespuesta(
     update: {},
     create: { telefono, motivo: "respuesta_baja" },
   });
-  const { count } = await prisma.envioSms.updateMany({
-    where: { destino: telefono, estado: { in: ["pendiente", "enviando"] } },
-    data: { estado: "cancelado", motivoNoEnvio: MOTIVO_BAJA, cerradoEn: ahora },
-  });
-  return count;
+  return cancelarPendientesDelDestino(prisma, telefono, MOTIVO_BAJA, ahora);
 }

@@ -7,7 +7,7 @@ import { resultadoSesionSchema } from "@/lib/sesion-clinica/schema";
 
 import { identidadWorker, registrarLatido } from "../../../_lib/casos-uso/sesion/latido";
 import { aplicarResultadoSesion } from "../../../_lib/casos-uso/sesion/resultado";
-import { errorResponse, ok, validationError } from "../../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { autorizarTicketSesion } from "../../../_lib/tickets";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     const sesion = await autorizarTicketSesion(request, db, id);
-    const parsed = resultadoSesionSchema.safeParse(await request.json());
+    const parsed = resultadoSesionSchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
 
     const resultado = await aplicarResultadoSesion({

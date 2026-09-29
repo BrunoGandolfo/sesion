@@ -23,10 +23,10 @@ import type {
 import type { RecordatorioModo } from "@/lib/recordatorios-programacion";
 import type {
   AlianzaTerapeutica,
-  ConfianzaModelo,
   DatosEstructurados as DatosEstructuradosSchema,
   EstadoSesion,
   NivelRiesgo,
+  OrientacionTeorica,
 } from "@/lib/sesion-clinica/schema";
 
 export type {
@@ -42,22 +42,6 @@ export type TurnoEstado = EstadoTurno;
 
 /** Estados de pago de una sesión realizada (nombre histórico de EstadoPago). */
 export type PagoEstado = EstadoPago;
-
-/**
- * Estados del recordatorio por SMS.
- *
- * "enviando" es la RESERVA del cron: una corrida lo tomó y lo está
- * trabajando. No dice que se haya llamado a Twilio — eso lo dice `intentos`.
- * Si la corrida se corta, la fila queda ahí y la siguiente la rescata (ver
- * src/app/api/_lib/casos-uso/despachar-sms.ts). En la base `estado` es
- * un String sin enum, así que este valor no necesita migración.
- */
-export type RecordatorioEstado =
-  | "pendiente"
-  | "enviando"
-  | "enviado"
-  | "fallido"
-  | "cancelado";
 
 // ============================================
 // Entidades
@@ -116,18 +100,6 @@ export interface SerieCreada {
  *  grabar) sigue leyendo `id` y `fecha` igual. */
 export type TurnoCreado = Turno & { serie: SerieCreada | null };
 
-export interface Recordatorio {
-  id: string;
-  turnoId: string;
-  programadoEn: Date;      // cuándo debe enviarse
-  enviadoEn: Date | null;  // cuándo se envió realmente
-  estado: RecordatorioEstado;
-  textoEnviado: string | null;
-  error: string | null;
-  intentos: number;
-  creadoEn: Date;
-  actualizadoEn: Date;
-}
 
 export interface Configuracion {
   id: string;
@@ -364,7 +336,7 @@ export type EstadoProcesamiento = EstadoSesion;
 export type { AlianzaTerapeutica };
 
 /** Confianza del modelo en la nota generada */
-export type { ConfianzaModelo };
+
 
 /** Nivel de la señal de riesgo. "ninguno" es el default seguro: sin
  *  evidencia textual explícita no se gradúa riesgo. */
@@ -384,11 +356,6 @@ export type RiesgoDetectado = NonNullable<
 /** Cita literal de la transcripción que ancla un indicador de riesgo */
 export type EvidenciaRiesgo = RiesgoDetectado["evidencia"][number];
 
-/** Speech analytics derivado de diarización (ratios en 0-100;
- *  `speakersDetectados` < 2 = colapso; ausente en payloads legacy). */
-export type SpeechAnalytics = NonNullable<
-  DatosEstructuradosSchema["speechAnalytics"]
->;
 
 // ============================================
 // Feedback terapeuta (Llamada C) — contrato multi-orientación
@@ -404,8 +371,8 @@ export type SpeechAnalytics = NonNullable<
 // ============================================
 
 /** Orientación teórica de la profesional — determina el instrumento
- *  de auto-supervisión. Fuente de verdad: Configuracion.orientacionTeorica. */
-export type OrientacionTeorica = "cbt_mi" | "gestalt";
+ *  de auto-supervisión. La lista vive en sesion-clinica/schema.ts. */
+export type { OrientacionTeorica };
 
 /** Cita literal de la transcripción que ancla un score */
 export interface EvidenciaFeedback {
@@ -436,7 +403,7 @@ export interface MITIGlobales {
 }
 
 /** Conteos MITI 4.2.1 — 10 categorías de comportamiento */
-export interface MITICounts {
+interface MITICounts {
   Q: number;   // Question
   SR: number;  // Simple Reflection
   CR: number;  // Complex Reflection
@@ -449,9 +416,9 @@ export interface MITICounts {
   C: number;   // Confront
 }
 
-export type BenchmarkMITI = "insufficient" | "fair" | "good";
+type BenchmarkMITI = "insufficient" | "fair" | "good";
 
-export interface RatiosDerivadosMITI {
+interface RatiosDerivadosMITI {
   rq: number | null;            // (SR + CR) / Q; null si Q === 0
   porcentajeCR: number | null;  // CR / (SR + CR) * 100; null si SR+CR === 0
   benchmarkRQ: BenchmarkMITI;
@@ -466,7 +433,7 @@ export interface CTSRSubset {
   guidedDiscovery: ScoreCTSR;
 }
 
-export interface SpeechAnalyticsInferido {
+interface SpeechAnalyticsInferido {
   ratioHablaTerapeutaPaciente: number | null;
   comentario: string | null;
 }
@@ -487,7 +454,7 @@ export interface AreaCrecimientoFeedback {
 // longitudinalmente sin importar el instrumento con que se generó cada
 // sesión. Los bloques específicos de instrumento extienden este núcleo.
 
-export interface FeedbackNucleoPanteorico {
+interface FeedbackNucleoPanteorico {
   fortalezas: FortalezaFeedback[];              // máx 3
   areasCrecimiento: AreaCrecimientoFeedback[];  // máx 3
   sugerenciaProximaSesion: string;
@@ -497,7 +464,7 @@ export interface FeedbackNucleoPanteorico {
 
 // ─── Bloque específico MITI 4.2.1 + CTS-R (orientación cbt_mi) ───────
 
-export interface FeedbackMitiCtsr extends FeedbackNucleoPanteorico {
+interface FeedbackMitiCtsr extends FeedbackNucleoPanteorico {
   /** El worker no lo manda (SCHEMA_FEEDBACK_CBT_MI no tiene el campo):
    *  sin instrumento, leerFeedback lo trata como cbt_mi. */
   instrumento?: "cbt_mi";
@@ -520,7 +487,7 @@ export interface ItemGTFS {
   evidence: EvidenciaFeedback[];
 }
 
-export interface FeedbackGestalt extends FeedbackNucleoPanteorico {
+interface FeedbackGestalt extends FeedbackNucleoPanteorico {
   instrumento: "gestalt";
   itemsGTFS: ItemGTFS[];
   adherenciaGlobal: number | null; // suma GTFS de ítems evaluables
@@ -551,8 +518,3 @@ export interface FeedbackTerapeutaLegacy {
   sugerenciaProximaSesion: string;
   disclaimer: string;
 }
-
-// ─── Normalización al leer (implementación en src/lib/sesion-clinica/normalizar.ts)
-
-/** @deprecated Importar desde "@/lib/sesion-clinica/normalizar". */
-export { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";

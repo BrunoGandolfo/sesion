@@ -95,7 +95,7 @@ interface ReporteModerno {
 }
 
 /** Lo que termina en el log, ya normalizado y recortado. */
-export interface Violacion {
+interface Violacion {
   documento: string;
   directiva: string;
   bloqueado: string;

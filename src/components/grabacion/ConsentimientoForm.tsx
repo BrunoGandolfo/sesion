@@ -3,12 +3,12 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui";
-import { apiPost } from "@/lib/api-client";
+import { apiPost, mensajeParaElla } from "@/lib/api-client";
 import {
   CONSENTIMIENTO_VERSION,
   generarTextoConsentimiento,
 } from "@/lib/consentimiento";
-import { ALGO_FALLO, AUTORIZACION_GRABACION } from "@/lib/glosario";
+import { AUTORIZACION_GRABACION } from "@/lib/glosario";
 
 import { FirmaCanvas } from "./FirmaCanvas";
 
@@ -64,7 +64,7 @@ export function ConsentimientoForm({
       });
       onConsentimientoFirmado();
     } catch (err) {
-      setError(err instanceof Error ? err.message : ALGO_FALLO);
+      setError(mensajeParaElla(err));
     } finally {
       setEnviando(false);
     }

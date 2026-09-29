@@ -290,7 +290,6 @@ src/components/ui/session-row.tsx
 src/app/api/_lib/casos-uso/cobrar-turno.ts
 src/lib/glosario.ts
 src/components/layout/avisos-de-notas.tsx
-src/components/layout/textos.ts
 src/lib/notas-en-proceso.ts
 src/app/api/_lib/casos-uso/avisos-notas.ts
 -->

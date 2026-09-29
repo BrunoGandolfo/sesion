@@ -104,10 +104,12 @@ Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
 5. Tocá **Firmar**.
 
 Firmada, aparece el chip verde **Grabación autorizada** y *"Firmada el …"*.
-La versión vigente del texto es **2.7**. Las firmas anteriores, incluida la
-2.6, siguen sirviendo para grabar y no hace falta revocarlas,
-pero **necesitan que la paciente firme la 2.7**: la 2.6 describía un cifrado del
-audio que la app ya no hace y decía que la transcripción no se podía ver. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
+La versión vigente del texto es **2.8**. Las firmas anteriores, incluidas la
+2.7 y la 2.6, siguen sirviendo para grabar y no hace falta revocarlas,
+pero **necesitan que la paciente firme la 2.8**: la 2.7 decía que el borrado en
+AssemblyAI se reintentaba solo si la transcripción se completaba, y la 2.6
+describía un cifrado del audio que la app ya no hace y decía que la
+transcripción no se podía ver. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
 en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
 pidas vos.
 

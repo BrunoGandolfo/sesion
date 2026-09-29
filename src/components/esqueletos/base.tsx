@@ -40,7 +40,7 @@ import * as React from "react";
  * nombre, un número, un avatar— y `suave` para lo que va a ser texto de
  * apoyo. La diferencia es la que da la jerarquía sin escribir una letra.
  */
-export type TonoHueco = "fuerte" | "suave";
+type TonoHueco = "fuerte" | "suave";
 
 const FONDO: Record<TonoHueco, string> = {
   fuerte: "bg-cream-200",

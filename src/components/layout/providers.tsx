@@ -8,7 +8,7 @@ import { ProteccionTrabajo } from "./proteccion-trabajo";
 // de servidor y resuelve la sesión con getSessionActor(): acá no hay fetch
 // ni proveedor externo. Reemplaza al SessionProvider de next-auth.
 
-export interface UsuariaActual {
+interface UsuariaActual {
   nombre: string;
   email: string;
 }

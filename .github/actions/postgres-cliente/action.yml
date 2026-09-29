@@ -1,0 +1,37 @@
+# Cliente de Postgres 17 (pg_dump, pg_restore, psql) desde el repositorio
+# PGDG. El runner trae el 16, que no puede volcar ni restaurar un Postgres 17.
+#
+# Uso, después del checkout:
+#
+#   - name: Instalar postgresql-client-17
+#     uses: ./.github/actions/postgres-cliente
+#
+# Deja los binarios en /usr/lib/postgresql/17/bin: los workflows lo pasan como
+# PG_BIN. Lo usan ci.yml (job test), backup.yml y ensayo-restauracion.yml.
+#
+# ES EL ÚNICO LUGAR DONDE SE ELIGE LA VERSIÓN DEL CLIENTE. Cuando la base de
+# producción pase a Postgres 18 se cambia acá y, en el mismo commit, el PG_BIN
+# de esos tres workflows, la imagen de los servicios de ci.yml y
+# docker-compose.yml. El cliente tiene que ser >= al servidor.
+
+name: Cliente de Postgres 17
+description: Instala postgresql-client-17 del repositorio PGDG y muestra su versión.
+
+runs:
+  using: composite
+  steps:
+    - name: Instalar postgresql-client-17 (PGDG)
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo install -d /usr/share/postgresql-common/pgdg
+        sudo curl --fail --silent --show-error \
+          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+          https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        codename="$(lsb_release -cs)"
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends postgresql-client-17
+        /usr/lib/postgresql/17/bin/pg_dump --version
+        /usr/lib/postgresql/17/bin/pg_restore --version

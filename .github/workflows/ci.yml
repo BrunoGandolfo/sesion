@@ -36,7 +36,8 @@
 #     repositorio PGDG con el nombre de la versión. Se cambia a propósito,
 #     con una corrida manual, no cuando GitHub mueva la etiqueta.
 #   - No hay `concurrency` en `test`: con base propia por corrida no hay nada
-#     que serializar. La de arriba sólo cancela corridas viejas del mismo ref.
+#     que serializar. La de arriba sólo cancela corridas viejas del mismo ref,
+#     y nunca en main.
 #   - Dependabot no recibe secrets: este workflow no usa ninguno, así que sus
 #     PRs corren la suite completa. Un verde no reemplaza leer qué sube.
 # ============================================================================
@@ -53,9 +54,16 @@ on:
   # nada: publicar.yml exige un pedido manual y CI verde de un push a main.
   workflow_dispatch:
 
+# Fuera de main, un push nuevo cancela la corrida vieja del mismo ref. En
+# main NO: cada SHA de main es candidato a publicar (publicar.yml exige su CI
+# verde) y avisar-ci.yml sólo avisa `failure`, así que un SHA cancelado
+# quedaba sin verde ni aviso. Y no alcanza con `cancel-in-progress: false`:
+# GitHub guarda UNA sola corrida pendiente por grupo y la tercera cancela a
+# la segunda. Por eso en main cada corrida tiene su propio grupo (run_id) y
+# todas corren.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -157,18 +165,7 @@ jobs:
       - name: Generar Prisma Client
         run: npx prisma generate
       - name: Instalar postgresql-client-17
-        run: |
-          set -euo pipefail
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl --fail --silent --show-error \
-            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-            https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          codename="$(lsb_release -cs)"
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client-17
-          "${PG_BIN}/pg_dump" --version
+        uses: ./.github/actions/postgres-cliente
       - name: Aplicar migraciones a la base efímera
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_test

@@ -11,8 +11,12 @@ import {
   esGrabacionSinTerminar,
   UMBRAL_GRABANDO_SIN_TERMINAR_MS,
   UMBRAL_HUERFANA_HORAS,
+  ESTADOS_CON_NOTA,
   ESTADOS_EN_PIPELINE,
+  ESTADOS_EN_PROCESO,
   ESTADOS_SESION,
+  estaEnProceso,
+  puede,
   keyAudio,
   LISTA_OPERACIONES,
   OPERACIONES,
@@ -121,7 +125,8 @@ describe("huérfanas y backoff", () => {
     expect(esHuerfana({ estado: "subiendo", actualizadaEn: new Date("2026-09-07T11:59:00Z") }, ahora)).toBe(true);
     expect(esHuerfana({ estado: "grabando", actualizadaEn: new Date("2026-09-08T12:00:00Z") }, ahora)).toBe(false);
     expect(esHuerfana({ estado: "subiendo", actualizadaEn: new Date("2026-09-14T07:00:00Z") }, ahora)).toBe(false);
-    expect(esHuerfana({ estado: "fallida" }, ahora)).toBe(true);
+    // Una fallida la resuelve ella desde Pendientes: el mantenimiento no la toca.
+    expect(esHuerfana({ estado: "fallida", actualizadaEn: new Date(0) }, ahora)).toBe(false);
     expect(esHuerfana({ estado: "procesando", actualizadaEn: new Date(0) }, ahora)).toBe(false);
   });
 
@@ -155,5 +160,29 @@ describe("el sondeo de la UI usa los estados de la tabla", () => {
     const { ESTADOS_ACTIVOS } = await import("@/hooks/useSesionClinicaPolling");
     expect(ESTADOS_ACTIVOS).toBe(ESTADOS_EN_PIPELINE);
     expect([...ESTADOS_EN_PIPELINE].sort()).toEqual(["grabando", "procesando", "subiendo"]);
+  });
+});
+
+describe("puede: la tabla, preguntada por las pantallas", () => {
+  it("coincide con OPERACIONES[op].desde para cada operación y cada estado", () => {
+    for (const op of LISTA_OPERACIONES) {
+      for (const estado of ESTADOS_SESION) {
+        expect(puede(op.nombre, estado)).toBe(op.desde.includes(estado));
+      }
+    }
+  });
+
+  it("sin sesión sólo vale lo que crea la fila", () => {
+    expect(puede("crear", null)).toBe(true);
+    expect(puede("aprobar", null)).toBe(false);
+    expect(puede("crear", "grabando")).toBe(false);
+  });
+
+  it("en proceso es subiendo o procesando; con nota, revision o aprobada", () => {
+    expect([...ESTADOS_EN_PROCESO].sort()).toEqual(["procesando", "subiendo"]);
+    expect(ESTADOS_EN_PROCESO.every((e) => ESTADOS_EN_PIPELINE.has(e))).toBe(true);
+    expect(estaEnProceso("grabando")).toBe(false);
+    expect(estaEnProceso(null)).toBe(false);
+    expect([...ESTADOS_CON_NOTA].sort()).toEqual(["aprobada", "revision"]);
   });
 });

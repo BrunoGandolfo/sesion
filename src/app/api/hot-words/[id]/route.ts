@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 
 import { getOrganizationId } from "../../_lib/auth";
 import { actualizarHotWord, borrarHotWord } from "../../_lib/casos-uso/hot-words";
-import { errorResponse, ok, validationError } from "../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../_lib/responses";
 import { hotWordUpdateSchema } from "../../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const organizationId = await getOrganizationId();
     const { id } = await params;
-    const body = await request.json();
+    const body = await leerJson(request);
     const parsed = hotWordUpdateSchema.safeParse(body);
 
     if (!parsed.success) {

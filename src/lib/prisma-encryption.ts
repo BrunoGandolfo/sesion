@@ -47,31 +47,31 @@ import { validarLlavero } from "./llavero";
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Una nota SOAP: las cuatro secciones, cada una texto o null. */
-export interface NotaSoap {
+interface NotaSoap {
   subjetivo: string | null;
   objetivo: string | null;
   analisis: string | null;
   plan: string | null;
 }
 
-export interface CamposPaciente {
+interface CamposPaciente {
   /** Notas privadas de la ficha. */
   notas: string | null;
 }
 
-export interface CamposTurno {
+interface CamposTurno {
   /** Nota privada del turno. */
   notas: string | null;
 }
 
-export interface CamposConsentimiento {
+interface CamposConsentimiento {
   /** Texto íntegro que la paciente firmó. */
   textoCompleto: string;
   /** Firma del canvas (base64). */
   firmaDigital: string;
 }
 
-export interface CamposHotWord {
+interface CamposHotWord {
   termino: string;
 }
 
@@ -93,7 +93,7 @@ export interface CamposSesionClinica {
   notasEdicion: string | null;
 }
 
-export interface CamposHiloVersion {
+interface CamposHiloVersion {
   /** Todo el contenido de la versión, un solo JSON. Misma regla que `datos`. */
   contenido: unknown;
 }
@@ -164,7 +164,7 @@ export const CAMPOS_CIFRADOS = {
   },
 } as const satisfies Record<string, DefModelo>;
 
-export type ModeloCifrado = keyof typeof CAMPOS_CIFRADOS;
+type ModeloCifrado = keyof typeof CAMPOS_CIFRADOS;
 
 export const MODELOS_CIFRADOS = Object.keys(CAMPOS_CIFRADOS) as ModeloCifrado[];
 
@@ -193,7 +193,7 @@ function aBuffer(valor: unknown): Buffer | null {
 }
 
 /** Cualquier objeto → las 4 claves SOAP (extras se descartan, faltantes → null). */
-export function normalizarNotaSoap(valor: unknown): NotaSoap | null {
+function normalizarNotaSoap(valor: unknown): NotaSoap | null {
   if (!esObjetoPlano(valor)) return null;
   return {
     subjetivo: textoONull(valor.subjetivo),
@@ -296,20 +296,20 @@ function cifrarCampos(
 
 type ConId = { id: string };
 
-export type ColumnasCifradasPaciente = ConId &
+type ColumnasCifradasPaciente = ConId &
   Pick<Prisma.PacienteUncheckedCreateInput, "notasEncrypted">;
-export type ColumnasCifradasTurno = ConId &
+type ColumnasCifradasTurno = ConId &
   Pick<Prisma.TurnoUncheckedCreateInput, "notasEncrypted">;
-export type ColumnasCifradasConsentimiento = ConId &
+type ColumnasCifradasConsentimiento = ConId &
   Required<
     Pick<
       Prisma.ConsentimientoGrabacionUncheckedCreateInput,
       "textoCompletoEncrypted" | "firmaDigitalEncrypted"
     >
   >;
-export type ColumnasCifradasHotWord = ConId &
+type ColumnasCifradasHotWord = ConId &
   Required<Pick<Prisma.HotWordUncheckedCreateInput, "terminoEncrypted">>;
-export type ColumnasCifradasSesion = ConId &
+type ColumnasCifradasSesion = ConId &
   Pick<
     Prisma.SesionClinicaUncheckedCreateInput,
     | "transcripcionEncrypted"
@@ -319,7 +319,7 @@ export type ColumnasCifradasSesion = ConId &
     | "notaFinalEncrypted"
     | "notasEdicionEncrypted"
   >;
-export type ColumnasCifradasHiloVersion = ConId &
+type ColumnasCifradasHiloVersion = ConId &
   Required<Pick<Prisma.HiloVersionUncheckedCreateInput, "contenidoEncrypted">>;
 
 export function cifrarPaciente(

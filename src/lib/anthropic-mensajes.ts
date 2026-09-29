@@ -10,10 +10,12 @@ import type {
   Tool,
 } from "@anthropic-ai/sdk/resources/messages";
 
-export const MODELO_AYUDA = "claude-sonnet-5";
-export const TIMEOUT_MS = 30_000;
+import { detalleDeError } from "@/lib/detalle-error";
 
-export interface BloqueSystem extends TextBlockParam {
+export const MODELO_AYUDA = "claude-sonnet-5";
+const TIMEOUT_MS = 30_000;
+
+interface BloqueSystem extends TextBlockParam {
   type: "text";
   text: string;
   cache_control?: { type: "ephemeral" };
@@ -34,7 +36,7 @@ export interface PedidoMensajes {
   tool_choice?: { type: "auto"; disable_parallel_tool_use: boolean };
 }
 
-export interface LlamadaHerramienta {
+interface LlamadaHerramienta {
   nombre: string;
   entrada: unknown;
 }
@@ -64,7 +66,7 @@ export type FetchLike = (
   init: RequestInit,
 ) => Promise<Response>;
 
-export interface OpcionesMensajes {
+interface OpcionesMensajes {
   apiKey: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
@@ -127,8 +129,7 @@ function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMe
 function envolverError(error: unknown): ErrorAnthropic {
   if (error instanceof ErrorAnthropic) return error;
   const status = error instanceof Anthropic.APIError ? error.status : undefined;
-  const detalle =
-    error instanceof Error ? error.message.slice(0, 500) : "desconocido";
+  const detalle = detalleDeError(error, "desconocido").slice(0, 500);
   return new ErrorAnthropic(detalle, status);
 }
 

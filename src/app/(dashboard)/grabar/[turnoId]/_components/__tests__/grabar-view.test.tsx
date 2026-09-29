@@ -121,8 +121,10 @@ test("si la pantalla se apaga grabando, el aviso queda hasta que ella lo cierra"
 });
 
 test("un hueco sin audio se dice con sus horas y deja seguir o terminar", () => {
-  const desde = new Date("2026-09-18T10:12:00").getTime();
-  const hasta = new Date("2026-09-18T10:20:00").getTime();
+  // Hora de Montevideo explícita: el aviso dice la hora del consultorio,
+  // no la del proceso (antes pasaba sólo si el test corría en UTC-3).
+  const desde = new Date("2026-09-18T10:12:00-03:00").getTime();
+  const hasta = new Date("2026-09-18T10:20:00-03:00").getTime();
   const grabador = grabadorEn({ estado: "grabando", hueco: { desde, hasta } });
   render(<GrabarView {...props} />);
 
@@ -134,7 +136,7 @@ test("un hueco sin audio se dice con sus horas y deja seguir o terminar", () => 
 });
 
 test("mientras el audio todavía no volvió, lo dice desde cuándo", () => {
-  const desde = new Date("2026-09-18T10:12:00").getTime();
+  const desde = new Date("2026-09-18T10:12:00-03:00").getTime();
   grabadorEn({ estado: "grabando", hueco: { desde, hasta: null } });
   render(<GrabarView {...props} />);
   expect(screen.getByText(AVISO_SIN_AUDIO_DESDE(desde))).toBeTruthy();

@@ -1,8 +1,9 @@
 import type { z } from "zod";
 import { regenerarHiloSchema } from "@/lib/hilo/contenido";
+import { OPERACIONES_VERSION, puedeVersion } from "@/lib/hilo/versiones";
 import { ApiError } from "../../responses";
 import { crearTrabajo } from "../trabajos/crear";
-import { auditarHilo, bloquearHilo, exigirVersion, filtroHilo, type BaseHilo, type IdentidadHilo } from "./base";
+import { auditarHilo, bloquearHilo, exigirVersion, filtroHilo, whereAprobadasDe, type BaseHilo, type IdentidadHilo } from "./base";
 
 export async function regenerarHilo(input: IdentidadHilo & z.infer<typeof regenerarHiloSchema> & { prisma: BaseHilo; usuarioId: string; ahora?: Date }) {
   const ahora = input.ahora ?? new Date();
@@ -14,9 +15,9 @@ export async function regenerarHilo(input: IdentidadHilo & z.infer<typeof regene
     if (input.propuestaId) {
       const propuesta = await tx.hiloVersion.findFirst({ where: { ...identidad, id: input.propuestaId } });
       if (!propuesta) throw new ApiError("Propuesta no encontrada", 404);
-      if (!["desactualizada", "rechazada"].includes(propuesta.estado)) throw new ApiError("Esta propuesta ya no se puede volver a generar", 409);
+      if (!puedeVersion("regenerar", propuesta.estado)) throw new ApiError("Esta propuesta ya no se puede volver a generar", 409);
       sesionId = propuesta.sesionOrigenId;
-      await tx.hiloVersion.update({ where: { id: propuesta.id }, data: { estado: "rechazada", resueltaEn: ahora, resueltaPorUserId: input.usuarioId } });
+      await tx.hiloVersion.update({ where: { id: propuesta.id }, data: { estado: OPERACIONES_VERSION.regenerar.hacia, resueltaEn: ahora, resueltaPorUserId: input.usuarioId } });
     } else {
       const trabajo = await tx.trabajo.findFirst({ where: { ...identidad, id: input.trabajoId, tipo: "integrar_contexto", estado: "fallido" } });
       if (!trabajo) throw new ApiError("Trabajo fallido no encontrado", 404);
@@ -26,7 +27,7 @@ export async function regenerarHilo(input: IdentidadHilo & z.infer<typeof regene
     if (await tx.hiloVersion.count({ where: { ...identidad, sesionOrigenId: sesionId, estado: "aplicada" } })) {
       throw new ApiError("Esta sesión ya se incorporó al Recorrido. Podés editar la versión vigente.", 409);
     }
-    const sesion = await tx.sesionClinica.findFirst({ where: { id: sesionId, organizationId: input.organizationId, turno: { pacienteId: input.pacienteId }, estado: "aprobada" }, select: { id: true } });
+    const sesion = await tx.sesionClinica.findFirst({ where: { ...whereAprobadasDe(identidad), id: sesionId }, select: { id: true } });
     if (!sesion) throw new ApiError("La sesión de origen ya no está disponible", 409);
     const ultimo = await tx.trabajo.findFirst({ where: { ...identidad, sesionId, tipo: "integrar_contexto" }, orderBy: [{ creadoEn: "desc" }, { id: "desc" }] });
     if (ultimo && (["pendiente", "en_curso"].includes(ultimo.estado) || (input.trabajoId && ultimo.id !== input.trabajoId))) throw new ApiError("Ya se pidió otra propuesta para esta sesión", 409);

@@ -10,7 +10,7 @@
 
 import * as React from "react";
 
-export type EstadoPantalla = "pidiendo" | "concedida" | "rechazada";
+type EstadoPantalla = "pidiendo" | "concedida" | "rechazada";
 type Anotar = (tipo: "wakelock-concedido" | "wakelock-rechazado" | "wakelock-soltado") => void;
 
 export function usePantallaEncendida(activa: boolean, avisarSiSeApaga: boolean, anotar: Anotar) {

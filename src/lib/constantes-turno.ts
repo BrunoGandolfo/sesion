@@ -73,5 +73,4 @@ export const duracionSchema = z.literal(DURACIONES);
 export const modalidadSchema = z.enum(MODALIDADES);
 export const estadoTurnoSchema = z.enum(ESTADOS_TURNO);
 export const metodoPagoSchema = z.enum(METODOS_PAGO);
-export const frecuenciaSerieSchema = z.enum(FRECUENCIAS_SERIE);
 export const frecuenciaTurnoSchema = z.enum(FRECUENCIAS_TURNO);

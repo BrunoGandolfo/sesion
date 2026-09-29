@@ -32,7 +32,7 @@ import {
 } from "../_lib/casos-uso/responder-ayuda";
 import { reservarCupo, devolverCupo } from "../_lib/casos-uso/ayuda/reservar-cupo";
 import { consultarAgenda } from "../_lib/casos-uso/ayuda/agenda";
-import { errorResponse, validationError } from "../_lib/responses";
+import { errorResponse, leerJson, validationError } from "../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   try {
     const { organizationId, userId } = await getSessionActor();
 
-    const body: unknown = await request.json();
+    const body: unknown = await leerJson(request);
     const parsed = preguntaSchema.safeParse(body);
     if (!parsed.success) {
       return validationError(parsed.error);

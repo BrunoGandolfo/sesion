@@ -57,9 +57,9 @@ import { CANCELAR_SERIE, CANCELAR_SERIE_TITULO, CANCELAR_SERIE_MENSAJE, CANCELAR
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
-import { sePuedeCobrar, sePuedeGrabar } from "@/app/api/_lib/domain";
+import { sePuedeCobrar } from "@/app/api/_lib/domain";
 import { estadoClinicoDe } from "@/components/ui/session-row";
-import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
+import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 
 // Los campos de "Reprogramar" son los del alta (fecha, hora, duración,
 // modalidad, notas): mismo schema y mismo componente, turno-editar-campos.
@@ -223,7 +223,6 @@ export function TurnoDetailSheet({
   // hora no llegó, ni Grabar a uno que no es de hoy.
   const ahora = new Date();
   const puedeCobrar = sePuedeCobrar(turno, ahora);
-  const puedeGrabar = sePuedeGrabar(turno, ahora);
   // Se puede deshacer mientras el turno siga cobrado. Es una reversión: el
   // turno vuelve a quedar sin cobrar y se puede volver a cobrar.
   const puedeDeshacerCobro = turno.pagoEstado === "pagado";
@@ -234,12 +233,10 @@ export function TurnoDetailSheet({
   // nota", y una nota que no se pudo escribir parecía una nota para leer.
   const sesionDatos = sesion !== "sin-dato" ? sesion : null;
   const notaClinica = estadoClinicoDe(sesionDatos);
-  // Una subida o una grabación que quedó a medias no se está procesando
-  // (la regla y sus umbrales: esGrabacionSinTerminar, estados.ts).
-  const sinTerminar = esGrabacionSinTerminar(sesionDatos, new Date());
-  const notaEnProceso =
-    !sinTerminar &&
-    (sesionDatos?.estado === "procesando" || sesionDatos?.estado === "subiendo");
+  // La acción clínica, la misma que la fila y la card de Ahora
+  // (accionClinicaDe): una subida o una grabación que quedó a medias no se
+  // está procesando, y una grabación en curso se sigue grabando.
+  const clinica = accionClinicaDe(sesionDatos, turno, ahora);
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
 
   /**
@@ -456,18 +453,18 @@ export function TurnoDetailSheet({
                       <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
                     </Link>
                   </Button>
-                ) : sinTerminar ? (
+                ) : clinica.tipo === "grabar" && clinica.retomar ? (
                   <Button asChild variant="secondary" className="!text-terracotta-600">
                     <Link href={`/grabar/${turno.id}`}>
                       {GRABACION_SIN_TERMINAR}
                       <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
                     </Link>
                   </Button>
-                ) : notaEnProceso ? (
+                ) : clinica.tipo === "escribiendo" ? (
                   <p className="text-[13px] text-ink-500" role="status">
                     {NOTA_PROCESANDO}
                   </p>
-                ) : sesionDatos || !puedeGrabar ? null : (
+                ) : clinica.tipo !== "grabar" ? null : (
                   <Button asChild variant="secondary">
                     <Link href={`/grabar/${turno.id}`}>
                       <Mic size={16} strokeWidth={1.8} aria-hidden="true" />

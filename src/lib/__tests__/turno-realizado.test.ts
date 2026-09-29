@@ -11,9 +11,10 @@
  * la API— para que la pantalla lo diga y ofrezca reintentar.
  *
  * Es una función de módulo, no un hook: se prueba con un doble de `fetch` en
- * el global. El proyecto no tiene jsdom ni @testing-library, así que la
- * pantalla en sí (el toast, el botón "Reintentar") no se puede renderizar en
- * un test; lo que sí queda fijado es el contrato del que depende.
+ * el global. Acá se fija el contrato del que depende la pantalla; el toast y
+ * el botón "Reintentar" se podrían renderizar con jsdom y
+ * @testing-library/react (ya están, ver vitest.config.ts), pero este archivo
+ * no lo hace.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -76,10 +77,12 @@ describe("marcarTurnoRealizado", () => {
     );
   });
 
-  it("lanza con el status cuando el error no trae mensaje", async () => {
+  it("sin mensaje de la API lanza un texto para ella, no el status", async () => {
     globalThis.fetch = fetchQueDevuelve(false, 500, null) as unknown as typeof fetch;
 
-    await expect(marcarTurnoRealizado(TURNO_ID)).rejects.toThrow("HTTP 500");
+    await expect(marcarTurnoRealizado(TURNO_ID)).rejects.toThrow(
+      "No pudimos completar la operación. Intentá de nuevo.",
+    );
   });
 
   it("propaga el error de red: la pantalla tiene que poder mostrarlo", async () => {

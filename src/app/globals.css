@@ -12,12 +12,10 @@
   --color-sage-100: #E2EBE6;
   --color-sage-200: #C2D4CB;
   --color-sage-300: #9BB6AA;
-  --color-sage-400: #6F9384;
   --color-sage-500: #4F7A6A;
   --color-sage-600: #3E6355;
   --color-sage-700: #304E43;
   --color-sage-800: #243A32;
-  --color-sage-900: #1A2A24;
 
   /* Cream — warm surfaces */
   --color-cream-50:  #FAFAF6;
@@ -59,10 +57,7 @@
   --color-gold-text: var(--color-gold-500);
 
   /* Semantic */
-  --color-success: #4F7A6A;
-  --color-warning: var(--color-terracotta-500);
   --color-error:   #8F4B48;
-  --color-info:    #4A6B7D;
 
   /* Radii */
   --radius-sm: 6px;
@@ -80,18 +75,15 @@
 }
 
 /* ============================================
-   Motion tokens
+   Bordes
+   (Los tiempos de movimiento no viven acá: llegan desde lib/movimiento.ts
+   en el layout.)
    ============================================ */
 :root {
-  /* Los valores de movimiento llegan desde lib/movimiento.ts en el layout. */
-
-
-  /* Borders */
   --border-subtle: var(--color-cream-200);
   --border-strong: #C4BDAE;
   /* Límite de controles: 3.29:1 sobre papel y 3.45:1 sobre blanco. */
   --border-control: #858C86;
-  --border-focus: var(--color-sage-500);
 }
 
 /* ============================================

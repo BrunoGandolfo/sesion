@@ -8,7 +8,9 @@
 // Sin reintentos, sin cache, sin interceptores: si mañana hacen falta, se
 // agregan cuando haya tres consumidores que lo pidan.
 
-export interface OpcionesApi {
+import { ALGO_FALLO } from "@/lib/glosario";
+
+interface OpcionesApi {
   signal?: AbortSignal;
 }
 
@@ -64,15 +66,32 @@ async function leerJson(res: Response): Promise<unknown> {
   }
 }
 
-async function lanzarSiNoOk(res: Response): Promise<void> {
-  if (res.ok) return;
+/** El ApiClientError de una respuesta no-ok, para quien hace su propio
+ *  fetch (la subida, que necesita el paso y el status). */
+export async function errorDeRespuesta(res: Response): Promise<ApiClientError> {
   const body = await leerJson(res);
   const mensaje =
     esObjeto(body) && typeof body.error === "string"
       ? body.error
       : MENSAJE_GENERICO;
   const details = esObjeto(body) && "details" in body ? body.details : undefined;
-  throw new ApiClientError(mensaje, res.status, details);
+  return new ApiClientError(mensaje, res.status, details);
+}
+
+async function lanzarSiNoOk(res: Response): Promise<void> {
+  if (res.ok) return;
+  throw await errorDeRespuesta(res);
+}
+
+/**
+ * Lo que se le dice a ella ante un error: el `error` que mandó la API, que ya
+ * está escrito para ella, o `porDefecto`. Nunca el `message` de otro Error:
+ * ahí llegan "Failed to fetch", "Load failed" o un TypeError de un bug, en
+ * inglés y sin nada que ella pueda hacer. Los abort se filtran antes con
+ * `esAbort`.
+ */
+export function mensajeParaElla(err: unknown, porDefecto: string = ALGO_FALLO): string {
+  return err instanceof ApiClientError ? err.mensaje : porDefecto;
 }
 
 async function desenvolver<T>(res: Response): Promise<T> {

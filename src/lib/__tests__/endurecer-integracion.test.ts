@@ -1,11 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { cifrarHiloVersion, cifrarPaciente, cifrarSesion } from "@/lib/prisma-encryption";
 import { CLAVES_CIFRADO_TEST } from "./base-identidad";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { conectarBaseDeTest, limpiarDatosDeTest, vaciarTablas, type BaseDeTest } from "./db-test";
-import { mantenimiento } from "@/app/api/_lib/casos-uso/mantenimiento";
+import { mantenimiento, recifrarTanda } from "@/app/api/_lib/casos-uso/mantenimiento";
+import { aadDe, descifrar } from "@/lib/encryption";
 
 let base: BaseDeTest;
 let orgId: string;
@@ -197,16 +198,45 @@ it("la limpieza de fixtures restaura las protecciones también al fallar", async
   await expect(base.db.hiloVersion.deleteMany()).rejects.toThrow(/hilo_versiones.*inmutable/);
 });
 
-it("recifrado no reescribe el historial ni anuncia que se puede retirar su clave", async () => {
+it("recifrado lleva las versiones del Recorrido a la clave activa sin cambiar su contenido", async () => {
   const v = await version();
-  process.env.CLAVES_CIFRADO = `${CLAVES_CIFRADO_TEST},2=${Buffer.alloc(32, 2).toString("base64")}`;
+  const aad = aadDe("hilo_versiones", "contenido_encrypted", v.id);
+  const textoAntes = descifrar(Buffer.from(v.contenidoEncrypted), aad);
+  expect(v.contenidoEncrypted[4]).toBe(1);
+  const K2 = randomBytes(32).toString("base64");
+  process.env.CLAVES_CIFRADO = `${CLAVES_CIFRADO_TEST},2=${K2}`;
   __resetLlaveroForTests();
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     const resultado = await mantenimiento({ prisma: base.db, ahora: new Date("2026-09-16T00:00:00Z"), todo: true });
-    expect(resultado.recifrado).toEqual({ recifradas: 1, pendientes: 1, errores: 1 });
-    expect(log).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("conservar la clave anterior"));
-    expect((await base.prisma.hiloVersion.findUniqueOrThrow({ where: { id: v.id } })).contenidoEncrypted).toEqual(v.contenidoEncrypted);
+    // La versión y las notas del paciente del beforeEach.
+    expect(resultado.recifrado).toEqual({ recifradas: 2, pendientes: 0, errores: 0 });
+    expect(log).not.toHaveBeenCalled();
   } finally { log.mockRestore(); }
+
+  const despues = await base.prisma.hiloVersion.findUniqueOrThrow({ where: { id: v.id } });
+  expect(despues.contenidoEncrypted[4]).toBe(2);
+  expect(descifrar(Buffer.from(despues.contenidoEncrypted), aad)).toBe(textoAntes);
+  expect(despues.estado).toBe(v.estado);
+
+  // Sin la 1 todo se sigue leyendo y no queda nada por hacer.
+  process.env.CLAVES_CIFRADO = `2=${K2}`;
+  __resetLlaveroForTests();
+  expect((await base.db.hiloVersion.findUniqueOrThrow({ where: { id: v.id }, select: { contenido: true } })).contenido).toEqual({ resumen: "original" });
+  expect(await recifrarTanda(base.db)).toEqual({ recifradas: 0, pendientes: 0, errores: 0 });
+});
+
+it("una versión del Recorrido que no descifra cuenta como error y no se toca", async () => {
+  const v = await version();
+  // Otra clave con el mismo id 1: el blob no autentica con ella.
+  process.env.CLAVES_CIFRADO = `1=${randomBytes(32).toString("base64")},2=${randomBytes(32).toString("base64")}`;
+  __resetLlaveroForTests();
+  await base.prisma.$executeRaw`UPDATE pacientes SET notas_encrypted = NULL`;
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const resultado = await mantenimiento({ prisma: base.db, ahora: new Date("2026-09-16T00:00:00Z"), todo: true });
+    expect(resultado.recifrado).toEqual({ recifradas: 0, pendientes: 1, errores: 1 });
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/hilo_versiones\.contenido_encrypted .*no descifra \(autenticacion\)/));
+  } finally { log.mockRestore(); }
+  expect((await base.prisma.hiloVersion.findUniqueOrThrow({ where: { id: v.id } })).contenidoEncrypted).toEqual(v.contenidoEncrypted);
 });

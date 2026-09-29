@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { useEsEscritorio } from "@/hooks/useEsEscritorio";
 import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSesionActual } from "@/components/layout/providers";
 import { useSalidaProtegida } from "./proteccion-trabajo";
-import { cerrarSesion } from "@/lib/sesion-cliente";
+import { salir } from "@/lib/sesion-cliente";
 import { motion } from "framer-motion";
 import {
   Calendar,
@@ -208,7 +209,7 @@ export function Sidebar() {
           </div>
           <button
             type="button"
-            onClick={() => confirmarSalida(() => void cerrarSesion("/login"), { navegar: true })}
+            onClick={() => confirmarSalida(() => void salir("/login"), { navegar: true })}
             aria-label="Cerrar sesión"
             title="Cerrar sesión"
             className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-900"
@@ -218,26 +219,5 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
-  );
-}
-
-/** El ancho en que este menú se ve (`lg`, 64rem: el `hidden lg:flex` del
- *  <aside>). En el servidor, falso: el conteo se pide ya en el navegador. */
-const CONSULTA_ESCRITORIO = "(min-width: 64rem)";
-
-function suscribirAncho(avisar: () => void): () => void {
-  if (typeof window.matchMedia !== "function") return () => {};
-  const consulta = window.matchMedia(CONSULTA_ESCRITORIO);
-  consulta.addEventListener("change", avisar);
-  return () => consulta.removeEventListener("change", avisar);
-}
-
-function useEsEscritorio(): boolean {
-  return React.useSyncExternalStore(
-    suscribirAncho,
-    () =>
-      typeof window.matchMedia === "function" &&
-      window.matchMedia(CONSULTA_ESCRITORIO).matches,
-    () => false,
   );
 }

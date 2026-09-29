@@ -6,6 +6,8 @@ interface S3CommandInput {
   Metadata?: Record<string, string>;
   ContentType?: string;
   ContentLength?: number;
+  Prefix?: string;
+  ContinuationToken?: string;
 }
 
 // vi.mock se hoistea por encima de los imports, por eso usamos vi.hoisted
@@ -37,11 +39,16 @@ const { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3 } =
         readonly __cmd = "Head" as const;
         constructor(public input: S3CommandInput) {}
       }
+      class ListObjectsV2Command {
+        readonly __cmd = "List" as const;
+        constructor(public input: S3CommandInput) {}
+      }
       return {
         S3Client,
         PutObjectCommand,
         DeleteObjectCommand,
         HeadObjectCommand,
+        ListObjectsV2Command,
       };
     };
 
@@ -102,6 +109,58 @@ describe("R2 client", () => {
       vi.stubEnv("R2_BUCKET_NAME", "");
       const { r2Configurado } = await import("@/lib/r2");
       expect(r2Configurado()).toBe(false);
+    });
+  });
+
+  describe("listarPorPrefijo (lo que borra borrar_audio_r2)", () => {
+    it("pagina con ContinuationToken hasta que R2 dice que no hay más", async () => {
+      setR2Env();
+      sendMock
+        .mockResolvedValueOnce({ Contents: [{ Key: "org/ses/0" }], IsTruncated: true, NextContinuationToken: "t1" })
+        .mockResolvedValueOnce({ Contents: [{ Key: "org/ses/1" }, { Key: "org/ses/2" }], IsTruncated: false });
+      const { listarPorPrefijo } = await import("@/lib/r2");
+
+      expect(await listarPorPrefijo("org/ses/")).toEqual(["org/ses/0", "org/ses/1", "org/ses/2"]);
+      const pedidos = sendMock.mock.calls.map(([cmd]) => (cmd as { __cmd: string; input: S3CommandInput }));
+      expect(pedidos.map((c) => c.__cmd)).toEqual(["List", "List"]);
+      expect(pedidos.map((c) => c.input.Prefix)).toEqual(["org/ses/", "org/ses/"]);
+      expect(pedidos.map((c) => c.input.ContinuationToken)).toEqual([undefined, "t1"]);
+      expect(pedidos[0].input.Bucket).toBe("bucket-test");
+    });
+
+    it("un prefijo vacío o sin barra final no llega a R2", async () => {
+      setR2Env();
+      const { listarPorPrefijo } = await import("@/lib/r2");
+      await expect(listarPorPrefijo("")).rejects.toThrow(/Prefijo inválido/);
+      await expect(listarPorPrefijo("org/ses")).rejects.toThrow(/Prefijo inválido/);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it("un error de R2 se propaga con el prefijo, sin confundirse con 'no hay nada'", async () => {
+      setR2Env();
+      sendMock.mockRejectedValueOnce(new Error("AccessDenied"));
+      const { listarPorPrefijo } = await import("@/lib/r2");
+      await expect(listarPorPrefijo("org/ses/")).rejects.toThrow(/No se pudo listar el audio en R2 \(org\/ses\/\): AccessDenied/);
+    });
+  });
+
+  describe("conTimeout y el adaptador del cron de trabajos", () => {
+    it("rechaza con la operación si R2 no contesta a tiempo, y deja pasar lo que llega antes", async () => {
+      const { conTimeout } = await import("@/lib/r2");
+      await expect(conTimeout(new Promise(() => {}), "list", 5)).rejects.toThrow("R2 no respondió en 5 ms (list)");
+      await expect(conTimeout(Promise.resolve("ok"), "delete", 50)).resolves.toBe("ok");
+      await expect(conTimeout(Promise.reject(new Error("AccessDenied")), "delete", 50)).rejects.toThrow("AccessDenied");
+    });
+
+    it("el adaptador lista y borra contra el bucket", async () => {
+      setR2Env();
+      sendMock.mockResolvedValueOnce({ Contents: [{ Key: "org/ses/0" }], IsTruncated: false });
+      const { adaptadorBorradoR2 } = await import("@/lib/r2");
+      expect(await adaptadorBorradoR2.listar("org/ses/")).toEqual(["org/ses/0"]);
+      await adaptadorBorradoR2.borrar("org/ses/0");
+      const ultimo = sendMock.mock.calls.at(-1)?.[0] as { __cmd: string; input: S3CommandInput };
+      expect(ultimo.__cmd).toBe("Delete");
+      expect(ultimo.input.Key).toBe("org/ses/0");
     });
   });
 

@@ -5,7 +5,6 @@ export {
   conectarBaseDeTest as conectarBaseIdentidad,
   vaciarTablas as vaciarBaseIdentidad,
   urlDeBaseDeTest,
-  hayBaseDeTest,
   type BaseDeTest as BaseIdentidad,
 } from "./db-test";
 

@@ -1,6 +1,10 @@
-// Unitario: toda ruta del área declara runtime nodejs, force-dynamic y un
-// maxDuration (H-29): ninguna función puede colgarse sin límite. Las rutas
-// salen del disco: una ruta nueva del área entra sola.
+// Unitario, dos partes:
+//   - la FORMA de toda ruta de src/app/api: runtime nodejs y force-dynamic.
+//     El techo de tiempo (H-29) no se mira acá: lo exige
+//     scripts/ci/max-duration.mjs en el job Guardias, que es el único
+//     guardián de maxDuration;
+//   - las reglas propias del área 2 (sesión clínica, cola de trabajos).
+// Las rutas salen del disco: una ruta nueva entra sola.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
@@ -24,14 +28,34 @@ const RUTAS = [
   "src/app/api/cron/trabajos/route.ts",
 ].sort();
 
-describe("rutas del área 2", () => {
-  it.each(RUTAS)("%s declara runtime, dynamic y maxDuration", (ruta) => {
-    const fuente = readFileSync(resolve(process.cwd(), ruta), "utf8");
-    expect(fuente).toMatch(/export const runtime = "nodejs"/);
-    expect(fuente).toMatch(/export const dynamic = "force-dynamic"/);
-    expect(fuente).toMatch(/export const maxDuration = \d+/);
+/** Rutas que no declaran runtime, con el motivo. */
+const SIN_RUNTIME: Record<string, string> = {
+  // Devuelve una constante del build: no usa nada de Node ni la base.
+  "src/app/api/version/route.ts": "metadato del build, sin Node",
+};
+
+describe("forma de toda ruta de src/app/api", () => {
+  const todas = rutasBajo("src/app/api").sort();
+
+  it("encuentra las rutas en el disco", () => {
+    expect(todas.length).toBeGreaterThan(60);
+    for (const ruta of Object.keys(SIN_RUNTIME)) expect(todas, ruta).toContain(ruta);
   });
 
+  it.each(todas)("%s declara runtime nodejs y force-dynamic", (ruta) => {
+    const fuente = readFileSync(resolve(RAIZ, ruta), "utf8");
+    if (!(ruta in SIN_RUNTIME)) expect(fuente).toMatch(/export const runtime = "nodejs"/);
+    expect(fuente).toMatch(/export const dynamic = "force-dynamic"/);
+  });
+
+  it("las exceptuadas siguen sin runtime (si lo declaran, sacarlas de SIN_RUNTIME)", () => {
+    for (const ruta of Object.keys(SIN_RUNTIME)) {
+      expect(readFileSync(resolve(RAIZ, ruta), "utf8")).not.toMatch(/export const runtime/);
+    }
+  });
+});
+
+describe("rutas del área 2", () => {
   it("el GET de la sesión no tiene PATCH ni DELETE", () => {
     const fuente = readFileSync(resolve(process.cwd(), "src/app/api/sesion-clinica/[id]/route.ts"), "utf8");
     expect(fuente).not.toMatch(/export async function (PATCH|DELETE)/);
@@ -97,7 +121,8 @@ describe("rutas del área 2", () => {
 
   it("sólo el cron de trabajos borra de R2", () => {
     const borran = rutasBajo("src/app/api").filter((ruta) =>
-      /import \{[^}]*\bborrarAudio\b[^}]*\} from "@\/lib\/r2"/.test(readFileSync(resolve(RAIZ, ruta), "utf8")),
+      // borrarAudio suelto, o el adaptador con timeout que lo envuelve.
+      /import \{[^}]*\b(borrarAudio|adaptadorBorradoR2)\b[^}]*\} from "@\/lib\/r2"/.test(readFileSync(resolve(RAIZ, ruta), "utf8")),
     );
     expect(borran).toEqual(["src/app/api/cron/trabajos/route.ts"]);
   });

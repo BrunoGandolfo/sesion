@@ -10,7 +10,11 @@ import {
 import { excedeMaximoPalabras, TERMINO_MUY_LARGO } from "@/lib/hot-words";
 import { normalizePhone } from "@/lib/phone";
 import { RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
-import { diagnosticoGrabacionSchema, pausasGrabacionSchema } from "@/lib/sesion-clinica/schema";
+import {
+  diagnosticoGrabacionSchema,
+  orientacionTeoricaSchema,
+  pausasGrabacionSchema,
+} from "@/lib/sesion-clinica/schema";
 
 // Las listas cerradas del turno se declaran una sola vez en
 // src/lib/constantes-turno.ts; acá solo se re-exportan para las rutas.
@@ -120,7 +124,7 @@ export const pacienteUpdateSchema = pacienteCreateSchema.partial().extend({
 // @/lib/hot-words, que es lo que también lee el formulario.
 // ────────────────────────────────────────────────────────────────────────────
 
-const hotWordScopeSchema = z.enum(["global", "profesional", "paciente"]);
+export const hotWordScopeSchema = z.enum(["global", "profesional", "paciente"]);
 
 /** Las categorías del vocabulario. Espejo del enum `categoria_hot_word` de
  *  Postgres (prisma/schema.prisma): src/lib/__tests__/hot-words.test.ts
@@ -200,7 +204,7 @@ export const configUpdateSchema = z.object({
     .trim()
     .min(1, "Falta el template")
     .optional(),
-  orientacionTeorica: z.enum(["cbt_mi", "gestalt"]).optional(),
+  orientacionTeorica: orientacionTeoricaSchema.optional(),
 });
 
 // ────────────────────────────────────────────────────────────────────────────

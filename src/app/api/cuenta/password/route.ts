@@ -26,7 +26,7 @@ import { cookieBorrada } from "@/lib/sesion-cookie";
 
 import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
-import { ApiError, errorResponse, ok, validationError } from "../../_lib/responses";
+import { ApiError, errorResponse, leerJson, okSinCache, validationError } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +40,7 @@ const bodySchema = z.object({
 export async function POST(request: Request) {
   try {
     const { organizationId, userId } = await getSessionActor();
-    const parsed = bodySchema.safeParse(await request.json());
+    const parsed = bodySchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
 
     const { actual, nueva } = parsed.data;
@@ -95,9 +95,8 @@ export async function POST(request: Request) {
       detalle: { sesionesCerradas: cerradas },
     });
 
-    const respuesta = ok({ cambiada: true, reingresar: true });
+    const respuesta = okSinCache({ cambiada: true, reingresar: true });
     respuesta.headers.append("Set-Cookie", cookieBorrada());
-    respuesta.headers.set("Cache-Control", "no-store");
     return respuesta;
   } catch (error) {
     return errorResponse(error);

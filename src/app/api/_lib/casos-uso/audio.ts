@@ -17,7 +17,6 @@ import { MINIMO_SEGUNDOS } from "@/lib/grabacion-captura";
 import {
   CODIGO_GRABACION_CORTA,
   keyAudio,
-  prefijoAudio,
 } from "@/lib/sesion-clinica/estados";
 import type { DiagnosticoGrabacion, PausaGrabacion } from "@/lib/sesion-clinica/schema";
 
@@ -28,8 +27,8 @@ import { ApiError } from "../responses";
 import { SESION_SELECT, toSesionClinicaResponse } from "../sesion-clinica";
 
 import { leerSesion } from "./sesion/leer";
-import { transicionar } from "./sesion/transicion";
-import { crearTrabajo } from "./trabajos/crear";
+import { exigirEstado, MENSAJE_NO_ENCONTRADA, transicionar } from "./sesion/transicion";
+import { trabajoBorrarAudio } from "./trabajos/crear";
 
 type Base = { prisma: typeof db; organizationId: string };
 type Sesion = Base & { sesionId: string };
@@ -119,15 +118,14 @@ export async function prepararAudio({ prisma, organizationId, turnoId, ahora = n
 export async function pedirUrlSubida(input: Sesion & { tamanoBytes: number; mime: string; almacen: AlmacenAudio }) {
   const { prisma, organizationId, sesionId, tamanoBytes, mime, almacen } = input;
   const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { estado: true } });
-  if (!fila) throw new ApiError("Sesión clínica no encontrada", 404);
-  if (fila.estado !== "grabando") {
-    throw new ApiError(
-      fila.estado === "subiendo"
-        ? "La sesión ya tiene una subida en curso. Para reintentar, volvé la sesión a 'grabando' y pedí una URL nueva."
-        : `Solo se puede iniciar la subida desde una sesión en estado grabando (estado actual: ${fila.estado})`,
-      409,
-    );
-  }
+  if (!fila) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
+  exigirEstado(
+    fila.estado,
+    "empezar_subida",
+    fila.estado === "subiendo"
+      ? "La sesión ya tiene una subida en curso. Para reintentar, volvé la sesión a 'grabando' y pedí una URL nueva."
+      : `Solo se puede iniciar la subida desde una sesión en estado grabando (estado actual: ${fila.estado})`,
+  );
   const key = keyAudio(organizationId, sesionId, 0);
   const { url, expiraEn } = await almacen.firmarSubida(key, { contentType: mime, contentLength: tamanoBytes, expiraEnSegundos: EXPIRA_URL_SUBIDA_SEGUNDOS });
   await transicionar({
@@ -156,8 +154,8 @@ export async function volverAGrabar({ prisma, organizationId, sesionId }: Sesion
 export async function confirmarSubida(input: Sesion & { key: string; duracionAudioSeg: number; pausas?: PausaGrabacion[]; almacen: AlmacenAudio }) {
   const { prisma, organizationId, sesionId, key, duracionAudioSeg, pausas, almacen } = input;
   const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { estado: true } });
-  if (!fila) throw new ApiError("Sesión clínica no encontrada", 404);
-  if (fila.estado !== "subiendo") throw new ApiError(`Solo se puede confirmar una subida en curso (estado actual: ${fila.estado})`, 409);
+  if (!fila) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
+  exigirEstado(fila.estado, "audio_listo", `Solo se puede confirmar una subida en curso (estado actual: ${fila.estado})`);
   if (key !== keyAudio(organizationId, sesionId, 0)) throw new ApiError("La key no corresponde a esta sesión", 400);
 
   const { existe, bytes } = await almacen.existe(key);
@@ -195,13 +193,7 @@ export async function confirmarSubida(input: Sesion & { key: string; duracionAud
         },
         conflicto: "La sesión cambió de estado durante la confirmación",
       });
-      await crearTrabajo({
-        prisma: tx,
-        tipo: "borrar_audio_r2",
-        payload: { prefijo: prefijoAudio(organizationId, sesionId), indices: [0] },
-        organizationId,
-        sesionId,
-      });
+      await trabajoBorrarAudio(tx, { organizationId, sesionId });
     });
     throw new ApiError(MENSAJE_GRABACION_CORTA, 422, CODIGO_GRABACION_CORTA);
   }

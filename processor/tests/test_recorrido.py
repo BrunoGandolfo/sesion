@@ -75,7 +75,7 @@ def test_fallo_de_contexto_impide_generar_una_nota_sin_historia(mocker):
     mocker.patch("processor.app_client.obtener_contexto_clinico_llm", side_effect=requests.RequestException())
     llamar = mocker.patch("processor.clinical_analyzer.analizar")
     with pytest.raises(processor.PipelineError, match="Recorrido"):
-        processor.analizar("s1", processor.Transcripto("texto", {}, "asr"), "p1", "ticket")
+        processor.analizar("s1", processor.Transcripto("texto", {}), "p1", "ticket")
     llamar.assert_not_called()
 
 

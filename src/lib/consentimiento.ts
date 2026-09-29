@@ -1,9 +1,9 @@
-// Texto del consentimiento informado para grabar sesiones, versión 2.7.
+// Texto del consentimiento informado para grabar sesiones, versión 2.8.
 //
 // Se GENERA desde src/lib/consentimiento-hechos.ts: cada frase que afirma
 // algo sobre el tratamiento de los datos sale de una constante que el código
 // hace verdadera, y consentimiento.test.ts las ata. El historial de versiones
-// anteriores (1.1 a 2.6) está en Git.
+// anteriores (1.1 a 2.7) está en Git.
 //
 // La 2.7 (decisión del dueño) persigue dos cosas:
 //
@@ -15,6 +15,11 @@
 //   decía que la transcripción no se podía ver, y hoy se ve.
 // - BREVEDAD. Una pantalla y media de teléfono (tope en el test: 3.500
 //   caracteres). Un párrafo corto por tema, de vos, sin jerga.
+//
+// La 2.8 corrige una sola frase: el borrado en AssemblyAI se reintenta aunque
+// el programa que transcribe se corte a mitad de camino (el worker registra
+// el id del transcript al crearlo, no al terminar). La 2.7 decía que el
+// reintento existía sólo si la transcripción se completaba.
 //
 // Las firmas anteriores siguen vigentes para grabar; sugiereRefirmar pide la
 // nueva.
@@ -28,7 +33,7 @@ import {
   ASR_BORRADO_CON_REINTENTO,
   ASR_BORRADO_DIAS_APROX,
   ASR_BORRADO_INMEDIATO,
-  ASR_REINTENTO_SOLO_SI_SE_COMPLETO,
+  ASR_REINTENTO_AUNQUE_EL_PROCESO_MUERA,
   AUDIO_EN_ARCHIVO_DEL_SERVIDOR,
   AUDIO_SE_SUBE_AL_TERMINAR,
   AUDIO_VIAJA_POR_CONEXION_CIFRADA,
@@ -63,9 +68,9 @@ import {
   VOCABULARIO_INCLUYE_NOMBRES,
 } from "@/lib/consentimiento-hechos";
 
-export const CONSENTIMIENTO_VERSION = "2.7";
+export const CONSENTIMIENTO_VERSION = "2.8";
 /** Fecha de la versión, tal como se lee al pie del texto. */
-export const CONSENTIMIENTO_FECHA = "27 de septiembre de 2026";
+export const CONSENTIMIENTO_FECHA = "29 de septiembre de 2026";
 
 /** ¿Conviene sugerirle a la profesional que la paciente firme el texto nuevo? */
 export function sugiereRefirmar(textoVersion: string): boolean {
@@ -108,7 +113,7 @@ export function generarTextoConsentimiento(params: {
   const guardado = `La transcripción, la nota y el resumen de tu proceso se guardan cifrados en la base de datos (${neon.nombre}), con esta autorización y tu firma.${BORRADOR_IA_GUARDADO_ANTES_DE_APROBAR ? " Ella revisa, corrige y aprueba el borrador de la IA, que también queda guardado" : ""}${RESUMEN_PROPUESTO_POR_IA ? "; el resumen solo cambia si acepta la propuesta" : ""}.`;
   const borradoAudio = ` Al aprobar la nota, la aplicación ${CLAVE_AUDIO_DESTRUIDA_AL_APROBAR ? "destruye la clave del audio y " : ""}manda borrar el audio${LIMPIEZA_AUDIO_REINTENTA ? ` y reintenta unos ${LIMPIEZA_AUDIO_DIAS_APROX} días; si no lo logra, el borrado queda marcado como fallido` : ""}.`;
   const borradoAsr = ASR_BORRADO_INMEDIATO
-    ? ` Al terminar la transcripción le pide a ${assemblyai.nombre} que borre el audio y el texto${ASR_BORRADO_CON_REINTENTO && ASR_REINTENTO_SOLO_SI_SE_COMPLETO ? ` y, si se completó, repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días; si algo falla, puede pedirlo una vez o ninguna` : ""}, y no puede comprobar que se haya borrado.`
+    ? ` Al terminar la transcripción le pide a ${assemblyai.nombre} que borre el audio y el texto${ASR_BORRADO_CON_REINTENTO ? `, y repite el pedido unos ${ASR_BORRADO_DIAS_APROX} días${ASR_REINTENTO_AUNQUE_EL_PROCESO_MUERA ? " aunque este programa se corte a mitad de camino" : ""}` : ""}; no puede comprobar que se haya borrado.`
     : "";
   const retencion = ANTHROPIC_RETENCION_CERO
     ? ` ${anthropic.nombre} está configurada para no conservar el contenido ni usarlo para entrenar.`

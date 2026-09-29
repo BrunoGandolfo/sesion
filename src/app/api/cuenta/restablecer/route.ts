@@ -8,7 +8,7 @@ import { BCRYPT_RONDAS } from "@/lib/password";
 
 import { registrarAuditoria } from "../../_lib/auditoria";
 import { restablecerCuenta } from "../../_lib/casos-uso/recuperar-cuenta";
-import { ApiError, errorResponse, ok } from "../../_lib/responses";
+import { ApiError, errorResponse, leerJson, ok } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ const schema = z.object({ token: z.string().max(64), password: z.string().max(10
 
 export async function POST(request: Request) {
   try {
-    const datos = schema.parse(await request.json());
+    const datos = schema.parse(await leerJson(request));
     const user = await restablecerCuenta(datos, {
       repo: repositorioRecuperacion(db),
       hashear: (password) => bcrypt.hash(password, BCRYPT_RONDAS),

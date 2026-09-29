@@ -9,6 +9,10 @@
 // Sin Twilio configurado no se toca ningún envío: quedan pendientes. Eso lo
 // grita el validador de entorno (/api/health en 503 y la métrica crítica del
 // cron de salud), no este cron.
+//
+// Si el despacho LANZA —lo más probable es que la base no responda—, los
+// recordatorios dejan de salir. Igual que en el cron de salud: se alerta y se
+// contesta 503, en vez de un 500 genérico que sólo queda en el log.
 
 import { db } from "@/lib/db";
 import { alertar } from "@/lib/alertas";
@@ -37,12 +41,24 @@ export async function GET(request: Request) {
     });
   }
 
-  const resumen = await despacharEnvios({
-    prisma: db,
-    ahora,
-    enviar: enviarSmsTwilio,
-    textoDeCobro: (envio) => textoDeCobro(db, envio),
-  });
+  let resumen;
+  try {
+    resumen = await despacharEnvios({
+      prisma: db,
+      ahora,
+      enviar: enviarSmsTwilio,
+      textoDeCobro: (envio) => textoDeCobro(db, envio),
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[sms] el despacho falló", error);
+    const alertaEnviada = await alertar(
+      "critico",
+      "El cron de SMS no pudo despachar los recordatorios",
+      { error: msg.slice(0, 200), cuando: ahora.toISOString() },
+    );
+    return Response.json({ status: "error", alertaEnviada }, { status: 503 });
+  }
 
   for (const fallo of resumen.fallosPersistencia) console.error(fallo);
 

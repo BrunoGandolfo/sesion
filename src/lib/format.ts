@@ -32,6 +32,13 @@ export function money(n: number): string {
 // Ahora todo pasa por fechas-montevideo: la app es de un consultorio en
 // Montevideo y la hora que se muestra es la del consultorio, esté quien
 // esté mirando y corra donde corra el proceso.
+//
+// UNA CAPA POR LADO. Los componentes y las pantallas formatean con estos
+// nombres cortos (fechaLarga, fechaCorta, hora, fechaCompleta, diaSemana),
+// que son los que ya usaban casi todos. Los `formatear*Mvd` de
+// fechas-montevideo quedan para quien no puede importar este módulo, que
+// trae el glosario: el servidor, los SMS y el propio glosario.
+// src/lib/__tests__/formato-una-capa.test.ts lo vigila en src/components.
 // ============================================
 
 /** "lunes 20 de abril" */

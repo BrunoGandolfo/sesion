@@ -13,7 +13,7 @@ import { hashTokenSesion, nuevoTokenSesion } from "@/lib/sesion-acceso";
 import { cookieDeSesion } from "@/lib/sesion-cookie";
 
 import { registrarCuenta } from "../../_lib/casos-uso/registrar-cuenta";
-import { ApiError, errorResponse, ok } from "../../_lib/responses";
+import { ApiError, errorResponse, leerJson, okSinCache } from "../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,16 +30,15 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const tokenSesion = nuevoTokenSesion();
-    await registrarCuenta(schema.parse(await request.json()), {
+    await registrarCuenta(schema.parse(await leerJson(request)), {
       repo: repositorioRegistro(db),
       hashear: (password) => bcrypt.hash(password, BCRYPT_RONDAS),
       tokenSesion,
       hashTokenSesion,
       huella: huellaDeRequest(request),
     });
-    const respuesta = ok({ creada: true }, 201);
+    const respuesta = okSinCache({ creada: true }, 201);
     respuesta.headers.append("Set-Cookie", cookieDeSesion(tokenSesion));
-    respuesta.headers.set("Cache-Control", "no-store");
     return respuesta;
   } catch (error) {
     if (error instanceof ApiError || error instanceof z.ZodError) return errorResponse(error);

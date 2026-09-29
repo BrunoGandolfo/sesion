@@ -11,7 +11,7 @@ import { getSessionActor } from "../../../_lib/auth";
 import { identidadWorker, registrarLatido } from "../../../_lib/casos-uso/sesion/latido";
 import { registrarTranscripcion } from "../../../_lib/casos-uso/sesion/registrar-transcripcion";
 import { verTranscripcion } from "../../../_lib/casos-uso/sesion/ver-transcripcion";
-import { errorResponse, ok, validationError } from "../../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { autorizarTicketSesion } from "../../../_lib/tickets";
 
 export const runtime = "nodejs";
@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     const sesion = await autorizarTicketSesion(request, db, id);
-    const parsed = registrarTranscripcionSchema.safeParse(await request.json());
+    const parsed = registrarTranscripcionSchema.safeParse(await leerJson(request));
     if (!parsed.success) return validationError(parsed.error);
 
     await registrarTranscripcion({
