@@ -22,7 +22,7 @@ import type { DiagnosticoGrabacion, PausaGrabacion } from "@/lib/sesion-clinica/
 
 import { DETALLE_MAX_ARRAY } from "../auditoria-pura";
 
-import { sePuedeGrabar } from "../domain";
+import { ESTADOS_GRABABLES, sePuedeGrabar } from "../domain";
 import { ApiError } from "../responses";
 import { SESION_SELECT, toSesionClinicaResponse } from "../sesion-clinica";
 
@@ -82,7 +82,7 @@ export const MENSAJE_GRABAR_OTRO_DIA =
 export async function prepararAudio({ prisma, organizationId, turnoId, ahora = new Date() }: Base & { turnoId: string; ahora?: Date }) {
   return prisma.$transaction(async (tx) => {
     // Serializa dos inicios del mismo turno sin reemplazar su identidad.
-    const tocado = await tx.turno.updateMany({ where: { id: turnoId, organizationId, estado: { in: ["programado", "realizado"] } }, data: { actualizadoEn: new Date() } });
+    const tocado = await tx.turno.updateMany({ where: { id: turnoId, organizationId, estado: { in: [...ESTADOS_GRABABLES] } }, data: { actualizadoEn: new Date() } });
     if (!tocado.count) throw new ApiError("El turno no está disponible para grabar", 409);
     const turno = await tx.turno.findUniqueOrThrow({ where: { id: turnoId }, select: { pacienteId: true, estado: true, fecha: true } });
     if (!await consentimientoVigenteDe(tx, turno.pacienteId, organizationId)) throw new ApiError("Falta consentimiento vigente para grabar", 400);

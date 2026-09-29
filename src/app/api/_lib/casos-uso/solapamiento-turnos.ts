@@ -49,7 +49,7 @@
 // turnos de UNA agenda, y no molesta a las demás. Con una sola profesional
 // por organización, la contención es nula.
 
-import { DURACIONES } from "@/lib/constantes-turno";
+import { DURACIONES, ESTADOS_QUE_OCUPAN } from "@/lib/constantes-turno";
 import type { db } from "@/lib/db";
 
 import {
@@ -95,10 +95,6 @@ const MS_POR_MINUTO = 60_000;
  * turno de 10:00 a 12:00 no chocaba con otro de las 11:30.
  */
 export const DURACION_MAXIMA_MIN = Math.max(...DURACIONES);
-
-/** Estados que efectivamente ocupan el horario. Espejo de TurnoEstado menos
- *  "cancelado" y "ausente". */
-export const ESTADOS_QUE_OCUPAN = ["programado", "realizado"] as const;
 
 /** Un turno reducido a lo único que importa para esta regla. */
 export interface Intervalo {

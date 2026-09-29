@@ -8,21 +8,13 @@
 // claves, sin texto libre.
 
 import type { db } from "@/lib/db";
-import {
-  finDeMesMvd,
-  finDelDiaMvd,
-  inicioDeMesMvd,
-  inicioDelDiaMvd,
-} from "@/lib/fechas-montevideo";
-import type {
-  DashboardData,
-  FlagsRiesgo,
-  KPIsDashboard,
-  SenalRiesgoDelDia,
-} from "@/types/domain";
+import { finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
+import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
+import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
+import type { DashboardData, KPIsDashboard, SenalRiesgoDelDia } from "@/types/domain";
 
-import { buscarTurnosConDeuda, toTurnoConPaciente } from "../domain";
-import { deudoresDeHoy, pendientesTerapeuta } from "./pendientes-terapeuta";
+import { buscarTurnosConDeuda, cobradoEnMes, toTurnoConPaciente } from "../domain";
+import { deudaDeHoy, pendientesTerapeuta } from "./pendientes-terapeuta";
 
 type ClientePrisma = typeof db;
 
@@ -30,17 +22,20 @@ type ClientePrisma = typeof db;
 export const TOPE_DEUDORES = 10;
 
 /** Los dos campos que mira `clavesDeRiesgo`, sin el texto libre. La forma
- *  y el porqué están en `SenalRiesgoDelDia` (src/types/domain.ts). */
-export function aSenalDeRiesgo(datos: unknown): SenalRiesgoDelDia {
-  const objeto = (datos ?? {}) as {
-    riesgoDetectado?: { nivel?: unknown } | null;
-    flagsRiesgo?: FlagsRiesgo | null;
-  };
-  const flags = objeto.flagsRiesgo ?? null;
+ *  y el porqué están en `SenalRiesgoDelDia` (src/types/domain.ts).
+ *
+ *  Lee `datos` como lo leen aprobar y el brief: parseDatosEstructurados y
+ *  normalizarRiesgo. Antes lo casteaba crudo y un `nivel` inválido guardado
+ *  llegaba tal cual a Hoy; ahora llega como "ninguno", el mismo veredicto
+ *  que da la aprobación. (El worker entrega `datos` ya validado contra el
+ *  mismo schema, así que una fila real no se pierde por esto.) */
+export function aSenalDeRiesgo(crudo: unknown): SenalRiesgoDelDia {
+  const datos = parseDatosEstructurados(crudo);
+  const flags = datos?.flagsRiesgo ?? null;
   return {
-    riesgoDetectado: objeto.riesgoDetectado
+    riesgoDetectado: datos?.riesgoDetectado
       ? {
-          nivel: objeto.riesgoDetectado.nivel,
+          nivel: normalizarRiesgo(datos.riesgoDetectado).nivel,
           indicadores: [],
           evidencia: [],
           notaParaTerapeuta: null,
@@ -63,16 +58,16 @@ export async function obtenerDashboard({
 }: ObtenerDashboardInput): Promise<DashboardData> {
   const todayStart = inicioDelDiaMvd(ahora);
   const todayEnd = finDelDiaMvd(ahora);
-  const monthStart = inicioDeMesMvd(ahora);
-  const monthEnd = finDeMesMvd(ahora);
 
-  // La deuda se lee UNA vez y la comparten el KPI, la lista de "Te deben" y
-  // el bloque de pendientes (ver casos-uso/pendientes-terapeuta.ts).
-  const deuda = buscarTurnosConDeuda(prisma, organizationId);
+  // La deuda se lee y se cuenta UNA vez (deudaDeHoy) y la comparten el KPI,
+  // la lista de "Te deben" y el bloque de pendientes. Antes se leía una vez
+  // pero se contaba dos: acá y otra vez dentro de pendientesTerapeuta.
+  const deuda = buscarTurnosConDeuda(prisma, organizationId).then((turnos) =>
+    deudaDeHoy(turnos, ahora),
+  );
 
   const [
-    sesionesHoyCount,
-    turnosConDeuda,
+    deudaCalculada,
     ingresosMes,
     sesionesHoyRows,
     pendientes,
@@ -81,20 +76,9 @@ export async function obtenerDashboard({
     pacientesActivos,
     totalTurnos,
   ] = await Promise.all([
-    prisma.turno.count({
-      where: {
-        organizationId,
-        fecha: { gte: todayStart, lte: todayEnd },
-        estado: { not: "cancelado" },
-      },
-    }),
     deuda,
     prisma.turno.aggregate({
-      where: {
-        organizationId,
-        pagoEstado: "pagado",
-        pagoFecha: { gte: monthStart, lte: monthEnd },
-      },
+      where: cobradoEnMes(organizationId, ahora),
       _sum: { tarifaCobrada: true },
     }),
     prisma.turno.findMany({
@@ -113,15 +97,8 @@ export async function obtenerDashboard({
     }),
     // Notas sin aprobar, sesiones sin cobrar y turnos de hoy sin
     // autorización: lo único de esta respuesta que pide una acción. La deuda
-    // le entra ya leída para no consultarla dos veces.
-    deuda.then((turnos) =>
-      pendientesTerapeuta({
-        prisma,
-        organizationId,
-        ahora,
-        turnosConDeuda: turnos,
-      }),
-    ),
+    // le entra ya contada.
+    deuda.then((d) => pendientesTerapeuta({ prisma, organizationId, ahora, deuda: d })),
     // Las sesiones del día, sólo para saber si alguna tuvo señal de riesgo.
     prisma.sesionClinica.findMany({
       where: {
@@ -140,12 +117,14 @@ export async function obtenerDashboard({
 
   const sesionesHoy = sesionesHoyRows.map(toTurnoConPaciente);
 
-  // La misma función y el mismo orden que consume el bloque de pendientes:
-  // monto descendente, como la lista de Cobros.
-  const deudores = deudoresDeHoy(turnosConDeuda, ahora).slice(0, TOPE_DEUDORES);
+  // La misma cuenta y el mismo orden que el bloque de pendientes y que
+  // /api/deudores: monto descendente y, a igual monto, la deuda más vieja.
+  const deudores = deudaCalculada.deudores.slice(0, TOPE_DEUDORES);
 
   const kpis: KPIsDashboard = {
-    sesionesHoy: sesionesHoyCount,
+    // Las mismas filas que se listan abajo: contarlas con otra consulta del
+    // mismo `where` era una ida más a la base.
+    sesionesHoy: sesionesHoyRows.length,
     // El mismo total que dice el bloque de pendientes, no una suma aparte.
     deudaAcumulada: pendientes.totalSinCobrar.monto,
     ingresosMes: ingresosMes._sum.tarifaCobrada ?? 0,

@@ -38,6 +38,12 @@ export const ESTADOS_TURNO = [
 ] as const;
 export type EstadoTurno = (typeof ESTADOS_TURNO)[number];
 
+/** Estados que ocupan el horario en la agenda: los que chocan al agendar o
+ *  reprogramar (casos-uso/solapamiento-turnos.ts). Hoy coincide con los
+ *  estados en los que se graba (ESTADOS_GRABABLES, domain.ts), pero es otra
+ *  regla: por eso tiene nombre propio y no se deriva de aquélla. */
+export const ESTADOS_QUE_OCUPAN = ["programado", "realizado"] as const satisfies readonly EstadoTurno[];
+
 export const ESTADOS_PAGO = ["pendiente", "pagado"] as const;
 export type EstadoPago = (typeof ESTADOS_PAGO)[number];
 

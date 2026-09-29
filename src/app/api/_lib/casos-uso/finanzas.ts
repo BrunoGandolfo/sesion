@@ -64,6 +64,7 @@ import { OFFSET_MONTEVIDEO_MIN } from "@/lib/fechas-montevideo";
 
 import {
   buscarTurnosConDeuda,
+  COBRADO,
   deudaPorAntiguedad,
   TRAMOS_DEUDA,
 } from "../domain";
@@ -327,7 +328,9 @@ export async function resumenFinanzas({
     pacientes
       .filter((f) => f.anio !== null)
       .map((f) => [
-        porMes ? `${f.anio}-${String(f.mes).padStart(2, "0")}` : `${f.anio}`,
+        // `mes` del SQL es 1..12; MesMvd, 0..11. El filter de arriba ya sacó
+        // la fila del total (anio null), y agrupando por mes el mes viene.
+        porMes ? formatearMes({ anio: f.anio!, mes: f.mes! - 1 }) : `${f.anio}`,
         f.pacientes,
       ]),
   );
@@ -418,6 +421,8 @@ function consultaTrabajo(
   `);
 }
 
+/** Lo cobrado por mes de Montevideo y método: la condición es COBRADO (la
+ *  misma de cobradoEnMes, domain.ts), agregada en SQL por el mes del pago. */
 function consultaPagos(
   prisma: ClientePrisma,
   organizationId: string,
@@ -434,7 +439,7 @@ function consultaPagos(
       COALESCE(SUM(t.tarifa_cobrada), 0)::bigint AS monto
     FROM turnos t
     WHERE t.organization_id = ${organizationId}
-      AND t.pago_estado = 'pagado'
+      AND t.pago_estado = ${COBRADO.pagoEstado}::estado_pago
       AND t.pago_fecha IS NOT NULL
       AND t.pago_fecha >= ${sinZona(inicio)}::timestamp
       AND t.pago_fecha <= ${sinZona(fin)}::timestamp
@@ -519,7 +524,9 @@ const vacio = (): Acumulado => ({
   porMetodo: new Map(),
 });
 
-const claveMes = ({ anio, mes }: MesMvd) => `${anio}-${mes}`;
+/** La clave del mapa mensual: la misma "AAAA-MM" de toda la app (mesIsoMvd,
+ *  vía formatearMes), no un formato propio. */
+const claveMes = formatearMes;
 
 /** Las filas de las dos consultas, indexadas por mes de Montevideo. */
 function juntarPorMes(

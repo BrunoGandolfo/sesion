@@ -21,38 +21,11 @@ import { cifrarPaciente } from "@/lib/prisma-encryption";
 import type { Paciente, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { auditar } from "../auditoria";
-import { toPacienteConDeuda, toTurno } from "../domain";
+import { toPaciente, toPacienteConDeuda, toTurno } from "../domain";
 import { ApiError } from "../responses";
 import { cancelarEnviosDeLaPaciente, MOTIVO_PACIENTE_ARCHIVADA } from "./envios-del-turno";
 
 type ClientePrisma = typeof db;
-
-/** Lo que la API devuelve de un paciente: la fila sin el blob cifrado. */
-function toPaciente(fila: {
-  id: string;
-  nombre: string;
-  apellido: string;
-  telefono: string;
-  tarifa: number;
-  notas: string | null;
-  activo: boolean;
-  creadoEn: Date;
-  actualizadoEn: Date;
-  organizationId: string;
-}): Paciente {
-  return {
-    id: fila.id,
-    nombre: fila.nombre,
-    apellido: fila.apellido,
-    telefono: fila.telefono,
-    tarifa: fila.tarifa,
-    notas: fila.notas,
-    activo: fila.activo,
-    creadoEn: fila.creadoEn,
-    actualizadoEn: fila.actualizadoEn,
-    organizationId: fila.organizationId,
-  };
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Lectura

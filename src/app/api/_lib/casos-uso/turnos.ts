@@ -5,28 +5,27 @@
 // /api/turnos/[id]. Las rutas ahora solo validan y llaman. Sin request ni
 // Response: reciben prisma como parámetro, como el resto de casos-uso/.
 
-import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
 import type { Prisma } from "@prisma/client";
 
-import type { Duracion, EstadoTurno, Modalidad } from "@/lib/constantes-turno";
 import type { db } from "@/lib/db";
-import { finDeMesMvd, inicioDeMesMvd } from "@/lib/fechas-montevideo";
 import { cifrarTurno } from "@/lib/prisma-encryption";
 import type { Turno, TurnoConPaciente } from "@/types/domain";
 
-import { toTurno, toTurnoConPaciente } from "../domain";
+import {
+  cobradoEnMes,
+  decidirEdicionTurno,
+  efectoEnvioDeEdicion,
+  toTurno,
+  toTurnoConPaciente,
+  type CambiosTurno,
+} from "../domain";
 import { ApiError } from "../responses";
 import {
   cancelarEnviosDelTurno,
   programarEnvioDelTurno,
   reprogramarEnvioDelTurno,
-  turnoSigueProgramado,
 } from "./envios-del-turno";
-import {
-  assertSinSolapamiento,
-  ESTADOS_QUE_OCUPAN,
-  tomarLockDeAgenda,
-} from "./solapamiento-turnos";
+import { assertSinSolapamiento, tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
 
@@ -97,11 +96,7 @@ export async function cobrosDelMes({
   enElMesDe,
 }: CobrosDelMesInput): Promise<TurnoConPaciente[]> {
   const turnos = await prisma.turno.findMany({
-    where: {
-      organizationId,
-      pagoEstado: "pagado",
-      pagoFecha: { gte: inicioDeMesMvd(enElMesDe), lte: finDeMesMvd(enElMesDe) },
-    },
+    where: cobradoEnMes(organizationId, enElMesDe),
     include: INCLUDE_AGENDA,
     orderBy: { pagoFecha: "desc" },
   });
@@ -113,13 +108,7 @@ export async function cobrosDelMes({
 // Edición
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface CambiosTurno {
-  fecha?: Date;
-  duracion?: Duracion;
-  modalidad?: Modalidad;
-  notas?: string | null;
-  estado?: EstadoTurno;
-}
+export type { CambiosTurno } from "../domain";
 
 export interface ActualizarTurnoInput {
   prisma: ClientePrisma;
@@ -127,13 +116,6 @@ export interface ActualizarTurnoInput {
   turnoId: string;
   cambios: CambiosTurno;
   ahora: Date;
-}
-
-
-function ocupa(estado: string): boolean {
-  return ESTADOS_QUE_OCUPAN.includes(
-    estado as (typeof ESTADOS_QUE_OCUPAN)[number],
-  );
 }
 
 /**
@@ -148,12 +130,6 @@ export async function actualizarTurno({
   cambios,
   ahora,
 }: ActualizarTurnoInput): Promise<Turno> {
-  const cambiaDatos =
-    cambios.fecha !== undefined ||
-    cambios.duracion !== undefined ||
-    cambios.modalidad !== undefined ||
-    cambios.notas !== undefined;
-
   const turno = await prisma.$transaction(async (tx) => {
     // El lock PRIMERO, y recién después releer el turno (Codex P1 sobre el
     // PR original).
@@ -175,44 +151,17 @@ export async function actualizarTurno({
       throw new ApiError("Turno no encontrado", 404);
     }
 
-    // Las dos guardas de estado también miran la fila releída: si se
-    // decidieran con la lectura previa al lock, un turno cancelado en el
-    // medio se podría reabrir igual.
-    if (actual.estado === "cancelado" && cambios.estado !== undefined) {
-      throw new ApiError(MENSAJE_NO_REABRIR, 400);
-    }
+    // Qué se puede y qué hay que hacer lo decide domain.ts, con la fila
+    // releída bajo el lock. Acá solo se aplica.
+    const decision = decidirEdicionTurno(actual, cambios);
+    if (decision.tipo === "rechazo") throw new ApiError(decision.mensaje, 400);
+    if (decision.tipo === "sinCambios") return actual;
 
-    if (cambiaDatos && actual.estado !== "programado") {
-      throw new ApiError(MENSAJE_SOLO_PROGRAMADOS, 400);
-    }
-
-    // Un body vacío no escribe nada: updateMany con todo undefined no toca
-    // filas y devolvería count 0, que abajo se leería como "no existe".
-    if (!cambiaDatos && cambios.estado === undefined) {
-      return actual;
-    }
-
-    // El intervalo en el que va a quedar el turno: lo que se manda, o lo
-    // que tiene AHORA.
-    const fechaFinal = cambios.fecha ?? actual.fecha;
-    const duracionFinal = cambios.duracion ?? actual.duracion;
-    const estadoFinal = cambios.estado ?? actual.estado;
-
-    // Sólo se comprueba el solapamiento cuando esta edición puede CREARLO:
-    // se movió el intervalo de un turno que ocupa, o el turno pasó de no
-    // ocupar a ocupar (ausente → programado). No se revalida en cada
-    // edición: un turno que ya estaba solapado no puede quedar con las
-    // notas sin poder editarse para siempre.
-    const movioElIntervalo =
-      fechaFinal.getTime() !== actual.fecha.getTime() ||
-      duracionFinal !== actual.duracion;
-    const pasaAOcupar = !ocupa(actual.estado) && ocupa(estadoFinal);
-
-    if (ocupa(estadoFinal) && (movioElIntervalo || pasaAOcupar)) {
+    if (decision.verificarSolapamiento) {
       await assertSinSolapamiento({
         prisma: tx,
         organizationId,
-        intervalo: { inicio: fechaFinal, duracionMin: duracionFinal },
+        intervalo: decision.verificarSolapamiento,
         // Sin esto, mover un turno cinco minutos lo haría chocar consigo
         // mismo.
         excluirTurnoId: turnoId,
@@ -249,45 +198,30 @@ export async function actualizarTurno({
 
     const updated = await tx.turno.findUniqueOrThrow({ where: { id: turnoId } });
 
-    // Un turno que dejó de estar programado —realizado, ausente o
-    // cancelado— no avisa nada. La regla vive en
-    // casos-uso/envios-del-turno.ts, no acá.
-    if (!turnoSigueProgramado(updated.estado)) {
+    // El aviso sigue lo que quedó ESCRITO, no lo que se previó: cobrar no
+    // toma el lock de agenda y pudo cerrar el turno en el medio. Con la
+    // fila de la base, la misma regla (efectoEnvioDeEdicion) da lo mismo
+    // que la decisión salvo en esa carrera.
+    const efecto = efectoEnvioDeEdicion(actual, updated, cambios.fecha !== undefined);
+    const turnoDelAviso = {
+      turnoId: updated.id,
+      organizationId,
+      pacienteId: updated.pacienteId,
+      fechaTurno: updated.fecha,
+      ahora,
+    };
+    if (efecto === "cancelar") {
+      // Un turno que dejó de estar programado —realizado, ausente o
+      // cancelado— no avisa nada.
       await cancelarEnviosDelTurno(tx, turnoId);
-      return updated;
-    }
-
-    // Llegados acá el turno ESTÁ programado. Dos motivos para rehacer el
-    // recordatorio: la reprogramación de siempre, y un turno que venía
-    // cerrado (realizado o ausente) y vuelve a "programado": el cierre apagó
-    // sus recordatorios y sin esta rama no volvería a avisar nunca.
-    const fechaCambio =
-      cambios.fecha !== undefined &&
-      updated.fecha.getTime() !== actual.fecha.getTime();
-    const reabierto =
-      !turnoSigueProgramado(actual.estado) &&
-      turnoSigueProgramado(updated.estado);
-
-    if (fechaCambio) {
+    } else if (efecto === "reprogramar") {
       // Se apaga lo pendiente de la fecha vieja y se programa el aviso de la
       // nueva (o un cambio de horario, si el de la fecha vieja ya salió).
-      await reprogramarEnvioDelTurno(tx, {
-        turnoId: updated.id,
-        organizationId,
-        pacienteId: updated.pacienteId,
-        fechaTurno: updated.fecha,
-        fechaTurnoPrevia: actual.fecha,
-        ahora,
-      });
-    } else if (reabierto) {
-      // Revive el envío que el cierre había cancelado.
-      await programarEnvioDelTurno(tx, {
-        turnoId: updated.id,
-        organizationId,
-        pacienteId: updated.pacienteId,
-        fechaTurno: updated.fecha,
-        ahora,
-      });
+      await reprogramarEnvioDelTurno(tx, { ...turnoDelAviso, fechaTurnoPrevia: actual.fecha });
+    } else if (efecto === "revivir") {
+      // Venía cerrado (realizado o ausente) y vuelve a "programado": el
+      // cierre apagó sus recordatorios y sin esto no volvería a avisar.
+      await programarEnvioDelTurno(tx, turnoDelAviso);
     }
 
     return updated;
