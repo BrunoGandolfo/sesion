@@ -1,5 +1,5 @@
-import { parseDatosEstructurados, flagRiesgoSchema } from "@/lib/sesion-clinica/schema";
-import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
+import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
+import { flagsActivos, normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
 import { exigirPaciente, filtroHilo, leerVersion, whereAprobadasDe, type BaseHilo, type IdentidadHilo } from "./base";
 
 /** Composición determinística: solo la nota aprobada y el Recorrido vigente. */
@@ -26,7 +26,7 @@ export async function leerBrief(prisma: BaseHilo, identidad: IdentidadHilo, ahor
         resumenSesion: datos?.resumenSesion ?? sesion.notaFinal?.analisis ?? null,
         focoProximaSesion: datos?.focoProximaSesion ?? sesion.notaFinal?.plan ?? null,
         progresoPercibido: datos?.progresoPercibido ?? null, temas: datos?.temas ?? [],
-        riesgo: { ...riesgo, flagsActivos: Object.entries(datos?.flagsRiesgo ?? {}).filter(([flag, valor]) => flagRiesgoSchema.options.includes(flag) && valor === true).map(([flag]) => flag) },
+        riesgo: { ...riesgo, flagsActivos: flagsActivos(datos?.flagsRiesgo) },
       } : null,
       hiloLongitudinal: c ? {
         resumenAcumulativo: c.resumenAcumulativo, hipotesisDiagnostica: c.hipotesisDiagnostica,

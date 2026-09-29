@@ -5,12 +5,22 @@
 // `integrar_contexto` (la propuesta al Recorrido, diseño 04). El request no
 // llama a R2 ni a nadie: o quedan todas las escrituras, o ninguna.
 //
-// Precondiciones de producto (400, antes de escribir):
-//   - riesgo graduado moderado/alto ⇒ `confirmoRiesgo`;
-//   - menciones léxicas con el modelo en `ninguno` o sin graduar ⇒
+// Precondiciones de producto (400, antes de escribir): las mismas casillas
+// que dibuja la pantalla, de UNA regla (lib/sesion-clinica/aprobacion.ts,
+// decisión del dueño D1):
+//   - riesgo graduado de cualquier nivel salvo `ninguno` ⇒ `confirmoRiesgo`;
+//   - cada flag activo ⇒ su nombre en `confirmoFlags`;
+//   - menciones léxicas con el modelo en `ninguno`, `bajo` o sin graduar ⇒
 //     `confirmoMenciones` (diseño 04 §2.9: "Leí las menciones").
 
 import { cifrarSesion } from "@/lib/prisma-encryption";
+import {
+  CLAVE_MENCIONES,
+  CLAVE_RIESGO_GRADUADO,
+  confirmacionesFaltantes,
+  confirmacionesParaAprobar,
+} from "@/lib/sesion-clinica/aprobacion";
+import { NOMBRE_FLAG } from "@/lib/etiquetas";
 import { normalizarRiesgo } from "@/lib/sesion-clinica/normalizar";
 import {
   parseDatosEstructurados,
@@ -40,13 +50,32 @@ export interface AprobarSesionInput {
   notaEditada?: NotaSoap;
   notasEdicion?: string;
   confirmoRiesgo?: boolean;
+  /** Los flags de riesgo que ella confirmó haber revisado, uno por casilla. */
+  confirmoFlags?: string[];
   confirmoMenciones?: boolean;
   ahora?: Date;
 }
 
+/** El 409 de una nota que cambió (otra generación) mientras ella la revisaba:
+ *  lo dicen la pre-lectura y la escritura condicionada. */
+export const MENSAJE_NOTA_CAMBIO =
+  "La nota cambió. Revisá la nota actual antes de aprobar; tu borrador se conserva en esta pantalla.";
+
 /** Cuántas menciones léxicas trae `datos`, o 0. */
 function cantidadMenciones(datos: ReturnType<typeof parseDatosEstructurados>): number {
   return datos?.riesgoLexico?.coincidencias.length ?? 0;
+}
+
+/** El 400 de lo que falta confirmar, en palabras: qué señal no se marcó. */
+function mensajeDeFaltantes(faltan: string[], nivel: string): string {
+  const partes = faltan.map((clave) =>
+    clave === CLAVE_RIESGO_GRADUADO
+      ? `la señal de riesgo (nivel ${nivel})`
+      : clave === CLAVE_MENCIONES
+        ? "las menciones de la transcripción"
+        : `la señal "${NOMBRE_FLAG[clave as keyof typeof NOMBRE_FLAG] ?? clave}"`,
+  );
+  return `Antes de aprobar, confirmá que revisaste ${partes.join(", ")}.`;
 }
 
 export async function aprobarSesion({
@@ -58,6 +87,7 @@ export async function aprobarSesion({
   notaEditada,
   notasEdicion,
   confirmoRiesgo,
+  confirmoFlags,
   confirmoMenciones,
   ahora = new Date(),
 }: AprobarSesionInput): Promise<FilaSesionClinica> {
@@ -78,7 +108,7 @@ export async function aprobarSesion({
   exigirEstado(existente.estado, "aprobar", "Solo se puede aprobar una nota en revisión");
 
   if (existente.generacion !== generacion) {
-    throw new ApiError("La nota cambió. Revisá la nota actual antes de aprobar; tu borrador se conserva en esta pantalla.", 409);
+    throw new ApiError(MENSAJE_NOTA_CAMBIO, 409);
   }
 
   const notaFinal = notaEditada ?? existente.notaIa;
@@ -88,22 +118,12 @@ export async function aprobarSesion({
 
   const datos = parseDatosEstructurados(existente.datos);
   const riesgo = normalizarRiesgo(datos?.riesgoDetectado);
-  const nivelExigeConfirmacion =
-    riesgo.nivel === "alto" || riesgo.nivel === "moderado";
-  if (nivelExigeConfirmacion && confirmoRiesgo !== true) {
-    throw new ApiError(
-      `La nota tiene una señal de riesgo (nivel ${riesgo.nivel}): confirmá que la revisaste antes de aprobar`,
-      400,
-    );
+  const exigidas = confirmacionesParaAprobar(datos);
+  const faltan = confirmacionesFaltantes(exigidas, { confirmoRiesgo, confirmoFlags, confirmoMenciones });
+  if (faltan.length > 0) {
+    throw new ApiError(mensajeDeFaltantes(faltan, riesgo.nivel), 400);
   }
   const menciones = cantidadMenciones(datos);
-  const mencionesExigenConfirmacion = menciones > 0 && !nivelExigeConfirmacion;
-  if (mencionesExigenConfirmacion && confirmoMenciones !== true) {
-    throw new ApiError(
-      "La transcripción tiene menciones a revisar: confirmá que las leíste antes de aprobar",
-      400,
-    );
-  }
 
   const pacienteId = existente.turno.pacienteId;
   const conAudio = existente.audioEstado === "en_r2";
@@ -113,7 +133,7 @@ export async function aprobarSesion({
       prisma: tx,
       operacion: "aprobar",
       condiciones: { generacion },
-      conflicto: "La nota cambió. Revisá la nota actual antes de aprobar; tu borrador se conserva en esta pantalla.",
+      conflicto: MENSAJE_NOTA_CAMBIO,
       sesionId,
       organizationId,
       data: {
@@ -153,6 +173,7 @@ export async function aprobarSesion({
     entidadId: sesionId,
     detalle: {
       confirmoRiesgo: confirmoRiesgo === true,
+      flagsConfirmados: exigidas.flags.length,
       confirmoMenciones: confirmoMenciones === true,
       nivelRiesgo: riesgo.nivel,
       menciones,

@@ -1,12 +1,15 @@
 "use client";
 
 import { LEI_LAS_MENCIONES } from "@/lib/glosario";
+import { CLAVE_MENCIONES, confirmacionesParaAprobar } from "@/lib/sesion-clinica/aprobacion";
 import type { DatosEstructurados } from "@/lib/sesion-clinica/schema";
 
-export const CLAVE_MENCIONES = "menciones-lexicas";
+export { CLAVE_MENCIONES };
+
+/** La casilla "Leí las menciones": la misma regla con que el servidor la
+ *  exige (confirmacionesParaAprobar, lib/sesion-clinica/aprobacion.ts). */
 export function exigeConfirmarMenciones(datos: DatosEstructurados | null | undefined) {
-  const nivel = datos?.riesgoDetectado?.nivel;
-  return (datos?.riesgoLexico?.coincidencias.length ?? 0) > 0 && nivel !== "moderado" && nivel !== "alto";
+  return confirmacionesParaAprobar(datos).menciones;
 }
 
 export function MencionesNota({ datos, editable, revisada, onRevisar }: {

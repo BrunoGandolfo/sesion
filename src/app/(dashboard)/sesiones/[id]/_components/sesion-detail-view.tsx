@@ -6,14 +6,15 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ChevronLeft } from "lucide-react";
 
 import { EsqueletoNotaCuerpo } from "@/components/esqueletos";
-import { exigeConfirmarMenciones, CLAVE_MENCIONES } from "@/components/clinico/MencionesNota";
 import { Button, Confirmar, Toast } from "@/components/ui";
 import { AnilloProgreso } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import {
-  clavesDeRiesgo,
-  CLAVE_RIESGO_GRADUADO,
-} from "@/components/grabacion/RiesgoDetectadoBanner";
+  CLAVE_MENCIONES,
+  clavesDeConfirmacion,
+  confirmacionesDeCasillas,
+  confirmacionesParaAprobar,
+} from "@/lib/sesion-clinica/aprobacion";
 import {
   ESTADOS_ACTIVOS,
   useSesionClinicaPolling,
@@ -242,22 +243,20 @@ export function SesionDetailView({
 
   const datos = sesion?.datos ?? null;
   const feedback = sesion?.feedback;
-  const clavesRiesgo = React.useMemo(
-    () => clavesDeRiesgo(datos?.riesgoDetectado, datos?.flagsRiesgo),
-    [datos],
-  );
-  // Aprobar no se habilita hasta que TODAS las casillas estén marcadas: una
-  // por flag activo más la de la señal graduada. Sin señales, la lista está
-  // vacía y `every` es true.
-  const requiereMenciones = exigeConfirmarMenciones(datos);
-  const puedeAprobar = !conflictoAprobacion && clavesRiesgo.every((clave) => revisadas.has(clave)) && (!requiereMenciones || revisadas.has(CLAVE_MENCIONES));
-  const faltanSenales = clavesRiesgo.some(clave => !revisadas.has(clave));
-  const faltanMenciones = requiereMenciones && !revisadas.has(CLAVE_MENCIONES);
+  // Las casillas que exige aprobar: una por flag activo, la de la señal
+  // graduada y la de las menciones. Es la MISMA regla con que el servidor
+  // rechaza una aprobación sin confirmar (lib/sesion-clinica/aprobacion.ts).
+  const exigidas = React.useMemo(() => confirmacionesParaAprobar(datos), [datos]);
+  const claves = clavesDeConfirmacion(exigidas);
+  // Aprobar no se habilita hasta que TODAS estén marcadas. Sin señales, la
+  // lista está vacía y `every` es true.
+  const puedeAprobar = !conflictoAprobacion && claves.every((clave) => revisadas.has(clave));
+  const faltanSenales = claves.some((clave) => clave !== CLAVE_MENCIONES && !revisadas.has(clave));
+  const faltanMenciones = exigidas.menciones && !revisadas.has(CLAVE_MENCIONES);
   const motivoBloqueo = conflictoAprobacion ? FALTA_REVISAR_VERSION
     : faltanSenales && faltanMenciones ? FALTA_REVISAR_AMBAS
     : faltanMenciones ? FALTA_REVISAR_MENCIONES
     : faltanSenales ? FALTA_REVISAR_RIESGO : null;
-  const exigeConfirmarRiesgo = clavesRiesgo.includes(CLAVE_RIESGO_GRADUADO);
 
   const marcarRevisada = React.useCallback((clave: string, marcada: boolean) => {
     if (!edicion) return;
@@ -307,8 +306,7 @@ export function SesionDetailView({
         {
           generacion: edicion.generacion,
           notaEditada: edicion.nota,
-          ...(exigeConfirmarRiesgo ? { confirmoRiesgo: true } : {}),
-          ...(requiereMenciones ? { confirmoMenciones: true } : {}),
+          ...confirmacionesDeCasillas(exigidas, revisadas),
         },
       );
       aplicar(fila);
