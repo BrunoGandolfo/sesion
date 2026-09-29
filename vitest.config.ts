@@ -76,6 +76,10 @@ const INTEGRACION = [
   'src/lib/__tests__/pendientes-terapeuta.test.ts',
   'src/lib/__tests__/cobrar-turno.test.ts',
   'src/lib/__tests__/multi-tenant.test.ts',
+  // La puerta de los crons y del worker, y los semáforos del monitor.
+  'src/lib/__tests__/rutas-cron-m2m.test.ts',
+  // Rutas que ningún test recorría: volver a grabar, vocabulario, pacientes, versión.
+  'src/lib/__tests__/rutas-sin-cubrir.test.ts',
   // El historial clínico y el mes de cobros, contra la base real.
   'src/lib/__tests__/historial-documentacion.test.ts',
   'src/lib/__tests__/cobros-mes.test.ts',

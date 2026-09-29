@@ -5,10 +5,69 @@
 //     guardián de maxDuration;
 //   - las reglas propias del área 2 (sesión clínica, cola de trabajos).
 // Las rutas salen del disco: una ruta nueva entra sola.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
+
+import { crearGrafo, exportadoresDe, type Grafo } from "./grafo-imports";
+
+const R2 = "src/lib/r2.ts";
+
+/** Los exports de r2.ts que borran: los que mandan un DeleteObjectCommand y,
+ *  hasta que no aparezcan más, los que llaman a uno de esos. Así un envoltorio
+ *  nuevo (como adaptadorBorradoR2 alrededor de borrarAudio) entra solo. */
+function exportsDeR2QueBorran(grafo: Grafo): Set<string> {
+  const fuente = ts.createSourceFile(R2, grafo.leer(R2), ts.ScriptTarget.Latest, true);
+  const exportados = new Map<string, string>();
+  for (const st of fuente.statements) {
+    const exportado = ts.canHaveModifiers(st) && ts.getModifiers(st)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+    if (!exportado) continue;
+    if (ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) exportados.set(d.name.getText(fuente), st.getText(fuente));
+    } else if ((ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st)) && st.name) {
+      exportados.set(st.name.text, st.getText(fuente));
+    }
+  }
+  const borran = new Set([...exportados].filter(([, texto]) => texto.includes("DeleteObjectCommand")).map(([n]) => n));
+  for (let cambio = true; cambio; ) {
+    cambio = false;
+    for (const [nombre, texto] of exportados) {
+      if (!borran.has(nombre) && [...borran].some((b) => new RegExp(`\\b${b}\\b`).test(texto))) {
+        borran.add(nombre);
+        cambio = true;
+      }
+    }
+  }
+  return borran;
+}
+
+/** Las rutas que llegan a algo que borra de R2, con la cadena de imports.
+ *  Cuenta el import directo, el que pasa por un caso de uso, el que pasa
+ *  por un barril (`export *`, `export { x as y }`, `export * as x`). Un
+ *  import namespace o dinámico de un módulo que exporta algo que borra
+ *  cuenta SIEMPRE: el namespace se puede pasar a otro módulo y no hay forma
+ *  estática de saber qué hace con él. Hoy ninguna ruta lo hace. */
+function rutasQueBorran(grafo: Grafo): Record<string, string[]> {
+  const exportadores = exportadoresDe(grafo, R2, exportsDeR2QueBorran(grafo));
+  const salida: Record<string, string[]> = {};
+  for (const ruta of grafo.rutasBajo("src/app/api")) {
+    busqueda: for (const [modulo, cadena] of grafo.alcanzables(ruta, new Set([R2]))) {
+      for (const imp of grafo.importsLocales(modulo)) {
+        const nombres = imp.tipo === "import" ? exportadores.get(imp.destino) : undefined;
+        if (!nombres) continue;
+        const trae = imp.nombres === "*" || imp.nombres.some((n) => nombres.has(n));
+        if (trae) {
+          salida[ruta] = cadena;
+          break busqueda;
+        }
+      }
+    }
+  }
+  return salida;
+}
 
 const RAIZ = process.cwd();
 
@@ -119,12 +178,14 @@ describe("rutas del área 2", () => {
     }
   });
 
-  it("sólo el cron de trabajos borra de R2", () => {
-    const borran = rutasBajo("src/app/api").filter((ruta) =>
-      // borrarAudio suelto, o el adaptador con timeout que lo envuelve.
-      /import \{[^}]*\b(borrarAudio|adaptadorBorradoR2)\b[^}]*\} from "@\/lib\/r2"/.test(readFileSync(resolve(RAIZ, ruta), "utf8")),
-    );
-    expect(borran).toEqual(["src/app/api/cron/trabajos/route.ts"]);
+  it("sólo el cron de trabajos borra de R2 (por cualquier cadena de imports)", () => {
+    // Antes se buscaba el import con una regex, y sólo en la ruta: un caso de
+    // uso que importara borrarAudio, o un barril, pasaban sin que se viera.
+    // Ahora se pregunta al grafo quién alcanza lo que borra.
+    const grafo = crearGrafo();
+    expect([...exportsDeR2QueBorran(grafo)]).toEqual(expect.arrayContaining(["adaptadorBorradoR2", "borrarAudio"]));
+    const borran = rutasQueBorran(grafo);
+    expect(Object.keys(borran), JSON.stringify(borran, null, 1)).toEqual(["src/app/api/cron/trabajos/route.ts"]);
   });
 
   it("encuentra las rutas del área en el disco", () => {
@@ -133,3 +194,49 @@ describe("rutas del área 2", () => {
     expect(RUTAS).toContain("src/app/api/sesion-clinica/[id]/aprobar/route.ts");
   });
 });
+
+describe("el detector de borrado en R2, sobre un árbol de mentira", () => {
+  it("ve el caso de uso, el barril con export *, el alias, el export * as y el import() dinámico; no ve a quien sólo lee", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "grafo-r2-"));
+    const escribir = (ruta: string, texto: string) => {
+      mkdirSync(join(raiz, ruta, ".."), { recursive: true });
+      writeFileSync(join(raiz, ruta), texto);
+    };
+    try {
+      escribir("src/lib/r2.ts", [
+        'import { DeleteObjectCommand } from "@aws-sdk/client-s3";',
+        "export async function borrarAudio(key: string) { return new DeleteObjectCommand({ Key: key }); }",
+        "export const adaptador = { borrar: (k: string) => borrarAudio(k) };",
+        "export function r2Configurado() { return true; }",
+      ].join("\n"));
+      escribir("src/lib/barril.ts", 'export * from "./r2";');
+      escribir("src/lib/alias.ts", 'export { adaptador as limpiador } from "@/lib/r2";');
+      escribir("src/lib/espacio.ts", 'export * as storage from "./r2";');
+      escribir("src/app/api/_lib/caso.ts", 'import { borrarAudio } from "@/lib/r2";\nexport const caso = borrarAudio;');
+      escribir("src/app/api/directa/route.ts", 'import { adaptador } from "@/lib/r2";\nexport const GET = adaptador;');
+      escribir("src/app/api/por-caso/route.ts", 'import { caso } from "../_lib/caso";\nexport const GET = caso;');
+      escribir("src/app/api/por-barril/route.ts", 'import { borrarAudio } from "@/lib/barril";\nexport const GET = borrarAudio;');
+      escribir("src/app/api/por-alias/route.ts", 'import { limpiador } from "@/lib/alias";\nexport const GET = limpiador;');
+      escribir("src/app/api/por-namespace/route.ts", 'import { storage } from "@/lib/espacio";\nexport const GET = () => storage.borrarAudio("k");');
+      escribir("src/app/api/_lib/ayudante.ts", 'export const usar = (s: { borrarAudio(k: string): unknown }) => s.borrarAudio("k");');
+      escribir("src/app/api/namespace-pasado/route.ts", 'import * as almacen from "@/lib/r2";\nimport { usar } from "../_lib/ayudante";\nexport const GET = () => usar(almacen);');
+      escribir("src/app/api/dinamica/route.ts", 'export const GET = async () => (await import("@/lib/r2")).borrarAudio("k");');
+      escribir("src/app/api/solo-lee/route.ts", 'import { r2Configurado } from "@/lib/barril";\nexport const GET = r2Configurado;');
+
+      const grafo = crearGrafo(raiz);
+      expect([...exportsDeR2QueBorran(grafo)].sort()).toEqual(["adaptador", "borrarAudio"]);
+      expect(Object.keys(rutasQueBorran(grafo)).sort()).toEqual([
+        "src/app/api/dinamica/route.ts",
+        "src/app/api/directa/route.ts",
+        "src/app/api/namespace-pasado/route.ts",
+        "src/app/api/por-alias/route.ts",
+        "src/app/api/por-barril/route.ts",
+        "src/app/api/por-caso/route.ts",
+        "src/app/api/por-namespace/route.ts",
+      ]);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+});
+
