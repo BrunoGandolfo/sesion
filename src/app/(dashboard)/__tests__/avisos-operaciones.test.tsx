@@ -161,7 +161,9 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
   });
 
   it.each([false, true])("reactivar desde la ficha: éxito=%s", async (exito) => {
-    if (!exito) m.patch.mockRejectedValue(new Error(FALLO));
+    // apiPatch rechaza con ApiClientError: la ficha dice su mensaje
+    // (mensajeParaElla); un error de otro tipo sería "Algo falló".
+    if (!exito) m.patch.mockRejectedValue(new ApiClientError(FALLO, 500));
     render(<FichaTab paciente={PACIENTE} turnos={[]} config={null} consentimiento={{ tipo: "cargando" }} onPacienteActualizado={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Reactivar" }));
     await verificarAviso(exito ? "Paciente reactivado" : FALLO, exito);

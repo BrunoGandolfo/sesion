@@ -7,7 +7,7 @@
 import * as React from "react";
 import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 import { SALIDA_NOTAS_PRIVADAS } from "@/lib/glosario";
-import type { VarianteToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -25,7 +25,8 @@ import {
 } from "@/components/grabacion/ConsentimientoBadge";
 import { HotWordsManager } from "@/components/grabacion/HotWordsManager";
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
-import { apiPatch } from "@/lib/api-client";
+import { apiPatch, mensajeParaElla } from "@/lib/api-client";
+import { formatPhoneDisplay } from "@/lib/phone";
 import { fechaCompleta, money } from "@/lib/format";
 import {
   ALGO_FALLO,
@@ -46,7 +47,6 @@ interface FichaTabProps {
   onPacienteActualizado: () => void;
 }
 
-type ToastState = { open: boolean; message: string; variante: VarianteToast };
 
 // La fecha de alta sale de format.ts como todas las demás. Con el
 // Intl.DateTimeFormat("es-UY") que tenía acá decía "05 de setiembre de 2026"
@@ -67,7 +67,7 @@ export function FichaTab({
   const [archivando, setArchivando] = React.useState(false);
   const [turnosAbiertos, setTurnosAbiertos] = React.useState(false);
   const [vocabularioAbierto, setVocabularioAbierto] = React.useState(false);
-  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "", variante: "aviso" });
+  const toast = useToast();
 
   async function cambiarActivo(proximoActivo: boolean) {
     setArchivando(true);
@@ -75,13 +75,13 @@ export function FichaTab({
       await apiPatch(`/api/pacientes/${paciente.id}`, { activo: proximoActivo });
       setConfirmandoArchivo(false);
       if (proximoActivo) {
-        setToast({ open: true, message: "Paciente reactivado", variante: "confirmacion" });
+        toast.confirmar("Paciente reactivado");
         onPacienteActualizado();
       } else {
         router.push("/pacientes?archivado=1");
       }
     } catch (err) {
-      setToast({ open: true, message: err instanceof Error ? err.message : ALGO_FALLO, variante: "aviso" });
+      toast.avisar(mensajeParaElla(err));
     } finally {
       setArchivando(false);
     }
@@ -102,7 +102,7 @@ export function FichaTab({
               href={`tel:${paciente.telefono.replace(/\s/g, "")}`}
               className="text-ink-900 underline decoration-sage-200 underline-offset-2 hover:text-sage-600"
             >
-              {paciente.telefono}
+              {formatPhoneDisplay(paciente.telefono)}
             </a>
           </DatoLinea>
           <DatoLinea
@@ -269,12 +269,7 @@ export function FichaTab({
         </div>
       </section>
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((current) => ({ ...current, open: false }))}
-      />
+      <Toast {...toast.props} />
     </div>
   );
 }

@@ -26,8 +26,7 @@ import { useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
-import type { VarianteToast } from "@/components/ui/toast";
-import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
+import { useToast, type VarianteToast } from "@/components/ui/toast";
 
 import { Button, Segmented, Sheet, Toast } from "@/components/ui";
 import type {
@@ -36,9 +35,10 @@ import type {
 } from "@/components/grabacion/ConsentimientoBadge";
 import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
-import { apiGet, esAbort } from "@/lib/api-client";
+import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { sePuedeGrabar } from "@/app/api/_lib/domain";
 import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
-import { ALGO_FALLO, DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
+import { DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { CabeceraFicha, CabeceraNavegacionFicha } from "./cabecera-ficha";
@@ -78,7 +78,6 @@ function escribirEnLaUrl(cambiar: (parametros: URLSearchParams) => void) {
   );
 }
 
-type ToastState = { open: boolean; message: string; variante: VarianteToast };
 
 /** Ficha ya con las fechas parseadas: es lo que consumen las tres pestañas. */
 type FichaPaciente = { paciente: PacienteConDeuda; turnos: Turno[] };
@@ -109,7 +108,7 @@ export function PacienteDetailView({ id }: { id: string }) {
   const confirmarSalida = useSalidaProtegida();
   const [reloadKey, setReloadKey] = React.useState(0);
   const [editarOpen, setEditarOpen] = React.useState(false);
-  const [toast, setToast] = React.useState<ToastState>({ open: false, message: "", variante: "aviso" });
+  const toast = useToast();
 
   // Envuelto en useMemo porque es dependencia del useMemo de `turnos`: la
   // rama `{ tipo: "cargando", id }` construye un objeto nuevo en cada render
@@ -141,7 +140,7 @@ export function PacienteDetailView({ id }: { id: string }) {
         setFicha({
           tipo: "error",
           id,
-          mensaje: err instanceof Error ? err.message : ALGO_FALLO,
+          mensaje: mensajeParaElla(err),
         });
       });
     return () => controller.abort();
@@ -187,9 +186,12 @@ export function PacienteDetailView({ id }: { id: string }) {
     refetchData();
   }
 
-  const avisar = React.useCallback((mensaje: string, variante: VarianteToast = "aviso") => {
-    setToast({ open: true, message: mensaje, variante });
-  }, []);
+  const { confirmar, avisar: avisarError } = toast;
+  const avisar = React.useCallback(
+    (mensaje: string, variante: VarianteToast = "aviso") =>
+      (variante === "confirmacion" ? confirmar : avisarError)(mensaje),
+    [confirmar, avisarError],
+  );
 
   const paciente = fichaActual.tipo === "lista" ? fichaActual.ficha.paciente : null;
   const turnos = React.useMemo(
@@ -204,12 +206,10 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   const turnoHoy = React.useMemo<Turno | null>(() => {
     if (!hoy) return null;
+    // La regla de grabar del servidor (sePuedeGrabar, domain.ts), no una
+    // copia: programado o realizado, y del mismo día de Montevideo.
     const deHoy = turnos
-      .filter(
-        (t) =>
-          (t.estado === "programado" || t.estado === "realizado") &&
-          esMismoDiaMvd(t.fecha, hoy),
-      )
+      .filter((t) => sePuedeGrabar(t, hoy))
       .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
     return deHoy[0] ?? null;
   }, [turnos, hoy]);
@@ -357,12 +357,7 @@ export function PacienteDetailView({ id }: { id: string }) {
         </Sheet>
       ) : null}
 
-      <Toast
-        open={toast.open}
-        message={toast.message}
-        variante={toast.variante}
-        onClose={() => setToast((c) => ({ ...c, open: false }))}
-      />
+      <Toast {...toast.props} />
     </>
   );
 }
