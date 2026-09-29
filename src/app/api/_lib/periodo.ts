@@ -10,7 +10,7 @@
 // Quien decide qué día es sigue siendo src/lib/fechas-montevideo.ts: acá sólo
 // se parsea el texto y se piden los bordes a ese módulo.
 
-import { instanteMvd, partesMvd } from "@/lib/fechas-montevideo";
+import { instanteMvd, mesIsoMvd, partesMvd } from "@/lib/fechas-montevideo";
 
 import { ApiError } from "./responses";
 
@@ -34,8 +34,8 @@ export function parsearMes(texto: string): MesMvd {
   return { anio, mes };
 }
 
-export const formatearMes = ({ anio, mes }: MesMvd): string =>
-  `${anio}-${String(mes + 1).padStart(2, "0")}`;
+/** "2026-09": la misma clave de mes que mesIsoMvd, que es quien la arma. */
+export const formatearMes = (mes: MesMvd): string => mesIsoMvd(inicioDeMes(mes));
 
 /** Meses enteros entre dos meses, contando los dos extremos. */
 export function largoEnMeses(desde: MesMvd, hasta: MesMvd): number {

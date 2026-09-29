@@ -328,7 +328,9 @@ export async function resumenFinanzas({
     pacientes
       .filter((f) => f.anio !== null)
       .map((f) => [
-        porMes ? `${f.anio}-${String(f.mes).padStart(2, "0")}` : `${f.anio}`,
+        // `mes` del SQL es 1..12; MesMvd, 0..11. El filter de arriba ya sacó
+        // la fila del total (anio null), y agrupando por mes el mes viene.
+        porMes ? formatearMes({ anio: f.anio!, mes: f.mes! - 1 }) : `${f.anio}`,
         f.pacientes,
       ]),
   );
@@ -522,7 +524,9 @@ const vacio = (): Acumulado => ({
   porMetodo: new Map(),
 });
 
-const claveMes = ({ anio, mes }: MesMvd) => `${anio}-${mes}`;
+/** La clave del mapa mensual: la misma "AAAA-MM" de toda la app (mesIsoMvd,
+ *  vía formatearMes), no un formato propio. */
+const claveMes = formatearMes;
 
 /** Las filas de las dos consultas, indexadas por mes de Montevideo. */
 function juntarPorMes(

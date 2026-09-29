@@ -41,7 +41,7 @@ import { MOTIVO_SIN_TELEFONO, MOTIVO_TURNO_CERRADO, MOTIVO_REPROGRAMADO } from "
 import type { EstadoEnvioSms, MotivoSms } from "@prisma/client";
 
 import type { db } from "@/lib/db";
-import { partesMvd } from "@/lib/fechas-montevideo";
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import {
   calcularProgramadoEn,
   normalizarRecordatorioModo,
@@ -63,12 +63,11 @@ export function claveDelTurno(turnoId: string, fechaTurno: Date): string {
   return `turno:${turnoId}:${fechaTurno.toISOString()}`;
 }
 
-/** Día de Montevideo AAAA-MM-DD, para la clave del aviso de cobro. */
+/** Día de Montevideo AAAA-MM-DD, para la clave del aviso de cobro: un
+ *  aviso por paciente y por DÍA. El texto lo arma fechaInputMvd (el mismo
+ *  día que un <input type="date">), no esta función a mano. */
 export function claveDeCobro(pacienteId: string, ahora: Date): string {
-  const { anio, mes, dia } = partesMvd(ahora);
-  const mm = String(mes + 1).padStart(2, "0");
-  const dd = String(dia).padStart(2, "0");
-  return `cobro:${pacienteId}:${anio}-${mm}-${dd}`;
+  return `cobro:${pacienteId}:${fechaInputMvd(ahora)}`;
 }
 
 /**
