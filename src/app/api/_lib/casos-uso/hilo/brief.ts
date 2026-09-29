@@ -22,7 +22,7 @@ export async function leerBrief(prisma: BaseHilo, identidad: IdentidadHilo, ahor
     return {
       pacienteId: identidad.pacienteId, propuestaPendiente, notaPendiente,
       ultimaSesion: sesion ? {
-        fecha: sesion.turno.fecha.toISOString(), pendienteAprobacion: false,
+        fecha: sesion.turno.fecha.toISOString(),
         resumenSesion: datos?.resumenSesion ?? sesion.notaFinal?.analisis ?? null,
         focoProximaSesion: datos?.focoProximaSesion ?? sesion.notaFinal?.plan ?? null,
         progresoPercibido: datos?.progresoPercibido ?? null, temas: datos?.temas ?? [],
@@ -31,7 +31,7 @@ export async function leerBrief(prisma: BaseHilo, identidad: IdentidadHilo, ahor
       hiloLongitudinal: c ? {
         resumenAcumulativo: c.resumenAcumulativo, hipotesisDiagnostica: c.hipotesisDiagnostica,
         temasRecurrentes: c.temasRecurrentes, objetivosActivos: c.objetivosTerapeuticos.filter(o => o.estado === "activo").map(o => o.descripcion),
-        riesgosHistoricos: c.riesgosHistoricos, revisadoPorTerapeuta: true,
+        riesgosHistoricos: c.riesgosHistoricos,
       } : null,
       proximoTurno: proximo ? { ...proximo, fecha: proximo.fecha.toISOString() } : null,
     };

@@ -25,7 +25,7 @@
 import * as React from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 
-import { ETIQUETA_NIVEL } from "@/components/clinico/brief-corto";
+import { hayRiesgo as hayRiesgoEn, textoRiesgo } from "@/components/clinico/brief-corto";
 import { Chip } from "@/components/ui";
 import { apiGet, esAbort } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
@@ -41,7 +41,6 @@ import type { NivelRiesgo } from "@/types/domain";
 
 type UltimaSesionBrief = {
   fecha: string;
-  pendienteAprobacion: boolean;
   resumenSesion: string | null;
   focoProximaSesion: string | null;
   progresoPercibido: string | null;
@@ -60,7 +59,6 @@ type HiloLongitudinalBrief = {
   temasRecurrentes: { tema: string; conteo: number }[];
   objetivosActivos: string[];
   riesgosHistoricos: { fecha: string; flag: string; detalle?: string }[];
-  revisadoPorTerapeuta: boolean;
 };
 
 type BriefResponse = {
@@ -76,9 +74,9 @@ type BriefResponse = {
   } | null;
 };
 
-// Los nombres de los flags salen de formatearEtiqueta y los del nivel de
-// ETIQUETA_NIVEL (brief-corto): acá había una tercera copia de las dos
-// tablas, con "Riesgo a terceros" donde el resto de la app dice "Violencia
+// Qué es riesgo y cómo se dice (hayRiesgo, textoRiesgo) sale de brief-corto:
+// acá había una copia de las dos, y antes una tercera de las tablas de
+// nombres, con "Riesgo a terceros" donde el resto de la app dice "Violencia
 // hacia terceros".
 
 // Brief atado al paciente que lo cargó: si cambia el id, el anterior deja de
@@ -126,10 +124,7 @@ export function BriefPreSesion({
   const { ultimaSesion, hiloLongitudinal, proximoTurno } = brief;
 
   const registrosRiesgo = hiloLongitudinal?.riesgosHistoricos.length ?? 0;
-  const riesgoUltima =
-    ultimaSesion !== null &&
-    (ultimaSesion.riesgo.nivel !== "ninguno" ||
-      ultimaSesion.riesgo.flagsActivos.length > 0);
+  const riesgoUltima = hayRiesgoEn(ultimaSesion?.riesgo);
   const hayRiesgo = riesgoUltima || registrosRiesgo > 0;
 
   const boton = (
@@ -215,15 +210,7 @@ export function BriefPreSesion({
                 </p>
                 {ultimaSesion && riesgoUltima ? (
                   <p className="font-sans text-[13px] leading-[1.55] text-ink-900">
-                    Última sesión:{" "}
-                    {ultimaSesion.riesgo.flagsActivos.length > 0
-                      ? ultimaSesion.riesgo.flagsActivos
-                          .map(formatearEtiqueta)
-                          .join(", ")
-                      : ultimaSesion.riesgo.indicadores.join(", ")}
-                    {ultimaSesion.riesgo.nivel !== "ninguno"
-                      ? ` (${ETIQUETA_NIVEL[ultimaSesion.riesgo.nivel]})`
-                      : ""}
+                    Última sesión: {textoRiesgo(ultimaSesion.riesgo)}
                     {ultimaSesion.riesgo.notaParaTerapeuta
                       ? ` — ${ultimaSesion.riesgo.notaParaTerapeuta}`
                       : ""}
@@ -276,9 +263,6 @@ export function BriefPreSesion({
             <div className="flex flex-col gap-3 border-t border-[color:var(--border-subtle)] pt-4">
               <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
                 {EL_RECORRIDO_HASTA_HOY}
-                {!hiloLongitudinal.revisadoPorTerapeuta
-                  ? " · actualizado tras la última sesión, revisalo"
-                  : ""}
               </p>
               {hiloLongitudinal.resumenAcumulativo ? (
                 <p className="font-sans text-[13px] leading-[1.6] text-ink-700">
@@ -310,12 +294,6 @@ export function BriefPreSesion({
             </div>
           ) : null}
 
-          {ultimaSesion?.pendienteAprobacion ? (
-            <p className="font-sans text-[12px] leading-[1.5] text-gold-500">
-              La última nota está para revisar: lo de arriba puede cambiar
-              cuando la apruebes.
-            </p>
-          ) : null}
         </div>
       ) : null}
     </>

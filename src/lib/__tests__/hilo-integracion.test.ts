@@ -149,7 +149,12 @@ it("el brief no muestra propuestas sin aceptar ni incorpora notas sin aprobar", 
   expect(JSON.stringify(previo)).not.toContain("NO APROBADA");
   expect(previo.ultimaSesion?.resumenSesion).toBe(NOTA.analisis);
   await aceptarPropuesta({ ...escritura(), propuestaId: propuesta.id });
-  expect(await leerBrief(base.db, identidad())).toMatchObject({ propuestaPendiente: false, hiloLongitudinal: { resumenAcumulativo: contenido().resumenAcumulativo, revisadoPorTerapeuta: true } });
+  const despues = await leerBrief(base.db, identidad());
+  expect(despues).toMatchObject({ propuestaPendiente: false, notaPendiente: true, hiloLongitudinal: { resumenAcumulativo: contenido().resumenAcumulativo } });
+  // Sin campos fijos: la nota sin aprobar la dice `notaPendiente`, no un
+  // `pendienteAprobacion: false` que no podía ser otra cosa (forense 01, H26).
+  expect(despues.ultimaSesion).not.toHaveProperty("pendienteAprobacion");
+  expect(despues.hiloLongitudinal).not.toHaveProperty("revisadoPorTerapeuta");
 });
 
 it("regenerar es explícito y dos pedidos simultáneos crean un solo trabajo nuevo", async () => {
