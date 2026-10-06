@@ -155,6 +155,10 @@ export async function crearPaciente({
   return toPaciente({ ...fila, notas: datos.notas });
 }
 
+/** Lo que contesta PATCH /api/pacientes/[id]: la paciente y cuántos turnos
+ *  futuros tomaron la tarifa nueva. Contrato con las pantallas. */
+export type PacienteActualizado = Paciente & { turnosActualizados: number };
+
 export interface ActualizarPacienteInput {
   prisma: ClientePrisma;
   organizationId: string;
@@ -181,8 +185,17 @@ const CAMPOS_COMPARABLES = ["nombre", "apellido", "telefono", "tarifa", "activo"
  *     los campos (nunca los valores: nombre, teléfono y notas son datos de la
  *     paciente).
  *
+ *   - si cambia la tarifa, la nueva alcanza a sus turnos `programado` con
+ *     fecha futura que no estén cobrados (`tarifaCobrada`). Nunca a los
+ *     pasados, realizados, ausentes, cancelados ni cobrados: lo que ya pasó
+ *     o ya se cobró se cobró a la tarifa de su día. El 30-sep Mariana bajó
+ *     dos pacientes de 2.600 a 1.400 y les quedaron 6 turnos futuros a 2.600.
+ *
  * La fila se bloquea antes de leerla: lo que se compara para decidir qué
  * cambió es lo que está guardado, no lo que leyó otro pedido en paralelo.
+ *
+ * Devuelve la paciente y `turnosActualizados` (0 si la tarifa no cambió):
+ * es lo que el PATCH contesta, para que la pantalla pueda decirlo.
  */
 export async function actualizarPaciente({
   prisma,
@@ -191,7 +204,7 @@ export async function actualizarPaciente({
   cambios,
   usuarioId,
   ahora = new Date(),
-}: ActualizarPacienteInput): Promise<Paciente> {
+}: ActualizarPacienteInput): Promise<PacienteActualizado> {
   const { notas, ...resto } = cambios;
   // El `id` que devuelve cifrarPaciente es para los create: acá el WHERE ya
   // lo tiene. `undefined` no toca la nota.
@@ -202,7 +215,7 @@ export async function actualizarPaciente({
   const data = { ...resto, ...notasCifradas };
   const hayCambios = Object.values(data).some((v) => v !== undefined);
 
-  await prisma.$transaction(async (tx) => {
+  const turnosActualizados = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM pacientes
       WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR UPDATE`;
     const actual = await tx.paciente.findFirst({
@@ -216,6 +229,20 @@ export async function actualizarPaciente({
       // `update({ where: { id } })` escribe la fila aunque sea de otra.
       await tx.paciente.updateMany({ where: { id: pacienteId, organizationId }, data });
     }
+
+    const cambiaTarifa = cambios.tarifa !== undefined && cambios.tarifa !== actual.tarifa;
+    const { count: turnosActualizados } = cambiaTarifa
+      ? await tx.turno.updateMany({
+          where: {
+            organizationId,
+            pacienteId,
+            estado: "programado",
+            fecha: { gt: ahora },
+            pagoEstado: "pendiente",
+          },
+          data: { tarifaCobrada: cambios.tarifa },
+        })
+      : { count: 0 };
 
     const auditarComo = (
       accion: typeof ACCIONES.paciente.archivar | typeof ACCIONES.paciente.editar,
@@ -253,7 +280,10 @@ export async function actualizarPaciente({
       ),
       ...(notas !== undefined ? ["notas"] : []),
     ];
-    if (campos.length > 0) await auditarComo(ACCIONES.paciente.editar, { campos });
+    if (campos.length > 0) {
+      await auditarComo(ACCIONES.paciente.editar, { campos, ...(cambiaTarifa ? { turnosActualizados } : {}) });
+    }
+    return turnosActualizados;
   });
 
   // Un body vacío no escribe nada: se lee y se devuelve tal cual, con la
@@ -266,5 +296,5 @@ export async function actualizarPaciente({
     throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
   }
 
-  return toPaciente(fila);
+  return { ...toPaciente(fila), turnosActualizados };
 }

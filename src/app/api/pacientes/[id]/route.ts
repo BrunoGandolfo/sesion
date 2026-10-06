@@ -39,7 +39,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return validationError(parsed.error);
     }
 
-    // telefono, si vino, ya está normalizado a E.164 por el esquema.
+    // telefono, si vino, ya está normalizado a E.164 por el esquema. La
+    // respuesta es la paciente más `turnosActualizados`: cuántos turnos
+    // futuros sin cobrar tomaron la tarifa nueva (0 si no cambió).
     const paciente = await actualizarPaciente({
       prisma: db,
       organizationId,
