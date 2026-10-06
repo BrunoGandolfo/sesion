@@ -280,6 +280,8 @@ src/lib/sesion-clinica/estados.ts
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
+src/app/(dashboard)/agenda/_components/detalle-datos.ts
+src/app/(dashboard)/agenda/_components/detalle-ver.tsx
 src/app/(dashboard)/agenda/_components/agenda-view.tsx
 src/app/(dashboard)/agenda/_components/datos.ts
 src/app/(dashboard)/cobros/_components/cobros-view.tsx

@@ -132,6 +132,8 @@ ningún recordatorio**.
 src/app/(dashboard)/agenda/_components/agenda-view.tsx
 src/app/(dashboard)/agenda/_components/datos.ts
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
+src/app/(dashboard)/agenda/_components/detalle-datos.ts
+src/app/(dashboard)/agenda/_components/detalle-ver.tsx
 src/app/api/turnos/route.ts
 src/app/api/turnos/[id]/route.ts
 src/app/api/turnos/[id]/cobrar/route.ts

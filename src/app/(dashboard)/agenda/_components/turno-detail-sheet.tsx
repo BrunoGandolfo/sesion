@@ -9,10 +9,8 @@
 // clínica; si no la tiene, "Grabar sesión".
 
 import * as React from "react";
-import Link from "next/link";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Mic } from "lucide-react";
 
 import { Avatar, Button, Chip, Confirmar, Sheet } from "@/components/ui";
 import {
@@ -26,44 +24,37 @@ import {
   horaInputMvd,
   instanteDesdeFechaHoraMvd,
 } from "@/lib/fechas-montevideo";
-import { apiGet, apiPatch, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
-import { fechaCorta, fechaLarga, hora, money } from "@/lib/format";
+import { apiPatch, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { fechaLarga, hora } from "@/lib/format";
 import {
-  CANCELAR_SERIE,
   CANCELAR_SERIE_TITULO,
   CANCELAR_SERIE_MENSAJE,
   CANCELAR_SERIE_ACCION,
   SERIE_CANCELADA,
-  AGENDADO,
-  CANCELADO,
   COBRADO,
   COBRO_DESHECHO,
-  DESHACER_COBRO,
   DESHACER_COBRO_ACCION,
   DESHACER_COBRO_MENSAJE,
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
-  GRABAR_SESION,
-  NO_VINO,
-  PAGADO,
-  PENDIENTE,
-  NOTA_PROCESANDO,
-  GRABACION_SIN_TERMINAR,
-  RECORDATORIO,
-  RECORDATORIO_ESTADO,
   VOLVER,
-  COBRAR,
   CARGANDO,
-  MODALIDAD_LABEL,
 } from "@/lib/glosario";
 import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
-import { sePuedeCobrar } from "@/app/api/_lib/domain";
 import { SelectorMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
-import { estadoClinicoDe } from "@/components/ui/session-row";
-import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
+
+import {
+  accionesDelDetalle,
+  chipDe,
+  leerRecordatorio,
+  leerSesion,
+  type RecordatorioJson,
+  type SesionDelTurno,
+} from "./detalle-datos";
+import { AccionesDelTurno, DatosDelTurno } from "./detalle-ver";
 
 // Los campos de "Reprogramar" son los del alta (fecha, hora, duración,
 // modalidad, notas): mismo schema y mismo componente, turno-editar-campos.
@@ -80,16 +71,6 @@ type Modo =
   | "confirmar-cancelar-serie"
   | "confirmar-deshacer-cobro";
 
-/** El recordatorio tal como viaja por la red: las fechas son ISO. */
-type RecordatorioJson = {
-  id: string;
-  estado: string;
-  programadoEn: string;
-  aceptadoEn: string | null;
-  intentos: number;
-  motivoNoEnvio: string | null;
-};
-
 interface Props {
   open: boolean;
   turno: TurnoConPaciente | null;
@@ -103,23 +84,6 @@ interface Props {
    */
   onCobrado?: (turnoId: string) => void;
 }
-
-// El mismo estado que muestra la fila de la agenda (session-row), con las
-// mismas palabras: acá decía "Cobrado"/"Sin cobrar" y allá "Pagado"/
-// "Pendiente". Es un turno solo y se llama de una sola manera.
-function chipDe(turno: TurnoConPaciente) {
-  if (turno.estado === "cancelado")
-    return { variant: "neutral" as const, label: CANCELADO };
-  if (turno.estado === "ausente")
-    return { variant: "neutral" as const, label: NO_VINO };
-  if (turno.pagoEstado === "pagado")
-    return { variant: "sage" as const, label: PAGADO };
-  if (turno.estado === "realizado")
-    return { variant: "terracotta" as const, label: PENDIENTE };
-  return { variant: "gold" as const, label: AGENDADO };
-}
-
-type SesionDelTurno = { id: string; estado?: string; actualizadaEn?: string } | null;
 
 export function TurnoDetailSheet({
   open,
@@ -157,9 +121,7 @@ export function TurnoDetailSheet({
     if (turnoEstado !== "programado" && turnoEstado !== "realizado") return;
 
     const controller = new AbortController();
-    apiGet<SesionDelTurno>(`/api/sesion-clinica?turnoId=${turnoId}`, {
-      signal: controller.signal,
-    })
+    leerSesion(turnoId, controller.signal)
       .then((data) => setSesion(data))
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
@@ -175,10 +137,8 @@ export function TurnoDetailSheet({
     if (!turnoId || turnoEstado !== "programado") return;
 
     const controller = new AbortController();
-    apiGet<RecordatorioJson[]>(`/api/sms/envios?turnoId=${turnoId}`, {
-      signal: controller.signal,
-    })
-      .then((lista) => setRecordatorio(lista[0] ?? null))
+    leerRecordatorio(turnoId, controller.signal)
+      .then((data) => setRecordatorio(data))
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
         // Sin dato no se dibuja el bloque: el turno se sigue pudiendo
@@ -210,31 +170,7 @@ export function TurnoDetailSheet({
   }
 
   const chip = chipDe(turno);
-  const esProgramado = turno.estado === "programado";
-  const esRealizado = turno.estado === "realizado";
-  const esCancelado = turno.estado === "cancelado";
-  const esAusente = turno.estado === "ausente";
-  // Las reglas del servidor (domain.ts): no se ofrece Cobrar a un turno cuya
-  // hora no llegó, ni Grabar a uno que no es de hoy.
-  const ahora = new Date();
-  const puedeCobrar = sePuedeCobrar(turno, ahora);
-  // Se puede deshacer mientras el turno siga cobrado. Es una reversión: el
-  // turno vuelve a quedar sin cobrar y se puede volver a cobrar.
-  const puedeDeshacerCobro = turno.pagoEstado === "pagado";
-  const puedeGrabarORevisar = esProgramado || esRealizado;
-  // El estado clínico, con las mismas palabras que la fila de Hoy y de
-  // Agenda (estadoClinicoDe): "Nota fallida · Ver qué pasó", "Para revisar",
-  // "Nota lista". Antes cualquier sesión, fallida incluida, ofrecía "Revisar
-  // nota", y una nota que no se pudo escribir parecía una nota para leer.
-  // Mientras la lectura no contestó vale lo que trae el turno de la agenda:
-  // con null ofrecía "Grabar sesión" sobre un turno ya grabado hasta que
-  // llegaba la respuesta (forense 03, P3-21).
-  const sesionDatos = sesion !== "sin-dato" ? sesion : (turno.sesionClinica ?? null);
-  const notaClinica = estadoClinicoDe(sesionDatos);
-  // La acción clínica, la misma que la fila y la card de Ahora
-  // (accionClinicaDe): una subida o una grabación que quedó a medias no se
-  // está procesando, y una grabación en curso se sigue grabando.
-  const clinica = accionClinicaDe(sesionDatos, turno, ahora);
+  const acciones = accionesDelDetalle(turno, sesion, new Date());
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
 
   /**
@@ -344,184 +280,21 @@ export function TurnoDetailSheet({
         </div>
 
         {/* Brief corto, arriba de todo lo demás */}
-        {puedeGrabarORevisar ? <BriefCorto pacienteId={turno.paciente.id} /> : null}
+        {acciones.puedeGrabarORevisar ? <BriefCorto pacienteId={turno.paciente.id} /> : null}
 
         {modo === "ver" ? (
           <>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[color:var(--border-subtle)] pt-4">
-              <Dato etiqueta="Duración">{turno.duracion} min</Dato>
-              <Dato etiqueta="Modalidad">
-                {MODALIDAD_LABEL[turno.modalidad]}
-              </Dato>
-              <Dato etiqueta="Tarifa">
-                <span className="tabular-nums">{money(turno.tarifaCobrada)}</span>
-              </Dato>
-              <Dato etiqueta="Pago">
-                {turno.pagoEstado === "pagado"
-                  ? `Cobrado${turno.pagoFecha ? ` el ${fechaCorta(turno.pagoFecha)}` : ""}`
-                  : "Sin cobrar"}
-              </Dato>
-            </dl>
-
-            {turno.notas ? (
-              <div className="border-t border-[color:var(--border-subtle)] pt-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                  Notas
-                </div>
-                <p className="mt-1 whitespace-pre-wrap text-[14px] text-ink-700">
-                  {turno.notas}
-                </p>
-              </div>
-            ) : null}
-
-            {aviso ? (
-              <div className="border-t border-[color:var(--border-subtle)] pt-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-                  {RECORDATORIO}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span
-                    className={`text-[14px] ${
-                      aviso.estado === "fallido"
-                        ? "text-terracotta-600"
-                        : "text-ink-900"
-                    }`}
-                  >
-                    {RECORDATORIO_ESTADO[aviso.estado] ?? aviso.estado}
-                  </span>
-                  <span className="text-[13px] tabular-nums text-ink-500">
-                    ·{" "}
-                    {aviso.aceptadoEn
-                      ? `${fechaCorta(new Date(aviso.aceptadoEn))} ${hora(new Date(aviso.aceptadoEn))}`
-                      : `${fechaCorta(new Date(aviso.programadoEn))} ${hora(new Date(aviso.programadoEn))}`}
-                  </span>
-                </div>
-                {aviso.motivoNoEnvio ? <p className="mt-2 text-[13px] text-ink-700">{aviso.motivoNoEnvio}</p> : null}
-              </div>
-            ) : null}
-
-            {esCancelado ? (
-              <p className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-[13px] text-ink-500">
-                Este turno fue cancelado.
-              </p>
-            ) : null}
-
-            {esAusente ? (
-              <p className="rounded-md border border-[color:var(--border-subtle)] bg-cream-50 px-4 py-3 text-[13px] text-ink-500">
-                La paciente no vino a este turno.
-              </p>
-            ) : null}
-
-            {/* Acciones */}
-            {puedeGrabarORevisar ? (
-              <div className="flex flex-col gap-2 border-t border-[color:var(--border-subtle)] pt-5">
-                {puedeCobrar ? (
-                  <Button
-                    onClick={() => {
-                      setError(null);
-                      setModo("cobrar");
-                    }}
-                    disabled={enviando}
-                  >
-                    {COBRAR}
-                  </Button>
-                ) : null}
-
-                {puedeDeshacerCobro ? (
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setError(null);
-                      setModo("confirmar-deshacer-cobro");
-                    }}
-                    disabled={enviando}
-                  >
-                    {DESHACER_COBRO}
-                  </Button>
-                ) : null}
-
-                {notaClinica ? (
-                  <Button
-                    asChild
-                    variant="secondary"
-                    className={notaClinica.fallida ? "!text-terracotta-600" : undefined}
-                  >
-                    <Link href={`/sesiones/${notaClinica.sesionId}`}>
-                      {notaClinica.rotulo}
-                      <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
-                    </Link>
-                  </Button>
-                ) : clinica.tipo === "grabar" && clinica.retomar ? (
-                  <Button asChild variant="secondary" className="!text-terracotta-600">
-                    <Link href={`/grabar/${turno.id}`}>
-                      {GRABACION_SIN_TERMINAR}
-                      <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
-                    </Link>
-                  </Button>
-                ) : clinica.tipo === "escribiendo" ? (
-                  <p className="text-[13px] text-ink-500" role="status">
-                    {NOTA_PROCESANDO}
-                  </p>
-                ) : clinica.tipo !== "grabar" ? null : (
-                  <Button asChild variant="secondary">
-                    <Link href={`/grabar/${turno.id}`}>
-                      <Mic size={16} strokeWidth={1.8} aria-hidden="true" />
-                      {GRABAR_SESION}
-                    </Link>
-                  </Button>
-                )}
-
-                {esProgramado ? (
-                  <>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="secondary"
-                        className="flex-1"
-                        onClick={abrirReprogramar}
-                        disabled={enviando}
-                      >
-                        Reprogramar
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="flex-1"
-                        onClick={() => {
-                          setError(null);
-                          setModo("confirmar-no-vino");
-                        }}
-                        disabled={enviando}
-                      >
-                        {NO_VINO}
-                      </Button>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      className="!text-terracotta-600 hover:!bg-terracotta-50"
-                      onClick={() => {
-                        setError(null);
-                        setModo("confirmar-cancelar");
-                      }}
-                      disabled={enviando}
-                    >
-                      Cancelar turno
-                    </Button>
-                    {turno.serieId ? (
-                      <Button
-                        variant="ghost"
-                        className="!text-terracotta-600 hover:!bg-terracotta-50"
-                        onClick={() => {
-                          setError(null);
-                          setModo("confirmar-cancelar-serie");
-                        }}
-                        disabled={enviando}
-                      >
-                        {CANCELAR_SERIE}
-                      </Button>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
-            ) : null}
+            <DatosDelTurno turno={turno} aviso={aviso} />
+            <AccionesDelTurno
+              turno={turno}
+              acciones={acciones}
+              enviando={enviando}
+              onModo={(siguiente) => {
+                setError(null);
+                setModo(siguiente);
+              }}
+              onReprogramar={abrirReprogramar}
+            />
 
           </>
         ) : null}
@@ -531,7 +304,7 @@ export function TurnoDetailSheet({
           <div className="border-t border-[color:var(--border-subtle)] pt-5">
             <SelectorMetodoPago
               monto={turno.tarifaCobrada}
-              cierraElTurno={esProgramado}
+              cierraElTurno={acciones.esProgramado}
               onElegir={cobrar}
               onListo={() => {}}
               onVolver={() => setModo("ver")}
@@ -630,19 +403,3 @@ export function TurnoDetailSheet({
   );
 }
 
-function Dato({
-  etiqueta,
-  children,
-}: {
-  etiqueta: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
-        {etiqueta}
-      </dt>
-      <dd className="mt-1 text-[14px] text-ink-900">{children}</dd>
-    </div>
-  );
-}

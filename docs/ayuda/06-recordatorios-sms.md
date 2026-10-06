@@ -119,6 +119,8 @@ src/lib/sms/backoff.ts
 src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/config/_components/mensaje-recordatorio.tsx
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
+src/app/(dashboard)/agenda/_components/detalle-datos.ts
+src/app/(dashboard)/agenda/_components/detalle-ver.tsx
 src/lib/glosario.ts
 vercel.json
 -->
