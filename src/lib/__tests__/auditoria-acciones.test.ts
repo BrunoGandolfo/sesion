@@ -98,3 +98,18 @@ describe("catálogo de acciones de auditoría", () => {
     },
   );
 });
+
+// auditoria.ts: UNA función escribe la fila. La única otra escritura es el
+// createMany del alta de cuenta, que necesita dos eventos de dos
+// organizaciones en la misma transacción que crea la organización.
+const ESCRIBE_A_MANO = /\beventoAuditoria\s*\.\s*(?:create|createMany)\s*\(/;
+const ESCRIBEN_A_MANO = ["src/app/api/_lib/auditoria.ts", "src/lib/cuenta-registro-db.ts"];
+
+describe("nadie escribe en eventos_auditoria por fuera de auditar()", () => {
+  it("sólo auditoria.ts y el alta de cuenta tocan eventoAuditoria.create*", () => {
+    const escriben = todos
+      .filter(({ abs }) => ESCRIBE_A_MANO.test(sinComentarios(readFileSync(abs, "utf8"))))
+      .map(({ rel }) => rel);
+    expect(escriben).toEqual(ESCRIBEN_A_MANO);
+  });
+});

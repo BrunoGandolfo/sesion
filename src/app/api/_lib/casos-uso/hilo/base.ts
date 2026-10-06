@@ -5,6 +5,7 @@ import { contenidoHiloSchema, type ContenidoHilo, type VersionHilo } from "@/lib
 import { OPERACIONES_VERSION } from "@/lib/hilo/versiones";
 import { cifrarHiloVersion } from "@/lib/prisma-encryption";
 
+import { auditar } from "../../auditoria";
 import { ApiError } from "../../responses";
 import { ACCIONES, type AccionAuditoria } from "@/lib/auditoria-acciones";
 
@@ -102,9 +103,10 @@ export async function aplicarVigente(tx: ClienteHilo, identidad: IdentidadHilo, 
 
 export async function auditarHilo(tx: ClienteHilo, identidad: IdentidadHilo, accion: AccionAuditoria, version: number, usuarioId: string | null, ahora: Date, trabajoId?: string) {
   const origen = await tx.hiloVersion.findFirst({ where: { ...filtroHilo(identidad), version }, select: { basadaEnVersion: true, sesionOrigenId: true } });
-  await tx.eventoAuditoria.create({ data: {
+  // Con el `tx` del acto: el rastro se confirma junto con la versión.
+  await auditar(tx, {
     organizationId: identidad.organizationId, actorTipo: usuarioId ? "usuario" : "worker",
     actorId: usuarioId, accion, entidad: "hilo", entidadId: identidad.pacienteId,
     detalle: { version, ...origen, ...(trabajoId ? { trabajoId } : {}) }, creadoEn: ahora,
-  } });
+  });
 }
