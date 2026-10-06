@@ -351,12 +351,7 @@ export function ConfigView() {
         Array.from(camposSuciosRef.current),
       );
       if (campos.length === 0) return;
-      void fetch("/api/config", {
-        method: "PATCH",
-        keepalive: true,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      }).catch(() => {});
+      void apiPatch("/api/config", patch, { keepalive: true }).catch(() => {});
     };
     window.addEventListener("pagehide", alSalir);
     return () => window.removeEventListener("pagehide", alSalir);

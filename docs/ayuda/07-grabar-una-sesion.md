@@ -211,7 +211,7 @@ src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/medidor-audio.tsx
 src/components/grabacion/GrabadorSesion.tsx
-src/hooks/useGrabacionSesion.ts
+src/lib/subida-audio.ts
 src/lib/grabacion-storage.ts
 src/hooks/usePantallaEncendida.ts
 src/lib/grabacion-captura.ts

@@ -98,7 +98,7 @@ const visibilidad = (valor: "hidden" | "visible") => {
 
 test("lo que pasó en el teléfono queda en eventos_auditoria.detalle, sin texto libre", async () => {
   const { useGrabador } = await import("@/components/grabacion/GrabadorSesion");
-  const { subirAudio } = await import("@/hooks/useGrabacionSesion");
+  const { subirAudio } = await import("@/lib/subida-audio");
   const { sesionId, turnoId } = await crearSesion(estado.base.prisma, org, { estado: "grabando", audio: false });
 
   let subida: Promise<unknown> | null = null;

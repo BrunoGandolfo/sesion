@@ -2,7 +2,7 @@
 //
 // POR QUÉ ESTOS Y NO OTROS
 //
-// `subirAudio` y `volverAGrabando` (src/hooks/useGrabacionSesion.ts)
+// `subirAudio` y `volverAGrabando` (src/lib/subida-audio.ts)
 // son funciones de módulo, no hooks: se pueden probar con vitest puro
 // poniendo dobles de `fetch` y de `XMLHttpRequest` en el global. No hacen
 // falta ni jsdom ni @testing-library, que el proyecto no tiene y que no se
@@ -21,7 +21,7 @@ import {
   ErrorSubida,
   subirAudio,
   volverAGrabando,
-} from "@/hooks/useGrabacionSesion";
+} from "@/lib/subida-audio";
 
 const SESION_ID = "ses_1";
 

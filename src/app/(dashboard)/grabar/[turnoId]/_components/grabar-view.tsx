@@ -43,7 +43,7 @@ import {
   marcarTurnoRealizado,
   subirAudio,
   volverAGrabando,
-} from "@/hooks/useGrabacionSesion";
+} from "@/lib/subida-audio";
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
 import { ApiClientError, apiGet, apiPost, mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";

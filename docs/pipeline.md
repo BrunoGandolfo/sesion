@@ -3,7 +3,7 @@
 ## Captura y subida
 
 La pantalla `src/app/(dashboard)/grabar/[turnoId]/page.tsx` usa
-`src/components/grabacion/GrabadorSesion.tsx` y `src/hooks/useGrabacionSesion.ts`
+`src/components/grabacion/GrabadorSesion.tsx` y `src/lib/subida-audio.ts`
 para la subida. Una grabación es **un solo MediaRecorder** desde Grabar hasta
 Terminar, con `start(1000)`:
 

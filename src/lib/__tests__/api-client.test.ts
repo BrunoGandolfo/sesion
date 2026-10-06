@@ -158,6 +158,17 @@ describe("api-client", () => {
       expect(init.body).toBe(JSON.stringify({ activo: false }));
     });
 
+    it("keepalive llega a fetch solo cuando se pide", async () => {
+      fetchMock.mockImplementation(async () => respuestaJson({ data: {} }));
+
+      await apiPatch("/api/config", { direccion: "x" }, { keepalive: true });
+      await apiPatch("/api/config", { direccion: "y" });
+
+      const [[, conKeepalive], [, sinKeepalive]] = fetchMock.mock.calls as [string, RequestInit][];
+      expect(conKeepalive.keepalive).toBe(true);
+      expect(sinKeepalive.keepalive).toBeUndefined();
+    });
+
     it("DELETE sin body manda body undefined y desenvuelve la respuesta", async () => {
       fetchMock.mockResolvedValue(respuestaJson({ data: { id: "h1" } }));
 

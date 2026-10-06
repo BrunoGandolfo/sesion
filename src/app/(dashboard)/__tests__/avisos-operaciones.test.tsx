@@ -46,6 +46,9 @@ vi.mock("../pacientes/[id]/_components/cabecera-ficha", () => ({ CabeceraFicha: 
 vi.mock("@/hooks/useHoy", () => ({ useHoy: () => AHORA }));
 vi.mock("@/hooks/useGrabacionSesion", () => ({
   useGrabacionSesion: () => ({ sesionClinica: { id: "s1", estado: "aprobada" }, loading: false }),
+}));
+vi.mock("@/lib/subida-audio", async (original) => ({
+  ...await original<typeof import("@/lib/subida-audio")>(),
   subirAudio: m.subir, volverAGrabando: vi.fn(), marcarTurnoRealizado: vi.fn(),
 }));
 vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: vi.fn() }));
