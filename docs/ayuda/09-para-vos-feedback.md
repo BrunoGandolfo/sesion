@@ -129,6 +129,7 @@ el audio no muestra que sobre lo que hiciste.
 src/components/grabacion/FeedbackTerapeutaView.tsx
 src/lib/glosario.ts
 src/app/(dashboard)/config/_components/config-view.tsx
+src/app/(dashboard)/config/_components/opciones-radio.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
 src/app/(dashboard)/sesiones/[id]/para-vos/page.tsx

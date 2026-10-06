@@ -168,6 +168,10 @@ tarifa sea 0, el alta de paciente la propone en 0 y hay que escribir una mayor.
 
 <!-- fuentes:
 src/app/(dashboard)/config/_components/config-view.tsx
+src/app/(dashboard)/config/_components/datos.ts
+src/app/(dashboard)/config/_components/useAutoguardado.ts
+src/app/(dashboard)/config/_components/opciones-radio.tsx
+src/app/(dashboard)/config/_components/cuenta-seccion.tsx
 src/app/(dashboard)/config/_components/editor-recordatorio.tsx
 src/app/api/config/route.ts
 src/lib/recordatorios-programacion.ts

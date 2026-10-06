@@ -287,6 +287,7 @@ src/app/(dashboard)/agenda/_components/datos.ts
 src/app/(dashboard)/cobros/_components/cobros-view.tsx
 src/app/(dashboard)/pacientes/[id]/_components/paciente-detail-view.tsx
 src/app/(dashboard)/config/_components/config-view.tsx
+src/app/(dashboard)/config/_components/useAutoguardado.ts
 src/app/(dashboard)/_components/dashboard.tsx
 src/app/(dashboard)/_components/datos.ts
 src/components/ui/session-row.tsx
