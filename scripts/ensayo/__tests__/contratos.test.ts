@@ -233,6 +233,94 @@ describe.skipIf(process.env.VITEST_SUITE === "unit")("contratos del ensayo", () 
     });
   });
 
+  describe("claves históricas", () => {
+    function verificar(url: string, env: Record<string, string>, etiqueta: string) {
+      const r = spawnSync(process.execPath, [VERIFICAR, "--etiqueta", etiqueta, "--salida", carpeta], {
+        encoding: "utf8",
+        env: { NODE_ENV: "test", PATH: process.env.PATH, PG_BIN: process.env.PG_BIN ?? "", DATABASE_URL: url, ...env },
+      });
+      const ruta = join(carpeta, `resultado-${etiqueta}.json`);
+      return { ...r, resultado: existsSync(ruta) ? JSON.parse(readFileSync(ruta, "utf8")) : null };
+    }
+    const acta = (etiqueta: string) => {
+      const trabajo = mkdtempSync(join(carpeta, "acta-"));
+      writeFileSync(join(trabajo, "resultado-mensual.json"), readFileSync(join(carpeta, `resultado-${etiqueta}.json`)));
+      return execFileSync(process.execPath, [VERIFICAR, "--acta", "--salida", trabajo], { encoding: "utf8" });
+    };
+
+    type Muestra = { claveId: number; ok: boolean | null; descifrada: boolean | null; historica?: boolean; cual: string };
+    let clave1: string, clave2: string, mezclada: string;
+
+    beforeAll(() => {
+      // Antes del recifrado del 29-sep (todo con la 1), después (todo con la 2)
+      // y una copia a medio recifrar: lo viejo con la 1, lo nuevo con la 2.
+      clave1 = crearBase("ensayo_contrato_clave1", PLANTILLA);
+      sembrar(clave1, [{ clave: 1, fecha: "2026-09-20" }, { clave: 1, fecha: "2026-09-27" }]);
+      clave2 = crearBase("ensayo_contrato_clave2", PLANTILLA);
+      sembrar(clave2, [{ clave: 2, fecha: "2026-09-20" }, { clave: 2, fecha: "2026-09-30" }]);
+      mezclada = crearBase("ensayo_contrato_mezclada", PLANTILLA);
+      sembrar(mezclada, [{ clave: 1, fecha: "2026-09-20" }, { clave: 2, fecha: "2026-09-30" }]);
+    });
+
+    it("copia con clave 1, la 1 histórica: esquema conocido y 'clave histórica no disponible: id 1', sin fallar", () => {
+      const v = verificar(clave1, { CLAVES_CIFRADO_IDS: "2", CLAVES_HISTORICAS_IDS: "1" }, "clave1");
+      expect(v.status, v.stderr).toBe(0);
+      expect(v.resultado).toMatchObject({ esquema: CONTRATO_ACTUAL, ok: true, problemas: [] });
+      expect(v.resultado.cifrado.clavesAusentes).toEqual([]);
+      const blobs = v.resultado.cifrado.porClave[1];
+      expect(blobs).toBeGreaterThan(0);
+      expect(v.resultado.avisos).toEqual([`clave histórica no disponible: id 1, ${blobs} blobs`]);
+      expect(v.stdout).toContain(`clave histórica no disponible: id 1, ${blobs} blobs`);
+      expect((v.resultado.descifrado.muestras as Muestra[]).every((m) => m.historica && m.ok === null && m.descifrada === null)).toBe(true);
+      const texto = acta("clave1");
+      expect(texto).toContain("**Resultado de la verificación:** OK");
+      expect(texto).toContain(`Clave histórica no disponible: id 1, ${blobs} blobs.`);
+    });
+
+    it("copia con clave 2: 4/4 muestras con clave conocida", () => {
+      const v = verificar(clave2, { CLAVES_CIFRADO_IDS: "2", CLAVES_HISTORICAS_IDS: "1" }, "clave2");
+      expect(v.status, v.stderr).toBe(0);
+      expect(v.resultado.avisos).toEqual([]);
+      expect(v.stdout).toContain("muestras con clave conocida: 4/4");
+    });
+
+    it("copia mezclada: avisa la histórica y verifica las de la clave presente", () => {
+      const v = verificar(mezclada, { CLAVES_CIFRADO_IDS: "2", CLAVES_HISTORICAS_IDS: "1" }, "mezclada");
+      expect(v.status, v.stderr).toBe(0);
+      expect(v.resultado.avisos).toEqual([`clave histórica no disponible: id 1, ${v.resultado.cifrado.porClave[1]} blobs`]);
+      const muestras = v.resultado.descifrado.muestras as Muestra[];
+      expect(muestras.filter((m) => m.cual === "más vieja").every((m) => m.claveId === 1 && m.historica)).toBe(true);
+      expect(muestras.filter((m) => m.cual === "más nueva").every((m) => m.claveId === 2 && m.ok === true)).toBe(true);
+    });
+
+    it("manual: descifra lo de la clave presente y no intenta lo histórico", () => {
+      const v = verificar(mezclada, { CLAVES_CIFRADO: `2=${CLAVE_2}`, CLAVES_HISTORICAS_IDS: "1" }, "manual-mezclada");
+      expect(v.status, v.stderr).toBe(0);
+      const muestras = v.resultado.descifrado.muestras as Muestra[];
+      expect(muestras.filter((m) => m.claveId === 2).every((m) => m.descifrada === true)).toBe(true);
+      expect(muestras.filter((m) => m.claveId === 1).every((m) => m.historica && m.descifrada === null)).toBe(true);
+      expect(v.stdout).toContain("muestras descifradas: 2/4, de clave histórica: 2");
+    });
+
+    it("manual: falla si una clave presente no descifra, aunque haya históricas", () => {
+      const otra = Buffer.alloc(32, 7).toString("base64");
+      const v = verificar(mezclada, { CLAVES_CIFRADO: `2=${otra}`, CLAVES_HISTORICAS_IDS: "1" }, "manual-equivocada");
+      expect(v.status).toBe(1);
+      expect(v.stderr).toContain("no descifra con la clave 2");
+      expect(v.resultado.problemas.some((p: string) => p.includes("clave 1"))).toBe(false);
+    });
+
+    it("sin declararla histórica, la clave 1 sigue siendo un fallo; y no puede ser histórica y disponible a la vez", () => {
+      let v = verificar(clave1, { CLAVES_CIFRADO_IDS: "2" }, "clave1-sin-historica");
+      expect(v.status).toBe(1);
+      expect(v.resultado.cifrado.clavesAusentes).toEqual([1]);
+      v = verificar(clave1, { CLAVES_CIFRADO_IDS: "1,2", CLAVES_HISTORICAS_IDS: "1" }, "ambas");
+      expect(v.status).toBe(1);
+      expect(v.stderr).toContain("CLAVES_HISTORICAS_IDS: 1 también figura entre las claves disponibles");
+      expect(v.resultado).toBeNull();
+    });
+  });
+
   it("el workflow compara contra release: checkout de release en la carpeta de RAIZ_RELEASE", () => {
     type Paso = { name?: string; uses?: string; with?: Record<string, string> };
     const { load } = createRequire(import.meta.url)("js-yaml") as {

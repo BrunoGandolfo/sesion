@@ -34,6 +34,10 @@
 # en la copia misma (scripts/ensayo/contratos.mjs); las migraciones viejas
 # apuntan a instantáneas congeladas que en su momento fueron release.
 #
+# Claves históricas: un id de CLAVES_HISTORICAS_IDS (variable, opcional;
+# claves que existieron y ya no tiene nadie) se informa como "clave
+# histórica no disponible: id N, M blobs" y no hace fallar el ensayo.
+#
 # DECISIÓN DELIBERADA: este ensayo NO descifra ninguna nota y no recibe
 # ninguna clave clínica. Hacerlo exigiría el llavero en GitHub Actions, es
 # decir, la clave de todo el histórico en un lugar más. El censo de ids no
@@ -49,7 +53,8 @@
 # Variable (Settings → Variables, no es secreta): CLAVES_CIFRADO_IDS="1,2":
 # los ids de TODAS las claves que existen guardadas (la del llavero de la app
 # y las retiradas que el dueño conserva para los respaldos). Solo ids, nunca
-# valores.
+# valores. CLAVES_HISTORICAS_IDS (opcional, disjunta de la anterior): las que
+# se perdieron.
 # ============================================================================
 
 name: Ensayo de restauración
@@ -99,6 +104,7 @@ jobs:
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
       CLAVES_CIFRADO_IDS: ${{ vars.CLAVES_CIFRADO_IDS }}
+      CLAVES_HISTORICAS_IDS: ${{ vars.CLAVES_HISTORICAS_IDS }}
       # El contrato actual sale de release, no de este checkout (ver arriba).
       RAIZ_RELEASE: ${{ github.workspace }}/publicado
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
