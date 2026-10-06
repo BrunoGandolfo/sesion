@@ -9,11 +9,11 @@
 
 import * as React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
 import { apiGet } from "@/lib/api-client";
-import { PARA_VOS, VISTA_NOTA } from "@/lib/glosario";
+import { EDITAR, PARA_VOS, SOAP_S, VISTA_NOTA } from "@/lib/glosario";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
 import SesionLayout from "../../layout";
@@ -46,6 +46,21 @@ function sesion(): SesionClinicaResponse {
     feedbackEstado: "listo", feedback: null, modeloAsr: null,
     turno: { id: "t_1", fecha: "2026-09-19T01:30:00.000Z", paciente: { id: "p_1", nombre: "Lucía", apellido: "Fernández" } },
   } as unknown as SesionClinicaResponse;
+}
+
+/** Una nota en revisión, sin señal de riesgo: editable de entrada. */
+function sesionEnRevision(): SesionClinicaResponse {
+  return {
+    ...sesion(), estado: "revision", notaFinal: null, notasEdicion: null, aprobadaEn: null,
+    notaIa: { subjetivo: "Relató la semana.", objetivo: "o", analisis: "a", plan: "p" },
+  } as unknown as SesionClinicaResponse;
+}
+
+/** Lo que hace el navegador al cerrar o recargar la pestaña. */
+function intentaSalir(): boolean {
+  const evento = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(evento);
+  return evento.defaultPrevented;
 }
 
 const lecturasDeLaFila = () =>
@@ -93,5 +108,26 @@ describe("sesiones/[id]: un solo contenedor para las tres caras", () => {
     render(await arbol(<TranscripcionPage />));
     expect(await screen.findByText("¿Cómo estuvo la semana?")).toBeTruthy();
     expect(lecturasDeLaFila()).toHaveLength(1);
+  });
+
+  it("las correcciones sin aprobar siguen protegidas en otra cara, y siguen ahí al volver", async () => {
+    vi.mocked(apiGet).mockResolvedValueOnce(sesionEnRevision());
+    const vista = render(await arbol(<SesionDetallePage />));
+    await screen.findByRole("heading", { level: 1, name: "Lucía Fernández" });
+    fireEvent.click(screen.getByRole("button", { name: `${EDITAR} — ${SOAP_S.titulo}` }));
+    const campo = screen.getByRole("textbox");
+    fireEvent.change(campo, { target: { value: "Relató otra cosa." } });
+    fireEvent.blur(campo);
+    expect(intentaSalir()).toBe(true);
+
+    navegacion.segmento = "para-vos";
+    vista.rerender(await arbol(<ParaVosPage />));
+    await waitFor(() => expect(screen.getByRole("tab", { name: PARA_VOS }).getAttribute("aria-selected")).toBe("true"));
+    // Irse de la sesión desde "Para vos" perdería el borrador: se avisa.
+    expect(intentaSalir()).toBe(true);
+
+    navegacion.segmento = null;
+    vista.rerender(await arbol(<SesionDetallePage />));
+    expect(await screen.findByText("Relató otra cosa.")).toBeTruthy();
   });
 });

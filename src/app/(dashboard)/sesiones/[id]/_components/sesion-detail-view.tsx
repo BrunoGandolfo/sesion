@@ -109,31 +109,32 @@ export function SesionDetailView({
   const acciones = sesion ? accionesDeUsuaria(sesion.estado) : null;
 
   // Sólo la nota se firma: "Para vos" es lectura.
-  const editable = vista === "nota" && acciones?.aprobar === true;
+  const enRevision = acciones?.aprobar === true;
+  const editable = vista === "nota" && enRevision;
 
   // La nota escrita y "Para vos" son las dos caras de la misma sesión.
   const conNota = cuerpo === "nota";
 
-  // Correcciones escritas y todavía no aprobadas. El borrador vive acá y sólo
-  // se escribe al aprobar, así que irse de la pantalla lo borra.
+  // Correcciones escritas y todavía no aprobadas. El borrador vive en el
+  // contenedor de sesiones/[id]/layout.tsx, que sigue montado al cambiar de
+  // cara: lo que se pierde es irse de la sesión, desde cualquier cara, así
+  // que esto no depende de cuál se está mirando.
   //
   // Se compara contra la nota de la fila, que es de donde salió el borrador
   // (`aplicar`): así, deshacer a mano una corrección vuelve a dejar la nota
   // sin cambios y el aviso no aparece por nada.
-  const tieneCambios = (editable && borradorAnterior !== null) ||
-    editable &&
-    sesion !== null &&
-    edicion !== null &&
-    !mismaNota(edicion.nota, notaDeSesion(sesion));
+  const tieneCambios = enRevision && (
+    borradorAnterior !== null ||
+    (sesion !== null &&
+      edicion !== null &&
+      !mismaNota(edicion.nota, notaDeSesion(sesion)))
+  );
 
   // Menú, enlaces, Atrás y recarga usan la misma protección del dashboard.
   useProtegerTrabajo(tieneCambios || borradorAnterior !== null, CAMBIOS_SIN_APROBAR_MENSAJE);
 
   // Para vos también explica la espera y ofrece el reintento cuando corresponde.
-  const selector =
-    conNota ? (
-      <SelectorVista id={id} vista={vista} tieneCambios={tieneCambios} />
-    ) : null;
+  const selector = conNota ? <SelectorVista id={id} vista={vista} /> : null;
 
   return (
     <>

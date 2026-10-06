@@ -13,13 +13,9 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 import {
-  CAMBIOS_SIN_APROBAR_MENSAJE,
-  CAMBIOS_SIN_APROBAR_TITULO,
-  IR_IGUAL,
   PARA_VOS,
   PARA_VOS_SIN_ANALISIS,
   PARA_VOS_SUBTITULO,
-  QUEDARME,
   VISTA_NOTA,
 } from "@/lib/glosario";
 
@@ -231,10 +227,12 @@ describe("ParaVosView", () => {
   });
 });
 
-describe("SelectorVista — cambios sin aprobar", () => {
+describe("SelectorVista — cambiar de cara", () => {
   beforeEach(() => push.mockClear());
 
-  it("sin cambios, tocar la otra cara navega derecho", () => {
+  // El borrador vive en el contenedor del layout, que no se desmonta al
+  // cambiar de cara (caras-un-contenedor.test.tsx): no hay nada que preguntar.
+  it("tocar la otra cara navega derecho, sin preguntar", () => {
     render(<SelectorVista id="ses_1" vista="nota" />);
     fireEvent.click(screen.getByRole("tab", { name: PARA_VOS }));
 
@@ -242,41 +240,11 @@ describe("SelectorVista — cambios sin aprobar", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
-  it("con cambios NO navega: pregunta primero", () => {
-    render(<SelectorVista id="ses_1" vista="nota" tieneCambios />);
-    fireEvent.click(screen.getByRole("tab", { name: PARA_VOS }));
-
-    // Lo que el P1 pedía: la nota editada sigue montada.
-    expect(push).not.toHaveBeenCalled();
-    const dialogo = screen.getByRole("alertdialog");
-    expect(within(dialogo).getByText(CAMBIOS_SIN_APROBAR_TITULO)).toBeTruthy();
-    expect(within(dialogo).getByText(CAMBIOS_SIN_APROBAR_MENSAJE)).toBeTruthy();
-  });
-
-  it("'Quedarme' cierra la pregunta y no navega", () => {
-    render(<SelectorVista id="ses_1" vista="nota" tieneCambios />);
-    fireEvent.click(screen.getByRole("tab", { name: PARA_VOS }));
-    fireEvent.click(screen.getByRole("button", { name: QUEDARME }));
-
-    expect(push).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-  });
-
-  it("'Ir igual' es lo único que navega con cambios", () => {
-    render(<SelectorVista id="ses_1" vista="nota" tieneCambios />);
-    fireEvent.click(screen.getByRole("tab", { name: PARA_VOS }));
-    expect(push).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: IR_IGUAL }));
-    expect(push).toHaveBeenCalledWith("/sesiones/ses_1/para-vos");
-  });
-
-  it("tocar la cara en la que ya está no pregunta nada", () => {
-    render(<SelectorVista id="ses_1" vista="nota" tieneCambios />);
+  it("tocar la cara en la que ya está no navega", () => {
+    render(<SelectorVista id="ses_1" vista="nota" />);
     fireEvent.click(screen.getByRole("tab", { name: VISTA_NOTA }));
 
     expect(push).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 });
 
