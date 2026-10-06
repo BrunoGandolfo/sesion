@@ -17,6 +17,12 @@ import { leerCorpus, olvidarCorpus, systemPromptAyuda } from "@/lib/ayuda-corpus
 /** El código que respalda una afirmación de la ayuda, leído del disco. */
 const codigo = (ruta: string) => readFileSync(join(process.cwd(), ruta), "utf8");
 
+/** La pantalla de grabar, cortada en la vista, su flujo y sus pantallas. */
+const pantallaDeGrabar = () =>
+  ["grabar-view.tsx", "flujo-grabacion.ts", "pantallas.tsx", "pantalla-grabando.tsx"]
+    .map((archivo) => codigo(`src/app/(dashboard)/grabar/[turnoId]/_components/${archivo}`))
+    .join("\n");
+
 function componentes(dir: string): string[] {
   return readdirSync(dir).flatMap((nombre) => {
     const ruta = join(dir, nombre);
@@ -70,7 +76,7 @@ it("pide dejar la pantalla encendida, y no garantiza recuperar una interrupción
   // El grabador es un solo MediaRecorder: con la pantalla apagada el teléfono
   // puede dejar de entregar audio. La app no corta por eso: avisa
   // (AVISO_PANTALLA_APAGADA) y al volver dice entre qué horas no se grabó.
-  const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+  const vista = pantallaDeGrabar();
   expect(vista).toContain("Dejá la pantalla encendida mientras grabás.");
   expect(glosario.AVISO_PANTALLA_APAGADA.startsWith("La pantalla se apagó. Con la pantalla apagada el teléfono puede")).toBe(true);
   expect(documento("07-grabar-una-sesion.md")).toContain("La pantalla se apagó. Con la pantalla apagada el teléfono puede");
@@ -180,7 +186,7 @@ it("la ayuda dice que la app NO cifra el audio, y qué lo protege en cada tramo"
 });
 
 it("la ayuda describe los botones del grabador que existen", () => {
-  const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+  const vista = pantallaDeGrabar();
   const texto = documento("07-grabar-una-sesion.md");
   // Los botones salen del glosario; la vista los usa por su constante.
   for (const [constante, boton] of [["GRABAR_SESION", "Grabar sesión"], ["PAUSAR", "Pausar"], ["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["GUARDAR_LO_GRABADO", "Guardar lo grabado"], ["SEGUIR_GRABANDO", "Seguir grabando"], ["VOLVER_A_LA_FICHA", "Volver a la ficha"], ["ENTENDIDO", "Entendido"]]) {
@@ -290,7 +296,7 @@ it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar 
   expect(pendientes).toContain("DESCARTAR_GRABACION_ACCION");
   expect(pendientes).toContain("DESCARTAR_GRABACION_TITULO");
   // Los del grabador: la copia pendiente y la grabación en curso.
-  const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+  const vista = pantallaDeGrabar();
   expect(vista).toContain("Descartarla");
   expect(vista).toContain("Descartar grabación");
   let corpus = leerCorpus();

@@ -192,6 +192,9 @@ src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/app/(dashboard)/pacientes/[id]/_components/ficha-tab.tsx
 src/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts
+src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/lib/grabacion-captura.ts
 src/components/clinico/MencionesNota.tsx
 src/components/clinico/HiloView.tsx

@@ -268,6 +268,9 @@ src/lib/login-intentos.ts
 src/lib/intentos-acceso.ts
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts
+src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/components/grabacion/GrabadorSesion.tsx
 src/lib/grabacion-microfono.ts
 src/lib/grabacion-captura.ts

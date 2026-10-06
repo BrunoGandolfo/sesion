@@ -154,6 +154,9 @@ src/app/api/_lib/casos-uso/envios-del-turno.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts
+src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
 src/lib/consentimiento-hechos.ts
 src/lib/glosario.ts
