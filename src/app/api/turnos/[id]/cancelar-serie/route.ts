@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../../../_lib/auth";
+import { getSessionActor } from "../../../_lib/auth";
 import { cancelarRestoDeSerie } from "../../../_lib/casos-uso/cancelar-serie-turno";
 import { errorResponse, ok } from "../../../_lib/responses";
 
@@ -16,13 +16,14 @@ type RouteParams = {
  *  La regla (qué se toca y qué no) está en casos-uso/cancelar-serie-turno.ts. */
 export async function POST(_request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
     const resultado = await cancelarRestoDeSerie({
       prisma: db,
       organizationId,
       turnoId: id,
+      usuarioId: userId,
     });
 
     return ok(resultado);

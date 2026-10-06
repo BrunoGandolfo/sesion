@@ -41,7 +41,7 @@ function trasLeerTurno(fn:()=>Promise<void>) {
  }});
 }
 test('rechaza cobrar un turno movido al futuro entre lectura y escritura',async()=>{
- const db=trasLeerTurno(async()=>{await actualizarTurno({prisma:base.db,organizationId:org,turnoId:turno,cambios:{fecha:new Date('2026-09-16T14:00:00Z')},ahora})});
+ const db=trasLeerTurno(async()=>{await actualizarTurno({prisma:base.db,organizationId:org,usuarioId:'usuaria-de-prueba',turnoId:turno,cambios:{fecha:new Date('2026-09-16T14:00:00Z')},ahora})});
  await expect(cobrarTurno({prisma:db,organizationId:org,turnoId:turno,metodo:'efectivo',fecha:ahora})).rejects.toMatchObject({status:409});
  const fin=await base.prisma.turno.findUniqueOrThrow({where:{id:turno}});
  expect(fin.fecha.getTime()).toBeGreaterThan(ahora.getTime());expect(fin.pagoEstado).toBe('pendiente');expect(fin.estado).toBe('programado');

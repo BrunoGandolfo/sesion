@@ -89,8 +89,8 @@ test("dos inicios a la vez con una sola grabación restante: pasa uno", async ()
 test("en el tope, lo demás del consultorio invitado sigue sin límite: pacientes, agenda y cobros", async () => {
   const { organizationId } = await consultorio(true);
   await base.prisma.organization.update({ where: { id: organizationId }, data: { grabacionesIniciadas: TOPE_GRABACIONES_PRUEBA } });
-  const paciente = await crearPaciente({ prisma: base.db, organizationId, datos: { nombre: "Nueva", apellido: "Paciente", telefono: "", tarifa: 1000, notas: null } });
-  const { id: turnoId } = await crearTurno({ prisma: base.db, organizationId, pacienteId: paciente.id, fecha: new Date(Date.now() - 3 * 60 * 60 * 1000), duracion: 50, modalidad: "presencial", notas: null, frecuencia: "unico", ahora: new Date() });
+  const paciente = await crearPaciente({ prisma: base.db, organizationId, usuarioId: "usuaria-de-prueba", datos: { nombre: "Nueva", apellido: "Paciente", telefono: "", tarifa: 1000, notas: null } });
+  const { id: turnoId } = await crearTurno({ prisma: base.db, organizationId, usuarioId: "usuaria-de-prueba", pacienteId: paciente.id, fecha: new Date(Date.now() - 3 * 60 * 60 * 1000), duracion: 50, modalidad: "presencial", notas: null, frecuencia: "unico", ahora: new Date() });
   expect((await cobrarTurno({ prisma: base.db, organizationId, turnoId, metodo: "efectivo", fecha: new Date() })).pagoEstado).toBe("pagado");
 });
 

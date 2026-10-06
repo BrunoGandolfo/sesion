@@ -250,7 +250,7 @@ describe("archivar a la paciente", () => {
     expect(evento.detalle).toMatchObject({ enviosCancelados: 1, yaEstabaArchivada: true });
   });
 
-  it("volver a activarla NO revive los envíos cancelados, y no audita", async () => {
+  it("volver a activarla NO revive los envíos cancelados; queda como edición, no como archivo", async () => {
     const f = await fixture();
     const id = await envio(f, "pendiente");
     await archivar(f);
@@ -268,10 +268,14 @@ describe("archivar a la paciente", () => {
     const fila = await leer(id);
     expect(fila).toMatchObject({ estado: "cancelado", motivoNoEnvio: MOTIVO_PACIENTE_ARCHIVADA });
     expect(fila.cerradoEn?.getTime()).toBe(AHORA.getTime());
-    expect(await eventos()).toHaveLength(1);
+    // El archivo de antes y la reactivación, que es una edición de `activo`.
+    expect((await eventos()).map((e) => [e.accion, e.detalle])).toEqual([
+      [ACCIONES.paciente.archivar, { enviosCancelados: 1, yaEstabaArchivada: false }],
+      [ACCIONES.paciente.editar, { campos: ["activo"] }],
+    ]);
   });
 
-  it("editar otros datos (sin archivar) no toca los envíos ni audita", async () => {
+  it("editar otros datos (sin archivar) no toca los envíos y deja paciente.editar con el nombre del campo", async () => {
     const f = await fixture();
     const id = await envio(f, "pendiente");
 
@@ -284,7 +288,7 @@ describe("archivar a la paciente", () => {
     });
 
     expect((await leer(id)).estado).toBe("pendiente");
-    expect(await eventos()).toHaveLength(0);
+    expect((await eventos()).map((e) => [e.accion, e.detalle])).toEqual([[ACCIONES.paciente.editar, { campos: ["nombre"] }]]);
   });
 
   it("archivar junto con otros cambios los aplica todos en la misma escritura", async () => {

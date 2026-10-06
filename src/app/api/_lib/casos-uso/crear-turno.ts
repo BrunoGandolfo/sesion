@@ -30,10 +30,12 @@ import type {
   FrecuenciaTurno,
   Modalidad,
 } from "@/lib/constantes-turno";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
 import { cifrarTurno } from "@/lib/prisma-encryption";
 import type { SerieCreada, Turno, TurnoCreado } from "@/types/domain";
 
+import { auditar } from "../auditoria";
 import { toTurno } from "../domain";
 import { ApiError } from "../responses";
 import { programarEnvioDelTurno } from "./envios-del-turno";
@@ -63,6 +65,8 @@ export interface CrearTurnoInput {
   alGrabar?: boolean;
   /** Momento del alta: decide si el turno lleva recordatorio. */
   ahora: Date;
+  /** Quién agenda, para turno.crear. */
+  usuarioId: string;
 }
 
 // La forma de la respuesta (TurnoCreado, SerieCreada) vive en
@@ -80,6 +84,7 @@ export async function crearTurno({
   frecuencia,
   alGrabar = false,
   ahora,
+  usuarioId,
 }: CrearTurnoInput): Promise<TurnoCreado> {
   return prisma.$transaction(async (tx) => {
     // El lock PRIMERO y por toda la transacción: dos altas simultáneas para
@@ -177,6 +182,25 @@ export async function crearTurno({
     // `primero` siempre queda asignado: la primera fecha o crea el turno o
     // lanza el 409. El chequeo es para el tipo.
     if (primero === null) throw new ApiError(TURNO_SOLAPADO, 409);
+
+    // Un evento por alta, aunque sea una serie: el primer turno y cuántos
+    // nacieron con él. Sin notas (van cifradas y son de la paciente).
+    await auditar(tx, {
+      organizationId,
+      actorTipo: "usuario",
+      actorId: usuarioId,
+      accion: ACCIONES.turno.crear,
+      entidad: "turno",
+      entidadId: primero.id,
+      creadoEn: ahora,
+      detalle: {
+        pacienteId: paciente.id,
+        serieId,
+        creados,
+        omitidos: omitidas.length,
+        alGrabar,
+      },
+    });
 
     return {
       ...primero,

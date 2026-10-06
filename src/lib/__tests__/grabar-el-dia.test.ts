@@ -105,7 +105,7 @@ it("un turno de hoy crea la grabación (201)", async () => {
 
 it("alGrabar sigue funcionando: el turno que nace al grabar se graba enseguida", async () => {
   const { id: turnoId } = await crearTurno({
-    prisma: estado.base.db, organizationId: org.orgId, pacienteId: org.pacienteId,
+    prisma: estado.base.db, organizationId: org.orgId, pacienteId: org.pacienteId, usuarioId: "usuaria-de-prueba",
     fecha: new Date(), duracion: 50, modalidad: "presencial", notas: null,
     frecuencia: "unico", alGrabar: true, ahora: new Date(),
   });

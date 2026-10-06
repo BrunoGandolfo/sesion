@@ -29,7 +29,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    // El usuario va al evento de auditoría de archivar.
+    // El usuario va al evento de auditoría (editar o archivar).
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
     const body = await leerJson(request);

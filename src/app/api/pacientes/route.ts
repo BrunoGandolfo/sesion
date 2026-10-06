@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../_lib/auth";
+import { getOrganizationId, getSessionActor } from "../_lib/auth";
 import { crearPaciente, listarPacientes } from "../_lib/casos-uso/pacientes";
 import { pacienteCreateSchema, toBooleanParam } from "../_lib/schemas";
 import { errorResponse, leerJson, ok, validationError } from "../_lib/responses";
@@ -43,7 +43,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const organizationId = await getOrganizationId();
+    // El usuario va al evento paciente.crear.
+    const { organizationId, userId } = await getSessionActor();
     const body = await leerJson(request);
     const parsed = pacienteCreateSchema.safeParse(body);
 
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
     const paciente = await crearPaciente({
       prisma: db,
       organizationId,
+      usuarioId: userId,
       datos: {
         nombre: parsed.data.nombre,
         apellido: parsed.data.apellido,

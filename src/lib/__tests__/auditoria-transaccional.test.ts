@@ -31,6 +31,9 @@ import {
   revocarConsentimiento,
 } from "@/app/api/_lib/casos-uso/consentimiento";
 import { cambiarPassword } from "@/app/api/_lib/casos-uso/cambiar-password";
+import { crearTurno } from "@/app/api/_lib/casos-uso/crear-turno";
+import { actualizarPaciente, crearPaciente } from "@/app/api/_lib/casos-uso/pacientes";
+import { actualizarTurno } from "@/app/api/_lib/casos-uso/turnos";
 import { salirDeLasDemas } from "@/app/api/_lib/casos-uso/salir-de-las-demas";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { crearSesion } from "@/lib/sesion-acceso";
@@ -435,5 +438,91 @@ describe("cambiar la contraseña", () => {
     const [evento] = await prismaRaw.eventoAuditoria.findMany();
     expect(evento).toMatchObject({ accion: "cuenta.password_cambiada", actorId: org.userId, detalle: { sesionesCerradas: 1 } });
     expect(JSON.stringify(evento.detalle)).not.toContain("hash");
+  });
+});
+
+describe("pacientes y turnos dejan su rastro con el acto", () => {
+  const DATOS = { nombre: "Lucía", apellido: "Ferreira", telefono: "+59899111222", tarifa: 1400, notas: "nota privada" };
+  /** Ni un dato de la paciente en el rastro: sólo ids, nombres de campo y estados. */
+  const sinDatosDeLaPaciente = (detalle: unknown) => {
+    const texto = JSON.stringify(detalle ?? {});
+    for (const dato of ["Lucía", "Ferreira", "99111222", "nota privada"]) expect(texto).not.toContain(dato);
+  };
+
+  it("crear paciente con la auditoría rota no la crea", async () => {
+    const org = await crearOrg();
+    await romperAuditoria();
+    await expect(crearPaciente({ prisma: db, organizationId: org.orgId, usuarioId: org.userId, datos: DATOS })).rejects.toThrow();
+    expect(await prismaRaw.paciente.count({ where: { organizationId: org.orgId } })).toBe(1);
+  });
+
+  it("crear y editar paciente: paciente.crear con el id, paciente.editar con los nombres de lo que cambió", async () => {
+    const org = await crearOrg();
+    const paciente = await crearPaciente({ prisma: db, organizationId: org.orgId, usuarioId: org.userId, datos: DATOS });
+    await actualizarPaciente({
+      prisma: db, organizationId: org.orgId, pacienteId: paciente.id, usuarioId: org.userId,
+      // nombre igual al guardado: no cuenta como cambio.
+      cambios: { nombre: "Lucía", telefono: "+59899333444", notas: "otra nota" },
+    });
+    // Nada cambió: no hay evento.
+    await actualizarPaciente({ prisma: db, organizationId: org.orgId, pacienteId: paciente.id, usuarioId: org.userId, cambios: { nombre: "Lucía" } });
+
+    const eventos = await prismaRaw.eventoAuditoria.findMany({ orderBy: { creadoEn: "asc" } });
+    expect(eventos.map((e) => [e.accion, e.entidadId, e.actorId])).toEqual([
+      ["paciente.crear", paciente.id, org.userId],
+      ["paciente.editar", paciente.id, org.userId],
+    ]);
+    expect(eventos[1].detalle).toEqual({ campos: ["telefono", "notas"] });
+    eventos.forEach((e) => sinDatosDeLaPaciente(e.detalle));
+  });
+
+  it("editar paciente con la auditoría rota no la edita", async () => {
+    const org = await crearOrg();
+    await romperAuditoria();
+    await expect(
+      actualizarPaciente({ prisma: db, organizationId: org.orgId, pacienteId: org.pacienteId, usuarioId: org.userId, cambios: { apellido: "Otra" } }),
+    ).rejects.toThrow();
+    expect((await prismaRaw.paciente.findUniqueOrThrow({ where: { id: org.pacienteId } })).apellido).toBe("Pérez");
+  });
+
+  const altaDeTurno = (org: Org) =>
+    crearTurno({
+      prisma: db, organizationId: org.orgId, usuarioId: org.userId, pacienteId: org.pacienteId,
+      fecha: new Date("2030-03-04T13:00:00.000Z"), duracion: 50, modalidad: "presencial",
+      notas: "nota del turno", frecuencia: "unico", ahora: new Date("2030-03-01T12:00:00.000Z"),
+    });
+
+  it("crear turno con la auditoría rota no lo crea", async () => {
+    const org = await crearOrg();
+    await romperAuditoria();
+    await expect(altaDeTurno(org)).rejects.toThrow();
+    expect(await prismaRaw.turno.count({ where: { organizationId: org.orgId } })).toBe(0);
+  });
+
+  it("crear, editar y cancelar un turno: turno.crear, turno.editar y turno.cancelar", async () => {
+    const org = await crearOrg();
+    const turno = await altaDeTurno(org);
+    // Un minuto entre acto y acto: el orden por creadoEn es el de los actos.
+    await actualizarTurno({ prisma: db, organizationId: org.orgId, usuarioId: org.userId, turnoId: turno.id, cambios: { duracion: 90, notas: "cambiada" }, ahora: new Date("2030-03-01T12:01:00.000Z") });
+    await actualizarTurno({ prisma: db, organizationId: org.orgId, usuarioId: org.userId, turnoId: turno.id, cambios: { estado: "cancelado" }, ahora: new Date("2030-03-01T12:02:00.000Z") });
+
+    const eventos = await prismaRaw.eventoAuditoria.findMany({ orderBy: { creadoEn: "asc" } });
+    expect(eventos.map((e) => e.accion)).toEqual(["turno.crear", "turno.editar", "turno.cancelar"]);
+    expect(eventos.every((e) => e.entidadId === turno.id && e.actorId === org.userId)).toBe(true);
+    expect(eventos[0].detalle).toMatchObject({ pacienteId: org.pacienteId, creados: 1, serieId: null });
+    expect(eventos[1].detalle).toEqual({ pacienteId: org.pacienteId, campos: ["duracion", "notas"], desde: "programado", hacia: "programado" });
+    expect(eventos[2].detalle).toMatchObject({ desde: "programado", hacia: "cancelado" });
+    // El nombre del campo sí; lo que decía la nota, nunca.
+    eventos.forEach((e) => expect(JSON.stringify(e.detalle)).not.toMatch(/nota del turno|cambiada/));
+  });
+
+  it("editar un turno con la auditoría rota no lo edita", async () => {
+    const org = await crearOrg();
+    const turno = await altaDeTurno(org);
+    await romperAuditoria();
+    await expect(
+      actualizarTurno({ prisma: db, organizationId: org.orgId, usuarioId: org.userId, turnoId: turno.id, cambios: { estado: "cancelado" }, ahora: new Date("2030-03-01T12:00:00.000Z") }),
+    ).rejects.toThrow();
+    expect((await prismaRaw.turno.findUniqueOrThrow({ where: { id: turno.id } })).estado).toBe("programado");
   });
 });

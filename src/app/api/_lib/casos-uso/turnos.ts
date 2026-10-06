@@ -7,6 +7,7 @@
 
 import type { Prisma } from "@prisma/client";
 
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
 import { cifrarTurno } from "@/lib/prisma-encryption";
 import type { Turno, TurnoConPaciente } from "@/types/domain";
@@ -19,6 +20,7 @@ import {
   toTurnoConPaciente,
   type CambiosTurno,
 } from "../domain";
+import { auditar } from "../auditoria";
 import { ApiError } from "../responses";
 import {
   cancelarEnviosDelTurno,
@@ -116,6 +118,8 @@ export interface ActualizarTurnoInput {
   turnoId: string;
   cambios: CambiosTurno;
   ahora: Date;
+  /** Quién edita, para turno.editar o turno.cancelar. */
+  usuarioId: string;
 }
 
 /**
@@ -129,6 +133,7 @@ export async function actualizarTurno({
   turnoId,
   cambios,
   ahora,
+  usuarioId,
 }: ActualizarTurnoInput): Promise<Turno> {
   const turno = await prisma.$transaction(async (tx) => {
     // El lock PRIMERO, y recién después releer el turno (Codex P1 sobre el
@@ -223,6 +228,25 @@ export async function actualizarTurno({
       // cierre apagó sus recordatorios y sin esto no volvería a avisar.
       await programarEnvioDelTurno(tx, turnoDelAviso);
     }
+
+    // Pasar a cancelado es turno.cancelar; lo demás, turno.editar. Los
+    // nombres de los campos que vinieron, nunca la nota.
+    const cancela = updated.estado === "cancelado" && actual.estado !== "cancelado";
+    await auditar(tx, {
+      organizationId,
+      actorTipo: "usuario",
+      actorId: usuarioId,
+      accion: cancela ? ACCIONES.turno.cancelar : ACCIONES.turno.editar,
+      entidad: "turno",
+      entidadId: turnoId,
+      creadoEn: ahora,
+      detalle: {
+        pacienteId: updated.pacienteId,
+        campos: (Object.keys(cambios) as (keyof CambiosTurno)[]).filter((c) => cambios[c] !== undefined),
+        desde: actual.estado,
+        hacia: updated.estado,
+      },
+    });
 
     return updated;
   });
