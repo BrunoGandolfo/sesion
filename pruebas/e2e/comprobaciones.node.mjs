@@ -13,6 +13,10 @@ test('el detector acepta una vista sana y rechaza desbordes y errores visibles',
     await assert.rejects(() => presentacion(page), /Presentación/);
     await page.setContent('<p role="alert">No se pudo guardar</p>');
     await assert.rejects(() => presentacion(page), /Alerta inesperada/);
+    await page.setContent('<div id="__next-route-announcer__" role="alert">Alejandro Sosa</div>');
+    await presentacion(page);
+    await page.setContent('<div id="__next-route-announcer__" role="alert">Alejandro Sosa</div><p role="alert">No se pudo guardar</p>');
+    await assert.rejects(() => presentacion(page), /Alerta inesperada/);
     await page.setContent('<p>Application error: a client-side exception has occurred</p>');
     await assert.rejects(() => presentacion(page), /Pantalla de error/);
     await page.setContent('<div role="alert">SEÑAL DE RIESGO\nContenido clínico de prueba</div>');
