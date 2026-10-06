@@ -11,10 +11,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
-import {
-  NuevoTurnoForm,
-  proponerDesdeUltimoTurno,
-} from "@/components/forms/nuevo-turno-form";
+import { proponerDesdeUltimoTurno } from "@/components/forms/nuevo-turno-datos";
+import { NuevoTurnoForm } from "@/components/forms/nuevo-turno-form";
 import {
   agregarDiasMvd,
   fechaInputMvd,

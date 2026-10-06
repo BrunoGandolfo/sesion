@@ -34,7 +34,6 @@ const EXCEPCIONES: Record<string, string> = {
   "src/app/(dashboard)/pacientes/[id]/_components/sesiones-tab.tsx": "ola 3",
   "src/app/(dashboard)/pacientes/_components/pacientes-view.tsx": "ola 3",
   "src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx": "ola 3",
-  "src/components/forms/nuevo-turno-form.tsx": "ola 3",
   "src/components/grabacion/FeedbackTerapeutaView.tsx": "ola 3",
   "src/components/grabacion/GrabadorSesion.tsx": "ola 3",
   "src/components/grabacion/HotWordsManager.tsx": "ola 3",

@@ -2,7 +2,7 @@
  * La grilla se verifica desde sus botones en calendario-consultorio.test.tsx. */
 import { describe, expect, it } from "vitest";
 
-import { proponerDesdeUltimoTurno } from "@/components/forms/nuevo-turno-form";
+import { proponerDesdeUltimoTurno } from "@/components/forms/nuevo-turno-datos";
 import {
   fechaInputMvd,
   horaInputMvd,
