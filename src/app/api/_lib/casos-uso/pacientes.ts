@@ -1,9 +1,11 @@
 // Casos de uso de la ficha: listar, crear, leer y editar pacientes.
 //
-// Archivar (`activo: false`) no es sólo esconderla de la lista: apaga sus SMS
-// pendientes y deja un evento de auditoría, los tres en UNA transacción. Si
-// el evento no se puede escribir, la paciente no queda archivada. Volver a
-// activarla no revive los SMS apagados (`cancelado` es terminal).
+// Crear y editar dejan su evento de auditoría (paciente.crear,
+// paciente.editar) en la MISMA transacción que el acto. Archivar
+// (`activo: false`) no es sólo esconderla de la lista: apaga sus SMS
+// pendientes y deja paciente.archivar, los tres juntos. Si el evento no se
+// puede escribir, el acto no queda hecho. Volver a activarla no revive los
+// SMS apagados (`cancelado` es terminal).
 //
 // Vivían dentro de GET/POST /api/pacientes y GET/PATCH /api/pacientes/[id].
 // Las rutas ahora solo validan y llaman. Sin request ni Response.
@@ -22,8 +24,10 @@ import type { Paciente, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { auditar } from "../auditoria";
 import { toPaciente, toPacienteConDeuda, toTurno } from "../domain";
+import { MENSAJE_PACIENTE_NO_ENCONTRADO } from "../pacientes";
 import { ApiError } from "../responses";
 import { cancelarEnviosDeLaPaciente, MOTIVO_PACIENTE_ARCHIVADA } from "./envios-del-turno";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClientePrisma = typeof db;
 
@@ -86,7 +90,7 @@ export async function obtenerPaciente({
   });
 
   if (!paciente) {
-    throw new ApiError("Paciente no encontrado", 404);
+    throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
   }
 
   return {
@@ -112,23 +116,38 @@ export interface CrearPacienteInput {
   prisma: ClientePrisma;
   organizationId: string;
   datos: DatosPaciente;
+  /** Quién la crea, para paciente.crear. */
+  usuarioId: string;
 }
 
 export async function crearPaciente({
   prisma,
   organizationId,
   datos,
+  usuarioId,
 }: CrearPacienteInput): Promise<Paciente> {
   const id = crypto.randomUUID();
-  const fila = await prisma.paciente.create({
-    data: {
-      nombre: datos.nombre,
-      apellido: datos.apellido,
-      telefono: datos.telefono,
-      tarifa: datos.tarifa,
+  const fila = await prisma.$transaction(async (tx) => {
+    const creada = await tx.paciente.create({
+      data: {
+        nombre: datos.nombre,
+        apellido: datos.apellido,
+        telefono: datos.telefono,
+        tarifa: datos.tarifa,
+        organizationId,
+        ...cifrarPaciente(id, { notas: datos.notas }),
+      },
+    });
+    // Sólo el id: ni nombre ni teléfono ni notas entran al rastro.
+    await auditar(tx, {
       organizationId,
-      ...cifrarPaciente(id, { notas: datos.notas }),
-    },
+      actorTipo: "usuario",
+      actorId: usuarioId,
+      accion: ACCIONES.paciente.crear,
+      entidad: "paciente",
+      entidadId: creada.id,
+    });
+    return creada;
   });
 
   // Las notas recién escritas: no hace falta descifrar lo que se acaba de
@@ -136,20 +155,48 @@ export async function crearPaciente({
   return toPaciente({ ...fila, notas: datos.notas });
 }
 
+/** Lo que contesta PATCH /api/pacientes/[id]: la paciente y cuántos turnos
+ *  futuros tomaron la tarifa nueva. Contrato con las pantallas. */
+export type PacienteActualizado = Paciente & { turnosActualizados: number };
+
 export interface ActualizarPacienteInput {
   prisma: ClientePrisma;
   organizationId: string;
   pacienteId: string;
   /** Los campos ausentes no se tocan. `activo` es el alta y la baja lógica. */
   cambios: Partial<DatosPaciente> & { activo?: boolean };
-  /** Quién archiva, para el evento de auditoría. */
-  usuarioId?: string | null;
+  /** Quién edita o archiva, para el evento de auditoría. */
+  usuarioId: string;
   /** Momento del acto. Inyectado para que el caso sea determinista. */
   ahora?: Date;
 }
 
-export const ACCION_ARCHIVAR = "paciente.archivar";
+/** Los campos de la ficha que se comparan con lo guardado para saber qué
+ *  cambió. `notas` va cifrada: si vino, cuenta como cambiada. */
+const CAMPOS_COMPARABLES = ["nombre", "apellido", "telefono", "tarifa", "activo"] as const;
 
+/**
+ * Edita la ficha, en UNA transacción con su rastro:
+ *
+ *   - archivar (`activo: false` sobre una activa) apaga sus SMS pendientes y
+ *     deja paciente.archivar. Si ya estaba archivada igual barre lo que haya
+ *     quedado pendiente, y sólo audita si apagó algo.
+ *   - cualquier otro campo que cambie deja paciente.editar con los NOMBRES de
+ *     los campos (nunca los valores: nombre, teléfono y notas son datos de la
+ *     paciente).
+ *
+ *   - si cambia la tarifa, la nueva alcanza a sus turnos `programado` con
+ *     fecha futura que no estén cobrados (`tarifaCobrada`). Nunca a los
+ *     pasados, realizados, ausentes, cancelados ni cobrados: lo que ya pasó
+ *     o ya se cobró se cobró a la tarifa de su día. El 30-sep Mariana bajó
+ *     dos pacientes de 2.600 a 1.400 y les quedaron 6 turnos futuros a 2.600.
+ *
+ * La fila se bloquea antes de leerla: lo que se compara para decidir qué
+ * cambió es lo que está guardado, no lo que leyó otro pedido en paralelo.
+ *
+ * Devuelve la paciente y `turnosActualizados` (0 si la tarifa no cambió):
+ * es lo que el PATCH contesta, para que la pantalla pueda decirlo.
+ */
 export async function actualizarPaciente({
   prisma,
   organizationId,
@@ -157,7 +204,7 @@ export async function actualizarPaciente({
   cambios,
   usuarioId,
   ahora = new Date(),
-}: ActualizarPacienteInput): Promise<Paciente> {
+}: ActualizarPacienteInput): Promise<PacienteActualizado> {
   const { notas, ...resto } = cambios;
   // El `id` que devuelve cifrarPaciente es para los create: acá el WHERE ya
   // lo tiene. `undefined` no toca la nota.
@@ -168,25 +215,54 @@ export async function actualizarPaciente({
   const data = { ...resto, ...notasCifradas };
   const hayCambios = Object.values(data).some((v) => v !== undefined);
 
-  if (cambios.activo === false) {
-    await prisma.$transaction(async (tx) => {
-      // Primero la transición activa → archivada, condicionada: el count dice
-      // si ESTE pedido la archivó (dos pedidos a la vez no auditan dos veces).
-      const { count: archivada } = await tx.paciente.updateMany({
-        where: { id: pacienteId, organizationId, activo: true },
-        data,
-      });
-      if (archivada === 0) {
-        // Ya estaba archivada (o no existe): se aplican los demás cambios.
-        const { count } = await tx.paciente.updateMany({
-          where: { id: pacienteId, organizationId },
-          data,
-        });
-        if (count === 0) {
-          throw new ApiError("Paciente no encontrado", 404);
-        }
-      }
+  const turnosActualizados = await prisma.$transaction(async (tx) => {
+    // NO KEY: serializa dos ediciones de la ficha sin frenar el alta de un
+    // turno (su INSERT toma KEY SHARE sobre esta fila).
+    await tx.$queryRaw`SELECT id FROM pacientes
+      WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR NO KEY UPDATE`;
+    const actual = await tx.paciente.findFirst({
+      where: { id: pacienteId, organizationId },
+      select: { nombre: true, apellido: true, telefono: true, tarifa: true, activo: true },
+    });
+    if (!actual) throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
 
+    if (hayCambios) {
+      // La organización va en el WHERE de la escritura, no sólo en la lectura:
+      // `update({ where: { id } })` escribe la fila aunque sea de otra.
+      await tx.paciente.updateMany({ where: { id: pacienteId, organizationId }, data });
+    }
+
+    const cambiaTarifa = cambios.tarifa !== undefined && cambios.tarifa !== actual.tarifa;
+    const { count: turnosActualizados } = cambiaTarifa
+      ? await tx.turno.updateMany({
+          where: {
+            organizationId,
+            pacienteId,
+            estado: "programado",
+            fecha: { gt: ahora },
+            pagoEstado: "pendiente",
+          },
+          data: { tarifaCobrada: cambios.tarifa },
+        })
+      : { count: 0 };
+
+    const auditarComo = (
+      accion: typeof ACCIONES.paciente.archivar | typeof ACCIONES.paciente.editar,
+      detalle: Record<string, unknown>,
+    ) =>
+      auditar(tx, {
+        organizationId,
+        actorTipo: "usuario",
+        actorId: usuarioId,
+        entidad: "paciente",
+        entidadId: pacienteId,
+        accion,
+        creadoEn: ahora,
+        detalle,
+      });
+
+    const archiva = cambios.activo === false;
+    if (archiva) {
       // Se apaga aunque ya estuviera archivada: limpia lo que haya quedado
       // pendiente de antes de que archivar cancelara los SMS.
       const enviosCancelados = await cancelarEnviosDeLaPaciente(
@@ -195,45 +271,32 @@ export async function actualizarPaciente({
         MOTIVO_PACIENTE_ARCHIVADA,
         ahora,
       );
-
-      if (archivada > 0 || enviosCancelados > 0) {
-        await auditar(tx, {
-          organizationId,
-          actorTipo: "usuario",
-          actorId: usuarioId ?? null,
-          entidad: "paciente",
-          entidadId: pacienteId,
-          accion: ACCION_ARCHIVAR,
-          creadoEn: ahora,
-          detalle: { enviosCancelados, yaEstabaArchivada: archivada === 0 },
-        });
+      if (actual.activo || enviosCancelados > 0) {
+        await auditarComo(ACCIONES.paciente.archivar, { enviosCancelados, yaEstabaArchivada: !actual.activo });
       }
-    });
-  } else if (hayCambios) {
-    // La organización va en el WHERE de la escritura, no sólo en un chequeo
-    // previo: `update({ where: { id } })` escribe la fila aunque sea de otra
-    // organización, y entre el chequeo y la escritura hay una ventana. Con
-    // updateMany + count la pertenencia es parte de la operación.
-    const { count } = await prisma.paciente.updateMany({
-      where: { id: pacienteId, organizationId },
-      data,
-    });
-
-    if (count === 0) {
-      throw new ApiError("Paciente no encontrado", 404);
     }
-  }
 
-  // Un body vacío no escribe nada (updateMany con data: {} no toca filas y
-  // devolvería count 0): se lee y se devuelve tal cual, con la organización
-  // en el WHERE.
+    const campos = [
+      ...CAMPOS_COMPARABLES.filter(
+        (campo) => cambios[campo] !== undefined && cambios[campo] !== actual[campo] && !(archiva && campo === "activo"),
+      ),
+      ...(notas !== undefined ? ["notas"] : []),
+    ];
+    if (campos.length > 0) {
+      await auditarComo(ACCIONES.paciente.editar, { campos, ...(cambiaTarifa ? { turnosActualizados } : {}) });
+    }
+    return turnosActualizados;
+  });
+
+  // Un body vacío no escribe nada: se lee y se devuelve tal cual, con la
+  // organización en el WHERE.
   const fila = await prisma.paciente.findFirst({
     where: { id: pacienteId, organizationId },
   });
 
   if (!fila) {
-    throw new ApiError("Paciente no encontrado", 404);
+    throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
   }
 
-  return toPaciente(fila);
+  return { ...toPaciente(fila), turnosActualizados };
 }

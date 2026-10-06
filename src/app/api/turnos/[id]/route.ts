@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../../_lib/auth";
+import { getSessionActor } from "../../_lib/auth";
 import { actualizarTurno } from "../../_lib/casos-uso/turnos";
 import { turnoUpdateSchema } from "../../_lib/schemas";
 import { errorResponse, leerJson, ok, validationError } from "../../_lib/responses";
@@ -18,7 +18,7 @@ type RouteParams = {
 // body y se responde.
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
     const body = await leerJson(request);
     const parsed = turnoUpdateSchema.safeParse(body);
@@ -42,6 +42,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         estado: parsed.data.estado,
       },
       ahora: new Date(),
+      usuarioId: userId,
     });
 
     return ok(turno);

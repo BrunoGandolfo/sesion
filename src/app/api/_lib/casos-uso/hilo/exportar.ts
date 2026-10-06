@@ -17,12 +17,12 @@
 // el registro falla, no salen datos. A diferencia de registrarAuditoria, que
 // se traga el error, acá exportar sin rastro no es una opción.
 
-import { ACCION_EXPORTAR_RECORRIDO } from "@/lib/consentimiento-hechos";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
 import { contenidoHiloSchema, type ResumenVersionHilo, type VersionHilo } from "@/lib/hilo/contenido";
 
 import { auditar } from "../../auditoria";
-import { ApiError } from "../../responses";
+import { requirePaciente } from "../../pacientes";
 import type { ProgresoClinico } from "../progreso-clinico";
 import { aResumen, filtroHilo, resumenSelect, whereAprobadasDe, type BaseHilo, type IdentidadHilo } from "./base";
 import { leerProgreso } from "./progreso";
@@ -50,11 +50,7 @@ export async function exportarRecorrido(
   ahora = new Date(),
 ): Promise<ExportacionRecorrido> {
   return prisma.$transaction(async tx => {
-    const paciente = await tx.paciente.findFirst({
-      where: { id: identidad.pacienteId, organizationId: identidad.organizationId },
-      select: { nombre: true, apellido: true },
-    });
-    if (!paciente) throw new ApiError("Paciente no encontrado", 404);
+    const paciente = await requirePaciente(tx, identidad.pacienteId, identidad.organizationId, { nombre: true, apellido: true });
 
     const configuracion = await tx.configuracion.findUnique({
       where: { organizationId: identidad.organizationId }, select: { nombreProfesional: true },
@@ -87,7 +83,7 @@ export async function exportarRecorrido(
 
     await auditar(tx, {
       organizationId: identidad.organizationId, actorTipo: "usuario", actorId: usuarioId,
-      accion: ACCION_EXPORTAR_RECORRIDO, entidad: "hilo", entidadId: identidad.pacienteId,
+      accion: ACCIONES.hilo.exportarPdf, entidad: "hilo", entidadId: identidad.pacienteId,
       detalle: {
         vigente: vigente?.version ?? null,
         versiones: filas.length,

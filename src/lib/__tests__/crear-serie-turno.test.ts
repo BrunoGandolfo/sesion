@@ -112,6 +112,7 @@ function base(orgId: string, pacienteId: string) {
   return {
     prisma: db,
     organizationId: orgId,
+    usuarioId: "usuaria-de-prueba",
     pacienteId,
     fecha: ANCLA,
     duracion: 50 as const,
@@ -310,6 +311,7 @@ describe("cada turno de la serie es independiente", () => {
     const movido = await actualizarTurno({
       prisma: db,
       organizationId: orgId,
+      usuarioId: "usuaria-de-prueba",
       turnoId: tercero.id,
       cambios: { fecha: nuevaFecha },
       ahora: AHORA,
@@ -331,6 +333,7 @@ describe("cada turno de la serie es independiente", () => {
     await actualizarTurno({
       prisma: db,
       organizationId: orgId,
+      usuarioId: "usuaria-de-prueba",
       turnoId: turnos[1].id,
       cambios: { estado: "cancelado" },
       ahora: AHORA,
@@ -374,6 +377,7 @@ describe("cancelarRestoDeSerie", () => {
     const resultado = await cancelarRestoDeSerie({
       prisma: db,
       organizationId: orgId,
+      usuarioId: "usuaria-de-prueba",
       turnoId: turnos[4].id,
     });
 
@@ -409,7 +413,7 @@ describe("cancelarRestoDeSerie", () => {
     const creado = await crearTurno({ ...base(orgId, pacienteId), frecuencia: "unico" });
 
     await expect(
-      cancelarRestoDeSerie({ prisma: db, organizationId: orgId, turnoId: creado.id }),
+      cancelarRestoDeSerie({ prisma: db, organizationId: orgId, usuarioId: "usuaria-de-prueba", turnoId: creado.id }),
     ).rejects.toMatchObject({ message: MENSAJE_SIN_SERIE, status: 400 });
     expect((await prismaRaw.turno.findUniqueOrThrow({ where: { id: creado.id } })).estado).toBe("programado");
   });
@@ -420,7 +424,7 @@ describe("cancelarRestoDeSerie", () => {
     const creado = await crearTurno({ ...base(orgId, pacienteId), frecuencia: "semanal" });
 
     await expect(
-      cancelarRestoDeSerie({ prisma: db, organizationId: otra.orgId, turnoId: creado.id }),
+      cancelarRestoDeSerie({ prisma: db, organizationId: otra.orgId, usuarioId: "usuaria-de-prueba", turnoId: creado.id }),
     ).rejects.toMatchObject({ status: 404 });
     const turnos = await turnosDeSerie(creado.serie!.id);
     expect(turnos.every((t) => t.estado === "programado")).toBe(true);

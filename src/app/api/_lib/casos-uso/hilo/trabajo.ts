@@ -7,6 +7,7 @@ import { ApiError } from "../../responses";
 import type { Adjuntador } from "../trabajos/entregar";
 import type { Aplicador } from "../trabajos/resultado-worker";
 import { auditarHilo, bloquearHilo, insertarVersion, leerVersion, whereAprobadasDe } from "./base";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export function versionDelTrabajo(payload: unknown): number {
   const version = (payload as { basadaEnVersion?: unknown } | null)?.basadaEnVersion;
@@ -51,5 +52,5 @@ export const aplicarPropuesta: Aplicador = async (tx, trabajo, resultado, _resol
     contenido, actor: "ia", estado, basadaEnVersion, sesionOrigenId: trabajo.sesionId,
     promptVersion: resultado.promptVersion, modeloLlm: resultado.modeloLlm, ahora,
   });
-  await auditarHilo(tx, identidad, "hilo.proponer", nueva.version, null, ahora, trabajo.trabajoId);
+  await auditarHilo(tx, identidad, ACCIONES.hilo.proponer, nueva.version, null, ahora, trabajo.trabajoId);
 };

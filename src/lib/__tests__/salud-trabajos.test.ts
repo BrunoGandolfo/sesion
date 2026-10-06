@@ -1,10 +1,12 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EstadoTrabajo } from "@prisma/client";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { conectarBaseDeTest, vaciarTablas } from "./db-test";
 import { CLAVES_CIFRADO_TEST } from "./base-identidad";
 import { enviarCorreo } from "@/lib/correo";
 import { GET } from "@/app/api/cron/salud/route";
+import { huellaDeAviso, VENTANA_AVISO_REPETIDO_MS } from "@/app/api/_lib/casos-uso/salud";
+import { cifrarHiloVersion } from "@/lib/prisma-encryption";
 
 let base: ReturnType<typeof conectarBaseDeTest>;
 let organizationId: string;
@@ -149,4 +151,183 @@ it("más eventos que actos no inventa una alarma negativa", async () => {
   const metrica = cuerpo.metricas.find((m: { nombre: string }) => m.nombre === "auditoria_rastros_perdidos_24h");
   expect(metrica.valor).toBe(0);
   expect(cuerpo.alertas).toEqual([]);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// integrar_contexto que espera a la profesional
+//
+// La regla de encadenado (trabajos/reclamar.ts) no entrega una integración
+// mientras la paciente tenga una propuesta del Recorrido sin resolver. Ese
+// trabajo no está atrasado: espera. El 29-sep dos de estos mandaron un correo
+// por hora durante un día.
+// ────────────────────────────────────────────────────────────────────────────
+
+async function pacienteConIntegracionVieja(opciones: { propuestaAbierta: boolean }) {
+  const paciente = await base.prisma.paciente.create({
+    data: { nombre: "Ana", apellido: "X", telefono: "+59899000001", tarifa: 1000, organizationId },
+  });
+  if (opciones.propuestaAbierta) {
+    await base.db.hilo.create({ data: { pacienteId: paciente.id, organizationId } });
+    await base.db.hiloVersion.create({ data: {
+      ...cifrarHiloVersion(crypto.randomUUID(), { contenido: { resumen: "propuesta" } }),
+      pacienteId: paciente.id, organizationId, version: 1, actor: "ia", estado: "propuesta",
+    } });
+  }
+  await base.prisma.trabajo.create({ data: {
+    organizationId, pacienteId: paciente.id, tipo: "integrar_contexto", ejecutor: "worker", estado: "pendiente",
+    payload: {}, creadoEn: new Date(Date.now() - 30 * 3600000),
+  } });
+}
+
+const correr = async (ahora?: Date) => {
+  if (ahora) {
+    vi.setSystemTime(ahora);
+    // El worker sigue vivo a esa hora: si no, su monitor cambia el aviso.
+    await base.prisma.workerEstado.update({ where: { id: "worker" }, data: { ultimoPollEn: ahora } });
+  }
+  return (await GET(new Request("http://localhost/api/cron/salud"))).json();
+};
+
+it("una integrar_contexto bloqueada por una propuesta abierta no cuenta como atrasada", async () => {
+  await pacienteConIntegracionVieja({ propuestaAbierta: true });
+  const cuerpo = await correr();
+  expect(cuerpo.metricas.find((m: { nombre: string }) => m.nombre === "trabajos_atrasados").valor).toBe(0);
+  expect(cuerpo.alertas).toEqual([]);
+  expect(enviarCorreo).not.toHaveBeenCalled();
+});
+
+it("la misma integrar_contexto sin propuesta abierta sí está atrasada", async () => {
+  await pacienteConIntegracionVieja({ propuestaAbierta: false });
+  const cuerpo = await correr();
+  expect(cuerpo.alertas).toEqual(["trabajos_atrasados"]);
+});
+
+it("detrás de otra integración vieja, la segunda espera y sólo cuenta la primera", async () => {
+  await pacienteConIntegracionVieja({ propuestaAbierta: false });
+  const [primera] = await base.prisma.trabajo.findMany();
+  await base.prisma.trabajo.create({ data: {
+    organizationId, pacienteId: primera.pacienteId, tipo: "integrar_contexto", ejecutor: "worker", estado: "pendiente",
+    payload: {}, creadoEn: new Date(Date.now() - 26 * 3600000),
+  } });
+  const cuerpo = await correr();
+  expect(cuerpo.metricas.find((m: { nombre: string }) => m.nombre === "trabajos_atrasados").valor).toBe(1);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// El mismo aviso no se repite cada hora
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("aviso repetido", () => {
+  const T0 = new Date("2026-10-06T12:00:00.000Z");
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  async function fallido() {
+    await base.prisma.trabajo.create({ data: {
+      organizationId, tipo: "borrar_audio_r2", ejecutor: "app", estado: "fallido", payload: {}, creadoEn: T0,
+    } });
+  }
+
+  it("dos corridas seguidas con el mismo estado mandan un solo correo", async () => {
+    await fallido();
+    const primera = await correr(T0);
+    const segunda = await correr(new Date(T0.getTime() + 3600000));
+
+    expect(primera).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+    expect(segunda).toMatchObject({ alertas: ["trabajos_fallidos"], alertaEnviada: false, avisoRepetido: true });
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+    // La constancia: un evento del sistema, con la huella y sin texto.
+    const [evento] = await base.prisma.eventoAuditoria.findMany({ where: { accion: "salud.aviso" } });
+    expect(evento).toMatchObject({ actorTipo: "sistema", organizationId: "sistema", entidad: "salud", detalle: { nivel: "aviso", metricas: ["trabajos_fallidos"] } });
+    expect(evento.entidadId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  async function atrasado() {
+    await base.prisma.trabajo.create({ data: {
+      organizationId, tipo: "borrar_audio_r2", ejecutor: "app", estado: "pendiente", payload: {},
+      creadoEn: new Date(T0.getTime() - 30 * 3600000),
+    } });
+  }
+
+  it("la misma métrica con otro número no es un aviso nuevo; el número va en el correo", async () => {
+    await fallido();
+    await correr(T0);
+    await fallido(); // ahora son dos
+    const segunda = await correr(new Date(T0.getTime() + 3600000));
+    await fallido(); // tres
+    const tercera = await correr(new Date(T0.getTime() + 2 * 3600000));
+
+    expect(segunda).toMatchObject({ alertaEnviada: false, avisoRepetido: true });
+    expect(tercera).toMatchObject({ alertaEnviada: false, avisoRepetido: true });
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(enviarCorreo).mock.calls[0][0].texto).toContain("1 tareas fallidas");
+  });
+
+  it("si cambia el conjunto de métricas, sale enseguida con los números de ahora", async () => {
+    await fallido();
+    await correr(T0);
+    await atrasado();
+    const segunda = await correr(new Date(T0.getTime() + 3600000));
+
+    expect(segunda).toMatchObject({ alertas: ["trabajos_fallidos", "trabajos_atrasados"], alertaEnviada: true });
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
+  it("si cambia el nivel, la huella es otra", () => {
+    const metrica = { nombre: "trabajos_fallidos", valor: 1, umbral: 1, texto: "x" };
+    const aviso = { nivel: "aviso" as const, alertas: [{ ...metrica, nivel: "aviso" as const }] };
+    const critico = { nivel: "critico" as const, alertas: [{ ...metrica, nivel: "critico" as const }] };
+    const otroNumero = { ...aviso, alertas: [{ ...aviso.alertas[0], valor: 7, texto: "y" }] };
+    expect(huellaDeAviso(aviso)).not.toBe(huellaDeAviso(critico));
+    expect(huellaDeAviso(aviso)).toBe(huellaDeAviso(otroNumero));
+  });
+
+  it("pasadas 24 h el mismo aviso vuelve a salir una vez", async () => {
+    await fallido();
+    await correr(T0);
+    await correr(new Date(T0.getTime() + VENTANA_AVISO_REPETIDO_MS - 60000));
+    const despues = await correr(new Date(T0.getTime() + VENTANA_AVISO_REPETIDO_MS + 60000));
+
+    expect(despues).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
+  it("si se resolvió y reaparece igual dentro de las 24 h, es otro incidente: avisa", async () => {
+    await fallido();
+    await correr(T0);
+    await base.prisma.trabajo.updateMany({ data: { estado: "hecho" } });
+    const sano = await correr(new Date(T0.getTime() + 3600000));
+    await correr(new Date(T0.getTime() + 2 * 3600000));
+    // La vuelta a la normalidad se anota una sola vez, no cada hora sana.
+    expect(await base.prisma.eventoAuditoria.count({ where: { accion: "salud.normal" } })).toBe(1);
+    await fallido();
+    const otraVez = await correr(new Date(T0.getTime() + 3 * 3600000));
+
+    expect(sano.alertas).toEqual([]);
+    expect(otraVez).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
+  it("A → B → A: volver al primer conjunto también es un cambio, y avisa", async () => {
+    await fallido();
+    await correr(T0); // A: fallidos
+    await atrasado();
+    await correr(new Date(T0.getTime() + 3600000)); // B: fallidos y atrasados
+    await base.prisma.trabajo.updateMany({ where: { estado: "pendiente" }, data: { estado: "hecho" } });
+    const deVuelta = await correr(new Date(T0.getTime() + 2 * 3600000)); // A otra vez
+
+    expect(deVuelta).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+    expect(enviarCorreo).toHaveBeenCalledTimes(3);
+  });
+
+  it("un correo que no salió no cuenta como enviado: la próxima corrida lo intenta", async () => {
+    await fallido();
+    vi.mocked(enviarCorreo).mockRejectedValue(new Error("Resend caído"));
+    const primera = await correr(T0);
+    vi.mocked(enviarCorreo).mockResolvedValue(undefined);
+    const segunda = await correr(new Date(T0.getTime() + 3600000));
+
+    expect(primera.alertaEnviada).toBe(false);
+    expect(segunda).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+  });
 });

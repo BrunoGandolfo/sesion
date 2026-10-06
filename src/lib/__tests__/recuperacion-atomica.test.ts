@@ -23,7 +23,7 @@ vi.mock("@/lib/db", () => ({ get db() { return estado.base.db; } }));
 const ahora = new Date("2026-09-10T12:00:00Z");
 const huella = { ip: "203.0.113.7", userAgent: "vitest" };
 const token = "a".repeat(64);
-const deps = { comparar: bcrypt.compare, hashear: (p: string) => bcrypt.hash(p, BCRYPT_RONDAS) };
+const deps = { comparar: bcrypt.compare, hashear: (p: string) => bcrypt.hash(p, BCRYPT_RONDAS), get auditoria() { return estado.base.db; } };
 
 beforeAll(() => {
   process.env.CLAVES_CIFRADO = CLAVES_CIFRADO_TEST;

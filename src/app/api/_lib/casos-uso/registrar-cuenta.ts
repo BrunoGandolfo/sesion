@@ -20,6 +20,10 @@ import { CUENTA_INVITAR_NO_PERMITIDO,
 import { cupoInvitacion, type ContadorInvitaciones, type CupoInvitacion } from "@/lib/limites-prueba";
 import { validarPasswordNueva } from "@/lib/password";
 
+import { ACCIONES } from "@/lib/auditoria-acciones";
+
+import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
+import { normalizarEmail } from "../email";
 import { ApiError } from "../responses";
 
 export const VIGENCIA_INVITACION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -38,9 +42,9 @@ export function puedeInvitar(
   if (actor.rol !== "titular") return false;
   const lista = (permitidas ?? "")
     .split(",")
-    .map((e) => e.trim().toLowerCase())
+    .map(normalizarEmail)
     .filter(Boolean);
-  return lista.includes(actor.email.trim().toLowerCase());
+  return lista.includes(normalizarEmail(actor.email));
 }
 
 export interface InvitacionGuardada {
@@ -90,13 +94,18 @@ export interface RepositorioRegistro {
 
 export interface ActorInvitante {
   userId: string;
+  organizationId: string;
   email: string;
   rol: string;
 }
 
 export async function crearInvitacion(
   actor: ActorInvitante,
-  repo: RepositorioRegistro,
+  { repo, auditoria }: {
+    repo: RepositorioRegistro;
+    /** Dónde queda cuenta.invitacion_creada: `db`. Informativo. */
+    auditoria: ClienteAuditoria;
+  },
   ahora = new Date(),
 ): Promise<{ enlace: string; vence: string; invitacionId: string }> {
   if (!puedeInvitar(actor)) throw new ApiError(CUENTA_INVITAR_NO_PERMITIDO, 403);
@@ -109,6 +118,16 @@ export async function crearInvitacion(
     creadaEn: ahora,
   });
   if (!("id" in creada)) throw new ApiError(motivoSinCupo(creada), 429);
+  // Sin token ni email: solo que se creó y cuándo vence.
+  await registrarAuditoria(auditoria, {
+    organizationId: actor.organizationId,
+    actorTipo: "usuario",
+    actorId: actor.userId,
+    accion: ACCIONES.cuenta.invitacionCreada,
+    entidad: "usuario",
+    entidadId: actor.userId,
+    detalle: { invitacionId: creada.id, vence: venceEn.toISOString() },
+  });
   return { enlace: `${ORIGEN_CUENTA}/registro?token=${token}`, vence: venceEn.toISOString(), invitacionId: creada.id };
 }
 
@@ -155,7 +174,7 @@ export async function registrarCuenta(
   },
 ): Promise<{ userId: string; organizationId: string; sesionId: string }> {
   if (datos.aceptaTerminos !== true) throw new ApiError(ENTRADA_TERMINOS_REQUERIDOS, 400);
-  const email = datos.email.trim().toLowerCase();
+  const email = normalizarEmail(datos.email);
   const nombre = datos.nombre.trim();
   if (!nombre || nombre.length > 120 || !z.string().email().max(254).safeParse(email).success) {
     throw new ApiError(ENTRADA_REGISTRO_ERROR, 400);

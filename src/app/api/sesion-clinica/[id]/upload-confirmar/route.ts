@@ -1,14 +1,15 @@
 // Paso 3 de la subida: el único cierre de la grabación. El servidor pregunta
 // a R2 (HeadObject) si el objeto está; si no, la sesión vuelve a grabando y
-// responde 409 para que el teléfono repita. Si está, subiendo → procesando.
+// responde 409 (codigo "audio_no_llego") para que el teléfono repita. Si
+// está, subiendo → procesando. El rastro de los dos desenlaces lo deja el
+// caso de uso.
 
 import { db } from "@/lib/db";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { exigirR2 } from "../../../_lib/exigir-r2";
-import { confirmarSubida, diagnosticoParaAuditoria, MENSAJE_NO_LLEGO } from "../../../_lib/casos-uso/audio";
-import { ApiError, errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
+import { confirmarSubida } from "../../../_lib/casos-uso/audio";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { uploadConfirmarSchema } from "../../../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -25,24 +26,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!parsed.success) return validationError(parsed.error);
 
     const almacen = exigirR2();
-
-    const auditar = (detalle: Record<string, unknown>) =>
-      registrarAuditoria(db, { organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.subir_audio_fin", entidad: "sesion_clinica", entidadId: id, detalle });
-
-    try {
-      const { diagnostico, ...cierre } = parsed.data;
-      const { bytes, sesion } = await confirmarSubida({ prisma: db, organizationId, sesionId: id, ...cierre, almacen });
-      // El diagnóstico del grabador queda acá y sólo acá: horas, motivos y
-      // conteos para no volver a adivinar por qué se cortó una grabación. Va
-      // aplanado: la auditoría descarta los objetos anidados sin avisar.
-      await auditar({ ok: true, duracionAudioSeg: cierre.duracionAudioSeg, bytes, ...(diagnostico ? diagnosticoParaAuditoria(diagnostico) : {}) });
-      return ok(sesion);
-    } catch (error) {
-      if (error instanceof ApiError && error.message === MENSAJE_NO_LLEGO) {
-        await auditar({ ok: false, motivo: "objeto_ausente" });
-      }
-      throw error;
-    }
+    return ok(await confirmarSubida({ prisma: db, organizationId, sesionId: id, usuarioId: userId, ...parsed.data, almacen }));
   } catch (error) {
     return errorResponse(error);
   }

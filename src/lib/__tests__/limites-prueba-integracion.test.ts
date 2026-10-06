@@ -3,6 +3,7 @@
  * Contra la base de test (DATABASE_URL_TEST).
  */
 
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 
 import { prepararAudio } from "@/app/api/_lib/casos-uso/audio";
@@ -40,7 +41,7 @@ async function turno(organizationId: string, pacienteId: string) {
 }
 
 async function grabar(organizationId: string, pacienteId: string) {
-  return prepararAudio({ prisma: base.db, organizationId, turnoId: await turno(organizationId, pacienteId) });
+  return prepararAudio({ prisma: base.db, organizationId, usuarioId: "usuaria-de-prueba", turnoId: await turno(organizationId, pacienteId) });
 }
 
 // Que la ruta POST /api/sesion-clinica pasa por prepararAudio lo prueba
@@ -55,13 +56,16 @@ test(`un consultorio invitado graba ${TOPE_GRABACIONES_PRUEBA} y no puede inicia
   expect(await leerEstadoPrueba({ prisma: base.db, organizationId })).toEqual({ usadas: 15, restantes: 0, tope: 15 });
 
   const turnoDieciseis = await turno(organizationId, pacienteId);
-  await expect(prepararAudio({ prisma: base.db, organizationId, turnoId: turnoDieciseis })).rejects.toMatchObject({ status: 403, message: PRUEBA_TOPE });
+  await expect(prepararAudio({ prisma: base.db, organizationId, usuarioId: "usuaria-de-prueba", turnoId: turnoDieciseis })).rejects.toMatchObject({ status: 403, message: PRUEBA_TOPE });
   expect(PRUEBA_TOPE).toContain("hablá con quien te invitó");
   expect(await base.prisma.sesionClinica.count({ where: { organizationId } })).toBe(15);
 
   // Reanudar una grabación ya iniciada no es una nueva: sigue andando y no suma.
   const turnoDeLaPrimera = (await base.prisma.sesionClinica.findUniqueOrThrow({ where: { id: grabadas[0].id } })).turnoId;
-  expect(await prepararAudio({ prisma: base.db, organizationId, turnoId: turnoDeLaPrimera })).toEqual({ id: grabadas[0].id });
+  expect(await prepararAudio({ prisma: base.db, organizationId, usuarioId: "usuaria-de-prueba", turnoId: turnoDeLaPrimera })).toEqual({ id: grabadas[0].id });
+  // sesion.crear lo deja la creación, en su transacción: quince grabaciones,
+  // quince eventos. Ni el rechazo del tope ni la reanudación agregan uno.
+  expect(await base.prisma.eventoAuditoria.count({ where: { organizationId, accion: ACCIONES.sesion.crear } })).toBe(15);
   expect((await base.prisma.organization.findUniqueOrThrow({ where: { id: organizationId } })).grabacionesIniciadas).toBe(15);
 });
 
@@ -85,8 +89,8 @@ test("dos inicios a la vez con una sola grabación restante: pasa uno", async ()
 test("en el tope, lo demás del consultorio invitado sigue sin límite: pacientes, agenda y cobros", async () => {
   const { organizationId } = await consultorio(true);
   await base.prisma.organization.update({ where: { id: organizationId }, data: { grabacionesIniciadas: TOPE_GRABACIONES_PRUEBA } });
-  const paciente = await crearPaciente({ prisma: base.db, organizationId, datos: { nombre: "Nueva", apellido: "Paciente", telefono: "", tarifa: 1000, notas: null } });
-  const { id: turnoId } = await crearTurno({ prisma: base.db, organizationId, pacienteId: paciente.id, fecha: new Date(Date.now() - 3 * 60 * 60 * 1000), duracion: 50, modalidad: "presencial", notas: null, frecuencia: "unico", ahora: new Date() });
+  const paciente = await crearPaciente({ prisma: base.db, organizationId, usuarioId: "usuaria-de-prueba", datos: { nombre: "Nueva", apellido: "Paciente", telefono: "", tarifa: 1000, notas: null } });
+  const { id: turnoId } = await crearTurno({ prisma: base.db, organizationId, usuarioId: "usuaria-de-prueba", pacienteId: paciente.id, fecha: new Date(Date.now() - 3 * 60 * 60 * 1000), duracion: 50, modalidad: "presencial", notas: null, frecuencia: "unico", ahora: new Date() });
   expect((await cobrarTurno({ prisma: base.db, organizationId, turnoId, metodo: "efectivo", fecha: new Date() })).pagoEstado).toBe("pagado");
 });
 

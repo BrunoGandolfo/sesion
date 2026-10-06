@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../_lib/auth";
+import { getOrganizationId, getSessionActor } from "../_lib/auth";
 import { crearTurno } from "../_lib/casos-uso/crear-turno";
 import { listarTurnos } from "../_lib/casos-uso/turnos";
 import {
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const body = await leerJson(request);
     const parsed = turnoCreateSchema.safeParse(body);
 
@@ -76,6 +76,7 @@ export async function POST(request: Request) {
       frecuencia: parsed.data.frecuencia,
       alGrabar: parsed.data.alGrabar ?? false,
       ahora: new Date(),
+      usuarioId: userId,
     });
 
     return ok(turno, 201);

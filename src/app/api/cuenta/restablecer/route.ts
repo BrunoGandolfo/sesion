@@ -6,7 +6,6 @@ import { db } from "@/lib/db";
 import { ENTRADA_CUENTA_ERROR } from "@/lib/glosario";
 import { BCRYPT_RONDAS } from "@/lib/password";
 
-import { registrarAuditoria } from "../../_lib/auditoria";
 import { restablecerCuenta } from "../../_lib/casos-uso/recuperar-cuenta";
 import { ApiError, errorResponse, leerJson, ok } from "../../_lib/responses";
 
@@ -18,14 +17,11 @@ const schema = z.object({ token: z.string().max(64), password: z.string().max(10
 export async function POST(request: Request) {
   try {
     const datos = schema.parse(await leerJson(request));
-    const user = await restablecerCuenta(datos, {
+    await restablecerCuenta(datos, {
       repo: repositorioRecuperacion(db),
       hashear: (password) => bcrypt.hash(password, BCRYPT_RONDAS),
       comparar: bcrypt.compare,
-    });
-    await registrarAuditoria(db, {
-      organizationId: user.organizationId, actorTipo: "usuario", actorId: user.userId,
-      accion: "cuenta.restablecer", entidad: "usuario", entidadId: user.userId,
+      auditoria: db,
     });
     // No inicia sesión: la usuaria entra con la contraseña nueva.
     return ok({ cambiada: true });

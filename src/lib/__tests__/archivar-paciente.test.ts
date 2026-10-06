@@ -14,12 +14,13 @@
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
  *   npx vitest run src/lib/__tests__/archivar-paciente.test.ts
  */
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import type { EstadoEnvioSms, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { ACCION_ARCHIVAR, actualizarPaciente } from "@/app/api/_lib/casos-uso/pacientes";
+import { actualizarPaciente } from "@/app/api/_lib/casos-uso/pacientes";
 import { MOTIVO_PACIENTE_ARCHIVADA } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
@@ -157,7 +158,7 @@ describe("archivar a la paciente", () => {
       organizationId: f.organizationId,
       actorTipo: "usuario",
       actorId: USUARIO,
-      accion: ACCION_ARCHIVAR,
+      accion: ACCIONES.paciente.archivar,
       entidad: "paciente",
       entidadId: f.pacienteId,
       detalle: { enviosCancelados: 2, yaEstabaArchivada: false },
@@ -169,7 +170,7 @@ describe("archivar a la paciente", () => {
     const f = await fixture();
     await archivar(f);
     const [evento] = await eventos();
-    expect(evento).toMatchObject({ accion: ACCION_ARCHIVAR, detalle: { enviosCancelados: 0, yaEstabaArchivada: false } });
+    expect(evento).toMatchObject({ accion: ACCIONES.paciente.archivar, detalle: { enviosCancelados: 0, yaEstabaArchivada: false } });
   });
 
   it("no toca los envíos ya aceptados, entregados, cancelados, fallidos ni desconocidos", async () => {
@@ -249,7 +250,7 @@ describe("archivar a la paciente", () => {
     expect(evento.detalle).toMatchObject({ enviosCancelados: 1, yaEstabaArchivada: true });
   });
 
-  it("volver a activarla NO revive los envíos cancelados, y no audita", async () => {
+  it("volver a activarla NO revive los envíos cancelados; queda como edición, no como archivo", async () => {
     const f = await fixture();
     const id = await envio(f, "pendiente");
     await archivar(f);
@@ -267,10 +268,14 @@ describe("archivar a la paciente", () => {
     const fila = await leer(id);
     expect(fila).toMatchObject({ estado: "cancelado", motivoNoEnvio: MOTIVO_PACIENTE_ARCHIVADA });
     expect(fila.cerradoEn?.getTime()).toBe(AHORA.getTime());
-    expect(await eventos()).toHaveLength(1);
+    // El archivo de antes y la reactivación, que es una edición de `activo`.
+    expect((await eventos()).map((e) => [e.accion, e.detalle])).toEqual([
+      [ACCIONES.paciente.archivar, { enviosCancelados: 1, yaEstabaArchivada: false }],
+      [ACCIONES.paciente.editar, { campos: ["activo"] }],
+    ]);
   });
 
-  it("editar otros datos (sin archivar) no toca los envíos ni audita", async () => {
+  it("editar otros datos (sin archivar) no toca los envíos y deja paciente.editar con el nombre del campo", async () => {
     const f = await fixture();
     const id = await envio(f, "pendiente");
 
@@ -283,7 +288,7 @@ describe("archivar a la paciente", () => {
     });
 
     expect((await leer(id)).estado).toBe("pendiente");
-    expect(await eventos()).toHaveLength(0);
+    expect((await eventos()).map((e) => [e.accion, e.detalle])).toEqual([[ACCIONES.paciente.editar, { campos: ["nombre"] }]]);
   });
 
   it("archivar junto con otros cambios los aplica todos en la misma escritura", async () => {

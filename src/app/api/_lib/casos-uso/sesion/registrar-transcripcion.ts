@@ -21,6 +21,7 @@ import { registrarAuditoria } from "../../auditoria";
 
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { transicionar, type ClienteSesion } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export interface RegistrarTranscripcionInput {
   prisma: ClienteSesion;
@@ -65,7 +66,7 @@ export async function registrarTranscripcion({
     organizationId,
     actorTipo: "worker",
     actorId: null,
-    accion: "sesion.transcripcion_guardada",
+    accion: ACCIONES.sesion.transcripcionGuardada,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: {

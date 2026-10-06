@@ -22,8 +22,10 @@ import {
   type ResultadoMensajes,
   type FlujoMensajes,
 } from "@/lib/anthropic-mensajes";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { systemPromptAyuda } from "@/lib/ayuda-corpus";
 
+import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
 import { ApiError } from "../responses";
 import { HERRAMIENTAS_AYUDA, resolverHerramienta, type ConsultarAgenda } from "./ayuda/herramientas";
 
@@ -45,8 +47,7 @@ export const MAX_TOKENS_RESPUESTA = 1024;
 export const TOPE_PREGUNTAS_DIA = 40;
 
 /** La acción con la que se auditan las preguntas, independiente del cupo. */
-export const ACCION_AYUDA = "ayuda.pregunta";
-export const ENTIDAD_AYUDA = "usuario";
+const ENTIDAD_AYUDA = "usuario";
 
 // ── Mensajes para la usuaria ────────────────────────────────────────────────
 // Explícitos y con nombre: los tests los verifican y no dicen nada de la
@@ -145,6 +146,46 @@ export async function responderAyudaStreaming(
     console.error("[ayuda] fallo del proveedor", error);
     throw new ApiError(MENSAJE_PROVEEDOR_CAIDO, 502);
   }
+}
+
+export interface PreguntaRespondida {
+  prisma: ClienteAuditoria;
+  organizationId: string;
+  userId: string;
+  largoPregunta: number;
+  /** El largo de lo que se le mostró (ya sin markdown). */
+  largoRespuesta: number;
+  turnosHistorial: number;
+  resultado: Pick<ResultadoMensajes, "tokensEntrada" | "tokensSalida" | "cacheLeido">;
+}
+
+/**
+ * El rastro de una pregunta contestada: metadatos y nada más. Cuántos
+ * caracteres tenía la pregunta, cuántos la respuesta, cuántos tokens, qué
+ * modelo, cuánto se leyó del caché. NUNCA el texto de la pregunta ni el de la
+ * respuesta: una pregunta de ayuda puede llevar adentro el nombre de una
+ * paciente ("no me sale la nota de X"), y el registro existe para saber que
+ * algo pasó, no qué decía. Informativo: el cupo ya se reservó antes del
+ * proveedor y la auditoría no decide el límite.
+ */
+export async function registrarPreguntaAyuda(p: PreguntaRespondida): Promise<void> {
+  await registrarAuditoria(p.prisma, {
+    organizationId: p.organizationId,
+    actorTipo: "usuario",
+    actorId: p.userId,
+    accion: ACCIONES.ayuda.pregunta,
+    entidad: ENTIDAD_AYUDA,
+    entidadId: p.userId,
+    detalle: {
+      largoPregunta: p.largoPregunta,
+      largoRespuesta: p.largoRespuesta,
+      turnosHistorial: p.turnosHistorial,
+      modelo: MODELO_AYUDA,
+      tokensEntrada: p.resultado.tokensEntrada,
+      tokensSalida: p.resultado.tokensSalida,
+      cacheLeido: p.resultado.cacheLeido,
+    },
+  });
 }
 
 /** El texto de ayuda sigue llegando por fragmentos. Una consulta de agenda

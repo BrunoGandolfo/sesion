@@ -14,8 +14,10 @@
 // una acción aparte, no una variante.
 
 import { MENSAJE_SIN_SERIE } from "@/lib/glosario";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
 
+import { auditar } from "../auditoria";
 import { TRANSICIONES_TURNO } from "../domain";
 import { ApiError } from "../responses";
 import { cancelarEnviosDelTurno } from "./envios-del-turno";
@@ -29,6 +31,8 @@ export interface CancelarRestoDeSerieInput {
   organizationId: string;
   /** El turno desde el cual se cancela (inclusive). */
   turnoId: string;
+  /** Quién cancela, para turno.cancelar. */
+  usuarioId: string;
 }
 
 export interface RestoDeSerieCancelado {
@@ -41,6 +45,7 @@ export async function cancelarRestoDeSerie({
   prisma,
   organizationId,
   turnoId,
+  usuarioId,
 }: CancelarRestoDeSerieInput): Promise<RestoDeSerieCancelado> {
   return prisma.$transaction(async (tx) => {
     // El lock de agenda PRIMERO, como el PATCH y el alta: así una edición
@@ -94,6 +99,19 @@ export async function cancelarRestoDeSerie({
     });
     for (const { id } of cancelados) {
       await cancelarEnviosDelTurno(tx, id);
+    }
+
+    // Un evento para el acto entero, desde el turno en que se pidió.
+    if (count > 0) {
+      await auditar(tx, {
+        organizationId,
+        actorTipo: "usuario",
+        actorId: usuarioId,
+        accion: ACCIONES.turno.cancelar,
+        entidad: "turno",
+        entidadId: desde.id,
+        detalle: { serieId: desde.serieId, cancelados: count, turnos: cancelados.map((t) => t.id) },
+      });
     }
 
     return { serieId: desde.serieId, cancelados: count };

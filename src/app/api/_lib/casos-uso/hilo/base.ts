@@ -5,7 +5,10 @@ import { contenidoHiloSchema, type ContenidoHilo, type VersionHilo } from "@/lib
 import { OPERACIONES_VERSION } from "@/lib/hilo/versiones";
 import { cifrarHiloVersion } from "@/lib/prisma-encryption";
 
+import { auditar } from "../../auditoria";
+import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
+import { ACCIONES, type AccionAuditoria } from "@/lib/auditoria-acciones";
 
 export type ClienteHilo = Pick<typeof db,
   "paciente" | "hilo" | "hiloVersion" | "trabajo" | "sesionClinica" | "turno" |
@@ -24,9 +27,8 @@ export function aResumen<T extends { creadaEn: Date; resueltaEn: Date | null }>(
 }
 export const CONFLICTO_HILO = "El Recorrido cambió mientras lo revisabas. Tu borrador sigue en esta pantalla; leé la versión actual antes de volver a guardar.";
 
-export async function exigirPaciente(tx: Pick<ClienteHilo, "paciente">, identidad: IdentidadHilo) {
-  const p = await tx.paciente.findFirst({ where: { id: identidad.pacienteId, organizationId: identidad.organizationId }, select: { id: true } });
-  if (!p) throw new ApiError("Paciente no encontrado", 404);
+export function exigirPaciente(tx: Pick<ClienteHilo, "paciente">, identidad: IdentidadHilo) {
+  return requirePaciente(tx, identidad.pacienteId, identidad.organizationId);
 }
 
 /** Único orden de locks: hilo, después trabajo. Lo usan escritores y claims. */
@@ -96,14 +98,15 @@ export async function aplicarVigente(tx: ClienteHilo, identidad: IdentidadHilo, 
     data: { estado: hacia, resueltaEn: ahora, resueltaPorUserId: usuarioId },
   });
   await tx.hilo.update({ where: { pacienteId: identidad.pacienteId }, data: { vigenteId: versionId, actualizadoEn: ahora } });
-  for (const anterior of anteriores) await auditarHilo(tx, identidad, "hilo.desactualizar", anterior.version, usuarioId, ahora);
+  for (const anterior of anteriores) await auditarHilo(tx, identidad, ACCIONES.hilo.desactualizar, anterior.version, usuarioId, ahora);
 }
 
-export async function auditarHilo(tx: ClienteHilo, identidad: IdentidadHilo, accion: string, version: number, usuarioId: string | null, ahora: Date, trabajoId?: string) {
+export async function auditarHilo(tx: ClienteHilo, identidad: IdentidadHilo, accion: AccionAuditoria, version: number, usuarioId: string | null, ahora: Date, trabajoId?: string) {
   const origen = await tx.hiloVersion.findFirst({ where: { ...filtroHilo(identidad), version }, select: { basadaEnVersion: true, sesionOrigenId: true } });
-  await tx.eventoAuditoria.create({ data: {
+  // Con el `tx` del acto: el rastro se confirma junto con la versión.
+  await auditar(tx, {
     organizationId: identidad.organizationId, actorTipo: usuarioId ? "usuario" : "worker",
     actorId: usuarioId, accion, entidad: "hilo", entidadId: identidad.pacienteId,
     detalle: { version, ...origen, ...(trabajoId ? { trabajoId } : {}) }, creadoEn: ahora,
-  } });
+  });
 }

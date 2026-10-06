@@ -23,6 +23,7 @@ import { crearTrabajo } from "../trabajos/crear";
 
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { transicionar, type ClienteTransaccional } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export interface ResultadoSesionInput {
   prisma: ClienteTransaccional;
@@ -202,7 +203,7 @@ export async function aplicarResultadoSesion({
     organizationId,
     actorTipo: "worker",
     actorId: null,
-    accion: "sesion.resultado",
+    accion: ACCIONES.sesion.resultado,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: {

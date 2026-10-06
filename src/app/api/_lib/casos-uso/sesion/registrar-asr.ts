@@ -7,6 +7,7 @@ import { registrarAuditoria } from "../../auditoria";
 import { crearTrabajo } from "../trabajos/crear";
 
 import { transicionar, type ClienteTransaccional } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export interface RegistrarAsrInput {
   prisma: ClienteTransaccional;
@@ -54,7 +55,7 @@ export async function registrarAsr({
     organizationId,
     actorTipo: "worker",
     actorId: null,
-    accion: "sesion.asr_creado",
+    accion: ACCIONES.sesion.asrCreado,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: { intento, trabajoId: trabajo.id },

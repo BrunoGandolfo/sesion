@@ -1,4 +1,5 @@
 // Los HECHOS que respaldan cada frase del consentimiento informado.
+import { ACCIONES } from "@/lib/auditoria-acciones";
 //
 // El texto del consentimiento (src/lib/consentimiento.ts) no se escribe a
 // mano: se genera desde estas constantes, y consentimiento.test.ts ata cada
@@ -161,10 +162,12 @@ export const BACKUP_INCLUYE_CLAVE_AUDIO = false;
 export const REVOCAR_BORRA_HISTORIA = false;
 
 /** Cada lectura de una nota queda registrada (eventos_auditoria):
- * api/sesion-clinica/[id]/route.ts escribe sesion.ver al abrirla y
- * casos-uso/sesion/ver-transcripcion.ts, sesion.ver_transcripcion. */
-export const ACCION_VER_SESION = "sesion.ver";
-export const ACCION_VER_TRANSCRIPCION = "sesion.ver_transcripcion";
+ * casos-uso/sesion/ver.ts escribe sesion.ver al abrirla, en la misma
+ * transacción que la lectura (sin rastro no sale la nota), y
+ * casos-uso/sesion/ver-transcripcion.ts, sesion.ver_transcripcion, con la
+ * misma regla. */
+export const ACCION_VER_SESION = ACCIONES.sesion.ver;
+export const ACCION_VER_TRANSCRIPCION = ACCIONES.sesion.verTranscripcion;
 
 /** Para vos: processor.generar_feedback manda la transcripción a Anthropic
  * (clinical_analyzer.generar_feedback_terapeuta) y el análisis del trabajo de
@@ -179,7 +182,7 @@ export const ANALISIS_DE_LA_PROFESIONAL_POR_IA = true;
  * transacción que lee el Recorrido: sin registro no hay datos).
  */
 export const RECORRIDO_EXPORTABLE = true;
-export const ACCION_EXPORTAR_RECORRIDO = "hilo.exportar_pdf";
+export const ACCION_EXPORTAR_RECORRIDO = ACCIONES.hilo.exportarPdf;
 
 /**
  * Lo que la paciente puede pedir y la app efectivamente ejecuta. El texto sólo

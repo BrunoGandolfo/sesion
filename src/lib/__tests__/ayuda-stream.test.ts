@@ -12,9 +12,10 @@ vi.mock("@/app/api/_lib/auth", () => ({
   getSessionActor: vi.fn().mockResolvedValue({ organizationId: "org", userId: "user" }),
 }));
 vi.mock("@/app/api/_lib/auditoria", () => ({ registrarAuditoria: vi.fn() }));
-vi.mock("@/app/api/_lib/casos-uso/responder-ayuda", () => ({
-  ACCION_AYUDA: "ayuda.pregunta", ENTIDAD_AYUDA: "usuario",
-  LARGO_MAX_PREGUNTA: 600, MAX_TURNOS_HISTORIAL: 6,
+// El proveedor se dobla; el rastro (registrarPreguntaAyuda) es el de verdad,
+// que escribe con el registrarAuditoria doblado de arriba.
+vi.mock("@/app/api/_lib/casos-uso/responder-ayuda", async (original) => ({
+  ...(await original<typeof import("@/app/api/_lib/casos-uso/responder-ayuda")>()),
   responderAyudaStreaming: vi.fn(),
 }));
 vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", () => ({ reservarCupo: vi.fn(), devolverCupo: vi.fn() }));

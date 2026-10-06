@@ -6,6 +6,7 @@ import { OPCIONES_TRANSACCION, tomarLocks } from "@/lib/intentos-serializados";
 import { cupoInvitacion } from "@/lib/limites-prueba";
 import type { ClienteCifrado } from "@/lib/prisma-encryption";
 import { VIGENCIA_ABSOLUTA_MS } from "@/lib/sesion-acceso";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export function repositorioRegistro(prisma: ClienteCifrado): RepositorioRegistro {
   return {
@@ -79,14 +80,14 @@ export function repositorioRegistro(prisma: ClienteCifrado): RepositorioRegistro
           await tx.eventoAuditoria.createMany({
             data: [
               {
-                organizationId: org.id, actorTipo: "usuario", actorId: user.id, accion: "cuenta.registro",
+                organizationId: org.id, actorTipo: "usuario", actorId: user.id, accion: ACCIONES.cuenta.registro,
                 entidad: "usuario", entidadId: user.id,
                 detalle: { aceptaTerminos: true, versionTerminos: TERMINOS_VERSION, invitacionId: datos.invitacionId },
               },
               // Quien invitó se entera en SU rastro: la invitación se usó.
               {
                 organizationId: invitacion.creadaPor.organizationId, actorTipo: "usuario", actorId: invitacion.creadaPorId,
-                accion: "cuenta.invitacion_usada", entidad: "usuario", entidadId: invitacion.creadaPorId,
+                accion: ACCIONES.cuenta.invitacionUsada, entidad: "usuario", entidadId: invitacion.creadaPorId,
                 detalle: { invitacionId: datos.invitacionId, usuarioNuevoId: user.id },
               },
             ],

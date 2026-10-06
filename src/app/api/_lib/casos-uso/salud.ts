@@ -12,8 +12,15 @@
 // ("la fuente X falló"), porque una métrica que no se pudo calcular no es un
 // 0, es una métrica ciega.
 //
-// Lo que sí es de acá: el texto final del correo y la regla de que se manda
-// UNO solo por corrida con todo adentro.
+// Lo que sí es de acá: el texto final del correo, la regla de que se manda
+// UNO solo por corrida con todo adentro, y la de que el MISMO aviso no se
+// repite cada hora (avisarSalud, abajo).
+
+import { ACCIONES } from "@/lib/auditoria-acciones";
+import type { db } from "@/lib/db";
+
+import { registrarAuditoria } from "../auditoria";
+import { hashTexto } from "../auditoria-pura";
 
 import { fuenteAuditoria } from "./auditoria-metricas";
 import { fuenteTrabajos } from "./trabajos/metricas";
@@ -114,4 +121,118 @@ export async function revisarSalud({
     nivel: nivelMaximo(alertas),
     alerta: `Sesión: ${lineasDeAlerta(alertas).join("; ")}`,
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// No repetir el mismo aviso
+//
+// El cron corre cada hora. Antes mandaba el correo cada vez que algo cruzaba
+// su umbral: el 29-sep fueron 24 correos idénticos en un día por dos tareas
+// de un paciente de prueba, y un aviso que llega 24 veces deja de leerse.
+//
+// Cada aviso enviado deja constancia en eventos_auditoria (actor `sistema`,
+// acción salud.aviso) con la HUELLA del aviso: el nivel y los NOMBRES de las
+// métricas que cruzaron. El valor no entra: una métrica que sube de a uno
+// (3, 4, 5 tareas atrasadas) es el mismo problema, no un aviso nuevo por
+// hora; el número va en el texto del correo.
+//
+// No se manda si el último evento de salud de las últimas 24 h es un aviso
+// con la misma huella. Sale de nuevo:
+//   - si cambió el conjunto de métricas o el nivel (otra huella; también
+//     A → B → A, porque el último aviso es B);
+//   - si se resolvió y reapareció: la corrida que vuelve a no tener nada que
+//     decir deja salud.normal y corta la ventana;
+//   - si pasaron 24 h: un problema que sigue igual merece un recordatorio
+//     diario, no horario.
+//
+// No hay tabla nueva: eventos_auditoria ya es "esto pasó, cuándo y quién",
+// append-only, con índice por (entidad, entidad_id). El aviso no es de
+// ninguna organización: va con ORGANIZACION_SISTEMA (la columna no tiene FK).
+// ────────────────────────────────────────────────────────────────────────────
+
+export const VENTANA_AVISO_REPETIDO_MS = 24 * 60 * 60 * 1000;
+/** organization_id de los eventos que no son de ningún consultorio. */
+export const ORGANIZACION_SISTEMA = "sistema";
+const ENTIDAD_AVISO = "salud";
+
+/** sha256 del nivel y de los nombres de las métricas que cruzaron, sin
+ *  valores ni hora: el mismo problema con otro número da la misma huella. */
+export function huellaDeAviso(salud: Pick<Salud, "nivel" | "alertas">): string {
+  const metricas = salud.alertas.map((m) => m.nombre).sort();
+  return hashTexto(JSON.stringify({ nivel: salud.nivel, metricas }));
+}
+
+export interface AvisarSaludParams {
+  prisma: Pick<typeof db, "eventoAuditoria">;
+  salud: Salud;
+  ahora: Date;
+  /** Manda el correo; true si salió. La ruta le pasa src/lib/alertas.ts. */
+  enviar: (salud: Salud & { nivel: NivelAlerta }) => Promise<boolean>;
+}
+
+export async function avisarSalud({
+  prisma,
+  salud,
+  ahora,
+  enviar,
+}: AvisarSaludParams): Promise<{ alertaEnviada: boolean; repetida: boolean }> {
+  const { nivel } = salud;
+  const ultimo = await ultimoEventoDeSalud(prisma, ahora);
+  if (!salud.alerta || !nivel) {
+    if (ultimo?.accion === ACCIONES.salud.aviso) {
+      await registrarAuditoria(prisma, {
+        organizationId: ORGANIZACION_SISTEMA,
+        actorTipo: "sistema",
+        accion: ACCIONES.salud.normal,
+        entidad: ENTIDAD_AVISO,
+        entidadId: "normal",
+        creadoEn: ahora,
+      });
+    }
+    return { alertaEnviada: false, repetida: false };
+  }
+
+  const huella = huellaDeAviso(salud);
+  if (ultimo?.accion === ACCIONES.salud.aviso && ultimo.entidadId === huella) {
+    return { alertaEnviada: false, repetida: true };
+  }
+
+  const alertaEnviada = await enviar({ ...salud, nivel });
+  // Sólo lo que salió: un correo que falló se vuelve a intentar en la
+  // próxima corrida.
+  if (alertaEnviada) {
+    await registrarAuditoria(prisma, {
+      organizationId: ORGANIZACION_SISTEMA,
+      actorTipo: "sistema",
+      accion: ACCIONES.salud.aviso,
+      entidad: ENTIDAD_AVISO,
+      entidadId: huella,
+      creadoEn: ahora,
+      detalle: { nivel, metricas: salud.alertas.map((m) => m.nombre) },
+    });
+  }
+  return { alertaEnviada, repetida: false };
+}
+
+/** El último aviso o vuelta a la normalidad de las últimas 24 h. Si no se
+ *  puede saber, null: se manda, porque un correo de más es mejor que un aviso
+ *  perdido. */
+async function ultimoEventoDeSalud(
+  prisma: Pick<typeof db, "eventoAuditoria">,
+  ahora: Date,
+): Promise<{ accion: string; entidadId: string } | null> {
+  try {
+    return await prisma.eventoAuditoria.findFirst({
+      where: {
+        entidad: ENTIDAD_AVISO,
+        accion: { in: [ACCIONES.salud.aviso, ACCIONES.salud.normal] },
+        creadoEn: { gt: new Date(ahora.getTime() - VENTANA_AVISO_REPETIDO_MS), lte: ahora },
+      },
+      orderBy: { creadoEn: "desc" },
+      select: { accion: true, entidadId: true },
+    });
+  } catch (error) {
+    console.error("[salud] no se pudo mirar si el aviso ya salió; se manda igual", error);
+    return null;
+  }
 }

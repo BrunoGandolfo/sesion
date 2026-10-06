@@ -66,8 +66,8 @@ async function preparar() {
   const invitante = await prisma.user.create({ data: { organizationId: org.id, nombre: "Invitante", email: `inv-${randomUUID()}@example.test`, hashedPassword: "hash" } });
   process.env.INVITACIONES_PERMITIDAS = invitante.email;
   const repo = repositorioRegistro(estado.base.db);
-  const actor = { userId: invitante.id, email: invitante.email, rol: "titular" };
-  const enlace = await crearInvitacion(actor, repo, ahora);
+  const actor = { userId: invitante.id, organizationId: org.id, email: invitante.email, rol: "titular" };
+  const enlace = await crearInvitacion(actor, { repo, auditoria: estado.base.db }, ahora);
   const token = new URL(enlace.enlace).searchParams.get("token")!;
   return { org, invitante, repo, token, actor };
 }
@@ -141,13 +141,13 @@ const DIA = 24 * 60 * 60 * 1000;
 it("la sexta invitación no se puede generar, ni aunque la limpieza haya purgado las anteriores", async () => {
   const { repo, actor } = await preparar(); // la primera, ahora
   for (let i = 1; i < TOPE_INVITACIONES_TOTAL; i++) {
-    await crearInvitacion(actor, repo, new Date(ahora.getTime() + i * ESPERA_ENTRE_INVITACIONES_MS));
+    await crearInvitacion(actor, { repo, auditoria: estado.base.db }, new Date(ahora.getTime() + i * ESPERA_ENTRE_INVITACIONES_MS));
   }
   expect(await estado.base.prisma.invitacion.count()).toBe(5);
   // El mantenimiento borra las invitaciones viejas: el contador no depende de esas filas.
   await estado.base.prisma.invitacion.deleteMany();
   const muchoDespues = new Date(ahora.getTime() + 400 * DIA);
-  await expect(crearInvitacion(actor, repo, muchoDespues)).rejects.toMatchObject({ status: 429, message: INVITAR_AGOTADAS });
+  await expect(crearInvitacion(actor, { repo, auditoria: estado.base.db }, muchoDespues)).rejects.toMatchObject({ status: 429, message: INVITAR_AGOTADAS });
   expect(await estado.base.prisma.invitacion.count()).toBe(0);
   expect(await consultarInvitaciones(actor, repo, muchoDespues)).toEqual({ restantes: 0, aviso: INVITAR_AGOTADAS });
 });
@@ -155,23 +155,23 @@ it("la sexta invitación no se puede generar, ni aunque la limpieza haya purgado
 it("una segunda antes de los treinta días no se genera, y el aviso dice desde cuándo sí", async () => {
   const { repo, actor, invitante } = await preparar();
   const casi = new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS - 1);
-  await expect(crearInvitacion(actor, repo, casi)).rejects.toMatchObject({ status: 429, message: expect.stringContaining("Vas a poder generar la próxima desde el ") });
+  await expect(crearInvitacion(actor, { repo, auditoria: estado.base.db }, casi)).rejects.toMatchObject({ status: 429, message: expect.stringContaining("Vas a poder generar la próxima desde el ") });
   const { aviso, restantes } = await consultarInvitaciones(actor, repo, casi);
   expect(restantes).toBe(4);
   expect(aviso).toContain("Vas a poder generar la próxima desde el ");
   expect(await estado.base.prisma.invitacion.count()).toBe(1);
   expect(await estado.base.prisma.user.findUniqueOrThrow({ where: { id: invitante.id } })).toMatchObject({ invitacionesGeneradas: 1, ultimaInvitacionEn: ahora });
 
-  await expect(crearInvitacion(actor, repo, new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS))).resolves.toBeDefined();
+  await expect(crearInvitacion(actor, { repo, auditoria: estado.base.db }, new Date(ahora.getTime() + ESPERA_ENTRE_INVITACIONES_MS))).resolves.toBeDefined();
   process.env.INVITACIONES_PERMITIDAS = "otra@example.test";
-  await expect(crearInvitacion(actor, repo, new Date(ahora.getTime() + 90 * DIA))).rejects.toMatchObject({ status: 403 });
+  await expect(crearInvitacion(actor, { repo, auditoria: estado.base.db }, new Date(ahora.getTime() + 90 * DIA))).rejects.toMatchObject({ status: 403 });
 });
 
 it("en paralelo: cinco pedidos a la vez generan una sola invitación", async () => {
   const { repo, actor, invitante } = await preparar();
   await estado.base.prisma.invitacion.deleteMany();
   await estado.base.prisma.user.update({ where: { id: invitante.id }, data: { invitacionesGeneradas: 0, ultimaInvitacionEn: null } });
-  const resultados = await Promise.allSettled(Array.from({ length: 5 }, () => crearInvitacion(actor, repo, ahora)));
+  const resultados = await Promise.allSettled(Array.from({ length: 5 }, () => crearInvitacion(actor, { repo, auditoria: estado.base.db }, ahora)));
   expect(resultados.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   for (const r of resultados.filter((r) => r.status === "rejected")) {
     expect((r as PromiseRejectedResult).reason).toMatchObject({ status: 429 });

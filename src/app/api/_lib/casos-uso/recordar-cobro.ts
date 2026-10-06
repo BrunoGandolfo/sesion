@@ -29,8 +29,10 @@ import type { db } from "@/lib/db";
 
 import { registrarAuditoria } from "../auditoria";
 import { deudaDePaciente } from "../domain";
+import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
 import { programarEnvioDeCobro } from "./envios-del-turno";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClientePrisma = typeof db;
 
@@ -38,7 +40,6 @@ type ClientePrisma = typeof db;
  * Acción del evento que deja un aviso PEDIDO. Una fila por toque efectivo
  * (el segundo del mismo día no crea evento porque no crea envío).
  */
-export const ACCION_AVISO = "cobro.recordatorio";
 
 export interface RecordarCobroParams {
   prisma: ClientePrisma;
@@ -78,14 +79,7 @@ export async function recordarCobro({
   usuarioId,
   ahora = new Date(),
 }: RecordarCobroParams): Promise<RecordarCobroResultado> {
-  const paciente = await prisma.paciente.findFirst({
-    where: { id: pacienteId, organizationId },
-    select: { id: true, telefono: true },
-  });
-
-  if (!paciente) {
-    throw new ApiError("Paciente no encontrado", 404);
-  }
+  const paciente = await requirePaciente(prisma, pacienteId, organizationId, { id: true, telefono: true });
 
   // La misma cuenta que /api/deudores, acotada a esta paciente.
   const deuda = await deudaDePaciente(prisma, organizationId, pacienteId, ahora);
@@ -115,7 +109,7 @@ export async function recordarCobro({
       // avisar quedan en la misma línea de tiempo, consultable con una query.
       entidad: "paciente",
       entidadId: pacienteId,
-      accion: ACCION_AVISO,
+      accion: ACCIONES.cobro.recordatorio,
       detalle: { sesiones: deuda.sesionesImpagas, monto: deuda.montoTotal, envioId },
     });
   }

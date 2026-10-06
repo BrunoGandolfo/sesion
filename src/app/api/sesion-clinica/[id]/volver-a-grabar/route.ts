@@ -4,7 +4,6 @@
 
 import { db } from "@/lib/db";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { volverAGrabar } from "../../../_lib/casos-uso/audio";
 import { errorResponse, ok } from "../../../_lib/responses";
@@ -20,17 +19,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
 
-    const sesion = await volverAGrabar({ prisma: db, organizationId, sesionId: id });
-
-    await registrarAuditoria(db, {
-      organizationId,
-      actorTipo: "usuario",
-      actorId: userId,
-      accion: "sesion.volver_a_grabar",
-      entidad: "sesion_clinica",
-      entidadId: id,
-      detalle: { estado: sesion.estado },
-    });
+    const sesion = await volverAGrabar({ prisma: db, organizationId, sesionId: id, usuarioId: userId });
 
     return ok(sesion);
   } catch (error) {

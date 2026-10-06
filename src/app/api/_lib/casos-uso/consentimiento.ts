@@ -29,7 +29,9 @@ import type { db } from "@/lib/db";
 import { cifrarConsentimiento } from "@/lib/prisma-encryption";
 
 import { auditar } from "../auditoria";
+import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClienteConsentimiento = typeof db;
 
@@ -38,8 +40,6 @@ type ClienteConsentimiento = typeof db;
  *  query por paciente (revocar lo hace por lote y no tiene un id único que
  *  poner acá). */
 const ENTIDAD = "paciente";
-export const ACCION_FIRMAR = "consentimiento.firmar";
-export const ACCION_REVOCAR = "consentimiento.revocar";
 
 const consentimientoSelect = {
   id: true,
@@ -80,12 +80,7 @@ async function exigirPaciente(
   pacienteId: string,
   organizationId: string,
 ) {
-  const paciente = await prisma.paciente.findFirst({
-    where: { id: pacienteId, organizationId },
-    select: { id: true, nombre: true, apellido: true },
-  });
-  if (!paciente) throw new ApiError("Paciente no encontrado", 404);
-  return paciente;
+  return requirePaciente(prisma, pacienteId, organizationId, { id: true, nombre: true, apellido: true });
 }
 
 export interface IdentidadConsentimiento {
@@ -181,7 +176,7 @@ export async function firmarConsentimiento({
       actorId: usuarioId ?? null,
       entidad: ENTIDAD,
       entidadId: pacienteId,
-      accion: ACCION_FIRMAR,
+      accion: ACCIONES.consentimiento.firmar,
       creadoEn: ahora,
       detalle: {
         consentimientoId: creado.id,
@@ -226,7 +221,7 @@ export async function revocarConsentimiento({
       actorId: usuarioId ?? null,
       entidad: ENTIDAD,
       entidadId: pacienteId,
-      accion: ACCION_REVOCAR,
+      accion: ACCIONES.consentimiento.revocar,
       creadoEn: ahora,
       detalle: { revocados: count },
     });

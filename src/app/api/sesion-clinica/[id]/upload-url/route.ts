@@ -11,10 +11,9 @@
 
 import { db } from "@/lib/db";
 
-import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { exigirR2 } from "../../../_lib/exigir-r2";
-import { EXPIRA_URL_SUBIDA_SEGUNDOS, pedirUrlSubida } from "../../../_lib/casos-uso/audio";
+import { pedirUrlSubida } from "../../../_lib/casos-uso/audio";
 import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { uploadUrlSchema } from "../../../_lib/schemas";
 
@@ -33,17 +32,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const almacen = exigirR2();
 
-    const subida = await pedirUrlSubida({ prisma: db, organizationId, sesionId: id, ...parsed.data, almacen });
-
-    await registrarAuditoria(db, {
-      organizationId,
-      actorTipo: "usuario",
-      actorId: userId,
-      accion: "sesion.subir_audio_inicio",
-      entidad: "sesion_clinica",
-      entidadId: id,
-      detalle: { tamanoBytes: parsed.data.tamanoBytes, mime: parsed.data.mime, expiraEnSegundos: EXPIRA_URL_SUBIDA_SEGUNDOS },
-    });
+    const subida = await pedirUrlSubida({ prisma: db, organizationId, sesionId: id, usuarioId: userId, ...parsed.data, almacen });
 
     return ok({ url: subida.url, key: subida.key, expiraEn: subida.expiraEn.toISOString(), headers: subida.headers });
   } catch (error) {

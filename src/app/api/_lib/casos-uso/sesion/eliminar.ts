@@ -19,6 +19,7 @@ import {
   whereTransicion,
   type ClienteTransaccional,
 } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export interface EliminarSesionInput {
   prisma: ClienteTransaccional;
@@ -67,7 +68,7 @@ export async function eliminarSesion({
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,
-    accion: "sesion.eliminar",
+    accion: ACCIONES.sesion.eliminar,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: {

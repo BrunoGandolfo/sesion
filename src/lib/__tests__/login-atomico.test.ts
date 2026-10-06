@@ -24,7 +24,7 @@ import {
   cerrarSesion,
   cerrarTodas,
   hashTokenSesion,
-  listarSesionesVivas,
+  whereViva,
 } from "@/lib/sesion-acceso";
 import { nombreCookie } from "@/lib/sesion-cookie";
 import { tokenDeCookieHeader } from "./ayudantes";
@@ -153,7 +153,7 @@ describe("iniciarSesion", () => {
       return r.resultado;
     };
     const [a, b, c] = [await abrir(), await abrir(), await abrir()];
-    expect(await listarSesionesVivas(estado.base.db, user.id, new Date())).toHaveLength(3);
+    expect(await estado.base.prisma.sesionAcceso.count({ where: { userId: user.id, ...whereViva(new Date()) } })).toBe(3);
 
     expect(await cerrarSesion(estado.base.db, { id: a.sesionId, userId: user.id, motivo: "salida", ahora: new Date() })).toBe(true);
     expect(await buscarSesionViva(estado.base.db, a.token, new Date())).toBeNull();

@@ -40,6 +40,7 @@ import {
   transicionar,
   type ClienteTransaccional,
 } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export interface AprobarSesionInput {
   prisma: ClienteTransaccional;
@@ -168,7 +169,7 @@ export async function aprobarSesion({
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,
-    accion: "sesion.aprobar",
+    accion: ACCIONES.sesion.aprobar,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: {

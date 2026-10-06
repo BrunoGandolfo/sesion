@@ -13,9 +13,10 @@ import { BCRYPT_RONDAS } from "@/lib/password";
 import type { ClienteCifrado } from "@/lib/prisma-encryption";
 import { crearSesion } from "@/lib/sesion-acceso";
 
-import { detalleSeguro } from "../auditoria-pura";
+import { registrarAuditoria } from "../auditoria";
+import { normalizarEmail } from "../email";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
-export const ACCION_ENTRADA = "cuenta.entrada";
 
 export interface SesionIniciada {
   token: string;
@@ -54,7 +55,7 @@ export async function iniciarSesion({
   comparar,
   hashear,
 }: IniciarSesionParams): Promise<ResultadoLogin<SesionIniciada>> {
-  const emailNormalizado = email.trim().toLowerCase();
+  const emailNormalizado = normalizarEmail(email);
   if (!emailNormalizado || !password) return { estado: "rechazado" };
 
   const resultado = await procesarIntentoLogin<SesionIniciada>({
@@ -97,23 +98,18 @@ export async function iniciarSesion({
   if (resultado.estado !== "ok") return resultado;
 
   // Fuera de la transacción a propósito: no es parte del contador y un fallo
-  // acá no puede dejar afuera a quien puso bien la contraseña. Sin IP ni
-  // user-agent: eso vive en sesiones_acceso.
-  try {
-    await prisma.eventoAuditoria.create({
-      data: {
-        organizationId: resultado.resultado.organizationId,
-        actorTipo: "usuario",
-        actorId: resultado.resultado.userId,
-        accion: ACCION_ENTRADA,
-        entidad: "usuario",
-        entidadId: resultado.resultado.userId,
-        detalle: detalleSeguro({ sesionId: resultado.resultado.sesionId }),
-      },
-    });
-  } catch (error) {
-    console.error("[cuenta] no se pudo registrar la entrada", error);
-  }
+  // acá no puede dejar afuera a quien puso bien la contraseña (por eso la
+  // variante informativa, que se traga el error). Sin IP ni user-agent: eso
+  // vive en sesiones_acceso.
+  await registrarAuditoria(prisma, {
+    organizationId: resultado.resultado.organizationId,
+    actorTipo: "usuario",
+    actorId: resultado.resultado.userId,
+    accion: ACCIONES.cuenta.entrada,
+    entidad: "usuario",
+    entidadId: resultado.resultado.userId,
+    detalle: { sesionId: resultado.resultado.sesionId },
+  });
 
   return resultado;
 }

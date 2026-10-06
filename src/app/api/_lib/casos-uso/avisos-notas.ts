@@ -72,6 +72,7 @@
 import type { db } from "@/lib/db";
 import type { AvisoServidor } from "@/lib/notas-en-proceso";
 import { ESTADOS_EN_PROCESO, estaEnProceso } from "@/lib/sesion-clinica/estados";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClientePrisma = Pick<typeof db, "sesionClinica" | "eventoAuditoria">;
 
@@ -90,8 +91,6 @@ export const TOPE_AVISOS = 20;
  *  pedido, con margen para una red lenta. */
 export const VENTANA_SONDEO_MS = 20_000;
 
-export const ACCION_VER = "sesion.ver";
-const ACCION_REINTENTAR = "sesion.reintentar";
 const ENTIDAD = "sesion_clinica";
 
 export interface AvisosNotasParams {
@@ -149,10 +148,10 @@ export async function avisosNotas({
           entidad: ENTIDAD,
           entidadId: { in: terminadas.map((f) => f.id) },
           OR: [
-            { accion: ACCION_VER, actorId: userId },
+            { accion: ACCIONES.sesion.ver, actorId: userId },
             // De cualquiera: si la colega reintentó, el fallo de antes ya no
             // es el que hay que avisar.
-            { accion: ACCION_REINTENTAR },
+            { accion: ACCIONES.sesion.reintentar },
           ],
         },
         select: { accion: true, entidadId: true, detalle: true, creadoEn: true },
@@ -162,7 +161,7 @@ export async function avisosNotas({
   const vista = (fila: (typeof filas)[number]): boolean => {
     const propios = eventos.filter((e) => e.entidadId === fila.id);
     const vers = propios
-      .filter((e) => e.accion === ACCION_VER)
+      .filter((e) => e.accion === ACCIONES.sesion.ver)
       .sort((a, b) => a.creadoEn.getTime() - b.creadoEn.getTime());
 
     // Desde cuándo está en este estado: la entrega de la nota, o el último
@@ -171,7 +170,7 @@ export async function avisosNotas({
       fila.estado === "revision"
         ? fila.procesadaEn
         : propios
-            .filter((e) => e.accion === ACCION_REINTENTAR)
+            .filter((e) => e.accion === ACCIONES.sesion.reintentar)
             .reduce<Date | null>(
               (max, e) => (max === null || e.creadoEn > max ? e.creadoEn : max),
               null,

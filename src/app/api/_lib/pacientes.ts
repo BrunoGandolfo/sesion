@@ -1,27 +1,34 @@
-// Helpers compartidos por las rutas de /api/pacientes/**.
+// "La paciente es de esta organización, o 404": UNA sola vez para toda la API.
+// Antes estaba escrito siete veces (rutas, hilo, consentimiento, alta de
+// turno, recordar cobro, exportar el Recorrido), cada una con su select y su
+// mensaje.
+
+import type { Prisma } from "@prisma/client";
 
 import type { db } from "@/lib/db";
 
 import { ApiError } from "./responses";
 
-type Cliente = typeof db;
+export const MENSAJE_PACIENTE_NO_ENCONTRADO = "Paciente no encontrado";
 
 /**
- * Verifica que el paciente exista y pertenezca a la organización; si no,
- * lanza el mismo 404 "Paciente no encontrado" que repetían las rutas. Devuelve
- * solo el id: las rutas que necesitan más columnas hacen su propio select.
+ * Lee la paciente con la organización en el WHERE y lanza 404 si no está (no
+ * existe o es de otra organización: para quien pregunta es lo mismo). Sin
+ * `select` devuelve sólo el id; con `select`, esas columnas. Acepta `db` o el
+ * `tx` de una transacción.
  */
-export async function requirePaciente(
-  prisma: Cliente,
+export async function requirePaciente<S extends Prisma.PacienteSelect = { id: true }>(
+  prisma: Pick<typeof db, "paciente">,
   id: string,
   organizationId: string,
-): Promise<{ id: string }> {
+  select?: S,
+): Promise<Prisma.PacienteGetPayload<{ select: S }>> {
   const paciente = await prisma.paciente.findFirst({
     where: { id, organizationId },
-    select: { id: true },
+    select: select ?? { id: true },
   });
   if (!paciente) {
-    throw new ApiError("Paciente no encontrado", 404);
+    throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
   }
-  return paciente;
+  return paciente as unknown as Prisma.PacienteGetPayload<{ select: S }>;
 }

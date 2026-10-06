@@ -14,6 +14,7 @@ import { crearTrabajo } from "../trabajos/crear";
 
 import { leerSesion } from "./leer";
 import { MENSAJE_NO_ENCONTRADA, transicionar, type ClienteTransaccional } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 /** Estados del feedback desde los que se puede pedir de nuevo. */
 export const FEEDBACK_REPEDIBLE: ReadonlyArray<EstadoFeedback> = [
@@ -74,7 +75,7 @@ export async function reintentarFeedback({
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,
-    accion: "sesion.pedir_feedback",
+    accion: ACCIONES.sesion.pedirFeedback,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: { estadoSesion: sesion.estado },

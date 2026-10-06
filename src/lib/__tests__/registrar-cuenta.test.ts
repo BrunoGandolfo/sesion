@@ -1,3 +1,5 @@
+import type { ClienteAuditoria } from "@/app/api/_lib/auditoria";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { afterEach, expect, it, vi } from "vitest";
 
 import {
@@ -14,7 +16,7 @@ import { CUENTA_INVITAR_NO_PERMITIDO, ENTRADA_REGISTRO_ERROR, INVITAR_AGOTADAS }
 import { cupoInvitacion, type ContadorInvitaciones } from "@/lib/limites-prueba";
 
 const ahora = new Date("2026-09-10T12:00:00Z");
-const actor = { userId: "duena", email: "mariana@example.test", rol: "titular" };
+const actor = { userId: "duena", organizationId: "consultorio", email: "mariana@example.test", rol: "titular" };
 const datos = { token: "a".repeat(64), email: " Nueva@example.test ", nombre: " Nueva Colega ", password: "contraseña larga", aceptaTerminos: true };
 const huella = { ip: "203.0.113.7", userAgent: "vitest" };
 const hashTokenSesion = async (t: string) => `hash(${t})`;
@@ -31,7 +33,8 @@ function preparar(cambios: Partial<InvitacionGuardada> = {}, contador: ContadorI
     buscarInvitacion: vi.fn().mockResolvedValue(invitacion),
     registrar: vi.fn().mockResolvedValue({ userId: "nueva", organizationId: "nuevo-consultorio", sesionId: "ses" }),
   };
-  return { repo, ahora, hashear: vi.fn().mockResolvedValue("hash-password"), tokenSesion: "t".repeat(43), huella, hashTokenSesion };
+  const auditoria = { eventoAuditoria: { create: vi.fn().mockResolvedValue({}) } } as unknown as ClienteAuditoria;
+  return { repo, auditoria, ahora, hashear: vi.fn().mockResolvedValue("hash-password"), tokenSesion: "t".repeat(43), huella, hashTokenSesion };
 }
 
 const ORIGINAL = process.env.INVITACIONES_PERMITIDAS;
@@ -51,20 +54,26 @@ it("puedeInvitar: rol titular y email en INVITACIONES_PERMITIDAS; sin la variabl
 it("crea un enlace canónico de 7 días, guardando sólo el hash", async () => {
   process.env.INVITACIONES_PERMITIDAS = actor.email;
   const deps = preparar();
-  const resultado = await crearInvitacion(actor, deps.repo, ahora);
+  const resultado = await crearInvitacion(actor, deps, ahora);
   expect(resultado.enlace).toMatch(/^https:\/\/sesionapp.app\/registro\?token=[a-f0-9]{64}$/);
   expect(resultado.vence).toBe("2026-09-17T12:00:00.000Z");
   expect(resultado.invitacionId).toBe("inv-nueva");
   const guardado = vi.mocked(deps.repo.crearInvitacion).mock.calls[0][0];
   expect(guardado.creadaPorId).toBe("duena");
   expect(resultado.enlace).not.toContain(guardado.tokenHash);
+  // El rastro, sin token ni email: sólo cuál y cuándo vence.
+  expect(deps.auditoria.eventoAuditoria.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+    organizationId: "consultorio", actorId: "duena", accion: ACCIONES.cuenta.invitacionCreada,
+    detalle: { invitacionId: "inv-nueva", vence: "2026-09-17T12:00:00.000Z" },
+  }) });
 });
 
 it("sin permiso: 403 y no crea nada", async () => {
   process.env.INVITACIONES_PERMITIDAS = "otra@example.test";
   const deps = preparar();
-  await expect(crearInvitacion(actor, deps.repo, ahora)).rejects.toMatchObject({ status: 403 });
+  await expect(crearInvitacion(actor, deps, ahora)).rejects.toMatchObject({ status: 403 });
   expect(deps.repo.crearInvitacion).not.toHaveBeenCalled();
+  expect(deps.auditoria.eventoAuditoria.create).not.toHaveBeenCalled();
 });
 
 it("consultarInvitaciones: cuántas quedan y por qué hoy no, antes de generar", async () => {
