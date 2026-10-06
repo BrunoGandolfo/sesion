@@ -73,6 +73,8 @@ const INTEGRACION = [
   'src/lib/__tests__/archivar-paciente.test.ts',
   // La tarifa nueva alcanza a los turnos futuros sin cobrar, y a ningún otro.
   'src/lib/__tests__/tarifa-turnos.test.ts',
+  // El mismo contrato de punta a punta: la ficha, la ruta real y el aviso.
+  'src/lib/__tests__/tarifa-pantalla-integracion.test.tsx',
   'src/lib/__tests__/sms-callback.test.ts',
   'src/lib/__tests__/recordar-cobro.test.ts',
   'src/lib/__tests__/pendientes-terapeuta.test.ts',
