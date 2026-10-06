@@ -17,7 +17,7 @@
 // el registro falla, no salen datos. A diferencia de registrarAuditoria, que
 // se traga el error, acá exportar sin rastro no es una opción.
 
-import { ACCION_EXPORTAR_RECORRIDO } from "@/lib/consentimiento-hechos";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
 import { contenidoHiloSchema, type ResumenVersionHilo, type VersionHilo } from "@/lib/hilo/contenido";
 
@@ -87,7 +87,7 @@ export async function exportarRecorrido(
 
     await auditar(tx, {
       organizationId: identidad.organizationId, actorTipo: "usuario", actorId: usuarioId,
-      accion: ACCION_EXPORTAR_RECORRIDO, entidad: "hilo", entidadId: identidad.pacienteId,
+      accion: ACCIONES.hilo.exportarPdf, entidad: "hilo", entidadId: identidad.pacienteId,
       detalle: {
         vigente: vigente?.version ?? null,
         versiones: filas.length,

@@ -14,8 +14,8 @@ import type { ClienteCifrado } from "@/lib/prisma-encryption";
 import { crearSesion } from "@/lib/sesion-acceso";
 
 import { detalleSeguro } from "../auditoria-pura";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
-export const ACCION_ENTRADA = "cuenta.entrada";
 
 export interface SesionIniciada {
   token: string;
@@ -105,7 +105,7 @@ export async function iniciarSesion({
         organizationId: resultado.resultado.organizationId,
         actorTipo: "usuario",
         actorId: resultado.resultado.userId,
-        accion: ACCION_ENTRADA,
+        accion: ACCIONES.cuenta.entrada,
         entidad: "usuario",
         entidadId: resultado.resultado.userId,
         detalle: detalleSeguro({ sesionId: resultado.resultado.sesionId }),

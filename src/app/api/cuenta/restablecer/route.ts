@@ -9,6 +9,7 @@ import { BCRYPT_RONDAS } from "@/lib/password";
 import { registrarAuditoria } from "../../_lib/auditoria";
 import { restablecerCuenta } from "../../_lib/casos-uso/recuperar-cuenta";
 import { ApiError, errorResponse, leerJson, ok } from "../../_lib/responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     });
     await registrarAuditoria(db, {
       organizationId: user.organizationId, actorTipo: "usuario", actorId: user.userId,
-      accion: "cuenta.restablecer", entidad: "usuario", entidadId: user.userId,
+      accion: ACCIONES.cuenta.restablecer, entidad: "usuario", entidadId: user.userId,
     });
     // No inicia sesión: la usuaria entra con la contraseña nueva.
     return ok({ cambiada: true });

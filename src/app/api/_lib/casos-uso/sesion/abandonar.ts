@@ -59,11 +59,10 @@ import {
   whereTransicion,
   type ClienteTransaccional,
 } from "./transicion";
+import { ACCIONES, type AccionAuditoria } from "@/lib/auditoria-acciones";
 
 /** Ella la descartó desde Pendientes. */
-export const ACCION_DESCARTAR = "sesion.descartar_grabacion";
 /** El mantenimiento la abandonó pasados los siete días. */
-export const ACCION_ABANDONAR = "sesion.abandonar";
 
 export const MENSAJE_NO_SIN_TERMINAR =
   "Solo se puede descartar una grabación sin terminar.";
@@ -99,7 +98,7 @@ async function cerrarSinTerminar({
   /** Con audio, la fila queda `fallida` en vez de borrarse. */
   conservarConAudio: boolean;
   actor: { tipo: ActorAuditoria; id: string | null };
-  accion: string;
+  accion: AccionAuditoria;
 }): Promise<SesionCerrada> {
   const fila = await prisma.sesionClinica.findFirst({
     where: { id: sesionId, organizationId },
@@ -160,7 +159,7 @@ export function descartarSesion({
     ...input,
     conservarConAudio: false,
     actor: { tipo: "usuario", id: usuarioId },
-    accion: ACCION_DESCARTAR,
+    accion: ACCIONES.sesion.descartarGrabacion,
   });
 }
 
@@ -170,6 +169,6 @@ export function abandonarSesion(input: CerrarSinTerminarBase): Promise<SesionCer
     ...input,
     conservarConAudio: true,
     actor: { tipo: "sistema", id: null },
-    accion: ACCION_ABANDONAR,
+    accion: ACCIONES.sesion.abandonar,
   });
 }

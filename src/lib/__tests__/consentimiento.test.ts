@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import * as hechos from "@/lib/consentimiento-hechos";
 import {
   CONSENTIMIENTO_FECHA,
@@ -177,10 +178,13 @@ describe("cada frase tiene el hecho que la respalda", () => {
   });
 
   it("quién puede ver, y que cada lectura de la nota o la transcripción queda registrada", () => {
-    // Las rutas todavía escriben la acción a mano (no importan el hecho):
-    // hasta que la importen, esto ata el hecho a lo que se registra.
-    expect(codigo("src/app/api/sesion-clinica/[id]/route.ts")).toContain(`accion: "${hechos.ACCION_VER_SESION}"`);
-    expect(codigo("src/app/api/_lib/casos-uso/sesion/ver-transcripcion.ts")).toContain(`accion: "${hechos.ACCION_VER_TRANSCRIPCION}"`);
+    // El hecho y quien escribe el evento toman la acción del mismo catálogo
+    // (auditoria-acciones.ts); que nadie la escriba a mano lo prueba
+    // auditoria-acciones.test.ts.
+    expect(hechos.ACCION_VER_SESION).toBe(ACCIONES.sesion.ver);
+    expect(hechos.ACCION_VER_TRANSCRIPCION).toBe(ACCIONES.sesion.verTranscripcion);
+    expect(codigo("src/app/api/sesion-clinica/[id]/route.ts")).toContain("accion: ACCIONES.sesion.ver,");
+    expect(codigo("src/app/api/_lib/casos-uso/sesion/ver-transcripcion.ts")).toContain("accion: ACCIONES.sesion.verTranscripcion,");
     expect(texto).toContain("Solo Lic. Ana Pérez, desde su cuenta, y cada vez que abre tu nota o tu transcripción queda registrado.");
     expect(texto).toContain("dicen que nadie accede al contenido, pero la aplicación no puede verificarlo.");
     expect(texto).not.toContain("Ninguna persona además de");

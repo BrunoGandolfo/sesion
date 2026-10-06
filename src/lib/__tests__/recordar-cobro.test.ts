@@ -12,6 +12,7 @@
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
  *   npx vitest run src/lib/__tests__/recordar-cobro.test.ts
  */
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
@@ -19,7 +20,6 @@ import type { PrismaClient } from "@prisma/client";
 
 import { claveDeCobro } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import {
-  ACCION_AVISO,
   recordarCobro,
   ultimoAvisoPorPaciente,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
@@ -138,7 +138,7 @@ describe("recordarCobro", () => {
     expect(eventos).toHaveLength(1);
     const evento = eventos[0];
     expect(evento).toMatchObject({
-      accion: ACCION_AVISO,
+      accion: ACCIONES.cobro.recordatorio,
       entidad: "paciente",
       entidadId: base.pacienteId,
       actorTipo: "usuario",

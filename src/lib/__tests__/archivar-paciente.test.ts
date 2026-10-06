@@ -14,12 +14,13 @@
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
  *   npx vitest run src/lib/__tests__/archivar-paciente.test.ts
  */
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import type { EstadoEnvioSms, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { ACCION_ARCHIVAR, actualizarPaciente } from "@/app/api/_lib/casos-uso/pacientes";
+import { actualizarPaciente } from "@/app/api/_lib/casos-uso/pacientes";
 import { MOTIVO_PACIENTE_ARCHIVADA } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
@@ -157,7 +158,7 @@ describe("archivar a la paciente", () => {
       organizationId: f.organizationId,
       actorTipo: "usuario",
       actorId: USUARIO,
-      accion: ACCION_ARCHIVAR,
+      accion: ACCIONES.paciente.archivar,
       entidad: "paciente",
       entidadId: f.pacienteId,
       detalle: { enviosCancelados: 2, yaEstabaArchivada: false },
@@ -169,7 +170,7 @@ describe("archivar a la paciente", () => {
     const f = await fixture();
     await archivar(f);
     const [evento] = await eventos();
-    expect(evento).toMatchObject({ accion: ACCION_ARCHIVAR, detalle: { enviosCancelados: 0, yaEstabaArchivada: false } });
+    expect(evento).toMatchObject({ accion: ACCIONES.paciente.archivar, detalle: { enviosCancelados: 0, yaEstabaArchivada: false } });
   });
 
   it("no toca los envíos ya aceptados, entregados, cancelados, fallidos ni desconocidos", async () => {

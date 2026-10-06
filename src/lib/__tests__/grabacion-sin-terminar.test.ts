@@ -23,6 +23,7 @@
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
  *   npx vitest run src/lib/__tests__/grabacion-sin-terminar.test.ts
  */
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import type { EstadoSesion, PrismaClient } from "@prisma/client";
@@ -31,8 +32,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { mantenimiento } from "@/app/api/_lib/casos-uso/mantenimiento";
 import { pendientesTerapeuta } from "@/app/api/_lib/casos-uso/pendientes-terapeuta";
 import {
-  ACCION_ABANDONAR,
-  ACCION_DESCARTAR,
   ESPERA_BORRADO_SIN_AUDIO_MS,
 } from "@/app/api/_lib/casos-uso/sesion/abandonar";
 import { SESION_FALLO_LABEL } from "@/lib/glosario";
@@ -125,7 +124,7 @@ async function crearSesion(f: Fixture, estado: EstadoSesion, quietaMs: number) {
 const leer = (id: string) => prismaRaw.sesionClinica.findUnique({ where: { id } });
 const trabajos = () => prismaRaw.trabajo.findMany({ orderBy: { creadoEn: "asc" } });
 const eventos = () =>
-  prismaRaw.eventoAuditoria.findMany({ where: { accion: { in: [ACCION_ABANDONAR, ACCION_DESCARTAR] } } });
+  prismaRaw.eventoAuditoria.findMany({ where: { accion: { in: [ACCIONES.sesion.abandonar, ACCIONES.sesion.descartarGrabacion] } } });
 
 function pedirAbandono(sesionId: string, como: Fixture) {
   sesionActual.organizationId = como.orgId;
@@ -260,7 +259,7 @@ describe("POST /api/sesion-clinica/[id]/abandonar", () => {
       organizationId: f.orgId,
       actorTipo: "usuario",
       actorId: f.userId,
-      accion: ACCION_DESCARTAR,
+      accion: ACCIONES.sesion.descartarGrabacion,
       entidad: "sesion_clinica",
       entidadId: sesionId,
       detalle: { desde: "subiendo", hacia: "borrada", conAudio: true },
@@ -285,7 +284,7 @@ describe("POST /api/sesion-clinica/[id]/abandonar", () => {
 
     const [evento] = await eventos();
     expect(evento).toMatchObject({
-      accion: ACCION_DESCARTAR,
+      accion: ACCIONES.sesion.descartarGrabacion,
       entidadId: sesionId,
       detalle: { desde: "grabando", hacia: "borrada", conAudio: false },
     });
@@ -366,7 +365,7 @@ describe("mantenimiento: red de seguridad a los siete días", () => {
     const registrados = await eventos();
     expect(registrados).toHaveLength(2);
     for (const evento of registrados) {
-      expect(evento).toMatchObject({ accion: ACCION_ABANDONAR, actorTipo: "sistema", actorId: null });
+      expect(evento).toMatchObject({ accion: ACCIONES.sesion.abandonar, actorTipo: "sistema", actorId: null });
     }
     expect(await trabajos()).toHaveLength(2);
   });

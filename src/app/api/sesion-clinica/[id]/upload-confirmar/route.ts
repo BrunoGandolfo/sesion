@@ -10,6 +10,7 @@ import { exigirR2 } from "../../../_lib/exigir-r2";
 import { confirmarSubida, diagnosticoParaAuditoria, MENSAJE_NO_LLEGO } from "../../../_lib/casos-uso/audio";
 import { ApiError, errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { uploadConfirmarSchema } from "../../../_lib/schemas";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const almacen = exigirR2();
 
     const auditar = (detalle: Record<string, unknown>) =>
-      registrarAuditoria(db, { organizationId, actorTipo: "usuario", actorId: userId, accion: "sesion.subir_audio_fin", entidad: "sesion_clinica", entidadId: id, detalle });
+      registrarAuditoria(db, { organizationId, actorTipo: "usuario", actorId: userId, accion: ACCIONES.sesion.subirAudioFin, entidad: "sesion_clinica", entidadId: id, detalle });
 
     try {
       const { diagnostico, ...cierre } = parsed.data;

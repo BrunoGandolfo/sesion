@@ -8,6 +8,7 @@ import type { FilaSesionClinica } from "../../sesion-clinica";
 import { leerSesion } from "./leer";
 import { datosVueltaAProcesando, HAY_MATERIAL } from "./reprocesar";
 import { transicionar, type ClienteTransaccional } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export interface ReintentarSesionInput {
   prisma: ClienteTransaccional;
@@ -41,7 +42,7 @@ export async function reintentarSesion({
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,
-    accion: "sesion.reintentar",
+    accion: ACCIONES.sesion.reintentar,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: { desde: "fallida", hacia: "procesando", intento: sesion.intento },

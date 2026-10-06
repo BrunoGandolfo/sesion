@@ -4,6 +4,7 @@ import { OPERACIONES_VERSION, puedeVersion } from "@/lib/hilo/versiones";
 import { ApiError } from "../../responses";
 import { crearTrabajo } from "../trabajos/crear";
 import { auditarHilo, bloquearHilo, exigirVersion, filtroHilo, whereAprobadasDe, type BaseHilo, type IdentidadHilo } from "./base";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export async function regenerarHilo(input: IdentidadHilo & z.infer<typeof regenerarHiloSchema> & { prisma: BaseHilo; usuarioId: string; ahora?: Date }) {
   const ahora = input.ahora ?? new Date();
@@ -33,7 +34,7 @@ export async function regenerarHilo(input: IdentidadHilo & z.infer<typeof regene
     if (ultimo && (["pendiente", "en_curso"].includes(ultimo.estado) || (input.trabajoId && ultimo.id !== input.trabajoId))) throw new ApiError("Ya se pidió otra propuesta para esta sesión", 409);
     if (await tx.hiloVersion.count({ where: { ...identidad, sesionOrigenId: sesionId, estado: "propuesta" } })) throw new ApiError("Ya hay una propuesta para esta sesión", 409);
     const trabajo = await crearTrabajo({ prisma: tx, ...identidad, sesionId, tipo: "integrar_contexto", payload: { sesionId, pacienteId: input.pacienteId } });
-    await auditarHilo(tx, identidad, "hilo.regenerar", input.basadaEnVersion, input.usuarioId, ahora, trabajo.id);
+    await auditarHilo(tx, identidad, ACCIONES.hilo.regenerar, input.basadaEnVersion, input.usuarioId, ahora, trabajo.id);
     return { trabajoId: trabajo.id };
   });
 }

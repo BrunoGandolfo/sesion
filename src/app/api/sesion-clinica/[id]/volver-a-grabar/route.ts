@@ -8,6 +8,7 @@ import { registrarAuditoria } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { volverAGrabar } from "../../../_lib/casos-uso/audio";
 import { errorResponse, ok } from "../../../_lib/responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,
-      accion: "sesion.volver_a_grabar",
+      accion: ACCIONES.sesion.volverAGrabar,
       entidad: "sesion_clinica",
       entidadId: id,
       detalle: { estado: sesion.estado },

@@ -4,13 +4,16 @@
 
 import { createHash } from "node:crypto";
 
+import type { AccionAuditoria } from "@/lib/auditoria-acciones";
+
 export type ActorAuditoria = "usuario" | "worker" | "sistema";
 
 export interface EventoAuditoriaInput {
   organizationId: string;
   actorTipo: ActorAuditoria;
   actorId?: string | null;
-  accion: string;
+  /** Del catálogo (src/lib/auditoria-acciones.ts), nunca un literal. */
+  accion: AccionAuditoria;
   entidad: string;
   entidadId: string;
   detalle?: Record<string, unknown>;

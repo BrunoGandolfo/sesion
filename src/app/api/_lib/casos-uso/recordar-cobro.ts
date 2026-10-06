@@ -31,6 +31,7 @@ import { registrarAuditoria } from "../auditoria";
 import { deudaDePaciente } from "../domain";
 import { ApiError } from "../responses";
 import { programarEnvioDeCobro } from "./envios-del-turno";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClientePrisma = typeof db;
 
@@ -38,7 +39,6 @@ type ClientePrisma = typeof db;
  * Acción del evento que deja un aviso PEDIDO. Una fila por toque efectivo
  * (el segundo del mismo día no crea evento porque no crea envío).
  */
-export const ACCION_AVISO = "cobro.recordatorio";
 
 export interface RecordarCobroParams {
   prisma: ClientePrisma;
@@ -115,7 +115,7 @@ export async function recordarCobro({
       // avisar quedan en la misma línea de tiempo, consultable con una query.
       entidad: "paciente",
       entidadId: pacienteId,
-      accion: ACCION_AVISO,
+      accion: ACCIONES.cobro.recordatorio,
       detalle: { sesiones: deuda.sesionesImpagas, monto: deuda.montoTotal, envioId },
     });
   }

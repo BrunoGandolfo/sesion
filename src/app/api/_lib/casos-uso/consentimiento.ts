@@ -30,6 +30,7 @@ import { cifrarConsentimiento } from "@/lib/prisma-encryption";
 
 import { auditar } from "../auditoria";
 import { ApiError } from "../responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClienteConsentimiento = typeof db;
 
@@ -38,8 +39,6 @@ type ClienteConsentimiento = typeof db;
  *  query por paciente (revocar lo hace por lote y no tiene un id único que
  *  poner acá). */
 const ENTIDAD = "paciente";
-export const ACCION_FIRMAR = "consentimiento.firmar";
-export const ACCION_REVOCAR = "consentimiento.revocar";
 
 const consentimientoSelect = {
   id: true,
@@ -181,7 +180,7 @@ export async function firmarConsentimiento({
       actorId: usuarioId ?? null,
       entidad: ENTIDAD,
       entidadId: pacienteId,
-      accion: ACCION_FIRMAR,
+      accion: ACCIONES.consentimiento.firmar,
       creadoEn: ahora,
       detalle: {
         consentimientoId: creado.id,
@@ -226,7 +225,7 @@ export async function revocarConsentimiento({
       actorId: usuarioId ?? null,
       entidad: ENTIDAD,
       entidadId: pacienteId,
-      accion: ACCION_REVOCAR,
+      accion: ACCIONES.consentimiento.revocar,
       creadoEn: ahora,
       detalle: { revocados: count },
     });

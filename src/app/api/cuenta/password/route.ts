@@ -27,6 +27,7 @@ import { cookieBorrada } from "@/lib/sesion-cookie";
 import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
 import { ApiError, errorResponse, leerJson, okSinCache, validationError } from "../../_lib/responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,
-      accion: "cuenta.password_cambiada",
+      accion: ACCIONES.cuenta.passwordCambiada,
       entidad: "usuario",
       entidadId: userId,
       detalle: { sesionesCerradas: cerradas },

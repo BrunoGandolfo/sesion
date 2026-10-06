@@ -10,6 +10,7 @@ import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
 import { consultarInvitaciones, crearInvitacion } from "../../_lib/casos-uso/registrar-cuenta";
 import { errorResponse, okSinCache } from "../../_lib/responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export async function POST() {
       organizationId: actor.organizationId,
       actorTipo: "usuario",
       actorId: actor.userId,
-      accion: "cuenta.invitacion_creada",
+      accion: ACCIONES.cuenta.invitacionCreada,
       entidad: "usuario",
       entidadId: actor.userId,
       detalle: { invitacionId: creada.invitacionId, vence: creada.vence },

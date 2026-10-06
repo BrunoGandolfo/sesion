@@ -5,6 +5,7 @@ import { cerrarTodas } from "@/lib/sesion-acceso";
 import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
 import { errorResponse, ok } from "../../_lib/responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export async function POST() {
       organizationId: actor.organizationId,
       actorTipo: "usuario",
       actorId: actor.userId,
-      accion: "cuenta.salida_todas",
+      accion: ACCIONES.cuenta.salidaTodas,
       entidad: "usuario",
       entidadId: actor.userId,
       detalle: { cerradas },

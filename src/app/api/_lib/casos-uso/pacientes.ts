@@ -24,6 +24,7 @@ import { auditar } from "../auditoria";
 import { toPaciente, toPacienteConDeuda, toTurno } from "../domain";
 import { ApiError } from "../responses";
 import { cancelarEnviosDeLaPaciente, MOTIVO_PACIENTE_ARCHIVADA } from "./envios-del-turno";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClientePrisma = typeof db;
 
@@ -148,7 +149,6 @@ export interface ActualizarPacienteInput {
   ahora?: Date;
 }
 
-export const ACCION_ARCHIVAR = "paciente.archivar";
 
 export async function actualizarPaciente({
   prisma,
@@ -203,7 +203,7 @@ export async function actualizarPaciente({
           actorId: usuarioId ?? null,
           entidad: "paciente",
           entidadId: pacienteId,
-          accion: ACCION_ARCHIVAR,
+          accion: ACCIONES.paciente.archivar,
           creadoEn: ahora,
           detalle: { enviosCancelados, yaEstabaArchivada: archivada === 0 },
         });

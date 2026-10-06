@@ -26,6 +26,7 @@ import { systemPromptAyuda } from "@/lib/ayuda-corpus";
 
 import { ApiError } from "../responses";
 import { HERRAMIENTAS_AYUDA, resolverHerramienta, type ConsultarAgenda } from "./ayuda/herramientas";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 
 /** Largo máximo de una pregunta. Mide caracteres, no tokens: es un tope
@@ -45,7 +46,7 @@ export const MAX_TOKENS_RESPUESTA = 1024;
 export const TOPE_PREGUNTAS_DIA = 40;
 
 /** La acción con la que se auditan las preguntas, independiente del cupo. */
-export const ACCION_AYUDA = "ayuda.pregunta";
+export const ACCION_AYUDA = ACCIONES.ayuda.pregunta;
 export const ENTIDAD_AYUDA = "usuario";
 
 // ── Mensajes para la usuaria ────────────────────────────────────────────────

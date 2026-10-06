@@ -45,6 +45,7 @@
 // que significar algo el día que suene.
 
 import type { FuenteMetricas } from "@/lib/salud-metricas";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 /** La ventana que se mira. Un día: si se perdió algo, se ve al otro día. */
 export const VENTANA_HORAS = 24;
@@ -62,8 +63,8 @@ const MS_MINUTO = 60 * 1000;
 
 /** Acto con marca de tiempo propia ↔ evento que debería acompañarlo. */
 const PARES = [
-  { accion: "sesion.crear", columna: "creadaEn" },
-  { accion: "sesion.aprobar", columna: "aprobadaEn" },
+  { accion: ACCIONES.sesion.crear, columna: "creadaEn" },
+  { accion: ACCIONES.sesion.aprobar, columna: "aprobadaEn" },
 ] as const;
 
 export const fuenteAuditoria: FuenteMetricas = async ({ prisma, ahora }) => {

@@ -8,6 +8,7 @@ import { registrarAuditoria } from "../../auditoria";
 import { ApiError } from "../../responses";
 
 import { MENSAJE_NO_ENCONTRADA, type ClienteSesion } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 /** Convención del worker: la terapeuta es siempre el hablante S0. */
 export const HABLANTE_TERAPEUTA = "S0";
@@ -46,7 +47,7 @@ export async function verTranscripcion({
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,
-    accion: "sesion.ver_transcripcion",
+    accion: ACCIONES.sesion.verTranscripcion,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: { estado: sesion.estado, caracteres: transcripcion.length },

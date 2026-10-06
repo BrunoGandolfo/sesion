@@ -7,6 +7,7 @@ import { auditar } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
 import { requirePaciente } from "../../../_lib/pacientes";
 import { errorResponse, ok, validationError } from "../../../_lib/responses";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -117,7 +118,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,
-      accion: "sesion.exportar",
+      accion: ACCIONES.sesion.exportar,
       entidad: "paciente",
       entidadId: id,
       // La página entra al rastro: exportar una página y exportar todo no

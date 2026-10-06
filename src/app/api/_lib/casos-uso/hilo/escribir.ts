@@ -4,6 +4,7 @@ import { OPERACIONES_VERSION, puedeVersion } from "@/lib/hilo/versiones";
 
 import { ApiError } from "../../responses";
 import { aplicarVigente, auditarHilo, bloquearHilo, CONFLICTO_HILO, exigirVersion, insertarVersion, leerVersion, type BaseHilo, type IdentidadHilo } from "./base";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 interface Escritura extends IdentidadHilo {
   prisma: BaseHilo; usuarioId: string; basadaEnVersion: number; ahora?: Date;
@@ -20,7 +21,7 @@ export async function editarHilo(input: Escritura & { contenido: ContenidoHilo }
       basadaEnVersion: input.basadaEnVersion, usuarioId: input.usuarioId, ahora,
     });
     await aplicarVigente(tx, input, nueva.id, input.usuarioId, ahora);
-    await auditarHilo(tx, input, "hilo.editar", nueva.version, input.usuarioId, ahora);
+    await auditarHilo(tx, input, ACCIONES.hilo.editar, nueva.version, input.usuarioId, ahora);
     return leerVersion(tx, input, nueva.version);
   });
 }
@@ -45,7 +46,7 @@ export async function aceptarPropuesta(input: Escritura & { propuestaId: string;
       sesionOrigenId: propuesta.sesionOrigenId, usuarioId: input.usuarioId, ahora,
     });
     await aplicarVigente(tx, input, vigente.id, input.usuarioId, ahora);
-    await auditarHilo(tx, input, contenido === undefined ? "hilo.aceptar" : "hilo.aceptar_editada", vigente.version, input.usuarioId, ahora);
+    await auditarHilo(tx, input, contenido === undefined ? ACCIONES.hilo.aceptar : ACCIONES.hilo.aceptarEditada, vigente.version, input.usuarioId, ahora);
     return leerVersion(tx, input, vigente.version);
   });
 }
@@ -63,7 +64,7 @@ export async function rechazarPropuesta(input: Escritura & { propuestaId: string
     await tx.hiloVersion.update({ where: { id: propuesta.id }, data: {
       estado: OPERACIONES_VERSION.rechazar.hacia, resueltaEn: ahora, resueltaPorUserId: input.usuarioId,
     } });
-    await auditarHilo(tx, input, "hilo.rechazar", propuesta.version, input.usuarioId, ahora);
+    await auditarHilo(tx, input, ACCIONES.hilo.rechazar, propuesta.version, input.usuarioId, ahora);
     return { ok: true };
   });
 }

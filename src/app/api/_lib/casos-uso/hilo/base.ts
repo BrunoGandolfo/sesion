@@ -6,6 +6,7 @@ import { OPERACIONES_VERSION } from "@/lib/hilo/versiones";
 import { cifrarHiloVersion } from "@/lib/prisma-encryption";
 
 import { ApiError } from "../../responses";
+import { ACCIONES, type AccionAuditoria } from "@/lib/auditoria-acciones";
 
 export type ClienteHilo = Pick<typeof db,
   "paciente" | "hilo" | "hiloVersion" | "trabajo" | "sesionClinica" | "turno" |
@@ -96,10 +97,10 @@ export async function aplicarVigente(tx: ClienteHilo, identidad: IdentidadHilo, 
     data: { estado: hacia, resueltaEn: ahora, resueltaPorUserId: usuarioId },
   });
   await tx.hilo.update({ where: { pacienteId: identidad.pacienteId }, data: { vigenteId: versionId, actualizadoEn: ahora } });
-  for (const anterior of anteriores) await auditarHilo(tx, identidad, "hilo.desactualizar", anterior.version, usuarioId, ahora);
+  for (const anterior of anteriores) await auditarHilo(tx, identidad, ACCIONES.hilo.desactualizar, anterior.version, usuarioId, ahora);
 }
 
-export async function auditarHilo(tx: ClienteHilo, identidad: IdentidadHilo, accion: string, version: number, usuarioId: string | null, ahora: Date, trabajoId?: string) {
+export async function auditarHilo(tx: ClienteHilo, identidad: IdentidadHilo, accion: AccionAuditoria, version: number, usuarioId: string | null, ahora: Date, trabajoId?: string) {
   const origen = await tx.hiloVersion.findFirst({ where: { ...filtroHilo(identidad), version }, select: { basadaEnVersion: true, sesionOrigenId: true } });
   await tx.eventoAuditoria.create({ data: {
     organizationId: identidad.organizationId, actorTipo: usuarioId ? "usuario" : "worker",

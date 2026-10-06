@@ -11,6 +11,7 @@ import type { FilaSesionClinica } from "../../sesion-clinica";
 
 import { leerSesion } from "./leer";
 import { transicionar, type ClienteTransaccional } from "./transicion";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export interface ReprocesarSesionInput {
   prisma: ClienteTransaccional;
@@ -78,7 +79,7 @@ export async function reprocesarSesion({
     organizationId,
     actorTipo: "usuario",
     actorId: usuarioId,
-    accion: "sesion.reprocesar",
+    accion: ACCIONES.sesion.reprocesar,
     entidad: "sesion_clinica",
     entidadId: sesionId,
     detalle: { desde: "revision", hacia: "procesando", generacion: sesion.generacion },

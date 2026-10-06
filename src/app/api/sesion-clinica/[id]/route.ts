@@ -10,6 +10,7 @@ import { getSessionActor } from "../../_lib/auth";
 import { leerSesion } from "../../_lib/casos-uso/sesion/leer";
 import { errorResponse, ok } from "../../_lib/responses";
 import { toSesionClinicaResponse } from "../../_lib/sesion-clinica";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,
-      accion: "sesion.ver",
+      accion: ACCIONES.sesion.ver,
       entidad: "sesion_clinica",
       entidadId: sesion.id,
       detalle: { estado: sesion.estado },

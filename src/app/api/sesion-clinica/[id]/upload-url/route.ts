@@ -17,6 +17,7 @@ import { exigirR2 } from "../../../_lib/exigir-r2";
 import { EXPIRA_URL_SUBIDA_SEGUNDOS, pedirUrlSubida } from "../../../_lib/casos-uso/audio";
 import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
 import { uploadUrlSchema } from "../../../_lib/schemas";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       organizationId,
       actorTipo: "usuario",
       actorId: userId,
-      accion: "sesion.subir_audio_inicio",
+      accion: ACCIONES.sesion.subirAudioInicio,
       entidad: "sesion_clinica",
       entidadId: id,
       detalle: { tamanoBytes: parsed.data.tamanoBytes, mime: parsed.data.mime, expiraEnSegundos: EXPIRA_URL_SUBIDA_SEGUNDOS },
