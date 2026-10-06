@@ -5,7 +5,7 @@ import { conectarBaseDeTest, vaciarTablas } from "./db-test";
 import { CLAVES_CIFRADO_TEST } from "./base-identidad";
 import { enviarCorreo } from "@/lib/correo";
 import { GET } from "@/app/api/cron/salud/route";
-import { VENTANA_AVISO_REPETIDO_MS } from "@/app/api/_lib/casos-uso/salud";
+import { huellaDeAviso, VENTANA_AVISO_REPETIDO_MS } from "@/app/api/_lib/casos-uso/salud";
 import { cifrarHiloVersion } from "@/lib/prisma-encryption";
 
 let base: ReturnType<typeof conectarBaseDeTest>;
@@ -242,14 +242,44 @@ describe("aviso repetido", () => {
     expect(evento.entidadId).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("si el contenido cambió, sale enseguida", async () => {
+  async function atrasado() {
+    await base.prisma.trabajo.create({ data: {
+      organizationId, tipo: "borrar_audio_r2", ejecutor: "app", estado: "pendiente", payload: {},
+      creadoEn: new Date(T0.getTime() - 30 * 3600000),
+    } });
+  }
+
+  it("la misma métrica con otro número no es un aviso nuevo; el número va en el correo", async () => {
     await fallido();
     await correr(T0);
-    await fallido(); // ahora son dos: otro número, otro aviso
+    await fallido(); // ahora son dos
+    const segunda = await correr(new Date(T0.getTime() + 3600000));
+    await fallido(); // tres
+    const tercera = await correr(new Date(T0.getTime() + 2 * 3600000));
+
+    expect(segunda).toMatchObject({ alertaEnviada: false, avisoRepetido: true });
+    expect(tercera).toMatchObject({ alertaEnviada: false, avisoRepetido: true });
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(enviarCorreo).mock.calls[0][0].texto).toContain("1 tareas fallidas");
+  });
+
+  it("si cambia el conjunto de métricas, sale enseguida con los números de ahora", async () => {
+    await fallido();
+    await correr(T0);
+    await atrasado();
     const segunda = await correr(new Date(T0.getTime() + 3600000));
 
-    expect(segunda).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+    expect(segunda).toMatchObject({ alertas: ["trabajos_fallidos", "trabajos_atrasados"], alertaEnviada: true });
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
+  it("si cambia el nivel, la huella es otra", () => {
+    const metrica = { nombre: "trabajos_fallidos", valor: 1, umbral: 1, texto: "x" };
+    const aviso = { nivel: "aviso" as const, alertas: [{ ...metrica, nivel: "aviso" as const }] };
+    const critico = { nivel: "critico" as const, alertas: [{ ...metrica, nivel: "critico" as const }] };
+    const otroNumero = { ...aviso, alertas: [{ ...aviso.alertas[0], valor: 7, texto: "y" }] };
+    expect(huellaDeAviso(aviso)).not.toBe(huellaDeAviso(critico));
+    expect(huellaDeAviso(aviso)).toBe(huellaDeAviso(otroNumero));
   });
 
   it("pasadas 24 h el mismo aviso vuelve a salir una vez", async () => {
@@ -278,12 +308,12 @@ describe("aviso repetido", () => {
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
   });
 
-  it("A → B → A: volver al primer estado también es un cambio, y avisa", async () => {
+  it("A → B → A: volver al primer conjunto también es un cambio, y avisa", async () => {
     await fallido();
-    await correr(T0); // A: un fallido
-    await fallido();
-    await correr(new Date(T0.getTime() + 3600000)); // B: dos fallidos
-    await base.prisma.trabajo.deleteMany({ where: { id: (await base.prisma.trabajo.findFirstOrThrow()).id } });
+    await correr(T0); // A: fallidos
+    await atrasado();
+    await correr(new Date(T0.getTime() + 3600000)); // B: fallidos y atrasados
+    await base.prisma.trabajo.updateMany({ where: { estado: "pendiente" }, data: { estado: "hecho" } });
     const deVuelta = await correr(new Date(T0.getTime() + 2 * 3600000)); // A otra vez
 
     expect(deVuelta).toMatchObject({ alertaEnviada: true, avisoRepetido: false });

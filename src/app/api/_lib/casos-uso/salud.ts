@@ -131,15 +131,19 @@ export async function revisarSalud({
 // de un paciente de prueba, y un aviso que llega 24 veces deja de leerse.
 //
 // Cada aviso enviado deja constancia en eventos_auditoria (actor `sistema`,
-// acción salud.aviso) con la HUELLA de su contenido: el nivel y, de cada
-// métrica que cruzó, nombre, valor y texto. Si el último evento de salud de
-// las últimas 24 h es un aviso con la misma huella, no se manda. Cuando una
-// corrida vuelve a no tener nada que decir después de un aviso, deja
-// salud.normal: corta la ventana, y si el mismo problema reaparece a las
-// tres horas, avisa (es otro incidente aunque el número sea igual). Si el contenido cambió —otra
-// métrica, otro número— la huella es otra y sale enseguida. Pasadas 24 h, el
-// mismo aviso vuelve a salir una vez: un problema que sigue igual merece un
-// recordatorio diario, no horario.
+// acción salud.aviso) con la HUELLA del aviso: el nivel y los NOMBRES de las
+// métricas que cruzaron. El valor no entra: una métrica que sube de a uno
+// (3, 4, 5 tareas atrasadas) es el mismo problema, no un aviso nuevo por
+// hora; el número va en el texto del correo.
+//
+// No se manda si el último evento de salud de las últimas 24 h es un aviso
+// con la misma huella. Sale de nuevo:
+//   - si cambió el conjunto de métricas o el nivel (otra huella; también
+//     A → B → A, porque el último aviso es B);
+//   - si se resolvió y reapareció: la corrida que vuelve a no tener nada que
+//     decir deja salud.normal y corta la ventana;
+//   - si pasaron 24 h: un problema que sigue igual merece un recordatorio
+//     diario, no horario.
 //
 // No hay tabla nueva: eventos_auditoria ya es "esto pasó, cuándo y quién",
 // append-only, con índice por (entidad, entidad_id). El aviso no es de
@@ -151,13 +155,11 @@ export const VENTANA_AVISO_REPETIDO_MS = 24 * 60 * 60 * 1000;
 export const ORGANIZACION_SISTEMA = "sistema";
 const ENTIDAD_AVISO = "salud";
 
-/** sha256 de lo que el aviso dice, sin la hora: dos corridas con el mismo
- *  estado dan la misma huella. */
+/** sha256 del nivel y de los nombres de las métricas que cruzaron, sin
+ *  valores ni hora: el mismo problema con otro número da la misma huella. */
 export function huellaDeAviso(salud: Pick<Salud, "nivel" | "alertas">): string {
-  const alertas = salud.alertas
-    .map((m) => [m.nombre, m.valor, m.texto] as const)
-    .sort(([a], [b]) => a.localeCompare(b));
-  return hashTexto(JSON.stringify({ nivel: salud.nivel, alertas }));
+  const metricas = salud.alertas.map((m) => m.nombre).sort();
+  return hashTexto(JSON.stringify({ nivel: salud.nivel, metricas }));
 }
 
 export interface AvisarSaludParams {
