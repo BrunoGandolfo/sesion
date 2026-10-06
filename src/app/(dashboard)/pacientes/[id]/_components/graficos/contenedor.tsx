@@ -32,7 +32,7 @@ import {
   type ProgresoResponse,
   type RangoProgreso,
   type SesionProgreso,
-} from "./base";
+} from "./progreso-contrato";
 import { FlagsRiesgoTimeline } from "./flags";
 import { IntensidadChart } from "./intensidad";
 import { IntervencionesChart } from "./intervenciones";

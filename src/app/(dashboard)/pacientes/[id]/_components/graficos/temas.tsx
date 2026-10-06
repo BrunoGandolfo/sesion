@@ -6,7 +6,8 @@ import { fechaCorta } from "@/lib/format";
 import { TEMAS, VER_DETALLE, pluralizar } from "@/lib/glosario";
 
 import { lecturaTemas } from "../progreso-lecturas";
-import { COLOR, ChartCard, fechaDe, type SesionProgreso, type TemaProgreso } from "./base";
+import { COLOR, ChartCard } from "./base";
+import { fechaDe, type SesionProgreso, type TemaProgreso } from "./progreso-contrato";
 import { DESDE, SUBTITULO_TEMAS, TENDENCIA_LABEL } from "./textos";
 
 // Temas del período.

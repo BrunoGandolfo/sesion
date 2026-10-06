@@ -29,7 +29,7 @@ import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
 
 import { AlianzaChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/alianza";
-import type { ProgresoResponse } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/base";
+import type { ProgresoResponse } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/progreso-contrato";
 import { LecturasDeLaUltima, SESIONES_PARA_GRAFICOS } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor";
 import { FlagsRiesgoTimeline } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/flags";
 import { IntensidadChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/intensidad";

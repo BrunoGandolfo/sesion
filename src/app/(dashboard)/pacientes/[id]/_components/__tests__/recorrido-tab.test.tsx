@@ -16,7 +16,7 @@ import {
 } from "@/lib/glosario";
 import { hiloVacio, type Recorrido, type VersionHilo } from "@/lib/hilo/contenido";
 
-import type { ProgresoResponse, SesionProgreso } from "../graficos/base";
+import type { ProgresoResponse, SesionProgreso } from "../graficos/progreso-contrato";
 import { RecorridoTab } from "../recorrido-tab";
 
 vi.mock("@/lib/api-client", async (original) => ({

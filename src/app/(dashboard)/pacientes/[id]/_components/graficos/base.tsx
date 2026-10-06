@@ -1,137 +1,44 @@
 "use client";
 
-// Tipos del payload de /progreso y los dos motores SVG del Recorrido.
+// Los dos motores SVG del Recorrido y la tarjeta que los envuelve. El
+// contrato de /progreso y las reglas que no dibujan viven en
+// progreso-contrato.ts; los ejes, en ejes.tsx.
 //
 // Qué cambió respecto de la versión anterior: el eje X ya no es el número de
 // sesión (S1…Sn) sino la fecha. Con 40 sesiones "S27" no significa nada para
 // nadie, y el espaciado por índice miente sobre el tiempo — dos sesiones
 // separadas por cuatro meses se dibujaban a la misma distancia que dos
 // separadas por una semana. Ahora la X es proporcional al tiempo real.
-//
-// Dos reglas que no se negocian:
-//   - Un valor ausente NO se interpola. La línea se corta y se retoma en el
-//     siguiente dato real (ver `segmentosDe`).
-//   - Con más de 12 puntos los marcadores se reducen a los extremos y a las
-//     sesiones con señal de riesgo, que nunca se ocultan.
 
 import * as React from "react";
 
 import { fechaCorta } from "@/lib/format";
-import type { AlianzaTerapeutica, NivelRiesgo } from "@/types/domain";
 
 import type { Lectura, TonoLectura } from "../progreso-lecturas";
-import { SIN_DATO } from "./textos";
+import { EjeX, EjeY } from "./ejes";
 import { etiquetasDeFechas, useAnchoGrafico } from "./medidas";
+import {
+  MAX_MARCADORES,
+  segmentosDe,
+  type BarraPorFecha,
+  type PuntoLinea,
+} from "./progreso-contrato";
 
+// Los colores del sistema de diseño (src/app/globals.css) por su variable.
+// mint, gray, violeta y arena no tienen token: son la paleta categórica de
+// las intervenciones y quedan escritos acá hasta que el sistema la tenga.
 export const COLOR = {
-  sage: "#4F7A6A",
-  sageSoft: "#C2D4CB",
+  sage: "var(--color-sage-500)",
+  sageSoft: "var(--color-sage-200)",
   terracotta: "var(--color-terracotta-500)",
-  terracottaSoft: "#F5E0CC",
+  terracottaSoft: "var(--color-terracotta-100)",
   gold: "var(--color-gold-500)",
-  goldSoft: "#FAF4E4",
-  cream: "#FAFAF6",
-  ink: "#1A2628",
-  inkSoft: "#A5B0B2",
+  inkSoft: "var(--color-ink-300)",
   mint: "#5DCAA5",
   gray: "#C2C8C9",
   violeta: "#7A6A9B",
   arena: "#C9A66B",
 } as const;
-
-// ────────────────────────────────────────────────────────────────────────────
-// Contrato de GET /api/pacientes/[id]/progreso?rango=
-// ────────────────────────────────────────────────────────────────────────────
-
-export type RangoProgreso = "10s" | "3m" | "6m" | "todo";
-
-export const RANGOS: readonly RangoProgreso[] = ["10s", "3m", "6m", "todo"];
-
-export function esRango(valor: string | null | undefined): valor is RangoProgreso {
-  return valor === "10s" || valor === "3m" || valor === "6m" || valor === "todo";
-}
-
-export type TendenciaTema = "nuevo" | "sube" | "baja" | "estable";
-
-/** Flags booleanos de la sesión. Se deja abierto porque el contrato de riesgo
- *  puede sumar señales y ninguna debe perderse por no estar enumerada acá. */
-export type FlagsRiesgoProgreso = Record<string, boolean | undefined>;
-
-export type SesionProgreso = {
-  sesionId: string;
-  fecha: string;
-  numero: number;
-  intensidadEmocional: number | null;
-  /** Nivel de alianza tal como lo nombra el contrato ("fragil"…"fuerte"). */
-  alianzaTerapeutica: AlianzaTerapeutica | null;
-  temas: string[];
-  nivelRiesgo: NivelRiesgo | null;
-  flagsRiesgo: FlagsRiesgoProgreso;
-  intervenciones: Record<string, number>;
-  observacionIA: string | null;
-  progresoPercibido: string | null;
-};
-
-export type TemaProgreso = {
-  tema: string;
-  conteo: number;
-  deTotal: number;
-  primeraVez: string;
-  ultimaVez: string;
-  tendencia: TendenciaTema;
-};
-
-export type RiesgoProgreso = {
-  sesionId: string;
-  fecha: string;
-  flag: string;
-  nivel: NivelRiesgo | null;
-  cita: string | null;
-};
-
-export type ProgresoResponse = {
-  pacienteId: string;
-  totalSesiones: number;
-  rango: RangoProgreso;
-  sesiones: SesionProgreso[];
-  temas: TemaProgreso[];
-  riesgos: RiesgoProgreso[];
-};
-
-// ────────────────────────────────────────────────────────────────────────────
-// Alianza terapéutica: nombre y orden
-// El nombre es el clínico y no se traduce. El orden 1..4 existe solo para
-// poder dibujar una línea; el eje se rotula con los nombres, no con números.
-// ────────────────────────────────────────────────────────────────────────────
-
-
-const ORDEN_ALIANZA: Record<AlianzaTerapeutica, number> = {
-  fragil: 1,
-  inestable: 2,
-  estable: 3,
-  fuerte: 4,
-};
-
-export function nivelDeAlianza(
-  valor: AlianzaTerapeutica | null | undefined,
-): number | null {
-  if (!valor) return null;
-  return ORDEN_ALIANZA[valor] ?? null;
-}
-
-/** Una sesión tiene señal si el nivel graduado no es "ninguno" o si algún
- *  flag booleano está activo. Las dos vías cuentan: el contrato de riesgo
- *  las mantiene separadas y ninguna se descarta. */
-export function tieneSenal(sesion: SesionProgreso): boolean {
-  if (sesion.nivelRiesgo !== null && sesion.nivelRiesgo !== "ninguno") {
-    return true;
-  }
-  return Object.values(sesion.flagsRiesgo ?? {}).some((v) => v === true);
-}
-
-export function fechaDe(sesion: { fecha: string }): Date {
-  return new Date(sesion.fecha);
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Card
@@ -178,35 +85,6 @@ export function ChartCard({
 // ────────────────────────────────────────────────────────────────────────────
 // Eje X por fecha
 // ────────────────────────────────────────────────────────────────────────────
-
-/** Más de esto y los marcadores se reducen a extremos + señales de riesgo. */
-export const MAX_MARCADORES = 12;
-
-export type PuntoLinea = {
-  fecha: Date;
-  /** null = la sesión no registró el dato. No se interpola. */
-  valor: number | null;
-  /** Se dibuja siempre, aunque el resto de los marcadores esté oculto. */
-  destacado?: boolean;
-  /** Texto del <title> del marcador (lectura al pasar o al tocar). */
-  detalle?: string;
-};
-
-/** Tramos consecutivos con dato. Cada corte es una sesión sin registro. */
-function segmentosDe(puntos: PuntoLinea[]): number[][] {
-  const segmentos: number[][] = [];
-  let actual: number[] = [];
-  puntos.forEach((punto, i) => {
-    if (punto.valor === null) {
-      if (actual.length > 0) segmentos.push(actual);
-      actual = [];
-      return;
-    }
-    actual.push(i);
-  });
-  if (actual.length > 0) segmentos.push(actual);
-  return segmentos;
-}
 
 export function LineaPorFecha({
   puntos,
@@ -272,28 +150,7 @@ export function LineaPorFecha({
         className="block w-full max-w-full"
         preserveAspectRatio="xMidYMid meet"
       >
-        {yTicks.map((t) => (
-          <g key={t}>
-            <line
-              x1={padL}
-              x2={W - padR}
-              y1={yFor(t)}
-              y2={yFor(t)}
-              stroke="#E8E1D2"
-              strokeWidth={1}
-            />
-            <text
-              x={padL - 8}
-              y={yFor(t) + 4}
-              textAnchor="end"
-              fontSize="12"
-              fill="#627072"
-              fontFamily="var(--font-sans)"
-            >
-              {yLabels?.[t] ?? t}
-            </text>
-          </g>
-        ))}
+        <EjeY ticks={yTicks} yFor={yFor} x1={padL} x2={W - padR} rotulos={yLabels} />
 
         {segmentos.map((indices, s) => {
           const puntosSvg = indices
@@ -340,20 +197,7 @@ export function LineaPorFecha({
           );
         })}
 
-        {etiquetas.map(({ indice, texto, x }) => (
-          <text
-            key={`x-${indice}`}
-            data-eje="x"
-            x={x}
-            y={H - 8}
-            textAnchor="middle"
-            fontSize="12"
-            fill="#627072"
-            fontFamily="var(--font-sans)"
-          >
-            {texto}
-          </text>
-        ))}
+        <EjeX etiquetas={etiquetas} y={H - 8} />
       </svg>
     </div>
   );
@@ -362,12 +206,6 @@ export function LineaPorFecha({
 // ────────────────────────────────────────────────────────────────────────────
 // Barras apiladas por sesión, rotuladas por fecha
 // ────────────────────────────────────────────────────────────────────────────
-
-export type BarraPorFecha = {
-  fecha: Date;
-  valores: Record<string, number>;
-  detalle?: string;
-};
 
 export function BarrasPorFecha({
   barras,
@@ -411,28 +249,7 @@ export function BarrasPorFecha({
           className="block w-full max-w-full"
           preserveAspectRatio="xMidYMid meet"
         >
-          {yTicks.map((t) => (
-            <g key={t}>
-              <line
-                x1={padL}
-                x2={W - padR}
-                y1={yFor(t)}
-                y2={yFor(t)}
-                stroke="#E8E1D2"
-                strokeWidth={1}
-              />
-              <text
-                x={padL - 8}
-                y={yFor(t) + 4}
-                textAnchor="end"
-                fontSize="12"
-                fill="#627072"
-                fontFamily="var(--font-sans)"
-              >
-                {t}
-              </text>
-            </g>
-          ))}
+          <EjeY ticks={yTicks} yFor={yFor} x1={padL} x2={W - padR} />
 
           {barras.map((barra, i) => {
             const cx = padL + slotW * i + slotW / 2;
@@ -461,22 +278,7 @@ export function BarrasPorFecha({
             );
           })}
 
-          {rotulos.map(({ indice, texto, x }) => {
-            return (
-              <text
-                key={`x-${indice}`}
-                data-eje="x"
-                x={x}
-                y={H - 8}
-                textAnchor="middle"
-                fontSize="12"
-                fill="#627072"
-                fontFamily="var(--font-sans)"
-              >
-                {texto}
-              </text>
-            );
-          })}
+          <EjeX etiquetas={rotulos} y={H - 8} />
         </svg>
       </div>
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
@@ -496,12 +298,4 @@ export function BarrasPorFecha({
       </ul>
     </div>
   );
-}
-
-/** Texto del <title> de un marcador: "4 mar · 7 de 10" o "4 mar · Sin dato". */
-export function detalleDePunto(
-  fecha: Date,
-  valor: string | null,
-): string {
-  return `${fechaCorta(fecha)} · ${valor ?? SIN_DATO}`;
 }

@@ -2,7 +2,7 @@
 
 import { Segmented } from "@/components/ui";
 
-import { RANGOS, type RangoProgreso } from "./base";
+import { RANGOS, type RangoProgreso } from "./progreso-contrato";
 import { PERIODO, RANGO_LABEL } from "./textos";
 
 // Selector de período del Recorrido.

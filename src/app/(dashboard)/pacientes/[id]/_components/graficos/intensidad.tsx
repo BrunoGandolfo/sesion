@@ -3,15 +3,13 @@
 import { INTENSIDAD_EMOCIONAL } from "@/lib/glosario";
 
 import { lecturaIntensidad } from "../progreso-lecturas";
+import { COLOR, ChartCard, LineaPorFecha } from "./base";
 import {
-  COLOR,
-  ChartCard,
-  LineaPorFecha,
   detalleDePunto,
   fechaDe,
   tieneSenal,
   type SesionProgreso,
-} from "./base";
+} from "./progreso-contrato";
 import { HUECOS_EXPLICADOS, SUBTITULO_INTENSIDAD } from "./textos";
 
 /** Intensidad emocional (1 a 10) por fecha. Las sesiones con señal de riesgo

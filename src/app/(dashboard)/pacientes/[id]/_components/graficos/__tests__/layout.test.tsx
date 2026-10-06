@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BarrasPorFecha, LineaPorFecha, type PuntoLinea } from "../base";
+import { BarrasPorFecha, LineaPorFecha } from "../base";
+import type { PuntoLinea } from "../progreso-contrato";
 
 let redimensionar: (ancho: number) => void;
 const desconectar = vi.fn();

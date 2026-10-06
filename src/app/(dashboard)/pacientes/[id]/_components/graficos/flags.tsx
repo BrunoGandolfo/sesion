@@ -9,7 +9,7 @@ import { formatearEtiqueta } from "@/lib/etiquetas";
 import { fechaCompleta } from "@/lib/format";
 import { LO_QUE_DIJO, SENAL_DE_RIESGO, pluralizar } from "@/lib/glosario";
 
-import type { RiesgoProgreso } from "./base";
+import type { RiesgoProgreso } from "./progreso-contrato";
 import { SUBTITULO_SENALES, VER_LA_SESION } from "./textos";
 
 // Línea de tiempo de señales de riesgo.
