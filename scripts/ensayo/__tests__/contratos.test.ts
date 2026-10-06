@@ -3,9 +3,9 @@
 // esquema de release, nunca contra el del checkout.
 //
 // Es de integración: necesita el Postgres 17 de test (DATABASE_URL_TEST,
-// superusuario: crea y borra bases ensayo_contrato_*) y psql. En la suite
-// unitaria se saltea (VITEST_SUITE=unit); vitest.config.ts no es de este
-// territorio, y su lista INTEGRACION todavía no lo nombra.
+// superusuario: crea y borra bases ensayo_contrato_*) y psql. Está en la
+// lista INTEGRACION de vitest.config.ts; en la suite unitaria se saltea
+// (VITEST_SUITE=unit).
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createCipheriv, randomBytes } from "node:crypto";

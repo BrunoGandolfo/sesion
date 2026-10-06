@@ -14,8 +14,9 @@ import {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Contrato de sesión clínica hacia la UI. Este hook es el nivel más bajo que
-// lo consume: sesiones-tab y useGrabacionSesion importan de acá los estados
-// activos, la forma de la fila y la normalización, sin repetirlos.
+// lo consume: sesiones-tab, useGrabacionSesion y lib/subida-audio importan de
+// acá los estados activos, la forma de la fila y la normalización, sin
+// repetirlos.
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Estados en los que la sesión sigue en el pipeline (grabación → subida →

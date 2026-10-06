@@ -28,13 +28,13 @@ export const MEDIOS_CAPTURA = ["audio"] as const;
  * La app NO cifra el audio (desde el 18/9/2026, rama grabador-dhh): cada trozo
  * se guarda como Blob tal como lo entrega el MediaRecorder
  * (src/lib/grabacion-storage.ts, guardarChunk) y el archivo se sube tal cual
- * (useGrabacionSesion.subirAudio). En el teléfono lo protege el bloqueo del
- * dispositivo. La versión 2.7 del consentimiento lo dice así.
+ * (subirAudio, src/lib/subida-audio.ts). En el teléfono lo protege el
+ * bloqueo del dispositivo. La versión 2.7 del consentimiento lo dice así.
  */
 export const RESPALDO_LOCAL_CIFRADO = false;
 
 /** La subida es un PUT a una URL prefirmada de R2 por HTTPS (TLS):
- * useGrabacionSesion.subirAudio → upload-url → PUT → upload-confirmar. */
+ * subirAudio (src/lib/subida-audio.ts) → upload-url → PUT → upload-confirmar. */
 export const AUDIO_VIAJA_POR_CONEXION_CIFRADA = true;
 
 /** Cloudflare R2 cifra en reposo todo objeto que guarda (documentación del
@@ -43,8 +43,8 @@ export const AUDIO_VIAJA_POR_CONEXION_CIFRADA = true;
 export const ALMACEN_CIFRA_EN_REPOSO = true;
 
 /** El archivo se sube entero al terminar, no por tramos mientras se graba
- * (useGrabacionSesion.subirAudio: upload-url → PUT → upload-confirmar). Esto
- * sigue siendo cierto. */
+ * (subirAudio en src/lib/subida-audio.ts: upload-url → PUT →
+ * upload-confirmar). Esto sigue siendo cierto. */
 export const AUDIO_SE_SUBE_AL_TERMINAR = true;
 
 /**

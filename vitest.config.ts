@@ -102,6 +102,8 @@ const INTEGRACION = [
   'src/lib/__tests__/crear-serie-turno.test.ts',
   // Área 5: el ensayo de restauración con respaldos generados contra la base de test.
   'src/lib/__tests__/ensayo-restauracion.test.ts',
+  // El contrato de esquema del ensayo lo elige la migración de la copia.
+  'scripts/ensayo/__tests__/contratos.test.ts',
   // La guarda de la base de test contra una base ajena real (crea y borra la suya).
   'src/lib/__tests__/base-ajena.test.ts',
   // Los avisos de notas del panel: en proceso y sin ver, por los sesion.ver.
