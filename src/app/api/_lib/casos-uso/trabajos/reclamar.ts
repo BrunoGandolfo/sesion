@@ -48,8 +48,11 @@ export interface TrabajoReclamado {
  * si el paciente tiene una propuesta abierta o un trabajo anterior del mismo
  * tipo sin terminar. La segunda propuesta tiene que escribirse sobre el hilo
  * que ya incluye a la primera.
+ *
+ * La lee también la métrica de salud (trabajos/metricas.ts): un trabajo que
+ * espera por esta regla no está atrasado, está esperando a la profesional.
  */
-async function bloqueadoPorEncadenado(
+export async function bloqueadoPorEncadenado(
   prisma: Pick<ClienteHilo, "trabajo" | "hiloVersion">,
   trabajo: { id: string; pacienteId: string | null; creadoEn: Date },
 ): Promise<boolean> {

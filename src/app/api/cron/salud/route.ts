@@ -1,6 +1,7 @@
 // Cron de salud. La ruta hace tres cosas y ninguna es decidir: autentica el
 // cron, le pide el diagnóstico al agregador (../../_lib/casos-uso/salud.ts)
-// y, si hay algo que decir, lo manda por correo con src/lib/alertas.ts.
+// y, si hay algo que decir y no se dijo igual en las últimas 24 h, lo manda
+// por correo con src/lib/alertas.ts.
 //
 // Y una cuarta que antes no hacía: si el agregador LANZA —lo más probable es
 // que la base no responda—, eso es la alerta más importante que este sistema
@@ -11,7 +12,7 @@ import { db } from "@/lib/db";
 import { alertar } from "@/lib/alertas";
 
 import { requireCron } from "../../_lib/auth";
-import { revisarSalud } from "../../_lib/casos-uso/salud";
+import { avisarSalud, revisarSalud } from "../../_lib/casos-uso/salud";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,20 +38,25 @@ export async function GET(request: Request) {
     return Response.json({ status: "error", alertaEnviada }, { status: 503 });
   }
 
-  const alertaEnviada =
-    salud.alerta && salud.nivel
-      ? await alertar(
-          salud.nivel,
-          `${salud.alertas.length} ${salud.alertas.length === 1 ? "aviso" : "avisos"} de salud`,
-          Object.fromEntries(salud.alertas.map((m) => [m.nombre, `${m.valor} ${m.texto}`])),
-          { ahora },
-        )
-      : false;
+  // El mismo aviso no sale más de una vez cada 24 h (casos-uso/salud.ts).
+  const { alertaEnviada, repetida } = await avisarSalud({
+    prisma: db,
+    salud,
+    ahora,
+    enviar: ({ nivel, alertas }) =>
+      alertar(
+        nivel,
+        `${alertas.length} ${alertas.length === 1 ? "aviso" : "avisos"} de salud`,
+        Object.fromEntries(alertas.map((m) => [m.nombre, `${m.valor} ${m.texto}`])),
+        { ahora },
+      ),
+  });
 
   return Response.json({
     metricas: salud.metricas,
     alertas: salud.alertas.map((m) => m.nombre),
     nivel: salud.nivel,
     alertaEnviada,
+    avisoRepetido: repetida,
   });
 }

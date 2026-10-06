@@ -12,8 +12,15 @@
 // ("la fuente X falló"), porque una métrica que no se pudo calcular no es un
 // 0, es una métrica ciega.
 //
-// Lo que sí es de acá: el texto final del correo y la regla de que se manda
-// UNO solo por corrida con todo adentro.
+// Lo que sí es de acá: el texto final del correo, la regla de que se manda
+// UNO solo por corrida con todo adentro, y la de que el MISMO aviso no se
+// repite cada hora (avisarSalud, abajo).
+
+import { ACCIONES } from "@/lib/auditoria-acciones";
+import type { db } from "@/lib/db";
+
+import { registrarAuditoria } from "../auditoria";
+import { hashTexto } from "../auditoria-pura";
 
 import { fuenteAuditoria } from "./auditoria-metricas";
 import { fuenteTrabajos } from "./trabajos/metricas";
@@ -114,4 +121,99 @@ export async function revisarSalud({
     nivel: nivelMaximo(alertas),
     alerta: `Sesión: ${lineasDeAlerta(alertas).join("; ")}`,
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// No repetir el mismo aviso
+//
+// El cron corre cada hora. Antes mandaba el correo cada vez que algo cruzaba
+// su umbral: el 29-sep fueron 24 correos idénticos en un día por dos tareas
+// de un paciente de prueba, y un aviso que llega 24 veces deja de leerse.
+//
+// Cada aviso enviado deja constancia en eventos_auditoria (actor `sistema`,
+// acción salud.aviso) con la HUELLA de su contenido: el nivel y, de cada
+// métrica que cruzó, nombre, valor y texto. Si en las últimas 24 h ya salió
+// uno con la misma huella, no se manda. Si el contenido cambió —otra
+// métrica, otro número— la huella es otra y sale enseguida. Pasadas 24 h, el
+// mismo aviso vuelve a salir una vez: un problema que sigue igual merece un
+// recordatorio diario, no horario.
+//
+// No hay tabla nueva: eventos_auditoria ya es "esto pasó, cuándo y quién",
+// append-only, con índice por (entidad, entidad_id). El aviso no es de
+// ninguna organización: va con ORGANIZACION_SISTEMA (la columna no tiene FK).
+// ────────────────────────────────────────────────────────────────────────────
+
+export const VENTANA_AVISO_REPETIDO_MS = 24 * 60 * 60 * 1000;
+/** organization_id de los eventos que no son de ningún consultorio. */
+export const ORGANIZACION_SISTEMA = "sistema";
+const ENTIDAD_AVISO = "salud";
+
+/** sha256 de lo que el aviso dice, sin la hora: dos corridas con el mismo
+ *  estado dan la misma huella. */
+export function huellaDeAviso(salud: Pick<Salud, "nivel" | "alertas">): string {
+  const alertas = salud.alertas
+    .map((m) => [m.nombre, m.valor, m.texto] as const)
+    .sort(([a], [b]) => a.localeCompare(b));
+  return hashTexto(JSON.stringify({ nivel: salud.nivel, alertas }));
+}
+
+export interface AvisarSaludParams {
+  prisma: Pick<typeof db, "eventoAuditoria">;
+  salud: Salud;
+  ahora: Date;
+  /** Manda el correo; true si salió. La ruta le pasa src/lib/alertas.ts. */
+  enviar: (salud: Salud & { nivel: NivelAlerta }) => Promise<boolean>;
+}
+
+export async function avisarSalud({
+  prisma,
+  salud,
+  ahora,
+  enviar,
+}: AvisarSaludParams): Promise<{ alertaEnviada: boolean; repetida: boolean }> {
+  const { nivel } = salud;
+  if (!salud.alerta || !nivel) return { alertaEnviada: false, repetida: false };
+
+  const huella = huellaDeAviso(salud);
+  if (await yaAvisado(prisma, huella, ahora)) return { alertaEnviada: false, repetida: true };
+
+  const alertaEnviada = await enviar({ ...salud, nivel });
+  // Sólo lo que salió: un correo que falló se vuelve a intentar en la
+  // próxima corrida.
+  if (alertaEnviada) {
+    await registrarAuditoria(prisma, {
+      organizationId: ORGANIZACION_SISTEMA,
+      actorTipo: "sistema",
+      accion: ACCIONES.salud.aviso,
+      entidad: ENTIDAD_AVISO,
+      entidadId: huella,
+      creadoEn: ahora,
+      detalle: { nivel, metricas: salud.alertas.map((m) => m.nombre) },
+    });
+  }
+  return { alertaEnviada, repetida: false };
+}
+
+/** Si no se puede saber, se manda: un correo de más es mejor que un aviso
+ *  perdido. */
+async function yaAvisado(
+  prisma: Pick<typeof db, "eventoAuditoria">,
+  huella: string,
+  ahora: Date,
+): Promise<boolean> {
+  try {
+    const previo = await prisma.eventoAuditoria.findFirst({
+      where: {
+        entidad: ENTIDAD_AVISO,
+        entidadId: huella,
+        accion: ACCIONES.salud.aviso,
+        creadoEn: { gt: new Date(ahora.getTime() - VENTANA_AVISO_REPETIDO_MS), lte: ahora },
+      },
+      select: { id: true },
+    });
+    return previo !== null;
+  } catch (error) {
+    console.error("[salud] no se pudo mirar si el aviso ya salió; se manda igual", error);
+    return false;
+  }
 }
