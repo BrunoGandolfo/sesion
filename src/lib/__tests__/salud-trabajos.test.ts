@@ -278,6 +278,18 @@ describe("aviso repetido", () => {
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
   });
 
+  it("A → B → A: volver al primer estado también es un cambio, y avisa", async () => {
+    await fallido();
+    await correr(T0); // A: un fallido
+    await fallido();
+    await correr(new Date(T0.getTime() + 3600000)); // B: dos fallidos
+    await base.prisma.trabajo.deleteMany({ where: { id: (await base.prisma.trabajo.findFirstOrThrow()).id } });
+    const deVuelta = await correr(new Date(T0.getTime() + 2 * 3600000)); // A otra vez
+
+    expect(deVuelta).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+    expect(enviarCorreo).toHaveBeenCalledTimes(3);
+  });
+
   it("un correo que no salió no cuenta como enviado: la próxima corrida lo intenta", async () => {
     await fallido();
     vi.mocked(enviarCorreo).mockRejectedValue(new Error("Resend caído"));

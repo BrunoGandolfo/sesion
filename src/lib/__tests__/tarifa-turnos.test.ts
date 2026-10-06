@@ -18,6 +18,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { EstadoPago, EstadoTurno, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { crearTurno } from "@/app/api/_lib/casos-uso/crear-turno";
 import { actualizarPaciente } from "@/app/api/_lib/casos-uso/pacientes";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
@@ -126,6 +127,39 @@ describe("cambiar la tarifa de la paciente", () => {
     });
 
     expect(await tarifaDe(suyo)).toBe(2600);
+  });
+});
+
+describe("un alta de turno en paralelo con el cambio de tarifa", () => {
+  it("espera al cambio y nace con la tarifa nueva (no se escapa de la propagación)", async () => {
+    const f = await fixture();
+    let soltar!: () => void;
+    const suelto = new Promise<void>((r) => { soltar = r; });
+    let bloqueada!: () => void;
+    const hayLock = new Promise<void>((r) => { bloqueada = r; });
+
+    // El cambio de tarifa toma la fila como actualizarPaciente y se queda
+    // con la transacción abierta hasta que el alta ya empezó.
+    const cambio = prismaRaw.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM pacientes WHERE id = ${f.pacienteId} FOR NO KEY UPDATE`;
+      await tx.paciente.update({ where: { id: f.pacienteId }, data: { tarifa: 1400 } });
+      bloqueada();
+      await suelto;
+    }, { timeout: 20_000 });
+
+    await hayLock;
+    const alta = crearTurno({
+      prisma: db, organizationId: f.organizationId, usuarioId: "mariana", pacienteId: f.pacienteId,
+      fecha: new Date(AHORA.getTime() + 72 * HORA), duracion: 50, modalidad: "presencial",
+      notas: null, frecuencia: "unico", ahora: AHORA,
+    });
+    // Tiempo para que el alta llegue a su lectura de la tarifa.
+    await new Promise((r) => setTimeout(r, 300));
+    soltar();
+    await cambio;
+    const turno = await alta;
+
+    expect(await tarifaDe(turno.id)).toBe(1400);
   });
 });
 
