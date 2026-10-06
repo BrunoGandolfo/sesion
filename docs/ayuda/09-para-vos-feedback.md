@@ -127,6 +127,9 @@ el audio no muestra que sobre lo que hiciste.
 
 <!-- fuentes:
 src/components/grabacion/FeedbackTerapeutaView.tsx
+src/components/grabacion/feedback-lectura.ts
+src/components/grabacion/feedback-instrumentos.tsx
+src/components/grabacion/feedback-piezas.tsx
 src/lib/glosario.ts
 src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/config/_components/opciones-radio.tsx

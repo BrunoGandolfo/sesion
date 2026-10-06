@@ -29,7 +29,6 @@ const CARPETAS = ["src/app/(dashboard)", "src/components", "src/hooks"];
 
 /** Archivo (relativo a la raíz) → dueño del corte pendiente. */
 const EXCEPCIONES: Record<string, string> = {
-  "src/components/grabacion/FeedbackTerapeutaView.tsx": "ola 3",
 };
 
 function esTest(ruta: string): boolean {

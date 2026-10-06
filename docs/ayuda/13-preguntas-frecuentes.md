@@ -204,6 +204,9 @@ src/app/api/_lib/casos-uso/trabajos/politica.ts
 .github/workflows/backup.yml
 src/components/grabacion/RiesgoDetectadoBanner.tsx
 src/components/grabacion/FeedbackTerapeutaView.tsx
+src/components/grabacion/feedback-lectura.ts
+src/components/grabacion/feedback-instrumentos.tsx
+src/components/grabacion/feedback-piezas.tsx
 processor/prompts/clinical_note_v3.1.1.md
 processor/prompts/therapist_feedback_gestalt_v1.1.md
 docs/pipeline.md
