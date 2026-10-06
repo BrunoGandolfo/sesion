@@ -10,6 +10,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -22,6 +23,7 @@ const CONTRATO_POR_MIGRACION: Record<string, string> = contratos.CONTRATO_POR_MI
 const CONTRATOS: Record<string, { archivo: string | null }> = contratos.CONTRATOS;
 
 const VERIFICAR = resolve("scripts/ensayo/verificar-restauracion.mjs");
+const WORKFLOW = resolve(".github/workflows/ensayo-restauracion.yml");
 const MIGRACIONES = resolve("prisma/migrations");
 const bin = (nombre: string) => (process.env.PG_BIN ? join(process.env.PG_BIN, nombre) : nombre);
 
@@ -229,6 +231,22 @@ describe.skipIf(process.env.VITEST_SUITE === "unit")("contratos del ensayo", () 
       v = verificar(url, { RAIZ_RELEASE: release });
       expect(v.status, v.stderr).toBe(0);
     });
+  });
+
+  it("el workflow compara contra release: checkout de release en la carpeta de RAIZ_RELEASE", () => {
+    type Paso = { name?: string; uses?: string; with?: Record<string, string> };
+    const { load } = createRequire(import.meta.url)("js-yaml") as {
+      load: (s: string) => { jobs: { ensayo: { env: Record<string, string>; steps: Paso[] } } };
+    };
+    const job = load(readFileSync(WORKFLOW, "utf8")).jobs.ensayo;
+    const raiz = job.env.RAIZ_RELEASE;
+    expect(raiz).toBe("${{ github.workspace }}/publicado");
+    const checkouts = job.steps.filter((p) => p.uses?.startsWith("actions/checkout@"));
+    const release = checkouts.filter((p) => p.with?.ref === "release");
+    expect(release).toHaveLength(1);
+    expect(raiz.endsWith(`/${release[0].with!.path}`)).toBe(true);
+    // Ningún otro checkout trae prisma/ a esa carpeta.
+    expect(checkouts.filter((p) => p.with?.path === release[0].with!.path)).toHaveLength(1);
   });
 });
 

@@ -21,6 +21,19 @@
 #      como artefactos y abre un issue con el acta;
 #   5. alerta por correo si cualquier paso falla.
 #
+# CONTRA QUÉ ESQUEMA SE COMPARA: el de `release`, lo que está publicado,
+# nunca el de `main`. Un `schedule` corre desde la rama por defecto (main), y
+# antes el contrato salía de ese checkout: una migración en main sin publicar
+# ponía en rojo toda copia de producción. Ahora hay dos checkouts:
+#   - el del ref de la corrida (main en la programada, la rama en un
+#     workflow_dispatch --ref): el CÓDIGO del ensayo (scripts/ensayo), que
+#     se puede probar desde una rama antes de fusionarlo;
+#   - `release`, en ./publicado y solo prisma/: el schema.prisma y las
+#     migraciones del contrato actual (RAIZ_RELEASE).
+# Qué contrato le toca a cada copia lo decide la última migración aplicada
+# en la copia misma (scripts/ensayo/contratos.mjs); las migraciones viejas
+# apuntan a instantáneas congeladas que en su momento fueron release.
+#
 # DECISIÓN DELIBERADA: este ensayo NO descifra ninguna nota y no recibe
 # ninguna clave clínica. Hacerlo exigiría el llavero en GitHub Actions, es
 # decir, la clave de todo el histórico en un lugar más. El censo de ids no
@@ -86,6 +99,8 @@ jobs:
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
       CLAVES_CIFRADO_IDS: ${{ vars.CLAVES_CIFRADO_IDS }}
+      # El contrato actual sale de release, no de este checkout (ver arriba).
+      RAIZ_RELEASE: ${{ github.workspace }}/publicado
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       ALERTA_CORREO: ${{ secrets.ALERTA_CORREO }}
       PG_URL: postgresql://postgres:postgres@localhost:5432
@@ -93,6 +108,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Esquema publicado (release)
+        uses: actions/checkout@v7
+        with:
+          ref: release
+          path: publicado
+          sparse-checkout: prisma
 
       - name: Verificar secrets
         run: |
