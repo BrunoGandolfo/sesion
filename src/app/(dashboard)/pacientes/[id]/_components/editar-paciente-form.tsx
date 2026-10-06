@@ -25,8 +25,26 @@ export interface EditarPacienteFormProps {
     telefono: string;
     tarifa: number;
   };
-  onSuccess: () => void;
+  /** Guardó: `aviso` es lo que se le confirma a ella. */
+  onSuccess: (aviso: string) => void;
   onCancel: () => void;
+}
+
+/** Lo que responde PATCH /api/pacientes/[id] y le importa a este formulario.
+ *  `turnosActualizados` llega cuando el servidor reescribe la tarifa de los
+ *  turnos futuros; mientras no lo mande, el aviso es el de siempre. */
+type RespuestaEdicion = { turnosActualizados?: unknown } | null | undefined;
+
+/** El aviso al guardar: si la tarifa cambió y el servidor actualizó turnos
+ *  futuros, dice cuántos; si no, el de siempre. */
+export function avisoAlGuardar(tarifaCambio: boolean, respuesta: RespuestaEdicion): string {
+  const n = respuesta?.turnosActualizados;
+  if (!tarifaCambio || typeof n !== "number" || !Number.isInteger(n) || n <= 0) {
+    return "Paciente actualizado";
+  }
+  return n === 1
+    ? "Tarifa guardada. Se actualizó 1 turno futuro."
+    : `Tarifa guardada. Se actualizaron ${n} turnos futuros.`;
 }
 
 export function EditarPacienteForm({
@@ -57,13 +75,13 @@ export function EditarPacienteForm({
     setApiError(null);
 
     try {
-      await apiPatch(`/api/pacientes/${paciente.id}`, {
+      const respuesta = await apiPatch<RespuestaEdicion>(`/api/pacientes/${paciente.id}`, {
         nombre: values.nombre,
         apellido: values.apellido,
         telefono: values.telefono,
         tarifa: values.tarifa,
       });
-      onSuccess();
+      onSuccess(avisoAlGuardar(values.tarifa !== paciente.tarifa, respuesta));
     } catch (err) {
       setApiError(mensajeParaElla(err));
     }

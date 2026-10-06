@@ -73,6 +73,7 @@ Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
 
 - **Datos de contacto** — teléfono (se puede tocar para llamar), tarifa
   por sesión y fecha de alta.
+  Si en **Editar datos** cambiás la tarifa y había turnos futuros, el aviso dice cuántos se actualizaron: *"Tarifa guardada. Se actualizaron 3 turnos futuros."*
 - **Notas privadas** — se guardan solas: *"Se guarda solo. Solo vos las ves."* Si
   intentás salir antes de que se guarden, la app avisa.
 - **Autorización para grabar las sesiones** — ver abajo.
