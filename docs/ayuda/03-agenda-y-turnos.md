@@ -130,6 +130,7 @@ ningún recordatorio**.
 
 <!-- fuentes:
 src/app/(dashboard)/agenda/_components/agenda-view.tsx
+src/app/(dashboard)/agenda/_components/datos.ts
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
 src/app/api/turnos/route.ts
 src/app/api/turnos/[id]/route.ts

@@ -27,7 +27,7 @@ it("describe la semana del teléfono y los puntos sin número", () => {
 });
 
 it("no dice que los cancelados desaparecen: la agenda los pide y los muestra", () => {
-  expect(leer("src/app/(dashboard)/agenda/_components/agenda-view.tsx")).toContain("&includeCancelados=true");
+  expect(leer("src/app/(dashboard)/agenda/_components/datos.ts")).toContain("&includeCancelados=true");
   expect(ayuda).not.toContain("no se muestran en la agenda");
 });
 

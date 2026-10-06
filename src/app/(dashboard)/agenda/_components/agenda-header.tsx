@@ -9,7 +9,7 @@ import { agregarDiasMvd, inicioDeSemanaMvd, formatearMesMvd } from "@/lib/fechas
 import { Button, Segmented } from "@/components/ui";
 import { fechaCorta, fechaLarga } from "@/lib/format";
 import { AGENDAR, NAV } from "@/lib/glosario";
-import type { AgendaViewMode } from "./agenda-view";
+import type { AgendaViewMode } from "./datos";
 
 interface Props {
   view: AgendaViewMode;
