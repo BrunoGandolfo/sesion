@@ -389,13 +389,18 @@ if [ -n "$CLAVE_ENC1" ] && aws s3api head-object --bucket "$R2_BUCKET" --key "$E
   sha256sum "$TRABAJO_ENSAYO/enc1/copia.dump.gpg"
   psql -X -q -v ON_ERROR_STOP=1 -c 'DROP DATABASE ensayo_manual' "$DATABASE_URL"
   cd "$TRABAJO_ENSAYO/enc1"
-  CLAVES_CIFRADO="1=$CLAVE_ENC1" "$OLDPWD/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
+  CLAVES_HISTORICAS_IDS= CLAVES_CIFRADO="1=$CLAVE_ENC1" "$OLDPWD/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
   cd "$OLDPWD"
-  CLAVES_CIFRADO="1=$CLAVE_ENC1" node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/enc1/transcripcion.txt"
+  CLAVES_HISTORICAS_IDS= CLAVES_CIFRADO="1=$CLAVE_ENC1" node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/enc1/transcripcion.txt"
 else
   echo "Sin CLAVE_ENC1 o la copia ENC1 ya no está en R2: prueba ENC1 salteada."
 fi
 ```
+
+El llavero de este bloque usa el id `1` sólo como etiqueta de la clave ENC1
+(ENC1 no guarda id): no es la clave 1 de ENC2. Por eso se vacía
+`CLAVES_HISTORICAS_IDS`, que puede traer ese mismo número y el verificador
+rechazaría como clave disponible e histórica a la vez.
 
 **Bien:** `esquema restaurado: produccion-d02ae0e`, `ENC1`, `muestras
 descifradas: 4/4` (nota clínica y contexto longitudinal, viejos y nuevos) y
