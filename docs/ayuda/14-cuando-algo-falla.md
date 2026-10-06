@@ -272,6 +272,8 @@ src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts
 src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/components/grabacion/GrabadorSesion.tsx
+src/components/grabacion/grabador-microfono.ts
+src/components/grabacion/grabacion-pendiente.ts
 src/lib/grabacion-microfono.ts
 src/lib/grabacion-captura.ts
 src/app/api/_lib/casos-uso/audio.ts

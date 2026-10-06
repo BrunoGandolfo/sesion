@@ -214,6 +214,8 @@ src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/medidor-audio.tsx
 src/components/grabacion/GrabadorSesion.tsx
+src/components/grabacion/grabador-microfono.ts
+src/components/grabacion/grabacion-pendiente.ts
 src/lib/subida-audio.ts
 src/lib/grabacion-storage.ts
 src/hooks/usePantallaEncendida.ts
