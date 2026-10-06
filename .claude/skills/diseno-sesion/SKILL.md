@@ -75,7 +75,7 @@ que más se usa, con **piso de 12 px**. Conteos por grep de `text-[…px]` en
 |---|---|---|---|---|
 | meta | 12 px | Rótulos en mayúscula, fechas, notas al pie | 120 | `src/components/layout/cabecera-usuario.tsx:75` |
 | secundario | 13 px | Texto de apoyo, filas densas | 122 | `src/components/ui/guardado-campo.tsx:8` |
-| cuerpo | 14 px | Texto corriente | 75 | `src/components/grabacion/HotWordsManager.tsx:443` |
+| cuerpo | 14 px | Texto corriente | 75 | `src/components/grabacion/HotWordsManager.tsx:162` |
 | campo | 15 px | Valor de input y select | 41 | `src/components/ui/input.tsx:53`, `src/components/ui/select.tsx:11` |
 | título chico | 16 px | Título de bloque o plegable (Fraunces) | 12 | `src/components/ui/plegable.tsx:60` |
 | título de sección | 18 px | Título de sección (Fraunces) | 16 | `src/app/(dashboard)/pacientes/[id]/_components/graficos/base.tsx:166` |
