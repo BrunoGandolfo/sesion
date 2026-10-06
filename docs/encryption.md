@@ -20,8 +20,7 @@ que es el contrato del anexo de `docs/esquema.md`.
 | `ConsentimientoGrabacion` (`consentimientos_grabacion`) | `textoCompleto` | `texto_completo_encrypted` | `string` |
 | | `firmaDigital` | `firma_digital_encrypted` | `string` |
 | `HotWord` (`hot_words`) | `termino` | `termino_encrypted` | `string` |
-| `SesionClinica` (`sesiones_clinicas`) | `audioClave` | `audio_clave_encrypted` | `string \| null` (base64) |
-| | `transcripcion` | `transcripcion_encrypted` | `string \| null` |
+| `SesionClinica` (`sesiones_clinicas`) | `transcripcion` | `transcripcion_encrypted` | `string \| null` |
 | | `notaIa` | `nota_ia_encrypted` | `NotaSoap \| null` |
 | | `datos` | `datos_encrypted` | `unknown` (JSON parseado) |
 | | `feedback` | `feedback_encrypted` | `unknown` (JSON parseado) |
@@ -38,7 +37,7 @@ fechas y montos, `speech_analytics` (números), IP y navegador en
 `sesiones_acceso` e `intentos_acceso` (purgas según fecha y estado; no son treinta días desde la creación en todos los casos). La lista completa está en
 `docs/esquema.md`.
 
-**La app no cifra el audio.** Se guarda como `Blob` en IndexedDB mientras se graba (`src/lib/grabacion-storage.ts`), viaja a R2 por TLS con un PUT prefirmado, R2 lo cifra en reposo (cifrado del proveedor, no de la app) y se pide borrarlo al aprobar o eliminar la sesión. El campo lógico `audioClave` (`audio_clave_encrypted`) y la columna `audio_iv` siguen en el esquema sin usarse: sólo tienen valor en sesiones grabadas con la versión que cifraba en el teléfono. Consecuencia que hay que saber: ya no existe una clave cuya destrucción vuelva ilegible un audio que no se pudo borrar. Ver `docs/pipeline.md`.
+**La app no cifra el audio.** Se guarda como `Blob` en IndexedDB mientras se graba (`src/lib/grabacion-storage.ts`), viaja a R2 por TLS con un PUT prefirmado, R2 lo cifra en reposo (cifrado del proveedor, no de la app) y se pide borrarlo al aprobar o eliminar la sesión. Las columnas `audio_clave_encrypted` y `audio_iv`, de la versión que cifraba en el teléfono (15 al 18/9/2026), las borró `20261006120000_sin_audio_cifrado`; sólo las traen los respaldos anteriores. Consecuencia que hay que saber: ya no existe una clave cuya destrucción vuelva ilegible un audio que no se pudo borrar. Ver `docs/pipeline.md`.
 
 Los backups de la base se cifran con gpg (`docs/operaciones.md`). El workflow retiene diarios treinta días y mensuales 366 días (doce meses), lo mismo que informa el consentimiento. Una copia anterior puede conservar la clave de un audio grabado con la versión que cifraba; las sesiones nuevas no tienen clave de audio.
 
@@ -105,7 +104,7 @@ await db.turno.create({
 
 await db.sesionClinica.updateMany({
   where: { id, organizationId, estado: "revision" },
-  data: { estado: "aprobada", ...cifrarSesion(id, { notaFinal, notasEdicion, audioClave: null }) },
+  data: { estado: "aprobada", ...cifrarSesion(id, { notaFinal, notasEdicion }) },
 });
 ```
 

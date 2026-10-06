@@ -69,6 +69,16 @@ export const CONTRATOS = {
         columnas: ["resumen_acumulativo_encrypted", "hipotesis_diagnostica_encrypted", "riesgos_historicos_encrypted"] },
     ],
   },
+  // Historia nueva hasta hilo_versiones_recifrado: todavía con las columnas
+  // del audio cifrado en el teléfono (audio_clave_encrypted, audio_iv), que
+  // borró 20261006120000_sin_audio_cifrado. Las copias de esa época duran
+  // hasta que vence la última mensual (366 días).
+  "nuevo-con-audio": {
+    archivo: "scripts/ensayo/esquema-con-audio.prisma",
+    formato: "ENC2",
+    minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
+    muestras: MUESTRAS_ENC2,
+  },
   [CONTRATO_ACTUAL]: {
     archivo: null,
     formato: "ENC2",
@@ -88,11 +98,12 @@ export const CONTRATO_POR_MIGRACION = {
   // grabador_restaurado tenían la tabla audio_segmentos y nunca llegaron a
   // una copia: la primera copia de la base nueva (18-sep) ya la tiene
   // aplicada. Si apareciera una, no tiene contrato y es "desconocida".
-  "20260918120000_grabador_restaurado": CONTRATO_ACTUAL,
-  "20260923120000_turnos_duracion_120": CONTRATO_ACTUAL, // CHECK
-  "20260923120100_turnos_pago_fecha_idx": CONTRATO_ACTUAL, // índice
-  "20260924120000_eventos_auditoria_accion_idx": CONTRATO_ACTUAL, // índice
-  "20260928120000_hilo_versiones_recifrado": CONTRATO_ACTUAL, // trigger
+  "20260918120000_grabador_restaurado": "nuevo-con-audio",
+  "20260923120000_turnos_duracion_120": "nuevo-con-audio", // CHECK
+  "20260923120100_turnos_pago_fecha_idx": "nuevo-con-audio", // índice
+  "20260924120000_eventos_auditoria_accion_idx": "nuevo-con-audio", // índice
+  "20260928120000_hilo_versiones_recifrado": "nuevo-con-audio", // trigger
+  "20261006120000_sin_audio_cifrado": CONTRATO_ACTUAL, // DROP de las columnas de audio
 };
 
 /**

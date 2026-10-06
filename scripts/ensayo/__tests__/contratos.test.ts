@@ -147,10 +147,17 @@ describe.skipIf(process.env.VITEST_SUITE === "unit")("contratos del ensayo", () 
       expect(v.stdout).toContain(`contrato elegido por su última migración, ${migracionesDelRepo().at(-1)}`);
     });
 
-    it("una copia del 22 o del 28 de septiembre (sin la migración del recifrado) también es conocida", () => {
-      for (const ultima of ["20260923120100_turnos_pago_fecha_idx", "20260924120000_eventos_auditoria_accion_idx"]) {
-        const url = crearBase("ensayo_contrato_vieja", COPIA);
-        psql(url, `DELETE FROM _prisma_migrations WHERE migration_name > '${ultima}'`);
+    it("las copias de producción de septiembre (22, 28 y 30) son conocidas, cada una con su contrato", () => {
+      for (const ultima of ["20260923120100_turnos_pago_fecha_idx", "20260924120000_eventos_auditoria_accion_idx", "20260928120000_hilo_versiones_recifrado"]) {
+        // Migradas por Prisma solo hasta `ultima`, como estaba producción.
+        const repo = mkdtempSync(join(carpeta, "hasta-"));
+        cpSync(resolve("prisma"), join(repo, "prisma"), { recursive: true });
+        for (const m of migracionesDelRepo().filter((m) => m > ultima)) rmSync(join(repo, "prisma/migrations", m), { recursive: true });
+        const url = crearBase("ensayo_contrato_vieja");
+        execFileSync(resolve("node_modules/.bin/prisma"), ["migrate", "deploy", "--schema", join(repo, "prisma/schema.prisma")], {
+          env: { NODE_ENV: "test", PATH: process.env.PATH, DATABASE_URL: url }, stdio: "pipe",
+        });
+        sembrar(url, [{ clave: 1, fecha: "2026-09-20" }]);
         const v = verificar(url);
         expect(v.status, v.stderr).toBe(0);
         expect(v.resultado.esquema).toBe(CONTRATO_POR_MIGRACION[ultima]);

@@ -161,9 +161,9 @@ que declara el consentimiento, generado desde `src/lib/consentimiento-hechos.ts`
 La limpieza se ejecuta cuando una corrida llega a ese paso: si el workflow está
 fallando, no hay borrado puntual.
 
-El dump no incluye los archivos de audio. Las grabaciones actuales no tienen
-clave de audio: la app dejó de cifrar el audio. Sólo filas de grabaciones
-anteriores pueden conservar la columna de clave, cifrada con ENC2. Para
+El dump no incluye los archivos de audio. La app dejó de cifrar el audio el
+18-sep y `20261006120000_sin_audio_cifrado` borró las columnas de clave e IV;
+las copias anteriores todavía las traen. Para
 restaurar hacen falta la passphrase del backup y todas las claves ENC2 usadas
 por ese dump: conservarlas hasta que no quede ninguna copia que las necesite,
 incluidas mensuales y copias retenidas por fallos.
@@ -227,7 +227,11 @@ las claves históricas.
 lee la última migración aplicada en la `_prisma_migrations` restaurada y la
 busca en `scripts/ensayo/contratos.mjs`, que dice qué esquema le corresponde:
 
-- las migraciones desde `20260918120000_grabador_restaurado` hasta la última
+- de `20260918120000_grabador_restaurado` a
+  `20260928120000_hilo_versiones_recifrado` → `nuevo-con-audio`, la
+  instantánea `scripts/ensayo/esquema-con-audio.prisma` (con
+  `audio_clave_encrypted` y `audio_iv`);
+- desde `20261006120000_sin_audio_cifrado` hasta la última
   publicada → el contrato `nuevo`, que se lee del `prisma/schema.prisma` de
   **release**. El workflow hace un segundo checkout, de `release`, sólo de
   `prisma/`, y se lo pasa al verificador; el código del ensayo es el del ref de
@@ -308,7 +312,7 @@ Ninguna se puede hacer desde el repositorio.
 
 ### Reversiones administrativas
 
-Tres SQL retiran lo que agregó una migración. No los ejecuta la app ni Publicar;
+Cuatro SQL revierten una migración. No los ejecuta la app ni Publicar;
 sólo se corren a mano, con la conexión directa y después de decidirlo.
 
 - `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
@@ -322,6 +326,11 @@ sólo se corren a mano, con la conexión directa y después de decidirlo.
   vuelven a admitir únicamente la resolución, y el cron deja de poder
   recifrarlas (cuentan como errores; su clave vieja no se puede retirar).
   Las garantías siguen puestas. No borra datos.
+- `scripts/mantenimiento/revertir-sin-audio-cifrado.sql` revierte
+  `20261006120000_sin_audio_cifrado`: vuelve a crear `audio_clave_encrypted`
+  y `audio_iv` vacías (no había datos que recuperar) y borra su registro en
+  `_prisma_migrations`. Sólo hace falta si se vuelve a publicar un código
+  anterior a esa migración.
 - `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de `20260917120000_limites_invitados` y su registro en `_prisma_migrations`. Obsoleto salvo reversión de código: hoy leen esas columnas `src/app/api/_lib/casos-uso/estado-prueba.ts`, `src/lib/cuenta-registro-db.ts` y `prepararAudio` (`src/app/api/_lib/casos-uso/audio.ts`). Correrlo con ese código publicado rompe el alta por invitación y la grabación.
 
 ## 5. Incidentes y límites conocidos

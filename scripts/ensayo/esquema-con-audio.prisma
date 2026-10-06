@@ -1,3 +1,10 @@
+// INSTANTÁNEA CONGELADA para el ensayo de restauración: prisma/schema.prisma
+// tal como estaba antes de 20261006120000_sin_audio_cifrado (con
+// audio_clave_encrypted y audio_iv). Es el contrato de las copias cuya
+// última migración va de grabador_restaurado a hilo_versiones_recifrado
+// (scripts/ensayo/contratos.mjs). No se edita: describe copias que ya
+// existen.
+
 // ============================================================================
 // Sesión — esquema definitivo (reconstrucción, Fase 2, 11-09-2026)
 //
@@ -626,6 +633,12 @@ model SesionClinica {
   // (key `<org>/<sesion>/0`, calculada en estados.ts). La app no lo cifra
   // desde 5c1bfe2 (18/9/2026); R2 lo cifra en reposo.
   audioEstado         EstadoAudio @default(sin_audio) @map("audio_estado")
+  /// Restos del cifrado de audio en el teléfono (15 al 18/9/2026). Nada los
+  /// lee ni los escribe: @ignore los saca del cliente de Prisma y las
+  /// columnas siguen en la base hasta la migración que las borra (fase 2 de
+  /// la limpieza, en un despliegue posterior).
+  audioClaveEncrypted Bytes?      @map("audio_clave_encrypted") @ignore
+  audioIv             Bytes?      @map("audio_iv") @ignore
   duracionAudioSeg    Int?        @map("duracion_audio_seg")
   /// Tramos en pausa tal como los reporta el teléfono: [{ inicio, fin }].
   /// Sin cifrar: marcas de tiempo, no contenido.
@@ -702,6 +715,14 @@ model SesionClinica {
   @@index([estado, proximoIntentoEn, leaseVenceEn])
   @@map("sesiones_clinicas")
 }
+
+/// Un segmento de audio (~60 s, comprimido, cifrado en el teléfono con la
+/// clave de la sesión y un IV propio). La key en R2 se calcula:
+/// <organizationId>/<sesionId>/<indice>. Descriptor inmutable: iv, bytes y
+/// sha256 los declara el cliente al reservar y se comprueban al confirmar
+/// (HEAD). confirmadoEn null = reservado, no confirmado. Se borra con la
+/// sesión (eliminar); el trabajo borrar_audio_r2 lleva en su payload lo que
+/// necesita para borrar los objetos.
 
 // ============================================================================
 // Trabajo durable (efectos externos fuera del request)
