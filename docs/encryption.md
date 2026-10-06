@@ -300,7 +300,11 @@ blobs con el id nuevo, y el ensayo automático (día 2 de cada mes) falla ante
 un id que no figura en la lista. Los ids viejos **se quedan** mientras
 existan respaldos que los usen: las diarias vencen solas, las mensuales
 duran 366 días. Un id viejo se saca recién cuando venció la última copia
-anterior a la rotación.
+anterior a la rotación. Excepción: si la clave vieja se perdió (no está en
+el gestor ni en Vercel), su id no se saca sin más: pasa a la variable
+CLAVES_HISTORICAS_IDS, y el ensayo informa esas copias como "clave histórica
+no disponible" en vez de fallar (`docs/operaciones.md` §4, "Cómo se juzga
+una copia").
 
 **Los respaldos anteriores a la rotación solo abren sus notas con la clave
 anterior. Si esa clave no está guardada offline, las notas de esos

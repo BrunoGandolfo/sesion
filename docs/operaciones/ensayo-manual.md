@@ -8,7 +8,10 @@ ninguna clave clínica, a propósito, y no descifra nada.
 
 Escrito el 26 de septiembre de 2026 sobre `main` en `a6f6e74`, leyendo el repo
 y GitHub Actions. Nada de esto se corrió con secretos: lo que depende de ellos
-está marcado como **no verificado** en §7.
+está marcado como **no verificado** en §7. Actualizado el 6 de octubre: el
+contrato de esquema lo elige la última migración de la copia, el checkout es
+de `release` y existen las claves históricas (§3.4 y `docs/operaciones.md` §4,
+"Cómo se juzga una copia").
 
 Qué hace, en una línea: bajar de R2 la copia diaria más reciente y la mensual
 más vieja, descifrar cada una con gpg, restaurarla en un Postgres 17 local en
@@ -46,7 +49,8 @@ cargan con `read -rs` en la misma terminal (§3.1) y se borran al final (§3.7).
 | `R2_BUCKET` | Bucket de **respaldos** (no confundir con `R2_BUCKET_NAME`, el de audio; pueden coincidir) | Copia del dueño del secret de Actions `R2_BUCKET`. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Token de R2 con lectura sobre ese bucket | Copia del dueño de los secrets `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`. GitHub **no deja leer** un secret ya cargado. Si no hay copia: crear en Cloudflare un token nuevo de sólo lectura (*Object Read*) para ese bucket y borrarlo al terminar; no reemplazar el de Actions. |
 | `BACKUP_ENCRYPTION_KEY` | Passphrase de gpg de los respaldos | La copia **offline** que pide `.github/workflows/backup.yml` (línea 22). El secret de Actions se cargó el 3-sep-2026 y no cambió desde entonces, así que todas las copias que hay en R2 hoy usan ese mismo valor. Si no existe copia offline, **parar**: ni este ensayo ni una restauración real son posibles, y eso es un hallazgo más grave que cualquier otro. |
-| `CLAVES_CIFRADO` | El llavero ENC2, formato `id=<32 bytes base64>[,id=…]` | El llavero del ensayo lleva **todas las claves de la época del respaldo, incluidas las retiradas**: un respaldo anterior a una rotación tiene blobs con la clave vieja. Salen del **gestor de contraseñas** del dueño, una entrada por id. No de Vercel: `CLAVES_CIFRADO` es *Sensitive* y no se puede leer, y en el estado final de una rotación (`docs/encryption.md` §3, paso 3) la variable de Vercel ya no tiene las claves retiradas. La variable de Actions `CLAVES_CIFRADO_IDS` (hoy `1`) dice qué ids se esperan; el llavero tiene que traer al menos esos. |
+| `CLAVES_CIFRADO` | El llavero ENC2, formato `id=<32 bytes base64>[,id=…]` | El llavero del ensayo lleva **todas las claves de la época del respaldo, incluidas las retiradas**: un respaldo anterior a una rotación tiene blobs con la clave vieja. Salen del **gestor de contraseñas** del dueño, una entrada por id. No de Vercel: `CLAVES_CIFRADO` es *Sensitive* y no se puede leer, y en el estado final de una rotación (`docs/encryption.md` §3, paso 3) la variable de Vercel ya no tiene las claves retiradas. La variable de Actions `CLAVES_CIFRADO_IDS` (hoy `1,2`) dice qué ids se esperan; el llavero tiene que traer al menos esos. |
+| `CLAVES_HISTORICAS_IDS` (opcional) | Ids, sin valores, de las claves que existieron y ya no tiene nadie, ej. `1` | La variable de Actions del mismo nombre, si existe (`gh variable get CLAVES_HISTORICAS_IDS`). Con ella, los blobs de esas claves se informan como "clave histórica no disponible" y no hacen fallar el ensayo. Un id no puede estar en el llavero y acá a la vez. |
 | `CLAVE_ENC1` | Sólo para la prueba opcional §3.6b: la `NOTES_ENCRYPTION_KEY` de la app anterior (32 bytes base64) | Gestor de contraseñas del dueño, o la variable del proyecto de Vercel si todavía existe y no es *Sensitive*. |
 
 **Por qué `CLAVE_ENC1` va aparte.** ENC1 no guarda id de clave: el verificador
@@ -106,9 +110,9 @@ set +x
 umask 077
 cd ~/proyectos/sesion-arreglos
 git fetch origin
-git worktree add --detach ../sesion-ensayo-acta origin/main
+git worktree add --detach ../sesion-ensayo-acta origin/release
 cd ../sesion-ensayo-acta
-git log -1 --format='Ensayo con el código de main %h (%cs)'
+git log -1 --format='Ensayo con el código de release %h (%cs)'
 export TRABAJO_ENSAYO="$(mktemp -d /tmp/sesion-ensayo.XXXXXX)"
 
 read -rp  'Endpoint R2 (https://…r2.cloudflarestorage.com): ' R2_ENDPOINT
@@ -119,7 +123,9 @@ read -rsp 'Passphrase del respaldo (BACKUP_ENCRYPTION_KEY): ' BACKUP_ENCRYPTION_
 read -rsp 'Llavero ENC2 de la época del respaldo, del gestor (todas las claves): ' CLAVES_CIFRADO; printf '\n'
 # Sólo si se va a hacer la prueba opcional §3.6b; si no, Enter vacío.
 read -rsp 'Clave ENC1 (NOTES_ENCRYPTION_KEY, opcional): ' CLAVE_ENC1; printf '\n'
-export R2_ENDPOINT R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO CLAVE_ENC1
+# Ids de claves perdidas (no son secretos). Enter vacío si no hay ninguna.
+read -rp  'Ids de claves históricas (CLAVES_HISTORICAS_IDS, ej. 1): ' CLAVES_HISTORICAS_IDS
+export R2_ENDPOINT R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO CLAVE_ENC1 CLAVES_HISTORICAS_IDS
 export AWS_DEFAULT_REGION=auto AWS_PAGER=""
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
 unset AWS_SESSION_TOKEN DATABASE_URL
@@ -131,7 +137,12 @@ que no queden escritas en `~/.aws/`. Las dos de checksum hacen lo mismo que
 los `aws configure set default.s3.…` de los workflows (R2 no acepta el
 checksum nuevo de aws-cli ≥ 2.23 en todas las rutas).
 
-**Bien:** muestra el SHA de main y la carpeta privada. Anotar el SHA para el acta.
+El checkout es de `release`, no de `main`: el guion compara la copia contra el
+`prisma/schema.prisma` de la carpeta desde la que corre, y la copia es de lo
+que está publicado. Con `main` adelantado en una migración, el ensayo diría
+"esquema desconocido" de copias sanas.
+
+**Bien:** muestra el SHA de release y la carpeta privada. Anotar el SHA para el acta.
 
 ### 3.2 Elegir y bajar las dos copias
 
@@ -204,10 +215,13 @@ cd "$OLDPWD"
 gpg y restaura con `pg_restore --exit-on-error` (`scripts/ensayo/restaurar.sh`),
 y corre `scripts/ensayo/verificar-restauracion.mjs` con el llavero, que:
 
-0. compara **todas** las tablas, columnas y tipos con las dos instantáneas
-   conocidas (`scripts/ensayo/esquema-produccion.prisma` = producción d02ae0e,
-   y `prisma/schema.prisma` = esquema nuevo). Esa es la verificación de esquema;
-   si no coincide con ninguna, dice "esquema restaurado desconocido" y falla;
+0. lee la última migración aplicada en la copia, busca su contrato en
+   `scripts/ensayo/contratos.mjs` (`nuevo` = `prisma/schema.prisma` del
+   checkout de release; `produccion-d02ae0e` =
+   `scripts/ensayo/esquema-produccion.prisma`) y exige que **todas** las
+   tablas, columnas y tipos sean exactamente los de ese contrato. Si no, o si
+   la migración no tiene contrato, dice "esquema restaurado desconocido" y por
+   qué, y falla;
 1. cuenta filas por tabla contra mínimos;
 2. revisa el formato de toda columna `*_encrypted`;
 3. **descifra** con id de clave y AAD la nota clínica
@@ -219,24 +233,38 @@ y corre `scripts/ensayo/verificar-restauracion.mjs` con el llavero, que:
 4. cuenta filas huérfanas por cada clave foránea.
 
 **Bien:** termina con `restauración verificada: OK`, dice `esquema restaurado:
-nuevo`, `columnas cifradas: … (ENC2, … por clave {"1":…}, inválidos 0)`,
-`muestras descifradas: 4/4`, `violaciones 0`, y deja `resultado-manual.json`.
+nuevo (contrato elegido por su última migración, …)`, `columnas cifradas: …
+(ENC2, … por clave {"2":…}, inválidos 0)`, `muestras descifradas: 4/4`,
+`violaciones 0`, y deja `resultado-manual.json`.
+
+**También bien, con una clave histórica:** una copia anterior al recifrado
+del 29-sep tiene blobs de la clave 1. Si la 1 está declarada histórica, dice
+`muestras descifradas: 0/4, de clave histórica: 4` (o 2/4 si la copia está a
+medio recifrar), `clave histórica no disponible: id 1, N blobs` y
+`restauración verificada: OK`. La copia se restauró; sus notas no se pueden
+leer porque la clave no existe. Va al acta así, con la fecha de la copia.
 
 **Si falla, leer el motivo antes de concluir nada:**
 
 - `falta la clave N en el llavero`: hay datos cifrados con una clave que el
   `CLAVES_CIFRADO` cargado no trae (una retirada o una copia incompleta del
-  llavero). No es corrupción: conseguir esa clave y repetir.
+  llavero). No es corrupción: conseguir esa clave y repetir. Si la clave ya no
+  existe en ningún lado, repetir con `CLAVES_HISTORICAS_IDS=N` exportada: el
+  ensayo pasa a informarla como histórica (y conviene declararla también en
+  Actions, `docs/operaciones.md` §4).
 - `no descifra con la clave N`: la clave con ese id no es la de esa época, o
   está mal copiada, o el dato está alterado. Descartar primero lo de la copia.
 - `tabla hilos vacía` / `tabla hilo_versiones vacía` / `no hay ninguna versión
   del Recorrido`: el verificador exige al menos un Recorrido. Si producción
   todavía no generó ninguno, el fallo es real pero no es del respaldo: anotar en
   el acta que la muestra del Recorrido no se pudo probar.
-- `esquema restaurado desconocido`: la copia no coincide columna por columna
-  con `prisma/schema.prisma` del checkout. Pasa si producción y `main` tienen
-  esquemas distintos; comprobar que `origin/release` sea igual a `origin/main`
-  en `prisma/` antes de ensayar.
+- `esquema restaurado desconocido: …`: el motivo viene después de los dos
+  puntos. "no corresponde a su última migración" lista columnas que faltan o
+  sobran: la copia no es lo que dice ser. "no tiene contrato" o "no está en
+  el release publicado": el checkout no es `origin/release` actualizado
+  (`git fetch` y repetir 3.1), o la copia tiene una migración que nunca salió
+  por Publicar. La tabla completa de veredictos está en `docs/operaciones.md`
+  §4, "Cómo se juzga una copia".
 
 Seguir igual con §3.5 para tener el dato de la transcripción.
 
@@ -266,6 +294,7 @@ for (const e of (process.env.CLAVES_CIFRADO ?? "").split(",").map((s) => s.trim(
   llavero.set(Number(e.slice(0, i).trim()), clave);
 }
 if (llavero.size === 0) throw new Error("falta CLAVES_CIFRADO");
+const historicas = new Set((process.env.CLAVES_HISTORICAS_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean).map(Number));
 
 const enc1 = sql(`SELECT count(*) FROM information_schema.columns WHERE table_schema='public'
   AND table_name='sesiones_clinicas' AND column_name='nota_soap_encrypted'`) === "1";
@@ -286,6 +315,7 @@ function abrir(blob, id) {
   }
   if (prefijo !== "ENC2" || blob.length < 33) return { ok: false, motivo: "formato (no es ENC2)" };
   const claveId = blob[4];
+  if (historicas.has(claveId)) return { ok: false, historica: true, claveId, motivo: `clave histórica no disponible: id ${claveId}` };
   const clave = llavero.get(claveId);
   if (!clave) return { ok: false, claveId, motivo: `clave_ausente: falta la clave ${claveId} en el llavero` };
   try {
@@ -307,16 +337,19 @@ for (const [orden, cual] of [["ASC", "más vieja"], ["DESC", "más nueva"]]) {
     WHERE transcripcion_encrypted IS NOT NULL ORDER BY ${fecha} ${orden}, id ${orden} LIMIT 1`).split("|");
   const r = abrir(Buffer.from(hex, "hex"), id);
   const leida = r.ok && typeof r.texto === "string" && r.texto.trim().length > 0;
-  if (!leida) fallo = true;
+  if (!leida && !r.historica) fallo = true;
   console.log(`transcripción ${cual} (sesiones_clinicas ${id}, clave ${r.claveId ?? "?"}): ` +
-    (leida ? "descifrada y leída: sí" : `descifrada y leída: NO — ${r.motivo ?? "descifra pero está vacía"}`));
+    (leida ? "descifrada y leída: sí" : r.historica ? `${r.motivo}, no se prueba`
+      : `descifrada y leída: NO — ${r.motivo ?? "descifra pero está vacía"}`));
 }
 process.exit(fallo ? 1 : 0);
 JS
 node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/diaria/transcripcion.txt"
 ```
 
-**Bien:** dos líneas `descifrada y leída: sí`. **Si dice "NO HAY
+**Bien:** dos líneas `descifrada y leída: sí`, o `clave histórica no
+disponible: id N, no se prueba` en las de una clave declarada histórica (no
+cuenta como fallo; va al acta así). **Si dice "NO HAY
 transcripciones":** la copia no tiene ninguna; anotarlo, no es un fallo del
 respaldo pero deja la transcripción sin probar.
 
@@ -335,8 +368,11 @@ node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/mensual/transcri
 ```
 
 Mismo criterio de **Bien** que 3.4 y 3.5: la mensual del 22-sep también es
-del esquema nuevo (desde entonces las migraciones sólo agregaron un CHECK y dos
-índices, ninguna columna).
+del esquema nuevo (desde entonces las migraciones sólo agregaron un CHECK, dos
+índices y un trigger, ninguna columna). Es anterior al recifrado del 29-sep:
+sus blobs son de la clave 1 (el automático del 2-oct contó 99). Si la clave 1
+no está en el gestor, esta es la copia que da "clave histórica no
+disponible".
 
 ### 3.6b Opcional, sólo hasta mediados de octubre: una copia ENC1 de la base anterior
 
@@ -410,7 +446,7 @@ Consecuencias:
 
 **Qué tiene que decir** (la plantilla, ajustada a estas copias):
 
-- Fecha, quién ejecutó, SHA de `main` usado (3.1), destino: *contenedor
+- Fecha, quién ejecutó, SHA de `release` usado (3.1), destino: *contenedor
   postgres:17 local en tmpfs*; duración total.
 - Por cada copia (diaria y mensual, y la ENC1 si se hizo 3.6b): la clave de
   R2 y su `sha256`, el esquema que informó el guion (`nuevo` esperado; la ENC1,
@@ -452,6 +488,13 @@ cadena de conexión ni texto clínico. Ids de filas sí (ya figuran en el issue 
 ---
 
 ## 6. El ensayo automático hoy: qué falla y si bloquea este
+
+**Actualización del 6-oct:** el automático corrió por calendario el 2-oct
+(corrida `37012091950`) y salió verde con las dos copias: la diaria del 2-oct
+(clave 2, 183 blobs) y la mensual del 22-sep (clave 1, 99 blobs), las dos
+`esquema restaurado: nuevo`, 4/4 muestras con clave conocida y 0 violaciones.
+Lo que sigue es el estado al 26-sep, que explica por qué hasta entonces no
+había corrido.
 
 **Lo que se ve en GitHub** (`gh run list`, 26-sep):
 
@@ -527,8 +570,8 @@ documento no lo dispara.
   producción: que traiga todos los ids que aparecen en las copias.
 - Que la base nueva ya tenga al menos un Recorrido, una nota clínica y una
   transcripción: el verificador exige muestras y falla sin ellas.
-- Que la copia mensual del 22-sep coincida exactamente con `prisma/schema.prisma`
-  de `main` (se infiere de las migraciones, no se restauró).
+- (Verificado después, el 2-oct, por el automático: la mensual del 22-sep
+  restaura con el esquema `nuevo`.)
 - Para 3.6b: que el dueño tenga `NOTES_ENCRYPTION_KEY` y que sea la misma con
   la que se cifró todo lo de la base anterior (ENC1 no admitía rotación).
 - Que notas, versiones del Recorrido y transcripciones descifren: es justamente
