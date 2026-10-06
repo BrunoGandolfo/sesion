@@ -34,8 +34,10 @@ import { cambiarPassword } from "@/app/api/_lib/casos-uso/cambiar-password";
 import { crearTurno } from "@/app/api/_lib/casos-uso/crear-turno";
 import { actualizarPaciente, crearPaciente } from "@/app/api/_lib/casos-uso/pacientes";
 import { actualizarTurno } from "@/app/api/_lib/casos-uso/turnos";
+import { verTranscripcion } from "@/app/api/_lib/casos-uso/sesion/ver-transcripcion";
 import { salirDeLasDemas } from "@/app/api/_lib/casos-uso/salir-de-las-demas";
 import { __resetLlaveroForTests } from "@/lib/llavero";
+import { cifrarSesion } from "@/lib/prisma-encryption";
 import { crearSesion } from "@/lib/sesion-acceso";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
@@ -524,5 +526,41 @@ describe("pacientes y turnos dejan su rastro con el acto", () => {
       actualizarTurno({ prisma: db, organizationId: org.orgId, usuarioId: org.userId, turnoId: turno.id, cambios: { estado: "cancelado" }, ahora: new Date("2030-03-01T12:00:00.000Z") }),
     ).rejects.toThrow();
     expect((await prismaRaw.turno.findUniqueOrThrow({ where: { id: turno.id } })).estado).toBe("programado");
+  });
+});
+
+describe("abrir la transcripción (sesion.ver_transcripcion)", () => {
+  const TEXTO = "S0: hola. S1: buenas.";
+  async function conTranscripcion(org: Org): Promise<string> {
+    const turno = await prismaRaw.turno.create({
+      data: { organizationId: org.orgId, pacienteId: org.pacienteId, fecha: new Date(), tarifaCobrada: 1000 },
+    });
+    // La transcripción va cifrada, atada al id de la fila.
+    const id = randomUUID();
+    await db.sesionClinica.create({
+      data: { ...cifrarSesion(id, { transcripcion: TEXTO }), organizationId: org.orgId, turnoId: turno.id, estado: "revision" },
+    });
+    return id;
+  }
+  const pedido = (org: Org, sesionId: string) =>
+    verTranscripcion({ prisma: db, organizationId: org.orgId, sesionId, usuarioId: org.userId });
+
+  it("con la auditoría rota NO entrega la transcripción", async () => {
+    const org = await crearOrg();
+    const sesionId = await conTranscripcion(org);
+    await romperAuditoria();
+
+    await expect(pedido(org, sesionId)).rejects.toThrow(/auditoria caida/);
+    expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
+  });
+
+  it("con la auditoría sana la entrega y deja el evento, sin el texto", async () => {
+    const org = await crearOrg();
+    const sesionId = await conTranscripcion(org);
+
+    expect(await pedido(org, sesionId)).toEqual({ transcripcion: TEXTO, hablanteTerapeuta: "S0" });
+    const [evento] = await prismaRaw.eventoAuditoria.findMany();
+    expect(evento).toMatchObject({ accion: "sesion.ver_transcripcion", entidadId: sesionId, detalle: { estado: "revision", caracteres: TEXTO.length } });
+    expect(JSON.stringify(evento.detalle)).not.toContain("hola");
   });
 });

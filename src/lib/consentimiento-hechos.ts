@@ -164,7 +164,8 @@ export const REVOCAR_BORRA_HISTORIA = false;
 /** Cada lectura de una nota queda registrada (eventos_auditoria):
  * casos-uso/sesion/ver.ts escribe sesion.ver al abrirla, en la misma
  * transacción que la lectura (sin rastro no sale la nota), y
- * casos-uso/sesion/ver-transcripcion.ts, sesion.ver_transcripcion. */
+ * casos-uso/sesion/ver-transcripcion.ts, sesion.ver_transcripcion, con la
+ * misma regla. */
 export const ACCION_VER_SESION = ACCIONES.sesion.ver;
 export const ACCION_VER_TRANSCRIPCION = ACCIONES.sesion.verTranscripcion;
 
