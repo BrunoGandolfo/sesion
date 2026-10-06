@@ -283,6 +283,9 @@ src/app/api/_lib/casos-uso/pendientes-terapeuta.ts
 src/app/(dashboard)/_components/pendientes.tsx
 src/lib/sesion-clinica/estados.ts
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/use-revision-nota.ts
+src/app/(dashboard)/sesiones/[id]/_components/use-para-vos.ts
+src/app/(dashboard)/sesiones/[id]/_components/avisos-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
 src/app/(dashboard)/agenda/_components/detalle-datos.ts

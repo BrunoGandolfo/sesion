@@ -174,6 +174,9 @@ que cada afirmación sea correcta.
 
 <!-- fuentes:
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/datos.ts
+src/app/(dashboard)/sesiones/[id]/_components/use-revision-nota.ts
+src/app/(dashboard)/sesiones/[id]/_components/avisos-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/nota-sesion-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/mas-de-esta-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/seccion-soap.tsx

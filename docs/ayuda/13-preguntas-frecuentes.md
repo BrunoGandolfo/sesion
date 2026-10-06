@@ -189,6 +189,7 @@ src/app/api/config/route.ts
 src/app/api/turnos/route.ts
 src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/use-revision-nota.ts
 src/app/(dashboard)/pacientes/[id]/_components/ficha-tab.tsx
 src/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
