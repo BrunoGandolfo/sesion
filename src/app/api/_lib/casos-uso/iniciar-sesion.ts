@@ -14,6 +14,7 @@ import type { ClienteCifrado } from "@/lib/prisma-encryption";
 import { crearSesion } from "@/lib/sesion-acceso";
 
 import { registrarAuditoria } from "../auditoria";
+import { normalizarEmail } from "../email";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 
 
@@ -54,7 +55,7 @@ export async function iniciarSesion({
   comparar,
   hashear,
 }: IniciarSesionParams): Promise<ResultadoLogin<SesionIniciada>> {
-  const emailNormalizado = email.trim().toLowerCase();
+  const emailNormalizado = normalizarEmail(email);
   if (!emailNormalizado || !password) return { estado: "rechazado" };
 
   const resultado = await procesarIntentoLogin<SesionIniciada>({

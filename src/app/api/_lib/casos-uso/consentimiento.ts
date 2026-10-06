@@ -29,6 +29,7 @@ import type { db } from "@/lib/db";
 import { cifrarConsentimiento } from "@/lib/prisma-encryption";
 
 import { auditar } from "../auditoria";
+import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 
@@ -79,12 +80,7 @@ async function exigirPaciente(
   pacienteId: string,
   organizationId: string,
 ) {
-  const paciente = await prisma.paciente.findFirst({
-    where: { id: pacienteId, organizationId },
-    select: { id: true, nombre: true, apellido: true },
-  });
-  if (!paciente) throw new ApiError("Paciente no encontrado", 404);
-  return paciente;
+  return requirePaciente(prisma, pacienteId, organizationId, { id: true, nombre: true, apellido: true });
 }
 
 export interface IdentidadConsentimiento {

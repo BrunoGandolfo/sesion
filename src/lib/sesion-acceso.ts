@@ -184,15 +184,3 @@ export async function cerrarTodas(
   return count;
 }
 
-/** Las sesiones vivas de la usuaria, para la pantalla "desde dónde estás entrada". Sin IP. */
-export async function listarSesionesVivas(
-  prisma: ClienteSesiones,
-  userId: string,
-  ahora: Date,
-): Promise<Array<{ id: string; creadaEn: Date; ultimoUsoEn: Date; userAgent: string | null }>> {
-  return prisma.sesionAcceso.findMany({
-    where: { userId, ...whereViva(ahora) },
-    select: { id: true, creadaEn: true, ultimoUsoEn: true, userAgent: true },
-    orderBy: { ultimoUsoEn: "desc" },
-  });
-}

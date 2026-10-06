@@ -22,7 +22,7 @@ import type { db } from "@/lib/db";
 import { contenidoHiloSchema, type ResumenVersionHilo, type VersionHilo } from "@/lib/hilo/contenido";
 
 import { auditar } from "../../auditoria";
-import { ApiError } from "../../responses";
+import { requirePaciente } from "../../pacientes";
 import type { ProgresoClinico } from "../progreso-clinico";
 import { aResumen, filtroHilo, resumenSelect, whereAprobadasDe, type BaseHilo, type IdentidadHilo } from "./base";
 import { leerProgreso } from "./progreso";
@@ -50,11 +50,7 @@ export async function exportarRecorrido(
   ahora = new Date(),
 ): Promise<ExportacionRecorrido> {
   return prisma.$transaction(async tx => {
-    const paciente = await tx.paciente.findFirst({
-      where: { id: identidad.pacienteId, organizationId: identidad.organizationId },
-      select: { nombre: true, apellido: true },
-    });
-    if (!paciente) throw new ApiError("Paciente no encontrado", 404);
+    const paciente = await requirePaciente(tx, identidad.pacienteId, identidad.organizationId, { nombre: true, apellido: true });
 
     const configuracion = await tx.configuracion.findUnique({
       where: { organizationId: identidad.organizationId }, select: { nombreProfesional: true },

@@ -23,6 +23,7 @@ import { validarPasswordNueva } from "@/lib/password";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 
 import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
+import { normalizarEmail } from "../email";
 import { ApiError } from "../responses";
 
 export const VIGENCIA_INVITACION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -41,9 +42,9 @@ export function puedeInvitar(
   if (actor.rol !== "titular") return false;
   const lista = (permitidas ?? "")
     .split(",")
-    .map((e) => e.trim().toLowerCase())
+    .map(normalizarEmail)
     .filter(Boolean);
-  return lista.includes(actor.email.trim().toLowerCase());
+  return lista.includes(normalizarEmail(actor.email));
 }
 
 export interface InvitacionGuardada {
@@ -173,7 +174,7 @@ export async function registrarCuenta(
   },
 ): Promise<{ userId: string; organizationId: string; sesionId: string }> {
   if (datos.aceptaTerminos !== true) throw new ApiError(ENTRADA_TERMINOS_REQUERIDOS, 400);
-  const email = datos.email.trim().toLowerCase();
+  const email = normalizarEmail(datos.email);
   const nombre = datos.nombre.trim();
   if (!nombre || nombre.length > 120 || !z.string().email().max(254).safeParse(email).success) {
     throw new ApiError(ENTRADA_REGISTRO_ERROR, 400);

@@ -24,6 +24,7 @@ import type { Paciente, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { auditar } from "../auditoria";
 import { toPaciente, toPacienteConDeuda, toTurno } from "../domain";
+import { MENSAJE_PACIENTE_NO_ENCONTRADO } from "../pacientes";
 import { ApiError } from "../responses";
 import { cancelarEnviosDeLaPaciente, MOTIVO_PACIENTE_ARCHIVADA } from "./envios-del-turno";
 import { ACCIONES } from "@/lib/auditoria-acciones";
@@ -89,7 +90,7 @@ export async function obtenerPaciente({
   });
 
   if (!paciente) {
-    throw new ApiError("Paciente no encontrado", 404);
+    throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
   }
 
   return {
@@ -208,7 +209,7 @@ export async function actualizarPaciente({
       where: { id: pacienteId, organizationId },
       select: { nombre: true, apellido: true, telefono: true, tarifa: true, activo: true },
     });
-    if (!actual) throw new ApiError("Paciente no encontrado", 404);
+    if (!actual) throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
 
     if (hayCambios) {
       // La organización va en el WHERE de la escritura, no sólo en la lectura:
@@ -262,7 +263,7 @@ export async function actualizarPaciente({
   });
 
   if (!fila) {
-    throw new ApiError("Paciente no encontrado", 404);
+    throw new ApiError(MENSAJE_PACIENTE_NO_ENCONTRADO, 404);
   }
 
   return toPaciente(fila);

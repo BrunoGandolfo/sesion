@@ -29,6 +29,7 @@ import { validarPasswordNueva } from "@/lib/password";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 
 import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
+import { normalizarEmail } from "../email";
 import { ApiError } from "../responses";
 
 export interface ResetGuardado {
@@ -73,7 +74,7 @@ export async function solicitarRecuperacion(
 
   const token = (deps.crearToken ?? nuevoTokenCuenta)();
   const reserva = await deps.repo.reservarSolicitud(
-    email.trim().toLowerCase(),
+    normalizarEmail(email),
     await hashTokenCuenta(token),
     ahora,
   );

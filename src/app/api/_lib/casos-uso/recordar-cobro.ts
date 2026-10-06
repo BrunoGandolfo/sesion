@@ -29,6 +29,7 @@ import type { db } from "@/lib/db";
 
 import { registrarAuditoria } from "../auditoria";
 import { deudaDePaciente } from "../domain";
+import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
 import { programarEnvioDeCobro } from "./envios-del-turno";
 import { ACCIONES } from "@/lib/auditoria-acciones";
@@ -78,14 +79,7 @@ export async function recordarCobro({
   usuarioId,
   ahora = new Date(),
 }: RecordarCobroParams): Promise<RecordarCobroResultado> {
-  const paciente = await prisma.paciente.findFirst({
-    where: { id: pacienteId, organizationId },
-    select: { id: true, telefono: true },
-  });
-
-  if (!paciente) {
-    throw new ApiError("Paciente no encontrado", 404);
-  }
+  const paciente = await requirePaciente(prisma, pacienteId, organizationId, { id: true, telefono: true });
 
   // La misma cuenta que /api/deudores, acotada a esta paciente.
   const deuda = await deudaDePaciente(prisma, organizationId, pacienteId, ahora);

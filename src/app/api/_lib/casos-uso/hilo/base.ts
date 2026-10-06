@@ -6,6 +6,7 @@ import { OPERACIONES_VERSION } from "@/lib/hilo/versiones";
 import { cifrarHiloVersion } from "@/lib/prisma-encryption";
 
 import { auditar } from "../../auditoria";
+import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
 import { ACCIONES, type AccionAuditoria } from "@/lib/auditoria-acciones";
 
@@ -26,9 +27,8 @@ export function aResumen<T extends { creadaEn: Date; resueltaEn: Date | null }>(
 }
 export const CONFLICTO_HILO = "El Recorrido cambió mientras lo revisabas. Tu borrador sigue en esta pantalla; leé la versión actual antes de volver a guardar.";
 
-export async function exigirPaciente(tx: Pick<ClienteHilo, "paciente">, identidad: IdentidadHilo) {
-  const p = await tx.paciente.findFirst({ where: { id: identidad.pacienteId, organizationId: identidad.organizationId }, select: { id: true } });
-  if (!p) throw new ApiError("Paciente no encontrado", 404);
+export function exigirPaciente(tx: Pick<ClienteHilo, "paciente">, identidad: IdentidadHilo) {
+  return requirePaciente(tx, identidad.pacienteId, identidad.organizationId);
 }
 
 /** Único orden de locks: hilo, después trabajo. Lo usan escritores y claims. */

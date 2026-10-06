@@ -37,6 +37,7 @@ import type { SerieCreada, Turno, TurnoCreado } from "@/types/domain";
 
 import { auditar } from "../auditoria";
 import { toTurno } from "../domain";
+import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
 import { programarEnvioDelTurno } from "./envios-del-turno";
 import { fechasDeSerie } from "./serie-turnos";
@@ -92,14 +93,7 @@ export async function crearTurno({
     // en solapamiento-turnos.ts).
     await tomarLockDeAgenda(tx, organizationId);
 
-    const paciente = await tx.paciente.findFirst({
-      where: { id: pacienteId, organizationId },
-      select: { id: true, tarifa: true },
-    });
-
-    if (!paciente) {
-      throw new ApiError("Paciente no encontrado", 404);
-    }
+    const paciente = await requirePaciente(tx, pacienteId, organizationId, { id: true, tarifa: true });
 
     const fechas =
       frecuencia === "unico" ? [fecha] : fechasDeSerie(fecha, frecuencia);

@@ -520,16 +520,14 @@ describe("aislamiento entre organizaciones — rutas sin id que listan sesiones"
 // recibe 404 —o, si la ruta lista, una lista vacía— y el texto de la
 // respuesta no trae ningún id de la dueña.
 
-type Ajena = "404" | "vacia" | "401" | "como-inexistente";
+type Ajena = "404" | "vacia" | "401";
 
 interface IdEnQueryOBody {
   nombre: string;
   ruta: string;
   metodo: Metodo;
   /** Lo que la ajena puede recibir. "401" sólo para el worker: su forma del
-   *  404 (autoriza por ticket; ver EXCEPCIONES). "como-inexistente": la
-   *  ruta no contesta 404 sino lo mismo que ante un id que no existe (estado
-   *  y cuerpo idénticos), así que tampoco confirma que el recurso exista. */
+   *  404 (autoriza por ticket; ver EXCEPCIONES). */
   ajena: Ajena;
   pedido: (duena: Org, extra: Extra) => { url: string; cuerpo?: unknown; ticket?: string };
   params?: (duena: Org) => Record<string, string>;
@@ -549,7 +547,7 @@ const HASTA = "2027-01-01T00:00:00.000Z";
 
 const IDS_EN_QUERY_O_BODY: IdEnQueryOBody[] = [
   { nombre: "GET sesion-clinica?turnoId", ruta: "sesion-clinica", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `sesion-clinica?turnoId=${a.turnoId}` }) },
-  { nombre: "POST sesion-clinica {turnoId}", ruta: "sesion-clinica", metodo: "POST", ajena: "como-inexistente", pedido: (a) => ({ url: "sesion-clinica", cuerpo: { turnoId: a.turnoId } }) },
+  { nombre: "POST sesion-clinica {turnoId}", ruta: "sesion-clinica", metodo: "POST", ajena: "404", pedido: (a) => ({ url: "sesion-clinica", cuerpo: { turnoId: a.turnoId } }) },
   { nombre: "GET sms/envios?turnoId", ruta: "sms/envios", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `sms/envios?turnoId=${a.turnoId}` }) },
   { nombre: "GET hot-words?pacienteId", ruta: "hot-words", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `hot-words?scope=paciente&pacienteId=${a.pacienteId}` }) },
   { nombre: "POST hot-words {pacienteId}",
@@ -651,10 +649,7 @@ describe("aislamiento entre organizaciones — ids en la query o en el body", ()
 
       const antes = await retrato(a);
       const ajena = await llamarConId(caso, b, a, extra, false);
-      if (caso.ajena === "como-inexistente") {
-        const inexistente = await llamarConId(caso, b, { ...a, turnoId: randomUUID(), pacienteId: randomUUID() }, extra, false);
-        expect(ajena, `${caso.nombre}: la ajena recibe algo distinto que ante un id que no existe`).toEqual(inexistente);
-      } else if (caso.ajena === "vacia") {
+      if (caso.ajena === "vacia") {
         expect(ajena.status, `${caso.metodo} ${caso.ruta}: la ajena no recibió una lista vacía`).toBe(200);
         const { data } = JSON.parse(ajena.texto) as { data: unknown };
         expect(data === null || (Array.isArray(data) && data.length === 0), `${caso.metodo} ${caso.ruta}: la ajena recibió datos`).toBe(true);

@@ -92,6 +92,8 @@ export async function leerSesionPorTurno({ prisma, organizationId, turnoId }: Ba
   return fila ? toSesionClinicaResponse(fila) : null;
 }
 
+export const MENSAJE_TURNO_NO_ENCONTRADO = "Turno no encontrado";
+
 /** Por qué no se crea la grabación de un turno que no es de hoy. */
 export const MENSAJE_GRABAR_OTRO_DIA =
   "Solo se puede grabar un turno el mismo día. Para grabar ahora, empezá desde la ficha de la paciente.";
@@ -109,7 +111,13 @@ export async function prepararAudio({ prisma, organizationId, turnoId, usuarioId
   return prisma.$transaction(async (tx) => {
     // Serializa dos inicios del mismo turno sin reemplazar su identidad.
     const tocado = await tx.turno.updateMany({ where: { id: turnoId, organizationId, estado: { in: [...ESTADOS_GRABABLES] } }, data: { actualizadoEn: new Date() } });
-    if (!tocado.count) throw new ApiError("El turno no está disponible para grabar", 409);
+    if (!tocado.count) {
+      // Un turno de otra organización es 404, como todo lo ajeno: un 409 le
+      // decía que el turno existe y está en otro estado.
+      const propio = await tx.turno.findFirst({ where: { id: turnoId, organizationId }, select: { id: true } });
+      if (!propio) throw new ApiError(MENSAJE_TURNO_NO_ENCONTRADO, 404);
+      throw new ApiError("El turno no está disponible para grabar", 409);
+    }
     const turno = await tx.turno.findUniqueOrThrow({ where: { id: turnoId }, select: { pacienteId: true, estado: true, fecha: true } });
     if (!await consentimientoVigenteDe(tx, turno.pacienteId, organizationId)) throw new ApiError("Falta consentimiento vigente para grabar", 400);
     const existente = await tx.sesionClinica.findUnique({ where: { turnoId }, select: { id: true, estado: true } });
