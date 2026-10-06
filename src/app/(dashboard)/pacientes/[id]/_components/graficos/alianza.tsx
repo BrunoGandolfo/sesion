@@ -4,15 +4,13 @@ import { NOMBRE_ALIANZA } from "@/lib/etiquetas";
 import { ALIANZA_TERAPEUTICA } from "@/lib/glosario";
 
 import { lecturaAlianza } from "../progreso-lecturas";
+import { COLOR, ChartCard, LineaPorFecha } from "./base";
 import {
-  COLOR,
-  ChartCard,
-  LineaPorFecha,
   detalleDePunto,
   fechaDe,
   nivelDeAlianza,
   type SesionProgreso,
-} from "./base";
+} from "./progreso-contrato";
 import { HUECOS_EXPLICADOS, SUBTITULO_ALIANZA } from "./textos";
 
 // El eje se rotula con los cuatro nombres del contrato, no con números: el

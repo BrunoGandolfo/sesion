@@ -26,10 +26,11 @@ import * as React from "react";
 import { AlertCircle, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { ApiClientError, apiGet } from "@/lib/api-client";
+import { ApiClientError } from "@/lib/api-client";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
 import { CabeceraSesion } from "./cabecera-sesion";
+import { leerTranscripcionDeSesion, type RespuestaTranscripcion } from "./datos";
 import {
   ALGO_FALLO,
   BUSCAR_ANTERIOR,
@@ -66,8 +67,6 @@ type Lectura =
   | { estado: "sin-texto" }
   | { estado: "error"; detalle: string };
 
-type Respuesta = { transcripcion: string };
-
 /** Cada hablante con su rótulo y su color: se distinguen las dos voces sin
  *  decir quién es quién (ver transcripcion.ts). */
 const HABLANTES = {
@@ -84,7 +83,7 @@ interface TranscripcionViewProps {
 export function TranscripcionView({ sesion, selector }: TranscripcionViewProps) {
   const [lectura, setLectura] = React.useState<Lectura>({ estado: "abriendo" });
   const [intento, setIntento] = React.useState(0);
-  const pedido = React.useRef<{ clave: string; promesa: Promise<Respuesta> } | null>(null);
+  const pedido = React.useRef<{ clave: string; promesa: Promise<RespuestaTranscripcion> } | null>(null);
 
   React.useEffect(() => {
     let vivo = true;
@@ -92,7 +91,7 @@ export function TranscripcionView({ sesion, selector }: TranscripcionViewProps) 
     if (pedido.current?.clave !== clave) {
       pedido.current = {
         clave,
-        promesa: apiGet<Respuesta>(`/api/sesion-clinica/${sesion.id}/transcripcion`),
+        promesa: leerTranscripcionDeSesion(sesion.id),
       };
     }
     pedido.current.promesa.then(

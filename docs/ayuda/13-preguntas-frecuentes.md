@@ -189,9 +189,13 @@ src/app/api/config/route.ts
 src/app/api/turnos/route.ts
 src/app/(dashboard)/config/_components/config-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/use-revision-nota.ts
 src/app/(dashboard)/pacientes/[id]/_components/ficha-tab.tsx
 src/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts
+src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/lib/grabacion-captura.ts
 src/components/clinico/MencionesNota.tsx
 src/components/clinico/HiloView.tsx
@@ -200,6 +204,9 @@ src/app/api/_lib/casos-uso/trabajos/politica.ts
 .github/workflows/backup.yml
 src/components/grabacion/RiesgoDetectadoBanner.tsx
 src/components/grabacion/FeedbackTerapeutaView.tsx
+src/components/grabacion/feedback-lectura.ts
+src/components/grabacion/feedback-instrumentos.tsx
+src/components/grabacion/feedback-piezas.tsx
 processor/prompts/clinical_note_v3.1.1.md
 processor/prompts/therapist_feedback_gestalt_v1.1.md
 docs/pipeline.md

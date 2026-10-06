@@ -45,9 +45,10 @@ Lo que no vino en el análisis no se dibuja.
 
 Con la nota en **Para revisar**, cada sección tiene **Editar** (o tocás el
 texto). Lo que escribís vive en la pantalla: **la nota se guarda una sola vez, al
-aprobar**. Si intentás salir con cambios sin aprobar, la app pregunta: *"Tenés
-cambios sin aprobar en la nota."* *"Si salís de la nota ahora, se pierden."* con
-**Quedarme** e **Ir igual**.
+aprobar**. Si intentás salir de la sesión con cambios sin aprobar, la app
+pregunta: *"Tenés cambios sin aprobar en la nota."* *"Si salís de la nota ahora,
+se pierden."* con **Quedarme** e **Ir igual**. Pasar a **Para vos** o a
+**Transcripción** no pregunta nada: al volver a la nota, tus cambios siguen ahí.
 
 ## Frases para revisar
 
@@ -174,6 +175,9 @@ que cada afirmación sea correcta.
 
 <!-- fuentes:
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/datos.ts
+src/app/(dashboard)/sesiones/[id]/_components/use-revision-nota.ts
+src/app/(dashboard)/sesiones/[id]/_components/avisos-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/nota-sesion-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/mas-de-esta-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/seccion-soap.tsx

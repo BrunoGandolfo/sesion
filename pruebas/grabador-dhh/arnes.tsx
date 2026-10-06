@@ -1,12 +1,12 @@
 // Arnés mínimo para probar en un navegador de verdad el hook REAL del grabador
-// y la subida REAL (src/hooks/useGrabacionSesion.ts: subirAudio). No es la
+// y la subida REAL (src/lib/subida-audio.ts: subirAudio). No es la
 // pantalla de la app: son cuatro botones y el estado, para que Playwright
 // toque lo mismo que toca la profesional. La API es local (verificar.mjs).
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 
 import { useGrabador, type DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
-import { subirAudio } from "@/hooks/useGrabacionSesion";
+import { subirAudio } from "@/lib/subida-audio";
 
 declare global {
   interface Window {

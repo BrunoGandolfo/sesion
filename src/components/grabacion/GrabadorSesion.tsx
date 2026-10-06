@@ -27,7 +27,7 @@
 
 import * as React from "react";
 
-import { aRegistradas, formatearDuracion, type PausaRegistrada } from "@/lib/grabacion-cronometro";
+import { aRegistradas, formatearDuracion } from "@/lib/grabacion-cronometro";
 import { crearMediaRecorder, mensajeErrorGrabacion } from "@/lib/grabacion-microfono";
 import {
   contarChunk,
@@ -38,7 +38,6 @@ import {
   medidaInicial,
   MINIMO_SEGUNDOS,
   reanudarMedida,
-  SILENCIO_AVISO_SEG,
   sinChunksDesde,
   TIMESLICE_MS,
   type Medida,
@@ -48,119 +47,34 @@ import {
   guardarPausas,
   iniciarSesionGrabacion,
   limpiarGrabacion,
-  recuperarGrabacionPendiente,
-  type GrabacionPendiente,
   type Pausa,
 } from "@/lib/grabacion-storage";
-import {
-  MAX_EVENTOS_GRABACION,
-  type DiagnosticoGrabacion,
-  type EventoGrabacion,
-} from "@/lib/sesion-clinica/schema";
+import { MAX_EVENTOS_GRABACION, type EventoGrabacion } from "@/lib/sesion-clinica/schema";
+
+import { useGrabacionPendiente } from "./grabacion-pendiente";
+import { useMicrofono } from "./grabador-microfono";
+import type { AvisoHueco, EstadoGrabador, Grabador, UseGrabadorOpciones } from "./grabador-tipos";
+import { useGuardaDeToque } from "./guarda-de-toque";
 
 export { formatearDuracion };
-
-/** Lo que recibe la pantalla para subir. El Blob se sube tal cual. */
-export interface DatosGrabacion {
-  audioBlob: Blob;
-  /** Segundos de audio recibido, medidos en el teléfono. */
-  duracionSegundos: number;
-  pausas: PausaRegistrada[];
-  diagnostico: DiagnosticoGrabacion;
-}
-
-/**
- *   inactivo   → grabando     (iniciar)
- *   grabando   ⇄ pausado      (pausar / reanudar; el tope pausa solo)
- *   grabando/pausado → terminada   (la pista terminó o el recorder falló)
- *   grabando/pausado/terminada → preparando → entregada   (terminar)
- *   inactivo   → preparando → entregada   (enviarPendiente)
- *   cualquiera → inactivo     (descartar / resetear)
- */
-export type EstadoGrabador =
-  | "inactivo"
-  | "grabando"
-  | "pausado"
-  | "terminada"
-  | "preparando"
-  | "entregada"
-  | "error";
-
-/** Un rato sin audio. `hasta` es null mientras todavía no volvió a llegar. */
-export interface AvisoHueco {
-  desde: number;
-  hasta: number | null;
-}
+export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador } from "./grabador-tipos";
 
 const GRABACION_VACIA = "No se pudo capturar audio de la sesión.";
 
 // Cada cuánto se refresca el medidor y se mira si siguen llegando chunks.
 const LATIDO_MS = 250;
-// Debajo de este RMS (0-1) el medidor considera que no entra sonido.
-const UMBRAL_SILENCIO = 0.012;
-// Tras Pausar o Reanudar el botón no responde por este rato: un doble toque
-// no puede reanudar dos veces ni volver a pausar lo que acaba de reanudar.
-const GUARDA_TOQUE_MS = 800;
-
-interface UseGrabadorOpciones {
-  /** Con qué se guardan los chunks: el turnoId (turno ↔ sesión es 1:1). */
-  claveGrabacion: string | null;
-  /** Recibe la grabación lista para subir. Una sola vez por grabación. */
-  onListo: (datos: DatosGrabacion) => void;
-  onError: (mensaje: string) => void;
-}
-
-export interface Grabador {
-  estado: EstadoGrabador;
-  /** Segundos de audio recibido. */
-  segundos: number;
-  /** 0-1, para el medidor. */
-  nivelAudio: number;
-  /** El medidor lleva SILENCIO_AVISO_SEG en cero con la pantalla a la vista. */
-  audioSilencioso: boolean;
-  /** El teléfono silenció el micrófono (una llamada). La grabación sigue. */
-  microfonoSilenciado: boolean;
-  /** Dejó de llegar audio; queda hasta que ella lo cierra. */
-  hueco: AvisoHueco | null;
-  limiteAlcanzado: boolean;
-  avisoLimite: boolean;
-  /** Pausar/Reanudar acaban de tocarse: el botón va deshabilitado. */
-  conmutando: boolean;
-  mensajeError: string | null;
-  /** Se tocó Terminar con menos de MINIMO_SEGUNDOS grabados: no se guardó
-   *  nada y se puede volver a grabar. Lo apaga el próximo Grabar. */
-  muyCorta: boolean;
-  /** Minutos aproximados de una grabación de este turno que quedó guardada. */
-  pendienteSeg: number | null;
-  iniciar: (clave: string) => Promise<void>;
-  pausar: () => void;
-  reanudar: () => void;
-  terminar: () => void;
-  descartar: () => void;
-  cerrarAvisoHueco: () => void;
-  enviarPendiente: () => void;
-  descartarPendiente: () => void;
-  /** La pantalla anota acá lo que sabe ella: el wake lock. */
-  anotar: (tipo: EventoGrabacion["tipo"], ms?: number) => void;
-  resetear: () => void;
-}
 
 export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpciones): Grabador {
   const [estado, setEstado] = React.useState<EstadoGrabador>("inactivo");
   const [segundos, setSegundos] = React.useState(0);
-  const [nivelAudio, setNivelAudio] = React.useState(0);
-  const [audioSilencioso, setAudioSilencioso] = React.useState(false);
-  const [microfonoSilenciado, setMicrofonoSilenciado] = React.useState(false);
   const [hueco, setHueco] = React.useState<AvisoHueco | null>(null);
   const [limiteAlcanzado, setLimiteAlcanzado] = React.useState(false);
   const [avisoLimite, setAvisoLimite] = React.useState(false);
-  const [conmutando, setConmutando] = React.useState(false);
+  const guarda = useGuardaDeToque();
   const [mensajeError, setMensajeError] = React.useState<string | null>(null);
   const [muyCorta, setMuyCorta] = React.useState(false);
-  const [pendiente, setPendiente] = React.useState<GrabacionPendiente | null>(null);
 
   const recorderRef = React.useRef<MediaRecorder | null>(null);
-  const streamRef = React.useRef<MediaStream | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   const medidaRef = React.useRef<Medida>(medidaInicial(0));
   // Todo lo que se MIDE usa este reloj, que no retrocede. Date.now() queda sólo
@@ -174,13 +88,9 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
   // Desde cuándo está en pausa el recorder. Un chunk que llega en pausa (el
   // resto que entrega pause() o stop()) sólo trae audio anterior a ese momento.
   const pausadoEnRef = React.useRef<number | null>(null);
-  const conmutandoRef = React.useRef(false);
   const limiteRef = React.useRef(false);
   const latidoRef = React.useRef<number | null>(null);
   const ultimoLatidoRef = React.useRef(0);
-  const silencioDesdeRef = React.useRef<number | null>(null);
-  const audioContextRef = React.useRef<AudioContext | null>(null);
-  const analizadorRef = React.useRef<AnalyserNode | null>(null);
   const estadoRef = React.useRef<EstadoGrabador>("inactivo");
   const claveRef = React.useRef<string | null>(claveGrabacion);
   const onErrorRef = React.useRef(onError);
@@ -216,21 +126,8 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     }
   }, []);
 
-  const soltarMicrofono = React.useCallback(() => {
-    analizadorRef.current = null;
-    silencioDesdeRef.current = null;
-    const contexto = audioContextRef.current;
-    audioContextRef.current = null;
-    void contexto?.close().catch(() => {});
-
-    for (const track of streamRef.current?.getTracks() ?? []) {
-      track.onended = null;
-      track.onmute = null;
-      track.onunmute = null;
-      track.stop();
-    }
-    streamRef.current = null;
-  }, []);
+  const microfono = useMicrofono(anotar);
+  const { soltar: soltarMicrofono } = microfono;
 
   function volverAInactivo() {
     limpiarLatido();
@@ -243,9 +140,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     limiteRef.current = false;
     pausadoEnRef.current = null;
     setSegundos(0);
-    setNivelAudio(0);
-    setAudioSilencioso(false);
-    setMicrofonoSilenciado(false);
+    microfono.reiniciar();
     setHueco(null);
     setLimiteAlcanzado(false);
     setAvisoLimite(false);
@@ -303,8 +198,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     pausadoEnRef.current = relojRef.current();
     pausasRef.current = [...pausasRef.current, { inicio: Date.now(), fin: null }];
     if (claveRef.current) void guardarPausas(claveRef.current, pausasRef.current);
-    setNivelAudio(0);
-    setAudioSilencioso(false);
+    microfono.aquietar();
     cambiarEstado("pausado");
     return true;
   }
@@ -322,58 +216,8 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     }
     limpiarLatido();
     soltarMicrofono();
-    setNivelAudio(0);
-    setAudioSilencioso(false);
-    setMicrofonoSilenciado(false);
+    microfono.reiniciar();
     cambiarEstado("terminada");
-  }
-
-  function guardaDeToque() {
-    conmutandoRef.current = true;
-    setConmutando(true);
-    window.setTimeout(() => {
-      conmutandoRef.current = false;
-      setConmutando(false);
-    }, GUARDA_TOQUE_MS);
-  }
-
-  function conectarMedidor(stream: MediaStream) {
-    const Constructor =
-      window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Constructor) return;
-    try {
-      const contexto = new Constructor();
-      const analizador = contexto.createAnalyser();
-      analizador.fftSize = 512;
-      contexto.createMediaStreamSource(stream).connect(analizador);
-      void contexto.resume().catch(() => {});
-      audioContextRef.current = contexto;
-      analizadorRef.current = analizador;
-    } catch {
-      // Sin medidor se graba igual.
-    }
-  }
-
-  /** Sólo pinta: el nivel y el aviso visible de silencio. No decide nada. */
-  function medirNivel(ahora: number) {
-    const analizador = analizadorRef.current;
-    if (!analizador || audioContextRef.current?.state !== "running") {
-      silencioDesdeRef.current = null;
-      setAudioSilencioso(false);
-      return;
-    }
-    const muestra = new Uint8Array(analizador.fftSize);
-    analizador.getByteTimeDomainData(muestra);
-    let suma = 0;
-    for (const valor of muestra) suma += ((valor - 128) / 128) ** 2;
-    const rms = Math.sqrt(suma / muestra.length);
-    setNivelAudio(Math.min(1, rms * 6));
-    silencioDesdeRef.current = rms < UMBRAL_SILENCIO ? (silencioDesdeRef.current ?? ahora) : null;
-    setAudioSilencioso(
-      document.visibilityState === "visible" &&
-        silencioDesdeRef.current !== null &&
-        ahora - silencioDesdeRef.current >= SILENCIO_AVISO_SEG * 1000,
-    );
   }
 
   function iniciarLatido() {
@@ -386,7 +230,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
       // La página no corrió: queda anotado. No corta nada.
       if (salto > HUECO_MS) anotar("hueco-latido", salto);
       if (estadoRef.current !== "grabando") return;
-      medirNivel(ahora);
+      microfono.medir(ahora);
       // Dejó de llegar audio y todavía no volvió: se dice mientras dura.
       const desde = sinChunksDesde(medidaRef.current, ahora);
       if (desde !== null) setHueco((actual) => (actual?.desde === desde ? actual : { desde, hasta: null }));
@@ -443,21 +287,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     };
   }, [anotar, limpiarLatido, soltarMicrofono]);
 
-  // Una grabación de este turno que quedó en el teléfono (el navegador mató
-  // la página). No se puede continuar —haría falta otro recorder—: se ofrece
-  // enviarla o descartarla.
-  React.useEffect(() => {
-    if (!claveGrabacion) return;
-    let cancelado = false;
-    void recuperarGrabacionPendiente().then((recuperada) => {
-      if (cancelado || !recuperada || recuperada.sesionClinicaId !== claveGrabacion) return;
-      if (estadoRef.current !== "inactivo") return;
-      setPendiente(recuperada);
-    });
-    return () => {
-      cancelado = true;
-    };
-  }, [claveGrabacion]);
+  const [pendiente, setPendiente] = useGrabacionPendiente(claveGrabacion, estadoRef);
 
   async function iniciar(clave: string) {
     if (estadoRef.current !== "inactivo" && estadoRef.current !== "error") return;
@@ -475,7 +305,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       const recorder = crearMediaRecorder(stream);
-      streamRef.current = stream;
+      microfono.tomar(stream);
       recorderRef.current = recorder;
       mimeTypeRef.current = recorder.mimeType || "audio/webm";
       relojRef.current = crearReloj();
@@ -492,22 +322,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
         entregar(chunksRef.current, mimeTypeRef.current, medidaRef.current.segundos, pausasRef.current);
       };
 
-      const pista = stream.getAudioTracks()[0];
-      if (pista) {
-        pista.onended = () => terminarPorFalla("pista-terminada");
-        // Una llamada entrante silencia la pista. El recorder sigue y graba
-        // silencio: es el mismo archivo, y al cortar la llamada vuelve solo.
-        pista.onmute = () => {
-          anotar("mute");
-          setMicrofonoSilenciado(true);
-        };
-        pista.onunmute = () => {
-          anotar("unmute");
-          setMicrofonoSilenciado(false);
-        };
-      }
-
-      conectarMedidor(stream);
+      microfono.escuchar(stream, () => terminarPorFalla("pista-terminada"));
       recorder.start(TIMESLICE_MS);
       cambiarEstado("grabando");
       iniciarLatido();
@@ -517,26 +332,26 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
   }
 
   function pausar() {
-    if (estadoRef.current !== "grabando" || conmutandoRef.current) return;
-    if (pausarRecorder("pausa")) guardaDeToque();
+    if (estadoRef.current !== "grabando" || guarda.activa.current) return;
+    if (pausarRecorder("pausa")) guarda.tocar();
   }
 
   function reanudar() {
     const recorder = recorderRef.current;
-    if (estadoRef.current !== "pausado" || conmutandoRef.current || limiteRef.current) return;
+    if (estadoRef.current !== "pausado" || guarda.activa.current || limiteRef.current) return;
     if (!recorder || recorder.state !== "paused") return;
     try {
       recorder.resume();
     } catch {
       return;
     }
-    guardaDeToque();
+    guarda.tocar();
     anotar("reanudar");
     pausadoEnRef.current = null;
     cerrarPausaAbierta();
     // El rato en pausa no es un hueco.
     medidaRef.current = reanudarMedida(medidaRef.current, relojRef.current());
-    silencioDesdeRef.current = null;
+    microfono.olvidarSilencio();
     cambiarEstado("grabando");
   }
 
@@ -611,13 +426,13 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
   return {
     estado,
     segundos,
-    nivelAudio,
-    audioSilencioso,
-    microfonoSilenciado,
+    nivelAudio: microfono.nivelAudio,
+    audioSilencioso: microfono.audioSilencioso,
+    microfonoSilenciado: microfono.microfonoSilenciado,
     hueco,
     limiteAlcanzado,
     avisoLimite,
-    conmutando,
+    conmutando: guarda.conmutando,
     mensajeError,
     muyCorta,
     pendienteSeg: pendiente ? pendiente.duracionAproxSeg : null,

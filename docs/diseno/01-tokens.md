@@ -51,11 +51,11 @@ armada con los tamaños que más se repiten; ninguno baja de 12 px.
 |---|---|---|---|
 | Meta | 12 px | Rótulos en mayúscula, fechas, notas al pie | `src/components/layout/cabecera-usuario.tsx:75` |
 | Secundario | 13 px | Texto de apoyo, filas de lista | `src/components/ui/guardado-campo.tsx:8` |
-| Cuerpo | 14 px | Texto corriente | `src/components/grabacion/HotWordsManager.tsx:443` |
+| Cuerpo | 14 px | Texto corriente | `src/components/grabacion/HotWordsManager.tsx:162` |
 | Campo | 15 px | Lo que se escribe en un campo | `src/components/ui/input.tsx:53` |
 | Título chico | 16 px | Título de un bloque (Fraunces) | `src/components/ui/plegable.tsx:60` |
-| Título de sección | 18 px | Título de sección (Fraunces) | `src/app/(dashboard)/pacientes/[id]/_components/graficos/base.tsx:166` |
-| Título de sheet | 22 px | Encabezado de un formulario (Fraunces) | `src/components/forms/nuevo-turno-form.tsx:424` |
+| Título de sección | 18 px | Título de sección (Fraunces) | `src/app/(dashboard)/pacientes/[id]/_components/graficos/base.tsx:67` |
+| Título de sheet | 22 px | Encabezado de un formulario (Fraunces) | `src/components/forms/nuevo-turno-form.tsx:268` |
 | Título de pantalla | 30 px | Título de pantalla en la computadora (Fraunces) | `src/app/(dashboard)/agenda/_components/agenda-header.tsx:62` |
 
 Lo que hoy está en 10 u 11 px sube a 12 cuando se toque ese archivo. Los

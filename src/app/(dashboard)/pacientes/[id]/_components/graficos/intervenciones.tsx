@@ -5,13 +5,8 @@ import { fechaCorta } from "@/lib/format";
 import { INTERVENCIONES } from "@/lib/glosario";
 
 import { lecturaIntervenciones } from "../progreso-lecturas";
-import {
-  COLOR,
-  BarrasPorFecha,
-  ChartCard,
-  fechaDe,
-  type SesionProgreso,
-} from "./base";
+import { COLOR, BarrasPorFecha, ChartCard } from "./base";
+import { fechaDe, type SesionProgreso } from "./progreso-contrato";
 import { SUBTITULO_INTERVENCIONES } from "./textos";
 
 // Intervenciones por sesión dentro del período.

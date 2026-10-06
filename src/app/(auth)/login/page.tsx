@@ -44,7 +44,7 @@ export default function LoginPage() {
     // /limpiar borra la cookie SOLO si no resuelve a una sesión viva: una
     // navegación inducida a /login?sesion=x no puede cerrar una sesión ajena
     // (auditoría de Codex, docs/pendientes/03-identidad.md §8).
-    void fetch("/api/cuenta/limpiar", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
+    void apiPost("/api/cuenta/limpiar", undefined).catch(() => undefined);
   }, [sesionVencida]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

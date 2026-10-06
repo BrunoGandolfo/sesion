@@ -41,8 +41,10 @@ export async function presentacion(page, { alertasEsperadas = [], textosErrorEsp
   assert(!/Application error:|Internal Server Error|This page could not be found|^404$/mi.test(texto), 'Pantalla de error del servidor');
   const lineasConError = texto.split('\n').map(t=>t.trim()).filter(t=>/^(Algo falló|No pudimos (traer|cargar|leer)|Hubo un error|Error al cargar)/i.test(t));
   assert(lineasConError.every(t=>textosErrorEsperados.some(p=>p.test(t))), 'Error visible al cargar la pantalla');
+  // El anunciador de rutas de Next (role="alert", 1 px recortado) lee el h1
+  // al navegar entre páginas que comparten layout: no es un aviso de la app.
   for (const alerta of await page.getByRole('alert').all()) {
-    if (await alerta.isVisible()) {
+    if (await alerta.isVisible() && await alerta.getAttribute('id') !== '__next-route-announcer__') {
       const texto = (await alerta.innerText()).trim();
       assert(!texto || alertasEsperadas.some(patron => patron.test(texto)), 'Alerta inesperada en pantalla');
     }

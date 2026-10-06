@@ -12,6 +12,9 @@ import { ALGO_FALLO } from "@/lib/glosario";
 
 interface OpcionesApi {
   signal?: AbortSignal;
+  /** El pedido sobrevive al cierre de la pestaña (`pagehide`): el navegador
+   *  lo deja terminar. Solo para POST/PATCH/DELETE chicos (tope de 64 KB). */
+  keepalive?: boolean;
 }
 
 const MENSAJE_GENERICO = "No pudimos completar la operación. Intentá de nuevo.";
@@ -126,6 +129,7 @@ async function conCuerpo<T>(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal: opciones.signal,
+    keepalive: opciones.keepalive,
   });
   return desenvolver<T>(res);
 }

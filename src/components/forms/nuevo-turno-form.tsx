@@ -7,6 +7,8 @@
 // de verdad con nombre y teléfono inline, y el botón "Agendar" queda fijo al
 // pie—. Quedó esa. Los campos del turno (fecha, hora, duración, modalidad,
 // notas) viven en turno-editar-campos.tsx, compartidos con "Reprogramar".
+// Las lecturas y reglas están en nuevo-turno-datos.ts; el buscador de
+// paciente, en buscador-paciente.tsx.
 //
 // Quien lo monta le da el padding lateral (px-6 lg:px-7): el pie fijo lo
 // cancela con márgenes negativos para ir a sangre.
@@ -15,20 +17,14 @@ import * as React from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus } from "lucide-react";
 
-import { Avatar, Button, Input, Segmented } from "@/components/ui";
-import { ApiClientError, apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { Button, Input, Segmented } from "@/components/ui";
+import { esAbort, mensajeParaElla } from "@/lib/api-client";
 import {
   frecuenciaTurnoSchema,
   FRECUENCIAS_TURNO,
   type FrecuenciaTurno,
 } from "@/lib/constantes-turno";
-// Los inputs se llenan con el reloj de Montevideo porque así los lee después
-// instanteDesdeFechaHoraMvd al enviar. Con getFullYear/getHours el par no
-// cerraba: desde Madrid, la propuesta "el mismo día y hora que la última vez"
-// mostraba las 20:15 de un turno de las 15:15 y lo agendaba a las 20:15 de
-// Montevideo, cinco horas tarde.
 import {
   agregarDiasMvd,
   fechaInputMvd,
@@ -39,17 +35,19 @@ import {
   FRECUENCIA_LABEL,
   SE_REPITE,
   AYUDA_SERIE,
-  ALGO_FALLO,
   PACIENTE_YA_CREADA,
   TARIFA_SIN_CARGAR,
 } from "@/lib/glosario";
-// La regla de la tarifa es una sola y es la del servidor (entera y mayor a
-// cero). Antes acá se miraba sólo si había número: con la tarifa del
-// consultorio en 0 el formulario anunciaba que iba a crear con $0 y el POST
-// contestaba "Datos inválidos".
-import { pacienteCreateSchema } from "@/app/api/_lib/schemas";
-import type { Duracion, Modalidad, Paciente } from "@/types/domain";
+import type { Duracion, Modalidad } from "@/types/domain";
 
+import { BuscadorPaciente, useBuscadorPaciente } from "./buscador-paciente";
+import {
+  crearPacienteRapido,
+  leerPropuesta,
+  mensajeDeCreacion,
+  tarifaUsable as esTarifaUsable,
+  type PacienteOpcion,
+} from "./nuevo-turno-datos";
 import {
   CAMPOS_TURNO_DEFAULT,
   TurnoEditarCampos,
@@ -77,8 +75,6 @@ export interface NuevoTurnoData {
 const OPCIONES_FRECUENCIA = FRECUENCIAS_TURNO.map((value) => ({ value, label: FRECUENCIA_LABEL[value] }));
 
 
-type PacienteOpcion = Pick<Paciente, "id" | "nombre" | "apellido" | "tarifa">;
-
 interface NuevoTurnoFormProps {
   pacientes: PacienteOpcion[];
   /** Tarifa por sesión de Tu consultorio, para "Crear a X". null si no se
@@ -93,38 +89,6 @@ interface NuevoTurnoFormProps {
   onCancel: () => void;
 }
 
-type JsonTurno = { fecha: string };
-
-function nombreCompleto(p: Pick<Paciente, "nombre" | "apellido">) {
-  return `${p.nombre} ${p.apellido}`.trim();
-}
-
-function coincide(p: Pick<Paciente, "nombre" | "apellido">, q: string) {
-  const aguja = q.trim().toLowerCase();
-  if (!aguja) return true;
-  return nombreCompleto(p).toLowerCase().includes(aguja);
-}
-
-/** Una semana después del último turno, avanzando de a semanas hasta que
- *  quede en el futuro. Conserva día de la semana y hora. */
-export function proponerDesdeUltimoTurno(ultimo: Date, ahora: Date): Date {
-  let propuesta = agregarDiasMvd(ultimo, 7);
-  while (propuesta.getTime() <= ahora.getTime()) {
-    propuesta = agregarDiasMvd(propuesta, 7);
-  }
-  return propuesta;
-}
-
-/** "Ana María Pérez" → { nombre: "Ana María", apellido: "Pérez" }. */
-function separarNombre(texto: string): { nombre: string; apellido: string } {
-  const partes = texto.trim().split(/\s+/).filter(Boolean);
-  if (partes.length < 2) return { nombre: partes[0] ?? "", apellido: "" };
-  return {
-    nombre: partes.slice(0, -1).join(" "),
-    apellido: partes[partes.length - 1],
-  };
-}
-
 export function NuevoTurnoForm({
   pacientes,
   tarifaDefault = null,
@@ -133,8 +97,6 @@ export function NuevoTurnoForm({
   onCancel,
 }: NuevoTurnoFormProps) {
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const closeTimerRef = React.useRef<number | null>(null);
-  const listaId = React.useId();
 
   const metodos = useForm<Valores>({
     resolver: zodResolver(schema),
@@ -160,10 +122,6 @@ export function NuevoTurnoForm({
 
   const pacienteId = useWatch({ control, name: "pacienteId" });
 
-  const [busqueda, setBusqueda] = React.useState("");
-  const [abierto, setAbierto] = React.useState(false);
-  const [indiceActivo, setIndiceActivo] = React.useState(0);
-
   // "Crear a X": dos campos inline en vez de la ficha completa.
   const [creando, setCreando] = React.useState(false);
   const [nuevoNombre, setNuevoNombre] = React.useState("");
@@ -187,59 +145,58 @@ export function NuevoTurnoForm({
   const [enviando, setEnviando] = React.useState(false);
   const [errorEnvio, setErrorEnvio] = React.useState<string | null>(null);
 
-  /** ¿La tarifa del consultorio sirve para crear una paciente? La decide el
-   *  mismo schema que valida el POST, no una copia. */
-  const tarifaUsable = pacienteCreateSchema.shape.tarifa.safeParse(
-    tarifaDefault,
-  ).success;
+  const tarifaUsable = esTarifaUsable(tarifaDefault);
 
   const pacienteElegido = React.useMemo(
     () => pacientes.find((p) => p.id === pacienteId) ?? null,
     [pacientes, pacienteId],
   );
 
+  const buscador = useBuscadorPaciente({
+    pacientes,
+    elegido: pacienteElegido,
+    onElegir: (p) => {
+      setValue("pacienteId", p.id, { shouldDirty: true });
+      clearErrors("pacienteId");
+      setCreando(false);
+      setErrorNuevo(null);
+    },
+    onCrear: (texto) => {
+      setValue("pacienteId", "", { shouldDirty: true });
+      clearErrors("pacienteId");
+      setNuevoNombre(texto);
+      setNuevoTelefono("");
+      setErrorNuevo(null);
+      setPropuesta(null);
+      setPacienteCreado(null);
+      setCreando(true);
+    },
+    onSoltar: () => {
+      setValue("pacienteId", "", { shouldDirty: true });
+      setPropuesta(null);
+    },
+  });
+  const { cerrar } = buscador;
+
   React.useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
       if (!rootRef.current) return;
       if (rootRef.current.contains(event.target as Node)) return;
-      setAbierto(false);
+      cerrar();
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, []);
-
-  React.useEffect(() => {
-    return () => {
-      if (closeTimerRef.current !== null) {
-        window.clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-    };
-  }, []);
+  }, [cerrar]);
 
   // Día y hora propuestos desde el último turno del paciente elegido.
   React.useEffect(() => {
     if (!pacienteId) return;
     const controller = new AbortController();
-    const ahora = new Date();
-    const desde = agregarDiasMvd(ahora, -180).toISOString();
-    const hasta = agregarDiasMvd(ahora, 180).toISOString();
 
-    apiGet<JsonTurno[]>(
-      `/api/turnos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&pacienteId=${encodeURIComponent(pacienteId)}`,
-      { signal: controller.signal },
-    )
-      .then((turnos) => {
-        if (turnos.length === 0) {
-          setPropuesta(null);
-          return;
-        }
-        const ultimo = turnos
-          .map((t) => new Date(t.fecha))
-          .sort((a, b) => b.getTime() - a.getTime())[0];
-        const sugerida = proponerDesdeUltimoTurno(ultimo, new Date());
+    leerPropuesta(pacienteId, controller.signal)
+      .then((sugerida) => {
         setPropuesta(sugerida);
-        if (fechaUHoraEditadaRef.current) return;
+        if (!sugerida || fechaUHoraEditadaRef.current) return;
         setValue("fecha", fechaInputMvd(sugerida), { shouldDirty: true });
         setValue("hora", horaInputMvd(sugerida), { shouldDirty: true });
       })
@@ -252,120 +209,10 @@ export function NuevoTurnoForm({
     return () => controller.abort();
   }, [pacienteId, setValue]);
 
-  const filtrados = React.useMemo(
-    () => pacientes.filter((p) => coincide(p, busqueda)),
-    [pacientes, busqueda],
-  );
-
-  const busquedaLimpia = busqueda.trim();
-  const puedeCrear = busquedaLimpia.length > 0 && filtrados.length === 0;
-  const cantidadOpciones = filtrados.length + (puedeCrear ? 1 : 0);
-  const hayOpciones = cantidadOpciones > 0;
-  const indiceEfectivo =
-    abierto && cantidadOpciones > 0
-      ? Math.min(indiceActivo, cantidadOpciones - 1)
-      : 0;
-
-  const elegirPaciente = React.useCallback(
-    (p: PacienteOpcion) => {
-      setValue("pacienteId", p.id, { shouldDirty: true });
-      clearErrors("pacienteId");
-      setBusqueda(nombreCompleto(p));
-      setCreando(false);
-      setErrorNuevo(null);
-      setAbierto(false);
-      setIndiceActivo(0);
-    },
-    [setValue, clearErrors],
-  );
-
-  const empezarACrear = () => {
-    setValue("pacienteId", "", { shouldDirty: true });
-    clearErrors("pacienteId");
-    setNuevoNombre(busquedaLimpia);
-    setNuevoTelefono("");
-    setErrorNuevo(null);
-    setPropuesta(null);
-    setPacienteCreado(null);
-    setCreando(true);
-    setAbierto(false);
-  };
-
   const cancelarCrear = () => {
     setCreando(false);
     setErrorNuevo(null);
   };
-
-  const onBusquedaChange = (valor: string) => {
-    setBusqueda(valor);
-    if (pacienteElegido && valor !== nombreCompleto(pacienteElegido)) {
-      setValue("pacienteId", "", { shouldDirty: true });
-      setPropuesta(null);
-    }
-    setAbierto(true);
-    setIndiceActivo(0);
-  };
-
-  const onBusquedaBlur = () => {
-    if (closeTimerRef.current !== null) {
-      window.clearTimeout(closeTimerRef.current);
-    }
-    closeTimerRef.current = window.setTimeout(() => {
-      setAbierto(false);
-      closeTimerRef.current = null;
-    }, 120);
-  };
-
-  const onBusquedaKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!abierto && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-      setAbierto(true);
-      return;
-    }
-    if (!hayOpciones) {
-      if (event.key === "Escape") setAbierto(false);
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setIndiceActivo((i) => (i + 1) % cantidadOpciones);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setIndiceActivo((i) => (i - 1 + cantidadOpciones) % cantidadOpciones);
-    } else if (event.key === "Enter" && abierto) {
-      event.preventDefault();
-      if (puedeCrear && indiceEfectivo === cantidadOpciones - 1) {
-        empezarACrear();
-        return;
-      }
-      const p = filtrados[indiceEfectivo];
-      if (p) elegirPaciente(p);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      setAbierto(false);
-    }
-  };
-
-  /** Crea el paciente con nombre, teléfono y la tarifa de Tu consultorio. */
-  async function crearPaciente(): Promise<string> {
-    const { nombre, apellido } = separarNombre(nuevoNombre);
-    if (!nombre || !apellido) {
-      throw new Error("Ingresá nombre y apellido");
-    }
-    if (!nuevoTelefono.trim()) {
-      throw new Error("Ingresá el teléfono");
-    }
-    if (tarifaDefault === null || !tarifaUsable) {
-      throw new Error(TARIFA_SIN_CARGAR);
-    }
-    const creado = await apiPost<Paciente>("/api/pacientes", {
-      nombre,
-      apellido,
-      telefono: nuevoTelefono.trim(),
-      tarifa: tarifaDefault,
-      notas: null,
-    });
-    return creado.id;
-  }
 
   const enviar = handleSubmit(async (valores) => {
     setErrorEnvio(null);
@@ -384,16 +231,14 @@ export function NuevoTurnoForm({
         idPaciente = pacienteCreado;
       } else if (creando) {
         try {
-          idPaciente = await crearPaciente();
+          idPaciente = await crearPacienteRapido({
+            nombreYApellido: nuevoNombre,
+            telefono: nuevoTelefono,
+            tarifaDefault,
+          });
           setPacienteCreado(idPaciente);
         } catch (err) {
-          setErrorNuevo(
-            err instanceof ApiClientError
-              ? err.mensaje
-              : err instanceof Error
-                ? err.message
-                : ALGO_FALLO,
-          );
+          setErrorNuevo(mensajeDeCreacion(err));
           return;
         }
       }
@@ -430,110 +275,7 @@ export function NuevoTurnoForm({
         <input type="hidden" {...register("pacienteId")} />
 
         <div className="flex flex-col gap-5 py-5">
-          {/* Paciente */}
-          <div className="relative">
-            <div onBlur={onBusquedaBlur}>
-              <Input
-                label="Paciente"
-                placeholder="Buscar por nombre…"
-                value={busqueda}
-                error={errors.pacienteId?.message}
-                aria-autocomplete="list"
-                aria-controls={listaId}
-                aria-expanded={abierto}
-                aria-haspopup="listbox"
-                aria-activedescendant={
-                  abierto && hayOpciones
-                    ? `${listaId}-opcion-${indiceEfectivo}`
-                    : undefined
-                }
-                onFocus={() => {
-                  setAbierto(true);
-                  setIndiceActivo(0);
-                }}
-                onChange={(e) => onBusquedaChange(e.target.value)}
-                onKeyDown={onBusquedaKeyDown}
-              />
-            </div>
-
-            {abierto ? (
-              <div
-                role="listbox"
-                id={listaId}
-                className="absolute left-0 right-0 top-full z-10 mt-2 max-h-[220px] overflow-y-auto rounded-[10px] border border-[color:var(--border-subtle)] bg-white shadow-raised"
-                onMouseDown={() => {
-                  if (closeTimerRef.current !== null) {
-                    window.clearTimeout(closeTimerRef.current);
-                    closeTimerRef.current = null;
-                  }
-                }}
-              >
-                {filtrados.map((p, index) => {
-                  const activo = index === indiceEfectivo;
-                  return (
-                    <button
-                      key={p.id}
-                      id={`${listaId}-opcion-${index}`}
-                      type="button"
-                      role="option"
-                      aria-selected={activo}
-                      onMouseEnter={() => setIndiceActivo(index)}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => elegirPaciente(p)}
-                      className={`flex w-full items-center gap-3 px-[14px] py-[10px] text-left transition-colors duration-[var(--duration-fast)] ${
-                        activo ? "bg-cream-50" : "bg-white hover:bg-cream-50"
-                      }`}
-                    >
-                      <Avatar nombre={p.nombre} apellido={p.apellido} size={28} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14px] font-medium text-ink-900">
-                          {nombreCompleto(p)}
-                        </span>
-                        <span className="block tabular-nums text-[12px] text-ink-500">
-                          {money(p.tarifa)}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-
-                {puedeCrear ? (
-                  <button
-                    id={`${listaId}-opcion-${cantidadOpciones - 1}`}
-                    type="button"
-                    role="option"
-                    aria-selected={indiceEfectivo === cantidadOpciones - 1}
-                    onMouseEnter={() => setIndiceActivo(cantidadOpciones - 1)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={empezarACrear}
-                    className={`flex w-full items-center gap-2 px-[14px] py-[10px] text-left transition-colors duration-[var(--duration-fast)] ${
-                      indiceEfectivo === cantidadOpciones - 1
-                        ? "bg-cream-50"
-                        : "bg-white hover:bg-cream-50"
-                    }`}
-                  >
-                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sage-50 text-sage-600">
-                      <Plus size={14} strokeWidth={2.5} aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-medium text-ink-900">
-                        Crear a {busquedaLimpia}
-                      </span>
-                      <span className="block tabular-nums text-[12px] text-ink-500">
-                        Nombre y teléfono, y seguimos con el turno
-                      </span>
-                    </span>
-                  </button>
-                ) : null}
-
-                {!hayOpciones ? (
-                  <div className="px-[14px] py-[12px] text-[13px] text-ink-500">
-                    No hay pacientes para mostrar.
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <BuscadorPaciente buscador={buscador} error={errors.pacienteId?.message} />
 
           {/* Crear paciente inline */}
           {creando ? (

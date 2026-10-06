@@ -2,6 +2,9 @@
 // El mismo dibujo que usa la rama "cargando" de sesion-detail-view.tsx:
 // allá va sólo el cuerpo (el "Volver" ya está dibujado y ya es tocable),
 // acá va con él.
+//
+// Vive en sesiones/ y no en sesiones/[id]/ para envolver al layout de [id],
+// que es el que dibuja la sesión (ver [id]/layout.tsx).
 
 import { EsqueletoNota } from "@/components/esqueletos";
 

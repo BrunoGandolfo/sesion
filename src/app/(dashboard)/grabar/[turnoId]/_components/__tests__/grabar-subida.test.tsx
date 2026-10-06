@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DatosGrabacion, EstadoGrabador, Grabador } from "@/components/grabacion/GrabadorSesion";
-import { ErrorSubida } from "@/hooks/useGrabacionSesion";
+import { ErrorSubida } from "@/lib/subida-audio";
 import {
   AUDIO_NO_GUARDADO,
   GRABACION_LLEGO,
@@ -39,8 +39,8 @@ vi.mock("@/lib/api-client", async (original) => ({
   apiPost: vi.fn(),
 }));
 vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: vi.fn() }));
-vi.mock("@/hooks/useGrabacionSesion", async (original) => ({
-  ...(await original<typeof import("@/hooks/useGrabacionSesion")>()),
+vi.mock("@/lib/subida-audio", async (original) => ({
+  ...(await original<typeof import("@/lib/subida-audio")>()),
   subirAudio: m.subir,
   volverAGrabando: m.volverAGrabando,
   marcarTurnoRealizado: vi.fn(),

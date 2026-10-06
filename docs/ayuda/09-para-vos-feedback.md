@@ -127,12 +127,20 @@ el audio no muestra que sobre lo que hiciste.
 
 <!-- fuentes:
 src/components/grabacion/FeedbackTerapeutaView.tsx
+src/components/grabacion/feedback-lectura.ts
+src/components/grabacion/feedback-instrumentos.tsx
+src/components/grabacion/feedback-piezas.tsx
 src/lib/glosario.ts
 src/app/(dashboard)/config/_components/config-view.tsx
+src/app/(dashboard)/config/_components/opciones-radio.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
 src/app/(dashboard)/sesiones/[id]/para-vos/page.tsx
+src/app/(dashboard)/sesiones/[id]/layout.tsx
+src/app/(dashboard)/sesiones/[id]/_components/contenedor-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
+src/app/(dashboard)/sesiones/[id]/_components/use-para-vos.ts
+src/app/(dashboard)/sesiones/[id]/_components/avisos-sesion.tsx
 src/app/api/_lib/casos-uso/sesion/reintentar-feedback.ts
 src/app/api/_lib/casos-uso/sesion/reclamar.ts
 processor/prompts/therapist_feedback_gestalt_v1.1.md

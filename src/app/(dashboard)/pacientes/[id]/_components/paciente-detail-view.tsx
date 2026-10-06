@@ -247,9 +247,9 @@ export function PacienteDetailView({ id }: { id: string }) {
   const estadoConsentimiento: EstadoConsentimiento =
     consentimiento && consentimiento.id === id ? consentimiento.estado : { tipo: "cargando" };
 
-  function handleEditarSuccess() {
+  function handleEditarSuccess(aviso: string) {
     setEditarOpen(false);
-    avisar("Paciente actualizado", "confirmacion");
+    avisar(aviso, "confirmacion");
     refetchData();
   }
 

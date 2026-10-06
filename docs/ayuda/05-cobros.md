@@ -132,12 +132,18 @@ turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
 
 <!-- fuentes:
 src/app/(dashboard)/cobros/_components/cobros-view.tsx
+src/app/(dashboard)/cobros/_components/datos.ts
+src/app/(dashboard)/cobros/_components/te-deben.tsx
+src/app/(dashboard)/cobros/_components/fila-deudor.tsx
+src/app/(dashboard)/cobros/_components/registrar-pago.tsx
 src/components/cobro/sheet-metodo-pago.tsx
 src/lib/cobrar-cliente.ts
 src/app/(dashboard)/_components/dashboard.tsx
 src/app/(dashboard)/_components/datos.ts
 src/app/(dashboard)/_components/card-ahora.tsx
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
+src/app/(dashboard)/agenda/_components/detalle-datos.ts
+src/app/(dashboard)/agenda/_components/detalle-ver.tsx
 src/app/(dashboard)/pacientes/[id]/_components/turnos-pagos-tab.tsx
 src/app/api/_lib/casos-uso/cobrar-turno.ts
 src/app/api/turnos/[id]/cobrar/route.ts
@@ -146,6 +152,8 @@ src/lib/deudas.ts
 src/app/api/_lib/casos-uso/recordar-cobro.ts
 src/app/api/_lib/casos-uso/despachar-sms.ts
 src/app/(dashboard)/pacientes/[id]/_components/sesiones-tab.tsx
+src/app/(dashboard)/pacientes/[id]/_components/sesiones-datos.ts
+src/app/(dashboard)/pacientes/[id]/_components/filas-sesion.tsx
 src/types/domain.ts
 src/components/layout/sidebar.tsx
 src/app/(dashboard)/cobros/_components/tarjeta-finanzas.tsx

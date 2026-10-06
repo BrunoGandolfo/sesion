@@ -103,6 +103,9 @@ src/app/(dashboard)/_components/kpis.tsx
 src/app/(dashboard)/config/_components/config-view.tsx
 src/lib/grabacion-storage.ts
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts
+src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/app/api/_lib/casos-uso/trabajos/politica.ts
 src/components/clinico/HiloView.tsx
 src/lib/ayuda-corpus.ts

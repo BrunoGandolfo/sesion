@@ -1,40 +1,28 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 import { EsqueletoNotaCuerpo } from "@/components/esqueletos";
 import { Button, Confirmar, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { AnilloProgreso } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
-import {
-  CLAVE_MENCIONES,
-  clavesDeConfirmacion,
-  confirmacionesDeCasillas,
-  confirmacionesParaAprobar,
-} from "@/lib/sesion-clinica/aprobacion";
-import {
-  ESTADOS_ACTIVOS,
-  useSesionClinicaPolling,
-} from "@/hooks/useSesionClinicaPolling";
-import { apiGet, apiPost, ApiClientError, esAbort, mensajeParaElla } from "@/lib/api-client";
+import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
+import { CAMBIOS_SIN_APROBAR_MENSAJE, SESION_FALLO_LABEL } from "@/lib/glosario";
 import { estaEnProceso } from "@/lib/sesion-clinica/estados";
-import type {
-  NotaSoap,
-  SesionClinicaResponse,
-} from "@/lib/sesion-clinica/schema";
 
 import { accionesDeUsuaria, cuerpoDe } from "./acciones-sesion";
+import { Aviso, AvisoAprobada } from "./avisos-sesion";
 import { BarraAcciones } from "./barra-acciones";
-import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
-import { CAMBIOS_SIN_APROBAR_MENSAJE, FALTA_REVISAR_RIESGO, FALTA_REVISAR_MENCIONES, FALTA_REVISAR_AMBAS, FALTA_REVISAR_VERSION, FEEDBACK_REINTENTAR_ERROR, SESION_FALLO_LABEL } from "@/lib/glosario";
+import { mismaNota, notaDeSesion } from "./datos";
 import { NotaSesionView } from "./nota-sesion-view";
 import { ParaVosView } from "./para-vos-view";
+import { SelectorVista, type VistaSesion } from "./selector-vista";
 import { TranscripcionView } from "./transcripcion-view";
-import { hrefDeVista, SelectorVista, type VistaSesion } from "./selector-vista";
+import { useParaVos } from "./use-para-vos";
+import { useRevisionNota } from "./use-revision-nota";
 import {
   ALGO_FALLO,
   ELIMINANDO,
@@ -42,8 +30,6 @@ import {
   ELIMINAR_MENSAJE,
   ELIMINAR_TITULO,
   ESCRIBIENDO_NOTA,
-  LEER_PARA_VOS,
-  NOTA_APROBADA_AVISO,
   NOTA_GUARDADA,
   NOTA_NO_ESCRITA,
   REINTENTANDO,
@@ -62,22 +48,20 @@ import {
 // La sesión tiene tres caras: la nota clínica (/sesiones/[id]), "Para vos"
 // (/sesiones/[id]/para-vos) y la transcripción (/sesiones/[id]/transcripcion,
 // que pide su texto aparte y recién al abrirse). Todas leen la misma fila, comparten cabecera
-// y se eligen con el mismo selector, así que las tres rutas montan este
-// componente con `vista` distinta. Duplicar la carga, el polling y los
-// estados de pipeline en dos contenedores habría sido dos veces la misma
-// pantalla con dos formas de fallar.
+// y se eligen con el mismo selector, así que las tres rutas comparten este
+// componente con `vista` distinta: lo monta una sola vez el layout de
+// sesiones/[id] (contenedor-sesion.tsx), y cambiar de cara no lo desmonta.
+// Duplicar la carga, el polling y los estados de pipeline en dos
+// contenedores habría sido dos veces la misma pantalla con dos formas de
+// fallar.
 //
 // La barra de acciones —aprobar, descartar— es sólo de la nota: es donde se
 // firma el documento clínico.
 //
-// Un solo origen de datos: GET /api/sesion-clinica/[id] por el cliente de
-// API. Mientras la sesión está en el pipeline se relee con
-// useSesionClinicaPolling, que ya deja de consultar solo cuando el estado
-// sale de ESTADOS_ACTIVOS (grabando, subiendo, procesando).
-//
-// El texto que ella edita vive acá, en el estado local, y viaja entero como
-// notaEditada al aprobar. Nunca se guarda por sección: aprobar es el único
-// momento en que la nota se escribe.
+// Un solo origen de datos: GET /api/sesion-clinica/[id] (datos.ts). La fila,
+// la relectura mientras está en el pipeline, el borrador y las acciones que
+// lo firman viven en useRevisionNota; la relectura de "Para vos" mientras se
+// escribe, en useParaVos. Acá queda la presentación.
 //
 // DESPUÉS DE APROBAR NO SE VA A NINGÚN LADO
 //
@@ -89,36 +73,6 @@ import {
 // barra de acciones desaparece porque ya no hay nada que firmar, y en su
 // lugar queda un aviso con el camino a "Para vos".
 
-/** La nota vigente: la aprobada si existe, si no la que escribió la IA. */
-function notaDeSesion(sesion: SesionClinicaResponse): NotaSoap {
-  const nota = sesion.notaFinal ?? sesion.notaIa;
-  return {
-    subjetivo: nota?.subjetivo ?? "",
-    objetivo: nota?.objetivo ?? "",
-    analisis: nota?.analisis ?? "",
-    plan: nota?.plan ?? "",
-  };
-}
-
-/** Dos notas con el mismo texto en las cuatro secciones. */
-function mismaNota(a: NotaSoap, b: NotaSoap): boolean {
-  return (
-    a.subjetivo === b.subjetivo &&
-    a.objetivo === b.objetivo &&
-    a.analisis === b.analisis &&
-    a.plan === b.plan
-  );
-}
-
-/** Edición atada a la versión de la fila que la originó: si la sesión se
- *  reescribe (descarte, reproceso), el borrador viejo deja de aplicar sin
- *  necesidad de un efecto que lo resetee. */
-type Edicion = { version: string; generacion: number; nota: NotaSoap };
-
-function versionDe(sesion: SesionClinicaResponse): string {
-  return `${sesion.id}:${sesion.generacion}:${sesion.estado}`;
-}
-
 export function SesionDetailView({
   id,
   vista = "nota",
@@ -127,18 +81,14 @@ export function SesionDetailView({
   vista?: VistaSesion;
 }) {
   const router = useRouter();
-
-  const [sesion, setSesion] = React.useState<SesionClinicaResponse | null>(null);
-  const [cargando, setCargando] = React.useState(true);
-  const [errorCarga, setErrorCarga] = React.useState<string | null>(null);
-  const [edicion, setEdicion] = React.useState<Edicion | null>(null);
-  const [revision, setRevision] = React.useState<{ version: string; claves: ReadonlySet<string> } | null>(null);
-  const revisadas = revision && revision.version === edicion?.version ? revision.claves : new Set<string>();
-  const [conflictoAprobacion, setConflictoAprobacion] = React.useState(false);
-  const [borradorAnterior, setBorradorAnterior] = React.useState<NotaSoap | null>(null);
-  const [enviando, setEnviando] = React.useState(false);
-  const [errorAccion, setErrorAccion] = React.useState<string | null>(null);
-  const [confirmarEliminar, setConfirmarEliminar] = React.useState(false);
+  const toast = useToast();
+  const {
+    sesion, aplicar, cargando, errorCarga, recargar, edicion, editarSeccion, revisadas,
+    marcarRevisada, puedeAprobar, motivo, conflictoAprobacion, revisarNotaActual,
+    borradorAnterior, enviando, errorAccion, confirmarEliminar, setConfirmarEliminar,
+    aprobadaAhora, aprobar, descartar, reintentar, eliminar,
+  } = useRevisionNota(id, { onAprobada: () => toast.confirmar(NOTA_GUARDADA) });
+  const paraVos = useParaVos({ id, vista, feedbackEstado: sesion?.feedbackEstado, aplicar });
 
   // El detalle del fallo es diagnóstico (a veces lo escribe el worker, con
   // recortes del pipeline): va a la consola, no a la pantalla. A ella se le
@@ -150,223 +100,7 @@ export function SesionDetailView({
   const motivoFallo = sesion?.falloCodigo ? (SESION_FALLO_LABEL[sesion.falloCodigo] ?? null) : null;
   // "Volver" con correcciones sin aprobar: pregunta antes de irse.
   const confirmarSalida = useSalidaProtegida();
-  // La nota se acaba de aprobar en esta pantalla. No es lo mismo que
-  // `estado === "aprobada"`: una nota abierta ya aprobada no muestra el
-  // aviso, porque no acaba de pasar nada.
-  const [aprobadaAhora, setAprobadaAhora] = React.useState(false);
-  const [pidiendoFeedback, setPidiendoFeedback] = React.useState(false);
-  const [errorFeedback, setErrorFeedback] = React.useState<string | null>(null);
-  const [lecturaFeedback, setLecturaFeedback] = React.useState(0);
-  const toast = useToast();
-
-  const aplicar = React.useCallback((fila: SesionClinicaResponse) => {
-    setSesion(fila);
-    setEdicion((previa) => {
-      const version = versionDe(fila);
-      return previa && previa.version === version
-        ? previa
-        : { version, generacion: fila.generacion, nota: notaDeSesion(fila) };
-    });
-  }, []);
-
-  // Carga inicial y recarga manual. El estado se escribe al resolverse la
-  // promesa, nunca en el cuerpo del efecto.
-  const [intentoCarga, setIntentoCarga] = React.useState(0);
-  React.useEffect(() => {
-    const controlador = new AbortController();
-    apiGet<SesionClinicaResponse>(`/api/sesion-clinica/${id}`, {
-      signal: controlador.signal,
-    })
-      .then((fila) => {
-        aplicar(fila);
-        setErrorCarga(null);
-        setCargando(false);
-      })
-      .catch((error: unknown) => {
-        if (esAbort(error) || controlador.signal.aborted) return;
-        setErrorCarga(mensajeParaElla(error));
-        setCargando(false);
-      });
-    return () => controlador.abort();
-  }, [id, intentoCarga, aplicar]);
-
-  // Relectura mientras la sesión sigue en el pipeline. Con la sesión ya
-  // fuera de esos estados el hook queda deshabilitado y no consulta.
-  const enPipeline = sesion !== null && ESTADOS_ACTIVOS.has(sesion.estado);
-  const onSesion = React.useCallback(
-    ({ fila }: { fila: SesionClinicaResponse }) => {
-      aplicar(fila);
-    },
-    [aplicar],
-  );
-  useSesionClinicaPolling({
-    sesionClinicaId: id,
-    enabled: enPipeline,
-    onSesion,
-  });
-
-  React.useEffect(() => {
-    if (vista !== "para-vos" || sesion?.feedbackEstado !== "pendiente") return;
-    const control = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const leer = async () => {
-      try {
-        const fila = await apiGet<SesionClinicaResponse>(`/api/sesion-clinica/${id}`, { signal: control.signal });
-        if (control.signal.aborted) return;
-        aplicar(fila); setErrorFeedback(null);
-        if (fila.feedbackEstado === "pendiente") timer = setTimeout(leer, 10_000);
-      } catch (e) {
-        if (!esAbort(e)) setErrorFeedback(mensajeParaElla(e));
-      }
-    };
-    timer = setTimeout(leer, lecturaFeedback ? 0 : 10_000);
-    return () => { control.abort(); clearTimeout(timer); };
-  }, [id, vista, sesion?.feedbackEstado, lecturaFeedback, aplicar]);
-
-  const pedirFeedback = async () => {
-    if (pidiendoFeedback) return;
-    setPidiendoFeedback(true); setErrorFeedback(null);
-    try {
-      const fila = await apiPost<SesionClinicaResponse>(`/api/sesion-clinica/${id}/feedback/reintentar`, {});
-      aplicar(fila);
-    } catch {
-      // Puede haberse creado el trabajo aunque se haya perdido su respuesta.
-      try {
-        const fila = await apiGet<SesionClinicaResponse>(`/api/sesion-clinica/${id}`);
-        aplicar(fila);
-        if (fila.feedbackEstado === "pendiente" || fila.feedbackEstado === "listo") return;
-      }
-      catch { /* El mensaje no afirma que el pedido haya fallado. */ }
-      setErrorFeedback(FEEDBACK_REINTENTAR_ERROR);
-    } finally { setPidiendoFeedback(false); }
-  };
-
-  const datos = sesion?.datos ?? null;
   const feedback = sesion?.feedback;
-  // Las casillas que exige aprobar: una por flag activo, la de la señal
-  // graduada y la de las menciones. Es la MISMA regla con que el servidor
-  // rechaza una aprobación sin confirmar (lib/sesion-clinica/aprobacion.ts).
-  const exigidas = React.useMemo(() => confirmacionesParaAprobar(datos), [datos]);
-  const claves = clavesDeConfirmacion(exigidas);
-  // Aprobar no se habilita hasta que TODAS estén marcadas. Sin señales, la
-  // lista está vacía y `every` es true.
-  const puedeAprobar = !conflictoAprobacion && claves.every((clave) => revisadas.has(clave));
-  const faltanSenales = claves.some((clave) => clave !== CLAVE_MENCIONES && !revisadas.has(clave));
-  const faltanMenciones = exigidas.menciones && !revisadas.has(CLAVE_MENCIONES);
-  const motivoBloqueo = conflictoAprobacion ? FALTA_REVISAR_VERSION
-    : faltanSenales && faltanMenciones ? FALTA_REVISAR_AMBAS
-    : faltanMenciones ? FALTA_REVISAR_MENCIONES
-    : faltanSenales ? FALTA_REVISAR_RIESGO : null;
-
-  const marcarRevisada = React.useCallback((clave: string, marcada: boolean) => {
-    if (!edicion) return;
-    setRevision((previa) => {
-      const claves = new Set(previa?.version === edicion.version ? previa.claves : []);
-      if (marcada) claves.add(clave);
-      else claves.delete(clave);
-      return { version: edicion.version, claves };
-    });
-  }, [edicion]);
-
-  const revisarNotaActual = async () => {
-    setEnviando(true);
-    try {
-      const fila = await apiGet<SesionClinicaResponse>(`/api/sesion-clinica/${id}`);
-      if (edicion) setBorradorAnterior(edicion.nota);
-      aplicar(fila);
-      setRevision(null);
-      setConflictoAprobacion(false);
-      setErrorAccion(null);
-    } catch (error) {
-      setErrorAccion(mensajeParaElla(error));
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  const editarSeccion = React.useCallback(
-    (clave: keyof NotaSoap, valor: string) => {
-      setEdicion((previa) =>
-        previa ? { ...previa, nota: { ...previa.nota, [clave]: valor } } : previa,
-      );
-    },
-    [],
-  );
-
-  const aprobar = async () => {
-    if (!edicion || !puedeAprobar) return;
-    setEnviando(true);
-    setErrorAccion(null);
-    try {
-      // La respuesta ES la fila aprobada: se aplica en vez de descartarse.
-      // Con eso el chip pasa a "Nota guardada", `editable` se apaga y la
-      // barra de acciones se va sola, sin recargar ni navegar.
-      const fila = await apiPost<SesionClinicaResponse>(
-        `/api/sesion-clinica/${id}/aprobar`,
-        {
-          generacion: edicion.generacion,
-          notaEditada: edicion.nota,
-          ...confirmacionesDeCasillas(exigidas, revisadas),
-        },
-      );
-      aplicar(fila);
-      setBorradorAnterior(null);
-      setAprobadaAhora(true);
-      setEnviando(false);
-      toast.confirmar(NOTA_GUARDADA);
-    } catch (error) {
-      if (error instanceof ApiClientError && error.status === 409) setConflictoAprobacion(true);
-      setErrorAccion(mensajeParaElla(error));
-      setEnviando(false);
-    }
-  };
-
-  // Descartar: la nota se manda a escribir de nuevo (POST /reprocesar). No
-  // se borra nada y no se vuelve a transcribir; la sesión vuelve a
-  // "procesando" y la pantalla la relee. Si cambió de estado mientras la
-  // pantalla estaba abierta, la API contesta 409.
-  const descartar = async () => {
-    setEnviando(true);
-    setErrorAccion(null);
-    try {
-      await apiPost(`/api/sesion-clinica/${id}/reprocesar`, {});
-      setIntentoCarga((n) => n + 1);
-    } catch (error) {
-      setErrorAccion(mensajeParaElla(error));
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  const reintentar = async () => {
-    setEnviando(true);
-    setErrorAccion(null);
-    try {
-      const fila = await apiPost<SesionClinicaResponse>(
-        `/api/sesion-clinica/${id}/reintentar`,
-        {},
-      );
-      aplicar(fila);
-    } catch (error) {
-      setErrorAccion(mensajeParaElla(error));
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  // Eliminar desde "fallida": borrado definitivo de la sesión y su audio.
-  const eliminar = async () => {
-    setEnviando(true);
-    setErrorAccion(null);
-    try {
-      await apiPost(`/api/sesion-clinica/${id}/eliminar`, {});
-      router.back();
-    } catch (error) {
-      setErrorAccion(mensajeParaElla(error));
-      setConfirmarEliminar(false);
-      setEnviando(false);
-    }
-  };
 
   // El cuerpo y las acciones salen de la tabla de operaciones
   // (acciones-sesion.ts), no de literales: un estado nuevo no compila hasta
@@ -375,31 +109,32 @@ export function SesionDetailView({
   const acciones = sesion ? accionesDeUsuaria(sesion.estado) : null;
 
   // Sólo la nota se firma: "Para vos" es lectura.
-  const editable = vista === "nota" && acciones?.aprobar === true;
+  const enRevision = acciones?.aprobar === true;
+  const editable = vista === "nota" && enRevision;
 
   // La nota escrita y "Para vos" son las dos caras de la misma sesión.
   const conNota = cuerpo === "nota";
 
-  // Correcciones escritas y todavía no aprobadas. El borrador vive acá y sólo
-  // se escribe al aprobar, así que irse de la pantalla lo borra.
+  // Correcciones escritas y todavía no aprobadas. El borrador vive en el
+  // contenedor de sesiones/[id]/layout.tsx, que sigue montado al cambiar de
+  // cara: lo que se pierde es irse de la sesión, desde cualquier cara, así
+  // que esto no depende de cuál se está mirando.
   //
   // Se compara contra la nota de la fila, que es de donde salió el borrador
   // (`aplicar`): así, deshacer a mano una corrección vuelve a dejar la nota
   // sin cambios y el aviso no aparece por nada.
-  const tieneCambios = (editable && borradorAnterior !== null) ||
-    editable &&
-    sesion !== null &&
-    edicion !== null &&
-    !mismaNota(edicion.nota, notaDeSesion(sesion));
+  const tieneCambios = enRevision && (
+    borradorAnterior !== null ||
+    (sesion !== null &&
+      edicion !== null &&
+      !mismaNota(edicion.nota, notaDeSesion(sesion)))
+  );
 
   // Menú, enlaces, Atrás y recarga usan la misma protección del dashboard.
   useProtegerTrabajo(tieneCambios || borradorAnterior !== null, CAMBIOS_SIN_APROBAR_MENSAJE);
 
   // Para vos también explica la espera y ofrece el reintento cuando corresponde.
-  const selector =
-    conNota ? (
-      <SelectorVista id={id} vista={vista} tieneCambios={tieneCambios} />
-    ) : null;
+  const selector = conNota ? <SelectorVista id={id} vista={vista} /> : null;
 
   return (
     <>
@@ -424,7 +159,7 @@ export function SesionDetailView({
 
         </div>
 
-        {/* La segunda espera: la ruta ya llegó —su loading.tsx dibujó este
+        {/* La segunda espera: la ruta ya llegó —sesiones/loading.tsx dibujó este
             mismo cuerpo— y falta GET /api/sesion-clinica/[id]. El "Volver"
             de arriba queda afuera del esqueleto porque ya está dibujado y ya
             es tocable: si la nota tarda, volverse tiene que seguir siendo
@@ -435,11 +170,7 @@ export function SesionDetailView({
           <Aviso titulo={ALGO_FALLO} detalle={errorCarga}>
             <Button
               variant="secondary"
-              onClick={() => {
-                setCargando(true);
-                setErrorCarga(null);
-                setIntentoCarga((n) => n + 1);
-              }}
+              onClick={recargar}
             >
               {REINTENTAR}
             </Button>
@@ -506,8 +237,8 @@ export function SesionDetailView({
         ) : null}
 
         {conNota && sesion && vista === "para-vos" ? (
-          <ParaVosView sesion={sesion} selector={selector} onReintentar={() => void pedirFeedback()}
-            pidiendo={pidiendoFeedback} error={errorFeedback} onActualizar={() => setLecturaFeedback(n => n + 1)} />
+          <ParaVosView sesion={sesion} selector={selector} onReintentar={() => void paraVos.pedir()}
+            pidiendo={paraVos.pidiendo} error={paraVos.error} onActualizar={paraVos.actualizar} />
         ) : null}
 
         {conNota && sesion && vista === "transcripcion" ? (
@@ -566,8 +297,8 @@ export function SesionDetailView({
         <BarraAcciones
           key={edicion?.version}
           puedeAprobar={puedeAprobar}
-          motivo={motivoBloqueo}
-            borradorAnterior={borradorAnterior !== null}
+          motivo={motivo}
+          borradorAnterior={borradorAnterior !== null}
           enviando={enviando}
           onAprobar={() => void aprobar()}
           onDescartar={() => void descartar()}
@@ -576,82 +307,5 @@ export function SesionDetailView({
 
       <Toast {...toast.props} />
     </>
-  );
-}
-
-/**
- * Lo que queda en la nota después de aprobar: que quedó guardada, y el
- * camino a "Para vos".
- *
- * Es una confirmación, no una celebración. Sin Lupita, sin check dibujado,
- * sin felicitación: la nota clínica no lleva personaje ni celebración
- * (docs/diseno/04-personaje.md), y esto está en la misma pantalla que el
- * bloque de riesgo. Verde salvia porque algo salió bien, y nada más.
- *
- * El enlace no se dibuja si no hay análisis: ofrecer una pantalla vacía
- * justo después de aprobar sería la peor primera impresión posible de la
- * mitad del producto que esta tanda vino a poner a la vista.
- */
-function AvisoAprobada({
-  id,
-  conParaVos,
-}: {
-  id: string;
-  conParaVos: boolean;
-}) {
-  return (
-    <div
-      role="status"
-      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sage-200 bg-sage-50 px-4 py-3"
-    >
-      <p className="font-sans text-[14px] leading-[1.5] text-ink-900">
-        {NOTA_APROBADA_AVISO}
-      </p>
-      {conParaVos ? (
-        <Link
-          href={hrefDeVista(id, "para-vos")}
-          className="inline-flex min-h-[44px] items-center font-sans text-[14px] font-semibold text-sage-600 transition-colors duration-[var(--duration-fast)] hover:text-sage-700"
-        >
-          {LEER_PARA_VOS}
-        </Link>
-      ) : null}
-    </div>
-  );
-}
-
-function Aviso({
-  titulo,
-  detalle,
-  children,
-}: {
-  titulo: string;
-  detalle?: string | null;
-  children?: React.ReactNode;
-}) {
-  return (
-    <section
-      role="alert"
-      className="flex flex-col gap-3 rounded-lg border border-terracotta-100 bg-terracotta-50 px-4 py-4"
-    >
-      <div className="flex items-start gap-2">
-        <AlertCircle
-          size={18}
-          strokeWidth={1.9}
-          aria-hidden="true"
-          className="mt-[2px] shrink-0 text-terracotta-500"
-        />
-        <div className="flex flex-col gap-1">
-          <p className="font-sans text-[15px] font-semibold text-ink-900">
-            {titulo}
-          </p>
-          {detalle ? (
-            <p className="font-sans text-[13px] leading-[1.55] text-ink-700">
-              {detalle}
-            </p>
-          ) : null}
-        </div>
-      </div>
-      {children}
-    </section>
   );
 }

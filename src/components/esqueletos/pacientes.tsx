@@ -13,7 +13,7 @@
 // La lista es la MISMA en los dos casos. El marco no se duplica: cuando
 // existe de verdad, se usa el de verdad.
 //
-// La grilla de la tabla de desktop es la de pacientes-view.tsx:346
+// La grilla de la tabla de desktop es la de DesktopTable (lista-pacientes.tsx)
 // (1.8fr 1fr 110px 1fr 120px 24px). Si cambia allá, cambia acá.
 
 import { CARGANDO_PACIENTES } from "@/lib/glosario";

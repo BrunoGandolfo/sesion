@@ -174,8 +174,10 @@ depende de que la pidas vos.
 src/lib/consentimiento-hechos.ts
 src/lib/consentimiento.ts
 src/components/grabacion/GrabadorSesion.tsx
+src/components/grabacion/grabador-microfono.ts
+src/components/grabacion/grabacion-pendiente.ts
 src/lib/grabacion-storage.ts
-src/hooks/useGrabacionSesion.ts
+src/lib/subida-audio.ts
 src/lib/glosario.ts
 src/lib/prisma-encryption.ts
 src/app/api/_lib/casos-uso/audio.ts

@@ -18,7 +18,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { marcarTurnoRealizado } from "@/hooks/useGrabacionSesion";
+import { marcarTurnoRealizado } from "@/lib/subida-audio";
 
 const TURNO_ID = "turno_1";
 

@@ -39,8 +39,8 @@ const m = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => m.router }));
 vi.mock("@/lib/api-client", () => ({ apiGet: m.get, apiPost: m.post }));
 vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: m.limpiar }));
-vi.mock("@/hooks/useGrabacionSesion", async (original) => ({
-  ...(await original<typeof import("@/hooks/useGrabacionSesion")>()),
+vi.mock("@/lib/subida-audio", async (original) => ({
+  ...(await original<typeof import("@/lib/subida-audio")>()),
   subirAudio: m.subir,
   volverAGrabando: vi.fn(),
   marcarTurnoRealizado: vi.fn(),

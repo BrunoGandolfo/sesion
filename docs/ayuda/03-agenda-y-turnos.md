@@ -130,7 +130,10 @@ ningún recordatorio**.
 
 <!-- fuentes:
 src/app/(dashboard)/agenda/_components/agenda-view.tsx
+src/app/(dashboard)/agenda/_components/datos.ts
 src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx
+src/app/(dashboard)/agenda/_components/detalle-datos.ts
+src/app/(dashboard)/agenda/_components/detalle-ver.tsx
 src/app/api/turnos/route.ts
 src/app/api/turnos/[id]/route.ts
 src/app/api/turnos/[id]/cobrar/route.ts
@@ -141,6 +144,8 @@ src/app/(dashboard)/agenda/_components/semana-tira.tsx
 src/app/(dashboard)/agenda/_components/day-view.tsx
 src/components/ui/session-row.tsx
 src/components/forms/nuevo-turno-form.tsx
+src/components/forms/nuevo-turno-datos.ts
+src/components/forms/buscador-paciente.tsx
 src/components/forms/resultado-serie.tsx
 src/app/api/_lib/casos-uso/crear-turno.ts
 src/app/api/_lib/casos-uso/turnos.ts

@@ -12,17 +12,8 @@ import { useEsEscritorio } from "@/hooks/useEsEscritorio";
 import { useHoy } from "@/hooks/useHoy";
 import { crearTurno, mensajeTurnoAgendado } from "@/lib/agendar-turno";
 import { SheetNuevoTurno } from "@/components/forms/sheet-nuevo-turno";
-import { apiGet, esAbort } from "@/lib/api-client";
-import { parseTurno, type TurnoJson } from "@/lib/json-turno";
-import {
-  agregarDiasMvd,
-  finDelDiaMvd,
-  inicioDeMesMvd,
-  inicioDeSemanaMvd,
-  inicioFinDiaMvd,
-  agregarMesesMvd,
-  esMismoDiaMvd,
-} from "@/lib/fechas-montevideo";
+import { esAbort } from "@/lib/api-client";
+import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 import {
   AGENDAR,
   ALGO_FALLO,
@@ -38,29 +29,12 @@ import { MonthView } from "./month-view";
 import { SemanaTira } from "./semana-tira";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
 import { TurnoDetailSheet } from "./turno-detail-sheet";
-
-export type AgendaViewMode = "día" | "semana" | "mes";
-
-// El rango que se le pide a la API. Los bordes son los del día de
-// Montevideo, no los del dispositivo: con `setHours` un teléfono en Madrid
-// pedía de las 19:00 del día anterior a las 18:59 del día, y la sesión de
-// las 21:30 quedaba fuera de su propio día.
-function computeRange(
-  view: AgendaViewMode,
-  anchor: Date,
-): { desde: Date; hasta: Date } {
-  if (view === "día") {
-    return inicioFinDiaMvd(anchor);
-  }
-  if (view === "semana") {
-    const desde = inicioDeSemanaMvd(anchor);
-    return { desde, hasta: finDelDiaMvd(agregarDiasMvd(desde, 6)) };
-  }
-  // Seis semanas completas desde el lunes de la semana en que cae el día 1:
-  // la grilla del mes siempre dibuja 42 celdas.
-  const desde = inicioDeSemanaMvd(inicioDeMesMvd(anchor));
-  return { desde, hasta: finDelDiaMvd(agregarDiasMvd(desde, 41)) };
-}
+import {
+  computeRange,
+  leerTurnos,
+  moverAncla,
+  type AgendaViewMode,
+} from "./datos";
 
 type LoadState = "idle" | "loading" | "error";
 
@@ -150,20 +124,10 @@ export function AgendaView() {
     }
 
     const controller = new AbortController();
-    // Con los cancelados: la agenda los muestra apagados (session-row y el
-    // punto gris del mes ya los distinguen). Sin este parámetro la API los
-    // filtra, y un turno cancelado desaparecía de la grilla como si nunca
-    // hubiera existido — que es lo que la deja sin saber si lo canceló.
-    const url =
-      `/api/turnos?desde=${encodeURIComponent(range.desde.toISOString())}` +
-      `&hasta=${encodeURIComponent(range.hasta.toISOString())}` +
-      `&includeCancelados=true`;
-
     const marcando = window.setTimeout(() => setTurnosStatus("loading"), 0);
 
-    apiGet<TurnoJson<TurnoConPaciente>[]>(url, { signal: controller.signal })
-      .then((data) => {
-        const parsed = data.map((t) => parseTurno(t));
+    leerTurnos(range, controller.signal)
+      .then((parsed) => {
         cacheRef.current.set(rangeKey, parsed);
         setLectura({ clave: rangeKey, turnos: parsed });
         setTurnosStatus("idle");
@@ -179,30 +143,15 @@ export function AgendaView() {
     };
   }, [rangeKey, range, refreshKey]);
 
-  const handlePrev = () => {
+  const mover = (signo: -1 | 1) => {
     setAnchorUsuario((elegido) => {
       const d = elegido ?? today;
       if (!d) return elegido;
-      if (isMobile && mesAbierto) return agregarMesesMvd(d, -1);
-      // Mes plegado: las flechas mueven la tira de a una semana.
-      if (isMobile) return agregarDiasMvd(d, -7);
-      if (view === "día") return agregarDiasMvd(d, -1);
-      if (view === "semana") return agregarDiasMvd(d, -7);
-      return agregarMesesMvd(d, -1);
+      return moverAncla(d, signo, { view, isMobile, mesAbierto });
     });
   };
-  const handleNext = () => {
-    setAnchorUsuario((elegido) => {
-      const d = elegido ?? today;
-      if (!d) return elegido;
-      if (isMobile && mesAbierto) return agregarMesesMvd(d, 1);
-      // Mes plegado: las flechas mueven la tira de a una semana.
-      if (isMobile) return agregarDiasMvd(d, 7);
-      if (view === "día") return agregarDiasMvd(d, 1);
-      if (view === "semana") return agregarDiasMvd(d, 7);
-      return agregarMesesMvd(d, 1);
-    });
-  };
+  const handlePrev = () => mover(-1);
+  const handleNext = () => mover(1);
   const handleToday = () => {
     setAnchorUsuario(new Date());
     setMesAbierto(false);

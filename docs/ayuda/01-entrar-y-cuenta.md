@@ -120,6 +120,7 @@ src/lib/login-intentos.ts
 src/lib/password.ts
 src/app/api/cuenta/password/route.ts
 src/app/(dashboard)/config/_components/config-view.tsx
+src/app/(dashboard)/config/_components/cuenta-seccion.tsx
 src/components/layout/sidebar.tsx
 src/components/layout/cabecera-usuario.tsx
 src/lib/intentos-acceso.ts

@@ -10,6 +10,9 @@
 // el servidor marca una señal (segundo caso). El 21/09/2026 se regeneró con
 // esta misma fixture por el cambio intencional de paleta A: cinco valores
 // de color, sin cambios de texto, estructura, tamaño ni orden.
+// El 06/10/2026 (ola 3) se regeneró porque los gráficos pasaron sus colores
+// de hex a la variable del token con el MISMO valor (#4F7A6A → var(--color-
+// sage-500), etc.): el papel imprime los mismos colores.
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";

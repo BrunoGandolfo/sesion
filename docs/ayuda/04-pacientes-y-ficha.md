@@ -73,6 +73,7 @@ Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
 
 - **Datos de contacto** — teléfono (se puede tocar para llamar), tarifa
   por sesión y fecha de alta.
+  Si en **Editar datos** cambiás la tarifa y había turnos futuros, el aviso dice cuántos se actualizaron: *"Tarifa guardada. Se actualizaron 3 turnos futuros."*
 - **Notas privadas** — se guardan solas: *"Se guarda solo. Solo vos las ves."* Si
   intentás salir antes de que se guarden, la app avisa.
 - **Autorización para grabar las sesiones** — ver abajo.
@@ -139,11 +140,15 @@ paciente está archivada"*. Mientras esté archivada no le sale ningún SMS.
 
 <!-- fuentes:
 src/app/(dashboard)/pacientes/_components/pacientes-view.tsx
+src/app/(dashboard)/pacientes/_components/pacientes-datos.ts
+src/app/(dashboard)/pacientes/_components/lista-pacientes.tsx
 src/app/(dashboard)/pacientes/_components/nuevo-paciente-form.tsx
 src/app/(dashboard)/pacientes/[id]/_components/paciente-detail-view.tsx
 src/app/(dashboard)/pacientes/[id]/_components/cabecera-ficha.tsx
 src/app/(dashboard)/pacientes/[id]/_components/ficha-tab.tsx
 src/app/(dashboard)/pacientes/[id]/_components/sesiones-tab.tsx
+src/app/(dashboard)/pacientes/[id]/_components/sesiones-datos.ts
+src/app/(dashboard)/pacientes/[id]/_components/filas-sesion.tsx
 src/app/(dashboard)/pacientes/[id]/_components/turnos-pagos-tab.tsx
 src/components/grabacion/ConsentimientoBadge.tsx
 src/components/grabacion/ConsentimientoForm.tsx
@@ -154,6 +159,9 @@ src/app/api/_lib/casos-uso/envios-del-turno.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts
+src/app/(dashboard)/grabar/[turnoId]/_components/pantallas.tsx
+src/app/(dashboard)/grabar/[turnoId]/_components/pantalla-grabando.tsx
 src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
 src/lib/consentimiento-hechos.ts
 src/lib/glosario.ts

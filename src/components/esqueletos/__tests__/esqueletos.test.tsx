@@ -157,7 +157,7 @@ describe("un esqueleto, dos usos", () => {
     "src/app/(dashboard)/pacientes/loading.tsx",
     "src/app/(dashboard)/cobros/loading.tsx",
     "src/app/(dashboard)/finanzas/loading.tsx",
-    "src/app/(dashboard)/sesiones/[id]/loading.tsx",
+    "src/app/(dashboard)/sesiones/loading.tsx",
     "src/app/(dashboard)/_components/dashboard.tsx",
     "src/app/(dashboard)/pacientes/_components/pacientes-view.tsx",
     "src/app/(dashboard)/cobros/_components/cobros-view.tsx",

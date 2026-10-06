@@ -19,6 +19,12 @@ import * as glosario from "@/lib/glosario";
 const RAIZ = process.cwd();
 const codigo = (ruta: string) => readFileSync(join(RAIZ, ruta), "utf8");
 
+/** La pantalla de grabar, cortada en la vista, su flujo y sus pantallas. */
+const pantallaDeGrabar = () =>
+  ["grabar-view.tsx", "flujo-grabacion.ts", "pantallas.tsx", "pantalla-grabando.tsx"]
+    .map((archivo) => codigo(`src/app/(dashboard)/grabar/[turnoId]/_components/${archivo}`))
+    .join("\n");
+
 /** Todo el código de la app que puede dibujar un texto, sin tests ni el propio corpus. */
 function fuentes(dir: string): string[] {
   return readdirSync(dir).flatMap((nombre) => {
@@ -97,7 +103,7 @@ describe("los ejemplos de voz de Lupita", () => {
     // grabacion-storage.test.ts ("el audio se guarda tal cual").
     expect(grabacion).toContain("queda guardado en el teléfono, segundo a segundo");
     expect(grabacion).not.toContain("cifrado");
-    const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx");
+    const vista = pantallaDeGrabar();
     for (const [constante, boton] of [["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["SEGUIR_GRABANDO", "Seguir grabando"]]) {
       expect((glosario as Record<string, unknown>)[constante]).toBe(boton);
       expect(vista).toContain(constante);

@@ -106,6 +106,15 @@ describe("B: los cambios no se pierden", () => {
     expect(api.patch).toHaveBeenLastCalledWith("/api/config", { direccion: "Segunda" });
   });
 
+  it("cerrar la pestaña manda lo pendiente con keepalive", async () => {
+    await abrir();
+    fireEvent.change(screen.getByLabelText("Dirección del consultorio"), { target: { value: "Otra 456" } });
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(api.patch).toHaveBeenCalledExactlyOnceWith("/api/config", { direccion: "Otra 456" }, { keepalive: true });
+  });
+
   it("un campo inválido no frena a los válidos del mismo lote", async () => {
     await abrir();
     fireEvent.change(screen.getByRole("spinbutton", { name: "Lo que cobrás por sesión" }), { target: { value: "" } });
