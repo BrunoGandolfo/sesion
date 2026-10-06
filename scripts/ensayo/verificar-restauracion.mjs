@@ -5,10 +5,14 @@
 // una vez por copia (diaria y mensual), y scripts/ensayo/ensayo-manual.sh en
 // la máquina del dueño. Comprobaciones:
 //
-//   0. Esquema conocido. Compara tablas, columnas y tipos con producción
-//      d02ae0e (instantánea conservada acá) y con prisma/schema.prisma. Si
-//      no coincide con ninguno, informa esquema desconocido y falla.
-//   1. Filas por tabla. Usa las tablas y mínimos del esquema detectado:
+//   0. Esquema conocido. La última migración aplicada en la copia
+//      (_prisma_migrations) elige el contrato en scripts/ensayo/contratos.mjs:
+//      el actual se lee del prisma/schema.prisma de RELEASE (RAIZ_RELEASE),
+//      los anteriores son instantáneas congeladas en esta carpeta. Las
+//      tablas, columnas y tipos tienen que ser exactamente los de ese
+//      contrato; si no, o si la migración no tiene contrato, informa esquema
+//      desconocido y falla.
+//   1. Filas por tabla. Usa las tablas y mínimos del contrato elegido:
 //      una base sin pacientes ni sesiones está vacía, aunque se restauró.
 //   2. Cifrado en reposo. Toda columna *_encrypted no nula tiene que ser un
 //      blob ENC1 (producción) o ENC2 (nuevo). En ENC2 el id (byte 4) debe
@@ -38,6 +42,10 @@
 //                              (la del llavero de la app y las retiradas que
 //                              el dueño conserva para los respaldos).
 //   CLAVES_CIFRADO="1=<base64>,2=…"  el llavero completo, formato de la app.
+// Opcional:
+//   RAIZ_RELEASE=<carpeta>     checkout de release del que sale el contrato
+//                              actual. Sin ella, este mismo checkout (los
+//                              tests y el ensayo manual desde release).
 //
 // Usa `psql` (PSQL, o PG_BIN/psql, o el del PATH) y no Prisma: así el ensayo
 // no depende de `npm ci` ni del cliente generado para reconocer ambos esquemas.
@@ -48,7 +56,12 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { CONTRATO_ACTUAL, CONTRATO_POR_MIGRACION, CONTRATOS, contratoDelSchema, diferencias, firma } from "./contratos.mjs";
+
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** Checkout de release: de ahí salen el schema.prisma y las migraciones del
+ *  contrato actual. Sin la variable, el checkout de este script. */
+const RAIZ_RELEASE = resolve(process.env.RAIZ_RELEASE || RAIZ);
 const PSQL = process.env.PSQL ?? (process.env.PG_BIN ? join(process.env.PG_BIN, "psql") : "psql");
 const VARIABLE_LLAVERO = "CLAVES_CIFRADO";
 const VARIABLE_IDS = "CLAVES_CIFRADO_IDS";
@@ -58,47 +71,6 @@ const VARIABLE_IDS = "CLAVES_CIFRADO_IDS";
  *  ensayo-restauracion.test.ts falla si los dos se separan: el acta que dice
  *  cuándo vuelve a mirarse esto no puede quedar desfasada del calendario. */
 const DIA_ENSAYO = 2;
-
-/** Filas mínimas por tabla. Una copia con menos no sirve para volver a
- *  atender: no hay a quién ni qué. */
-const MINIMOS_COMUNES = {
-  organizaciones: 1,
-  usuarios: 1,
-  pacientes: 1,
-  turnos: 1,
-  sesiones_clinicas: 1,
-};
-
-// La instantánea de producción es schema.prisma de d02ae0e, sin cambios.
-// El contrato nuevo se deriva del schema del checkout. Se comparan TODAS
-// las tablas/columnas/tipos físicos antes de consultar contenido.
-const ESQUEMAS = [
-  {
-    id: "produccion-d02ae0e",
-    archivo: join(RAIZ, "scripts/ensayo/esquema-produccion.prisma"),
-    formato: "ENC1",
-    minimos: { ...MINIMOS_COMUNES, paciente_contexto_clinico: 1 },
-    muestras: [
-      { rotulo: "nota clínica", tabla: "sesiones_clinicas", fecha: "createdAt", tipo: "nota",
-        columnas: ["nota_soap_encrypted", "nota_soap_original_encrypted"] },
-      // Producción conserva el contexto actual por paciente, no versiones.
-      { rotulo: "contexto longitudinal", tabla: "paciente_contexto_clinico", fecha: "creado_en", tipo: "contexto",
-        columnas: ["resumen_acumulativo_encrypted", "hipotesis_diagnostica_encrypted", "riesgos_historicos_encrypted"] },
-    ],
-  },
-  {
-    id: "nuevo",
-    archivo: join(RAIZ, "prisma/schema.prisma"),
-    formato: "ENC2",
-    minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
-    muestras: [
-      { rotulo: "nota clínica", tabla: "sesiones_clinicas", fecha: "creada_en", tipo: "nota",
-        columnas: ["nota_final_encrypted", "nota_ia_encrypted"] },
-      { rotulo: "versión del Recorrido", tabla: "hilo_versiones", fecha: "creada_en", tipo: "hilo",
-        columnas: ["contenido_encrypted"] },
-    ],
-  },
-];
 
 // ENC2: "ENC2" | id de clave (1) | IV (12) | tag (16) | ciphertext. AAD
 // "<tabla>:<columna>:<id>". Copia de src/lib/encryption.ts, que este script
@@ -130,38 +102,58 @@ function sql(consulta) {
   }).trim();
 }
 
-function contratoDelSchema(archivo) {
-  const schema = readFileSync(archivo, "utf8");
-  const tipos = { String: "text", Int: "int4", Float: "float8", Boolean: "bool", DateTime: "timestamp", Json: "jsonb", Bytes: "bytea" };
-  for (const [, nombre, cuerpo] of schema.matchAll(/^enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
-    tipos[nombre] = cuerpo.match(/@@map\("([^"]+)"\)/)?.[1] ?? nombre;
-  }
-  const tablas = {};
-  for (const [, nombre, cuerpo] of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
-    const tabla = cuerpo.match(/@@map\("([^"]+)"\)/)?.[1] ?? nombre;
-    tablas[tabla] = {};
-    for (const linea of cuerpo.split("\n")) {
-      const campo = linea.match(/^\s*(\w+)\s+(\w+)(\??)(\s+.*|\s*)$/);
-      if (!campo || !tipos[campo[2]]) continue; // Relaciones, no columnas.
-      const columna = campo[4].match(/@map\("([^"]+)"\)/)?.[1] ?? campo[1];
-      tablas[tabla][columna] = /@db\.VarChar\(/.test(campo[4]) ? "varchar"
-        : /@db\.Char\(/.test(campo[4]) ? "bpchar" : tipos[campo[2]];
-    }
-  }
-  return tablas;
-}
-
-function detectarEsquema() {
-  const catalogo = JSON.parse(sql(`SELECT coalesce(json_object_agg(tabla, columnas), '{}') FROM (
+function catalogoRestaurado() {
+  return JSON.parse(sql(`SELECT coalesce(json_object_agg(tabla, columnas), '{}') FROM (
     SELECT t.table_name AS tabla,
       coalesce(json_object_agg(c.column_name, c.udt_name) FILTER (WHERE c.column_name IS NOT NULL), '{}') AS columnas
     FROM information_schema.tables t LEFT JOIN information_schema.columns c
       ON c.table_schema = t.table_schema AND c.table_name = t.table_name
     WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND t.table_name <> '_prisma_migrations'
     GROUP BY t.table_name) s`));
-  const firma = (tablas) => JSON.stringify(Object.entries(tablas).sort().map(([tabla, columnas]) => [tabla, Object.entries(columnas).sort()]));
-  return ESQUEMAS.map((e) => ({ ...e, tablas: contratoDelSchema(e.archivo) }))
-    .find((e) => firma(e.tablas) === firma(catalogo)) ?? null;
+}
+
+/** Las tablas del contrato `id`: el actual se lee del schema.prisma de release. */
+function tablasDe(id) {
+  const archivo = CONTRATOS[id].archivo ? join(RAIZ, CONTRATOS[id].archivo) : join(RAIZ_RELEASE, "prisma/schema.prisma");
+  return contratoDelSchema(readFileSync(archivo, "utf8"));
+}
+
+/**
+ * Elige el contrato por la última migración aplicada en la copia y exige que
+ * el catálogo restaurado sea exactamente ese. Devuelve { esquema, contrato }
+ * con esquema null si es desconocido, y el motivo en contrato.motivo.
+ */
+function elegirContrato() {
+  const catalogo = catalogoRestaurado();
+  if (sql(`SELECT to_regclass('public._prisma_migrations') IS NOT NULL`) !== "t") {
+    // Toda copia de producción la tiene (Publicar aplica las migraciones con
+    // `prisma migrate deploy`). Una base sin ella no se armó con migraciones
+    // —en los tests, con `prisma db push`—: se acepta solo si coincide
+    // exactamente con algún contrato, y el acta dice que se eligió así.
+    const id = Object.keys(CONTRATOS).find((c) => firma(tablasDe(c)) === firma(catalogo));
+    return id
+      ? { esquema: id, contrato: { id, migracion: null, origen: "por firma: la copia no tiene _prisma_migrations" } }
+      : { esquema: null, contrato: { id: null, migracion: null, motivo: "la copia no tiene _prisma_migrations y su esquema no coincide con ningún contrato" } };
+  }
+  const sinTerminar = sql(`SELECT string_agg(migration_name, ', ' ORDER BY migration_name) FROM _prisma_migrations
+    WHERE finished_at IS NULL AND rolled_back_at IS NULL`);
+  const migracion = sql(`SELECT migration_name FROM _prisma_migrations
+    WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name COLLATE "C" DESC LIMIT 1`) || null;
+  const desconocido = (motivo) => ({ esquema: null, contrato: { id: CONTRATO_POR_MIGRACION[migracion] ?? null, migracion, motivo } });
+  if (sinTerminar) return desconocido(`la copia tiene migraciones empezadas y sin terminar: ${sinTerminar}`);
+  if (!migracion) return desconocido("la copia no tiene ninguna migración aplicada");
+  const id = CONTRATO_POR_MIGRACION[migracion];
+  if (!id) return desconocido(`su última migración, ${migracion}, no tiene contrato en scripts/ensayo/contratos.mjs`);
+  if (id === CONTRATO_ACTUAL && !existsSync(join(RAIZ_RELEASE, "prisma/migrations", migracion))) {
+    return desconocido(`su última migración, ${migracion}, no está en el release publicado (${RAIZ_RELEASE}): no hay contrato publicado para ella`);
+  }
+  const contrato = tablasDe(id);
+  if (firma(contrato) !== firma(catalogo)) {
+    const difs = diferencias(catalogo, contrato);
+    return desconocido(`no corresponde a su última migración, ${migracion} (contrato ${id}): ${difs.slice(0, 8).join("; ")}` +
+      (difs.length > 8 ? `; y ${difs.length - 8} diferencia(s) más` : ""));
+  }
+  return { esquema: id, contrato: { id, migracion, origen: `por su última migración, ${migracion}` } };
 }
 
 /** Mismas reglas que src/lib/llavero.ts. Devuelve Map<id, Buffer>. */
@@ -449,7 +441,7 @@ function seccionCopia(etiqueta, archivo) {
     return lineas;
   }
   lineas.push(`- **Fecha del respaldo:** ${r.fechaArchivo ?? "?"}`, `- **Resultado de la verificación:** ${r.ok ? "OK" : "FALLÓ"}`);
-  if (r.esquema) lineas.push(`- **Esquema restaurado:** ${r.esquema}`);
+  if (r.esquema) lineas.push(`- **Esquema restaurado:** ${r.esquema}` + (r.contrato?.origen ? ` (contrato elegido ${r.contrato.origen})` : ""));
   if (r.tablas) {
     lineas.push("", "| Tabla | Filas |", "| --- | --- |");
     for (const [t, n] of Object.entries(r.tablas.conteos)) lineas.push(`| ${t} | ${n ?? "no existe"} |`);
@@ -522,6 +514,9 @@ try {
       `falta ${VARIABLE_IDS} (ensayo automático: ids de las claves conocidas, sin valores) o ${VARIABLE_LLAVERO} (ensayo manual: el llavero, que además descifra).`,
     );
   }
+  if (!existsSync(join(RAIZ_RELEASE, "prisma/schema.prisma"))) {
+    throw new Error(`RAIZ_RELEASE: no hay prisma/schema.prisma en ${RAIZ_RELEASE}; el checkout de release falta o está vacío (no es un problema de la copia).`);
+  }
 } catch (error) {
   console.error(error.message);
   process.exit(1);
@@ -533,6 +528,7 @@ const resultado = {
   archivo: process.env.BACKUP_ARCHIVO ?? null,
   fechaArchivo: process.env.BACKUP_FECHA ?? null,
   esquema: "no determinado",
+  contrato: null,
   tablas: null,
   cifrado: null,
   descifrado: null,
@@ -542,14 +538,16 @@ const resultado = {
 };
 let etapa = "detección del esquema";
 try {
-  const esquema = detectarEsquema();
-  if (!esquema) {
+  const { esquema: id, contrato } = elegirContrato();
+  resultado.contrato = contrato;
+  if (!id) {
     resultado.esquema = "desconocido";
-    resultado.problemas.push("esquema restaurado desconocido: las tablas, columnas o tipos no coinciden con producción (d02ae0e) ni con el esquema nuevo");
+    resultado.problemas.push(`esquema restaurado desconocido: ${contrato.motivo}`);
   } else {
-    resultado.esquema = esquema.id;
+    const esquema = CONTRATOS[id];
+    resultado.esquema = id;
     etapa = "conteo de filas";
-    resultado.tablas = contarFilas(Object.keys(esquema.tablas), esquema.minimos);
+    resultado.tablas = contarFilas(Object.keys(tablasDe(id)), esquema.minimos);
     resultado.problemas.push(...resultado.tablas.problemas);
     etapa = "censo de cifrado";
     resultado.cifrado = verificarCifrado(idsConocidos, llavero ? "llavero" : "ids", esquema.formato);
@@ -570,7 +568,8 @@ try {
 writeFileSync(join(SALIDA, `resultado-${ETIQUETA}.json`), JSON.stringify(resultado, null, 2));
 
 const { tablas: filas, cifrado, descifrado, fk, problemas } = resultado;
-console.log(`[${ETIQUETA}] esquema restaurado: ${resultado.esquema}`);
+console.log(`[${ETIQUETA}] esquema restaurado: ${resultado.esquema}` +
+  (resultado.contrato?.origen ? ` (contrato elegido ${resultado.contrato.origen})` : ""));
 if (filas && cifrado && descifrado && fk) {
   console.log(
     `[${ETIQUETA}] tablas: ${Object.keys(filas.conteos).length}; columnas cifradas: ${cifrado.columnas} (${cifrado.formato}, sin id ${cifrado.sinId}, por clave ${JSON.stringify(cifrado.porClave)}, inválidos ${cifrado.otros}); ` +
