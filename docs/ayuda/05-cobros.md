@@ -132,6 +132,10 @@ turno queda sin cobrar. No vuelve a Agendado ni se reactiva su recordatorio.
 
 <!-- fuentes:
 src/app/(dashboard)/cobros/_components/cobros-view.tsx
+src/app/(dashboard)/cobros/_components/datos.ts
+src/app/(dashboard)/cobros/_components/te-deben.tsx
+src/app/(dashboard)/cobros/_components/fila-deudor.tsx
+src/app/(dashboard)/cobros/_components/registrar-pago.tsx
 src/components/cobro/sheet-metodo-pago.tsx
 src/lib/cobrar-cliente.ts
 src/app/(dashboard)/_components/dashboard.tsx
