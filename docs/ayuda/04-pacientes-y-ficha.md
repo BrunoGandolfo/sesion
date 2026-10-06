@@ -144,6 +144,8 @@ src/app/(dashboard)/pacientes/[id]/_components/paciente-detail-view.tsx
 src/app/(dashboard)/pacientes/[id]/_components/cabecera-ficha.tsx
 src/app/(dashboard)/pacientes/[id]/_components/ficha-tab.tsx
 src/app/(dashboard)/pacientes/[id]/_components/sesiones-tab.tsx
+src/app/(dashboard)/pacientes/[id]/_components/sesiones-datos.ts
+src/app/(dashboard)/pacientes/[id]/_components/filas-sesion.tsx
 src/app/(dashboard)/pacientes/[id]/_components/turnos-pagos-tab.tsx
 src/components/grabacion/ConsentimientoBadge.tsx
 src/components/grabacion/ConsentimientoForm.tsx

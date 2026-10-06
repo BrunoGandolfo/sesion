@@ -152,6 +152,8 @@ src/lib/deudas.ts
 src/app/api/_lib/casos-uso/recordar-cobro.ts
 src/app/api/_lib/casos-uso/despachar-sms.ts
 src/app/(dashboard)/pacientes/[id]/_components/sesiones-tab.tsx
+src/app/(dashboard)/pacientes/[id]/_components/sesiones-datos.ts
+src/app/(dashboard)/pacientes/[id]/_components/filas-sesion.tsx
 src/types/domain.ts
 src/components/layout/sidebar.tsx
 src/app/(dashboard)/cobros/_components/tarjeta-finanzas.tsx
