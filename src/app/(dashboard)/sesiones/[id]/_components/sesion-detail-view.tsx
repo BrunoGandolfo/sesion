@@ -48,10 +48,12 @@ import {
 // La sesión tiene tres caras: la nota clínica (/sesiones/[id]), "Para vos"
 // (/sesiones/[id]/para-vos) y la transcripción (/sesiones/[id]/transcripcion,
 // que pide su texto aparte y recién al abrirse). Todas leen la misma fila, comparten cabecera
-// y se eligen con el mismo selector, así que las tres rutas montan este
-// componente con `vista` distinta. Duplicar la carga, el polling y los
-// estados de pipeline en dos contenedores habría sido dos veces la misma
-// pantalla con dos formas de fallar.
+// y se eligen con el mismo selector, así que las tres rutas comparten este
+// componente con `vista` distinta: lo monta una sola vez el layout de
+// sesiones/[id] (contenedor-sesion.tsx), y cambiar de cara no lo desmonta.
+// Duplicar la carga, el polling y los estados de pipeline en dos
+// contenedores habría sido dos veces la misma pantalla con dos formas de
+// fallar.
 //
 // La barra de acciones —aprobar, descartar— es sólo de la nota: es donde se
 // firma el documento clínico.
@@ -156,7 +158,7 @@ export function SesionDetailView({
 
         </div>
 
-        {/* La segunda espera: la ruta ya llegó —su loading.tsx dibujó este
+        {/* La segunda espera: la ruta ya llegó —sesiones/loading.tsx dibujó este
             mismo cuerpo— y falta GET /api/sesion-clinica/[id]. El "Volver"
             de arriba queda afuera del esqueleto porque ya está dibujado y ya
             es tocable: si la nota tarda, volverse tiene que seguir siendo

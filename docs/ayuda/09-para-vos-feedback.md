@@ -133,6 +133,8 @@ src/app/(dashboard)/config/_components/opciones-radio.tsx
 src/app/(dashboard)/sesiones/[id]/_components/para-vos-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/selector-vista.tsx
 src/app/(dashboard)/sesiones/[id]/para-vos/page.tsx
+src/app/(dashboard)/sesiones/[id]/layout.tsx
+src/app/(dashboard)/sesiones/[id]/_components/contenedor-sesion.tsx
 src/app/(dashboard)/sesiones/[id]/_components/sesion-detail-view.tsx
 src/app/(dashboard)/sesiones/[id]/_components/use-para-vos.ts
 src/app/(dashboard)/sesiones/[id]/_components/avisos-sesion.tsx
