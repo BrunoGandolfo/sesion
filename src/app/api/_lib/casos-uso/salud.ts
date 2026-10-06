@@ -132,8 +132,11 @@ export async function revisarSalud({
 //
 // Cada aviso enviado deja constancia en eventos_auditoria (actor `sistema`,
 // acción salud.aviso) con la HUELLA de su contenido: el nivel y, de cada
-// métrica que cruzó, nombre, valor y texto. Si en las últimas 24 h ya salió
-// uno con la misma huella, no se manda. Si el contenido cambió —otra
+// métrica que cruzó, nombre, valor y texto. Si el último evento de salud de
+// las últimas 24 h es un aviso con la misma huella, no se manda. Cuando una
+// corrida vuelve a no tener nada que decir después de un aviso, deja
+// salud.normal: corta la ventana, y si el mismo problema reaparece a las
+// tres horas, avisa (es otro incidente aunque el número sea igual). Si el contenido cambió —otra
 // métrica, otro número— la huella es otra y sale enseguida. Pasadas 24 h, el
 // mismo aviso vuelve a salir una vez: un problema que sigue igual merece un
 // recordatorio diario, no horario.
@@ -172,10 +175,25 @@ export async function avisarSalud({
   enviar,
 }: AvisarSaludParams): Promise<{ alertaEnviada: boolean; repetida: boolean }> {
   const { nivel } = salud;
-  if (!salud.alerta || !nivel) return { alertaEnviada: false, repetida: false };
+  const ultimo = await ultimoEventoDeSalud(prisma, ahora);
+  if (!salud.alerta || !nivel) {
+    if (ultimo?.accion === ACCIONES.salud.aviso) {
+      await registrarAuditoria(prisma, {
+        organizationId: ORGANIZACION_SISTEMA,
+        actorTipo: "sistema",
+        accion: ACCIONES.salud.normal,
+        entidad: ENTIDAD_AVISO,
+        entidadId: "normal",
+        creadoEn: ahora,
+      });
+    }
+    return { alertaEnviada: false, repetida: false };
+  }
 
   const huella = huellaDeAviso(salud);
-  if (await yaAvisado(prisma, huella, ahora)) return { alertaEnviada: false, repetida: true };
+  if (ultimo?.accion === ACCIONES.salud.aviso && ultimo.entidadId === huella) {
+    return { alertaEnviada: false, repetida: true };
+  }
 
   const alertaEnviada = await enviar({ ...salud, nivel });
   // Sólo lo que salió: un correo que falló se vuelve a intentar en la
@@ -194,26 +212,25 @@ export async function avisarSalud({
   return { alertaEnviada, repetida: false };
 }
 
-/** Si no se puede saber, se manda: un correo de más es mejor que un aviso
+/** El último aviso o vuelta a la normalidad de las últimas 24 h. Si no se
+ *  puede saber, null: se manda, porque un correo de más es mejor que un aviso
  *  perdido. */
-async function yaAvisado(
+async function ultimoEventoDeSalud(
   prisma: Pick<typeof db, "eventoAuditoria">,
-  huella: string,
   ahora: Date,
-): Promise<boolean> {
+): Promise<{ accion: string; entidadId: string } | null> {
   try {
-    const previo = await prisma.eventoAuditoria.findFirst({
+    return await prisma.eventoAuditoria.findFirst({
       where: {
         entidad: ENTIDAD_AVISO,
-        entidadId: huella,
-        accion: ACCIONES.salud.aviso,
+        accion: { in: [ACCIONES.salud.aviso, ACCIONES.salud.normal] },
         creadoEn: { gt: new Date(ahora.getTime() - VENTANA_AVISO_REPETIDO_MS), lte: ahora },
       },
-      select: { id: true },
+      orderBy: { creadoEn: "desc" },
+      select: { accion: true, entidadId: true },
     });
-    return previo !== null;
   } catch (error) {
     console.error("[salud] no se pudo mirar si el aviso ya salió; se manda igual", error);
-    return false;
+    return null;
   }
 }

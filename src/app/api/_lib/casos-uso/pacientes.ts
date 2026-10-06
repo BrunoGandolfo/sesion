@@ -216,8 +216,10 @@ export async function actualizarPaciente({
   const hayCambios = Object.values(data).some((v) => v !== undefined);
 
   const turnosActualizados = await prisma.$transaction(async (tx) => {
+    // NO KEY: serializa dos ediciones de la ficha sin frenar el alta de un
+    // turno (su INSERT toma KEY SHARE sobre esta fila).
     await tx.$queryRaw`SELECT id FROM pacientes
-      WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR UPDATE`;
+      WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR NO KEY UPDATE`;
     const actual = await tx.paciente.findFirst({
       where: { id: pacienteId, organizationId },
       select: { nombre: true, apellido: true, telefono: true, tarifa: true, activo: true },

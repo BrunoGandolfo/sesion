@@ -81,6 +81,9 @@ export const ACCIONES = {
     /** El cron de salud mandó un correo; el detalle lleva la huella del
      *  contenido para no repetir el mismo aviso (casos-uso/salud.ts). */
     aviso: "salud.aviso",
+    /** La corrida que vuelve a no tener nada que avisar después de un aviso:
+     *  corta la ventana, para que el mismo problema, si reaparece, avise. */
+    normal: "salud.normal",
   },
 } as const;
 

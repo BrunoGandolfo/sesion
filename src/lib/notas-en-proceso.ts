@@ -13,7 +13,7 @@
 // `sesion.ver` de auditoría). Lo de acá es la última respuesta, en memoria.
 //
 // Nunca se consulta GET /api/sesion-clinica/[id] para esto: cada pedido
-// deja un "sesion.ver", y sondear con él marcaría como vistas notas que
+// deja un `sesion.ver`, y sondear con él marcaría como vistas notas que
 // nadie abrió.
 //
 // CUÁNDO SE PREGUNTA

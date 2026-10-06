@@ -262,6 +262,22 @@ describe("aviso repetido", () => {
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
   });
 
+  it("si se resolvió y reaparece igual dentro de las 24 h, es otro incidente: avisa", async () => {
+    await fallido();
+    await correr(T0);
+    await base.prisma.trabajo.updateMany({ data: { estado: "hecho" } });
+    const sano = await correr(new Date(T0.getTime() + 3600000));
+    await correr(new Date(T0.getTime() + 2 * 3600000));
+    // La vuelta a la normalidad se anota una sola vez, no cada hora sana.
+    expect(await base.prisma.eventoAuditoria.count({ where: { accion: "salud.normal" } })).toBe(1);
+    await fallido();
+    const otraVez = await correr(new Date(T0.getTime() + 3 * 3600000));
+
+    expect(sano.alertas).toEqual([]);
+    expect(otraVez).toMatchObject({ alertaEnviada: true, avisoRepetido: false });
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
   it("un correo que no salió no cuenta como enviado: la próxima corrida lo intenta", async () => {
     await fallido();
     vi.mocked(enviarCorreo).mockRejectedValue(new Error("Resend caído"));

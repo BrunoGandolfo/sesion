@@ -93,6 +93,11 @@ export async function crearTurno({
     // en solapamiento-turnos.ts).
     await tomarLockDeAgenda(tx, organizationId);
 
+    // La tarifa se lee con la fila compartida: un cambio de tarifa en curso
+    // (actualizarPaciente, FOR NO KEY UPDATE) termina antes, y los turnos
+    // nuevos nacen con la tarifa que quedó.
+    await tx.$queryRaw`SELECT id FROM pacientes
+      WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR SHARE`;
     const paciente = await requirePaciente(tx, pacienteId, organizationId, { id: true, tarifa: true });
 
     const fechas =
