@@ -133,7 +133,9 @@ de la sesión son constantes de `src/lib/sesion-clinica/estados.ts`.
   lee: es *Sensitive*), recifrar hasta que pendientes y errores den 0,
   dejar la nueva como única `CLAVES_CIFRADO` y sumar su id a
   `CLAVES_CIFRADO_IDS`. La vieja se conserva en el gestor mientras haya
-  backups que la requieran.
+  backups que la requieran. Si se perdió (no está en el gestor ni en
+  Vercel), su id pasa de `CLAVES_CIFRADO_IDS` a la variable de Actions
+  CLAVES_HISTORICAS_IDS: ver "Cómo se juzga una copia" en §4.
 - R2 y claves de proveedores: crear el reemplazo, actualizar todos los
   entornos consumidores y comprobarlos antes de revocar el anterior.
   Para Anthropic son dos consumidores: app y worker.
@@ -194,7 +196,8 @@ trimestral es exactamente esto, en la máquina del dueño y con su llavero:
    del Recorrido más vieja y más nueva, y claves foráneas. Deja
    `resultado-manual.json`. Si dice "falta la clave N en el llavero", el
    respaldo no está corrupto: es de una época cuya clave se retiró, y hay que
-   agregarla al llavero y repetir.
+   agregarla al llavero y repetir. Si esa clave ya no existe en ningún lado,
+   se repite declarándola histórica (ver "Cómo se juzga una copia").
 3. Copiar la salida al acta (`docs/operaciones/actas/`, plantilla al lado),
    sin texto clínico: ids y sí/no.
 4. Sólo después decidir si se reemplaza la conexión de la app. Los efectos
@@ -214,6 +217,55 @@ es corrupción. Sin esa variable, el workflow falla antes de bajar nada.
 `src/lib/__tests__/ensayo-restauracion.test.ts` ejerce los dos guiones con
 respaldos generados contra la base de test: bueno, vacío, corrupto, truncado y
 uno leído con un llavero al que se le retiró la clave.
+`scripts/ensayo/__tests__/contratos.test.ts` prueba la elección del contrato y
+las claves históricas.
+
+### Cómo se juzga una copia
+
+**El contrato de esquema lo elige la copia, no el checkout.** El verificador
+lee la última migración aplicada en la `_prisma_migrations` restaurada y la
+busca en `scripts/ensayo/contratos.mjs`, que dice qué esquema le corresponde:
+
+- las migraciones desde `20260918120000_grabador_restaurado` hasta la última
+  publicada → el contrato `nuevo`, que se lee del `prisma/schema.prisma` de
+  **release**. El workflow hace un segundo checkout, de `release`, sólo de
+  `prisma/`, y se lo pasa al verificador; el código del ensayo es el del ref de
+  la corrida (`main` en la programada), así que una migración en `main` sin
+  publicar no cambia contra qué se compara;
+- `20260909194000_invitaciones`, la última de la base anterior a la
+  reconstrucción del 17-sep → `produccion-d02ae0e`, la instantánea
+  `scripts/ensayo/esquema-produccion.prisma`;
+- cuando una migración cambia columnas, las anteriores pasan a una
+  instantánea congelada en `scripts/ensayo/` (el test lo exige: aplica las
+  migraciones hasta cada una del mapa y compara).
+
+Las tablas, columnas y tipos restaurados tienen que ser **exactamente** los de
+ese contrato. Que coincidan con otro no alcanza.
+
+| Veredicto | Qué significa | Qué hacer |
+| --- | --- | --- |
+| `esquema restaurado: nuevo (contrato elegido por su última migración, …)` | La copia tiene el esquema que su migración promete. | Nada. |
+| `esquema restaurado: … (por firma: la copia no tiene _prisma_migrations)` | La base no se armó con migraciones (los tests usan `prisma db push`). Ninguna copia de producción debería verse así. | Si es una copia de R2, averiguar cómo se generó. |
+| `esquema restaurado desconocido: no corresponde a su última migración, X` | La copia dice tener X aplicada pero sus columnas no son las de X. Lista lo que falta y lo que sobra. | Es una base tocada a mano o un respaldo de otra cosa: no sirve para volver a atender. |
+| `… X no tiene contrato en scripts/ensayo/contratos.mjs` | Una migración que el mapa no conoce. | Si X es real y está publicada, agregarla al mapa (el test de contratos lo pide al crearla). |
+| `… X no está en el release publicado` | La copia tiene una migración que release no tiene. | Producción corre algo que no salió por Publicar: incidente. |
+| `… migraciones empezadas y sin terminar` | Una migración falló a la mitad en producción. | Incidente: ver el log de Publicar de ese día. |
+| `clave histórica no disponible: id N, M blobs` | La copia tiene blobs de una clave declarada histórica. **No hace fallar el ensayo.** La base se restaura; esas notas no se pueden leer. | Anotarlo en el acta con la fecha de la copia. Deja de aparecer cuando vence la última copia de esa época. |
+| `hay datos cifrados con la clave N, que no figura en CLAVES_CIFRADO_IDS` / `falta la clave N en el llavero` | Una clave que nadie declaró. **Falla.** | Si la clave existe: agregar su id (o la clave al llavero). Si se perdió: declararla histórica. |
+| `no descifra con la clave N` | Una clave **presente** que no abre el dato. **Falla.** | Corrupción o clave equivocada bajo ese id. |
+
+**Una copia con una clave histórica.** Una clave es histórica cuando
+existió y ya no la tiene nadie: ni el llavero de Vercel ni el gestor del
+dueño. Hoy es el caso de la clave 1 si no quedó copia offline después de la
+rotación del 29-sep: los respaldos anteriores la usan. Se declara una sola
+vez, con ids y nunca valores, en las variables de Actions (Settings →
+Variables): se saca su id de `CLAVES_CIFRADO_IDS` y se agrega a
+CLAVES_HISTORICAS_IDS (las dos listas no pueden compartir un id; el
+verificador se niega). En el ensayo manual se exporta igual antes de correr
+el guion. Desde ahí esas copias dan "clave histórica no disponible" y el
+ensayo sigue verde para lo que sí puede probar: que la copia se abre, tiene
+filas y no tiene huérfanas. Declararla es aceptar que las notas de esas
+copias no se recuperan: es una decisión del dueño, no un arreglo del ensayo.
 
 **Qué prueba el ensayo automático y qué no.** Prueba que el archivo de R2 se
 descifra con `BACKUP_ENCRYPTION_KEY`, que `pg_restore --exit-on-error` lo abre
@@ -244,6 +296,14 @@ Ninguna se puede hacer desde el repositorio.
    correr a mano Actions → Ensayo de restauración.
 4. **`CLAVES_CIFRADO_IDS` cargada** en Settings → Variables de Actions: sin ella
    el ensayo falla antes de bajar nada. Son sólo ids, nunca claves.
+5. **¿Existe todavía la clave 1?** Hoy `CLAVES_CIFRADO_IDS` es `1,2`, así que
+   el ensayo da por disponible la 1. Si no está en el gestor, pasarla a
+   histórica (`gh variable set CLAVES_CIFRADO_IDS --body 2` y
+   `gh variable set CLAVES_HISTORICAS_IDS --body 1`), y recién después de
+   que `main` tenga el verificador que entiende esa variable (el automático
+   corre el código de `main`; el manual, el de `release`, que también tiene
+   que tenerlo): con el anterior, la mensual del 22-sep pondría el ensayo en
+   rojo.
 
 ### Reversiones administrativas
 

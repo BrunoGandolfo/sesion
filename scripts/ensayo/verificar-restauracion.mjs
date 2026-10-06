@@ -5,15 +5,23 @@
 // una vez por copia (diaria y mensual), y scripts/ensayo/ensayo-manual.sh en
 // la máquina del dueño. Comprobaciones:
 //
-//   0. Esquema conocido. Compara tablas, columnas y tipos con producción
-//      d02ae0e (instantánea conservada acá) y con prisma/schema.prisma. Si
-//      no coincide con ninguno, informa esquema desconocido y falla.
-//   1. Filas por tabla. Usa las tablas y mínimos del esquema detectado:
+//   0. Esquema conocido. La última migración aplicada en la copia
+//      (_prisma_migrations) elige el contrato en scripts/ensayo/contratos.mjs:
+//      el actual se lee del prisma/schema.prisma de RELEASE (RAIZ_RELEASE),
+//      los anteriores son instantáneas congeladas en esta carpeta. Las
+//      tablas, columnas y tipos tienen que ser exactamente los de ese
+//      contrato; si no, o si la migración no tiene contrato, informa esquema
+//      desconocido y falla.
+//   1. Filas por tabla. Usa las tablas y mínimos del contrato elegido:
 //      una base sin pacientes ni sesiones está vacía, aunque se restauró.
 //   2. Cifrado en reposo. Toda columna *_encrypted no nula tiene que ser un
 //      blob ENC1 (producción) o ENC2 (nuevo). En ENC2 el id (byte 4) debe
 //      estar entre los ids conocidos: si no está, se informa clave ausente,
-//      no corrupción. ENC1 no guarda id; el automático solo puede comprobar
+//      no corrupción, y falla. Si está entre las HISTÓRICAS (claves que
+//      existieron y ya no tiene nadie), se informa "clave histórica no
+//      disponible: id N, M blobs" y NO falla: esa copia no puede abrir sus
+//      notas y el ensayo no puede hacer nada al respecto. ENC1 no guarda
+//      id; el automático solo puede comprobar
 //      su formato y deja explícito que no identificó ni probó la clave.
 //   3. Muestras: nota clínica más vieja y más nueva; contexto actual por
 //      paciente en producción, versiones del Recorrido en el nuevo. Usa
@@ -23,7 +31,9 @@
 //      - Ensayo MANUAL (CLAVES_CIFRADO, en la máquina del dueño): se
 //        descifra con AES-256-GCM. ENC2 usa id y AAD; ENC1 prueba las claves
 //        del llavero sin AAD, como producción. Se valida JSON o texto según
-//        la columna. Nada del contenido se imprime ni se guarda.
+//        la columna. Nada del contenido se imprime ni se guarda. Falla si
+//        una clave que está en el llavero no descifra; una muestra de clave
+//        histórica no se intenta.
 //   4. Integridad referencial. Para cada clave foránea se cuentan las filas
 //      hijas sin padre. pg_restore ya fallaría, pero deja el número en el acta.
 //
@@ -38,6 +48,12 @@
 //                              (la del llavero de la app y las retiradas que
 //                              el dueño conserva para los respaldos).
 //   CLAVES_CIFRADO="1=<base64>,2=…"  el llavero completo, formato de la app.
+// Opcional:
+//   CLAVES_HISTORICAS_IDS="1"  ids de claves que existieron y ya no están en
+//                              ningún lado. No puede repetir un id disponible.
+//   RAIZ_RELEASE=<carpeta>     checkout de release del que sale el contrato
+//                              actual. Sin ella, este mismo checkout (los
+//                              tests y el ensayo manual desde release).
 //
 // Usa `psql` (PSQL, o PG_BIN/psql, o el del PATH) y no Prisma: así el ensayo
 // no depende de `npm ci` ni del cliente generado para reconocer ambos esquemas.
@@ -48,57 +64,22 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { CONTRATO_ACTUAL, CONTRATO_POR_MIGRACION, CONTRATOS, contratoDelSchema, diferencias, firma } from "./contratos.mjs";
+
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** Checkout de release: de ahí salen el schema.prisma y las migraciones del
+ *  contrato actual. Sin la variable, el checkout de este script. */
+const RAIZ_RELEASE = resolve(process.env.RAIZ_RELEASE || RAIZ);
 const PSQL = process.env.PSQL ?? (process.env.PG_BIN ? join(process.env.PG_BIN, "psql") : "psql");
 const VARIABLE_LLAVERO = "CLAVES_CIFRADO";
 const VARIABLE_IDS = "CLAVES_CIFRADO_IDS";
+const VARIABLE_HISTORICAS = "CLAVES_HISTORICAS_IDS";
 
 /** Día del mes en que corre el ensayo automático, para el acta. Es el
  *  day-of-month del cron de .github/workflows/ensayo-restauracion.yml, y
  *  ensayo-restauracion.test.ts falla si los dos se separan: el acta que dice
  *  cuándo vuelve a mirarse esto no puede quedar desfasada del calendario. */
 const DIA_ENSAYO = 2;
-
-/** Filas mínimas por tabla. Una copia con menos no sirve para volver a
- *  atender: no hay a quién ni qué. */
-const MINIMOS_COMUNES = {
-  organizaciones: 1,
-  usuarios: 1,
-  pacientes: 1,
-  turnos: 1,
-  sesiones_clinicas: 1,
-};
-
-// La instantánea de producción es schema.prisma de d02ae0e, sin cambios.
-// El contrato nuevo se deriva del schema del checkout. Se comparan TODAS
-// las tablas/columnas/tipos físicos antes de consultar contenido.
-const ESQUEMAS = [
-  {
-    id: "produccion-d02ae0e",
-    archivo: join(RAIZ, "scripts/ensayo/esquema-produccion.prisma"),
-    formato: "ENC1",
-    minimos: { ...MINIMOS_COMUNES, paciente_contexto_clinico: 1 },
-    muestras: [
-      { rotulo: "nota clínica", tabla: "sesiones_clinicas", fecha: "createdAt", tipo: "nota",
-        columnas: ["nota_soap_encrypted", "nota_soap_original_encrypted"] },
-      // Producción conserva el contexto actual por paciente, no versiones.
-      { rotulo: "contexto longitudinal", tabla: "paciente_contexto_clinico", fecha: "creado_en", tipo: "contexto",
-        columnas: ["resumen_acumulativo_encrypted", "hipotesis_diagnostica_encrypted", "riesgos_historicos_encrypted"] },
-    ],
-  },
-  {
-    id: "nuevo",
-    archivo: join(RAIZ, "prisma/schema.prisma"),
-    formato: "ENC2",
-    minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
-    muestras: [
-      { rotulo: "nota clínica", tabla: "sesiones_clinicas", fecha: "creada_en", tipo: "nota",
-        columnas: ["nota_final_encrypted", "nota_ia_encrypted"] },
-      { rotulo: "versión del Recorrido", tabla: "hilo_versiones", fecha: "creada_en", tipo: "hilo",
-        columnas: ["contenido_encrypted"] },
-    ],
-  },
-];
 
 // ENC2: "ENC2" | id de clave (1) | IV (12) | tag (16) | ciphertext. AAD
 // "<tabla>:<columna>:<id>". Copia de src/lib/encryption.ts, que este script
@@ -130,38 +111,58 @@ function sql(consulta) {
   }).trim();
 }
 
-function contratoDelSchema(archivo) {
-  const schema = readFileSync(archivo, "utf8");
-  const tipos = { String: "text", Int: "int4", Float: "float8", Boolean: "bool", DateTime: "timestamp", Json: "jsonb", Bytes: "bytea" };
-  for (const [, nombre, cuerpo] of schema.matchAll(/^enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
-    tipos[nombre] = cuerpo.match(/@@map\("([^"]+)"\)/)?.[1] ?? nombre;
-  }
-  const tablas = {};
-  for (const [, nombre, cuerpo] of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
-    const tabla = cuerpo.match(/@@map\("([^"]+)"\)/)?.[1] ?? nombre;
-    tablas[tabla] = {};
-    for (const linea of cuerpo.split("\n")) {
-      const campo = linea.match(/^\s*(\w+)\s+(\w+)(\??)(\s+.*|\s*)$/);
-      if (!campo || !tipos[campo[2]]) continue; // Relaciones, no columnas.
-      const columna = campo[4].match(/@map\("([^"]+)"\)/)?.[1] ?? campo[1];
-      tablas[tabla][columna] = /@db\.VarChar\(/.test(campo[4]) ? "varchar"
-        : /@db\.Char\(/.test(campo[4]) ? "bpchar" : tipos[campo[2]];
-    }
-  }
-  return tablas;
-}
-
-function detectarEsquema() {
-  const catalogo = JSON.parse(sql(`SELECT coalesce(json_object_agg(tabla, columnas), '{}') FROM (
+function catalogoRestaurado() {
+  return JSON.parse(sql(`SELECT coalesce(json_object_agg(tabla, columnas), '{}') FROM (
     SELECT t.table_name AS tabla,
       coalesce(json_object_agg(c.column_name, c.udt_name) FILTER (WHERE c.column_name IS NOT NULL), '{}') AS columnas
     FROM information_schema.tables t LEFT JOIN information_schema.columns c
       ON c.table_schema = t.table_schema AND c.table_name = t.table_name
     WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND t.table_name <> '_prisma_migrations'
     GROUP BY t.table_name) s`));
-  const firma = (tablas) => JSON.stringify(Object.entries(tablas).sort().map(([tabla, columnas]) => [tabla, Object.entries(columnas).sort()]));
-  return ESQUEMAS.map((e) => ({ ...e, tablas: contratoDelSchema(e.archivo) }))
-    .find((e) => firma(e.tablas) === firma(catalogo)) ?? null;
+}
+
+/** Las tablas del contrato `id`: el actual se lee del schema.prisma de release. */
+function tablasDe(id) {
+  const archivo = CONTRATOS[id].archivo ? join(RAIZ, CONTRATOS[id].archivo) : join(RAIZ_RELEASE, "prisma/schema.prisma");
+  return contratoDelSchema(readFileSync(archivo, "utf8"));
+}
+
+/**
+ * Elige el contrato por la última migración aplicada en la copia y exige que
+ * el catálogo restaurado sea exactamente ese. Devuelve { esquema, contrato }
+ * con esquema null si es desconocido, y el motivo en contrato.motivo.
+ */
+function elegirContrato() {
+  const catalogo = catalogoRestaurado();
+  if (sql(`SELECT to_regclass('public._prisma_migrations') IS NOT NULL`) !== "t") {
+    // Toda copia de producción la tiene (Publicar aplica las migraciones con
+    // `prisma migrate deploy`). Una base sin ella no se armó con migraciones
+    // —en los tests, con `prisma db push`—: se acepta solo si coincide
+    // exactamente con algún contrato, y el acta dice que se eligió así.
+    const id = Object.keys(CONTRATOS).find((c) => firma(tablasDe(c)) === firma(catalogo));
+    return id
+      ? { esquema: id, contrato: { id, migracion: null, origen: "por firma: la copia no tiene _prisma_migrations" } }
+      : { esquema: null, contrato: { id: null, migracion: null, motivo: "la copia no tiene _prisma_migrations y su esquema no coincide con ningún contrato" } };
+  }
+  const sinTerminar = sql(`SELECT string_agg(migration_name, ', ' ORDER BY migration_name) FROM _prisma_migrations
+    WHERE finished_at IS NULL AND rolled_back_at IS NULL`);
+  const migracion = sql(`SELECT migration_name FROM _prisma_migrations
+    WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name COLLATE "C" DESC LIMIT 1`) || null;
+  const desconocido = (motivo) => ({ esquema: null, contrato: { id: CONTRATO_POR_MIGRACION[migracion] ?? null, migracion, motivo } });
+  if (sinTerminar) return desconocido(`la copia tiene migraciones empezadas y sin terminar: ${sinTerminar}`);
+  if (!migracion) return desconocido("la copia no tiene ninguna migración aplicada");
+  const id = CONTRATO_POR_MIGRACION[migracion];
+  if (!id) return desconocido(`su última migración, ${migracion}, no tiene contrato en scripts/ensayo/contratos.mjs`);
+  if (id === CONTRATO_ACTUAL && !existsSync(join(RAIZ_RELEASE, "prisma/migrations", migracion))) {
+    return desconocido(`su última migración, ${migracion}, no está en el release publicado (${RAIZ_RELEASE}): no hay contrato publicado para ella`);
+  }
+  const contrato = tablasDe(id);
+  if (firma(contrato) !== firma(catalogo)) {
+    const difs = diferencias(catalogo, contrato);
+    return desconocido(`no corresponde a su última migración, ${migracion} (contrato ${id}): ${difs.slice(0, 8).join("; ")}` +
+      (difs.length > 8 ? `; y ${difs.length - 8} diferencia(s) más` : ""));
+  }
+  return { esquema: id, contrato: { id, migracion, origen: `por su última migración, ${migracion}` } };
 }
 
 /** Mismas reglas que src/lib/llavero.ts. Devuelve Map<id, Buffer>. */
@@ -187,15 +188,15 @@ function parsearLlavero(texto) {
 }
 
 /** "1,2" → Set de ids. Solo ids: acá no hay ningún valor de clave. */
-function parsearIds(texto) {
+function parsearIds(texto, variable = VARIABLE_IDS) {
   const ids = new Set();
   for (const cruda of texto.split(",")) {
     const e = cruda.trim();
     if (e === "") continue;
-    if (!/^\d+$/.test(e) || Number(e) < 1 || Number(e) > 255) throw new Error(`${VARIABLE_IDS}: id "${e}" fuera de rango (1..255)`);
+    if (!/^\d+$/.test(e) || Number(e) < 1 || Number(e) > 255) throw new Error(`${variable}: id "${e}" fuera de rango (1..255)`);
     ids.add(Number(e));
   }
-  if (ids.size === 0) throw new Error(`${VARIABLE_IDS}: no tiene ningún id`);
+  if (ids.size === 0) throw new Error(`${variable}: no tiene ningún id`);
   return ids;
 }
 
@@ -272,7 +273,7 @@ function contarFilas(tablas, minimos) {
 
 // ─── 2. Cifrado en reposo: prefijo e ids de clave ───────────────────────────
 
-function verificarCifrado(idsConocidos, modo, formato) {
+function verificarCifrado(idsConocidos, historicas, modo, formato) {
   const columnas = sql(
     `SELECT table_name || '.' || column_name FROM information_schema.columns
      WHERE table_schema = 'public' AND column_name LIKE '%\\_encrypted' AND data_type = 'bytea'
@@ -286,6 +287,8 @@ function verificarCifrado(idsConocidos, modo, formato) {
   const detalle = {};
   const problemas = [];
   const clavesAusentes = new Set();
+  /** id → blobs de claves declaradas históricas (CLAVES_HISTORICAS_IDS). */
+  const clavesHistoricas = {};
   let sinId = 0;
 
   for (const col of columnas) {
@@ -307,19 +310,21 @@ function verificarCifrado(idsConocidos, modo, formato) {
     if (Number(malos) > 0) problemas.push(`${col}: ${malos} valor(es) sin prefijo ${formato} o demasiado cortos: dato corrupto o sin cifrar`);
     for (const [id, n] of Object.entries(porClaveCol)) {
       porClave[id] = (porClave[id] ?? 0) + n;
-      if (!idsConocidos.has(Number(id))) {
+      if (historicas.has(Number(id))) {
+        clavesHistoricas[id] = (clavesHistoricas[id] ?? 0) + n;
+      } else if (!idsConocidos.has(Number(id))) {
         clavesAusentes.add(Number(id));
         problemas.push(`${col}: ${n} valor(es): ${mensajeClaveAusente(id, modo)}`);
       }
     }
   }
 
-  return { formato, columnas: columnas.length, porClave, sinId, otros, clavesAusentes: [...clavesAusentes].sort(), detalle, problemas };
+  return { formato, columnas: columnas.length, porClave, sinId, otros, clavesAusentes: [...clavesAusentes].sort(), clavesHistoricas, detalle, problemas };
 }
 
 // ─── 3. Muestras: elegir siempre, descifrar solo con llavero ──────────────────────────────────────────────
 
-function elegirMuestras(llavero, idsConocidos, esquema) {
+function elegirMuestras(llavero, idsConocidos, historicas, esquema) {
   const muestras = [];
   const problemas = [];
 
@@ -351,6 +356,13 @@ function elegirMuestras(llavero, idsConocidos, esquema) {
         ok: false,
       };
       muestra.ok = esquema.formato === "ENC1" ? null : muestra.claveId !== null && idsConocidos.has(muestra.claveId);
+      if (muestra.claveId !== null && historicas.has(muestra.claveId)) {
+        // Nadie tiene esa clave: no hay nada que probar y no es un fallo.
+        muestra.historica = true;
+        muestra.ok = null;
+        muestras.push(muestra);
+        continue;
+      }
       if (!llavero) {
         muestras.push(muestra);
         continue;
@@ -382,7 +394,13 @@ function elegirMuestras(llavero, idsConocidos, esquema) {
       muestras.push(muestra);
     }
   }
-  return { modo: llavero ? "llavero" : "ids", idsConocidos: [...idsConocidos].sort((a, b) => a - b), muestras, problemas };
+  return {
+    modo: llavero ? "llavero" : "ids",
+    idsConocidos: [...idsConocidos].sort((a, b) => a - b),
+    idsHistoricos: [...historicas].sort((a, b) => a - b),
+    muestras,
+    problemas,
+  };
 }
 
 // ─── 4. Claves foráneas ─────────────────────────────────────────────────────
@@ -449,7 +467,7 @@ function seccionCopia(etiqueta, archivo) {
     return lineas;
   }
   lineas.push(`- **Fecha del respaldo:** ${r.fechaArchivo ?? "?"}`, `- **Resultado de la verificación:** ${r.ok ? "OK" : "FALLÓ"}`);
-  if (r.esquema) lineas.push(`- **Esquema restaurado:** ${r.esquema}`);
+  if (r.esquema) lineas.push(`- **Esquema restaurado:** ${r.esquema}` + (r.contrato?.origen ? ` (contrato elegido ${r.contrato.origen})` : ""));
   if (r.tablas) {
     lineas.push("", "| Tabla | Filas |", "| --- | --- |");
     for (const [t, n] of Object.entries(r.tablas.conteos)) lineas.push(`| ${t} | ${n ?? "no existe"} |`);
@@ -465,6 +483,9 @@ function seccionCopia(etiqueta, archivo) {
       (r.cifrado.clavesAusentes.length ? `; **claves que faltan en el llavero: ${r.cifrado.clavesAusentes.join(", ")}**` : ""),
     `- **Ids de clave conocidos (${r.descifrado.modo === "llavero" ? "del llavero" : VARIABLE_IDS}):** ${r.descifrado.idsConocidos.join(", ")} (nunca los valores)`,
   );
+  for (const a of r.avisos ?? []) {
+    lineas.push(`- **${a[0].toUpperCase()}${a.slice(1)}.** La clave ya no existe en ningún lado (${VARIABLE_HISTORICAS}): las notas de esta copia no se pueden leer, la base sí se restaura. No es corrupción ni un fallo del ensayo.`);
+  }
   if (r.cifrado.formato === "ENC1") {
     lineas.push(`- **Límite de ENC1:** ${r.cifrado.sinId} blobs sin identificador de clave. El automático comprueba el formato, pero no puede identificar ni confirmar la clave; lo prueba el ensayo manual con el llavero.`);
     lineas.push("- **Recorrido de producción:** contexto actual por paciente; este esquema no conserva versiones históricas.");
@@ -472,7 +493,9 @@ function seccionCopia(etiqueta, archivo) {
   for (const m of r.descifrado.muestras) {
     const nombre = `${m.rotulo[0].toUpperCase()}${m.rotulo.slice(1)} ${m.cual}`;
     const donde = `${m.tabla} \`${m.id}\`, clave ${m.claveId ?? "?"}`;
-    if (m.descifrada === null) {
+    if (m.historica) {
+      lineas.push(`- **${nombre}:** ${donde}; clave histórica no disponible: no se puede probar.`);
+    } else if (m.descifrada === null) {
       lineas.push(m.formato === "ENC1"
         ? `- **${nombre}:** ${m.tabla} \`${m.id}\`; ENC1 sin id de clave. Descifrado no probado en el automático.`
         : `- **${nombre}:** ${donde}; clave ${m.ok ? "conocida" : "DESCONOCIDA"}. No se descifra en el ensayo automático: lo hace el trimestral a mano.`);
@@ -511,6 +534,7 @@ function armarActa() {
 
 let llavero = null;
 let idsConocidos;
+let historicas = new Set();
 try {
   if (process.env[VARIABLE_LLAVERO]?.trim()) {
     llavero = parsearLlavero(process.env[VARIABLE_LLAVERO]);
@@ -521,6 +545,14 @@ try {
     throw new Error(
       `falta ${VARIABLE_IDS} (ensayo automático: ids de las claves conocidas, sin valores) o ${VARIABLE_LLAVERO} (ensayo manual: el llavero, que además descifra).`,
     );
+  }
+  if (!existsSync(join(RAIZ_RELEASE, "prisma/schema.prisma"))) {
+    throw new Error(`RAIZ_RELEASE: no hay prisma/schema.prisma en ${RAIZ_RELEASE}; el checkout de release falta o está vacío (no es un problema de la copia).`);
+  }
+  if (process.env[VARIABLE_HISTORICAS]?.trim()) historicas = parsearIds(process.env[VARIABLE_HISTORICAS], VARIABLE_HISTORICAS);
+  const ambas = [...historicas].filter((id) => idsConocidos.has(id));
+  if (ambas.length) {
+    throw new Error(`${VARIABLE_HISTORICAS}: ${ambas.join(", ")} también figura entre las claves disponibles; una clave está o no está.`);
   }
 } catch (error) {
   console.error(error.message);
@@ -533,29 +565,37 @@ const resultado = {
   archivo: process.env.BACKUP_ARCHIVO ?? null,
   fechaArchivo: process.env.BACKUP_FECHA ?? null,
   esquema: "no determinado",
+  contrato: null,
   tablas: null,
   cifrado: null,
   descifrado: null,
   fk: null,
   problemas: [],
+  /** Lo que el acta tiene que decir y no es un fallo (claves históricas). */
+  avisos: [],
   ok: false,
 };
 let etapa = "detección del esquema";
 try {
-  const esquema = detectarEsquema();
-  if (!esquema) {
+  const { esquema: id, contrato } = elegirContrato();
+  resultado.contrato = contrato;
+  if (!id) {
     resultado.esquema = "desconocido";
-    resultado.problemas.push("esquema restaurado desconocido: las tablas, columnas o tipos no coinciden con producción (d02ae0e) ni con el esquema nuevo");
+    resultado.problemas.push(`esquema restaurado desconocido: ${contrato.motivo}`);
   } else {
-    resultado.esquema = esquema.id;
+    const esquema = CONTRATOS[id];
+    resultado.esquema = id;
     etapa = "conteo de filas";
-    resultado.tablas = contarFilas(Object.keys(esquema.tablas), esquema.minimos);
+    resultado.tablas = contarFilas(Object.keys(tablasDe(id)), esquema.minimos);
     resultado.problemas.push(...resultado.tablas.problemas);
     etapa = "censo de cifrado";
-    resultado.cifrado = verificarCifrado(idsConocidos, llavero ? "llavero" : "ids", esquema.formato);
+    resultado.cifrado = verificarCifrado(idsConocidos, historicas, llavero ? "llavero" : "ids", esquema.formato);
     resultado.problemas.push(...resultado.cifrado.problemas);
+    for (const [clave, n] of Object.entries(resultado.cifrado.clavesHistoricas)) {
+      resultado.avisos.push(`clave histórica no disponible: id ${clave}, ${n} blobs`);
+    }
     etapa = "selección y verificación de muestras";
-    resultado.descifrado = elegirMuestras(llavero, idsConocidos, esquema);
+    resultado.descifrado = elegirMuestras(llavero, idsConocidos, historicas, esquema);
     resultado.problemas.push(...resultado.descifrado.problemas);
     etapa = "verificación de claves foráneas";
     resultado.fk = verificarClavesForaneas();
@@ -570,7 +610,8 @@ try {
 writeFileSync(join(SALIDA, `resultado-${ETIQUETA}.json`), JSON.stringify(resultado, null, 2));
 
 const { tablas: filas, cifrado, descifrado, fk, problemas } = resultado;
-console.log(`[${ETIQUETA}] esquema restaurado: ${resultado.esquema}`);
+console.log(`[${ETIQUETA}] esquema restaurado: ${resultado.esquema}` +
+  (resultado.contrato?.origen ? ` (contrato elegido ${resultado.contrato.origen})` : ""));
 if (filas && cifrado && descifrado && fk) {
   console.log(
     `[${ETIQUETA}] tablas: ${Object.keys(filas.conteos).length}; columnas cifradas: ${cifrado.columnas} (${cifrado.formato}, sin id ${cifrado.sinId}, por clave ${JSON.stringify(cifrado.porClave)}, inválidos ${cifrado.otros}); ` +
@@ -578,16 +619,21 @@ if (filas && cifrado && descifrado && fk) {
         ? `muestras descifradas: ${descifrado.muestras.filter((m) => m.descifrada).length}/${descifrado.muestras.length}`
         : cifrado.formato === "ENC1" ? "muestras ENC1 sin id: clave no identificable (sin descifrar)"
           : `muestras con clave conocida: ${descifrado.muestras.filter((m) => m.ok).length}/${descifrado.muestras.length} (sin descifrar)`) +
+      (descifrado.muestras.some((m) => m.historica)
+        ? `, de clave histórica: ${descifrado.muestras.filter((m) => m.historica).length}` : "") +
       `; FK: ${fk.constraints}, violaciones ${fk.violaciones}`,
   );
   for (const [t, n] of Object.entries(filas.conteos)) console.log(`  ${t}: ${n ?? "NO EXISTE"}`);
   for (const m of descifrado.muestras) {
-    const estado = m.descifrada === null
+    const estado = m.historica ? "clave histórica no disponible, no se prueba"
+      : m.descifrada === null
       ? m.formato === "ENC1" ? "ENC1 sin id, clave no probada" : m.ok ? "clave conocida, sin descifrar" : "clave DESCONOCIDA"
       : m.descifrada ? "descifrada y leída" : m.codigo;
     console.log(`  ${m.rotulo} ${m.cual} (${m.tabla} ${m.id}, clave ${m.claveId ?? "?"}): ${estado}`);
   }
 }
+
+for (const a of resultado.avisos) console.log(`[${ETIQUETA}] ${a} (no es un fallo: ${VARIABLE_HISTORICAS})`);
 
 if (problemas.length > 0) {
   console.error("\nProblemas:");
