@@ -120,11 +120,6 @@ describe("nadie escribe en eventos_auditoria por fuera de auditar()", () => {
 // lo pierde.
 const RAIZ_API = "src/app/api/";
 const AUDITA_EN_RUTA = /\b(?:auditar|registrarAuditoria)\s*\(|_lib\/auditoria["']/;
-/** Las que todavía auditan, con el bloque que las mueve. Tiene que quedar vacía. */
-const RUTAS_QUE_AUDITAN_PENDIENTES: Record<string, string> = {
-  "cuenta/password/route.ts": "bloque 5: cambiarPassword",
-  "pacientes/[id]/documentacion/route.ts": "bloque 5: exportarDocumentacion",
-};
 
 describe("ninguna ruta de src/app/api audita", () => {
   const rutas = todos
@@ -135,18 +130,10 @@ describe("ninguna ruta de src/app/api audita", () => {
     expect(rutas.length).toBeGreaterThan(40);
   });
 
-  it.each(rutas.filter(({ rel }) => !(rel in RUTAS_QUE_AUDITAN_PENDIENTES)).map(({ rel, abs }) => [rel, abs]))(
+  it.each(rutas.map(({ rel, abs }) => [rel, abs]))(
     "%s",
     (_rel, abs) => {
       expect(sinComentarios(readFileSync(abs, "utf8"))).not.toMatch(AUDITA_EN_RUTA);
     },
   );
-
-  it("cada pendiente sigue auditando (si ya no, sacarla de la lista)", () => {
-    for (const rel of Object.keys(RUTAS_QUE_AUDITAN_PENDIENTES)) {
-      const ruta = rutas.find((r) => r.rel === rel);
-      expect(ruta, `${rel} ya no existe`).toBeDefined();
-      expect(sinComentarios(readFileSync(ruta!.abs, "utf8"))).toMatch(AUDITA_EN_RUTA);
-    }
-  });
 });

@@ -1,13 +1,13 @@
-import type { EstadoSesion } from "@prisma/client";
+// GET /api/pacientes/[id]/documentacion — el historial clínico de la ficha.
+// Cuenta como exportación: la lectura y su rastro van juntos
+// (casos-uso/sesion/documentacion.ts).
+
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
 
-import { auditar } from "../../../_lib/auditoria";
 import { getSessionActor } from "../../../_lib/auth";
-import { requirePaciente } from "../../../_lib/pacientes";
+import { exportarDocumentacion } from "../../../_lib/casos-uso/sesion/documentacion";
 import { errorResponse, ok, validationError } from "../../../_lib/responses";
-import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +16,6 @@ export const maxDuration = 15; // segundos; la convención está en scripts/ci/m
 type RouteParams = {
   params: Promise<{ id: string }>;
 };
-
-/** Los estados que este historial muestra: lo que la profesional dio por
- *  bueno o está por darlo. */
-const ESTADOS: EstadoSesion[] = ["revision", "aprobada"];
 
 /**
  * Sólo página y tamaño. Hubo filtros `desde`, `hasta` e `incluirFallidas`
@@ -44,99 +40,16 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!parsedQuery.success) {
       return validationError(parsedQuery.error);
     }
-    const { page, limit } = parsedQuery.data;
 
-    await requirePaciente(db, id, organizationId);
-
-    const where = {
-      organizationId,
-      estado: { in: ESTADOS },
-      turno: { pacienteId: id },
-    };
-
-    const [totalSesiones, sesiones] = await Promise.all([
-      db.sesionClinica.count({ where }),
-      db.sesionClinica.findMany({
-        where,
-        orderBy: { turno: { fecha: "desc" } },
-        skip: (page - 1) * limit,
-        take: limit,
-        select: {
-          id: true,
-          estado: true,
-          duracionAudioSeg: true,
-          procesadaEn: true,
-          aprobadaEn: true,
-          // Campos lógicos de la extensión de cifrado (prisma-encryption.ts).
-          notaIa: true,
-          notaFinal: true,
-          datos: true,
-          feedback: true,
-          feedbackEstado: true,
-          turno: {
-            select: {
-              id: true,
-              fecha: true,
-              duracion: true,
-              modalidad: true,
-            },
-          },
-        },
+    return ok(
+      await exportarDocumentacion({
+        prisma: db,
+        organizationId,
+        pacienteId: id,
+        usuarioId: userId,
+        ...parsedQuery.data,
       }),
-    ]);
-
-    const totalPages =
-      totalSesiones === 0 ? 0 : Math.ceil(totalSesiones / limit);
-
-    const payload = sesiones.map((s) => ({
-      sesionClinicaId: s.id,
-      turnoId: s.turno.id,
-      fecha: s.turno.fecha.toISOString(),
-      duracionMin: s.turno.duracion,
-      duracionAudioSeg: s.duracionAudioSeg,
-      modalidad: s.turno.modalidad,
-      estado: s.estado,
-      // La nota vigente: la aprobada si existe, si no la de la IA.
-      nota: s.notaFinal ?? s.notaIa,
-      // Parseo del tablero (valida el shape; fila corrupta → null).
-      datos: parseDatosEstructurados(s.datos),
-      // Su forma la valida quien lo dibuja (hayParaVos).
-      feedback: s.feedback,
-      feedbackEstado: s.feedbackEstado,
-      aprobadaEn: s.aprobadaEn ? s.aprobadaEn.toISOString() : null,
-      procesadaEn: s.procesadaEn ? s.procesadaEn.toISOString() : null,
-    }));
-
-    // Este GET devuelve notas completas en lote: cuenta como EXPORTACIÓN de
-    // documentación clínica, y por eso va con `auditar` y no con la variante
-    // best-effort: si el rastro no se puede escribir, las notas no salen (la
-    // usuaria ve un error y vuelve a pedirlas). Es el mismo criterio que
-    // casos-uso/hilo/exportar.ts. No hay transacción que abrazarlo porque el
-    // acto es una lectura: alcanza con escribirlo ANTES de devolver el
-    // cuerpo, y que su fallo voltee la respuesta.
-    await auditar(db, {
-      organizationId,
-      actorTipo: "usuario",
-      actorId: userId,
-      accion: ACCIONES.sesion.exportar,
-      entidad: "paciente",
-      entidadId: id,
-      // La página entra al rastro: exportar una página y exportar todo no
-      // son el mismo acto, y el registro tiene que poder distinguirlos.
-      detalle: {
-        page,
-        limit,
-        total: totalSesiones,
-      },
-    });
-
-    return ok({
-      pacienteId: id,
-      totalSesiones,
-      sesiones: payload,
-      page,
-      totalPages,
-    });
+    );
   } catch (error) {
     return errorResponse(error);
   }

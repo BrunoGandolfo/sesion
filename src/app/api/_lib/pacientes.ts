@@ -4,7 +4,7 @@ import type { db } from "@/lib/db";
 
 import { ApiError } from "./responses";
 
-type Cliente = typeof db;
+type Cliente = Pick<typeof db, "paciente">;
 
 /**
  * Verifica que el paciente exista y pertenezca a la organización; si no,

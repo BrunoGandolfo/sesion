@@ -30,6 +30,7 @@ import {
   firmarConsentimiento,
   revocarConsentimiento,
 } from "@/app/api/_lib/casos-uso/consentimiento";
+import { cambiarPassword } from "@/app/api/_lib/casos-uso/cambiar-password";
 import { salirDeLasDemas } from "@/app/api/_lib/casos-uso/salir-de-las-demas";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { crearSesion } from "@/lib/sesion-acceso";
@@ -401,5 +402,38 @@ describe("abrir una nota (sesion.ver)", () => {
 
     expect((await pedido(sesionId)).status).toBe(404);
     expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
+  });
+});
+
+describe("cambiar la contraseña", () => {
+  const cambiar = (org: Org) =>
+    cambiarPassword(
+      { organizationId: org.orgId, userId: org.userId, actual: "la de siempre", nueva: "una contraseña nueva y larga" },
+      { prisma: db, hashear: async () => "hash-nuevo", comparar: async () => true, huella: { ip: null, userAgent: null } },
+    );
+  const hashDe = async (userId: string) =>
+    (await prismaRaw.user.findUniqueOrThrow({ where: { id: userId } })).hashedPassword;
+
+  it("con la auditoría rota la contraseña no cambia y las sesiones siguen abiertas", async () => {
+    const org = await crearOrg();
+    await crearSesion(db, { userId: org.userId, ip: null, userAgent: null, ahora: new Date() });
+    await romperAuditoria();
+
+    await expect(cambiar(org)).rejects.toThrow();
+
+    expect(await hashDe(org.userId)).toBe("no-importa");
+    expect(await prismaRaw.sesionAcceso.count({ where: { userId: org.userId, cerradaEn: null } })).toBe(1);
+  });
+
+  it("con la auditoría sana cambia, cierra todas y deja el evento sin la contraseña", async () => {
+    const org = await crearOrg();
+    await crearSesion(db, { userId: org.userId, ip: null, userAgent: null, ahora: new Date() });
+
+    expect(await cambiar(org)).toEqual({ sesionesCerradas: 1 });
+
+    expect(await hashDe(org.userId)).toBe("hash-nuevo");
+    const [evento] = await prismaRaw.eventoAuditoria.findMany();
+    expect(evento).toMatchObject({ accion: "cuenta.password_cambiada", actorId: org.userId, detalle: { sesionesCerradas: 1 } });
+    expect(JSON.stringify(evento.detalle)).not.toContain("hash");
   });
 });
