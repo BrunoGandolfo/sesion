@@ -24,6 +24,7 @@ habilitar datos reales.
 `.github/workflows/ci.yml` corre tipos, build, lint, tests con base efímera,
 guardias, auditoría de dependencias y tests del worker. Se puede ejecutar a mano
 sobre una rama. Un CI verde o un push a main no publica nada.
+Audit bloquea solo por avisos altos o críticos de producción (`npm audit --omit=dev`, D6); los de dev se informan sin bloquear porque no corren en producción.
 `.github/workflows/publicar.yml` sólo acepta ejecución manual
 (workflow_dispatch) desde main, con el SHA completo como campo obligatorio.
 

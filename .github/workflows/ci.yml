@@ -214,6 +214,8 @@ jobs:
       - name: Acta de restauración vigente
         run: node scripts/ci/acta-vigente.mjs
 
+  # Bloquea solo lo de producción (--omit=dev, decisión D6): lo de dev no
+  # corre en producción y su aviso no frena; el paso informativo lo muestra.
   audit:
     name: Audit
     runs-on: ubuntu-24.04
@@ -270,14 +272,14 @@ jobs:
       # 60 del paso moderate: entra en el timeout-minutes del job.
       # El costo: un SHA puede publicarse sin auditoría si npm estuvo caído
       # justo en ese push; el push siguiente la vuelve a correr.
-      - name: Auditar dependencias (high bloquea; caída de npm avisa)
+      - name: Auditar dependencias de producción (high bloquea; caída de npm avisa)
         # GitHub corre el paso con `bash -e`: sin `set +e`, el primer npm
         # audit que falla corta el paso antes de reintentar.
         run: |
           set +e
           set -uo pipefail
           for intento in 1 2 3; do
-            timeout 60 npm audit --audit-level=high --json > audit.json
+            timeout 60 npm audit --audit-level=high --omit=dev --json > audit.json
             altas="$(node -e '
               const d = JSON.parse(require("fs").readFileSync("audit.json", "utf8"));
               const v = d.metadata && d.metadata.vulnerabilities;
@@ -286,11 +288,11 @@ jobs:
             ' 2>/dev/null)"
             if [ $? -eq 0 ]; then
               if [ "${altas}" -eq 0 ]; then
-                echo "Sin vulnerabilidades altas ni críticas."
+                echo "Sin vulnerabilidades altas ni críticas en producción."
                 exit 0
               fi
-              timeout 60 npm audit --audit-level=high || true
-              echo "::error::npm audit encontró ${altas} vulnerabilidad(es) alta(s) o crítica(s)."
+              timeout 60 npm audit --audit-level=high --omit=dev || true
+              echo "::error::npm audit encontró ${altas} vulnerabilidad(es) alta(s) o crítica(s) en dependencias de producción."
               exit 1
             fi
             echo "Intento ${intento}: npm no devolvió un informe ($(head -c 300 audit.json | tr '\n' ' '))."
@@ -298,9 +300,10 @@ jobs:
           done
           echo "::warning::No se pudo auditar: el servicio de avisos de npm no respondió en 3 intentos. No es una vulnerabilidad; el próximo push vuelve a auditar."
           exit 0
-      # Informativo: se ve en el log, no frena. Cuando aparece algo acá con
-      # arreglo disponible, se arregla en el próximo PR de dependencias.
-      - name: Auditar dependencias (moderate informa)
+      # Informativo: audita todo, también dev; se ve en el log, no frena.
+      # Cuando aparece algo acá con arreglo disponible, se arregla en el
+      # próximo PR de dependencias.
+      - name: Auditar todas las dependencias, también dev (moderate informa)
         continue-on-error: true
         run: timeout 60 npm audit --audit-level=moderate
 
