@@ -1,11 +1,9 @@
 // POST /api/cuenta/salir-todas → cierra todas las sesiones menos la actual.
 import { db } from "@/lib/db";
-import { cerrarTodas } from "@/lib/sesion-acceso";
 
-import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
+import { salirDeLasDemas } from "../../_lib/casos-uso/salir-de-las-demas";
 import { errorResponse, ok } from "../../_lib/responses";
-import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,20 +12,11 @@ export const maxDuration = 15;
 export async function POST() {
   try {
     const actor = await getSessionActor();
-    const cerradas = await cerrarTodas(db, {
-      userId: actor.userId,
-      motivo: "salida_todas",
-      ahora: new Date(),
-      exceptoId: actor.sesionId,
-    });
-    await registrarAuditoria(db, {
+    const cerradas = await salirDeLasDemas({
+      prisma: db,
       organizationId: actor.organizationId,
-      actorTipo: "usuario",
-      actorId: actor.userId,
-      accion: ACCIONES.cuenta.salidaTodas,
-      entidad: "usuario",
-      entidadId: actor.userId,
-      detalle: { cerradas },
+      userId: actor.userId,
+      sesionId: actor.sesionId,
     });
     return ok({ cerradas });
   } catch (error) {

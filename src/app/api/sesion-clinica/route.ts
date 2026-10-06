@@ -1,10 +1,8 @@
 import { db } from "@/lib/db";
-import { registrarAuditoria } from "../_lib/auditoria";
 import { getSessionActor } from "../_lib/auth";
 import { ApiError, errorResponse, leerJson, ok } from "../_lib/responses";
 import { sesionClinicaCrearSchema } from "../_lib/schemas";
 import { leerSesionPorTurno, prepararAudio } from "../_lib/casos-uso/audio";
-import { ACCIONES } from "@/lib/auditoria-acciones";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -20,8 +18,7 @@ export async function POST(request: Request) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { turnoId } = sesionClinicaCrearSchema.parse(await leerJson(request));
-    const { id } = await prepararAudio({ prisma: db, organizationId, turnoId });
-    await registrarAuditoria(db, { organizationId, actorTipo: "usuario", actorId: userId, accion: ACCIONES.sesion.crear, entidad: "sesion_clinica", entidadId: id, detalle: { turnoId } });
+    await prepararAudio({ prisma: db, organizationId, turnoId, usuarioId: userId });
     return ok(await leerSesionPorTurno({ prisma: db, organizationId, turnoId }), 201);
   } catch (error) { return errorResponse(error); }
 }

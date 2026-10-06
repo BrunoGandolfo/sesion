@@ -6,11 +6,9 @@
 import { repositorioRegistro } from "@/lib/cuenta-registro-db";
 import { db } from "@/lib/db";
 
-import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
 import { consultarInvitaciones, crearInvitacion } from "../../_lib/casos-uso/registrar-cuenta";
 import { errorResponse, okSinCache } from "../../_lib/responses";
-import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,10 +17,7 @@ export const maxDuration = 30; // segundos; la convención está en scripts/ci/m
 export async function GET() {
   try {
     const actor = await getSessionActor();
-    return okSinCache(await consultarInvitaciones(
-      { userId: actor.userId, email: actor.email, rol: actor.rol },
-      repositorioRegistro(db),
-    ));
+    return okSinCache(await consultarInvitaciones(actor, repositorioRegistro(db)));
   } catch (error) {
     return errorResponse(error);
   }
@@ -31,20 +26,7 @@ export async function GET() {
 export async function POST() {
   try {
     const actor = await getSessionActor();
-    const creada = await crearInvitacion(
-      { userId: actor.userId, email: actor.email, rol: actor.rol },
-      repositorioRegistro(db),
-    );
-    // Sin token ni email: solo que se creó y cuándo vence.
-    await registrarAuditoria(db, {
-      organizationId: actor.organizationId,
-      actorTipo: "usuario",
-      actorId: actor.userId,
-      accion: ACCIONES.cuenta.invitacionCreada,
-      entidad: "usuario",
-      entidadId: actor.userId,
-      detalle: { invitacionId: creada.invitacionId, vence: creada.vence },
-    });
+    const creada = await crearInvitacion(actor, { repo: repositorioRegistro(db), auditoria: db });
     return okSinCache({ enlace: creada.enlace, vence: creada.vence });
   } catch (error) {
     return errorResponse(error);

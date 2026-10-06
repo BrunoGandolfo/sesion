@@ -113,3 +113,41 @@ describe("nadie escribe en eventos_auditoria por fuera de auditar()", () => {
     expect(escriben).toEqual(ESCRIBEN_A_MANO);
   });
 });
+
+// Ninguna ruta audita: el evento es parte del acto y el acto vive en su caso
+// de uso (dentro de su transacción cuando la hay). Una ruta que audita
+// después del caso de uso deja el rastro fuera del acto y, si responde antes,
+// lo pierde.
+const RAIZ_API = "src/app/api/";
+const AUDITA_EN_RUTA = /\b(?:auditar|registrarAuditoria)\s*\(|_lib\/auditoria["']/;
+/** Las que todavía auditan, con el bloque que las mueve. Tiene que quedar vacía. */
+const RUTAS_QUE_AUDITAN_PENDIENTES: Record<string, string> = {
+  "sesion-clinica/[id]/route.ts": "bloque 4: verSesion",
+  "cuenta/password/route.ts": "bloque 5: cambiarPassword",
+  "pacientes/[id]/documentacion/route.ts": "bloque 5: exportarDocumentacion",
+};
+
+describe("ninguna ruta de src/app/api audita", () => {
+  const rutas = todos
+    .filter(({ rel }) => rel.startsWith(RAIZ_API) && rel.endsWith("/route.ts"))
+    .map(({ abs, rel }) => ({ abs, rel: rel.slice(RAIZ_API.length) }));
+
+  it("encuentra las rutas en el disco", () => {
+    expect(rutas.length).toBeGreaterThan(40);
+  });
+
+  it.each(rutas.filter(({ rel }) => !(rel in RUTAS_QUE_AUDITAN_PENDIENTES)).map(({ rel, abs }) => [rel, abs]))(
+    "%s",
+    (_rel, abs) => {
+      expect(sinComentarios(readFileSync(abs, "utf8"))).not.toMatch(AUDITA_EN_RUTA);
+    },
+  );
+
+  it("cada pendiente sigue auditando (si ya no, sacarla de la lista)", () => {
+    for (const rel of Object.keys(RUTAS_QUE_AUDITAN_PENDIENTES)) {
+      const ruta = rutas.find((r) => r.rel === rel);
+      expect(ruta, `${rel} ya no existe`).toBeDefined();
+      expect(sinComentarios(readFileSync(ruta!.abs, "utf8"))).toMatch(AUDITA_EN_RUTA);
+    }
+  });
+});

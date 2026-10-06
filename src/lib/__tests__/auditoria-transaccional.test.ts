@@ -30,7 +30,9 @@ import {
   firmarConsentimiento,
   revocarConsentimiento,
 } from "@/app/api/_lib/casos-uso/consentimiento";
+import { salirDeLasDemas } from "@/app/api/_lib/casos-uso/salir-de-las-demas";
 import { __resetLlaveroForTests } from "@/lib/llavero";
+import { crearSesion } from "@/lib/sesion-acceso";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 
@@ -305,5 +307,38 @@ describe("exportar documentación clínica", () => {
     expect(
       (await prismaRaw.eventoAuditoria.findMany()).map((e) => e.accion),
     ).toEqual(["sesion.exportar"]);
+  });
+});
+
+describe("cerrar las demás sesiones", () => {
+  async function tresSesiones(org: Org) {
+    const ahora = new Date();
+    return Promise.all([0, 1, 2].map(() => crearSesion(db, { userId: org.userId, ip: null, userAgent: null, ahora })));
+  }
+  const abiertas = (userId: string) => prismaRaw.sesionAcceso.count({ where: { userId, cerradaEn: null } });
+
+  it("con la auditoría rota no cierra ninguna", async () => {
+    const org = await crearOrg();
+    const [actual] = await tresSesiones(org);
+    await romperAuditoria();
+
+    await expect(
+      salirDeLasDemas({ prisma: db, organizationId: org.orgId, userId: org.userId, sesionId: actual.id }),
+    ).rejects.toThrow();
+
+    expect(await abiertas(org.userId)).toBe(3);
+  });
+
+  it("con la auditoría sana cierra las otras dos, deja la actual y el evento", async () => {
+    const org = await crearOrg();
+    const [actual] = await tresSesiones(org);
+
+    expect(
+      await salirDeLasDemas({ prisma: db, organizationId: org.orgId, userId: org.userId, sesionId: actual.id }),
+    ).toBe(2);
+
+    expect(await abiertas(org.userId)).toBe(1);
+    const [evento] = await prismaRaw.eventoAuditoria.findMany();
+    expect(evento).toMatchObject({ accion: "cuenta.salida_todas", actorId: org.userId, detalle: { cerradas: 2 } });
   });
 });

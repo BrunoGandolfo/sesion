@@ -26,7 +26,9 @@ import {
 } from "@/lib/cuenta-tokens";
 import { ENTRADA_ENLACE_INVALIDO, ENTRADA_PASSWORD_DISTINTA } from "@/lib/glosario";
 import { validarPasswordNueva } from "@/lib/password";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 
+import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
 import { ApiError } from "../responses";
 
 export interface ResetGuardado {
@@ -95,6 +97,9 @@ export async function restablecerCuenta(
     repo: RepositorioRecuperacion;
     hashear: (password: string) => Promise<string>;
     comparar: (password: string, hash: string) => Promise<boolean>;
+    /** Dónde queda cuenta.restablecer: `db`. Informativo, después del acto
+     *  (el acto es la transacción de `repo.consumir`). */
+    auditoria: ClienteAuditoria;
     ahora?: Date;
   },
 ): Promise<{ userId: string; organizationId: string }> {
@@ -109,5 +114,13 @@ export async function restablecerCuenta(
   }
   const hash = await deps.hashear(input.password);
   if (!(await deps.repo.consumir(reset, hash, ahora))) throw new ApiError(ENTRADA_ENLACE_INVALIDO, 400);
+  await registrarAuditoria(deps.auditoria, {
+    organizationId: reset.organizationId,
+    actorTipo: "usuario",
+    actorId: reset.userId,
+    accion: ACCIONES.cuenta.restablecer,
+    entidad: "usuario",
+    entidadId: reset.userId,
+  });
   return { userId: reset.userId, organizationId: reset.organizationId };
 }

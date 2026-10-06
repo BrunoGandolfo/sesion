@@ -1,3 +1,5 @@
+import type { ClienteAuditoria } from "@/app/api/_lib/auditoria";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { expect, it, vi } from "vitest";
 
 import {
@@ -25,7 +27,8 @@ function preparar(cambios: Partial<ResetGuardado> = {}) {
     buscar: vi.fn().mockImplementation(async () => fila),
     consumir: vi.fn().mockImplementation(async () => { if (fila.usadoEn) return false; fila.usadoEn = ahora; return true; }),
   };
-  return { repo, ahora, hashear: vi.fn().mockResolvedValue("hash-nuevo"), comparar: vi.fn().mockResolvedValue(false) };
+  const auditoria = { eventoAuditoria: { create: vi.fn().mockResolvedValue({}) } } as unknown as ClienteAuditoria;
+  return { repo, ahora, hashear: vi.fn().mockResolvedValue("hash-nuevo"), comparar: vi.fn().mockResolvedValue(false), auditoria };
 }
 
 it("genera 32 bytes aleatorios y un hash diferente del token", async () => {
@@ -74,6 +77,11 @@ it("restablece una vez y rechaza reutilizarlo", async () => {
   expect(await restablecerCuenta({ token, password: "contraseña nueva" }, deps)).toEqual({ userId: "user", organizationId: "org" });
   await expect(restablecerCuenta({ token, password: "otra contraseña" }, deps)).rejects.toMatchObject({ status: 400 });
   expect(deps.hashear).toHaveBeenCalledTimes(1);
+  // El rastro lo deja el caso de uso, una vez, sólo por el que restableció.
+  expect(deps.auditoria.eventoAuditoria.create).toHaveBeenCalledTimes(1);
+  expect(deps.auditoria.eventoAuditoria.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+    organizationId: "org", actorId: "user", accion: ACCIONES.cuenta.restablecer, entidadId: "user",
+  }) });
 });
 
 it.each([{ venceEn: ahora }, { usadoEn: ahora }, { enviadoEn: null }])("rechaza vencido, usado o sin correo enviado, sin hashear: %j", async (cambios) => {

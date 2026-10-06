@@ -20,6 +20,9 @@ import {
 } from "@/lib/sesion-clinica/estados";
 import type { DiagnosticoGrabacion, PausaGrabacion } from "@/lib/sesion-clinica/schema";
 
+import { ACCIONES } from "@/lib/auditoria-acciones";
+
+import { auditar, registrarAuditoria } from "../auditoria";
 import { DETALLE_MAX_ARRAY } from "../auditoria-pura";
 
 import { ESTADOS_GRABABLES, sePuedeGrabar } from "../domain";
@@ -32,6 +35,26 @@ import { trabajoBorrarAudio } from "./trabajos/crear";
 
 type Base = { prisma: typeof db; organizationId: string };
 type Sesion = Base & { sesionId: string };
+/** Quien graba: va al evento de auditoría de cada paso. */
+type DeUsuaria = { usuarioId: string };
+
+/** El rastro informativo de cada paso de la subida: si no se puede escribir,
+ *  la subida sigue (registrarAuditoria). */
+function rastroSubida(
+  { prisma, organizationId, sesionId, usuarioId }: Sesion & DeUsuaria,
+  accion: (typeof ACCIONES.sesion)["subirAudioInicio" | "subirAudioFin" | "volverAGrabar"],
+  detalle: Record<string, unknown>,
+) {
+  return registrarAuditoria(prisma, {
+    organizationId,
+    actorTipo: "usuario",
+    actorId: usuarioId,
+    accion,
+    entidad: "sesion_clinica",
+    entidadId: sesionId,
+    detalle,
+  });
+}
 
 /** Lo que la subida necesita de R2. `src/lib/r2.ts` lo implementa; los tests
  *  lo doblan. */
@@ -48,6 +71,9 @@ export const EXPIRA_URL_SUBIDA_SEGUNDOS = 60 * 60;
 
 export const MENSAJE_NO_LLEGO =
   "El audio no llegó a R2. La sesión volvió a 'grabando': reintentá la subida.";
+/** El código del 409 de arriba: quien necesite distinguirlo mira esto, no
+ *  el texto. */
+export const CODIGO_AUDIO_NO_LLEGO = "audio_no_llego";
 
 /**
  * Lo que se le contesta a una grabación más corta que el mínimo.
@@ -79,7 +105,7 @@ export const MENSAJE_GRABAR_OTRO_DIA =
  * grabación empezó el día del turno y cortarla pasada la medianoche dejaría
  * el audio en el teléfono sin a dónde ir.
  */
-export async function prepararAudio({ prisma, organizationId, turnoId, ahora = new Date() }: Base & { turnoId: string; ahora?: Date }) {
+export async function prepararAudio({ prisma, organizationId, turnoId, usuarioId, ahora = new Date() }: Base & DeUsuaria & { turnoId: string; ahora?: Date }) {
   return prisma.$transaction(async (tx) => {
     // Serializa dos inicios del mismo turno sin reemplazar su identidad.
     const tocado = await tx.turno.updateMany({ where: { id: turnoId, organizationId, estado: { in: [...ESTADOS_GRABABLES] } }, data: { actualizadoEn: new Date() } });
@@ -103,6 +129,18 @@ export async function prepararAudio({ prisma, organizationId, turnoId, ahora = n
     if (!contada.count) throw new ApiError(PRUEBA_TOPE, 403);
     const id = randomUUID();
     await tx.sesionClinica.create({ data: { id, organizationId, turnoId, estado: "grabando" } });
+    // Sólo la creación deja sesion.crear, y con el tx de la creación: es el
+    // par que cuenta auditoria-metricas.ts (una fila nueva, un evento).
+    await auditar(tx, {
+      organizationId,
+      actorTipo: "usuario",
+      actorId: usuarioId,
+      accion: ACCIONES.sesion.crear,
+      entidad: "sesion_clinica",
+      entidadId: id,
+      creadoEn: ahora,
+      detalle: { turnoId },
+    });
     return { id };
   });
 }
@@ -115,7 +153,7 @@ export async function prepararAudio({ prisma, organizationId, turnoId, ahora = n
  * grabando y el cliente reintenta sin más. La transición lleva el estado en
  * el WHERE, así dos pestañas pidiendo URL a la vez no se pisan.
  */
-export async function pedirUrlSubida(input: Sesion & { tamanoBytes: number; mime: string; almacen: AlmacenAudio }) {
+export async function pedirUrlSubida(input: Sesion & DeUsuaria & { tamanoBytes: number; mime: string; almacen: AlmacenAudio }) {
   const { prisma, organizationId, sesionId, tamanoBytes, mime, almacen } = input;
   const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { estado: true } });
   if (!fila) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
@@ -136,23 +174,31 @@ export async function pedirUrlSubida(input: Sesion & { tamanoBytes: number; mime
     data: { falloCodigo: null, falloDetalle: null },
     conflicto: "La sesión cambió mientras se preparaba la subida. Probá de nuevo.",
   });
+  await rastroSubida(input, ACCIONES.sesion.subirAudioInicio, { tamanoBytes, mime, expiraEnSegundos: EXPIRA_URL_SUBIDA_SEGUNDOS });
   // El navegador DEBE mandar exactamente estos headers en el PUT: están firmados en la URL.
   return { url, key, expiraEn, headers: { "Content-Type": mime } };
 }
 
 /** Reintento del cliente (POST [id]/volver-a-grabar): subiendo → grabando, para pedir otra URL. */
-export async function volverAGrabar({ prisma, organizationId, sesionId }: Sesion) {
+export async function volverAGrabar(input: Sesion & DeUsuaria) {
+  const { prisma, organizationId, sesionId } = input;
   await transicionar({ prisma, operacion: "volver_a_grabar", sesionId, organizationId, conflicto: "Solo una sesión en 'subiendo' puede volver a 'grabando'." });
-  return toSesionClinicaResponse(await leerSesion(prisma, sesionId, organizationId));
+  const sesion = toSesionClinicaResponse(await leerSesion(prisma, sesionId, organizationId));
+  await rastroSubida(input, ACCIONES.sesion.volverAGrabar, { estado: sesion.estado });
+  return sesion;
 }
 
 /**
  * Paso 3: el único cierre de la grabación. HeadObject sobre la key calculada;
  * si el objeto no está, la sesión vuelve a grabando y se contesta 409 para
  * que el teléfono repita la subida. Si está, subiendo → procesando.
+ *
+ * Deja sesion.subir_audio_fin en los dos desenlaces que importan para
+ * reconstruir una grabación: llegó (con el diagnóstico del grabador) o no
+ * llegó.
  */
-export async function confirmarSubida(input: Sesion & { key: string; duracionAudioSeg: number; pausas?: PausaGrabacion[]; almacen: AlmacenAudio }) {
-  const { prisma, organizationId, sesionId, key, duracionAudioSeg, pausas, almacen } = input;
+export async function confirmarSubida(input: Sesion & DeUsuaria & { key: string; duracionAudioSeg: number; pausas?: PausaGrabacion[]; diagnostico?: DiagnosticoGrabacion; almacen: AlmacenAudio }) {
+  const { prisma, organizationId, sesionId, key, duracionAudioSeg, pausas, diagnostico, almacen } = input;
   const fila = await prisma.sesionClinica.findFirst({ where: { id: sesionId, organizationId }, select: { estado: true } });
   if (!fila) throw new ApiError(MENSAJE_NO_ENCONTRADA, 404);
   exigirEstado(fila.estado, "audio_listo", `Solo se puede confirmar una subida en curso (estado actual: ${fila.estado})`);
@@ -165,7 +211,8 @@ export async function confirmarSubida(input: Sesion & { key: string; duracionAud
     } catch {
       // count = 0: otra pestaña ya la movió. El 409 de abajo sigue valiendo.
     }
-    throw new ApiError(MENSAJE_NO_LLEGO, 409);
+    await rastroSubida(input, ACCIONES.sesion.subirAudioFin, { ok: false, motivo: "objeto_ausente" });
+    throw new ApiError(MENSAJE_NO_LLEGO, 409, CODIGO_AUDIO_NO_LLEGO);
   }
 
   // ── El mínimo, también acá ──────────────────────────────────────────
@@ -211,7 +258,16 @@ export async function confirmarSubida(input: Sesion & { key: string; duracionAud
     },
     conflicto: "La sesión cambió de estado durante la confirmación",
   });
-  return { bytes, sesion: toSesionClinicaResponse(await leerSesion(prisma, sesionId, organizationId)) };
+  // El diagnóstico del grabador queda acá y sólo acá: horas, motivos y
+  // conteos para no volver a adivinar por qué se cortó una grabación. Va
+  // aplanado: la auditoría descarta los objetos anidados.
+  await rastroSubida(input, ACCIONES.sesion.subirAudioFin, {
+    ok: true,
+    duracionAudioSeg,
+    bytes,
+    ...(diagnostico ? diagnosticoParaAuditoria(diagnostico) : {}),
+  });
+  return toSesionClinicaResponse(await leerSesion(prisma, sesionId, organizationId));
 }
 
 /**

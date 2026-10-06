@@ -20,6 +20,9 @@ import { CUENTA_INVITAR_NO_PERMITIDO,
 import { cupoInvitacion, type ContadorInvitaciones, type CupoInvitacion } from "@/lib/limites-prueba";
 import { validarPasswordNueva } from "@/lib/password";
 
+import { ACCIONES } from "@/lib/auditoria-acciones";
+
+import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
 import { ApiError } from "../responses";
 
 export const VIGENCIA_INVITACION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -90,13 +93,18 @@ export interface RepositorioRegistro {
 
 export interface ActorInvitante {
   userId: string;
+  organizationId: string;
   email: string;
   rol: string;
 }
 
 export async function crearInvitacion(
   actor: ActorInvitante,
-  repo: RepositorioRegistro,
+  { repo, auditoria }: {
+    repo: RepositorioRegistro;
+    /** Dónde queda cuenta.invitacion_creada: `db`. Informativo. */
+    auditoria: ClienteAuditoria;
+  },
   ahora = new Date(),
 ): Promise<{ enlace: string; vence: string; invitacionId: string }> {
   if (!puedeInvitar(actor)) throw new ApiError(CUENTA_INVITAR_NO_PERMITIDO, 403);
@@ -109,6 +117,16 @@ export async function crearInvitacion(
     creadaEn: ahora,
   });
   if (!("id" in creada)) throw new ApiError(motivoSinCupo(creada), 429);
+  // Sin token ni email: solo que se creó y cuándo vence.
+  await registrarAuditoria(auditoria, {
+    organizationId: actor.organizationId,
+    actorTipo: "usuario",
+    actorId: actor.userId,
+    accion: ACCIONES.cuenta.invitacionCreada,
+    entidad: "usuario",
+    entidadId: actor.userId,
+    detalle: { invitacionId: creada.id, vence: venceEn.toISOString() },
+  });
   return { enlace: `${ORIGEN_CUENTA}/registro?token=${token}`, vence: venceEn.toISOString(), invitacionId: creada.id };
 }
 

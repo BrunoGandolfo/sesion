@@ -19,10 +19,12 @@ import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  CODIGO_AUDIO_NO_LLEGO,
   confirmarSubida,
   MENSAJE_GRABACION_CORTA,
   type AlmacenAudio,
 } from "@/app/api/_lib/casos-uso/audio";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { hayMaterial } from "@/app/api/_lib/casos-uso/sesion/reprocesar";
 import { reintentarSesion } from "@/app/api/_lib/casos-uso/sesion/reintentar";
 import { ApiError } from "@/app/api/_lib/responses";
@@ -86,6 +88,7 @@ const confirmar = (orgId: string, sesionId: string, duracionAudioSeg: number) =>
     prisma: db,
     organizationId: orgId,
     sesionId,
+    usuarioId: "usuaria-de-prueba",
     key: keyAudio(orgId, sesionId, 0),
     duracionAudioSeg,
     almacen,
@@ -167,7 +170,7 @@ describe("una grabación que llega al mínimo", () => {
   it(`con ${MINIMO_SEGUNDOS} segundos justos pasa a procesando y no encola borrado`, async () => {
     const { orgId, sesionId } = await sesionSubiendo();
 
-    const { sesion } = await confirmar(orgId, sesionId, MINIMO_SEGUNDOS);
+    const sesion = await confirmar(orgId, sesionId, MINIMO_SEGUNDOS);
 
     expect(sesion.estado).toBe("procesando");
     const fila = await prismaRaw.sesionClinica.findUniqueOrThrow({ where: { id: sesionId } });
@@ -175,6 +178,30 @@ describe("una grabación que llega al mínimo", () => {
     expect(fila.duracionAudioSeg).toBe(MINIMO_SEGUNDOS);
     expect(fila.falloCodigo).toBeNull();
     expect(await trabajosDe(sesionId)).toEqual([]);
+    // El rastro lo deja el caso de uso, no la ruta.
+    const [evento] = await prismaRaw.eventoAuditoria.findMany({ where: { entidadId: sesionId, accion: ACCIONES.sesion.subirAudioFin } });
+    expect(evento).toMatchObject({ actorId: "usuaria-de-prueba", detalle: { ok: true, duracionAudioSeg: MINIMO_SEGUNDOS, bytes: 12_345 } });
+  });
+});
+
+describe("un audio que no llegó a R2", () => {
+  it("vuelve a grabando, contesta 409 con codigo audio_no_llego y deja el rastro del intento", async () => {
+    const { orgId, sesionId } = await sesionSubiendo();
+    const error = await confirmarSubida({
+      prisma: db,
+      organizationId: orgId,
+      sesionId,
+      usuarioId: "usuaria-de-prueba",
+      key: keyAudio(orgId, sesionId, 0),
+      duracionAudioSeg: MINIMO_SEGUNDOS,
+      almacen: { ...almacen, existe: async () => ({ existe: false, bytes: null }) },
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 409, codigo: CODIGO_AUDIO_NO_LLEGO });
+    expect((await prismaRaw.sesionClinica.findUniqueOrThrow({ where: { id: sesionId } })).estado).toBe("grabando");
+    const eventos = await prismaRaw.eventoAuditoria.findMany({ where: { entidadId: sesionId, accion: ACCIONES.sesion.subirAudioFin } });
+    expect(eventos.map((e) => e.detalle)).toEqual([{ ok: false, motivo: "objeto_ausente" }]);
   });
 });
 
