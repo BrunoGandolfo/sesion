@@ -139,6 +139,8 @@ paciente está archivada"*. Mientras esté archivada no le sale ningún SMS.
 
 <!-- fuentes:
 src/app/(dashboard)/pacientes/_components/pacientes-view.tsx
+src/app/(dashboard)/pacientes/_components/pacientes-datos.ts
+src/app/(dashboard)/pacientes/_components/lista-pacientes.tsx
 src/app/(dashboard)/pacientes/_components/nuevo-paciente-form.tsx
 src/app/(dashboard)/pacientes/[id]/_components/paciente-detail-view.tsx
 src/app/(dashboard)/pacientes/[id]/_components/cabecera-ficha.tsx
