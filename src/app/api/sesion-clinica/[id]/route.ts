@@ -2,15 +2,15 @@
 // PATCH ni DELETE: cada transición es una ruta con nombre (aprobar,
 // reprocesar, reintentar, eliminar, feedback/reintentar, volver-a-grabar) que
 // escribe con el estado de partida en el WHERE.
+//
+// Abrirla deja sesion.ver en la misma transacción que la lectura: si el
+// rastro no se puede escribir, la nota no sale (casos-uso/sesion/ver.ts).
 
 import { db } from "@/lib/db";
 
-import { registrarAuditoria } from "../../_lib/auditoria";
 import { getSessionActor } from "../../_lib/auth";
-import { leerSesion } from "../../_lib/casos-uso/sesion/leer";
+import { verSesion } from "../../_lib/casos-uso/sesion/ver";
 import { errorResponse, ok } from "../../_lib/responses";
-import { toSesionClinicaResponse } from "../../_lib/sesion-clinica";
-import { ACCIONES } from "@/lib/auditoria-acciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,22 +22,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
-
-    const sesion = await leerSesion(db, id, organizationId);
-
-    await registrarAuditoria(db, {
-      organizationId,
-      actorTipo: "usuario",
-      actorId: userId,
-      accion: ACCIONES.sesion.ver,
-      entidad: "sesion_clinica",
-      entidadId: sesion.id,
-      detalle: { estado: sesion.estado },
-    });
-
-    return ok(toSesionClinicaResponse(sesion));
+    return ok(await verSesion({ prisma: db, organizationId, sesionId: id, usuarioId: userId }));
   } catch (error) {
     return errorResponse(error);
   }
 }
-

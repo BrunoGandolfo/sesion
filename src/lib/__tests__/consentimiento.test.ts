@@ -183,7 +183,7 @@ describe("cada frase tiene el hecho que la respalda", () => {
     // auditoria-acciones.test.ts.
     expect(hechos.ACCION_VER_SESION).toBe(ACCIONES.sesion.ver);
     expect(hechos.ACCION_VER_TRANSCRIPCION).toBe(ACCIONES.sesion.verTranscripcion);
-    expect(codigo("src/app/api/sesion-clinica/[id]/route.ts")).toContain("accion: ACCIONES.sesion.ver,");
+    expect(codigo("src/app/api/_lib/casos-uso/sesion/ver.ts")).toContain("accion: ACCIONES.sesion.ver,");
     expect(codigo("src/app/api/_lib/casos-uso/sesion/ver-transcripcion.ts")).toContain("accion: ACCIONES.sesion.verTranscripcion,");
     expect(texto).toContain("Solo Lic. Ana Pérez, desde su cuenta, y cada vez que abre tu nota o tu transcripción queda registrado.");
     expect(texto).toContain("dicen que nadie accede al contenido, pero la aplicación no puede verificarlo.");

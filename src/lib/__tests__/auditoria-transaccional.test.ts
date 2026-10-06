@@ -53,10 +53,9 @@ vi.mock("@/app/api/_lib/auth", () => ({
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
-let exportarDocumentacion!: (
-  request: Request,
-  ctx: { params: Promise<{ id: string }> },
-) => Promise<Response>;
+type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
+let exportarDocumentacion!: Handler;
+let verNota!: Handler;
 
 const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
@@ -124,7 +123,8 @@ beforeAll(async () => {
   // global que lee src/lib/db.ts, ANTES de importar la ruta.
   (globalThis as unknown as { prisma: unknown }).prisma = db;
   const ruta = await import("@/app/api/pacientes/[id]/documentacion/route");
-  exportarDocumentacion = ruta.GET as typeof exportarDocumentacion;
+  exportarDocumentacion = ruta.GET as Handler;
+  verNota = (await import("@/app/api/sesion-clinica/[id]/route")).GET as Handler;
 });
 
 beforeEach(async () => {
@@ -340,5 +340,66 @@ describe("cerrar las demás sesiones", () => {
     expect(await abiertas(org.userId)).toBe(1);
     const [evento] = await prismaRaw.eventoAuditoria.findMany();
     expect(evento).toMatchObject({ accion: "cuenta.salida_todas", actorId: org.userId, detalle: { cerradas: 2 } });
+  });
+});
+
+describe("abrir una nota (sesion.ver)", () => {
+  async function notaEnRevision(org: Org): Promise<string> {
+    const turno = await prismaRaw.turno.create({
+      data: { organizationId: org.orgId, pacienteId: org.pacienteId, fecha: new Date(), tarifaCobrada: 1000 },
+    });
+    const sesion = await prismaRaw.sesionClinica.create({
+      data: { organizationId: org.orgId, turnoId: turno.id, estado: "revision" },
+    });
+    return sesion.id;
+  }
+  const pedido = (sesionId: string) =>
+    verNota(new Request(`http://localhost/api/sesion-clinica/${sesionId}`), {
+      params: Promise.resolve({ id: sesionId }),
+    });
+
+  it("con la auditoría rota NO entrega la nota: 500 con el mensaje de siempre", async () => {
+    const org = await crearOrg();
+    sesionActual.organizationId = org.orgId;
+    sesionActual.userId = org.userId;
+    const sesionId = await notaEnRevision(org);
+    await romperAuditoria();
+
+    const res = await pedido(sesionId);
+
+    expect(res.status).toBe(500);
+    const cuerpo = await res.json();
+    // El mismo cuerpo que el historial clínico con la auditoría rota.
+    expect(cuerpo).toEqual({ error: "Error interno" });
+    expect(JSON.stringify(cuerpo)).not.toContain(sesionId);
+    expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
+  });
+
+  it("con la auditoría sana entrega la nota y deja sesion.ver con el estado en que la vio", async () => {
+    const org = await crearOrg();
+    sesionActual.organizationId = org.orgId;
+    sesionActual.userId = org.userId;
+    const sesionId = await notaEnRevision(org);
+
+    const res = await pedido(sesionId);
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toMatchObject({ id: sesionId, estado: "revision" });
+    const eventos = await prismaRaw.eventoAuditoria.findMany();
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]).toMatchObject({
+      accion: "sesion.ver", entidadId: sesionId, actorId: org.userId, detalle: { estado: "revision" },
+    });
+  });
+
+  it("una nota ajena es 404 y no deja rastro", async () => {
+    const duena = await crearOrg();
+    const otra = await crearOrg();
+    const sesionId = await notaEnRevision(duena);
+    sesionActual.organizationId = otra.orgId;
+    sesionActual.userId = otra.userId;
+
+    expect((await pedido(sesionId)).status).toBe(404);
+    expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
   });
 });

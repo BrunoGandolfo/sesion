@@ -122,7 +122,6 @@ const RAIZ_API = "src/app/api/";
 const AUDITA_EN_RUTA = /\b(?:auditar|registrarAuditoria)\s*\(|_lib\/auditoria["']/;
 /** Las que todavía auditan, con el bloque que las mueve. Tiene que quedar vacía. */
 const RUTAS_QUE_AUDITAN_PENDIENTES: Record<string, string> = {
-  "sesion-clinica/[id]/route.ts": "bloque 4: verSesion",
   "cuenta/password/route.ts": "bloque 5: cambiarPassword",
   "pacientes/[id]/documentacion/route.ts": "bloque 5: exportarDocumentacion",
 };
