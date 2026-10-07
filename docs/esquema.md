@@ -55,7 +55,7 @@ abrir.
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), duración medida por el teléfono (el ASR no la pisa), pausas, cuándo se borró. `audio_clave_encrypted` y `audio_iv` quedan en el esquema **sin usarse** (aceptan null): la app ya no cifra el audio, y sólo tienen valor en sesiones grabadas con la versión que sí cifraba. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. Aprobar anula, en la misma transacción, la clave de audio que pudiera quedar de una grabación anterior al cambio. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
+| `sesiones_clinicas` | Una fila por turno grabado. **Estado** (`grabando`, `subiendo`, `procesando`, `revision`, `aprobada`, `fallida`; `aprobada` es el único terminal). **Audio**: dónde está (`sin_audio` / `en_r2` / `borrado`), duración medida por el teléfono (el ASR no la pisa), pausas, cuándo se borró. La app no cifra el audio: no hay clave ni IV por sesión. **Procesamiento**: número de intento (identidad de cada reclamo del worker, nunca se resetea), fallos seguidos, próximo intento, vencimiento del lease, hash del ticket del worker, código y detalle del fallo. **Resultado** (todo cifrado): transcripción, nota de la IA de la generación vigente, datos estructurados, "Para vos" con su propio estado (`no_pedido` / `pendiente` / `listo` / `fallido`), id del transcript en AssemblyAI, modelos, versión del prompt, consumo (`uso`). Métricas de habla en claro (números, no contenido). **Aprobación**: nota final (con las ediciones), comentarios, fecha. | La vida de una grabación hasta la nota aprobada. La transcripción se guarda apenas termina el ASR (checkpoint): ningún reintento vuelve a transcribir. | La app (grabar, subir, aprobar, reprocesar, reintentar, eliminar) y el worker (reclamar, lease, checkpoint, resultado), siempre con el estado de partida y el intento en el `WHERE`. | Pantalla de la nota, ficha, "Ahora", brief, worker, salud. |
 
 ### Trabajo durable y worker
 
@@ -107,9 +107,10 @@ Por qué cada pieza quedó como está. Los números del 01 al 06 son los diseño
 la Fase 1 que el esquema reconcilió; la historia completa está en Git.
 
 1. **Audio.** No se adopta el formato binario `SAP1` ni el manifiesto con hash
-   del diseño 01. La sesión lleva `audio_estado`; las columnas de la clave
-   (`audio_clave_encrypted`) y del IV (`audio_iv`) quedaron sin uso cuando la
-   app dejó de cifrar el audio (rama grabador-dhh, sin migración). La tabla `audio_segmentos`
+   del diseño 01. La sesión lleva `audio_estado`. Las columnas de la clave y
+   del IV del audio se dejaron de usar cuando la app dejó de cifrar el audio
+   (e64915f) y se borraron en la migración `20261006120000_sin_audio_cifrado`.
+   La tabla `audio_segmentos`
    del diseño por segmentos se borró (migración `20260918120000_grabador_restaurado`)
    al volver al grabador de un solo archivo. La key de R2 no existe como columna.
 2. **Estados de la sesión.** El enum y las columnas de identidad del intento
@@ -223,7 +224,6 @@ que aparezca el lector, con una migración aditiva.
   `notas`; `consentimientos_grabacion.texto_completo_encrypted` →
   `textoCompleto`, `firma_digital_encrypted` → `firmaDigital`;
   `hot_words.termino_encrypted` → `termino`; `sesiones_clinicas`:
-  `audio_clave_encrypted` → `audioClave`,
   `transcripcion_encrypted` → `transcripcion`, `nota_ia_encrypted` → `notaIa`,
   `datos_encrypted` → `datos`, `feedback_encrypted` → `feedback`,
   `nota_final_encrypted` → `notaFinal`, `notas_edicion_encrypted` →

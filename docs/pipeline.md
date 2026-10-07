@@ -22,8 +22,7 @@ Terminar, con `start(1000)`:
 (`src/lib/grabacion-storage.ts`) y el archivo final es un `Blob` de esos
 `Blob`s, que se sube con el PUT prefirmado tal cual, sin `arrayBuffer()` ni
 copias en memoria. El audio viaja por TLS, R2 lo cifra en reposo y se borra al
-aprobar la nota (`borrar_audio_r2`). Las columnas `audio_clave_encrypted` y
-`audio_iv` siguen en el esquema, sin usarse.
+aprobar la nota (`borrar_audio_r2`). No hay clave ni IV de audio por sesión.
 
 La subida son tres pasos: `POST [id]/upload-url` (grabando → subiendo, devuelve
 la URL prefirmada), PUT directo a R2 y `POST [id]/upload-confirmar` (HeadObject;
@@ -182,8 +181,7 @@ borrar_transcript_asr, generar_feedback e integrar_contexto.
 
 `src/app/api/_lib/casos-uso/sesion/aprobar.ts` exige confirmar un riesgo
 moderado/alto o las menciones léxicas que correspondan. Dentro de una
-transacción guarda la nota final, anula audioClave (sólo tiene valor en sesiones
-grabadas antes de que la app dejara de cifrar el audio), pasa a aprobada y crea
+transacción guarda la nota final, pasa a aprobada y crea
 los trabajos borrar_audio_r2 (si hay audio) e integrar_contexto.
 No llama a R2 antes de confirmar la base. El evento de auditoría se registra
 después de esa transacción, con hash de nota y sin texto clínico.
