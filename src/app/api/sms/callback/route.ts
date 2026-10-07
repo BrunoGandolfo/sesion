@@ -11,7 +11,7 @@
 
 import { db } from "@/lib/db";
 import { alertar } from "@/lib/alertas";
-import { firmaValida, parametrosDeFormulario, URL_CALLBACK } from "@/lib/sms/firma";
+import { firmaValida, lineaRechazo, parametrosDeFormulario, URL_CALLBACK } from "@/lib/sms/firma";
 
 import { aplicarCallbackTwilio } from "../../_lib/casos-uso/sms-webhooks";
 
@@ -25,10 +25,13 @@ export async function POST(request: Request) {
   const token = process.env.TWILIO_AUTH_TOKEN;
   const crudo = await request.text();
   if (!token || crudo.length > MAX_BYTES) {
+    console.warn(lineaRechazo(!token ? "sin_token" : "cuerpo_grande", {}));
     return new Response(null, { status: 403 });
   }
   const params = parametrosDeFormulario(crudo);
-  if (!firmaValida(token, URL_CALLBACK, params, request.headers.get("x-twilio-signature"))) {
+  const firma = request.headers.get("x-twilio-signature");
+  if (!firmaValida(token, URL_CALLBACK, params, firma)) {
+    console.warn(lineaRechazo(firma ? "firma" : "sin_firma", params));
     return new Response(null, { status: 403 });
   }
 

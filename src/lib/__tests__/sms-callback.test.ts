@@ -23,6 +23,7 @@ vi.mock("@/lib/alertas", () => ({
 }));
 
 import { MOTIVO_BAJA } from "@/app/api/_lib/casos-uso/despachar-sms";
+import { reconciliarEnvios } from "@/app/api/_lib/casos-uso/sms-webhooks";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { firmaTwilio, URL_CALLBACK, URL_ENTRANTE } from "@/lib/sms/firma";
 
@@ -132,6 +133,104 @@ describe("POST /api/sms/callback", () => {
     expect((await callback(pedido(URL_CALLBACK, { MessageSid: "SM5", MessageStatus: "sent" }))).status).toBe(204);
     expect((await callback(pedido(URL_CALLBACK, { MessageSid: "SMxx", MessageStatus: "delivered" }))).status).toBe(204);
     expect((await leer(envio.id)).estado).toBe("aceptado");
+  });
+
+  // Los callbacks como los manda Twilio de verdad: todos los campos, con
+  // los "+" de los teléfonos codificados, firmados contra la URL pública.
+  const real = (sid: string, estado: string, extra: Record<string, string> = {}) => ({
+    AccountSid: "AC-cuenta-de-prueba",
+    ApiVersion: "2010-04-01",
+    From: "+15005550006",
+    MessageSid: sid,
+    MessageStatus: estado,
+    RawDlrDoneDate: "2610012305",
+    SmsSid: sid,
+    SmsStatus: estado,
+    To: TELEFONO,
+    ...extra,
+  });
+
+  it("un delivered real (firmado, con todos los campos) deja entregado y cerrado_en", async () => {
+    const envio = await crearEnvio("aceptado", "SM164ffaa386a9de5241dd2b7324cc02d1");
+    const r = await callback(pedido(URL_CALLBACK, real("SM164ffaa386a9de5241dd2b7324cc02d1", "delivered")));
+    expect(r.status).toBe(204);
+    const fila = await leer(envio.id);
+    expect(fila).toMatchObject({ estado: "entregado", codigoProveedor: null });
+    expect(fila.cerradoEn).toBeInstanceOf(Date);
+  });
+
+  it("un undelivered real deja no_entregado con codigo_proveedor y cerrado_en", async () => {
+    const envio = await crearEnvio("aceptado", "SM06206f22afe65269741b1f8230b5d4e8");
+    const r = await callback(pedido(URL_CALLBACK, real("SM06206f22afe65269741b1f8230b5d4e8", "undelivered", { ErrorCode: "30003" })));
+    expect(r.status).toBe(204);
+    const fila = await leer(envio.id);
+    expect(fila).toMatchObject({ estado: "no_entregado", codigoProveedor: "30003" });
+    expect(fila.cerradoEn).toBeInstanceOf(Date);
+  });
+
+  it("el 403 deja una línea con el motivo y el sid, sin cuerpo, firma ni token", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const params = real("SMf34ab10697b43aedb0fc8daf88a7abb1", "delivered");
+      const firmaAjena = firmaTwilio("token-secundario", URL_CALLBACK, params);
+      expect((await callback(pedido(URL_CALLBACK, params, firmaAjena))).status).toBe(403);
+      expect((await callback(pedido(URL_CALLBACK, params, null))).status).toBe(403);
+
+      const lineas = aviso.mock.calls.map((c) => String(c[0]));
+      expect(lineas).toEqual([
+        '[sms-callback] 403 {"motivo":"firma","sid":"SMf34ab10697b43aedb0fc8daf88a7abb1","estado":"delivered","cuentaPropia":false}',
+        '[sms-callback] 403 {"motivo":"sin_firma","sid":"SMf34ab10697b43aedb0fc8daf88a7abb1","estado":"delivered","cuentaPropia":false}',
+      ]);
+      for (const linea of lineas) {
+        for (const secreto of [TOKEN, firmaAjena, TELEFONO, "15005550006"]) expect(linea).not.toContain(secreto);
+      }
+    } finally {
+      aviso.mockRestore();
+    }
+  });
+});
+
+describe("reconciliarEnvios: los aceptado viejos, contra lo que dice Twilio", () => {
+  const TWILIO: Record<string, { status: string; codigo: number | null } | "error"> = {
+    SMentregado: { status: "delivered", codigo: null },
+    SMnollego: { status: "undelivered", codigo: 30003 },
+    SMsinacuse: { status: "sent", codigo: null },
+    SMcaido: "error",
+  };
+  const consultar = async (sid: string) => {
+    const m = TWILIO[sid];
+    return m === "error" || !m ? { tipo: "error" as const, mensaje: "HTTP 500" } : { tipo: "ok" as const, ...m };
+  };
+  const preparar = async () => {
+    const ids: Record<string, string> = {};
+    for (const sid of Object.keys(TWILIO)) ids[sid] = (await crearEnvio("aceptado", sid)).id;
+    ids.SMyaCerrado = (await crearEnvio("entregado", "SMyaCerrado")).id;
+    return ids;
+  };
+
+  it("por defecto simula: dice qué haría y no escribe nada", async () => {
+    const ids = await preparar();
+    const filas = await reconciliarEnvios({ prisma: db, consultar, simular: true, ahora: AHORA });
+    expect(Object.fromEntries(filas.map((f) => [f.sid, [f.efecto, f.actualizados]]))).toEqual({
+      SMentregado: ["entregado", 0],
+      SMnollego: ["no_entregado", 0],
+      SMsinacuse: ["sin_cambio", 0],
+      SMcaido: ["error", 0],
+    });
+    for (const sid of Object.keys(TWILIO)) expect((await leer(ids[sid])).estado).toBe("aceptado");
+  });
+
+  it("aplicando, escribe por el camino del callback: entregado, no_entregado con código; sent y error quedan", async () => {
+    const ids = await preparar();
+    const filas = await reconciliarEnvios({ prisma: db, consultar, simular: false, ahora: AHORA });
+    expect(filas.filter((f) => f.actualizados === 1).map((f) => f.sid).sort()).toEqual(["SMentregado", "SMnollego"]);
+    expect(await leer(ids.SMentregado)).toMatchObject({ estado: "entregado", cerradoEn: AHORA });
+    expect(await leer(ids.SMnollego)).toMatchObject({ estado: "no_entregado", codigoProveedor: "30003", cerradoEn: AHORA });
+    expect((await leer(ids.SMsinacuse)).estado).toBe("aceptado");
+    expect((await leer(ids.SMcaido)).estado).toBe("aceptado");
+    // Lo que ya estaba cerrado ni se consulta.
+    expect(filas.map((f) => f.sid)).not.toContain("SMyaCerrado");
+    expect(alertas.enviadas).toEqual([]);
   });
 });
 

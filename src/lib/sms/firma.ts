@@ -66,3 +66,33 @@ export function parametrosDeFormulario(cuerpo: string): Record<string, string> {
   }
   return out;
 }
+
+export type MotivoRechazo = "sin_token" | "cuerpo_grande" | "sin_firma" | "firma";
+
+/**
+ * La línea que deja un 403 en el log de la ruta /api/sms/callback. Durante semanas los
+ * callbacks llegaron y se rechazaron sin dejar rastro (diagnóstico del
+ * 7-oct, docs/operaciones.md §6): el 403 se veía en Vercel, el porqué no.
+ *
+ * Sólo lo que sirve para separar las causas y no es secreto: el motivo, el
+ * MessageSid, el estado que traía y si el AccountSid del callback es el de
+ * nuestra cuenta. Con la URL exacta y el AccountSid nuestro, una firma que
+ * no valida sólo puede ser un Auth Token que no es el que firma (el
+ * secundario, o uno de otra cuenta). Nunca el cuerpo, la firma ni el token.
+ */
+export function lineaRechazo(
+  motivo: MotivoRechazo,
+  params: Record<string, string>,
+  cuentaPropia: string | undefined = process.env.TWILIO_ACCOUNT_SID,
+): string {
+  const sid = params.MessageSid ?? params.SmsSid;
+  const estado = params.MessageStatus ?? params.SmsStatus;
+  const cuenta = params.AccountSid;
+  const datos = {
+    motivo,
+    ...(sid ? { sid: sid.slice(0, 40) } : {}),
+    ...(estado ? { estado: estado.slice(0, 20) } : {}),
+    ...(cuenta ? { cuentaPropia: Boolean(cuentaPropia) && cuenta === cuentaPropia } : {}),
+  };
+  return `[sms-callback] 403 ${JSON.stringify(datos)}`;
+}
