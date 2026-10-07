@@ -406,6 +406,68 @@ antes de decidir una corrección. No hay pantalla de conciliación en main;
 no hacer una escritura manual que pueda duplicar el SMS sin verificar evidencia.
 El estado por turno se consulta por `GET /api/sms/envios`.
 
+### Las confirmaciones de entrega no llegaban (diagnóstico del 7-oct-2026)
+
+**Síntoma.** En producción, 43 envíos con `sid` en `aceptado`; ninguno pasó
+nunca a `entregado`, `no_entregado` ni `fallido` (`cerrado_en` y
+`codigo_proveedor` en NULL).
+
+**Evidencia.**
+
+- Logs de Vercel, producción, 30-sep a 7-oct
+  (`vercel logs --project sesion --environment production --no-branch --since 7d --query /api/sms/callback --json`):
+  6 POST a `/api/sms/callback`, los 6 con **403**, en pares a 3–6 s
+  (30-sep 18:55; 1-oct 23:05 y 23:10 UTC): Twilio manda el `sent` y el acuse
+  del operador, y la ruta rechaza los dos. Ningún 204, ningún 500.
+- Todos al dominio `sesionapp.app` y a la ruta exacta; ningún 307/308. Las
+  variantes sí redirigen (`www.` → 307, barra final y `http` → 308, medido
+  con curl), pero Twilio no las usó: **no es una redirección**
+  (`src/lib/__tests__/firma-url.test.ts`).
+- El `TWILIO_ACCOUNT_SID` de producción es una cuenta (`AC…`), no una API
+  Key: el envío arma `/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json` con esa
+  misma variable y Twilio aceptó los 43 mensajes; con un `SK…` en esa
+  posición contesta 404.
+- `TWILIO_ACCOUNT_SID` y `TWILIO_AUTH_TOKEN` están en Vercel como
+  **sensitive** (sin cambios desde el 23-abr-2026): ni `vercel env pull` ni
+  la API los devuelven, así que la comparación con el token de la cuenta no
+  se pudo hacer desde acá.
+
+**Causa (por descarte; falta la última confirmación).** La URL es la exacta,
+el cuerpo se valida con el algoritmo de los vectores oficiales
+(`src/lib/__tests__/firma.test.ts`) y la cuenta es la nuestra: lo único que queda es que el
+`TWILIO_AUTH_TOKEN` de Vercel no es el que Twilio usa para firmar. Twilio
+firma los webhooks con el **Auth Token primario** de la cuenta; el
+secundario (o uno de otra cuenta con acceso) autentica la API igual, por eso
+los envíos salían y las firmas no.
+
+**Qué hace el dueño (una vez).**
+
+1. Twilio Console → Account → *API keys & tokens* → **Auth Tokens**: copiar
+   el **Primary**.
+2. Vercel → proyecto `sesion` → Settings → Environment Variables →
+   `TWILIO_AUTH_TOKEN` (Production) → reemplazar por el primario.
+3. Volver a publicar la producción actual (un redeploy; sin cambio de
+   código).
+4. Verificar con el próximo SMS: `vercel logs --project sesion --environment production --no-branch --since 1h --query /api/sms/callback`
+   tiene que mostrar **204**. Si vuelve a aparecer un 403, el log de la
+   función trae la línea `[sms-callback] 403 {"motivo":…,"sid":…,"cuentaPropia":…}`:
+   `motivo: "firma"` con `cuentaPropia: true` es el token; `cuentaPropia: false`
+   es que el mensaje lo mandó otra cuenta; `sin_token` es la variable vacía.
+   La línea no lleva el cuerpo, la firma ni el token.
+
+**Los envíos viejos.** Twilio no reenvía callbacks pasados. Después del paso
+4, con autorización explícita, el dueño corre la reconciliación: primero
+simulando, después aplicando. Consulta cada envío `aceptado` con sid en
+Twilio y aplica su estado por el mismo caso de uso que el callback
+(`reconciliarEnvios` en `casos-uso/sms-webhooks.ts`): un `sent` sin acuse
+queda como está, un envío ya cerrado no se reabre, y no manda alertas.
+
+~~~bash
+# con DATABASE_URL, TWILIO_ACCOUNT_SID y TWILIO_AUTH_TOKEN de producción en el entorno
+node scripts/mantenimiento/reconciliar-sms.mjs            # simula: no escribe
+node scripts/mantenimiento/reconciliar-sms.mjs --aplicar  # escribe
+~~~
+
 Recordar cobro usa `POST /api/pacientes/[id]/recordar-cobro` y crea o
 reutiliza un envío SMS persistido. Confirmar la cola no significa que el SMS
 haya sido entregado. Las alertas se envían por correo con

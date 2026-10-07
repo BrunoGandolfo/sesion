@@ -181,3 +181,50 @@ export async function enviarSmsTwilio(
     clearTimeout(timer);
   }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Consultar un mensaje ya enviado (reconciliación)
+//
+//   GET https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json
+//   200 → { sid, status, error_code, … }
+//
+// Lo usa scripts/mantenimiento/reconciliar-sms.mjs para los envíos que se
+// quedaron en `aceptado` porque su StatusCallback fue rechazado. Twilio no
+// reenvía callbacks pasados: la única forma de saber cómo terminaron es
+// preguntar.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type EstadoMensajeTwilio =
+  | { tipo: "ok"; status: string; codigo: number | null }
+  | { tipo: "error"; mensaje: string };
+
+export async function consultarMensajeTwilio(
+  sid: string,
+  opciones: OpcionesTwilio = {},
+): Promise<EstadoMensajeTwilio> {
+  const env = opciones.env ?? process.env;
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN) {
+    return { tipo: "error", mensaje: "faltan credenciales de Twilio" };
+  }
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages/${encodeURIComponent(sid)}.json`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opciones.timeoutMs ?? TIMEOUT_TWILIO_MS);
+  try {
+    const response = await (opciones.fetcher ?? fetch)(url, {
+      headers: { Authorization: `Basic ${btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`)}` },
+      signal: controller.signal,
+    });
+    const cuerpo = (await response.json().catch(() => null)) as
+      | { status?: string; error_code?: number | string | null; message?: string }
+      | null;
+    if (!response.ok || !cuerpo?.status) {
+      return { tipo: "error", mensaje: cuerpo?.message ?? `HTTP ${response.status}` };
+    }
+    const codigo = cuerpo.error_code === null || cuerpo.error_code === undefined ? null : Number(cuerpo.error_code);
+    return { tipo: "ok", status: cuerpo.status, codigo: codigo !== null && Number.isFinite(codigo) ? codigo : null };
+  } catch (error) {
+    return { tipo: "error", mensaje: detalleDeError(error) };
+  } finally {
+    clearTimeout(timer);
+  }
+}

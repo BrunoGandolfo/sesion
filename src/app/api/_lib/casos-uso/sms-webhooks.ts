@@ -63,6 +63,84 @@ export async function aplicarCallbackTwilio(
   };
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Reconciliación de los envíos que se quedaron en `aceptado`
+//
+// Hasta el 7-oct-2026 todos los StatusCallback se rechazaron por firma
+// (docs/operaciones.md §6): 43 envíos quedaron en `aceptado` aunque Twilio
+// sabía cómo terminaron. Twilio no reenvía callbacks pasados. Esto pregunta
+// por cada uno y aplica el estado por el MISMO camino que el callback
+// (aplicarCallbackTwilio), así que un envío ya cerrado no se reabre y un
+// `sent` sin acuse lo deja como está.
+//
+// Por defecto SIMULA: sólo cuenta qué haría. Escribe con `simular: false`.
+// No avisa por correo (el 30007 de un mensaje de hace semanas no es una
+// alarma de hoy): el resumen lo dice.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ConsultaMensaje =
+  | { tipo: "ok"; status: string; codigo: number | null }
+  | { tipo: "error"; mensaje: string };
+
+export interface ReconciliarEnviosInput {
+  prisma: Pick<ClientePrisma, "envioSms">;
+  /** Cómo está el mensaje en Twilio (src/lib/sms/twilio.ts, consultarMensajeTwilio). */
+  consultar: (sid: string) => Promise<ConsultaMensaje>;
+  simular: boolean;
+  ahora: Date;
+  /** Tope de envíos por corrida. */
+  limite?: number;
+}
+
+export interface FilaReconciliada {
+  sid: string;
+  /** Lo que dice Twilio, o null si no se pudo consultar. */
+  status: string | null;
+  codigo: number | null;
+  efecto: "entregado" | "no_entregado" | "sin_cambio" | "error";
+  /** Filas escritas (0 al simular). */
+  actualizados: number;
+}
+
+export async function reconciliarEnvios({
+  prisma,
+  consultar,
+  simular,
+  ahora,
+  limite = 500,
+}: ReconciliarEnviosInput): Promise<FilaReconciliada[]> {
+  const envios = await prisma.envioSms.findMany({
+    where: { estado: "aceptado", sid: { not: null } },
+    select: { sid: true },
+    orderBy: { aceptadoEn: "asc" },
+    take: limite,
+  });
+  const filas: FilaReconciliada[] = [];
+  for (const { sid } of envios) {
+    if (!sid) continue;
+    const mensaje = await consultar(sid);
+    if (mensaje.tipo === "error") {
+      filas.push({ sid, status: null, codigo: null, efecto: "error", actualizados: 0 });
+      continue;
+    }
+    const { status, codigo } = mensaje;
+    if (simular) {
+      const veredicto = clasificarCallback(status, codigo);
+      filas.push({ sid, status, codigo, efecto: veredicto.efecto === "ignorar" ? "sin_cambio" : veredicto.efecto, actualizados: 0 });
+      continue;
+    }
+    const resultado = await aplicarCallbackTwilio(prisma, { sid, estado: status, codigo, ahora });
+    filas.push({
+      sid,
+      status,
+      codigo,
+      efecto: resultado.efecto === "ignorar" ? "sin_cambio" : resultado.efecto,
+      actualizados: resultado.efecto === "ignorar" ? 0 : resultado.actualizados,
+    });
+  }
+  return filas;
+}
+
 /** Lo que cuenta como pedido de baja, ya normalizado. */
 export const PALABRAS_DE_BAJA: ReadonlySet<string> = new Set(["baja", "stop", "cancelar"]);
 
