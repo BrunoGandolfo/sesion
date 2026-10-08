@@ -13,7 +13,7 @@ entrega un cambio está en `docs/como-trabajamos.md`.
 | Postgres | Prisma y esquema de `prisma/schema.prisma`. CI utiliza Postgres 17 efímero; local usa un contenedor propio por rama. |
 | R2 | Audio de las sesiones y backups. La app no cifra el audio: lo sube tal cual y R2 lo guarda cifrado en reposo (cifrado del proveedor). Los backups sí van cifrados con gpg. La app usa `src/lib/r2.ts`; el worker, `processor/r2_client.py`. |
 | Railway | Worker Python: `processor/Dockerfile` (el arranque es su CMD, el único), `processor/railway.json` (build, reinicio y `watchPatterns: /processor/**`) y `processor/worker.py`. Con Root Directory `/processor`, confirmar en Settings → Config-as-code que el path sea `/processor/railway.json`; si no, Railway ignora el archivo. |
-| AssemblyAI / Anthropic | Configuración del worker en `processor/config.py`. Lupita es una llamada aparte de la app, con `src/lib/anthropic-mensajes.ts`. |
+| AssemblyAI / Anthropic | Configuración del worker en `processor/config.py`. Lupita y Lux son llamadas aparte de la app, con `src/lib/anthropic-mensajes.ts` (Haiku 5.5; contrato de Lux en `docs/contrato-lux.md`). |
 | Twilio / Resend | `src/lib/sms/` y `src/lib/correo.ts`. Requieren configuración de cuenta, número y dominio fuera de Git. |
 
 `src/lib/consentimiento-hechos.ts` registra una verificación de retención
@@ -96,7 +96,7 @@ permanece en `processor/.env.example`.
 | `INVITACIONES_PERMITIDAS` | Cuentas habilitadas para invitar; sin lista no se crean invitaciones. |
 | `PROCESSING_SECRET` | Autoriza reclamos del worker; las escrituras posteriores usan tickets. |
 | `CRON_SECRET` | Autoriza crons. |
-| `ANTHROPIC_API_KEY` | Lupita. El worker carga su propia copia en su entorno. |
+| `ANTHROPIC_API_KEY` | Lupita y Lux. Sin ella, las dos rutas contestan 503. El worker carga su propia copia en su entorno. |
 | `RESEND_API_KEY`, `ALERTA_CORREO` | Correo y alertas. |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Acceso a objetos de audio. |
 | `R2_PUBLIC_HOST` | Origen exacto de R2 usado por el navegador, para la CSP. |
@@ -231,7 +231,9 @@ busca en `scripts/ensayo/contratos.mjs`, que dice qué esquema le corresponde:
   `20260928120000_hilo_versiones_recifrado` → `nuevo-con-audio`, la
   instantánea `scripts/ensayo/esquema-con-audio.prisma` (con
   `audio_clave_encrypted` y `audio_iv`);
-- desde `20261006120000_sin_audio_cifrado` hasta la última
+- `20261006120000_sin_audio_cifrado` → `nuevo-sin-ambito`, la instantánea
+  `scripts/ensayo/esquema-sin-ambito.prisma` (`cupos_ayuda` sin `ambito`);
+- desde `20261008120000_cupos_por_ambito` hasta la última
   publicada → el contrato `nuevo`, que se lee del `prisma/schema.prisma` de
   **release**. El workflow hace un segundo checkout, de `release`, sólo de
   `prisma/`, y se lo pasa al verificador; el código del ensayo es el del ref de
@@ -312,7 +314,7 @@ Ninguna se puede hacer desde el repositorio.
 
 ### Reversiones administrativas
 
-Cuatro SQL revierten una migración. No los ejecuta la app ni Publicar;
+Cinco SQL revierten una migración. No los ejecuta la app ni Publicar;
 sólo se corren a mano, con la conexión directa y después de decidirlo.
 
 - `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
@@ -331,6 +333,11 @@ sólo se corren a mano, con la conexión directa y después de decidirlo.
   y `audio_iv` vacías (no había datos que recuperar) y borra su registro en
   `_prisma_migrations`. Sólo hace falta si se vuelve a publicar un código
   anterior a esa migración.
+- `scripts/mantenimiento/revertir-cupos-por-ambito.sql` revierte
+  `20261008120000_cupos_por_ambito`: borra los cupos de Lux del día (son
+  contadores), saca la columna `ambito` y su enum, y vuelve la clave a
+  (usuaria, día). Sólo hace falta si se vuelve a publicar un código anterior a
+  la migración: con el código de Lux publicado, Lupita y Lux dan 500.
 - `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de `20260917120000_limites_invitados` y su registro en `_prisma_migrations`. Obsoleto salvo reversión de código: hoy leen esas columnas `src/app/api/_lib/casos-uso/estado-prueba.ts`, `src/lib/cuenta-registro-db.ts` y `prepararAudio` (`src/app/api/_lib/casos-uso/audio.ts`). Correrlo con ese código publicado rompe el alta por invitación y la grabación.
 
 ## 5. Incidentes y límites conocidos

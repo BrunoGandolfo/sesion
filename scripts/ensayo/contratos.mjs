@@ -79,6 +79,14 @@ export const CONTRATOS = {
     minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
     muestras: MUESTRAS_ENC2,
   },
+  // Desde sin_audio_cifrado hasta antes de cupos_por_ambito: cupos_ayuda sin
+  // la columna `ambito` (la agregó 20261008120000_cupos_por_ambito, Lux).
+  "nuevo-sin-ambito": {
+    archivo: "scripts/ensayo/esquema-sin-ambito.prisma",
+    formato: "ENC2",
+    minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
+    muestras: MUESTRAS_ENC2,
+  },
   [CONTRATO_ACTUAL]: {
     archivo: null,
     formato: "ENC2",
@@ -103,7 +111,8 @@ export const CONTRATO_POR_MIGRACION = {
   "20260923120100_turnos_pago_fecha_idx": "nuevo-con-audio", // índice
   "20260924120000_eventos_auditoria_accion_idx": "nuevo-con-audio", // índice
   "20260928120000_hilo_versiones_recifrado": "nuevo-con-audio", // trigger
-  "20261006120000_sin_audio_cifrado": CONTRATO_ACTUAL, // DROP de las columnas de audio
+  "20261006120000_sin_audio_cifrado": "nuevo-sin-ambito", // DROP de las columnas de audio
+  "20261008120000_cupos_por_ambito": CONTRATO_ACTUAL, // cupos_ayuda.ambito
 };
 
 /**

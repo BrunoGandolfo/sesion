@@ -1,3 +1,9 @@
+// INSTANTÁNEA CONGELADA para el ensayo de restauración: prisma/schema.prisma
+// tal como estaba antes de 20261008120000_cupos_por_ambito (cupos_ayuda sin
+// la columna ambito). Es el contrato de las copias cuya última migración es
+// 20261006120000_sin_audio_cifrado (scripts/ensayo/contratos.mjs). No se
+// edita: describe copias que ya existen.
+
 // ============================================================================
 // Sesión — esquema definitivo (reconstrucción, Fase 2, 11-09-2026)
 //
@@ -221,29 +227,19 @@ model Invitacion {
   @@map("invitaciones")
 }
 
-/// De qué asistente es el cupo: cada uno tiene su tope diario y no se
-/// comen entre sí (Lupita 40, Lux 60).
-enum AmbitoCupo {
-  ayuda
-  lux
-
-  @@map("ambito_cupo")
-}
-
-/// Cupo diario de preguntas, por asistente (`ambito`). Reserva atómica ANTES de
+/// Cupo diario de preguntas a Lupita (la ayuda). Reserva atómica ANTES de
 /// llamar al proveedor: INSERT … ON CONFLICT DO UPDATE SET usadas = usadas + 1
-/// WHERE usadas < tope del ámbito RETURNING usadas; 0 filas → 429.
+/// WHERE usadas < tope RETURNING usadas; 0 filas → 429.
 model CupoAyuda {
-  userId String     @map("user_id")
+  userId String @map("user_id")
   /// Día de Montevideo, "AAAA-MM-DD". Texto y no DATE para que el día lo
   /// decida la app con su zona horaria, no el driver.
-  dia    String     @db.VarChar(10)
-  ambito AmbitoCupo @default(ayuda)
-  usadas Int        @default(0)
+  dia    String @db.VarChar(10)
+  usadas Int    @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([userId, dia, ambito])
+  @@id([userId, dia])
   @@map("cupos_ayuda")
 }
 

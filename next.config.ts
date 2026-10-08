@@ -72,6 +72,8 @@ const nextConfig: NextConfig = {
   // deployado. La clave es la ruta de la ruta; el valor, relativo a la raíz.
   outputFileTracingIncludes: {
     "/api/ayuda": ["./docs/ayuda/**"],
+    // El prompt de Lux (src/lib/lux/prompt.ts), por la misma razón.
+    "/api/pacientes/[id]/lux": ["./src/lib/lux/system-prompt.md"],
   },
 };
 

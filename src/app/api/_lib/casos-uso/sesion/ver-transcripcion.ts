@@ -15,6 +15,7 @@ import { auditar } from "../../auditoria";
 import { ApiError } from "../../responses";
 
 import { MENSAJE_NO_ENCONTRADA, type ClienteTransaccional } from "./transicion";
+import type { ClienteAuditoria } from "../../auditoria";
 
 /** Convención del worker: la terapeuta es siempre el hablante S0. */
 export const HABLANTE_TERAPEUTA = "S0";
@@ -24,6 +25,31 @@ export interface VerTranscripcionInput {
   sesionId: string;
   organizationId: string;
   usuarioId: string;
+  /** Quién la leyó por ella. Sin esto, la abrió ella en la pantalla. */
+  via?: "lux";
+}
+
+/**
+ * El rastro de UNA lectura de transcripción. Lo usan esta ruta y Lux
+ * (casos-uso/lux/material.ts), siempre con el `tx` de la lectura: sin rastro
+ * no hay transcripción.
+ */
+export async function auditarLecturaTranscripcion(tx: ClienteAuditoria, lectura: {
+  organizationId: string; usuarioId: string; sesionId: string;
+  estado: string; caracteres: number; via?: "lux";
+}) {
+  await auditar(tx, {
+    organizationId: lectura.organizationId,
+    actorTipo: "usuario",
+    actorId: lectura.usuarioId,
+    accion: ACCIONES.sesion.verTranscripcion,
+    entidad: "sesion_clinica",
+    entidadId: lectura.sesionId,
+    detalle: {
+      estado: lectura.estado, caracteres: lectura.caracteres,
+      ...(lectura.via ? { via: lectura.via } : {}),
+    },
+  });
 }
 
 export interface TranscripcionVisible {
@@ -36,6 +62,7 @@ export async function verTranscripcion({
   sesionId,
   organizationId,
   usuarioId,
+  via,
 }: VerTranscripcionInput): Promise<TranscripcionVisible> {
   return prisma.$transaction(async (tx) => {
     const sesion = await tx.sesionClinica.findFirst({
@@ -50,14 +77,9 @@ export async function verTranscripcion({
       throw new ApiError("La sesión todavía no tiene transcripción", 409);
     }
 
-    await auditar(tx, {
-      organizationId,
-      actorTipo: "usuario",
-      actorId: usuarioId,
-      accion: ACCIONES.sesion.verTranscripcion,
-      entidad: "sesion_clinica",
-      entidadId: sesionId,
-      detalle: { estado: sesion.estado, caracteres: transcripcion.length },
+    await auditarLecturaTranscripcion(tx, {
+      organizationId, usuarioId, sesionId,
+      estado: sesion.estado, caracteres: transcripcion.length, via,
     });
 
     return { transcripcion, hablanteTerapeuta: HABLANTE_TERAPEUTA };
