@@ -25,9 +25,8 @@ import {
   leerRecordatoriosWhatsapp,
   muestraWhatsapp,
   registrarAbierto,
-  type RecordatoriosHoy,
-  type TurnoParaAvisar,
 } from "./recordatorios-datos";
+import type { RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
 import {
   ABRIR_WHATSAPP,
   NO_SE_ANOTO_AVISO,
@@ -43,7 +42,7 @@ import {
 import { Titulo } from "./titulo";
 
 export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number }) {
-  const [lectura, setLectura] = React.useState<RecordatoriosHoy | null>(null);
+  const [lectura, setLectura] = React.useState<RecordatoriosWhatsappDeHoy | null>(null);
   const [error, setError] = React.useState(false);
   const [intento, setIntento] = React.useState(0);
   /** Turnos cuyo registro falló después de abrir WhatsApp. */
@@ -64,9 +63,10 @@ export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number })
     return () => controller.abort();
   }, [reloadKey, intento]);
 
-  const alAbrir = React.useCallback((turnoId: string) => {
+  const alAbrir = React.useCallback((turno: RecordatorioWhatsapp) => {
+    const { turnoId } = turno;
     setSinAnotar((previo) => sinElemento(previo, turnoId));
-    registrarAbierto(turnoId)
+    registrarAbierto(turno)
       .then(({ avisadoEn }) =>
         setLectura((previa) =>
           previa
@@ -128,9 +128,9 @@ function FilaAviso({
   sinAnotar,
   onAbrir,
 }: {
-  turno: TurnoParaAvisar;
+  turno: RecordatorioWhatsapp;
   sinAnotar: boolean;
-  onAbrir: (turnoId: string) => void;
+  onAbrir: (turno: RecordatorioWhatsapp) => void;
 }) {
   const inicio = new Date(turno.fecha);
   const nombre = `${turno.paciente.nombre} ${turno.paciente.apellido}`.trim();
@@ -176,7 +176,7 @@ function FilaAviso({
             href={enlace}
             target="_blank"
             rel="noopener"
-            onClick={() => onAbrir(turno.turnoId)}
+            onClick={() => onAbrir(turno)}
           >
             {ABRIR_WHATSAPP}
           </a>

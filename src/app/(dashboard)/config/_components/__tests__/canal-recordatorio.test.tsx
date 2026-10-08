@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// "Cómo recordás los turnos": muestra el canal guardado (SMS si la respuesta
-// todavía no lo trae) y elegir otro lo guarda con el autoguardado de siempre.
+// "Cómo recordás los turnos": muestra el canal guardado (la API siempre lo
+// trae: la columna es NOT NULL con default sms) y elegir otro lo guarda con
+// el autoguardado de siempre.
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -28,6 +29,7 @@ beforeEach(() => {
     recordatorioModo: "dia_anterior",
     templateRecordatorio: "Hola {{nombre}}",
     orientacionTeorica: "gestalt",
+    canalRecordatorio: "sms",
   };
 });
 afterEach(() => {
@@ -45,7 +47,7 @@ function grupo() {
   return screen.getByRole("group", { name: "Cómo recordás los turnos" });
 }
 
-it("ofrece los tres modos, cada uno con su línea, y sin canal guardado marca SMS", async () => {
+it("ofrece los tres modos, cada uno con su línea, y marca el guardado (SMS por defecto)", async () => {
   await abrir();
   const radios = Array.from(grupo().querySelectorAll<HTMLInputElement>("input[type=radio]"));
   expect(radios.map((r) => r.value)).toEqual(["sms", "whatsapp", "ambos"]);

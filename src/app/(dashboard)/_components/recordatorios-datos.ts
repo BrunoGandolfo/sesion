@@ -4,40 +4,16 @@
 //
 // El texto del mensaje no se arma acá ni en la pantalla: viene armado
 // dentro de `enlace` (un wa.me con el texto ya codificado). La pantalla
-// sólo lo abre.
+// sólo lo abre. Los tipos del contrato viven en src/types/domain.ts, una
+// sola vez para la ruta y para la pantalla.
 
 import { apiGet, apiPost } from "@/lib/api-client";
-
-/** Cómo se recuerdan los turnos (Tu consultorio). */
-export type CanalRecordatorio = "sms" | "whatsapp" | "ambos";
-
-export const CANALES_RECORDATORIO: readonly CanalRecordatorio[] = [
-  "sms",
-  "whatsapp",
-  "ambos",
-];
-
-export interface TurnoParaAvisar {
-  turnoId: string;
-  /** ISO del inicio del turno. */
-  fecha: string;
-  paciente: {
-    id: string;
-    nombre: string;
-    apellido: string;
-    telefono: string | null;
-  };
-  /** null cuando no se puede armar: hoy, sólo si falta el teléfono. */
-  enlace: string | null;
-  motivo?: "sin_telefono";
-  /** ISO de la última vez que ella abrió el WhatsApp de este turno. */
-  avisadoEn: string | null;
-}
-
-export interface RecordatoriosHoy {
-  canal: CanalRecordatorio;
-  turnos: TurnoParaAvisar[];
-}
+import type {
+  AvisoWhatsappRegistrado,
+  CanalRecordatorio,
+  RecordatorioWhatsapp,
+  RecordatoriosWhatsappDeHoy,
+} from "@/types/domain";
 
 /** El bloque sólo existe si ella eligió avisar por WhatsApp. */
 export function muestraWhatsapp(canal: CanalRecordatorio): boolean {
@@ -46,17 +22,21 @@ export function muestraWhatsapp(canal: CanalRecordatorio): boolean {
 
 export function leerRecordatoriosWhatsapp(
   signal: AbortSignal,
-): Promise<RecordatoriosHoy> {
-  return apiGet<RecordatoriosHoy>("/api/recordatorios/whatsapp", { signal });
+): Promise<RecordatoriosWhatsappDeHoy> {
+  return apiGet<RecordatoriosWhatsappDeHoy>("/api/recordatorios/whatsapp", { signal });
 }
 
-/** Registra que ella abrió el WhatsApp del turno. `keepalive`: en el
- *  teléfono, abrir WhatsApp manda la pestaña al fondo y el pedido tiene que
- *  terminar igual. */
-export function registrarAbierto(turnoId: string): Promise<{ avisadoEn: string }> {
-  return apiPost<{ avisadoEn: string }>(
-    `/api/recordatorios/whatsapp/${encodeURIComponent(turnoId)}/abierto`,
-    {},
+/** Registra que ella abrió el WhatsApp del turno, con la `fecha` del turno
+ *  que traía el enlace: si lo movieron entre la lista y el toque, queda
+ *  anotado el horario que de verdad se mandó (y la API corrige el aviso
+ *  vigente). `keepalive`: en el teléfono, abrir WhatsApp manda la pestaña
+ *  al fondo y el pedido tiene que terminar igual. */
+export function registrarAbierto(
+  turno: Pick<RecordatorioWhatsapp, "turnoId" | "fecha">,
+): Promise<AvisoWhatsappRegistrado> {
+  return apiPost<AvisoWhatsappRegistrado>(
+    `/api/recordatorios/whatsapp/${encodeURIComponent(turno.turnoId)}/abierto`,
+    { fecha: turno.fecha },
     { keepalive: true },
   );
 }

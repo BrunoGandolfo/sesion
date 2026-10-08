@@ -9,14 +9,7 @@ import {
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
 import { prepararPlantillaRecordatorio, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms/texto";
-import type { Configuracion, OrientacionTeorica } from "@/types/domain";
-
-import type { CanalRecordatorio } from "../../_components/recordatorios-datos";
-
-/** Lo que manda /api/config. `canalRecordatorio` lo agrega la API de los
- *  recordatorios por WhatsApp; mientras una respuesta no lo traiga, el canal
- *  es el de siempre: SMS. */
-type ConfigLeida = Configuracion & { canalRecordatorio?: CanalRecordatorio };
+import type { CanalRecordatorio, Configuracion, OrientacionTeorica } from "@/types/domain";
 
 export type CampoConfig =
   | "nombreProfesional"
@@ -66,14 +59,14 @@ export const FORM_VACIO: FormConfig = {
   orientacionTeorica: "cbt_mi",
 };
 
-export function formDesdeConfig(config: ConfigLeida): FormConfig {
+export function formDesdeConfig(config: Configuracion): FormConfig {
   return {
     nombreProfesional: config.nombreProfesional,
     direccion: config.direccion,
     whatsappOrigen: config.whatsappOrigen,
     tarifaDefault: String(config.tarifaDefault),
     recordatorioModo: config.recordatorioModo,
-    canalRecordatorio: config.canalRecordatorio ?? "sms",
+    canalRecordatorio: config.canalRecordatorio,
     // La plantilla que de verdad sale: la misma preparación que usan el envío
     // y la vista previa. Sin esto, el editor mostraba la guardada tal cual y
     // la vista previa otra (el default viejo de la base se reemplaza entero,
@@ -155,12 +148,12 @@ export function patchDesdeCampos(
   return { patch, campos: incluidos, invalido };
 }
 
-export function leerConfig(signal: AbortSignal): Promise<ConfigLeida> {
-  return apiGet<ConfigLeida>("/api/config", { signal });
+export function leerConfig(signal: AbortSignal): Promise<Configuracion> {
+  return apiGet<Configuracion>("/api/config", { signal });
 }
 
-export function guardarConfig(patch: PatchConfig): Promise<ConfigLeida> {
-  return apiPatch<ConfigLeida>("/api/config", patch);
+export function guardarConfig(patch: PatchConfig): Promise<Configuracion> {
+  return apiPatch<Configuracion>("/api/config", patch);
 }
 
 /** Lo pendiente al cerrar o recargar la pestaña: `keepalive` es el pedido

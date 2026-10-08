@@ -20,9 +20,7 @@ import {
   calcularProgramadoEn,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
-import type { OrientacionTeorica } from "@/types/domain";
-
-import type { CanalRecordatorio } from "../../_components/recordatorios-datos";
+import type { CanalRecordatorio, OrientacionTeorica } from "@/types/domain";
 
 interface Opcion<T extends string> {
   valor: T;

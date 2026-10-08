@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RecordatoriosWhatsapp } from "../recordatorios-whatsapp";
-import type { RecordatoriosHoy } from "../recordatorios-datos";
+import type { RecordatoriosWhatsappDeHoy } from "@/types/domain";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api-client", async (original) => ({
@@ -22,18 +22,19 @@ const ana = {
   fecha: "2026-10-09T13:00:00.000Z",
   paciente: { id: "p1", nombre: "Ana", apellido: "Pérez", telefono: "099111222" },
   enlace: ENLACE,
+  motivo: null,
   avisadoEn: null,
 };
 const beto = {
   turnoId: "t2",
   fecha: "2026-10-09T15:00:00.000Z",
-  paciente: { id: "p2", nombre: "Beto", apellido: "Suárez", telefono: null },
+  paciente: { id: "p2", nombre: "Beto", apellido: "Suárez", telefono: "" },
   enlace: null,
   motivo: "sin_telefono" as const,
   avisadoEn: null,
 };
 
-function responder(lectura: RecordatoriosHoy) {
+function responder(lectura: RecordatoriosWhatsappDeHoy) {
   api.get.mockResolvedValue(lectura);
 }
 
@@ -101,9 +102,11 @@ describe("Abrir WhatsApp", () => {
     window.removeEventListener("click", mirar);
     expect(cancelado).toBe(false);
 
+    // Con la fecha del turno que traía el enlace: si lo movieron entre la
+    // lista y el toque, queda anotado el horario que se mandó.
     expect(api.post).toHaveBeenCalledWith(
       "/api/recordatorios/whatsapp/t1/abierto",
-      {},
+      { fecha: ana.fecha },
       { keepalive: true },
     );
     // Hasta que vuelve el registro, la fila no promete nada.
