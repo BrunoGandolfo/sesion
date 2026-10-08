@@ -406,10 +406,13 @@ cd "$REPO_ENSAYO"
 
 Mismo criterio de **Bien** que 3.4 y 3.5. La mensual más vieja es anterior a
 migraciones posteriores, así que es esperable que diga un contrato congelado:
-la del 22-sep da `esquema restaurado: nuevo-sin-whatsapp` (antes de
-`20261008120000_whatsapp_asistido`). Es anterior al recifrado del 29-sep: sus
-blobs son de la clave 1 (el automático del 2-oct contó 99). Si la clave 1 no
-está en el gestor, esta es la copia que da "clave histórica no disponible".
+la del 22-sep tiene como última migración
+`20260918120000_grabador_restaurado` y da `esquema restaurado:
+nuevo-con-audio` (corrida automática `37814736865`, 8-oct). Las diarias de
+antes de publicar `20261008120000_whatsapp_asistido` dan
+`nuevo-sin-whatsapp`. Es anterior al recifrado del 29-sep: sus blobs son de la
+clave 1 (el automático del 2-oct contó 99). Si la clave 1 no está en el gestor,
+esta es la copia que da "clave histórica no disponible".
 
 Ahora es el momento de copiar al acta lo que haga falta de
 `$TRABAJO_ENSAYO/{diaria,mensual}/` (`salida.txt`, `resultado-manual.json`,
@@ -457,8 +460,9 @@ Consecuencias:
 - Fecha, quién ejecutó, SHA de `release` usado (3.1), destino: *contenedor
   postgres:17 local en tmpfs*; duración total.
 - Por cada copia (diaria y mensual): la clave de R2 y su `sha256`, el esquema
-  que informó el guion (`nuevo` en la diaria; en la mensual, `nuevo` o un
-  contrato congelado como `nuevo-sin-whatsapp`) y la última migración.
+  que informó el guion (en la diaria, `nuevo` o, si es de antes de la última
+  migración publicada, un contrato congelado como `nuevo-sin-whatsapp`; en la
+  mensual del 22-sep, `nuevo-con-audio`) y la última migración.
 - Conteo de filas por tabla (la tabla que imprime el guion, o
   `resultado-manual.json`) comparado a ojo con lo que tiene hoy el consultorio.
 - Formato de cifrado: `ENC2` en todas las columnas `*_encrypted`, blobs por id
