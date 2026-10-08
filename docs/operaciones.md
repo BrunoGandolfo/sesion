@@ -169,7 +169,11 @@ por ese dump: conservarlas hasta que no quede ninguna copia que las necesite,
 incluidas mensuales y copias retenidas por fallos.
 
 Restaurar siempre primero en una base aislada y vacía. El ensayo a mano
-trimestral es exactamente esto, en la máquina del dueño y con su llavero:
+trimestral es exactamente esto, en la máquina del dueño y con su llavero. El
+procedimiento completo, con los bloques para copiar y pegar en orden (las dos
+copias, las transcripciones y el acta), está en
+`docs/operaciones/ensayo-manual.md`, ensayado en seco el 8-oct-2026; lo que
+sigue es el resumen:
 
 1. Descargar el respaldo elegido de R2 (conviene alternar: una vez la diaria
    más reciente, otra la mensual más vieja):

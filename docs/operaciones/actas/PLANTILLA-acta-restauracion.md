@@ -43,6 +43,8 @@ del Recorrido más vieja y más nueva, y dice sí/no por cada una.
 - Nota clínica más nueva descifrada y leída: sí / no — sesión `<id>`, clave `<n>`
 - Versión del Recorrido más vieja descifrada y leída: sí / no — versión `<id>`, clave `<n>`
 - Versión del Recorrido más nueva descifrada y leída: sí / no — versión `<id>`, clave `<n>`
+- Transcripción más vieja descifrada y leída (bloque 3.5 de `docs/operaciones/ensayo-manual.md`): sí / no — sesión `<id>`, clave `<n>`
+- Transcripción más nueva descifrada y leída: sí / no — sesión `<id>`, clave `<n>`
 - Si alguna dijo NO: ¿el guion habló de clave ausente (falta una clave del
   llavero) o de dato corrupto? (copiar el motivo, sin texto clínico)
 

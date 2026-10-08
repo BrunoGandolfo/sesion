@@ -11,7 +11,11 @@ y GitHub Actions. Nada de esto se corrió con secretos: lo que depende de ellos
 está marcado como **no verificado** en §7. Actualizado el 6 de octubre: el
 contrato de esquema lo elige la última migración de la copia, el checkout es
 de `release` y existen las claves históricas (§3.4 y `docs/operaciones.md` §4,
-"Cómo se juzga una copia").
+"Cómo se juzga una copia"). **Ensayado en seco el 8 de octubre** contra
+`release` = `445141f`: todos los bloques de §3, copiados tal cual de este
+archivo, corrieron de punta a punta con copias, passphrase, llavero y R2
+inventados (§7). Lo único que queda sin probar es lo que depende de los
+secretos reales.
 
 Qué hace, en una línea: bajar de R2 la copia diaria más reciente y la mensual
 más vieja, descifrar cada una con gpg, restaurarla en un Postgres 17 local en
@@ -33,15 +37,17 @@ con datos, la del 18-sep ya tiene 22. Entonces:
   **anterior** (esquema `produccion-d02ae0e`, **ENC1**, clave
   `NOTES_ENCRYPTION_KEY`). La retención de 30 días las borra: la última
   desaparece con la corrida del respaldo del 17 o del 18 de octubre, según la
-  hora. Mientras exista, se puede ensayar una como tercera prueba (§3.6b),
-  **opcional**.
+  hora. Este procedimiento ya no las ensaya (ver §1).
 
 ---
 
 ## 1. Secretos que hacen falta y de dónde salen
 
-Ninguno se pega en un comando, un archivo del repo, el chat ni una captura. Se
-cargan con `read -rs` en la misma terminal (§3.1) y se borran al final (§3.7).
+Ninguno se pega en un comando, un archivo del repo, el chat ni una captura.
+Los cuatro secretos (las dos credenciales de R2, la passphrase y el llavero) se
+cargan con `read -rs` al principio de §3.1, en la misma terminal, y se borran al
+final (§3.7). Después de esas siete preguntas (cuatro secretas y tres que no lo
+son) ningún bloque pide nada más.
 
 | Variable en la terminal | Qué es | De dónde sale |
 | --- | --- | --- |
@@ -51,21 +57,18 @@ cargan con `read -rs` en la misma terminal (§3.1) y se borran al final (§3.7).
 | `BACKUP_ENCRYPTION_KEY` | Passphrase de gpg de los respaldos | La copia **offline** que pide `.github/workflows/backup.yml` (línea 22). El secret de Actions se cargó el 3-sep-2026 y no cambió desde entonces, así que todas las copias que hay en R2 hoy usan ese mismo valor. Si no existe copia offline, **parar**: ni este ensayo ni una restauración real son posibles, y eso es un hallazgo más grave que cualquier otro. |
 | `CLAVES_CIFRADO` | El llavero ENC2, formato `id=<32 bytes base64>[,id=…]` | El llavero del ensayo lleva **todas las claves de la época del respaldo, incluidas las retiradas**: un respaldo anterior a una rotación tiene blobs con la clave vieja. Salen del **gestor de contraseñas** del dueño, una entrada por id. No de Vercel: `CLAVES_CIFRADO` es *Sensitive* y no se puede leer, y en el estado final de una rotación (`docs/encryption.md` §3, paso 3) la variable de Vercel ya no tiene las claves retiradas. La variable de Actions `CLAVES_CIFRADO_IDS` (hoy `1,2`) dice qué ids se esperan; el llavero tiene que traer al menos esos. |
 | `CLAVES_HISTORICAS_IDS` (opcional) | Ids, sin valores, de las claves que existieron y ya no tiene nadie, ej. `1` | La variable de Actions del mismo nombre, si existe (`gh variable get CLAVES_HISTORICAS_IDS`). Con ella, los blobs de esas claves se informan como "clave histórica no disponible" y no hacen fallar el ensayo. Un id no puede estar en el llavero y acá a la vez. |
-| `CLAVE_ENC1` | Sólo para la prueba opcional §3.6b: la `NOTES_ENCRYPTION_KEY` de la app anterior (32 bytes base64) | Gestor de contraseñas del dueño, o la variable del proyecto de Vercel si todavía existe y no es *Sensitive*. |
 
-**Por qué `CLAVE_ENC1` va aparte.** ENC1 no guarda id de clave: el verificador
-prueba cada clave del llavero. Para esa prueba se arma un llavero de una sola
-entrada, `1=<NOTES_ENCRYPTION_KEY>` (el formato es el mismo; ver
-`git show 1e9312e^:src/lib/encryption.ts`). No se mezcla con el llavero real
-porque el id `1` ya lo usa la clave ENC2 y el llavero rechaza ids repetidos.
-
-**Cuánto conservar `NOTES_ENCRYPTION_KEY`.** `docs/pendientes/03-identidad.md`
-pide verificar que en Vercel no quede "la clave ENC1". Sacarla de Vercel está
-bien. Guardada aparte, hace falta mientras exista algún dato ENC1: las diarias
-de R2 anteriores al 18-sep (hasta mediados de octubre) y la rama anterior de
-Neon mientras no se borre (`docs/operaciones/reconstruir-produccion.md` la deja
-intacta como vuelta atrás; no se verificó si sigue). Ninguna copia **mensual**
-es ENC1.
+**La copia ENC1 de la base anterior ya no se ensaya acá.** Hasta el 8-oct
+había una prueba opcional (§3.6b) para la última diaria ENC1
+(`backups/sesion-backup-2026-09-17-112606.dump.gpg`), con un quinto secreto,
+`NOTES_ENCRYPTION_KEY`. Salió del procedimiento: la retención de 30 días borra
+esa copia el 17 o el 18 de octubre, ninguna mensual es ENC1, y obligaba a pedir
+un secreto más en medio del ensayo. Si hiciera falta antes de esa fecha, el
+bloque está en el historial de este archivo (commit `9017522`).
+`NOTES_ENCRYPTION_KEY` hace falta guardada mientras exista algún dato ENC1:
+esa diaria y la rama anterior de Neon mientras no se borre
+(`docs/operaciones/reconstruir-produccion.md` la deja intacta como vuelta
+atrás).
 
 No hacen falta: `DATABASE_URL` de Neon (el ensayo nunca toca Neon),
 `CLAVES_CIFRADO_IDS` (es del automático), ni nada de Vercel, Railway o Resend.
@@ -79,58 +82,68 @@ En Ubuntu/WSL con Bash, en la máquina del dueño:
 ```bash
 bash --version | head -1
 docker version --format '{{.Server.Version}}'   # tiene que responder el SERVIDOR
-aws --version                                    # AWS CLI v2
+docker run --rm postgres:17 postgres --version   # postgres (PostgreSQL) 17.x
+aws --version                                    # aws-cli/2.x
 gpg --version | head -1
 psql --version; pg_restore --version            # 17.x
 node --version                                   # v22
 ```
 
-Estado de esta máquina al escribir esto (26-sep): psql y pg_restore 17.10, gpg
-2.4.4 y Node 22.23 están; **`aws` no está instalado** y **`docker` no responde
-dentro de WSL** ("could not be found in this WSL 2 distro": Docker Desktop
-apagado o sin la integración con WSL activada). Hay que resolver las dos cosas
-antes. Si `docker pull` falla con `docker-credential-desktop.exe`, correr con
-`DOCKER_CONFIG` apuntando a una carpeta con un `config.json` que diga `{}`.
+Estado de esta máquina al 8-oct-2026: Docker responde dentro de WSL (servidor
+29.6.1) y `postgres:17` ya está bajada (17.11); AWS CLI v2 está instalada
+(2.37.4, en `/usr/local/aws-cli`); psql y pg_restore 17.10, gpg 2.4.4 y Node
+22.23. No hace falta instalar nada. Si `docker pull` falla con
+`docker-credential-desktop.exe`, correr con `DOCKER_CONFIG` apuntando a una
+carpeta con un `config.json` que diga `{}`.
+
+Si AWS CLI faltara, se instala en el usuario, sin sudo:
+
+```bash
+cd "$(mktemp -d)" && curl -fsSLo awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip \
+  && unzip -q awscliv2.zip && ./aws/install -i ~/.local/aws-cli -b ~/.local/bin && aws --version
+```
 
 Si `psql` del PATH no es 17: `export PG_BIN=/usr/lib/postgresql/17/bin`
-(los dos guiones del ensayo lo respetan).
+(los dos guiones del ensayo y el bloque de §3.5 lo respetan).
 
 ---
 
 ## 3. Comandos, en orden
 
-Copiar cada bloque entero, uno por vez, en **la misma terminal**. Si un bloque
-da ERROR o una salida distinta a la indicada, no seguir: anotar el mensaje
-(sin credenciales) y pasar a §3.7 para limpiar.
+Copiar cada bloque entero, uno por vez, en **la misma terminal**, en este
+orden: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7. Sólo 3.1 pregunta algo; los demás
+corren solos. Si un bloque da ERROR o una salida distinta a la indicada, no
+seguir: anotar el mensaje (sin credenciales) y pasar a §3.7 para limpiar.
 
-### 3.1 Terminal privada, checkout y secretos
+### 3.1 Secretos, terminal privada y checkout de release
 
 ```bash
 set +x
 umask 077
-cd ~/proyectos/sesion-arreglos
-git fetch origin
-git worktree add --detach ../sesion-ensayo-acta origin/release
-cd ../sesion-ensayo-acta
-git log -1 --format='Ensayo con el código de release %h (%cs)'
-export TRABAJO_ENSAYO="$(mktemp -d /tmp/sesion-ensayo.XXXXXX)"
-
-read -rp  'Endpoint R2 (https://…r2.cloudflarestorage.com): ' R2_ENDPOINT
-read -rp  'Bucket de respaldos (R2_BUCKET): ' R2_BUCKET
 read -rsp 'R2 access key id: ' AWS_ACCESS_KEY_ID; printf '\n'
 read -rsp 'R2 secret access key: ' AWS_SECRET_ACCESS_KEY; printf '\n'
 read -rsp 'Passphrase del respaldo (BACKUP_ENCRYPTION_KEY): ' BACKUP_ENCRYPTION_KEY; printf '\n'
 read -rsp 'Llavero ENC2 de la época del respaldo, del gestor (todas las claves): ' CLAVES_CIFRADO; printf '\n'
-# Sólo si se va a hacer la prueba opcional §3.6b; si no, Enter vacío.
-read -rsp 'Clave ENC1 (NOTES_ENCRYPTION_KEY, opcional): ' CLAVE_ENC1; printf '\n'
-# Ids de claves perdidas (no son secretos). Enter vacío si no hay ninguna.
-read -rp  'Ids de claves históricas (CLAVES_HISTORICAS_IDS, ej. 1): ' CLAVES_HISTORICAS_IDS
-export R2_ENDPOINT R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO CLAVE_ENC1 CLAVES_HISTORICAS_IDS
+read -rp  'Endpoint R2 (https://…r2.cloudflarestorage.com): ' R2_ENDPOINT
+read -rp  'Bucket de respaldos (R2_BUCKET): ' R2_BUCKET
+read -rp  'Ids de claves históricas (CLAVES_HISTORICAS_IDS, ej. 1; Enter si ninguna): ' CLAVES_HISTORICAS_IDS
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO R2_ENDPOINT R2_BUCKET CLAVES_HISTORICAS_IDS
 export AWS_DEFAULT_REGION=auto AWS_PAGER=""
 export AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
 unset AWS_SESSION_TOKEN DATABASE_URL
+export TRABAJO_ENSAYO="$(mktemp -d /tmp/sesion-ensayo.XXXXXX)"
+export REPO_ENSAYO="$HOME/proyectos/sesion-ensayo-$(date +%F)"
+git -C ~/proyectos/sesion fetch -q origin
+[ -d "$REPO_ENSAYO" ] || git -C ~/proyectos/sesion worktree add -q --detach "$REPO_ENSAYO" origin/release
+git -C "$REPO_ENSAYO" checkout -q --detach origin/release
+cd "$REPO_ENSAYO"
+git log -1 --format='Ensayo con el código de release %h (%cs)'
 echo "Carpeta privada: $TRABAJO_ENSAYO"
 ```
+
+Las cuatro primeras preguntas no muestran lo que se escribe (`-s`): se pega
+con el botón derecho o Ctrl+Shift+V y se aprieta Enter, aunque no se vea nada.
+Las tres siguientes no son secretas y sí se ven.
 
 Las credenciales van por variables de entorno y no con `aws configure`, para
 que no queden escritas en `~/.aws/`. Las dos de checksum hacen lo mismo que
@@ -140,9 +153,13 @@ checksum nuevo de aws-cli ≥ 2.23 en todas las rutas).
 El checkout es de `release`, no de `main`: el guion compara la copia contra el
 `prisma/schema.prisma` de la carpeta desde la que corre, y la copia es de lo
 que está publicado. Con `main` adelantado en una migración, el ensayo diría
-"esquema desconocido" de copias sanas.
+"esquema desconocido" de copias sanas. Va a una carpeta con la fecha del día,
+`~/proyectos/sesion-ensayo-AAAA-MM-DD`, que queda para escribir el acta (§4):
+si ya existe (un segundo intento el mismo día), se reusa y se pone en el
+`release` actual.
 
-**Bien:** muestra el SHA de release y la carpeta privada. Anotar el SHA para el acta.
+**Bien:** imprime `Ensayo con el código de release <sha> (<fecha>)` y la
+carpeta privada. Anotar el SHA para el acta.
 
 ### 3.2 Elegir y bajar las dos copias
 
@@ -169,8 +186,9 @@ sha256sum "$TRABAJO_ENSAYO"/*/copia.dump.gpg
 
 **Bien:** dos claves de la forma `backups/sesion-backup-AAAA-MM-DD-HHMMSS.dump.gpg`
 y `backups/mensuales/sesion-backup-…`, y dos huellas de 64 caracteres. La
-mensual esperable hoy es `backups/mensuales/sesion-backup-2026-09-22-112134.dump.gpg`
-(la única: ver §6). Anotar claves y huellas para el acta.
+mensual es la más vieja que quede (las mensuales se guardan 12 meses; la
+primera es `backups/mensuales/sesion-backup-2026-09-22-112134.dump.gpg`).
+Anotar claves y huellas para el acta.
 **Si dice "falta una de las dos copias":** seguir sólo con la que exista y
 decirlo en el acta; si falta la diaria, parar.
 
@@ -203,15 +221,15 @@ psql -X -At -c 'SHOW server_version' "$DATABASE_URL"
 ```bash
 cd "$TRABAJO_ENSAYO/diaria"
 inicio=$(date +%s)
-"$OLDPWD/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
+"$REPO_ENSAYO/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
 echo "duración: $(( $(date +%s) - inicio )) s"
 psql -X -At -c \
   "SELECT 'última migración: ' || migration_name FROM _prisma_migrations ORDER BY finished_at DESC NULLS LAST LIMIT 1" \
   "$DB_ENSAYO"
-cd "$OLDPWD"
+cd "$REPO_ENSAYO"
 ```
 
-(`$OLDPWD` es la carpeta del worktree del bloque 3.1.) El guion: descifra con
+El guion: descifra con
 gpg y restaura con `pg_restore --exit-on-error` (`scripts/ensayo/restaurar.sh`),
 y corre `scripts/ensayo/verificar-restauracion.mjs` con el llavero, que:
 
@@ -228,12 +246,15 @@ y corre `scripts/ensayo/verificar-restauracion.mjs` con el llavero, que:
    (`nota_final_encrypted`, o `nota_ia_encrypted` si no hay ninguna final)
    más vieja y más nueva, y la versión del Recorrido (`hilo_versiones`) más
    vieja y más nueva. Valida la forma (SOAP con sus cuatro claves; objeto JSON
-   para el Recorrido). No imprime contenido. Con una copia ENC1 (§3.6b)
-   descifra en cambio `nota_soap_encrypted` y el contexto longitudinal;
+   para el Recorrido). No imprime contenido. (Con una copia ENC1 de la base
+   anterior descifraría en cambio `nota_soap_encrypted` y el contexto
+   longitudinal; este procedimiento ya no las ensaya, ver §1);
 4. cuenta filas huérfanas por cada clave foránea.
 
 **Bien:** termina con `restauración verificada: OK`, dice `esquema restaurado:
-nuevo (contrato elegido por su última migración, …)`, `columnas cifradas: …
+nuevo (contrato elegido por su última migración, …)` (o el de un contrato
+congelado, como `nuevo-sin-whatsapp`, si la copia es anterior a la última
+migración publicada), `columnas cifradas: …
 (ENC2, … por clave {"2":…}, inválidos 0)`, `muestras descifradas: 4/4`,
 `violaciones 0`, y deja `resultado-manual.json`.
 
@@ -244,7 +265,10 @@ medio recifrar), `clave histórica no disponible: id 1, N blobs` y
 `restauración verificada: OK`. La copia se restauró; sus notas no se pueden
 leer porque la clave no existe. Va al acta así, con la fecha de la copia.
 
-**Si falla, leer el motivo antes de concluir nada:**
+**Si falla,** no aparece `restauración verificada: OK`: el guion termina con
+`Problemas:` y una línea por motivo (o, si ni siquiera restauró, con un
+`ERROR:` de gpg o de pg_restore, como `no se pudo descifrar: passphrase
+equivocada o archivo dañado/truncado`). Leer el motivo antes de concluir nada:
 
 - `falta la clave N en el llavero`: hay datos cifrados con una clave que el
   `CLAVES_CIFRADO` cargado no trae (una retirada o una copia incompleta del
@@ -275,7 +299,8 @@ Este bloque las descifra con el mismo llavero y las mismas reglas (ENC1: sin
 AAD, prueba cada clave; ENC2: id del byte 4 y AAD
 `sesiones_clinicas:transcripcion_encrypted:<id>`). Imprime ids, clave y sí/no;
 **nunca el texto**. Se probó con blobs sintéticos ENC1 y ENC2 (clave correcta,
-equivocada, ausente y blob movido de fila); no se probó contra una copia real.
+equivocada, ausente y blob movido de fila) y, el 8-oct, dentro del ensayo
+general completo con copias inventadas (§7); no se probó contra una copia real.
 
 ```bash
 cat > "$TRABAJO_ENSAYO/transcripcion.mjs" <<'JS'
@@ -283,8 +308,17 @@ import { execFileSync } from "node:child_process";
 import { createDecipheriv } from "node:crypto";
 
 const psql = process.env.PG_BIN ? `${process.env.PG_BIN}/psql` : "psql";
-const sql = (q) => execFileSync(psql, ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", q, process.env.DB_ENSAYO],
-  { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+const sql = (q) => {
+  try {
+    return execFileSync(psql, ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", q, process.env.DB_ENSAYO],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+  } catch {
+    // El mensaje de psql ya salió arriba; sin la cadena de conexión ni la pila.
+    console.log("transcripciones: no se pudo consultar ensayo_manual (el error de psql está arriba). " +
+      "Casi siempre es que la restauración de este bloque o del anterior falló: mirar su ERROR.");
+    process.exit(1);
+  }
+};
 
 const llavero = new Map();
 for (const e of (process.env.CLAVES_CIFRADO ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
@@ -361,71 +395,43 @@ El guion crea la base `ensayo_manual` y se niega si ya existe: se borra antes.
 psql -X -q -v ON_ERROR_STOP=1 -c 'DROP DATABASE ensayo_manual' "$DATABASE_URL"
 cd "$TRABAJO_ENSAYO/mensual"
 inicio=$(date +%s)
-"$OLDPWD/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
+"$REPO_ENSAYO/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
 echo "duración: $(( $(date +%s) - inicio )) s"
-cd "$OLDPWD"
+psql -X -At -c \
+  "SELECT 'última migración: ' || migration_name FROM _prisma_migrations ORDER BY finished_at DESC NULLS LAST LIMIT 1" \
+  "$DB_ENSAYO"
 node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/mensual/transcripcion.txt"
+cd "$REPO_ENSAYO"
 ```
 
-Mismo criterio de **Bien** que 3.4 y 3.5: la mensual del 22-sep también es
-del esquema nuevo (desde entonces las migraciones sólo agregaron un CHECK, dos
-índices y un trigger, ninguna columna). Es anterior al recifrado del 29-sep:
-sus blobs son de la clave 1 (el automático del 2-oct contó 99). Si la clave 1
-no está en el gestor, esta es la copia que da "clave histórica no
-disponible".
-
-### 3.6b Opcional, sólo hasta mediados de octubre: una copia ENC1 de la base anterior
-
-La última diaria de la base anterior es
-`backups/sesion-backup-2026-09-17-112606.dump.gpg`. Probarla demuestra que
-`NOTES_ENCRYPTION_KEY` abre lo que había antes de la reconstrucción. No es
-condición para el acta ni para vaciar la base de prueba. Necesita `CLAVE_ENC1`.
-
-```bash
-ENC1_KEY=backups/sesion-backup-2026-09-17-112606.dump.gpg
-if [ -n "$CLAVE_ENC1" ] && aws s3api head-object --bucket "$R2_BUCKET" --key "$ENC1_KEY"      --endpoint-url "$R2_ENDPOINT" > /dev/null 2>&1; then
-  mkdir -p "$TRABAJO_ENSAYO/enc1"
-  aws s3 cp "s3://$R2_BUCKET/$ENC1_KEY" "$TRABAJO_ENSAYO/enc1/copia.dump.gpg"     --endpoint-url "$R2_ENDPOINT" --only-show-errors
-  sha256sum "$TRABAJO_ENSAYO/enc1/copia.dump.gpg"
-  psql -X -q -v ON_ERROR_STOP=1 -c 'DROP DATABASE ensayo_manual' "$DATABASE_URL"
-  cd "$TRABAJO_ENSAYO/enc1"
-  CLAVES_HISTORICAS_IDS= CLAVES_CIFRADO="1=$CLAVE_ENC1" "$OLDPWD/scripts/ensayo/ensayo-manual.sh" ./copia.dump.gpg 2>&1 | tee salida.txt
-  cd "$OLDPWD"
-  CLAVES_HISTORICAS_IDS= CLAVES_CIFRADO="1=$CLAVE_ENC1" node "$TRABAJO_ENSAYO/transcripcion.mjs" | tee "$TRABAJO_ENSAYO/enc1/transcripcion.txt"
-else
-  echo "Sin CLAVE_ENC1 o la copia ENC1 ya no está en R2: prueba ENC1 salteada."
-fi
-```
-
-El llavero de este bloque usa el id `1` sólo como etiqueta de la clave ENC1
-(ENC1 no guarda id): no es la clave 1 de ENC2. Por eso se vacía
-`CLAVES_HISTORICAS_IDS`, que puede traer ese mismo número y el verificador
-rechazaría como clave disponible e histórica a la vez.
-
-**Bien:** `esquema restaurado: produccion-d02ae0e`, `ENC1`, `muestras
-descifradas: 4/4` (nota clínica y contexto longitudinal, viejos y nuevos) y
-dos transcripciones `sí`. El 16-sep esa base tenía 36 pacientes, 113 turnos y
-43 sesiones clínicas (issue #33). **Si dice "ENC1 no descifra con ninguna clave
-del llavero":** la clave cargada no es la `NOTES_ENCRYPTION_KEY` de esa época o
-está mal copiada; no es corrupción hasta descartar eso.
+Mismo criterio de **Bien** que 3.4 y 3.5. La mensual más vieja es anterior a
+migraciones posteriores, así que es esperable que diga un contrato congelado:
+la del 22-sep tiene como última migración
+`20260918120000_grabador_restaurado` y da `esquema restaurado:
+nuevo-con-audio` (corrida automática `37814736865`, 8-oct). Las diarias de
+antes de publicar `20261008120000_whatsapp_asistido` dan
+`nuevo-sin-whatsapp`. Es anterior al recifrado del 29-sep: sus blobs son de la
+clave 1 (el automático del 2-oct contó 99). Si la clave 1 no está en el gestor,
+esta es la copia que da "clave histórica no disponible".
 
 Ahora es el momento de copiar al acta lo que haga falta de
-`$TRABAJO_ENSAYO/{diaria,mensual,enc1}/` (`salida.txt`, `resultado-manual.json`,
+`$TRABAJO_ENSAYO/{diaria,mensual}/` (`salida.txt`, `resultado-manual.json`,
 `transcripcion.txt`): en §3.7 se borra todo.
 
 ### 3.7 Limpiar (correr siempre, aunque algo haya fallado)
 
 ```bash
+cd "$REPO_ENSAYO"
 docker rm -f "$CONTENEDOR_ENSAYO" > /dev/null 2>&1 || true
 rm -rf "$TRABAJO_ENSAYO"
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO CLAVE_ENC1 \
-      DATABASE_URL DB_ENSAYO R2_ENDPOINT R2_BUCKET
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY BACKUP_ENCRYPTION_KEY CLAVES_CIFRADO \
+      CLAVES_HISTORICAS_IDS DATABASE_URL DB_ENSAYO R2_ENDPOINT R2_BUCKET TRABAJO_ENSAYO
 docker ps -a --filter "name=sesion-ensayo" --format '{{.Names}}'
 ```
 
 **Bien:** la última línea no imprime nada. Si se creó un token de R2 sólo para
-esto, borrarlo en Cloudflare. El worktree `../sesion-ensayo-acta` queda para
-escribir el acta (§4).
+esto, borrarlo en Cloudflare. La carpeta `$REPO_ENSAYO`
+(`~/proyectos/sesion-ensayo-AAAA-MM-DD`) queda para escribir el acta (§4).
 
 ---
 
@@ -453,9 +459,10 @@ Consecuencias:
 
 - Fecha, quién ejecutó, SHA de `release` usado (3.1), destino: *contenedor
   postgres:17 local en tmpfs*; duración total.
-- Por cada copia (diaria y mensual, y la ENC1 si se hizo 3.6b): la clave de
-  R2 y su `sha256`, el esquema que informó el guion (`nuevo` esperado; la ENC1,
-  `produccion-d02ae0e`) y la última migración.
+- Por cada copia (diaria y mensual): la clave de R2 y su `sha256`, el esquema
+  que informó el guion (en la diaria, `nuevo` o, si es de antes de la última
+  migración publicada, un contrato congelado como `nuevo-sin-whatsapp`; en la
+  mensual del 22-sep, `nuevo-con-audio`) y la última migración.
 - Conteo de filas por tabla (la tabla que imprime el guion, o
   `resultado-manual.json`) comparado a ojo con lo que tiene hoy el consultorio.
 - Formato de cifrado: `ENC2` en todas las columnas `*_encrypted`, blobs por id
@@ -463,10 +470,8 @@ Consecuencias:
 - Claves foráneas: verificadas / violaciones (0).
 - **Descifrado**, por copia, con ids y sí/no, sin texto:
   - nota clínica más vieja y más nueva;
-  - versión del Recorrido más vieja y más nueva (en la copia ENC1 su lugar lo
-    ocupa el contexto longitudinal);
-  - transcripción más vieja y más nueva (3.5; la plantilla no la tiene:
-    agregar las dos líneas);
+  - versión del Recorrido más vieja y más nueva;
+  - transcripción más vieja y más nueva (3.5);
   - ids de clave del llavero usados (el número, nunca el valor).
 - Si algo dijo NO: el motivo que imprimió el guion (clave ausente,
   autenticación, formato), sin texto clínico.
@@ -477,18 +482,36 @@ cadena de conexión ni texto clínico. Ids de filas sí (ya figuran en el issue 
 
 ---
 
-## 5. Tiempo estimado
+## 5. Tiempo
+
+Medido el 8-oct en el ensayo general (§7), en esta máquina, con copias
+inventadas de unos 15 KB y un R2 simulado local:
+
+| Bloque | Tiempo medido |
+| --- | --- |
+| 3.1 secretos y checkout (sin contar escribir las siete respuestas) | 5 s, casi todo el `git fetch` |
+| 3.2 elegir y bajar las dos copias | 2 s |
+| 3.3 Postgres 17 en Docker (imagen ya bajada) | 2 s |
+| 3.4 restaurar y verificar la diaria | 4 s |
+| 3.5 transcripciones de la diaria | menos de 1 s |
+| 3.6 la mensual, con sus transcripciones | 4 s |
+| 3.7 limpiar | menos de 1 s |
+| **Total de los bloques** | **17 s** |
+
+Con las copias reales cambian dos cosas, que no se pudieron medir: la bajada
+desde R2 (la diaria pesaba 1,5 MB y la mensual 0,9 MB a fines de septiembre,
+según los logs de `.github/workflows/backup.yml`) y la restauración, que crece con el
+tamaño; a ese tamaño debería seguir siendo cosa de segundos. Lo que sí lleva
+tiempo es lo de alrededor:
 
 | Parte | Tiempo |
 | --- | --- |
-| Instalar AWS CLI y activar Docker en WSL (una sola vez) | 15–30 min |
 | Juntar los secretos (§1) | 5–15 min si están en el gestor; indefinido si no |
-| Bajar las dos copias | < 1 min: la diaria del 26-sep pesa 1,5 MB y la mensual del 22-sep, 0,9 MB (logs de `.github/workflows/backup.yml`) |
-| Primer `docker pull postgres:17` | 1–3 min |
-| Restaurar y verificar cada copia (3.4–3.6b) | < 1 min cada una a este tamaño (hipótesis: no se cronometró con una copia real) |
+| Primer `docker pull postgres:17`, si no está | 1–3 min |
+| Correr §3 entero y leer cada salida | 10–15 min |
 | Escribir el acta, PR y merge | 20–30 min |
 
-**Total: alrededor de una hora**, la mayor parte en preparar y en el acta.
+**Total: menos de una hora**, casi toda en juntar secretos y en el acta.
 
 ---
 
@@ -545,6 +568,37 @@ documento no lo dispara.
 
 ## 7. Verificado y no verificado
 
+**Verificado corriendo, el 8-oct, sin ningún secreto real** (`release` =
+`445141f`): un ensayo general con todo inventado. Se armó una base con las
+migraciones de `release` y datos ficticios cifrados en ENC2 con dos claves
+generadas al azar (la 1 en septiembre, la 2 en octubre); se hizo `pg_dump` y
+`gpg` con los mismos parámetros que `.github/workflows/backup.yml` y una passphrase inventada;
+y se subieron una diaria vieja, una mensual (sin la migración de WhatsApp) y
+una diaria nueva a un S3 local (`motoserver/moto` en Docker) con credenciales
+inventadas. Después se corrieron los siete bloques de §3, extraídos tal cual
+de este archivo, en una sola sesión de bash:
+
+- 3.1 a 3.7 dicen lo que este documento dice que dicen: el SHA de release,
+  la diaria más nueva y la mensual (no la diaria vieja), `17.11`,
+  `esquema restaurado: nuevo` en la diaria y `nuevo-sin-whatsapp` en la
+  mensual, `muestras descifradas: 4/4`, `violaciones 0`,
+  `restauración verificada: OK`, dos transcripciones `sí` por copia, y 3.7
+  sin contenedores ni carpeta privada al final.
+- Con el llavero sin la clave 1 y `CLAVES_HISTORICAS_IDS=1`: la diaria da
+  `2/4, de clave histórica: 2`, la mensual `0/4, de clave histórica: 4`,
+  `clave histórica no disponible: id 1, 6 blobs` y OK, como dice §3.4.
+- Con el llavero sin la clave 1 y sin declararla: `Problemas:` y
+  `falta la clave 1 en el llavero … No es corrupción`, y la transcripción
+  `NO — clave_ausente`.
+- Con la passphrase equivocada: `ERROR: … no se pudo descifrar: passphrase
+  equivocada o archivo dañado/truncado.`
+- Un segundo intento el mismo día reusa la carpeta de release sin error.
+
+Lo que este ensayo general no prueba: la autenticación contra R2 (el S3 local
+acepta cualquier credencial), la región `auto` de R2 (el S3 local la acepta
+para leer pero no para crear un bucket, cosa que el ensayo no hace) y nada de
+lo que depende de los valores reales (abajo).
+
 **Verificado leyendo el repo y GitHub** (26-sep, `main` = `a6f6e74`):
 
 - El flujo de `.github/workflows/backup.yml` (pg_dump custom → gpg AES-256 simétrico → R2 bajo
@@ -577,11 +631,10 @@ documento no lo dispara.
   transcripción: el verificador exige muestras y falla sin ellas.
 - (Verificado después, el 2-oct, por el automático: la mensual del 22-sep
   restaura con el esquema `nuevo`.)
-- Para 3.6b: que el dueño tenga `NOTES_ENCRYPTION_KEY` y que sea la misma con
+- (Retirado el 8-oct, ver §1) que el dueño tenga `NOTES_ENCRYPTION_KEY` y que sea la misma con
   la que se cifró todo lo de la base anterior (ENC1 no admitía rotación).
 - Que notas, versiones del Recorrido y transcripciones descifren: es justamente
   lo que el ensayo tiene que mostrar.
-- Los tiempos de restauración de §5.
-- El comportamiento de `docker port` y de la red en WSL con Docker Desktop:
-  hoy Docker no responde en esta distribución y no se pudo ensayar el bloque
-  3.3.
+- Los tiempos de §5 con copias del tamaño real.
+- (Verificado el 8-oct: `docker port` y la red en WSL con Docker Desktop
+  funcionan; el bloque 3.3 corrió.)
