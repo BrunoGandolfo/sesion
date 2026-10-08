@@ -318,6 +318,41 @@ export const RECORDATORIO_MOMENTOS = {
   },
 } as const;
 
+/** Cómo se recuerdan los turnos, en Configuración. SMS es lo de siempre:
+ *  sale solo, desde un número de servicio. Con WhatsApp el mensaje lo manda
+ *  ella desde su teléfono, y por eso las respuestas le llegan a ella. */
+export const RECORDATORIO_CANAL_LEYENDA = "Cómo recordás los turnos";
+export const RECORDATORIO_CANALES = {
+  sms: {
+    label: "SMS automático",
+    detalle: "La app manda el SMS sola. Las respuestas no te llegan.",
+  },
+  whatsapp: {
+    label: "WhatsApp desde mi teléfono",
+    detalle: "La app te prepara el mensaje y lo mandás vos; las respuestas te llegan a tu WhatsApp.",
+  },
+  ambos: {
+    label: "Ambos",
+    detalle: "Sale el SMS automático y además tenés el WhatsApp preparado en Hoy.",
+  },
+} as const;
+
+// ─── Recordatorios por WhatsApp, en Hoy ─────────────────────────────────────
+
+export const RECORDATORIOS_PARA_HOY = "Recordatorios para hoy";
+export const SIN_TURNOS_PARA_AVISAR = "No hay turnos para avisar hoy";
+export const ABRIR_WHATSAPP = "Abrir WhatsApp";
+export const SIN_AVISAR = "Sin avisar";
+export const SIN_TELEFONO = "Sin teléfono";
+export const SIN_ENLACE = "No se pudo preparar el mensaje";
+export const NO_SE_LEYERON_RECORDATORIOS = "No se pudieron leer los recordatorios de hoy.";
+/** El WhatsApp se abrió igual; lo que falló es anotarlo. */
+export const NO_SE_ANOTO_AVISO = "Se abrió WhatsApp, pero no quedó anotado.";
+
+export function avisadoA(hora: string): string {
+  return `Avisado ${hora}`;
+}
+
 /** La excepción de "La misma mañana": si el aviso de la mañana no llegaría
  *  antes del turno, sale la tarde anterior. `limite` es el primer minuto en
  *  que eso ya no puede pasar. */
@@ -484,6 +519,11 @@ export const COBRAR = "Cobrar";
 
 /** Enlace a la ficha de la paciente desde cualquier tarjeta. */
 export const VER_FICHA = "Ver ficha";
+
+/** Arriba de la nota anterior mientras se escribe la nueva ("Volver a
+ *  escribirla"), en la pantalla de la sesión. */
+export const REESCRIBIENDO_VERSION_ANTERIOR =
+  "Se está escribiendo de nuevo. Esto es la versión anterior; cuando termine, la reemplaza.";
 
 /** La hora del turno ya empezó y todavía no terminó. */
 export const EN_CURSO = "En curso";
@@ -1708,6 +1748,10 @@ export const ENTRADA_REINGRESO =
 export const MOTIVO_SIN_TELEFONO = "la paciente no tiene teléfono cargado";
 
 export const MOTIVO_TURNO_CERRADO = "el turno dejó de estar programado";
+
+/** El SMS del recordatorio que el cron cancela porque ella eligió avisar
+ *  por WhatsApp (Configuracion.canalRecordatorio). */
+export const MOTIVO_CANAL_WHATSAPP = "el recordatorio va por WhatsApp, no por SMS";
 
 export const MOTIVO_REPROGRAMADO = "el turno se reprogramó: sale un aviso nuevo";
 

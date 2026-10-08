@@ -77,6 +77,7 @@ export {
   VUELVE_A_APARECER,
   busquedaSinResultados,
   resultadoDeBusqueda,
+  REESCRIBIENDO_VERSION_ANTERIOR,
 } from "@/lib/glosario";
 
 import {
@@ -112,10 +113,3 @@ export const SECCIONES_SOAP: ReadonlyArray<{
  */
 export const HABLANTE_1 = "Hablante 1";
 export const HABLANTE_2 = "Hablante 2";
-
-/**
- * Arriba de la nota anterior mientras se escribe la nueva ("Volver a
- * escribirla"). Propio de esta pantalla: no se usa en ninguna otra.
- */
-export const REESCRIBIENDO_VERSION_ANTERIOR =
-  "Se está escribiendo de nuevo. Esto es la versión anterior; cuando termine, la reemplaza.";

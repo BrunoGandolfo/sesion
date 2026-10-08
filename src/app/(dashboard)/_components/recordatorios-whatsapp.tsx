@@ -19,26 +19,22 @@ import Link from "next/link";
 import { Button, Card } from "@/components/ui";
 import { esAbort } from "@/lib/api-client";
 import { fechaCorta, hora } from "@/lib/format";
-import { REINTENTAR } from "@/lib/glosario";
-
-import {
-  leerRecordatoriosWhatsapp,
-  muestraWhatsapp,
-  registrarAbierto,
-} from "./recordatorios-datos";
-import type { RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
 import {
   ABRIR_WHATSAPP,
   NO_SE_ANOTO_AVISO,
   NO_SE_LEYERON_RECORDATORIOS,
   RECORDATORIOS_PARA_HOY,
+  REINTENTAR,
   SIN_AVISAR,
   SIN_ENLACE,
   SIN_TELEFONO,
   SIN_TURNOS_PARA_AVISAR,
   VER_FICHA,
   avisadoA,
-} from "./textos";
+} from "@/lib/glosario";
+import type { RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
+
+import { leerRecordatoriosWhatsapp, muestraWhatsapp, registrarAbierto } from "./recordatorios-datos";
 import { Titulo } from "./titulo";
 
 export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number }) {

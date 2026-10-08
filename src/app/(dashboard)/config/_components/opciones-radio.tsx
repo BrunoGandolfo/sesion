@@ -10,11 +10,14 @@ import {
   CTSR,
   GTFS,
   MITI,
+  RECORDATORIO_CANAL_LEYENDA,
+  RECORDATORIO_CANALES,
   RECORDATORIO_MISMA_MANANA_EXCEPCION,
   RECORDATORIO_MOMENTOS,
 } from "@/lib/glosario";
 import { formatearHoraMvd, instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import {
+  CANALES_RECORDATORIO,
   DISPERSION_MINUTOS,
   RECORDATORIO_MODOS,
   calcularProgramadoEn,
@@ -194,24 +197,11 @@ export function CuandoAvisar({
 // el mensaje lo manda ella desde su teléfono, y por eso las respuestas le
 // llegan a ella.
 
-const CANALES: Opcion<CanalRecordatorio>[] = [
-  {
-    valor: "sms",
-    titulo: "SMS automático",
-    detalle: "La app manda el SMS sola. Las respuestas no te llegan.",
-  },
-  {
-    valor: "whatsapp",
-    titulo: "WhatsApp desde mi teléfono",
-    detalle:
-      "La app te prepara el mensaje y lo mandás vos; las respuestas te llegan a tu WhatsApp.",
-  },
-  {
-    valor: "ambos",
-    titulo: "Ambos",
-    detalle: "Sale el SMS automático y además tenés el WhatsApp preparado en Hoy.",
-  },
-];
+const CANALES: Opcion<CanalRecordatorio>[] = CANALES_RECORDATORIO.map((valor) => ({
+  valor,
+  titulo: RECORDATORIO_CANALES[valor].label,
+  detalle: RECORDATORIO_CANALES[valor].detalle,
+}));
 
 export function SelectorCanal({
   value,
@@ -222,7 +212,7 @@ export function SelectorCanal({
 }) {
   return (
     <OpcionesRadio
-      leyenda="Cómo recordás los turnos"
+      leyenda={RECORDATORIO_CANAL_LEYENDA}
       opciones={CANALES}
       valor={value}
       onChange={onChange}

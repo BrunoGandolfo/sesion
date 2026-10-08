@@ -57,7 +57,7 @@ export type ClienteEnvios = Pick<typeof db, "envioSms" | "paciente" | "configura
 /** Estados desde los que un envío TODAVÍA puede terminar mandando un SMS. */
 export const ESTADOS_CON_ENVIO_PENDIENTE = ["pendiente", "enviando"] as const;
 
-export { MOTIVO_TURNO_CERRADO } from "@/lib/glosario";
+export { MOTIVO_CANAL_WHATSAPP, MOTIVO_TURNO_CERRADO } from "@/lib/glosario";
 
 export function claveDelTurno(turnoId: string, fechaTurno: Date): string {
   return `turno:${turnoId}:${fechaTurno.toISOString()}`;
@@ -219,10 +219,6 @@ export async function cancelarEnviosDelTurno(
  *  baja: la baja la pidió la paciente, archivar lo decidió la profesional. */
 export const MOTIVO_PACIENTE_ARCHIVADA = "la paciente está archivada";
 
-/** Por qué no salió el SMS del recordatorio cuando la profesional eligió
- *  WhatsApp (Configuracion.canalRecordatorio): lo decide el cron al
- *  despachar. Es terminal y lo lee ella en el turno, como los demás. */
-export const MOTIVO_CANAL_WHATSAPP = "el recordatorio va por WhatsApp, no por SMS";
 
 /**
  * Apaga los envíos de la paciente que todavía pueden mandar un SMS, de

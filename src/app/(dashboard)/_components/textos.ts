@@ -16,21 +16,3 @@ export function notasQueFallaron(cantidad: number): string {
  *  reproceso la rechazaría, así que no se promete un reintento. */
 export const NO_SE_PUEDE_REINTENTAR =
   "No se puede reintentar; se puede eliminar";
-
-// ─── Recordatorios por WhatsApp ─────────────────────────────────────────────
-
-export const RECORDATORIOS_PARA_HOY = "Recordatorios para hoy";
-export const SIN_TURNOS_PARA_AVISAR = "No hay turnos para avisar hoy";
-export const ABRIR_WHATSAPP = "Abrir WhatsApp";
-export const SIN_AVISAR = "Sin avisar";
-export const SIN_TELEFONO = "Sin teléfono";
-export const SIN_ENLACE = "No se pudo preparar el mensaje";
-export const VER_FICHA = "Ver ficha";
-export const NO_SE_LEYERON_RECORDATORIOS =
-  "No se pudieron leer los recordatorios de hoy.";
-/** El WhatsApp se abrió igual; lo que falló es anotarlo. */
-export const NO_SE_ANOTO_AVISO = "Se abrió WhatsApp, pero no quedó anotado.";
-
-export function avisadoA(hora: string): string {
-  return `Avisado ${hora}`;
-}
