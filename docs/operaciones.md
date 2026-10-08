@@ -421,6 +421,10 @@ No se describe un esquema antiguo de horas de anticipación.
   saliendo por SMS (lo pide ella desde Cobros).
 - `ambos`: sale el SMS y además se prepara el WhatsApp.
 
+Las pacientes cuyo teléfono está en `bajas_sms` (respondieron BAJA, o Twilio
+lo marcó con 21610) quedan fuera de la lista de WhatsApp: la baja se respeta
+también en el canal asistido.
+
 Con `whatsapp` o `ambos`, `GET /api/recordatorios/whatsapp` lista los turnos
 cuyo envío tiene `programado_en` hoy (Montevideo), más los vencidos que el
 cron trata hoy (agendado o reabierto hoy para esta tarde: el SMS saldría

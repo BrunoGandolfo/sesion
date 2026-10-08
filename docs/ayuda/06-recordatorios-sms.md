@@ -13,15 +13,31 @@ vale para todos los turnos:
   llegan."* Es lo de siempre, y lo que tiene toda cuenta que no eligió otra
   cosa. Todo el resto de esta página es sobre el SMS.
 - **WhatsApp desde mi teléfono** — *"La app te prepara el mensaje y lo mandás
-  vos; las respuestas te llegan a tu WhatsApp."* No sale ningún SMS.
+  vos; las respuestas te llegan a tu WhatsApp."* No sale ningún SMS de
+  recordatorio: cuando llega su hora, el SMS del turno queda **Cancelado** con
+  el motivo *"el recordatorio va por WhatsApp, no por SMS"*.
 - **Ambos** — sale el SMS automático y además tenés el WhatsApp preparado en
   **Hoy**. La paciente puede recibir los dos.
+
+El modo se mira en el momento en que le toca salir a cada aviso: cambiarlo
+alcanza también a los turnos que ya estaban agendados. El aviso de **Recordar
+cobro por SMS** sale por SMS en cualquiera de los tres modos.
 
 ## WhatsApp desde tu teléfono
 
 Con **WhatsApp desde mi teléfono** o **Ambos**, en **Hoy** aparece el bloque
 **Recordatorios para hoy**, después de la agenda del día. Si no hay a quién
 avisar, dice *"No hay turnos para avisar hoy"*.
+
+**Qué turnos aparecen.** Los que tienen el recordatorio para hoy según lo que
+elegiste en **Cuándo se avisa**: con **El día anterior**, hoy aparecen los
+turnos de mañana; con **Dos días antes**, los de pasado mañana; con **La misma
+mañana**, los de hoy. También los que agendaste hoy cuando la hora del aviso ya
+había pasado (por ejemplo, un turno de esta tarde agendado esta mañana): el SMS
+saldría enseguida, y el WhatsApp queda para hoy. No aparecen los turnos que ya
+empezaron, los cancelados ni las pacientes archivadas. Tampoco las pacientes
+que pidieron no recibir más SMS respondiendo **BAJA**: la app respeta ese
+pedido también en el WhatsApp.
 
 Cada fila tiene la paciente, el día y la hora del turno, y cómo está:
 
@@ -43,6 +59,10 @@ pero no quedó anotado."*
 
 Como el mensaje sale de tu número, **las respuestas te llegan a tu WhatsApp**,
 como cualquier conversación.
+
+Si movés un turno después de abrir su WhatsApp, la paciente tiene el horario
+viejo: el aviso nuevo es un **cambio de horario**, vuelve a aparecer en la
+lista como **Sin avisar** y su mensaje dice que el turno cambió.
 
 ## Cuándo sale el SMS
 
@@ -166,5 +186,5 @@ src/lib/glosario.ts
 vercel.json
 src/app/(dashboard)/_components/recordatorios-whatsapp.tsx
 src/app/(dashboard)/_components/recordatorios-datos.ts
-src/app/(dashboard)/_components/textos.ts
+src/app/api/_lib/casos-uso/recordatorios-whatsapp.ts
 -->
