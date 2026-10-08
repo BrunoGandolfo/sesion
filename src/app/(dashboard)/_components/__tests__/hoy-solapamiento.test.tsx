@@ -8,6 +8,9 @@ import { NO_SE_PUDO_AGENDAR, TURNO_AGENDADO, TURNO_SOLAPADO } from "@/lib/glosar
 import { Dashboard } from "../dashboard";
 import { leerHoy, SIN_PENDIENTES } from "../datos";
 import type { NuevoTurnoData } from "@/components/forms/nuevo-turno-form";
+import { relojFijo } from "./reloj-fijo";
+
+relojFijo(new Date("2026-09-10T14:00:00Z"));
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api-client", async (original) => ({

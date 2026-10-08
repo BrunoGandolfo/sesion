@@ -20,6 +20,7 @@ import type {
   SenalRiesgoDelDia,
   TurnoConPaciente,
 } from "@/types/domain";
+import { relojDelSistema, type Reloj } from "./reloj";
 
 /** Lo que se muestra cuando /api/dashboard todavía no manda `pendientes`. */
 export const SIN_PENDIENTES: PendientesTerapeuta = {
@@ -265,7 +266,7 @@ export function aplicarCobro(
 }
 
 /** Lectura pura: sin estado ni efectos. El resultado entra por then(). */
-export async function leerHoy(): Promise<EstadoHoy> {
+export async function leerHoy(reloj: Reloj = relojDelSistema): Promise<EstadoHoy> {
   const [raw, config] = await Promise.all([
     apiGet<JsonDashboard>("/api/dashboard"),
     apiGet<Pick<Configuracion, "nombreProfesional">>("/api/config").catch(
@@ -285,7 +286,7 @@ export async function leerHoy(): Promise<EstadoHoy> {
     // para la misma persona, y un ancla visual que cambia de contenido entre
     // pantallas deja de ser un ancla.
     nombre: config?.nombreProfesional?.trim() || null,
-    ahora: new Date(),
+    ahora: reloj(),
   };
 }
 

@@ -38,9 +38,10 @@ import { SegunLectura, type Carga } from "./segun-lectura";
 import { Kpis } from "./kpis";
 import { Pendientes } from "./pendientes";
 import { RecordatoriosWhatsapp } from "./recordatorios-whatsapp";
+import { relojDelSistema, type Reloj } from "./reloj";
 import { Saludo } from "./saludo";
 
-export function Dashboard() {
+export function Dashboard({ hora = relojDelSistema }: { hora?: Reloj } = {}) {
   const [estado, setEstado] = React.useState<EstadoHoy | null>(null);
   const [carga, setCarga] = React.useState<Carga>("cargando");
   // El reloj de la pantalla (ver el efecto de abajo). null hasta el primer
@@ -80,7 +81,7 @@ export function Dashboard() {
 
   React.useEffect(() => {
     let cancelado = false;
-    leerHoy()
+    leerHoy(hora)
       .then((siguiente) => {
         if (cancelado) return;
         leidoEn.current = siguiente.ahora;
@@ -93,7 +94,7 @@ export function Dashboard() {
     return () => {
       cancelado = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, hora]);
 
   // Hoy abierto no se queda en la hora en que se leyó (forense 03, P3-09):
   // el reloj avanza al empezar cada minuto, así un turno que llega a su hora
@@ -103,14 +104,14 @@ export function Dashboard() {
   React.useEffect(() => {
     let intervalo: number | undefined;
     const avanzar = () => {
-      const tic = new Date();
+      const tic = hora();
       setReloj(tic);
       if (leidoEn.current && !esMismoDiaMvd(tic, leidoEn.current)) recargar();
     };
     const primero = window.setTimeout(() => {
       avanzar();
       intervalo = window.setInterval(avanzar, 60_000);
-    }, 60_000 - (Date.now() % 60_000));
+    }, 60_000 - (hora().getTime() % 60_000));
     const alVolver = () => {
       if (document.visibilityState === "visible") recargar();
     };
@@ -120,7 +121,7 @@ export function Dashboard() {
       window.clearInterval(intervalo);
       document.removeEventListener("visibilitychange", alVolver);
     };
-  }, [recargar]);
+  }, [recargar, hora]);
 
   // El más nuevo entre el reloj y la lectura: una recarga trae su propio
   // `ahora`, que puede ser posterior al último tic.
@@ -180,14 +181,14 @@ export function Dashboard() {
         previo
           ? {
               ...previo,
-              data: aplicarCobro(previo.data, turnoId, metodo, new Date()),
+              data: aplicarCobro(previo.data, turnoId, metodo, hora()),
             }
           : previo,
       );
       setCobroConfirmado(turnoId);
       confirmar(COBRADO);
     },
-    [cobrando, confirmar],
+    [cobrando, confirmar, hora],
   );
 
   // Si la API rechaza (un 409 por solapamiento, por ejemplo), crearTurno

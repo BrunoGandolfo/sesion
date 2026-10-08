@@ -8,6 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RecordatoriosWhatsapp } from "../recordatorios-whatsapp";
 import type { RecordatoriosWhatsappDeHoy } from "@/types/domain";
+import { relojFijo } from "./reloj-fijo";
+
+relojFijo(new Date("2026-10-08T13:00:00.000Z"));
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api-client", async (original) => ({

@@ -14,6 +14,7 @@ import type { GrabacionSinTerminar, PendientesTerapeuta, TurnoConPaciente } from
 import { accionDe } from "../card-ahora";
 import { sesionesEnProceso } from "../datos";
 import { Pendientes } from "../pendientes";
+import { relojFijo } from "./reloj-fijo";
 
 vi.mock("@/lib/api-client", async (original) => ({
   ...(await original<typeof import("@/lib/api-client")>()),
@@ -31,6 +32,7 @@ beforeAll(() => {
 afterEach(() => vi.mocked(apiPost).mockReset());
 
 const AHORA = new Date("2026-09-25T15:00:00.000Z");
+relojFijo(AHORA);
 const hace = (min: number) => new Date(AHORA.getTime() - min * 60_000).toISOString();
 
 const TURNO: TurnoConPaciente = {

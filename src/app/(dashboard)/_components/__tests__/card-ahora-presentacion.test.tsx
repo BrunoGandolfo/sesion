@@ -3,6 +3,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { CardAhora } from '../card-ahora';
 import type { TurnoConPaciente } from '@/types/domain';
+import { relojFijo } from "./reloj-fijo";
+
+relojFijo(new Date(2026, 8, 11, 19));
 
 vi.mock('@/lib/api-client', () => ({ apiGet: vi.fn().mockResolvedValue(null) }));
 

@@ -3,6 +3,9 @@ import { expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Pendientes } from "./pendientes";
 import type { PendientesTerapeuta } from "@/types/domain";
+import { relojFijo } from "./__tests__/reloj-fijo";
+
+relojFijo(new Date("2026-09-23T15:00:00.000Z"));
 
 const vacios: PendientesTerapeuta = {
   notasParaRevisar: [],
