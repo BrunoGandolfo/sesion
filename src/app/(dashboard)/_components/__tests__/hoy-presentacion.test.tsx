@@ -3,6 +3,9 @@ import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { Dashboard } from '../dashboard';
 import { leerHoy, SIN_PENDIENTES } from '../datos';
+import { relojFijo } from "./reloj-fijo";
+
+relojFijo(new Date("2026-09-11T15:00:00Z"));
 vi.mock('next/navigation', () => ({useRouter: () => ({push: vi.fn()})}));
 vi.mock('../datos', async original => ({...await original<typeof import('../datos')>(), leerHoy: vi.fn()}));
 vi.mock('@/components/layout/cabecera-usuario', () => ({CabeceraUsuario: () => null}));

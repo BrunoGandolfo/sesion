@@ -11,6 +11,7 @@ import type { DashboardData, TurnoConPaciente } from "@/types/domain";
 
 import { CardAhora, accionDe } from "../card-ahora";
 import { aplicarCobro, repartirElDia } from "../datos";
+import { relojFijo } from "./reloj-fijo";
 
 const apiGet = vi.fn();
 vi.mock("@/lib/api-client", () => ({
@@ -25,6 +26,7 @@ beforeEach(() => {
 // 15:00 en Montevideo; "ahora" son las 15:20.
 const INICIO = new Date("2026-09-23T18:00:00.000Z");
 const AHORA = new Date("2026-09-23T18:20:00.000Z");
+relojFijo(AHORA);
 
 function turno(cambios: Partial<TurnoConPaciente> = {}): TurnoConPaciente {
   return {

@@ -22,6 +22,7 @@ import type { TurnoConPaciente } from "@/types/domain";
 
 import { AgendaDelDia } from "../agenda-del-dia";
 import { hayRiesgoEnElDia } from "../datos";
+import { relojFijo } from "./reloj-fijo";
 
 const push = vi.fn();
 
@@ -30,6 +31,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const AHORA = new Date("2026-09-07T15:00:00.000Z");
+relojFijo(AHORA);
 
 const TURNO: TurnoConPaciente = {
   sesionClinica: null,

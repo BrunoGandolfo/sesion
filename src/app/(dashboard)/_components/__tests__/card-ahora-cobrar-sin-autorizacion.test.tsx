@@ -10,10 +10,12 @@ import { expect, it, vi } from "vitest";
 
 import { CardAhora } from "../card-ahora";
 import type { TurnoConPaciente } from "@/types/domain";
+import { relojFijo } from "./reloj-fijo";
 
 vi.mock("@/lib/api-client", () => ({ apiGet: vi.fn().mockResolvedValue(null) }));
 
 const fecha = new Date(2026, 8, 11, 19);
+relojFijo(fecha);
 const TURNO: TurnoConPaciente = {
   id: "t1", serieId: null, pacienteId: "p1", organizationId: "org",
   fecha, duracion: 50, modalidad: "presencial", estado: "programado",

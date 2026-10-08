@@ -4,12 +4,13 @@
 // con "Preparar sesión". Hasta el 20/9 la tarjeta de ahora quedaba debajo de la
 // agenda y de los pendientes: había que pasar toda la deuda para llegar a la
 // paciente que está entrando.
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import { Dashboard } from "../dashboard";
 import { leerHoy, SIN_PENDIENTES } from "../datos";
 import type { TurnoConPaciente } from "@/types/domain";
+import { relojFijo } from "./reloj-fijo";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("../datos", async (original) => ({
@@ -24,6 +25,7 @@ vi.mock("framer-motion", async (original) => ({
 }));
 
 const AHORA = new Date("2026-09-11T15:00:00Z");
+relojFijo(AHORA);
 const TURNO: TurnoConPaciente = {
   id: "t1", organizationId: "org", pacienteId: "p1", serieId: null,
   fecha: new Date("2026-09-11T16:00:00Z"), duracion: 50, modalidad: "presencial",
@@ -59,4 +61,41 @@ it("lo primero de Hoy es el próximo encuentro, con Preparar sesión; después l
 
   const preparar = screen.getByRole("link", { name: "Preparar sesión" });
   expect(preparar.getAttribute("href")).toBe("/pacientes/p1?preparar=1");
+});
+
+it("aunque el tic del minuto dispare, Hoy sigue en su hora: el reloj no lee la hora real", async () => {
+  vi.mocked(leerHoy).mockResolvedValue({
+    nombre: null, ahora: AHORA, riesgoEnElDia: false,
+    data: {
+      inicio: { tarifaCargada: true, tienePacientes: true, tieneTurnos: true },
+      kpis: { sesionesHoy: 1, deudaAcumulada: 0, ingresosMes: 0 },
+      sesionesHoy: [TURNO], deudores: [], proximaSesion: TURNO, riesgoDelDia: [],
+      pendientes: SIN_PENDIENTES,
+    },
+  });
+  // Lo que pasaba con la suite lenta: el temporizador del minuto se cumple.
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "setInterval", "clearTimeout", "clearInterval"] });
+  vi.setSystemTime(AHORA);
+  render(<Dashboard />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
+  vi.useRealTimers();
+  expect(screen.getByRole("heading", { name: "Ana López" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Preparar sesión" })).toBeTruthy();
+  expect(document.body.textContent).not.toMatch(/de octubre/);
+});
+
+it("el reloj se inyecta: el Dashboard usa la hora que se le pasa, no la del sistema", async () => {
+  vi.mocked(leerHoy).mockImplementation(async (hora) => ({
+    nombre: null, ahora: hora!(), riesgoEnElDia: false,
+    data: {
+      inicio: { tarifaCargada: true, tienePacientes: true, tieneTurnos: true },
+      kpis: { sesionesHoy: 1, deudaAcumulada: 0, ingresosMes: 0 },
+      sesionesHoy: [TURNO], deudores: [], proximaSesion: TURNO, riesgoDelDia: [],
+      pendientes: SIN_PENDIENTES,
+    },
+  }));
+  render(<Dashboard hora={() => AHORA} />);
+  expect(await screen.findByRole("heading", { name: "Ana López" })).toBeTruthy();
+  expect(vi.mocked(leerHoy).mock.calls.at(-1)![0]!()).toEqual(AHORA);
 });
