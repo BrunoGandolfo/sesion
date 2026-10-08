@@ -51,7 +51,10 @@ cifrado y se borra del teléfono.
    para redactar la nota, la transcripción para el análisis **Para vos**, y la
    nota aprobada con el Recorrido vigente para preparar una propuesta del
    Recorrido. El resumen del proceso lo propone la misma IA que redacta la nota;
-   solo queda vigente cuando lo aceptás.
+   solo queda vigente cuando lo aceptás. Cuando conversás con **Lux**, en la
+   ficha, Anthropic recibe además tus preguntas y lo que Lux lee de esa
+   paciente: el Recorrido, las notas y las sesiones que mira, con sus
+   transcripciones; la conversación no se guarda (ver `16-lux.md`).
 6. Al aprobar la nota, o al eliminar la sesión, la app intenta borrar el
    archivo en R2 y comprueba que ya no esté. Si falla, reintenta **hasta 20
    veces**, durante **unos 15 días**; después el borrado queda marcado como

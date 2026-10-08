@@ -7,7 +7,7 @@ también lo que la app **no** hace.
 - [01 · Entrar y tu cuenta](01-entrar-y-cuenta.md) — login, bloqueo por intentos fallidos, cambiar la contraseña.
 - [02 · La pantalla de Hoy](02-pantalla-hoy.md) — la agenda del día, los pendientes, la tarjeta de ahora, los dos números y cada color.
 - [03 · Agenda y turnos](03-agenda-y-turnos.md) — crear, reprogramar, cancelar, "No vino", y qué pasa con el recordatorio en cada caso.
-- [04 · Pacientes y la ficha](04-pacientes-y-ficha.md) — alta, las tres pestañas, la autorización de grabación y archivar.
+- [04 · Pacientes y la ficha](04-pacientes-y-ficha.md) — alta, las cuatro pestañas, la autorización de grabación y archivar.
 - [05 · Cobros](05-cobros.md) — cobrar, métodos de pago, "Te deben", zonas de atraso, "Recordar cobro por SMS" y deshacer un cobro.
 - [06 · El recordatorio por SMS](06-recordatorios-sms.md) — cuándo sale y por qué no a la hora en punto, el mensaje y sus fichas, y qué hacer si no salió.
 - [07 · Grabar una sesión](07-grabar-una-sesion.md) — la autorización primero, con turno o sin turno, pausar, terminar y guardar, y recuperar una grabación cortada.
@@ -19,6 +19,7 @@ también lo que la app **no** hace.
 - [13 · Preguntas frecuentes](13-preguntas-frecuentes.md) — 31 preguntas con respuesta corta y el documento donde está el detalle.
 - [14 · Cuando algo falla](14-cuando-algo-falla.md) — no puedo entrar, la grabación se cortó, la nota no llega, no puedo aprobar, el SMS no salió.
 - [15 · Finanzas](15-finanzas.md) — lo que entró y lo que trabajaste, los períodos, las barras, lo que te deben hoy y qué no calcula.
+- [16 · Lux](16-lux.md) — repasar a una paciente conversando: qué lee, "Ver en qué me baso", que no guarda la charla, a dónde viaja y el tope del día.
 
 <!-- fuentes:
 docs/ayuda/00-que-es-sesion.md
@@ -37,4 +38,5 @@ docs/ayuda/12-camino-del-audio-y-privacidad.md
 docs/ayuda/13-preguntas-frecuentes.md
 docs/ayuda/14-cuando-algo-falla.md
 docs/ayuda/15-finanzas.md
+docs/ayuda/16-lux.md
 -->
