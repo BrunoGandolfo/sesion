@@ -53,6 +53,14 @@ escribe igual con los dos enfoques.
 
 ## Recordatorio
 
+- **Cómo recordás los turnos** — tres opciones, cada una con su línea:
+  - **SMS automático** — *"La app manda el SMS sola. Las respuestas no te
+    llegan."* Es la que tenés si nunca elegiste otra.
+  - **WhatsApp desde mi teléfono** — *"La app te prepara el mensaje y lo
+    mandás vos; las respuestas te llegan a tu WhatsApp."* En **Hoy** aparece
+    **Recordatorios para hoy**, con **Abrir WhatsApp** en cada turno.
+  - **Ambos** — *"Sale el SMS automático y además tenés el WhatsApp preparado
+    en Hoy."*
 - **Cuándo se avisa** — **El día anterior** (20:00), **Dos días antes** (20:00) o
   **La misma mañana** (8:00). Vale para todos los turnos, y afecta a los turnos
   que agendes o reprogrames de ahí en adelante.
@@ -63,8 +71,9 @@ escribe igual con los dos enfoques.
 - **Así lo recibe la paciente** — la vista previa, con datos de ejemplo y tus
   datos reales.
 
-Los avisos no salen a la hora en punto sino con unos minutos de corrimiento. El
-detalle completo está en `06-recordatorios-sms.md`.
+Los SMS no salen a la hora en punto sino con unos minutos de corrimiento. El
+detalle completo, y cómo es avisar por WhatsApp, está en
+`06-recordatorios-sms.md`.
 
 ## Vocabulario
 

@@ -37,6 +37,7 @@ import { FalloDeCarga } from "./estados-carga";
 import { SegunLectura, type Carga } from "./segun-lectura";
 import { Kpis } from "./kpis";
 import { Pendientes } from "./pendientes";
+import { RecordatoriosWhatsapp } from "./recordatorios-whatsapp";
 import { Saludo } from "./saludo";
 
 export function Dashboard() {
@@ -296,7 +297,10 @@ function DiaDeHoy({
 
       {aviso}
 
-      <ListaEnCascada className="flex flex-col gap-7 lg:gap-10">
+      {/* Un bloque que decide no dibujarse (los recordatorios con SMS
+          automático) deja vacía su envoltura de la cascada: se oculta para
+          que no sume un hueco más entre bloques. */}
+      <ListaEnCascada className="flex flex-col gap-7 lg:gap-10 [&>:empty]:hidden">
         {/* Primero quién viene ahora o después: es lo que se busca entre
             pacientes, con el teléfono en la mano. La agenda del día y los
             pendientes vienen después. */}
@@ -341,6 +345,8 @@ function DiaDeHoy({
           turnoCobrado={cobroConfirmado}
           riesgoEnElDia={riesgoEnElDia}
         />
+
+        <RecordatoriosWhatsapp reloadKey={reloadKey} />
 
         <Pendientes pendientes={pendientes} inicio={inicio} onCambio={onCambio} />
 
