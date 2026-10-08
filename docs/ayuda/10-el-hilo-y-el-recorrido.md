@@ -138,9 +138,10 @@ meses** y **Todo**, y queda guardado en la dirección de la página.
 - **Intervenciones** — cantidad y tipo por sesión.
 - **Progreso percibido** y **Observación IA** — de la **última sesión del
   período**, con su fecha y el enlace **Ver la sesión**. Si esa sesión tiene una
-  señal de riesgo marcada, la tarjeta de Progreso percibido sale en terracotta y
+  señal de riesgo marcada, la tarjeta de Progreso percibido sale en terracota y
   dice *"Esta sesión tiene una señal de riesgo marcada."* Lo decide la señal que
-  quedó en la nota, no las palabras del texto, y en el PDF sale igual.
+  quedó en la nota, no las palabras del texto. En el PDF van las de todas las
+  sesiones, y cada una con señal lleva la misma frase.
 
 Cada gráfico puede traer una lectura breve escrita por la app sobre la
 tendencia. Es orientativa: leela con tu criterio.
@@ -164,9 +165,13 @@ guardar PDF** lo vuelve a abrir.
 
 La hoja lleva:
 
+- Arriba, el nombre y **De un vistazo**: las notas aprobadas, los objetivos
+  activos, el tema que más vuelve y, si hubo, la última señal.
 - **El Recorrido vigente**, completo, con sus señales anteriores y su detalle.
 - **Cómo va**, con todas las sesiones con nota, también las que están para
-  revisar.
+  revisar. A diferencia de la pantalla, el papel lleva el **Progreso
+  percibido** y la **Observación IA** de cada sesión, de la más vieja a la más
+  nueva, y cada tema con la última vez que apareció.
 - **El historial de versiones**: cada una con su fecha, quién la escribió, su
   estado y la nota que la motivó.
 - **Las versiones que estuvieron vigentes antes**, completas.
