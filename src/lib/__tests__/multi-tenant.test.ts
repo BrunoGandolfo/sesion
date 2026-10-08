@@ -117,6 +117,7 @@ const RECURSO_DEL_AREA: Record<string, (org: Org) => string> = {
   turnos: (org) => org.turnoId,
   "hot-words": (org) => org.hotWordId,
   "sesion-clinica": (org) => org.sesionId,
+  recordatorios: (org) => org.turnoId,
 };
 
 /** En los cuerpos que llevan el id de una propuesta, se reemplaza por el de
@@ -369,6 +370,7 @@ function paramsDe(ruta: RutaConId, org: Org): Record<string, string> {
     const nombre = segmento.slice(1, -1);
     if (nombre === "id") params.id = RECURSO_DEL_AREA[area](org);
     else if (nombre === "propuestaId") params.propuestaId = org.propuestaId;
+    else if (nombre === "turnoId") params.turnoId = org.turnoId;
     else if (nombre === "version") params.version = "1";
     else throw new Error(`Parámetro sin resolver en ${ruta.rel}: ${nombre}`);
   }

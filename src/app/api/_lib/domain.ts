@@ -163,6 +163,7 @@ export function toConfiguracion(
     recordatorioModo: configuracion.recordatorioModo,
     templateRecordatorio: configuracion.templateRecordatorio,
     orientacionTeorica: configuracion.orientacionTeorica,
+    canalRecordatorio: configuracion.canalRecordatorio,
     organizationId: configuracion.organizationId,
   };
 }

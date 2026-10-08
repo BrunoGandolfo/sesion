@@ -1,3 +1,10 @@
+// INSTANTÁNEA CONGELADA para el ensayo de restauración: prisma/schema.prisma
+// tal como estaba antes de 20261008120000_whatsapp_asistido (sin
+// configuraciones.canal_recordatorio ni avisos_whatsapp). Es el contrato de
+// las copias cuya última migración es 20261006120000_sin_audio_cifrado
+// (scripts/ensayo/contratos.mjs). No se edita: describe copias que ya
+// existen.
+
 // ============================================================================
 // Sesión — esquema definitivo (reconstrucción, Fase 2, 11-09-2026)
 //
@@ -63,7 +70,6 @@ model Organization {
   seriesTurno      SerieTurno[]
   turnos           Turno[]
   enviosSms        EnvioSms[]
-  avisosWhatsapp   AvisoWhatsapp[]
   consentimientos  ConsentimientoGrabacion[]
   sesionesClinicas SesionClinica[]
   trabajos         Trabajo[]
@@ -251,20 +257,6 @@ enum ModoRecordatorio {
   @@map("modo_recordatorio")
 }
 
-/// Por dónde sale el recordatorio del turno. Con `whatsapp` la app no manda
-/// SMS: le prepara el mensaje para que lo mande ella desde su teléfono
-/// (casos-uso/recordatorios-whatsapp.ts) y el cron cancela el SMS al
-/// despacharlo. Con `ambos`, sale el SMS como siempre y además se lo prepara.
-/// Se decide AL DESPACHAR, no al crear el turno: cambiar la configuración
-/// alcanza a lo ya agendado.
-enum CanalRecordatorio {
-  sms
-  whatsapp
-  ambos
-
-  @@map("canal_recordatorio")
-}
-
 /// Orientación teórica de la profesional: decide el instrumento de
 /// auto-supervisión de "Para vos" (cbt_mi → MITI + CTS-R; gestalt → GTFS).
 enum OrientacionTeorica {
@@ -285,7 +277,6 @@ model Configuracion {
   /// se guarda; sí la plantilla vigente.
   templateRecordatorio String             @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
   orientacionTeorica   OrientacionTeorica @default(cbt_mi) @map("orientacion_teorica")
-  canalRecordatorio    CanalRecordatorio  @default(sms) @map("canal_recordatorio")
 
   organizationId String       @unique @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -433,9 +424,8 @@ model Turno {
   serieId        String?      @map("serie_id")
   serie          SerieTurno?  @relation(fields: [serieId], references: [id], onDelete: SetNull)
 
-  sesionClinica  SesionClinica?
-  enviosSms      EnvioSms[]
-  avisosWhatsapp AvisoWhatsapp[]
+  sesionClinica SesionClinica?
+  enviosSms     EnvioSms[]
 
   // Agenda (día, semana, mes) y "Ahora": WHERE organization_id = ? AND fecha BETWEEN …
   @@index([organizationId, fecha])
@@ -534,42 +524,6 @@ model EnvioSms {
   // Cancelar / reprogramar los envíos de un turno.
   @@index([turnoId])
   @@map("envios_sms")
-}
-
-// ============================================================================
-// WhatsApp asistido: la app prepara el mensaje, lo manda ella
-// ============================================================================
-
-/// Un solo valor hoy; el enum existe para el aviso de cobro que viene después.
-enum TipoAvisoWhatsapp {
-  recordatorio
-
-  @@map("tipo_aviso_whatsapp")
-}
-
-/// Una fila por cada vez que la profesional abrió el enlace de WhatsApp de un
-/// turno. La app no sabe si el mensaje salió (lo manda el teléfono de ella):
-/// registra que lo abrió. "Ya avisado" = existe al menos una para la fecha
-/// vigente del turno. Sin texto ni teléfono, igual que envios_sms.
-model AvisoWhatsapp {
-  id             String            @id @default(uuid())
-  organizationId String            @map("organization_id")
-  organization   Organization      @relation(fields: [organizationId], references: [id])
-  turnoId        String            @map("turno_id")
-  turno          Turno             @relation(fields: [turnoId], references: [id], onDelete: Restrict)
-  tipo           TipoAvisoWhatsapp
-  /// La fecha del turno que se avisó. Mover el turno deja estas filas con la
-  /// fecha vieja: no cuentan como "avisado" para la nueva, y sí como prueba
-  /// de que la paciente tenía el horario anterior (reprogramarEnvioDelTurno
-  /// manda entonces un cambio de horario).
-  fechaTurno     DateTime          @map("fecha_turno")
-  abiertoEn      DateTime          @map("abierto_en")
-  /// Quién lo abrió. Sin FK, como hilo_versiones.resuelta_por_user_id.
-  usuarioId      String            @map("usuario_id")
-
-  // "Ya avisado" y el último aviso de cada turno de hoy.
-  @@index([turnoId, tipo])
-  @@map("avisos_whatsapp")
 }
 
 enum MotivoBajaSms {

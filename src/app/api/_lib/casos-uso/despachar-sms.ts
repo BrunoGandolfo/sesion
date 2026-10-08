@@ -42,6 +42,8 @@
 //     puede depender de que cada llamador se acuerde.
 //   - El turno: cerrado o pasado → `cancelado`, sin gastar nada.
 //   - La paciente archivada: ni siquiera es candidata (leerCandidatos).
+//   - El canal: con `whatsapp`, el recordatorio del turno se cancela con
+//     MOTIVO_CANAL_WHATSAPP, sin llamar a Twilio.
 //
 // ─── LOS CIERRES NO PISAN UNA CANCELACIÓN ───────────────────────────────────
 //
@@ -67,13 +69,14 @@ import { SMS_MOTIVOS, MOTIVO_BAJA, MOTIVO_TURNO_PASADO, MOTIVO_RESERVA_HUERFANA,
 import type { db } from "@/lib/db";
 import { decidirTrasFalloTransitorio, limiteUtilDelTurno } from "@/lib/sms/backoff";
 import { URL_CALLBACK } from "@/lib/sms/firma";
-import { contarLongitudSms, textoDelEnvio } from "@/lib/sms/texto";
+import { contarLongitudSms, textoDelRecordatorio } from "@/lib/sms/texto";
 import type { EnviadorSms, ResultadoTwilio } from "@/lib/sms/twilio";
 import type { NivelAlerta } from "@/lib/salud-metricas";
 
 import {
   cancelarPendientesDelDestino,
   correspondeEnvio,
+  MOTIVO_CANAL_WHATSAPP,
   MOTIVO_TURNO_CERRADO,
   turnoSigueProgramado,
 } from "./envios-del-turno";
@@ -173,7 +176,13 @@ async function leerCandidatos(prisma: ClientePrisma, ahora: Date, corteRescate: 
       organization: {
         select: {
           configuracion: {
-            select: { nombreProfesional: true, direccion: true, whatsappOrigen: true, templateRecordatorio: true },
+            select: {
+              nombreProfesional: true,
+              direccion: true,
+              whatsappOrigen: true,
+              templateRecordatorio: true,
+              canalRecordatorio: true,
+            },
           },
         },
       },
@@ -210,7 +219,12 @@ const aCodigo = (codigo: number | null) => (codigo !== null ? String(codigo) : n
 // ─── Cortes previos: lo que cancela el envío antes de gastar nada ──────────
 //
 // En este orden. La baja primero: es una obligación legal y vale en TODO
-// envío. Después el turno, si lo hay: cerrado o pasado no se avisa.
+// envío. Después el turno, si lo hay: cerrado o pasado no se avisa. Y al
+// final el canal: si la profesional eligió WhatsApp, el recordatorio del
+// turno no sale por SMS (lo manda ella, casos-uso/recordatorios-whatsapp.ts).
+// Se mira ACÁ, al despachar, y no al crear el turno: cambiar la
+// configuración alcanza a lo ya agendado. El aviso de cobro no tiene turno y
+// sigue saliendo por SMS: lo pidió ella con el botón de Cobros.
 
 interface CortePrevio {
   motivo: string;
@@ -228,6 +242,10 @@ const CORTES_PREVIOS: ReadonlyArray<ReglaDeCorte> = [
   (e, { ahora }) =>
     e.turno && !correspondeEnvio(e.turno.fecha, ahora)
       ? { motivo: MOTIVO_TURNO_PASADO, evento: "turno-pasado" }
+      : null,
+  (e) =>
+    e.turno && e.organization.configuracion?.canalRecordatorio === "whatsapp"
+      ? { motivo: MOTIVO_CANAL_WHATSAPP, evento: "canal-whatsapp" }
       : null,
 ];
 
@@ -251,14 +269,7 @@ async function textoDe(c: Corrida, e: Candidato): Promise<string | null> {
   const config = e.organization.configuracion;
   if (!config) throw new Error(`Organización ${e.organizationId} sin configuración`);
   if (!e.turno) throw new Error(`Envío ${e.id} de turno sin turno`);
-  return textoDelEnvio(e.motivo, config.templateRecordatorio, {
-    nombre: e.paciente.nombre,
-    apellido: e.paciente.apellido,
-    fecha: e.turno.fecha,
-    direccion: config.direccion,
-    profesional: config.nombreProfesional,
-    telefonoConsultorio: config.whatsappOrigen,
-  });
+  return textoDelRecordatorio(e.motivo, config, e.paciente, e.turno.fecha);
 }
 
 // ─── Qué hacer con cada respuesta de Twilio ────────────────────────────────

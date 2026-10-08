@@ -74,6 +74,12 @@ export const ACCIONES = {
   cobro: {
     recordatorio: "cobro.recordatorio",
   },
+  recordatorio: {
+    /** La profesional abrió el enlace de WhatsApp del recordatorio de un
+     *  turno (casos-uso/recordatorios-whatsapp.ts). Abrió, no "mandó": el
+     *  mensaje sale de su teléfono y la app no lo ve. */
+    whatsappAbierto: "recordatorio.whatsapp_abierto",
+  },
   ayuda: {
     pregunta: "ayuda.pregunta",
   },

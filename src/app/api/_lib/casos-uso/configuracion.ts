@@ -46,6 +46,7 @@ export type CambiosConfiguracion = Pick<
   | "recordatorioModo"
   | "templateRecordatorio"
   | "orientacionTeorica"
+  | "canalRecordatorio"
 >;
 
 export interface ActualizarConfiguracionInput {
