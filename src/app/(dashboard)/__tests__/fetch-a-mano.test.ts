@@ -29,6 +29,8 @@ const CARPETAS = ["src/app", "src/components", "src/hooks"];
 const JUSTIFICADOS: Record<string, string> = {
   "src/components/ayuda/panel-ayuda.tsx":
     "lee la respuesta como stream (res.body) a medida que llega; api-client espera el JSON entero",
+  "src/components/lux/use-conversacion-lux.ts":
+    "lee la respuesta de Lux como stream (res.body), igual que el panel de ayuda; api-client espera el JSON entero",
   "src/components/layout/aviso-version.tsx":
     "consulta /api/version con su propio timeout y sin mostrar errores; no es una lectura de datos de ella",
 };

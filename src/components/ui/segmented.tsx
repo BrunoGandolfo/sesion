@@ -1,6 +1,8 @@
 "use client";
 
-// El control de dos o tres opciones de la app: las pestañas de la ficha, el
+import type * as React from "react";
+
+// El control de dos a cuatro opciones de la app: las pestañas de la ficha, el
 // filtro de Pacientes, el modo de vista de la agenda, las dos listas de
 // Cobros.
 //
@@ -30,6 +32,9 @@
 interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  /** Un dibujo decorativo antes del rótulo (el sol de Lux). aria-hidden lo
+   *  pone el dibujo: el nombre accesible de la pestaña sigue siendo `label`. */
+  icono?: React.ReactNode;
 }
 
 interface SegmentedProps<T extends string> {
@@ -68,6 +73,7 @@ export function Segmented<T extends string>({
                 : "text-ink-500 hover:text-ink-700"
             }`}
           >
+            {opt.icono ? <span className="mr-1.5 inline-flex shrink-0">{opt.icono}</span> : null}
             <span className="truncate">{opt.label}</span>
           </button>
         );
