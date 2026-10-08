@@ -112,8 +112,11 @@ puede volver a pedir después de aprobar.
 
 Mientras está **Para revisar**, **Volver a escribirla** pide confirmación: *"Se
 pide una nueva nota con la transcripción guardada. No se vuelve a transcribir."*
-No vuelve a transcribir. Los datos de la nota anterior se conservan mientras llega
-la nueva; la pantalla muestra solo *"Escribiendo la nota…"*. No se guarda una
+No vuelve a transcribir. Mientras llega la nueva, la nota anterior **se sigue
+viendo, sólo para leer**, debajo del aviso *"Se está escribiendo de nuevo. Esto es
+la versión anterior; cuando termine, la reemplaza."* Mientras tanto no se puede
+corregir, aprobar ni volver a pedir. Cuando la nueva está lista, ocupa su lugar
+sola y vuelve a quedar **Para revisar**. No se guarda una
 biblioteca de todas las redacciones anteriores. Guardá aparte cualquier texto que
 necesites conservar.
 
@@ -189,6 +192,8 @@ src/app/(dashboard)/sesiones/[id]/_components/transcripcion.ts
 src/components/clinico/MencionesNota.tsx
 src/components/grabacion/RiesgoDetectadoBanner.tsx
 src/app/api/_lib/casos-uso/sesion/aprobar.ts
+src/app/api/_lib/casos-uso/sesion/reprocesar.ts
+src/app/(dashboard)/sesiones/[id]/_components/textos.ts
 src/app/api/_lib/casos-uso/sesion/reclamar.ts
 src/app/api/_lib/casos-uso/sesion/ver-transcripcion.ts
 src/lib/glosario.ts
