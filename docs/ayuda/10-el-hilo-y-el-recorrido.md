@@ -128,10 +128,11 @@ meses** y **Todo**, y queda guardado en la dirección de la página.
 
 - **Señales de riesgo** — una fila por señal marcada, de la más reciente a la más
   vieja, con **Lo que dijo** y **Ver la sesión**.
-- **Intensidad emocional** — *"Cómo llegó a cada sesión, del 1 al 10."* Los
-  puntos en terracotta son sesiones con señal de riesgo.
+- **Intensidad emocional** — *"Cómo llegó a cada sesión, del 1 al 10."* La
+  línea va en gris; los puntos en terracota son sesiones con señal de riesgo.
+  Si en el período no hay ninguna, el gráfico no tiene nada en terracota.
 - **Alianza terapéutica** — *"Calidad del vínculo en cada sesión. Las caídas en
-  terracotta son posibles rupturas."*
+  terracota son posibles rupturas."*
 - **Temas** — cada uno con en cuántas sesiones apareció, su tendencia
   (**nuevo**, **↑ sube**, **↓ baja**, **= estable**) y *"desde 4 mar"*.
 - **Intervenciones** — cantidad y tipo por sesión.

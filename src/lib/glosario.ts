@@ -733,9 +733,9 @@ export const DESDE = "desde";
 /** Subtítulos de cada gráfico. Explican qué se está mirando sin interpretar
  *  por ella. */
 export const SUBTITULO_INTENSIDAD =
-  "Cómo llegó a cada sesión, del 1 al 10. Los puntos en terracotta son sesiones con señal de riesgo.";
+  "Cómo llegó a cada sesión, del 1 al 10. Los puntos en terracota son sesiones con señal de riesgo.";
 export const SUBTITULO_ALIANZA =
-  "Calidad del vínculo en cada sesión. Las caídas en terracotta son posibles rupturas.";
+  "Calidad del vínculo en cada sesión. Las caídas en terracota son posibles rupturas.";
 export const SUBTITULO_TEMAS = "Qué se repite en el período elegido.";
 export const SUBTITULO_INTERVENCIONES =
   "Cantidad y tipo de intervenciones en cada sesión del período.";
