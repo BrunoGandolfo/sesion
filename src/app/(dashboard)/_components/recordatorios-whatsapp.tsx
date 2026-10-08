@@ -60,7 +60,7 @@ export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number })
   }, [reloadKey, intento]);
 
   const alAbrir = React.useCallback((turno: RecordatorioWhatsapp) => {
-    const { turnoId } = turno;
+    const { turnoId, fecha } = turno;
     setSinAnotar((previo) => sinElemento(previo, turnoId));
     registrarAbierto(turno)
       .then(({ avisadoEn }) =>
@@ -69,7 +69,10 @@ export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number })
             ? {
                 ...previa,
                 turnos: previa.turnos.map((t) =>
-                  t.turnoId === turnoId ? { ...t, avisadoEn } : t,
+                  // Turno y fecha: si una recarga trajo el turno movido
+                  // mientras volvía el registro, lo abierto era el horario
+                  // viejo y el nuevo sigue sin avisar.
+                  t.turnoId === turnoId && t.fecha === fecha ? { ...t, avisadoEn } : t,
                 ),
               }
             : previa,

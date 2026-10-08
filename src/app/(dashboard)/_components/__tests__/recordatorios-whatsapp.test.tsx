@@ -2,6 +2,7 @@
 // Recordatorios para hoy: el bloque sólo existe con WhatsApp o Ambos; el
 // botón es un enlace que abre WhatsApp sin esperar a nada y, al tocarlo,
 // registra el aviso; sin teléfono no hay botón.
+import type * as React from "react";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -114,6 +115,26 @@ describe("Abrir WhatsApp", () => {
     await act(async () => resolver({ avisadoEn: "2026-10-08T13:32:00.000Z" }));
     expect(screen.getByText("Avisado 10:32")).toBeTruthy();
     expect(screen.queryByText("Sin avisar")).toBeNull();
+  });
+
+  it("si el turno se movió mientras volvía el registro, la fila nueva sigue sin avisar", async () => {
+    responder({ canal: "whatsapp", turnos: [ana] });
+    let resolver!: (valor: { avisadoEn: string }) => void;
+    api.post.mockReturnValue(new Promise((r) => (resolver = r)));
+    let rerender!: (ui: React.ReactElement) => void;
+    await act(async () => {
+      ({ rerender } = render(<RecordatoriosWhatsapp reloadKey={0} />));
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Abrir WhatsApp" }));
+    // La recarga (volver a la pestaña) trae el turno con otra hora.
+    responder({ canal: "whatsapp", turnos: [{ ...ana, fecha: "2026-10-09T17:00:00.000Z" }] });
+    await act(async () => {
+      rerender(<RecordatoriosWhatsapp reloadKey={1} />);
+    });
+    expect(screen.getByText(/9 oct · 14:00/)).toBeTruthy();
+    await act(async () => resolver({ avisadoEn: "2026-10-08T13:32:00.000Z" }));
+    expect(screen.getByText("Sin avisar")).toBeTruthy();
+    expect(screen.queryByText(/Avisado/)).toBeNull();
   });
 
   it("si el registro falla, el enlace ya abrió y la fila lo dice", async () => {
