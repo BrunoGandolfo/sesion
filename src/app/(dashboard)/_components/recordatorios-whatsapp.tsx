@@ -68,24 +68,19 @@ export function RecordatoriosWhatsapp({
     return () => controller.abort();
   }, [reloadKey, intento]);
 
+  // Las aperturas que el servidor ya confirmó, por turno Y fecha. No se
+  // escriben dentro de `lectura`: una recarga que salió antes del registro y
+  // vuelve después traería "Sin avisar" y pisaría el aviso. Se combinan al
+  // dibujar, y gana el más reciente. Con la fecha en la clave, si el turno se
+  // movió, lo abierto era el horario viejo y el nuevo sigue sin avisar.
+  const [confirmados, setConfirmados] = React.useState<ReadonlyMap<string, string>>(new Map());
+
   const alAbrir = React.useCallback((turno: RecordatorioWhatsapp) => {
-    const { turnoId, fecha } = turno;
+    const { turnoId } = turno;
     setSinAnotar((previo) => sinElemento(previo, turnoId));
     registrarAbierto(turno)
       .then(({ avisadoEn }) =>
-        setLectura((previa) =>
-          previa
-            ? {
-                ...previa,
-                turnos: previa.turnos.map((t) =>
-                  // Turno y fecha: si una recarga trajo el turno movido
-                  // mientras volvía el registro, lo abierto era el horario
-                  // viejo y el nuevo sigue sin avisar.
-                  t.turnoId === turnoId && t.fecha === fecha ? { ...t, avisadoEn } : t,
-                ),
-              }
-            : previa,
-        ),
+        setConfirmados((previo) => new Map(previo).set(claveDeAviso(turno), avisadoEn)),
       )
       .catch(() => setSinAnotar((previo) => new Set(previo).add(turnoId)));
   }, []);
@@ -96,7 +91,9 @@ export function RecordatoriosWhatsapp({
   const visible = lectura ? muestraWhatsapp(lectura.canal) : error;
   if (!visible) return null;
   const turnos = lectura
-    ? lectura.turnos.filter((t) => !ahora || new Date(t.fecha).getTime() > ahora.getTime())
+    ? lectura.turnos
+        .filter((t) => !ahora || new Date(t.fecha).getTime() > ahora.getTime())
+        .map((t) => ({ ...t, avisadoEn: masReciente(t.avisadoEn, confirmados.get(claveDeAviso(t))) }))
     : [];
 
   return (
@@ -202,6 +199,17 @@ function FilaAviso({
       )}
     </li>
   );
+}
+
+function claveDeAviso(turno: Pick<RecordatorioWhatsapp, "turnoId" | "fecha">): string {
+  return `${turno.turnoId}|${turno.fecha}`;
+}
+
+/** El aviso más reciente de dos ISO (cualquiera puede faltar). */
+function masReciente(a: string | null, b: string | undefined): string | null {
+  if (!b) return a;
+  if (!a) return b;
+  return Date.parse(b) > Date.parse(a) ? b : a;
 }
 
 function sinElemento(conjunto: Set<string>, elemento: string): Set<string> {

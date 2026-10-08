@@ -156,6 +156,30 @@ describe("Abrir WhatsApp", () => {
   });
 });
 
+describe("una recarga vieja no pisa un aviso confirmado", () => {
+  it("la lectura que sale antes del registro y vuelve después no lo devuelve a «Sin avisar»", async () => {
+    responder({ canal: "whatsapp", turnos: [ana] });
+    let resolverPost!: (valor: { avisadoEn: string }) => void;
+    api.post.mockReturnValue(new Promise((r) => (resolverPost = r)));
+    let rerender!: (ui: React.ReactElement) => void;
+    await act(async () => {
+      ({ rerender } = render(<RecordatoriosWhatsapp reloadKey={0} />));
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Abrir WhatsApp" }));
+    // Vuelve de WhatsApp: la recarga sale ya, pero contesta después del POST.
+    let resolverGet!: (valor: RecordatoriosWhatsappDeHoy) => void;
+    api.get.mockReturnValue(new Promise((r) => (resolverGet = r)));
+    await act(async () => {
+      rerender(<RecordatoriosWhatsapp reloadKey={1} />);
+    });
+    await act(async () => resolverPost({ avisadoEn: "2026-10-08T13:32:00.000Z" }));
+    expect(screen.getByText("Avisado 10:32")).toBeTruthy();
+    await act(async () => resolverGet({ canal: "whatsapp", turnos: [ana] }));
+    expect(screen.getByText("Avisado 10:32")).toBeTruthy();
+    expect(screen.queryByText("Sin avisar")).toBeNull();
+  });
+});
+
 describe("el reloj de Hoy", () => {
   it("un turno que ya empezó deja de ofrecerse sin esperar una recarga", async () => {
     responder({ canal: "whatsapp", turnos: [ana] });
