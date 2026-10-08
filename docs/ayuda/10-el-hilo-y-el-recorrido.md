@@ -175,8 +175,10 @@ La hoja lleva:
 - **Las versiones que estuvieron vigentes antes**, completas.
 
 De las propuestas de la IA que no adoptaste (sin revisar, desactualizadas o
-descartadas) queda solo la fila del historial, sin su texto. En **Cómo va** no se
-imprimen las citas de **Lo que dijo**.
+descartadas) queda solo la fila del historial, sin su texto. En **Cómo va**, cada
+señal de riesgo lleva a la vista la frase de la paciente que en la pantalla está
+detrás de **Lo que dijo**. En el historial, la columna **Basada en** dice sobre qué
+versión se escribió cada una (*"sobre la v1"*).
 
 El archivo sale de la aplicación **sin cifrar**: queda bajo tu cuidado, como
 cualquier registro en papel. **Queda registrada la preparación de la copia**:
