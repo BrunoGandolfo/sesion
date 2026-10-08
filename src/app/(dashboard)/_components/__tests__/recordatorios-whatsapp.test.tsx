@@ -156,6 +156,23 @@ describe("Abrir WhatsApp", () => {
   });
 });
 
+describe("el reloj de Hoy", () => {
+  it("un turno que ya empezó deja de ofrecerse sin esperar una recarga", async () => {
+    responder({ canal: "whatsapp", turnos: [ana] });
+    let rerender!: (ui: React.ReactElement) => void;
+    await act(async () => {
+      ({ rerender } = render(<RecordatoriosWhatsapp ahora={new Date("2026-10-09T12:59:00.000Z")} />));
+    });
+    expect(screen.getByRole("link", { name: "Abrir WhatsApp" })).toBeTruthy();
+    await act(async () => {
+      rerender(<RecordatoriosWhatsapp ahora={new Date("2026-10-09T13:00:00.000Z")} />);
+    });
+    expect(screen.queryByRole("link", { name: "Abrir WhatsApp" })).toBeNull();
+    expect(screen.getByText("No hay turnos para avisar hoy")).toBeTruthy();
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("sin teléfono", () => {
   it("no hay botón: la fila se apaga y lleva a la ficha", async () => {
     responder({ canal: "whatsapp", turnos: [ana, beto] });

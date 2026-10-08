@@ -37,7 +37,16 @@ import type { RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/d
 import { leerRecordatoriosWhatsapp, muestraWhatsapp, registrarAbierto } from "./recordatorios-datos";
 import { Titulo } from "./titulo";
 
-export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number }) {
+export function RecordatoriosWhatsapp({
+  reloadKey = 0,
+  ahora,
+}: {
+  reloadKey?: number;
+  /** El reloj de Hoy (avanza cada minuto). Un turno que ya empezó deja de
+   *  ofrecerse aunque la lista no se haya recargado: el servidor lo filtra
+   *  igual (`fecha > ahora`), pero sólo al leer. */
+  ahora?: Date;
+}) {
   const [lectura, setLectura] = React.useState<RecordatoriosWhatsappDeHoy | null>(null);
   const [error, setError] = React.useState(false);
   const [intento, setIntento] = React.useState(0);
@@ -86,6 +95,9 @@ export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number })
   // que había y además se dice que no está al día.
   const visible = lectura ? muestraWhatsapp(lectura.canal) : error;
   if (!visible) return null;
+  const turnos = lectura
+    ? lectura.turnos.filter((t) => !ahora || new Date(t.fecha).getTime() > ahora.getTime())
+    : [];
 
   return (
     <section className="min-w-0" aria-label={RECORDATORIOS_PARA_HOY}>
@@ -100,14 +112,14 @@ export function RecordatoriosWhatsapp({ reloadKey = 0 }: { reloadKey?: number })
           </Button>
         </div>
       ) : null}
-      {!lectura ? null : lectura.turnos.length === 0 ? (
+      {!lectura ? null : turnos.length === 0 ? (
         <p className="text-[13px] text-ink-500">{SIN_TURNOS_PARA_AVISAR}</p>
       ) : (
         // !p-0: el padding de Card le gana a un p-0 común, y en 360 px esos
         // 48 px eran el nombre de la paciente.
         <Card className="rounded-[8px] !p-0">
           <ul className="divide-y divide-[color:var(--border-subtle)]">
-            {lectura.turnos.map((turno) => (
+            {turnos.map((turno) => (
               <FilaAviso
                 key={turno.turnoId}
                 turno={turno}

@@ -346,7 +346,7 @@ function DiaDeHoy({
           riesgoEnElDia={riesgoEnElDia}
         />
 
-        <RecordatoriosWhatsapp reloadKey={reloadKey} />
+        <RecordatoriosWhatsapp reloadKey={reloadKey} ahora={ahora} />
 
         <Pendientes pendientes={pendientes} inicio={inicio} onCambio={onCambio} />
 
