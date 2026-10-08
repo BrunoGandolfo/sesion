@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { HAY_VERSION_NUEVA } from "@/lib/glosario";
 import { VERSION_APP } from "@/lib/version-app";
 
 function esRutaGrabacion(ruta: string) {
@@ -73,7 +74,7 @@ export function AvisoVersion({ recargar = recargarPagina }: { recargar?: () => v
           if (!esRutaGrabacion(ruta) && !esRutaGrabacion(window.location.pathname)) recargar();
         }}
       >
-        Hay una versión nueva. Tocá para actualizar
+        {HAY_VERSION_NUEVA}
       </button>
     </div>
   );

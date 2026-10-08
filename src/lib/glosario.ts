@@ -59,6 +59,9 @@ export const INICIO_CARGAR_TARIFA = "Cargá tu tarifa";
 export const INICIO_CARGAR_PACIENTE = "Cargá tu primera paciente";
 export const INICIO_AGENDAR_SESION = "Agendá la primera sesión";
 
+/** El aviso del layout cuando hay un build nuevo (layout/aviso-version.tsx). */
+export const HAY_VERSION_NUEVA = "Hay una versión nueva. Tocá para actualizar";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Pestañas de la ficha del paciente
 // ────────────────────────────────────────────────────────────────────────────
