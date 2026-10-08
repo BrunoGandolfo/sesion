@@ -1,5 +1,7 @@
 /* Hoja de impresión. Solo lo que Tailwind no puede decir desde una clase:
-   el tamaño y los márgenes del papel, y el número de página.
+   el tamaño y los márgenes del papel, el número de página, el fondo de los
+   márgenes y los ajustes de papel de las tarjetas compartidas con la
+   pantalla.
 
    Los colores y las fuentes salen de los tokens de globals.css; acá no se
    escribe ningún valor de la paleta. El ancho de la hoja en pantalla
@@ -9,6 +11,8 @@
 @page {
   size: A4;
   margin: 14mm 16mm 12mm;
+  /* El papel es crema de borde a borde, márgenes incluidos. */
+  background: var(--color-cream-50);
 
   /* El número de página va en el margen porque es lo único que el papel sabe
      y la página no. Chrome lo dibuja; Safari y Firefox lo ignoran, y el
@@ -19,4 +23,31 @@
     font-size: 8pt;
     color: var(--color-ink-500);
   }
+}
+
+/* El papel es crema de borde a borde, también en los márgenes de @page: sin
+   esto el navegador deja blanco el margen y la hoja parece pegada sobre
+   otra. print-color-adjust en la raíz para que el fondo no se descarte. */
+@media print {
+  html,
+  body {
+    background: var(--color-cream-50);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* Las tarjetas de "Cómo va" son las de la pantalla (graficos/), que esta hoja
+   no edita. En el papel van blancas sobre el crema y con el radio md, y
+   ningún texto queda por debajo de 9 pt: las tarjetas de la última sesión
+   usan 10 y 11 px, que en papel no se leen. */
+[data-hoja-recorrido] [data-graficos] > section {
+  border-radius: var(--radius-md);
+}
+[data-hoja-recorrido] [data-graficos] > section.bg-cream-50 {
+  background: white;
+}
+[data-hoja-recorrido] [data-graficos] .text-\[10px\],
+[data-hoja-recorrido] [data-graficos] .text-\[11px\] {
+  font-size: 9pt;
 }

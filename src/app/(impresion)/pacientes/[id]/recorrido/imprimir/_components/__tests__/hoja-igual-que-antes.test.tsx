@@ -13,6 +13,12 @@
 // El 06/10/2026 (ola 3) se regeneró porque los gráficos pasaron sus colores
 // de hex a la variable del token con el MISMO valor (#4F7A6A → var(--color-
 // sage-500), etc.): el papel imprime los mismos colores.
+// El 08/10/2026 (recorrido-pdf-editorial) se regeneró por el rediseño
+// editorial de la hoja: papel crema, cabecera de documento con una línea de
+// datos en vez de la lista, el bloque "De un vistazo" (sesiones con nota,
+// objetivos activos, el tema que más vuelve, la última señal) y la frase del
+// historial mudada a su sección. Se comparó el texto de las dos versiones:
+// no falta ningún dato y los SVG de los gráficos son idénticos.
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";

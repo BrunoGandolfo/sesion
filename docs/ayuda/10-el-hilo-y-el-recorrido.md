@@ -163,6 +163,8 @@ guardar PDF** lo vuelve a abrir.
 
 La hoja lleva:
 
+- Arriba, el nombre y **De un vistazo**: las sesiones con nota, los objetivos
+  activos, el tema que más vuelve y, si hubo, la última señal.
 - **El Recorrido vigente**, completo, con sus señales anteriores y su detalle.
 - **Cómo va**, con todas las sesiones con nota, también las que están para
   revisar.
