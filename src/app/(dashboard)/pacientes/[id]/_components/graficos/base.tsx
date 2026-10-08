@@ -31,9 +31,12 @@ export const COLOR = {
   sage: "var(--color-sage-500)",
   sageSoft: "var(--color-sage-200)",
   terracotta: "var(--color-terracotta-500)",
-  terracottaSoft: "var(--color-terracotta-100)",
   gold: "var(--color-gold-500)",
   inkSoft: "var(--color-ink-300)",
+  /** La serie neutra: el texto de apoyo (ink-500) para la línea y ink-300 al
+   *  12 % para el área, la misma transparencia que el área de la alianza. */
+  ink: "var(--color-ink-500)",
+  inkArea: "rgba(165,176,178,0.12)",
   mint: "#5DCAA5",
   gray: "#C2C8C9",
   violeta: "#7A6A9B",
@@ -187,6 +190,8 @@ export function LineaPorFecha({
               key={i}
               cx={xFor(i)}
               cy={yFor(punto.valor as number)}
+              // El destacado es la única marca en terracota: la serie va en
+              // su propio color, y un punto destacado se lee contra ella.
               r={destacado ? 4.5 : 3}
               fill={destacado ? COLOR.terracotta : color}
               stroke="white"

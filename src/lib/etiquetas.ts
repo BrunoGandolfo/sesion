@@ -83,6 +83,9 @@ const DICCIONARIO: Readonly<Record<string, string>> = {
   "pregunta circular": "Pregunta circular",
   validacion: "Validación",
   "silencio terapeutico": "Silencio terapéutico",
+  // Fuera del contrato, pero llega en datos viejos y el gráfico muestra toda
+  // clave que venga: con su nombre y su tilde, no "Psicoeducacion".
+  psicoeducacion: "Psicoeducación",
   otra: "Otra",
   otras: "Otras",
   otros: "Otros",
