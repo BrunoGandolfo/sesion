@@ -1,13 +1,5 @@
 # Identidad y consentimiento: lo que sigue abierto
 
-- **Re-firma:** la API devuelve `sugiereRefirmar` para firmas de versiones
-  anteriores, pero ninguna pantalla lo muestra. `CONSENTIMIENTO_NUEVO_TEXTO`
-  está en el glosario sin uso. Las firmas anteriores siguen válidas; no se
-  deben bloquear.
-- **Rutas con Prisma directo:** `cuenta/password` y
-  `pacientes/[id]/documentacion` siguen como excepciones en
-  `src/lib/__tests__/rutas-sin-prisma.test.ts`. Hay que pasarlas a casos de uso
-  y sacarlas de la lista.
 - **Consolas (sólo el dueño):** verificar en Vercel que no queden variables
   retiradas (`AUTH_SECRET`, `AUTH_URL`, la clave ENC1) y en Anthropic la
   configuración de retención. La fecha que informa el consentimiento es la

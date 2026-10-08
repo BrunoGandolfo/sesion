@@ -15,6 +15,7 @@ import {
   FALTA_REVISAR_VERSION,
 } from "@/lib/glosario";
 import { CLAVE_MENCIONES } from "@/lib/sesion-clinica/aprobacion";
+import { estaEnProceso } from "@/lib/sesion-clinica/estados";
 import type { NotaSoap, SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
 import type { VistaSesion } from "./selector-vista";
@@ -41,6 +42,20 @@ export function notaDeSesion(sesion: SesionClinicaResponse): NotaSoap {
     analisis: nota?.analisis ?? "",
     plan: nota?.plan ?? "",
   };
+}
+
+/**
+ * La nota que se sigue viendo mientras se escribe la siguiente: "Volver a
+ * escribirla" deja la generación anterior en la fila hasta que el resultado
+ * nuevo la reemplace (casos-uso/sesion/reprocesar.ts), y el GET la manda.
+ * null si la sesión no está en proceso o si todavía no hubo ninguna nota
+ * (la primera vez que se escribe).
+ */
+export function notaAnteriorEnProceso(sesion: SesionClinicaResponse): NotaSoap | null {
+  if (!estaEnProceso(sesion.estado)) return null;
+  if (!sesion.notaFinal && !sesion.notaIa) return null;
+  const nota = notaDeSesion(sesion);
+  return Object.values(nota).some((texto) => texto.trim() !== "") ? nota : null;
 }
 
 /** Dos notas con el mismo texto en las cuatro secciones. */

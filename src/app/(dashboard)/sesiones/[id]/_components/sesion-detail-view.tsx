@@ -16,7 +16,7 @@ import { estaEnProceso } from "@/lib/sesion-clinica/estados";
 import { accionesDeUsuaria, cuerpoDe } from "./acciones-sesion";
 import { Aviso, AvisoAprobada } from "./avisos-sesion";
 import { BarraAcciones } from "./barra-acciones";
-import { mismaNota, notaDeSesion } from "./datos";
+import { mismaNota, notaAnteriorEnProceso, notaDeSesion } from "./datos";
 import { NotaSesionView } from "./nota-sesion-view";
 import { ParaVosView } from "./para-vos-view";
 import { SelectorVista, type VistaSesion } from "./selector-vista";
@@ -32,6 +32,7 @@ import {
   ESCRIBIENDO_NOTA,
   NOTA_GUARDADA,
   NOTA_NO_ESCRITA,
+  REESCRIBIENDO_VERSION_ANTERIOR,
   REINTENTANDO,
   REINTENTAR,
   SECCIONES_SOAP,
@@ -108,6 +109,10 @@ export function SesionDetailView({
   const cuerpo = sesion ? cuerpoDe(sesion.estado) : null;
   const acciones = sesion ? accionesDeUsuaria(sesion.estado) : null;
 
+  // "Volver a escribirla": mientras se escribe la nueva, la anterior se
+  // sigue leyendo, sin edición ni aprobación (acciones de `procesando`).
+  const notaAnterior = sesion && vista === "nota" ? notaAnteriorEnProceso(sesion) : null;
+
   // Sólo la nota se firma: "Para vos" es lectura.
   const enRevision = acciones?.aprobar === true;
   const editable = vista === "nota" && enRevision;
@@ -177,7 +182,22 @@ export function SesionDetailView({
           </Aviso>
         ) : null}
 
-        {sesion && estaEnProceso(sesion.estado) ? (
+        {sesion && notaAnterior ? (
+          <div className="flex flex-col gap-6">
+            <div
+              role="status"
+              className="flex items-center gap-3 rounded-lg border border-[color:var(--border-subtle)] bg-cream-100 px-4 py-3"
+            >
+              <AnilloProgreso tamano={20} className="shrink-0 text-gold-500" />
+              <p className="font-sans text-[14px] leading-[1.5] text-ink-900">
+                {REESCRIBIENDO_VERSION_ANTERIOR}
+              </p>
+            </div>
+            <NotaSesionView sesion={sesion} nota={notaAnterior} editable={false} />
+          </div>
+        ) : null}
+
+        {sesion && estaEnProceso(sesion.estado) && !notaAnterior ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AnilloProgreso tamano={30} className="text-gold-500" />
             <p

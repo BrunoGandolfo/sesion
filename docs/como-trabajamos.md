@@ -35,6 +35,12 @@ esquema parecen equivocados, se dice con fundamento antes de rodearlos.
 
 - Cada frase del criterio de salida tiene un test que la demuestra.
 - `codex review --uncommitted` antes de cada commit; los P1/P2 se arreglan con test.
+  Corre directo en el worktree, sin clonar aparte. Si falla con `Failed to read
+  project hooks config file …/sesion/.codex/config.toml: Not a directory`, se
+  juntaron un archivo `.codex` vacío en `~/proyectos/sesion` (versionado en las
+  ramas anteriores a 850b2b5) y una carpeta `.codex/` vacía en el worktree
+  (ignorada por `.gitignore`): se borra esa carpeta del worktree y se vuelve a
+  correr.
 - El CI corre la suite completa con un Postgres propio: es el juez de cada rama
   antes de fusionar. El recorrido de Playwright (`pruebas/e2e`) recorre la app
   como la usuaria, pero no corre en el CI: se lanza a mano contra una rama
