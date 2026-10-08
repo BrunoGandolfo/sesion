@@ -301,7 +301,16 @@ it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar 
   expect(vista).toContain("Descartar grabación");
   let corpus = leerCorpus();
   for (const texto of vigentes) corpus = corpus.replaceAll(texto, "");
-  expect(corpus).not.toMatch(/WhatsApp|Descartar|Descartarla|Volver a intentarlo/i);
+  expect(corpus).not.toMatch(/Descartar|Descartarla|Volver a intentarlo/i);
+  // WhatsApp volvió como recordatorio que ella manda desde su teléfono: lo
+  // cuentan estas páginas, y sólo mientras Hoy ofrezca el botón.
+  const conWhatsapp = ["_indice.md", "02-pantalla-hoy.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
+  expect(codigo("src/app/(dashboard)/_components/recordatorios-whatsapp.tsx")).toContain("{ABRIR_WHATSAPP}");
+  const restoDelCorpus = corpus
+    .split(/(?=----- \S+\.md -----)/)
+    .filter((parte) => !conWhatsapp.some((nombre) => parte.startsWith(`----- ${nombre} -----`)));
+  expect(restoDelCorpus.length).toBe(corpus.split(/(?=----- \S+\.md -----)/).length - conWhatsapp.length);
+  expect(restoDelCorpus.join("")).not.toMatch(/WhatsApp/i);
   expect(corpus).not.toMatch(/No recibe respuestas|hasta \*\*3 intentos|Seguís con la sesión abierta acá/);
   expect(documento("01-entrar-y-cuenta.md")).toContain("se cierran todas las sesiones abiertas");
   expect(documento("01-entrar-y-cuenta.md")).toContain("Esta sesión sigue abierta");

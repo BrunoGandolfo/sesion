@@ -22,7 +22,7 @@ import { CuentaSeccion } from "./cuenta-seccion";
 import type { EstadoGuardado } from "./datos";
 import { InvitarColega } from "./invitar-colega";
 import { MensajeRecordatorio } from "./mensaje-recordatorio";
-import { CuandoAvisar, SelectorEnfoque } from "./opciones-radio";
+import { CuandoAvisar, SelectorCanal, SelectorEnfoque } from "./opciones-radio";
 import { TituloSeccion } from "./titulo-seccion";
 import { useAutoguardado } from "./useAutoguardado";
 import { VocabularioSeccion } from "./vocabulario-seccion";
@@ -195,6 +195,14 @@ export function ConfigView() {
           <TituloSeccion>Recordatorio</TituloSeccion>
           <Card>
             <div className="flex flex-col gap-6">
+              <div>
+                <SelectorCanal
+                  value={form.canalRecordatorio}
+                  onChange={(valor) => actualizarCampo("canalRecordatorio", valor)}
+                />
+                <GuardadoCampo estado={estadoDelCampo("canalRecordatorio")} />
+              </div>
+
               <div>
                 <CuandoAvisar
                   value={form.recordatorioModo}

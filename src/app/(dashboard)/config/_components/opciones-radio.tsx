@@ -1,8 +1,8 @@
 "use client";
 
 // Un grupo de radios dibujado como tarjetas: cada opción con su título y una
-// línea que dice qué implica. Lo usan los dos selectores de Tu consultorio
-// (el enfoque y cuándo se avisa), que antes eran dos copias del mismo JSX.
+// línea que dice qué implica. Lo usan los selectores de Tu consultorio (el
+// enfoque, cómo y cuándo se avisa), que antes eran copias del mismo JSX.
 
 import * as React from "react";
 
@@ -21,6 +21,8 @@ import {
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
 import type { OrientacionTeorica } from "@/types/domain";
+
+import type { CanalRecordatorio } from "../../_components/recordatorios-datos";
 
 interface Opcion<T extends string> {
   valor: T;
@@ -186,5 +188,46 @@ export function CuandoAvisar({
         </p>
       ) : null}
     </OpcionesRadio>
+  );
+}
+
+// ─── Cómo se recuerdan los turnos ───────────────────────────────────────────
+// SMS es lo de siempre: sale solo, desde un número de servicio. Con WhatsApp
+// el mensaje lo manda ella desde su teléfono, y por eso las respuestas le
+// llegan a ella.
+
+const CANALES: Opcion<CanalRecordatorio>[] = [
+  {
+    valor: "sms",
+    titulo: "SMS automático",
+    detalle: "La app manda el SMS sola. Las respuestas no te llegan.",
+  },
+  {
+    valor: "whatsapp",
+    titulo: "WhatsApp desde mi teléfono",
+    detalle:
+      "La app te prepara el mensaje y lo mandás vos; las respuestas te llegan a tu WhatsApp.",
+  },
+  {
+    valor: "ambos",
+    titulo: "Ambos",
+    detalle: "Sale el SMS automático y además tenés el WhatsApp preparado en Hoy.",
+  },
+];
+
+export function SelectorCanal({
+  value,
+  onChange,
+}: {
+  value: CanalRecordatorio;
+  onChange: (canal: CanalRecordatorio) => void;
+}) {
+  return (
+    <OpcionesRadio
+      leyenda="Cómo recordás los turnos"
+      opciones={CANALES}
+      valor={value}
+      onChange={onChange}
+    />
   );
 }

@@ -1,10 +1,50 @@
-# El recordatorio por SMS
+# Recordatorios
 
-**Para qué sirve.** Cada turno agendado avisa a la paciente por SMS, si tiene un
-celular cargado y no pidió la baja. Acá está cuándo sale, cómo se escribe el
-mensaje y qué hacer si no salió.
+**Para qué sirve.** Cada turno agendado se le recuerda a la paciente. Acá está
+cómo: por SMS automático, por WhatsApp desde tu teléfono o de las dos formas;
+cuándo sale el SMS, cómo se escribe y qué hacer si no salió.
 
-## Cuándo sale
+## Los tres modos
+
+En **Tu consultorio → Recordatorio → Cómo recordás los turnos** elegís uno, y
+vale para todos los turnos:
+
+- **SMS automático** — *"La app manda el SMS sola. Las respuestas no te
+  llegan."* Es lo de siempre, y lo que tiene toda cuenta que no eligió otra
+  cosa. Todo el resto de esta página es sobre el SMS.
+- **WhatsApp desde mi teléfono** — *"La app te prepara el mensaje y lo mandás
+  vos; las respuestas te llegan a tu WhatsApp."* No sale ningún SMS.
+- **Ambos** — sale el SMS automático y además tenés el WhatsApp preparado en
+  **Hoy**. La paciente puede recibir los dos.
+
+## WhatsApp desde tu teléfono
+
+Con **WhatsApp desde mi teléfono** o **Ambos**, en **Hoy** aparece el bloque
+**Recordatorios para hoy**, después de la agenda del día. Si no hay a quién
+avisar, dice *"No hay turnos para avisar hoy"*.
+
+Cada fila tiene la paciente, el día y la hora del turno, y cómo está:
+
+- **Sin avisar** — todavía no lo abriste.
+- **Avisado 10:32** — lo abriste a esa hora.
+- **Sin teléfono** — la paciente no tiene teléfono cargado. La fila se ve
+  apagada, sin botón, con **Ver ficha →** para cargarlo.
+
+**Abrir WhatsApp** abre la conversación con la paciente y el mensaje ya
+escrito: en el teléfono, en la app de WhatsApp; en la computadora, en WhatsApp
+Web. El mensaje lo arma la app con los datos del turno; lo ves antes de
+mandarlo, y podés cambiarlo ahí mismo. **Lo mandás vos**: la app no lo envía.
+
+Tocar el botón deja la fila en **Avisado** con la hora. "Avisado" quiere decir
+que **abriste** el WhatsApp de ese turno, no que el mensaje salió: eso pasa
+cuando tocás enviar en WhatsApp, y la app no lo ve. WhatsApp se abre siempre,
+aunque anotar el aviso falle; si falla, la fila lo dice: *"Se abrió WhatsApp,
+pero no quedó anotado."*
+
+Como el mensaje sale de tu número, **las respuestas te llegan a tu WhatsApp**,
+como cualquier conversación.
+
+## Cuándo sale el SMS
 
 En **Tu consultorio → Recordatorio → Cuándo se avisa** elegís uno de tres
 momentos, y vale para todos los turnos:
@@ -124,4 +164,7 @@ src/app/(dashboard)/agenda/_components/detalle-datos.ts
 src/app/(dashboard)/agenda/_components/detalle-ver.tsx
 src/lib/glosario.ts
 vercel.json
+src/app/(dashboard)/_components/recordatorios-whatsapp.tsx
+src/app/(dashboard)/_components/recordatorios-datos.ts
+src/app/(dashboard)/_components/textos.ts
 -->

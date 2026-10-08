@@ -1,8 +1,8 @@
 # La pantalla de Hoy
 
 **Para qué sirve.** Es la primera pantalla: la sesión que viene o está en
-curso, la agenda del día, lo que espera una acción tuya, y dos números del día
-y del mes.
+curso, la agenda del día, los recordatorios por WhatsApp si los usás, lo que
+espera una acción tuya, y dos números del día y del mes.
 
 ## Lo que ves, de arriba abajo
 
@@ -52,7 +52,15 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    la duración, la paciente, la modalidad y la tarifa, y a la derecha lo que
    corresponde hacer (ver abajo). Si no hay turnos: *"Hoy no hay nada
    agendado."* *"A veces eso también es parte del trabajo."*
-5. **Pendientes** — una tarjeta con borde dorado a la izquierda. Aparece solo si
+5. **Recordatorios para hoy** — solo si en **Tu consultorio** elegiste
+   **WhatsApp desde mi teléfono** o **Ambos**; con **SMS automático** no
+   aparece. Una fila por turno a avisar: la paciente, el día y la hora del
+   turno, **Sin avisar** o **Avisado 10:32**, y el botón **Abrir WhatsApp**,
+   que abre la conversación con el mensaje ya escrito para que lo mandes vos.
+   Si la paciente no tiene teléfono, la fila se ve apagada, dice **Sin
+   teléfono** y en lugar del botón está **Ver ficha →**. Si no hay a quién
+   avisar: *"No hay turnos para avisar hoy"*. Ver `06-recordatorios-sms.md`.
+6. **Pendientes** — una tarjeta con borde dorado a la izquierda. Aparece solo si
    hay algo:
    - **Los primeros pasos**, en una cuenta nueva: *"Cargá tu tarifa"*, *"Cargá
      tu primera paciente"*, *"Agendá la primera sesión"*.
@@ -71,7 +79,7 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
      firmaron la autorización de grabación.
    De las notas y de las autorizaciones se muestran hasta 3, y el resto se
    resume como *"y N más"*.
-6. **Los dos números** — **Sesiones hoy**, con cuántas están pagas, y **Este
+7. **Los dos números** — **Sesiones hoy**, con cuántas están pagas, y **Este
    mes**, lo cobrado en el mes corriente. No se tocan.
 
 ## Lo que ofrece cada fila de la agenda del día
@@ -125,6 +133,8 @@ contar cuando se graba o se cobra.
   pestaña o en la computadora— aparece al volver a entrar o recargar.
 - **No muestra los turnos cancelados.**
 - **No muestra el bloque de pendientes** cuando no hay nada pendiente.
+- **No manda el WhatsApp por vos**: **Abrir WhatsApp** lo deja escrito, y
+  **Avisado** quiere decir que lo abriste, no que salió.
 - **No cobra desde el bloque de pendientes**: ahí se enlaza a la nota, a la ficha
   o a Cobros.
 
@@ -148,4 +158,6 @@ src/lib/format.ts
 src/app/api/_lib/casos-uso/pendientes-terapeuta.ts
 src/components/layout/avisos-de-notas.tsx
 src/components/layout/globito-hoy.tsx
+src/app/(dashboard)/_components/recordatorios-whatsapp.tsx
+src/app/(dashboard)/_components/recordatorios-datos.ts
 -->
