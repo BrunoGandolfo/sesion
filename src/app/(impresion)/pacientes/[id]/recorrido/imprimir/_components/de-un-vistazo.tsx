@@ -27,7 +27,9 @@ export function cifrasDeUnVistazo(datos: Exportacion): Cifra[] {
   const ultimaSenal = senales.at(-1);
 
   const cifras: Cifra[] = [
-    { rotulo: "Sesiones con nota", valor: String(datos.sesiones.length) },
+    // Las notas aprobadas: lo mismo que cuenta la cabecera. "Cómo va" cuenta
+    // además las que están para revisar (progreso.totalSesiones).
+    { rotulo: "Notas aprobadas", valor: String(datos.sesiones.length) },
     { rotulo: "Objetivos activos", valor: activos === undefined ? "—" : String(activos) },
     temas[0]
       ? { rotulo: "El tema que más vuelve", valor: temas[0].tema, detalle: pluralizar(temas[0].conteo, "sesión", "sesiones") }

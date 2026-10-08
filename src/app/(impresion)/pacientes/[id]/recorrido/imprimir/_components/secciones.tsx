@@ -7,14 +7,15 @@
 // de 2 px a la izquierda, y las señales anteriores sobre terracota.
 
 import { AlianzaChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/alianza";
-import { LecturasDeLaUltima, SESIONES_PARA_GRAFICOS } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor";
+import { SESIONES_PARA_GRAFICOS } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor";
 import { FlagsRiesgoTimeline } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/flags";
 import { IntensidadChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/intensidad";
 import { IntervencionesChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/intervenciones";
-import { TemasTable } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/temas";
 import { HiloContenido } from "@/components/clinico/HiloContenido";
 import { POCO_RECORRIDO_DETALLE, POCO_RECORRIDO_TITULO } from "@/lib/glosario";
 
+import { LecturasDelPeriodo } from "./lecturas";
+import { TemasDelPeriodo } from "./temas";
 import { autoria, diaCorto, diaCortoYHora, diaYHora, estadoLegible, type Exportacion } from "./formato";
 
 export function Seccion({
@@ -65,7 +66,8 @@ export function RecorridoDeVersion({ datos, version }: { datos: Exportacion; ver
   );
 }
 
-/** "Cómo va": los mismos gráficos de la pantalla, cada uno en su tarjeta. */
+/** "Cómo va": los mismos gráficos de la pantalla, cada uno en su tarjeta;
+ *  temas y lecturas con su versión de papel (temas.tsx, lecturas.tsx). */
 export function Graficos({ datos }: { datos: Exportacion }) {
   const { progreso } = datos;
   const sesiones = progreso.sesiones;
@@ -83,11 +85,10 @@ export function Graficos({ datos }: { datos: Exportacion }) {
       <FlagsRiesgoTimeline riesgos={progreso.riesgos} />
       <IntensidadChart sesiones={sesiones} />
       <AlianzaChart sesiones={sesiones} />
-      <TemasTable temas={progreso.temas} sesiones={sesiones} />
+      <TemasDelPeriodo temas={progreso.temas} sesiones={sesiones} />
       <IntervencionesChart sesiones={sesiones} />
-      {/* La misma pieza que la pantalla: la alerta de la última sesión
-          sale igual en el papel. */}
-      <LecturasDeLaUltima ultima={ultima} />
+      {/* La pantalla muestra sólo la última; el papel, todas. */}
+      <LecturasDelPeriodo sesiones={sesiones} />
     </div>
   );
 }

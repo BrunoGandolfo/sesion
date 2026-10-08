@@ -143,7 +143,7 @@ function Hoja({ datos }: { datos: Exportacion }) {
                 )}
               </Seccion>
 
-              <Seccion antetitulo="Todas las sesiones con nota" titulo={COMO_VA} nuevaPagina>
+              <Seccion antetitulo={pluralizar(datos.progreso.totalSesiones, "sesión con nota", "sesiones con nota")} titulo={COMO_VA} nuevaPagina>
                 <Graficos datos={datos} />
               </Seccion>
 

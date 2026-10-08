@@ -167,7 +167,9 @@ La hoja lleva:
   activos, el tema que más vuelve y, si hubo, la última señal.
 - **El Recorrido vigente**, completo, con sus señales anteriores y su detalle.
 - **Cómo va**, con todas las sesiones con nota, también las que están para
-  revisar.
+  revisar. A diferencia de la pantalla, el papel lleva el **Progreso
+  percibido** y la **Observación IA** de cada sesión, de la más vieja a la más
+  nueva, y cada tema con la última vez que apareció.
 - **El historial de versiones**: cada una con su fecha, quién la escribió, su
   estado y la nota que la motivó.
 - **Las versiones que estuvieron vigentes antes**, completas.

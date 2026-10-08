@@ -28,7 +28,7 @@ describe("De un vistazo", () => {
       ],
     }));
     expect(cifras.map((c) => [c.rotulo, c.valor, c.detalle])).toEqual([
-      ["Sesiones con nota", "2", undefined],
+      ["Notas aprobadas", "2", undefined],
       ["Objetivos activos", "1", undefined],
       ["El tema que más vuelve", "Trabajo", "3 sesiones"],
       ["Última señal", "2 sep 2026", expect.any(String)],
@@ -37,7 +37,7 @@ describe("De un vistazo", () => {
   });
 
   it("sin señales son tres cifras, y sin Recorrido vigente no inventa nada", () => {
-    expect(cifrasDeUnVistazo(datos({})).map((c) => c.rotulo)).toEqual(["Sesiones con nota", "Objetivos activos", "El tema que más vuelve"]);
+    expect(cifrasDeUnVistazo(datos({})).map((c) => c.rotulo)).toEqual(["Notas aprobadas", "Objetivos activos", "El tema que más vuelve"]);
     expect(cifrasDeUnVistazo(datos(null)).map((c) => c.valor)).toEqual(["2", "—", "—"]);
   });
 });
