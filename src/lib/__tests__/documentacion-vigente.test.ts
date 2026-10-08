@@ -27,10 +27,12 @@ it("rechaza un enlace de archivo roto y una ruta HTTP eliminada", () => {
   });
   expect(resultado.errores).toHaveLength(2);
 });
+// WhatsApp volvió como canal del recordatorio (casos-uso/recordatorios-whatsapp.ts):
+// lo retirado es el enlace viejo de cobros, buildWhatsAppUrl, y eso es lo que se vigila.
 it("los cuatro documentos no reintroducen configuración ni contratos retirados", () => {
   for (const archivo of DOCUMENTOS) {
     const texto = readFileSync(archivo, "utf8");
-    expect(texto, archivo).not.toMatch(/NEXTAUTH_URL|NOTES_ENCRYPTION_KEY|WhatsApp|ALERTA_WEBHOOK_URL|SEED_SECRET|SEED_USER_PASSWORD/);
+    expect(texto, archivo).not.toMatch(/NEXTAUTH_URL|NOTES_ENCRYPTION_KEY|buildWhatsAppUrl|ALERTA_WEBHOOK_URL|SEED_SECRET|SEED_USER_PASSWORD/);
     expect(texto, archivo).not.toMatch(/PATCH \/api\/sesion-clinica/);
   }
 });

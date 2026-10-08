@@ -28,7 +28,7 @@ abrir.
 | `password_resets` | Enlaces de recuperación: hash del token, vencimiento, cuándo se usó y **cuándo salió el correo**. | Un enlace cuyo correo no salió no vale y no gasta el cupo. | Recuperar (crea y marca enviado), restablecer (marca usado), cron (purga). | Restablecer, el cupo de tres por hora. |
 | `invitaciones` | Hash del token, vencimiento, cuándo se usó, quién la creó. | Que una colega abra su propio consultorio. Tope de vigentes por creadora (constante en el código, marcada temporal). Crear y usar dejan evento de auditoría. | Crear invitación, registro. | Registro, el tope. |
 | `cupos_ayuda` | Por profesional y día: cuántas preguntas le hizo a Lupita. | Reservar el cupo **antes** de llamar al proveedor, en una sola operación atómica. Cortar una respuesta cuenta igual. | La ruta de ayuda. | La misma. |
-| `configuraciones` | Nombre profesional, dirección, WhatsApp, tarifa por defecto, cuándo sale el recordatorio (`dia_anterior` / `dos_dias_antes` / `misma_manana`), plantilla del SMS, orientación teórica (`cbt_mi` / `gestalt`). | Una fila por organización. Sale `horasAnticipacion` (nadie la leía). | Pantalla de configuración. | Recordatorios, SMS, el worker (orientación). |
+| `configuraciones` | Nombre profesional, dirección, WhatsApp, tarifa por defecto, cuándo sale el recordatorio (`dia_anterior` / `dos_dias_antes` / `misma_manana`), plantilla del SMS, orientación teórica (`cbt_mi` / `gestalt`), por dónde sale el recordatorio (`canal_recordatorio`: `sms` / `whatsapp` / `ambos`, default `sms`). | Una fila por organización. Sale `horasAnticipacion` (nadie la leía). | Pantalla de configuración. | Recordatorios, SMS, el worker (orientación). |
 
 ### Pacientes y agenda
 
@@ -43,6 +43,7 @@ abrir.
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
 | `envios_sms` | Cada SMS que la app decidió mandar: motivo (`recordatorio_turno` / `cambio_de_horario` / `recordatorio_cobro`), estado (ocho: `pendiente`, `enviando`, `aceptado`, `entregado`, `no_entregado`, `cancelado`, `fallido`, `desconocido`), paciente, turno, teléfono congelado, cuándo debía salir, próximo intento, intentos, el identificador que devuelve Twilio (`sid`), el código de error del proveedor, un motivo en palabras para la pantalla cuando no hay código, y cuántos segmentos cobró Twilio. Una **clave de idempotencia** única: dos pedidos con la misma clave son el mismo mensaje. **Nunca el texto** (decisión del dueño). | Reemplaza a `recordatorios`. "Aceptado" no es "llegó": la confirmación del operador escribe `entregado` o `no_entregado`. `desconocido` (se llamó a Twilio y no sabemos qué pasó) **nunca** se reenvía solo. Reprogramar un turno produce una clave nueva y un mensaje de cambio de horario. | Crear/mover/cancelar turno, el cron de despacho, el webhook de estado de Twilio, la conciliación. | Cron, pantallas de agenda y cobros, conteo mensual por consultorio. |
+| `avisos_whatsapp` | Una fila por cada vez que la profesional abrió el enlace de WhatsApp del recordatorio de un turno: organización, turno (FK `RESTRICT`), tipo (`recordatorio`; el enum `tipo_aviso_whatsapp` existe para el aviso de cobro que viene después), la fecha del turno que avisó (`fecha_turno`), cuándo lo abrió y quién (`usuario_id`, sin FK). Índice por (`turno_id`, `tipo`). **Ni texto ni teléfono.** | WhatsApp asistido: con `canal_recordatorio` en `whatsapp` o `ambos` la app prepara el mensaje y ella lo manda desde su teléfono. La app sabe que lo **abrió**, no que salió. "Ya avisado" = existe al menos una fila para la fecha vigente del turno; una de otra fecha hace que reprogramar mande un cambio de horario. | `POST /api/recordatorios/whatsapp/[turnoId]/abierto` (con su evento `recordatorio.whatsapp_abierto`). | `GET /api/recordatorios/whatsapp` (`avisadoEn`, la última). |
 | `bajas_sms` | Teléfonos que respondieron "BAJA" (o que Twilio marcó como dados de baja), con motivo. | Obligación legal: se consulta antes de **todo** envío. Es por número, no por consultorio: la baja es del teléfono. | El webhook de SMS entrantes; el código 21610 de Twilio; a mano. | Todo envío. |
 
 ### Consentimiento
@@ -133,7 +134,11 @@ la Fase 1 que el esquema reconcilió; la historia completa está en Git.
    término del vocabulario con su hash), y los borrados del 03.
 7. **SMS.** `envios_sms` con los ocho estados, clave de idempotencia, motivo,
    `sid`, código del proveedor, segmentos, sin texto; más `bajas_sms`. Se borra
-   `recordatorios`.
+   `recordatorios`. Desde `20261008120000_whatsapp_asistido`,
+   `configuraciones.canal_recordatorio` y `avisos_whatsapp`: con canal
+   `whatsapp` el cron cancela el recordatorio del turno al despacharlo, con
+   `motivo_no_envio` = "el recordatorio va por WhatsApp, no por SMS". Es texto
+   y no un enum, como los demás motivos, porque lo lee la pantalla tal cual.
 8. **Latido del worker.** `worker_estado` del 04. No hay tabla `latidos` ni
    ruta nueva; la ruta pública `/api/estado-worker` del 05 lee esta fila.
 9. **Cupo de Lupita.** `cupos_ayuda` del 04.

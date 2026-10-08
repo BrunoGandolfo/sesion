@@ -312,7 +312,7 @@ Ninguna se puede hacer desde el repositorio.
 
 ### Reversiones administrativas
 
-Cuatro SQL revierten una migración. No los ejecuta la app ni Publicar;
+Cinco SQL revierten una migración. No los ejecuta la app ni Publicar;
 sólo se corren a mano, con la conexión directa y después de decidirlo.
 
 - `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
@@ -331,6 +331,13 @@ sólo se corren a mano, con la conexión directa y después de decidirlo.
   y `audio_iv` vacías (no había datos que recuperar) y borra su registro en
   `_prisma_migrations`. Sólo hace falta si se vuelve a publicar un código
   anterior a esa migración.
+- `scripts/mantenimiento/revertir-whatsapp-asistido.sql` revierte
+  `20261008120000_whatsapp_asistido`: borra `avisos_whatsapp` (se pierde el
+  registro de qué recordatorios abrió por WhatsApp), la columna
+  `configuraciones.canal_recordatorio` (todas vuelven a SMS), sus dos enums y
+  su registro en `_prisma_migrations`. Antes, publicar un código anterior: el
+  cron de SMS lee la columna en cada despacho. Los envíos ya cancelados por
+  canal quedan cancelados.
 - `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de `20260917120000_limites_invitados` y su registro en `_prisma_migrations`. Obsoleto salvo reversión de código: hoy leen esas columnas `src/app/api/_lib/casos-uso/estado-prueba.ts`, `src/lib/cuenta-registro-db.ts` y `prepararAudio` (`src/app/api/_lib/casos-uso/audio.ts`). Correrlo con ese código publicado rompe el alta por invitación y la grabación.
 
 ## 5. Incidentes y límites conocidos
@@ -400,6 +407,33 @@ No se describe un esquema antiguo de horas de anticipación.
 | cancelado | El envío dejó de corresponder. Si ya había sido aceptado, pudo haber salido. |
 | fallido | Rechazo definitivo o ventana de envío agotada. |
 | desconocido | Hubo una llamada con resultado incierto; no se reenvía automáticamente. |
+
+### Canal del recordatorio: SMS, WhatsApp o ambos
+
+`configuraciones.canal_recordatorio` (default `sms`, se cambia con
+`PATCH /api/config`) decide por dónde sale el recordatorio del turno. Se lee
+**al despachar**, no al crear el turno: cambiarlo alcanza a lo ya agendado.
+
+- `sms`: como siempre.
+- `whatsapp`: el cron no llama a Twilio para el recordatorio ni para el cambio
+  de horario; cuando vence su hora, el envío pasa a `cancelado` con el motivo
+  "el recordatorio va por WhatsApp, no por SMS". El aviso de cobro sigue
+  saliendo por SMS (lo pide ella desde Cobros).
+- `ambos`: sale el SMS y además se prepara el WhatsApp.
+
+Con `whatsapp` o `ambos`, `GET /api/recordatorios/whatsapp` lista los turnos
+cuyo envío tiene `programado_en` hoy (Montevideo), más los vencidos que el
+cron trata hoy (agendado o reabierto hoy para esta tarde: el SMS saldría
+enseguida), con el
+enlace `https://wa.me/…?text=…` armado con el mismo texto del SMS. Ella lo
+abre y lo manda desde su teléfono;
+`POST /api/recordatorios/whatsapp/[turnoId]/abierto` (cuerpo opcional
+`{ fecha }`, la del enlace) registra la apertura en `avisos_whatsapp` con la
+fecha del turno avisada. La app no puede saber si el mensaje salió: un turno
+"avisado" es uno cuyo enlace se abrió para su fecha vigente. Si después se
+mueve, el aviso nuevo sale como cambio de horario, igual que tras un SMS
+aceptado; y si la apertura de la fecha vieja llega después de moverlo, el
+recordatorio vigente que no salió pasa a cambio de horario en ese momento.
 
 Ante desconocido, buscar el mensaje en los logs de Twilio por hora y destino
 antes de decidir una corrección. No hay pantalla de conciliación en main;

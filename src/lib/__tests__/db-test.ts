@@ -285,6 +285,7 @@ export const TABLAS = [
   "series_turno",
   "turnos",
   "envios_sms",
+  "avisos_whatsapp",
   "bajas_sms",
   "consentimientos_grabacion",
   "sesiones_clinicas",

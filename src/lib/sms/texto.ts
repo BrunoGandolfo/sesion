@@ -85,7 +85,7 @@ export function prepararPlantillaRecordatorio(template: string): string {
 
 /** Los motivos de SMS que tienen plantilla acá (el de cobro vive en
  *  src/lib/deudas.ts y lo manda la pantalla de Cobros). */
-type MotivoConPlantilla = "recordatorio_turno" | "cambio_de_horario";
+export type MotivoConPlantilla = "recordatorio_turno" | "cambio_de_horario";
 
 /**
  * El texto de un envío según su motivo: el recordatorio usa la plantilla de
@@ -102,6 +102,38 @@ export function textoDelEnvio(
       ? PLANTILLA_CAMBIO_DE_HORARIO
       : prepararPlantillaRecordatorio(plantillaRecordatorio);
   return buildSmsMessage(plantilla, data);
+}
+
+/** Lo que hace falta de la configuración para armar un recordatorio. */
+export interface ConfiguracionDelRecordatorio {
+  templateRecordatorio: string;
+  direccion: string;
+  nombreProfesional: string;
+  /** El teléfono del consultorio (la columna conserva el nombre viejo). */
+  whatsappOrigen: string;
+}
+
+/**
+ * El texto del recordatorio de un turno, con la configuración tal como
+ * viene de la base. Es la ÚNICA puerta: la usan el cron que manda el SMS
+ * (casos-uso/despachar-sms.ts) y el WhatsApp asistido
+ * (casos-uso/recordatorios-whatsapp.ts), así la paciente lee lo mismo por
+ * los dos canales.
+ */
+export function textoDelRecordatorio(
+  motivo: MotivoConPlantilla,
+  configuracion: ConfiguracionDelRecordatorio,
+  paciente: { nombre: string; apellido: string },
+  fechaTurno: Date,
+): string {
+  return textoDelEnvio(motivo, configuracion.templateRecordatorio, {
+    nombre: paciente.nombre,
+    apellido: paciente.apellido,
+    fecha: fechaTurno,
+    direccion: configuracion.direccion,
+    profesional: configuracion.nombreProfesional,
+    telefonoConsultorio: configuracion.whatsappOrigen,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -77,6 +77,8 @@ const INTEGRACION = [
   'src/lib/__tests__/tarifa-pantalla-integracion.test.tsx',
   'src/lib/__tests__/sms-callback.test.ts',
   'src/lib/__tests__/recordar-cobro.test.ts',
+  // WhatsApp asistido: qué se avisa hoy, el cron según el canal y las rutas.
+  'src/lib/__tests__/recordatorios-whatsapp.test.ts',
   'src/lib/__tests__/pendientes-terapeuta.test.ts',
   'src/lib/__tests__/cobrar-turno.test.ts',
   'src/lib/__tests__/multi-tenant.test.ts',

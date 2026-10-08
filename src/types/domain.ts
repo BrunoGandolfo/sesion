@@ -20,7 +20,7 @@ import type {
   MetodoPago,
   Modalidad,
 } from "@/lib/constantes-turno";
-import type { RecordatorioModo } from "@/lib/recordatorios-programacion";
+import type { CanalRecordatorio, RecordatorioModo } from "@/lib/recordatorios-programacion";
 import type {
   AlianzaTerapeutica,
   DatosEstructurados as DatosEstructuradosSchema,
@@ -117,7 +117,44 @@ export interface Configuracion {
    *  auto-supervisión (ver contrato multi-orientación). En la base es el
    *  enum orientacion_teorica. */
   orientacionTeorica: OrientacionTeorica;
+  /** Por dónde sale el recordatorio: sms (default), whatsapp o ambos. En la
+   *  base es el enum canal_recordatorio. */
+  canalRecordatorio: CanalRecordatorio;
   organizationId: string;
+}
+
+export type { CanalRecordatorio };
+
+// ============================================
+// WhatsApp asistido (casos-uso/recordatorios-whatsapp.ts)
+// ============================================
+
+/** Un turno cuyo recordatorio corresponde hoy, con el mensaje listo para
+ *  mandar desde el teléfono de la profesional. */
+export interface RecordatorioWhatsapp {
+  turnoId: string;
+  /** ISO del turno. */
+  fecha: string;
+  paciente: { id: string; nombre: string; apellido: string; telefono: string };
+  /** https://wa.me/<número>?text=<mensaje>, o null si no hay teléfono. */
+  enlace: string | null;
+  /** Por qué no hay enlace; null si lo hay. */
+  motivo: "sin_telefono" | null;
+  /** ISO de la última vez que abrió el enlace de este turno, o null. */
+  avisadoEn: string | null;
+}
+
+/** `data` de GET /api/recordatorios/whatsapp. Con canal `sms`, `turnos` es
+ *  [] y la pantalla decide si muestra el bloque. */
+export interface RecordatoriosWhatsappDeHoy {
+  canal: CanalRecordatorio;
+  turnos: RecordatorioWhatsapp[];
+}
+
+/** `data` (201) de POST /api/recordatorios/whatsapp/[turnoId]/abierto. */
+export interface AvisoWhatsappRegistrado {
+  /** ISO del aviso recién registrado. */
+  avisadoEn: string;
 }
 
 // ============================================

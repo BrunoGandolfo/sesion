@@ -52,7 +52,7 @@ import {
  * `typeof db` entero: el cliente de una transacción no es asignable al
  * cliente completo (no tiene $transaction); con el Pick entran los dos.
  */
-export type ClienteEnvios = Pick<typeof db, "envioSms" | "paciente" | "configuracion">;
+export type ClienteEnvios = Pick<typeof db, "envioSms" | "paciente" | "configuracion" | "avisoWhatsapp">;
 
 /** Estados desde los que un envío TODAVÍA puede terminar mandando un SMS. */
 export const ESTADOS_CON_ENVIO_PENDIENTE = ["pendiente", "enviando"] as const;
@@ -219,6 +219,11 @@ export async function cancelarEnviosDelTurno(
  *  baja: la baja la pidió la paciente, archivar lo decidió la profesional. */
 export const MOTIVO_PACIENTE_ARCHIVADA = "la paciente está archivada";
 
+/** Por qué no salió el SMS del recordatorio cuando la profesional eligió
+ *  WhatsApp (Configuracion.canalRecordatorio): lo decide el cron al
+ *  despachar. Es terminal y lo lee ella en el turno, como los demás. */
+export const MOTIVO_CANAL_WHATSAPP = "el recordatorio va por WhatsApp, no por SMS";
+
 /**
  * Apaga los envíos de la paciente que todavía pueden mandar un SMS, de
  * cualquier motivo (turno o cobro). Es lo que hace archivar, dentro de su
@@ -254,7 +259,8 @@ export interface ReprogramarEnvioParams {
 /**
  * La fecha del turno cambió. Se apaga lo pendiente de la fecha vieja y se
  * programa el aviso de la nueva. Si para ESTE TURNO ya había salido algún
- * aviso (Twilio lo aceptó, o quedó en desconocido: pudo haber salido), el
+ * aviso (Twilio lo aceptó, o quedó en desconocido: pudo haber salido; o
+ * ella abrió el WhatsApp de otra fecha, avisos_whatsapp), el
  * nuevo es un `cambio_de_horario` y sale ya; si no, es el recordatorio de
  * siempre, a su hora. Se mira cualquier fecha anterior, no sólo la inmediata:
  * un turno movido dos veces (A → B → C) cuya paciente recibió el aviso de A
@@ -269,17 +275,24 @@ export async function reprogramarEnvioDelTurno(
 
   await cancelarEnviosDelTurno(tx, turnoId, MOTIVO_REPROGRAMADO, ahora);
 
-  const yaAviso = await tx.envioSms.findFirst({
-    where: {
-      turnoId,
-      claveIdempotencia: { not: claveDelTurno(turnoId, fechaTurno) },
-      OR: [
-        { estado: { in: [...ESTADOS_QUE_PUDIERON_LLEGAR] } },
-        { aceptadoEn: { not: null } },
-      ],
-    },
-    select: { id: true },
-  });
+  const yaAviso =
+    (await tx.envioSms.findFirst({
+      where: {
+        turnoId,
+        claveIdempotencia: { not: claveDelTurno(turnoId, fechaTurno) },
+        OR: [
+          { estado: { in: [...ESTADOS_QUE_PUDIERON_LLEGAR] } },
+          { aceptadoEn: { not: null } },
+        ],
+      },
+      select: { id: true },
+    })) ??
+    // Con el WhatsApp asistido el aviso pudo haber salido del teléfono de
+    // ella: abrir el enlace de otra fecha cuenta igual que un SMS aceptado.
+    (await tx.avisoWhatsapp.findFirst({
+      where: { turnoId, fechaTurno: { not: fechaTurno } },
+      select: { id: true },
+    }));
 
   await programarEnvioDelTurno(tx, {
     turnoId,

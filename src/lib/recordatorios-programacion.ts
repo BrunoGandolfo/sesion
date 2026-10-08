@@ -37,6 +37,13 @@ export type RecordatorioModo = (typeof RECORDATORIO_MODOS)[number];
 /** El de siempre: la tarde anterior. Igual que el default de la columna. */
 export const RECORDATORIO_MODO_DEFAULT: RecordatorioModo = "dia_anterior";
 
+/** Por dónde sale el recordatorio. Espejo de Configuracion.canalRecordatorio:
+ *  con `whatsapp` el cron no manda el SMS y la app le prepara el mensaje a
+ *  la profesional; con `ambos`, las dos cosas. */
+export const CANALES_RECORDATORIO = ["sms", "whatsapp", "ambos"] as const;
+
+export type CanalRecordatorio = (typeof CANALES_RECORDATORIO)[number];
+
 /** Hora de la tarde en que sale el aviso del día anterior. */
 const HORA_TARDE = 20;
 

@@ -9,7 +9,7 @@ import {
 } from "@/lib/constantes-turno";
 import { excedeMaximoPalabras, TERMINO_MUY_LARGO } from "@/lib/hot-words";
 import { normalizePhone } from "@/lib/phone";
-import { RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
+import { CANALES_RECORDATORIO, RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
 import {
   diagnosticoGrabacionSchema,
   orientacionTeoricaSchema,
@@ -205,7 +205,18 @@ export const configUpdateSchema = z.object({
     .min(1, "Falta el template")
     .optional(),
   orientacionTeorica: orientacionTeoricaSchema.optional(),
+  /** Por dónde sale el recordatorio. Lo lee el cron al despachar, así que
+   *  cambiarlo alcanza a los turnos ya agendados. */
+  canalRecordatorio: z.enum(CANALES_RECORDATORIO).optional(),
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// WhatsApp asistido — el body (opcional) de
+// POST /api/recordatorios/whatsapp/[turnoId]/abierto: la `fecha` del turno
+// que traía el enlace que abrió, tal como la dio el GET.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const avisoWhatsappAbiertoSchema = z.object({ fecha: z.iso.datetime().optional() });
 
 // ────────────────────────────────────────────────────────────────────────────
 // Grabación y subida del audio (rutas de sesión clínica)
