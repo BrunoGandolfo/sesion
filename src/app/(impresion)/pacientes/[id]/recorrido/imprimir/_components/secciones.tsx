@@ -16,7 +16,9 @@ import { POCO_RECORRIDO_DETALLE, POCO_RECORRIDO_TITULO } from "@/lib/glosario";
 import { LecturasDelPeriodo } from "./lecturas";
 import { SenalesDelPeriodo } from "./senales";
 import { TemasDelPeriodo } from "./temas";
-import { autoria, diaCorto, diaCortoYHora, diaYHora, estadoLegible, type Exportacion } from "./formato";
+import { formatearHoraMvd } from "@/lib/fechas-montevideo";
+
+import { autoria, diaCorto, diaYHora, estadoLegible, type Exportacion } from "./formato";
 
 export function Seccion({
   antetitulo,
@@ -94,6 +96,17 @@ export function Graficos({ datos }: { datos: Exportacion }) {
   );
 }
 
+/** "28 dic 2026, 20:59" en dos piezas que no se cortan por dentro: con lugar
+ *  va en una línea; si el historial se llena (siete columnas, estados largos,
+ *  versiones de tres cifras) la hora baja y la tabla no se pasa de los 178 mm. */
+function DiaYHoraPartible({ iso }: { iso: string }) {
+  return (
+    <>
+      <span className="whitespace-nowrap">{diaCorto(iso)},</span> <span className="whitespace-nowrap">{formatearHoraMvd(new Date(iso))}</span>
+    </>
+  );
+}
+
 export function Historial({ datos }: { datos: Exportacion }) {
   const { versiones, sesiones } = datos;
   const fechaDeSesion = new Map(sesiones.map((s) => [s.id, diaCorto(s.fecha)]));
@@ -119,12 +132,12 @@ export function Historial({ datos }: { datos: Exportacion }) {
           {versiones.map((v) => (
             <tr key={v.id} className="break-inside-avoid border-b border-cream-200 align-top last:border-b-0">
               <td className="px-2 py-2 tabular-nums">{v.version}</td>
-              <td className="whitespace-nowrap py-2 pr-3 tabular-nums">{diaCortoYHora(v.creadaEn)}</td>
+              <td className="py-2 pr-3 tabular-nums"><DiaYHoraPartible iso={v.creadaEn} /></td>
               <td className="py-2 pr-3">{autoria(v)}</td>
               <td className="py-2 pr-3">{estadoLegible(v, datos)}</td>
               <td className="whitespace-nowrap py-2 pr-3 tabular-nums">{v.basadaEnVersion !== null ? `sobre la v${v.basadaEnVersion}` : "—"}</td>
               <td className="whitespace-nowrap py-2 pr-3 tabular-nums">{v.sesionOrigenId ? (fechaDeSesion.get(v.sesionOrigenId) ?? "No disponible") : "—"}</td>
-              <td className="whitespace-nowrap py-2 pr-2 tabular-nums">{v.resueltaEn ? diaCortoYHora(v.resueltaEn) : "—"}</td>
+              <td className="py-2 pr-2 tabular-nums">{v.resueltaEn ? <DiaYHoraPartible iso={v.resueltaEn} /> : "—"}</td>
             </tr>
           ))}
         </tbody>
