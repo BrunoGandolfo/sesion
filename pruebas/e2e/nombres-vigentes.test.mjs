@@ -54,7 +54,7 @@ const PERMITIDOS = [
   // El bloque de indicadores en el PDF del Recorrido se titula así.
   ["docs/ayuda/10-el-hilo-y-el-recorrido.md", "Cómo va", "En el PDF este bloque se titula **Cómo va**."],
   ["docs/ayuda/10-el-hilo-y-el-recorrido.md", "Cómo va", "- **Cómo va**, con todas las sesiones"],
-  ["docs/ayuda/10-el-hilo-y-el-recorrido.md", "Cómo va", "En **Cómo va** no se"],
+  ["docs/ayuda/10-el-hilo-y-el-recorrido.md", "Cómo va", "En **Cómo va**, cada señal de riesgo"],
   // La Adherencia global existe: es lo primero al abrir el instrumento.
   ["docs/ayuda/09-para-vos-feedback.md", "Adherencia global", "**Adherencia global**: *\"13 de 18"],
 ];

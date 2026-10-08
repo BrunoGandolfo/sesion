@@ -36,7 +36,7 @@ function exportacion() {
   const v1 = version({ version: 1, actor: "ia", sesionOrigenId: SESION_A });
   const v2 = version({ version: 2, propuestaOrigenId: v1.id, sesionOrigenId: SESION_A, resueltaEn: "2026-08-02T12:00:00.000Z" });
   const v3 = version({ version: 3, creadaEn: "2026-08-25T12:00:00.000Z" });
-  const v4 = version({ version: 4, actor: "ia", estado: "propuesta", sesionOrigenId: SESION_B });
+  const v4 = version({ version: 4, actor: "ia", estado: "propuesta", sesionOrigenId: SESION_B, basadaEnVersion: 3 });
   return {
     paciente: { nombre: "Ana", apellido: "Pérez" },
     nombreProfesional: "Lic. Prueba",
@@ -81,11 +81,12 @@ describe("la hoja del Recorrido", () => {
 
     const historial = screen.getByRole("heading", { name: "Historial de versiones" }).closest("section")!;
     const filas = within(historial).getAllByRole("row").slice(1).map((fila) => within(fila).getAllByRole("cell").map((c) => c.textContent));
-    expect(filas.map((f) => [f[0], f[2], f[3], f[4]])).toEqual([
-      ["4", "Propuesta de la IA", "Sin revisar", "20 ago 2026"],
-      ["3", "Edición tuya", "Vigente", "—"],
-      ["2", "Edición tuya", "Estuvo vigente", "1 ago 2026"],
-      ["1", "Propuesta de la IA", "Aceptada con tus ediciones (versión 2)", "1 ago 2026"],
+    // Versión, Escrita, Autoría, Estado, Basada en, Nota de origen, Resuelta.
+    expect(filas.map((f) => [f[0], f[2], f[3], f[4], f[5]])).toEqual([
+      ["4", "Propuesta de la IA", "Sin revisar", "sobre la v3", "20 ago 2026"],
+      ["3", "Edición tuya", "Vigente", "—", "—"],
+      ["2", "Edición tuya", "Estuvo vigente", "—", "1 ago 2026"],
+      ["1", "Propuesta de la IA", "Aceptada con tus ediciones (versión 2)", "—", "1 ago 2026"],
     ]);
   });
 

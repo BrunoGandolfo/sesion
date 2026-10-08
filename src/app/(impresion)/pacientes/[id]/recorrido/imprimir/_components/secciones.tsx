@@ -8,13 +8,13 @@
 
 import { AlianzaChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/alianza";
 import { SESIONES_PARA_GRAFICOS } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/contenedor";
-import { FlagsRiesgoTimeline } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/flags";
 import { IntensidadChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/intensidad";
 import { IntervencionesChart } from "@/app/(dashboard)/pacientes/[id]/_components/graficos/intervenciones";
 import { HiloContenido } from "@/components/clinico/HiloContenido";
 import { POCO_RECORRIDO_DETALLE, POCO_RECORRIDO_TITULO } from "@/lib/glosario";
 
 import { LecturasDelPeriodo } from "./lecturas";
+import { SenalesDelPeriodo } from "./senales";
 import { TemasDelPeriodo } from "./temas";
 import { autoria, diaCorto, diaCortoYHora, diaYHora, estadoLegible, type Exportacion } from "./formato";
 
@@ -67,7 +67,8 @@ export function RecorridoDeVersion({ datos, version }: { datos: Exportacion; ver
 }
 
 /** "Cómo va": los mismos gráficos de la pantalla, cada uno en su tarjeta;
- *  temas y lecturas con su versión de papel (temas.tsx, lecturas.tsx). */
+ *  señales, temas y lecturas con su versión de papel (senales.tsx,
+ *  temas.tsx, lecturas.tsx), que muestra lo que la pantalla pliega. */
 export function Graficos({ datos }: { datos: Exportacion }) {
   const { progreso } = datos;
   const sesiones = progreso.sesiones;
@@ -82,7 +83,7 @@ export function Graficos({ datos }: { datos: Exportacion }) {
   }
   return (
     <div data-graficos className="flex flex-col gap-5">
-      <FlagsRiesgoTimeline riesgos={progreso.riesgos} />
+      <SenalesDelPeriodo riesgos={progreso.riesgos} />
       <IntensidadChart sesiones={sesiones} />
       <AlianzaChart sesiones={sesiones} />
       <TemasDelPeriodo temas={progreso.temas} sesiones={sesiones} />
@@ -109,6 +110,7 @@ export function Historial({ datos }: { datos: Exportacion }) {
             <th scope="col" className="py-2 pr-3 font-semibold">Escrita</th>
             <th scope="col" className="py-2 pr-3 font-semibold">Autoría</th>
             <th scope="col" className="py-2 pr-3 font-semibold">Estado</th>
+            <th scope="col" className="py-2 pr-3 font-semibold">Basada en</th>
             <th scope="col" className="py-2 pr-3 font-semibold">Nota de origen</th>
             <th scope="col" className="py-2 pr-2 font-semibold">Resuelta</th>
           </tr>
@@ -120,6 +122,7 @@ export function Historial({ datos }: { datos: Exportacion }) {
               <td className="whitespace-nowrap py-2 pr-3 tabular-nums">{diaCortoYHora(v.creadaEn)}</td>
               <td className="py-2 pr-3">{autoria(v)}</td>
               <td className="py-2 pr-3">{estadoLegible(v, datos)}</td>
+              <td className="whitespace-nowrap py-2 pr-3 tabular-nums">{v.basadaEnVersion !== null ? `sobre la v${v.basadaEnVersion}` : "—"}</td>
               <td className="whitespace-nowrap py-2 pr-3 tabular-nums">{v.sesionOrigenId ? (fechaDeSesion.get(v.sesionOrigenId) ?? "No disponible") : "—"}</td>
               <td className="whitespace-nowrap py-2 pr-2 tabular-nums">{v.resueltaEn ? diaCortoYHora(v.resueltaEn) : "—"}</td>
             </tr>

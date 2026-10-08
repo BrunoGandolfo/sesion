@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiPost } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
+import { lecturaIntensidad } from "@/app/(dashboard)/pacientes/[id]/_components/progreso-lecturas";
 import { formatearFechaCortaMvd, instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import { fechaCompleta } from "@/lib/format";
 import { TENDENCIA_LABEL, ULTIMA_SESION_CON_SENAL } from "@/lib/glosario";
@@ -89,6 +90,7 @@ const COMO_SE_VE: Record<string, Muestra> = {
   "version.creadaEn": instante,
   "version.resueltaEn": instante,
   "version.propuestaOrigenId": (_v, hoja) => contiene(hoja, "Aceptada con tus ediciones"),
+  "version.basadaEnVersion": (v, hoja) => contiene(hoja, `sobre la v${v}`),
 
   // El contenido del Recorrido (HiloContenido).
   "contenido.hipotesisDiagnostica": parrafos,
@@ -128,11 +130,13 @@ const COMO_SE_VE: Record<string, Muestra> = {
   "progreso.riesgos[].fecha": (v, hoja) => contiene(hoja, dia(String(v))),
   "progreso.riesgos[].flag": etiqueta,
   "progreso.riesgos[].nivel": (v, hoja) => contiene(hoja, `nivel ${v}`),
+  // La frase de la paciente que sostiene la señal: en la pantalla va detrás de
+  // "Lo que dijo"; en el papel, a la vista (senales.tsx).
+  "progreso.riesgos[].cita": entreComillas,
 };
 
 const OMITIDOS_A_PROPOSITO: Record<string, string> = {
   "version.id": "identificador interno: la hoja no muestra ids (recorrido-imprimible.test)",
-  "version.basadaEnVersion": "dato de concurrencia de la edición; la secuencia se lee en el número de versión",
   "version.creadaPorUserId": "id de usuaria; quién exporta va con nombre en la cabecera",
   "version.resueltaPorUserId": "id de usuaria, igual que creadaPorUserId",
   "contenido.objetivosTerapeuticos[].id": "identificador interno",
@@ -145,8 +149,14 @@ const OMITIDOS_A_PROPOSITO: Record<string, string> = {
   "progreso.sesiones[].numero": "orden de la sesión; la fecha ya lo dice y la app dejó de rotular S1…Sn",
   "progreso.sesiones[].temas[]": "temas por sesión: la matriz vive detrás de \"Ver detalle\", que no se imprime; el papel lleva el total por tema (progreso.temas)",
   "progreso.riesgos[].sesionId": "identificador; la señal se nombra por su fecha",
-  "progreso.riesgos[].cita": "\"Lo que dijo\" va plegado y no se imprime (ayuda 10: En Cómo va no se imprimen las citas)",
 };
+
+// LECTURAS CALCULADAS: no son campos de la exportación y por eso no están en
+// ninguna de las dos listas. Son frases que la app arma con los datos —por
+// ejemplo, la de la intensidad: "podría indicar un aumento del malestar que
+// conviene monitorear"— y salen iguales en la pantalla (ChartCard) y en el
+// papel. Se verifica que la hoja muestre la misma frase que calcula la app,
+// no que la frase esté en el fixture.
 
 /** La ruta de cada campo, normalizada: listas como [], las tres formas de
  *  una versión como `version.`, y las claves abiertas de flags e intervenciones como *. */
@@ -233,6 +243,22 @@ describe("la hoja del Recorrido es fiel a la exportación", () => {
       .filter((c) => !COMO_SE_VE[normalizar(c.ruta)](c.valor, h, c.ctx))
       .map((c) => `${c.ruta} = ${JSON.stringify(c.valor)}`);
     expect(faltan).toEqual([]);
+  });
+
+  it("el recorrido es recursivo de verdad: listas dentro de objetos dentro de listas", () => {
+    const salida: Hallado[] = [];
+    recorrer({ a: [{ b: [{ c: 1, d: ["x"] }], e: { f: [{ g: true }] } }] }, "", { padre: {} }, salida);
+    expect(salida.map((h) => h.ruta).sort()).toEqual(["a[].b[].c", "a[].b[].d[]", "a[].e.f[].g"]);
+    // Y en la exportación: dentro de progreso entra en sesiones[], temas[] y riesgos[].
+    const dentroDeProgreso = new Set(campos.map((c) => normalizar(c.ruta)).filter((r) => r.startsWith("progreso.")));
+    for (const r of ["progreso.riesgos[].cita", "progreso.sesiones[].flagsRiesgo.*", "progreso.temas[].ultimaVez"]) expect(dentroDeProgreso.has(r), r).toBe(true);
+  });
+
+  it("la lectura de la intensidad es la que calcula la app, no un dato del fixture", async () => {
+    const h = await hoja();
+    const lectura = lecturaIntensidad(datos.progreso.sesiones.map((s) => s.intensidadEmocional));
+    expect(h.texto).toContain(lectura.texto);
+    expect(JSON.stringify(datos)).not.toContain(lectura.texto);
   });
 
   it("el contrato muerde: una hoja sin las lecturas de las sesiones viejas falla", async () => {
