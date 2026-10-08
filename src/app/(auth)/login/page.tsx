@@ -43,7 +43,7 @@ export default function LoginPage() {
     if (!sesionVencida) return;
     // /limpiar borra la cookie SOLO si no resuelve a una sesión viva: una
     // navegación inducida a /login?sesion=x no puede cerrar una sesión ajena
-    // (auditoría de Codex, docs/pendientes/03-identidad.md §8).
+    // (auditoría de Codex; el porqué, en src/app/api/cuenta/limpiar/route.ts).
     void apiPost("/api/cuenta/limpiar", undefined).catch(() => undefined);
   }, [sesionVencida]);
 

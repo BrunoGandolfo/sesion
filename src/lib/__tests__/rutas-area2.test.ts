@@ -153,7 +153,7 @@ describe("rutas del área 2", () => {
   });
 
   it("fuera del proxy, ninguna ruta acepta sesión de usuaria con método no seguro sin chequear Origin", () => {
-    // Contrato del Área 3 (docs/pendientes/03-identidad.md §3): el proxy
+    // Contrato del Área 3 (cabecera de src/proxy.ts): el proxy
     // chequea Origin (CSRF) sólo para lo que matchea. Una ruta excluida que
     // use la sesión de usuaria en POST/PATCH/DELETE tiene que llamar a
     // esOrigenPropio. Hoy la única excluida con sesión es el GET de la
