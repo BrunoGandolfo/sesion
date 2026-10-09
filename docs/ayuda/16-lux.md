@@ -26,8 +26,9 @@ y las últimas sesiones de … No guarda esta conversación."*
   transcripción del 03/10…"*. No es algo que te dice: es la app avisando qué
   está leyendo.
 - Debajo de algunas respuestas aparece **Ver en qué me baso**, plegado. Al
-  tocarlo se abre la lista de lo que Lux usó para contestar: la nota, la
-  sesión o la parte del Recorrido. Sirve para ir a mirarlo vos.
+  tocarlo se abre la lista de lo que Lux usó para contestar: de qué sesión, de
+  qué fecha y la frase. Es texto, no un enlace: sirve para ir a buscarlo vos
+  en la nota o en la transcripción.
 - **Nueva conversación** borra lo que hay en pantalla y Lux vuelve a abrir
   desde cero.
 
@@ -39,6 +40,13 @@ cambiás de pestaña, la app te pregunta antes, como con las notas privadas.
 
 Al pasar a otra paciente la pestaña arranca vacía: nada de una queda a la
 vista de la otra.
+
+## Qué lee
+
+Solo lo que ya aprobaste: el Recorrido, las notas aprobadas y las
+transcripciones de esas sesiones. Una sesión que todavía está en revisión no
+entra. Si hay una propuesta de Recorrido que no aceptaste, Lux la ve marcada
+como no aceptada.
 
 ## A dónde viaja lo que lee
 
@@ -59,7 +67,7 @@ responder.
   ni agenda. Solo lee y conversa.
 - **No reemplaza tu lectura**: lo que dice Lux es una ayuda para repasar, la
   interpretación clínica es tuya. Si algo te importa, abrí la nota o la
-  transcripción con **Ver en qué me baso**.
+  transcripción de esa sesión: **Ver en qué me baso** te dice cuál.
 - **No habla de otra paciente** desde esta pestaña: lee solo la ficha donde
   estás.
 
@@ -69,6 +77,8 @@ src/app/(dashboard)/pacientes/[id]/_components/lux-tab.tsx
 src/components/lux/conversacion-lux.tsx
 src/components/lux/use-conversacion-lux.ts
 src/components/lux/respuesta.ts
-src/components/lux/textos.ts
+src/lib/glosario.ts
+src/lib/lux/contrato.ts
+src/app/api/_lib/casos-uso/lux/material.ts
 src/components/ui/lux.tsx
 -->

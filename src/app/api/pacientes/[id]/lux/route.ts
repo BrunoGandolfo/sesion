@@ -13,18 +13,14 @@
 // <citas> y el aviso _(mirando la transcripción del DD/MM)_ son para la
 // pantalla, que los pliega y los muestra.
 
-import { z } from "zod";
-
 import { db } from "@/lib/db";
+import { peticionLuxSchema } from "@/lib/lux/contrato";
 
 import { getSessionActor } from "../../../_lib/auth";
 import { devolverCupo, reservarCupo } from "../../../_lib/casos-uso/ayuda/reservar-cupo";
 import {
   abrirConversacion,
   autorizarPaciente,
-  LARGO_MAX_PREGUNTA_LUX,
-  LARGO_MAX_TURNO_LUX,
-  MAX_TURNOS_HISTORIAL,
   registrarConversacionLux,
   responder,
   type ConversacionLux,
@@ -37,29 +33,13 @@ export const maxDuration = 60; // segundos; la convención está en scripts/ci/m
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-// Lo que ella escribió tiene el tope de una pregunta; lo que contestó Lux
-// tiene que poder volver entero (LARGO_MAX_TURNO_LUX, en conversar.ts).
-const turnoSchema = z.discriminatedUnion("rol", [
-  z.object({ rol: z.literal("usuaria"), texto: z.string().trim().min(1).max(LARGO_MAX_PREGUNTA_LUX) }),
-  z.object({ rol: z.literal("asistente"), texto: z.string().trim().min(1).max(LARGO_MAX_TURNO_LUX) }),
-]);
-
-const cuerpoSchema = z.object({
-  pregunta: z.string().trim().min(1).max(LARGO_MAX_PREGUNTA_LUX).optional(),
-  // El recorte a los últimos MAX_TURNOS_HISTORIAL lo hace el caso de uso.
-  historial: z.array(turnoSchema).max(MAX_TURNOS_HISTORIAL * 2).optional(),
-}).strict().refine(
-  (cuerpo) => cuerpo.pregunta !== undefined || !cuerpo.historial?.length,
-  { message: "Con historial hace falta una pregunta", path: ["pregunta"] },
-);
-
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id: pacienteId } = await params;
 
     const body: unknown = await leerJson(request);
-    const parsed = cuerpoSchema.safeParse(body ?? {});
+    const parsed = peticionLuxSchema.safeParse(body ?? {});
     if (!parsed.success) return validationError(parsed.error);
     const { pregunta, historial } = parsed.data;
     const tipo = pregunta === undefined ? "abrir" : "pregunta";

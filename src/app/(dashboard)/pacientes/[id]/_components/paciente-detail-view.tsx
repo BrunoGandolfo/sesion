@@ -38,8 +38,7 @@ import { useHoy } from "@/hooks/useHoy";
 import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { sePuedeGrabar } from "@/app/api/_lib/domain";
 import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
-import { DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
-import { LUX } from "@/components/lux/textos";
+import { DATOS, LUX, RECORRIDO, SESIONES } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { CabeceraFicha, CabeceraNavegacionFicha } from "./cabecera-ficha";

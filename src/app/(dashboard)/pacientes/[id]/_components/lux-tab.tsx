@@ -5,7 +5,7 @@
 // cambiar de paciente se monta de cero, sin nada de la anterior.
 
 import { ConversacionLux } from "@/components/lux/conversacion-lux";
-import { nombreDePila } from "@/components/lux/textos";
+import { nombreDePila } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda } from "@/types/domain";
 
 interface LuxTabProps {

@@ -17,7 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Lux, TAMANOS_LUX } from "@/components/ui/lux";
 import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
 
-import { leerRespuesta, type RespuestaLux } from "./respuesta";
+import { LARGO_MAX_PREGUNTA_LUX, type RespuestaLux } from "@/lib/lux/contrato";
+
+import { leerRespuesta } from "./respuesta";
 import {
   LUX,
   LUX_CONVERSACION,
@@ -32,8 +34,8 @@ import {
   luxMirando,
   luxQueLee,
   luxSaludo,
-} from "./textos";
-import { LARGO_MAX_PREGUNTA, useConversacionLux } from "./use-conversacion-lux";
+} from "@/lib/glosario";
+import { useConversacionLux } from "./use-conversacion-lux";
 
 interface ConversacionLuxProps {
   pacienteId: string;
@@ -170,7 +172,7 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
           value={borrador}
           onChange={(e) => setBorrador(e.target.value)}
           onKeyDown={alTeclear}
-          maxLength={LARGO_MAX_PREGUNTA}
+          maxLength={LARGO_MAX_PREGUNTA_LUX}
           rows={2}
           placeholder={LUX_PLACEHOLDER}
           aria-label={LUX_PLACEHOLDER}

@@ -1,7 +1,7 @@
 // Cómo se lee una respuesta de Lux mientras llega.
 //
 // El stream de POST /api/pacientes/{id}/lux es texto plano, como el de
-// /api/ayuda, con dos marcas dentro:
+// /api/ayuda, con dos marcas dentro (las define src/lib/lux/contrato.ts):
 //
 //   <citas>…</citas>     al principio de una respuesta: en qué se basa. Se
 //                        pliega bajo "Ver en qué me baso".
@@ -19,33 +19,24 @@
 // instante como prosa.
 
 import { limpiarMarkdown } from "@/lib/ayuda-texto";
-
-export type BloqueLux =
-  | { tipo: "prosa"; texto: string }
-  | { tipo: "estado"; fecha: string };
-
-export interface RespuestaLux {
-  /** El contenido de <citas>, sin las etiquetas. null si no vino. */
-  citas: string | null;
-  bloques: BloqueLux[];
-}
-
-const ABRE_CITAS = "<citas>";
-const CIERRA_CITAS = "</citas>";
-const PREFIJO_ESTADO = "_(mirando la transcripción del ";
-// El servidor puede limpiar el Markdown antes de mandar y comerse los guiones
-// bajos: la línea vale con ellos o sin ellos.
-const LINEA_ESTADO = /^\s*_?\(mirando la transcripción del (\d{1,2}\/\d{1,2})\)_?\s*$/;
+import {
+  ABRE_CITAS,
+  CIERRA_CITAS,
+  LINEA_AVISO_MIRANDO,
+  PREFIJO_AVISO_MIRANDO,
+  type BloqueLux,
+  type RespuestaLux,
+} from "@/lib/lux/contrato";
 
 /** ¿Puede este pedazo final de línea terminar siendo una línea de estado? */
 function puedeSerEstado(linea: string): boolean {
   const inicio = linea.trimStart();
   if (inicio === "") return false;
-  const sinGuion = PREFIJO_ESTADO.slice(1);
+  const sinGuion = PREFIJO_AVISO_MIRANDO.slice(1);
   return (
-    PREFIJO_ESTADO.startsWith(inicio) ||
+    PREFIJO_AVISO_MIRANDO.startsWith(inicio) ||
     sinGuion.startsWith(inicio) ||
-    inicio.startsWith(PREFIJO_ESTADO) ||
+    inicio.startsWith(PREFIJO_AVISO_MIRANDO) ||
     inicio.startsWith(sinGuion)
   );
 }
@@ -87,7 +78,7 @@ export function leerRespuesta(crudo: string, final: boolean): RespuestaLux {
     prosa = [];
   };
   for (const linea of lineas) {
-    const estado = LINEA_ESTADO.exec(linea);
+    const estado = LINEA_AVISO_MIRANDO.exec(linea);
     if (estado) {
       cerrarProsa();
       bloques.push({ tipo: "estado", fecha: estado[1] });

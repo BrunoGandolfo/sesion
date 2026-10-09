@@ -93,7 +93,7 @@ describe("el caso de uso con la capacidad de agenda", () => {
   });
   it("lee tool_use real del SDK por SSE y muestra el listado, con métricas y una sola consulta", async () => {
     const eventos = [
-      { type: "message_start", message: { id: "msg_test", type: "message", role: "assistant", content: [], model: "claude-sonnet-5", stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 1 } } },
+      { type: "message_start", message: { id: "msg_test", type: "message", role: "assistant", content: [], model: "claude-haiku-5-5", stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 1 } } },
       { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "tool_test", name: "consultar_agenda", input: {} } },
       { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"periodo":"hoy"}' } },
       { type: "content_block_stop", index: 0 },

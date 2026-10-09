@@ -18,7 +18,7 @@ import {
   luxMirando,
   luxQueLee,
   luxSaludo,
-} from "../textos";
+} from "@/lib/glosario";
 
 /** Un stream que el test alimenta de a un fragmento. */
 function streamManual() {

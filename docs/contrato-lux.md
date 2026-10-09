@@ -1,12 +1,26 @@
 # Contrato de Lux
 
-**Estado:** servidor implementado en la rama `lux-api` (8 de octubre de 2026). La
-pantalla (la conversación desde la ficha) es de otra rama.
-**Código:** `src/app/api/pacientes/[id]/lux/route.ts`,
+**Estado:** integrado en la rama `lux` (servidor de `lux-api` y pantalla de
+`lux-ui`, 9 de octubre de 2026).
+**El contrato en código:** [`src/lib/lux/contrato.ts`](../src/lib/lux/contrato.ts)
+—el esquema de la petición (de ahí sale su tipo), los máximos, el status del
+tope, las marcas del stream y los tipos de la respuesta—. Lo importan la ruta,
+el caso de uso y la pantalla; si este documento y ese archivo dicen cosas
+distintas, manda el archivo.
+**Servidor:** `src/app/api/pacientes/[id]/lux/route.ts`,
 `src/app/api/_lib/casos-uso/lux/` (`conversar.ts`, `material.ts`,
 `herramientas.ts`, `topes.ts`), el bucle en `src/lib/anthropic-mensajes.ts`
 (`crearConversacionConHerramientas`) y el prompt en
 [`src/lib/lux/system-prompt.md`](../src/lib/lux/system-prompt.md).
+**Pantalla:** la pestaña Lux de la ficha
+(`src/app/(dashboard)/pacientes/[id]/_components/lux-tab.tsx`),
+`src/components/lux/` (conversación, hook del stream y lectura de la
+respuesta) y el sol (`src/components/ui/lux.tsx`). Los textos, en
+`src/lib/glosario.ts` (sección Lux). La ayuda: `docs/ayuda/16-lux.md`.
+
+**Consentimiento:** decisión del dueño (9 de octubre de 2026): la
+autorización vigente (2.8) cubre a Lux. No hay versión nueva ni guardia
+propia; lo dice `docs/ayuda/12-camino-del-audio-y-privacidad.md`.
 
 ## Qué es
 

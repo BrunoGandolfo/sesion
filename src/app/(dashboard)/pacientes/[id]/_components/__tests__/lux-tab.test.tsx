@@ -9,8 +9,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
-import { LUX, LUX_CONVERSACION, LUX_PLACEHOLDER, luxSaludo } from "@/components/lux/textos";
-import { DATOS, IR_IGUAL, QUEDARME, SALIDA_TRABAJO_TITULO } from "@/lib/glosario";
+import { DATOS, IR_IGUAL, LUX, LUX_CONVERSACION, LUX_PLACEHOLDER, luxSaludo, QUEDARME, SALIDA_TRABAJO_TITULO } from "@/lib/glosario";
 
 import { PacienteDetailView } from "../paciente-detail-view";
 

@@ -19,23 +19,18 @@ import {
 } from "@/lib/anthropic-mensajes";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import { LARGO_MAX_PREGUNTA_LUX, type TurnoHistorialLux } from "@/lib/lux/contrato";
 import { systemPromptLux } from "@/lib/lux/prompt";
 
 import { registrarAuditoria, type ClienteAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
-import { historialAMensajes, MAX_TURNOS_HISTORIAL, type TurnoAyuda } from "../responder-ayuda";
+import { historialAMensajes } from "../responder-ayuda";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
 import { armarMaterial, type ClienteLux, type MaterialLux } from "./material";
 
-export { MAX_TURNOS_HISTORIAL };
 export { TOPE_LUX_DIA, MENSAJE_TOPE_LUX } from "./topes";
 
-export const LARGO_MAX_PREGUNTA_LUX = 2000;
-/** Largo máximo de un turno de Lux que vuelve en el historial. Una respuesta
- *  puede llegar a MAX_TOKENS_LUX por ronda, en varias rondas, con sus avisos:
- *  tiene que poder volver entera. Es un tope contra un cuerpo enorme. */
-export const LARGO_MAX_TURNO_LUX = 100_000;
 /** Incluye el razonamiento del modelo (thinking adaptativo de Haiku 5.5). */
 export const MAX_TOKENS_LUX = 8000;
 /** La conversación entera, todas las rondas. La ruta tiene 60 s. */
@@ -51,8 +46,6 @@ export const MENSAJE_PREGUNTA_LARGA_LUX = `La pregunta es muy larga: máximo ${L
  *  exige que el primer mensaje sea de la usuaria. */
 export const PEDIDO_APERTURA =
   "(La profesional abrió la conversación sobre este paciente, sin pregunta. Hablá vos primero, como dice <apertura>.)";
-
-export type TurnoLux = TurnoAyuda;
 
 interface ConversarBase {
   prisma: ClienteLux;
@@ -83,7 +76,7 @@ export function abrirConversacion(input: ConversarBase): Promise<ConversacionLux
   return conversar(input, [{ role: "user", content: PEDIDO_APERTURA }]);
 }
 
-export function responder(input: ConversarBase & { pregunta: string; historial?: TurnoLux[] }): Promise<ConversacionLux> {
+export function responder(input: ConversarBase & { pregunta: string; historial?: TurnoHistorialLux[] }): Promise<ConversacionLux> {
   const pregunta = input.pregunta.trim();
   if (pregunta === "") throw new ApiError("Escribí una pregunta.", 400);
   if (pregunta.length > LARGO_MAX_PREGUNTA_LUX) throw new ApiError(MENSAJE_PREGUNTA_LARGA_LUX, 400);

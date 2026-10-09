@@ -10,6 +10,7 @@
 import { z } from "zod";
 
 import type { EjecutorHerramientas, PedidoConversacion } from "@/lib/anthropic-mensajes";
+import { avisoMirandoTranscripcion } from "@/lib/lux/contrato";
 
 import { auditarLecturaTranscripcion } from "../sesion/ver-transcripcion";
 import {
@@ -61,7 +62,7 @@ export function ejecutorLux(contexto: {
     leidas,
     aviso({ nombre, entrada }) {
       const valida = validar(nombre, entrada);
-      return valida ? `_(mirando la transcripción del ${diaMes(valida.fecha)})_` : null;
+      return valida ? avisoMirandoTranscripcion(diaMes(valida.fecha)) : null;
     },
     async ejecutar({ nombre, entrada }) {
       if (nombre !== HERRAMIENTA_LEER_TRANSCRIPCION) return { contenido: RECHAZO_HERRAMIENTA, esError: true };

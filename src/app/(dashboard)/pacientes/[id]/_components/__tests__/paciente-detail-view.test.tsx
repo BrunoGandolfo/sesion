@@ -7,8 +7,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
-import { LUX } from "@/components/lux/textos";
+import { DATOS, LUX, RECORRIDO, SESIONES } from "@/lib/glosario";
 
 import { PacienteDetailView } from "../paciente-detail-view";
 

@@ -21,42 +21,40 @@ import * as React from "react";
 
 import { ApiClientError, esAbort } from "@/lib/api-client";
 
-import { leerRespuesta, prosaDe } from "./respuesta";
-import { LUX_CORTADO, LUX_NO_PUDO, LUX_SIN_CONEXION, LUX_TOPE } from "./textos";
+import { LUX_CORTADO, LUX_NO_PUDO, LUX_SIN_CONEXION, LUX_TOPE } from "@/lib/glosario";
+import {
+  LARGO_MAX_PREGUNTA_LUX,
+  LARGO_MAX_TURNO_LUX,
+  MAX_TURNOS_HISTORIAL_LUX,
+  STATUS_TOPE_LUX,
+  type PeticionLux,
+  type TurnoHistorialLux,
+} from "@/lib/lux/contrato";
 
-export const LARGO_MAX_PREGUNTA = 600;
-const MAX_TURNOS_ENVIADOS = 12;
-const LARGO_MAX_TURNO = 4000;
-const STATUS_TOPE_DIARIO = 429;
+import { leerRespuesta, prosaDe } from "./respuesta";
 
 export type TurnoLux =
   | { rol: "usuaria"; texto: string }
   | { rol: "asistente"; crudo: string; completo: boolean };
 
-interface CuerpoLux {
-  pregunta?: string;
-  historial?: { rol: "usuaria" | "asistente"; texto: string }[];
-}
-
 function textoDeError(error: unknown): string {
   if (error instanceof ApiClientError) {
-    return error.status === STATUS_TOPE_DIARIO ? LUX_TOPE : LUX_NO_PUDO;
+    return error.status === STATUS_TOPE_LUX ? LUX_TOPE : LUX_NO_PUDO;
   }
   return LUX_SIN_CONEXION;
 }
 
 /** Lo que vuelve a viajar: los turnos terminados, con lo que Lux dijo (sin
- *  citas ni estados), recortados como en la ayuda. */
-function historialDe(turnos: TurnoLux[]): NonNullable<CuerpoLux["historial"]> {
+ *  citas ni estados), dentro de los máximos del contrato. */
+function historialDe(turnos: TurnoLux[]): TurnoHistorialLux[] {
   return turnos
-    .flatMap((t): NonNullable<CuerpoLux["historial"]> => {
-      if (t.rol === "usuaria") return [{ rol: t.rol, texto: t.texto }];
+    .flatMap((t): TurnoHistorialLux[] => {
+      if (t.rol === "usuaria") return [{ rol: t.rol, texto: t.texto.slice(0, LARGO_MAX_PREGUNTA_LUX) }];
       if (!t.completo) return [];
-      return [{ rol: t.rol, texto: prosaDe(leerRespuesta(t.crudo, true)) }];
+      return [{ rol: t.rol, texto: prosaDe(leerRespuesta(t.crudo, true)).slice(0, LARGO_MAX_TURNO_LUX) }];
     })
     .filter((t) => t.texto.trim() !== "")
-    .slice(-MAX_TURNOS_ENVIADOS)
-    .map((t) => ({ ...t, texto: t.texto.slice(0, LARGO_MAX_TURNO) }));
+    .slice(-MAX_TURNOS_HISTORIAL_LUX);
 }
 
 /** Reemplaza (o agrega) la respuesta que está llegando. */
@@ -73,7 +71,7 @@ function conRespuesta(turnos: TurnoLux[], crudo: string, completo: boolean): Tur
  *  ruta contesta un error, y lo que tire fetch si no hay red. */
 async function leerLux(
   paciente: string,
-  cuerpo: CuerpoLux,
+  cuerpo: PeticionLux,
   signal: AbortSignal,
   alLlegar: (crudo: string, completo: boolean) => void,
 ): Promise<void> {
@@ -114,7 +112,7 @@ export function useConversacionLux(pacienteId: string) {
   }
 
   const pedir = React.useCallback(
-    (paciente: string, cuerpo: CuerpoLux, alFallar: (mensaje: string) => void) => {
+    (paciente: string, cuerpo: PeticionLux, alFallar: (mensaje: string) => void) => {
       // Quien llama ya dejó esperando=true y error=null: la apertura los
       // trae así del render, y preguntar() los pone en el evento.
       peticion.current?.abort();
