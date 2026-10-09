@@ -77,7 +77,7 @@ function postear(turnoId: string, iniciadaEn?: Date) {
 }
 
 /** El turno de una grabación sin turno, como lo pide la pantalla al subir. */
-function crearTurnoAlGrabar(inicio: Date, iniciadaEn: Date | undefined = inicio) {
+function crearTurnoAlGrabar(inicio: Date, iniciadaEn: Date | null = inicio) {
   return POST_TURNOS(new Request("http://localhost/api/turnos", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -210,6 +210,21 @@ describe("con iniciadaEn", () => {
     const corrido = await crearTurnoAlGrabar(new Date(Date.now() + DIA), new Date());
     expect(corrido.status).toBe(400);
     expect(await estado.base.prisma.sesionClinica.count({ where: { organizationId: org.orgId } })).toBe(0);
+  });
+
+  it("el turno de una grabación es idempotente: un reintento con el mismo inicio devuelve el mismo", async () => {
+    const inicio = new Date(Date.now() - 20 * 60_000 + 123); // con milisegundos, como el teléfono
+    const primero = await crearTurnoAlGrabar(inicio);
+    const segundo = await crearTurnoAlGrabar(inicio);
+    expect(primero.status).toBe(201);
+    expect(segundo.status).toBe(201);
+    const a = ((await primero.json()) as { data: { id: string } }).data.id;
+    const b = ((await segundo.json()) as { data: { id: string } }).data.id;
+    expect(b).toBe(a);
+    expect(await estado.base.prisma.turno.count({ where: { organizationId: org.orgId, fecha: inicio } })).toBe(1);
+    // Sin iniciadaEn no hay identidad que comparar: alGrabar crea como siempre.
+    const sinInicio = await crearTurnoAlGrabar(inicio, null);
+    expect(((await sinInicio.json()) as { data: { id: string } }).data.id).not.toBe(a);
   });
 
   it("iniciadaEn sólo va con alGrabar al crear un turno", async () => {

@@ -21,6 +21,9 @@ export function useGrabacionPendiente(
   claveRef: React.RefObject<string | null>,
 ) {
   const [pendiente, setPendiente] = React.useState<GrabacionPendiente | null>(null);
+  // Sube después de borrar una: la búsqueda vuelve a correr y ofrece la
+  // siguiente que coincida, si hay más de una guardada.
+  const [busqueda, setBusqueda] = React.useState(0);
   const coincide = React.useMemo(
     () => esPendiente ?? (claveGrabacion ? (clave: string) => clave === claveGrabacion : null),
     [esPendiente, claveGrabacion],
@@ -37,14 +40,14 @@ export function useGrabacionPendiente(
     return () => {
       cancelado = true;
     };
-  }, [coincide, estadoRef]);
+  }, [coincide, estadoRef, busqueda]);
 
   /** Descartarla: se borra con SU clave, que puede no ser la del prop (una
    *  grabación sin turno se encuentra por paciente). */
   function descartar() {
     const clave = pendiente?.sesionClinicaId ?? claveRef.current;
     setPendiente(null);
-    if (clave) void limpiarGrabacion(clave);
+    if (clave) void limpiarGrabacion(clave).then(() => setBusqueda((n) => n + 1));
   }
 
   const guardada: PendienteGuardada | null =

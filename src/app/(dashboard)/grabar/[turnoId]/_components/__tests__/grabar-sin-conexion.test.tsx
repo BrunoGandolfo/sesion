@@ -384,6 +384,23 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     expect(pedidos.filter((p) => p.includes("t-ayer") && !p.startsWith("GET "))).toEqual([]);
   });
 
+  test("con dos guardadas de la paciente, descartar la más nueva deja ver la otra", async () => {
+    disco.metas.set("t-ayer", { iniciadaEn: AYER.getTime() - 60 * 60_000, mimeType: "audio/webm", pacienteId: "p1" });
+    disco.chunks.set("t-ayer", Array.from({ length: 120 }, () => new Blob(["audio"], { type: "audio/webm" })));
+    guardada(); // la sin turno, una hora más tarde
+    render(<GrabarView {...SIN_TURNO} />);
+    await screen.findByRole("button", { name: "Guardarla ahora" });
+    expect(screen.getByText(/~1 min/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
+    });
+
+    // Aparece la otra (dos minutos), sin recargar.
+    expect(await screen.findByText(/~2 min/)).toBeTruthy();
+    expect(disco.metas.has(CLAVE)).toBe(false);
+    expect(disco.metas.has("t-ayer")).toBe(true);
+  });
+
   test("sin red, guardarla deja la grabación donde estaba y lo dice", async () => {
     guardada();
     red.caida = true;

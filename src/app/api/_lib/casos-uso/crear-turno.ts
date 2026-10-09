@@ -108,6 +108,18 @@ export async function crearTurno({
       WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR SHARE`;
     const paciente = await requirePaciente(tx, pacienteId, organizationId, { id: true, tarifa: true });
 
+    // El turno de una grabación sin turno es idempotente: su fecha es el
+    // instante en que empezó a grabar (al milisegundo), así que un reintento
+    // —la respuesta anterior se perdió, se cerró el navegador— encuentra el
+    // que ya nació en vez de crear otro. Bajo el lock de agenda: dos intentos
+    // a la vez se ordenan.
+    if (alGrabar && iniciadaEn && iniciadaEn.getTime() === fecha.getTime()) {
+      const existente = await tx.turno.findFirst({
+        where: { organizationId, pacienteId: paciente.id, fecha, estado: { not: "cancelado" } },
+      });
+      if (existente) return { ...toTurno({ ...existente, notas: existente.notas ?? null }), serie: null };
+    }
+
     const fechas =
       frecuencia === "unico" ? [fecha] : fechasDeSerie(fecha, frecuencia);
 
