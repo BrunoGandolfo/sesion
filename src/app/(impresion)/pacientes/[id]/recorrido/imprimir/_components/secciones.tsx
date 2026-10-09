@@ -20,19 +20,21 @@ import { formatearHoraMvd } from "@/lib/fechas-montevideo";
 
 import { autoria, diaCorto, diaYHora, estadoLegible, type Exportacion } from "./formato";
 
+/** Una sección no empieza página: fluye detrás de la anterior. Lo que no se
+ *  parte es lo de adentro —cada tarjeta, gráfico, señal y fila— y el título
+ *  queda pegado a lo que sigue. Con saltos forzados, una paciente de una sola
+ *  nota salía en tres páginas casi vacías. */
 export function Seccion({
   antetitulo,
   titulo,
-  nuevaPagina = false,
   children,
 }: {
   antetitulo: string;
   titulo: string;
-  nuevaPagina?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className={`mt-10 ${nuevaPagina ? "print:break-before-page print:mt-0" : ""}`}>
+    <section className="mt-10">
       <div className="mb-5 break-after-avoid border-b border-sage-200 pb-2">
         <p className="text-[9pt] font-semibold uppercase tracking-[0.12em] text-gold-500">{antetitulo}</p>
         <h2 className="mt-0.5 font-display text-[18pt] font-medium leading-tight tracking-[-0.01em] text-ink-900">{titulo}</h2>
