@@ -125,7 +125,9 @@ export function useFlujoGrabacion({
   const audioRef = React.useRef<DatosGrabacion | null>(null);
   const turnoIdRef = React.useRef(turnoIdInicial);
   const claveRef = React.useRef(turnoIdInicial);
-  // Sin turno: cuándo empezó la grabación, que será la hora del turno.
+  // Cuándo empezó la grabación. Viaja al crear el turno (sin turno, es su
+  // hora) y la sesión: el servidor acepta una grabación del día del turno
+  // aunque llegue pasada la medianoche (plazo-grabacion.ts).
   const inicioRef = React.useRef<Date | null>(null);
   const sesionIdRef = React.useRef<string | null>(null);
   const turnoProgramadoRef = React.useRef(turnoProgramado);
@@ -142,8 +144,10 @@ export function useFlujoGrabacion({
     );
 
     if (!sesion) {
+      const inicio = inicioRef.current;
       sesion = await apiPost<SesionApi>("/api/sesion-clinica", {
         turnoId: turno,
+        ...(inicio ? { iniciadaEn: inicio.toISOString() } : {}),
       });
     }
 
@@ -176,6 +180,7 @@ export function useFlujoGrabacion({
       // sesión ocurrió, y un solapamiento en la agenda no puede impedir
       // guardarla.
       alGrabar: true,
+      iniciadaEn: inicio.toISOString(),
     });
     turnoIdRef.current = creado.id;
     turnoProgramadoRef.current = true;
@@ -347,7 +352,7 @@ export function useFlujoGrabacion({
       const turno = turnoIdRef.current;
       const inicio = new Date();
       const claveNueva = turno ?? claveSinTurno(pacienteId, inicio);
-      inicioRef.current = turno ? null : inicio;
+      inicioRef.current = inicio;
       claveRef.current = claveNueva;
       setClave(claveNueva);
       if (!turno) setHoraTexto(hora(inicio));
@@ -380,10 +385,8 @@ export function useFlujoGrabacion({
         turnoProgramadoRef.current = true;
         setTurnoId(guardada.turnoId);
       }
-      if (!turnoIdRef.current) {
-        inicioRef.current = inicioDeClaveSinTurno(guardada.clave) ?? new Date(guardada.iniciadaEn);
-        setHoraTexto(hora(inicioRef.current));
-      }
+      inicioRef.current = inicioDeClaveSinTurno(guardada.clave) ?? new Date(guardada.iniciadaEn);
+      if (!turnoIdRef.current) setHoraTexto(hora(inicioRef.current));
     } else if (!turnoIdRef.current) {
       avisar(ALGO_FALLO);
       return;

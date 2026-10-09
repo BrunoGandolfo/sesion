@@ -17,8 +17,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { organizationId, userId } = await getSessionActor();
-    const { turnoId } = sesionClinicaCrearSchema.parse(await leerJson(request));
-    await prepararAudio({ prisma: db, organizationId, turnoId, usuarioId: userId });
+    const { turnoId, iniciadaEn } = sesionClinicaCrearSchema.parse(await leerJson(request));
+    await prepararAudio({
+      prisma: db, organizationId, turnoId, usuarioId: userId,
+      ...(iniciadaEn ? { iniciadaEn: new Date(iniciadaEn) } : {}),
+    });
     return ok(await leerSesionPorTurno({ prisma: db, organizationId, turnoId }), 201);
   } catch (error) { return errorResponse(error); }
 }

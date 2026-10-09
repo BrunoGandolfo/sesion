@@ -36,7 +36,7 @@ import { cifrarTurno } from "@/lib/prisma-encryption";
 import type { SerieCreada, Turno, TurnoCreado } from "@/types/domain";
 
 import { auditar } from "../auditoria";
-import { toTurno } from "../domain";
+import { motivoGrabacionNoAdmitida, toTurno } from "../domain";
 import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
 import { programarEnvioDelTurno } from "./envios-del-turno";
@@ -64,6 +64,9 @@ export interface CrearTurnoInput {
    *  este instante): la sesión ya está ocurriendo, así que no pasa por la
    *  regla de choques. Decisión del dueño. */
   alGrabar?: boolean;
+  /** Con alGrabar: cuándo empezó la grabación. La fecha del turno tiene que
+   *  caer en el plazo (motivoGrabacionNoAdmitida, domain.ts). */
+  iniciadaEn?: Date;
   /** Momento del alta: decide si el turno lleva recordatorio. */
   ahora: Date;
   /** Quién agenda, para turno.crear. */
@@ -84,9 +87,14 @@ export async function crearTurno({
   notas,
   frecuencia,
   alGrabar = false,
+  iniciadaEn,
   ahora,
   usuarioId,
 }: CrearTurnoInput): Promise<TurnoCreado> {
+  if (alGrabar && iniciadaEn) {
+    const motivo = motivoGrabacionNoAdmitida(fecha, iniciadaEn, ahora);
+    if (motivo) throw new ApiError(motivo, 400);
+  }
   return prisma.$transaction(async (tx) => {
     // El lock PRIMERO y por toda la transacción: dos altas simultáneas para
     // el mismo hueco se ordenan y la segunda ve la primera (el porqué está

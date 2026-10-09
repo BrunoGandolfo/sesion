@@ -28,7 +28,13 @@ import {
   finDeMesMvd,
   inicioDeMesMvd,
 } from "@/lib/fechas-montevideo";
-import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
+import {
+  GRABACION_OTRO_DIA_QUE_EL_TURNO,
+  GRABACION_VENCIDA,
+  MENSAJE_NO_REABRIR,
+  MENSAJE_SOLO_PROGRAMADOS,
+} from "@/lib/glosario";
+import { HORAS_PARA_ENVIAR_GRABACION, MINUTOS_RELOJ_ADELANTADO } from "@/lib/plazo-grabacion";
 import { porMontoYAntiguedad } from "@/lib/orden-deuda";
 
 type TurnoStats = Pick<
@@ -474,6 +480,26 @@ export function sePuedeGrabar(
     return false;
   }
   return esMismoDiaMvd(turno.fecha, ahora);
+}
+
+/**
+ * Si se acepta una grabación que EMPEZÓ en `iniciadaEn` para un turno con
+ * fecha `fechaTurno`: el inicio es del mismo día de Montevideo que el turno y
+ * de las últimas HORAS_PARA_ENVIAR_GRABACION horas (plazo-grabacion.ts).
+ * Devuelve null si se acepta, o el mensaje para ella.
+ *
+ * Es la regla de crear la sesión clínica cuando el cliente manda el inicio
+ * (prepararAudio) y la de crear el turno de una grabación sin turno
+ * (crearTurno con alGrabar). Sin `iniciadaEn` vale sePuedeGrabar (turno de
+ * hoy): grabar no espera al servidor, así que la sesión nace al subir, y una
+ * sesión de las 23:30 que sube a las 00:10 ya no es "de hoy".
+ */
+export function motivoGrabacionNoAdmitida(fechaTurno: Date, iniciadaEn: Date, ahora: Date): string | null {
+  const adelanto = iniciadaEn.getTime() - ahora.getTime();
+  if (adelanto > MINUTOS_RELOJ_ADELANTADO * 60_000) return GRABACION_OTRO_DIA_QUE_EL_TURNO;
+  if (-adelanto > HORAS_PARA_ENVIAR_GRABACION * 60 * 60_000) return GRABACION_VENCIDA;
+  if (!esMismoDiaMvd(fechaTurno, iniciadaEn)) return GRABACION_OTRO_DIA_QUE_EL_TURNO;
+  return null;
 }
 
 export interface TurnoParaDeuda {

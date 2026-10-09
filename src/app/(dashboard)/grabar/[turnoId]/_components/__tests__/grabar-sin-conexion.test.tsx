@@ -220,8 +220,9 @@ describe("sin red", () => {
       "PATCH /api/turnos/t-nuevo",
     ]);
     expect(cuerpos["POST /api/turnos"]).toEqual(expect.objectContaining({
-      pacienteId: "p1", alGrabar: true, fecha: INICIO.toISOString(),
+      pacienteId: "p1", alGrabar: true, fecha: INICIO.toISOString(), iniciadaEn: INICIO.toISOString(),
     }));
+    expect(cuerpos["POST /api/sesion-clinica"]).toEqual({ turnoId: "t-nuevo", iniciadaEn: INICIO.toISOString() });
     // Con la confirmación, la copia del teléfono sobra.
     expect(disco.metas.size).toBe(0);
   });
@@ -270,7 +271,8 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     });
 
     expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
-    expect(cuerpos["POST /api/turnos"]).toEqual(expect.objectContaining({ fecha: AYER.toISOString(), alGrabar: true }));
+    expect(cuerpos["POST /api/turnos"]).toEqual(expect.objectContaining({ fecha: AYER.toISOString(), alGrabar: true, iniciadaEn: AYER.toISOString() }));
+    expect(cuerpos["POST /api/sesion-clinica"]).toEqual({ turnoId: "t-nuevo", iniciadaEn: AYER.toISOString() });
     expect(pedidos.filter((p) => p === "POST /api/turnos")).toHaveLength(1);
     expect(disco.metas.has(CLAVE)).toBe(false);
   });

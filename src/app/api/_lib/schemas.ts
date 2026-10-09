@@ -45,9 +45,14 @@ export const turnoCreateSchema = z.object({
    *  está ocurriendo y no pasa por la regla de choques (decisión del
    *  dueño). Solo para un turno suelto: una serie no nace grabando. */
   alGrabar: z.literal(true).optional(),
+  /** Con alGrabar: cuándo empezó la grabación (plazo-grabacion.ts). */
+  iniciadaEn: isoDateTimeSchema.optional(),
 }).refine((d) => !d.alGrabar || d.frecuencia === "unico", {
   message: "Un turno que nace al grabar no puede ser una serie",
   path: ["alGrabar"],
+}).refine((d) => !d.iniciadaEn || d.alGrabar, {
+  message: "iniciadaEn solo va con alGrabar",
+  path: ["iniciadaEn"],
 });
 
 export const turnoUpdateSchema = z.object({
@@ -222,7 +227,12 @@ export const avisoWhatsappAbiertoSchema = z.object({ fecha: z.iso.datetime().opt
 // Grabación y subida del audio (rutas de sesión clínica)
 // ────────────────────────────────────────────────────────────────────────────
 
-export const sesionClinicaCrearSchema = z.object({ turnoId: z.uuid() }).strict();
+/** `iniciadaEn`: cuándo empezó la grabación, guardado en el teléfono. Con él
+ *  vale el plazo de plazo-grabacion.ts; sin él, la regla de turno de hoy. */
+export const sesionClinicaCrearSchema = z.object({
+  turnoId: z.uuid(),
+  iniciadaEn: isoDateTimeSchema.optional(),
+}).strict();
 
 // Sin tope de 120 MB (era el límite del buffer en memoria de la función).
 // Queda solo una cota de sanidad: 2 GiB, muy por encima de una sesión de

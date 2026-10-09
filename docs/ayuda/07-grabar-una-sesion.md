@@ -19,7 +19,8 @@ el borrador de la nota clínica.
 - **Un turno se graba el día que está agendado.** El de ayer ya no ofrece
   **Grabar sesión** en la agenda. Si la sesión es ahora, grabala desde la
   ficha con **Grabar**: se crea el turno de hoy, como arriba. Una grabación
-  que ya estaba en marcha se puede retomar aunque haya pasado la medianoche.
+  que empezó el día del turno se envía aunque termine o suba pasada la
+  medianoche.
 - **Una cuenta de prueba graba hasta 15 sesiones.** Si tu consultorio se creó
   con una invitación, arriba dice cuántas llevás. Al llegar a 15, dice
   *"Llegaste a las 15 sesiones grabadas de la prueba y no podés grabar más.
@@ -125,12 +126,14 @@ salvo: tocá Terminar la sesión para enviarlo."* Todavía tenés que tocar
 **Se puede empezar a grabar sin señal** (en modo avión, en un sótano): grabar no
 necesita internet, y el audio se sube cuando vuelve. Si al terminar no hay
 conexión, la pantalla dice *"Sin conexión. La grabación quedó guardada en el
-teléfono; reintentá cuando vuelva la señal."* con **Reintentar**. Subila el
-mismo día: pasada la medianoche, una grabación que nunca llegó a la app ya no
-se puede enviar.
+teléfono; reintentá cuando vuelva la señal."* con **Reintentar**. Tenés
+**36 horas** desde que empezaste a grabar: después la app dice *"Esta grabación
+empezó hace más de 36 horas y ya no se puede enviar. Sigue guardada en el
+teléfono."*
 
-Si hay señal y la subida falla igual, la pantalla dice *"No se pudo guardar el audio. Está a salvo en tu teléfono.
-Probá de nuevo."* con un botón **Reintentar**. Nada se borra: la grabación sigue
+Si hay señal y la subida falla igual, la pantalla dice *"No se pudo guardar el
+audio. Está a salvo en tu teléfono. Probá de nuevo."* con un botón
+**Reintentar**. Nada se borra: la grabación sigue
 guardada en el teléfono. Poné el teléfono en una conexión buena y tocá
 **Reintentar** las veces que haga falta. No des por guardada una sesión hasta
 ver *"La grabación llegó bien."*

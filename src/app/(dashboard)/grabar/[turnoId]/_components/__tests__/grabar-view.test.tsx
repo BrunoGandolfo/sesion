@@ -283,10 +283,13 @@ test("el turno que nace al grabar se crea al subir, con alGrabar y la hora en qu
   await waitFor(() => expect(m.subir).toHaveBeenCalled());
   const turnos = m.post.mock.calls.filter(([url]) => url === "/api/turnos");
   expect(turnos).toHaveLength(1);
+  const inicio = inicioDeClaveSinTurno(clave)!.toISOString();
   expect(turnos[0][1]).toEqual(expect.objectContaining({
-    pacienteId: "p1", alGrabar: true, fecha: inicioDeClaveSinTurno(clave)!.toISOString(),
+    pacienteId: "p1", alGrabar: true, fecha: inicio, iniciadaEn: inicio,
   }));
-  expect(m.post).toHaveBeenCalledWith("/api/sesion-clinica", { turnoId: "t-nuevo" });
+  // La sesión viaja con el inicio: el servidor la acepta aunque suba pasada
+  // la medianoche (plazo-grabacion.ts).
+  expect(m.post).toHaveBeenCalledWith("/api/sesion-clinica", { turnoId: "t-nuevo", iniciadaEn: inicio });
 });
 
 test("con un turno ya agendado no se crea otro ni se manda alGrabar", async () => {
