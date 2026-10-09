@@ -59,7 +59,10 @@ Cuerpo (JSON, estricto: un campo de más es 400):
 - `historial`: opcional, hasta 12 turnos. Los de `usuaria`, 1 a 2000 caracteres
   (el tope de una pregunta); los de `asistente`, 1 a 100.000
   (`LARGO_MAX_TURNO_LUX`), para que una respuesta larga de Lux, con sus citas
-  y avisos, pueda volver entera. El caso de uso
+  y avisos, pueda volver entera. La pantalla manda cada turno de Lux tal como
+  ella lo vio: prosa, `<citas>` y líneas `_(mirando la transcripción del
+  DD/MM)_`; esas líneas son las que traen la transcripción de vuelta al
+  material (punto 5 de "El material"). El caso de uso
   usa los últimos `MAX_TURNOS_HISTORIAL` (6, como Lupita). Si el primero que
   queda es de Lux, se antepone el pedido de apertura (la API exige que el
   primer mensaje sea de la usuaria).
@@ -134,7 +137,27 @@ En este orden:
    (90.000 tokens estimados como caracteres / 4) va sólo la más reciente; si
    con una también, ninguna. Lo omitido se dice en un documento propio
    ("Transcripción del DD/MM/AAAA omitida por tamaño.").
-5. **Las demás sesiones aprobadas** (incluidas las omitidas por tamaño): id,
+5. **Las transcripciones que Lux ya leyó en esta conversación.** Por cada
+   línea `_(mirando la transcripción del DD/MM)_` que aparece en los turnos
+   de Lux del historial recibido (los de ella no cuentan), la transcripción
+   de esa sesión vuelve completa, como documento propio: "Transcripción
+   completa de la sesión del DD/MM/AAAA, leída en esta conversación". Sólo
+   se miran los turnos que llegan al modelo (los últimos
+   `MAX_TURNOS_HISTORIAL`). La fecha se resuelve contra las sesiones
+   aprobadas de **este** paciente (si dos son del mismo DD/MM en años
+   distintos, vuelven las dos); una fecha que no corresponde a ninguna se
+   ignora; una que ya está en el punto 4 no se repite. Entran mientras el
+   material no pase `TOKENS_MAX_MATERIAL`; las que no, se nombran en un
+   documento propio ("Transcripción del DD/MM/AAAA, leída en esta
+   conversación, omitida por tamaño: podés volver a abrirla con
+   leer_transcripcion") y siguen en la lista del punto 6.
+   **Por qué:** el historial es texto y no lleva lo que leyó la herramienta.
+   Sin esto, en la pregunta siguiente Lux veía sus propias citas sin la
+   fuente delante y decía que las había inventado (prueba real del
+   9/10/2026). El prompt lo acompaña: esas líneas en sus turnos anteriores
+   quieren decir que leyó esa transcripción; si no la tiene delante, la
+   vuelve a abrir, y nunca dice que inventó lo que leyó.
+6. **Las demás sesiones aprobadas** (incluidas las omitidas por tamaño): id,
    fecha y primera línea del subjetivo de la nota. Son las únicas que Lux
    puede abrir.
 
@@ -143,7 +166,8 @@ ella, igual que el Recorrido.
 
 El material es estable mientras los datos no cambian, así que el corte de
 caché va al final del system (después del prompt): la segunda pregunta de la
-misma charla lee el material del caché.
+misma charla lee el material del caché. Cuando una transcripción vuelve por
+el punto 5, el material cambia y esa llamada escribe el caché de nuevo.
 
 ## Las herramientas
 
@@ -151,7 +175,7 @@ Lista cerrada, sólo lectura, una por ronda, a lo sumo **3 llamadas por
 pedido** (`MAX_LLAMADAS_HERRAMIENTA`). Después de la tercera, la ronda
 siguiente va con `tool_choice: none` y el modelo contesta con lo que tiene.
 
-- `leer_transcripcion({ sesionId })`: el id tiene que estar en la lista 5 del
+- `leer_transcripcion({ sesionId })`: el id tiene que estar en la lista 6 del
   material de **este** pedido. Argumentos validados con zod (uuid, sin campos
   de más). Fuera de la lista, argumentos inválidos o una herramienta
   inventada: `tool_result` con `is_error`, sin tocar la base. Una
@@ -172,7 +196,8 @@ No hay escritura, SQL, ids libres ni organización elegible por el modelo.
   `registrarAuditoria` cuando el stream terminó: modelo, tokens (entrada,
   salida, caché leído y escrito), rondas, nombres de herramientas (sólo de la
   lista; otro nombre queda como `desconocida`), lecturas y rechazos, cuántas
-  notas y transcripciones tenía el material, largos de pregunta y respuesta,
+  notas y transcripciones tenía el material, cuántas volvieron por haberse
+  leído en la charla (`releidas`, `releidasOmitidas`), largos de pregunta y respuesta,
   turnos de historial. **Nunca** el texto de la pregunta, de la respuesta ni
   los argumentos de las herramientas.
 
@@ -200,6 +225,8 @@ nada variable adentro. `next.config.ts` lo declara en
 | Bucle: una llamada → resultado al modelo → respuesta; rechazo como `is_error`; tope de 3; la ronda final tiene que traer texto propio | `src/lib/__tests__/lux-bucle.test.ts` |
 | Lista cerrada: id fuera de lista, argumentos de más, herramienta inventada | `lux-bucle.test.ts` |
 | Material: orden, dos transcripciones, recorte por tamaño, propuesta marcada, escape | `lux-integracion.test.ts` |
+| Lo leído en la charla vuelve al material: auditado, fecha inexistente ignorada, sin duplicar, omitida por tamaño | `lux-integracion.test.ts`, `lux-leidas.test.ts` |
+| El historial lleva el turno entero de Lux (citas y estados) | `src/components/lux/__tests__/conversacion-lux.test.tsx` |
 | Autorización (paciente ajeno 404 sin leer), 503 sin clave | `lux-integracion.test.ts` |
 | Auditoría: `sesion.ver_transcripcion` via lux, `lux.abrir`, `lux.pregunta`, sin texto | `lux-integracion.test.ts`, `lux-ruta.test.ts` |
 | Cupo por ámbito: 60 de Lux no consumen los 40 de Lupita | `cupo-ayuda-integracion.test.ts` |

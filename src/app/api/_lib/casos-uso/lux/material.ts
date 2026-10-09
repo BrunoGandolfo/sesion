@@ -2,7 +2,7 @@
 //
 // El modelo nunca elige qué se lee: este archivo decide, con la organización
 // y el paciente que vienen de la sesión autenticada y de la ruta, y lo único
-// que Lux puede pedir después es una transcripción de la lista (e) que arma
+// que Lux puede pedir después es una transcripción de la lista (f) que arma
 // este mismo archivo (herramientas.ts).
 //
 // ORDEN (el del prompt, documentos arriba y pregunta abajo, como pide la guía
@@ -17,7 +17,18 @@
 //      Si con las dos el material pasa de ~90.000 tokens estimados
 //      (caracteres / 4), va sólo la más reciente; si con una sola también,
 //      ninguna. Lo omitido se dice en el material.
-//   e. Las demás sesiones aprobadas: id, fecha y primera línea de la nota.
+//   e. Las transcripciones que Lux ya leyó en ESTA conversación: cada línea
+//      "(mirando la transcripción del DD/MM)" de sus turnos en el historial
+//      trae de vuelta esa transcripción, como documento propio ("leída en
+//      esta conversación"). El historial es texto: sin esto, en la pregunta
+//      siguiente Lux veía sus propias citas sin la fuente delante y decía
+//      que las había inventado (prueba real del 9/10/2026). La fecha se
+//      resuelve contra las sesiones aprobadas de este paciente (si hay dos
+//      del mismo DD/MM en años distintos, entran las dos); una que no
+//      corresponde a ninguna se ignora; una que ya está en (d) no se repite.
+//      Entran mientras el material no pase el tope; las que no, se nombran
+//      como omitidas y siguen en la lista (f) para reabrirlas.
+//   f. Las demás sesiones aprobadas: id, fecha y primera línea de la nota.
 //
 // AUDITORÍA. Cada transcripción que entra al material deja su
 // sesion.ver_transcripcion (via "lux") con `auditar`, en la MISMA transacción
@@ -30,6 +41,7 @@
 import type { db } from "@/lib/db";
 import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import type { ContenidoHilo, VersionHilo } from "@/lib/hilo/contenido";
+import { LINEA_AVISO_MIRANDO, type TurnoHistorialLux } from "@/lib/lux/contrato";
 
 import { requirePaciente } from "../../pacientes";
 import { whereAprobadasDe, type IdentidadHilo } from "../hilo/base";
@@ -55,11 +67,37 @@ export interface MaterialLux {
   transcripciones: string[];
   /** Cuántas de las más recientes quedaron afuera por tamaño. */
   transcripcionesOmitidas: number;
+  /** Ids de las que volvieron porque Lux ya las había leído en la charla
+   *  (y quedaron auditadas otra vez). */
+  releidas: string[];
+  /** Cuántas de esas no entraron por tamaño. */
+  releidasOmitidas: number;
 }
 
 export interface ArmarMaterialInput extends IdentidadHilo {
   prisma: ClienteLux;
   usuarioId: string;
+  /** "DD/MM" de las transcripciones que Lux ya leyó en esta conversación
+   *  (leidasEnHistorial). */
+  leidasEnConversacion?: readonly string[];
+}
+
+/** Los "DD/MM" de las líneas "(mirando la transcripción del DD/MM)" que hay
+ *  en los turnos de Lux del historial, sin repetir y en el orden en que
+ *  aparecen. Los turnos de ella no cuentan: esa línea la escribe el
+ *  servidor, y una que tipee ella no es una lectura de Lux. */
+export function leidasEnHistorial(historial: readonly TurnoHistorialLux[]): string[] {
+  const fechas = new Set<string>();
+  for (const turno of historial) {
+    if (turno.rol !== "asistente") continue;
+    for (const linea of turno.texto.split("\n")) {
+      const aviso = LINEA_AVISO_MIRANDO.exec(linea);
+      if (!aviso) continue;
+      const [dia, mes] = aviso[1].split("/");
+      fechas.add(`${dia.padStart(2, "0")}/${mes.padStart(2, "0")}`);
+    }
+  }
+  return [...fechas];
 }
 
 export function estimarTokens(texto: string): number {
@@ -209,27 +247,40 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
   const base = documentos.join("\n");
   const limite = TOKENS_MAX_MATERIAL * CARACTERES_POR_TOKEN;
 
+  // Las que Lux ya leyó en esta conversación y no están entre las candidatas
+  // de (d): de la más nueva a la más vieja, como las candidatas.
+  const enBase = new Set(candidatas.map((s) => s.id));
+  const pedidas = new Set(input.leidasEnConversacion ?? []);
+  const releer = aprobadas.filter((s) => pedidas.has(diaMes(s.turno.fecha)) && !enBase.has(s.id)).reverse();
+
   // Lectura, decisión y rastro de las transcripciones en una transacción.
   const elegidas = await prisma.$transaction(async (tx) => {
     const leidas = await tx.sesionClinica.findMany({
-      where: { id: { in: candidatas.map((s) => s.id) }, ...whereAprobadasDe(identidad) },
+      where: { id: { in: [...candidatas, ...releer].map((s) => s.id) }, ...whereAprobadasDe(identidad) },
       select: { id: true, estado: true, transcripcion: true },
     });
     const porId = new Map(leidas.map((s) => [s.id, s]));
-    const conTexto = candidatas
+    const conTextoDe = (lista: typeof candidatas) => lista
       .map((s) => ({ id: s.id, fecha: s.turno.fecha, fila: porId.get(s.id) }))
       .filter((s): s is typeof s & { fila: NonNullable<typeof s.fila> & { transcripcion: string } } =>
         Boolean(s.fila?.transcripcion));
+    const conTexto = conTextoDe(candidatas);
     let incluidas = conTexto;
     const largo = (lista: typeof conTexto) => base.length + lista.reduce((n, s) => n + s.fila.transcripcion.length, 0);
     while (incluidas.length && largo(incluidas) > limite) incluidas = incluidas.slice(0, -1);
-    for (const s of incluidas) {
+    const releidas: typeof conTexto = [];
+    const releidasOmitidas: typeof conTexto = [];
+    for (const s of conTextoDe(releer)) {
+      if (largo([...incluidas, ...releidas, s]) <= limite) releidas.push(s);
+      else releidasOmitidas.push(s);
+    }
+    for (const s of [...incluidas, ...releidas]) {
       await auditarLecturaTranscripcion(tx, {
         organizationId, usuarioId, sesionId: s.id,
         estado: s.fila.estado, caracteres: s.fila.transcripcion.length, via: "lux",
       });
     }
-    return { incluidas, omitidas: conTexto.slice(incluidas.length) };
+    return { incluidas, omitidas: conTexto.slice(incluidas.length), releidas, releidasOmitidas };
   });
 
   // Más vieja primero, como las notas.
@@ -240,8 +291,19 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
     agregar("Aviso del sistema sobre el material", null, elegidas.omitidas
       .map((s) => `Transcripción del ${fechaLegible(s.fecha)} omitida por tamaño.`).join("\n"));
   }
+  for (const s of [...elegidas.releidas].reverse()) {
+    agregar(
+      `Transcripción completa de la sesión del ${fechaLegible(s.fecha)}, leída en esta conversación (id ${s.id}; S0 es la terapeuta)`,
+      s.fecha, s.fila.transcripcion,
+    );
+  }
+  if (elegidas.releidasOmitidas.length) {
+    agregar("Aviso del sistema sobre el material", null, elegidas.releidasOmitidas
+      .map((s) => `Transcripción del ${fechaLegible(s.fecha)}, leída en esta conversación, omitida por tamaño: podés volver a abrirla con leer_transcripcion.`)
+      .join("\n"));
+  }
 
-  const conTranscripcion = new Set(elegidas.incluidas.map((s) => s.id));
+  const conTranscripcion = new Set([...elegidas.incluidas, ...elegidas.releidas].map((s) => s.id));
   const demas = aprobadas.filter((s) => !conTranscripcion.has(s.id));
   agregar(
     "Sesiones anteriores que podés abrir con leer_transcripcion",
@@ -257,6 +319,8 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
     notas: aprobadas.length,
     transcripciones: elegidas.incluidas.map((s) => s.id),
     transcripcionesOmitidas: elegidas.omitidas.length,
+    releidas: elegidas.releidas.map((s) => s.id),
+    releidasOmitidas: elegidas.releidasOmitidas.length,
   };
 }
 

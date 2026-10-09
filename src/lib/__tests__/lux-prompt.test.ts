@@ -33,6 +33,9 @@ describe("system-prompt.md de Lux", () => {
       "leer_transcripcion",
       "<citas>",
       "propuesta",
+      // Lo que leyó en la charla vuelve arriba: que no diga que lo inventó.
+      "leída en esta conversación",
+      "nunca digas que inventaste lo que leíste",
     ]) expect(prompt).toContain(frase);
   });
 

@@ -8,6 +8,7 @@ import { aprobarSesion } from "@/app/api/_lib/casos-uso/sesion/aprobar";
 import { editarHilo } from "@/app/api/_lib/casos-uso/hilo/escribir";
 import { bloquearHilo, insertarVersion } from "@/app/api/_lib/casos-uso/hilo/base";
 import { armarMaterial, TOKENS_MAX_MATERIAL, type ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
+import { avisoMirandoTranscripcion } from "@/lib/lux/contrato";
 import { ejecutorLux, RECHAZO_FUERA_DE_LISTA } from "@/app/api/_lib/casos-uso/lux/herramientas";
 import {
   abrirConversacion, autorizarPaciente, PEDIDO_APERTURA, registrarConversacionLux, responder,
@@ -72,7 +73,10 @@ async function consultorio(transcripciones: (n: number) => string = (n) => `[00:
   return { org, sesiones };
 }
 
-const material = (c: Consultorio) => armarMaterial({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId });
+const material = (c: Consultorio, leidasEnConversacion?: string[]) =>
+  armarMaterial({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, leidasEnConversacion });
+const LEIDA = "leída en esta conversación";
+const veces = (texto: string, marca: string) => texto.split(marca).length - 1;
 
 async function lecturasLux(org: Org) {
   return (await eventosAuditoriaDe(base.prisma, org.orgId)).filter((e) => e.accion === ACCIONES.sesion.verTranscripcion);
@@ -279,5 +283,84 @@ describe("conversación y rastro", () => {
     for (const marca of ["PREGUNTA_SECRETA", "RESPUESTA_SECRETA", "APERTURA_SECRETA", "TRANSCRIPCION_", "NOTA_"]) {
       expect(todo).not.toContain(marca);
     }
+  });
+
+  describe("lo que Lux leyó en la charla vuelve al material", () => {
+    // El consultorio tiene sesiones del 01, 08, 15 y 22 de septiembre: entran
+    // completas las del 15 y el 22; la del 01 y la del 08 están en la lista.
+
+    it("una línea 'mirando' del historial trae esa transcripción, como documento propio, y la audita", async () => {
+      const c = await consultorio();
+      const antes = (await lecturasLux(c.org)).length;
+      const m = await material(c, ["01/09"]);
+      expect(m.texto).toContain(`Transcripción completa de la sesión del 01/09/2026, ${LEIDA}`);
+      expect(m.texto).toContain("TRANSCRIPCION_0");
+      expect(m.releidas).toEqual([c.sesiones[0]]);
+      expect(m.releidasOmitidas).toBe(0);
+      // Ya no está en la lista para abrir: la tiene delante.
+      expect([...m.abribles.keys()]).toEqual([c.sesiones[1]]);
+      const lecturas = await lecturasLux(c.org);
+      expect(lecturas.length - antes).toBe(3);
+      expect(lecturas.filter((e) => e.entidadId === c.sesiones[0])).toHaveLength(1);
+    });
+
+    it("una fecha que no es de ninguna sesión aprobada de este paciente se ignora", async () => {
+      const c = await consultorio();
+      const otro = await consultorio();
+      // 30/09 no existe; y una fecha de otro paciente no sirve para este.
+      const m = await material(c, ["30/09"]);
+      expect(m.releidas).toEqual([]);
+      expect(m.texto).not.toContain(LEIDA);
+      expect(m.texto).not.toContain("TRANSCRIPCION_0");
+      expect(otro.sesiones).not.toContain(m.releidas[0]);
+    });
+
+    it("una transcripción que ya está en el material base no se repite", async () => {
+      const c = await consultorio();
+      const m = await material(c, ["22/09"]);
+      expect(m.releidas).toEqual([]);
+      expect(veces(m.texto, "TRANSCRIPCION_3")).toBe(1);
+      expect(m.texto).not.toContain(LEIDA);
+      expect((await lecturasLux(c.org)).filter((e) => e.entidadId === c.sesiones[3])).toHaveLength(1);
+    });
+
+    it("si no entra por tamaño, va el aviso de omitida, sigue en la lista y no se audita", async () => {
+      // La del 01/09 sola ya pasa el tope del material.
+      const c = await consultorio((n) => `S1: T${n} ${"a".repeat(n === 0 ? TOKENS_MAX_MATERIAL * 4 : 10)}`);
+      const m = await material(c, ["01/09"]);
+      expect(m.releidas).toEqual([]);
+      expect(m.releidasOmitidas).toBe(1);
+      expect(m.texto).toContain(`Transcripción del 01/09/2026, ${LEIDA}, omitida por tamaño`);
+      expect(m.texto).not.toContain("T0 aaaa");
+      expect([...m.abribles.keys()]).toContain(c.sesiones[0]);
+      expect((await lecturasLux(c.org)).map((e) => e.entidadId)).not.toContain(c.sesiones[0]);
+    });
+
+    it("de punta a punta: responder lleva al modelo la transcripción que su historial dice haber leído", async () => {
+      const c = await consultorio();
+      const { pedidos, crearConversacion } = doble();
+      const conversacion = await responder({
+        prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, pacienteId: c.org.pacienteId,
+        apiKey: "k", systemPrompt: "p", crearConversacion, pregunta: PREGUNTA,
+        historial: [
+          { rol: "asistente", texto: "APERTURA" },
+          { rol: "usuaria", texto: "¿Qué dijo el 01/09?" },
+          { rol: "asistente", texto: `Voy a mirar.\n\n${avisoMirandoTranscripcion("01/09")}\n\n<citas>\nTRANSCRIPCION_0\n</citas>\nDijo eso.` },
+        ],
+      });
+      expect(pedidos[0].system[0].text).toContain(`Transcripción completa de la sesión del 01/09/2026, ${LEIDA}`);
+      expect(conversacion.material.releidas).toEqual([c.sesiones[0]]);
+    });
+
+    it("una línea 'mirando' que escribió ella en su pregunta no cuenta como lectura de Lux", async () => {
+      const c = await consultorio();
+      const { pedidos, crearConversacion } = doble();
+      await responder({
+        prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, pacienteId: c.org.pacienteId,
+        apiKey: "k", systemPrompt: "p", crearConversacion, pregunta: PREGUNTA,
+        historial: [{ rol: "asistente", texto: "APERTURA" }, { rol: "usuaria", texto: avisoMirandoTranscripcion("01/09") }],
+      });
+      expect(pedidos[0].system[0].text).not.toContain(LEIDA);
+    });
   });
 });

@@ -25,9 +25,9 @@ import { systemPromptLux } from "@/lib/lux/prompt";
 import { registrarAuditoria, type ClienteAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
-import { historialAMensajes } from "../responder-ayuda";
+import { historialAMensajes, MAX_TURNOS_HISTORIAL } from "../responder-ayuda";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
-import { armarMaterial, type ClienteLux, type MaterialLux } from "./material";
+import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
 
 export { TOPE_LUX_DIA, MENSAJE_TOPE_LUX } from "./topes";
 
@@ -62,7 +62,7 @@ interface ConversarBase {
 
 export interface ConversacionLux {
   flujo: FlujoConversacion;
-  material: Pick<MaterialLux, "notas" | "transcripciones" | "transcripcionesOmitidas">;
+  material: Pick<MaterialLux, "notas" | "transcripciones" | "transcripcionesOmitidas" | "releidas" | "releidasOmitidas">;
   ejecutor: EjecutorLux;
 }
 
@@ -80,12 +80,16 @@ export function responder(input: ConversarBase & { pregunta: string; historial?:
   const pregunta = input.pregunta.trim();
   if (pregunta === "") throw new ApiError("Escribí una pregunta.", 400);
   if (pregunta.length > LARGO_MAX_PREGUNTA_LUX) throw new ApiError(MENSAJE_PREGUNTA_LARGA_LUX, 400);
-  const previos: MessageParam[] = historialAMensajes(input.historial ?? []);
+  const historial = input.historial ?? [];
+  const previos: MessageParam[] = historialAMensajes(historial);
   if (previos[0]?.role === "assistant") previos.unshift({ role: "user", content: PEDIDO_APERTURA });
-  return conversar(input, [...previos, { role: "user", content: pregunta }]);
+  // Las transcripciones que Lux leyó en los turnos que el modelo va a ver
+  // (los mismos que deja historialAMensajes) vuelven al material.
+  const vistos = historial.filter((t) => t.texto.trim() !== "").slice(-MAX_TURNOS_HISTORIAL);
+  return conversar(input, [...previos, { role: "user", content: pregunta }], leidasEnHistorial(vistos));
 }
 
-async function conversar(input: ConversarBase, mensajes: MessageParam[]): Promise<ConversacionLux> {
+async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasEnConversacion: string[] = []): Promise<ConversacionLux> {
   const apiKey = input.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.warn("[lux] ANTHROPIC_API_KEY no configurada");
@@ -95,7 +99,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[]): Promis
   // 404 si el paciente no es de la organización. Errores de base: 500.
   const material = await armarMaterial({
     prisma: input.prisma, organizationId: input.organizationId,
-    pacienteId: input.pacienteId, usuarioId: input.usuarioId,
+    pacienteId: input.pacienteId, usuarioId: input.usuarioId, leidasEnConversacion,
   });
   const ejecutor = ejecutorLux({
     prisma: input.prisma, organizationId: input.organizationId,
@@ -125,6 +129,8 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[]): Promis
         notas: material.notas,
         transcripciones: material.transcripciones,
         transcripcionesOmitidas: material.transcripcionesOmitidas,
+        releidas: material.releidas,
+        releidasOmitidas: material.releidasOmitidas,
       },
       ejecutor,
     };
@@ -176,6 +182,9 @@ export async function registrarConversacionLux(p: ConversacionRespondida): Promi
       notas: p.conversacion.material.notas,
       transcripcionesEnMaterial: p.conversacion.material.transcripciones.length,
       transcripcionesOmitidas: p.conversacion.material.transcripcionesOmitidas,
+      // Las que volvieron al material porque Lux ya las había leído en la charla.
+      releidas: p.conversacion.material.releidas.length,
+      releidasOmitidas: p.conversacion.material.releidasOmitidas,
       largoPregunta: p.largoPregunta,
       largoRespuesta: p.largoRespuesta,
       turnosHistorial: p.turnosHistorial,

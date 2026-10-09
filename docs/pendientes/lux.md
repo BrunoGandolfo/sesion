@@ -14,16 +14,22 @@ De producto, sin decidir:
   pregunta leyó del caché (3895 tokens por ronda); la auditoría quedó con
   `lux.abrir`, `lux.pregunta` y cada `sesion.ver_transcripcion` con
   `via: "lux"`; las tres llamadas costaron unos US$ 0,004. Lo que salió mal:
-  - **GRAVE: el historial le borra a Lux lo que leyó.** La pantalla manda en
-    el historial sólo la prosa de Lux, sin `<citas>` y sin la lectura de la
-    herramienta. En la tercera llamada el modelo vio citas literales de la
-    transcripción del 04/08 sin ninguna fuente en su contexto, concluyó que
-    las había inventado y lo dijo: "No abrí la transcripción del 04/08… las
-    citas que puse no salen de ningún documento". Era falso: la abrió (ronda
-    con `tool_use`, auditoría de 506 caracteres) y las citas coincidían
-    palabra por palabra. Es del contrato o del prompt (que el historial
-    lleve las citas o lo leído, o que el prompt no le pida desconfiar de lo
-    que no ve), no de la pantalla: decidirlo antes de tocar la API.
+  - **RESUELTO — GRAVE: Lux negaba haber leído lo que leyó.** En la tercera
+    llamada decía "No abrí la transcripción del 04/08… las citas que puse no
+    salen de ningún documento", aunque la había abierto (ronda con
+    `tool_use`, auditoría de 506 caracteres) y las citas eran exactas.
+    Primero se creyó que era el historial recortado (la pantalla mandaba
+    sólo la prosa): mandarlo entero (cfb3ed5) no alcanzó, porque la causa
+    real era otra. El servidor rearma cada llamada con el material base, que
+    sólo trae las dos transcripciones más recientes; lo leído con la
+    herramienta no vuelve, y el prompt le pide no afirmar lo que no puede
+    anclar. Con sus citas del 04/08 sin la fuente delante, concluía que las
+    había inventado. Arreglo: cada línea "(mirando la transcripción del
+    DD/MM)" de los turnos de Lux en el historial trae esa transcripción de
+    vuelta al material, auditada ("leída en esta conversación", punto 5 de
+    `docs/contrato-lux.md`), y el prompt dice que esas líneas significan que
+    la leyó y que, si no la tiene delante, la vuelva a abrir sin decir que
+    inventó.
   - **`<citas>` no llega primero.** En la apertura va después de un párrafo;
     en la segunda, después de una frase y de la línea de transcripción. El
     parser de la pantalla lo pliega igual. La tercera respuesta no trae
