@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { leerRespuesta, prosaDe } from "../respuesta";
+import type { RespuestaLux } from "@/lib/lux/contrato";
+
+import { leerRespuesta } from "../respuesta";
+
+/** La prosa de una respuesta leída, sin citas ni estados. */
+const prosaDe = (r: RespuestaLux) => r.bloques.flatMap((b) => (b.tipo === "prosa" ? [b.texto] : [])).join("\n\n");
 
 describe("leerRespuesta", () => {
   it("separa las citas del principio y deja la prosa", () => {

@@ -105,10 +105,3 @@ export function leerRespuesta(crudo: string, final: boolean): RespuestaLux {
   const juntas = citas.filter((c) => c !== "").join("\n");
   return { citas: juntas === "" ? null : juntas, bloques };
 }
-
-/** Lo que Lux dijo, sin citas ni estados: es lo que vuelve en el historial. */
-export function prosaDe(respuesta: RespuestaLux): string {
-  return respuesta.bloques
-    .flatMap((b) => (b.tipo === "prosa" ? [b.texto] : []))
-    .join("\n\n");
-}

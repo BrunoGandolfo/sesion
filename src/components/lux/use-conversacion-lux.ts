@@ -31,8 +31,6 @@ import {
   type TurnoHistorialLux,
 } from "@/lib/lux/contrato";
 
-import { leerRespuesta, prosaDe } from "./respuesta";
-
 export type TurnoLux =
   | { rol: "usuaria"; texto: string }
   | { rol: "asistente"; crudo: string; completo: boolean };
@@ -44,14 +42,17 @@ function textoDeError(error: unknown): string {
   return LUX_SIN_CONEXION;
 }
 
-/** Lo que vuelve a viajar: los turnos terminados, con lo que Lux dijo (sin
- *  citas ni estados), dentro de los máximos del contrato. */
+/** Lo que vuelve a viajar: exactamente lo que ella vio. De cada turno de Lux
+ *  terminado va el texto completo, como llegó: la prosa, el bloque <citas> y
+ *  las líneas "(mirando la transcripción del DD/MM)". Sin las citas ni los
+ *  avisos, en la pregunta siguiente Lux veía frases literales sin fuente y
+ *  negaba haber leído lo que había leído (prueba real del 9/10/2026). */
 function historialDe(turnos: TurnoLux[]): TurnoHistorialLux[] {
   return turnos
     .flatMap((t): TurnoHistorialLux[] => {
       if (t.rol === "usuaria") return [{ rol: t.rol, texto: t.texto.slice(0, LARGO_MAX_PREGUNTA_LUX) }];
       if (!t.completo) return [];
-      return [{ rol: t.rol, texto: prosaDe(leerRespuesta(t.crudo, true)).slice(0, LARGO_MAX_TURNO_LUX) }];
+      return [{ rol: t.rol, texto: t.crudo.trim().slice(0, LARGO_MAX_TURNO_LUX) }];
     })
     .filter((t) => t.texto.trim() !== "")
     .slice(-MAX_TURNOS_HISTORIAL_LUX);

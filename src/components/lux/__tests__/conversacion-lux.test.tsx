@@ -7,6 +7,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { peticionLuxSchema } from "@/lib/lux/contrato";
+
 import { ConversacionLux } from "../conversacion-lux";
 import {
   LUX_CONVERSACION,
@@ -32,6 +34,10 @@ function streamManual() {
     },
     async cerrar() {
       await act(async () => { control.close(); await new Promise((r) => setTimeout(r, 0)); });
+    },
+    /** La red se corta a mitad de la respuesta. */
+    cortar() {
+      control.error(new TypeError("conexión cortada"));
     },
   };
 }
@@ -151,10 +157,58 @@ describe("preguntar", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(cuerpos()[1]).toEqual({
       pregunta: "¿Cómo viene\ncon el sueño?",
-      historial: [{ rol: "asistente", texto: "Hola, ¿qué querés repasar?" }],
+      historial: [{ rol: "asistente", texto: "<citas>Nota del 03/10</citas>Hola, ¿qué querés repasar?" }],
     });
     expect((campo as HTMLTextAreaElement).value).toBe("");
     expect(hilo().textContent).toContain("Mejor que en septiembre.");
+  });
+
+  it("un turno de Lux vuelve entero en el historial: prosa, citas y estado, tal como ella lo vio", async () => {
+    // Lo que contestó Haiku 5.5 en la prueba real, recortado: una frase, el
+    // aviso de la transcripción, las citas y la prosa.
+    const respuestaConLectura = [
+      "Voy a mirar la transcripción del 04/08.",
+      "",
+      "_(mirando la transcripción del 04/08)_",
+      "",
+      "<citas>",
+      'Transcripción 04/08/2026, [02:44] S1: "Me cantaba una canción de cuna en gallego."',
+      "</citas>",
+      "",
+      'La frase literal es "durme, meniño, durme".',
+    ].join("\n");
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
+    montar();
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    fetchMock.mockResolvedValueOnce(respuestaEntera(respuestaConLectura));
+    await act(async () => { escribirYEnviar("¿Qué dijo de la canción?"); });
+
+    // Ella lo vio plegado y en gris…
+    expect(screen.getByText(LUX_EN_QUE_ME_BASO)).toBeTruthy();
+    expect(screen.getByText(luxMirando("04/08"))).toBeTruthy();
+
+    // …y viaja completo en la pregunta siguiente, sin perder nada.
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Sí, en la última también."));
+    await act(async () => { escribirYEnviar("¿Volvió a aparecer?"); });
+    const cuerpo = cuerpos()[2];
+    expect(cuerpo.historial).toEqual([
+      { rol: "asistente", texto: "Hola." },
+      { rol: "usuaria", texto: "¿Qué dijo de la canción?" },
+      { rol: "asistente", texto: respuestaConLectura },
+    ]);
+    // Y el contrato lo acepta tal cual: no recorta ni rechaza esas partes.
+    expect(peticionLuxSchema.parse(cuerpo).historial?.[2].texto).toBe(respuestaConLectura);
+  });
+
+  it("una respuesta cortada a la mitad no viaja en el historial", async () => {
+    const stream = streamManual();
+    fetchMock.mockResolvedValueOnce(stream.respuesta);
+    montar();
+    await stream.mandar("<citas>Nota del 0");
+    await act(async () => { stream.cortar(); await new Promise((r) => setTimeout(r, 0)); });
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Ok."));
+    await act(async () => { escribirYEnviar("¿Seguimos?"); });
+    expect(cuerpos().at(-1)).toEqual({ pregunta: "¿Seguimos?" });
   });
 
   it("un 429 muestra el tope del día y la pregunta vuelve al campo", async () => {
