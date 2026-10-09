@@ -34,6 +34,7 @@ esquema parecen equivocados, se dice con fundamento antes de rodearlos.
 ## Verificación
 
 - Cada frase del criterio de salida tiene un test que la demuestra.
+- Tests unitarios del territorio en local; la suite completa la corre CI.
 - `codex review --uncommitted` antes de cada commit; los P1/P2 se arreglan con test.
   Corre directo en el worktree, sin clonar aparte. Si falla con `Failed to read
   project hooks config file …/sesion/.codex/config.toml: Not a directory`, se
@@ -49,14 +50,16 @@ esquema parecen equivocados, se dice con fundamento antes de rodearlos.
 
 ### Herramientas manuales de `pruebas/`
 
-Salvo `pruebas/e2e/nombres-vigentes.test.mjs`, que vitest recolecta y corre en
-cada `npm test`, nada de `pruebas/` corre solo: son herramientas para lanzar a
+Salvo `pruebas/e2e/nombres-vigentes.test.mjs` y `pruebas/e2e/recorrido-pdf/pdf.test.ts`
+(el lector de páginas del PDF), que vitest recolecta y corre en cada `npm test`,
+nada de `pruebas/` corre solo: son herramientas para lanzar a
 mano cuando se toca lo que prueban. Cada carpeta dice cómo en su README o en la
 cabecera del archivo.
 
 | Qué | Para qué | Cómo se corre |
 | --- | --- | --- |
 | `e2e/recorrido.mjs` | La app entera como la usuaria, a 1280 y 390 px, contra una rama desplegada o un servidor local, con una cuenta de prueba | `npm run e2e -- --url=…` (ver `pruebas/e2e/README.md`) |
+| `e2e/recorrido-pdf/` | El PDF del Recorrido: mínimo en 1 página A4, rico en 6 o menos | `CAPTURAS_URL=… E2E_USUARIO=… E2E_PASSWORD=… npx vitest run pruebas/e2e/recorrido-pdf` |
 | `e2e/capturas.spec.ts` | Capturas a 390 y 1280 px para el cierre de una tarea de frontend | `CAPTURAS_URL=… npx vitest run pruebas/e2e/capturas.spec.ts` |
 | `e2e/comprobaciones.node.mjs` | Prueba del detector de desbordes que usa el recorrido | `node --test pruebas/e2e/comprobaciones.node.mjs` |
 | `e2e/sembrar-local.mjs` | Siembra una base local `sesion_e2e_*` para correr el recorrido en local | ver su cabecera |

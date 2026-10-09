@@ -10,9 +10,16 @@
 #   - typecheck: tsc --noEmit
 #   - build:     next build
 #   - lint:      eslint
-#   - test:      vitest run, con un Postgres 17 EFÍMERO por corrida (service
-#                container). Nada comparte base con nadie: ni con otra
-#                corrida, ni con la laptop de nadie, ni con Neon.
+#   - test-unitarios: vitest con VITEST_SUITE=unit, sin base ni contenedor.
+#   - test (Test integración): vitest con VITEST_SUITE=integration (la lista
+#                INTEGRACION de vitest.config.ts), con un Postgres 17 EFÍMERO
+#                por corrida (service container). Nada comparte base con
+#                nadie: ni con otra corrida, ni con la laptop de nadie, ni
+#                con Neon.
+#                Las dos suites eran un solo job "Test" de 11-13 minutos con
+#                tope de 15: partidas corren en paralelo, y un rojo en
+#                cualquiera deja la corrida en rojo (publicar.yml mira la
+#                conclusión de la corrida, no la de un job).
 #   - guardias:  drift de migraciones, migraciones destructivas sin marca,
 #                maxDuration en toda ruta, acta de restauración vigente.
 #   - audit:     npm audit, BLOQUEANTE en high; moderate informa y no frena;
@@ -26,7 +33,8 @@
 #     explícito por si alguien lo saca.
 #   - Prisma necesita DATABASE_URL para `generate` (parsea el schema, no se
 #     conecta): la dummy alcanza. El job `test` la pisa a nivel step con la
-#     del contenedor para `migrate deploy`.
+#     del contenedor para `migrate deploy`. El de unitarios no tiene base:
+#     un unitario que la necesite falla acá y va a la lista INTEGRACION.
 #   - src/lib/db.ts construye el cliente Prisma al importarse y la extensión
 #     de cifrado valida la clave al construirse. Va un llavero dummy en
 #     CLAVES_CIFRADO ("1=<base64>", 32 bytes en cero, formato ENC2). No cifra
@@ -35,7 +43,7 @@
 #     el 19 de octubre de 2026, y el cliente de Postgres 17 se instala del
 #     repositorio PGDG con el nombre de la versión. Se cambia a propósito,
 #     con una corrida manual, no cuando GitHub mueva la etiqueta.
-#   - No hay `concurrency` en `test`: con base propia por corrida no hay nada
+#   - No hay `concurrency` en los tests: con base propia por corrida no hay nada
 #     que serializar. La de arriba sólo cancela corridas viejas del mismo ref,
 #     y nunca en main.
 #   - Dependabot no recibe secrets: este workflow no usa ninguno, así que sus
@@ -125,10 +133,34 @@ jobs:
       - name: Ejecutar ESLint
         run: npm run lint
 
-  test:
-    name: Test
+  test-unitarios:
+    name: Test unitarios
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Medido el 9-oct-2026 (run 37941320000): 9 min 31 s el job, 8 min 55 s
+    # los tests. El tope deja más del doble; la suite entera llegó a 12 min.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Generar Prisma Client
+        run: npx prisma generate
+      - name: Ejecutar tests unitarios
+        run: npm run test:unit
+
+  # La clave sigue siendo `test`: acciones-compuestas.test.ts revisa que ESTE
+  # job (el que tiene base) instale el cliente de Postgres con la acción.
+  test:
+    name: Test integración
+    runs-on: ubuntu-24.04
+    # Medido el 9-oct-2026 (run 37941320000): 4 min 9 s el job, 3 min 7 s
+    # los tests. El tope deja más del doble.
+    timeout-minutes: 10
     # Postgres 17 efímero: nace con el job y muere con él. Es lo que hace que
     # un rojo sea un rojo y un verde sea un verde (antes, una corrida local
     # en otra máquina vaciaba la misma rama de Neon a mitad de la suite).
@@ -170,8 +202,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sesion_test
         run: npx prisma migrate deploy
-      - name: Ejecutar tests
-        run: npm test
+      - name: Ejecutar tests de integración
+        run: npm run test:integration
 
   guardias:
     name: Guardias

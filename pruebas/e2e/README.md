@@ -106,3 +106,13 @@ Con `npm run dev` levantado en el puerto 3000:
     CAPTURAS_URL=http://localhost:3000 npx vitest run pruebas/e2e/capturas.spec.ts
 
 Deja `login-390.png` y `login-1280.png` en `pruebas/e2e/resultados/capturas/`, una carpeta que Git ignora. Usa vitest y la librería `playwright` que ya están en el repo, con Chromium instalado como en el recorrido. Sin `CAPTURAS_URL`, vitest ni lo recolecta (`vitest.config.ts` lo excluye): `npm test` no abre un navegador ni lo cuenta como saltado. Contra `next dev`, la captura de 1280 puede incluir el indicador de desarrollo de Next abajo a la izquierda.
+
+## PDF del Recorrido: páginas y papel
+
+`recorrido-pdf/recorrido-pdf.spec.ts` imprime la hoja del Recorrido con Chromium y exige que el fixture mínimo (una nota, sin Recorrido revisado) salga en **1 página A4** y el rico en **6 o menos, todas A4**. Los snapshots de la hoja no pueden decir eso: jsdom no pagina. Usa la página real con su sesión: entra con la cuenta de prueba y sólo responde el POST de exportación con la fixture de los tests de la hoja. Pide el PDF en Carta, así que el A4 tiene que venir del `@page` de `impresion.css`.
+
+Contra un servidor levantado (local con `npm run build && npx next start`, base sembrada como arriba) o una rama desplegada:
+
+    CAPTURAS_URL=http://localhost:3000 E2E_USUARIO=… E2E_PASSWORD=… npx vitest run pruebas/e2e/recorrido-pdf
+
+Deja `minimo.pdf` y `rico.pdf` en `pruebas/e2e/resultados/recorrido-pdf/`. Las páginas y el tamaño los lee `recorrido-pdf/pdf.ts` del propio archivo, sin ghostscript; su test (`pdf.test.ts`) sí corre en `npm test`.
