@@ -30,3 +30,9 @@ export function inicioDeClaveSinTurno(clave: string): Date | null {
   const fecha = new Date(iso);
   return Number.isNaN(fecha.getTime()) ? null : fecha;
 }
+
+/** El turno al que va una grabación guardada: el que se le anotó al subir o,
+ *  si su clave es un turnoId, ese. Null: es sin turno y todavía no lo tiene. */
+export function turnoDeLaGrabacion(clave: string, turnoAnotado: string | null): string | null {
+  return turnoAnotado ?? (esClaveSinTurno(clave) ? null : clave);
+}

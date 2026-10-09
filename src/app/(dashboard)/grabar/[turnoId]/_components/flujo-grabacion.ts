@@ -31,7 +31,7 @@ import {
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
 import { ApiClientError, apiGet, apiPost, mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";
-import { claveSinTurno, esClaveSinTurnoDe, inicioDeClaveSinTurno } from "@/lib/grabacion-clave";
+import { claveSinTurno, esClaveSinTurnoDe, inicioDeClaveSinTurno, turnoDeLaGrabacion } from "@/lib/grabacion-clave";
 import { asociarTurno, limpiarGrabacion } from "@/lib/grabacion-storage";
 import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import {
@@ -111,7 +111,6 @@ export function useFlujoGrabacion({
   pacienteId,
   avisar,
 }: OpcionesFlujo) {
-  const [turnoId, setTurnoId] = React.useState(turnoIdInicial);
   // La clave local de la grabación (ver arriba). Con turno es su id.
   const [clave, setClave] = React.useState(turnoIdInicial);
   const [horaTexto, setHoraTexto] = React.useState(horaInicial);
@@ -184,7 +183,6 @@ export function useFlujoGrabacion({
     });
     turnoIdRef.current = creado.id;
     turnoProgramadoRef.current = true;
-    setTurnoId(creado.id);
     setHoraTexto(hora(new Date(creado.fecha)));
     if (claveLocal) await asociarTurno(claveLocal, creado.id);
     return creado.id;
@@ -201,7 +199,6 @@ export function useFlujoGrabacion({
       let turno: string | null = null;
       let sesionId: string | null = null;
       try {
-        // Lo que necesita red pasa acá, no al empezar a grabar.
         turno = await asegurarTurno();
         sesionId = await asegurarSesion(turno);
         sesionIdRef.current = sesionId;
@@ -295,21 +292,22 @@ export function useFlujoGrabacion({
     avisar(mensaje);
   }, [avisar]);
 
-  // Qué grabación guardada en el teléfono es de esta pantalla: la del turno
-  // (por su clave, o una sin turno a la que ya se le creó este turno: se
-  // vuelve a ella desde la ficha, por /grabar/<ese turno>) o, sin turno,
-  // cualquiera sin turno de esta paciente.
+  // Qué grabación guardada en el teléfono se ofrece acá: cualquiera de esta
+  // paciente —la de este turno, una sin turno, o la de un turno de ayer que
+  // no llegó a subir (la sesión nace al subir, así que sólo existe en el
+  // teléfono)—. Se envía a SU turno, no al de la URL (enviarPendiente).
   const esPendiente = React.useCallback(
-    (claveGuardada: string, turnoGuardado: string | null) =>
-      turnoIdInicial
-        ? claveGuardada === turnoIdInicial || turnoGuardado === turnoIdInicial
-        : esClaveSinTurnoDe(pacienteId, claveGuardada),
+    (claveGuardada: string, turnoGuardado: string | null, pacienteGuardado: string | null) =>
+      pacienteGuardado === pacienteId ||
+      esClaveSinTurnoDe(pacienteId, claveGuardada) ||
+      (turnoIdInicial !== null && turnoDeLaGrabacion(claveGuardada, turnoGuardado) === turnoIdInicial),
     [turnoIdInicial, pacienteId],
   );
 
   const grabador = useGrabador({
     claveGrabacion: clave,
     esPendiente,
+    pacienteId,
     onListo,
     onError: onErrorGrabacion,
   });
@@ -325,8 +323,9 @@ export function useFlujoGrabacion({
   // la admite. Si ya está en procesando (o más allá) el audio llegó: la copia
   // local sobra y se borra, en vez de ofrecerse de nuevo para siempre.
   const { pendienteSeg, descartarPendiente } = grabador;
-  // Una grabación sin turno que ya creó el suyo también se puede mirar.
-  const turnoDeLaPendiente = turnoId ?? grabador.pendiente?.turnoId ?? null;
+  // Se mira el turno de la grabación guardada, que puede no ser el de la URL.
+  const guardada = grabador.pendiente ?? null;
+  const turnoDeLaPendiente = guardada ? turnoDeLaGrabacion(guardada.clave, guardada.turnoId) : turnoIdInicial;
   React.useEffect(() => {
     if (pendienteSeg === null || !turnoDeLaPendiente) return;
     let cancelado = false;
@@ -377,16 +376,17 @@ export function useFlujoGrabacion({
     const guardada = grabador.pendiente ?? null;
 
     if (guardada) {
+      // Va a SU turno: el de su clave, el que se le creó, o ninguno todavía
+      // (sin turno: se crea al subir, con la hora en que empezó).
+      const turno = turnoDeLaGrabacion(guardada.clave, guardada.turnoId);
       claveRef.current = guardada.clave;
       setClave(guardada.clave);
-      if (!turnoIdRef.current && guardada.turnoId) {
-        // Ya se había creado su turno en un intento anterior.
-        turnoIdRef.current = guardada.turnoId;
-        turnoProgramadoRef.current = true;
-        setTurnoId(guardada.turnoId);
-      }
+      turnoIdRef.current = turno;
+      // El de la URL dice su estado; otro (uno de ayer, uno creado al subir)
+      // estaba programado o ya realizado, y marcarlo realizado no cambia nada.
+      turnoProgramadoRef.current = turno === turnoIdInicial ? turnoProgramado : true;
       inicioRef.current = inicioDeClaveSinTurno(guardada.clave) ?? new Date(guardada.iniciadaEn);
-      if (!turnoIdRef.current) setHoraTexto(hora(inicioRef.current));
+      setHoraTexto(turno === turnoIdInicial ? horaInicial : hora(inicioRef.current));
     } else if (!turnoIdRef.current) {
       avisar(ALGO_FALLO);
       return;

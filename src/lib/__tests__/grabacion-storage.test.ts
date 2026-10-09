@@ -439,9 +439,19 @@ describe("grabacion-storage — una grabación sin turno", () => {
     await storage.guardarChunk(OTRO_TURNO, 0, chunk("b"));
 
     const porTurno = await storage.recuperarGrabacionPendiente((_clave, turnoId) => turnoId === "t-nuevo");
+    expect(porTurno?.pacienteId).toBeNull();
     expect(porTurno?.sesionClinicaId).toBe(SIN_TURNO);
     const ninguna = await storage.recuperarGrabacionPendiente((clave) => clave === "turno_inexistente");
     expect(ninguna).toBeNull();
     expect((await storage.recuperarGrabacionPendiente())?.sesionClinicaId).toBe(OTRO_TURNO);
+  });
+
+  it("guarda de qué paciente es, y por eso se la encuentra", async () => {
+    await storage.iniciarSesionGrabacion("turno_de_ayer", "audio/webm", "p1");
+    await storage.guardarChunk("turno_de_ayer", 0, chunk("a"));
+    const dePaciente = await storage.recuperarGrabacionPendiente((_c, _t, pacienteId) => pacienteId === "p1");
+    expect(dePaciente?.sesionClinicaId).toBe("turno_de_ayer");
+    expect(dePaciente?.pacienteId).toBe("p1");
+    expect(await storage.recuperarGrabacionPendiente((_c, _t, pacienteId) => pacienteId === "p2")).toBeNull();
   });
 });

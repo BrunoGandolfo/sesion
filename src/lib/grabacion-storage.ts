@@ -60,6 +60,9 @@ interface MetaGrabacion {
   pausas?: Pausa[];
   /** El turno creado al subir una grabación sin turno. */
   turnoId?: string;
+  /** De qué paciente es: la pantalla de grabar de esa paciente la ofrece
+   *  aunque sea de otro turno (uno de ayer que no llegó a subir). */
+  pacienteId?: string;
 }
 
 interface ChunkGrabacion {
@@ -78,6 +81,7 @@ export interface GrabacionPendiente {
   iniciadaEn: number;
   /** El turno que ya se creó para esta grabación, si se llegó a crear. */
   turnoId: string | null;
+  pacienteId: string | null;
 }
 
 function indexedDBDisponible(): boolean {
@@ -176,6 +180,7 @@ function avisar(operacion: string, error: unknown) {
 export async function iniciarSesionGrabacion(
   sesionClinicaId: string,
   mimeType: string,
+  pacienteId?: string,
 ): Promise<void> {
   if (!indexedDBDisponible()) {
     return;
@@ -192,6 +197,7 @@ export async function iniciarSesionGrabacion(
       iniciadaEn: Date.now(),
       mimeType,
       pausas: [],
+      ...(pacienteId ? { pacienteId } : {}),
     };
     tx.objectStore(STORE_META).put(meta);
 
@@ -300,7 +306,7 @@ export async function asociarTurno(sesionClinicaId: string, turnoId: string): Pr
  * `blob`) no se ofrece: la clave para abrirlo ya no se entrega.
  */
 export async function recuperarGrabacionPendiente(
-  coincide: (sesionClinicaId: string, turnoId: string | null) => boolean = () => true,
+  coincide: (sesionClinicaId: string, turnoId: string | null, pacienteId: string | null) => boolean = () => true,
 ): Promise<GrabacionPendiente | null> {
   if (!indexedDBDisponible()) {
     return null;
@@ -320,7 +326,7 @@ export async function recuperarGrabacionPendiente(
 
     // Candidatas de la más reciente a la más vieja.
     const ordenadas = [...metas]
-      .filter((meta) => coincide(meta.sesionClinicaId, meta.turnoId ?? null))
+      .filter((meta) => coincide(meta.sesionClinicaId, meta.turnoId ?? null, meta.pacienteId ?? null))
       .sort((a, b) => b.iniciadaEn - a.iniciadaEn);
 
     for (const meta of ordenadas) {
@@ -351,6 +357,7 @@ export async function recuperarGrabacionPendiente(
         pausas: meta.pausas ?? [],
         iniciadaEn: meta.iniciadaEn,
         turnoId: meta.turnoId ?? null,
+        pacienteId: meta.pacienteId ?? null,
       };
     }
 

@@ -16,12 +16,12 @@ import { GrabarView } from "../grabar-view";
 
 // ─── IndexedDB en memoria ───────────────────────────────────────────────────
 const disco = vi.hoisted(() => ({
-  metas: new Map<string, { iniciadaEn: number; mimeType: string; turnoId?: string }>(),
+  metas: new Map<string, { iniciadaEn: number; mimeType: string; turnoId?: string; pacienteId?: string }>(),
   chunks: new Map<string, Blob[]>(),
 }));
 vi.mock("@/lib/grabacion-storage", () => ({
-  iniciarSesionGrabacion: vi.fn(async (clave: string, mimeType: string) => {
-    disco.metas.set(clave, { iniciadaEn: Date.now(), mimeType });
+  iniciarSesionGrabacion: vi.fn(async (clave: string, mimeType: string, pacienteId?: string) => {
+    disco.metas.set(clave, { iniciadaEn: Date.now(), mimeType, ...(pacienteId ? { pacienteId } : {}) });
     disco.chunks.set(clave, []);
   }),
   guardarChunk: vi.fn(async (clave: string, _indice: number, blob: Blob) => {
@@ -36,15 +36,15 @@ vi.mock("@/lib/grabacion-storage", () => ({
     const meta = disco.metas.get(clave);
     if (meta) meta.turnoId = turnoId;
   }),
-  recuperarGrabacionPendiente: vi.fn(async (coincide: (clave: string, turnoId: string | null) => boolean = () => true) => {
+  recuperarGrabacionPendiente: vi.fn(async (coincide: (clave: string, turnoId: string | null, pacienteId: string | null) => boolean = () => true) => {
     const [clave, meta] = [...disco.metas.entries()]
-      .filter(([c, m]) => coincide(c, m.turnoId ?? null) && (disco.chunks.get(c)?.length ?? 0) > 0)
+      .filter(([c, m]) => coincide(c, m.turnoId ?? null, m.pacienteId ?? null) && (disco.chunks.get(c)?.length ?? 0) > 0)
       .sort((a, b) => b[1].iniciadaEn - a[1].iniciadaEn)[0] ?? [];
     if (!clave || !meta) return null;
     const chunks = disco.chunks.get(clave)!;
     return {
       sesionClinicaId: clave, chunks, mimeType: meta.mimeType, duracionAproxSeg: chunks.length,
-      pausas: [], iniciadaEn: meta.iniciadaEn, turnoId: meta.turnoId ?? null,
+      pausas: [], iniciadaEn: meta.iniciadaEn, turnoId: meta.turnoId ?? null, pacienteId: meta.pacienteId ?? null,
     };
   }),
 }));
@@ -308,9 +308,9 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     expect(disco.metas.has(CLAVE)).toBe(false);
   });
 
-  test("entrando por otro turno no se ofrece", async () => {
+  test("una grabación de otra paciente no se ofrece, ni por su turno ni sin turno", async () => {
     guardada("t-anterior");
-    render(<GrabarView {...CON_TURNO} turnoId="t-otro" />);
+    render(<GrabarView {...CON_TURNO} pacienteId="p2" turnoId="t-otro" />);
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(screen.queryByRole("button", { name: "Guardarla ahora" })).toBeNull();
   });
@@ -333,6 +333,36 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
     expect(cuerpos["POST /api/sesion-clinica"]).toEqual({ turnoId: "t-ayer", iniciadaEn: AYER.toISOString() });
     expect(disco.metas.has("t-ayer")).toBe(false);
+  });
+
+  test("la de un turno de ayer se encuentra desde la ficha (Grabar abre /grabar/nuevo) y sube a SU turno", async () => {
+    disco.metas.set("t-ayer", { iniciadaEn: AYER.getTime(), mimeType: "audio/webm", pacienteId: "p1" });
+    disco.chunks.set("t-ayer", Array.from({ length: 30 }, () => new Blob(["audio"], { type: "audio/webm" })));
+    render(<GrabarView {...SIN_TURNO} />);
+    const guardarla = await screen.findByRole("button", { name: "Guardarla ahora" });
+    await act(async () => {
+      fireEvent.click(guardarla);
+    });
+
+    expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
+    // No crea un turno nuevo: la grabación ya tenía el suyo.
+    expect(pedidos.some((p) => p === "POST /api/turnos")).toBe(false);
+    expect(cuerpos["POST /api/sesion-clinica"]).toEqual({ turnoId: "t-ayer", iniciadaEn: AYER.toISOString() });
+    expect(pedidos).toContain("PATCH /api/turnos/t-ayer");
+  });
+
+  test("desde el turno de hoy también, y no se manda al turno de hoy", async () => {
+    disco.metas.set("t-ayer", { iniciadaEn: AYER.getTime(), mimeType: "audio/webm", pacienteId: "p1" });
+    disco.chunks.set("t-ayer", Array.from({ length: 30 }, () => new Blob(["audio"], { type: "audio/webm" })));
+    render(<GrabarView {...CON_TURNO} turnoId="t-hoy" />);
+    const guardarla = await screen.findByRole("button", { name: "Guardarla ahora" });
+    await act(async () => {
+      fireEvent.click(guardarla);
+    });
+
+    expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
+    expect(pedidos.filter((p) => p.includes("t-hoy"))).toEqual([]);
+    expect(cuerpos["POST /api/sesion-clinica"]).toEqual({ turnoId: "t-ayer", iniciadaEn: AYER.toISOString() });
   });
 
   test("sin red, guardarla deja la grabación donde estaba y lo dice", async () => {

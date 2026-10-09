@@ -64,7 +64,7 @@ const GRABACION_VACIA = "No se pudo capturar audio de la sesión.";
 // Cada cuánto se refresca el medidor y se mira si siguen llegando chunks.
 const LATIDO_MS = 250;
 
-export function useGrabador({ claveGrabacion, esPendiente, onListo, onError }: UseGrabadorOpciones): Grabador {
+export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, onError }: UseGrabadorOpciones): Grabador {
   const [estado, setEstado] = React.useState<EstadoGrabador>("inactivo");
   const [segundos, setSegundos] = React.useState(0);
   const [hueco, setHueco] = React.useState<AvisoHueco | null>(null);
@@ -312,7 +312,7 @@ export function useGrabador({ claveGrabacion, esPendiente, onListo, onError }: U
       relojRef.current = crearReloj();
       medidaRef.current = medidaInicial(relojRef.current());
       // Registra el inicio y limpia chunks viejos del turno.
-      void iniciarSesionGrabacion(clave, mimeTypeRef.current);
+      void iniciarSesionGrabacion(clave, mimeTypeRef.current, pacienteId);
 
       recorder.ondataavailable = (event: BlobEvent) => alLlegarChunk(event.data);
       recorder.onerror = () => terminarPorFalla("error-recorder");
