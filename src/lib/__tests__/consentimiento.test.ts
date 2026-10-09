@@ -89,7 +89,10 @@ describe("cada frase tiene el hecho que la respalda", () => {
   it("la copia del teléfono se borra al confirmar la subida", () => {
     const vista = codigo("src/app/(dashboard)/grabar/[turnoId]/_components/flujo-grabacion.ts");
     expect(vista.indexOf("await subirAudio(")).toBeGreaterThan(-1);
-    expect(vista.indexOf("await subirAudio(")).toBeLessThan(vista.indexOf("void limpiarGrabacion(turno)"));
+    // Se borra con la clave local de la grabación (el turnoId, o la clave
+    // sin turno del teléfono), recién después de la subida confirmada.
+    expect(vista.indexOf("void limpiarGrabacion(claveRef.current ?? turno)")).toBeGreaterThan(-1);
+    expect(vista.indexOf("await subirAudio(")).toBeLessThan(vista.indexOf("void limpiarGrabacion(claveRef.current ?? turno)"));
     // Que limpiarGrabacion borra los trozos lo prueba grabacion-storage.test.ts.
     expect(texto).toContain(", y se borra del teléfono.");
   });
