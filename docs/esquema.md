@@ -27,7 +27,7 @@ abrir.
 | `intentos_acceso` | Cada intento **fallido** de entrar, cambiar contraseña o pedir recuperación, con la clave que se cuenta (email hasheado, IP, usuaria) e IP/navegador. | Bloqueo por intentos. Antes vivía mezclado en la auditoría clínica, con IPs adentro. | Las tres rutas de cuenta. | El contador de bloqueo; el cron purga a los 30 días. |
 | `password_resets` | Enlaces de recuperación: hash del token, vencimiento, cuándo se usó y **cuándo salió el correo**. | Un enlace cuyo correo no salió no vale y no gasta el cupo. | Recuperar (crea y marca enviado), restablecer (marca usado), cron (purga). | Restablecer, el cupo de tres por hora. |
 | `invitaciones` | Hash del token, vencimiento, cuándo se usó, quién la creó. | Que una colega abra su propio consultorio. Tope de vigentes por creadora (constante en el código, marcada temporal). Crear y usar dejan evento de auditoría. | Crear invitación, registro. | Registro, el tope. |
-| `cupos_ayuda` | Por profesional y día: cuántas preguntas le hizo a Lupita. | Reservar el cupo **antes** de llamar al proveedor, en una sola operación atómica. Cortar una respuesta cuenta igual. | La ruta de ayuda. | La misma. |
+| `cupos_ayuda` | Por profesional, día y `ambito` (`ayuda` = Lupita, 40 por día; `lux` = Lux, 60 por día): cuántas llamadas hizo a cada asistente. Los dos topes no se comen entre sí. | Reservar el cupo **antes** de llamar al proveedor, en una sola operación atómica. Cortar una respuesta cuenta igual. | Las rutas de ayuda y de Lux (`/api/pacientes/[id]/lux`). | Las mismas. |
 | `configuraciones` | Nombre profesional, dirección, WhatsApp, tarifa por defecto, cuándo sale el recordatorio (`dia_anterior` / `dos_dias_antes` / `misma_manana`), plantilla del SMS, orientación teórica (`cbt_mi` / `gestalt`), por dónde sale el recordatorio (`canal_recordatorio`: `sms` / `whatsapp` / `ambos`, default `sms`). | Una fila por organización. Sale `horasAnticipacion` (nadie la leía). | Pantalla de configuración. | Recordatorios, SMS, el worker (orientación). |
 
 ### Pacientes y agenda
@@ -141,7 +141,9 @@ la Fase 1 que el esquema reconcilió; la historia completa está en Git.
    y no un enum, como los demás motivos, porque lo lee la pantalla tal cual.
 8. **Latido del worker.** `worker_estado` del 04. No hay tabla `latidos` ni
    ruta nueva; la ruta pública `/api/estado-worker` del 05 lee esta fila.
-9. **Cupo de Lupita.** `cupos_ayuda` del 04.
+9. **Cupo de Lupita.** `cupos_ayuda` del 04. Desde el 8 de octubre de 2026 la
+   clave es (usuaria, día, `ambito`): Lux tiene su propio cupo en la misma tabla
+   (`20261009120000_cupos_por_ambito`, `docs/contrato-lux.md`).
 10. **Constantes.** Duraciones, modalidades y métodos de pago viven en
     `src/lib/constantes-turno.ts`; en la base, `modalidad`, `pago_metodo` y todos
     los estados son enums, y `duracion` es entero con CHECK. El 06 quería CHECK

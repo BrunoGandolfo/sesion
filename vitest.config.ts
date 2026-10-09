@@ -49,6 +49,8 @@ const INTEGRACION = [
   // Qué UPDATE admite hilo_versiones: la resolución o, sola, la clave.
   'src/lib/__tests__/hilo-recifrado-integracion.test.ts',
   'src/lib/__tests__/cupo-ayuda-integracion.test.ts',
+  // Lux: material, auditoría y autorización contra la base.
+  'src/lib/__tests__/lux-integracion.test.ts',
   'src/lib/__tests__/hilo-integracion.test.ts',
   'src/lib/__tests__/salud-trabajos.test.ts',
   'src/lib/__tests__/revision-carreras.test.ts',

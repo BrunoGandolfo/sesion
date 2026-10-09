@@ -134,6 +134,9 @@ const CUERPOS: Record<string, Partial<Record<Metodo, unknown>>> = {
     POST: { firmaDigital: "data:image/png;base64,AAAA", textoVersion: "2.6" },
   },
   "pacientes/[id]/hilo/versiones/route.ts": { POST: { contenido: contenidoHilo(), basadaEnVersion: 1 } },
+  // La apertura de Lux. Sin clave de Anthropic (abajo) la dueña recibe 503
+  // antes de leer material: el barrido nunca llama al proveedor.
+  "pacientes/[id]/lux/route.ts": { POST: {} },
   "turnos/[id]/route.ts": { PATCH: { estado: "cancelado" } },
   "turnos/[id]/cobrar/route.ts": {
     POST: { metodo: "efectivo" },
@@ -230,6 +233,9 @@ vi.mock("@/app/api/_lib/auth", () => ({
     };
   },
 }));
+
+// Anthropic no se llama: con la clave vacía, Lux contesta 503 a la dueña.
+vi.stubEnv("ANTHROPIC_API_KEY", "");
 
 // R2 no se toca: acá se prueba el aislamiento, no el almacenamiento. Mock
 // PARCIAL sobre el módulo real, para que una función nueva de r2.ts no rompa
