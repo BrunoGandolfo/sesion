@@ -300,7 +300,7 @@ export async function asociarTurno(sesionClinicaId: string, turnoId: string): Pr
  * `blob`) no se ofrece: la clave para abrirlo ya no se entrega.
  */
 export async function recuperarGrabacionPendiente(
-  coincide: (sesionClinicaId: string) => boolean = () => true,
+  coincide: (sesionClinicaId: string, turnoId: string | null) => boolean = () => true,
 ): Promise<GrabacionPendiente | null> {
   if (!indexedDBDisponible()) {
     return null;
@@ -320,7 +320,7 @@ export async function recuperarGrabacionPendiente(
 
     // Candidatas de la más reciente a la más vieja.
     const ordenadas = [...metas]
-      .filter((meta) => coincide(meta.sesionClinicaId))
+      .filter((meta) => coincide(meta.sesionClinicaId, meta.turnoId ?? null))
       .sort((a, b) => b.iniciadaEn - a.iniciadaEn);
 
     for (const meta of ordenadas) {

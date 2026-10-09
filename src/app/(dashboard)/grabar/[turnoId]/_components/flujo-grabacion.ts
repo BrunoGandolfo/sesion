@@ -291,10 +291,14 @@ export function useFlujoGrabacion({
   }, [avisar]);
 
   // Qué grabación guardada en el teléfono es de esta pantalla: la del turno
-  // o, sin turno, cualquiera sin turno de esta paciente.
+  // (por su clave, o una sin turno a la que ya se le creó este turno: se
+  // vuelve a ella desde la ficha, por /grabar/<ese turno>) o, sin turno,
+  // cualquiera sin turno de esta paciente.
   const esPendiente = React.useCallback(
-    (claveGuardada: string) =>
-      turnoIdInicial ? claveGuardada === turnoIdInicial : esClaveSinTurnoDe(pacienteId, claveGuardada),
+    (claveGuardada: string, turnoGuardado: string | null) =>
+      turnoIdInicial
+        ? claveGuardada === turnoIdInicial || turnoGuardado === turnoIdInicial
+        : esClaveSinTurnoDe(pacienteId, claveGuardada),
     [turnoIdInicial, pacienteId],
   );
 

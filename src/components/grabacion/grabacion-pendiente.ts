@@ -15,7 +15,7 @@ export function useGrabacionPendiente(
   claveGrabacion: string | null,
   /** Qué grabaciones guardadas son de esta pantalla. Sin esto, la de
    *  `claveGrabacion` (y ninguna si tampoco hay clave). */
-  esPendiente: ((clave: string) => boolean) | undefined,
+  esPendiente: ((clave: string, turnoId: string | null) => boolean) | undefined,
   estadoRef: React.RefObject<EstadoGrabador>,
   /** La clave de la grabación en curso: la que se borra si no hay guardada. */
   claveRef: React.RefObject<string | null>,
@@ -30,7 +30,7 @@ export function useGrabacionPendiente(
     if (!coincide) return;
     let cancelado = false;
     void recuperarGrabacionPendiente(coincide).then((recuperada) => {
-      if (cancelado || !recuperada || !coincide(recuperada.sesionClinicaId)) return;
+      if (cancelado || !recuperada || !coincide(recuperada.sesionClinicaId, recuperada.turnoId)) return;
       if (estadoRef.current !== "inactivo") return;
       setPendiente(recuperada);
     });

@@ -36,9 +36,9 @@ vi.mock("@/lib/grabacion-storage", () => ({
     const meta = disco.metas.get(clave);
     if (meta) meta.turnoId = turnoId;
   }),
-  recuperarGrabacionPendiente: vi.fn(async (coincide: (clave: string) => boolean = () => true) => {
+  recuperarGrabacionPendiente: vi.fn(async (coincide: (clave: string, turnoId: string | null) => boolean = () => true) => {
     const [clave, meta] = [...disco.metas.entries()]
-      .filter(([c]) => coincide(c) && (disco.chunks.get(c)?.length ?? 0) > 0)
+      .filter(([c, m]) => coincide(c, m.turnoId ?? null) && (disco.chunks.get(c)?.length ?? 0) > 0)
       .sort((a, b) => b[1].iniciadaEn - a[1].iniciadaEn)[0] ?? [];
     if (!clave || !meta) return null;
     const chunks = disco.chunks.get(clave)!;
@@ -288,6 +288,29 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     expect(pedidos.some((p) => p === "POST /api/turnos")).toBe(false);
     expect(pedidos).toContain("GET /api/sesion-clinica?turnoId=t-anterior");
     expect(pedidos).toContain("PATCH /api/turnos/t-anterior");
+  });
+
+  test("si su turno ya se creó, también se ofrece entrando por ese turno (como llega desde la ficha)", async () => {
+    guardada("t-anterior");
+    sesionDelTurno = { id: "s1", estado: "grabando" };
+    render(<GrabarView {...CON_TURNO} turnoId="t-anterior" />);
+    const guardarla = await screen.findByRole("button", { name: "Guardarla ahora" });
+    await act(async () => {
+      fireEvent.click(guardarla);
+    });
+
+    expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
+    expect(pedidos.some((p) => p === "POST /api/turnos")).toBe(false);
+    expect(pedidos).toContain("POST /api/sesion-clinica/s1/upload-confirmar");
+    // Se borra con SU clave, no con la del turno.
+    expect(disco.metas.has(CLAVE)).toBe(false);
+  });
+
+  test("entrando por otro turno no se ofrece", async () => {
+    guardada("t-anterior");
+    render(<GrabarView {...CON_TURNO} turnoId="t-otro" />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(screen.queryByRole("button", { name: "Guardarla ahora" })).toBeNull();
   });
 
   test("sin red, guardarla deja la grabación donde estaba y lo dice", async () => {

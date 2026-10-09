@@ -40,10 +40,11 @@ export interface UseGrabadorOpciones {
   /** Con qué se guardan los chunks: el turnoId (turno ↔ sesión es 1:1) o la
    *  clave `sin-turno:…` de una grabación sin turno (lib/grabacion-clave.ts). */
   claveGrabacion: string | null;
-  /** Qué grabación guardada en el teléfono ofrecer como pendiente. Sin esto,
-   *  la de `claveGrabacion`. Una grabación sin turno todavía no tiene clave
-   *  conocida al entrar: se la busca por paciente. */
-  esPendiente?: (clave: string) => boolean;
+  /** Qué grabación guardada en el teléfono ofrecer como pendiente, por su
+   *  clave y por el turno que ya se le creó (si se le creó). Sin esto, la de
+   *  `claveGrabacion`. Una grabación sin turno no tiene clave conocida al
+   *  entrar: se la busca por paciente, o por su turno. */
+  esPendiente?: (clave: string, turnoId: string | null) => boolean;
   /** Recibe la grabación lista para subir. Una sola vez por grabación. */
   onListo: (datos: DatosGrabacion) => void;
   onError: (mensaje: string) => void;
