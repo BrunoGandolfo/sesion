@@ -411,3 +411,47 @@ describe("grabacion-storage — el audio se guarda tal cual", () => {
     await expect(storage.recuperarGrabacionPendiente()).resolves.toBeNull();
   });
 });
+
+describe("grabacion-storage — una grabación sin turno", () => {
+  const SIN_TURNO = "sin-turno:p1:2026-10-09T12:30:00.000Z";
+
+  it("guarda cuándo empezó y el turno que se le creó, y las pausas no lo borran", async () => {
+    vi.setSystemTime(new Date("2026-10-09T12:30:00.000Z"));
+    await storage.iniciarSesionGrabacion(SIN_TURNO, "audio/webm");
+    await storage.guardarChunk(SIN_TURNO, 0, chunk("a"));
+    await storage.asociarTurno(SIN_TURNO, "t-nuevo");
+    await storage.guardarPausas(SIN_TURNO, [{ inicio: 1, fin: 2 }]);
+    vi.useRealTimers();
+
+    const pendiente = await recuperarAlgo();
+    expect(pendiente.sesionClinicaId).toBe(SIN_TURNO);
+    expect(pendiente.iniciadaEn).toBe(Date.parse("2026-10-09T12:30:00.000Z"));
+    expect(pendiente.turnoId).toBe("t-nuevo");
+  });
+
+  it("se elige por clave o por el turno anotado; la más reciente entre las que coinciden", async () => {
+    await storage.iniciarSesionGrabacion(SIN_TURNO, "audio/webm");
+    await storage.guardarChunk(SIN_TURNO, 0, chunk("a"));
+    await storage.asociarTurno(SIN_TURNO, "t-nuevo");
+    // Otra más nueva, de otro turno: no le gana a la que coincide.
+    await new Promise((r) => setTimeout(r, 5));
+    await storage.iniciarSesionGrabacion(OTRO_TURNO, "audio/webm");
+    await storage.guardarChunk(OTRO_TURNO, 0, chunk("b"));
+
+    const porTurno = await storage.recuperarGrabacionPendiente((_clave, turnoId) => turnoId === "t-nuevo");
+    expect(porTurno?.pacienteId).toBeNull();
+    expect(porTurno?.sesionClinicaId).toBe(SIN_TURNO);
+    const ninguna = await storage.recuperarGrabacionPendiente((clave) => clave === "turno_inexistente");
+    expect(ninguna).toBeNull();
+    expect((await storage.recuperarGrabacionPendiente())?.sesionClinicaId).toBe(OTRO_TURNO);
+  });
+
+  it("guarda de qué paciente es, y por eso se la encuentra", async () => {
+    await storage.iniciarSesionGrabacion("turno_de_ayer", "audio/webm", "p1");
+    await storage.guardarChunk("turno_de_ayer", 0, chunk("a"));
+    const dePaciente = await storage.recuperarGrabacionPendiente((_c, _t, pacienteId) => pacienteId === "p1");
+    expect(dePaciente?.sesionClinicaId).toBe("turno_de_ayer");
+    expect(dePaciente?.pacienteId).toBe("p1");
+    expect(await storage.recuperarGrabacionPendiente((_c, _t, pacienteId) => pacienteId === "p2")).toBeNull();
+  });
+});

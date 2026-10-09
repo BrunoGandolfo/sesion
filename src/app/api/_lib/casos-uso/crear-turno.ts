@@ -36,7 +36,7 @@ import { cifrarTurno } from "@/lib/prisma-encryption";
 import type { SerieCreada, Turno, TurnoCreado } from "@/types/domain";
 
 import { auditar } from "../auditoria";
-import { toTurno } from "../domain";
+import { motivoGrabacionNoAdmitida, toTurno } from "../domain";
 import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
 import { programarEnvioDelTurno } from "./envios-del-turno";
@@ -64,6 +64,9 @@ export interface CrearTurnoInput {
    *  este instante): la sesión ya está ocurriendo, así que no pasa por la
    *  regla de choques. Decisión del dueño. */
   alGrabar?: boolean;
+  /** Con alGrabar: cuándo empezó la grabación. La fecha del turno tiene que
+   *  caer en el plazo (motivoGrabacionNoAdmitida, domain.ts). */
+  iniciadaEn?: Date;
   /** Momento del alta: decide si el turno lleva recordatorio. */
   ahora: Date;
   /** Quién agenda, para turno.crear. */
@@ -84,9 +87,14 @@ export async function crearTurno({
   notas,
   frecuencia,
   alGrabar = false,
+  iniciadaEn,
   ahora,
   usuarioId,
 }: CrearTurnoInput): Promise<TurnoCreado> {
+  if (alGrabar && iniciadaEn) {
+    const motivo = motivoGrabacionNoAdmitida(fecha, iniciadaEn, ahora);
+    if (motivo) throw new ApiError(motivo, 400);
+  }
   return prisma.$transaction(async (tx) => {
     // El lock PRIMERO y por toda la transacción: dos altas simultáneas para
     // el mismo hueco se ordenan y la segunda ve la primera (el porqué está
@@ -99,6 +107,18 @@ export async function crearTurno({
     await tx.$queryRaw`SELECT id FROM pacientes
       WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR SHARE`;
     const paciente = await requirePaciente(tx, pacienteId, organizationId, { id: true, tarifa: true });
+
+    // El turno de una grabación sin turno es idempotente: su fecha es el
+    // instante en que empezó a grabar (al milisegundo), así que un reintento
+    // —la respuesta anterior se perdió, se cerró el navegador— encuentra el
+    // que ya nació en vez de crear otro. Bajo el lock de agenda: dos intentos
+    // a la vez se ordenan.
+    if (alGrabar && iniciadaEn && iniciadaEn.getTime() === fecha.getTime()) {
+      const existente = await tx.turno.findFirst({
+        where: { organizationId, pacienteId: paciente.id, fecha, estado: { not: "cancelado" } },
+      });
+      if (existente) return { ...toTurno({ ...existente, notas: existente.notas ?? null }), serie: null };
+    }
 
     const fechas =
       frecuencia === "unico" ? [fecha] : fechasDeSerie(fecha, frecuencia);

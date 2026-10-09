@@ -25,7 +25,7 @@ import { ACCIONES } from "@/lib/auditoria-acciones";
 import { auditar, registrarAuditoria } from "../auditoria";
 import { DETALLE_MAX_ARRAY } from "../auditoria-pura";
 
-import { ESTADOS_GRABABLES, sePuedeGrabar } from "../domain";
+import { ESTADOS_GRABABLES, motivoGrabacionNoAdmitida, sePuedeGrabar } from "../domain";
 import { ApiError } from "../responses";
 import { SESION_SELECT, toSesionClinicaResponse } from "../sesion-clinica";
 
@@ -102,12 +102,15 @@ export const MENSAJE_GRABAR_OTRO_DIA =
  * Crea la sesión clínica de un turno, o devuelve la que ya está grabando.
  *
  * Una grabación NUEVA solo se crea si el turno es de hoy en Montevideo
- * (sePuedeGrabar, la misma regla con que las pantallas ofrecen Grabar).
+ * (sePuedeGrabar, la misma regla con que las pantallas ofrecen Grabar) o, si
+ * el cliente manda `iniciadaEn`, si la grabación empezó el día del turno y
+ * dentro del plazo (motivoGrabacionNoAdmitida): grabar no espera a la red y
+ * la sesión nace al subir.
  * Reanudar una que ya está en "grabando" no pasa por esa regla: la
  * grabación empezó el día del turno y cortarla pasada la medianoche dejaría
  * el audio en el teléfono sin a dónde ir.
  */
-export async function prepararAudio({ prisma, organizationId, turnoId, usuarioId, ahora = new Date() }: Base & DeUsuaria & { turnoId: string; ahora?: Date }) {
+export async function prepararAudio({ prisma, organizationId, turnoId, usuarioId, iniciadaEn, ahora = new Date() }: Base & DeUsuaria & { turnoId: string; iniciadaEn?: Date; ahora?: Date }) {
   return prisma.$transaction(async (tx) => {
     // Serializa dos inicios del mismo turno sin reemplazar su identidad.
     const tocado = await tx.turno.updateMany({ where: { id: turnoId, organizationId, estado: { in: [...ESTADOS_GRABABLES] } }, data: { actualizadoEn: new Date() } });
@@ -125,7 +128,15 @@ export async function prepararAudio({ prisma, organizationId, turnoId, usuarioId
       if (existente.estado !== "grabando") throw new ApiError("La grabación ya se cerró. Revisá su estado.", 409);
       return { id: existente.id };
     }
-    if (!sePuedeGrabar(turno, ahora)) throw new ApiError(MENSAJE_GRABAR_OTRO_DIA, 400);
+    // Con el inicio de la grabación, el plazo (motivoGrabacionNoAdmitida); sin
+    // él, la regla de siempre: turno de hoy. El estado del turno ya lo pidió
+    // el UPDATE de arriba.
+    if (iniciadaEn) {
+      const motivo = motivoGrabacionNoAdmitida(turno.fecha, iniciadaEn, ahora);
+      if (motivo) throw new ApiError(motivo, 400);
+    } else if (!sePuedeGrabar(turno, ahora)) {
+      throw new ApiError(MENSAJE_GRABAR_OTRO_DIA, 400);
+    }
     // Una grabación nueva suma al contador del consultorio. En un consultorio
     // de prueba, sólo si no llegó al tope: el UPDATE toma el lock de la fila y
     // vuelve a mirar la condición, así dos inicios a la vez no pasan del tope.

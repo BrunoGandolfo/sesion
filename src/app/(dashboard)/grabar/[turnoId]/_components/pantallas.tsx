@@ -26,6 +26,25 @@ import {
   VOLVER_A_LA_FICHA,
 } from "@/lib/glosario";
 
+/** Una grabación que quedó en el teléfono sin enviar. */
+function OfertaPendiente({ minutos, onEnviar, onDescartar }: { minutos: number; onEnviar: () => void; onDescartar: () => void }) {
+  return (
+    <div className="w-full rounded-md border border-[color:var(--border-subtle)] bg-cream-100 px-4 py-4 text-left">
+      <p className="font-sans text-[14px] font-semibold text-ink-900">
+        Quedó una grabación de ~{minutos} min sin enviar
+      </p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <Button className="flex-1" onClick={onEnviar}>
+          Guardarla ahora
+        </Button>
+        <Button variant="secondary" onClick={onDescartar}>
+          Descartarla
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function PantallaPrevia({
   autorizacionVigente,
   motivoSinGrabar,
@@ -55,8 +74,19 @@ export function PantallaPrevia({
   onDescartarPendiente: () => void;
 }) {
   if (motivoSinGrabar) {
+    // El motivo es para una grabación NUEVA. Una que ya quedó guardada en el
+    // teléfono se ofrece igual: la sesión nace al subir, así que la de un
+    // turno de ayer que no llegó a subir no tiene sesión que la deje pasar,
+    // y el servidor la acepta por su inicio (plazo-grabacion.ts).
     return (
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex w-full flex-col items-center gap-4">
+        {pendienteMinutos !== null ? (
+          <OfertaPendiente
+            minutos={pendienteMinutos}
+            onEnviar={onEnviarPendiente}
+            onDescartar={onDescartarPendiente}
+          />
+        ) : null}
         <p className="max-w-[340px] font-sans text-[15px] leading-[1.55] text-ink-900">
           {motivoSinGrabar}
         </p>
@@ -88,19 +118,11 @@ export function PantallaPrevia({
         </p>
       ) : null}
       {pendienteMinutos !== null ? (
-        <div className="w-full rounded-md border border-[color:var(--border-subtle)] bg-cream-100 px-4 py-4 text-left">
-          <p className="font-sans text-[14px] font-semibold text-ink-900">
-            Quedó una grabación de ~{pendienteMinutos} min sin enviar
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Button className="flex-1" onClick={onEnviarPendiente}>
-              Guardarla ahora
-            </Button>
-            <Button variant="secondary" onClick={onDescartarPendiente}>
-              Descartarla
-            </Button>
-          </div>
-        </div>
+        <OfertaPendiente
+          minutos={pendienteMinutos}
+          onEnviar={onEnviarPendiente}
+          onDescartar={onDescartarPendiente}
+        />
       ) : null}
 
       <button

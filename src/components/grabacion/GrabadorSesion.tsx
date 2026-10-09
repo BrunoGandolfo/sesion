@@ -57,14 +57,14 @@ import type { AvisoHueco, EstadoGrabador, Grabador, UseGrabadorOpciones } from "
 import { useGuardaDeToque } from "./guarda-de-toque";
 
 export { formatearDuracion };
-export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador } from "./grabador-tipos";
+export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador, PendienteGuardada } from "./grabador-tipos";
 
 const GRABACION_VACIA = "No se pudo capturar audio de la sesión.";
 
 // Cada cuánto se refresca el medidor y se mira si siguen llegando chunks.
 const LATIDO_MS = 250;
 
-export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpciones): Grabador {
+export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, onError }: UseGrabadorOpciones): Grabador {
   const [estado, setEstado] = React.useState<EstadoGrabador>("inactivo");
   const [segundos, setSegundos] = React.useState(0);
   const [hueco, setHueco] = React.useState<AvisoHueco | null>(null);
@@ -287,7 +287,8 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     };
   }, [anotar, limpiarLatido, soltarMicrofono]);
 
-  const [pendiente, setPendiente] = useGrabacionPendiente(claveGrabacion, estadoRef);
+  const { pendiente, setPendiente, guardada, descartar: descartarPendiente } =
+    useGrabacionPendiente(claveGrabacion, esPendiente, estadoRef, claveRef);
 
   async function iniciar(clave: string) {
     if (estadoRef.current !== "inactivo" && estadoRef.current !== "error") return;
@@ -311,7 +312,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
       relojRef.current = crearReloj();
       medidaRef.current = medidaInicial(relojRef.current());
       // Registra el inicio y limpia chunks viejos del turno.
-      void iniciarSesionGrabacion(clave, mimeTypeRef.current);
+      void iniciarSesionGrabacion(clave, mimeTypeRef.current, pacienteId);
 
       recorder.ondataavailable = (event: BlobEvent) => alLlegarChunk(event.data);
       recorder.onerror = () => terminarPorFalla("error-recorder");
@@ -410,17 +411,13 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
       setMuyCorta(true);
       return;
     }
+    claveRef.current = pendiente.sesionClinicaId; // la suya, no la del prop
     setPendiente(null);
     cambiarEstado("preparando");
     eventosRef.current = [];
     anotar("recuperada");
     setSegundos(pendiente.duracionAproxSeg);
     entregar(pendiente.chunks, pendiente.mimeType, pendiente.duracionAproxSeg, pendiente.pausas);
-  }
-
-  function descartarPendiente() {
-    setPendiente(null);
-    if (claveRef.current) void limpiarGrabacion(claveRef.current);
   }
 
   return {
@@ -436,6 +433,7 @@ export function useGrabador({ claveGrabacion, onListo, onError }: UseGrabadorOpc
     mensajeError,
     muyCorta,
     pendienteSeg: pendiente ? pendiente.duracionAproxSeg : null,
+    pendiente: guardada,
     iniciar,
     pausar,
     reanudar,

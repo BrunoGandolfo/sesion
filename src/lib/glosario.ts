@@ -29,6 +29,7 @@ import { ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, TOPE_INVITACIO
 // La hora, del motor de fechas y no de format.ts: format.ts ya importa
 // pluralizar de acá, y los dos módulos se importarían mutuamente.
 import { formatearHoraMvd } from "@/lib/fechas-montevideo";
+import { HORAS_PARA_ENVIAR_GRABACION } from "@/lib/plazo-grabacion";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Navegación
@@ -1332,6 +1333,20 @@ export const MESES_CORTOS = [
 /** Falló la subida del audio. Lo importante es que no se perdió. */
 export const AUDIO_NO_GUARDADO =
   "No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de nuevo.";
+
+/** El servidor no acepta la grabación: empezó hace más del plazo
+ *  (plazo-grabacion.ts). El audio sigue en el teléfono. */
+export const GRABACION_VENCIDA = `Esta grabación empezó hace más de ${HORAS_PARA_ENVIAR_GRABACION} horas y ya no se puede enviar. Sigue guardada en el teléfono.`;
+
+/** El servidor no acepta la grabación: no empezó el día del turno, o la hora
+ *  de inicio que trae no es posible (el reloj del teléfono estaba mal). */
+export const GRABACION_OTRO_DIA_QUE_EL_TURNO =
+  "Esta grabación no empezó el día del turno, así que no se puede enviar a ese turno. Sigue guardada en el teléfono.";
+
+/** La subida no pudo salir porque no hay red. Grabar no la necesita: el
+ *  turno, la sesión y el audio se mandan juntos cuando vuelve la señal. */
+export const GRABACION_SIN_CONEXION =
+  "Sin conexión. La grabación quedó guardada en el teléfono; reintentá cuando vuelva la señal.";
 
 /** El audio se guardó pero el turno no llegó a quedar como realizado. Se
  *  dice en ese orden: primero lo que sí se salvó (la sesión, que es lo

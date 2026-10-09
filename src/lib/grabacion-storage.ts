@@ -19,10 +19,12 @@
 // debe romper la grabación en curso.
 //
 // Nota de integración: el parámetro `sesionClinicaId` es el
-// identificador con el que el caller nombra la grabación. En la
-// integración actual GrabadorSesion usa el turnoId (relación 1:1
-// turno ↔ sesión clínica), porque el componente no recibe el id de
-// la sesión clínica como prop.
+// identificador con el que el caller nombra la grabación: el turnoId si la
+// grabación tiene turno, o la clave `sin-turno:…` que se inventa en el
+// teléfono cuando se graba desde la ficha (src/lib/grabacion-clave.ts). Al
+// subir, el turno que se crea para esa grabación se anota en su meta
+// (`asociarTurno`): un reintento después de cerrar el navegador no lo crea
+// dos veces.
 // ============================================
 
 const DB_NOMBRE = "sesion-grabaciones";
@@ -56,6 +58,11 @@ interface MetaGrabacion {
   /** El formato que eligió el MediaRecorder: sin él no se arma el archivo. */
   mimeType?: string;
   pausas?: Pausa[];
+  /** El turno creado al subir una grabación sin turno. */
+  turnoId?: string;
+  /** De qué paciente es: la pantalla de grabar de esa paciente la ofrece
+   *  aunque sea de otro turno (uno de ayer que no llegó a subir). */
+  pacienteId?: string;
 }
 
 interface ChunkGrabacion {
@@ -70,6 +77,11 @@ export interface GrabacionPendiente {
   mimeType: string;
   duracionAproxSeg: number;
   pausas: Pausa[];
+  /** Epoch ms en que empezó la grabación. */
+  iniciadaEn: number;
+  /** El turno que ya se creó para esta grabación, si se llegó a crear. */
+  turnoId: string | null;
+  pacienteId: string | null;
 }
 
 function indexedDBDisponible(): boolean {
@@ -168,6 +180,7 @@ function avisar(operacion: string, error: unknown) {
 export async function iniciarSesionGrabacion(
   sesionClinicaId: string,
   mimeType: string,
+  pacienteId?: string,
 ): Promise<void> {
   if (!indexedDBDisponible()) {
     return;
@@ -184,6 +197,7 @@ export async function iniciarSesionGrabacion(
       iniciadaEn: Date.now(),
       mimeType,
       pausas: [],
+      ...(pacienteId ? { pacienteId } : {}),
     };
     tx.objectStore(STORE_META).put(meta);
 
@@ -219,9 +233,9 @@ export async function guardarPausas(
     );
 
     const meta: MetaGrabacion = {
+      ...actual,
       sesionClinicaId,
       iniciadaEn: actual?.iniciadaEn ?? Date.now(),
-      mimeType: actual?.mimeType,
       pausas: pausas.map((p) => ({ inicio: p.inicio, fin: p.fin })),
     };
     store.put(meta);
@@ -261,13 +275,39 @@ export async function guardarChunk(
 }
 
 /**
- * Devuelve la grabación pendiente más reciente (si existe alguna con
- * chunks persistidos), con sus chunks ordenados por índice. Devuelve null si
- * no hay nada recuperable o IndexedDB no está disponible. Un registro de la
- * versión que cifraba cada chunk (sin `blob`) no se ofrece: la clave para
- * abrirlo ya no se entrega.
+ * Anota en la meta de una grabación el turno que se creó para ella. Nunca
+ * lanza: si no se pudo anotar, lo peor es que un reintento después de cerrar
+ * el navegador cree otro turno.
  */
-export async function recuperarGrabacionPendiente(): Promise<GrabacionPendiente | null> {
+export async function asociarTurno(sesionClinicaId: string, turnoId: string): Promise<void> {
+  if (!indexedDBDisponible()) {
+    return;
+  }
+
+  try {
+    const db = await abrirDB();
+    const tx = db.transaction(STORE_META, "readwrite");
+    const store = tx.objectStore(STORE_META);
+    const actual = await esperarRequest(
+      store.get(sesionClinicaId) as IDBRequest<MetaGrabacion | undefined>,
+    );
+    if (actual) store.put({ ...actual, turnoId });
+    await esperarTransaccion(tx);
+  } catch (error) {
+    avisar("asociarTurno", error);
+  }
+}
+
+/**
+ * Devuelve la grabación pendiente más reciente (si existe alguna con
+ * chunks persistidos) entre las que `coincide` acepta, con sus chunks
+ * ordenados por índice. Devuelve null si no hay nada recuperable o IndexedDB
+ * no está disponible. Un registro de la versión que cifraba cada chunk (sin
+ * `blob`) no se ofrece: la clave para abrirlo ya no se entrega.
+ */
+export async function recuperarGrabacionPendiente(
+  coincide: (sesionClinicaId: string, turnoId: string | null, pacienteId: string | null) => boolean = () => true,
+): Promise<GrabacionPendiente | null> {
   if (!indexedDBDisponible()) {
     return null;
   }
@@ -285,7 +325,9 @@ export async function recuperarGrabacionPendiente(): Promise<GrabacionPendiente 
     }
 
     // Candidatas de la más reciente a la más vieja.
-    const ordenadas = [...metas].sort((a, b) => b.iniciadaEn - a.iniciadaEn);
+    const ordenadas = [...metas]
+      .filter((meta) => coincide(meta.sesionClinicaId, meta.turnoId ?? null, meta.pacienteId ?? null))
+      .sort((a, b) => b.iniciadaEn - a.iniciadaEn);
 
     for (const meta of ordenadas) {
       const txChunks = db.transaction(STORE_CHUNKS, "readonly");
@@ -313,6 +355,9 @@ export async function recuperarGrabacionPendiente(): Promise<GrabacionPendiente 
         mimeType: meta.mimeType ?? "audio/webm",
         duracionAproxSeg: registros.length * SEGUNDOS_POR_CHUNK,
         pausas: meta.pausas ?? [],
+        iniciadaEn: meta.iniciadaEn,
+        turnoId: meta.turnoId ?? null,
+        pacienteId: meta.pacienteId ?? null,
       };
     }
 

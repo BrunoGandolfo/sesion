@@ -3,9 +3,20 @@
 // El flujo de /grabar/[turnoId]: el orden de la pantalla y la conversación
 // con la API, sin JSX.
 //
-//   crear turno (solo si no había)  →  asegurar la sesión clínica en
-//   "grabando"  →  grabar  →  upload-url / PUT a R2 / upload-confirmar  →
-//   el turno pasa a realizado  →  ella toca "Volver a la ficha".
+// ARRANCAR A GRABAR NO DEPENDE DEL SERVIDOR (incidente del 9 de octubre de
+// 2026: en modo avión, "Grabar sesión" decía "Algo falló" y no grababa,
+// porque antes de abrir el micrófono se creaban el turno y la sesión).
+//
+//   Grabar  →  el micrófono, de inmediato, con una clave local: el turnoId o,
+//   sin turno, `sin-turno:<paciente>:<inicio>` (lib/grabacion-clave.ts)
+//
+//   Terminar (o Reintentar, o "Guardarla ahora")  →  crear el turno si no
+//   había, con la hora en que EMPEZÓ la grabación  →  asegurar la sesión en
+//   "grabando"  →  upload-url / PUT a R2 / upload-confirmar  →  el turno pasa
+//   a realizado  →  ella toca "Volver a la ficha".
+//
+// Si algo de eso falla por red, la grabación queda en el teléfono (IndexedDB,
+// con su clave) y la pantalla lo dice: se reintenta cuando vuelve la señal.
 //
 // La grabación misma (un solo MediaRecorder, chunks, pausa, IndexedDB,
 // recuperación) es de useGrabador; la subida, de lib/subida-audio.ts.
@@ -20,34 +31,25 @@ import {
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
 import { ApiClientError, apiGet, apiPost, mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";
-import { limpiarGrabacion } from "@/lib/grabacion-storage";
+import { claveSinTurno, esClaveSinTurnoDe, inicioDeClaveSinTurno, turnoDeLaGrabacion } from "@/lib/grabacion-clave";
+import { asociarTurno, limpiarGrabacion } from "@/lib/grabacion-storage";
 import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import {
-  ErrorSubida,
   marcarTurnoRealizado,
   subirAudio,
   volverAGrabando,
 } from "@/lib/subida-audio";
+import { esRechazoDefinitivo, esRechazoDelServidor, esSinConexion } from "./errores-grabacion";
 import {
   ALGO_FALLO,
   AUDIO_NO_GUARDADO,
+  GRABACION_SIN_CONEXION,
   SESION_EN_CAMINO,
   TURNO_NO_MARCADO,
 } from "@/lib/glosario";
 
 /** Duración por defecto del turno creado al vuelo. */
 const DURACION_SIN_TURNO = 50;
-
-/** Un rechazo del servidor a la subida (409 o 422 al pedir la URL o al
- *  confirmar) PUEDE ser definitivo. El PUT a R2 no entra: un 4xx de R2 (una
- *  URL vencida) se arregla pidiendo otra. */
-function esRechazoDelServidor(error: unknown): error is ErrorSubida {
-  return (
-    error instanceof ErrorSubida &&
-    error.paso !== "put" &&
-    (error.status === 409 || error.status === 422)
-  );
-}
 
 export type Fase =
   | "previo"
@@ -109,7 +111,8 @@ export function useFlujoGrabacion({
   pacienteId,
   avisar,
 }: OpcionesFlujo) {
-  const [turnoId, setTurnoId] = React.useState(turnoIdInicial);
+  // La clave local de la grabación (ver arriba). Con turno es su id.
+  const [clave, setClave] = React.useState(turnoIdInicial);
   const [horaTexto, setHoraTexto] = React.useState(horaInicial);
   const [fase, setFase] = React.useState<Fase>("previo");
   const [progreso, setProgreso] = React.useState<number | null>(null);
@@ -120,32 +123,90 @@ export function useFlujoGrabacion({
   // responde OK.
   const audioRef = React.useRef<DatosGrabacion | null>(null);
   const turnoIdRef = React.useRef(turnoIdInicial);
+  const claveRef = React.useRef(turnoIdInicial);
+  // Cuándo empezó la grabación. Viaja al crear el turno (sin turno, es su
+  // hora) y la sesión: el servidor acepta una grabación del día del turno
+  // aunque llegue pasada la medianoche (plazo-grabacion.ts).
+  const inicioRef = React.useRef<Date | null>(null);
   const sesionIdRef = React.useRef<string | null>(null);
   const turnoProgramadoRef = React.useRef(turnoProgramado);
 
+  /**
+   * Deja la sesión clínica del turno en estado "grabando" y devuelve su id.
+   * Tolera reentrar con una sesión ya empezada (volvió atrás, se le cerró el
+   * navegador) y una subida que quedó a medias. Se llama al subir, no al
+   * empezar a grabar.
+   */
+  const asegurarSesion = React.useCallback(async (turno: string): Promise<string> => {
+    let sesion = await apiGet<SesionApi | null>(
+      `/api/sesion-clinica?turnoId=${turno}`,
+    );
+
+    if (!sesion) {
+      const inicio = inicioRef.current;
+      sesion = await apiPost<SesionApi>("/api/sesion-clinica", {
+        turnoId: turno,
+        ...(inicio ? { iniciadaEn: inicio.toISOString() } : {}),
+      });
+    }
+
+    if (sesion.estado === "subiendo") {
+      await volverAGrabando(sesion.id);
+      return sesion.id;
+    }
+
+    if (sesion.estado !== "grabando") {
+      throw new ApiClientError(SESION_EN_CAMINO, 409);
+    }
+
+    return sesion.id;
+  }, []);
+
+  /** El turno: el que había o uno nuevo con la hora de inicio, anotado en el
+   *  teléfono para que un reintento no lo cree dos veces. */
+  const asegurarTurno = React.useCallback(async (): Promise<string> => {
+    if (turnoIdRef.current) return turnoIdRef.current;
+    const claveLocal = claveRef.current;
+    const inicio = inicioRef.current ?? (claveLocal ? inicioDeClaveSinTurno(claveLocal) : null);
+    if (!inicio) throw new Error("grabación sin turno y sin hora de inicio");
+    const creado = await apiPost<TurnoApi>("/api/turnos", {
+      pacienteId,
+      fecha: inicio.toISOString(),
+      duracion: DURACION_SIN_TURNO,
+      modalidad: "presencial",
+      // Un turno que nace al grabar no pasa por la regla de choque: la
+      // sesión ocurrió, y un solapamiento en la agenda no puede impedir
+      // guardarla.
+      alGrabar: true,
+      iniciadaEn: inicio.toISOString(),
+    });
+    turnoIdRef.current = creado.id;
+    turnoProgramadoRef.current = true;
+    setHoraTexto(hora(new Date(creado.fecha)));
+    if (claveLocal) await asociarTurno(claveLocal, creado.id);
+    return creado.id;
+  }, [pacienteId]);
+
   const subir = React.useCallback(
     async (datos: DatosGrabacion) => {
-      const sesionId = sesionIdRef.current;
-      const turno = turnoIdRef.current;
-
       audioRef.current = datos;
-
-      if (!sesionId || !turno) {
-        setErrorPantalla(ALGO_FALLO);
-        setFase("no-guardado");
-        return;
-      }
 
       setErrorPantalla(null);
       setProgreso(0);
       setFase("enviando");
 
+      let turno: string | null = null;
+      let sesionId: string | null = null;
       try {
+        turno = await asegurarTurno();
+        sesionId = await asegurarSesion(turno);
+        sesionIdRef.current = sesionId;
+
         await subirAudio(sesionId, datos, (p: number) => setProgreso(p));
 
         audioRef.current = null;
         // Recién con la confirmación en la mano deja de hacer falta el backup.
-        void limpiarGrabacion(turno);
+        void limpiarGrabacion(claveRef.current ?? turno);
 
         if (turnoProgramadoRef.current) {
           try {
@@ -166,6 +227,25 @@ export function useFlujoGrabacion({
         setFase("guardado");
       } catch (error) {
         console.warn("[grabar] falló la subida", error);
+        // Sin red no se le pregunta nada al servidor: la grabación queda en
+        // el teléfono y se reintenta cuando vuelva la señal.
+        if (esSinConexion(error)) {
+          setErrorPantalla(GRABACION_SIN_CONEXION);
+          setFase("no-guardado");
+          // Si la sesión llegó a quedar en "subiendo", que vuelva a "grabando"
+          // (sin red no va a poder; el próximo intento lo resuelve igual).
+          if (sesionId) await volverAGrabando(sesionId);
+          return;
+        }
+        // El servidor no aceptó el turno o la sesión (la sesión ya se cerró,
+        // el turno no es de hoy, falta la autorización): reintentar fallaría
+        // igual. Se dice lo que contestó, que está escrito para ella. La
+        // grabación sigue en el teléfono.
+        if (!sesionId && esRechazoDefinitivo(error)) {
+          setErrorPantalla(error.mensaje);
+          setFase("rechazada");
+          return;
+        }
         // Lo que decide es el estado de la sesión, no el código: un 409 de
         // "no llegó" deja la sesión en grabando a propósito para reintentar,
         // y uno de upload-url con la sesión en subiendo se arregla volviendo
@@ -173,7 +253,7 @@ export function useFlujoGrabacion({
         // cerró el mantenimiento, quedó fallida por corta, ya se procesa):
         // reintentar fallaría igual cada vez. Si no se puede leer, se
         // reintenta como siempre.
-        if (esRechazoDelServidor(error)) {
+        if (turno && esRechazoDelServidor(error)) {
           const sesion = await apiGet<SesionApi | null>(
             `/api/sesion-clinica?turnoId=${turno}`,
           ).catch(() => undefined);
@@ -182,8 +262,6 @@ export function useFlujoGrabacion({
             (sesion !== null &&
               (ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado));
           if (!admiteAudio) {
-            // Se dice lo que contestó el servidor, que está escrito para
-            // ella, y se vuelve a la ficha.
             setErrorPantalla(error.message);
             setFase("rechazada");
             return;
@@ -192,14 +270,14 @@ export function useFlujoGrabacion({
         // Nada se borra: la grabación sigue en memoria y sus chunks en
         // IndexedDB. La sesión vuelve a "grabando" para repetir desde
         // upload-url con el mismo blob.
-        setErrorPantalla(AUDIO_NO_GUARDADO);
+        setErrorPantalla(error instanceof ApiClientError ? mensajeParaElla(error) : AUDIO_NO_GUARDADO);
         setFase("no-guardado");
-        await volverAGrabando(sesionId);
+        if (sesionId) await volverAGrabando(sesionId);
       } finally {
         setProgreso(null);
       }
     },
-    [avisar],
+    [avisar, asegurarTurno, asegurarSesion],
   );
 
   const onListo = React.useCallback(
@@ -213,8 +291,22 @@ export function useFlujoGrabacion({
     avisar(mensaje);
   }, [avisar]);
 
+  // Qué grabación guardada en el teléfono se ofrece acá: cualquiera de esta
+  // paciente —la de este turno, una sin turno, o la de un turno de ayer que
+  // no llegó a subir (la sesión nace al subir, así que sólo existe en el
+  // teléfono)—. Se envía a SU turno, no al de la URL (enviarPendiente).
+  const esPendiente = React.useCallback(
+    (claveGuardada: string, turnoGuardado: string | null, pacienteGuardado: string | null) =>
+      pacienteGuardado === pacienteId ||
+      esClaveSinTurnoDe(pacienteId, claveGuardada) ||
+      (turnoIdInicial !== null && turnoDeLaGrabacion(claveGuardada, turnoGuardado) === turnoIdInicial),
+    [turnoIdInicial, pacienteId],
+  );
+
   const grabador = useGrabador({
-    claveGrabacion: turnoId,
+    claveGrabacion: clave,
+    esPendiente,
+    pacienteId,
     onListo,
     onError: onErrorGrabacion,
   });
@@ -230,10 +322,13 @@ export function useFlujoGrabacion({
   // la admite. Si ya está en procesando (o más allá) el audio llegó: la copia
   // local sobra y se borra, en vez de ofrecerse de nuevo para siempre.
   const { pendienteSeg, descartarPendiente } = grabador;
+  // Se mira el turno de la grabación guardada, que puede no ser el de la URL.
+  const guardada = grabador.pendiente ?? null;
+  const turnoDeLaPendiente = guardada ? turnoDeLaGrabacion(guardada.clave, guardada.turnoId) : turnoIdInicial;
   React.useEffect(() => {
-    if (pendienteSeg === null || !turnoId) return;
+    if (pendienteSeg === null || !turnoDeLaPendiente) return;
     let cancelado = false;
-    void apiGet<SesionApi | null>(`/api/sesion-clinica?turnoId=${turnoId}`)
+    void apiGet<SesionApi | null>(`/api/sesion-clinica?turnoId=${turnoDeLaPendiente}`)
       .then((sesion) => {
         if (!cancelado && sesion && !(ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado)) descartarPendiente();
       })
@@ -243,64 +338,26 @@ export function useFlujoGrabacion({
     };
     // descartarPendiente se recrea en cada render; la condición es el dato.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendienteSeg, turnoId]);
+  }, [pendienteSeg, turnoDeLaPendiente]);
 
-  /**
-   * Deja la sesión clínica del turno en estado "grabando" y devuelve su id.
-   * Tolera reentrar a la pantalla con una sesión ya empezada (volvió atrás,
-   * se le cerró el navegador) y una subida que quedó a medias.
-   */
-  async function asegurarSesion(turno: string): Promise<string> {
-    let sesion = await apiGet<SesionApi | null>(
-      `/api/sesion-clinica?turnoId=${turno}`,
-    );
-
-    if (!sesion) {
-      sesion = await apiPost<SesionApi>("/api/sesion-clinica", {
-        turnoId: turno,
-      });
-    }
-
-    if (sesion.estado === "subiendo") {
-      await volverAGrabando(sesion.id);
-      return sesion.id;
-    }
-
-    if (sesion.estado !== "grabando") {
-      throw new ApiClientError(SESION_EN_CAMINO, 409);
-    }
-
-    return sesion.id;
-  }
-
+  /** Grabar: el micrófono, ya. Nada de red: el turno y la sesión se piden
+   *  al subir (ver arriba). */
   async function empezar() {
     setFase("preparando");
     setErrorPantalla(null);
 
     try {
-      let turno = turnoIdRef.current;
+      // Una grabación nueva es de ESTA pantalla, aunque se haya ofrecido otra.
+      const turno = (turnoIdRef.current = turnoIdInicial);
+      turnoProgramadoRef.current = turnoProgramado;
+      const inicio = new Date();
+      const claveNueva = turno ?? claveSinTurno(pacienteId, inicio);
+      inicioRef.current = inicio;
+      claveRef.current = claveNueva;
+      setClave(claveNueva);
+      if (!turno) setHoraTexto(hora(inicio));
 
-      if (!turno) {
-        const creado = await apiPost<TurnoApi>("/api/turnos", {
-          pacienteId,
-          fecha: new Date().toISOString(),
-          duracion: DURACION_SIN_TURNO,
-          modalidad: "presencial",
-          // Un turno que nace al grabar no pasa por la regla de choque: la
-          // sesión está ocurriendo, y un solapamiento en la agenda no puede
-          // impedir grabarla.
-          alGrabar: true,
-        });
-
-        turno = creado.id;
-        turnoIdRef.current = turno;
-        turnoProgramadoRef.current = true;
-        setTurnoId(turno);
-        setHoraTexto(hora(new Date(creado.fecha)));
-      }
-
-      sesionIdRef.current = await asegurarSesion(turno);
-      await grabador.iniciar(turno);
+      await grabador.iniciar(claveNueva);
       // iniciar() arranca el diagnóstico de cero: se repone lo que ya se
       // sabía de la pantalla encendida.
       grabador.anotar(pantalla.estado === "concedida" ? "wakelock-concedido" : "wakelock-rechazado");
@@ -313,26 +370,29 @@ export function useFlujoGrabacion({
     }
   }
 
-  /** Una grabación que quedó en este teléfono: se envía tal cual, sin pedir
-   *  nada más que la sesión en "grabando". */
-  async function enviarPendiente() {
-    const turno = turnoIdRef.current;
+  /** Una grabación que quedó en este teléfono: se envía tal cual. El turno
+   *  (si era sin turno, con la hora en que empezó) y la sesión se piden al
+   *  subir, como al terminar. */
+  function enviarPendiente() {
+    const guardada = grabador.pendiente ?? null;
 
-    if (!turno) {
+    if (guardada) {
+      // Va a SU turno: el de su clave, el que se le creó, o ninguno todavía
+      // (sin turno: se crea al subir, con la hora en que empezó).
+      const turno = turnoDeLaGrabacion(guardada.clave, guardada.turnoId);
+      claveRef.current = guardada.clave;
+      setClave(guardada.clave);
+      turnoIdRef.current = turno;
+      // Otro turno estaba programado o realizado: marcarlo realizado no daña.
+      turnoProgramadoRef.current = turno === turnoIdInicial ? turnoProgramado : true;
+      inicioRef.current = inicioDeClaveSinTurno(guardada.clave) ?? new Date(guardada.iniciadaEn);
+      setHoraTexto(turno === turnoIdInicial ? horaInicial : hora(inicioRef.current));
+    } else if (!turnoIdRef.current) {
       avisar(ALGO_FALLO);
       return;
     }
 
-    setFase("preparando");
-
-    try {
-      sesionIdRef.current = await asegurarSesion(turno);
-      setFase("previo");
-      grabador.enviarPendiente();
-    } catch (error) {
-      setFase("previo");
-      avisar(mensajeParaElla(error));
-    }
+    grabador.enviarPendiente();
   }
 
   /** Repite solo el PATCH del turno: el audio ya está subido. */

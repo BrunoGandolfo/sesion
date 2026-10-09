@@ -14,8 +14,10 @@ import { ErrorSubida } from "@/lib/subida-audio";
 import {
   AUDIO_NO_GUARDADO,
   GRABACION_LLEGO,
+  GRABACION_SIN_CONEXION,
   GRABAR_SESION,
   REINTENTAR,
+  SESION_EN_CAMINO,
   TURNO_SIN_SESION_PARA_GRABAR,
   VOLVER_A_LA_FICHA,
 } from "@/lib/glosario";
@@ -99,13 +101,13 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("cuando la subida falla", () => {
-  it("un fallo de red dice AUDIO_NO_GUARDADO y Reintentar vuelve a subir la misma grabación", async () => {
+  it("un fallo de red dice que no hay conexión y Reintentar vuelve a subir la misma grabación", async () => {
     m.subir
       .mockRejectedValueOnce(new ErrorSubida("Fallo de red al subir el audio.", "put"))
       .mockResolvedValueOnce(undefined);
     await subirUnaGrabacion();
 
-    expect(await screen.findByText(AUDIO_NO_GUARDADO)).toBeTruthy();
+    expect(await screen.findByText(GRABACION_SIN_CONEXION)).toBeTruthy();
     expect(m.volverAGrabando).toHaveBeenCalledWith("s1");
 
     await act(async () => {
@@ -179,6 +181,12 @@ describe("un turno que no se puede grabar", () => {
     ["de ayer con la subida a medias", { estado: "realizado", fecha: AYER, sesionClinica: { estado: "subiendo" } }, null],
     ["cancelado", { estado: "cancelado", fecha: HOY, sesionClinica: null }, TURNO_SIN_SESION_PARA_GRABAR],
     ["ausente", { estado: "ausente", fecha: HOY, sesionClinica: null }, TURNO_SIN_SESION_PARA_GRABAR],
+    // Grabar ya no le pregunta al servidor: una sesión cerrada se dice antes
+    // de ofrecer el botón, no después de grabar una sesión entera.
+    ["de hoy con la sesión ya procesándose", { estado: "realizado", fecha: HOY, sesionClinica: { estado: "procesando" } }, SESION_EN_CAMINO],
+    ["de hoy con la nota aprobada", { estado: "realizado", fecha: HOY, sesionClinica: { estado: "aprobada" } }, SESION_EN_CAMINO],
+    ["de hoy con la sesión fallida", { estado: "realizado", fecha: HOY, sesionClinica: { estado: "fallida" } }, SESION_EN_CAMINO],
+    ["de hoy con la grabación a medias", { estado: "programado", fecha: HOY, sesionClinica: { estado: "grabando" } }, null],
   ])("motivoSinGrabar: turno %s", (_nombre, turno, esperado) => {
     expect(motivoSinGrabar(turno, HOY)).toBe(esperado);
   });

@@ -82,6 +82,11 @@ teléfono.
 tocá **Reintentar**. Podés reintentar las veces que haga falta. No des por
 guardada una sesión hasta ver *"La grabación llegó bien."*
 
+Si dice *"Sin conexión. La grabación quedó guardada en el teléfono; reintentá
+cuando vuelva la señal."*, es lo mismo sin señal: grabar no la necesita, subir
+sí. Tocá **Reintentar** cuando vuelva, dentro de las 36 horas desde que
+empezaste a grabar.
+
 ### La sesión se guardó pero el turno quedó agendado
 
 **Ves:** *"La sesión se guardó, pero el turno quedó como agendado. Probá de
