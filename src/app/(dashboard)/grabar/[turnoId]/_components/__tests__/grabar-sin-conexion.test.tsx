@@ -365,6 +365,25 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     expect(cuerpos["POST /api/sesion-clinica"]).toEqual({ turnoId: "t-ayer", iniciadaEn: AYER.toISOString() });
   });
 
+  test("si la guardada de otro turno resulta muy corta, grabar de nuevo es para el turno de esta pantalla", async () => {
+    disco.metas.set("t-ayer", { iniciadaEn: AYER.getTime(), mimeType: "audio/webm", pacienteId: "p1" });
+    disco.chunks.set("t-ayer", [new Blob(["audio"], { type: "audio/webm" })]); // un segundo
+    sesionDelTurno = { id: "s1", estado: "grabando" };
+    render(<GrabarView {...CON_TURNO} turnoId="t-hoy" />);
+    const guardarla = await screen.findByRole("button", { name: "Guardarla ahora" });
+    await act(async () => {
+      fireEvent.click(guardarla);
+    });
+    expect(disco.metas.has("t-ayer")).toBe(false);
+
+    await grabarYTerminar();
+    expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
+    expect(pedidos).toContain("GET /api/sesion-clinica?turnoId=t-hoy");
+    expect(pedidos).toContain("PATCH /api/turnos/t-hoy");
+    // De t-ayer sólo se leyó su estado al entrar; nada se le escribió.
+    expect(pedidos.filter((p) => p.includes("t-ayer") && !p.startsWith("GET "))).toEqual([]);
+  });
+
   test("sin red, guardarla deja la grabación donde estaba y lo dice", async () => {
     guardada();
     red.caida = true;

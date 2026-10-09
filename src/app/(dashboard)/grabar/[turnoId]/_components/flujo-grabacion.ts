@@ -162,9 +162,8 @@ export function useFlujoGrabacion({
     return sesion.id;
   }, []);
 
-  /** El turno de la grabación: el que había o, sin turno, uno nuevo con la
-   *  hora en que empezó a grabar. Se anota en el teléfono junto a la
-   *  grabación: un reintento no lo crea dos veces. */
+  /** El turno: el que había o uno nuevo con la hora de inicio, anotado en el
+   *  teléfono para que un reintento no lo cree dos veces. */
   const asegurarTurno = React.useCallback(async (): Promise<string> => {
     if (turnoIdRef.current) return turnoIdRef.current;
     const claveLocal = claveRef.current;
@@ -348,7 +347,9 @@ export function useFlujoGrabacion({
     setErrorPantalla(null);
 
     try {
-      const turno = turnoIdRef.current;
+      // Una grabación nueva es de ESTA pantalla, aunque se haya ofrecido otra.
+      const turno = (turnoIdRef.current = turnoIdInicial);
+      turnoProgramadoRef.current = turnoProgramado;
       const inicio = new Date();
       const claveNueva = turno ?? claveSinTurno(pacienteId, inicio);
       inicioRef.current = inicio;
@@ -382,8 +383,7 @@ export function useFlujoGrabacion({
       claveRef.current = guardada.clave;
       setClave(guardada.clave);
       turnoIdRef.current = turno;
-      // El de la URL dice su estado; otro (uno de ayer, uno creado al subir)
-      // estaba programado o ya realizado, y marcarlo realizado no cambia nada.
+      // Otro turno estaba programado o realizado: marcarlo realizado no daña.
       turnoProgramadoRef.current = turno === turnoIdInicial ? turnoProgramado : true;
       inicioRef.current = inicioDeClaveSinTurno(guardada.clave) ?? new Date(guardada.iniciadaEn);
       setHoraTexto(turno === turnoIdInicial ? horaInicial : hora(inicioRef.current));
