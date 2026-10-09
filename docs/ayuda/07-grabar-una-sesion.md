@@ -11,8 +11,9 @@ el borrador de la nota clínica.
   Ver `04-pacientes-y-ficha.md`.
 - **Con turno o sin turno.** Si hay turno hoy, se graba ese turno. Si tocás
   **Grabar** en la cabecera de la ficha y la paciente no tiene turno, la app
-  **crea uno de 50 minutos, presencial, con la hora de ahora** recién cuando
-  tocás **Grabar sesión** (ese turno no genera recordatorio). Ese turno se crea
+  **crea uno de 50 minutos, presencial, con la hora en que empezaste a
+  grabar** recién cuando la grabación se envía (ese turno no genera
+  recordatorio). Ese turno se crea
   aunque a esa hora haya otro en la agenda: la sesión está ocurriendo, y un
   choque de horarios no impide grabarla.
 - **Un turno se graba el día que está agendado.** El de ayer ya no ofrece
@@ -121,7 +122,14 @@ salvo: tocá Terminar la sesión para enviarlo."* Todavía tenés que tocar
 
 ## Si la subida falla
 
-La pantalla dice *"No se pudo guardar el audio. Está a salvo en tu teléfono.
+**Se puede empezar a grabar sin señal** (en modo avión, en un sótano): grabar no
+necesita internet, y el audio se sube cuando vuelve. Si al terminar no hay
+conexión, la pantalla dice *"Sin conexión. La grabación quedó guardada en el
+teléfono; reintentá cuando vuelva la señal."* con **Reintentar**. Subila el
+mismo día: pasada la medianoche, una grabación que nunca llegó a la app ya no
+se puede enviar.
+
+Si hay señal y la subida falla igual, la pantalla dice *"No se pudo guardar el audio. Está a salvo en tu teléfono.
 Probá de nuevo."* con un botón **Reintentar**. Nada se borra: la grabación sigue
 guardada en el teléfono. Poné el teléfono en una conexión buena y tocá
 **Reintentar** las veces que haga falta. No des por guardada una sesión hasta

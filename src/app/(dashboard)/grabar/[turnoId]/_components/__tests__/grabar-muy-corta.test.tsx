@@ -90,17 +90,17 @@ test("tres segundos y Terminar: lo dice en una frase, no sube nada y deja grabar
   expect(GRABACION_MUY_CORTA).toBe("Grabaste menos de 10 segundos. No se guardó nada.");
   expect(limpiarGrabacion).toHaveBeenCalledWith("t1");
 
-  // Nada salió hacia la subida: ni la URL firmada, ni el PUT, ni la confirmación.
-  expect(pedidos).toEqual(["GET /api/sesion-clinica?turnoId=t1"]);
+  // Nada salió a la red: grabar no le pregunta nada al servidor, y una
+  // grabación corta no sube (ni la sesión, ni la URL, ni el PUT).
+  expect(pedidos).toEqual([]);
   expect(xhrAbiertos).toEqual([]);
 
-  // El botón de grabar está de vuelta y activo, y graba sobre la MISMA sesión
-  // del servidor: la vuelve a encontrar en "grabando", no crea otra.
+  // El botón de grabar está de vuelta y activo, y vuelve a grabar con la
+  // misma clave del turno, sin pedir nada.
   const grabarDeNuevo = screen.getByRole("button", { name: "Grabar sesión" }) as HTMLButtonElement;
   expect(grabarDeNuevo.disabled).toBe(false);
   fireEvent.click(grabarDeNuevo);
   await waitFor(() => expect(recorders).toHaveLength(2));
   expect(screen.queryByText(GRABACION_MUY_CORTA)).toBeNull();
-  expect(pedidos).toEqual(["GET /api/sesion-clinica?turnoId=t1", "GET /api/sesion-clinica?turnoId=t1"]);
-  expect(pedidos.some((p) => p.startsWith("POST"))).toBe(false);
+  expect(pedidos).toEqual([]);
 });

@@ -252,11 +252,17 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
     expect((screen.getByRole("button", { name: "Grabar sesión" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("un inicio rechazado no muestra una confirmación", async () => {
+  it("con el servidor caído se graba igual, y el rechazo al subir no muestra una confirmación", async () => {
     m.get.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<GrabarView turnoId="t1" turnoProgramado={false} horaTexto="12:00" pacienteId="p1" pacienteNombre="Paciente Sintética" autorizacionVigente />);
     fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
-    await verificarAviso(FALLO, false);
-    expect(m.iniciar).not.toHaveBeenCalled();
+    // Grabar no espera al servidor (incidente del 9-oct-2026).
+    await waitFor(() => expect(m.iniciar).toHaveBeenCalledWith("t1"));
+    expect(m.get).not.toHaveBeenCalled();
+    const datos: DatosGrabacion = { audioBlob: new Blob(["audio sintético"]), duracionSegundos: 5, pausas: [], diagnostico: { eventos: [], chunks: 5, bytes: 15 } };
+    await act(async () => { m.grabador?.onListo(datos); });
+    expect(await screen.findByText(FALLO)).toBeTruthy();
+    expect(screen.queryByText(GRABACION_LLEGO)).toBeNull();
+    expect(m.subir).not.toHaveBeenCalled();
   });
 });

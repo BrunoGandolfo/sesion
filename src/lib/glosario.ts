@@ -1333,6 +1333,11 @@ export const MESES_CORTOS = [
 export const AUDIO_NO_GUARDADO =
   "No se pudo guardar el audio. Está a salvo en tu teléfono. Probá de nuevo.";
 
+/** La subida no pudo salir porque no hay red. Grabar no la necesita: el
+ *  turno, la sesión y el audio se mandan juntos cuando vuelve la señal. */
+export const GRABACION_SIN_CONEXION =
+  "Sin conexión. La grabación quedó guardada en el teléfono; reintentá cuando vuelva la señal.";
+
 /** El audio se guardó pero el turno no llegó a quedar como realizado. Se
  *  dice en ese orden: primero lo que sí se salvó (la sesión, que es lo
  *  irrecuperable), después lo que falta y se puede repetir. */

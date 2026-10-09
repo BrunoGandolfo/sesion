@@ -24,6 +24,8 @@ import {
   VOLVER_A_LA_FICHA,
 } from "@/lib/glosario";
 
+import { inicioDeClaveSinTurno } from "@/lib/grabacion-clave";
+
 import { GrabarView } from "../grabar-view";
 
 const m = vi.hoisted(() => ({
@@ -37,8 +39,12 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => m.router }));
-vi.mock("@/lib/api-client", () => ({ apiGet: m.get, apiPost: m.post }));
-vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: m.limpiar }));
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  apiGet: m.get,
+  apiPost: m.post,
+}));
+vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: m.limpiar, asociarTurno: vi.fn(async () => {}) }));
 vi.mock("@/lib/subida-audio", async (original) => ({
   ...(await original<typeof import("@/lib/subida-audio")>()),
   subirAudio: m.subir,
@@ -257,19 +263,30 @@ test("una copia local de una sesión todavía en grabando se ofrece, sin pedir n
   expect(m.post).not.toHaveBeenCalled();
 });
 
-test("el turno que nace al grabar se crea con alGrabar: no pasa por la regla de choque", async () => {
-  m.post.mockImplementation(async (url: string) =>
-    url === "/api/turnos" ? { id: "t-nuevo", fecha: "2026-09-18T15:00:00.000Z" } : { id: "s1", estado: "grabando" });
+test("el turno que nace al grabar se crea al subir, con alGrabar y la hora en que empezó", async () => {
+  m.post.mockImplementation(async (url: string, cuerpo: { fecha?: string }) =>
+    url === "/api/turnos" ? { id: "t-nuevo", fecha: cuerpo.fecha } : { id: "s1", estado: "grabando" });
   m.get.mockResolvedValue(null);
   const grabador = grabadorEn({});
   render(<GrabarView {...props} turnoId={null} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
 
-  await waitFor(() => expect(grabador.iniciar).toHaveBeenCalledWith("t-nuevo"));
-  expect(m.post).toHaveBeenCalledWith("/api/turnos", expect.objectContaining({ pacienteId: "p1", alGrabar: true }));
-  // Con un turno que ya existía no se crea ninguno.
-  expect(m.post.mock.calls.filter(([url]) => url === "/api/turnos")).toHaveLength(1);
+  // Grabar no espera al servidor: el micrófono arranca con una clave local.
+  await waitFor(() => expect(grabador.iniciar).toHaveBeenCalledWith(expect.stringMatching(/^sin-turno:p1:/)));
+  expect(m.post).not.toHaveBeenCalled();
+  const clave = vi.mocked(grabador.iniciar).mock.calls[0][0];
+
+  await act(async () => {
+    m.opciones?.onListo(DATOS);
+  });
+  await waitFor(() => expect(m.subir).toHaveBeenCalled());
+  const turnos = m.post.mock.calls.filter(([url]) => url === "/api/turnos");
+  expect(turnos).toHaveLength(1);
+  expect(turnos[0][1]).toEqual(expect.objectContaining({
+    pacienteId: "p1", alGrabar: true, fecha: inicioDeClaveSinTurno(clave)!.toISOString(),
+  }));
+  expect(m.post).toHaveBeenCalledWith("/api/sesion-clinica", { turnoId: "t-nuevo" });
 });
 
 test("con un turno ya agendado no se crea otro ni se manda alGrabar", async () => {

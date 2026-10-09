@@ -37,11 +37,22 @@ export interface AvisoHueco {
 }
 
 export interface UseGrabadorOpciones {
-  /** Con qué se guardan los chunks: el turnoId (turno ↔ sesión es 1:1). */
+  /** Con qué se guardan los chunks: el turnoId (turno ↔ sesión es 1:1) o la
+   *  clave `sin-turno:…` de una grabación sin turno (lib/grabacion-clave.ts). */
   claveGrabacion: string | null;
+  /** Qué grabación guardada en el teléfono ofrecer como pendiente. Sin esto,
+   *  la de `claveGrabacion`. Una grabación sin turno todavía no tiene clave
+   *  conocida al entrar: se la busca por paciente. */
+  esPendiente?: (clave: string) => boolean;
   /** Recibe la grabación lista para subir. Una sola vez por grabación. */
   onListo: (datos: DatosGrabacion) => void;
   onError: (mensaje: string) => void;
+}
+
+export interface PendienteGuardada {
+  clave: string;
+  iniciadaEn: number;
+  turnoId: string | null;
 }
 
 export interface Grabador {
@@ -66,6 +77,9 @@ export interface Grabador {
   muyCorta: boolean;
   /** Minutos aproximados de una grabación de este turno que quedó guardada. */
   pendienteSeg: number | null;
+  /** De esa grabación guardada: con qué clave, cuándo empezó y, si es una
+   *  grabación sin turno que ya llegó a crear el suyo, cuál. */
+  pendiente: PendienteGuardada | null;
   iniciar: (clave: string) => Promise<void>;
   pausar: () => void;
   reanudar: () => void;

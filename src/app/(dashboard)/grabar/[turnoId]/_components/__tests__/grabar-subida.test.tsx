@@ -14,6 +14,7 @@ import { ErrorSubida } from "@/lib/subida-audio";
 import {
   AUDIO_NO_GUARDADO,
   GRABACION_LLEGO,
+  GRABACION_SIN_CONEXION,
   GRABAR_SESION,
   REINTENTAR,
   TURNO_SIN_SESION_PARA_GRABAR,
@@ -99,13 +100,13 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("cuando la subida falla", () => {
-  it("un fallo de red dice AUDIO_NO_GUARDADO y Reintentar vuelve a subir la misma grabación", async () => {
+  it("un fallo de red dice que no hay conexión y Reintentar vuelve a subir la misma grabación", async () => {
     m.subir
       .mockRejectedValueOnce(new ErrorSubida("Fallo de red al subir el audio.", "put"))
       .mockResolvedValueOnce(undefined);
     await subirUnaGrabacion();
 
-    expect(await screen.findByText(AUDIO_NO_GUARDADO)).toBeTruthy();
+    expect(await screen.findByText(GRABACION_SIN_CONEXION)).toBeTruthy();
     expect(m.volverAGrabando).toHaveBeenCalledWith("s1");
 
     await act(async () => {

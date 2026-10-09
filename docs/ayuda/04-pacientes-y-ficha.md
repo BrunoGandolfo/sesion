@@ -31,8 +31,8 @@ grabar las sesiones. La paciente la firma acá mismo."*— con el botón **Firma
 autorización**. El botón **Grabar** está en la cabecera de la ficha, junto
 a las acciones del paciente; no es un botón flotante. Si la paciente tiene
 turno hoy, **Grabar** abre ese turno. Si no, abre la pantalla de grabar igual y
-el turno se crea recién cuando tocás **Grabar sesión**. No hace falta agendar
-antes. Ver `07-grabar-una-sesion.md`.
+el turno se crea recién cuando la grabación se envía, con la hora en que
+empezaste a grabar. No hace falta agendar antes. Ver `07-grabar-una-sesion.md`.
 
 ### Pestaña **Sesiones**
 
