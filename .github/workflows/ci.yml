@@ -11,7 +11,7 @@
 #   - build:     next build
 #   - lint:      eslint
 #   - test-unitarios: vitest con VITEST_SUITE=unit, sin base ni contenedor.
-#   - test-integracion: vitest con VITEST_SUITE=integration (la lista
+#   - test (Test integración): vitest con VITEST_SUITE=integration (la lista
 #                INTEGRACION de vitest.config.ts), con un Postgres 17 EFÍMERO
 #                por corrida (service container). Nada comparte base con
 #                nadie: ni con otra corrida, ni con la laptop de nadie, ni
@@ -136,6 +136,8 @@ jobs:
   test-unitarios:
     name: Test unitarios
     runs-on: ubuntu-24.04
+    # Medido el 9-oct-2026 (run 37941320000): 9 min 31 s el job, 8 min 55 s
+    # los tests. El tope deja más del doble; la suite entera llegó a 12 min.
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
@@ -151,10 +153,14 @@ jobs:
       - name: Ejecutar tests unitarios
         run: npm run test:unit
 
-  test-integracion:
+  # La clave sigue siendo `test`: acciones-compuestas.test.ts revisa que ESTE
+  # job (el que tiene base) instale el cliente de Postgres con la acción.
+  test:
     name: Test integración
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # Medido el 9-oct-2026 (run 37941320000): 4 min 9 s el job, 3 min 7 s
+    # los tests. El tope deja más del doble.
+    timeout-minutes: 10
     # Postgres 17 efímero: nace con el job y muere con él. Es lo que hace que
     # un rojo sea un rojo y un verde sea un verde (antes, una corrida local
     # en otra máquina vaciaba la misma rama de Neon a mitad de la suite).
