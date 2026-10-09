@@ -7,6 +7,7 @@ export { EditorialRule } from "./editorial-rule";
 export { Fab } from "./fab";
 export { Input } from "./input";
 export { Lupita } from "./lupita";
+export { Lux } from "./lux";
 export { Plegable } from "./plegable";
 export { Segmented } from "./segmented";
 export { SessionRow } from "./session-row";

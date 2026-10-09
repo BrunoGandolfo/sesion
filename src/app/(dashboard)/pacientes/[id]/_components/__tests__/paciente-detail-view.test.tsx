@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
+import { LUX } from "@/components/lux/textos";
 
 import { PacienteDetailView } from "../paciente-detail-view";
 
@@ -46,6 +47,7 @@ vi.mock("../sesiones-tab", () => ({
 }));
 vi.mock("../recorrido-tab", () => ({ RecorridoTab: () => <div data-testid="pestana-recorrido" /> }));
 vi.mock("../ficha-tab", () => ({ FichaTab: () => <div data-testid="pestana-datos" /> }));
+vi.mock("../lux-tab", () => ({ LuxTab: () => <div data-testid="pestana-lux" /> }));
 
 function abrirFicha(consulta = "") {
   m.consulta = consulta;
@@ -56,10 +58,10 @@ function abrirFicha(consulta = "") {
 beforeEach(() => { m.sesionesProps = null; });
 afterEach(cleanup);
 
-it("la tercera pestaña se llama Datos, no Ficha", async () => {
+it("la pestaña de datos se llama Datos, no Ficha, y Lux va después de Recorrido", async () => {
   abrirFicha();
   const pestanas = (await screen.findAllByRole("tab")).map((t) => t.textContent);
-  expect(pestanas).toEqual([SESIONES, RECORRIDO, DATOS]);
+  expect(pestanas).toEqual([SESIONES, RECORRIDO, LUX, DATOS]);
   expect(DATOS).toBe("Datos");
 });
 

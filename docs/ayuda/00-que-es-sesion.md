@@ -10,8 +10,10 @@ cada paciente.
    y dos números: **Sesiones hoy** y **Este mes**.
 2. **Agenda** — los turnos por día, semana y mes. Crear, reprogramar,
    cancelar, marcar "No vino".
-3. **Pacientes** — la ficha de cada uno, con tres pestañas: **Sesiones**,
-   **Recorrido** y **Datos**. El Recorrido se puede exportar a PDF.
+3. **Pacientes** — la ficha de cada uno, con cuatro pestañas: **Sesiones**,
+   **Recorrido**, **Lux** y **Datos**. El Recorrido se puede exportar a PDF.
+   En **Lux** conversás sobre esa paciente con un asistente que leyó su
+   Recorrido, sus notas y sus últimas sesiones (ver `16-lux.md`).
 4. **Cobros** — "Te deben" y "Cobros del mes".
 5. **Tu consultorio** — tu nombre, tu dirección, tu teléfono, la tarifa, el
    enfoque teórico, el recordatorio, el vocabulario, invitar a una colega y tu

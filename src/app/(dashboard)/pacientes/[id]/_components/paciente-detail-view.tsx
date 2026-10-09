@@ -1,12 +1,12 @@
 "use client";
 import { useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 
-// Ficha del paciente: carga, cabecera, tres pestañas (Sesiones, Recorrido,
-// Datos) y un solo sheet de edición.
+// Ficha del paciente: carga, cabecera, cuatro pestañas (Sesiones, Recorrido,
+// Lux, Datos) y un solo sheet de edición.
 //
 // LO QUE LA FICHA LEE Y ESCRIBE EN SU URL
 //
-//   ?tab=recorrido|datos   la pestaña abierta (sin parámetro: Sesiones). Se
+//   ?tab=recorrido|datos|lux  la pestaña abierta (sin parámetro: Sesiones). Se
 //                          escribe al cambiar de pestaña, con replaceState, y
 //                          así "volver" desde una nota cae en la misma pestaña:
 //                          la nota vuelve con router.back().
@@ -28,7 +28,7 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { useToast, type VarianteToast } from "@/components/ui/toast";
 
-import { Button, Segmented, Sheet, Toast } from "@/components/ui";
+import { Button, Lux, Segmented, Sheet, Toast } from "@/components/ui";
 import type {
   ConsentimientoVigente,
   EstadoConsentimiento,
@@ -39,6 +39,7 @@ import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { sePuedeGrabar } from "@/app/api/_lib/domain";
 import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
 import { DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
+import { LUX } from "@/components/lux/textos";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
 import { CabeceraFicha, CabeceraNavegacionFicha } from "./cabecera-ficha";
@@ -50,19 +51,21 @@ import {
   type TurnoJson,
 } from "@/lib/json-turno";
 import { FichaTab } from "./ficha-tab";
+import { LuxTab } from "./lux-tab";
 import { RecorridoTab } from "./recorrido-tab";
 import { SesionesTab } from "./sesiones-tab";
 
-type TabKey = "sesiones" | "recorrido" | "datos";
+type TabKey = "sesiones" | "recorrido" | "datos" | "lux";
 
-const TAB_OPTIONS: { value: TabKey; label: string }[] = [
+const TAB_OPTIONS: { value: TabKey; label: string; icono?: React.ReactNode }[] = [
   { value: "sesiones", label: SESIONES },
   { value: "recorrido", label: RECORRIDO },
+  { value: "lux", label: LUX, icono: <Lux /> },
   { value: "datos", label: DATOS },
 ];
 
 function tabDeLaUrl(valor: string | null): TabKey {
-  return valor === "recorrido" || valor === "datos" ? valor : "sesiones";
+  return valor === "recorrido" || valor === "datos" || valor === "lux" ? valor : "sesiones";
 }
 
 /** Reescribe los parámetros de la entrada actual del historial, sin navegar.
@@ -328,6 +331,8 @@ export function PacienteDetailView({ id }: { id: string }) {
             )}
 
             {activeTab === "recorrido" && <RecorridoTab pacienteId={paciente.id} />}
+
+            {activeTab === "lux" && <LuxTab paciente={paciente} config={config} />}
 
             {activeTab === "datos" && (
               <FichaTab
