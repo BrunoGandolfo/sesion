@@ -315,6 +315,26 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     expect(screen.queryByRole("button", { name: "Guardarla ahora" })).toBeNull();
   });
 
+  test("la de un turno agendado de ayer, que no llegó a subir, se ofrece aunque ya no se pueda grabar una nueva", async () => {
+    // Grabada ayer a las 18:10 con el turno t-ayer, sin red, y el navegador
+    // se cerró: no hay sesión en el servidor. Hoy la página dice que el turno
+    // ya no se graba, pero lo guardado se envía con su inicio.
+    disco.metas.set("t-ayer", { iniciadaEn: AYER.getTime(), mimeType: "audio/webm" });
+    disco.chunks.set("t-ayer", Array.from({ length: 30 }, () => new Blob(["audio"], { type: "audio/webm" })));
+    render(<GrabarView {...CON_TURNO} turnoId="t-ayer" motivoSinGrabar="Solo se puede grabar un turno el mismo día." />);
+
+    const guardarla = await screen.findByRole("button", { name: "Guardarla ahora" });
+    expect(screen.queryByRole("button", { name: "Grabar sesión" })).toBeNull();
+    expect(screen.getByText("Solo se puede grabar un turno el mismo día.")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(guardarla);
+    });
+
+    expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
+    expect(cuerpos["POST /api/sesion-clinica"]).toEqual({ turnoId: "t-ayer", iniciadaEn: AYER.toISOString() });
+    expect(disco.metas.has("t-ayer")).toBe(false);
+  });
+
   test("sin red, guardarla deja la grabación donde estaba y lo dice", async () => {
     guardada();
     red.caida = true;

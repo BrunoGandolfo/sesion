@@ -20,7 +20,8 @@ el borrador de la nota clínica.
   **Grabar sesión** en la agenda. Si la sesión es ahora, grabala desde la
   ficha con **Grabar**: se crea el turno de hoy, como arriba. Una grabación
   que empezó el día del turno se envía aunque termine o suba pasada la
-  medianoche.
+  medianoche: si quedó en el teléfono, al abrir ese turno al otro día aparece
+  **Guardarla ahora**, aunque ya no se pueda grabar una nueva.
 - **Una cuenta de prueba graba hasta 15 sesiones.** Si tu consultorio se creó
   con una invitación, arriba dice cuántas llevás. Al llegar a 15, dice
   *"Llegaste a las 15 sesiones grabadas de la prueba y no podés grabar más.
