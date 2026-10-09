@@ -46,30 +46,14 @@ function limpiar(texto: string, final: boolean): string {
 }
 
 /** Separa citas, prosa y estados. `final` es true cuando el stream terminó:
- *  ahí ya no hay nada que esperar y lo pendiente se muestra como vino. */
+ *  ahí ya no hay nada que esperar y lo pendiente se muestra como vino.
+ *
+ *  Un bloque <citas> vale al comienzo de cualquier línea, no sólo del
+ *  stream: cuando Lux abre una transcripción, el servidor escribe el aviso y
+ *  la respuesta que sigue empieza con sus citas. Si hay más de un bloque, se
+ *  juntan. */
 export function leerRespuesta(crudo: string, final: boolean): RespuestaLux {
-  let citas: string | null = null;
-  let resto = crudo;
-
-  const sinBlancos = crudo.trimStart();
-  if (sinBlancos.startsWith(ABRE_CITAS)) {
-    const cierre = sinBlancos.indexOf(CIERRA_CITAS);
-    if (cierre === -1) {
-      // Las citas todavía están llegando: no hay prosa que mostrar.
-      if (!final) return { citas: null, bloques: [] };
-      citas = sinBlancos.slice(ABRE_CITAS.length).trim();
-      resto = "";
-    } else {
-      citas = sinBlancos.slice(ABRE_CITAS.length, cierre).trim();
-      resto = sinBlancos.slice(cierre + CIERRA_CITAS.length);
-    }
-  } else if (!final && sinBlancos !== "" && ABRE_CITAS.startsWith(sinBlancos)) {
-    return { citas: null, bloques: [] };
-  }
-
-  const lineas = resto.split("\n");
-  if (!final && puedeSerEstado(lineas.at(-1) ?? "")) lineas.pop();
-
+  const citas: string[] = [];
   const bloques: BloqueLux[] = [];
   let prosa: string[] = [];
   const cerrarProsa = () => {
@@ -77,18 +61,49 @@ export function leerRespuesta(crudo: string, final: boolean): RespuestaLux {
     if (texto !== "") bloques.push({ tipo: "prosa", texto });
     prosa = [];
   };
-  for (const linea of lineas) {
-    const estado = LINEA_AVISO_MIRANDO.exec(linea);
+
+  const lineas = crudo.split("\n");
+  for (let i = 0; i < lineas.length; i++) {
+    const inicio = lineas[i].trimStart();
+    const esUltima = i === lineas.length - 1;
+
+    if (inicio.startsWith(ABRE_CITAS)) {
+      let bloque = inicio.slice(ABRE_CITAS.length);
+      let j = i;
+      while (!bloque.includes(CIERRA_CITAS) && j < lineas.length - 1) {
+        j += 1;
+        bloque += `\n${lineas[j]}`;
+      }
+      const cierre = bloque.indexOf(CIERRA_CITAS);
+      if (cierre === -1) {
+        // Las citas todavía están llegando: desde acá no hay nada que mostrar.
+        if (!final) break;
+        citas.push(bloque.trim());
+        i = j;
+        continue;
+      }
+      citas.push(bloque.slice(0, cierre).trim());
+      const despues = bloque.slice(cierre + CIERRA_CITAS.length);
+      if (despues.trim() !== "") prosa.push(despues);
+      i = j;
+      continue;
+    }
+
+    // Lo que todavía puede ser el comienzo de una marca no se muestra.
+    if (!final && esUltima && inicio !== "" && (ABRE_CITAS.startsWith(inicio) || puedeSerEstado(inicio))) break;
+
+    const estado = LINEA_AVISO_MIRANDO.exec(lineas[i]);
     if (estado) {
       cerrarProsa();
       bloques.push({ tipo: "estado", fecha: estado[1] });
     } else {
-      prosa.push(linea);
+      prosa.push(lineas[i]);
     }
   }
   cerrarProsa();
 
-  return { citas: citas === "" ? null : citas, bloques };
+  const juntas = citas.filter((c) => c !== "").join("\n");
+  return { citas: juntas === "" ? null : juntas, bloques };
 }
 
 /** Lo que Lux dijo, sin citas ni estados: es lo que vuelve en el historial. */

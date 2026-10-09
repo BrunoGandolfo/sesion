@@ -41,4 +41,31 @@ describe("leerRespuesta", () => {
     expect(leerRespuesta("Hola.", true).citas).toBeNull();
     expect(leerRespuesta("<citas> </citas>Hola.", true).citas).toBeNull();
   });
+
+  it("las citas después de abrir una transcripción también se pliegan y no vuelven como prosa", () => {
+    // Lo que manda el servidor cuando Lux usa leer_transcripcion: preámbulo,
+    // aviso y recién ahí la respuesta, que empieza con sus citas.
+    const crudo = "Voy a mirar esa sesión.\n\n_(mirando la transcripción del 03/10)_\n\n<citas>\nSesión del 03/10: \"me fui antes\"\n</citas>\nAhí aparece otra vez el irse antes.";
+    const r = leerRespuesta(crudo, true);
+    expect(r.citas).toBe("Sesión del 03/10: \"me fui antes\"");
+    expect(r.bloques).toEqual([
+      { tipo: "prosa", texto: "Voy a mirar esa sesión." },
+      { tipo: "estado", fecha: "03/10" },
+      { tipo: "prosa", texto: "Ahí aparece otra vez el irse antes." },
+    ]);
+    expect(prosaDe(r)).not.toContain("citas");
+    // A medio llegar, las citas de la segunda ronda tampoco asoman.
+    const parcial = leerRespuesta("Voy a mirar esa sesión.\n\n_(mirando la transcripción del 03/10)_\n\n<citas>\nSesión del", false);
+    expect(parcial.citas).toBeNull();
+    expect(parcial.bloques).toEqual([
+      { tipo: "prosa", texto: "Voy a mirar esa sesión." },
+      { tipo: "estado", fecha: "03/10" },
+    ]);
+    expect(leerRespuesta("Voy a mirar.\n<ci", false).bloques).toEqual([{ tipo: "prosa", texto: "Voy a mirar." }]);
+  });
+
+  it("dos bloques de citas se juntan", () => {
+    expect(leerRespuesta("<citas>A</citas>\nUno.\n<citas>B</citas>\nDos.", true).citas).toBe("A\nB");
+  });
 });
+
