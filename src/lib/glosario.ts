@@ -2046,7 +2046,9 @@ export const LUX_EN_QUE_ME_BASO = "Ver en qué me baso";
 export const LUX_PLACEHOLDER = "Preguntale a Lux";
 export const LUX_ENVIAR = "Enviar";
 export const LUX_NUEVA = "Nueva conversación";
-export const LUX_PENSANDO = "Lux está leyendo…";
+/** Sin los puntos suspensivos: los dibuja la pantalla, que los enciende de a
+ *  uno mientras Lux trabaja (puntos-leyendo.tsx). */
+export const LUX_LEYENDO = "Lux está leyendo";
 export const LUX_TOPE = "Lux llegó a su tope de hoy.";
 export const LUX_NO_PUDO = "Lux no pudo responder. Probá de nuevo en un rato.";
 export const LUX_SIN_CONEXION = "No hay conexión. Probá de nuevo cuando vuelva.";

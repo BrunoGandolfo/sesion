@@ -19,6 +19,7 @@ import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
 
 import { LARGO_MAX_PREGUNTA_LUX, type RespuestaLux } from "@/lib/lux/contrato";
 
+import { PuntosLeyendo } from "./puntos-leyendo";
 import { leerRespuesta } from "./respuesta";
 import {
   LUX,
@@ -28,7 +29,7 @@ import {
   LUX_EN_QUE_ME_BASO,
   LUX_ENVIAR,
   LUX_NUEVA,
-  LUX_PENSANDO,
+  LUX_LEYENDO,
   LUX_PLACEHOLDER,
   LUX_SALIR,
   luxMirando,
@@ -154,7 +155,10 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
         )}
 
         {leyendo ? (
-          <p className="font-sans text-[13px] leading-[1.5] text-ink-500">{LUX_PENSANDO}</p>
+          <p role="status" className="font-sans text-[13px] leading-[1.5] text-ink-500">
+            {LUX_LEYENDO}
+            <PuntosLeyendo />
+          </p>
         ) : null}
 
         {error ? (

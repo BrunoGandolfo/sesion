@@ -13,11 +13,20 @@ function fuentes(dir: string): string[] {
     return e.isDirectory() ? fuentes(p) : /\.(tsx|css)$/.test(p) ? [p] : [];
   });
 }
+// Los únicos loops permitidos, con su motivo. Como gira-procesando
+// (globals.css): una espera de decenas de segundos que, quieta, se lee como
+// "se colgó". Cada uno respeta prefers-reduced-motion y arma su duración con
+// TIEMPOS; ninguno escribe una duración a mano.
+const LOOPS_PERMITIDOS: Record<string, string> = {
+  "src/components/lux/puntos-leyendo.tsx": "los puntos de \"Lux está leyendo\" mientras Lux lee el material y las transcripciones",
+};
 it("solo admite las tres duraciones y la curva común en el código editable", () => {
   expect(Object.values(TIEMPOS)).toEqual([150,180,220]);
   for (const p of fuentes(join(process.cwd(), "src"))) {
     const s = readFileSync(p, "utf8").replace(/\/\*[\s\S]*?\*\//g,"").replace(/^\s*\/\/.*$/gm,"");
-    expect(s, p).not.toMatch(/duration:\s*[1-9]|duration:\s*0\.[0-9]|ease:\s*["']|type:\s*["']spring|repeat:\s*Infinity/);
+    const conLoop = p.replace(process.cwd() + "/", "") in LOOPS_PERMITIDOS;
+    expect(s, p).not.toMatch(/duration:\s*[1-9]|duration:\s*0\.[0-9]|ease:\s*["']|type:\s*["']spring/);
+    if (!conLoop) expect(s, p).not.toMatch(/repeat:\s*Infinity/);
     expect(s, p).not.toMatch(/duration-\d+/);
   }
 });

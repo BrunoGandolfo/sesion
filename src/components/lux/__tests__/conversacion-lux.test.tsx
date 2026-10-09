@@ -12,7 +12,7 @@ import {
   LUX_CONVERSACION,
   LUX_EN_QUE_ME_BASO,
   LUX_NUEVA,
-  LUX_PENSANDO,
+  LUX_LEYENDO,
   LUX_PLACEHOLDER,
   LUX_TOPE,
   luxMirando,
@@ -71,7 +71,8 @@ describe("apertura", () => {
     expect(screen.getByText(luxSaludo("Mariana", "Ana"))).toBeTruthy();
     expect(screen.getByText(luxQueLee("Ana"))).toBeTruthy();
     expect(screen.getByText(luxQueLee("Ana")).textContent).toContain("No guarda esta conversación.");
-    expect(screen.getByText(LUX_PENSANDO)).toBeTruthy();
+    // La apertura también muestra "Lux está leyendo" con sus puntos.
+    expect(screen.getByRole("status").textContent).toContain(LUX_LEYENDO);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/pacientes/p1/lux");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
@@ -79,7 +80,7 @@ describe("apertura", () => {
 
     await stream.mandar("Repasé las últimas ");
     expect(hilo().textContent).toContain("Repasé las últimas");
-    expect(screen.queryByText(LUX_PENSANDO)).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
     await stream.mandar("tres sesiones.");
     expect(hilo().textContent).toContain("Repasé las últimas tres sesiones.");
     await stream.cerrar();
