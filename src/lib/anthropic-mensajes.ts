@@ -365,6 +365,12 @@ export async function crearConversacionConHerramientas(
           if (textoRonda.trim() === "") {
             throw new ErrorAnthropic(`respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`);
           }
+          // Una respuesta cortada por el techo de tokens o por un rechazo no
+          // terminó: se dice como un corte, no como una respuesta completa
+          // que después vuelve en el historial.
+          if (mensaje.stop_reason === "max_tokens" || mensaje.stop_reason === "refusal") {
+            throw new ErrorAnthropic(`respuesta incompleta (stop_reason=${mensaje.stop_reason})`);
+          }
           completar({
             texto: texto.trim(),
             ...uso,

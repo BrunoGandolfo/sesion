@@ -26,7 +26,7 @@ import type { ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
 
 type Bloque = { texto: string } | { herramienta: string; entrada: unknown };
 
-function sse(bloques: Bloque[], stop: "end_turn" | "tool_use"): string {
+function sse(bloques: Bloque[], stop: "end_turn" | "tool_use" | "max_tokens" | "refusal"): string {
   const eventos: unknown[] = [{
     type: "message_start",
     message: { id: `msg_${randomUUID()}`, type: "message", role: "assistant", content: [], model: MODELO_LUX, stop_reason: null, stop_sequence: null, usage: { input_tokens: 100, output_tokens: 1, cache_read_input_tokens: 50, cache_creation_input_tokens: 0 } },
@@ -160,6 +160,16 @@ describe("crearConversacionConHerramientas", () => {
     const flujo = await crearConversacionConHerramientas(PEDIDO, ejecutor, { apiKey: "k", fetchImpl });
     await expect(leerTodo(flujo.fragmentos)).rejects.toThrow(/sin texto/);
     await expect(flujo.resultado).rejects.toThrow(/sin texto/);
+  });
+
+  it.each(["max_tokens", "refusal"] as const)("una respuesta cortada por %s no se da por completa", async (motivo) => {
+    const { fetchImpl } = proveedor([sse([{ texto: "Lo que veo es que" }], motivo)]);
+    const flujo = await crearConversacionConHerramientas(PEDIDO, { aviso: () => null, ejecutar: async () => ({ contenido: "" }) }, { apiKey: "k", fetchImpl });
+    const fragmentos: string[] = [];
+    await expect((async () => { for await (const f of flujo.fragmentos) fragmentos.push(f); })()).rejects.toThrow(/incompleta/);
+    // Lo que llegó se vio; el final es un error, no un cierre normal.
+    expect(fragmentos.join("")).toBe("Lo que veo es que");
+    await expect(flujo.resultado).rejects.toThrow(new RegExp(motivo));
   });
 
   it("un 500 inicial del proveedor lanza antes de devolver el flujo", async () => {

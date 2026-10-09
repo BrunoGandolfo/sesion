@@ -71,7 +71,9 @@ Orden: validar → autorizar (el paciente es de la organización de la sesión, 
 no 404) → reservar cupo de Lux (429 si no queda) → caso de uso → stream. Si el
 caso de uso falla antes del proveedor, o el stream falla antes del primer
 fragmento, el cupo se devuelve. Cancelar o un corte después del primer
-fragmento lo conservan, como Lupita.
+fragmento lo conservan, como Lupita. Una respuesta que el modelo cortó por el techo de tokens
+o por un rechazo (`stop_reason` `max_tokens` o `refusal`) no se da por
+terminada: el stream termina en error y la pantalla dice que se cortó.
 
 Respuesta 200: el mismo transporte que `/api/ayuda`: `text/plain;
 charset=utf-8` en streaming, `Cache-Control: no-store, no-transform`,
