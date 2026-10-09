@@ -80,3 +80,31 @@ export function exportacionDePrueba(ultimaConSenal = false): Exportacion {
     },
   };
 }
+
+/** La paciente de una sola nota aprobada, sin Recorrido revisado y con la
+ *  primera propuesta de la IA sin revisar: el caso que en producción salía
+ *  en tres páginas casi vacías. Una página. */
+export function exportacionMinima(): Exportacion {
+  const sesion = SESIONES[0];
+  const fecha = "2026-09-30T14:00:00.000Z";
+  return {
+    paciente: { nombre: "Ana", apellido: "Pérez" },
+    nombreProfesional: "Lic. Prueba",
+    exportadoEn: "2026-10-01T13:00:00.000Z",
+    vigente: null,
+    anteriores: [],
+    versiones: [version({ version: 1, actor: "ia", estado: "propuesta", sesionOrigenId: sesion, creadaEn: "2026-09-30T16:00:00.000Z" })],
+    sesiones: [{ id: sesion, fecha }],
+    progreso: {
+      pacienteId: "p", totalSesiones: 1, rango: "todo",
+      sesiones: [{
+        sesionId: sesion, fecha, numero: 1,
+        intensidadEmocional: 5, alianzaTerapeutica: "estable", temas: ["Trabajo"],
+        nivelRiesgo: "ninguno", flagsRiesgo: SIN_FLAGS, intervenciones: { validacion: 1 },
+        observacionIA: "Primera sesión; llegó derivada.", progresoPercibido: "Recién empezamos.",
+      }],
+      temas: [{ tema: "Trabajo", conteo: 1, deTotal: 1, primeraVez: fecha, ultimaVez: fecha, tendencia: "nuevo" }],
+      riesgos: [],
+    },
+  };
+}

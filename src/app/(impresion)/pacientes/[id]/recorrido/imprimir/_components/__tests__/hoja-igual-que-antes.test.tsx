@@ -25,6 +25,9 @@
 // con su última vez, y el fixture (fixture-exportacion.ts) es coherente: la
 // señal del 20 de agosto está también en el progreso. Con eso la alerta deja
 // de ser exclusiva de la última sesión: sale en cada sesión con señal.
+// El 08/10/2026 (pdf-flujo) se regeneró porque las secciones dejaron de
+// forzar página nueva: sólo cambió el marcado de los saltos (sin
+// print:break-before-page; los temas, partibles entre filas). Ningún texto.
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";

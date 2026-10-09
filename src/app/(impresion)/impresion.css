@@ -51,3 +51,16 @@
 [data-hoja-recorrido] [data-graficos] .text-\[11px\] {
   font-size: 9pt;
 }
+
+/* Saltos de página. Las tarjetas compartidas (ChartCard) no se parten por
+   dentro y su título queda pegado a lo que sigue. La excepción son los
+   temas: con todos los temas del período la tarjeta puede pasar de una
+   página, así que se parte entre filas, nunca dentro de una (cada <li> lleva
+   break-inside-avoid en temas.tsx). */
+[data-hoja-recorrido] [data-graficos] > section > header,
+[data-hoja-recorrido] [data-graficos] > section > header + p {
+  break-after: avoid;
+}
+[data-hoja-recorrido] [data-graficos] > section:has([data-temas-papel]) {
+  break-inside: auto;
+}

@@ -10,9 +10,12 @@
 // Cómo se pagina:
 //   - La hoja entera es una tabla: el <thead> y el <tfoot> se repiten en cada
 //     página impresa, y son el encabezado y el pie.
-//   - Cada sección, fila, párrafo y gráfico lleva break-inside-avoid; cada
+//   - Ninguna sección empieza página: fluyen una detrás de otra. Cada
+//     tarjeta, gráfico, señal, fila y párrafo lleva break-inside-avoid; cada
 //     título, break-after-avoid. Un bloque que no entra en lo que queda de la
 //     página pasa entero a la siguiente.
+//   - Las listas largas se parten entre filas, nunca dentro de una: el
+//     historial (con su <thead> repetido) y los temas (impresion.css).
 //   - La excepción es "El recorrido hasta hoy": crece un párrafo por sesión y
 //     pasa de una página, así que se parte entre párrafos, nunca dentro de
 //     uno (HiloContenido). Un solo párrafo más alto que una página entera no
@@ -143,11 +146,11 @@ function Hoja({ datos }: { datos: Exportacion }) {
                 )}
               </Seccion>
 
-              <Seccion antetitulo={pluralizar(datos.progreso.totalSesiones, "sesión con nota", "sesiones con nota")} titulo={COMO_VA} nuevaPagina>
+              <Seccion antetitulo={pluralizar(datos.progreso.totalSesiones, "sesión con nota", "sesiones con nota")} titulo={COMO_VA}>
                 <Graficos datos={datos} />
               </Seccion>
 
-              <Seccion antetitulo={pluralizar(versiones.length, "versión", "versiones")} titulo="Historial de versiones" nuevaPagina>
+              <Seccion antetitulo={pluralizar(versiones.length, "versión", "versiones")} titulo="Historial de versiones">
                 <Historial datos={datos} />
               </Seccion>
 
@@ -155,7 +158,6 @@ function Hoja({ datos }: { datos: Exportacion }) {
                 <Seccion
                   antetitulo={pluralizar(anteriores.length, "versión", "versiones")}
                   titulo="Versiones que estuvieron vigentes antes"
-                  nuevaPagina
                 >
                   <Anteriores datos={datos} />
                 </Seccion>

@@ -28,9 +28,10 @@ export function TemasDelPeriodo({ temas, sesiones }: { temas: TemaProgreso[]; se
   }
   return (
     <ChartCard title={TEMAS} subtitle={SUBTITULO_TEMAS} lectura={lecturaTemas(sesiones.map((s) => s.temas ?? []))}>
-      <ul>
+      {/* data-temas-papel: la tarjeta se parte entre filas (impresion.css). */}
+      <ul data-temas-papel>
         {temas.map((tema) => (
-          <li key={tema.tema} className="flex items-baseline justify-between gap-3 border-t border-cream-200 py-1.5 first:border-t-0">
+          <li key={tema.tema} className="flex break-inside-avoid items-baseline justify-between gap-3 border-t border-cream-200 py-1.5 first:border-t-0">
             <span className="text-[10pt] text-ink-900">{formatearEtiqueta(tema.tema)}</span>
             <span className="flex flex-wrap items-baseline justify-end gap-x-2 text-[9pt] tabular-nums text-ink-500">
               <span>{tema.conteo} de {pluralizar(tema.deTotal, "sesión", "sesiones")}</span>

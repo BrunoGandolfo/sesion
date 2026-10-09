@@ -5,7 +5,22 @@
 
 import { RECORRIDO, pluralizar } from "@/lib/glosario";
 
+import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
+
 import { dia, diaYHora, type Exportacion } from "./formato";
+
+/** "3 notas aprobadas, del 1 de agosto al 10 de septiembre de 2026"; si todas
+ *  son del mismo día en Montevideo, una sola fecha: "1 nota aprobada, el 30
+ *  de septiembre de 2026", no "del 30 … al 30 …". */
+export function periodoDeNotas(sesiones: Exportacion["sesiones"]): string {
+  const primera = sesiones[0];
+  const ultima = sesiones.at(-1);
+  if (!primera || !ultima) return "Ninguna nota aprobada todavía";
+  const cuantas = pluralizar(sesiones.length, "nota aprobada", "notas aprobadas");
+  return esMismoDiaMvd(new Date(primera.fecha), new Date(ultima.fecha))
+    ? `${cuantas}, el ${dia(primera.fecha)}`
+    : `${cuantas}, del ${dia(primera.fecha)} al ${dia(ultima.fecha)}`;
+}
 
 /** Encabezado que se repite en cada página impresa (el <thead> de la hoja). */
 export function EncabezadoDePagina({ datos }: { datos: Exportacion }) {
@@ -22,12 +37,8 @@ export function EncabezadoDePagina({ datos }: { datos: Exportacion }) {
 
 export function CabeceraDocumento({ datos }: { datos: Exportacion }) {
   const { paciente, vigente, sesiones } = datos;
-  const primera = sesiones[0];
-  const ultima = sesiones.at(-1);
   const linea = [
-    primera && ultima
-      ? `${pluralizar(sesiones.length, "nota aprobada", "notas aprobadas")}, del ${dia(primera.fecha)} al ${dia(ultima.fecha)}`
-      : "Ninguna nota aprobada todavía",
+    periodoDeNotas(sesiones),
     vigente
       ? `versión ${vigente.version} vigente, ${vigente.actor === "ia" ? "propuesta aceptada" : "revisada por vos"} el ${diaYHora(vigente.resueltaEn ?? vigente.creadaEn)}`
       : "todavía no hay un Recorrido revisado",
