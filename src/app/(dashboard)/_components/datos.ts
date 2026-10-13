@@ -4,9 +4,10 @@
 // Vive fuera de dashboard.tsx porque no es pantalla: es el borde entre
 // /api/dashboard y el render. Sin estado, sin efectos, sin React.
 
-import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
-import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
+import { esGrabacionSinTerminar, ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
+import { esDeudaPendiente, ESTADOS_GRABABLES, sePuedeCobrar } from "@/app/api/_lib/domain";
 import { clavesDeRiesgo } from "@/components/grabacion/RiesgoDetectadoBanner";
+import type { TurnoParaAgenda } from "@/lib/agenda-local";
 import { apiGet } from "@/lib/api-client";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import { enProceso } from "@/lib/notas-en-proceso";
@@ -288,6 +289,25 @@ export async function leerHoy(reloj: Reloj = relojDelSistema): Promise<EstadoHoy
     nombre: config?.nombreProfesional?.trim() || null,
     ahora: reloj(),
   };
+}
+
+/**
+ * Lo que Hoy deja en la agenda local del teléfono (lib/agenda-local.ts) para
+ * grabar si la app se abre sin señal: los turnos del día y el próximo que se
+ * pueden grabar (programados o realizados, sin una sesión ya cerrada). Sólo
+ * lo que la agenda local guarda: id, paciente, nombre y fecha.
+ */
+export function turnosParaAgendaLocal(data: Pick<DashboardData, "sesionesHoy" | "proximaSesion">): TurnoParaAgenda[] {
+  const turnos = data.proximaSesion ? [...data.sesionesHoy, data.proximaSesion] : data.sesionesHoy;
+  return turnos
+    .filter((t) => (ESTADOS_GRABABLES as readonly string[]).includes(t.estado))
+    .filter((t) => !t.sesionClinica || (ESTADOS_SIN_TERMINAR as readonly string[]).includes(t.sesionClinica.estado))
+    .map((t) => ({
+      id: t.id,
+      pacienteId: t.pacienteId,
+      fecha: t.fecha,
+      nombreParaMostrar: `${t.paciente.nombre} ${t.paciente.apellido}`.trim(),
+    }));
 }
 
 /** Una sesión del día cuya nota se está escribiendo. */

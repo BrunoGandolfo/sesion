@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import { withSerwist } from "@serwist/turbopack";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Headers de seguridad.
@@ -59,6 +60,13 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
+      // El service worker (src/app/serwist/[path]/route.ts): que el
+      // navegador pregunte siempre por la versión nueva. Ver
+      // docs/operaciones.md, "La app sin conexión".
+      {
+        source: "/serwist/:path*",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
     ];
   },
   // El asistente de ayuda lee docs/ayuda/*.md del disco en tiempo de
@@ -75,7 +83,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+// withSerwist (ejemplo oficial de Serwist para Turbopack) sólo deja esbuild
+// fuera del bundle del servidor: lo usa la ruta que compila el service worker.
+export default withSentryConfig(withSerwist(nextConfig), {
   org: "sesion",
   project: "sesion-app",
   silent: true, // no loguear durante build

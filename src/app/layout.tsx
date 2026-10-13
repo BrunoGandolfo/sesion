@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { VARIABLES_MOVIMIENTO } from "@/lib/movimiento";
 import type { Metadata, Viewport } from "next";
+import { RegistroServiceWorker } from "@/components/layout/registro-service-worker";
 import { fraunces, jakarta } from "@/lib/fonts";
 import "./globals.css";
 
@@ -34,7 +35,10 @@ export default function RootLayout({
 }) {
   return (
     <html style={VARIABLES_MOVIMIENTO as CSSProperties} lang="es" className={`${fraunces.variable} ${jakarta.variable}`}>
-      <body>{children}</body>
+      <body>
+        {/* El service worker que deja abrir la app sin señal (src/app/sw.ts). */}
+        <RegistroServiceWorker>{children}</RegistroServiceWorker>
+      </body>
     </html>
   );
 }

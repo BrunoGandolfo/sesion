@@ -1,6 +1,7 @@
 # Operación de Sesión
 
-Manual de producción: publicar, variables, respaldos, incidentes, SMS y CSP.
+Manual de producción: publicar, variables, respaldos, incidentes, SMS, CSP y la
+app sin conexión.
 Los archivos citados describen automatismos del repositorio; no demuestran que
 una corrida, entrega o ajuste de consola haya ocurrido. Cómo se trabaja y se
 entrega un cambio está en `docs/como-trabajamos.md`.
@@ -592,3 +593,69 @@ Dejar también `Content-Security-Policy-Report-Only`, con la misma política,
 un mes más: la de bloqueo bloquea y la de reporte sigue avisando. Después se
 saca la de reporte, y se puede fusionar `frame-ancestors 'none'` de
 `next.config.ts` con la política del proxy.
+
+## 9. La app sin conexión (service worker)
+
+Para que la app instalada se abra en modo avión hay un service worker
+(`src/app/sw.ts`, con Serwist). Guarda en el teléfono **sólo** los archivos
+estáticos de la app (`/_next/static/**`) y la pantalla `/sin-conexion`. Las
+páginas van siempre a la red y no se copian; si la red falla se muestra
+`/sin-conexion`, que lee del teléfono la agenda local (turnos de hoy y mañana:
+id del turno, id de la paciente, nombre, fecha y hora; `src/lib/agenda-local.ts`).
+Nunca se guarda `/api/**` ni el HTML de otra ruta. La regla está en
+`src/lib/sw-politica.ts` y la verifica `src/lib/__tests__/sw-politica.test.ts`.
+
+### Dónde vive el archivo
+
+Con Turbopack no existe `public/sw.js`. `next build` compila `src/app/sw.ts` con
+esbuild y lo prerenderiza como la ruta `/serwist/sw.js`
+(`src/app/serwist/[path]/route.ts`, ejemplo oficial de Serwist para Turbopack);
+queda dentro de `.next/`, que no se versiona. En el log del build aparece
+`○ /serwist/[path]` con `/serwist/sw.js` y una línea `N precache entries`.
+Se registra desde el layout raíz (`src/components/layout/registro-service-worker.tsx`)
+con alcance `/` (la ruta responde `Service-Worker-Allowed: /`). En `next dev`
+no se registra.
+
+### Cómo se actualiza
+
+Solo, con cada publicación. El navegador vuelve a pedir `/serwist/sw.js` al
+abrir la app (la ruta responde `Cache-Control: no-cache`); como cambian los
+nombres de los archivos y la versión de `/sin-conexion`, el service worker nuevo
+se instala, se activa enseguida (`skipWaiting`) y toma las pestañas abiertas
+(`clientsClaim`), y borra lo que la versión vieja había guardado. Además, cuando
+el aviso de versión nueva (`src/components/layout/aviso-version.tsx`) detecta
+otra versión, le pide al service worker que se actualice. La pantalla no se
+recarga sola: la recarga la hace ella al tocar el aviso. No hay nada que hacer a
+mano.
+
+### Cómo se desregistra si hiciera falta
+
+Si el service worker se portara mal (por ejemplo, mostrando `/sin-conexion` con
+señal):
+
+1. **En un teléfono:** Chrome → menú ⋮ → Configuración → Configuración de sitios
+   → Todos los sitios → el dominio de la app → **Borrar y restablecer**. Ojo:
+   borra también las grabaciones guardadas en el teléfono que no llegaron a
+   subir (IndexedDB). Antes, abrir la app con señal y comprobar que no queda
+   ninguna grabación pendiente.
+2. **En una computadora:** DevTools → Application → Service workers →
+   **Unregister**; y Application → Storage → Cache storage, borrar las
+   cachés `serwist-*`.
+3. **Para todos (requiere autorización del dueño):** publicar una versión cuyo
+   `src/app/sw.ts` sólo se desregistre y borre sus cachés:
+
+   ~~~ts
+   declare const self: ServiceWorkerGlobalScope;
+   self.addEventListener("install", () => self.skipWaiting());
+   self.addEventListener("activate", (event) => {
+     event.waitUntil((async () => {
+       for (const nombre of await caches.keys()) await caches.delete(nombre);
+       await self.registration.unregister();
+     })());
+   });
+   ~~~
+
+   y sacar `RegistroServiceWorker` del layout raíz para que no se vuelva a
+   registrar. Cada teléfono lo aplica la próxima vez que abre la app con señal.
+   Las grabaciones guardadas (IndexedDB) no se tocan.
+

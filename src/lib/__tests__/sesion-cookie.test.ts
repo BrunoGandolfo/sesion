@@ -51,11 +51,12 @@ describe("la cookie", () => {
 });
 
 describe("rutas públicas", () => {
-  it("son exactamente las de cuenta, términos y metadatos de versión", () => {
+  it("son exactamente las de cuenta, términos, metadatos de versión y la pantalla sin conexión", () => {
     expect(RUTAS_PUBLICAS).toEqual([
       "/api/version",
       "/login", "/registro", "/terminos", "/recuperar", "/restablecer",
       "/api/cuenta/entrar", "/api/cuenta/registro", "/api/cuenta/recuperar", "/api/cuenta/restablecer",
+      "/sin-conexion",
     ]);
   });
 

@@ -21,6 +21,7 @@ import { COBRADO, HOY_SIN_PROXIMA } from "@/lib/glosario";
 import type { MetodoPago, TurnoCreado } from "@/types/domain";
 
 import { cobrarTurno } from "@/lib/cobrar-cliente";
+import { anotarAgendaDelDia } from "@/lib/agenda-local";
 import { esMismoDiaMvd } from "@/lib/fechas-montevideo";
 import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 
@@ -31,6 +32,7 @@ import {
   leerHoy,
   repartirElDia,
   sesionesEnProceso,
+  turnosParaAgendaLocal,
   type EstadoHoy,
 } from "./datos";
 import { FalloDeCarga } from "./estados-carga";
@@ -87,6 +89,8 @@ export function Dashboard({ hora = relojDelSistema }: { hora?: Reloj } = {}) {
         leidoEn.current = siguiente.ahora;
         setEstado(siguiente);
         setCarga("listo");
+        // Para grabar si la app se abre sin señal (/sin-conexion).
+        void anotarAgendaDelDia(turnosParaAgendaLocal(siguiente.data), siguiente.ahora);
       })
       .catch(() => {
         if (!cancelado) setCarga("error");

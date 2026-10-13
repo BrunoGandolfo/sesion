@@ -68,6 +68,10 @@ export const RUTAS_PUBLICAS: readonly string[] = [
   "/api/cuenta/registro",
   "/api/cuenta/recuperar",
   "/api/cuenta/restablecer",
+  // La pantalla que el service worker guarda para cuando no hay señal
+  // (src/app/sin-conexion). No trae datos: la baja el service worker al
+  // instalarse y la muestra sin red.
+  "/sin-conexion",
 ];
 
 export function esRutaPublica(pathname: string): boolean {

@@ -36,7 +36,8 @@ import { join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { construirDestinos, hostsExternos, SUFIJO_HOST_R2, validarHostR2 } from "@/lib/csp";
+import { construirCsp, construirDestinos, hostsExternos, SUFIJO_HOST_R2, validarHostR2 } from "@/lib/csp";
+import { URL_SW } from "@/lib/sw-politica";
 
 const RAIZ = process.cwd();
 const SRC = join(RAIZ, "src");
@@ -182,5 +183,30 @@ describe("destinos externos del código", () => {
     for (const host of [...Object.keys(SERVIDOR_A_SERVIDOR), ...Object.keys(PROPIOS_O_NAVEGACION)]) {
       expect(DESTINOS.some((p) => coincideConDestino(host, p))).toBe(false);
     }
+  });
+});
+
+describe("el service worker", () => {
+  // La app sin conexión registra un service worker (src/app/sw.ts). Es un
+  // destino del navegador como cualquier otro: worker-src tiene que
+  // permitirlo, y tiene que ser del propio origen, sin host externo.
+  const workerSrc = construirCsp("nonce", { destinos: { sentry: [], r2: [] } })
+    .split(";")
+    .map((d) => d.trim().split(/\s+/))
+    .find(([nombre]) => nombre === "worker-src")
+    ?.slice(1);
+
+  it("worker-src permite 'self'", () => {
+    expect(workerSrc).toContain("'self'");
+  });
+
+  it("se sirve del propio origen, con una ruta relativa", () => {
+    expect(URL_SW.startsWith("/")).toBe(true);
+    expect(URL_SW.startsWith("//")).toBe(false);
+    expect(new URL(URL_SW, "https://sesionapp.app").host).toBe("sesionapp.app");
+  });
+
+  it("worker-src no abre ningún host externo", () => {
+    expect(workerSrc?.filter((fuente) => /^https?:/.test(fuente))).toEqual([]);
   });
 });
