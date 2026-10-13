@@ -30,8 +30,19 @@ describe("consultarMensajeTwilio", () => {
   });
 
   it("un 404 o sin credenciales es error, no un estado", async () => {
-    expect(await consultarMensajeTwilio("SM1", { env: ENV, fetcher: fetcherQue(404, { message: "not found" }) }))
-      .toEqual({ tipo: "error", mensaje: "not found" });
-    expect(await consultarMensajeTwilio("SM1", { env: {} })).toEqual({ tipo: "error", mensaje: "faltan credenciales de Twilio" });
+    expect(await consultarMensajeTwilio("SM1", { env: ENV, fetcher: fetcherQue(404, { code: 20404, message: "not found" }) }))
+      .toEqual({ tipo: "error", codigo: 20404, httpStatus: 404, mensaje: "not found" });
+    expect(await consultarMensajeTwilio("SM1", { env: {} }))
+      .toEqual({ tipo: "error", codigo: null, httpStatus: null, mensaje: "faltan credenciales de Twilio" });
+  });
+
+  it("el mensaje de error es una línea con tope, y sin cuerpo legible dice el HTTP", async () => {
+    const largo = `uno\n  dos ${"x".repeat(500)}`;
+    const r = await consultarMensajeTwilio("SM1", { env: ENV, fetcher: fetcherQue(500, { message: largo }) });
+    expect(r.tipo === "error" && r.mensaje).toMatch(/^uno dos x+…$/);
+    expect(r.tipo === "error" && r.mensaje.length).toBe(200);
+    const sinCuerpo = (async () => new Response("<html>", { status: 502 })) as typeof fetch;
+    expect(await consultarMensajeTwilio("SM1", { env: ENV, fetcher: sinCuerpo }))
+      .toEqual({ tipo: "error", codigo: null, httpStatus: 502, mensaje: "HTTP 502" });
   });
 });

@@ -108,7 +108,7 @@ recargá y vas a ver el turno ya cobrado. Ver `14-cuando-algo-falla.md`.
 - **Verde (sage)** — hecho, cobrado, en curso.
 - **Dorado (gold)** — algo espera algo tuyo: turno agendado, nota para revisar,
   la nota escribiéndose.
-- **Terracotta** — plata sin cobrar, falta la autorización, señal de riesgo.
+- **Terracota** — plata sin cobrar, falta la autorización, señal de riesgo.
 - **Gris** — "No vino", o simplemente sin acento.
 
 ## Qué hace la app por detrás

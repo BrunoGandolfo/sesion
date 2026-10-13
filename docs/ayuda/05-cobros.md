@@ -82,9 +82,9 @@ cobran solo las que faltan; si volvés, la lista se actualiza con lo que entró.
 ## Las tres zonas de la deuda
 
 Según los días de atraso de la deuda más vieja: **hasta 14 días** en verde
-(*"hace 5 días"*), **15 a 30** en dorado y **31 o más** en terracotta, dentro de
+(*"hace 5 días"*), **15 a 30** en dorado y **31 o más** en terracota, dentro de
 una píldora. En la computadora, el menú lateral muestra al lado de **Cobros** una
-píldora terracotta, por ejemplo *"2 · +30 días"*, con cuántas personas están en
+píldora terracota, por ejemplo *"2 · +30 días"*, con cuántas personas están en
 esa última zona.
 
 Un turno **Agendado** cuya hora ya pasó todavía no cuenta como deuda: empieza a

@@ -72,7 +72,7 @@ paciente no vino a este turno."*
 | Chip | Qué significa |
 | --- | --- |
 | **Agendado** (dorado) | Programado, todavía no pasó nada. |
-| **Sin cobrar** (terracotta) | La sesión se hizo y falta el pago. |
+| **Sin cobrar** (terracota) | La sesión se hizo y falta el pago. |
 | **Pagado** (verde) | Cobrado. |
 | **No vino** (gris) | La paciente faltó. |
 | **Cancelado** (gris) | El turno se anuló. Queda en la agenda y en la ficha de la paciente, apagado. |

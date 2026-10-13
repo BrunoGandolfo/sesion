@@ -4,6 +4,7 @@
 
 import type { db } from "@/lib/db";
 import { clasificarCallback, type VeredictoCallback } from "@/lib/sms/clasificar";
+import type { ErrorConsultaTwilio, EstadoMensajeTwilio } from "@/lib/sms/twilio";
 
 import { MOTIVO_BAJA } from "./despachar-sms";
 import { cancelarPendientesDelDestino } from "./envios-del-turno";
@@ -78,9 +79,7 @@ export async function aplicarCallbackTwilio(
 // alarma de hoy): el resumen lo dice.
 // ────────────────────────────────────────────────────────────────────────────
 
-export type ConsultaMensaje =
-  | { tipo: "ok"; status: string; codigo: number | null }
-  | { tipo: "error"; mensaje: string };
+export type ConsultaMensaje = EstadoMensajeTwilio;
 
 export interface ReconciliarEnviosInput {
   prisma: Pick<ClientePrisma, "envioSms">;
@@ -100,6 +99,8 @@ export interface FilaReconciliada {
   efecto: "entregado" | "no_entregado" | "sin_cambio" | "error";
   /** Filas escritas (0 al simular). */
   actualizados: number;
+  /** Con efecto=error, por qué falló la consulta; si no, null. */
+  error: ErrorConsultaTwilio | null;
 }
 
 export async function reconciliarEnvios({
@@ -120,13 +121,14 @@ export async function reconciliarEnvios({
     if (!sid) continue;
     const mensaje = await consultar(sid);
     if (mensaje.tipo === "error") {
-      filas.push({ sid, status: null, codigo: null, efecto: "error", actualizados: 0 });
+      const { codigo, httpStatus, mensaje: detalle } = mensaje;
+      filas.push({ sid, status: null, codigo: null, efecto: "error", actualizados: 0, error: { codigo, httpStatus, mensaje: detalle } });
       continue;
     }
     const { status, codigo } = mensaje;
     if (simular) {
       const veredicto = clasificarCallback(status, codigo);
-      filas.push({ sid, status, codigo, efecto: veredicto.efecto === "ignorar" ? "sin_cambio" : veredicto.efecto, actualizados: 0 });
+      filas.push({ sid, status, codigo, efecto: veredicto.efecto === "ignorar" ? "sin_cambio" : veredicto.efecto, actualizados: 0, error: null });
       continue;
     }
     const resultado = await aplicarCallbackTwilio(prisma, { sid, estado: status, codigo, ahora });
@@ -136,6 +138,7 @@ export async function reconciliarEnvios({
       codigo,
       efecto: resultado.efecto === "ignorar" ? "sin_cambio" : resultado.efecto,
       actualizados: resultado.efecto === "ignorar" ? 0 : resultado.actualizados,
+      error: null,
     });
   }
   return filas;

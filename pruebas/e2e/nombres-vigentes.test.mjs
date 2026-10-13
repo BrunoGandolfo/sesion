@@ -108,6 +108,14 @@ describe("nombres vigentes en el recorrido y la ayuda", () => {
     expect(leer("03-agenda-y-turnos.md")).toContain(`**"${PREPARAR_SESION}"**`);
   });
 
+  it("la ayuda dice terracota, en castellano", () => {
+    const leer = (n) => readFileSync(join(RAIZ, "docs/ayuda", n), "utf8");
+    for (const pagina of ["02-pantalla-hoy.md", "03-agenda-y-turnos.md", "05-cobros.md", "08-la-nota-clinica.md", "09-para-vos-feedback.md"]) {
+      expect(leer(pagina), pagina).not.toMatch(/terracotta/i);
+      expect(leer(pagina), pagina).toMatch(/terracota/i);
+    }
+  });
+
   it("la agenda ofrece en la ayuda las mismas duraciones que el formulario", () => {
     const texto = plano(readFileSync(join(RAIZ, "docs/ayuda/03-agenda-y-turnos.md"), "utf8"));
     const lista = `${DURACIONES.slice(0, -1).join(", ")} o ${DURACIONES.at(-1)} minutos`;

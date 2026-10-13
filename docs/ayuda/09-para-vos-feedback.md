@@ -80,7 +80,7 @@ una observación corporal sin decirla en voz alta, para el sistema no existe.
 ## MITI 4.2.1 — Motivational Interviewing Treatment Integrity
 
 *Cómo acompañaste en esta sesión.* Dos escalas globales, de **1 a 5**:
-**Empatía** y **Colaboración**. Verde de 3 para arriba, dorado en 2, terracotta
+**Empatía** y **Colaboración**. Verde de 3 para arriba, dorado en 2, terracota
 en 1.
 
 ## CTS-R — Cognitive Therapy Scale, Revised

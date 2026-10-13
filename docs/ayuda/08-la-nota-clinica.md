@@ -64,7 +64,7 @@ revisar la señal.
 
 ## La señal de riesgo
 
-Un bloque terracotta titulado **Señal de riesgo** y, si está graduada, el nivel:
+Un bloque terracota titulado **Señal de riesgo** y, si está graduada, el nivel:
 *bajo*, *moderado* o *alto*. Puede traer los indicadores marcados (**Ideación
 suicida**, **Autolesión**, **Violencia hacia terceros**, **Síntomas psicóticos**,
 **Crisis de pánico**), **Lo que dijo** —las citas literales con su minuto— y una
