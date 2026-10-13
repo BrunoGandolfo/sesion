@@ -12,8 +12,10 @@
 // El cupo vuelve sólo si el proveedor no llegó a recibir el pedido: un error
 // de base o de validación en el caso de uso, antes de llamarlo. Desde que se
 // llamó a Anthropic puede haber cobrado (un timeout, una respuesta sin texto,
-// una herramienta que falla después de la primera ronda): el cupo se queda. Qué se lee, qué se
-// audita y qué se le manda al modelo está en ../../../_lib/casos-uso/lux/.
+// una herramienta que falla después de la primera ronda): el cupo se queda.
+//
+// Qué se lee, qué se audita y qué se le manda al modelo está en
+// ../../../_lib/casos-uso/lux/.
 //
 // A diferencia de /api/ayuda, el texto NO pasa por limpiarMarkdown: el bloque
 // <citas> y el aviso _(mirando la transcripción del DD/MM)_ son para la
