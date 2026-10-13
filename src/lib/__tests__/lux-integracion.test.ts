@@ -2,18 +2,18 @@
 // que audita, a quién deja leer y qué rastro deja la conversación. El
 // proveedor se dobla; la base, el cifrado y la auditoría son los de verdad.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { aprobarSesion } from "@/app/api/_lib/casos-uso/sesion/aprobar";
 import { editarHilo } from "@/app/api/_lib/casos-uso/hilo/escribir";
 import { bloquearHilo, insertarVersion } from "@/app/api/_lib/casos-uso/hilo/base";
 import { armarMaterial, TOKENS_MAX_MATERIAL, type ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
-import { avisoMirandoTranscripcion } from "@/lib/lux/contrato";
+import { avisoMirandoTranscripcion, LARGO_MAX_HISTORIAL_LUX, LARGO_MAX_TURNO_LUX, MARCA_ESTADO_LUX } from "@/lib/lux/contrato";
 import { ejecutorLux, RECHAZO_FUERA_DE_LISTA } from "@/app/api/_lib/casos-uso/lux/herramientas";
 import {
-  abrirConversacion, autorizarPaciente, PEDIDO_APERTURA, registrarConversacionLux, responder,
+  abrirConversacion, autorizarPaciente, ErrorProveedorLux, PEDIDO_APERTURA, registrarConversacionLux, responder,
 } from "@/app/api/_lib/casos-uso/lux/conversar";
-import type { crearConversacionConHerramientas, ResultadoConversacion } from "@/lib/anthropic-mensajes";
+import { ErrorAnthropic, type crearConversacionConHerramientas, type ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import { hiloVacio } from "@/lib/hilo/contenido";
 import { cifrarSesion } from "@/lib/prisma-encryption";
@@ -161,7 +161,7 @@ describe("leer_transcripcion contra la base", () => {
     const otro = await consultorio();
     const m = await material(c);
     const antes = (await lecturasLux(c.org)).length;
-    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, abribles: m.abribles });
+    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, abribles: m.abribles });
 
     const leida = await ejecutor.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: c.sesiones[0] } });
     expect(leida.esError).toBeUndefined();
@@ -177,6 +177,31 @@ describe("leer_transcripcion contra la base", () => {
     }
     expect(await lecturasLux(c.org)).toHaveLength(antes + 1);
     expect(await lecturasLux(otro.org)).toEqual([]);
+  });
+
+  it("aunque el id llegue a la lista, la base no entrega la de otro paciente ni una sin aprobar", async () => {
+    const c = await consultorio();
+    // Otro paciente de la MISMA organización, con su sesión aprobada.
+    const otroPaciente = await base.prisma.paciente.create({
+      data: { organizationId: c.org.orgId, nombre: "Beto", apellido: "Gómez", telefono: "+59899000001", tarifa: 1000 },
+      select: { id: true },
+    });
+    const ajena = await crearSesion(base.prisma, { ...c.org, pacienteId: otroPaciente.id }, {
+      estado: "revision", audio: false, transcripcion: "S1: DE_OTRO_PACIENTE", notaIa: NOTA,
+    });
+    await aprobarSesion({ prisma: base.db, sesionId: ajena.sesionId, organizationId: c.org.orgId, usuarioId: c.org.userId, generacion: 1 });
+    // Del mismo paciente, todavía en revisión.
+    const enRevision = await crearSesion(base.prisma, c.org, { estado: "revision", audio: false, transcripcion: "S1: SIN_APROBAR", notaIa: NOTA });
+    const antes = (await lecturasLux(c.org)).length;
+    // Una lista (f) mal armada: la segunda barrera es la consulta.
+    const abribles = new Map([[ajena.sesionId, new Date()], [enRevision.sesionId, new Date()]]);
+    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, abribles });
+    for (const sesionId of abribles.keys()) {
+      await expect(ejecutor.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId } }))
+        .resolves.toEqual({ contenido: RECHAZO_FUERA_DE_LISTA, esError: true });
+    }
+    expect(ejecutor.leidas).toEqual([]);
+    expect(await lecturasLux(c.org)).toHaveLength(antes);
   });
 });
 
@@ -209,6 +234,24 @@ describe("autorización", () => {
   });
 });
 
+describe("fallo del proveedor", () => {
+  it("contesta 502 y loguea sólo el status y un código, nunca el mensaje del proveedor", async () => {
+    const c = await consultorio();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(abrirConversacion({
+        prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, pacienteId: c.org.pacienteId,
+        apiKey: "k", systemPrompt: "p",
+        crearConversacion: async () => { throw new ErrorAnthropic("CUERPO_DEL_PROVEEDOR con TRANSCRIPCION_3", 529, "overloaded_error"); },
+      })).rejects.toBeInstanceOf(ErrorProveedorLux);
+      expect(log).toHaveBeenCalledWith("[lux] fallo del proveedor", { status: 529, codigo: "overloaded_error" });
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/CUERPO_DEL_PROVEEDOR|TRANSCRIPCION_/);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
 describe("conversación y rastro", () => {
   const PREGUNTA = "PREGUNTA_SECRETA ¿qué pasa con el cuerpo?";
   const RESPUESTA = "RESPUESTA_SECRETA se va del cuerpo cuando habla del padre";
@@ -222,7 +265,7 @@ describe("conversación y rastro", () => {
     const pedidos: Parameters<typeof crearConversacionConHerramientas>[0][] = [];
     const crearConversacion: typeof crearConversacionConHerramientas = async (pedido) => {
       pedidos.push(pedido);
-      return { fragmentos: (async function* () { yield RESPUESTA; })(), resultado: Promise.resolve(resultado), cancelar: () => {} };
+      return { fragmentos: (async function* () { yield RESPUESTA; })(), resultado: Promise.resolve(resultado), cancelar: () => {}, progreso: () => resultado };
     };
     return { pedidos, crearConversacion };
   }
@@ -279,6 +322,7 @@ describe("conversación y rastro", () => {
     const pregunta = eventos.find((e) => e.accion === ACCIONES.lux.pregunta);
     expect(pregunta).toMatchObject({ detalle: expect.objectContaining({ largoPregunta: PREGUNTA.length, herramientas: ["leer_transcripcion", "desconocida"], rechazadas: 1 }) });
     // Ninguna fila de auditoría de este consultorio lleva texto de la charla.
+    expect(pregunta?.detalle).not.toHaveProperty("interrumpida");
     const todo = JSON.stringify(eventos);
     for (const marca of ["PREGUNTA_SECRETA", "RESPUESTA_SECRETA", "APERTURA_SECRETA", "TRANSCRIPCION_", "NOTA_"]) {
       expect(todo).not.toContain(marca);
@@ -350,6 +394,47 @@ describe("conversación y rastro", () => {
       });
       expect(pedidos[0].system[0].text).toContain(`Transcripción completa de la sesión del 01/09/2026, ${LEIDA}`);
       expect(conversacion.material.releidas).toEqual([c.sesiones[0]]);
+      // El modelo lee su turno sin la marca del servidor.
+      expect(JSON.stringify(pedidos[0].messages)).not.toContain(MARCA_ESTADO_LUX);
+      expect(pedidos[0].messages[3]).toEqual({
+        role: "assistant", content: "Voy a mirar.\n\n_(mirando la transcripción del 01/09)_\n\n<citas>\nTRANSCRIPCION_0\n</citas>\nDijo eso.",
+      });
+    });
+
+    it("la misma línea sin la marca (el modelo imitándola) no trae la transcripción", async () => {
+      const c = await consultorio();
+      const { pedidos, crearConversacion } = doble();
+      const conversacion = await responder({
+        prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, pacienteId: c.org.pacienteId,
+        apiKey: "k", systemPrompt: "p", crearConversacion, pregunta: PREGUNTA,
+        historial: [{ rol: "asistente", texto: "Voy a mirar.\n\n_(mirando la transcripción del 01/09)_\n\nDijo eso." }],
+      });
+      expect(pedidos[0].system[0].text).not.toContain(LEIDA);
+      expect(conversacion.material.releidas).toEqual([]);
+    });
+
+    it("si el historial pasa el tope total, se cae lo más viejo, y con eso lo que se leyó ahí", async () => {
+      const c = await consultorio();
+      const { pedidos, crearConversacion } = doble();
+      const largo = "x".repeat(LARGO_MAX_TURNO_LUX - 100);
+      await responder({
+        prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, pacienteId: c.org.pacienteId,
+        apiKey: "k", systemPrompt: "p", crearConversacion, pregunta: PREGUNTA,
+        historial: [
+          { rol: "asistente", texto: `${avisoMirandoTranscripcion("01/09")}\nVIEJO ${largo}` },
+          { rol: "usuaria", texto: "¿Y?" },
+          { rol: "asistente", texto: `NUEVO ${largo}` },
+        ],
+      });
+      const mensajes = pedidos[0].messages;
+      const total = mensajes.slice(0, -1).reduce((n, m) => n + (m.content as string).length, 0);
+      expect(total).toBeLessThanOrEqual(LARGO_MAX_HISTORIAL_LUX + PEDIDO_APERTURA.length);
+      expect(JSON.stringify(mensajes)).not.toContain("VIEJO");
+      // Quedan los dos turnos nuevos, y el pedido de apertura no hace falta.
+      expect(mensajes.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+      expect(mensajes[0].content).toBe("¿Y?");
+      // La transcripción del turno que se cayó no vuelve al material.
+      expect(pedidos[0].system[0].text).not.toContain(LEIDA);
     });
 
     it("una línea 'mirando' que escribió ella en su pregunta no cuenta como lectura de Lux", async () => {

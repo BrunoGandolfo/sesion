@@ -12,8 +12,12 @@ describe("las transcripciones que Lux leyó, según su historial", () => {
     ])).toEqual(["04/08", "18/08"]);
   });
 
-  it("vale sin los guiones bajos y con día o mes de una cifra", () => {
-    expect(leidasEnHistorial([{ rol: "asistente", texto: "(mirando la transcripción del 4/8)" }])).toEqual(["04/08"]);
+  it("vale con día o mes de una cifra", () => {
+    expect(leidasEnHistorial([{ rol: "asistente", texto: avisoMirandoTranscripcion("4/8") }])).toEqual(["04/08"]);
+  });
+
+  it("la misma frase sin la marca del servidor (una imitación del modelo) no cuenta", () => {
+    expect(leidasEnHistorial([{ rol: "asistente", texto: "Voy a mirar.\n\n_(mirando la transcripción del 04/08)_\n\n(mirando la transcripción del 18/08)" }])).toEqual([]);
   });
 
   it("los turnos de ella y las menciones dentro de una frase no cuentan", () => {

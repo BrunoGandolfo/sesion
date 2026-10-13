@@ -13,19 +13,22 @@
 
 import {
   crearConversacionConHerramientas,
+  ErrorAnthropic,
   MODELO_LUX,
   type FlujoConversacion,
-  type ResultadoConversacion,
+  type ProgresoConversacion,
 } from "@/lib/anthropic-mensajes";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { ACCIONES } from "@/lib/auditoria-acciones";
-import { LARGO_MAX_PREGUNTA_LUX, type TurnoHistorialLux } from "@/lib/lux/contrato";
+import {
+  LARGO_MAX_HISTORIAL_LUX, LARGO_MAX_PREGUNTA_LUX, sinMarcasLux, type TurnoHistorialLux,
+} from "@/lib/lux/contrato";
 import { systemPromptLux } from "@/lib/lux/prompt";
 
 import { registrarAuditoria, type ClienteAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
-import { historialAMensajes, MAX_TURNOS_HISTORIAL } from "../responder-ayuda";
+import { MAX_TURNOS_HISTORIAL } from "../responder-ayuda";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
 import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
 
@@ -40,6 +43,15 @@ export const MENSAJE_SIN_CLAVE_LUX =
   "Lux no está disponible en este momento. Probá más tarde; si sigue así, avisale a quien administra la app.";
 export const MENSAJE_PROVEEDOR_CAIDO_LUX = "Lux no pudo contestarte ahora. Probá de nuevo en un ratito.";
 export const MENSAJE_PREGUNTA_LARGA_LUX = `La pregunta es muy larga: máximo ${LARGO_MAX_PREGUNTA_LUX} caracteres.`;
+
+/** El proveedor ya recibió el pedido cuando esto se lanza (un 4xx/5xx del
+ *  handshake, un timeout esperando la respuesta): la ruta no devuelve el
+ *  cupo, porque no puede saber si Anthropic lo cobró. */
+export class ErrorProveedorLux extends ApiError {
+  constructor() {
+    super(MENSAJE_PROVEEDOR_CAIDO_LUX, 502);
+  }
+}
 
 /** Lo que recibe el modelo cuando ella abre la conversación sin preguntar.
  *  También encabeza un historial que empieza con la apertura de Lux: la API
@@ -80,13 +92,28 @@ export function responder(input: ConversarBase & { pregunta: string; historial?:
   const pregunta = input.pregunta.trim();
   if (pregunta === "") throw new ApiError("Escribí una pregunta.", 400);
   if (pregunta.length > LARGO_MAX_PREGUNTA_LUX) throw new ApiError(MENSAJE_PREGUNTA_LARGA_LUX, 400);
-  const historial = input.historial ?? [];
-  const previos: MessageParam[] = historialAMensajes(historial);
+  const vistos = historialQueViaja(input.historial ?? []);
+  // El modelo lee sus turnos sin la marca del servidor; el material, con ella.
+  const previos: MessageParam[] = vistos.map((t) => ({
+    role: t.rol === "usuaria" ? "user" : "assistant", content: sinMarcasLux(t.texto),
+  }));
   if (previos[0]?.role === "assistant") previos.unshift({ role: "user", content: PEDIDO_APERTURA });
   // Las transcripciones que Lux leyó en los turnos que el modelo va a ver
-  // (los mismos que deja historialAMensajes) vuelven al material.
-  const vistos = historial.filter((t) => t.texto.trim() !== "").slice(-MAX_TURNOS_HISTORIAL);
+  // vuelven al material.
   return conversar(input, [...previos, { role: "user", content: pregunta }], leidasEnHistorial(vistos));
+}
+
+/** Los turnos que llegan al modelo: los últimos MAX_TURNOS_HISTORIAL no
+ *  vacíos y, si entre todos pasan LARGO_MAX_HISTORIAL_LUX caracteres, sin
+ *  los más viejos que hagan falta para que entren. */
+export function historialQueViaja(historial: readonly TurnoHistorialLux[]): TurnoHistorialLux[] {
+  const turnos = historial
+    .map((t) => ({ rol: t.rol, texto: t.texto.trim() }))
+    .filter((t) => t.texto !== "")
+    .slice(-MAX_TURNOS_HISTORIAL);
+  let largo = turnos.reduce((total, t) => total + t.texto.length, 0);
+  while (largo > LARGO_MAX_HISTORIAL_LUX) largo -= turnos.shift()!.texto.length;
+  return turnos;
 }
 
 async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasEnConversacion: string[] = []): Promise<ConversacionLux> {
@@ -102,7 +129,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
     pacienteId: input.pacienteId, usuarioId: input.usuarioId, leidasEnConversacion,
   });
   const ejecutor = ejecutorLux({
-    prisma: input.prisma, organizationId: input.organizationId,
+    prisma: input.prisma, organizationId: input.organizationId, pacienteId: input.pacienteId,
     usuarioId: input.usuarioId, abribles: material.abribles,
   });
 
@@ -135,9 +162,17 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
       ejecutor,
     };
   } catch (error) {
-    console.error("[lux] fallo del proveedor", error);
-    throw new ApiError(MENSAJE_PROVEEDOR_CAIDO_LUX, 502);
+    // Sólo status y código: el mensaje puede traer el cuerpo del proveedor.
+    console.error("[lux] fallo del proveedor", diagnosticoDe(error));
+    throw new ErrorProveedorLux();
   }
+}
+
+/** Lo que se loguea de un fallo del proveedor: status y código, nunca el
+ *  mensaje. */
+export function diagnosticoDe(error: unknown): { status: number | null; codigo: string } {
+  if (error instanceof ErrorAnthropic) return { status: error.status ?? null, codigo: error.codigo };
+  return { status: null, codigo: "desconocido" };
 }
 
 export interface ConversacionRespondida {
@@ -147,10 +182,13 @@ export interface ConversacionRespondida {
   pacienteId: string;
   tipo: "abrir" | "pregunta";
   conversacion: Pick<ConversacionLux, "material">;
-  resultado: Pick<ResultadoConversacion, "tokensEntrada" | "tokensSalida" | "cacheLeido" | "cacheEscrito" | "llamadas" | "rondas">;
+  resultado: ProgresoConversacion;
   largoPregunta: number;
   largoRespuesta: number;
   turnosHistorial: number;
+  /** true: se canceló o se cortó a mitad. Los tokens son los de las rondas
+   *  que alcanzaron a cerrar, y el largo, el de lo que llegó a la pantalla. */
+  interrumpida?: boolean;
 }
 
 /**
@@ -188,6 +226,7 @@ export async function registrarConversacionLux(p: ConversacionRespondida): Promi
       largoPregunta: p.largoPregunta,
       largoRespuesta: p.largoRespuesta,
       turnosHistorial: p.turnosHistorial,
+      ...(p.interrumpida ? { interrumpida: true } : {}),
     },
   });
 }

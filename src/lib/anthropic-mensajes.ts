@@ -66,10 +66,22 @@ export class ErrorAnthropic extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    /** Qué pasó, en una palabra que se puede loguear: nunca trae texto del
+     *  proveedor (el `message` sí puede traerlo). */
+    readonly codigo: string = "desconocido",
   ) {
     super(message);
     this.name = "ErrorAnthropic";
   }
+}
+
+/** Un identificador corto (el tipo de error de la API, el nombre de la clase
+ *  del SDK) o "desconocido": lo que sea, nunca un mensaje. */
+function codigoDe(error: unknown): string {
+  const tipo = error instanceof Anthropic.APIError
+    ? (error.error as { error?: { type?: unknown } } | undefined)?.error?.type
+    : error instanceof Error ? error.name : undefined;
+  return typeof tipo === "string" && /^[A-Za-z0-9_]{1,40}$/.test(tipo) ? tipo : "desconocido";
 }
 
 export type FetchLike = (
@@ -117,12 +129,12 @@ function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMe
     .filter((bloque) => bloque.type === "tool_use")
     .map((bloque) => ({ nombre: bloque.name, entrada: bloque.input }));
   if (herramientas.length && !permiteHerramientas) {
-    throw new ErrorAnthropic("respuesta con herramientas no habilitadas");
+    throw new ErrorAnthropic("respuesta con herramientas no habilitadas", undefined, "herramientas_no_habilitadas");
   }
 
   if (texto === "" && herramientas.length === 0) {
     throw new ErrorAnthropic(
-      `respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`,
+      `respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`, undefined, "sin_texto",
     );
   }
 
@@ -141,7 +153,7 @@ function envolverError(error: unknown): ErrorAnthropic {
   if (error instanceof ErrorAnthropic) return error;
   const status = error instanceof Anthropic.APIError ? error.status : undefined;
   const detalle = detalleDeError(error, "desconocido").slice(0, 500);
-  return new ErrorAnthropic(detalle, status);
+  return new ErrorAnthropic(detalle, status, codigoDe(error));
 }
 
 /**
@@ -164,7 +176,7 @@ export async function crearMensajeStreaming(
   const limpiar = () => clearTimeout(temporizador);
   const errorDelFlujo = (error: unknown) =>
     vencido
-      ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`)
+      ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`, undefined, "timeout")
       : envolverError(error);
 
   try {
@@ -250,10 +262,26 @@ export interface ResultadoConversacion extends ResultadoMensajes {
   rondas: number;
 }
 
+/** Lo que se sabe de una conversación que todavía no terminó (o que se
+ *  cortó): las rondas cerradas, con sus tokens, y las llamadas atendidas. */
+export type ProgresoConversacion = Pick<
+  ResultadoConversacion, "tokensEntrada" | "tokensSalida" | "cacheLeido" | "cacheEscrito" | "llamadas" | "rondas"
+>;
+
 export interface FlujoConversacion {
   fragmentos: AsyncIterable<string>;
   resultado: Promise<ResultadoConversacion>;
   cancelar: () => void;
+  /** Para el rastro de una conversación cancelada o cortada a mitad. */
+  progreso: () => ProgresoConversacion;
+}
+
+/** El texto del modelo nunca trae caracteres de control (salvo tabulador y
+ *  saltos de línea): así una marca del servidor hecha con uno de ellos
+ *  (MARCA_ESTADO_LUX, src/lib/lux/contrato.ts) no se puede imitar. */
+const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+export function sinControl(texto: string): string {
+  return texto.replace(CONTROL, "");
 }
 
 /** Tope de llamadas a herramientas por pregunta. */
@@ -292,7 +320,7 @@ export async function crearConversacionConHerramientas(
   const limpiar = () => clearTimeout(temporizador);
   const errorDelFlujo = (error: unknown) =>
     vencido
-      ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`)
+      ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`, undefined, "timeout")
       : envolverError(error);
 
   // Sin reintentos del SDK y con el plazo propio: el del SDK se pone igual
@@ -334,21 +362,23 @@ export async function crearConversacionConHerramientas(
   });
   void resultado.catch(() => {});
   let cancelado = false;
+  let llamadas = 0;
+  let rondas = 0;
+  const uso = { tokensEntrada: 0, tokensSalida: 0, cacheLeido: 0, cacheEscrito: 0 };
+  const atendidas: ResultadoConversacion["llamadas"] = [];
 
   async function* leer(): AsyncGenerator<string> {
     let texto = "";
-    let llamadas = 0;
-    let rondas = 0;
-    const uso = { tokensEntrada: 0, tokensSalida: 0, cacheLeido: 0, cacheEscrito: 0 };
-    const atendidas: ResultadoConversacion["llamadas"] = [];
     try {
       while (true) {
         let textoRonda = "";
         for await (const evento of { [Symbol.asyncIterator]: () => ronda.eventos }) {
           if (evento.type === "content_block_delta" && evento.delta.type === "text_delta") {
-            textoRonda += evento.delta.text;
-            texto += evento.delta.text;
-            yield evento.delta.text;
+            const delta = sinControl(evento.delta.text);
+            if (delta === "") continue;
+            textoRonda += delta;
+            texto += delta;
+            yield delta;
           }
         }
         const mensaje: Message = await ronda.final;
@@ -363,13 +393,13 @@ export async function crearConversacionConHerramientas(
           // La respuesta es la de esta ronda: un aviso o un preámbulo de una
           // ronda anterior no cuentan como contestar.
           if (textoRonda.trim() === "") {
-            throw new ErrorAnthropic(`respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`);
+            throw new ErrorAnthropic(`respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`, undefined, "sin_texto");
           }
           // Una respuesta cortada por el techo de tokens o por un rechazo no
           // terminó: se dice como un corte, no como una respuesta completa
           // que después vuelve en el historial.
           if (mensaje.stop_reason === "max_tokens" || mensaje.stop_reason === "refusal") {
-            throw new ErrorAnthropic(`respuesta incompleta (stop_reason=${mensaje.stop_reason})`);
+            throw new ErrorAnthropic(`respuesta incompleta (stop_reason=${mensaje.stop_reason})`, undefined, "incompleta");
           }
           completar({
             texto: texto.trim(),
@@ -429,7 +459,8 @@ export async function crearConversacionConHerramientas(
       cancelado = true;
       limpiar();
       controller.abort();
-      fallar(new ErrorAnthropic("Conversación cancelada"));
+      fallar(new ErrorAnthropic("Conversación cancelada", undefined, "cancelada"));
     },
+    progreso: () => ({ ...uso, llamadas: [...atendidas], rondas }),
   };
 }

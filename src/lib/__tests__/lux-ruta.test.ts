@@ -6,7 +6,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 import { POST } from "@/app/api/pacientes/[id]/lux/route";
 import { registrarAuditoria } from "@/app/api/_lib/auditoria";
-import { abrirConversacion, autorizarPaciente, responder } from "@/app/api/_lib/casos-uso/lux/conversar";
+import { abrirConversacion, autorizarPaciente, ErrorProveedorLux, responder } from "@/app/api/_lib/casos-uso/lux/conversar";
 import { devolverCupo, reservarCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
 import { ApiError } from "@/app/api/_lib/responses";
 import type { ResultadoConversacion } from "@/lib/anthropic-mensajes";
@@ -29,8 +29,9 @@ const RESULTADO: ResultadoConversacion = {
   texto: "<citas>\n01/09: \"me voy\"\n</citas>\nTEXTO", tokensEntrada: 10, tokensSalida: 5, cacheLeido: 0, cacheEscrito: 0,
   motivoDeCorte: "end_turn", rondas: 1, llamadas: [],
 };
+const PROGRESO = { tokensEntrada: 7, tokensSalida: 3, cacheLeido: 0, cacheEscrito: 0, rondas: 1, llamadas: [] };
 const conversacion = (fragmentos: string[] = ["<citas>\n01/09: \"me voy\"\n</citas>\n", "**TEXTO**"]) => ({
-  flujo: { fragmentos: (async function* () { yield* fragmentos; })(), resultado: Promise.resolve(RESULTADO), cancelar: vi.fn() },
+  flujo: { fragmentos: (async function* () { yield* fragmentos; })(), resultado: Promise.resolve(RESULTADO), cancelar: vi.fn(), progreso: () => PROGRESO },
   material: { notas: 3, transcripciones: ["a", "b"], transcripcionesOmitidas: 0, releidas: [], releidasOmitidas: 0 },
   ejecutor: { leidas: [], aviso: () => null, ejecutar: vi.fn() },
 });
@@ -119,31 +120,82 @@ it("tope de Lux: 429 con su mensaje", async () => {
   expect(abrirConversacion).not.toHaveBeenCalled();
 });
 
-it("si el proveedor falla antes de empezar, devuelve el cupo y contesta su status", async () => {
-  vi.mocked(abrirConversacion).mockRejectedValue(new ApiError("Lux no pudo contestarte ahora.", 502));
-  const respuesta = await pedir({});
-  expect(respuesta.status).toBe(502);
+it("si el caso de uso falla antes de llamar al proveedor (base, validación), devuelve el cupo", async () => {
+  for (const error of [new ApiError("Error interno", 500), new ApiError("Escribí una pregunta.", 400)]) {
+    vi.mocked(abrirConversacion).mockRejectedValueOnce(error);
+    expect((await pedir({})).status).toBe(error.status);
+  }
+  expect(devolverCupo).toHaveBeenCalledTimes(2);
   expect(devolverCupo).toHaveBeenCalledWith(db, { userId: "user", dia: "2026-10-08", ambito: "lux" });
 });
 
-it("si el stream falla antes del primer fragmento, devuelve el cupo; después, no", async () => {
-  const fallida = (fragmentos: string[]) => ({
+it("si el proveedor ya recibió el pedido y falló, contesta 502 y el cupo se queda", async () => {
+  vi.mocked(abrirConversacion).mockRejectedValue(new ErrorProveedorLux());
+  const respuesta = await pedir({});
+  expect(respuesta.status).toBe(502);
+  expect(devolverCupo).not.toHaveBeenCalled();
+});
+
+const fallida = (fragmentos: string[], error = new Error("se cortó")) => {
+  const resultado = Promise.reject(error);
+  void resultado.catch(() => {});
+  return {
     ...conversacion(),
     flujo: {
-      fragmentos: (async function* () { yield* fragmentos; throw new Error("se cortó"); })(),
-      resultado: Promise.reject(new Error("se cortó")), cancelar: vi.fn(),
+      fragmentos: (async function* () { yield* fragmentos; throw error; })(),
+      resultado, cancelar: vi.fn(), progreso: () => PROGRESO,
+    },
+  };
+};
+
+it("un corte del stream (sin texto, timeout, herramienta) no devuelve el cupo, antes o después del primer fragmento", async () => {
+  for (const fragmentos of [[], ["algo"]]) {
+    vi.mocked(abrirConversacion).mockResolvedValueOnce(fallida(fragmentos));
+    await expect(leer(await pedir({}))).rejects.toThrow();
+  }
+  expect(devolverCupo).not.toHaveBeenCalled();
+});
+
+it("un corte a mitad deja lux.abrir con interrumpida y lo que se sabe, sin el texto", async () => {
+  vi.mocked(abrirConversacion).mockResolvedValueOnce(fallida(["TEXTO_PARCIAL"]));
+  await expect(leer(await pedir({}))).rejects.toThrow();
+  expect(registrarAuditoria).toHaveBeenCalledTimes(1);
+  const evento = vi.mocked(registrarAuditoria).mock.calls[0][1];
+  expect(evento).toMatchObject({
+    accion: "lux.abrir", entidadId: "pac-1",
+    detalle: expect.objectContaining({ interrumpida: true, tokensEntrada: 7, rondas: 1, largoRespuesta: "TEXTO_PARCIAL".length }),
+  });
+  expect(JSON.stringify(evento)).not.toMatch(/TEXTO_PARCIAL/);
+});
+
+it("una respuesta entera no lleva interrumpida", async () => {
+  await leer(await pedir({}));
+  expect(vi.mocked(registrarAuditoria).mock.calls[0][1].detalle).not.toHaveProperty("interrumpida");
+});
+
+it("cancelar a mitad deja lux.pregunta con interrumpida, una sola vez", async () => {
+  let soltar!: () => void;
+  const esperando = new Promise<void>((resolve) => { soltar = resolve; });
+  const cancelar = vi.fn(() => soltar());
+  const resultado = Promise.reject(new Error("Conversación cancelada"));
+  void resultado.catch(() => {});
+  vi.mocked(responder).mockResolvedValueOnce({
+    ...conversacion(),
+    flujo: {
+      fragmentos: (async function* () { yield "primera parte"; await esperando; yield "lo que ya no llega"; })(),
+      resultado, cancelar, progreso: () => PROGRESO,
     },
   });
-  const sinNada = fallida([]);
-  void sinNada.flujo.resultado.catch(() => {});
-  vi.mocked(abrirConversacion).mockResolvedValueOnce(sinNada);
-  await expect(leer(await pedir({}))).rejects.toThrow();
-  expect(devolverCupo).toHaveBeenCalledTimes(1);
-
-  const conAlgo = fallida(["algo"]);
-  void conAlgo.flujo.resultado.catch(() => {});
-  vi.mocked(abrirConversacion).mockResolvedValueOnce(conAlgo);
-  await expect(leer(await pedir({}))).rejects.toThrow();
-  expect(devolverCupo).toHaveBeenCalledTimes(1);
-  expect(registrarAuditoria).not.toHaveBeenCalled();
+  const respuesta = await pedir({ pregunta: "¿y?" });
+  const lector = respuesta.body!.getReader();
+  await lector.read();
+  await lector.cancel();
+  await vi.waitFor(() => expect(registrarAuditoria).toHaveBeenCalledTimes(1));
+  expect(cancelar).toHaveBeenCalled();
+  expect(vi.mocked(registrarAuditoria).mock.calls[0][1]).toMatchObject({
+    accion: "lux.pregunta", detalle: expect.objectContaining({ interrumpida: true, largoRespuesta: "primera parte".length }),
+  });
+  await new Promise((r) => setTimeout(r, 10));
+  expect(registrarAuditoria).toHaveBeenCalledTimes(1);
+  expect(devolverCupo).not.toHaveBeenCalled();
 });

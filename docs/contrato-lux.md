@@ -60,21 +60,27 @@ Cuerpo (JSON, estricto: un campo de más es 400):
   (el tope de una pregunta); los de `asistente`, 1 a 100.000
   (`LARGO_MAX_TURNO_LUX`), para que una respuesta larga de Lux, con sus citas
   y avisos, pueda volver entera. La pantalla manda cada turno de Lux tal como
-  ella lo vio: prosa, `<citas>` y líneas `_(mirando la transcripción del
-  DD/MM)_`; esas líneas son las que traen la transcripción de vuelta al
+  ella lo vio: prosa, `<citas>` y líneas de estado (con su marca, ver abajo);
+  esas líneas son las que traen la transcripción de vuelta al
   material (punto 5 de "El material"). El caso de uso
-  usa los últimos `MAX_TURNOS_HISTORIAL` (6, como Lupita). Si el primero que
-  queda es de Lux, se antepone el pedido de apertura (la API exige que el
-  primer mensaje sea de la usuaria).
+  usa los últimos `MAX_TURNOS_HISTORIAL` (6, como Lupita) y, si entre todos
+  pasan `LARGO_MAX_HISTORIAL_LUX` (120.000 caracteres), descarta los más
+  viejos hasta que entren: cada pregunta reenvía el historial, y sin ese tope
+  seis respuestas largas pesan más que el material. Un turno que se cae no
+  trae de vuelta lo que leyó. El modelo lee sus turnos sin la marca. Si el
+  primero que queda es de Lux, se antepone el pedido de apertura (la API
+  exige que el primer mensaje sea de la usuaria).
 - **Apertura:** cuerpo `{}` (sin `pregunta` y sin `historial`). Lux habla
   primero. Un cuerpo vacío no es JSON y da 400.
 - `historial` sin `pregunta`: 400.
 
 Orden: validar → autorizar (el paciente es de la organización de la sesión, si
-no 404) → reservar cupo de Lux (429 si no queda) → caso de uso → stream. Si el
-caso de uso falla antes del proveedor, o el stream falla antes del primer
-fragmento, el cupo se devuelve. Cancelar o un corte después del primer
-fragmento lo conservan, como Lupita. Una respuesta que el modelo cortó por el techo de tokens
+no 404) → reservar cupo de Lux (429 si no queda) → caso de uso → stream. El
+cupo se devuelve sólo si el caso de uso falla **antes** de llamar al
+proveedor (un error de base armando el material, una pregunta inválida).
+Desde que se llamó a Anthropic puede haber cobrado, así que el cupo se
+queda: un 502 del handshake (`ErrorProveedorLux`), un timeout, una respuesta
+sin texto, un error de herramienta o de base después de la llamada, cancelar. Una respuesta que el modelo cortó por el techo de tokens
 o por un rechazo (`stop_reason` `max_tokens` o `refusal`) no se da por
 terminada: el stream termina en error y la pantalla dice que se cortó.
 
@@ -86,15 +92,22 @@ Lupita, el texto **no** pasa por `limpiarMarkdown`: la pantalla recibe tal cual
 - el bloque `<citas>…</citas>` al principio de toda respuesta con
   observaciones (una cita por línea: sesión, fecha, frase), que pliega bajo
   "ver en qué me baso";
-- la línea `_(mirando la transcripción del DD/MM)_`, que el **servidor** emite
-  en su propio párrafo antes de ejecutar `leer_transcripcion`.
+- la línea de estado `␞_(mirando la transcripción del DD/MM)_`, que el
+  **servidor** emite en su propio párrafo antes de ejecutar
+  `leer_transcripcion`. `␞` es `MARCA_ESTADO_LUX` (U+001E, un carácter de
+  control): el bucle borra los caracteres de control de todo lo que escribe
+  el modelo, así que el modelo no puede producir la marca. La pantalla y el
+  material sólo reconocen la línea con la marca; si el modelo imita la
+  frase, sale sin marca y se muestra como texto común.
 
 Errores (JSON `{ "error": … }`, contrato de `docs/contrato-respuestas-api.md`):
 400 validación, 401 sin sesión, 404 paciente ajeno o inexistente, 429 tope
 diario (`MENSAJE_TOPE_LUX`), 502 el proveedor falló al empezar
 (`MENSAJE_PROVEEDOR_CAIDO_LUX`), 503 sin `ANTHROPIC_API_KEY`
 (`MENSAJE_SIN_CLAVE_LUX`), 500 error de base (incluido no poder escribir el
-rastro de una transcripción).
+rastro de una transcripción). Un fallo del proveedor se loguea con su status
+y un código (`ErrorAnthropic.codigo`: el tipo de error de la API, `timeout`,
+`sin_texto`…), nunca con su mensaje, que puede traer el cuerpo del pedido.
 
 ## El cupo
 
@@ -138,7 +151,7 @@ En este orden:
    con una también, ninguna. Lo omitido se dice en un documento propio
    ("Transcripción del DD/MM/AAAA omitida por tamaño.").
 5. **Las transcripciones que Lux ya leyó en esta conversación.** Por cada
-   línea `_(mirando la transcripción del DD/MM)_` que aparece en los turnos
+   línea de estado (con la marca del servidor) que aparece en los turnos
    de Lux del historial recibido (los de ella no cuentan), la transcripción
    de esa sesión vuelve completa, como documento propio: "Transcripción
    completa de la sesión del DD/MM/AAAA, leída en esta conversación". Sólo
@@ -176,7 +189,8 @@ pedido** (`MAX_LLAMADAS_HERRAMIENTA`). Después de la tercera, la ronda
 siguiente va con `tool_choice: none` y el modelo contesta con lo que tiene.
 
 - `leer_transcripcion({ sesionId })`: el id tiene que estar en la lista 6 del
-  material de **este** pedido. Argumentos validados con zod (uuid, sin campos
+  material de **este** pedido, y la consulta vuelve a exigir organización,
+  paciente y nota aprobada (`whereAprobadasDe`): dos barreras, no una. Argumentos validados con zod (uuid, sin campos
   de más). Fuera de la lista, argumentos inválidos o una herramienta
   inventada: `tool_result` con `is_error`, sin tocar la base. Una
   transcripción de más de 90.000 tokens estimados se rechaza sin leerla.
@@ -193,7 +207,9 @@ No hay escritura, SQL, ids libres ni organización elegible por el modelo.
   medirla y queda afuera no se audita. Cada pedido vuelve a leer, así que cada
   pedido vuelve a auditar.
 - `lux.abrir` o `lux.pregunta` (entidad `paciente`, id del paciente), con
-  `registrarAuditoria` cuando el stream terminó: modelo, tokens (entrada,
+  `registrarAuditoria` cuando el stream terminó —también si se canceló o se
+  cortó a mitad: ahí con `interrumpida: true`, los tokens de las rondas que
+  alcanzaron a cerrar y el largo de lo que llegó a la pantalla—: modelo, tokens (entrada,
   salida, caché leído y escrito), rondas, nombres de herramientas (sólo de la
   lista; otro nombre queda como `desconocida`), lecturas y rechazos, cuántas
   notas y transcripciones tenía el material, cuántas volvieron por haberse
@@ -230,5 +246,9 @@ nada variable adentro. `next.config.ts` lo declara en
 | Autorización (paciente ajeno 404 sin leer), 503 sin clave | `lux-integracion.test.ts` |
 | Auditoría: `sesion.ver_transcripcion` via lux, `lux.abrir`, `lux.pregunta`, sin texto | `lux-integracion.test.ts`, `lux-ruta.test.ts` |
 | Cupo por ámbito: 60 de Lux no consumen los 40 de Lupita | `cupo-ayuda-integracion.test.ts` |
-| Ruta: apertura sin pregunta, validación, orden autorizar → cupo → caso de uso, devolución del cupo | `lux-ruta.test.ts` |
+| Ruta: apertura sin pregunta, validación, orden autorizar → cupo → caso de uso, el cupo vuelve sólo antes del proveedor, rastro de lo interrumpido | `lux-ruta.test.ts` |
+| Tope total del historial, recortado desde lo más viejo | `lux-historial.test.ts`, `lux-integracion.test.ts` |
+| La marca de estado: el modelo no la puede escribir; su imitación es prosa | `lux-bucle.test.ts`, `respuesta.test.ts`, `conversacion-lux.test.tsx`, `lux-leidas.test.ts` |
+| La segunda barrera de `leer_transcripcion` (paciente y aprobada) | `lux-bucle.test.ts`, `lux-integracion.test.ts` |
+| El log de un fallo del proveedor: status y código, sin mensaje | `lux-integracion.test.ts` |
 | Prompt: secciones, límites, sin partes variables, incluido en el deploy | `lux-prompt.test.ts` |

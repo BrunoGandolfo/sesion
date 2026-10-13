@@ -7,7 +7,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { peticionLuxSchema } from "@/lib/lux/contrato";
+import { avisoMirandoTranscripcion, MARCA_ESTADO_LUX, peticionLuxSchema } from "@/lib/lux/contrato";
 
 import { ConversacionLux } from "../conversacion-lux";
 import {
@@ -127,7 +127,7 @@ describe("lo que llega dentro del texto", () => {
     fetchMock.mockResolvedValueOnce(stream.respuesta);
     montar();
 
-    await stream.mandar("Dejame ver.\n_(mirando la tra");
+    await stream.mandar(`Dejame ver.\n${MARCA_ESTADO_LUX}_(mirando la tra`);
     expect(hilo().textContent).not.toContain("mirando");
     await stream.mandar("nscripción del 03/10)_\nAhí contó que no durmió.");
     await stream.cerrar();
@@ -138,6 +138,15 @@ describe("lo que llega dentro del texto", () => {
     const mensajes = within(hilo()).getAllByText((_, el) => el?.tagName === "P" && !!el.textContent?.startsWith("Lux:"));
     expect(mensajes.map((m) => m.textContent)).toEqual(["Lux: Dejame ver.", "Lux: Ahí contó que no durmió."]);
     expect(hilo().textContent).not.toContain("_(");
+    expect(hilo().textContent).not.toContain(MARCA_ESTADO_LUX);
+  });
+
+  it("si el texto de Lux imita la línea sin la marca, se muestra como texto común", async () => {
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Dejame ver.\n_(mirando la transcripción del 03/10)_\nAhí contó que no durmió."));
+    montar();
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(screen.queryByText(luxMirando("03/10"))).toBeNull();
+    expect(hilo().textContent).toContain("(mirando la transcripción del 03/10)");
   });
 });
 
@@ -169,7 +178,7 @@ describe("preguntar", () => {
     const respuestaConLectura = [
       "Voy a mirar la transcripción del 04/08.",
       "",
-      "_(mirando la transcripción del 04/08)_",
+      avisoMirandoTranscripcion("04/08"),
       "",
       "<citas>",
       'Transcripción 04/08/2026, [02:44] S1: "Me cantaba una canción de cuna en gallego."',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RespuestaLux } from "@/lib/lux/contrato";
+import { avisoMirandoTranscripcion as aviso, MARCA_ESTADO_LUX, type RespuestaLux } from "@/lib/lux/contrato";
 
 import { leerRespuesta } from "../respuesta";
 
@@ -19,8 +19,8 @@ describe("leerRespuesta", () => {
     expect(leerRespuesta("<citas>Nota del 0", false)).toEqual({ citas: null, bloques: [] });
   });
 
-  it("una línea de transcripción es un estado, con o sin los guiones bajos", () => {
-    const r = leerRespuesta("Dejame ver.\n_(mirando la transcripción del 03/10)_\nAhí dice que no durmió.\n(mirando la transcripción del 7/9)", true);
+  it("una línea de transcripción con la marca del servidor es un estado", () => {
+    const r = leerRespuesta(`Dejame ver.\n${aviso("03/10")}\nAhí dice que no durmió.\n${aviso("7/9")}`, true);
     expect(r.bloques).toEqual([
       { tipo: "prosa", texto: "Dejame ver." },
       { tipo: "estado", fecha: "03/10" },
@@ -30,12 +30,24 @@ describe("leerRespuesta", () => {
     expect(prosaDe(r)).toBe("Dejame ver.\n\nAhí dice que no durmió.");
   });
 
+  it("la misma línea sin la marca (el modelo imitándola) es prosa común", () => {
+    const r = leerRespuesta("Dejame ver.\n_(mirando la transcripción del 03/10)_\n(mirando la transcripción del 7/9)", true);
+    expect(r.bloques.every((b) => b.tipo === "prosa")).toBe(true);
+    expect(prosaDe(r)).toContain("(mirando la transcripción del 03/10)");
+    expect(prosaDe(r)).toContain("(mirando la transcripción del 7/9)");
+    // Y mientras llega no se esconde: no puede ser un estado.
+    expect(prosaDe(leerRespuesta("Dejame ver.\n_(mirando la trans", false))).toContain("(mirando la trans");
+  });
+
   it("no deja asomar una línea de estado a medio llegar", () => {
-    expect(leerRespuesta("Dejame ver.\n_(mirando la trans", false).bloques).toEqual([
+    const aMedias = `Dejame ver.\n${MARCA_ESTADO_LUX}_(mirando la trans`;
+    expect(leerRespuesta(aMedias, false).bloques).toEqual([
       { tipo: "prosa", texto: "Dejame ver." },
     ]);
-    // Al terminar el stream, lo que quedó se muestra como vino.
-    expect(prosaDe(leerRespuesta("Dejame ver.\n_(mirando la trans", true))).toContain("(mirando la trans");
+    // Al terminar el stream, lo que quedó se muestra como vino, sin la marca.
+    const final = prosaDe(leerRespuesta(aMedias, true));
+    expect(final).toContain("(mirando la trans");
+    expect(final).not.toContain(MARCA_ESTADO_LUX);
   });
 
   it("limpia el Markdown como la ayuda", () => {
@@ -50,7 +62,7 @@ describe("leerRespuesta", () => {
   it("las citas después de abrir una transcripción también se pliegan y no vuelven como prosa", () => {
     // Lo que manda el servidor cuando Lux usa leer_transcripcion: preámbulo,
     // aviso y recién ahí la respuesta, que empieza con sus citas.
-    const crudo = "Voy a mirar esa sesión.\n\n_(mirando la transcripción del 03/10)_\n\n<citas>\nSesión del 03/10: \"me fui antes\"\n</citas>\nAhí aparece otra vez el irse antes.";
+    const crudo = `Voy a mirar esa sesión.\n\n${aviso("03/10")}\n\n<citas>\nSesión del 03/10: "me fui antes"\n</citas>\nAhí aparece otra vez el irse antes.`;
     const r = leerRespuesta(crudo, true);
     expect(r.citas).toBe("Sesión del 03/10: \"me fui antes\"");
     expect(r.bloques).toEqual([
@@ -60,7 +72,7 @@ describe("leerRespuesta", () => {
     ]);
     expect(prosaDe(r)).not.toContain("citas");
     // A medio llegar, las citas de la segunda ronda tampoco asoman.
-    const parcial = leerRespuesta("Voy a mirar esa sesión.\n\n_(mirando la transcripción del 03/10)_\n\n<citas>\nSesión del", false);
+    const parcial = leerRespuesta(`Voy a mirar esa sesión.\n\n${aviso("03/10")}\n\n<citas>\nSesión del`, false);
     expect(parcial.citas).toBeNull();
     expect(parcial.bloques).toEqual([
       { tipo: "prosa", texto: "Voy a mirar esa sesión." },

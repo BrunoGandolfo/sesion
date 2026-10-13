@@ -5,40 +5,34 @@
 //
 //   <citas>…</citas>     al principio de una respuesta: en qué se basa. Se
 //                        pliega bajo "Ver en qué me baso".
-//   _(mirando la transcripción del DD/MM)_
+//   MARCA_ESTADO_LUX + _(mirando la transcripción del DD/MM)_
 //                        una línea sola: es un estado de la app, no algo que
-//                        Lux le dice a ella. Se muestra en gris.
+//                        Lux le dice a ella. Se muestra en gris. Sólo con la
+//                        marca, que el modelo no puede escribir: la misma
+//                        frase sin marca es prosa.
 //
 // Puro y sin estado: se vuelve a leer el texto acumulado entero con cada
 // fragmento. Una respuesta de chat mide unos pocos kilobytes, y releerla es
 // más simple y más difícil de romper que un autómata que recuerde a mitad de
 // qué marca quedó el fragmento anterior.
 //
-// Lo que todavía puede ser el comienzo de una marca ("<ci", "_(mira") no se
-// muestra hasta que llega lo que lo decide: así una marca nunca asoma un
-// instante como prosa.
+// Lo que todavía puede ser el comienzo de una marca ("<ci", una línea que
+// empieza con MARCA_ESTADO_LUX) no se muestra hasta que llega lo que lo
+// decide: así una marca nunca asoma un instante como prosa.
 
 import { limpiarMarkdown } from "@/lib/ayuda-texto";
 import {
   ABRE_CITAS,
   CIERRA_CITAS,
   LINEA_AVISO_MIRANDO,
-  PREFIJO_AVISO_MIRANDO,
+  MARCA_ESTADO_LUX,
   type BloqueLux,
   type RespuestaLux,
 } from "@/lib/lux/contrato";
 
 /** ¿Puede este pedazo final de línea terminar siendo una línea de estado? */
 function puedeSerEstado(linea: string): boolean {
-  const inicio = linea.trimStart();
-  if (inicio === "") return false;
-  const sinGuion = PREFIJO_AVISO_MIRANDO.slice(1);
-  return (
-    PREFIJO_AVISO_MIRANDO.startsWith(inicio) ||
-    sinGuion.startsWith(inicio) ||
-    inicio.startsWith(PREFIJO_AVISO_MIRANDO) ||
-    inicio.startsWith(sinGuion)
-  );
+  return linea.startsWith(MARCA_ESTADO_LUX);
 }
 
 function limpiar(texto: string, final: boolean): string {
@@ -90,14 +84,15 @@ export function leerRespuesta(crudo: string, final: boolean): RespuestaLux {
     }
 
     // Lo que todavía puede ser el comienzo de una marca no se muestra.
-    if (!final && esUltima && inicio !== "" && (ABRE_CITAS.startsWith(inicio) || puedeSerEstado(inicio))) break;
+    if (!final && esUltima && inicio !== "" && (ABRE_CITAS.startsWith(inicio) || puedeSerEstado(lineas[i]))) break;
 
     const estado = LINEA_AVISO_MIRANDO.exec(lineas[i]);
     if (estado) {
       cerrarProsa();
       bloques.push({ tipo: "estado", fecha: estado[1] });
     } else {
-      prosa.push(lineas[i]);
+      // Una marca suelta (una línea de estado rota) no se muestra.
+      prosa.push(lineas[i].replaceAll(MARCA_ESTADO_LUX, ""));
     }
   }
   cerrarProsa();

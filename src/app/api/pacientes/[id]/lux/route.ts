@@ -6,7 +6,13 @@
 // en streaming. Contrato completo en docs/contrato-lux.md.
 //
 // La ruta valida, autoriza, reserva el cupo de Lux, llama al caso de uso y,
-// cuando el stream terminó, le pide que deje el rastro. Qué se lee, qué se
+// cuando el stream terminó (entero, cancelado o cortado), le pide que deje el
+// rastro.
+//
+// El cupo vuelve sólo si el proveedor no llegó a recibir el pedido: un error
+// de base o de validación en el caso de uso, antes de llamarlo. Desde que se
+// llamó a Anthropic puede haber cobrado (un timeout, una respuesta sin texto,
+// una herramienta que falla después de la primera ronda): el cupo se queda. Qué se lee, qué se
 // audita y qué se le manda al modelo está en ../../../_lib/casos-uso/lux/.
 //
 // A diferencia de /api/ayuda, el texto NO pasa por limpiarMarkdown: el bloque
@@ -21,6 +27,7 @@ import { devolverCupo, reservarCupo } from "../../../_lib/casos-uso/ayuda/reserv
 import {
   abrirConversacion,
   autorizarPaciente,
+  ErrorProveedorLux,
   registrarConversacionLux,
   responder,
   type ConversacionLux,
@@ -53,32 +60,48 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? await abrirConversacion(base)
         : await responder({ ...base, pregunta, historial });
     } catch (error) {
-      await devolverCupo(db, reserva);
+      if (!(error instanceof ErrorProveedorLux)) await devolverCupo(db, reserva);
       throw error;
     }
 
     const { flujo } = conversacion;
     const codificador = new TextEncoder();
-    let recibioFragmento = false;
     let cancelado = false;
+    let registrado = false;
+    let largoEnviado = 0;
+    const registrar = (resultado: Parameters<typeof registrarConversacionLux>[0]["resultado"], largoRespuesta: number, interrumpida: boolean) => {
+      registrado = true;
+      return registrarConversacionLux({
+        prisma: db, organizationId, userId, pacienteId, tipo, conversacion, resultado,
+        largoPregunta: pregunta?.length ?? 0,
+        largoRespuesta,
+        turnosHistorial: historial?.length ?? 0,
+        interrumpida,
+      });
+    };
+    // Cancelada o cortada: el rastro igual queda, con lo que se sabe. Si
+    // falla, se dice en el log y nada más (ya no hay a quién contestarle).
+    const registrarInterrumpida = async () => {
+      if (registrado) return;
+      try {
+        await registrar(flujo.progreso(), largoEnviado, true);
+      } catch {
+        console.error("[lux] no se pudo registrar la conversación interrumpida");
+      }
+    };
     const cuerpo = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
           for await (const fragmento of flujo.fragmentos) {
-            if (fragmento.length) recibioFragmento = true;
-            if (cancelado) return;
+            if (cancelado) return await registrarInterrumpida();
+            largoEnviado += fragmento.length;
             controller.enqueue(codificador.encode(fragmento));
           }
           const resultado = await flujo.resultado;
-          await registrarConversacionLux({
-            prisma: db, organizationId, userId, pacienteId, tipo, conversacion, resultado,
-            largoPregunta: pregunta?.length ?? 0,
-            largoRespuesta: resultado.texto.length,
-            turnosHistorial: historial?.length ?? 0,
-          });
+          await registrar(resultado, resultado.texto.length, false);
           controller.close();
         } catch (error) {
-          if (!recibioFragmento && !cancelado) await devolverCupo(db, reserva);
+          await registrarInterrumpida();
           // Sin el error: su mensaje puede traer el cuerpo del proveedor.
           console.error("[lux] stream interrumpido");
           if (cancelado) return;

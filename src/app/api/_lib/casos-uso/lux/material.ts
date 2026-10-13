@@ -18,7 +18,8 @@
 //      (caracteres / 4), va sólo la más reciente; si con una sola también,
 //      ninguna. Lo omitido se dice en el material.
 //   e. Las transcripciones que Lux ya leyó en ESTA conversación: cada línea
-//      "(mirando la transcripción del DD/MM)" de sus turnos en el historial
+//      de estado "(mirando la transcripción del DD/MM)" —con la marca del
+//      servidor, MARCA_ESTADO_LUX— de sus turnos en el historial
 //      trae de vuelta esa transcripción, como documento propio ("leída en
 //      esta conversación"). El historial es texto: sin esto, en la pregunta
 //      siguiente Lux veía sus propias citas sin la fuente delante y decía
@@ -82,10 +83,11 @@ export interface ArmarMaterialInput extends IdentidadHilo {
   leidasEnConversacion?: readonly string[];
 }
 
-/** Los "DD/MM" de las líneas "(mirando la transcripción del DD/MM)" que hay
- *  en los turnos de Lux del historial, sin repetir y en el orden en que
- *  aparecen. Los turnos de ella no cuentan: esa línea la escribe el
- *  servidor, y una que tipee ella no es una lectura de Lux. */
+/** Los "DD/MM" de las líneas de estado "(mirando la transcripción del
+ *  DD/MM)" que hay en los turnos de Lux del historial, sin repetir y en el
+ *  orden en que aparecen. Sólo cuentan las que llevan la marca del servidor
+ *  (LINEA_AVISO_MIRANDO): la misma frase escrita por el modelo sale sin
+ *  marca y no es una lectura. Los turnos de ella tampoco cuentan. */
 export function leidasEnHistorial(historial: readonly TurnoHistorialLux[]): string[] {
   const fechas = new Set<string>();
   for (const turno of historial) {

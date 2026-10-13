@@ -1,9 +1,11 @@
 // Las herramientas de Lux: lista cerrada, sólo lectura. Hoy una.
 //
-// leer_transcripcion(sesionId): el id tiene que estar en la lista (e) del
+// leer_transcripcion(sesionId): el id tiene que estar en la lista (f) del
 // material, que armó el servidor para ESTE paciente de ESTA organización. Un
 // id fuera de la lista se rechaza sin tocar la base: el modelo nunca elige
-// organización, paciente, columnas ni SQL. La lectura y su rastro
+// organización, paciente, columnas ni SQL. Y la consulta vuelve a exigir
+// organización, paciente y nota aprobada (whereAprobadasDe): dos barreras, no
+// una. La lectura y su rastro
 // (sesion.ver_transcripcion, via "lux") van en una transacción, como cuando
 // ella la abre en la pantalla.
 
@@ -12,6 +14,7 @@ import { z } from "zod";
 import type { EjecutorHerramientas, PedidoConversacion } from "@/lib/anthropic-mensajes";
 import { avisoMirandoTranscripcion } from "@/lib/lux/contrato";
 
+import { whereAprobadasDe } from "../hilo/base";
 import { auditarLecturaTranscripcion } from "../sesion/ver-transcripcion";
 import {
   CARACTERES_POR_TOKEN, diaMes, escapar, fechaLegible, TOKENS_MAX_MATERIAL, type ClienteLux,
@@ -47,6 +50,7 @@ export interface EjecutorLux extends EjecutorHerramientas {
 export function ejecutorLux(contexto: {
   prisma: ClienteLux;
   organizationId: string;
+  pacienteId: string;
   usuarioId: string;
   abribles: ReadonlyMap<string, Date>;
 }): EjecutorLux {
@@ -72,10 +76,11 @@ export function ejecutorLux(contexto: {
       // demasiado larga no llega al modelo, así que no se audita como leída.
       const transcripcion = await contexto.prisma.$transaction(async (tx) => {
         const fila = await tx.sesionClinica.findFirst({
-          where: { id: valida.sesionId, organizationId: contexto.organizationId },
+          where: { id: valida.sesionId, ...whereAprobadasDe(contexto) },
           select: { id: true, estado: true, transcripcion: true },
         });
-        if (!fila?.transcripcion) return { rechazo: RECHAZO_SIN_TRANSCRIPCION };
+        if (!fila) return { rechazo: RECHAZO_FUERA_DE_LISTA };
+        if (!fila.transcripcion) return { rechazo: RECHAZO_SIN_TRANSCRIPCION };
         if (fila.transcripcion.length > TOKENS_MAX_MATERIAL * CARACTERES_POR_TOKEN) return { rechazo: RECHAZO_DEMASIADO_LARGA };
         await auditarLecturaTranscripcion(tx, {
           organizationId: contexto.organizationId, usuarioId: contexto.usuarioId, sesionId: fila.id,

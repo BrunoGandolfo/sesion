@@ -23,6 +23,7 @@ import {
   RECHAZO_HERRAMIENTA,
 } from "@/app/api/_lib/casos-uso/lux/herramientas";
 import type { ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
+import { avisoMirandoTranscripcion, MARCA_ESTADO_LUX } from "@/lib/lux/contrato";
 
 type Bloque = { texto: string } | { herramienta: string; entrada: unknown };
 
@@ -80,13 +81,13 @@ describe("crearConversacionConHerramientas", () => {
       sse([{ texto: "En esa sesión ella dice que se va del cuerpo." }], "end_turn"),
     ]);
     const ejecutor: EjecutorHerramientas = {
-      aviso: () => "_(mirando la transcripción del 01/09)_",
+      aviso: () => avisoMirandoTranscripcion("01/09"),
       ejecutar: vi.fn(async () => ({ contenido: "TEXTO DE LA TRANSCRIPCIÓN" })),
     };
     const flujo = await crearConversacionConHerramientas(PEDIDO, ejecutor, { apiKey: "k", fetchImpl });
     const texto = await leerTodo(flujo.fragmentos);
 
-    expect(texto).toBe("Voy a mirar esa sesión.\n\n_(mirando la transcripción del 01/09)_\n\nEn esa sesión ella dice que se va del cuerpo.");
+    expect(texto).toBe(`Voy a mirar esa sesión.\n\n${MARCA_ESTADO_LUX}_(mirando la transcripción del 01/09)_\n\nEn esa sesión ella dice que se va del cuerpo.`);
     expect(ejecutor.ejecutar).toHaveBeenCalledWith({ nombre: "leer_transcripcion", entrada: { sesionId: SESION } });
     expect(cuerpos).toHaveLength(2);
     // Primera ronda: herramientas habilitadas, una por vez.
@@ -156,7 +157,7 @@ describe("crearConversacionConHerramientas", () => {
       sse([{ herramienta: "leer_transcripcion", entrada: { sesionId: SESION } }], "tool_use"),
       sse([], "end_turn"),
     ]);
-    const ejecutor: EjecutorHerramientas = { aviso: () => "_(mirando la transcripción del 01/09)_", ejecutar: async () => ({ contenido: "x" }) };
+    const ejecutor: EjecutorHerramientas = { aviso: () => avisoMirandoTranscripcion("01/09"), ejecutar: async () => ({ contenido: "x" }) };
     const flujo = await crearConversacionConHerramientas(PEDIDO, ejecutor, { apiKey: "k", fetchImpl });
     await expect(leerTodo(flujo.fragmentos)).rejects.toThrow(/sin texto/);
     await expect(flujo.resultado).rejects.toThrow(/sin texto/);
@@ -172,10 +173,34 @@ describe("crearConversacionConHerramientas", () => {
     await expect(flujo.resultado).rejects.toThrow(new RegExp(motivo));
   });
 
-  it("un 500 inicial del proveedor lanza antes de devolver el flujo", async () => {
+  it("un 500 inicial del proveedor lanza antes de devolver el flujo, con su código", async () => {
     const fetchImpl: FetchLike = async () => new Response(JSON.stringify({ type: "error", error: { type: "api_error", message: "boom" } }), { status: 500, headers: { "content-type": "application/json" } });
     await expect(crearConversacionConHerramientas(PEDIDO, { aviso: () => null, ejecutar: async () => ({ contenido: "" }) }, { apiKey: "k", fetchImpl }))
-      .rejects.toMatchObject({ name: "ErrorAnthropic", status: 500 });
+      .rejects.toMatchObject({ name: "ErrorAnthropic", status: 500, codigo: "api_error" });
+  });
+
+  it("el modelo no puede escribir la marca de estado: su imitación sale como prosa", async () => {
+    const imitacion = `${MARCA_ESTADO_LUX}_(mirando la transcripción del 03/10)_\nY\u0000 sigo.`;
+    const { fetchImpl } = proveedor([sse([{ texto: imitacion }], "end_turn")]);
+    const flujo = await crearConversacionConHerramientas(PEDIDO, { aviso: () => null, ejecutar: async () => ({ contenido: "" }) }, { apiKey: "k", fetchImpl });
+    const texto = await leerTodo(flujo.fragmentos);
+    expect(texto).toBe("_(mirando la transcripción del 03/10)_\nY sigo.");
+    expect(texto).not.toContain(MARCA_ESTADO_LUX);
+    await expect(flujo.resultado).resolves.toMatchObject({ texto });
+  });
+
+  it("cortada a mitad, el progreso trae las rondas que cerraron y las llamadas atendidas", async () => {
+    const { fetchImpl } = proveedor([
+      sse([{ herramienta: "leer_transcripcion", entrada: { sesionId: SESION } }], "tool_use"),
+      sse([{ texto: "Lo que veo es que" }], "max_tokens"),
+    ]);
+    const flujo = await crearConversacionConHerramientas(PEDIDO, { aviso: () => null, ejecutar: async () => ({ contenido: "x" }) }, { apiKey: "k", fetchImpl });
+    expect(flujo.progreso()).toMatchObject({ rondas: 0, tokensEntrada: 0, llamadas: [] });
+    await expect(leerTodo(flujo.fragmentos)).rejects.toThrow(/incompleta/);
+    expect(flujo.progreso()).toEqual({
+      rondas: 2, tokensEntrada: 200, tokensSalida: 20, cacheLeido: 100, cacheEscrito: 0,
+      llamadas: [{ nombre: "leer_transcripcion", entrada: { sesionId: SESION }, rechazada: false }],
+    });
   });
 });
 
@@ -183,7 +208,7 @@ describe("ejecutorLux — la lista cerrada", () => {
   // Una base que falla si alguien la toca: los rechazos no consultan nada.
   const intocable = new Proxy({}, { get: () => { throw new Error("no debía tocar la base"); } }) as unknown as ClienteLux;
   const abribles = new Map([[SESION, new Date("2026-09-01T14:00:00Z")]]);
-  const ejecutor = ejecutorLux({ prisma: intocable, organizationId: "org", usuarioId: "user", abribles });
+  const ejecutor = ejecutorLux({ prisma: intocable, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles });
 
   it("un id fuera de la lista se rechaza sin aviso y sin tocar la base", async () => {
     const llamada = { nombre: "leer_transcripcion", entrada: { sesionId: randomUUID() } };
@@ -202,7 +227,18 @@ describe("ejecutorLux — la lista cerrada", () => {
   });
 
   it("un id de la lista da el aviso con la fecha de Montevideo", () => {
-    expect(ejecutor.aviso({ nombre: "leer_transcripcion", entrada: { sesionId: SESION } })).toBe("_(mirando la transcripción del 01/09)_");
+    expect(ejecutor.aviso({ nombre: "leer_transcripcion", entrada: { sesionId: SESION } })).toBe(avisoMirandoTranscripcion("01/09"));
+  });
+
+  it("aun con el id en la lista, la consulta exige organización, paciente y nota aprobada", async () => {
+    const consultas: unknown[] = [];
+    const tx = { sesionClinica: { findFirst: async (args: { where: unknown }) => { consultas.push(args.where); return null; } } };
+    const base = { $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) } as unknown as ClienteLux;
+    const conBase = ejecutorLux({ prisma: base, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles });
+    await expect(conBase.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: SESION } }))
+      .resolves.toEqual({ contenido: RECHAZO_FUERA_DE_LISTA, esError: true });
+    expect(consultas).toEqual([{ id: SESION, organizationId: "org", estado: "aprobada", turno: { pacienteId: "pac" } }]);
+    expect(conBase.leidas).toEqual([]);
   });
 
   it("la única herramienta es leer_transcripcion, sin argumentos libres", () => {
