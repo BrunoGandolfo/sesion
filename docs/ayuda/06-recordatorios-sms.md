@@ -100,7 +100,9 @@ botones **+ Nombre**, **+ Fecha**, **+ Hora** y **+ Dirección**: se insertan
 donde está el cursor. El mensaje que viene por defecto es:
 
 > Consultorio **Tu nombre**
-> **Nombre**, tu turno es el **Fecha** a las **Hora**. Cambios: llamar al **Tu teléfono**
+> **Nombre**, tu turno es el **Fecha** a las **Hora**.
+> **Dirección**
+> Cambios: llamar al **Tu teléfono**
 
 Debajo, en **"Así lo recibe la paciente"**, ves el mensaje armado con datos de
 ejemplo (Lucía, martes 21 de abril, 10:00) y tus datos reales.
@@ -145,8 +147,9 @@ comunicate por tu cuenta con la paciente. No hay reintento manual de SMS.
 
 ## Reintentos y cambios de horario
 
-Los problemas transitorios se reintentan con esperas crecientes, de 2 a 30
-minutos, hasta dos horas antes del turno. No hay un límite fijo de tres
+Los problemas transitorios se reintentan con esperas crecientes, de unos 2 a
+unos 30 minutos (cada espera varía un poco al azar, para que no se reintenten
+todos juntos), hasta dos horas antes del turno. No hay un límite fijo de tres
 intentos. Con **La misma mañana** y un turno temprano esa ventana es corta: un
 primer fallo puede dejarlo directamente en **No salió**. Un resultado
 **No sabemos si salió** requiere revisión de quien administra Sesión y **no se

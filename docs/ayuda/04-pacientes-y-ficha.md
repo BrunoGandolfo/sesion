@@ -82,7 +82,8 @@ Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
   `11-tu-consultorio.md`.
 - **Turnos y pagos** — plegado; muestra cuántas sesiones hay sin cobrar y el
   historial completo de turnos con su estado, método y monto. Desde ahí se
-  cobran los turnos realizados y se deshace un cobro.
+  cobran los turnos realizados, y también los agendados cuya hora ya empezó
+  (al cobrarlos quedan realizados), y se deshace un cobro.
 - **Archivo** — archivar o reactivar.
 
 ## La autorización de grabación (consentimiento)
@@ -111,8 +112,10 @@ pero **necesitan que la paciente firme la 2.8**: la 2.7 decía que el borrado en
 AssemblyAI se reintentaba solo si la transcripción se completaba, y la 2.6
 describía un cifrado del audio que la app ya no hace y decía que la
 transcripción no se podía ver. Ver `12-camino-del-audio-y-privacidad.md`. Pedíselo
-en la próxima sesión. La app no te lo sugiere en pantalla; depende de que lo
-pidas vos.
+en la próxima sesión. La app te lo recuerda: en la cabecera de la ficha y en
+**Datos** aparece *"Conviene volver a firmar. La paciente firmó una versión
+anterior del texto. Sigue sirviendo para grabar; conviene que firme la
+vigente."* con el botón **Firmar el texto vigente**.
 
 **Revocar**: el botón **Revocar** avisa *"Las próximas sesiones no se van a
 grabar. Lo ya grabado y sus notas se conservan."*

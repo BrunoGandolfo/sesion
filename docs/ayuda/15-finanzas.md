@@ -46,6 +46,10 @@ fueron. Debajo hay dos comparaciones, en pesos y en porcentaje:
   cantidad. Con **Este mes**, dice **Contra el mes anterior**.
 - **Contra el mismo período del año pasado**: los mismos meses, un año antes.
 
+Con un período de doce meses —**12 meses**, con el que abre la pantalla, o un
+año ya cerrado— las dos serían la misma comparación, y queda solo la del año
+pasado.
+
 Si en aquellos meses no había nada registrado, dice *"Sin datos para
 comparar"*: un cero ahí diría que cobraste cero, cuando en realidad todavía no
 usabas Sesión. Si aquel período fue cero, aparece la diferencia en pesos y no el

@@ -13,13 +13,16 @@ aparece en el turno, en varios lugares:
   hora, esté *Agendado* o ya realizado. En la tarjeta, **Cobrar** aparece al
   lado de **Grabar sesión**, no en lugar de.
 - En la **Agenda**, abriendo el turno.
-- En la **ficha**, en **Turnos y pagos** para los turnos realizados sin cobrar, y
+- En la **ficha**, en **Turnos y pagos** para los turnos realizados sin cobrar y
+  los agendados cuya hora ya empezó, y
   en la sesión de hoy de la pestaña **Sesiones** cuando la nota ya está
   aprobada.
 
 Hay seis métodos de pago: **Efectivo**, **Transferencia**, **MercadoPago**,
-**Débito**, **Crédito** y **Otro**. El selector es el mismo en todos lados, se
-llama *"¿Cómo pagó?"* y muestra el monto. Al elegir uno se dibuja un tilde verde
+**Débito**, **Crédito** y **Otro**. El selector es el mismo en todos lados y se
+llama *"¿Cómo pagó?"*. En **Hoy**, la **Agenda** y la ficha muestra el monto del
+turno; desde **Te deben → Registrar pago** no, porque el total ya se ve en el
+panel donde elegiste las sesiones. Al elegir uno se dibuja un tilde verde
 sobre el método, el sheet se cierra solo y aparece *"Cobrado. Ese ya está."*
 
 **Cobrar cierra la sesión.** Si el turno todavía figuraba *Agendado* y la hora ya
@@ -40,7 +43,7 @@ nuevo."* En **Hoy**, el turno cobrado se actualiza en la pantalla sin recargar, 
 - El turno está cancelado, o la paciente no vino: *"no hay sesión para cobrar"*.
 - Ya está cobrado: *"El turno ya está cobrado"*.
 
-En **Hoy** estos motivos no se ven: aparece el aviso general.
+En **Hoy** también se ve el motivo: el selector muestra el mismo texto.
 
 ## La pantalla de Cobros
 
@@ -53,7 +56,8 @@ solapas:
 - **Te deben** — *"Son N sesiones sin cobrar."* y la lista **ordenada por monto**,
   de mayor a menor: nombre, cuántas sesiones sin cobrar, cuánto hace y el total.
   Cada persona tiene el botón **Registrar pago**. Si ya le recordaste el cobro,
-  dice *"Avisado hace N días"*. Si no debe nadie: *"Nadie te debe"*.
+  dice cuándo: *"Avisado hoy"*, *"Avisado hace 3 días"*, y desde la semana
+  *"hace 2 semanas"*, *"hace 1 mes"* o *"hace 1 año"*. Si no debe nadie: *"Nadie te debe"*.
 - **Cobros del mes** — cada pago con su fecha, la paciente, el **método** y el
   monto. Si todavía no cobraste nada: *"Todavía no cobraste este mes"*.
 
@@ -88,7 +92,8 @@ píldora terracota, por ejemplo *"2 · +30 días"*, con cuántas personas están
 esa última zona.
 
 Un turno **Agendado** cuya hora ya pasó todavía no cuenta como deuda: empieza a
-contar cuando lo grabás o lo cobrás.
+contar cuando lo grabás. Si lo cobrás antes, queda realizado y cobrado a la vez,
+y nunca figura como deuda.
 
 ## "Recordar cobro por SMS"
 

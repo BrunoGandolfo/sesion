@@ -38,6 +38,9 @@ cifrado y se borra del teléfono.
    - Además, apenas AssemblyAI crea la transcripción —antes de esperarla—, la
      app anota un reintento: repite el pedido, cada vez más espaciado,
      **hasta 20 veces**, durante **unos 15 días**, hasta que AssemblyAI responde que lo borró o que ya no existe.
+     Los primeros cuatro intentos no le piden nada a AssemblyAI: esperan a que
+     el proceso que transcribe haya terminado con el texto. Los pedidos de
+     borrado reales son, entonces, hasta 16.
      Ese reintento sigue **aunque el proceso que transcribe se corte a mitad de
      camino**. Si aun así no lo logra, el borrado queda marcado como fallido y
      avisa a quien administra Sesión.
@@ -167,8 +170,8 @@ borrado en AssemblyAI, que el borrador de la IA se guarda antes de aprobar ni
 lo que Anthropic recibe después de aprobar. Las anteriores a la 2.2 tampoco
 cuentan los plazos reales de borrado y de respaldo ni que el resumen del
 proceso lo propone la IA. La app no bloquea
-la grabación con una firma anterior y no te sugiere la nueva en pantalla:
-depende de que la pidas vos.
+la grabación con una firma anterior, pero te sugiere la nueva: en la ficha
+aparece *"Conviene volver a firmar"* con el botón **Firmar el texto vigente**.
 
 <!-- fuentes:
 src/lib/consentimiento-hechos.ts

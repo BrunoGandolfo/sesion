@@ -16,8 +16,8 @@ sola; al estar lista, el chip pasa a **Para revisar**.
    (dorado) o **Nota guardada** (verde).
 2. Un selector **Nota clínica | Para vos | Transcripción**, que aparece siempre
    que la nota está para revisar o guardada. Debajo, un **índice** de una línea
-   (Resumen, Subjetivo (S), Objetivo (O), Análisis (A), Plan (P), Más de esta
-   sesión; solo las que tienen algo) que queda a la vista mientras leés: tocá
+   (**Resumen** si lo hay, las cuatro secciones SOAP siempre y **Más de esta
+   sesión** si trae algo) que queda a la vista mientras leés: tocá
    una sección y la pantalla salta ahí.
 3. **Frases para revisar**, si la transcripción tiene menciones (ver abajo).
 4. **Señal de riesgo**, si la hay (ver abajo).
@@ -39,15 +39,16 @@ sola; al estar lista, el chip pasa a **Para revisar**.
 **Para vos** tiene una vista separada, con dirección propia. Ver
 `09-para-vos-feedback.md`.
 
-Lo que no vino en el análisis no se dibuja.
+Lo que no vino en el análisis no se dibuja, salvo las cuatro secciones SOAP:
+siempre están, y una que vino vacía muestra *"—"*.
 
 ## Editar
 
 Con la nota en **Para revisar**, cada sección tiene **Editar** (o tocás el
 texto). Lo que escribís vive en la pantalla: **la nota se guarda una sola vez, al
 aprobar**. Si intentás salir de la sesión con cambios sin aprobar, la app
-pregunta: *"Tenés cambios sin aprobar en la nota."* *"Si salís de la nota ahora,
-se pierden."* con **Quedarme** e **Ir igual**. Pasar a **Para vos** o a
+pregunta: *"Tenés trabajo en curso"* *"Si salís de la nota ahora, se pierden."*
+con **Quedarme** e **Ir igual**. Pasar a **Para vos** o a
 **Transcripción** no pregunta nada: al volver a la nota, tus cambios siguen ahí.
 
 ## Frases para revisar
@@ -89,16 +90,15 @@ Si el botón de aprobar está apagado, debajo dice por qué:
 
 ## Aprobar
 
-Tocá **✓ Aprobar nota** y revisá la confirmación: *"La nota queda aprobada. Se
-destruye la clave del audio y su borrado sigue en segundo plano, con reintentos.
-La aprobación no se puede deshacer."* Guarda la nota editada. Aparece **Nota
+Tocá **✓ Aprobar nota** y revisá la confirmación, *"¿Aprobar esta nota?"*: *"La
+nota queda aprobada y el audio se borra: del teléfono ya se borró al subirse, y
+del almacenamiento se borra ahora, en segundo plano y con reintentos. La
+aprobación no se puede deshacer."* Guarda la nota editada. Aparece **Nota
 guardada** y permanecés en la nota, con el aviso *"Nota aprobada. El audio se
 borra en segundo plano."* y, si hay análisis, **Leer Para vos**.
 
-**La mención de la clave quedó vieja**: la app ya no cifra el audio, así que las
-grabaciones de hoy no tienen clave que destruir. Aprobar pide borrar el archivo
-remoto; el borrado sigue en segundo plano y se reintenta durante unos 15 días,
-hasta marcarse como fallido si no lo logra. Hasta que se borra, el archivo se
+Aprobar pide borrar el archivo remoto; el borrado sigue en segundo plano y se
+reintenta durante unos 15 días, hasta marcarse como fallido si no lo logra. Hasta que se borra, el archivo se
 puede escuchar con acceso al almacén. Ver `12-camino-del-audio-y-privacidad.md`.
 
 Si la nota cambió mientras la revisabas (por ejemplo, porque llegó una nueva
@@ -122,14 +122,15 @@ necesites conservar.
 
 ## Si falló
 
-Aparece **"No pudimos escribir la nota"** con el motivo. **Reintentar** usa lo que
+Aparece **"No pudimos escribir la nota"**, a veces con el motivo debajo; en
+muchos fallos aparece sin motivo. **Reintentar** usa lo que
 ya quedó guardado: si hay transcripción, no vuelve a transcribir. **Eliminar**
 pide confirmación: *"Se borran la sesión, la transcripción y lo generado; el
 audio se manda a borrar. El turno queda libre para volver a grabar. No se puede
 deshacer."* La eliminación queda registrada en la auditoría.
 
-Si se agotaron los reintentos automáticos, el motivo lo dice: *"Se agotaron los
-reintentos automáticos (5 fallos seguidos). Reintentá o eliminá la sesión."*
+Si se agotaron los reintentos automáticos, el motivo lo dice: *"Se intentó cinco
+veces seguidas y no salió."*
 
 ## Ver transcripción
 

@@ -43,9 +43,10 @@ Podés repetir cada semana o cada 15 días. Se agendan **tres meses** de turnos.
 Cada turno es independiente: moverlo, cobrarlo o cancelarlo no cambia el resto.
 
 Al guardar una serie aparece **Serie agendada**, con cuántos turnos se agendaron,
-y queda abierta hasta que tocás **Entendido**. Si una fecha posterior choca con
-otro turno, no se agenda y el aviso muestra cuáles se omitieron: *"Podés
-agendarlas por separado en otro horario."* Si choca la primera fecha, no se crea
+y queda abierta hasta que tocás **Entendido**, tocás afuera o apretás Escape.
+Si una fecha posterior choca con otro turno, no se agenda y el aviso muestra
+cuáles se omitieron: *"Podés agendarlas por separado en otro horario."* Anotalas
+antes de cerrarlo: después esa lista no se vuelve a mostrar. Si choca la primera fecha, no se crea
 la serie: elegí otro comienzo.
 
 Desde un turno de la serie, **Cancelar el resto de la serie** pide confirmación:
@@ -71,7 +72,7 @@ paciente no vino a este turno."*
 
 | Chip | Qué significa |
 | --- | --- |
-| **Agendado** (dorado) | Programado, todavía no pasó nada. |
+| **Agendado** (gris en la agenda, dorado en el detalle del turno) | Programado, todavía no pasó nada. |
 | **Sin cobrar** (terracota) | La sesión se hizo y falta el pago. |
 | **Pagado** (verde) | Cobrado. |
 | **No vino** (gris) | La paciente faltó. |
@@ -96,7 +97,10 @@ paciente no vino a este turno."*
   cambiaste la fecha o la hora, **el recordatorio viejo se cancela y se programa
   uno nuevo** para el horario nuevo. Si solo cambiaste la duración o la
   modalidad, el recordatorio queda como estaba. Si el aviso anterior ya había
-  salido, se manda **enseguida** un **cambio de horario** con la fecha nueva.
+  salido, se programa en el acto un **cambio de horario** con la fecha nueva,
+  que sale en la siguiente revisión de envíos (se revisan cada 5 minutos). Si
+  los recordatorios los mandás vos desde tu teléfono, ese aviso no sale por
+  SMS: ver `06-recordatorios-sms.md`.
 - **No vino** — pregunta *"¿[Nombre] no vino?"* y avisa: *"El turno queda
   registrado como ausencia. No se cobra y no se puede grabar."*
   **El recordatorio se cancela.**
