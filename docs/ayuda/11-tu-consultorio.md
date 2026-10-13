@@ -102,8 +102,9 @@ mantiene abierta la actual. Ver
 ## Qué hace la app por detrás
 
 Los cambios pendientes se envían juntos. **Si un campo del lote es inválido,
-no se guarda ninguno de esos cambios.** Corregí los campos marcados y tocá
-**Reintentar**; esperá la confirmación **Guardado** antes de salir.
+los demás se guardan igual y ese queda sin guardar**, marcado con su error.
+Corregilo y tocá **Reintentar**; esperá la confirmación **Guardado** antes de
+salir.
 La configuración es de todo el consultorio: los cambios guardados también
 se ven en la computadora.
 

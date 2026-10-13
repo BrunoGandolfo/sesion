@@ -137,12 +137,14 @@ it("la ayuda cuenta los límites de las invitaciones con los números y los text
   expect(plano(documento("02-pantalla-hoy.md"))).toContain("**15 sesiones**");
 });
 
-it("la ayuda avisa que un campo inválido frena el lote de configuración", () => {
+it("la ayuda avisa que un campo inválido no frena a los válidos del lote de configuración", () => {
+  // El autoguardado manda los campos válidos y deja pendiente, con su error, sólo el inválido.
+  expect(codigo("src/app/(dashboard)/config/_components/datos.ts")).toContain("los campos válidos del lote salen igual");
   const texto = documento("11-tu-consultorio.md");
-  expect(texto).toContain("no se guarda ninguno de esos cambios");
+  expect(texto).toContain("los demás se guardan igual y ese queda sin guardar");
   expect(texto).toContain("**Reintentar**");
   expect(texto).toContain("antes de salir");
-  expect(texto).not.toMatch(/lo demás se guarda igual|Cada campo se guarda por separado|Todo se guarda solo/);
+  expect(texto).not.toMatch(/no se guarda ninguno de esos cambios|Cada campo se guarda por separado|Todo se guarda solo/);
 });
 
 it("la ayuda dice que la app NO cifra el audio, y qué lo protege en cada tramo", () => {
