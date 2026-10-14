@@ -205,6 +205,24 @@ describe("leer_transcripcion contra la base", () => {
   });
 });
 
+describe("el tope del material se mide sobre lo que viaja", () => {
+  it("cuenta el escape de &, < y > y los envoltorios: el material armado nunca pasa el tope", async () => {
+    // 50.000 "<" son 50.000 caracteres en la base y 200.000 escapados: las
+    // dos crudas entran (100.000), escapadas no (400.000). Va sólo la nueva.
+    const c = await consultorio((n) => `[00:00] S1: TRANSCRIPCION_${n} ${"<".repeat(50_000)}`);
+    const antes = (await lecturasLux(c.org)).length;
+    const m = await material(c);
+    const limite = TOKENS_MAX_MATERIAL * 4;
+    expect(m.transcripciones).toEqual([c.sesiones[3]]);
+    expect(m.transcripcionesOmitidas).toBe(1);
+    expect(m.texto.length).toBeLessThanOrEqual(limite);
+    expect(m.caracteresLibres).toBe(limite - m.texto.length);
+    expect(m.texto).toContain("omitida por tamaño");
+    // Sólo la que entró queda auditada.
+    expect((await lecturasLux(c.org)).slice(antes).map((e) => e.entidadId)).toEqual([c.sesiones[3]]);
+  });
+});
+
 describe("el tope del material alcanza también a lo que lee la herramienta", () => {
   it("material y lecturas comparten un presupuesto; la lectura que no entra no se audita", async () => {
     // Cuatro transcripciones de ~96.000 caracteres: dos entran al material
@@ -267,9 +285,35 @@ describe("fallo del proveedor", () => {
         prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, pacienteId: c.org.pacienteId,
         apiKey: "k", systemPrompt: "p",
         crearConversacion: async () => { throw new ErrorAnthropic("CUERPO_DEL_PROVEEDOR con TRANSCRIPCION_3", 529, "overloaded_error"); },
-      })).rejects.toBeInstanceOf(ErrorProveedorLux);
+      })).rejects.toMatchObject({ status: 502, devuelveCupo: true });
       expect(log).toHaveBeenCalledWith("[lux] fallo del proveedor", { status: 529, codigo: "overloaded_error" });
       expect(JSON.stringify(log.mock.calls)).not.toMatch(/CUERPO_DEL_PROVEEDOR|TRANSCRIPCION_/);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("qué fallos del proveedor devuelven el cupo", () => {
+  it("un error HTTP sí; un timeout, una conexión cortada o un error sin status, no", async () => {
+    const c = await consultorio();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const casos: [unknown, boolean][] = [
+      [new ErrorAnthropic("x", 429, "rate_limit_error"), true],
+      [new ErrorAnthropic("x", 500, "api_error"), true],
+      [new ErrorAnthropic("x", undefined, "timeout"), false],
+      [new ErrorAnthropic("x", undefined, "APIConnectionError"), false],
+      [new Error("socket hang up"), false],
+    ];
+    try {
+      for (const [error, devuelveCupo] of casos) {
+        const fallo = await abrirConversacion({
+          prisma: db(), organizationId: c.org.orgId, usuarioId: c.org.userId, pacienteId: c.org.pacienteId,
+          apiKey: "k", systemPrompt: "p", crearConversacion: async () => { throw error; },
+        }).catch((e: unknown) => e);
+        expect(fallo).toBeInstanceOf(ErrorProveedorLux);
+        expect((fallo as ErrorProveedorLux).devuelveCupo).toBe(devuelveCupo);
+      }
     } finally {
       log.mockRestore();
     }

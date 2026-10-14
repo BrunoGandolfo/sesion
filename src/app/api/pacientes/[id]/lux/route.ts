@@ -62,7 +62,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? await abrirConversacion(base)
         : await responder({ ...base, pregunta, historial });
     } catch (error) {
-      if (!(error instanceof ErrorProveedorLux)) await devolverCupo(db, reserva);
+      // Vuelve si el proveedor no llegó a procesar: falló antes de llamarlo
+      // (base, validación) o contestó un error HTTP. Un timeout o un corte
+      // de conexión lo retienen.
+      if (!(error instanceof ErrorProveedorLux) || error.devuelveCupo) await devolverCupo(db, reserva);
       throw error;
     }
 

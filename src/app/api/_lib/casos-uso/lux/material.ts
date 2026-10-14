@@ -16,7 +16,8 @@
 //   d. Las dos transcripciones más recientes de sesiones aprobadas, completas.
 //      Si con las dos el material pasa de ~90.000 tokens estimados
 //      (caracteres / 4), va sólo la más reciente; si con una sola también,
-//      ninguna. Lo omitido se dice en el material.
+//      ninguna. Lo omitido se dice en el material. Se mide el material
+//      entero ya serializado (escape, envoltorios, avisos y lista (f)).
 //   e. Las transcripciones que Lux ya leyó en ESTA conversación: cada línea
 //      de estado "(mirando la transcripción del DD/MM)" —con la marca del
 //      servidor, MARCA_ESTADO_LUX— de sus turnos en el historial
@@ -222,12 +223,11 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
   // Las candidatas a transcripción completa: las más recientes, la más nueva primero.
   const candidatas = aprobadas.slice(-TRANSCRIPCIONES_EN_MATERIAL).reverse();
 
-  const documentos: string[] = [];
-  let indice = 0;
-  const agregar = (fuente: string, fecha: Date | null, contenido: string) => {
-    indice += 1;
-    documentos.push(documento(indice, fuente, fecha ? fechaInputMvd(fecha) : null, contenido));
-  };
+  // Las partes van como [fuente, fecha, contenido]; el índice y el escape se
+  // ponen al serializar, que es lo que se mide contra el tope.
+  type Parte = [string, Date | null, string];
+  const fijas: Parte[] = [];
+  const agregar = (fuente: string, fecha: Date | null, contenido: string) => { fijas.push([fuente, fecha, contenido]); };
 
   agregar("Ficha del paciente", null, [
     `Nombre de pila: ${paciente.nombre}`,
@@ -250,7 +250,6 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
     );
   }
 
-  const base = documentos.join("\n");
   const limite = TOKENS_MAX_MATERIAL * CARACTERES_POR_TOKEN;
 
   // Las que Lux ya leyó en esta conversación y no están entre las candidatas
@@ -259,6 +258,46 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
   const pedidas = new Set(input.leidasEnConversacion ?? []);
   const releer = aprobadas.filter((s) => pedidas.has(diaMes(s.turno.fecha)) && !enBase.has(s.id)).reverse();
 
+  interface ConTexto { id: string; fecha: Date; estado: string; transcripcion: string }
+  interface Eleccion { incluidas: ConTexto[]; omitidas: ConTexto[]; releidas: ConTexto[]; releidasOmitidas: ConTexto[] }
+
+  // El material entero, tal como viaja: fijas, (d), avisos, (e), avisos y
+  // la lista (f). Cada decisión de qué entra se mide con esto.
+  const componer = (e: Eleccion) => {
+    const partes: Parte[] = [...fijas];
+    // Más vieja primero, como las notas.
+    for (const s of [...e.incluidas].reverse()) {
+      partes.push([`Transcripción completa de la sesión del ${fechaLegible(s.fecha)} (id ${s.id}; S0 es la terapeuta)`, s.fecha, s.transcripcion]);
+    }
+    if (e.omitidas.length) {
+      partes.push(["Aviso del sistema sobre el material", null, e.omitidas
+        .map((s) => `Transcripción del ${fechaLegible(s.fecha)} omitida por tamaño.`).join("\n")]);
+    }
+    for (const s of [...e.releidas].reverse()) {
+      partes.push([
+        `Transcripción completa de la sesión del ${fechaLegible(s.fecha)}, leída en esta conversación (id ${s.id}; S0 es la terapeuta)`,
+        s.fecha, s.transcripcion,
+      ]);
+    }
+    if (e.releidasOmitidas.length) {
+      partes.push(["Aviso del sistema sobre el material", null, e.releidasOmitidas
+        .map((s) => `Transcripción del ${fechaLegible(s.fecha)}, leída en esta conversación, omitida por tamaño: podés volver a abrirla con leer_transcripcion.`)
+        .join("\n")]);
+    }
+    const conTranscripcion = new Set([...e.incluidas, ...e.releidas].map((s) => s.id));
+    const demas = aprobadas.filter((s) => !conTranscripcion.has(s.id));
+    partes.push([
+      "Sesiones anteriores que podés abrir con leer_transcripcion",
+      null,
+      demas.length
+        ? demas.map((s) => `${s.id} · ${fechaLegible(s.turno.fecha)} · ${primeraLinea(s.notaFinal)}`).join("\n")
+        : "(ninguna: no hay otras sesiones aprobadas)",
+    ]);
+    const documentos = partes.map(([fuente, fecha, contenido], i) =>
+      documento(i + 1, fuente, fecha ? fechaInputMvd(fecha) : null, contenido));
+    return { texto: `<documents>\n${documentos.join("\n")}\n</documents>`, demas };
+  };
+
   // Lectura, decisión y rastro de las transcripciones en una transacción.
   const elegidas = await prisma.$transaction(async (tx) => {
     const leidas = await tx.sesionClinica.findMany({
@@ -266,60 +305,35 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
       select: { id: true, estado: true, transcripcion: true },
     });
     const porId = new Map(leidas.map((s) => [s.id, s]));
-    const conTextoDe = (lista: typeof candidatas) => lista
-      .map((s) => ({ id: s.id, fecha: s.turno.fecha, fila: porId.get(s.id) }))
-      .filter((s): s is typeof s & { fila: NonNullable<typeof s.fila> & { transcripcion: string } } =>
-        Boolean(s.fila?.transcripcion));
+    const conTextoDe = (lista: typeof candidatas): ConTexto[] => lista.flatMap((s) => {
+      const fila = porId.get(s.id);
+      return fila?.transcripcion ? [{ id: s.id, fecha: s.turno.fecha, estado: fila.estado, transcripcion: fila.transcripcion }] : [];
+    });
+    const entra = (e: Eleccion) => componer(e).texto.length <= limite;
     const conTexto = conTextoDe(candidatas);
     let incluidas = conTexto;
-    const largo = (lista: typeof conTexto) => base.length + lista.reduce((n, s) => n + s.fila.transcripcion.length, 0);
-    while (incluidas.length && largo(incluidas) > limite) incluidas = incluidas.slice(0, -1);
-    const releidas: typeof conTexto = [];
-    const releidasOmitidas: typeof conTexto = [];
-    for (const s of conTextoDe(releer)) {
-      if (largo([...incluidas, ...releidas, s]) <= limite) releidas.push(s);
-      else releidasOmitidas.push(s);
+    while (incluidas.length && !entra({ incluidas, omitidas: conTexto.slice(incluidas.length), releidas: [], releidasOmitidas: [] })) {
+      incluidas = incluidas.slice(0, -1);
     }
-    for (const s of [...incluidas, ...releidas]) {
+    const eleccion: Eleccion = { incluidas, omitidas: conTexto.slice(incluidas.length), releidas: [], releidasOmitidas: [] };
+    const releerConTexto = conTextoDe(releer);
+    for (const [n, s] of releerConTexto.entries()) {
+      // Se mide con las que faltan decidir como omitidas: su aviso también viaja.
+      const pendientes = releerConTexto.slice(n + 1);
+      const conElla = { ...eleccion, releidas: [...eleccion.releidas, s], releidasOmitidas: [...eleccion.releidasOmitidas, ...pendientes] };
+      if (entra(conElla)) eleccion.releidas.push(s);
+      else eleccion.releidasOmitidas.push(s);
+    }
+    for (const s of [...eleccion.incluidas, ...eleccion.releidas]) {
       await auditarLecturaTranscripcion(tx, {
         organizationId, usuarioId, sesionId: s.id,
-        estado: s.fila.estado, caracteres: s.fila.transcripcion.length, via: "lux",
+        estado: s.estado, caracteres: s.transcripcion.length, via: "lux",
       });
     }
-    return { incluidas, omitidas: conTexto.slice(incluidas.length), releidas, releidasOmitidas };
+    return eleccion;
   });
 
-  // Más vieja primero, como las notas.
-  for (const s of [...elegidas.incluidas].reverse()) {
-    agregar(`Transcripción completa de la sesión del ${fechaLegible(s.fecha)} (id ${s.id}; S0 es la terapeuta)`, s.fecha, s.fila.transcripcion);
-  }
-  if (elegidas.omitidas.length) {
-    agregar("Aviso del sistema sobre el material", null, elegidas.omitidas
-      .map((s) => `Transcripción del ${fechaLegible(s.fecha)} omitida por tamaño.`).join("\n"));
-  }
-  for (const s of [...elegidas.releidas].reverse()) {
-    agregar(
-      `Transcripción completa de la sesión del ${fechaLegible(s.fecha)}, leída en esta conversación (id ${s.id}; S0 es la terapeuta)`,
-      s.fecha, s.fila.transcripcion,
-    );
-  }
-  if (elegidas.releidasOmitidas.length) {
-    agregar("Aviso del sistema sobre el material", null, elegidas.releidasOmitidas
-      .map((s) => `Transcripción del ${fechaLegible(s.fecha)}, leída en esta conversación, omitida por tamaño: podés volver a abrirla con leer_transcripcion.`)
-      .join("\n"));
-  }
-
-  const conTranscripcion = new Set([...elegidas.incluidas, ...elegidas.releidas].map((s) => s.id));
-  const demas = aprobadas.filter((s) => !conTranscripcion.has(s.id));
-  agregar(
-    "Sesiones anteriores que podés abrir con leer_transcripcion",
-    null,
-    demas.length
-      ? demas.map((s) => `${s.id} · ${fechaLegible(s.turno.fecha)} · ${primeraLinea(s.notaFinal)}`).join("\n")
-      : "(ninguna: no hay otras sesiones aprobadas)",
-  );
-
-  const texto = `<documents>\n${documentos.join("\n")}\n</documents>`;
+  const { texto, demas } = componer(elegidas);
   return {
     texto,
     caracteresLibres: Math.max(0, limite - texto.length),

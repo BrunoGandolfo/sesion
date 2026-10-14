@@ -129,11 +129,19 @@ it("si el caso de uso falla antes de llamar al proveedor (base, validación), de
   expect(devolverCupo).toHaveBeenCalledWith(db, { userId: "user", dia: "2026-10-08", ambito: "lux" });
 });
 
-it("si el proveedor ya recibió el pedido y falló, contesta 502 y el cupo se queda", async () => {
-  vi.mocked(abrirConversacion).mockRejectedValue(new ErrorProveedorLux());
+it("con timeout o conexión cortada al llamar al proveedor, contesta 502 y el cupo se queda", async () => {
+  vi.mocked(abrirConversacion).mockRejectedValue(new ErrorProveedorLux(false));
   const respuesta = await pedir({});
   expect(respuesta.status).toBe(502);
   expect(devolverCupo).not.toHaveBeenCalled();
+});
+
+it("con un error HTTP del proveedor (429, 529…), contesta 502 y devuelve el cupo", async () => {
+  vi.mocked(abrirConversacion).mockRejectedValue(new ErrorProveedorLux(true));
+  const respuesta = await pedir({});
+  expect(respuesta.status).toBe(502);
+  expect(devolverCupo).toHaveBeenCalledOnce();
+  expect(devolverCupo).toHaveBeenCalledWith(db, { userId: "user", dia: "2026-10-08", ambito: "lux" });
 });
 
 const fallida = (fragmentos: string[], error = new Error("se cortó")) => {

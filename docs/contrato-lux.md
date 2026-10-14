@@ -76,11 +76,13 @@ Cuerpo (JSON, estricto: un campo de más es 400):
 
 Orden: validar → autorizar (el paciente es de la organización de la sesión, si
 no 404) → reservar cupo de Lux (429 si no queda) → caso de uso → stream. El
-cupo se devuelve sólo si el caso de uso falla **antes** de llamar al
-proveedor (un error de base armando el material, una pregunta inválida).
-Desde que se llamó a Anthropic puede haber cobrado, así que el cupo se
-queda: un 502 del handshake (`ErrorProveedorLux`), un timeout, una respuesta
-sin texto, un error de herramienta o de base después de la llamada, cancelar. Una respuesta que el modelo cortó por el techo de tokens
+cupo se devuelve sólo si el proveedor no llegó a procesar el pedido: el
+caso de uso falla **antes** de llamarlo (un error de base armando el
+material, una pregunta inválida) o Anthropic contesta el handshake con un
+error HTTP (429, 500, 529…: `ErrorProveedorLux` con `devuelveCupo`). En los
+demás casos puede haber cobrado, así que el cupo se queda: un timeout o una
+conexión cortada sin status, una respuesta sin texto, un error de
+herramienta o de base después de la llamada, un corte del stream, cancelar. Una respuesta que el modelo cortó por el techo de tokens
 o por un rechazo (`stop_reason` `max_tokens` o `refusal`) no se da por
 terminada: el stream termina en error y la pantalla dice que se cortó.
 
@@ -148,7 +150,9 @@ En este orden:
 4. **Las dos transcripciones más recientes** de sesiones aprobadas, completas,
    con fecha. Si con las dos el material pasa de `TOKENS_MAX_MATERIAL`
    (90.000 tokens estimados como caracteres / 4) va sólo la más reciente; si
-   con una también, ninguna. Lo omitido se dice en un documento propio
+   con una también, ninguna. Se mide el material entero tal como viaja:
+   escapado (`&`, `<`, `>` crecen), con sus envoltorios, los avisos de
+   omisión y la lista de sesiones; el armado nunca pasa el tope. Lo omitido se dice en un documento propio
    ("Transcripción del DD/MM/AAAA omitida por tamaño.").
 5. **Las transcripciones que Lux ya leyó en esta conversación.** Por cada
    línea de estado (con la marca del servidor) que aparece en los turnos
@@ -253,10 +257,12 @@ nada variable adentro. `next.config.ts` lo declara en
 | Autorización (paciente ajeno 404 sin leer), 503 sin clave | `lux-integracion.test.ts` |
 | Auditoría: `sesion.ver_transcripcion` via lux, `lux.abrir`, `lux.pregunta`, sin texto | `lux-integracion.test.ts`, `lux-ruta.test.ts` |
 | Cupo por ámbito: 60 de Lux no consumen los 40 de Lupita | `cupo-ayuda-integracion.test.ts` |
-| Ruta: apertura sin pregunta, validación, orden autorizar → cupo → caso de uso, el cupo vuelve sólo antes del proveedor, rastro de lo interrumpido | `lux-ruta.test.ts` |
+| Ruta: apertura sin pregunta, validación, orden autorizar → cupo → caso de uso, el cupo vuelve antes del proveedor o ante su error HTTP, rastro de lo interrumpido | `lux-ruta.test.ts` |
 | Tope total del historial, recortado desde lo más viejo | `lux-historial.test.ts`, `lux-integracion.test.ts` |
 | La marca de estado: el modelo no la puede escribir; su imitación es prosa | `lux-bucle.test.ts`, `respuesta.test.ts`, `conversacion-lux.test.tsx`, `lux-leidas.test.ts` |
 | La segunda barrera de `leer_transcripcion` (paciente y aprobada) | `lux-bucle.test.ts`, `lux-integracion.test.ts` |
 | Material y lecturas comparten un presupuesto; la que no entra no se audita | `lux-bucle.test.ts`, `lux-integracion.test.ts` |
+| El tope del material se mide escapado y con envoltorios | `lux-integracion.test.ts` |
+| Qué fallos del proveedor devuelven el cupo (HTTP sí; timeout y conexión no) | `lux-integracion.test.ts`, `lux-ruta.test.ts` |
 | El log de un fallo del proveedor: status y código, sin mensaje | `lux-integracion.test.ts` |
 | Prompt: secciones, límites, sin partes variables, incluido en el deploy | `lux-prompt.test.ts` |

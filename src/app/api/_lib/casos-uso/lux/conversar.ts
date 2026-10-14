@@ -44,13 +44,21 @@ export const MENSAJE_SIN_CLAVE_LUX =
 export const MENSAJE_PROVEEDOR_CAIDO_LUX = "Lux no pudo contestarte ahora. Probá de nuevo en un ratito.";
 export const MENSAJE_PREGUNTA_LARGA_LUX = `La pregunta es muy larga: máximo ${LARGO_MAX_PREGUNTA_LUX} caracteres.`;
 
-/** El proveedor ya recibió el pedido cuando esto se lanza (un 4xx/5xx del
- *  handshake, un timeout esperando la respuesta): la ruta no devuelve el
- *  cupo, porque no puede saber si Anthropic lo cobró. */
+/** Falló la llamada a Anthropic, antes de que empiece la respuesta.
+ *  `devuelveCupo`: el proveedor contestó con un error HTTP (4xx/5xx del
+ *  handshake), así que no procesó ni cobró el pedido y la ruta devuelve el
+ *  cupo. Un timeout o una conexión cortada sin status no lo devuelven: no se
+ *  puede saber si Anthropic llegó a procesarlo. */
 export class ErrorProveedorLux extends ApiError {
-  constructor() {
+  constructor(readonly devuelveCupo = false) {
     super(MENSAJE_PROVEEDOR_CAIDO_LUX, 502);
   }
+}
+
+/** Un error HTTP del proveedor trae status; el timeout y la conexión
+ *  cortada, no. */
+export function esErrorHttpDelProveedor(error: unknown): boolean {
+  return error instanceof ErrorAnthropic && typeof error.status === "number";
 }
 
 /** Lo que recibe el modelo cuando ella abre la conversación sin preguntar.
@@ -164,7 +172,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
   } catch (error) {
     // Sólo status y código: el mensaje puede traer el cuerpo del proveedor.
     console.error("[lux] fallo del proveedor", diagnosticoDe(error));
-    throw new ErrorProveedorLux();
+    throw new ErrorProveedorLux(esErrorHttpDelProveedor(error));
   }
 }
 
