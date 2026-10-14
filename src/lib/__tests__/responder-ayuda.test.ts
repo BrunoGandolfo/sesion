@@ -221,7 +221,7 @@ describe("responderAyudaStreaming — el proveedor falla", () => {
 });
 
 describe("responderAyudaStreaming — el pedido que arma", () => {
-  it("usa Haiku 4.5 y el techo de tokens", async () => {
+  it("usa Haiku 5.5 y el techo de tokens", async () => {
     const { crear, pedidos } = proveedorQueContesta();
     await responderAyudaStreaming({
       pregunta: "¿cómo cobro?",
@@ -231,7 +231,7 @@ describe("responderAyudaStreaming — el pedido que arma", () => {
     });
 
     expect(pedidos[0].model).toBe(MODELO_AYUDA);
-    expect(MODELO_AYUDA).toBe("claude-sonnet-5");
+    expect(MODELO_AYUDA).toBe("claude-haiku-5-5");
     expect(pedidos[0].max_tokens).toBe(MAX_TOKENS_RESPUESTA);
   });
 

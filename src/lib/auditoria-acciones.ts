@@ -83,6 +83,13 @@ export const ACCIONES = {
   ayuda: {
     pregunta: "ayuda.pregunta",
   },
+  /** Lux, la colega con la que se conversa sobre un paciente. El detalle
+   *  lleva métricas, nunca el texto de la conversación. Cada transcripción
+   *  que lee queda además como sesion.ver_transcripcion con via "lux". */
+  lux: {
+    abrir: "lux.abrir",
+    pregunta: "lux.pregunta",
+  },
   salud: {
     /** El cron de salud mandó un correo; el detalle lleva la huella del
      *  contenido para no repetir el mismo aviso (casos-uso/salud.ts). */

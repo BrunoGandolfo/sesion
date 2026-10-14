@@ -66,7 +66,7 @@ it("entrega texto limpio antes de completar el proveedor y audita su largo limpi
   expect(devolverCupo).not.toHaveBeenCalled();
   // El cliente va primero: lo que se inyecta es el cliente, no la función.
   expect(registrarAuditoria).toHaveBeenCalledWith(db, expect.objectContaining({
-    detalle: expect.objectContaining({ largoRespuesta: texto.length, modelo: "claude-sonnet-5" }),
+    detalle: expect.objectContaining({ largoRespuesta: texto.length, modelo: "claude-haiku-5-5" }),
   }));
 });
 

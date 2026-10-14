@@ -4,7 +4,7 @@
 //
 // La profesional pregunta "¿cómo hago para…?" o "¿por qué la app hace…?" y
 // recibe una respuesta corta. La fuente de uso son los documentos de
-// docs/ayuda/: no hay base vectorial ni búsqueda: entran los 17 archivos
+// docs/ayuda/: no hay base vectorial ni búsqueda: entran los 18 archivos
 // enteros —unos 92 KB al 16 de septiembre de 2026— en el system prompt, y el
 // prompt caching de Anthropic hace que ese bloque se pague completo una vez y
 // después se lea más barato.
@@ -90,6 +90,7 @@ export const ARCHIVOS_CORPUS = [
   "13-preguntas-frecuentes.md",
   "14-cuando-algo-falla.md",
   "15-finanzas.md",
+  "16-lux.md",
 ] as const;
 
 /**

@@ -67,6 +67,11 @@ una sola vez y la cuenta coincide con lo que la lista muestra.
 
 El Recorrido del proceso, los indicadores por sesión y **Exportar PDF**. Ver `10-el-hilo-y-el-recorrido.md`.
 
+### Pestaña **Lux**
+
+Una conversación sobre esta paciente con Lux, que leyó su Recorrido, sus notas
+y sus últimas sesiones. No se guarda. Ver `16-lux.md`.
+
 ### Pestaña **Datos**
 
 Se llamaba **Ficha**. Tiene lo mismo: los datos administrativos de la paciente.
