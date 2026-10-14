@@ -184,13 +184,14 @@ async function reemplazar(
 
 /**
  * Lo que mostró Hoy con conexión: los turnos de ese día. Reemplaza todo el
- * día (lo que ya no está en la agenda se va). Sólo entran turnos de hoy y
- * mañana.
+ * día (lo que ya no está en la agenda se va). Sólo entran turnos de hoy: lo
+ * que no reemplaza no lo escribe, así nada queda viejo sin que se lo pueda
+ * borrar. Los de mañana los anota cada ficha.
  */
 export function anotarAgendaDelDia(turnos: TurnoParaAgenda[], ahora: Date): Promise<void> {
-  const dias = diasQueSeGuardan(ahora);
-  const nuevos = turnos.map(aRegistro).filter((t) => dias.includes(t.fecha));
-  return reemplazar((r) => r.fecha === dias[0], nuevos, ahora);
+  const [hoy] = diasQueSeGuardan(ahora);
+  const nuevos = turnos.map(aRegistro).filter((t) => t.fecha === hoy);
+  return reemplazar((r) => r.fecha === hoy, nuevos, ahora);
 }
 
 /**

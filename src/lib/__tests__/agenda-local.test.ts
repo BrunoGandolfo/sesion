@@ -132,6 +132,11 @@ describe("agenda local — qué se guarda", () => {
     expect([...registros.keys()].sort()).toEqual(["t1", "t2"]);
   });
 
+  it("Hoy anota sólo el día: uno de mañana no entra (no lo podría borrar si se cancela)", async () => {
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15), turno("t2", MANANA_11)], AHORA);
+    expect([...registros.keys()]).toEqual(["t1"]);
+  });
+
   it("una ficha no anota turnos de otra paciente", async () => {
     await agenda.anotarTurnosDePaciente("pac_1", [turno("t1", HOY_15), turno("t2", HOY_9, "pac_2")], AHORA);
     expect([...registros.keys()]).toEqual(["t1"]);

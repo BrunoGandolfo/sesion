@@ -8,6 +8,7 @@
 //   3. Sin señal (context.setOffline): /grabar/<turnoId> por URL muestra el
 //      nombre de la paciente; "Grabar sesión" arranca el micrófono; al
 //      terminar, la grabación queda en el teléfono (flujo sin conexión).
+//      "Volver" desde el grabador lleva a la agenda local.
 //   4. Sin señal: / muestra la agenda local con su botón Grabar.
 //   5. Lo que quedó guardado en el teléfono: las cachés del service worker
 //      (sólo /_next/static/** y /sin-conexion) y la agenda local.
@@ -180,6 +181,13 @@ try {
   await pagina.getByRole("heading", { name: nombre }).waitFor();
   assert.equal(new URL(pagina.url()).pathname, `/grabar/${turnoId}`);
   await pagina.screenshot({ path: path.join(salida, "grabar-sin-senal-390.png") });
+  // "Volver" es un <Link> de Next: sin red su pedido RSC falla y la
+  // navegación tiene que terminar en la agenda local, no colgada.
+  await pagina.getByRole("link", { name: "Volver" }).click();
+  await pagina.getByRole("heading", { name: "Sin señal" }).waitFor({ timeout: 15_000 });
+  paso("sin señal: Volver desde el grabador lleva a la agenda local", { url: new URL(pagina.url()).pathname });
+  await pagina.locator(`a[href="/grabar/${turnoId}"]`).click();
+  await pagina.getByRole("heading", { name: nombre }).waitFor();
   await pagina.getByRole("button", { name: "Grabar sesión" }).click();
   await pagina.getByRole("button", { name: "Pausar" }).waitFor();
   await pagina.waitForFunction(() => {
