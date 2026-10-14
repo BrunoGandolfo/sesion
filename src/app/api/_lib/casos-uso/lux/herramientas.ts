@@ -8,6 +8,10 @@
 // una. La lectura y su rastro
 // (sesion.ver_transcripcion, via "lux") van en una transacción, como cuando
 // ella la abre en la pantalla.
+//
+// Lo leído comparte el tope del material: cada lectura aceptada descuenta lo
+// que manda al modelo de caracteresLibres, y la que no entra se rechaza sin
+// auditarse. Así tres lecturas no multiplican por cuatro la entrada.
 
 import { z } from "zod";
 
@@ -41,6 +45,8 @@ export const RECHAZO_HERRAMIENTA = "Esa herramienta no existe. La única es leer
 export const RECHAZO_SIN_TRANSCRIPCION = "Esa sesión no tiene transcripción.";
 export const RECHAZO_DEMASIADO_LARGA =
   "Esa transcripción es demasiado larga para leerla entera acá. Trabajá con la nota de esa sesión.";
+export const RECHAZO_SIN_LUGAR =
+  "Ya no queda lugar para otra transcripción en esta respuesta. Trabajá con la nota de esa sesión y con lo que ya leíste.";
 
 export interface EjecutorLux extends EjecutorHerramientas {
   /** Las sesiones efectivamente leídas por la herramienta, en orden. */
@@ -53,8 +59,11 @@ export function ejecutorLux(contexto: {
   pacienteId: string;
   usuarioId: string;
   abribles: ReadonlyMap<string, Date>;
+  /** MaterialLux.caracteresLibres: el presupuesto de todas las lecturas. */
+  caracteresLibres: number;
 }): EjecutorLux {
   const leidas: string[] = [];
+  let libres = contexto.caracteresLibres;
   const validar = (nombre: string, entrada: unknown) => {
     if (nombre !== HERRAMIENTA_LEER_TRANSCRIPCION) return null;
     const parsed = leerTranscripcionSchema.safeParse(entrada);
@@ -72,8 +81,8 @@ export function ejecutorLux(contexto: {
       if (nombre !== HERRAMIENTA_LEER_TRANSCRIPCION) return { contenido: RECHAZO_HERRAMIENTA, esError: true };
       const valida = validar(nombre, entrada);
       if (!valida) return { contenido: RECHAZO_FUERA_DE_LISTA, esError: true };
-      // Lectura, medida y rastro en una transacción. Una transcripción
-      // demasiado larga no llega al modelo, así que no se audita como leída.
+      // Lectura, medida y rastro en una transacción. Una transcripción que no
+      // entra no llega al modelo, así que no se audita como leída.
       const transcripcion = await contexto.prisma.$transaction(async (tx) => {
         const fila = await tx.sesionClinica.findFirst({
           where: { id: valida.sesionId, ...whereAprobadasDe(contexto) },
@@ -82,17 +91,18 @@ export function ejecutorLux(contexto: {
         if (!fila) return { rechazo: RECHAZO_FUERA_DE_LISTA };
         if (!fila.transcripcion) return { rechazo: RECHAZO_SIN_TRANSCRIPCION };
         if (fila.transcripcion.length > TOKENS_MAX_MATERIAL * CARACTERES_POR_TOKEN) return { rechazo: RECHAZO_DEMASIADO_LARGA };
+        const contenido = `Transcripción de la sesión del ${fechaLegible(valida.fecha)} (S0 es la terapeuta):\n${escapar(fila.transcripcion)}`;
+        if (contenido.length > libres) return { rechazo: RECHAZO_SIN_LUGAR };
         await auditarLecturaTranscripcion(tx, {
           organizationId: contexto.organizationId, usuarioId: contexto.usuarioId, sesionId: fila.id,
           estado: fila.estado, caracteres: fila.transcripcion.length, via: "lux",
         });
-        return { texto: fila.transcripcion };
+        return { contenido };
       });
       if ("rechazo" in transcripcion) return { contenido: transcripcion.rechazo!, esError: true };
+      libres -= transcripcion.contenido.length;
       leidas.push(valida.sesionId);
-      return {
-        contenido: `Transcripción de la sesión del ${fechaLegible(valida.fecha)} (S0 es la terapeuta):\n${escapar(transcripcion.texto)}`,
-      };
+      return { contenido: transcripcion.contenido };
     },
   };
 }

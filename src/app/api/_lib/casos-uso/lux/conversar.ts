@@ -130,7 +130,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
   });
   const ejecutor = ejecutorLux({
     prisma: input.prisma, organizationId: input.organizationId, pacienteId: input.pacienteId,
-    usuarioId: input.usuarioId, abribles: material.abribles,
+    usuarioId: input.usuarioId, abribles: material.abribles, caracteresLibres: material.caracteresLibres,
   });
 
   try {

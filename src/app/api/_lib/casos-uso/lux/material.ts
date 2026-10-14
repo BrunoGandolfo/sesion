@@ -73,6 +73,10 @@ export interface MaterialLux {
   releidas: string[];
   /** Cuántas de esas no entraron por tamaño. */
   releidasOmitidas: number;
+  /** Lo que queda del tope del material (TOKENS_MAX_MATERIAL), en caracteres,
+   *  para lo que lea leer_transcripcion en esta respuesta: material y
+   *  lecturas comparten un solo presupuesto. */
+  caracteresLibres: number;
 }
 
 export interface ArmarMaterialInput extends IdentidadHilo {
@@ -315,8 +319,10 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
       : "(ninguna: no hay otras sesiones aprobadas)",
   );
 
+  const texto = `<documents>\n${documentos.join("\n")}\n</documents>`;
   return {
-    texto: `<documents>\n${documentos.join("\n")}\n</documents>`,
+    texto,
+    caracteresLibres: Math.max(0, limite - texto.length),
     abribles: new Map(demas.map((s) => [s.id, s.turno.fecha])),
     notas: aprobadas.length,
     transcripciones: elegidas.incluidas.map((s) => s.id),

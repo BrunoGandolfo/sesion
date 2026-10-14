@@ -21,6 +21,7 @@ import {
   HERRAMIENTAS_LUX,
   RECHAZO_FUERA_DE_LISTA,
   RECHAZO_HERRAMIENTA,
+  RECHAZO_SIN_LUGAR,
 } from "@/app/api/_lib/casos-uso/lux/herramientas";
 import type { ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
 import { avisoMirandoTranscripcion, MARCA_ESTADO_LUX } from "@/lib/lux/contrato";
@@ -208,7 +209,7 @@ describe("ejecutorLux — la lista cerrada", () => {
   // Una base que falla si alguien la toca: los rechazos no consultan nada.
   const intocable = new Proxy({}, { get: () => { throw new Error("no debía tocar la base"); } }) as unknown as ClienteLux;
   const abribles = new Map([[SESION, new Date("2026-09-01T14:00:00Z")]]);
-  const ejecutor = ejecutorLux({ prisma: intocable, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles });
+  const ejecutor = ejecutorLux({ prisma: intocable, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles, caracteresLibres: 360_000 });
 
   it("un id fuera de la lista se rechaza sin aviso y sin tocar la base", async () => {
     const llamada = { nombre: "leer_transcripcion", entrada: { sesionId: randomUUID() } };
@@ -234,11 +235,39 @@ describe("ejecutorLux — la lista cerrada", () => {
     const consultas: unknown[] = [];
     const tx = { sesionClinica: { findFirst: async (args: { where: unknown }) => { consultas.push(args.where); return null; } } };
     const base = { $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) } as unknown as ClienteLux;
-    const conBase = ejecutorLux({ prisma: base, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles });
+    const conBase = ejecutorLux({ prisma: base, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles, caracteresLibres: 360_000 });
     await expect(conBase.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: SESION } }))
       .resolves.toEqual({ contenido: RECHAZO_FUERA_DE_LISTA, esError: true });
     expect(consultas).toEqual([{ id: SESION, organizationId: "org", estado: "aprobada", turno: { pacienteId: "pac" } }]);
     expect(conBase.leidas).toEqual([]);
+  });
+
+  it("las lecturas comparten el presupuesto: la que no entra se rechaza sin auditarse", async () => {
+    const otra = randomUUID();
+    const largos = new Map<string, number>([[SESION, 60_000], [otra, 60_000]]);
+    const auditadas: string[] = [];
+    const tx = {
+      sesionClinica: {
+        findFirst: async (args: { where: { id: string } }) =>
+          ({ id: args.where.id, estado: "aprobada", transcripcion: "S1: hola ".repeat(largos.get(args.where.id)! / 9) }),
+      },
+      eventoAuditoria: { create: async (args: { data: { entidadId: string } }) => { auditadas.push(args.data.entidadId); } },
+    };
+    const base = { $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) } as unknown as ClienteLux;
+    const dos = new Map([[SESION, new Date("2026-09-01T14:00:00Z")], [otra, new Date("2026-09-08T14:00:00Z")]]);
+    // Entra una de 60.000, no dos: cada una por separado estaría bajo el tope.
+    const conTope = ejecutorLux({ prisma: base, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles: dos, caracteresLibres: 100_000 });
+    const primera = await conTope.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: SESION } });
+    expect(primera.esError).toBeUndefined();
+    await expect(conTope.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: otra } }))
+      .resolves.toEqual({ contenido: RECHAZO_SIN_LUGAR, esError: true });
+    expect(conTope.leidas).toEqual([SESION]);
+    expect(auditadas).toEqual([SESION]);
+    // Sin lugar desde el principio (el material ya llenó el tope): ninguna.
+    const lleno = ejecutorLux({ prisma: base, organizationId: "org", pacienteId: "pac", usuarioId: "user", abribles: dos, caracteresLibres: 0 });
+    await expect(lleno.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: SESION } }))
+      .resolves.toEqual({ contenido: RECHAZO_SIN_LUGAR, esError: true });
+    expect(auditadas).toEqual([SESION]);
   });
 
   it("la única herramienta es leer_transcripcion, sin argumentos libres", () => {

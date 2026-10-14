@@ -9,7 +9,7 @@ import { editarHilo } from "@/app/api/_lib/casos-uso/hilo/escribir";
 import { bloquearHilo, insertarVersion } from "@/app/api/_lib/casos-uso/hilo/base";
 import { armarMaterial, TOKENS_MAX_MATERIAL, type ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
 import { avisoMirandoTranscripcion, LARGO_MAX_HISTORIAL_LUX, LARGO_MAX_TURNO_LUX, MARCA_ESTADO_LUX } from "@/lib/lux/contrato";
-import { ejecutorLux, RECHAZO_FUERA_DE_LISTA } from "@/app/api/_lib/casos-uso/lux/herramientas";
+import { ejecutorLux, RECHAZO_FUERA_DE_LISTA, RECHAZO_SIN_LUGAR } from "@/app/api/_lib/casos-uso/lux/herramientas";
 import {
   abrirConversacion, autorizarPaciente, ErrorProveedorLux, PEDIDO_APERTURA, registrarConversacionLux, responder,
 } from "@/app/api/_lib/casos-uso/lux/conversar";
@@ -161,7 +161,7 @@ describe("leer_transcripcion contra la base", () => {
     const otro = await consultorio();
     const m = await material(c);
     const antes = (await lecturasLux(c.org)).length;
-    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, abribles: m.abribles });
+    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, abribles: m.abribles, caracteresLibres: m.caracteresLibres });
 
     const leida = await ejecutor.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: c.sesiones[0] } });
     expect(leida.esError).toBeUndefined();
@@ -195,13 +195,37 @@ describe("leer_transcripcion contra la base", () => {
     const antes = (await lecturasLux(c.org)).length;
     // Una lista (f) mal armada: la segunda barrera es la consulta.
     const abribles = new Map([[ajena.sesionId, new Date()], [enRevision.sesionId, new Date()]]);
-    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, abribles });
+    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, abribles, caracteresLibres: TOKENS_MAX_MATERIAL * 4 });
     for (const sesionId of abribles.keys()) {
       await expect(ejecutor.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId } }))
         .resolves.toEqual({ contenido: RECHAZO_FUERA_DE_LISTA, esError: true });
     }
     expect(ejecutor.leidas).toEqual([]);
     expect(await lecturasLux(c.org)).toHaveLength(antes);
+  });
+});
+
+describe("el tope del material alcanza también a lo que lee la herramienta", () => {
+  it("material y lecturas comparten un presupuesto; la lectura que no entra no se audita", async () => {
+    // Cuatro transcripciones de ~96.000 caracteres: dos entran al material
+    // (~192.000 de 360.000) y la herramienta puede sumar una, no dos. Cada
+    // una por separado está bajo el tope.
+    const c = await consultorio((n) => `[00:00] S1: TRANSCRIPCION_${n} ${"palabra ".repeat(12_000)}`);
+    const m = await material(c);
+    const limite = TOKENS_MAX_MATERIAL * 4;
+    expect(m.transcripciones).toHaveLength(2);
+    expect(m.caracteresLibres).toBe(limite - m.texto.length);
+    const abribles = [...m.abribles.keys()];
+    expect(abribles).toHaveLength(2);
+    const antes = (await lecturasLux(c.org)).length;
+    const ejecutor = ejecutorLux({ prisma: db(), organizationId: c.org.orgId, pacienteId: c.org.pacienteId, usuarioId: c.org.userId, abribles: m.abribles, caracteresLibres: m.caracteresLibres });
+    const primera = await ejecutor.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: abribles[0] } });
+    expect(primera.esError).toBeUndefined();
+    await expect(ejecutor.ejecutar({ nombre: "leer_transcripcion", entrada: { sesionId: abribles[1] } }))
+      .resolves.toEqual({ contenido: RECHAZO_SIN_LUGAR, esError: true });
+    expect(ejecutor.leidas).toEqual([abribles[0]]);
+    expect(await lecturasLux(c.org)).toHaveLength(antes + 1);
+    expect(m.texto.length + primera.contenido.length).toBeLessThanOrEqual(limite);
   });
 });
 

@@ -194,6 +194,13 @@ siguiente va con `tool_choice: none` y el modelo contesta con lo que tiene.
   de más). Fuera de la lista, argumentos inválidos o una herramienta
   inventada: `tool_result` con `is_error`, sin tocar la base. Una
   transcripción de más de 90.000 tokens estimados se rechaza sin leerla.
+  Las lecturas comparten el tope del material: lo que queda de
+  `TOKENS_MAX_MATERIAL` después de armar el material
+  (`MaterialLux.caracteresLibres`) es el presupuesto de todas las lecturas
+  de la respuesta, y cada una aceptada descuenta lo que manda al modelo. La
+  que no entra vuelve como `is_error` ("ya no queda lugar") y no se audita.
+  Así tres lecturas no multiplican la entrada. Con el material lleno, Lux
+  trabaja con las notas.
   La lectura, la medida y el rastro van en una transacción.
 
 No hay escritura, SQL, ids libres ni organización elegible por el modelo.
@@ -250,5 +257,6 @@ nada variable adentro. `next.config.ts` lo declara en
 | Tope total del historial, recortado desde lo más viejo | `lux-historial.test.ts`, `lux-integracion.test.ts` |
 | La marca de estado: el modelo no la puede escribir; su imitación es prosa | `lux-bucle.test.ts`, `respuesta.test.ts`, `conversacion-lux.test.tsx`, `lux-leidas.test.ts` |
 | La segunda barrera de `leer_transcripcion` (paciente y aprobada) | `lux-bucle.test.ts`, `lux-integracion.test.ts` |
+| Material y lecturas comparten un presupuesto; la que no entra no se audita | `lux-bucle.test.ts`, `lux-integracion.test.ts` |
 | El log de un fallo del proveedor: status y código, sin mensaje | `lux-integracion.test.ts` |
 | Prompt: secciones, límites, sin partes variables, incluido en el deploy | `lux-prompt.test.ts` |
