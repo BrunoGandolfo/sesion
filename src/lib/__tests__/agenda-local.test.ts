@@ -4,6 +4,7 @@
 //   - sólo de hoy y mañana (Montevideo);
 //   - Hoy reemplaza el día entero y una ficha reemplaza los de su paciente;
 //   - lo de hace más de dos días se purga;
+//   - al salir y al entrar se borra entera (olvidarAgendaLocal);
 //   - sin IndexedDB no lanza.
 //
 // vitest corre en `node`, sin IndexedDB: abajo hay uno mínimo para un único
@@ -165,6 +166,13 @@ describe("agenda local — purga y lectura", () => {
     await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
     expect(await agenda.buscarTurnoLocal("t1", AHORA)).toMatchObject({ nombreParaMostrar: "Ana Pérez", hora: "15:00" });
     expect(await agenda.buscarTurnoLocal("otro", AHORA)).toBeNull();
+  });
+
+  it("olvidarAgendaLocal borra todo, de cualquier día y paciente", async () => {
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
+    await agenda.anotarTurnosDePaciente("pac_2", [turno("t2", MANANA_11, "pac_2")], AHORA);
+    await agenda.olvidarAgendaLocal();
+    expect(registros.size).toBe(0);
   });
 
   it("sin IndexedDB no lanza: escribir no hace nada y leer devuelve vacío", async () => {

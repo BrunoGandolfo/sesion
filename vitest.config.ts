@@ -75,6 +75,8 @@ const INTEGRACION = [
   'src/lib/__tests__/tarifa-turnos.test.ts',
   // El mismo contrato de punta a punta: la ficha, la ruta real y el aviso.
   'src/lib/__tests__/tarifa-pantalla-integracion.test.tsx',
+  // La ficha trae el estado de la sesión de cada turno (agenda sin señal).
+  'src/lib/__tests__/ficha-sesion-del-turno.test.ts',
   'src/lib/__tests__/sms-callback.test.ts',
   'src/lib/__tests__/recordar-cobro.test.ts',
   // WhatsApp asistido: qué se avisa hoy, el cron según el canal y las rutas.

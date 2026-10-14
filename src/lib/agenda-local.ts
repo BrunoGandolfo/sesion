@@ -9,7 +9,10 @@
 // entero, lo demás no entra.
 //
 // Se escribe cuando Hoy o una ficha se muestran con conexión; lo de hace más
-// de dos días se purga en cada escritura y en cada lectura.
+// de dos días se purga en cada escritura y en cada lectura. Se BORRA ENTERA
+// al cerrar sesión y al entrar (olvidarAgendaLocal): /sin-conexion es pública
+// y el navegador puede ser compartido, así que los nombres de una cuenta no
+// quedan a la vista de quien venga después, ni de otra cuenta que entre.
 //
 // Mismo patrón que grabacion-storage.ts: es un SEGURO, no una dependencia.
 // Si IndexedDB no está o falla, no lanza: escribir no hace nada y leer
@@ -208,4 +211,9 @@ export async function turnosLocalesDeHoy(ahora: Date): Promise<TurnoLocal[]> {
 /** Un turno guardado, o null. */
 export async function buscarTurnoLocal(turnoId: string, ahora: Date): Promise<TurnoLocal | null> {
   return (await leerAgendaLocal(ahora)).find((t) => t.turnoId === turnoId) ?? null;
+}
+
+/** Borra toda la agenda local. Al cerrar sesión y al entrar. Nunca lanza. */
+export function olvidarAgendaLocal(): Promise<void> {
+  return reemplazar(() => true, [], new Date());
 }

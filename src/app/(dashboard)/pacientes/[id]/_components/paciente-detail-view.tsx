@@ -37,8 +37,10 @@ import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
 import { anotarTurnosDePaciente, type TurnoParaAgenda } from "@/lib/agenda-local";
 import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
+import type { TurnoDeFicha } from "@/app/api/_lib/casos-uso/pacientes";
 import { ESTADOS_GRABABLES, sePuedeGrabar } from "@/app/api/_lib/domain";
 import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
+import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import { DATOS, RECORRIDO, SESIONES } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
@@ -122,13 +124,13 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   React.useEffect(() => {
     const controller = new AbortController();
-    apiGet<{ paciente: PacienteJson; turnos: TurnoJson[] }>(
+    apiGet<{ paciente: PacienteJson; turnos: TurnoJson<TurnoDeFicha>[] }>(
       `/api/pacientes/${id}`,
       { signal: controller.signal },
     )
       .then((data) => {
         const paciente = parsePaciente(data.paciente);
-        const turnos = (data.turnos ?? []).map(parseTurno);
+        const turnos = (data.turnos ?? []).map((t) => parseTurno<TurnoDeFicha>(t));
         setFicha({ tipo: "lista", id, ficha: { paciente, turnos } });
         // Para grabar si la app se abre sin señal (/sin-conexion).
         void anotarTurnosDePaciente(id, turnosParaAgendaLocal(paciente, turnos), new Date());
@@ -377,11 +379,16 @@ function DetailSkeletonInner() {
 }
 
 /** Lo que la ficha deja en la agenda local del teléfono (lib/agenda-local.ts,
- *  que se queda con hoy y mañana): los turnos que se pueden grabar. Sólo id,
- *  paciente, nombre y fecha. */
-function turnosParaAgendaLocal(paciente: PacienteConDeuda, turnos: Turno[]): TurnoParaAgenda[] {
+ *  que se queda con hoy y mañana): los turnos que se pueden grabar
+ *  (programados o realizados, sin una sesión ya cerrada: la misma regla que
+ *  Hoy). Sólo id, paciente, nombre y fecha. */
+export function turnosParaAgendaLocal(
+  paciente: Pick<PacienteConDeuda, "nombre" | "apellido">,
+  turnos: TurnoDeFicha[],
+): TurnoParaAgenda[] {
   const nombreParaMostrar = `${paciente.nombre} ${paciente.apellido}`.trim();
   return turnos
     .filter((t) => (ESTADOS_GRABABLES as readonly string[]).includes(t.estado))
+    .filter((t) => !t.sesionClinica || (ESTADOS_SIN_TERMINAR as readonly string[]).includes(t.sesionClinica.estado))
     .map((t) => ({ id: t.id, pacienteId: t.pacienteId, fecha: t.fecha, nombreParaMostrar }));
 }

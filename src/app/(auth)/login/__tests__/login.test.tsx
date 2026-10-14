@@ -25,6 +25,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => router,
 }));
 
+const olvidarAgendaLocal = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/lib/agenda-local", () => ({ olvidarAgendaLocal }));
+
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 import LoginPage from "@/app/(auth)/login/page";
@@ -134,6 +137,23 @@ describe("Pantalla de entrada", () => {
     responder(Response.json({ data: { ok: true } }));
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/"));
     expect(router.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("al entrar borra la agenda local de quien estuvo antes, y no si el ingreso falla", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ data: { ok: true } })));
+    render(<LoginPage />);
+    fireEvent.change(screen.getByLabelText(ENTRADA_EMAIL), { target: { value: "prueba@example.test" } });
+    fireEvent.change(screen.getByLabelText(ENTRADA_CONTRASENA), { target: { value: "solo-prueba-local" } });
+    fireEvent.submit(screen.getByLabelText(ENTRADA_EMAIL).closest("form")!);
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/"));
+    expect(olvidarAgendaLocal).toHaveBeenCalledOnce();
+    expect(olvidarAgendaLocal.mock.invocationCallOrder[0]).toBeLessThan(router.push.mock.invocationCallOrder[0]);
+
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "rechazado" }, { status: 401 })));
+    fireEvent.submit(screen.getByLabelText(ENTRADA_EMAIL).closest("form")!);
+    await screen.findByText(ENTRADA_ERROR);
+    expect(olvidarAgendaLocal).not.toHaveBeenCalled();
   });
 
   it("ante un rechazo conserva lo escrito, informa el error y permite reintentar", async () => {

@@ -602,6 +602,8 @@ estáticos de la app (`/_next/static/**`) y la pantalla `/sin-conexion`. Las
 páginas van siempre a la red y no se copian; si la red falla se muestra
 `/sin-conexion`, que lee del teléfono la agenda local (turnos de hoy y mañana:
 id del turno, id de la paciente, nombre, fecha y hora; `src/lib/agenda-local.ts`).
+La agenda local se borra entera al cerrar sesión y al entrar, porque
+`/sin-conexion` es pública y el navegador puede ser compartido.
 Nunca se guarda `/api/**` ni el HTML de otra ruta. La regla está en
 `src/lib/sw-politica.ts` y la verifica `src/lib/__tests__/sw-politica.test.ts`.
 
