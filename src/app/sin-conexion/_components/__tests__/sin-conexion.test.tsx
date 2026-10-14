@@ -58,6 +58,14 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+describe("el aviso sin señal", () => {
+  it("no promete un envío automático: dice qué tocar cuando vuelva la señal", () => {
+    expect(SIN_CONEXION_AVISO).not.toMatch(/se env[ií]a/);
+    expect(SIN_CONEXION_AVISO).toContain("Reintentar");
+    expect(SIN_CONEXION_AVISO).toContain("Guardarla ahora");
+  });
+});
+
 describe("turnoDeLaRuta", () => {
   it("reconoce /grabar/<turno> y nada más", () => {
     expect(turnoDeLaRuta("/grabar/t1")).toBe("t1");

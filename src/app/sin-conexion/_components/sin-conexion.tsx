@@ -6,8 +6,8 @@
 //
 //   /grabar/<turnoId>  → el grabador de siempre (grabar-view.tsx) con el
 //                        turno de la agenda local y su flujo sin conexión:
-//                        la grabación queda en el teléfono y se envía cuando
-//                        vuelve la señal.
+//                        la grabación queda en el teléfono y, con señal, se
+//                        envía al tocar Reintentar (no sale sola).
 //   cualquier otra     → los turnos de hoy guardados en el teléfono, cada uno
 //                        con su botón Grabar.
 //

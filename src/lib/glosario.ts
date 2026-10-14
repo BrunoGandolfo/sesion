@@ -1353,8 +1353,11 @@ export const GRABACION_SIN_CONEXION =
 // teléfono sólo la agenda local (src/lib/agenda-local.ts).
 
 export const SIN_CONEXION_TITULO = "Sin señal";
+/** No promete un envío automático: no lo hay. Con señal, la grabación sale
+ *  cuando ella toca Reintentar, o "Guardarla ahora" al volver a abrir el turno
+ *  (flujo-grabacion.ts, pantallas.tsx). */
 export const SIN_CONEXION_AVISO =
-  "No hay conexión. Podés grabar los turnos de hoy: la grabación queda en el teléfono y se envía cuando vuelva la señal.";
+  "No hay conexión. Podés grabar los turnos de hoy: la grabación queda en el teléfono. Cuando vuelva la señal, tocá Reintentar o abrí el turno y tocá Guardarla ahora.";
 /** No hay nada de hoy en la agenda local. */
 export const SIN_CONEXION_SIN_TURNOS =
   "No hay turnos de hoy guardados en este teléfono. Se guardan cada vez que abrís Hoy o una ficha con señal.";
