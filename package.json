@@ -30,7 +30,7 @@
     "@serwist/turbopack": "9.5.13",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.1.0",
-    "framer-motion": "^12.38.0",
+    "framer-motion": "^12.43.0",
     "lucide-react": "^1.8.0",
     "next": "16.3.8",
     "prisma": "^5.22.0",
