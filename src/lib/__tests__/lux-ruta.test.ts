@@ -32,7 +32,7 @@ const RESULTADO: ResultadoConversacion = {
 const PROGRESO = { tokensEntrada: 7, tokensSalida: 3, cacheLeido: 0, cacheEscrito: 0, rondas: 1, llamadas: [] };
 const conversacion = (fragmentos: string[] = ["<citas>\n01/09: \"me voy\"\n</citas>\n", "**TEXTO**"]) => ({
   flujo: { fragmentos: (async function* () { yield* fragmentos; })(), resultado: Promise.resolve(RESULTADO), cancelar: vi.fn(), progreso: () => PROGRESO },
-  material: { notas: 3, transcripciones: ["a", "b"], transcripcionesOmitidas: 0, releidas: [], releidasOmitidas: 0 },
+  material: { notas: 3, notasOmitidas: 0, transcripciones: ["a", "b"], transcripcionesOmitidas: 0, releidas: [], releidasOmitidas: 0 },
   ejecutor: { leidas: [], aviso: () => null, ejecutar: vi.fn() },
 });
 

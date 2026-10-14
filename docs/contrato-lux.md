@@ -146,7 +146,15 @@ En este orden:
 3. **Notas aprobadas**, todas, de la más vieja a la más nueva, cada una con
    fecha e id (`notaFinal`). Si "Para vos" está `listo`, su núcleo
    panteórico: fortalezas, áreas de crecimiento (observación y sugerencia) y
-   sugerencia para la próxima sesión. Sin scores ni evidencias.
+   sugerencia para la próxima sesión. Sin scores ni evidencias. Las notas
+   van antes que las transcripciones: si ni sin ninguna transcripción el
+   material entra en el tope, se omiten las más viejas, con un aviso
+   ("Las N notas aprobadas anteriores al DD/MM/AAAA se omitieron por
+   tamaño"); esas sesiones siguen en la lista 6 y Lux puede abrir su
+   transcripción. Si ni sin notas entra (la ficha y el Recorrido, vigente y
+   propuesta, pasan el tope solos), el caso de uso contesta 422
+   (`MENSAJE_MATERIAL_EXCEDIDO_LUX`) sin llamar al proveedor, y el cupo
+   vuelve. Hoy la pantalla muestra ahí su texto genérico.
 4. **Las dos transcripciones más recientes** de sesiones aprobadas, completas,
    con fecha. Si con las dos el material pasa de `TOKENS_MAX_MATERIAL`
    (90.000 tokens estimados como caracteres / 4) va sólo la más reciente; si
@@ -223,7 +231,8 @@ No hay escritura, SQL, ids libres ni organización elegible por el modelo.
   alcanzaron a cerrar y el largo de lo que llegó a la pantalla—: modelo, tokens (entrada,
   salida, caché leído y escrito), rondas, nombres de herramientas (sólo de la
   lista; otro nombre queda como `desconocida`), lecturas y rechazos, cuántas
-  notas y transcripciones tenía el material, cuántas volvieron por haberse
+  notas y transcripciones tenía el material (`notas` son las que entraron;
+  `notasOmitidas`, las viejas que quedaron afuera), cuántas volvieron por haberse
   leído en la charla (`releidas`, `releidasOmitidas`), largos de pregunta y respuesta,
   turnos de historial. **Nunca** el texto de la pregunta, de la respuesta ni
   los argumentos de las herramientas.
@@ -263,6 +272,7 @@ nada variable adentro. `next.config.ts` lo declara en
 | La segunda barrera de `leer_transcripcion` (paciente y aprobada) | `lux-bucle.test.ts`, `lux-integracion.test.ts` |
 | Material y lecturas comparten un presupuesto; la que no entra no se audita | `lux-bucle.test.ts`, `lux-integracion.test.ts` |
 | El tope del material se mide escapado y con envoltorios | `lux-integracion.test.ts` |
+| Notas que solas pasan el tope: se omiten las más viejas con aviso; si ni sin notas entra, 422 sin proveedor | `lux-integracion.test.ts` |
 | Qué fallos del proveedor devuelven el cupo (HTTP sí; timeout y conexión no) | `lux-integracion.test.ts`, `lux-ruta.test.ts` |
 | El log de un fallo del proveedor: status y código, sin mensaje | `lux-integracion.test.ts` |
 | Prompt: secciones, límites, sin partes variables, incluido en el deploy | `lux-prompt.test.ts` |

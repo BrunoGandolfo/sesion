@@ -12,7 +12,10 @@
 //   b. Recorrido vigente completo y, si hay, la propuesta abierta, marcada
 //      como "propuesta no aceptada".
 //   c. Todas las notas aprobadas, de la más vieja a la más nueva, con el
-//      núcleo de "Para vos" si está listo (sin scores).
+//      núcleo de "Para vos" si está listo (sin scores). Si ni sin
+//      transcripciones entran, se omiten las más viejas con un aviso; sus
+//      sesiones siguen en (f). Si ni sin notas entra (ficha y Recorrido
+//      solos pasan el tope), 422 sin llamar al proveedor.
 //   d. Las dos transcripciones más recientes de sesiones aprobadas, completas.
 //      Si con las dos el material pasa de ~90.000 tokens estimados
 //      (caracteres / 4), va sólo la más reciente; si con una sola también,
@@ -45,12 +48,18 @@ import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import type { ContenidoHilo, VersionHilo } from "@/lib/hilo/contenido";
 import { LINEA_AVISO_MIRANDO, type TurnoHistorialLux } from "@/lib/lux/contrato";
 
+import { ApiError } from "../../responses";
 import { requirePaciente } from "../../pacientes";
 import { whereAprobadasDe, type IdentidadHilo } from "../hilo/base";
 import { leerRecorrido } from "../hilo/leer";
 import { auditarLecturaTranscripcion } from "../sesion/ver-transcripcion";
 
 export type ClienteLux = typeof db;
+
+/** Ni con todas las notas omitidas entra el material (la ficha y el
+ *  Recorrido solos pasan el tope): no se llama al proveedor y el cupo vuelve. */
+export const MENSAJE_MATERIAL_EXCEDIDO_LUX =
+  "La historia de este paciente es demasiado larga para que Lux la lea entera. Avisale a quien administra la app.";
 
 /** Tope del material, en tokens estimados (caracteres / 4). Debajo de los
  *  100.000 a partir de los cuales Haiku cobra la entrada más cara. */
@@ -67,6 +76,9 @@ export interface MaterialLux {
   notas: number;
   /** Ids cuya transcripción entró completa (y quedó auditada). */
   transcripciones: string[];
+  /** Las notas más viejas que quedaron afuera por tamaño (las demás, en
+   *  `notas`, entraron). */
+  notasOmitidas: number;
   /** Cuántas de las más recientes quedaron afuera por tamaño. */
   transcripcionesOmitidas: number;
   /** Ids de las que volvieron porque Lux ya las había leído en la charla
@@ -241,14 +253,16 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
     agregar(...documentoVersion("Propuesta de Recorrido NO ACEPTADA por la profesional (lectura de la app, no validada)", recorrido.propuesta, fechas));
   }
 
-  for (const sesion of aprobadas) {
+  // Una por sesión aprobada, de la más vieja a la más nueva. Si ni sin
+  // transcripciones entran todas, se omiten las más viejas (notasDesde).
+  const notas: Parte[] = aprobadas.map((sesion) => {
     const paraVos = sesion.feedbackEstado === "listo" ? textoParaVos(sesion.feedback) : null;
-    agregar(
+    return [
       `Nota aprobada de la sesión del ${fechaLegible(sesion.turno.fecha)} (id ${sesion.id})`,
       sesion.turno.fecha,
       paraVos ? `${textoNota(sesion.notaFinal)}\n\n"Para vos" (devolución a la terapeuta):\n${paraVos}` : textoNota(sesion.notaFinal),
-    );
-  }
+    ];
+  });
 
   const limite = TOKENS_MAX_MATERIAL * CARACTERES_POR_TOKEN;
 
@@ -259,12 +273,24 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
   const releer = aprobadas.filter((s) => pedidas.has(diaMes(s.turno.fecha)) && !enBase.has(s.id)).reverse();
 
   interface ConTexto { id: string; fecha: Date; estado: string; transcripcion: string }
-  interface Eleccion { incluidas: ConTexto[]; omitidas: ConTexto[]; releidas: ConTexto[]; releidasOmitidas: ConTexto[] }
+  interface Eleccion {
+    /** Índice en `aprobadas` de la nota más vieja que entra. */
+    notasDesde: number;
+    incluidas: ConTexto[]; omitidas: ConTexto[]; releidas: ConTexto[]; releidasOmitidas: ConTexto[];
+  }
 
-  // El material entero, tal como viaja: fijas, (d), avisos, (e), avisos y
-  // la lista (f). Cada decisión de qué entra se mide con esto.
+  // El material entero, tal como viaja: fijas, (c) con su aviso, (d),
+  // avisos, (e), avisos y la lista (f). Cada decisión de qué entra se mide
+  // con esto.
   const componer = (e: Eleccion) => {
     const partes: Parte[] = [...fijas];
+    if (e.notasDesde > 0) {
+      const primera = aprobadas[e.notasDesde];
+      partes.push(["Aviso del sistema sobre el material", null, primera
+        ? `Las ${e.notasDesde} notas aprobadas anteriores al ${fechaLegible(primera.turno.fecha)} se omitieron por tamaño. Esas sesiones siguen en la lista de sesiones anteriores: podés abrir su transcripción con leer_transcripcion.`
+        : `Las ${e.notasDesde} notas aprobadas se omitieron por tamaño. Esas sesiones siguen en la lista de sesiones anteriores: podés abrir su transcripción con leer_transcripcion.`]);
+    }
+    partes.push(...notas.slice(e.notasDesde));
     // Más vieja primero, como las notas.
     for (const s of [...e.incluidas].reverse()) {
       partes.push([`Transcripción completa de la sesión del ${fechaLegible(s.fecha)} (id ${s.id}; S0 es la terapeuta)`, s.fecha, s.transcripcion]);
@@ -311,12 +337,31 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
     });
     const entra = (e: Eleccion) => componer(e).texto.length <= limite;
     const conTexto = conTextoDe(candidatas);
+    const releerConTexto = conTextoDe(releer);
+
+    // Las notas van antes que las transcripciones: se omiten las más viejas
+    // sólo si ni sin ninguna transcripción (con todos sus avisos) entra el
+    // material. Menos notas nunca alarga el material: búsqueda binaria de
+    // la primera que entra.
+    const sinTranscripciones = (notasDesde: number): Eleccion =>
+      ({ notasDesde, incluidas: [], omitidas: conTexto, releidas: [], releidasOmitidas: releerConTexto });
+    let notasDesde = 0;
+    if (!entra(sinTranscripciones(0))) {
+      if (!entra(sinTranscripciones(aprobadas.length))) throw new ApiError(MENSAJE_MATERIAL_EXCEDIDO_LUX, 422);
+      let [desde, hasta] = [1, aprobadas.length];
+      while (desde < hasta) {
+        const medio = Math.floor((desde + hasta) / 2);
+        if (entra(sinTranscripciones(medio))) hasta = medio;
+        else desde = medio + 1;
+      }
+      notasDesde = desde;
+    }
+
     let incluidas = conTexto;
-    while (incluidas.length && !entra({ incluidas, omitidas: conTexto.slice(incluidas.length), releidas: [], releidasOmitidas: [] })) {
+    while (incluidas.length && !entra({ notasDesde, incluidas, omitidas: conTexto.slice(incluidas.length), releidas: [], releidasOmitidas: releerConTexto })) {
       incluidas = incluidas.slice(0, -1);
     }
-    const eleccion: Eleccion = { incluidas, omitidas: conTexto.slice(incluidas.length), releidas: [], releidasOmitidas: [] };
-    const releerConTexto = conTextoDe(releer);
+    const eleccion: Eleccion = { notasDesde, incluidas, omitidas: conTexto.slice(incluidas.length), releidas: [], releidasOmitidas: [] };
     for (const [n, s] of releerConTexto.entries()) {
       // Se mide con las que faltan decidir como omitidas: su aviso también viaja.
       const pendientes = releerConTexto.slice(n + 1);
@@ -338,7 +383,8 @@ export async function armarMaterial(input: ArmarMaterialInput): Promise<Material
     texto,
     caracteresLibres: Math.max(0, limite - texto.length),
     abribles: new Map(demas.map((s) => [s.id, s.turno.fecha])),
-    notas: aprobadas.length,
+    notas: aprobadas.length - elegidas.notasDesde,
+    notasOmitidas: elegidas.notasDesde,
     transcripciones: elegidas.incluidas.map((s) => s.id),
     transcripcionesOmitidas: elegidas.omitidas.length,
     releidas: elegidas.releidas.map((s) => s.id),

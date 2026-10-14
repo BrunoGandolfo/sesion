@@ -82,7 +82,7 @@ interface ConversarBase {
 
 export interface ConversacionLux {
   flujo: FlujoConversacion;
-  material: Pick<MaterialLux, "notas" | "transcripciones" | "transcripcionesOmitidas" | "releidas" | "releidasOmitidas">;
+  material: Pick<MaterialLux, "notas" | "notasOmitidas" | "transcripciones" | "transcripcionesOmitidas" | "releidas" | "releidasOmitidas">;
   ejecutor: EjecutorLux;
 }
 
@@ -162,6 +162,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
       flujo,
       material: {
         notas: material.notas,
+        notasOmitidas: material.notasOmitidas,
         transcripciones: material.transcripciones,
         transcripcionesOmitidas: material.transcripcionesOmitidas,
         releidas: material.releidas,
@@ -226,6 +227,7 @@ export async function registrarConversacionLux(p: ConversacionRespondida): Promi
       lecturas: llamadas.filter((l) => !l.rechazada).length,
       rechazadas: llamadas.filter((l) => l.rechazada).length,
       notas: p.conversacion.material.notas,
+      notasOmitidas: p.conversacion.material.notasOmitidas,
       transcripcionesEnMaterial: p.conversacion.material.transcripciones.length,
       transcripcionesOmitidas: p.conversacion.material.transcripcionesOmitidas,
       // Las que volvieron al material porque Lux ya las había leído en la charla.

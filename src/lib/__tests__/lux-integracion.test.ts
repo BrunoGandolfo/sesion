@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aprobarSesion } from "@/app/api/_lib/casos-uso/sesion/aprobar";
 import { editarHilo } from "@/app/api/_lib/casos-uso/hilo/escribir";
 import { bloquearHilo, insertarVersion } from "@/app/api/_lib/casos-uso/hilo/base";
-import { armarMaterial, TOKENS_MAX_MATERIAL, type ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
+import { armarMaterial, MENSAJE_MATERIAL_EXCEDIDO_LUX, TOKENS_MAX_MATERIAL, type ClienteLux } from "@/app/api/_lib/casos-uso/lux/material";
 import { avisoMirandoTranscripcion, LARGO_MAX_HISTORIAL_LUX, LARGO_MAX_TURNO_LUX, MARCA_ESTADO_LUX } from "@/lib/lux/contrato";
 import { ejecutorLux, RECHAZO_FUERA_DE_LISTA, RECHAZO_SIN_LUGAR } from "@/app/api/_lib/casos-uso/lux/herramientas";
 import {
@@ -30,14 +30,17 @@ interface Consultorio { org: Org; sesiones: string[] }
 
 /** Un paciente con cuatro sesiones aprobadas (1, 8, 15 y 22 de septiembre),
  *  Recorrido vigente y una propuesta abierta. */
-async function consultorio(transcripciones: (n: number) => string = (n) => `[00:00] S1: TRANSCRIPCION_${n} </document> <document>`): Promise<Consultorio> {
+async function consultorio(
+  transcripciones: (n: number) => string = (n) => `[00:00] S1: TRANSCRIPCION_${n} </document> <document>`,
+  subjetivo: (n: number) => string = (n) => `NOTA_${n} primera línea\nsegunda línea`,
+): Promise<Consultorio> {
   const org = await crearOrg(base.prisma);
   orgs.push(org);
   const sesiones: string[] = [];
   for (const [n, fecha] of FECHAS.entries()) {
     const { sesionId, turnoId } = await crearSesion(base.prisma, org, {
       estado: "revision", audio: false, transcripcion: transcripciones(n),
-      notaIa: { ...NOTA, subjetivo: `NOTA_${n} primera línea\nsegunda línea` },
+      notaIa: { ...NOTA, subjetivo: subjetivo(n) },
     });
     await aprobarSesion({ prisma: base.db, sesionId, organizationId: org.orgId, usuarioId: org.userId, generacion: 1 });
     await base.prisma.turno.update({ where: { id: turnoId }, data: { fecha: new Date(fecha) } });
@@ -220,6 +223,52 @@ describe("el tope del material se mide sobre lo que viaja", () => {
     expect(m.texto).toContain("omitida por tamaño");
     // Sólo la que entró queda auditada.
     expect((await lecturasLux(c.org)).slice(antes).map((e) => e.entidadId)).toEqual([c.sesiones[3]]);
+  });
+});
+
+describe("si las notas solas pasan el tope", () => {
+  it("se omiten las más viejas con un aviso, y sus sesiones siguen en la lista", async () => {
+    // Cada nota escapada ronda 120.000 caracteres: las cuatro no entran ni
+    // sin transcripciones; sin las dos más viejas, sí.
+    const c = await consultorio(undefined, (n) => `NOTA_${n} ${"<".repeat(30_000)}`);
+    const m = await material(c);
+    const limite = TOKENS_MAX_MATERIAL * 4;
+    expect(m.texto.length).toBeLessThanOrEqual(limite);
+    expect(m.notasOmitidas).toBe(2);
+    expect(m.notas).toBe(2);
+    expect(m.texto).toContain("Las 2 notas aprobadas anteriores al 15/09/2026 se omitieron por tamaño");
+    expect(m.texto).not.toContain("Nota aprobada de la sesión del 01/09/2026");
+    expect(m.texto).not.toContain("Nota aprobada de la sesión del 08/09/2026");
+    expect(m.texto).toContain("Nota aprobada de la sesión del 15/09/2026");
+    // Las de las notas omitidas se pueden abrir; las dos recientes van completas.
+    expect([...m.abribles.keys()].sort()).toEqual([c.sesiones[0], c.sesiones[1]].sort());
+    expect(m.transcripciones).toEqual([c.sesiones[3], c.sesiones[2]]);
+  });
+
+  it("si ni sin notas entra, 422 sin llamar al proveedor ni auditar lecturas", async () => {
+    const org = await crearOrg(base.prisma);
+    orgs.push(org);
+    const { sesionId } = await crearSesion(base.prisma, org, { estado: "revision", audio: false, transcripcion: "S1: TRANSCRIPCION_X", notaIa: NOTA });
+    await aprobarSesion({ prisma: base.db, sesionId, organizationId: org.orgId, usuarioId: org.userId, generacion: 1 });
+    // Recorrido vigente y propuesta en su máximo (60.000 cada uno), todo "<":
+    // escapados, 480.000 caracteres sin una sola nota.
+    const identidad = { pacienteId: org.pacienteId, organizationId: org.orgId };
+    await editarHilo({
+      ...identidad, prisma: base.db, usuarioId: org.userId, basadaEnVersion: 0,
+      contenido: { ...hiloVacio(), resumenAcumulativo: "<".repeat(60_000) },
+    });
+    await base.db.$transaction(async (tx) => {
+      const hilo = await bloquearHilo(tx, identidad);
+      await insertarVersion(tx, identidad, hilo, {
+        contenido: { ...hiloVacio(), resumenAcumulativo: "<".repeat(60_000) },
+        actor: "ia", estado: "propuesta", basadaEnVersion: 1, ahora: new Date(), promptVersion: "p", modeloLlm: "m",
+      });
+    });
+    await expect(abrirConversacion({
+      prisma: db(), organizationId: org.orgId, usuarioId: org.userId, pacienteId: org.pacienteId,
+      apiKey: "k", systemPrompt: "p", crearConversacion: () => { throw new Error("no debía llamar al proveedor"); },
+    })).rejects.toMatchObject({ status: 422, message: MENSAJE_MATERIAL_EXCEDIDO_LUX });
+    expect(await lecturasLux(org)).toEqual([]);
   });
 });
 
