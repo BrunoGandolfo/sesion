@@ -11,6 +11,24 @@ function esRutaGrabacion(ruta: string) {
 
 const recargarPagina = () => window.location.reload();
 
+/**
+ * Hay versión nueva publicada: que el service worker también se ponga al día
+ * (src/app/sw.ts). Con skipWaiting y clientsClaim el nuevo se activa apenas
+ * se instala, con la precarga nueva (y su /sin-conexion), así que cuando ella
+ * toque el aviso la versión vieja ya no está atendiendo. No recarga nada: el
+ * cambio de service worker no toca la pantalla. Nunca lanza.
+ */
+function actualizarServiceWorker() {
+  try {
+    void navigator.serviceWorker
+      ?.getRegistration()
+      .then((registro) => registro?.update())
+      .catch(() => {});
+  } catch {
+    // Sin service worker (navegador viejo, modo privado): nada que actualizar.
+  }
+}
+
 /** Sólo propone actualizar. Nunca recarga por una respuesta o un temporizador. */
 export function AvisoVersion({ recargar = recargarPagina }: { recargar?: () => void }) {
   const ruta = usePathname();
@@ -38,7 +56,9 @@ export function AvisoVersion({ recargar = recargarPagina }: { recargar?: () => v
         const cuerpo = await respuesta.json();
         const version = cuerpo?.data?.version;
         if (vigente && !controlador.signal.aborted && typeof version === "string" && version.length > 0) {
-          setHayVersionNueva(version !== VERSION_APP);
+          const nueva = version !== VERSION_APP;
+          setHayVersionNueva(nueva);
+          if (nueva) actualizarServiceWorker();
         }
       } catch {
         // Sin conexión o chequeo fallido: conservar la pantalla y probar al volver.

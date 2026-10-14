@@ -77,16 +77,26 @@ export interface ObtenerPacienteInput {
   pacienteId: string;
 }
 
+/** Un turno de la ficha, con el estado de su sesión clínica: la ficha lo usa
+ *  para no guardar en la agenda local (grabar sin señal) un turno cuya sesión
+ *  ya no admite audio. */
+export type TurnoDeFicha = Turno & { sesionClinica: { estado: string } | null };
+
 /** La ficha: el paciente con su deuda y todos sus turnos, del más reciente
  *  al más viejo. 404 si no es de esta organización. */
 export async function obtenerPaciente({
   prisma,
   organizationId,
   pacienteId,
-}: ObtenerPacienteInput): Promise<{ paciente: PacienteConDeuda; turnos: Turno[] }> {
+}: ObtenerPacienteInput): Promise<{ paciente: PacienteConDeuda; turnos: TurnoDeFicha[] }> {
   const paciente = await prisma.paciente.findFirst({
     where: { id: pacienteId, organizationId },
-    include: { turnos: { orderBy: { fecha: "desc" } } },
+    include: {
+      turnos: {
+        orderBy: { fecha: "desc" },
+        include: { sesionClinica: { select: { estado: true } } },
+      },
+    },
   });
 
   if (!paciente) {
@@ -95,7 +105,10 @@ export async function obtenerPaciente({
 
   return {
     paciente: toPacienteConDeuda(paciente),
-    turnos: paciente.turnos.map(toTurno),
+    turnos: paciente.turnos.map((turno) => ({
+      ...toTurno(turno),
+      sesionClinica: turno.sesionClinica ? { estado: turno.sesionClinica.estado } : null,
+    })),
   };
 }
 

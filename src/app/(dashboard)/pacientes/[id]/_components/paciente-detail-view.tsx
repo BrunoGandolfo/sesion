@@ -35,9 +35,12 @@ import type {
 } from "@/components/grabacion/ConsentimientoBadge";
 import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
+import { anotarTurnosDePaciente, generacionAgenda, type TurnoParaAgenda } from "@/lib/agenda-local";
 import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
-import { sePuedeGrabar } from "@/app/api/_lib/domain";
+import type { TurnoDeFicha } from "@/app/api/_lib/casos-uso/pacientes";
+import { ESTADOS_GRABABLES, sePuedeGrabar } from "@/app/api/_lib/domain";
 import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
+import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import { DATOS, LUX, RECORRIDO, SESIONES } from "@/lib/glosario";
 import type { Configuracion, PacienteConDeuda, Turno } from "@/types/domain";
 
@@ -123,20 +126,19 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   React.useEffect(() => {
     const controller = new AbortController();
-    apiGet<{ paciente: PacienteJson; turnos: TurnoJson[] }>(
+    // Antes de pedir: ver CLAVE_GENERACION en lib/agenda-local.ts.
+    const generacion = generacionAgenda();
+    apiGet<{ paciente: PacienteJson; turnos: TurnoJson<TurnoDeFicha>[] }>(
       `/api/pacientes/${id}`,
       { signal: controller.signal },
     )
-      .then((data) =>
-        setFicha({
-          tipo: "lista",
-          id,
-          ficha: {
-            paciente: parsePaciente(data.paciente),
-            turnos: (data.turnos ?? []).map(parseTurno),
-          },
-        }),
-      )
+      .then((data) => {
+        const paciente = parsePaciente(data.paciente);
+        const turnos = (data.turnos ?? []).map((t) => parseTurno<TurnoDeFicha>(t));
+        setFicha({ tipo: "lista", id, ficha: { paciente, turnos } });
+        // Para grabar si la app se abre sin señal (/sin-conexion).
+        void anotarTurnosDePaciente(id, turnosParaAgendaLocal(paciente, turnos), new Date(), generacion);
+      })
       .catch((err: unknown) => {
         if (esAbort(err)) return;
         setFicha({
@@ -380,4 +382,19 @@ function DetailSkeletonInner() {
       <div className="mt-6 h-[140px] w-full rounded-lg bg-cream-100" />
     </div>
   );
+}
+
+/** Lo que la ficha deja en la agenda local del teléfono (lib/agenda-local.ts,
+ *  que se queda con hoy y mañana): los turnos que se pueden grabar
+ *  (programados o realizados, sin una sesión ya cerrada: la misma regla que
+ *  Hoy). Sólo id, paciente, nombre y fecha. */
+export function turnosParaAgendaLocal(
+  paciente: Pick<PacienteConDeuda, "nombre" | "apellido">,
+  turnos: TurnoDeFicha[],
+): TurnoParaAgenda[] {
+  const nombreParaMostrar = `${paciente.nombre} ${paciente.apellido}`.trim();
+  return turnos
+    .filter((t) => (ESTADOS_GRABABLES as readonly string[]).includes(t.estado))
+    .filter((t) => !t.sesionClinica || (ESTADOS_SIN_TERMINAR as readonly string[]).includes(t.sesionClinica.estado))
+    .map((t) => ({ id: t.id, pacienteId: t.pacienteId, fecha: t.fecha, nombreParaMostrar }));
 }

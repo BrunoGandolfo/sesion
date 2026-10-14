@@ -109,3 +109,28 @@ it("ignora una respuesta que llegó después de entrar a grabar", async () => {
   await act(async () => { resolver(respuesta()); });
   expect(screen.queryByRole("button")).toBeNull();
 });
+it("con versión nueva pide al service worker que se actualice, sin recargar", async () => {
+  const actualizar = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { ...navigator, serviceWorker: { getRegistration: vi.fn().mockResolvedValue({ update: actualizar }) } });
+  pedir.mockResolvedValue(respuesta());
+  const recargar = vi.fn();
+  render(<AvisoVersion recargar={recargar} />);
+  await screen.findByRole("button");
+  await waitFor(() => expect(actualizar).toHaveBeenCalledTimes(1));
+  expect(recargar).not.toHaveBeenCalled();
+});
+it("con la misma versión no toca el service worker", async () => {
+  const getRegistration = vi.fn().mockResolvedValue({ update: vi.fn() });
+  vi.stubGlobal("navigator", { ...navigator, serviceWorker: { getRegistration } });
+  pedir.mockResolvedValue(respuesta("version-inicial"));
+  render(<AvisoVersion />);
+  await waitFor(() => expect(pedir).toHaveBeenCalledTimes(1));
+  await act(async () => {});
+  expect(getRegistration).not.toHaveBeenCalled();
+});
+it("sin service worker en el navegador, el aviso sigue igual", async () => {
+  vi.stubGlobal("navigator", { ...navigator, serviceWorker: undefined });
+  pedir.mockResolvedValue(respuesta());
+  render(<AvisoVersion />);
+  await screen.findByRole("button");
+});

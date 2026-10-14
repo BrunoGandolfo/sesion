@@ -204,6 +204,9 @@ export function construirCsp(
     `connect-src 'self' ${hostsExternos(destinos).join(" ")}`,
     // MediaRecorder y la reproducción local trabajan con blobs.
     "media-src 'self' blob:",
+    // 'self': el service worker de la app sin conexión, que se sirve del
+    // propio origen (/serwist/sw.js, src/lib/sw-politica.ts). Verificado en
+    // csp-destinos.test.ts. blob: es de la grabación (csp.test.ts).
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",

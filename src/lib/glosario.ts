@@ -1348,6 +1348,31 @@ export const GRABACION_OTRO_DIA_QUE_EL_TURNO =
 export const GRABACION_SIN_CONEXION =
   "Sin conexión. La grabación quedó guardada en el teléfono; reintentá cuando vuelva la señal.";
 
+// ── La app abierta sin señal (/sin-conexion) ────────────────────────────────
+// La muestra el service worker cuando una página no llega a la red. Lee del
+// teléfono sólo la agenda local (src/lib/agenda-local.ts).
+
+export const SIN_CONEXION_TITULO = "Sin señal";
+/** No promete un envío automático: no lo hay. Con señal, la grabación sale
+ *  cuando ella toca Reintentar, o "Guardarla ahora" al volver a abrir el turno
+ *  (flujo-grabacion.ts, pantallas.tsx). */
+export const SIN_CONEXION_AVISO =
+  "No hay conexión. Podés grabar los turnos de hoy: la grabación queda en el teléfono. Cuando vuelva la señal, tocá Reintentar o abrí el turno y tocá Guardarla ahora.";
+/** No hay nada de hoy en la agenda local. */
+export const SIN_CONEXION_SIN_TURNOS =
+  "No hay turnos de hoy guardados en este teléfono. Se guardan cada vez que abrís Hoy o una ficha con señal.";
+/** Se abrió /grabar/<turno> y ese turno no está en la agenda local. */
+export const SIN_CONEXION_TURNO_NO_GUARDADO =
+  "Este turno no está guardado en el teléfono, así que sin señal no se puede abrir.";
+/** El turno guardado es de mañana: se graba el mismo día. */
+export const SIN_CONEXION_TURNO_OTRO_DIA =
+  "Este turno no es de hoy. Sin señal se pueden grabar sólo los turnos de hoy.";
+/** La franja de arriba del grabador sin señal: corta, el resto ya lo dice
+ *  la pantalla. */
+export const SIN_CONEXION_FRANJA = "Sin señal. La grabación queda en el teléfono.";
+/** Recarga la página: si volvió la señal, abre la app de siempre. */
+export const SIN_CONEXION_PROBAR = "Probar de nuevo";
+
 /** El audio se guardó pero el turno no llegó a quedar como realizado. Se
  *  dice en ese orden: primero lo que sí se salvó (la sesión, que es lo
  *  irrecuperable), después lo que falta y se puede repetir. */

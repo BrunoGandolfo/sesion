@@ -55,3 +55,9 @@ entrega/
 # python
 __pycache__/
 .pytest_cache/
+
+# Serwist (service worker): con Turbopack se compila en el build y queda en
+# .next/ (src/app/serwist/[path]/route.ts). Por si algún día se genera en
+# public/, como en la integración con webpack, tampoco se versiona.
+public/sw*
+public/swe-worker*
