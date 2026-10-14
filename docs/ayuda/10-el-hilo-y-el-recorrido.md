@@ -90,8 +90,10 @@ impide. Una propuesta de la IA nunca reemplaza tu versión sin que la aceptes.
 En **Historial de versiones** ves cada una con su número, si es una propuesta de
 IA o una edición tuya, su estado y sus fechas. Abrí una para leerla y, si
 querés, **Usar como borrador de una versión nueva**. En el historial el estado
-aparece con la palabra técnica: *aplicada* (fue o es la vigente), *propuesta*,
-*desactualizada* o *rechazada* (descartada).
+aparece con la palabra técnica: *aplicada* (fue o es la vigente, o es una
+propuesta que aceptaste con **Editar y aceptar**: en ese caso la vigente es la
+versión nueva con tus ediciones), *propuesta*, *desactualizada* o *rechazada*
+(descartada).
 
 ## El brief antes de la sesión
 
@@ -126,7 +128,7 @@ meses** y **Todo**, y queda guardado en la dirección de la página.
 
 ### Los gráficos
 
-- **Señales de riesgo** — una fila por señal marcada, de la más reciente a la más
+- **Señal de riesgo · N señales** — una fila por señal marcada, de la más reciente a la más
   vieja, con **Lo que dijo** y **Ver la sesión**.
 - **Intensidad emocional** — *"Cómo llegó a cada sesión, del 1 al 10."* La
   línea va en gris; los puntos en terracota son sesiones con señal de riesgo.
@@ -153,8 +155,10 @@ interpolación"*. El hueco es un dato que no se pudo evaluar, no un cero.
 
 Intensidad, alianza e intervenciones muestran el período elegido. **Los temas y
 las señales de riesgo se cuentan sobre todas las sesiones**, aunque sus
-subtítulos hablen del período. Lo único de Temas que sí se acota al período es
-la tabla tema por sesión, dentro de **Ver detalle**.
+subtítulos hablen del período. De Temas, lo que sí se acota al período es la
+frase de lectura del gráfico (por ejemplo, si los temas de la
+última sesión aparecen por primera vez, se compara solo con las sesiones del
+período) y la tabla tema por sesión, dentro de **Ver detalle**.
 
 ## Exportar el Recorrido a PDF
 
@@ -169,7 +173,8 @@ La hoja lleva:
   activos, el tema que más vuelve y, si hubo, la última señal.
 - **El Recorrido vigente**, completo, con sus señales anteriores y su detalle.
 - **Cómo va**, con todas las sesiones con nota, también las que están para
-  revisar. A diferencia de la pantalla, el papel lleva el **Progreso
+  revisar. Con menos de 3, solo dice *"Todavía no hay suficiente recorrido."*
+  A diferencia de la pantalla, el papel lleva el **Progreso
   percibido** y la **Observación IA** de cada sesión, de la más vieja a la más
   nueva, y cada tema con la última vez que apareció.
 - **El historial de versiones**: cada una con su fecha, quién la escribió, su

@@ -71,7 +71,7 @@ En **Ver detalle** cada ítem aparece con uno de tres estados:
   respaldarlo con una cita textual; revisá que la cita esté.
 - **Ausente** (punto gris) — la sesión daba lugar y no apareció.
 - **No determinable** (punto punteado) — no hay cómo saberlo desde el audio, con
-  la razón escrita al lado.
+  la razón escrita debajo del ítem.
 
 **"No determinable" no es "mal".** El instrumento fue validado con video; desde
 una transcripción solo se puede acreditar lo que dejó huella verbal. Si hiciste
@@ -80,7 +80,7 @@ una observación corporal sin decirla en voz alta, para el sistema no existe.
 ## MITI 4.2.1 — Motivational Interviewing Treatment Integrity
 
 *Cómo acompañaste en esta sesión.* Dos escalas globales, de **1 a 5**:
-**Empatía** y **Colaboración**. Verde de 3 para arriba, dorado en 2, terracotta
+**Empatía** y **Colaboración**. Verde de 3 para arriba, dorado en 2, terracota
 en 1.
 
 ## CTS-R — Cognitive Therapy Scale, Revised
@@ -98,10 +98,11 @@ Es lo que está arriba de todo, antes del instrumento:
 - **Áreas de crecimiento** — hasta 3, cada una con una observación y una
   sugerencia concreta.
 - **Observación general** — una idea para la próxima sesión.
-- Cada puntaje debería traer **la cita literal y el minuto** que lo justifican,
-  y sin cita el modelo tiene que marcar **"No determinable"** con la razón. Es
-  una instrucción al modelo, no algo que la app compruebe: si ves un puntaje sin
-  cita, tomalo con más cautela.
+- En MITI y CTS-R, cada puntaje debería traer **la cita literal y el minuto**
+  que lo justifican, y sin cita el modelo tiene que marcar **"No determinable"**
+  con la razón. En GTFS la cita se exige solo para **Presente**: **Ausente** va
+  sin cita. Es una instrucción al modelo, no algo que la app compruebe: si ves
+  un puntaje sin cita, tomalo con más cautela.
 
 Y al pie, siempre: *"Este análisis es generado por IA a partir de la
 transcripción. No sustituye la supervisión clínica profesional. Las métricas son

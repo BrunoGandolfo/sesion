@@ -47,6 +47,9 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    - Si ya está todo hecho, un chip **"Nota lista"**.
    Siempre están además **Preparar sesión** (abre la ficha en modo
    preparación) y el enlace **Ver ficha →**.
+   Si además hay otras sesiones del día cuya nota se está escribiendo, debajo
+   de la tarjeta aparece un recuadro *"Procesando la sesión de …"* por cada
+   una.
 4. **Agenda del día** — una fila por turno, en orden de hora, con el botón
    **Agendar** y, en la computadora, **Ver semana →**. Cada fila muestra la hora,
    la duración, la paciente, la modalidad y la tarifa, y a la derecha lo que
@@ -100,16 +103,19 @@ cosa y la nota que falta es otra, y las dos se muestran.
 Si cobrás un turno que todavía figuraba **Agendado**, pasa a realizado y
 cobrado en el momento, en la fila y en la tarjeta de ahora, y suma a **Este
 mes**. Si igual lo intentaras cobrar dos veces (por ejemplo desde otra
-pestaña), el segundo cobro no entra y la app avisa *"No se pudo cobrar."*:
-recargá y vas a ver el turno ya cobrado. Ver `14-cuando-algo-falla.md`.
+pestaña), el segundo cobro no entra y la app avisa *"El turno ya está
+cobrado"* o, si los dos llegaron casi juntos, *"El turno cambió mientras se
+cobraba. Probá de nuevo."*: recargá y vas a ver el turno ya cobrado. Ver `14-cuando-algo-falla.md`.
 
 ## Los colores
 
-- **Verde (sage)** — hecho, cobrado, en curso.
-- **Dorado (gold)** — algo espera algo tuyo: turno agendado, nota para revisar,
-  la nota escribiéndose.
-- **Terracotta** — plata sin cobrar, falta la autorización, señal de riesgo.
-- **Gris** — "No vino", o simplemente sin acento.
+- **Verde (sage)** — hecho, cobrado, en curso, nota para revisar.
+- **Dorado (gold)** — lo que te toca hacer: los botones **Grabar sesión** y
+  **Cobrar** de cada fila de la agenda, el borde del bloque de pendientes y su
+  ícono de notas para revisar, y **Sin avisar**.
+- **Terracota** — plata sin cobrar, falta la autorización, señal de riesgo.
+- **Gris** — **Agendado**, "No vino", **Cancelado**, *Procesando*, o
+  simplemente sin acento.
 
 ## Qué hace la app por detrás
 
@@ -122,15 +128,19 @@ de cualquier fecha (hasta 20). La hora se resuelve siempre en hora de Montevideo
 servidor.
 
 Un turno **Agendado** cuya hora ya pasó todavía no cuenta como deuda: pasa a
-contar cuando se graba o se cobra.
+contar cuando se graba. Si lo cobrás antes, queda realizado y cobrado a la vez,
+y nunca figura como deuda.
 
 ## Lo que NO hace
 
-- **No se relee entera sola.** El aviso de nota lista sí llega solo: la franja
-  arriba y el número en **Hoy** (ver `14-cuando-algo-falla.md`). Y cuando
-  termina una nota que Hoy mostraba *Procesando*, la agenda y los pendientes se
-  actualizan sin recargar. Lo demás —un turno agendado o cobrado en otra
-  pestaña o en la computadora— aparece al volver a entrar o recargar.
+- **No se relee entera mientras la estás mirando.** El aviso de nota lista sí
+  llega solo: la franja arriba y el número en **Hoy** (ver
+  `14-cuando-algo-falla.md`). Y cuando termina una nota que Hoy mostraba
+  *Procesando*, la agenda y los pendientes se actualizan sin recargar. Lo
+  demás —un turno agendado o cobrado en otra pestaña o en la computadora—
+  aparece cuando volvés a esta pestaña desde otra o desde otra app, al pasar la
+  medianoche, o al volver a entrar o recargar. La hora sí avanza sola, minuto a
+  minuto: un turno que llega a su hora pasa a **En curso** sin recargar.
 - **No muestra los turnos cancelados.**
 - **No muestra el bloque de pendientes** cuando no hay nada pendiente.
 - **No manda el WhatsApp por vos**: **Abrir WhatsApp** lo deja escrito, y

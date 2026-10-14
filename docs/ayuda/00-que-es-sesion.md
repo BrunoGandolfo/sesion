@@ -77,7 +77,9 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 
 ## Lo que NO hace
 
-- Los recordatorios de turno salen por SMS.
+- Los recordatorios de turno salen por SMS automático o los mandás vos desde tu
+  teléfono, según el canal que elijas en **Tu consultorio** (ver
+  `06-recordatorios-sms.md`).
   **Recordar cobro por SMS** también manda un SMS, pero solo cuando vos confirmás
   el envío desde Cobros.
 - **No graba video.** Solo audio.

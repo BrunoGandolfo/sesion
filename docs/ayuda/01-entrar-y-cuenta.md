@@ -41,9 +41,9 @@ días** sin usar la app en ese dispositivo.
 
 - Se bloquea con **5 intentos fallidos dentro de 15 minutos**. Se cuentan por
   email y también por la conexión desde la que se entra.
-- El bloqueo dura **15 minutos** la primera vez, **30** la segunda, **60** la
-  tercera y **4 horas** de ahí en adelante, contando las veces de las últimas
-  24 horas.
+- Cuánto dura depende de cuántos intentos fallidos sumás en las últimas 24
+  horas, seguidos o no: con 5 a 9, **15 minutos**; con 10 a 14, **30**; con 15
+  a 19, **60**; y con 20 o más, **4 horas**.
 - El tiempo se cuenta **desde el último intento fallido antes del bloqueo**.
   Probar mientras está bloqueado no alarga la espera, pero tampoco sirve:
   mientras dura, ni la contraseña correcta entra.

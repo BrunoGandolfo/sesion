@@ -194,9 +194,33 @@ export async function enviarSmsTwilio(
 // preguntar.
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Por qué no se pudo consultar un mensaje. `httpStatus` es null cuando no
+ *  hubo respuesta (red, timeout); `codigo` es el `code` del cuerpo de error
+ *  de Twilio (20404, 20003…) cuando vino. `mensaje` es una línea: el
+ *  `message` de Twilio o la causa de red, nunca el cuerpo entero. */
+export interface ErrorConsultaTwilio {
+  codigo: number | null;
+  httpStatus: number | null;
+  mensaje: string;
+}
+
 export type EstadoMensajeTwilio =
   | { tipo: "ok"; status: string; codigo: number | null }
-  | { tipo: "error"; mensaje: string };
+  | ({ tipo: "error" } & ErrorConsultaTwilio);
+
+/** Tope del mensaje de error: una línea para un log o una terminal. */
+const TOPE_MENSAJE = 200;
+
+function enUnaLinea(texto: string): string {
+  const plano = texto.replace(/\s+/g, " ").trim() || "sin detalle";
+  return plano.length > TOPE_MENSAJE ? `${plano.slice(0, TOPE_MENSAJE - 1)}…` : plano;
+}
+
+function aNumero(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : null;
+}
 
 export async function consultarMensajeTwilio(
   sid: string,
@@ -204,26 +228,40 @@ export async function consultarMensajeTwilio(
 ): Promise<EstadoMensajeTwilio> {
   const env = opciones.env ?? process.env;
   if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN) {
-    return { tipo: "error", mensaje: "faltan credenciales de Twilio" };
+    return { tipo: "error", codigo: null, httpStatus: null, mensaje: "faltan credenciales de Twilio" };
   }
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages/${encodeURIComponent(sid)}.json`;
+  const timeoutMs = opciones.timeoutMs ?? TIMEOUT_TWILIO_MS;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opciones.timeoutMs ?? TIMEOUT_TWILIO_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await (opciones.fetcher ?? fetch)(url, {
-      headers: { Authorization: `Basic ${btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`)}` },
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await (opciones.fetcher ?? fetch)(url, {
+        headers: { Authorization: `Basic ${btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`)}` },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      // "fetch failed" no dice nada: lo que sirve es la causa
+      // (ECONNREFUSED, ENOTFOUND, UND_ERR_CONNECT_TIMEOUT).
+      const mensaje =
+        error instanceof Error && error.name === "AbortError"
+          ? `Twilio no respondió en ${timeoutMs / 1000} s`
+          : `red: ${detalleDeError(error)}${codigoDeRed(error) ? ` (${codigoDeRed(error)})` : ""}`;
+      return { tipo: "error", codigo: null, httpStatus: null, mensaje: enUnaLinea(mensaje) };
+    }
     const cuerpo = (await response.json().catch(() => null)) as
-      | { status?: string; error_code?: number | string | null; message?: string }
+      | { status?: string; error_code?: number | string | null; code?: number | string; message?: string }
       | null;
     if (!response.ok || !cuerpo?.status) {
-      return { tipo: "error", mensaje: cuerpo?.message ?? `HTTP ${response.status}` };
+      return {
+        tipo: "error",
+        codigo: response.ok ? null : aNumero(cuerpo?.code),
+        httpStatus: response.status,
+        mensaje: enUnaLinea(typeof cuerpo?.message === "string" ? cuerpo.message : `HTTP ${response.status}`),
+      };
     }
-    const codigo = cuerpo.error_code === null || cuerpo.error_code === undefined ? null : Number(cuerpo.error_code);
-    return { tipo: "ok", status: cuerpo.status, codigo: codigo !== null && Number.isFinite(codigo) ? codigo : null };
-  } catch (error) {
-    return { tipo: "error", mensaje: detalleDeError(error) };
+    return { tipo: "ok", status: cuerpo.status, codigo: aNumero(cuerpo.error_code) };
   } finally {
     clearTimeout(timer);
   }

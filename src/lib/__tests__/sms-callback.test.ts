@@ -199,7 +199,7 @@ describe("reconciliarEnvios: los aceptado viejos, contra lo que dice Twilio", ()
   };
   const consultar = async (sid: string) => {
     const m = TWILIO[sid];
-    return m === "error" || !m ? { tipo: "error" as const, mensaje: "HTTP 500" } : { tipo: "ok" as const, ...m };
+    return m === "error" || !m ? { tipo: "error" as const, codigo: null, httpStatus: 500, mensaje: "HTTP 500" } : { tipo: "ok" as const, ...m };
   };
   const preparar = async () => {
     const ids: Record<string, string> = {};

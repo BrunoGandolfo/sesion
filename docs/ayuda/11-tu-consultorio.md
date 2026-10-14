@@ -19,7 +19,7 @@ Arriba a la derecha aparece *Guardando…* y después *Guardado.* Si algo falla:
 
 | Campo | Qué hace |
 | --- | --- |
-| **Nombre** | *"Como querés que te nombren los pacientes"*. Va **al principio** de cada recordatorio, después de "Consultorio", y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
+| **Nombre** | *"Como querés que te nombren los pacientes"*. Va **al principio** de cada recordatorio y del SMS de **Recordar cobro por SMS**, después de "Consultorio", y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
 | **Dirección del consultorio** | Aparece en la autorización que firma la paciente, y en el recordatorio si insertás la ficha **Dirección**. |
 | **Teléfono** | El número al que la paciente llama para cambios. Va al final de cada recordatorio: *"Cambios: llamar al …"*. |
 
@@ -102,8 +102,9 @@ mantiene abierta la actual. Ver
 ## Qué hace la app por detrás
 
 Los cambios pendientes se envían juntos. **Si un campo del lote es inválido,
-no se guarda ninguno de esos cambios.** Corregí los campos marcados y tocá
-**Reintentar**; esperá la confirmación **Guardado** antes de salir.
+los demás se guardan igual y ese queda sin guardar**, marcado con su error.
+Corregilo y tocá **Reintentar**; esperá la confirmación **Guardado** antes de
+salir.
 La configuración es de todo el consultorio: los cambios guardados también
 se ven en la computadora.
 
@@ -113,7 +114,7 @@ se ven en la computadora.
 - **No hay horario de atención** ni días laborables configurables.
 - **No hay duración por defecto del turno**: se elige en cada turno (viene 50).
 - **No cambia el momento del recordatorio por paciente**: es uno para todos.
-- **No cambia el texto de "Recordar cobro por SMS"** de Cobros: ese no es configurable.
+- **No cambia el texto de "Recordar cobro por SMS"** de Cobros: ese no es configurable, salvo tu **Nombre**, que va al principio.
 - **No cambia el texto de la autorización** de grabación.
 - Cada cuenta tiene su propio consultorio; invitar no comparte el tuyo.
 
