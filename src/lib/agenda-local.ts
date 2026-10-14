@@ -27,32 +27,52 @@ const DB_VERSION = 1;
 const STORE = "turnos";
 
 /**
- * Marca de "sesión cerrada" en localStorage. Una escritura que todavía estaba
- * en vuelo al salir (la respuesta de Hoy o de una ficha que llega tarde, u
- * otra pestaña abierta) volvería a llenar la agenda después del borrado. La
- * marca la pone olvidarAgendaLocal ANTES de borrar y la saca el ingreso
- * (abrirAgendaLocal); cada escritura la mira DENTRO de su transacción. Las
- * transacciones de escritura sobre un mismo store corren en orden, así que
- * una escritura que corre después del borrado ve la marca y no guarda nada.
- * localStorage es compartido y síncrono entre pestañas.
+ * Generación de la sesión, en localStorage (compartido y síncrono entre
+ * pestañas). Una respuesta de Hoy o de una ficha que llega tarde —en esta u
+ * otra pestaña, pedida con la cuenta anterior— no puede escribir la agenda
+ * después de salir ni después de que entre otra cuenta (/sin-conexion es
+ * pública). Por eso:
+ *
+ *   - quien pide los datos captura la generación ANTES de pedirlos
+ *     (generacionAgenda) y la pasa al escribir;
+ *   - salir (olvidarAgendaLocal) y entrar (abrirAgendaLocal) la cambian;
+ *     salir la deja "cerrada" hasta el próximo ingreso;
+ *   - cada escritura compara su generación con la vigente DENTRO de su
+ *     transacción. Las transacciones de escritura sobre un mismo store corren
+ *     en orden: una que corre después de un cambio de generación lo ve y no
+ *     guarda nada.
+ *
+ * Sin localStorage (modo privado estricto) la generación es siempre la misma:
+ * queda sólo el borrado al salir y al entrar.
  */
-const MARCA_CERRADA = "sesion-agenda-local:cerrada";
+const CLAVE_GENERACION = "sesion-agenda-local:generacion";
+const SIN_ALMACENAMIENTO = "sin-almacenamiento";
+const CERRADA = ":cerrada";
 
-function sesionCerrada(): boolean {
+/** La generación vigente. Capturarla antes de pedir los datos que se van a
+ *  anotar. */
+export function generacionAgenda(): string {
   try {
-    return localStorage.getItem(MARCA_CERRADA) !== null;
+    return localStorage.getItem(CLAVE_GENERACION) ?? "0";
   } catch {
-    return false;
+    return SIN_ALMACENAMIENTO;
   }
 }
 
-function marcarCerrada(cerrada: boolean) {
+/** Pasa a una generación nueva, abierta o cerrada. */
+function nuevaGeneracion(cerrada: boolean) {
   try {
-    if (cerrada) localStorage.setItem(MARCA_CERRADA, "1");
-    else localStorage.removeItem(MARCA_CERRADA);
+    const actual = Number.parseInt(localStorage.getItem(CLAVE_GENERACION) ?? "0", 10);
+    const siguiente = (Number.isFinite(actual) ? actual : 0) + 1;
+    localStorage.setItem(CLAVE_GENERACION, `${siguiente}${cerrada ? CERRADA : ""}`);
   } catch {
-    // Sin localStorage (modo privado estricto): queda el borrado solo.
+    // Sin localStorage: queda el borrado solo.
   }
+}
+
+/** Si una escritura pedida en `generacion` todavía vale. */
+function generacionVigente(generacion: string): boolean {
+  return !generacion.endsWith(CERRADA) && generacion === generacionAgenda();
 }
 
 /** Lo de hace más de estos días se borra. */
@@ -163,6 +183,7 @@ async function reemplazar(
   esDelAlcance: (registro: TurnoLocal) => boolean,
   nuevos: TurnoLocal[],
   ahora: Date,
+  generacion: string | null,
 ): Promise<void> {
   if (!indexedDBDisponible()) return;
   const limite = fechaLimite(ahora);
@@ -171,12 +192,21 @@ async function reemplazar(
     const tx = db.transaction(STORE, "readwrite");
     const store = tx.objectStore(STORE);
     const actuales = await esperarRequest(store.getAll() as IDBRequest<TurnoLocal[]>);
-    for (const registro of actuales ?? []) {
-      if (registro.fecha < limite || esDelAlcance(registro)) store.delete(registro.turnoId);
+    // Ya dentro de la transacción: ver CLAVE_GENERACION. Una escritura de una
+    // sesión anterior no borra ni escribe nada; un borrado (generacion null)
+    // siempre se aplica.
+    if (generacion !== null && !generacionVigente(generacion)) {
+      tx.abort();
+    } else {
+      for (const registro of actuales ?? []) {
+        if (registro.fecha < limite || esDelAlcance(registro)) store.delete(registro.turnoId);
+      }
+      for (const registro of nuevos) store.put(registro);
     }
-    // Después del getAll, ya dentro de la transacción: ver MARCA_CERRADA.
-    if (!sesionCerrada()) for (const registro of nuevos) store.put(registro);
-    await esperarTransaccion(tx);
+    await esperarTransaccion(tx).catch((error) => {
+      if (generacion !== null && !generacionVigente(generacion)) return;
+      throw error;
+    });
   } catch (error) {
     avisar("escribir", error);
   }
@@ -188,10 +218,14 @@ async function reemplazar(
  * que no reemplaza no lo escribe, así nada queda viejo sin que se lo pueda
  * borrar. Los de mañana los anota cada ficha.
  */
-export function anotarAgendaDelDia(turnos: TurnoParaAgenda[], ahora: Date): Promise<void> {
+export function anotarAgendaDelDia(
+  turnos: TurnoParaAgenda[],
+  ahora: Date,
+  generacion: string,
+): Promise<void> {
   const [hoy] = diasQueSeGuardan(ahora);
   const nuevos = turnos.map(aRegistro).filter((t) => t.fecha === hoy);
-  return reemplazar((r) => r.fecha === hoy, nuevos, ahora);
+  return reemplazar((r) => r.fecha === hoy, nuevos, ahora, generacion);
 }
 
 /**
@@ -202,13 +236,14 @@ export function anotarTurnosDePaciente(
   pacienteId: string,
   turnos: TurnoParaAgenda[],
   ahora: Date,
+  generacion: string,
 ): Promise<void> {
   const dias = diasQueSeGuardan(ahora);
   const nuevos = turnos
     .filter((t) => t.pacienteId === pacienteId)
     .map(aRegistro)
     .filter((t) => dias.includes(t.fecha));
-  return reemplazar((r) => r.pacienteId === pacienteId && dias.includes(r.fecha), nuevos, ahora);
+  return reemplazar((r) => r.pacienteId === pacienteId && dias.includes(r.fecha), nuevos, ahora, generacion);
 }
 
 /** Todos los registros vigentes, por fecha y hora. Purga lo viejo. */
@@ -245,16 +280,17 @@ export async function buscarTurnoLocal(turnoId: string, ahora: Date): Promise<Tu
 }
 
 /** Borra toda la agenda local y no deja escribir más hasta el próximo
- *  ingreso (ver MARCA_CERRADA). Al cerrar sesión. Nunca lanza. */
+ *  ingreso (ver CLAVE_GENERACION). Al cerrar sesión. Nunca lanza. */
 export function olvidarAgendaLocal(): Promise<void> {
-  marcarCerrada(true);
-  return reemplazar(() => true, [], new Date());
+  nuevaGeneracion(true);
+  return reemplazar(() => true, [], new Date(), null);
 }
 
 /** Al entrar: borra lo que haya quedado de otra cuenta (o de una sesión que
- *  venció sin salir) y vuelve a dejar escribir. Nunca lanza. */
+ *  venció sin salir) y abre una generación nueva: lo que se haya pedido antes,
+ *  en cualquier pestaña, ya no se escribe. Nunca lanza. */
 export async function abrirAgendaLocal(): Promise<void> {
-  marcarCerrada(true);
-  await reemplazar(() => true, [], new Date());
-  marcarCerrada(false);
+  nuevaGeneracion(true);
+  await reemplazar(() => true, [], new Date(), null);
+  nuevaGeneracion(false);
 }

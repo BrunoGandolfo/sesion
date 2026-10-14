@@ -4,8 +4,8 @@
 //   - sólo de hoy y mañana (Montevideo);
 //   - Hoy reemplaza el día entero y una ficha reemplaza los de su paciente;
 //   - lo de hace más de dos días se purga;
-//   - al salir y al entrar se borra entera, y una escritura que llega tarde
-//     (o de otra pestaña) después de salir no la vuelve a llenar;
+//   - al salir y al entrar se borra entera, y una escritura pedida con una
+//     sesión anterior (en esta u otra pestaña) no la vuelve a llenar;
 //   - sin IndexedDB no lanza.
 //
 // vitest corre en `node`, sin IndexedDB: abajo hay uno mínimo para un único
@@ -43,11 +43,15 @@ const dbFalsa = {
     const tx = {
       oncomplete: null as (() => void) | null,
       onerror: null,
-      onabort: null,
+      onabort: null as (() => void) | null,
       error: null,
+      abortada: false,
       objectStore: () => storeFalso,
+      abort: () => {
+        tx.abortada = true;
+      },
     };
-    setTimeout(() => tx.oncomplete?.(), 0);
+    setTimeout(() => (tx.abortada ? tx.onabort?.() : tx.oncomplete?.()), 0);
     return tx;
   },
   close: () => {},
@@ -111,7 +115,7 @@ describe("agenda local — qué se guarda", () => {
       sesionClinica: { id: "s1", estado: "aprobada" },
       tarifaCobrada: 2200,
     };
-    await agenda.anotarAgendaDelDia([entero], AHORA);
+    await agenda.anotarAgendaDelDia([entero], AHORA, agenda.generacionAgenda());
 
     expect([...registros.values()]).toEqual([
       { turnoId: "t1", pacienteId: "pac_1", nombreParaMostrar: "Ana Pérez", fecha: "2026-10-13", hora: "15:00" },
@@ -119,7 +123,7 @@ describe("agenda local — qué se guarda", () => {
   });
 
   it("fecha y hora de Montevideo, también pasadas las 21 (otro día en UTC)", async () => {
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_NOCHE)], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_NOCHE)], AHORA, agenda.generacionAgenda());
     expect(registros.get("t1")).toMatchObject({ fecha: "2026-10-13", hora: "23:30" });
   });
 
@@ -128,37 +132,38 @@ describe("agenda local — qué se guarda", () => {
       "pac_1",
       [turno("t1", HOY_15), turno("t2", MANANA_11), turno("t3", PASADO_11)],
       AHORA,
+      agenda.generacionAgenda(),
     );
     expect([...registros.keys()].sort()).toEqual(["t1", "t2"]);
   });
 
   it("Hoy anota sólo el día: uno de mañana no entra (no lo podría borrar si se cancela)", async () => {
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_15), turno("t2", MANANA_11)], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15), turno("t2", MANANA_11)], AHORA, agenda.generacionAgenda());
     expect([...registros.keys()]).toEqual(["t1"]);
   });
 
   it("una ficha no anota turnos de otra paciente", async () => {
-    await agenda.anotarTurnosDePaciente("pac_1", [turno("t1", HOY_15), turno("t2", HOY_9, "pac_2")], AHORA);
+    await agenda.anotarTurnosDePaciente("pac_1", [turno("t1", HOY_15), turno("t2", HOY_9, "pac_2")], AHORA, agenda.generacionAgenda());
     expect([...registros.keys()]).toEqual(["t1"]);
   });
 });
 
 describe("agenda local — reemplazos", () => {
   it("Hoy reemplaza el día: un turno que ya no está (cancelado, movido) se va", async () => {
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_9), turno("t2", HOY_15)], AHORA);
-    await agenda.anotarAgendaDelDia([turno("t2", HOY_15)], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_9), turno("t2", HOY_15)], AHORA, agenda.generacionAgenda());
+    await agenda.anotarAgendaDelDia([turno("t2", HOY_15)], AHORA, agenda.generacionAgenda());
     expect([...registros.keys()]).toEqual(["t2"]);
   });
 
   it("Hoy no borra lo de mañana que anotó una ficha", async () => {
-    await agenda.anotarTurnosDePaciente("pac_1", [turno("t2", MANANA_11)], AHORA);
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_9, "pac_3")], AHORA);
+    await agenda.anotarTurnosDePaciente("pac_1", [turno("t2", MANANA_11)], AHORA, agenda.generacionAgenda());
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_9, "pac_3")], AHORA, agenda.generacionAgenda());
     expect([...registros.keys()].sort()).toEqual(["t1", "t2"]);
   });
 
   it("una ficha reemplaza sólo los turnos de su paciente", async () => {
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_9, "pac_1"), turno("t2", HOY_15, "pac_2")], AHORA);
-    await agenda.anotarTurnosDePaciente("pac_1", [], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_9, "pac_1"), turno("t2", HOY_15, "pac_2")], AHORA, agenda.generacionAgenda());
+    await agenda.anotarTurnosDePaciente("pac_1", [], AHORA, agenda.generacionAgenda());
     expect([...registros.keys()]).toEqual(["t2"]);
   });
 });
@@ -171,50 +176,70 @@ describe("agenda local — purga y lectura", () => {
     expect([...registros.keys()]).toEqual(["anteayer"]);
 
     registros.set("viejo", { turnoId: "viejo", pacienteId: "p", nombreParaMostrar: "X", fecha: "2026-10-10", hora: "10:00" });
-    await agenda.anotarAgendaDelDia([], AHORA);
+    await agenda.anotarAgendaDelDia([], AHORA, agenda.generacionAgenda());
     expect(registros.has("viejo")).toBe(false);
   });
 
   it("los de hoy, por hora", async () => {
-    await agenda.anotarTurnosDePaciente("pac_1", [turno("t2", MANANA_11), turno("t1", HOY_15), turno("t0", HOY_9)], AHORA);
+    await agenda.anotarTurnosDePaciente("pac_1", [turno("t2", MANANA_11), turno("t1", HOY_15), turno("t0", HOY_9)], AHORA, agenda.generacionAgenda());
     const hoy = await agenda.turnosLocalesDeHoy(AHORA);
     expect(hoy.map((t) => t.turnoId)).toEqual(["t0", "t1"]);
   });
 
   it("busca un turno guardado por su id", async () => {
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA, agenda.generacionAgenda());
     expect(await agenda.buscarTurnoLocal("t1", AHORA)).toMatchObject({ nombreParaMostrar: "Ana Pérez", hora: "15:00" });
     expect(await agenda.buscarTurnoLocal("otro", AHORA)).toBeNull();
   });
 
   it("olvidarAgendaLocal borra todo, de cualquier día y paciente", async () => {
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
-    await agenda.anotarTurnosDePaciente("pac_2", [turno("t2", MANANA_11, "pac_2")], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA, agenda.generacionAgenda());
+    await agenda.anotarTurnosDePaciente("pac_2", [turno("t2", MANANA_11, "pac_2")], AHORA, agenda.generacionAgenda());
     await agenda.olvidarAgendaLocal();
     expect(registros.size).toBe(0);
   });
 
-  it("una escritura que llega después de salir no vuelve a llenar la agenda, hasta el próximo ingreso", async () => {
+  it("una escritura pedida antes de salir no vuelve a llenar la agenda, ni antes ni después del próximo ingreso", async () => {
+    // La respuesta de Hoy que estaba en vuelo, u otra pestaña con la cuenta anterior.
+    const vieja = agenda.generacionAgenda();
     await agenda.olvidarAgendaLocal();
-    // La respuesta de Hoy que estaba en vuelo, u otra pestaña.
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
-    await agenda.anotarTurnosDePaciente("pac_1", [turno("t2", MANANA_11)], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA, vieja);
+    expect(registros.size).toBe(0);
+    // Pedida ya con la sesión cerrada, tampoco.
+    await agenda.anotarTurnosDePaciente("pac_1", [turno("t2", MANANA_11)], AHORA, agenda.generacionAgenda());
     expect(registros.size).toBe(0);
 
     await agenda.abrirAgendaLocal();
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
-    expect([...registros.keys()]).toEqual(["t1"]);
+    await agenda.anotarAgendaDelDia([turno("t3", HOY_9, "pac_3")], AHORA, agenda.generacionAgenda());
+    // La de la cuenta anterior llega tarde, después del ingreso: no borra ni escribe.
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA, vieja);
+    expect([...registros.keys()]).toEqual(["t3"]);
+  });
+
+  it("una escritura pedida antes de que entre otra cuenta (sin salir) tampoco vale", async () => {
+    const vieja = agenda.generacionAgenda();
+    await agenda.abrirAgendaLocal();
+    await agenda.anotarTurnosDePaciente("pac_1", [turno("t1", HOY_15)], AHORA, vieja);
+    expect(registros.size).toBe(0);
   });
 
   it("entrar borra lo que quedó de otra cuenta", async () => {
-    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA, agenda.generacionAgenda());
     await agenda.abrirAgendaLocal();
+    expect(registros.size).toBe(0);
+  });
+
+  it("sin localStorage se sigue escribiendo (queda sólo el borrado al salir y al entrar)", async () => {
+    vi.stubGlobal("localStorage", { getItem: () => { throw new Error("bloqueado"); }, setItem: () => { throw new Error("bloqueado"); } });
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA, agenda.generacionAgenda());
+    expect([...registros.keys()]).toEqual(["t1"]);
+    await agenda.olvidarAgendaLocal();
     expect(registros.size).toBe(0);
   });
 
   it("sin IndexedDB no lanza: escribir no hace nada y leer devuelve vacío", async () => {
     vi.stubGlobal("indexedDB", undefined);
-    await expect(agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA)).resolves.toBeUndefined();
+    await expect(agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA, agenda.generacionAgenda())).resolves.toBeUndefined();
     expect(await agenda.leerAgendaLocal(AHORA)).toEqual([]);
     expect(registros.size).toBe(0);
   });

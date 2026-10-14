@@ -17,7 +17,7 @@ import { EntradaMarco } from "../_components/entrada-marco";
 // El POST de registro deja la cookie de sesión puesta: no hay segundo paso
 // de entrada. Con 201, vamos a Hoy. Como al entrar, la agenda local de
 // grabar sin señal se vacía de lo de otra cuenta y vuelve a aceptar
-// escrituras (lib/agenda-local.ts, MARCA_CERRADA).
+// escrituras (lib/agenda-local.ts, CLAVE_GENERACION).
 export function RegistroForm({ token, valida }: { token: string; valida: boolean }) {
   const router = useRouter();
   const [nombre, setNombre] = React.useState(""); const [email, setEmail] = React.useState("");

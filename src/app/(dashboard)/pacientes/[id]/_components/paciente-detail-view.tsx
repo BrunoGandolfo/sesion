@@ -35,7 +35,7 @@ import type {
 } from "@/components/grabacion/ConsentimientoBadge";
 import { useGrabacionSesion } from "@/hooks/useGrabacionSesion";
 import { useHoy } from "@/hooks/useHoy";
-import { anotarTurnosDePaciente, type TurnoParaAgenda } from "@/lib/agenda-local";
+import { anotarTurnosDePaciente, generacionAgenda, type TurnoParaAgenda } from "@/lib/agenda-local";
 import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
 import type { TurnoDeFicha } from "@/app/api/_lib/casos-uso/pacientes";
 import { ESTADOS_GRABABLES, sePuedeGrabar } from "@/app/api/_lib/domain";
@@ -124,6 +124,8 @@ export function PacienteDetailView({ id }: { id: string }) {
 
   React.useEffect(() => {
     const controller = new AbortController();
+    // Antes de pedir: ver CLAVE_GENERACION en lib/agenda-local.ts.
+    const generacion = generacionAgenda();
     apiGet<{ paciente: PacienteJson; turnos: TurnoJson<TurnoDeFicha>[] }>(
       `/api/pacientes/${id}`,
       { signal: controller.signal },
@@ -133,7 +135,7 @@ export function PacienteDetailView({ id }: { id: string }) {
         const turnos = (data.turnos ?? []).map((t) => parseTurno<TurnoDeFicha>(t));
         setFicha({ tipo: "lista", id, ficha: { paciente, turnos } });
         // Para grabar si la app se abre sin señal (/sin-conexion).
-        void anotarTurnosDePaciente(id, turnosParaAgendaLocal(paciente, turnos), new Date());
+        void anotarTurnosDePaciente(id, turnosParaAgendaLocal(paciente, turnos), new Date(), generacion);
       })
       .catch((err: unknown) => {
         if (esAbort(err)) return;
