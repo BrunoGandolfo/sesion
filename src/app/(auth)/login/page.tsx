@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button, Card, Input } from "@/components/ui";
-import { olvidarAgendaLocal } from "@/lib/agenda-local";
+import { abrirAgendaLocal } from "@/lib/agenda-local";
 import { apiPost } from "@/lib/api-client";
 import { ENTRADA_REINGRESO,
   ENTRADA_CONTRASENA,
@@ -56,7 +56,7 @@ export default function LoginPage() {
       await apiPost("/api/cuenta/entrar", { email, password });
       // Lo que quedó de otra cuenta (o de una sesión que venció sin salir)
       // no se mezcla con la de quien entra: la agenda local se rehace en Hoy.
-      await olvidarAgendaLocal();
+      await abrirAgendaLocal();
       router.push("/");
       router.refresh();
     } catch {

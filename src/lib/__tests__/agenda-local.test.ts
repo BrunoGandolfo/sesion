@@ -4,7 +4,8 @@
 //   - sólo de hoy y mañana (Montevideo);
 //   - Hoy reemplaza el día entero y una ficha reemplaza los de su paciente;
 //   - lo de hace más de dos días se purga;
-//   - al salir y al entrar se borra entera (olvidarAgendaLocal);
+//   - al salir y al entrar se borra entera, y una escritura que llega tarde
+//     (o de otra pestaña) después de salir no la vuelve a llenar;
 //   - sin IndexedDB no lanza.
 //
 // vitest corre en `node`, sin IndexedDB: abajo hay uno mínimo para un único
@@ -76,15 +77,28 @@ function turno(id: string, fecha: Date, pacienteId = "pac_1", nombre = "Ana Pér
   return { id, pacienteId, fecha, nombreParaMostrar: nombre };
 }
 
+// localStorage de juguete: la marca de sesión cerrada (compartida entre pestañas).
+const marca = new Map<string, string>();
+const localStorageFalso = {
+  getItem: (k: string) => marca.get(k) ?? null,
+  setItem: (k: string, v: string) => void marca.set(k, v),
+  removeItem: (k: string) => void marca.delete(k),
+};
+
 beforeAll(async () => {
+  vi.stubGlobal("localStorage", localStorageFalso);
   vi.stubGlobal("indexedDB", indexedDBFalso);
   agenda = await import("@/lib/agenda-local");
 });
 
-beforeEach(() => registros.clear());
+beforeEach(() => {
+  registros.clear();
+  marca.clear();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.stubGlobal("localStorage", localStorageFalso);
   vi.stubGlobal("indexedDB", indexedDBFalso);
 });
 
@@ -172,6 +186,24 @@ describe("agenda local — purga y lectura", () => {
     await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
     await agenda.anotarTurnosDePaciente("pac_2", [turno("t2", MANANA_11, "pac_2")], AHORA);
     await agenda.olvidarAgendaLocal();
+    expect(registros.size).toBe(0);
+  });
+
+  it("una escritura que llega después de salir no vuelve a llenar la agenda, hasta el próximo ingreso", async () => {
+    await agenda.olvidarAgendaLocal();
+    // La respuesta de Hoy que estaba en vuelo, u otra pestaña.
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
+    await agenda.anotarTurnosDePaciente("pac_1", [turno("t2", MANANA_11)], AHORA);
+    expect(registros.size).toBe(0);
+
+    await agenda.abrirAgendaLocal();
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
+    expect([...registros.keys()]).toEqual(["t1"]);
+  });
+
+  it("entrar borra lo que quedó de otra cuenta", async () => {
+    await agenda.anotarAgendaDelDia([turno("t1", HOY_15)], AHORA);
+    await agenda.abrirAgendaLocal();
     expect(registros.size).toBe(0);
   });
 

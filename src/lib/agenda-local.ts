@@ -26,6 +26,35 @@ const DB_NOMBRE = "sesion-agenda-local";
 const DB_VERSION = 1;
 const STORE = "turnos";
 
+/**
+ * Marca de "sesión cerrada" en localStorage. Una escritura que todavía estaba
+ * en vuelo al salir (la respuesta de Hoy o de una ficha que llega tarde, u
+ * otra pestaña abierta) volvería a llenar la agenda después del borrado. La
+ * marca la pone olvidarAgendaLocal ANTES de borrar y la saca el ingreso
+ * (abrirAgendaLocal); cada escritura la mira DENTRO de su transacción. Las
+ * transacciones de escritura sobre un mismo store corren en orden, así que
+ * una escritura que corre después del borrado ve la marca y no guarda nada.
+ * localStorage es compartido y síncrono entre pestañas.
+ */
+const MARCA_CERRADA = "sesion-agenda-local:cerrada";
+
+function sesionCerrada(): boolean {
+  try {
+    return localStorage.getItem(MARCA_CERRADA) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function marcarCerrada(cerrada: boolean) {
+  try {
+    if (cerrada) localStorage.setItem(MARCA_CERRADA, "1");
+    else localStorage.removeItem(MARCA_CERRADA);
+  } catch {
+    // Sin localStorage (modo privado estricto): queda el borrado solo.
+  }
+}
+
 /** Lo de hace más de estos días se borra. */
 const DIAS_DE_VIDA = 2;
 
@@ -145,7 +174,8 @@ async function reemplazar(
     for (const registro of actuales ?? []) {
       if (registro.fecha < limite || esDelAlcance(registro)) store.delete(registro.turnoId);
     }
-    for (const registro of nuevos) store.put(registro);
+    // Después del getAll, ya dentro de la transacción: ver MARCA_CERRADA.
+    if (!sesionCerrada()) for (const registro of nuevos) store.put(registro);
     await esperarTransaccion(tx);
   } catch (error) {
     avisar("escribir", error);
@@ -213,7 +243,17 @@ export async function buscarTurnoLocal(turnoId: string, ahora: Date): Promise<Tu
   return (await leerAgendaLocal(ahora)).find((t) => t.turnoId === turnoId) ?? null;
 }
 
-/** Borra toda la agenda local. Al cerrar sesión y al entrar. Nunca lanza. */
+/** Borra toda la agenda local y no deja escribir más hasta el próximo
+ *  ingreso (ver MARCA_CERRADA). Al cerrar sesión. Nunca lanza. */
 export function olvidarAgendaLocal(): Promise<void> {
+  marcarCerrada(true);
   return reemplazar(() => true, [], new Date());
+}
+
+/** Al entrar: borra lo que haya quedado de otra cuenta (o de una sesión que
+ *  venció sin salir) y vuelve a dejar escribir. Nunca lanza. */
+export async function abrirAgendaLocal(): Promise<void> {
+  marcarCerrada(true);
+  await reemplazar(() => true, [], new Date());
+  marcarCerrada(false);
 }

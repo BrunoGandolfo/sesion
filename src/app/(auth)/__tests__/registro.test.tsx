@@ -11,6 +11,8 @@ function servidor(cupo: { restantes: number; aviso: string | null }, post: Respo
 }
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+const abrirAgendaLocal = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/lib/agenda-local", () => ({ abrirAgendaLocal }));
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 function completar() {
   for (const [label, value] of [[ENTRADA_NOMBRE, "Colega"], [ENTRADA_EMAIL, "colega@example.test"], [ENTRADA_CONTRASENA, "contraseña larga"], [ENTRADA_REPETIR, "contraseña larga"]]) {
@@ -35,6 +37,9 @@ it("exige términos, crea la cuenta con UN solo POST (que deja la cookie) y va a
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect(fetcher.mock.calls[0][0]).toBe("/api/cuenta/registro");
   expect(JSON.parse(fetcher.mock.calls[0][1].body).aceptaTerminos).toBe(true);
+  // Registrarse después de que otra cuenta salió reabre la agenda local.
+  expect(abrirAgendaLocal).toHaveBeenCalledOnce();
+  expect(abrirAgendaLocal.mock.invocationCallOrder[0]).toBeLessThan(router.replace.mock.invocationCallOrder[0]);
 });
 it("un 403 al invitar muestra el motivo del servidor", async () => {
   vi.stubGlobal("fetch", servidor({ restantes: 5, aviso: null }, Response.json({ error: "No podés invitar desde esta cuenta." }, { status: 403 })));

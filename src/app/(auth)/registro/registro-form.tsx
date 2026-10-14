@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input } from "@/components/ui";
 import { useEnvio } from "@/hooks/useEnvio";
+import { abrirAgendaLocal } from "@/lib/agenda-local";
 import { apiPost } from "@/lib/api-client";
 import { PASSWORD_MIN, validarPasswordNueva } from "@/lib/password";
 import {
@@ -14,7 +15,9 @@ import {
 import { EntradaMarco } from "../_components/entrada-marco";
 
 // El POST de registro deja la cookie de sesión puesta: no hay segundo paso
-// de entrada. Con 201, vamos a Hoy.
+// de entrada. Con 201, vamos a Hoy. Como al entrar, la agenda local de
+// grabar sin señal se vacía de lo de otra cuenta y vuelve a aceptar
+// escrituras (lib/agenda-local.ts, MARCA_CERRADA).
 export function RegistroForm({ token, valida }: { token: string; valida: boolean }) {
   const router = useRouter();
   const [nombre, setNombre] = React.useState(""); const [email, setEmail] = React.useState("");
@@ -22,6 +25,7 @@ export function RegistroForm({ token, valida }: { token: string; valida: boolean
   const [acepta, setAcepta] = React.useState(false); const [creada, setCreada] = React.useState(false);
   const { enviar: registrar, enviando, error, setError } = useEnvio(async () => {
     await apiPost("/api/cuenta/registro", { token, nombre, email, password, aceptaTerminos: true });
+    await abrirAgendaLocal();
     setCreada(true);
     router.replace("/"); router.refresh();
   }, ENTRADA_CUENTA_ERROR);
