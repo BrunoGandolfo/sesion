@@ -20,15 +20,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+const busqueda = vi.hoisted(() => ({ valor: "" }));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(busqueda.valor),
   useRouter: () => router,
 }));
 
 const abrirAgendaLocal = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock("@/lib/agenda-local", () => ({ abrirAgendaLocal }));
+const olvidarAgendaLocal = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/lib/agenda-local", () => ({ abrirAgendaLocal, olvidarAgendaLocal }));
 
-afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); busqueda.valor = ""; });
 
 import LoginPage from "@/app/(auth)/login/page";
 import {
@@ -129,9 +131,9 @@ describe("Pantalla de entrada", () => {
     fireEvent.change(screen.getByLabelText(ENTRADA_EMAIL), { target: { value: "prueba@example.test" } });
     fireEvent.change(screen.getByLabelText(ENTRADA_CONTRASENA), { target: { value: "solo-prueba-local" } });
     fireEvent.submit(screen.getByLabelText(ENTRADA_EMAIL).closest("form")!);
-    expect(peticion).toHaveBeenCalledExactlyOnceWith("/api/cuenta/entrar", expect.objectContaining({
+    await waitFor(() => expect(peticion).toHaveBeenCalledExactlyOnceWith("/api/cuenta/entrar", expect.objectContaining({
       method: "POST", body: JSON.stringify({ email: "prueba@example.test", password: "solo-prueba-local" }),
-    }));
+    })));
     expect((screen.getByRole("button", { name: ENTRANDO }) as HTMLButtonElement).disabled).toBe(true);
     expect(router.push).not.toHaveBeenCalled();
     responder(Response.json({ data: { ok: true } }));
@@ -166,6 +168,69 @@ describe("Pantalla de entrada", () => {
     expect((screen.getByLabelText(ENTRADA_EMAIL) as HTMLInputElement).value).toBe("prueba@example.test");
     expect((screen.getByRole("button", { name: ENTRAR }) as HTMLButtonElement).disabled).toBe(false);
     expect(router.push).not.toHaveBeenCalled();
+  });
+});
+
+describe("Llegar con ?sesion= (la sesión venció o se cerró desde otro aparato)", () => {
+  const limpiar = (viva: boolean) => vi.fn(async () => Response.json({ data: { viva } }));
+
+  it("si el servidor dice que la sesión no está viva, borra la agenda local", async () => {
+    busqueda.valor = "sesion=vencida";
+    const peticion = limpiar(false);
+    vi.stubGlobal("fetch", peticion);
+    render(<LoginPage />);
+    await waitFor(() => expect(olvidarAgendaLocal).toHaveBeenCalledOnce());
+    expect(peticion).toHaveBeenCalledExactlyOnceWith("/api/cuenta/limpiar", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("si la sesión sigue viva, no borra nada aunque la URL diga ?sesion=", async () => {
+    busqueda.valor = "sesion=vencida";
+    const peticion = limpiar(true);
+    vi.stubGlobal("fetch", peticion);
+    render(<LoginPage />);
+    await waitFor(() => expect(peticion).toHaveBeenCalledOnce());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(olvidarAgendaLocal).not.toHaveBeenCalled();
+  });
+
+  it("si /limpiar falla, tampoco borra", async () => {
+    busqueda.valor = "sesion=vencida";
+    const peticion = vi.fn(async () => Response.json({ error: "x" }, { status: 500 }));
+    vi.stubGlobal("fetch", peticion);
+    render(<LoginPage />);
+    await waitFor(() => expect(peticion).toHaveBeenCalledOnce());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(olvidarAgendaLocal).not.toHaveBeenCalled();
+  });
+
+  it("entrar espera a la limpieza: una respuesta tardía no borra la agenda de la sesión nueva", async () => {
+    busqueda.valor = "sesion=vencida";
+    let responderLimpiar!: (r: Response) => void;
+    const peticion = vi.fn((url: string) => url === "/api/cuenta/limpiar"
+      ? new Promise<Response>((resolve) => { responderLimpiar = resolve; })
+      : Promise.resolve(Response.json({ data: { ok: true } })));
+    vi.stubGlobal("fetch", peticion);
+    render(<LoginPage />);
+    fireEvent.change(screen.getByLabelText(ENTRADA_EMAIL), { target: { value: "prueba@example.test" } });
+    fireEvent.change(screen.getByLabelText(ENTRADA_CONTRASENA), { target: { value: "solo-prueba-local" } });
+    fireEvent.submit(screen.getByLabelText(ENTRADA_EMAIL).closest("form")!);
+    await new Promise((r) => setTimeout(r, 0));
+    // Mientras /limpiar no contesta, no se entra.
+    expect(peticion).toHaveBeenCalledTimes(1);
+    responderLimpiar(Response.json({ data: { viva: false } }));
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/"));
+    expect(peticion.mock.calls.map(([url]) => url)).toEqual(["/api/cuenta/limpiar", "/api/cuenta/entrar"]);
+    // Primero se olvida la agenda vieja, después se abre la nueva.
+    expect(olvidarAgendaLocal.mock.invocationCallOrder[0]).toBeLessThan(abrirAgendaLocal.mock.invocationCallOrder[0]);
+  });
+
+  it("sin ?sesion= no llama a /limpiar ni borra", async () => {
+    const peticion = limpiar(false);
+    vi.stubGlobal("fetch", peticion);
+    render(<LoginPage />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(peticion).not.toHaveBeenCalled();
+    expect(olvidarAgendaLocal).not.toHaveBeenCalled();
   });
 });
 

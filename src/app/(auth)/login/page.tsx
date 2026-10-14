@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button, Card, Input } from "@/components/ui";
-import { abrirAgendaLocal } from "@/lib/agenda-local";
+import { abrirAgendaLocal, olvidarAgendaLocal } from "@/lib/agenda-local";
 import { apiPost } from "@/lib/api-client";
 import { ENTRADA_REINGRESO,
   ENTRADA_CONTRASENA,
@@ -39,13 +39,22 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  // La limpieza en curso: entrar la espera, así una respuesta tardía de
+  // /limpiar no borra la cookie ni la agenda de la sesión recién abierta.
+  const limpieza = React.useRef<Promise<void>>(Promise.resolve());
 
   React.useEffect(() => {
     if (!sesionVencida) return;
     // /limpiar borra la cookie SOLO si no resuelve a una sesión viva: una
     // navegación inducida a /login?sesion=x no puede cerrar una sesión ajena
     // (auditoría de Codex; el porqué, en src/app/api/cuenta/limpiar/route.ts).
-    void apiPost("/api/cuenta/limpiar", undefined).catch(() => undefined);
+    // Si el servidor confirma que la sesión no está viva (venció o se cerró
+    // desde otro aparato), se borra también la agenda local: /sin-conexion es
+    // pública y mostraría nombres y horas sin contraseña. Lo decide la
+    // respuesta, nunca el ?sesion= de la URL, que cualquiera puede armar.
+    limpieza.current = apiPost<{ viva: boolean }>("/api/cuenta/limpiar", undefined)
+      .then((respuesta) => (respuesta?.viva === false ? olvidarAgendaLocal() : undefined))
+      .catch(() => undefined);
   }, [sesionVencida]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -53,6 +62,7 @@ export default function LoginPage() {
     setError(false);
     setLoading(true);
     try {
+      await limpieza.current;
       await apiPost("/api/cuenta/entrar", { email, password });
       // Lo que quedó de otra cuenta (o de una sesión que venció sin salir)
       // no se mezcla con la de quien entra: la agenda local se rehace en Hoy.
