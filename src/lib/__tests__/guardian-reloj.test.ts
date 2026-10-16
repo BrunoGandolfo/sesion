@@ -25,6 +25,8 @@ const PENDIENTES = [
   "src/app/(dashboard)/pacientes/[id]/_components/__tests__/turnos-pagos-tab.test.tsx",
   "src/components/forms/__tests__/nuevo-turno-propuesta.test.tsx",
   "src/components/layout/__tests__/menus.test.tsx",
+  // Grabación: useFakeTimers sin setSystemTime (sólo un vencimiento relativo).
+  "src/lib/__tests__/grabacion-diagnostico-integracion.test.tsx",
 ];
 
 function tests(dir: string): string[] {
@@ -41,7 +43,8 @@ function tests(dir: string): string[] {
 
 const renderiza = (fuente: string) => /\brender(Hook)?\(/.test(fuente);
 const leeElReloj = (fuente: string) => /new Date\(\s*\)|\bDate\.now\(\)/.test(fuente);
-const fijaLaHora = (fuente: string) => /\brelojFijo\(|\.setSystemTime\(|\.useFakeTimers\(/.test(fuente);
+// useFakeTimers solo no alcanza: sin setSystemTime arranca en la hora real.
+const fijaLaHora = (fuente: string) => /\brelojFijo\(|\.setSystemTime\(/.test(fuente);
 
 const todos = CARPETAS.flatMap(tests).map((abs) => ({
   rel: relative(RAIZ, abs).split("\\").join("/"),

@@ -229,7 +229,9 @@ describe("login y cambio de contraseña se excluyen", () => {
     }, OPCIONES_LENTAS);
     // Mientras el login no suelte, el cambio espera su lock: Postgres lo
     // muestra bloqueado. Sin el lock del login, el cambio termina.
-    expect(await esperarBloqueo(estado.base.prisma, { esperando: await pid }, cambio)).toBe("bloqueada");
+    // Si el cambio no llega a empezar, falla acá y no a los 30 s.
+    const pidCambio = await Promise.race([pid, cambio.then(() => { throw new Error("el cambio terminó sin dar su pid"); })]);
+    expect(await esperarBloqueo(estado.base.prisma, { esperando: pidCambio }, cambio)).toBe("bloqueada");
     seguir();
 
     const resultado = await login;
