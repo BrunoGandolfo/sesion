@@ -11,7 +11,7 @@
 
 import { db } from "@/lib/db";
 import { alertar } from "@/lib/alertas";
-import { firmaValida, lineaRechazo, parametrosDeFormulario, URL_CALLBACK } from "@/lib/sms/firma";
+import { URL_CALLBACK, validarWebhookTwilio } from "@/lib/sms/firma";
 
 import { aplicarCallbackTwilio } from "../../_lib/casos-uso/sms-webhooks";
 
@@ -19,21 +19,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
-const MAX_BYTES = 16 * 1024;
-
 export async function POST(request: Request) {
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const crudo = await request.text();
-  if (!token || crudo.length > MAX_BYTES) {
-    console.warn(lineaRechazo(!token ? "sin_token" : "cuerpo_grande", {}));
-    return new Response(null, { status: 403 });
-  }
-  const params = parametrosDeFormulario(crudo);
-  const firma = request.headers.get("x-twilio-signature");
-  if (!firmaValida(token, URL_CALLBACK, params, firma)) {
-    console.warn(lineaRechazo(firma ? "firma" : "sin_firma", params));
-    return new Response(null, { status: 403 });
-  }
+  const params = await validarWebhookTwilio(request, URL_CALLBACK);
+  if (!params) return new Response(null, { status: 403 });
 
   const sid = params.MessageSid ?? params.SmsSid;
   const estado = params.MessageStatus ?? params.SmsStatus ?? "";
