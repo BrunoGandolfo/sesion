@@ -454,6 +454,64 @@ describe("cancelación del turno durante el envío", () => {
     expect(fila.motivoNoEnvio).toBe(MENSAJE_ENVIADO_TRAS_CANCELACION);
   });
 
+  /** El cliente de la corrida, con un gancho que corre justo después de
+   *  leer los candidatos y reservar (la consulta de la baja): ahí cae la
+   *  cancelación que llega mientras el despacho prepara el envío. */
+  function conGancho(gancho: () => Promise<void>): ClienteCifrado {
+    const baja = new Proxy(db.bajaSms, {
+      get(objetivo, clave, receptor) {
+        if (clave !== "findUnique") return Reflect.get(objetivo, clave, receptor);
+        return async (...args: Parameters<typeof db.bajaSms.findUnique>) => {
+          await gancho();
+          return objetivo.findUnique(...args);
+        };
+      },
+    });
+    return new Proxy(db, {
+      get: (objetivo, clave, receptor) => (clave === "bajaSms" ? baja : Reflect.get(objetivo, clave, receptor)),
+    });
+  }
+
+  it("B3: el turno se cancela después de leer los candidatos → el SMS no sale ni gasta el intento", async () => {
+    const { envioId, turnoId } = await crearEnvio();
+    const stub = vi.fn(aceptaOk);
+    const r = await correr(stub, {
+      prisma: conGancho(async () => {
+        // Lo que hace cancelar el turno: el turno y sus envíos en la misma transacción.
+        await prismaRaw.turno.update({ where: { id: turnoId! }, data: { estado: "cancelado" } });
+        await cancelarDesdeAfuera(envioId);
+      }),
+    });
+    expect(stub).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ aceptados: 0, cancelados: 1 });
+    expect(await leer(envioId)).toMatchObject({ estado: "cancelado", intentos: 0, motivoNoEnvio: MOTIVO_TURNO_CERRADO });
+  });
+
+  it("B3: el turno deja de estar programado aunque nadie apague el envío → no sale, se cancela", async () => {
+    const { envioId, turnoId } = await crearEnvio();
+    const stub = vi.fn(aceptaOk);
+    const r = await correr(stub, {
+      prisma: conGancho(async () => {
+        await prismaRaw.turno.update({ where: { id: turnoId! }, data: { estado: "cancelado" } });
+      }),
+    });
+    expect(stub).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ aceptados: 0, cancelados: 1 });
+    expect(await leer(envioId)).toMatchObject({ estado: "cancelado", intentos: 0, motivoNoEnvio: MOTIVO_TURNO_CERRADO });
+  });
+
+  it("B3: un aviso de cobro apagado en el medio (baja, archivo) tampoco sale", async () => {
+    const { envioId } = await crearEnvio({ motivo: "recordatorio_cobro" });
+    const stub = vi.fn(aceptaOk);
+    const r = await correr(stub, {
+      prisma: conGancho(() => cancelarDesdeAfuera(envioId)),
+      textoDeCobro: async () => "Consultorio\nTenés una sesión pendiente de pago.",
+    });
+    expect(stub).not.toHaveBeenCalled();
+    expect(r.aceptados).toBe(0);
+    expect(await leer(envioId)).toMatchObject({ estado: "cancelado", intentos: 0 });
+  });
+
   it("si el envío falló, el envío NO revive, y una corrida posterior no lo levanta", async () => {
     const { envioId } = await crearEnvio();
     await correr(async () => {

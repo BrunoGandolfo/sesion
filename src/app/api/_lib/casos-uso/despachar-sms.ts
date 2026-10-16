@@ -439,14 +439,29 @@ async function procesar(c: Corrida, e: Candidato, corteRescate: Date, ts: string
     const segmentosEstimados = contarLongitudSms(texto).segmentos;
 
     // El intento se gasta ACÁ. `proximoIntentoEn = null` es la marca de
-    // que la llamada pudo haber salido (ver el rescate).
-    const consumido = await prisma.envioSms.update({
-      where: { id: e.id },
+    // que la llamada pudo haber salido (ver el rescate). Condicionado a que
+    // la fila siga reservada y el turno siga programado AHORA: el turno se
+    // leyó con los candidatos, y entre esa lectura y este paso ella pudo
+    // cancelarlo (eso apaga la fila) o cerrarlo por otro camino.
+    const consumido = await prisma.envioSms.updateMany({
+      where: {
+        id: e.id,
+        estado: "enviando",
+        // La misma regla que turnoSigueProgramado, en la base.
+        ...(e.turnoId ? { turno: { is: { estado: "programado" } } } : {}),
+      },
       data: { intentos: { increment: 1 }, proximoIntentoEn: null },
-      select: { intentos: true },
     });
+    if (consumido.count === 0) {
+      // Sin llamar a Twilio. Si la cancelación ya apagó la fila, este
+      // cierre no la toca (condiciona a `enviando`).
+      await c.cerrar(e, { estado: "cancelado", motivoNoEnvio: MOTIVO_TURNO_CERRADO, cerradoEn: ahora });
+      resumen.cancelados += 1;
+      c.evento("cerrado-antes-de-enviar", e, "resultado=cancelado");
+      return;
+    }
     intentoConsumido = true;
-    intentos = consumido.intentos;
+    intentos = e.intentos + 1;
 
     let resultado: ResultadoTwilio;
     try {
