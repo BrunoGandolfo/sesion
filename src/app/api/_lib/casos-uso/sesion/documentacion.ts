@@ -8,18 +8,13 @@
 // usuaria ve un error y vuelve a pedirlas). Es el mismo criterio que
 // hilo/exportar.ts y sesion/ver.ts.
 
-import type { EstadoSesion } from "@prisma/client";
-
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
+import { ESTADOS_CON_NOTA } from "@/lib/sesion-clinica/estados";
 import { parseDatosEstructurados } from "@/lib/sesion-clinica/schema";
 
 import { auditar } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
-
-/** Los estados que este historial muestra: lo que la profesional dio por
- *  bueno o está por darlo. */
-const ESTADOS: EstadoSesion[] = ["revision", "aprobada"];
 
 export interface ExportarDocumentacionInput {
   prisma: typeof db;
@@ -43,7 +38,8 @@ export async function exportarDocumentacion({
 
     const where = {
       organizationId,
-      estado: { in: ESTADOS },
+      // Lo que la profesional dio por bueno o está por darlo.
+      estado: { in: [...ESTADOS_CON_NOTA] },
       turno: { pacienteId },
     };
 
