@@ -49,7 +49,7 @@ export function PantallaPrevia({
   autorizacionVigente,
   motivoSinGrabar,
   pacienteId,
-  preparando,
+  abriendoMicrofono,
   sinCupo,
   sinPantallaEncendida,
   muyCorta,
@@ -61,7 +61,7 @@ export function PantallaPrevia({
   autorizacionVigente: boolean;
   motivoSinGrabar: string | null;
   pacienteId: string;
-  preparando: boolean;
+  abriendoMicrofono: boolean;
   /** Tope de grabaciones de la prueba alcanzado: Grabar sesión apagado. */
   sinCupo: boolean;
   /** El teléfono no concedió el wake lock: se dice ANTES de empezar. */
@@ -128,10 +128,10 @@ export function PantallaPrevia({
       <button
         type="button"
         onClick={onEmpezar}
-        disabled={preparando || sinCupo}
+        disabled={abriendoMicrofono || sinCupo}
         className="inline-flex h-[132px] w-[132px] flex-col items-center justify-center gap-2 rounded-full bg-sage-500 text-white shadow-raised transition-colors duration-150 hover:bg-sage-600 active:bg-sage-700 disabled:opacity-60 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30"
       >
-        {preparando ? (
+        {abriendoMicrofono ? (
           <Loader2
             size={32}
             strokeWidth={1.8}

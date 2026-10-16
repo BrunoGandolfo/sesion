@@ -266,7 +266,7 @@ describe("pantallaDe", () => {
     ["previo", "terminada", "grabando"],
     ["previo", "error", "error-mic"],
     ["previo", "inactivo", "previa"],
-    ["preparando", "inactivo", "previa"],
+    ["abriendo-microfono", "inactivo", "previa"],
   ])("fase %s con el grabador en %s → %s", (fase, grabador, pantalla) => {
     expect(pantallaDe(fase, grabador)).toBe(pantalla);
   });

@@ -30,6 +30,7 @@ import {
   type DatosGrabacion,
   type EstadoGrabador,
 } from "@/components/grabacion/GrabadorSesion";
+import { enCurso } from "@/components/grabacion/grabador-tipos";
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
 import { mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";
@@ -47,7 +48,9 @@ import { ALGO_FALLO, TURNO_NO_MARCADO } from "@/lib/glosario";
 
 export type Fase =
   | "previo"
-  | "preparando"
+  // Tocó Grabar y se está abriendo el micrófono. (No confundir con el
+  // "preparando" del grabador, que es armar el archivo después de Terminar.)
+  | "abriendo-microfono"
   | "enviando"
   | "guardado"
   | "no-guardado"
@@ -79,9 +82,7 @@ export function pantallaDe(fase: Fase, estadoGrabador: EstadoGrabador): Pantalla
   if (fase === "no-guardado") return "reintentar-subida";
   if (fase === "turno-sin-marcar") return "reintentar-turno";
   if (fase === "rechazada") return "rechazada";
-  if (estadoGrabador === "grabando" || estadoGrabador === "pausado" || estadoGrabador === "terminada") {
-    return "grabando";
-  }
+  if (enCurso(estadoGrabador)) return "grabando";
   if (estadoGrabador === "error") return "error-mic";
   return "previa";
 }
@@ -216,8 +217,7 @@ export function useFlujoGrabacion({
     onError: onErrorGrabacion,
   });
 
-  const enCursoAhora =
-    grabador.estado === "grabando" || grabador.estado === "pausado" || grabador.estado === "terminada";
+  const enCursoAhora = enCurso(grabador.estado);
   const enviandoAhora = grabador.estado === "preparando" || fase === "enviando";
   // La pantalla encendida desde que entra hasta que la grabación llegó:
   // también mientras sube, que en dos horas de audio son varios minutos.
@@ -248,7 +248,7 @@ export function useFlujoGrabacion({
   /** Grabar: el micrófono, ya. Nada de red: el turno y la sesión se piden
    *  al subir (ver arriba). */
   async function empezar() {
-    setFase("preparando");
+    setFase("abriendo-microfono");
     setErrorPantalla(null);
 
     try {

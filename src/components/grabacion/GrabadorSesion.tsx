@@ -54,11 +54,11 @@ import { MAX_EVENTOS_GRABACION, type EventoGrabacion } from "@/lib/sesion-clinic
 
 import { useGrabacionPendiente } from "./grabacion-pendiente";
 import { useMicrofono } from "./grabador-microfono";
-import type { AvisoHueco, EstadoGrabador, Grabador, UseGrabadorOpciones } from "./grabador-tipos";
+import { enCurso, type AvisoHueco, type EstadoGrabador, type Grabador, type UseGrabadorOpciones } from "./grabador-tipos";
 import { useGuardaDeToque } from "./guarda-de-toque";
 
 export { formatearDuracion };
-export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador, PendienteGuardada } from "./grabador-tipos";
+export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador } from "./grabador-tipos";
 
 // Cada cuánto se refresca el medidor y se mira si siguen llegando chunks.
 const LATIDO_MS = 250;
@@ -368,7 +368,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
   function terminar() {
     const actual = estadoRef.current;
 
-    if ((actual === "grabando" || actual === "pausado" || actual === "terminada") && medidaRef.current.segundos < MINIMO_SEGUNDOS) {
+    if (enCurso(actual) && medidaRef.current.segundos < MINIMO_SEGUNDOS) {
       descartarPorCorta();
       return;
     }

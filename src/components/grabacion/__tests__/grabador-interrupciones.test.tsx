@@ -7,7 +7,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useGrabador, type DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
+import { useGrabador, type DatosGrabacion, type EstadoGrabador } from "@/components/grabacion/GrabadorSesion";
+import { EN_CURSO, enCurso } from "@/components/grabacion/grabador-tipos";
 import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { guardarChunk, limpiarGrabacion } from "@/lib/grabacion-storage";
 import { MENSAJE_ERROR_GRABADOR } from "@/app/(dashboard)/grabar/[turnoId]/_components/errores-grabacion";
@@ -438,5 +439,72 @@ describe("caminos de fallo del grabador", () => {
     expect(grabador.current.estado).toBe("error");
     expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["no-se-detuvo"]);
     expect(pista.stop).toHaveBeenCalled();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Las transiciones del grabador, en una tabla: cada acción desde cada estado.
+// Fija las guardas que hoy están en cada función (iniciar, pausar, reanudar,
+// terminar, descartar, resetear) contra el diagrama de grabador-tipos.ts.
+// "preparando" no entra como origen: con un recorder que entrega al detenerse
+// dura lo que tarda onstop, y no hay acción que se pueda tocar en el medio.
+// ────────────────────────────────────────────────────────────────────────────
+
+type Accion = "iniciar" | "pausar" | "reanudar" | "terminar" | "descartar" | "resetear";
+type Origen = Exclude<EstadoGrabador, "preparando">;
+
+async function llevarA(estado: Origen) {
+  const montado = montar();
+  const { grabador } = montado;
+  if (estado === "inactivo") return montado;
+  if (estado === "error") {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const original = navigator.mediaDevices.getUserMedia;
+    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("x", "NotAllowedError"); };
+    await act(async () => { await grabador.current.iniciar(TURNO); });
+    navigator.mediaDevices.getUserMedia = original;
+    return montado;
+  }
+  await empezar(grabador, 12);
+  if (estado === "pausado") {
+    act(() => grabador.current.pausar());
+    await act(async () => { vi.advanceTimersByTime(1000); });
+  }
+  if (estado === "terminada") act(() => pista.onended?.());
+  if (estado === "entregada") act(() => grabador.current.terminar());
+  expect(grabador.current.estado).toBe(estado);
+  return montado;
+}
+
+const TRANSICIONES: Record<Origen, Record<Accion, EstadoGrabador>> = {
+  inactivo: { iniciar: "grabando", pausar: "inactivo", reanudar: "inactivo", terminar: "inactivo", descartar: "inactivo", resetear: "inactivo" },
+  grabando: { iniciar: "grabando", pausar: "pausado", reanudar: "grabando", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+  pausado: { iniciar: "pausado", pausar: "pausado", reanudar: "grabando", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+  terminada: { iniciar: "terminada", pausar: "terminada", reanudar: "terminada", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+  // Después de un error del micrófono se puede volver a intentar.
+  error: { iniciar: "grabando", pausar: "error", reanudar: "error", terminar: "error", descartar: "inactivo", resetear: "inactivo" },
+  // Lo entregado ya es de la pantalla: sólo se sale descartando o reseteando.
+  entregada: { iniciar: "entregada", pausar: "entregada", reanudar: "entregada", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+};
+
+describe("tabla de transiciones del grabador", () => {
+  const casos = Object.entries(TRANSICIONES).flatMap(([origen, acciones]) =>
+    Object.entries(acciones).map(([accion, destino]) => [origen as Origen, accion as Accion, destino] as const),
+  );
+
+  it.each(casos)("%s + %s → %s", async (origen, accion, destino) => {
+    const { grabador } = await llevarA(origen);
+    await act(async () => {
+      if (accion === "iniciar") await grabador.current.iniciar(TURNO);
+      else grabador.current[accion]();
+    });
+    expect(grabador.current.estado).toBe(destino);
+  });
+
+  it("EN_CURSO son los estados con una grabación abierta, y enCurso los reconoce", () => {
+    expect([...EN_CURSO].sort()).toEqual(["grabando", "pausado", "terminada"]);
+    for (const origen of Object.keys(TRANSICIONES) as Origen[]) {
+      expect(enCurso(origen)).toBe(EN_CURSO.has(origen));
+    }
   });
 });

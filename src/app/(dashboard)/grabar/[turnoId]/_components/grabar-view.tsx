@@ -192,7 +192,7 @@ export function GrabarView({
                   autorizacionVigente={autorizacionVigente}
                   motivoSinGrabar={motivoSinGrabar}
                   pacienteId={pacienteId}
-                  preparando={fase === "preparando"}
+                  abriendoMicrofono={fase === "abriendo-microfono"}
                   sinCupo={sinCupo}
                   sinPantallaEncendida={pantalla.estado === "rechazada"}
                   muyCorta={grabador.muyCorta}
