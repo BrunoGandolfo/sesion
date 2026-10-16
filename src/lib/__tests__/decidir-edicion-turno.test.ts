@@ -15,12 +15,12 @@ import {
   TRANSICIONES_TURNO,
 } from "@/app/api/_lib/domain";
 import { ESTADOS_TURNO, type EstadoTurno } from "@/lib/constantes-turno";
-import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS } from "@/lib/glosario";
+import { MENSAJE_NO_REABRIR, MENSAJE_SOLO_PROGRAMADOS, MENSAJE_TURNO_PAGADO } from "@/lib/glosario";
 
 const DIEZ = new Date("2026-10-05T13:00:00.000Z");
 const ONCE = new Date("2026-10-05T14:00:00.000Z");
 
-const turno = (estado: EstadoTurno, fecha = DIEZ, duracion = 50) => ({ estado, fecha, duracion });
+const turno = (estado: EstadoTurno, fecha = DIEZ, duracion = 50, pagoEstado = "pendiente") => ({ estado, fecha, duracion, pagoEstado });
 
 describe("TRANSICIONES_TURNO", () => {
   it("solo un programado se edita, se cierra al cobrar y entra al cancelar la serie", () => {
@@ -69,6 +69,25 @@ describe("decidirEdicionTurno", () => {
       tipo: "rechazo",
       mensaje: MENSAJE_NO_REABRIR,
     });
+  });
+
+  it("un turno pagado no cambia de estado: primero se deshace el cobro", () => {
+    for (const desde of ["programado", "realizado", "ausente"] as const) {
+      for (const hacia of ESTADOS_TURNO.filter((e) => e !== desde)) {
+        expect(decidirEdicionTurno(turno(desde, DIEZ, 50, "pagado"), { estado: hacia }), `${desde}→${hacia}`).toEqual({
+          tipo: "rechazo",
+          mensaje: MENSAJE_TURNO_PAGADO,
+        });
+      }
+    }
+  });
+
+  it("un pagado acepta el mismo estado que ya tiene (marcar realizado otra vez no rompe)", () => {
+    expect(decidirEdicionTurno(turno("realizado", DIEZ, 50, "pagado"), { estado: "realizado" })).toMatchObject({ tipo: "aplicar" });
+  });
+
+  it("sin cobrar, el estado se sigue cambiando como antes", () => {
+    expect(decidirEdicionTurno(turno("realizado"), { estado: "cancelado" })).toMatchObject({ tipo: "aplicar" });
   });
 
   it("un body vacío no escribe nada", () => {

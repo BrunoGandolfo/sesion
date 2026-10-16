@@ -2105,3 +2105,7 @@ export const CONSENTIMIENTO_VERSION_VIEJA =
 
 /** Un pedido a la API llegó sin sesión y el proxy lo mandó al login. */
 export const SESION_VENCIDA = "Tu sesión venció. Volvé a entrar para seguir.";
+
+/** PATCH de estado sobre un turno cobrado (domain.ts, decidirEdicionTurno). */
+export const MENSAJE_TURNO_PAGADO =
+  "Este turno ya está cobrado. Para cambiarle el estado, primero deshacé el cobro.";

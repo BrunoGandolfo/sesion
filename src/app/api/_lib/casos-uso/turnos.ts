@@ -8,6 +8,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import { MENSAJE_TURNO_PAGADO } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 import { cifrarTurno } from "@/lib/prisma-encryption";
 import type { Turno, TurnoConPaciente } from "@/types/domain";
@@ -186,8 +187,13 @@ export async function actualizarTurno({
     // lectura: `update({ where: { id } })` escribe la fila aunque sea de
     // otra organización. Con updateMany + count la pertenencia es parte de
     // la operación.
+    //
+    // Cambiar el estado exige además que el pago siga como se leyó: cobrar
+    // no toma el lock de agenda y pudo cobrar el turno en el medio, y un
+    // turno cobrado no cambia de estado (estadoFijadoPorElCobro).
+    const cambiaEstado = cambios.estado !== undefined && cambios.estado !== actual.estado;
     const { count } = await tx.turno.updateMany({
-      where: { id: turnoId, organizationId },
+      where: { id: turnoId, organizationId, ...(cambiaEstado ? { pagoEstado: actual.pagoEstado } : {}) },
       data: {
         fecha: cambios.fecha,
         duracion: cambios.duracion,
@@ -198,6 +204,9 @@ export async function actualizarTurno({
     });
 
     if (count === 0) {
+      // Bajo el lock la fila existía: si no se escribió es porque la cobraron
+      // en el medio.
+      if (cambiaEstado) throw new ApiError(MENSAJE_TURNO_PAGADO, 409);
       throw new ApiError("Turno no encontrado", 404);
     }
 

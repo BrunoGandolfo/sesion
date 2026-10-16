@@ -27,7 +27,9 @@ import {
   MENSAJE_NO_EMPEZO,
   MENSAJE_YA_COBRADO,
 } from "@/app/api/_lib/casos-uso/cobrar-turno";
+import { actualizarTurno } from "@/app/api/_lib/casos-uso/turnos";
 import { ApiError } from "@/app/api/_lib/responses";
+import { MENSAJE_TURNO_PAGADO } from "@/lib/glosario";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import {
@@ -375,5 +377,39 @@ describe("descobrarTurno", () => {
     expect(segundo.estado).toBe("realizado");
     expect(segundo.pagoEstado).toBe("pagado");
     expect((await leerTurno(turnoId)).pagoMetodo).toBe("mercadopago");
+  });
+});
+
+describe("un turno cobrado no cambia de estado por la API (rev-dominio B5)", () => {
+  it("realizado y pagado → cancelado: 400 y el turno queda como estaba", async () => {
+    const { orgId, turnoId } = await crearTurno({
+      estado: "realizado",
+      pagoEstado: "pagado",
+      pagoMetodo: "efectivo",
+      pagoFecha: AHORA,
+    });
+
+    const error = await esperarApiError(
+      actualizarTurno({ prisma: db, organizationId: orgId, turnoId, cambios: { estado: "cancelado" }, ahora: AHORA, usuarioId: "u-1" }),
+      400,
+    );
+    expect(error.message).toBe(MENSAJE_TURNO_PAGADO);
+
+    const turno = await leerTurno(turnoId);
+    expect(turno.estado).toBe("realizado");
+    expect(turno.pagoEstado).toBe("pagado");
+  });
+
+  it("después de deshacer el cobro, sí se puede cancelar", async () => {
+    const { orgId, turnoId } = await crearTurno({
+      estado: "realizado",
+      pagoEstado: "pagado",
+      pagoMetodo: "efectivo",
+      pagoFecha: AHORA,
+    });
+    await descobrarTurno({ actualizadoEn: (await leerTurno(turnoId)).actualizadoEn, prisma: db, turnoId, organizationId: orgId });
+
+    const turno = await actualizarTurno({ prisma: db, organizationId: orgId, turnoId, cambios: { estado: "cancelado" }, ahora: AHORA, usuarioId: "u-1" });
+    expect(turno.estado).toBe("cancelado");
   });
 });
