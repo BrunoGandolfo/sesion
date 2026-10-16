@@ -2102,3 +2102,6 @@ export const LUX_SALIR =
  *  pantalla mostró otra (una app vieja en caché), no se firma: 409. */
 export const CONSENTIMIENTO_VERSION_VIEJA =
   "El texto del consentimiento cambió. Recargá la página para firmar la versión vigente.";
+
+/** Un pedido a la API llegó sin sesión y el proxy lo mandó al login. */
+export const SESION_VENCIDA = "Tu sesión venció. Volvé a entrar para seguir.";
