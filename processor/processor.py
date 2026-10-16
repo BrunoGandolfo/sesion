@@ -218,7 +218,7 @@ def procesar_sesion(sesion: SesionReclamada) -> None:
             # cuerpos de respuesta de proveedores o un valor de la sesion.
             logger.error(f"[{etiqueta}] error_interno {type(e).__name__}")
             reportar_fallo(
-                sesion, PipelineError("error_interno", "Error interno del worker", definitivo=False), lease.paso, uso=uso
+                sesion, PipelineError("error_interno", "Error interno del worker"), lease.paso, uso=uso
             )
 
 
@@ -402,7 +402,7 @@ def registrar_checkpoint(
     if res.rechazado:
         raise LeasePerdido()
     if not res.ok:
-        raise PipelineError("app_error", f"La app no guardo la transcripcion (HTTP {res.status})", definitivo=False)
+        raise PipelineError("app_error", f"La app no guardo la transcripcion (HTTP {res.status})")
     return Transcripto(transcripcion_fmt=transcripcion_fmt, speech_metrics=speech_metrics)
 
 
@@ -426,11 +426,11 @@ def analizar(
     """
     uso = uso if uso is not None else Uso()
     if not paciente_id:
-        raise PipelineError("contexto_invalido", "Falta la paciente del Recorrido", definitivo=False)
+        raise PipelineError("contexto_invalido", "Falta la paciente del Recorrido")
     try:
         contexto_llm = app_client.obtener_contexto_clinico_llm(paciente_id, etiqueta, ticket)
     except requests.RequestException:
-        raise PipelineError("contexto_no_disponible", "No se pudo leer el Recorrido vigente", definitivo=False) from None
+        raise PipelineError("contexto_no_disponible", "No se pudo leer el Recorrido vigente") from None
     if contexto_llm:
         logger.info(f"[{etiqueta}] Contexto longitudinal: {len(contexto_llm)} chars")
 
