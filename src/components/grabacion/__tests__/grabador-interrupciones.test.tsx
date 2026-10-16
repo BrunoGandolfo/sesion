@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGrabador, type DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { guardarChunk, limpiarGrabacion } from "@/lib/grabacion-storage";
+import { MENSAJE_ERROR_GRABADOR } from "@/app/(dashboard)/grabar/[turnoId]/_components/errores-grabacion";
 
 /** Lo que "quedó en el teléfono". null = no hay nada que recuperar. */
 let persistido: {
@@ -382,5 +383,31 @@ describe("un toque accidental no se sube", () => {
     expect(grabador.current.muyCorta).toBe(true);
     expect(grabador.current.pendienteSeg).toBeNull();
     expect(limpiarGrabacion).toHaveBeenCalledWith(TURNO);
+  });
+});
+
+describe("los errores del micrófono se dicen en castellano", () => {
+  it("un error del navegador con texto en inglés no llega a la pantalla: va el del catálogo", async () => {
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      mediaDevices: { getUserMedia: async () => { throw new TypeError("Permission denied by system"); } },
+    });
+    const consola = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { grabador, onError } = montar();
+    await act(async () => { await grabador.current.iniciar(TURNO); });
+
+    expect(grabador.current.estado).toBe("error");
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["no-inicio"]);
+    expect(onError).toHaveBeenCalledWith(MENSAJE_ERROR_GRABADOR["no-inicio"]);
+    // El original queda para el diagnóstico, no para ella.
+    expect(consola).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ message: "Permission denied by system" }));
+  });
+
+  it("un navegador sin grabación lo dice con el texto del catálogo", async () => {
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: undefined });
+    const { grabador } = montar();
+    await act(async () => { await grabador.current.iniciar(TURNO); });
+
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["sin-soporte"]);
   });
 });

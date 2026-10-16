@@ -1,16 +1,76 @@
-// Cómo se lee un error de la grabación al subir: sin red, un rechazo del
-// servidor que reintentar no arregla, o algo que se reintenta. Lo usa
-// flujo-grabacion.ts; vive aparte para que el flujo se lea entero.
+// El catálogo de errores de la grabación: qué le decimos a ella cuando el
+// micrófono no arranca o la grabación no sale (MENSAJE_ERROR_GRABADOR, con
+// los textos en el glosario), y cómo se lee un error al subir: sin red, un
+// rechazo del servidor que reintentar no arregla, o algo que se reintenta.
+// Ningún texto del navegador (en inglés, técnico) llega a la pantalla: va a
+// la consola. Lo usan flujo-grabacion.ts y el grabador (GrabadorSesion.tsx).
 
 import { ApiClientError, esAbort, mensajeParaElla } from "@/lib/api-client";
 import {
   AUDIO_NO_GUARDADO,
   AUDIO_NO_GUARDADO_SIN_COPIA,
   COPIA_NO_GUARDADA,
+  GRABACION_BLOQUEADA,
+  GRABACION_NO_INICIO,
+  GRABACION_NO_SE_DETUVO,
   GRABACION_SIN_CONEXION,
   GRABACION_SIN_CONEXION_SIN_COPIA,
+  GRABACION_VACIA,
+  MIC_NO_ENCONTRADO,
+  MIC_OCUPADO,
+  MIC_SIN_PERMISO,
+  NAVEGADOR_SIN_GRABACION,
 } from "@/lib/glosario";
 import { ErrorSubida } from "@/lib/subida-audio";
+
+/** Por qué el grabador no pudo grabar o entregar. */
+export type CausaErrorGrabador =
+  | "sin-permiso"
+  | "sin-microfono"
+  | "microfono-ocupado"
+  | "bloqueada"
+  | "no-inicio"
+  | "sin-soporte"
+  | "vacia"
+  | "no-se-detuvo";
+
+export const MENSAJE_ERROR_GRABADOR: Record<CausaErrorGrabador, string> = {
+  "sin-permiso": MIC_SIN_PERMISO,
+  "sin-microfono": MIC_NO_ENCONTRADO,
+  "microfono-ocupado": MIC_OCUPADO,
+  bloqueada: GRABACION_BLOQUEADA,
+  "no-inicio": GRABACION_NO_INICIO,
+  "sin-soporte": NAVEGADOR_SIN_GRABACION,
+  // El micrófono no entregó nada: ese audio no se recupera.
+  vacia: GRABACION_VACIA,
+  "no-se-detuvo": GRABACION_NO_SE_DETUVO,
+};
+
+/**
+ * Lo que tira `getUserMedia` (o el MediaRecorder al crearse), como causa.
+ * Los nombres duplicados (`NotAllowedError`/`PermissionDeniedError`,
+ * `NotFoundError`/`DevicesNotFoundError`, `NotReadableError`/`TrackStartError`)
+ * son el mismo caso con el nombre viejo y el nuevo según el navegador. Lo que
+ * no se reconoce es "no-inicio": su texto original no se muestra.
+ */
+export function causaDelErrorDeMicrofono(error: unknown): CausaErrorGrabador {
+  if (!(error instanceof DOMException)) return "no-inicio";
+  switch (error.name) {
+    case "NotAllowedError":
+    case "PermissionDeniedError":
+      return "sin-permiso";
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+      return "sin-microfono";
+    case "NotReadableError":
+    case "TrackStartError":
+      return "microfono-ocupado";
+    case "SecurityError":
+      return "bloqueada";
+    default:
+      return "no-inicio";
+  }
+}
 
 /** Un rechazo del servidor a la subida (409 o 422 al pedir la URL o al
  *  confirmar) PUEDE ser definitivo. El PUT a R2 no entra: un 4xx de R2 (una

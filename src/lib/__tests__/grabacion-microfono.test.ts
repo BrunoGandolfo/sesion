@@ -1,63 +1,13 @@
-// El micrófono: qué se le dice a la profesional cuando falla, y con qué
-// formato se graba.
+// El micrófono: con qué formato se graba. Lo que se le dice cuando falla se
+// prueba con su catálogo (grabar/[turnoId]/_components/__tests__/errores-grabacion.test.ts).
 //
 // Nunca había tenido tests: estaba adentro de GrabadorSesion.tsx, que no se
 // puede renderizar sin jsdom. Con el módulo aparte alcanza un doble del
 // global `MediaRecorder`.
-//
-// Los mensajes de error son lo único que ve alguien parada frente a una
-// paciente con el micrófono que no arranca. Que digan lo correcto no es
-// cosmética: "no diste permiso" y "cerrá otras apps" mandan a lugares
-// distintos.
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  crearMediaRecorder,
-  mensajeErrorGrabacion,
-} from "@/lib/grabacion-microfono";
-
-const GENERICO = "No se pudo iniciar la grabación de audio.";
-
-describe("mensajeErrorGrabacion", () => {
-  it.each([
-    ["NotAllowedError", "No diste permiso"],
-    ["PermissionDeniedError", "No diste permiso"],
-    ["NotFoundError", "No encontramos un micrófono"],
-    ["DevicesNotFoundError", "No encontramos un micrófono"],
-    ["NotReadableError", "Cerrá otras apps"],
-    ["TrackStartError", "Cerrá otras apps"],
-    ["SecurityError", "bloqueó la grabación"],
-  ])("%s → %s", (nombre, esperado) => {
-    // Los pares son el mismo caso con el nombre viejo y el nuevo según el
-    // navegador: los dos tienen que dar el MISMO mensaje.
-    expect(mensajeErrorGrabacion(new DOMException("x", nombre))).toContain(
-      esperado,
-    );
-  });
-
-  it("un DOMException desconocido cae en el genérico", () => {
-    expect(mensajeErrorGrabacion(new DOMException("x", "AbortError"))).toBe(
-      GENERICO,
-    );
-  });
-
-  it("un Error común pasa su mensaje", () => {
-    expect(mensajeErrorGrabacion(new Error("el micrófono explotó"))).toBe(
-      "el micrófono explotó",
-    );
-  });
-
-  it("un Error sin mensaje cae en el genérico, no en la cadena vacía", () => {
-    expect(mensajeErrorGrabacion(new Error(""))).toBe(GENERICO);
-  });
-
-  it("cualquier otra cosa cae en el genérico", () => {
-    expect(mensajeErrorGrabacion(null)).toBe(GENERICO);
-    expect(mensajeErrorGrabacion("un string suelto")).toBe(GENERICO);
-    expect(mensajeErrorGrabacion(undefined)).toBe(GENERICO);
-  });
-});
+import { crearMediaRecorder } from "@/lib/grabacion-microfono";
 
 // ────────────────────────────────────────────────────────────────────────────
 

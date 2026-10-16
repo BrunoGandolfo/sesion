@@ -28,7 +28,8 @@
 import * as React from "react";
 
 import { aRegistradas, formatearDuracion } from "@/lib/grabacion-cronometro";
-import { crearMediaRecorder, mensajeErrorGrabacion } from "@/lib/grabacion-microfono";
+import { causaDelErrorDeMicrofono, MENSAJE_ERROR_GRABADOR } from "@/app/(dashboard)/grabar/[turnoId]/_components/errores-grabacion";
+import { crearMediaRecorder } from "@/lib/grabacion-microfono";
 import {
   contarChunk,
   crearReloj,
@@ -58,8 +59,6 @@ import { useGuardaDeToque } from "./guarda-de-toque";
 
 export { formatearDuracion };
 export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador, PendienteGuardada } from "./grabador-tipos";
-
-const GRABACION_VACIA = "No se pudo capturar audio de la sesión.";
 
 // Cada cuánto se refresca el medidor y se mira si siguen llegando chunks.
 const LATIDO_MS = 250;
@@ -165,7 +164,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     const audioBlob = new Blob(chunks, { type: mimeType });
 
     if (audioBlob.size === 0) {
-      irAError(GRABACION_VACIA);
+      irAError(MENSAJE_ERROR_GRABADOR.vacia);
       return;
     }
 
@@ -295,7 +294,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     claveRef.current = clave;
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      irAError("Tu navegador no soporta grabación de audio.");
+      irAError(MENSAJE_ERROR_GRABADOR["sin-soporte"]);
       return;
     }
 
@@ -329,7 +328,8 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       cambiarEstado("grabando");
       iniciarLatido();
     } catch (error) {
-      irAError(mensajeErrorGrabacion(error));
+      console.warn("[grabador] el micrófono no arrancó", error); // el texto del navegador, sólo acá
+      irAError(MENSAJE_ERROR_GRABADOR[causaDelErrorDeMicrofono(error)]);
     }
   }
 
@@ -387,7 +387,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     try {
       recorderRef.current?.stop();
     } catch {
-      irAError("No se pudo detener la grabación.");
+      irAError(MENSAJE_ERROR_GRABADOR["no-se-detuvo"]);
     }
   }
 

@@ -2113,3 +2113,14 @@ export const AUDIO_NO_GUARDADO_SIN_COPIA =
 /** Como GRABACION_SIN_CONEXION, pero sin copia en el teléfono. */
 export const GRABACION_SIN_CONEXION_SIN_COPIA =
   "Sin conexión, y la copia en el teléfono no se pudo guardar. No cierres esta pantalla: reintentá cuando vuelva la señal.";
+
+// Los errores del grabador. El catálogo que elige cuál va está en
+// grabar/[turnoId]/_components/errores-grabacion.ts (MENSAJE_ERROR_GRABADOR).
+export const MIC_SIN_PERMISO = "No diste permiso para usar el micrófono. Habilitalo y probá de nuevo.";
+export const MIC_NO_ENCONTRADO = "No encontramos un micrófono disponible en este dispositivo.";
+export const MIC_OCUPADO = "No pudimos acceder al micrófono. Cerrá otras apps que lo estén usando y probá de nuevo.";
+export const GRABACION_BLOQUEADA = "Tu navegador bloqueó la grabación de audio en este contexto.";
+export const GRABACION_NO_INICIO = "No se pudo iniciar la grabación de audio.";
+export const NAVEGADOR_SIN_GRABACION = "Tu navegador no soporta grabación de audio.";
+export const GRABACION_VACIA = "No se pudo capturar audio de la sesión.";
+export const GRABACION_NO_SE_DETUVO = "No se pudo detener la grabación.";
