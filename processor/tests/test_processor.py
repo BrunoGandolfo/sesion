@@ -8,11 +8,11 @@ import logging
 import pytest
 
 import config
+import dobles
 import processor
 import trabajos
 from app_client import RespuestaApp
 from errores import LeasePerdido, PipelineError
-from processor import SesionReclamada
 
 TRANSCRIPCION = {
     "duration_seconds": 3,
@@ -24,45 +24,27 @@ TRANSCRIPCION = {
 
 NOTA = {"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"}
 LLM = f"anthropic:{config.LLM_MODEL_ID}"
-TICKET = "a" * 64
+TICKET = dobles.TICKET
 
 
-def sesion(**extra) -> SesionReclamada:
-    base = dict(
-        sesion_clinica_id="s1",
-        intento=2,
-        ticket=TICKET,
-        paciente_id="p1",
-        terminos_asr=["GTFS"],
-        audio={"key": "org/s1/0"},
-        checkpoint=None,
-    )
-    base.update(extra)
-    return SesionReclamada(**base)
+def sesion(**extra):
+    return dobles.sesion(**{"intento": 2, "terminos_asr": ["GTFS"], **extra})
 
 
 @pytest.fixture
 def pasos(mocker):
     """Pasos exitosos por defecto; cada test rompe el que le interesa."""
-    mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
+    app = dobles.app_ok(mocker)
     mocker.patch("processor.descargar_audio", return_value=b"audio")
     mocker.patch("processor.preparar_para_asr", side_effect=lambda _etiqueta, audio: audio)
     mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
     mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
     mocker.patch("processor.formatear_para_llm", return_value="[00:00] Terapeuta: hola")
-    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
     mocker.patch(
         "processor.clinical_analyzer.analizar",
         return_value=({"nota": NOTA, "datosEstructurados": {"temas": ["x"]}}, "clinical_note_v4.md", _diag()),
     )
-    ok = RespuestaApp(ok=True, status=200)
-    return {
-        "mocker": mocker,
-        "asr": mocker.patch("processor.app_client.registrar_asr", return_value=ok),
-        "checkpoint": mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok),
-        "resultado": mocker.patch("processor.app_client.enviar_resultado", return_value=ok),
-        "lease": mocker.patch("processor.app_client.renovar_lease", return_value=ok),
-    }
+    return {"mocker": mocker, **app}
 
 
 def _diag(advertencias=None, definitivo=False):

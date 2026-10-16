@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 
 import audio_asr
+import dobles
 import processor
-from app_client import RespuestaApp
 from dobles import requiere
 from processor import SesionReclamada
 
@@ -139,15 +139,8 @@ def test_la_imagen_del_worker_instala_ffmpeg():
 
 # El pipeline le entrega al ASR el archivo normalizado ──────────────────────
 
-TICKET = "a" * 64
-
-
 def _sesion(duracion_audio_seg: int | None = 60) -> SesionReclamada:
-    return SesionReclamada(
-        sesion_clinica_id="s1", intento=1, ticket=TICKET, paciente_id="p1",
-        terminos_asr=[], audio={"key": "org/s1/0"},
-        checkpoint=None, duracion_audio_seg=duracion_audio_seg,
-    )
+    return dobles.sesion(duracion_audio_seg=duracion_audio_seg)
 
 
 class AsrDoble:
@@ -176,13 +169,8 @@ class AsrDoble:
 @pytest.fixture
 def pipeline(mocker):
     """procesar_sesion con R2, app y modelo de dobles; la normalizacion y el formateo son reales."""
-    mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
-    ok = RespuestaApp(ok=True, status=200)
-    mocker.patch("processor.app_client.registrar_asr", return_value=ok)
-    mocker.patch("processor.app_client.renovar_lease", return_value=ok)
-    mocker.patch("processor.app_client.enviar_resultado", return_value=ok)
+    checkpoint = dobles.app_ok(mocker)["checkpoint"]
     mocker.patch("processor.analizar", return_value=processor.Analisis({}, {}, "p"))
-    checkpoint = mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok)
 
     def correr(audio: bytes, asr: AsrDoble, sesion: SesionReclamada | None = None):
         mocker.patch("processor.r2_client.descargar_audio", return_value=audio)

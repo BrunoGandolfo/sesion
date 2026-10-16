@@ -17,13 +17,11 @@ import pytest
 
 import clinical_analyzer
 import config
+import dobles
 import processor
 import trabajos
 from dobles import respuesta_sdk
-from app_client import RespuestaApp
-from processor import SesionReclamada
 
-TICKET = "a" * 64
 TEXTO_CLINICO = "Hola, ¿cómo llegaste hoy? Bastante cansada, dormí poco."
 
 NOTA_OK = {
@@ -49,12 +47,7 @@ def anthropic_doble(mocker):
 @pytest.fixture
 def pipeline(mocker):
     """procesar_sesion con R2, ASR y app de dobles; analizar y el modelo son los reales."""
-    mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
-    ok = RespuestaApp(ok=True, status=200)
-    mocker.patch("processor.app_client.registrar_asr", return_value=ok)
-    mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok)
-    mocker.patch("processor.app_client.renovar_lease", return_value=ok)
-    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
+    resultado = dobles.app_ok(mocker)["resultado"]
     mocker.patch("processor.descargar_audio", return_value=b"audio")
     mocker.patch("processor.preparar_para_asr", side_effect=lambda _e, audio: audio)
     mocker.patch(
@@ -67,16 +60,10 @@ def pipeline(mocker):
             "speech_model": "universal-3-5-pro",
         },
     )
-    resultado = mocker.patch("processor.app_client.enviar_resultado", return_value=ok)
     mocker.patch("uso.config.WORKER_VERSION", "1a2b3c4")
 
     def correr():
-        processor.procesar_sesion(
-            SesionReclamada(
-                sesion_clinica_id="s1", intento=1, ticket=TICKET, paciente_id="p1",
-                terminos_asr=[], audio={"key": "org/s1/0"}, checkpoint=None, duracion_audio_seg=3232,
-            )
-        )
+        processor.procesar_sesion(dobles.sesion(duracion_audio_seg=3232))
         return resultado.call_args.args[2]
 
     return correr
@@ -195,19 +182,12 @@ def test_un_timeout_queda_anotado_con_su_duracion(pipeline, anthropic_doble):
 
 
 def test_con_checkpoint_no_hay_asr_que_contar(mocker, anthropic_doble):
-    mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
-    ok = RespuestaApp(ok=True, status=200)
-    mocker.patch("processor.app_client.renovar_lease", return_value=ok)
-    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
-    resultado = mocker.patch("processor.app_client.enviar_resultado", return_value=ok)
+    resultado = dobles.app_ok(mocker)["resultado"]
     anthropic_doble.side_effect = [respuesta_sdk(NOTA_OK)]
 
-    processor.procesar_sesion(
-        SesionReclamada(
-            sesion_clinica_id="s1", intento=2, ticket=TICKET, paciente_id="p1", terminos_asr=[],
-            audio=None, checkpoint={"transcripcion": "[00:00] Terapeuta: hola", "modeloAsr": "assemblyai:x"},
-        )
-    )
+    processor.procesar_sesion(dobles.sesion(
+        intento=2, audio=None, checkpoint={"transcripcion": "[00:00] Terapeuta: hola", "modeloAsr": "assemblyai:x"},
+    ))
 
     uso = resultado.call_args.args[2]["uso"]
     assert "asrSegundos" not in uso and "pasosMs" not in uso
