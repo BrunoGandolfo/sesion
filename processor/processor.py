@@ -29,9 +29,11 @@ texto de transcripcion/nota ni datos del paciente.
 """
 import re
 import io
+import json
 import logging
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 import requests
@@ -532,12 +534,27 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
 # (mas su ultimo GET y una pausa); el trabajo recien borra en el primer
 # intento que, por la politica de la app, no puede llegar antes de eso.
 #
-# Espejo de src/app/api/_lib/casos-uso/trabajos/politica.ts:
-# POLITICA_POR_TIPO.borrar_transcript_asr.backoffMs y LEASE_TRABAJO_MS.worker.
-# Entre un intento y el siguiente pasa el backoff, o el lease si el worker
-# murio sin resolver: lo que sea menor es lo minimo garantizado.
-BACKOFF_BORRADO_ASR_SEG = (60, 300, 1800, 7200, 21600, 86400)
-LEASE_TRABAJO_WORKER_SEG = 900
+# El backoff y el lease los aplica la app (trabajos/politica.ts): el worker
+# los lee de contrato/politica-trabajos.json, que un test ata a politica.ts
+# (tests/test_contrato_politica_trabajos.py). Entre un intento y el
+# siguiente pasa el backoff, o el lease si el worker murio sin resolver: lo
+# que sea menor es lo minimo garantizado.
+RUTA_POLITICA_TRABAJOS = Path(__file__).resolve().parent / "contrato" / "politica-trabajos.json"
+
+
+def cargar_politica_borrado_asr(ruta: Path = RUTA_POLITICA_TRABAJOS) -> tuple[tuple[int, ...], int]:
+    """(backoff en segundos, lease del worker en segundos). Sin ellos, no arranca."""
+    with open(ruta, encoding="utf-8") as f:
+        datos = json.load(f).get("borrarTranscriptAsr") or {}
+    backoff, lease = datos.get("backoffSeg"), datos.get("leaseWorkerSeg")
+    if (not isinstance(backoff, list) or not backoff
+            or any(type(x) is not int or x <= 0 for x in backoff)
+            or type(lease) is not int or lease <= 0):
+        raise ValueError(f"{ruta.name}: borrarTranscriptAsr sin backoffSeg o leaseWorkerSeg validos")
+    return tuple(backoff), lease
+
+
+BACKOFF_BORRADO_ASR_SEG, LEASE_TRABAJO_WORKER_SEG = cargar_politica_borrado_asr()
 
 
 def espera_minima_antes_del_intento(intento: int) -> int:
