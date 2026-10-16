@@ -30,7 +30,7 @@ import {
 import { Avatar, Button, Card, Chip } from "@/components/ui";
 import { Latido } from "@/components/ui/movimiento";
 import { IndicadorProcesando } from "@/components/ui/procesando";
-import { estadoClinicoDe } from "@/components/ui/session-row";
+import { firmaDelTurno, rotuloDeNota } from "@/components/turno/presentacion";
 import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 import { apiGet } from "@/lib/api-client";
 import { hora, money } from "@/lib/format";
@@ -131,10 +131,11 @@ export function accionDe(
   if (clinica.tipo === "escribiendo") return { tipo: "escribiendo" };
   // Una grabación a medias se retoma como una grabación: la pantalla de
   // grabar ofrece la copia guardada en el teléfono.
-  const grabable = clinica.tipo === "grabar";
-  const grabar = grabable ? (sinAutorizacion ? "autorizar" : "grabar") : null;
-  const firma =
-    sinAutorizacion && !grabable ? (sinCobrar ? "aviso" : "boton") : null;
+  // La firma que falta, con la regla de la fila (firmaDelTurno).
+  const falta = firmaDelTurno(clinica, sinAutorizacion);
+  const grabar =
+    clinica.tipo === "grabar" ? (falta === "en-lugar-de-grabar" ? "autorizar" : "grabar") : null;
+  const firma = falta === "aviso" ? (sinCobrar ? "aviso" : "boton") : null;
   return {
     tipo: "turno",
     grabar,
@@ -198,7 +199,7 @@ export function CardAhora({
   // ofrecía "Grabar sesión" hasta que llegara la respuesta, o para siempre.
   const sesion: SesionDelTurno = contexto.sesion ?? turno.sesionClinica;
   const accion = accionDe(sesion, turno, ahora, sinAutorizacion, sinCobrar);
-  const notaClinica = estadoClinicoDe(sesion);
+  const notaClinica = rotuloDeNota(sesion);
   const ultima = contexto.brief?.ultimaSesion ?? null;
   const preparar = `/pacientes/${turno.paciente.id}?preparar=1`;
   const ModalityIcon = turno.modalidad === "online" ? Video : MapPin;

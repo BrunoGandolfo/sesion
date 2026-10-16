@@ -10,7 +10,7 @@ import Link from "next/link";
 import { ArrowRight, Mic } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { estadoClinicoDe } from "@/components/ui/session-row";
+import { rotuloDeNota, sePuedeDeshacerCobro } from "@/components/turno/presentacion";
 import { fechaCorta, hora, money } from "@/lib/format";
 import {
   CANCELAR_SERIE,
@@ -21,6 +21,8 @@ import {
   MODALIDAD_LABEL,
   NO_VINO,
   NOTA_PROCESANDO,
+  PAGADO,
+  PENDIENTE,
   RECORDATORIO,
   RECORDATORIO_ESTADO,
 } from "@/lib/glosario";
@@ -54,9 +56,10 @@ export function DatosDelTurno({
           <span className="tabular-nums">{money(turno.tarifaCobrada)}</span>
         </Dato>
         <Dato etiqueta="Pago">
-          {turno.pagoEstado === "pagado"
-            ? `Cobrado${turno.pagoFecha ? ` el ${fechaCorta(turno.pagoFecha)}` : ""}`
-            : "Sin cobrar"}
+          {/* Las palabras del chip de arriba: un solo par para el pago. */}
+          {sePuedeDeshacerCobro(turno)
+            ? `${PAGADO}${turno.pagoFecha ? ` el ${fechaCorta(turno.pagoFecha)}` : ""}`
+            : PENDIENTE}
         </Dato>
       </dl>
 
@@ -126,13 +129,17 @@ export function AccionesDelTurno({
   onModo: (modo: ModoDesdeVer) => void;
   onReprogramar: () => void;
 }) {
-  if (!acciones.puedeGrabarORevisar) return null;
   const { clinica } = acciones;
   // El estado clínico, con las mismas palabras que la fila de Hoy y de
   // Agenda (estadoClinicoDe): "Nota fallida · Ver qué pasó", "Para revisar",
   // "Nota lista". Antes cualquier sesión, fallida incluida, ofrecía "Revisar
   // nota", y una nota que no se pudo escribir parecía una nota para leer.
-  const notaClinica = estadoClinicoDe(acciones.sesion ?? null);
+  const notaClinica = rotuloDeNota(acciones.sesion ?? null);
+  // Un turno cancelado o "No vino" no ofrece nada clínico, pero si quedó
+  // cobrado el cobro se puede deshacer igual.
+  if (!acciones.puedeGrabarORevisar && !acciones.puedeCobrar && !acciones.puedeDeshacerCobro) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col gap-2 border-t border-[color:var(--border-subtle)] pt-5">
@@ -155,7 +162,7 @@ export function AccionesDelTurno({
         </Button>
       ) : null}
 
-      {notaClinica ? (
+      {!acciones.puedeGrabarORevisar ? null : notaClinica ? (
         <Button
           asChild
           variant="secondary"

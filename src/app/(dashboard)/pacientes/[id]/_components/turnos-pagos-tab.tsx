@@ -14,11 +14,16 @@ import {
   SUAVE,
 } from "@/components/ui/movimiento";
 import { deudaDeTurnos, sePuedeCobrar } from "@/app/api/_lib/domain";
+import {
+  cobrarCierraElTurno,
+  estadoSinPago,
+  pagoDelTurno,
+  sePuedeDeshacerCobro,
+} from "@/components/turno/presentacion";
 import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
 import { SheetMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { fechaCorta, hora, money } from "@/lib/format";
 import {
-  AGENDADO,
   COBRADO,
   COBRO_DESHECHO,
   DESHACER_COBRO,
@@ -27,42 +32,18 @@ import {
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   METODO_PAGO_LABEL,
-  NO_VINO,
-  PENDIENTE,
-  PAGADO,
-  CANCELADO,
   COBRAR,
-  REALIZADO,
   SESIONES_SIN_COBRAR_DETALLE,
   MODALIDAD_LABEL,
   pluralizar,
   VOLVER,
 } from "@/lib/glosario";
-import type {
-  Turno,
-  TurnoEstado,
-} from "@/types/domain";
+import type { Turno } from "@/types/domain";
 import { mensajeParaElla } from "@/lib/api-client";
 
 interface TurnosPagosTabProps {
   turnos: Turno[];
   onTurnoActualizado?: () => void;
-}
-
-const ESTADO_LABEL: Record<TurnoEstado, string> = {
-  programado: AGENDADO,
-  realizado: REALIZADO,
-  cancelado: CANCELADO,
-  ausente: NO_VINO,
-};
-
-function estadoChipVariant(
-  estado: TurnoEstado,
-): "sage" | "gold" | "terracotta" | "neutral" {
-  if (estado === "realizado") return "sage";
-  if (estado === "cancelado") return "neutral";
-  if (estado === "ausente") return "gold";
-  return "neutral";
 }
 
 // Cobros optimistas sobre la lista recibida por props. Van atados a la
@@ -136,7 +117,7 @@ export function TurnosPagosTab({ turnos, onTurnoActualizado }: TurnosPagosTabPro
         open={cobroTarget !== null}
         onClose={() => setCobroTarget(null)}
         monto={cobroTarget?.tarifaCobrada}
-        cierraElTurno={cobroTarget?.estado === "programado"}
+        cierraElTurno={cobroTarget ? cobrarCierraElTurno(cobroTarget.estado) : false}
         onElegir={async (metodo) => {
           if (!cobroTarget) return;
           const actualizado = await cobrarTurno(cobroTarget.id, metodo);
@@ -228,11 +209,14 @@ function TurnoRow({
   const reducido = useMovimientoReducido();
   // La regla del servidor: también un programado cuya hora ya llegó (cobrarlo
   // lo cierra); nunca uno que todavía no empezó.
-  const mostrarCobrar = sePuedeCobrar(turno, new Date());
+  const ahora = new Date();
+  const mostrarCobrar = sePuedeCobrar(turno, ahora);
   // Cobrado es cobrado en cualquier estado: si después pasó a "No vino" o se
   // canceló, la plata sigue registrada y se puede deshacer (como en la Agenda
   // y en el servidor, que sólo miran el pago).
-  const mostrarPagado = turno.pagoEstado === "pagado";
+  const mostrarPagado = sePuedeDeshacerCobro(turno);
+  const estado = estadoSinPago(turno.estado);
+  const pago = pagoDelTurno(turno, ahora);
 
   // La confirmación se abre debajo de la fila, no en un sheet: es una
   // reversión, no un cobro, y no hay nada que elegir.
@@ -271,18 +255,14 @@ function TurnoRow({
           </Chip>
         </div>
 
-        <Chip variant={estadoChipVariant(turno.estado)} size="sm" className="self-start justify-self-start">
-          {ESTADO_LABEL[turno.estado]}
+        <Chip variant={estado.variant} size="sm" className="self-start justify-self-start">
+          {estado.label}
         </Chip>
 
         <div className="flex flex-col items-start gap-1">
-          {mostrarPagado ? (
-            <Chip variant="sage" size="sm">
-              {PAGADO}
-            </Chip>
-          ) : mostrarCobrar ? (
-            <Chip variant="terracotta" size="sm">
-              {PENDIENTE}
+          {pago ? (
+            <Chip variant={pago.variant} size="sm">
+              {pago.label}
             </Chip>
           ) : (
             <span className="font-sans text-[11px] text-ink-300">—</span>

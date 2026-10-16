@@ -4,7 +4,8 @@ import * as React from "react";
 import { agregarDiasMvd, esMismoDiaMvd, esMismoMesMvd, inicioDeMesMvd, inicioDeSemanaMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaLarga } from "@/lib/format";
 
-import { AGENDADO, MES_LEYENDA, MES_LEYENDA_SIN_SESION, PAGADO } from "@/lib/glosario";
+import { estadoDelTurno } from "@/components/turno/presentacion";
+import { AGENDADO, MES_LEYENDA, MES_LEYENDA_SIN_SESION, PAGADO, PENDIENTE } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
 interface Props {
@@ -80,11 +81,6 @@ export function MonthView({ anchor, today, turnos, onDayClick }: Props) {
  *  puntitos no se cuentan de un vistazo y desbordan la celda del teléfono. */
 const MAX_PUNTOS = 4;
 
-function colorDelPunto(t: TurnoConPaciente): string {
-  if (t.estado === "ausente" || t.estado === "cancelado") return "bg-ink-300";
-  return t.pagoEstado === "pagado" ? "bg-sage-500" : "bg-ink-500";
-}
-
 /**
  * Un punto por turno, con el color de su estado, y nada más: sin el número
  * al lado. La cantidad la dice el aria-label de la celda que los contiene.
@@ -113,7 +109,7 @@ export function PuntosDelDia({
         <span
           key={t.id}
           data-punto=""
-          className={`h-[6px] w-[6px] rounded-full ${colorDelPunto(t)}`}
+          className={`h-[6px] w-[6px] rounded-full ${estadoDelTurno(t).punto}`}
         />
       ))}
       {sobran ? (
@@ -124,26 +120,27 @@ export function PuntosDelDia({
 }
 
 /**
- * Qué significan el punto oscuro y el verde. La grilla no dice otra cosa que
- * puntos, y sin esta leyenda el código de color —oscuro agendado o sin
- * cobrar, verde pagado— había que adivinarlo.
+ * Qué significa cada punto. La grilla no dice otra cosa que puntos, y sin
+ * esta leyenda el código de color había que adivinarlo. Los colores salen
+ * del mismo lugar que los de los puntos (estadoDelTurno).
  */
+const LEYENDA = [
+  { punto: estadoDelTurno({ estado: "programado", pagoEstado: "pendiente" }).punto, texto: AGENDADO },
+  { punto: estadoDelTurno({ estado: "realizado", pagoEstado: "pendiente" }).punto, texto: PENDIENTE },
+  { punto: estadoDelTurno({ estado: "realizado", pagoEstado: "pagado" }).punto, texto: PAGADO },
+  { punto: estadoDelTurno({ estado: "ausente", pagoEstado: "pendiente" }).punto, texto: MES_LEYENDA_SIN_SESION },
+];
+
 function Leyenda() {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[color:var(--border-subtle)] bg-cream-50 px-3 py-2 text-[11px] text-ink-500">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[color:var(--border-subtle)] bg-cream-50 px-3 py-2 text-[12px] text-ink-500">
       <span>{MES_LEYENDA}</span>
-      <span className="inline-flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-ink-500" />
-        {AGENDADO}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-sage-500" />
-        {PAGADO}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-[6px] w-[6px] rounded-full bg-ink-300" />
-        {MES_LEYENDA_SIN_SESION}
-      </span>
+      {LEYENDA.map(({ punto, texto }) => (
+        <span key={texto} className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className={`h-[6px] w-[6px] rounded-full ${punto}`} />
+          {texto}
+        </span>
+      ))}
     </div>
   );
 }

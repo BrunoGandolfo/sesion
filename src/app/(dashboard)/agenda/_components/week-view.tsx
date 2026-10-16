@@ -4,7 +4,7 @@ import * as React from "react";
 import { agregarDiasMvd, esMismoDiaMvd, inicioDeSemanaMvd, partesMvd, horaLocalMvd, minutosDelDiaMvd } from "@/lib/fechas-montevideo";
 import type { TurnoConPaciente } from "@/types/domain";
 import { hora } from "@/lib/format";
-import { CANCELADO, NO_VINO } from "@/lib/glosario";
+import { estadoDelTurno, ocupaElHorario } from "@/components/turno/presentacion";
 import { ALTO_HORA, distribuirTurnos } from "./week-layout";
 
 interface Props {
@@ -107,12 +107,7 @@ export function WeekView({ anchor, today, turnos, onEventClick }: Props) {
                   // "No vino" y cancelado no ocupan el horario (se puede
                   // agendar encima): se dibujan apagados y lo dicen, con los
                   // mismos rótulos y el mismo borde gris que SessionRow.
-                  const libera =
-                    turno.estado === "ausente"
-                      ? NO_VINO
-                      : turno.estado === "cancelado"
-                        ? CANCELADO
-                        : null;
+                  const libera = ocupaElHorario(turno.estado) ? null : estadoDelTurno(turno).label;
                   const detalle = libera ? `${hora(turno.fecha)} · ${libera}` : hora(turno.fecha);
                   return (
                     <button

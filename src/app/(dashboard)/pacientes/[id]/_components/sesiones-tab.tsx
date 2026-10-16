@@ -21,6 +21,7 @@
 // hook de grabación en el padre).
 
 import * as React from "react";
+import { cobrarCierraElTurno } from "@/components/turno/presentacion";
 import type { VarianteToast } from "@/components/ui/toast";
 
 import { Button, Card } from "@/components/ui";
@@ -247,7 +248,7 @@ export function SesionesTab({
         open={cobroTarget !== null}
         onClose={() => setCobroTarget(null)}
         monto={cobroTarget?.tarifaCobrada}
-        cierraElTurno={cobroTarget?.estado === "programado"}
+        cierraElTurno={cobroTarget ? cobrarCierraElTurno(cobroTarget.estado) : false}
         onElegir={async (metodo) => {
           if (!cobroTarget) return;
           await cobrarTurno(cobroTarget.id, metodo);

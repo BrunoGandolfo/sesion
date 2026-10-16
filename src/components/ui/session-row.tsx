@@ -5,23 +5,20 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { TurnoConPaciente } from "@/types/domain";
 import { esDeudaPendiente, sePuedeCobrar } from "@/app/api/_lib/domain";
+import {
+  estadoDelTurno,
+  firmaDelTurno,
+  rotuloDeNota,
+} from "@/components/turno/presentacion";
 import { hora, money } from "@/lib/format";
 import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
 import {
-  AGENDADO,
-  CANCELADO,
   COBRAR,
   FALTA_AUTORIZACION,
   GRABACION_SIN_TERMINAR,
   GRABAR_SESION,
-  NO_VINO,
-  NOTA_FALLIDA,
-  NOTA_LISTA,
+  MODALIDAD_LABEL,
   NOTA_PROCESANDO,
-  PAGADO,
-  PARA_REVISAR,
-  PENDIENTE,
-  VER_QUE_PASO,
   VER_TURNO,
 } from "@/lib/glosario";
 import { Avatar } from "./avatar";
@@ -63,11 +60,6 @@ interface SessionRowProps {
   className?: string;
 }
 
-type Status = {
-  variant: "sage" | "terracotta" | "gold" | "neutral";
-  label: string;
-};
-
 /** Acciones de la fila. Las decide el estado del turno, no la pantalla:
  *  la misma fila en la agenda y en Hoy ofrece lo mismo. */
 type Accion = {
@@ -76,33 +68,6 @@ type Accion = {
   tono: "gold" | "terracotta";
   onClick: () => void;
 };
-
-/**
- * El estado clínico del turno, separado del pago. Son dos cosas distintas y
- * se dicen por separado: una nota que FALLÓ se veía en su fila sólo como
- * "Cobrar", y la deuda tapaba el problema clínico. Cada rótulo lleva a la
- * sesión; el de la fallida, además, se pinta como problema.
- */
-export function estadoClinicoDe(
-  sesion: { id: string; estado?: string } | null,
-): { rotulo: string; sesionId: string; fallida: boolean } | null {
-  if (!sesion) return null;
-  if (sesion.estado === "fallida") {
-    return { rotulo: `${NOTA_FALLIDA} · ${VER_QUE_PASO}`, sesionId: sesion.id, fallida: true };
-  }
-  if (sesion.estado === "revision") return { rotulo: PARA_REVISAR, sesionId: sesion.id, fallida: false };
-  if (sesion.estado === "aprobada") return { rotulo: NOTA_LISTA, sesionId: sesion.id, fallida: false };
-  return null;
-}
-
-function statusFor(turno: TurnoConPaciente): Status {
-  if (turno.estado === "cancelado") return { variant: "neutral", label: CANCELADO };
-  if (turno.estado === "ausente") return { variant: "neutral", label: NO_VINO };
-  if (turno.pagoEstado === "pagado") return { variant: "sage", label: PAGADO };
-  if (turno.estado === "programado") return { variant: "neutral", label: AGENDADO };
-  return { variant: "terracotta", label: PENDIENTE };
-}
-
 
 /**
  * Grabar y cobrar son independientes. Antes, pasada la hora con el pago
@@ -123,7 +88,7 @@ function statusFor(turno: TurnoConPaciente): Status {
  * Sin handler no hay acción; sin ninguna acción la fila muestra el chip de
  * estado. El acceso a la nota se muestra por separado, siempre.
  */
-export function accionesDe({
+function accionesDe({
   turno,
   ahora,
   sinAutorizacion,
@@ -143,9 +108,11 @@ export function accionesDe({
   const grabable = clinica?.tipo === "grabar" && !clinica.retomar;
 
   const acciones: Accion[] = [];
-  // La firma que falta se avisa donde iría Grabar, y al lado de Cobrar: no
-  // lo reemplaza ni lo esconde.
-  if (sinAutorizacion && onAutorizar) {
+  // La firma que falta (firmaDelTurno, la regla de la card de Ahora) se
+  // avisa donde iría Grabar, y al lado de Cobrar: no lo reemplaza ni lo
+  // esconde.
+  const firma = clinica ? firmaDelTurno(clinica, !!sinAutorizacion) : sinAutorizacion ? "aviso" : null;
+  if (firma && onAutorizar) {
     acciones.push({
       tipo: "autorizar",
       label: `${FALTA_AUTORIZACION} →`,
@@ -169,11 +136,13 @@ const TONO: Record<Accion["tono"], string> = {
 
 export function SessionRow(props: SessionRowProps) {
   const { turno, onClick, cobroConfirmado = false, className = "" } = props;
-  const status = statusFor(turno);
+  const status = estadoDelTurno(turno);
   const leftClass = "border-l-cream-200";
   const acciones = accionesDe(props);
   const sesion = turno.sesionClinica;
-  const nota = estadoClinicoDe(sesion);
+  // El estado clínico, separado del pago: una nota que FALLÓ se veía sólo
+  // como "Cobrar" y la deuda tapaba el problema clínico.
+  const nota = rotuloDeNota(sesion);
   // La acción clínica (accionClinicaDe): la misma que la card y el detalle.
   // Una grabación o subida que quedó a medias no se está procesando: lleva a
   // la pantalla de grabar, que ofrece la copia guardada en el teléfono. Sin
@@ -213,7 +182,7 @@ export function SessionRow(props: SessionRowProps) {
               {nombre}
             </span>
             <span className="tabular-nums text-[12px] text-ink-500">
-              {turno.modalidad === "online" ? "Online" : "Presencial"} ·{" "}
+              {MODALIDAD_LABEL[turno.modalidad]} ·{" "}
               {money(turno.tarifaCobrada)}
             </span>
           </div>

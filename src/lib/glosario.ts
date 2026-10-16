@@ -105,8 +105,6 @@ export const PARA_VOS = "Para vos";
  *  que ya tenía tres en el código viejo. */
 export const BORRADOR = PARA_REVISAR;
 
-/** Chip de la cabecera de la nota una vez aprobada (= NOTA_GUARDADA). */
-export const APROBADA = NOTA_GUARDADA;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Nota clínica SOAP — el formato NO cambia, solo se explica.
@@ -578,6 +576,10 @@ export const NOTA_FALLIDA = "Nota fallida";
 /** La nota ya está aprobada. Para "escrita y sin revisar" se usa
  *  PARA_REVISAR, que ya existe arriba. */
 export const NOTA_LISTA = "Nota lista";
+/** Chip de la cabecera de la nota una vez aprobada: el mismo nombre del
+ *  estado que en Hoy, la Agenda y la ficha (NOTA_LISTA). "Nota guardada"
+ *  queda sólo como confirmación al aprobar. */
+export const APROBADA = NOTA_LISTA;
 
 /** El resumen corto se muestra en dos líneas. Cuando hay más, se dice: un
  *  corte silencioso parece un resumen completo. */
@@ -2095,3 +2097,11 @@ export const LUX_SIN_CONEXION = "No hay conexión. Probá de nuevo cuando vuelva
 export const LUX_CORTADO = "Se cortó la respuesta. Podés preguntar de nuevo.";
 export const LUX_SALIR =
   "Escribiste algo para Lux que todavía no mandaste. Si seguís, se pierde.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// rev-frontend · textos de la revisión C (src/components/turno/presentacion.ts
+// y las pantallas que la usan)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Chip de la ficha para una sesión que se está grabando en este momento. */
+export const GRABANDO = "Grabando…";

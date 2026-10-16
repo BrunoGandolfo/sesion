@@ -15,6 +15,7 @@ import {
   BUSCAR_EN_TRANSCRIPCION,
   BUSCAR_MINIMO,
   BUSCAR_SIGUIENTE,
+  NOTA_LISTA,
   REINTENTAR,
   TRANSCRIPCION,
   TRANSCRIPCION_ERROR_TITULO,
@@ -75,7 +76,8 @@ describe("la cabecera", () => {
     render(<CabeceraSesion sesion={sesion()} rotulo={TRANSCRIPCION} />);
     const cuando = screen.getByText("viernes 18 de septiembre · 22:30");
     expect(cuando.tagName).toBe("TIME");
-    expect(screen.getByText("Nota guardada")).toBeTruthy();
+    // El estado se llama igual que en Hoy, la Agenda y la ficha.
+    expect(screen.getByText(NOTA_LISTA)).toBeTruthy();
   });
 });
 

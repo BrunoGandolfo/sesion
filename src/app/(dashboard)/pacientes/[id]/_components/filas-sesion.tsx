@@ -12,6 +12,7 @@ import { IndicadorProcesando } from "@/components/ui/procesando";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
+import { rotuloDelProceso } from "@/components/turno/presentacion";
 import { enProceso } from "@/lib/notas-en-proceso";
 import { esGrabacionSinTerminar, puede } from "@/lib/sesion-clinica/estados";
 import { fechaLarga, hora } from "@/lib/format";
@@ -19,10 +20,7 @@ import {
   COBRAR,
   CARGANDO,
   GRABAR_SESION,
-  GRABACION_SIN_TERMINAR,
   MODALIDAD_LABEL,
-  NOTA_GUARDADA,
-  PARA_REVISAR,
   PARA_VOS,
   REVISAR_NOTA,
   SESION_DE_HOY,
@@ -33,7 +31,6 @@ import type { SesionClinicaEnsamblada } from "@/hooks/useSesionClinicaPolling";
 import type { Modalidad, Turno } from "@/types/domain";
 
 import {
-  chipDeEstado,
   resumenCorto,
   temasDeLaSesion,
   type DocSesion,
@@ -148,10 +145,9 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
   // (no "Grabando…" ni "Procesando") y se ofrece grabar, que retoma la
   // copia guardada en el teléfono.
   const sinTerminar = esGrabacionSinTerminar(sesion, new Date());
-  const chip = sinTerminar
-    ? { variant: "terracotta" as const, label: GRABACION_SIN_TERMINAR }
-    : sesion && !enProceso(sesion.estado)
-      ? chipDeEstado(sesion.estado)
+  const chip =
+    sesion && (sinTerminar || !enProceso(sesion.estado))
+      ? rotuloDelProceso(sesion.estado, { sinTerminar })
       : null;
 
   let accion: React.ReactNode;
@@ -243,6 +239,7 @@ function FilaSesion({ sesion, hoy }: { sesion: DocSesion; hoy: Hoy | null }) {
   const fecha = new Date(sesion.fecha);
   const resumen = resumenCorto(sesion.datos) || temasDeLaSesion(sesion.datos);
   const esRevision = sesion.estado === "revision";
+  const chip = rotuloDelProceso(sesion.estado, { sinTerminar: false });
   const conParaVos = hayParaVos(sesion.feedback);
   const href = `/sesiones/${sesion.sesionClinicaId}`;
   const cobrable = hoy?.turno ? sePuedeCobrar(hoy.turno, new Date()) : false;
@@ -266,9 +263,11 @@ function FilaSesion({ sesion, hoy }: { sesion: DocSesion; hoy: Hoy | null }) {
         <span className="font-sans text-[12px] text-ink-500 tabular-nums">
           {sesion.duracionMin} min · {modalidadTexto(sesion.modalidad)}
         </span>
-        <Chip variant={esRevision ? "gold" : "sage"} size="sm">
-          {esRevision ? PARA_REVISAR : NOTA_GUARDADA}
-        </Chip>
+        {chip ? (
+          <Chip variant={chip.variant} size="sm">
+            {chip.label}
+          </Chip>
+        ) : null}
       </div>
       {resumen ? (
         <p className="font-sans text-[14px] leading-[1.55] text-ink-700">

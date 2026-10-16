@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   agruparPorMes,
-  chipDeEstado,
   conPaginaSiguiente,
   conPrimeraPagina,
   listaInicial,
@@ -77,12 +76,6 @@ describe("agruparPorMes", () => {
 });
 
 describe("textos de la fila", () => {
-  it("el chip sigue al estado y no hay chip para un estado sin nombre", () => {
-    expect(chipDeEstado("fallida")?.variant).toBe("terracotta");
-    expect(chipDeEstado("aprobada")?.variant).toBe("sage");
-    expect(chipDeEstado("cancelada" as never)).toBeNull();
-  });
-
   it("sin temas no inventa texto", () => {
     expect(temasDeLaSesion(null)).toBe("");
   });
