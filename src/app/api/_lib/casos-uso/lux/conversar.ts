@@ -21,6 +21,7 @@ import {
 } from "@/lib/anthropic-mensajes";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import { MAX_TURNOS_HISTORIAL } from "@/lib/ayuda-contrato";
 import {
   LARGO_MAX_HISTORIAL_LUX, LARGO_MAX_PREGUNTA_LUX, sinMarcasLux, type TurnoHistorialLux,
 } from "@/lib/lux/contrato";
@@ -30,7 +31,6 @@ import { registrarAuditoria, type ClienteAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
 import { ErrorProveedorAsistente } from "../ayuda/reservar-cupo";
-import { MAX_TURNOS_HISTORIAL } from "../responder-ayuda";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
 import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
 

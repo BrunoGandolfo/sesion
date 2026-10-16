@@ -3,7 +3,7 @@ import type { AmbitoCupo } from "@prisma/client";
 import type { db } from "@/lib/db";
 import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import { ApiError } from "../../responses";
-import { MENSAJE_TOPE_DIARIO, TOPE_PREGUNTAS_DIA } from "../responder-ayuda";
+import { MENSAJE_TOPE_DIARIO, TOPE_PREGUNTAS_DIA } from "./topes";
 import { MENSAJE_TOPE_LUX, TOPE_LUX_DIA } from "../lux/topes";
 
 type ClienteCupo = Pick<typeof db, "$queryRaw" | "cupoAyuda">;

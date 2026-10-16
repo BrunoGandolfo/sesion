@@ -25,6 +25,7 @@ import {
   type FlujoMensajes,
 } from "@/lib/anthropic-mensajes";
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import { LARGO_MAX_PREGUNTA, MAX_TURNOS_HISTORIAL } from "@/lib/ayuda-contrato";
 import { systemPromptAyuda } from "@/lib/ayuda-corpus";
 
 import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
@@ -33,21 +34,9 @@ import { ErrorProveedorAsistente } from "./ayuda/reservar-cupo";
 import { HERRAMIENTAS_AYUDA, resolverHerramienta, type ConsultarAgenda } from "./ayuda/herramientas";
 
 
-/** Largo máximo de una pregunta. Mide caracteres, no tokens: es un tope
- *  contra el pegado accidental de media pantalla, no un control de gasto. */
-export const LARGO_MAX_PREGUNTA = 600;
-
-/** Cuántos turnos previos entran. Un turno es un mensaje, de cualquiera de
- *  las dos. Con 6 alcanza para un "¿y si no me anduvo?" encadenado, y el
- *  historial nunca crece hasta pesar como el corpus. */
-export const MAX_TURNOS_HISTORIAL = 6;
-
 /** Techo de la respuesta. Los límites piden 3 a 8 líneas; 1024 tokens son
  *  varias veces eso, así que solo corta una respuesta ya descarrilada. */
 export const MAX_TOKENS_RESPUESTA = 1024;
-
-/** Cuántas preguntas por usuaria por día. */
-export const TOPE_PREGUNTAS_DIA = 40;
 
 /** La acción con la que se auditan las preguntas, independiente del cupo. */
 const ENTIDAD_AYUDA = "usuario";
@@ -61,8 +50,6 @@ export const MENSAJE_SIN_CLAVE =
 
 export const MENSAJE_PROVEEDOR_CAIDO =
   "No pude responderte ahora mismo. Probá de nuevo en un ratito.";
-
-export const MENSAJE_TOPE_DIARIO = `Por hoy llegaste a las ${TOPE_PREGUNTAS_DIA} preguntas. Mañana se renueva. Mientras tanto, la ayuda escrita está toda en la app.`;
 
 export const MENSAJE_PREGUNTA_VACIA = "Escribí una pregunta.";
 

@@ -10,11 +10,10 @@ import { ErrorAnthropic, MODELO_AYUDA } from "@/lib/anthropic-mensajes";
 import { ErrorProveedorAsistente } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
 
 import { ApiError } from "@/app/api/_lib/responses";
+import { LARGO_MAX_PREGUNTA, MAX_TURNOS_HISTORIAL } from "@/lib/ayuda-contrato";
 import {
   historialAMensajes,
-  LARGO_MAX_PREGUNTA,
   MAX_TOKENS_RESPUESTA,
-  MAX_TURNOS_HISTORIAL,
   MENSAJE_PROVEEDOR_CAIDO,
   MENSAJE_SIN_CLAVE,
   responderAyudaStreaming,

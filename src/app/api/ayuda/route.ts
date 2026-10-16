@@ -8,17 +8,12 @@
 // El cupo se reserva antes del proveedor y vuelve con la misma regla que el
 // de Lux (cupoVuelveAnte); la auditoría no decide el límite.
 
-import { z } from "zod";
+import { preguntaAyudaSchema } from "@/lib/ayuda-contrato";
 import { limpiarMarkdown, type EstadoMarkdown } from "@/lib/ayuda-texto";
 import { db } from "@/lib/db";
 
 import { getSessionActor } from "../_lib/auth";
-import {
-  LARGO_MAX_PREGUNTA,
-  MAX_TURNOS_HISTORIAL,
-  registrarPreguntaAyuda,
-  responderAyudaStreaming,
-} from "../_lib/casos-uso/responder-ayuda";
+import { registrarPreguntaAyuda, responderAyudaStreaming } from "../_lib/casos-uso/responder-ayuda";
 import { cupoVuelveAnte, devolverCupo, reservarCupo } from "../_lib/casos-uso/ayuda/reservar-cupo";
 import { consultarAgenda } from "../_lib/casos-uso/ayuda/agenda";
 import { errorResponse, leerJson, validationError } from "../_lib/responses";
@@ -27,24 +22,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // segundos; la convención está en scripts/ci/max-duration.mjs
 
-const turnoSchema = z.object({
-  rol: z.enum(["usuaria", "asistente"]),
-  texto: z.string().trim().min(1).max(4000),
-});
-
-const preguntaSchema = z.object({
-  pregunta: z.string().trim().min(1).max(LARGO_MAX_PREGUNTA),
-  // El recorte a los últimos MAX_TURNOS_HISTORIAL lo hace el caso de uso;
-  // acá el tope es contra un cuerpo enorme, por eso es holgado.
-  historial: z.array(turnoSchema).max(MAX_TURNOS_HISTORIAL * 2).optional(),
-});
-
 export async function POST(request: Request) {
   try {
     const { organizationId, userId } = await getSessionActor();
 
     const body: unknown = await leerJson(request);
-    const parsed = preguntaSchema.safeParse(body);
+    const parsed = preguntaAyudaSchema.safeParse(body);
     if (!parsed.success) {
       return validationError(parsed.error);
     }

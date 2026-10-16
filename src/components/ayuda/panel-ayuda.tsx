@@ -6,6 +6,12 @@ import { usePathname } from "next/navigation";
 
 import { ApiClientError, esAbort } from "@/lib/api-client";
 import {
+  LARGO_MAX_PREGUNTA,
+  LARGO_MAX_TURNO,
+  MAX_TURNOS_ENVIADOS,
+  STATUS_TOPE_DIARIO,
+} from "@/lib/ayuda-contrato";
+import {
   ALGO_FALLO,
   AYUDA_BIENVENIDA,
   AYUDA_CERRAR,
@@ -32,9 +38,6 @@ import { AnilloProgreso } from "@/components/ui/movimiento";
 import { useMovimientoReducido } from "@/hooks/useMovimientoReducido";
 import { Sheet } from "@/components/ui/sheet";
 
-const LARGO_MAX_PREGUNTA = 600;
-const MAX_TURNOS_ENVIADOS = 12;
-const STATUS_TOPE_DIARIO = 429;
 
 /** Única definición de superficies donde el personaje no puede aparecer. */
 const PREFIJOS_RUTA_CLINICA = [
@@ -114,7 +117,7 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
       .slice(-MAX_TURNOS_ENVIADOS)
       // Una semana completa puede superar el máximo del historial HTTP.
       // Se conserva entera en pantalla; sólo se acota lo que vuelve a enviarse.
-      .map(({ rol, texto }) => ({ rol, texto: texto.slice(0, 4000) }));
+      .map(({ rol, texto }) => ({ rol, texto: texto.slice(0, LARGO_MAX_TURNO) }));
     setTurnos((previos) => [...previos, { rol: "usuaria", texto: pregunta }]);
     setBorrador("");
     setError(null);

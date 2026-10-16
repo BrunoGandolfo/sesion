@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { historialQueViaja } from "@/app/api/_lib/casos-uso/lux/conversar";
-import { MAX_TURNOS_HISTORIAL } from "@/app/api/_lib/casos-uso/responder-ayuda";
+import { MAX_TURNOS_HISTORIAL } from "@/lib/ayuda-contrato";
 import { LARGO_MAX_HISTORIAL_LUX, LARGO_MAX_TURNO_LUX, type TurnoHistorialLux } from "@/lib/lux/contrato";
 
 const lux = (texto: string): TurnoHistorialLux => ({ rol: "asistente", texto });
