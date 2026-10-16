@@ -220,7 +220,7 @@ def _feedback_cbt_mi(score=4) -> dict:
 def test_feedback_reintenta_y_reporta_el_reintento(llm, prompt):
     llm.side_effect = [{"mitiGlobales": {}}, _feedback_cbt_mi()]
 
-    feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+    feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     assert nombre == "therapist_feedback_v1.1.md"
     assert llm.call_count == 2
@@ -230,7 +230,7 @@ def test_feedback_reintenta_y_reporta_el_reintento(llm, prompt):
 def test_feedback_con_puntaje_fuera_de_escala_queda_en_null(llm, prompt):
     llm.side_effect = [_feedback_cbt_mi(score=0)]
 
-    feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+    feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     assert feedback["mitiGlobales"]["empathy"]["score"] is None
     assert diagnostico.advertencias == [
@@ -242,7 +242,7 @@ def test_feedback_que_falla_dos_veces_no_tira_la_sesion(llm, prompt):
     # El feedback es best-effort: la nota clinica ya esta generada.
     llm.side_effect = [{"mitiGlobales": {}}, {"mitiGlobales": {}}]
 
-    feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+    feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     assert feedback is None
     assert nombre == "therapist_feedback_v1.1.md"
@@ -279,7 +279,7 @@ def test_feedback_gestalt_usa_su_prompt_y_su_validador(llm, prompt):
 def test_feedback_truncado_reintenta_y_sale(llm, prompt):
     llm.side_effect = [_truncado(), _feedback_cbt_mi()]
 
-    feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+    feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     assert llm.call_count == 2
     assert diagnostico.advertencias == []
@@ -291,7 +291,7 @@ def test_el_reintento_por_truncado_repite_el_pedido_sin_correccion(llm, prompt):
     # Mariana cuanto dura el feedback. El pedido se repite igual.
     llm.side_effect = [_truncado(), _feedback_cbt_mi()]
 
-    clinical_analyzer.generar_feedback_terapeuta("t")
+    clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     primera = llm.call_args_list[0].args[1]
     segunda = llm.call_args_list[1].args[1]
@@ -302,7 +302,7 @@ def test_el_reintento_por_truncado_repite_el_pedido_sin_correccion(llm, prompt):
 def test_feedback_truncado_dos_veces_deja_advertencia_y_no_inventa_nada(llm, prompt):
     llm.side_effect = [_truncado(16384), _truncado(16384)]
 
-    feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+    feedback, nombre, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     assert llm.call_count == 2
     # Regla 13 del prompt de nota: null antes que inventar.
@@ -338,7 +338,7 @@ def test_la_nota_truncada_dos_veces_propaga_el_codigo(llm):
 def test_el_feedback_pide_su_propio_techo(llm, prompt):
     llm.side_effect = [_feedback_cbt_mi()]
 
-    clinical_analyzer.generar_feedback_terapeuta("t")
+    clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     assert llm.call_args.args[3] == config.LLM_MAX_TOKENS_FEEDBACK
 
@@ -427,7 +427,7 @@ def test_la_nota_truncada_dos_veces_sigue_fallando(llm, prompt):
 def test_la_segunda_pasada_no_pasa_del_tope_de_reintento(llm, prompt):
     llm.side_effect = [_truncado(config.LLM_MAX_TOKENS_FEEDBACK), _feedback_cbt_mi()]
 
-    clinical_analyzer.generar_feedback_terapeuta("t")
+    clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
 
     assert llm.call_args_list[1].args[3] == min(2 * config.LLM_MAX_TOKENS_FEEDBACK, config.LLM_MAX_TOKENS_REINTENTO)
 
@@ -577,7 +577,7 @@ def test_un_fallo_inesperado_del_feedback_solo_loguea_el_tipo(mocker, caplog):
     secreto = "ANA-SECRETA dijo que no duerme"
     mocker.patch("clinical_analyzer._cargar_prompt", side_effect=KeyError(secreto))
     with caplog.at_level(logging.DEBUG):
-        feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t")
+        feedback, _, diagnostico = clinical_analyzer.generar_feedback_terapeuta("t", orientacion="cbt_mi")
     assert feedback is None
     assert diagnostico.advertencias == ["feedback_no_generado: KeyError"]
     assert all(secreto not in r.getMessage() for r in caplog.records)

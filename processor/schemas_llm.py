@@ -35,6 +35,7 @@ CLAVES_CONTRATO = (
     "nivelRiesgo",
     "alianzaTerapeutica",
     "confianzaModelo",
+    "orientacionTeorica",
 )
 
 
@@ -101,6 +102,8 @@ FLAGS_RIESGO = _ENUMS["flagRiesgo"]
 NIVELES_RIESGO = _ENUMS["nivelRiesgo"]
 ALIANZAS = _ENUMS["alianzaTerapeutica"]
 CONFIANZAS_MODELO = _ENUMS["confianzaModelo"]
+# Cada una tiene su instrumento de "Para vos" (clinical_analyzer._FEEDBACK_POR_ORIENTACION).
+ORIENTACIONES_TEORICAS = _ENUMS["orientacionTeorica"]
 
 # {timestamp, quote}: cita anclada en la transcripción.
 _EVIDENCIA = _arr(_obj({"timestamp": _STR, "quote": _STR}))

@@ -601,11 +601,14 @@ def generar_feedback(adjunto: dict, uso: Uso | None = None) -> dict:
     transcripcion_fmt = adjunto.get("transcripcionFormateada")
     if not isinstance(transcripcion_fmt, str) or not transcripcion_fmt.strip():
         return {"ok": False, "error": "adjunto sin transcripcionFormateada"}
+    orientacion = adjunto.get("orientacionTeorica")
+    if orientacion not in clinical_analyzer._FEEDBACK_POR_ORIENTACION:
+        return {"ok": False, "error": clinical_analyzer.ORIENTACION_DESCONOCIDA}
     speech = adjunto.get("speechAnalytics")
     feedback, prompt_feedback, diag = clinical_analyzer.generar_feedback_terapeuta(
         transcripcion_fmt,
         speech_analytics=speech if isinstance(speech, dict) else None,
-        orientacion=adjunto.get("orientacionTeorica") or "cbt_mi",
+        orientacion=orientacion,
         llamadas=uso.llamadas if uso is not None else None,
     )
     if uso is not None and feedback:

@@ -88,3 +88,37 @@ def test_un_contrato_roto_no_se_carga_en_silencio(tmp_path):
     roto.write_text(json.dumps(crudo), encoding="utf-8")
     with pytest.raises(ValueError, match="repetidos"):
         cargar_enums_clinicos(roto)
+
+
+# Orientaciones teóricas ────────────────────────────────────────────────────
+#
+# Una sola lista, la del contrato. Cada orientación tiene su instrumento de
+# "Para vos"; una que el worker no conoce falla con código, nunca cae en
+# silencio al instrumento de otra.
+
+def test_las_orientaciones_son_las_del_contrato():
+    from schemas_llm import ORIENTACIONES_TEORICAS
+    assert ORIENTACIONES_TEORICAS == tuple(_json()["orientacionTeorica"])
+
+
+def test_cada_orientacion_del_contrato_tiene_su_instrumento_y_ninguna_mas():
+    import clinical_analyzer
+    from schemas_llm import ORIENTACIONES_TEORICAS
+    assert set(clinical_analyzer._FEEDBACK_POR_ORIENTACION) == set(ORIENTACIONES_TEORICAS)
+
+
+@pytest.mark.parametrize("adjunto_extra", [{"orientacionTeorica": "freudiana"}, {"orientacionTeorica": None}, {}])
+def test_una_orientacion_desconocida_falla_con_codigo_sin_llamar_al_modelo(mocker, adjunto_extra):
+    import processor
+    llamar = mocker.patch("clinical_analyzer._llamar_validando")
+    resultado = processor.generar_feedback({"transcripcionFormateada": "[00:00] Terapeuta: hola", **adjunto_extra})
+    assert resultado == {"ok": False, "error": "orientacion_desconocida"}
+    llamar.assert_not_called()
+
+
+def test_el_analizador_no_cae_a_otra_orientacion(mocker):
+    import clinical_analyzer
+    llamar = mocker.patch("clinical_analyzer._llamar_validando")
+    with pytest.raises(ValueError, match="orientacion_desconocida"):
+        clinical_analyzer.generar_feedback_terapeuta("t", orientacion="freudiana")
+    llamar.assert_not_called()

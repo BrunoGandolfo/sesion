@@ -526,7 +526,7 @@ def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
         "processor.clinical_analyzer.generar_feedback_terapeuta",
         return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"])),
     )
-    res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x"}})
+    res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x", "orientacionTeorica": "gestalt"}})
     del res["uso"]
     assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado"}
 

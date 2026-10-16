@@ -41,7 +41,9 @@ PROMPTS = {
 }
 
 # Orientacion teorica -> (clave en PROMPTS, schema, validador estructural).
-# Desconocida cae a cbt_mi.
+# Las claves son exactamente ORIENTACIONES_TEORICAS (contrato/enums-clinicos.json,
+# lo fija tests/test_contrato_enums.py). Una desconocida es un error: nunca cae
+# al instrumento de otra.
 _FEEDBACK_POR_ORIENTACION = {
     "cbt_mi": ("feedback_cbt_mi", SCHEMA_FEEDBACK_CBT_MI, validar_estructura_feedback_cbt_mi),
     "gestalt": ("feedback_gestalt", SCHEMA_FEEDBACK_GESTALT, validar_estructura_feedback_gestalt),
@@ -517,24 +519,30 @@ def actualizar_contexto_clinico(
 # de la excepcion.
 ADVERTENCIA_FEEDBACK = "feedback_no_generado"
 
+# El `error` del trabajo generar_feedback cuando la orientacion que adjunta la
+# app no esta en el contrato. Texto fijo: el valor recibido no viaja.
+ORIENTACION_DESCONOCIDA = "orientacion_desconocida"
+
 def generar_feedback_terapeuta(
     transcripcion_formateada: str,
     speech_analytics: dict | None = None,
-    orientacion: str = "cbt_mi",
+    *,
+    orientacion: str,
     llamadas: list[dict] | None = None,
 ) -> tuple[dict | None, str, DiagnosticoLLM]:
     """
     Reporte de auto-supervision segun orientacion teorica (MITI/CTS-R para
-    cbt_mi, GTFS para gestalt). Orientacion desconocida cae a cbt_mi.
+    cbt_mi, GTFS para gestalt). Una orientacion fuera del contrato lanza
+    ValueError("orientacion_desconocida") antes de llamar al modelo.
 
     Best-effort de punta a punta: si falla el LLM devuelve
     (None, nombre_prompt, diagnostico) con el motivo como advertencia. La nota
     clinica ya esta generada a esta altura y una sesion no se pierde porque el
     reporte de auto-supervision no salio.
     """
-    clave, schema, validar = _FEEDBACK_POR_ORIENTACION.get(
-        orientacion, _FEEDBACK_POR_ORIENTACION["cbt_mi"]
-    )
+    if orientacion not in _FEEDBACK_POR_ORIENTACION:
+        raise ValueError(ORIENTACION_DESCONOCIDA)
+    clave, schema, validar = _FEEDBACK_POR_ORIENTACION[orientacion]
     nombre_prompt = PROMPTS[clave]
     logger.info(f"Feedback terapeuta: orientacion={orientacion}, prompt={nombre_prompt}")
     try:
