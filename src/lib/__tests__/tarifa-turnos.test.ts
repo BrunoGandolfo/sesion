@@ -22,7 +22,7 @@ import { crearTurno } from "@/app/api/_lib/casos-uso/crear-turno";
 import { actualizarPaciente } from "@/app/api/_lib/casos-uso/pacientes";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
-import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
+import { conectarBaseDeTest, esperarBloqueo, pidDe, vaciarTablas, type ClienteCifrado } from "./db-test";
 
 const sesionActual = vi.hoisted(() => ({ organizationId: "", userId: "" }));
 vi.mock("@/app/api/_lib/auth", () => ({
@@ -135,30 +135,32 @@ describe("un alta de turno en paralelo con el cambio de tarifa", () => {
     const f = await fixture();
     let soltar!: () => void;
     const suelto = new Promise<void>((r) => { soltar = r; });
-    let bloqueada!: () => void;
-    const hayLock = new Promise<void>((r) => { bloqueada = r; });
+    let conLock!: (pid: number) => void;
+    const pidDelCambio = new Promise<number>((r) => { conLock = r; });
 
     // El cambio de tarifa toma la fila como actualizarPaciente y se queda
-    // con la transacción abierta hasta que el alta ya empezó.
+    // con la transacción abierta hasta que el alta espera detrás.
     const cambio = prismaRaw.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM pacientes WHERE id = ${f.pacienteId} FOR NO KEY UPDATE`;
       await tx.paciente.update({ where: { id: f.pacienteId }, data: { tarifa: 1400 } });
-      bloqueada();
+      conLock(await pidDe(tx));
       await suelto;
     }, { timeout: 20_000 });
 
-    await hayLock;
+    const pid = await pidDelCambio;
     const alta = crearTurno({
       prisma: db, organizationId: f.organizationId, usuarioId: "mariana", pacienteId: f.pacienteId,
       fecha: new Date(AHORA.getTime() + 72 * HORA), duracion: 50, modalidad: "presencial",
       notas: null, frecuencia: "unico", ahora: AHORA,
     });
-    // Tiempo para que el alta llegue a su lectura de la tarifa.
-    await new Promise((r) => setTimeout(r, 300));
+    // El cambio se suelta recién cuando el alta espera su fila. Sin el FOR
+    // SHARE del alta no hay espera: termina con la tarifa vieja.
+    const momento = await esperarBloqueo(prismaRaw, { detrasDe: pid }, alta);
     soltar();
     await cambio;
     const turno = await alta;
 
+    expect(momento).toBe("bloqueada");
     expect(await tarifaDe(turno.id)).toBe(1400);
   });
 });

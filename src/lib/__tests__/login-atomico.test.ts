@@ -28,6 +28,7 @@ import {
 } from "@/lib/sesion-acceso";
 import { nombreCookie } from "@/lib/sesion-cookie";
 import { tokenDeCookieHeader } from "./ayudantes";
+import { esperarBloqueo, pidDe } from "./db-test";
 
 import {
   CLAVES_CIFRADO_TEST,
@@ -172,32 +173,33 @@ describe("iniciarSesion", () => {
 // terminar de entrar DESPUÉS de que la víctima la cambiara.
 describe("login y cambio de contraseña se excluyen", () => {
   const OPCIONES_LENTAS = { maxWait: 5_000, timeout: 20_000 };
-  const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
   it("un cambio commiteado mientras el login esperaba el lock por usuaria: rechazado, sin sesión", async () => {
     const { user, password } = await cuenta();
     const hashNuevo = await bcrypt.hash("otra contraseña larga", BCRYPT_RONDAS);
-    let lockTomado!: () => void;
-    const conLock = new Promise<void>((r) => { lockTomado = r; });
+    let lockTomado!: (pid: number) => void;
+    const pidDelCambio = new Promise<number>((r) => { lockTomado = r; });
     let soltar!: () => void;
     const esperando = new Promise<void>((r) => { soltar = r; });
     // El cambio toma el lock primero y se queda con él hasta que el login
     // esté esperando detrás.
     const cambio = estado.base.db.$transaction(async (tx) => {
       await tomarLocks(tx, [claveUsuario(user.id)]);
-      lockTomado();
+      lockTomado(await pidDe(tx));
       await esperando;
       await tx.user.update({ where: { id: user.id }, data: { hashedPassword: hashNuevo } });
     }, OPCIONES_LENTAS);
-    await conLock;
+    const pid = await pidDelCambio;
 
     const login = iniciarSesion({
       prisma: estado.base.db, email: user.email, password, huella: HUELLA, comparar: bcrypt.compare, hashear: bcrypt.hash,
     });
-    await dormir(300);
+    // Se suelta cuando Postgres muestra al login esperando el lock del cambio.
+    const momento = await esperarBloqueo(estado.base.prisma, { detrasDe: pid }, login);
     soltar();
     await cambio;
 
+    expect(momento).toBe("bloqueada");
     expect(await login).toEqual({ estado: "rechazado" });
     expect(await estado.base.prisma.sesionAcceso.count({ where: { userId: user.id } })).toBe(0);
   });
@@ -217,13 +219,17 @@ describe("login y cambio de contraseña se excluyen", () => {
     });
     await comparando;
 
+    let pidDelCambio!: (pid: number) => void;
+    const pid = new Promise<number>((r) => { pidDelCambio = r; });
     const cambio = estado.base.db.$transaction(async (tx) => {
+      pidDelCambio(await pidDe(tx));
       await tomarLocks(tx, [claveUsuario(user.id)]);
       await tx.user.update({ where: { id: user.id }, data: { hashedPassword: hashNuevo } });
       return cerrarTodas(tx, { userId: user.id, motivo: "cambio_password", ahora: new Date() });
     }, OPCIONES_LENTAS);
-    // Mientras el login no suelte, el cambio no avanza.
-    expect(await Promise.race([cambio.then(() => "avanzó"), dormir(300).then(() => "espera")])).toBe("espera");
+    // Mientras el login no suelte, el cambio espera su lock: Postgres lo
+    // muestra bloqueado. Sin el lock del login, el cambio termina.
+    expect(await esperarBloqueo(estado.base.prisma, { esperando: await pid }, cambio)).toBe("bloqueada");
     seguir();
 
     const resultado = await login;
