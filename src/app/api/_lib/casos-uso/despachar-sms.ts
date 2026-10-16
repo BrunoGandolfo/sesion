@@ -387,125 +387,147 @@ function manejar(c: Corrida, i: Intento, r: ResultadoTwilio): Promise<void> {
   return (MANEJADORES[r.tipo] as (c: Corrida, i: Intento, r: ResultadoTwilio) => Promise<void>)(c, i, r);
 }
 
-/** Un envío, de la reserva al cierre. */
-async function procesar(c: Corrida, e: Candidato, corteRescate: Date, ts: string): Promise<void> {
-  const { prisma, ahora, resumen } = c;
-  resumen.procesados += 1;
-  const esRescate = e.estado === "enviando";
-
-  const claim = await prisma.envioSms.updateMany({
-    where: esRescate
+/** La reserva: `pendiente` → `enviando` (o el rescate de una reserva vieja).
+ *  false si otra corrida la tomó primero. */
+async function reservar(c: Corrida, e: Candidato, corteRescate: Date): Promise<boolean> {
+  const claim = await c.prisma.envioSms.updateMany({
+    where: e.estado === "enviando"
       ? { id: e.id, estado: "enviando", actualizadoEn: { lt: corteRescate } }
       : { id: e.id, estado: "pendiente" },
     data: { estado: "enviando" },
   });
-  if (claim.count === 0) {
-    resumen.saltados += 1;
+  return claim.count > 0;
+}
+
+/** Cierra el envío como cancelado sin haber llamado a Twilio. */
+async function cancelarSinEnviar(c: Corrida, e: Candidato, motivo: string, evento: string): Promise<void> {
+  await c.cerrar(e, { estado: "cancelado", motivoNoEnvio: motivo, cerradoEn: c.ahora });
+  c.resumen.cancelados += 1;
+  c.evento(evento, e, "resultado=cancelado");
+}
+
+/**
+ * El intento se gasta ACÁ. `proximoIntentoEn = null` es la marca de que la
+ * llamada pudo haber salido (ver el rescate). Condicionado a que la fila siga
+ * reservada y el turno siga programado AHORA: el turno se leyó con los
+ * candidatos, y entre esa lectura y este paso ella pudo cancelarlo (eso apaga
+ * la fila) o cerrarlo por otro camino. false si no se pudo gastar.
+ */
+async function consumirIntento(c: Corrida, e: Candidato): Promise<boolean> {
+  const consumido = await c.prisma.envioSms.updateMany({
+    where: {
+      id: e.id,
+      estado: "enviando",
+      ...(e.turnoId ? { turno: { is: whereTurnoAvisable(c.ahora) } } : {}),
+    },
+    data: { intentos: { increment: 1 }, proximoIntentoEn: null },
+  });
+  return consumido.count > 0;
+}
+
+/** La llamada a Twilio. El enviador no lanza; si algo lo hace, no sabemos
+ *  si el cuerpo viajó. Desconocido, por prudencia. */
+async function llamarAlProveedor(c: Corrida, e: Candidato, texto: string): Promise<ResultadoTwilio> {
+  try {
+    return await c.enviar({ destino: e.destino, texto, statusCallback: URL_CALLBACK });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { tipo: "desconocido", motivo: `el enviador lanzó: ${msg.slice(0, 120)}` };
+  }
+}
+
+/** Hasta dónde llegó un envío: si ya gastó el intento, y con cuántos. */
+interface Avance {
+  intentoConsumido: boolean;
+  intentos: number;
+}
+
+/** Ya reservado: rescate, cortes previos, texto, intento, llamada y cierre. */
+async function intentar(c: Corrida, e: Candidato, avance: Avance): Promise<void> {
+  if (e.estado === "enviando") {
+    c.resumen.rescatados += 1;
+    if (e.proximoIntentoEn === null) {
+      // La corrida anterior murió DESPUÉS de marcar el intento: la
+      // llamada pudo haber salido. Nunca se reenvía: desconocido.
+      await c.cerrar(e, { estado: "desconocido", motivoNoEnvio: MOTIVO_RESERVA_HUERFANA });
+      c.resumen.desconocidos += 1;
+      c.evento("rescate", e, "resultado=desconocido-llamada-pudo-salir");
+      return;
+    }
+    c.evento("rescate", e, "resultado=reserva-huerfana-sin-llamada");
+  }
+
+  const corte = await cortePrevio(c, e);
+  if (corte) return cancelarSinEnviar(c, e, corte.motivo, corte.evento);
+
+  const texto = await textoDe(c, e);
+  if (!texto) return cancelarSinEnviar(c, e, MOTIVO_SIN_TEXTO_DE_COBRO, "sin-deuda");
+  const segmentosEstimados = contarLongitudSms(texto).segmentos;
+
+  // Si no se pudo gastar, no se llama a Twilio. Si la cancelación ya apagó
+  // la fila, este cierre no la toca (condiciona a `enviando`).
+  if (!(await consumirIntento(c, e))) return cancelarSinEnviar(c, e, MOTIVO_TURNO_CERRADO, "cerrado-antes-de-enviar");
+  avance.intentoConsumido = true;
+  avance.intentos = e.intentos + 1;
+
+  const resultado = await llamarAlProveedor(c, e, texto);
+  await manejar(c, { e, intentos: avance.intentos, segmentosEstimados }, resultado);
+}
+
+/**
+ * Un error nuestro (sin configuración, la base) antes o después de Twilio.
+ * Si el intento no se consumió, la llamada no salió: se reintenta con
+ * backoff. Si se consumió y llegamos acá, es que falló la persistencia del
+ * resultado: la fila queda en `enviando` y el rescate la va a pasar a
+ * desconocido (proximoIntentoEn es null).
+ */
+async function trasErrorPropio(c: Corrida, e: Candidato, avance: Avance, error: unknown, ts: string): Promise<void> {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (!avance.intentoConsumido) {
+    try {
+      await reintentarSinHaberLlamado(c, e, avance.intentos, msg);
+    } catch (persistErr) {
+      const persistMsg = persistErr instanceof Error ? persistErr.message : String(persistErr);
+      c.resumen.fallosPersistencia.push(`[sms][persistencia] envio=${e.id} error="${persistMsg}" ts=${ts}`);
+    }
+  } else {
+    c.resumen.fallosPersistencia.push(`[sms][persistencia] envio=${e.id} error="${msg}" ts=${ts}`);
+  }
+  c.evento("error", e, `error="${msg}"`);
+}
+
+/** El backoff de un error nuestro antes de la llamada: no se gastó nada. */
+async function reintentarSinHaberLlamado(c: Corrida, e: Candidato, intentos: number, msg: string): Promise<void> {
+  const decision = decidirTrasFalloTransitorio({
+    intentos: Math.max(1, intentos),
+    ahora: c.ahora,
+    limiteUtil: limiteUtilDe(e),
+    fechaTurno: e.turno?.fecha ?? null,
+    aleatorio: c.aleatorio(),
+  });
+  if (decision.accion === "reintentar") {
+    await c.cerrar(e, { estado: "pendiente", proximoIntentoEn: decision.proximoIntentoEn, motivoNoEnvio: msg.slice(0, 200) });
+    c.resumen.reintentos += 1;
+  } else {
+    await c.cerrar(e, { estado: decision.accion, motivoNoEnvio: decision.motivo, cerradoEn: c.ahora });
+    if (decision.accion === "fallido") c.resumen.fallidos += 1;
+    else c.resumen.cancelados += 1;
+  }
+}
+
+/** Un envío, de la reserva al cierre. */
+async function procesar(c: Corrida, e: Candidato, corteRescate: Date, ts: string): Promise<void> {
+  c.resumen.procesados += 1;
+  if (!(await reservar(c, e, corteRescate))) {
+    c.resumen.saltados += 1;
     c.evento("skip", e, "resultado=tomado-por-otra-corrida");
     return;
   }
-
-  let intentoConsumido = false;
-  let intentos = e.intentos;
-
+  const avance: Avance = { intentoConsumido: false, intentos: e.intentos };
   try {
-    if (esRescate) {
-      resumen.rescatados += 1;
-      if (e.proximoIntentoEn === null) {
-        // La corrida anterior murió DESPUÉS de marcar el intento: la
-        // llamada pudo haber salido. Nunca se reenvía: desconocido.
-        await c.cerrar(e, { estado: "desconocido", motivoNoEnvio: MOTIVO_RESERVA_HUERFANA });
-        resumen.desconocidos += 1;
-        c.evento("rescate", e, "resultado=desconocido-llamada-pudo-salir");
-        return;
-      }
-      c.evento("rescate", e, "resultado=reserva-huerfana-sin-llamada");
-    }
-
-    const corte = await cortePrevio(c, e);
-    if (corte) {
-      await c.cerrar(e, { estado: "cancelado", motivoNoEnvio: corte.motivo, cerradoEn: ahora });
-      resumen.cancelados += 1;
-      c.evento(corte.evento, e, "resultado=cancelado");
-      return;
-    }
-
-    const texto = await textoDe(c, e);
-    if (!texto) {
-      await c.cerrar(e, { estado: "cancelado", motivoNoEnvio: MOTIVO_SIN_TEXTO_DE_COBRO, cerradoEn: ahora });
-      resumen.cancelados += 1;
-      c.evento("sin-deuda", e, "resultado=cancelado");
-      return;
-    }
-    const segmentosEstimados = contarLongitudSms(texto).segmentos;
-
-    // El intento se gasta ACÁ. `proximoIntentoEn = null` es la marca de
-    // que la llamada pudo haber salido (ver el rescate). Condicionado a que
-    // la fila siga reservada y el turno siga programado AHORA: el turno se
-    // leyó con los candidatos, y entre esa lectura y este paso ella pudo
-    // cancelarlo (eso apaga la fila) o cerrarlo por otro camino.
-    const consumido = await prisma.envioSms.updateMany({
-      where: {
-        id: e.id,
-        estado: "enviando",
-        ...(e.turnoId ? { turno: { is: whereTurnoAvisable(ahora) } } : {}),
-      },
-      data: { intentos: { increment: 1 }, proximoIntentoEn: null },
-    });
-    if (consumido.count === 0) {
-      // Sin llamar a Twilio. Si la cancelación ya apagó la fila, este
-      // cierre no la toca (condiciona a `enviando`).
-      await c.cerrar(e, { estado: "cancelado", motivoNoEnvio: MOTIVO_TURNO_CERRADO, cerradoEn: ahora });
-      resumen.cancelados += 1;
-      c.evento("cerrado-antes-de-enviar", e, "resultado=cancelado");
-      return;
-    }
-    intentoConsumido = true;
-    intentos = e.intentos + 1;
-
-    let resultado: ResultadoTwilio;
-    try {
-      resultado = await c.enviar({ destino: e.destino, texto, statusCallback: URL_CALLBACK });
-    } catch (error) {
-      // El enviador no lanza; si algo lo hace, no sabemos si el cuerpo
-      // viajó. Desconocido, por prudencia.
-      const msg = error instanceof Error ? error.message : String(error);
-      resultado = { tipo: "desconocido", motivo: `el enviador lanzó: ${msg.slice(0, 120)}` };
-    }
-
-    await manejar(c, { e, intentos, segmentosEstimados }, resultado);
+    await intentar(c, e, avance);
   } catch (error) {
-    // Un error nuestro (sin configuración, la base) antes o después de
-    // Twilio. Si el intento no se consumió, la llamada no salió: se
-    // reintenta con backoff. Si se consumió y llegamos acá, es que falló
-    // la persistencia del resultado: la fila queda en `enviando` y el
-    // rescate la va a pasar a desconocido (proximoIntentoEn es null).
-    const msg = error instanceof Error ? error.message : String(error);
-    if (!intentoConsumido) {
-      try {
-        const decision = decidirTrasFalloTransitorio({
-          intentos: Math.max(1, intentos),
-          ahora,
-          limiteUtil: limiteUtilDe(e),
-          fechaTurno: e.turno?.fecha ?? null,
-          aleatorio: c.aleatorio(),
-        });
-        if (decision.accion === "reintentar") {
-          await c.cerrar(e, { estado: "pendiente", proximoIntentoEn: decision.proximoIntentoEn, motivoNoEnvio: msg.slice(0, 200) });
-          resumen.reintentos += 1;
-        } else {
-          await c.cerrar(e, { estado: decision.accion, motivoNoEnvio: decision.motivo, cerradoEn: ahora });
-          if (decision.accion === "fallido") resumen.fallidos += 1;
-          else resumen.cancelados += 1;
-        }
-      } catch (persistErr) {
-        const persistMsg = persistErr instanceof Error ? persistErr.message : String(persistErr);
-        resumen.fallosPersistencia.push(`[sms][persistencia] envio=${e.id} error="${persistMsg}" ts=${ts}`);
-      }
-    } else {
-      resumen.fallosPersistencia.push(`[sms][persistencia] envio=${e.id} error="${msg}" ts=${ts}`);
-    }
-    c.evento("error", e, `error="${msg}"`);
+    await trasErrorPropio(c, e, avance, error, ts);
   }
 }
 
