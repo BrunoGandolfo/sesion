@@ -21,6 +21,7 @@ import {
   MIC_SIN_PERMISO,
   NAVEGADOR_SIN_GRABACION,
 } from "@/lib/glosario";
+import { admiteAudio, leerSesionDelTurno } from "@/lib/grabacion-sesion";
 import { ErrorSubida } from "@/lib/subida-audio";
 
 /** Por qué el grabador no pudo grabar o entregar. */
@@ -108,4 +109,48 @@ export function mensajeParaReintentar(error: unknown, copiaEnTelefono: boolean):
     return copiaEnTelefono ? mensajeParaElla(error) : `${mensajeParaElla(error)} ${COPIA_NO_GUARDADA}`;
   }
   return copiaEnTelefono ? AUDIO_NO_GUARDADO : AUDIO_NO_GUARDADO_SIN_COPIA;
+}
+
+/** Cómo termina una subida que falló: qué fase, qué se le dice y si la
+ *  sesión vuelve a "grabando" para repetir desde upload-url con el mismo
+ *  blob. Nada se borra: la grabación sigue en memoria y, si se pudo, en el
+ *  teléfono. */
+export interface DesenlaceDelFallo {
+  fase: "no-guardado" | "rechazada";
+  mensaje: string;
+  volverAGrabando: boolean;
+}
+
+export async function desenlaceDelFallo(
+  error: unknown,
+  { turno, sesionId, copiaEnTelefono }: { turno: string | null; sesionId: string | null; copiaEnTelefono: boolean },
+): Promise<DesenlaceDelFallo> {
+  const reintentar: DesenlaceDelFallo = {
+    fase: "no-guardado",
+    mensaje: mensajeParaReintentar(error, copiaEnTelefono),
+    volverAGrabando: sesionId !== null,
+  };
+  // Sin red no se le pregunta nada al servidor: se reintenta cuando vuelva la
+  // señal. Si la sesión llegó a quedar en "subiendo", que vuelva a
+  // "grabando" (sin red no va a poder; el próximo intento lo resuelve igual).
+  if (esSinConexion(error)) return reintentar;
+  // El servidor no aceptó el turno o la sesión (la sesión ya se cerró, el
+  // turno no es de hoy, falta la autorización): reintentar fallaría igual. Se
+  // dice lo que contestó, que está escrito para ella.
+  if (!sesionId && esRechazoDefinitivo(error)) {
+    return { fase: "rechazada", mensaje: error.mensaje, volverAGrabando: false };
+  }
+  // Lo que decide es el estado de la sesión, no el código: un 409 de "no
+  // llegó" deja la sesión en grabando a propósito para reintentar, y uno de
+  // upload-url con la sesión en subiendo se arregla volviendo a grabando.
+  // Definitivo es que la sesión ya no admita audio (la cerró el
+  // mantenimiento, quedó fallida por corta, ya se procesa). Si no se puede
+  // leer, se reintenta como siempre.
+  if (turno && esRechazoDelServidor(error)) {
+    const sesion = await leerSesionDelTurno(turno).catch(() => undefined);
+    if (sesion === null || (sesion !== undefined && !admiteAudio(sesion.estado))) {
+      return { fase: "rechazada", mensaje: error.message, volverAGrabando: false };
+    }
+  }
+  return reintentar;
 }

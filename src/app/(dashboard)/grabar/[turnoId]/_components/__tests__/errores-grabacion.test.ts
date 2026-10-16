@@ -11,8 +11,15 @@ import { ApiClientError } from "@/lib/api-client";
 import * as glosario from "@/lib/glosario";
 import { ErrorSubida } from "@/lib/subida-audio";
 
+const m = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  apiGet: m.get,
+}));
+
 import {
   causaDelErrorDeMicrofono,
+  desenlaceDelFallo,
   esRechazoDefinitivo,
   esRechazoDelServidor,
   esSinConexion,
@@ -20,7 +27,10 @@ import {
   mensajeParaReintentar,
 } from "../errores-grabacion";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
 
 describe("causaDelErrorDeMicrofono", () => {
   it.each([
@@ -101,5 +111,42 @@ describe("mensajeParaReintentar", () => {
     ["la API, sin copia", new ApiClientError("Error interno", 500), false, `Error interno ${glosario.COPIA_NO_GUARDADA}`],
   ] as const)("%s", (_caso, error, copia, esperado) => {
     expect(mensajeParaReintentar(error, copia)).toBe(esperado);
+  });
+});
+
+describe("desenlaceDelFallo", () => {
+  const CON_COPIA = { turno: "t1", sesionId: "s1", copiaEnTelefono: true };
+
+  it("sin red: se reintenta, y la sesión vuelve a grabando si llegó a existir", async () => {
+    await expect(desenlaceDelFallo(new TypeError("Failed to fetch"), CON_COPIA)).resolves.toEqual({
+      fase: "no-guardado", mensaje: glosario.GRABACION_SIN_CONEXION, volverAGrabando: true,
+    });
+    await expect(desenlaceDelFallo(new TypeError("Failed to fetch"), { ...CON_COPIA, sesionId: null })).resolves.toMatchObject({ volverAGrabando: false });
+    expect(m.get).not.toHaveBeenCalled();
+  });
+
+  it("el servidor rechazó crear la sesión: se dice lo que contestó, sin reintento", async () => {
+    const error = new ApiClientError("Sin autorización", 403);
+    await expect(desenlaceDelFallo(error, { ...CON_COPIA, sesionId: null })).resolves.toEqual({
+      fase: "rechazada", mensaje: "Sin autorización", volverAGrabando: false,
+    });
+  });
+
+  it.each([
+    ["la sesión ya no admite audio", { id: "s1", estado: "fallida" }, "rechazada"],
+    ["la sesión desapareció", null, "rechazada"],
+    ["la sesión sigue en grabando", { id: "s1", estado: "grabando" }, "no-guardado"],
+  ] as const)("un 409 del servidor cuando %s", async (_caso, sesion, fase) => {
+    m.get.mockResolvedValueOnce(sesion);
+    const desenlace = await desenlaceDelFallo(new ErrorSubida("Ya se cerró", "url", 409), CON_COPIA);
+    expect(desenlace.fase).toBe(fase);
+    expect(m.get).toHaveBeenCalledWith("/api/sesion-clinica?turnoId=t1");
+  });
+
+  it("si no se puede leer la sesión después de un 409, se reintenta", async () => {
+    m.get.mockRejectedValueOnce(new Error("sin red"));
+    await expect(desenlaceDelFallo(new ErrorSubida("No llegó", "confirmar", 409), CON_COPIA)).resolves.toEqual({
+      fase: "no-guardado", mensaje: glosario.AUDIO_NO_GUARDADO, volverAGrabando: true,
+    });
   });
 });
