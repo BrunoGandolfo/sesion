@@ -9,7 +9,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, REINTENTAR } from "@/lib/glosario";
+import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, GRABACION_SIN_CONEXION_SIN_COPIA, REINTENTAR } from "@/lib/glosario";
 import { claveSinTurno } from "@/lib/grabacion-clave";
 
 import { GrabarView } from "../grabar-view";
@@ -18,14 +18,19 @@ import { GrabarView } from "../grabar-view";
 const disco = vi.hoisted(() => ({
   metas: new Map<string, { iniciadaEn: number; mimeType: string; turnoId?: string; pacienteId?: string }>(),
   chunks: new Map<string, Blob[]>(),
+  // Con la cuota llena IndexedDB no escribe: guardarChunk devuelve false.
+  cuotaLlena: false,
 }));
 vi.mock("@/lib/grabacion-storage", () => ({
   iniciarSesionGrabacion: vi.fn(async (clave: string, mimeType: string, pacienteId?: string) => {
     disco.metas.set(clave, { iniciadaEn: Date.now(), mimeType, ...(pacienteId ? { pacienteId } : {}) });
     disco.chunks.set(clave, []);
+    return true;
   }),
   guardarChunk: vi.fn(async (clave: string, _indice: number, blob: Blob) => {
+    if (disco.cuotaLlena) return false;
     disco.chunks.get(clave)?.push(blob);
+    return true;
   }),
   guardarPausas: vi.fn(async () => {}),
   limpiarGrabacion: vi.fn(async (clave: string) => {
@@ -147,6 +152,7 @@ beforeEach(() => {
   for (const k of Object.keys(cuerpos)) delete cuerpos[k];
   disco.metas.clear();
   disco.chunks.clear();
+  disco.cuotaLlena = false;
   red.caida = false;
   sesionDelTurno = null;
   vi.stubGlobal("MediaRecorder", RecorderFalso);
@@ -194,6 +200,18 @@ describe("sin red", () => {
     expect([...disco.metas.keys()]).toEqual([clave]);
     expect(disco.chunks.get(clave)!.length).toBeGreaterThanOrEqual(12);
     expect(pedidos).toEqual([]);
+  });
+
+  test("con la cuota llena no dice que la grabación quedó en el teléfono: pide no cerrar la pantalla", async () => {
+    red.caida = true;
+    disco.cuotaLlena = true;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<GrabarView {...SIN_TURNO} />);
+    await grabarYTerminar();
+
+    expect(await screen.findByText(GRABACION_SIN_CONEXION_SIN_COPIA)).toBeTruthy();
+    expect(screen.queryByText(GRABACION_SIN_CONEXION)).toBeNull();
+    expect(screen.getByRole("button", { name: REINTENTAR })).toBeTruthy();
   });
 
   test("al volver la red, Reintentar crea el turno con la hora en que empezó, la sesión, y sube", async () => {

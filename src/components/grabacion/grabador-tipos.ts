@@ -11,6 +11,10 @@ export interface DatosGrabacion {
   duracionSegundos: number;
   pausas: PausaRegistrada[];
   diagnostico: DiagnosticoGrabacion;
+  /** Si los chunks quedaron en el teléfono (IndexedDB). Se pregunta al fallar
+   *  la subida: con la cuota llena no hay copia, y la pantalla no la promete.
+   *  Sin el campo, se supone que sí. */
+  respaldoEnTelefono?: () => boolean;
 }
 
 /**

@@ -21,9 +21,9 @@ let persistido: {
 } | null = null;
 
 vi.mock("@/lib/grabacion-storage", () => ({
-  guardarChunk: vi.fn(async () => {}),
+  guardarChunk: vi.fn(async () => true),
   guardarPausas: vi.fn(async () => {}),
-  iniciarSesionGrabacion: vi.fn(async () => {}),
+  iniciarSesionGrabacion: vi.fn(async () => true),
   limpiarGrabacion: vi.fn(async () => {}),
   recuperarGrabacionPendiente: vi.fn(async () => persistido),
 }));
@@ -292,7 +292,17 @@ describe("lo que se entrega", () => {
     expect(audioBlob.size).toBe(60);
     expect(await audioBlob.text()).toBe("a".repeat(60));
     expect(diagnostico).toMatchObject({ chunks: 12, bytes: 60 });
-    expect(Object.keys(onListo.mock.calls[0][0]).sort()).toEqual(["audioBlob", "diagnostico", "duracionSegundos", "pausas"]);
+    expect(Object.keys(onListo.mock.calls[0][0]).sort()).toEqual(["audioBlob", "diagnostico", "duracionSegundos", "pausas", "respaldoEnTelefono"]);
+    expect(onListo.mock.calls[0][0].respaldoEnTelefono?.()).toBe(true);
+  });
+
+  it("si un chunk no se pudo guardar en el teléfono (cuota llena), la entrega lo dice", async () => {
+    vi.mocked(guardarChunk).mockResolvedValueOnce(false);
+    const { grabador, onListo } = montar();
+    await empezar(grabador, 11);
+    act(() => grabador.current.terminar());
+
+    expect(onListo.mock.calls[0][0].respaldoEnTelefono?.()).toBe(false);
   });
 
   it("una grabación que quedó en el teléfono se envía sin pedir ninguna clave", async () => {

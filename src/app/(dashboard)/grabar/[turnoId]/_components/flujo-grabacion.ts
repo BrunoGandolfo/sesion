@@ -39,14 +39,8 @@ import {
   subirAudio,
   volverAGrabando,
 } from "@/lib/subida-audio";
-import { esRechazoDefinitivo, esRechazoDelServidor, esSinConexion } from "./errores-grabacion";
-import {
-  ALGO_FALLO,
-  AUDIO_NO_GUARDADO,
-  GRABACION_SIN_CONEXION,
-  SESION_EN_CAMINO,
-  TURNO_NO_MARCADO,
-} from "@/lib/glosario";
+import { esRechazoDefinitivo, esRechazoDelServidor, esSinConexion, mensajeParaReintentar } from "./errores-grabacion";
+import { ALGO_FALLO, SESION_EN_CAMINO, TURNO_NO_MARCADO } from "@/lib/glosario";
 
 /** Duración por defecto del turno creado al vuelo. */
 const DURACION_SIN_TURNO = 50;
@@ -229,8 +223,9 @@ export function useFlujoGrabacion({
         console.warn("[grabar] falló la subida", error);
         // Sin red no se le pregunta nada al servidor: la grabación queda en
         // el teléfono y se reintenta cuando vuelva la señal.
+        const copiaEnTelefono = datos.respaldoEnTelefono?.() ?? true;
         if (esSinConexion(error)) {
-          setErrorPantalla(GRABACION_SIN_CONEXION);
+          setErrorPantalla(mensajeParaReintentar(error, copiaEnTelefono));
           setFase("no-guardado");
           // Si la sesión llegó a quedar en "subiendo", que vuelva a "grabando"
           // (sin red no va a poder; el próximo intento lo resuelve igual).
@@ -270,7 +265,7 @@ export function useFlujoGrabacion({
         // Nada se borra: la grabación sigue en memoria y sus chunks en
         // IndexedDB. La sesión vuelve a "grabando" para repetir desde
         // upload-url con el mismo blob.
-        setErrorPantalla(error instanceof ApiClientError ? mensajeParaElla(error) : AUDIO_NO_GUARDADO);
+        setErrorPantalla(mensajeParaReintentar(error, copiaEnTelefono));
         setFase("no-guardado");
         if (sesionId) await volverAGrabando(sesionId);
       } finally {

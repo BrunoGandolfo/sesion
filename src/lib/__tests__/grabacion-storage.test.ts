@@ -356,13 +356,58 @@ describe("grabacion-storage — borrar", () => {
 });
 
 describe("grabacion-storage — degradación", () => {
+  it("guardarChunk e iniciarSesionGrabacion devuelven true cuando quedó escrito", async () => {
+    await expect(storage.iniciarSesionGrabacion(TURNO, "audio/webm")).resolves.toBe(true);
+    await expect(storage.guardarChunk(TURNO, 0, chunk("a"))).resolves.toBe(true);
+  });
+
+  it("al empezar una grabación pide almacenamiento persistente, para que el teléfono no desaloje la copia", async () => {
+    const persist = vi.fn(async () => true);
+    vi.stubGlobal("navigator", { storage: { persist } });
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm");
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
+  it("si el navegador no tiene la API, o la rechaza, la grabación empieza igual", async () => {
+    vi.stubGlobal("navigator", {});
+    await expect(storage.iniciarSesionGrabacion(TURNO, "audio/webm")).resolves.toBe(true);
+    vi.stubGlobal("navigator", { storage: { persist: vi.fn(async () => { throw new Error("no"); }) } });
+    await expect(storage.iniciarSesionGrabacion(TURNO, "audio/webm")).resolves.toBe(true);
+  });
+
+  it("con la cuota llena guardarChunk no lanza y devuelve false", async () => {
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm");
+    // La transacción aborta como aborta IndexedDB sin espacio.
+    vi.spyOn(dbFalsa, "transaction").mockImplementationOnce(() => {
+      const tx = {
+        error: null as unknown,
+        oncomplete: null as (() => void) | null,
+        onerror: null as (() => void) | null,
+        onabort: null as (() => void) | null,
+        objectStore: () => ({ put: () => ({}) }),
+      };
+      setTimeout(() => {
+        tx.error = new DOMException("The quota has been exceeded.", "QuotaExceededError");
+        tx.onabort?.();
+      }, 0);
+      return tx as unknown as TransaccionFalsa;
+    });
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(storage.guardarChunk(TURNO, 0, chunk("a"))).resolves.toBe(false);
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
+  });
+
+
   it("sin IndexedDB no lanza y se comporta como solo-RAM", async () => {
     vi.stubGlobal("indexedDB", undefined);
 
-    await expect(storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus")).resolves.toBeUndefined();
+    // Devuelven false: no quedó nada en el teléfono, y la pantalla lo dice.
+    await expect(storage.iniciarSesionGrabacion(TURNO, "audio/webm;codecs=opus")).resolves.toBe(false);
     await expect(
       storage.guardarChunk(TURNO, 0, chunk("a")),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
     await expect(storage.guardarPausas(TURNO, [])).resolves.toBeUndefined();
     await expect(storage.limpiarGrabacion(TURNO)).resolves.toBeUndefined();
     await expect(storage.recuperarGrabacionPendiente()).resolves.toBeNull();

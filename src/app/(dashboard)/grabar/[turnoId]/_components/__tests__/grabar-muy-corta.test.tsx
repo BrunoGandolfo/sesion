@@ -14,9 +14,9 @@ import { GrabarView } from "../grabar-view";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/grabacion-storage", () => ({
-  guardarChunk: vi.fn(async () => {}),
+  guardarChunk: vi.fn(async () => true),
   guardarPausas: vi.fn(async () => {}),
-  iniciarSesionGrabacion: vi.fn(async () => {}),
+  iniciarSesionGrabacion: vi.fn(async () => true),
   limpiarGrabacion: vi.fn(async () => {}),
   recuperarGrabacionPendiente: vi.fn(async () => null),
 }));

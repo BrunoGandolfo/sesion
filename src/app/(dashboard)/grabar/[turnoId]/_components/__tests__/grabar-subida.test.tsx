@@ -13,6 +13,7 @@ import type { DatosGrabacion, EstadoGrabador, Grabador } from "@/components/grab
 import { ErrorSubida } from "@/lib/subida-audio";
 import {
   AUDIO_NO_GUARDADO,
+  AUDIO_NO_GUARDADO_SIN_COPIA,
   GRABACION_LLEGO,
   GRABACION_SIN_CONEXION,
   GRABAR_SESION,
@@ -82,7 +83,7 @@ function rechazarLaSubida(error: ErrorSubida, estado: string) {
 }
 
 /** Deja la sesión anotada (por el camino de la copia pendiente) y entrega la grabación. */
-async function subirUnaGrabacion() {
+async function subirUnaGrabacion(datos: DatosGrabacion = DATOS) {
   grabadorEn({ estado: "inactivo", pendienteSeg: 600 });
   const { rerender } = render(<GrabarView {...props} />);
   fireEvent.click(await screen.findByRole("button", { name: "Guardarla ahora" }));
@@ -90,7 +91,7 @@ async function subirUnaGrabacion() {
   grabadorEn({ estado: "entregada" });
   rerender(<GrabarView {...props} />);
   await act(async () => {
-    m.opciones?.onListo(DATOS);
+    m.opciones?.onListo(datos);
   });
 }
 
@@ -122,6 +123,14 @@ describe("cuando la subida falla", () => {
     m.subir.mockRejectedValueOnce(new ErrorSubida("R2 rechazó la subida (HTTP 403).", "put", 403));
     await subirUnaGrabacion();
     expect(await screen.findByText(AUDIO_NO_GUARDADO)).toBeTruthy();
+    expect(screen.getByRole("button", { name: REINTENTAR })).toBeTruthy();
+  });
+
+  it("si la copia del teléfono no se pudo guardar, no dice que el audio está a salvo en el teléfono", async () => {
+    m.subir.mockRejectedValueOnce(new ErrorSubida("R2 rechazó la subida (HTTP 403).", "put", 403));
+    await subirUnaGrabacion({ ...DATOS, respaldoEnTelefono: () => false });
+    expect(await screen.findByText(AUDIO_NO_GUARDADO_SIN_COPIA)).toBeTruthy();
+    expect(screen.queryByText(AUDIO_NO_GUARDADO)).toBeNull();
     expect(screen.getByRole("button", { name: REINTENTAR })).toBeTruthy();
   });
 

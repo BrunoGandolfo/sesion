@@ -2095,3 +2095,21 @@ export const LUX_SIN_CONEXION = "No hay conexión. Probá de nuevo cuando vuelva
 export const LUX_CORTADO = "Se cortó la respuesta. Podés preguntar de nuevo.";
 export const LUX_SALIR =
   "Escribiste algo para Lux que todavía no mandaste. Si seguís, se pierde.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// rev-grabacion
+// ────────────────────────────────────────────────────────────────────────────
+
+/** La copia de la grabación en el teléfono (IndexedDB) no se pudo guardar:
+ *  cuota llena, modo privado. Se agrega a lo que contestó el servidor cuando
+ *  la subida falla: la grabación existe sólo mientras la pantalla siga abierta. */
+export const COPIA_NO_GUARDADA =
+  "La copia en el teléfono no se pudo guardar: no cierres esta pantalla hasta que la grabación suba.";
+
+/** Como AUDIO_NO_GUARDADO, pero sin copia en el teléfono. */
+export const AUDIO_NO_GUARDADO_SIN_COPIA =
+  "No se pudo guardar el audio, y la copia en el teléfono tampoco se pudo guardar. No cierres esta pantalla y probá de nuevo.";
+
+/** Como GRABACION_SIN_CONEXION, pero sin copia en el teléfono. */
+export const GRABACION_SIN_CONEXION_SIN_COPIA =
+  "Sin conexión, y la copia en el teléfono no se pudo guardar. No cierres esta pantalla: reintentá cuando vuelva la señal.";

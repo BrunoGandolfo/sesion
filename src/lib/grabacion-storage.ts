@@ -14,9 +14,10 @@
 //
 // Filosofía de errores: este módulo es un SEGURO, no una dependencia.
 // Si IndexedDB no está disponible, la cuota se agota o cualquier
-// operación falla, se degrada silenciosamente a solo-RAM (el
-// comportamiento previo). Nunca lanza: una falla del backup jamás
-// debe romper la grabación en curso.
+// operación falla, la grabación sigue en RAM. Nunca lanza: una falla del
+// backup jamás debe romper la grabación en curso. Pero no es silenciosa:
+// iniciarSesionGrabacion y guardarChunk devuelven false, y la pantalla deja
+// de decir que el audio está a salvo en el teléfono.
 //
 // Nota de integración: el parámetro `sesionClinicaId` es el
 // identificador con el que el caller nombra la grabación: el turnoId si la
@@ -170,23 +171,25 @@ function rangoChunks(sesionClinicaId: string): IDBKeyRange {
 }
 
 function avisar(operacion: string, error: unknown) {
-  // Solo diagnóstico: la degradación es silenciosa para el usuario.
   console.warn(`[grabacion-storage] ${operacion} falló, sigo en solo-RAM`, error);
 }
 
 /**
  * Registra el inicio de una grabación. Borra cualquier chunk previo
  * asociado al mismo id (una grabación nueva reemplaza a la anterior
- * del mismo turno/sesión) y guarda el timestamp de inicio.
+ * del mismo turno/sesión) y guarda el timestamp de inicio. Pide además
+ * almacenamiento persistente, para que el teléfono no desaloje la copia.
+ * Devuelve si la meta quedó escrita.
  */
 export async function iniciarSesionGrabacion(
   sesionClinicaId: string,
   mimeType: string,
   pacienteId?: string,
-): Promise<void> {
+): Promise<boolean> {
   if (!indexedDBDisponible()) {
-    return;
+    return false;
   }
+  pedirAlmacenamientoPersistente();
 
   try {
     const db = await abrirDB();
@@ -204,8 +207,10 @@ export async function iniciarSesionGrabacion(
     tx.objectStore(STORE_META).put(meta);
 
     await esperarTransaccion(tx);
+    return true;
   } catch (error) {
     avisar("iniciarSesionGrabacion", error);
+    return false;
   }
 }
 
@@ -249,17 +254,17 @@ export async function guardarPausas(
 }
 
 /**
- * Persiste un chunk de audio. Pensado para llamarse fire-and-forget desde
- * `ondataavailable`: nunca lanza y no hay que await-earlo en el hot path de
- * la grabación.
+ * Persiste un chunk de audio. Pensado para llamarse sin esperarlo desde
+ * `ondataavailable`: nunca lanza y no bloquea la grabación. Devuelve si quedó
+ * escrito: false con la cuota llena, sin IndexedDB o con la base cerrada.
  */
 export async function guardarChunk(
   sesionClinicaId: string,
   indice: number,
   chunk: Blob,
-): Promise<void> {
+): Promise<boolean> {
   if (!indexedDBDisponible()) {
-    return;
+    return false;
   }
 
   try {
@@ -270,9 +275,24 @@ export async function guardarChunk(
     tx.objectStore(STORE_CHUNKS).put(registro);
 
     await esperarTransaccion(tx);
+    return true;
   } catch (error) {
-    // Cuota agotada, DB cerrada, etc.: degradar a solo-RAM.
+    // Cuota agotada, DB cerrada, etc.: la grabación sigue sólo en RAM.
     avisar(`guardarChunk(${indice})`, error);
+    return false;
+  }
+}
+
+/**
+ * Pide que el navegador no desaloje lo guardado cuando le falta espacio
+ * (sin esto, el almacenamiento es "best-effort" y Android lo puede borrar).
+ * El navegador puede decir que no; no cambia nada de lo demás.
+ */
+function pedirAlmacenamientoPersistente(): void {
+  try {
+    void navigator.storage?.persist?.().catch(() => {});
+  } catch {
+    // Sin la API: nada que pedir.
   }
 }
 
