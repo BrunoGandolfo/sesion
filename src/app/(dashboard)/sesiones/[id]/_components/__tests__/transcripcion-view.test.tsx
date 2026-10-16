@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 
 import { apiGet, apiPost, ApiClientError } from "@/lib/api-client";
 import {
+  ALGO_FALLO,
   BUSCAR_ANTERIOR,
   BUSCAR_EN_TRANSCRIPCION,
   BUSCAR_MINIMO,
@@ -153,6 +154,14 @@ describe("TranscripcionView", () => {
     fireEvent.click(within(aviso).getByRole("button", { name: REINTENTAR }));
     expect(await screen.findByText("¿Cómo estuvo la semana?")).toBeTruthy();
     expect(lecturas()).toHaveLength(2);
+  });
+
+  it("sin conexión dice que algo falló, nunca el error técnico en inglés", async () => {
+    vi.mocked(apiGet).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(<TranscripcionView sesion={sesion()} />);
+    const aviso = await screen.findByRole("alert");
+    expect(within(aviso).getByText(ALGO_FALLO)).toBeTruthy();
+    expect(within(aviso).queryByText(/Failed to fetch/)).toBeNull();
   });
 
   it("se pide una sola vez por apertura, aunque React monte dos veces", async () => {
