@@ -455,3 +455,33 @@ describe("grabacion-storage — una grabación sin turno", () => {
     expect(await storage.recuperarGrabacionPendiente((_c, _t, pacienteId) => pacienteId === "p2")).toBeNull();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// D5: la duración de una grabación recuperada sale del timeslice con que se
+// grabó. Si alguien cambia TIMESLICE_MS, la duración recuperada lo acompaña
+// (con ella se decide si es "muy corta" y los minutos que se ofrecen).
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("grabacion-storage — duración atada al timeslice", () => {
+  afterEach(() => {
+    vi.doUnmock("@/lib/grabacion-captura");
+    vi.resetModules();
+  });
+
+  it("con chunks de 2 s, tres chunks recuperados son 6 s", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/grabacion-captura", async (original) => ({
+      ...(await original<typeof import("@/lib/grabacion-captura")>()),
+      TIMESLICE_MS: 2000,
+    }));
+    const conOtroTimeslice: ModuloStorage = await import("@/lib/grabacion-storage");
+
+    await conOtroTimeslice.iniciarSesionGrabacion(TURNO, "audio/webm");
+    await conOtroTimeslice.guardarChunk(TURNO, 0, chunk("a"));
+    await conOtroTimeslice.guardarChunk(TURNO, 1, chunk("b"));
+    await conOtroTimeslice.guardarChunk(TURNO, 2, chunk("c"));
+
+    const pendiente = await conOtroTimeslice.recuperarGrabacionPendiente();
+    expect(pendiente?.duracionAproxSeg).toBe(6);
+  });
+});

@@ -27,16 +27,18 @@
 // dos veces.
 // ============================================
 
+import { TIMESLICE_MS } from "@/lib/grabacion-captura";
+
 const DB_NOMBRE = "sesion-grabaciones";
 const DB_VERSION = 1;
 const STORE_CHUNKS = "chunks";
 const STORE_META = "meta";
 
-/** Duración del timeslice del MediaRecorder (ms). Cada chunk ≈ 1 segundo.
- *  Durante una pausa el MediaRecorder no emite chunks, así que contar chunks
+/** Segundos de audio que trae cada chunk: el timeslice con que se le pide
+ *  audio al MediaRecorder (grabacion-captura.ts). Durante una pausa el MediaRecorder no emite chunks, así que contar chunks
  *  ya descuenta las pausas: la duración aproximada de una grabación
  *  recuperada no necesita corregirse con `pausas`. */
-const SEGUNDOS_POR_CHUNK = 1;
+const SEGUNDOS_POR_CHUNK = TIMESLICE_MS / 1000;
 
 /**
  * Tramo en el que la grabación estuvo detenida sin cerrarse: la terapeuta
