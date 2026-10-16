@@ -4,7 +4,7 @@
  * resultado. Y las vueltas a procesando de la usuaria (reprocesar,
  * reintentar) más eliminar.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { eliminarSesion } from "@/app/api/_lib/casos-uso/sesion/eliminar";
 import { reclamarSesiones } from "@/app/api/_lib/casos-uso/sesion/reclamar";
@@ -26,7 +26,6 @@ import {
   crearOrg,
   crearSesion,
   filaDe,
-  limpiarOrg,
   NOTA,
   pedidoConTicket,
   trabajosDe,
@@ -34,21 +33,27 @@ import {
   type BaseArea2,
   type Org,
 } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 let base!: BaseArea2;
 let org!: Org;
 let otra!: Org;
 const AHORA = new Date("2026-09-14T12:00:00Z");
 
-beforeAll(async () => {
+beforeAll(() => {
   base = conectarArea2();
+});
+
+// El reclamo entrega las `limite` sesiones más viejas de toda la base: cada
+// caso empieza vacío para que la suya no quede afuera por las de otro caso.
+beforeEach(async () => {
+  await vaciarTablas(base.prisma);
   org = await crearOrg(base.prisma);
   otra = await crearOrg(base.prisma);
 });
 
 afterAll(async () => {
-  await limpiarOrg(base.prisma, org.orgId);
-  await limpiarOrg(base.prisma, otra.orgId);
+  await vaciarTablas(base.prisma);
   await base.prisma.$disconnect();
 });
 
