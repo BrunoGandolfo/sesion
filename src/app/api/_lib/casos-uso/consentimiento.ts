@@ -19,6 +19,7 @@
 // tabla) ni la IP (no se guarda: decisión del dueño).
 
 import {
+  CONSENTIMIENTO_VERSION,
   buscarConsentimientoVigente,
   esConsentimientoVigente,
   generarTextoConsentimiento,
@@ -32,6 +33,11 @@ import { auditar } from "../auditoria";
 import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import { CONSENTIMIENTO_VERSION_VIEJA } from "@/lib/glosario";
+
+/** La pantalla firmó un texto que no es el vigente (una app vieja en caché):
+ *  el cliente lo distingue de otros 409 y pide recargar. */
+export const CODIGO_CONSENTIMIENTO_VERSION_VIEJA = "consentimiento_version_vieja";
 
 type ClienteConsentimiento = typeof db;
 
@@ -109,6 +115,10 @@ export interface FirmarConsentimientoInput extends IdentidadConsentimiento {
   /** Quién resolvió la sesión: va al evento. */
   usuarioId?: string | null;
   firmaDigital: string;
+  /** La versión del texto que la pantalla le mostró a la paciente. Solo se
+   *  compara: lo que se guarda es la versión del texto que genera el
+   *  servidor, para que el registro legal nunca diga una versión y guarde
+   *  otro texto. */
   textoVersion: string;
   ahora?: Date;
 }
@@ -141,6 +151,10 @@ export async function firmarConsentimiento({
     throw new ApiError("Configuración de la organización no encontrada", 500);
   }
 
+  if (textoVersion !== CONSENTIMIENTO_VERSION) {
+    throw new ApiError(CONSENTIMIENTO_VERSION_VIEJA, 409, CODIGO_CONSENTIMIENTO_VERSION_VIEJA);
+  }
+
   const textoCompleto = generarTextoConsentimiento({
     nombrePaciente: `${paciente.nombre} ${paciente.apellido}`.trim(),
     nombreProfesional: configuracion.nombreProfesional,
@@ -164,7 +178,7 @@ export async function firmarConsentimiento({
         pacienteId,
         organizationId,
         firmadoEn: ahora,
-        textoVersion,
+        textoVersion: CONSENTIMIENTO_VERSION,
         ...cifrarConsentimiento(consentimientoId, { textoCompleto, firmaDigital }),
       },
       select: consentimientoSelect,

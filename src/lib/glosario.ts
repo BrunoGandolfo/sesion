@@ -2095,3 +2095,10 @@ export const LUX_SIN_CONEXION = "No hay conexión. Probá de nuevo cuando vuelva
 export const LUX_CORTADO = "Se cortó la respuesta. Podés preguntar de nuevo.";
 export const LUX_SALIR =
   "Escribiste algo para Lux que todavía no mandaste. Si seguís, se pierde.";
+
+// ─── rev-dominio ─────────────────────────────────────────────────────────────
+
+/** El servidor guarda la versión del texto que él mismo genera. Si la
+ *  pantalla mostró otra (una app vieja en caché), no se firma: 409. */
+export const CONSENTIMIENTO_VERSION_VIEJA =
+  "El texto del consentimiento cambió. Recargá la página para firmar la versión vigente.";
