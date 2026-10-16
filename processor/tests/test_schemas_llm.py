@@ -23,7 +23,6 @@ from schemas_llm import (
     SCHEMA_NOTA,
     sanear_datos_nota,
     sanear_feedback,
-    validar_estructura_contexto,
     validar_estructura_feedback_cbt_mi,
     validar_estructura_feedback_gestalt,
     validar_estructura_nota,
@@ -290,12 +289,6 @@ def test_feedback_gestalt_sin_items_es_bloqueante():
             "areasCrecimiento": [],
         })
     assert "itemsGTFS" in str(exc.value)
-
-
-def test_contexto_incompleto_es_bloqueante():
-    with pytest.raises(ValueError) as exc:
-        validar_estructura_contexto({"hipotesisDiagnostica": None})
-    assert "campos inválidos" in str(exc.value)
 
 
 # Saneo de los puntajes por item del feedback ───────────────────────────────

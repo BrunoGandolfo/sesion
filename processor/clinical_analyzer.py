@@ -25,7 +25,7 @@ from schemas_llm import (
     SCHEMA_NOTA,
     sanear_datos_nota,
     sanear_feedback,
-    validar_estructura_contexto,
+    validar_recorrido,
     validar_estructura_feedback_cbt_mi,
     validar_estructura_feedback_gestalt,
     validar_estructura_nota,
@@ -500,7 +500,7 @@ def actualizar_contexto_clinico(
         system_prompt,
         user_content,
         SCHEMA_CONTEXTO,
-        validar_estructura_contexto,
+        validar_recorrido,
         llamadas=llamadas,
         nombre="contexto",
     )

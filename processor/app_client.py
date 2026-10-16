@@ -34,7 +34,7 @@ from dataclasses import dataclass
 import requests
 
 import config
-from schemas_llm import validar_estructura_contexto
+from schemas_llm import validar_recorrido
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +256,7 @@ def obtener_contexto_clinico_llm(paciente_id: str, sesion_id: str, ticket: str) 
     if hilo["version"] == 0 or hilo["contenido"] is None:
         raise requests.RequestException("Versión y contenido de Recorrido incompatibles")
     try:
-        validar_estructura_contexto(hilo["contenido"])
+        validar_recorrido(hilo["contenido"])
     except ValueError:
         raise requests.RequestException("Contenido de Recorrido inválido") from None
     return json.dumps(hilo["contenido"], ensure_ascii=False)

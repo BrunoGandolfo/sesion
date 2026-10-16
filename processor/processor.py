@@ -42,7 +42,7 @@ import audio_asr
 import clinical_analyzer
 import config
 import r2_client
-from schemas_llm import validar_estructura_contexto
+from schemas_llm import validar_recorrido
 from riesgo_lexico import buscar_menciones
 import speech_analytics
 from errores import LeasePerdido, PipelineError
@@ -623,9 +623,9 @@ def integrar_contexto(adjunto: dict, payload: dict, uso: Uso | None = None) -> d
     contexto = adjunto["contextoVigente"]
     if contexto is not None:
         try:
-            validar_estructura_contexto(contexto)
+            validar_recorrido(contexto)
         except ValueError:
-            raise _adjunto_invalido("Recorrido vigente con forma inválida") from None
+            raise _adjunto_invalido("Recorrido vigente que no es un objeto JSON") from None
     if (contexto is None) != (adjunto["version"] == 0):
         raise _adjunto_invalido("Base de Recorrido incompatible")
     nota = adjunto["notaFinal"]
@@ -644,9 +644,8 @@ def integrar_contexto(adjunto: dict, payload: dict, uso: Uso | None = None) -> d
         contexto or {}, nota, datos, adjunto["sesionId"], fecha,
         llamadas=uso.llamadas if uso is not None else None,
     )
-    # La propuesta ya viene validada con validar_estructura_contexto
-    # (clinical_analyzer._llamar_validando): si no la cumplia dos veces, es
-    # un PipelineError con codigo.
+    # La forma de la propuesta la fija SCHEMA_CONTEXTO (structured output) y
+    # la valida la app al aplicarla: el worker solo exige un objeto JSON.
     return {"ok": True, "propuesta": propuesta, "promptVersion": prompt, "modeloLlm": MODELO_LLM}
 
 
