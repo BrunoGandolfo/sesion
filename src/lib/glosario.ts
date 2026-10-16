@@ -2109,3 +2109,7 @@ export const SESION_VENCIDA = "Tu sesión venció. Volvé a entrar para seguir."
 /** PATCH de estado sobre un turno cobrado (domain.ts, decidirEdicionTurno). */
 export const MENSAJE_TURNO_PAGADO =
   "Este turno ya está cobrado. Para cambiarle el estado, primero deshacé el cobro.";
+
+/** POST /api/turnos con alGrabar y sin iniciadaEn (crear-turno.ts). */
+export const MENSAJE_AL_GRABAR_SIN_INICIO =
+  "Un turno que nace al grabar necesita la hora en que empezó la grabación.";

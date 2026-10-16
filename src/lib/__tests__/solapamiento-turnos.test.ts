@@ -569,18 +569,37 @@ describe("POST /api/turnos con alGrabar: el turno que nace al grabar", () => {
 
   it("no pasa por la regla de choques: la sesión ya está ocurriendo", async () => {
     const orgId = await crearOrgConPacientes();
-    await turnoExistente(orgId, enUnaSemana());
+    const inicio = new Date();
+    await turnoExistente(orgId, new Date(inicio.getTime() - 10 * MS_POR_MINUTO));
 
-    const res = await postAlGrabar(enUnaSemana(10));
+    const res = await postAlGrabar(inicio, { iniciadaEn: inicio.toISOString() });
 
     expect(res.status).toBe(201);
     expect(await prismaRaw.turno.count()).toBe(2);
   });
 
+  it("sin iniciadaEn no vale: 400 y no se crea nada, aunque la fecha esté libre (rev-dominio B7)", async () => {
+    await crearOrgConPacientes();
+
+    const res = await postAlGrabar(enUnaSemana());
+
+    expect(res.status).toBe(400);
+    expect(await prismaRaw.turno.count()).toBe(0);
+  });
+
+  it("con iniciadaEn de ahora, una fecha de la semana que viene cae fuera del plazo: 400", async () => {
+    await crearOrgConPacientes();
+
+    const res = await postAlGrabar(enUnaSemana(), { iniciadaEn: new Date().toISOString() });
+
+    expect(res.status).toBe(400);
+    expect(await prismaRaw.turno.count()).toBe(0);
+  });
+
   it("no sirve para una serie: 400 y no se crea nada", async () => {
     await crearOrgConPacientes();
 
-    const res = await postAlGrabar(enUnaSemana(), { frecuencia: "semanal" });
+    const res = await postAlGrabar(enUnaSemana(), { frecuencia: "semanal", iniciadaEn: enUnaSemana().toISOString() });
 
     expect(res.status).toBe(400);
     expect(await prismaRaw.turno.count()).toBe(0);
