@@ -79,6 +79,7 @@ import {
   MOTIVO_CANAL_WHATSAPP,
   MOTIVO_TURNO_CERRADO,
   turnoSigueProgramado,
+  whereTurnoAvisable,
 } from "./envios-del-turno";
 
 type ClientePrisma = typeof db;
@@ -447,8 +448,7 @@ async function procesar(c: Corrida, e: Candidato, corteRescate: Date, ts: string
       where: {
         id: e.id,
         estado: "enviando",
-        // La misma regla que turnoSigueProgramado, en la base.
-        ...(e.turnoId ? { turno: { is: { estado: "programado" } } } : {}),
+        ...(e.turnoId ? { turno: { is: whereTurnoAvisable(ahora) } } : {}),
       },
       data: { intentos: { increment: 1 }, proximoIntentoEn: null },
     });

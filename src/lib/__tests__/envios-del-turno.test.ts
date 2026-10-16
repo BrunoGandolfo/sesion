@@ -20,6 +20,8 @@ import {
   programarEnvioDeCobro,
   programarEnvioDelTurno,
   reprogramarEnvioDelTurno,
+  turnoAvisable,
+  whereTurnoAvisable,
 } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { calcularProgramadoEn } from "@/lib/recordatorios-programacion";
@@ -319,5 +321,30 @@ describe("enviosDelTurno (lectura para la pantalla)", () => {
 
     const otra = await fixture();
     expect(await enviosDelTurno(db, otra.organizationId, f.turnoId)).toEqual([]);
+  });
+});
+
+describe("E8: a qué turno se le avisa (SMS y WhatsApp)", () => {
+  it("la regla en memoria (despacho) y en la base (lista de WhatsApp, consumo del intento) dicen lo mismo", async () => {
+    const f = await fixture();
+    const fechas = [new Date(AHORA.getTime() - HORA), AHORA, new Date(AHORA.getTime() + 1), MANANA];
+    const estados = ["programado", "realizado", "cancelado", "ausente"] as const;
+    const turnos = [];
+    for (const estado of estados) {
+      for (const fecha of fechas) {
+        turnos.push(await prismaRaw.turno.create({
+          data: { fecha, estado, tarifaCobrada: 1000, pacienteId: f.pacienteId, organizationId: f.organizationId },
+          select: { id: true, estado: true, fecha: true },
+        }));
+      }
+    }
+    const enLaBase = new Set((await prismaRaw.turno.findMany({
+      where: { id: { in: turnos.map((t) => t.id) }, ...whereTurnoAvisable(AHORA) },
+      select: { id: true },
+    })).map((t) => t.id));
+    const enMemoria = new Set(turnos.filter((t) => turnoAvisable(t, AHORA)).map((t) => t.id));
+    expect(enLaBase).toEqual(enMemoria);
+    // Programado y todavía no empezado: los dos que quedan.
+    expect(enMemoria.size).toBe(2);
   });
 });

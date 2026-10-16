@@ -38,10 +38,11 @@
 // que está pasando no es un recordatorio: no se crea.
 
 import { MOTIVO_SIN_TELEFONO, MOTIVO_TURNO_CERRADO, MOTIVO_REPROGRAMADO } from "@/lib/glosario";
-import type { EstadoEnvioSms, MotivoSms } from "@prisma/client";
+import type { EstadoEnvioSms, MotivoSms, Prisma } from "@prisma/client";
 
 import type { db } from "@/lib/db";
 import { fechaInputMvd } from "@/lib/fechas-montevideo";
+import { turnoSigueProgramado } from "../domain";
 import {
   calcularProgramadoEn,
   normalizarRecordatorioModo,
@@ -107,11 +108,25 @@ export async function cancelarPendientesDelDestino(
 
 /** True si el turno sigue esperando a la paciente. La regla vive con las
  *  demás del turno, en domain.ts; se re-exporta para despachar-sms. */
-export { turnoSigueProgramado } from "../domain";
+export { turnoSigueProgramado };
 
 /** ¿Corresponde un aviso para un turno con esta fecha? No, si ya empezó. */
 export function correspondeEnvio(fechaTurno: Date, ahora: Date): boolean {
   return fechaTurno.getTime() > ahora.getTime();
+}
+
+/**
+ * A qué turno todavía se le avisa: sigue programado y no empezó. Una sola
+ * regla para los dos canales, en dos formas: en memoria la usa el despacho
+ * de SMS (que separa los dos cortes para decir el motivo), y en la base la
+ * lista de WhatsApp y el paso que gasta el intento del SMS. Un test las ata.
+ */
+export function turnoAvisable(turno: { estado: string; fecha: Date }, ahora: Date): boolean {
+  return turnoSigueProgramado(turno.estado) && correspondeEnvio(turno.fecha, ahora);
+}
+
+export function whereTurnoAvisable(ahora: Date) {
+  return { estado: "programado", fecha: { gt: ahora } } satisfies Prisma.TurnoWhereInput;
 }
 
 export interface ProgramarEnvioParams {
