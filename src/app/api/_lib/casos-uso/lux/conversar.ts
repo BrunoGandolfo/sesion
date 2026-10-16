@@ -32,8 +32,6 @@ import { MAX_TURNOS_HISTORIAL } from "../responder-ayuda";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
 import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
 
-export { TOPE_LUX_DIA, MENSAJE_TOPE_LUX } from "./topes";
-
 /** Incluye el razonamiento del modelo (thinking adaptativo de Haiku 5.5). */
 export const MAX_TOKENS_LUX = 8000;
 /** La conversación entera, todas las rondas. La ruta tiene 60 s. */
