@@ -268,6 +268,38 @@ describe("programarEnvioDeCobro", () => {
     const { envioId } = await programarEnvioDeCobro(db, { organizationId: f.organizationId, pacienteId: f.pacienteId, ahora: AHORA });
     expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envioId } })).toMatchObject({ estado: "fallido", motivoNoEnvio: MOTIVO_SIN_TELEFONO });
   });
+
+  it("B4: dos toques simultáneos (los dos leen antes de que alguno cree) dan el mismo envío, sin error", async () => {
+    const f = await fixture();
+    // Barrera: ningún pedido pasa de la lectura hasta que los dos leyeron.
+    // Es el orden que en producción da el doble toque: los dos ven "no hay"
+    // y los dos intentan crear.
+    let leyeron = 0;
+    let soltar!: () => void;
+    const ambosLeyeron = new Promise<void>(r => (soltar = r));
+    const envioSms = new Proxy(db.envioSms, {
+      get(objetivo, clave, receptor) {
+        if (clave !== "findUnique") return Reflect.get(objetivo, clave, receptor);
+        return async (...args: Parameters<typeof db.envioSms.findUnique>) => {
+          const fila = await objetivo.findUnique(...args);
+          leyeron += 1;
+          if (leyeron === 2) soltar();
+          await ambosLeyeron;
+          return fila;
+        };
+      },
+    });
+    const tx = new Proxy(db, {
+      get: (objetivo, clave, receptor) => (clave === "envioSms" ? envioSms : Reflect.get(objetivo, clave, receptor)),
+    });
+    const pedir = () => programarEnvioDeCobro(tx, { organizationId: f.organizationId, pacienteId: f.pacienteId, ahora: AHORA });
+
+    const [a, b] = await Promise.all([pedir(), pedir()]);
+
+    expect([a.creado, b.creado].sort()).toEqual([false, true]);
+    expect(a.envioId).toBe(b.envioId);
+    expect(await prismaRaw.envioSms.count({ where: { pacienteId: f.pacienteId } })).toBe(1);
+  });
 });
 
 describe("enviosDelTurno (lectura para la pantalla)", () => {

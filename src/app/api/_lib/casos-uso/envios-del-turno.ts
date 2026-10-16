@@ -327,20 +327,30 @@ export async function programarEnvioDeCobro(
   const existente = await tx.envioSms.findUnique({ where: { claveIdempotencia: clave }, select: { id: true } });
   if (existente) return { envioId: existente.id, creado: false };
 
-  const creado = await tx.envioSms.create({
-    data: {
-      organizationId,
-      claveIdempotencia: clave,
-      motivo: "recordatorio_cobro",
-      pacienteId,
-      turnoId: null,
-      destino,
-      programadoEn: ahora,
-      ...estadoInicialDelEnvio(destino, ahora, ahora),
-    },
-    select: { id: true },
-  });
-  return { envioId: creado.id, creado: true };
+  try {
+    const creado = await tx.envioSms.create({
+      data: {
+        organizationId,
+        claveIdempotencia: clave,
+        motivo: "recordatorio_cobro",
+        pacienteId,
+        turnoId: null,
+        destino,
+        programadoEn: ahora,
+        ...estadoInicialDelEnvio(destino, ahora, ahora),
+      },
+      select: { id: true },
+    });
+    return { envioId: creado.id, creado: true };
+  } catch (error) {
+    // Doble toque: los dos pedidos vieron "no hay" y el segundo choca con el
+    // UNIQUE. Es el mismo aviso, no un error (como en programarEnvioDelTurno).
+    // Fuera de una transacción: dentro, el P2002 ya la habría abortado.
+    if ((error as { code?: string } | null)?.code !== "P2002") throw error;
+    const ganador = await tx.envioSms.findUnique({ where: { claveIdempotencia: clave }, select: { id: true } });
+    if (!ganador) throw error;
+    return { envioId: ganador.id, creado: false };
+  }
 }
 
 // ─── LECTURA PARA LA PANTALLA ────────────────────────────────────────────────
