@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const DOCUMENTOS = ["README.md", "docs/pipeline.md", "docs/encryption.md", "docs/operaciones.md"];
+export const DOCUMENTOS = ["README.md", "docs/pipeline.md", "docs/encryption.md", "docs/operaciones.md", "docs/esquema.md"];
 const RUTA = /^(?:(?:src|docs|prisma|processor|scripts|\.github)\/|\.env(?:\.|$)|(?:README|AGENTS)\.md$|(?:package(?:-lock)?|vercel)\.json$|[\w.-]+\.(?:tsx?|jsx?|mjs|yml|yaml)$)/;
 const VARIABLE = /^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/;
 
