@@ -12,13 +12,16 @@ import { IndicadorProcesando } from "@/components/ui/procesando";
 import { ListaEnCascada } from "@/components/ui/movimiento";
 import { hayParaVos } from "@/components/grabacion/FeedbackTerapeutaView";
 import { sePuedeCobrar } from "@/app/api/_lib/domain";
-import { rotuloDelProceso } from "@/components/turno/presentacion";
+import { firmaDelTurno, rotuloDeNota, rotuloDelProceso } from "@/components/turno/presentacion";
 import { enProceso } from "@/lib/notas-en-proceso";
-import { esGrabacionSinTerminar, puede } from "@/lib/sesion-clinica/estados";
+import { accionClinicaDe } from "@/lib/sesion-clinica/accion-clinica";
+import { esGrabacionSinTerminar } from "@/lib/sesion-clinica/estados";
 import { fechaLarga, hora } from "@/lib/format";
 import {
   COBRAR,
   CARGANDO,
+  FALTA_AUTORIZACION,
+  FIRMAR_AUTORIZACION,
   GRABAR_SESION,
   MODALIDAD_LABEL,
   PARA_VOS,
@@ -49,6 +52,10 @@ export type Hoy = {
   cargando: boolean;
   paciente: string;
   onCobrar: () => void;
+  /** La paciente no firmó la autorización para grabar. */
+  sinAutorizacion?: boolean;
+  /** Lleva a firmarla (la pestaña Datos de la ficha). */
+  onAutorizar?: () => void;
 };
 
 const FILA =
@@ -150,39 +157,55 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
       ? rotuloDelProceso(sesion.estado, { sinTerminar })
       : null;
 
-  let accion: React.ReactNode;
+  // La acción clínica es la de la fila de Hoy y de Agenda, la card de Ahora
+  // y el detalle (accionClinicaDe); la firma que falta, la de firmaDelTurno.
+  // El cobro va aparte: sePuedeCobrar.
+  const ahora = new Date();
+  const clinica = accionClinicaDe(sesion, turno, ahora);
+  const firma = firmaDelTurno(clinica, !!hoy.sinAutorizacion && !!hoy.onAutorizar);
+
+  let accion: React.ReactNode = null;
   if (cargando) {
     accion = <p className="font-sans text-[13px] text-ink-500">{CARGANDO}</p>;
-  } else if (!sesion || puede("empezar_subida", sesion.estado) || sinTerminar) {
-    accion = (
-      <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
-        <Mic size={16} strokeWidth={1.8} aria-hidden="true" />
-        {GRABAR_SESION}
-      </Link>
-    );
-  } else if (enProceso(sesion.estado)) {
+  } else if (clinica.tipo === "grabar") {
+    accion =
+      firma === "en-lugar-de-grabar" ? (
+        <Button variant="primary" onClick={hoy.onAutorizar}>
+          {FIRMAR_AUTORIZACION}
+        </Button>
+      ) : (
+        <Link href={`/grabar/${turno.id}`} className={ENLACE_PRIMARIO}>
+          <Mic size={16} strokeWidth={1.8} aria-hidden="true" />
+          {GRABAR_SESION}
+        </Link>
+      );
+  } else if (clinica.tipo === "escribiendo") {
     accion = <IndicadorProcesando paciente={paciente} className="w-full" />;
-  } else if (puede("aprobar", sesion.estado)) {
+  } else if (clinica.tipo === "nota" && clinica.estado === "revision") {
     // La lista todavía no la trajo con su nota (se está volviendo a pedir).
     accion = (
-      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_PRIMARIO}>
+      <Link href={`/sesiones/${clinica.sesionId}`} className={ENLACE_PRIMARIO}>
         {REVISAR_NOTA}
       </Link>
     );
-  } else if (sesion.estado === "aprobada") {
-    accion = sePuedeCobrar(turno, new Date()) ? (
+  } else if (clinica.tipo === "nota" && clinica.estado === "aprobada") {
+    accion = sePuedeCobrar(turno, ahora) ? (
       <Button variant="primary" onClick={hoy.onCobrar}>
         {COBRAR}
       </Button>
     ) : (
-      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
+      <Link href={`/sesiones/${clinica.sesionId}`} className={ENLACE_SECUNDARIO}>
         {VER_NOTA}
       </Link>
     );
-  } else {
+  } else if (clinica.tipo === "nota") {
+    // Fallida: las palabras de la fila de Hoy (rotuloDeNota), como problema.
     accion = (
-      <Link href={`/sesiones/${sesion.id}`} className={ENLACE_SECUNDARIO}>
-        Ver
+      <Link
+        href={`/sesiones/${clinica.sesionId}`}
+        className={`${ENLACE_SECUNDARIO} !text-terracotta-600`}
+      >
+        {rotuloDeNota(sesion)?.rotulo}
       </Link>
     );
   }
@@ -207,7 +230,18 @@ function FilaDeHoySinNota({ turno, hoy }: { turno: Turno; hoy: Hoy }) {
           </Chip>
         ) : null}
       </div>
-      <div className="flex pt-1 sm:justify-start">{accion}</div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1 sm:justify-start">
+        {accion}
+        {firma === "aviso" ? (
+          <button
+            type="button"
+            onClick={hoy.onAutorizar}
+            className="inline-flex min-h-11 items-center font-sans text-[13px] font-semibold text-terracotta-600 hover:text-terracotta-700"
+          >
+            {FALTA_AUTORIZACION} →
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

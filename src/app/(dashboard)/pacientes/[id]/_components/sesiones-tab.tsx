@@ -69,6 +69,10 @@ interface SesionesTabProps {
   /** Se tocó un enlace a la nota de esta sesión: el padre lo anota en la URL
    *  para que "volver" sepa a dónde. */
   onAbrirSesion?: (sesionClinicaId: string) => void;
+  /** La paciente no firmó la autorización para grabar. */
+  sinAutorizacion?: boolean;
+  /** Lleva a firmarla. */
+  onAutorizar?: () => void;
 }
 
 export function SesionesTab({
@@ -83,6 +87,8 @@ export function SesionesTab({
   volverA = null,
   onVolvio,
   onAbrirSesion,
+  sinAutorizacion = false,
+  onAutorizar,
 }: SesionesTabProps) {
   const [lista, setLista] = React.useState<ListaState>(() => listaInicial(pacienteId));
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -225,6 +231,8 @@ export function SesionesTab({
                   cargando: sesionHoyCargando,
                   paciente: pacienteNombre,
                   onCobrar: () => setCobroTarget(turnoHoy),
+                  sinAutorizacion,
+                  onAutorizar,
                 }}
               />
             ))}

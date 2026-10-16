@@ -318,6 +318,10 @@ export function PacienteDetailView({ id }: { id: string }) {
                 pacienteId={paciente.id}
                 pacienteNombre={`${paciente.nombre} ${paciente.apellido}`.trim()}
                 turnoHoy={turnoHoy}
+                // La firma que falta se dice en la fila de hoy, como en Hoy;
+                // firmarla es en la pestaña Datos.
+                sinAutorizacion={estadoConsentimiento.tipo === "sin"}
+                onAutorizar={() => cambiarDePestana("datos")}
                 sesionHoy={sesionHoy}
                 sesionHoyCargando={sesionHoyCargando}
                 onTurnoActualizado={refetchData}
