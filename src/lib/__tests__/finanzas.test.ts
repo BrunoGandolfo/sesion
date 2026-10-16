@@ -381,6 +381,30 @@ describe("la serie cierra con los totales", () => {
     }
   });
 
+  it("por año, un período que empieza a mitad de año no suma los meses de antes (rev-dominio B6)", async () => {
+    // Una sesión de 1000 por mes desde 2024-07 hasta 2026-06. El período
+    // pedido es 2025-07..2026-06: doce meses, 12000. La consulta se ensancha
+    // para las comparaciones y trae 2024-07..2025-06; esos meses no son del
+    // período y la barra de 2025 no puede contarlos (antes daba 18000).
+    const org = await crearOrg(1);
+    const turnos: TurnoFixture[] = [];
+    for (let mes = 0; mes < 24; mes += 1) {
+      turnos.push({ fecha: instanteMvd(2024, 6 + mes, 10, 15), tarifa: 1000, estado: "realizado", paciente: 0 });
+    }
+    await sembrar(org, turnos);
+
+    const r = await resumen(org, {
+      desde: parsearMes("2025-07"),
+      hasta: parsearMes("2026-06"),
+      granularidad: "anio",
+    });
+
+    expect(r.totales.trabajado).toBe(12000);
+    expect(periodo(r, "2025")!.trabajado).toBe(6000);
+    expect(periodo(r, "2026")!.trabajado).toBe(6000);
+    expect(r.serie.reduce((t, p) => t + p.trabajado, 0)).toBe(r.totales.trabajado);
+  });
+
   it("las pacientes distintas NO se suman entre meses: quien vino en dos meses es una sola en el año", async () => {
     const org = await crearOrg(2);
     await sembrar(org, [
