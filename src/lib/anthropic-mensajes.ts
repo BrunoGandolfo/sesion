@@ -81,6 +81,13 @@ export function esErrorHttpDelProveedor(error: unknown): boolean {
   return error instanceof ErrorAnthropic && typeof error.status === "number";
 }
 
+/** Lo que se loguea de un fallo del proveedor: status y código, nunca el
+ *  mensaje (puede traer el cuerpo de la respuesta). */
+export function diagnosticoDe(error: unknown): { status: number | null; codigo: string } {
+  if (error instanceof ErrorAnthropic) return { status: error.status ?? null, codigo: error.codigo };
+  return { status: null, codigo: "desconocido" };
+}
+
 /** Un identificador corto (el tipo de error de la API, el nombre de la clase
  *  del SDK) o "desconocido": lo que sea, nunca un mensaje. */
 function codigoDe(error: unknown): string {

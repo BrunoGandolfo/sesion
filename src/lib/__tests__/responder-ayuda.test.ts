@@ -58,9 +58,10 @@ async function consumir(flujo: FlujoMensajes) {
   return { respuesta: texto, tokensEntrada, tokensSalida, cacheLeido };
 }
 
-/** Doble de crearMensajeStreaming que se cae. */
+/** Doble de crearMensajeStreaming que se cae, como el real: con un
+ *  ErrorAnthropic cuyo mensaje trae el cuerpo del proveedor. */
 const proveedorCaido: typeof crearMensajeStreaming = async () => {
-  throw new Error("HTTP 529: overloaded — este texto NO puede salir a la app");
+  throw new ErrorAnthropic("HTTP 529: overloaded — este texto NO puede salir a la app", 529, "overloaded_error");
 };
 
 // console.warn/error se silencian: los caminos de error loguean a propósito
@@ -205,7 +206,7 @@ describe("responderAyudaStreaming — el proveedor falla", () => {
     expect(error.message).not.toContain("overloaded");
   });
 
-  it("el detalle sí va al log", async () => {
+  it("al log va el status y el código, nunca el cuerpo del proveedor", async () => {
     await responderAyudaStreaming({
       pregunta: "¿cómo cobro?",
       apiKey: CLAVE,
@@ -215,7 +216,7 @@ describe("responderAyudaStreaming — el proveedor falla", () => {
 
     expect(console.error).toHaveBeenCalledWith(
       "[ayuda] fallo del proveedor",
-      expect.any(Error),
+      { status: 529, codigo: "overloaded_error" },
     );
   });
 
@@ -223,7 +224,9 @@ describe("responderAyudaStreaming — el proveedor falla", () => {
     const casos: Array<[ErrorAnthropic | Error, boolean]> = [
       [new ErrorAnthropic("HTTP 529", 529, "overloaded_error"), true],
       [new ErrorAnthropic("Timeout", undefined, "timeout"), false],
-      [new Error("socket hang up"), false],
+      [new ErrorAnthropic("socket hang up", undefined, "APIConnectionError"), false],
+      // No vino del proveedor (el armado del pedido): el pedido no salió.
+      [new Error("ENOENT: docs/ayuda/_indice.md"), true],
     ];
     for (const [fallo, devuelve] of casos) {
       const error = await atrapar<ErrorProveedorAsistente>(

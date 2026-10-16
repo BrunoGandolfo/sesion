@@ -17,6 +17,8 @@
 
 import {
   crearMensajeStreaming,
+  diagnosticoDe,
+  ErrorAnthropic,
   esErrorHttpDelProveedor,
   MODELO_AYUDA,
   systemCacheado,
@@ -133,8 +135,13 @@ export async function responderAyudaStreaming(
     );
     return input.consultarAgenda ? conConsultaAgenda(flujo, input.consultarAgenda) : flujo;
   } catch (error) {
-    console.error("[ayuda] fallo del proveedor", error);
-    throw new ErrorProveedorAsistente(MENSAJE_PROVEEDOR_CAIDO, esErrorHttpDelProveedor(error));
+    // Todo lo que viene del proveedor es ErrorAnthropic: se loguea sólo su
+    // status y código (el mensaje puede traer el cuerpo de la respuesta).
+    // Otra cosa es nuestra (el corpus, el armado del pedido): el pedido no
+    // salió, se loguea con su causa y el cupo vuelve.
+    const delProveedor = error instanceof ErrorAnthropic;
+    console.error("[ayuda] fallo del proveedor", delProveedor ? diagnosticoDe(error) : error);
+    throw new ErrorProveedorAsistente(MENSAJE_PROVEEDOR_CAIDO, !delProveedor || esErrorHttpDelProveedor(error));
   }
 }
 

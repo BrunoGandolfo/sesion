@@ -13,7 +13,7 @@
 
 import {
   crearConversacionConHerramientas,
-  ErrorAnthropic,
+  diagnosticoDe,
   esErrorHttpDelProveedor,
   MODELO_LUX,
   type FlujoConversacion,
@@ -168,13 +168,6 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
     console.error("[lux] fallo del proveedor", diagnosticoDe(error));
     throw new ErrorProveedorLux(esErrorHttpDelProveedor(error));
   }
-}
-
-/** Lo que se loguea de un fallo del proveedor: status y código, nunca el
- *  mensaje. */
-export function diagnosticoDe(error: unknown): { status: number | null; codigo: string } {
-  if (error instanceof ErrorAnthropic) return { status: error.status ?? null, codigo: error.codigo };
-  return { status: null, codigo: "desconocido" };
 }
 
 export interface ConversacionRespondida {

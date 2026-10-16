@@ -483,7 +483,8 @@ describe("cancelación del turno durante el envío", () => {
       }),
     });
     expect(stub).not.toHaveBeenCalled();
-    expect(r).toMatchObject({ aceptados: 0, cancelados: 1 });
+    // La canceló la otra transacción, no esta corrida: no se cuenta.
+    expect(r).toMatchObject({ aceptados: 0, cancelados: 0 });
     expect(await leer(envioId)).toMatchObject({ estado: "cancelado", intentos: 0, motivoNoEnvio: MOTIVO_TURNO_CERRADO });
   });
 

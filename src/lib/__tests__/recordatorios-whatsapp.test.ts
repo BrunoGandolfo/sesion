@@ -738,8 +738,13 @@ describe("registrarAviso", () => {
     const aviso = registrarAviso({
       prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: AHORA, fechaTurno: turno.fecha,
     }).finally(() => { terminado = true; });
+    // El lock de ESTA agenda (pg_advisory_xact_lock(bigint) guarda la mitad
+    // baja de la clave en objid), no cualquier advisory de la base.
     const esperandoLock = async () =>
-      (await prismaRaw.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`)[0].n > 0;
+      (await prismaRaw.$queryRaw<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_locks
+        WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
+          AND objid::bigint = (hashtext(${o.orgId})::bigint & 4294967295)`)[0].n > 0;
     while (!terminado && !(await esperandoLock())) await new Promise((r) => setImmediate(r));
     soltar();
     await Promise.all([mover, aviso]);

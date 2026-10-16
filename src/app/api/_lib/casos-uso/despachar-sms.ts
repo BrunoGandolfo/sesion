@@ -465,8 +465,17 @@ async function intentar(c: Corrida, e: Candidato, avance: Avance): Promise<void>
   const segmentosEstimados = contarLongitudSms(texto).segmentos;
 
   // Si no se pudo gastar, no se llama a Twilio. Si la cancelación ya apagó
-  // la fila, este cierre no la toca (condiciona a `enviando`).
-  if (!(await consumirIntento(c, e))) return cancelarSinEnviar(c, e, MOTIVO_TURNO_CERRADO, "cerrado-antes-de-enviar");
+  // la fila, este cierre no la toca (condiciona a `enviando`) y no cuenta
+  // como cancelado por esta corrida.
+  if (!(await consumirIntento(c, e))) {
+    if (await c.cerrar(e, { estado: "cancelado", motivoNoEnvio: MOTIVO_TURNO_CERRADO, cerradoEn: c.ahora })) {
+      c.resumen.cancelados += 1;
+      c.evento("cerrado-antes-de-enviar", e, "resultado=cancelado");
+    } else {
+      c.evento("cancelado-afuera-antes-de-enviar", e, "resultado=sin-llamar");
+    }
+    return;
+  }
   avance.intentoConsumido = true;
   avance.intentos = e.intentos + 1;
 

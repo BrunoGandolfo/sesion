@@ -26,6 +26,8 @@ it("sin corpus, la ayuda contesta 502 con el mensaje de proveedor caído y nunca
   try {
     const pedido = responderAyudaStreaming({ pregunta: "¿Dónde cambio la tarifa?", apiKey: "clave", crearStreaming });
     await expect(pedido).rejects.toMatchObject({ status: 502, message: MENSAJE_PROVEEDOR_CAIDO });
+    // El pedido no salió: el cupo vuelve (cupoVuelveAnte).
+    await expect(pedido).rejects.toMatchObject({ devuelveCupo: true });
     await expect(pedido).rejects.not.toMatchObject({ message: expect.stringContaining("ERROR_CORPUS_AUSENTE") });
     expect(crearStreaming).not.toHaveBeenCalled();
     // El log de la función sí conserva la causa real.
