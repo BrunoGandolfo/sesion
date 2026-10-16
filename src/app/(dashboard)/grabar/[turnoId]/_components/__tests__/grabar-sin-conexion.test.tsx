@@ -9,7 +9,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, GRABACION_SIN_CONEXION_SIN_COPIA, REINTENTAR } from "@/lib/glosario";
+import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, GRABACION_SIN_CONEXION_SIN_COPIA, MIC_SIN_PERMISO, REINTENTAR } from "@/lib/glosario";
 import { claveSinTurno } from "@/lib/grabacion-clave";
 
 import { GrabarView } from "../grabar-view";
@@ -430,5 +430,24 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
 
     expect(await screen.findByText(GRABACION_SIN_CONEXION)).toBeTruthy();
     expect(disco.metas.has(CLAVE)).toBe(true);
+  });
+});
+
+describe("el micrófono no arranca", () => {
+  test("sin permiso lo dice, y Probá de nuevo vuelve a la previa y deja grabar", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    getUserMedia.mockRejectedValueOnce(new DOMException("Permission denied", "NotAllowedError"));
+    render(<GrabarView {...CON_TURNO} />);
+    fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
+
+    // En la pantalla y en el aviso.
+    expect((await screen.findAllByText(MIC_SIN_PERMISO)).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Permission denied")).toBeNull();
+    expect(recorders).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Probá de nuevo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Grabar sesión" }));
+    await waitFor(() => expect(recorders).toHaveLength(1));
+    expect(recorders[0].state).toBe("recording");
   });
 });

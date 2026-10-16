@@ -5,11 +5,22 @@
 // paciente con el micrófono que no arranca: "no diste permiso" y "cerrá otras
 // apps" mandan a lugares distintos.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiClientError } from "@/lib/api-client";
 import * as glosario from "@/lib/glosario";
+import { ErrorSubida } from "@/lib/subida-audio";
 
-import { causaDelErrorDeMicrofono, MENSAJE_ERROR_GRABADOR } from "../errores-grabacion";
+import {
+  causaDelErrorDeMicrofono,
+  esRechazoDefinitivo,
+  esRechazoDelServidor,
+  esSinConexion,
+  MENSAJE_ERROR_GRABADOR,
+  mensajeParaReintentar,
+} from "../errores-grabacion";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("causaDelErrorDeMicrofono", () => {
   it.each([
@@ -51,5 +62,44 @@ describe("MENSAJE_ERROR_GRABADOR", () => {
     expect(MENSAJE_ERROR_GRABADOR["microfono-ocupado"]).toContain("Cerrá otras apps");
     expect(MENSAJE_ERROR_GRABADOR.bloqueada).toContain("bloqueó la grabación");
     expect(MENSAJE_ERROR_GRABADOR.vacia).toBe("No se pudo capturar audio de la sesión.");
+  });
+});
+
+describe("cómo se lee un error al subir", () => {
+  const casos: [string, unknown, { sinRed: boolean; servidor: boolean; definitivo: boolean }][] = [
+    ["fetch sin red (TypeError)", new TypeError("Failed to fetch"), { sinRed: true, servidor: false, definitivo: false }],
+    ["el PUT a R2 sin red", new ErrorSubida("Fallo de red", "put"), { sinRed: true, servidor: false, definitivo: false }],
+    ["un 403 de R2 (URL vencida)", new ErrorSubida("R2 rechazó", "put", 403), { sinRed: false, servidor: false, definitivo: false }],
+    ["un 409 al pedir la URL", new ErrorSubida("Ya se cerró", "url", 409), { sinRed: false, servidor: true, definitivo: false }],
+    ["un 422 al confirmar", new ErrorSubida("Muy corta", "confirmar", 422), { sinRed: false, servidor: true, definitivo: false }],
+    ["un 500 al confirmar", new ErrorSubida("Error interno", "confirmar", 500), { sinRed: false, servidor: false, definitivo: false }],
+    ["un 403 al crear la sesión", new ApiClientError("Sin autorización", 403), { sinRed: false, servidor: false, definitivo: true }],
+    ["un 409 al crear el turno", new ApiClientError("Otro estado", 409), { sinRed: false, servidor: false, definitivo: true }],
+    ["un 500 al crear la sesión", new ApiClientError("Error interno", 500), { sinRed: false, servidor: false, definitivo: false }],
+    ["un abort", new DOMException("x", "AbortError"), { sinRed: false, servidor: false, definitivo: false }],
+  ];
+
+  it.each(casos)("%s", (_caso, error, esperado) => {
+    expect(esSinConexion(error)).toBe(esperado.sinRed);
+    expect(esRechazoDelServidor(error)).toBe(esperado.servidor);
+    expect(esRechazoDefinitivo(error)).toBe(esperado.definitivo);
+  });
+
+  it("el teléfono sin red manda, sea cual sea el error", () => {
+    vi.stubGlobal("navigator", { onLine: false });
+    expect(esSinConexion(new ApiClientError("Error interno", 500))).toBe(true);
+  });
+});
+
+describe("mensajeParaReintentar", () => {
+  it.each([
+    ["sin red, con copia", new TypeError("Failed to fetch"), true, glosario.GRABACION_SIN_CONEXION],
+    ["sin red, sin copia", new TypeError("Failed to fetch"), false, glosario.GRABACION_SIN_CONEXION_SIN_COPIA],
+    ["R2, con copia", new ErrorSubida("R2 rechazó", "put", 403), true, glosario.AUDIO_NO_GUARDADO],
+    ["R2, sin copia", new ErrorSubida("R2 rechazó", "put", 403), false, glosario.AUDIO_NO_GUARDADO_SIN_COPIA],
+    ["la API, con copia", new ApiClientError("Error interno", 500), true, "Error interno"],
+    ["la API, sin copia", new ApiClientError("Error interno", 500), false, `Error interno ${glosario.COPIA_NO_GUARDADA}`],
+  ] as const)("%s", (_caso, error, copia, esperado) => {
+    expect(mensajeParaReintentar(error, copia)).toBe(esperado);
   });
 });

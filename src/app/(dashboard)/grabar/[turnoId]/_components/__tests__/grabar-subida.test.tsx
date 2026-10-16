@@ -10,6 +10,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DatosGrabacion, EstadoGrabador, Grabador } from "@/components/grabacion/GrabadorSesion";
+import { ApiClientError } from "@/lib/api-client";
 import { ErrorSubida } from "@/lib/subida-audio";
 import {
   AUDIO_NO_GUARDADO,
@@ -19,6 +20,7 @@ import {
   GRABAR_SESION,
   REINTENTAR,
   SESION_EN_CAMINO,
+  TURNO_NO_MARCADO,
   TURNO_SIN_SESION_PARA_GRABAR,
   VOLVER_A_LA_FICHA,
 } from "@/lib/glosario";
@@ -29,6 +31,8 @@ import { motivoSinGrabar } from "../motivo-sin-grabar";
 const m = vi.hoisted(() => ({
   router: { push: vi.fn(), refresh: vi.fn() },
   get: vi.fn(),
+  post: vi.fn(),
+  marcar: vi.fn(),
   subir: vi.fn(),
   volverAGrabando: vi.fn(),
   grabador: {} as Record<string, unknown>,
@@ -39,14 +43,14 @@ vi.mock("next/navigation", () => ({ useRouter: () => m.router }));
 vi.mock("@/lib/api-client", async (original) => ({
   ...(await original<typeof import("@/lib/api-client")>()),
   apiGet: m.get,
-  apiPost: vi.fn(),
+  apiPost: m.post,
 }));
 vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: vi.fn() }));
 vi.mock("@/lib/subida-audio", async (original) => ({
   ...(await original<typeof import("@/lib/subida-audio")>()),
   subirAudio: m.subir,
   volverAGrabando: m.volverAGrabando,
-  marcarTurnoRealizado: vi.fn(),
+  marcarTurnoRealizado: m.marcar,
 }));
 vi.mock("@/components/grabacion/GrabadorSesion", () => ({
   formatearDuracion: () => "00:10",
@@ -83,13 +87,13 @@ function rechazarLaSubida(error: ErrorSubida, estado: string) {
 }
 
 /** Deja la sesión anotada (por el camino de la copia pendiente) y entrega la grabación. */
-async function subirUnaGrabacion(datos: DatosGrabacion = DATOS) {
+async function subirUnaGrabacion(datos: DatosGrabacion = DATOS, conProps = props) {
   grabadorEn({ estado: "inactivo", pendienteSeg: 600 });
-  const { rerender } = render(<GrabarView {...props} />);
+  const { rerender } = render(<GrabarView {...conProps} />);
   fireEvent.click(await screen.findByRole("button", { name: "Guardarla ahora" }));
   await waitFor(() => expect(m.grabador.enviarPendiente).toHaveBeenCalled());
   grabadorEn({ estado: "entregada" });
-  rerender(<GrabarView {...props} />);
+  rerender(<GrabarView {...conProps} />);
   await act(async () => {
     m.opciones?.onListo(datos);
   });
@@ -168,6 +172,54 @@ describe("cuando la subida falla", () => {
     });
     await subirUnaGrabacion();
     expect(await screen.findByText(AUDIO_NO_GUARDADO)).toBeTruthy();
+  });
+});
+
+describe("cuando el servidor rechaza crear la sesión", () => {
+  it.each([
+    [403, "Falta la autorización de la paciente para grabar."],
+    [409, "Esta sesión ya se está procesando."],
+    [422, "La grabación empezó otro día que el turno."],
+  ])("un %i no ofrece Reintentar: dice lo que contestó y vuelve a la ficha", async (status, texto) => {
+    m.get.mockResolvedValue(null);
+    m.post.mockRejectedValueOnce(new ApiClientError(texto, status));
+    await subirUnaGrabacion();
+
+    expect((await screen.findByRole("alert")).textContent).toBe(texto);
+    expect(screen.queryByRole("button", { name: REINTENTAR })).toBeNull();
+    expect(m.subir).not.toHaveBeenCalled();
+    expect(m.volverAGrabando).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: VOLVER_A_LA_FICHA }));
+    expect(m.router.push).toHaveBeenCalledWith("/pacientes/p1");
+  });
+
+  it("un 500 al crearla no es definitivo: se puede reintentar", async () => {
+    m.get.mockResolvedValue(null);
+    m.post.mockRejectedValueOnce(new ApiClientError("Error interno", 500));
+    await subirUnaGrabacion();
+
+    expect(await screen.findByRole("button", { name: REINTENTAR })).toBeTruthy();
+  });
+});
+
+describe("cuando el turno no queda realizado", () => {
+  it("el audio ya subió: lo dice, y Reintentar repite sólo el turno hasta que llega", async () => {
+    m.subir.mockResolvedValueOnce(undefined);
+    m.marcar.mockRejectedValueOnce(new Error("sin red")).mockResolvedValueOnce(undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await subirUnaGrabacion(DATOS, { ...props, turnoProgramado: true });
+
+    expect((await screen.findAllByText(TURNO_NO_MARCADO)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(GRABACION_LLEGO)).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: REINTENTAR }));
+    });
+    expect(await screen.findByText(GRABACION_LLEGO)).toBeTruthy();
+    // El audio no se volvió a subir: sólo el PATCH del turno.
+    expect(m.subir).toHaveBeenCalledTimes(1);
+    expect(m.marcar).toHaveBeenCalledTimes(2);
+    expect(m.marcar).toHaveBeenLastCalledWith("t1");
   });
 });
 

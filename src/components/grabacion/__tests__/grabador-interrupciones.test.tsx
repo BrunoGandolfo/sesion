@@ -411,3 +411,32 @@ describe("los errores del micrófono se dicen en castellano", () => {
     expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["sin-soporte"]);
   });
 });
+
+describe("caminos de fallo del grabador", () => {
+  it("un archivo vacío no se entrega: lo dice y no sube nada", async () => {
+    // Llegó a contar diez minutos, pero los chunks no traen bytes.
+    persistido = { sesionClinicaId: TURNO, chunks: [new Blob([]), new Blob([])], mimeType: "audio/webm", duracionAproxSeg: 600, pausas: [] };
+    const { grabador, onListo, onError } = montar();
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => grabador.current.enviarPendiente());
+
+    expect(onListo).not.toHaveBeenCalled();
+    expect(grabador.current.estado).toBe("error");
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR.vacia);
+    expect(onError).toHaveBeenCalledWith(MENSAJE_ERROR_GRABADOR.vacia);
+  });
+
+  it("si stop() lanza al terminar, lo dice y suelta el micrófono", async () => {
+    const { grabador, onListo } = montar();
+    await empezar(grabador, 12);
+    recorders[0].stop.mockImplementationOnce(() => { throw new DOMException("x", "InvalidStateError"); });
+
+    act(() => grabador.current.terminar());
+
+    expect(onListo).not.toHaveBeenCalled();
+    expect(grabador.current.estado).toBe("error");
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["no-se-detuvo"]);
+    expect(pista.stop).toHaveBeenCalled();
+  });
+});
