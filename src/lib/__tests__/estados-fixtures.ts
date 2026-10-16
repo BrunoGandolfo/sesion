@@ -1,12 +1,10 @@
 // Fixtures de los tests de integración del Área 2 (vida de la sesión
 // clínica). No es un test: vitest no lo colecta.
 //
-// La base es un Postgres propio de esta área (docker, DATABASE_URL_TEST en
-// localhost) o, en CI, la que el job levante. Acá no se trunca nada: cada
-// archivo crea su organización con ids únicos y borra sólo lo suyo al
-// terminar, así la misma base sirve a varios archivos a la vez.
-//
-// La URL pasa por la guarda de db-test.ts (sólo bases locales).
+// La base es la de test de db-test.ts (guarda por nombre y host local). Una
+// sola forma de limpiarla: cada archivo la vacía con `vaciarTablas` antes de
+// sus casos (o antes de cada caso) y al terminar. Los archivos corren de a
+// uno (vitest.config.ts), así que nadie la vacía a mitad de otro.
 
 import { randomBytes, randomUUID } from "node:crypto";
 
@@ -21,7 +19,7 @@ import {
 } from "@/lib/prisma-encryption";
 import type { NotaSoap } from "@/lib/sesion-clinica/schema";
 
-import { conectarBaseDeTest, limpiarDatosDeTest } from "./db-test";
+import { conectarBaseDeTest } from "./db-test";
 
 export interface BaseArea2 {
   /** Cliente crudo: columnas físicas, fixtures, aserciones. */
@@ -30,7 +28,6 @@ export interface BaseArea2 {
   db: ClienteCifrado & ClienteTransaccional;
 }
 
-/** Llamar en beforeAll: fija una clave de cifrado propia y conecta. */
 /** Llamar en beforeAll: fija un llavero propio de la corrida y conecta. */
 export function conectarArea2(): BaseArea2 {
   process.env[VARIABLE_LLAVERO] = `1=${randomBytes(32).toString("base64")}`;
@@ -45,29 +42,7 @@ export interface Org {
   userId: string;
 }
 
-/**
- * La base es compartida: si otro agente la trunca mientras se insertan las
- * filas de un fixture, Postgres responde con una violación de clave foránea
- * (P2003). Se repite el fixture entero unas veces antes de darse por
- * vencido; un fallo persistente sigue siendo un fallo.
- */
-export async function conReintentoFK<T>(accion: () => Promise<T>, intentos = 4): Promise<T> {
-  for (let i = 1; ; i += 1) {
-    try {
-      return await accion();
-    } catch (error) {
-      const codigo = (error as { code?: string } | null)?.code;
-      if (codigo !== "P2003" || i >= intentos) throw error;
-      await new Promise((r) => setTimeout(r, 500 * i));
-    }
-  }
-}
-
-export function crearOrg(prisma: PrismaClient, orientacion: "cbt_mi" | "gestalt" = "gestalt"): Promise<Org> {
-  return conReintentoFK(() => crearOrgUnaVez(prisma, orientacion));
-}
-
-async function crearOrgUnaVez(prisma: PrismaClient, orientacion: "cbt_mi" | "gestalt"): Promise<Org> {
+export async function crearOrg(prisma: PrismaClient, orientacion: "cbt_mi" | "gestalt" = "gestalt"): Promise<Org> {
   const orgId = randomUUID();
   const org = await prisma.organization.create({
     data: {
@@ -107,15 +82,7 @@ export interface OpcionesSesion {
   audioEstado?: EstadoAudio;
 }
 
-export function crearSesion(
-  prisma: PrismaClient,
-  org: Org,
-  opciones: OpcionesSesion,
-): Promise<{ sesionId: string; turnoId: string }> {
-  return conReintentoFK(() => crearSesionUnaVez(prisma, org, opciones));
-}
-
-async function crearSesionUnaVez(
+export async function crearSesion(
   prisma: PrismaClient,
   org: Org,
   opciones: OpcionesSesion,
@@ -158,21 +125,6 @@ async function crearSesionUnaVez(
     select: { id: true },
   });
   return { sesionId, turnoId: turno.id };
-}
-
-/** Borra todo lo de una organización, en orden de claves foráneas. */
-export async function limpiarOrg(prisma: PrismaClient, orgId: string | undefined): Promise<void> {
-  if (!orgId) return;
-  await limpiarDatosDeTest(prisma, async (tx) => {
-    await tx.trabajo.deleteMany({ where: { organizationId: orgId } });
-    await tx.eventoAuditoria.deleteMany({ where: { organizationId: orgId } });
-    await tx.sesionClinica.deleteMany({ where: { organizationId: orgId } });
-    await tx.turno.deleteMany({ where: { organizationId: orgId } });
-    await tx.hilo.deleteMany({ where: { organizationId: orgId } });
-    await tx.paciente.deleteMany({ where: { organizationId: orgId } });
-    await tx.configuracion.deleteMany({ where: { organizationId: orgId } });
-    await tx.organization.deleteMany({ where: { id: orgId } });
-  });
 }
 
 /**

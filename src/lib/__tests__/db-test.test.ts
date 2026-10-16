@@ -8,7 +8,7 @@
 // entre casos, y un test que pasa gracias a datos de otro test es un verde
 // falso. La prueba contra una base ajena real está en base-ajena.test.ts.
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
@@ -135,5 +135,41 @@ describe("TABLAS que se vacían", () => {
       if (/^\}/.test(linea)) dentroDeModel = false;
     }
     expect([...TABLAS].sort()).toEqual([...enSchema].sort());
+  });
+});
+
+describe("una sola forma de limpiar la base de test", () => {
+  // Antes convivían dos: vaciar todo, o borrar sólo la organización propia
+  // (con un reintento por clave foránea de la época en que otra máquina
+  // vaciaba la misma base de Neon). Los archivos corren de a uno: cada uno
+  // vacía la base antes de sus casos y al terminar, y lo que deja otro
+  // archivo no le cambia el veredicto.
+  const CONECTA = /\b(?:conectarBaseDeTest|conectarArea2|conectarBaseIdentidad)\(/;
+  const VACIA = /\b(?:vaciarTablas|vaciarBaseIdentidad)\(/;
+  /** Se conectan sin vaciar, con motivo. */
+  const SIN_VACIAR: Record<string, string> = {
+    "src/lib/__tests__/base-ajena.test.ts": "crea y borra su propia base, ajena a sesion_test",
+  };
+
+  const archivos = (dir: string): string[] =>
+    readdirSync(resolve(process.cwd(), dir), { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? archivos(`${dir}/${e.name}`) : /\.test\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : [],
+    );
+  const conectan = ["src", "scripts"]
+    .flatMap(archivos)
+    .filter((rel) => CONECTA.test(readFileSync(resolve(process.cwd(), rel), "utf8")));
+
+  it("todo test que se conecta a la base la vacía con vaciarTablas", () => {
+    expect(conectan.length).toBeGreaterThan(30);
+    const sinVaciar = conectan.filter(
+      (rel) => !(rel in SIN_VACIAR) && !VACIA.test(readFileSync(resolve(process.cwd(), rel), "utf8")),
+    );
+    expect(sinVaciar).toEqual([]);
+    for (const rel of Object.keys(SIN_VACIAR)) expect(conectan, rel).toContain(rel);
+  });
+
+  it("los fixtures no reintentan ni borran por organización", () => {
+    const fixtures = readFileSync(resolve(process.cwd(), "src/lib/__tests__/estados-fixtures.ts"), "utf8");
+    expect(fixtures).not.toMatch(/conReintentoFK|limpiarOrg|deleteMany/);
   });
 });

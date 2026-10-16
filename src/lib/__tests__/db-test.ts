@@ -219,8 +219,11 @@ const autorizados = new WeakSet<object>();
  * cifrado valida la clave al construirse, y los tests la setean en ese mismo
  * hook.
  */
-export function conectarBaseDeTest(): BaseDeTest {
+export function conectarBaseDeTest(
+  opciones: Pick<Prisma.PrismaClientOptions, "transactionOptions"> = {},
+): BaseDeTest {
   const prisma = new PrismaClient({
+    ...opciones,
     datasources: { db: { url: enUtc(urlDeBaseDeTest()) } },
   });
   autorizados.add(prisma);

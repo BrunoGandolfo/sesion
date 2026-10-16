@@ -13,12 +13,10 @@
  * tienen su propio test (envios-del-turno.test.ts). El cifrado de las notas
  * es el real.
  *
- * No usa vaciarTablas: otras ramas comparten esta base. Crea su propia
- * organización por test y borra lo suyo al final.
+ * Cada caso empieza con la base vacía (vaciarTablas).
  */
 import {
   afterAll,
-  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -39,11 +37,9 @@ import { __resetLlaveroForTests } from "@/lib/llavero";
 import { agregarDiasMvd, instanteMvd } from "@/lib/fechas-montevideo";
 import { MENSAJE_SIN_SERIE, TURNO_SOLAPADO_CON } from "@/lib/glosario";
 
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
-import { withEncryption } from "@/lib/prisma-encryption";
-
-import { urlDeBaseDeTest, type ClienteCifrado } from "./db-test";
+import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 
 const recordatorios = vi.hoisted(() => ({
   programados: [] as string[],
@@ -81,13 +77,10 @@ const TEST_KEY_B64 = randomBytes(32).toString("base64");
 const ANCLA = instanteMvd(2026, 8, 15, 15, 0);
 const AHORA = instanteMvd(2026, 8, 8, 10, 0);
 
-const organizaciones: string[] = [];
-
 async function crearOrg(): Promise<{ orgId: string; pacienteId: string }> {
   const org = await prismaRaw.organization.create({
     data: { nombre: `Org serie ${randomUUID()}` },
   });
-  organizaciones.push(org.id);
   const paciente = await prismaRaw.paciente.create({
     data: {
       nombre: "Lucía",
@@ -126,37 +119,19 @@ beforeAll(() => {
   process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
   __resetLlaveroForTests();
   // Mismas opciones de transacción que src/lib/db.ts: crear una serie son
-  // unos cuarenta viajes a la base dentro de UNA transacción, y con el
-  // timeout por defecto de Prisma (5 s) contra Neon desde afuera de su
-  // región la transacción se cierra sola a mitad de camino. La URL pasa por
-  // las mismas guardas que conectarBaseDeTest; acá no se llama a
-  // vaciarTablas, así que no hace falta el cliente autorizado.
-  prismaRaw = new PrismaClient({
-    datasources: { db: { url: urlDeBaseDeTest() } },
-    transactionOptions: { maxWait: 30_000, timeout: 30_000 },
-  });
-  db = withEncryption(prismaRaw);
+  // unos cuarenta viajes a la base dentro de UNA transacción.
+  ({ prisma: prismaRaw, db } = conectarBaseDeTest({ transactionOptions: { maxWait: 30_000, timeout: 30_000 } }));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await vaciarTablas(prismaRaw);
   recordatorios.programados.length = 0;
   recordatorios.reprogramados.length = 0;
   recordatorios.cerrados.length = 0;
 });
 
-afterEach(async () => {
-  // Solo lo propio: turnos, series y pacientes de las organizaciones que
-  // creó este archivo. Con deleteMany en todo: si otra rama vació la base
-  // en el medio, que no falle además la limpieza.
-  for (const orgId of organizaciones.splice(0)) {
-    await prismaRaw.turno.deleteMany({ where: { organizationId: orgId } });
-    await prismaRaw.serieTurno.deleteMany({ where: { organizationId: orgId } });
-    await prismaRaw.paciente.deleteMany({ where: { organizationId: orgId } });
-    await prismaRaw.organization.deleteMany({ where: { id: orgId } });
-  }
-});
-
 afterAll(async () => {
+  await vaciarTablas(prismaRaw);
   await prismaRaw.$disconnect();
   process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
   __resetLlaveroForTests();

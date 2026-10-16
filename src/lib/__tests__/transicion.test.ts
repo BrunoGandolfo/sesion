@@ -10,18 +10,20 @@ import { transicionar } from "@/app/api/_lib/casos-uso/sesion/transicion";
 import { ApiError } from "@/app/api/_lib/responses";
 import { ESTADOS_SESION, LISTA_OPERACIONES } from "@/lib/sesion-clinica/estados";
 
-import { conectarArea2, crearOrg, crearSesion, filaDe, limpiarOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, crearSesion, filaDe, type BaseArea2, type Org } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 let base!: BaseArea2;
 let org!: Org;
 
 beforeAll(async () => {
   base = conectarArea2();
+  await vaciarTablas(base.prisma);
   org = await crearOrg(base.prisma);
 });
 
 afterAll(async () => {
-  await limpiarOrg(base.prisma, org.orgId);
+  await vaciarTablas(base.prisma);
   await base.prisma.$disconnect();
 });
 

@@ -13,7 +13,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
-import { conectarArea2, crearOrg, limpiarOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 const estado = vi.hoisted(() => ({ base: null as unknown as BaseArea2, actor: { organizationId: "", userId: "" } }));
 
@@ -45,9 +46,10 @@ let turnoFuturo: string;
 const DIA = 24 * 60 * 60 * 1000;
 
 beforeAll(() => { estado.base = conectarArea2(); });
-afterAll(async () => { await estado.base.prisma.$disconnect(); });
+afterAll(async () => { await vaciarTablas(estado.base.prisma); await estado.base.prisma.$disconnect(); });
 
 beforeEach(async () => {
+  await vaciarTablas(estado.base.prisma);
   org = await crearOrg(estado.base.prisma);
   estado.actor = { organizationId: org.orgId, userId: org.userId };
   turnoFuturo = (await estado.base.prisma.turno.create({
@@ -79,7 +81,6 @@ beforeEach(async () => {
 afterEach(async () => {
   cleanup();
   vi.unstubAllGlobals();
-  await limpiarOrg(estado.base.prisma, org?.orgId);
 });
 
 it("PATCH real con tarifa nueva: turnosActualizados 1 en la respuesta y el aviso en pantalla", async () => {

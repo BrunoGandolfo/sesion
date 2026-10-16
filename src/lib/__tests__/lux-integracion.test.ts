@@ -18,7 +18,8 @@ import { ACCIONES } from "@/lib/auditoria-acciones";
 import { hiloVacio } from "@/lib/hilo/contenido";
 import { cifrarSesion } from "@/lib/prisma-encryption";
 
-import { conectarArea2, crearOrg, crearSesion, eventosAuditoriaDe, limpiarOrg, NOTA, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, crearSesion, eventosAuditoriaDe, NOTA, type BaseArea2, type Org } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 let base: BaseArea2;
 const orgs: Org[] = [];
@@ -85,9 +86,9 @@ async function lecturasLux(org: Org) {
   return (await eventosAuditoriaDe(base.prisma, org.orgId)).filter((e) => e.accion === ACCIONES.sesion.verTranscripcion);
 }
 
-beforeAll(() => { base = conectarArea2(); });
+beforeAll(async () => { base = conectarArea2(); await vaciarTablas(base.prisma); });
 afterAll(async () => {
-  for (const org of orgs) await limpiarOrg(base.prisma, org.orgId);
+  await vaciarTablas(base.prisma);
   await base.prisma.$disconnect();
 });
 
