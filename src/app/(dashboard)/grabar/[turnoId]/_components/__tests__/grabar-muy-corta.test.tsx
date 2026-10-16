@@ -14,7 +14,9 @@ import { limpiarGrabacion } from "@/lib/grabacion-storage";
 import { GrabarView } from "../grabar-view";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
-vi.mock("@/lib/grabacion-storage", () => ({
+vi.mock("@/lib/grabacion-storage", async (original) => ({
+  // La de verdad: lleva la cuenta de lo que los dobles de abajo contestan.
+  seguimientoDeCopia: (await original<typeof import("@/lib/grabacion-storage")>()).seguimientoDeCopia,
   guardarChunk: vi.fn(async () => true),
   guardarPausas: vi.fn(async () => {}),
   iniciarSesionGrabacion: vi.fn(async () => true),

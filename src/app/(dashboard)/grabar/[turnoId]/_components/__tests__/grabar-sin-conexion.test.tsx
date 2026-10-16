@@ -22,7 +22,9 @@ const disco = vi.hoisted(() => ({
   // Con la cuota llena IndexedDB no escribe: guardarChunk devuelve false.
   cuotaLlena: false,
 }));
-vi.mock("@/lib/grabacion-storage", () => ({
+vi.mock("@/lib/grabacion-storage", async (original) => ({
+  // La de verdad: lleva la cuenta de lo que los dobles de abajo contestan.
+  seguimientoDeCopia: (await original<typeof import("@/lib/grabacion-storage")>()).seguimientoDeCopia,
   iniciarSesionGrabacion: vi.fn(async (clave: string, mimeType: string, pacienteId?: string) => {
     disco.metas.set(clave, { iniciadaEn: Date.now(), mimeType, ...(pacienteId ? { pacienteId } : {}) });
     disco.chunks.set(clave, []);

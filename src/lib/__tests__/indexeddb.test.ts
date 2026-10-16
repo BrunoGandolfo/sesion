@@ -108,10 +108,19 @@ describe("esperarRequest y esperarTransaccion", () => {
 });
 
 describe("hayIndexedDB", () => {
-  it("dice si está, y no lanza si leerlo lanza", () => {
+  it("dice si está", () => {
     vi.stubGlobal("indexedDB", {});
     expect(hayIndexedDB()).toBe(true);
     vi.stubGlobal("indexedDB", undefined);
     expect(hayIndexedDB()).toBe(false);
+  });
+
+  it("no lanza si leerlo lanza (modo privado estricto): es que no está", () => {
+    Object.defineProperty(globalThis, "indexedDB", { configurable: true, get() { throw new DOMException("x", "SecurityError"); } });
+    try {
+      expect(hayIndexedDB()).toBe(false);
+    } finally {
+      Reflect.deleteProperty(globalThis, "indexedDB");
+    }
   });
 });

@@ -224,11 +224,42 @@ export async function guardarChunk(
  */
 function pedirAlmacenamientoPersistente(): void {
   try {
-    void navigator.storage?.persist?.().catch(() => {});
+    const storage = navigator.storage;
+    if (!storage?.persist) return;
+    // Si ya lo es, no se vuelve a pedir: en Firefox el pedido abre un cartel.
+    void Promise.resolve(storage.persisted?.() ?? false)
+      .then((ya) => (ya ? true : storage.persist()))
+      .catch(() => {});
   } catch {
     // Sin la API: nada que pedir.
   }
 }
+
+/** Lo más que se espera a que termine de escribirse un chunk antes de decir
+ *  si hay copia. Una escritura colgada no confirma nada: no se promete. */
+const ESPERA_COPIA_MS = 3000;
+
+/**
+ * Si todo lo de UNA grabación quedó en el teléfono. El grabador anota cada
+ * escritura (la promesa que devuelven guardarChunk e iniciarSesionGrabacion)
+ * y la pantalla pregunta al fallar la subida, que puede ser antes de que la
+ * última termine: hayCopia() las espera, hasta ESPERA_COPIA_MS.
+ */
+export function seguimientoDeCopia() {
+  const escrituras: Promise<boolean>[] = [];
+  return {
+    anotar(escritura: Promise<boolean>) {
+      escrituras.push(escritura);
+    },
+    hayCopia(): Promise<boolean> {
+      const todas = Promise.all(escrituras).then((resultados) => resultados.every(Boolean));
+      const plazo = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ESPERA_COPIA_MS));
+      return Promise.race([todas, plazo]);
+    },
+  };
+}
+
+export type SeguimientoDeCopia = ReturnType<typeof seguimientoDeCopia>;
 
 /**
  * Anota en la meta de una grabación el turno que se creó para ella. Nunca

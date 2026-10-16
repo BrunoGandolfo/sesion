@@ -132,6 +132,16 @@ describe("desenlaceDelFallo", () => {
     });
   });
 
+  it("rechazada sin copia en el teléfono: no deja creer que la grabación sigue guardada", async () => {
+    const error = new ApiClientError(glosario.GRABACION_VENCIDA, 422);
+    await expect(desenlaceDelFallo(error, { ...CON_COPIA, sesionId: null, copiaEnTelefono: false })).resolves.toEqual({
+      fase: "rechazada", mensaje: `${glosario.GRABACION_VENCIDA} ${glosario.RECHAZADA_SIN_COPIA}`, volverAGrabando: false,
+    });
+    m.get.mockResolvedValueOnce({ id: "s1", estado: "fallida" });
+    const otro = await desenlaceDelFallo(new ErrorSubida("Ya se cerró", "url", 409), { ...CON_COPIA, copiaEnTelefono: false });
+    expect(otro).toMatchObject({ fase: "rechazada", mensaje: `Ya se cerró ${glosario.RECHAZADA_SIN_COPIA}` });
+  });
+
   it.each([
     ["la sesión ya no admite audio", { id: "s1", estado: "fallida" }, "rechazada"],
     ["la sesión desapareció", null, "rechazada"],

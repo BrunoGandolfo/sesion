@@ -48,6 +48,7 @@ import {
   guardarPausas,
   iniciarSesionGrabacion,
   limpiarGrabacion,
+  seguimientoDeCopia,
   type Pausa,
 } from "@/lib/grabacion-storage";
 import { MAX_EVENTOS_GRABACION, type EventoGrabacion } from "@/lib/sesion-clinica/schema";
@@ -92,8 +93,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
   const ultimoLatidoRef = React.useRef(0);
   const estadoRef = React.useRef<EstadoGrabador>("inactivo");
   const claveRef = React.useRef<string | null>(claveGrabacion);
-  const respaldoRef = React.useRef(true); // ¿todo lo grabado quedó también en el teléfono?
-  const sinRespaldoSi = (guardado: boolean) => { if (!guardado) respaldoRef.current = false; };
+  const copiaRef = React.useRef(seguimientoDeCopia()); // ¿lo de esta grabación quedó en el teléfono?
   const onErrorRef = React.useRef(onError);
   const onListoRef = React.useRef(onListo);
 
@@ -176,7 +176,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       duracionSegundos: Math.min(LIMITE_SEGUNDOS, Math.max(1, Math.round(duracionSegundos))),
       pausas: aRegistradas(pausas),
       diagnostico: { eventos: eventosRef.current, chunks: chunks.length, bytes: audioBlob.size },
-      respaldoEnTelefono: () => respaldoRef.current,
+      respaldoEnTelefono: copiaRef.current.hayCopia,
     });
   }
 
@@ -245,7 +245,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     const medida = contarChunk(antes, chunk.size, pausadoEnRef.current ?? relojRef.current());
     medidaRef.current = medida;
     chunksRef.current.push(chunk);
-    if (claveRef.current) void guardarChunk(claveRef.current, medida.chunks - 1, chunk).then(sinRespaldoSi);
+    if (claveRef.current) copiaRef.current.anotar(guardarChunk(claveRef.current, medida.chunks - 1, chunk));
 
     if (medida.huecos.length > antes.huecos.length) {
       const nuevo = medida.huecos[medida.huecos.length - 1];
@@ -311,8 +311,8 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       relojRef.current = crearReloj();
       medidaRef.current = medidaInicial(relojRef.current());
       // Registra el inicio y limpia chunks viejos del turno.
-      respaldoRef.current = true;
-      void iniciarSesionGrabacion(clave, mimeTypeRef.current, pacienteId).then(sinRespaldoSi);
+      copiaRef.current = seguimientoDeCopia();
+      copiaRef.current.anotar(iniciarSesionGrabacion(clave, mimeTypeRef.current, pacienteId));
 
       recorder.ondataavailable = (event: BlobEvent) => alLlegarChunk(event.data);
       recorder.onerror = () => terminarPorFalla("error-recorder");
@@ -413,7 +413,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       return;
     }
     claveRef.current = pendiente.sesionClinicaId; // la suya, no la del prop
-    respaldoRef.current = true; // se leyó del teléfono: la copia existe
+    copiaRef.current = seguimientoDeCopia(); // se leyó del teléfono: la copia existe
     setPendiente(null);
     cambiarEstado("preparando");
     eventosRef.current = [];

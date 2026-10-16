@@ -530,3 +530,60 @@ describe("grabacion-storage — duración atada al timeslice", () => {
     expect(pendiente?.duracionAproxSeg).toBe(6);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// seguimientoDeCopia: si todo lo de UNA grabación quedó en el teléfono. Se
+// pregunta al fallar la subida, que puede ser antes de que termine de
+// escribirse el último chunk.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("seguimientoDeCopia", () => {
+  it("con todo escrito, hay copia", async () => {
+    const copia = storage.seguimientoDeCopia();
+    copia.anotar(Promise.resolve(true));
+    copia.anotar(Promise.resolve(true));
+    await expect(copia.hayCopia()).resolves.toBe(true);
+  });
+
+  it("espera la escritura que todavía no terminó: si falla después de preguntar, no hay copia", async () => {
+    const copia = storage.seguimientoDeCopia();
+    let terminar!: (guardado: boolean) => void;
+    copia.anotar(Promise.resolve(true));
+    copia.anotar(new Promise<boolean>((resolve) => { terminar = resolve; }));
+    const respuesta = copia.hayCopia();
+    terminar(false);
+    await expect(respuesta).resolves.toBe(false);
+  });
+
+  it("una escritura colgada no deja esperando para siempre: sin confirmación, no se promete la copia", async () => {
+    vi.useFakeTimers();
+    try {
+      const copia = storage.seguimientoDeCopia();
+      copia.anotar(new Promise<boolean>(() => {}));
+      const respuesta = copia.hayCopia();
+      await vi.advanceTimersByTimeAsync(5000);
+      await expect(respuesta).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cada grabación lleva la suya: lo que falla de la anterior no toca a la nueva", async () => {
+    const vieja = storage.seguimientoDeCopia();
+    const nueva = storage.seguimientoDeCopia();
+    vieja.anotar(Promise.resolve(false));
+    nueva.anotar(Promise.resolve(true));
+    await expect(vieja.hayCopia()).resolves.toBe(false);
+    await expect(nueva.hayCopia()).resolves.toBe(true);
+  });
+});
+
+describe("pedido de almacenamiento persistente", () => {
+  it("si ya es persistente no lo vuelve a pedir (en Firefox, pedirlo abre un cartel)", async () => {
+    const persist = vi.fn(async () => true);
+    vi.stubGlobal("navigator", { storage: { persisted: async () => true, persist } });
+    await storage.iniciarSesionGrabacion(TURNO, "audio/webm");
+    await Promise.resolve();
+    expect(persist).not.toHaveBeenCalled();
+  });
+});

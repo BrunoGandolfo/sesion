@@ -2124,3 +2124,9 @@ export const GRABACION_NO_INICIO = "No se pudo iniciar la grabación de audio.";
 export const NAVEGADOR_SIN_GRABACION = "Tu navegador no soporta grabación de audio.";
 export const GRABACION_VACIA = "No se pudo capturar audio de la sesión.";
 export const GRABACION_NO_SE_DETUVO = "No se pudo detener la grabación.";
+
+/** Se agrega a un rechazo del servidor cuando la copia del teléfono no se
+ *  pudo guardar: el rechazo puede decir "sigue guardada en el teléfono", y
+ *  en ese caso no es cierto. */
+export const RECHAZADA_SIN_COPIA =
+  "Ojo: en este teléfono no quedó copia (no había lugar para guardarla), así que al salir de esta pantalla la grabación se pierde.";

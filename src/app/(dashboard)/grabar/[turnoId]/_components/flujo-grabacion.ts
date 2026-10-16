@@ -19,8 +19,8 @@
 // con su clave) y la pantalla lo dice: se reintenta cuando vuelve la señal.
 //
 // La grabación misma (un solo MediaRecorder, chunks, pausa, IndexedDB,
-// recuperación) es de useGrabador; la subida, de lib/subida-audio.ts; el turno
-// y la sesión, de sesion-del-turno.ts; qué hacer cuando falla, de
+// recuperación) es de useGrabador; la subida, de lib/subida-audio.ts; la
+// sesión, de sesion-del-turno.ts; qué hacer cuando falla, de
 // errores-grabacion.ts (desenlaceDelFallo).
 
 import * as React from "react";
@@ -32,19 +32,24 @@ import {
 } from "@/components/grabacion/GrabadorSesion";
 import { enCurso } from "@/components/grabacion/grabador-tipos";
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
-import { mensajeParaElla } from "@/lib/api-client";
+import { apiPost, mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { claveSinTurno, esClaveSinTurnoDe, inicioDeClaveSinTurno, turnoDeLaGrabacion } from "@/lib/grabacion-clave";
 import { admiteAudio, leerSesionDelTurno } from "@/lib/grabacion-sesion";
-import { limpiarGrabacion } from "@/lib/grabacion-storage";
+import { asociarTurno, limpiarGrabacion } from "@/lib/grabacion-storage";
 import {
   marcarTurnoRealizado,
   subirAudio,
   volverAGrabando,
 } from "@/lib/subida-audio";
 import { desenlaceDelFallo } from "./errores-grabacion";
-import { asegurarSesion, crearTurnoDeLaGrabacion } from "./sesion-del-turno";
+import { asegurarSesion } from "./sesion-del-turno";
 import { ALGO_FALLO, TURNO_NO_MARCADO } from "@/lib/glosario";
+
+/** Duración por defecto del turno creado al vuelo. */
+const DURACION_SIN_TURNO = 50;
+
+type TurnoApi = { id: string; fecha: string };
 
 export type Fase =
   | "previo"
@@ -124,13 +129,28 @@ export function useFlujoGrabacion({
   const sesionIdRef = React.useRef<string | null>(null);
   const turnoProgramadoRef = React.useRef(turnoProgramado);
 
-  /** El turno: el que había o uno nuevo con la hora de inicio. */
+  /** El turno: el que había o uno nuevo con la hora de inicio, anotado en el
+   *  teléfono para que un reintento no lo cree dos veces. */
   const asegurarTurno = React.useCallback(async (): Promise<string> => {
     if (turnoIdRef.current) return turnoIdRef.current;
-    const creado = await crearTurnoDeLaGrabacion({ pacienteId, clave: claveRef.current, inicio: inicioRef.current });
+    const claveLocal = claveRef.current;
+    const inicio = inicioRef.current ?? (claveLocal ? inicioDeClaveSinTurno(claveLocal) : null);
+    if (!inicio) throw new Error("grabación sin turno y sin hora de inicio");
+    const creado = await apiPost<TurnoApi>("/api/turnos", {
+      pacienteId,
+      fecha: inicio.toISOString(),
+      duracion: DURACION_SIN_TURNO,
+      modalidad: "presencial",
+      // Un turno que nace al grabar no pasa por la regla de choque: la
+      // sesión ocurrió, y un solapamiento en la agenda no puede impedir
+      // guardarla.
+      alGrabar: true,
+      iniciadaEn: inicio.toISOString(),
+    });
     turnoIdRef.current = creado.id;
     turnoProgramadoRef.current = true;
     setHoraTexto(hora(new Date(creado.fecha)));
+    if (claveLocal) await asociarTurno(claveLocal, creado.id);
     return creado.id;
   }, [pacienteId]);
 
@@ -174,7 +194,7 @@ export function useFlujoGrabacion({
         setFase("guardado");
       } catch (error) {
         console.warn("[grabar] falló la subida", error);
-        const copiaEnTelefono = datos.respaldoEnTelefono?.() ?? true;
+        const copiaEnTelefono = (await datos.respaldoEnTelefono?.()) ?? true;
         const desenlace = await desenlaceDelFallo(error, { turno, sesionId, copiaEnTelefono });
         setErrorPantalla(desenlace.mensaje);
         setFase(desenlace.fase);

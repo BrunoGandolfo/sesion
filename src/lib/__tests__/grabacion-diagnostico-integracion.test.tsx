@@ -35,7 +35,9 @@ vi.mock("@/lib/r2", () => ({
     existe: async () => ({ existe: true, bytes: 40 }),
   },
 }));
-vi.mock("@/lib/grabacion-storage", () => ({
+vi.mock("@/lib/grabacion-storage", async (original) => ({
+  // La de verdad: lleva la cuenta de lo que los dobles de abajo contestan.
+  seguimientoDeCopia: (await original<typeof import("@/lib/grabacion-storage")>()).seguimientoDeCopia,
   guardarChunk: vi.fn(async () => true),
   guardarPausas: vi.fn(async () => {}),
   iniciarSesionGrabacion: vi.fn(async () => true),

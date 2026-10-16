@@ -132,7 +132,7 @@ describe("cuando la subida falla", () => {
 
   it("si la copia del teléfono no se pudo guardar, no dice que el audio está a salvo en el teléfono", async () => {
     m.subir.mockRejectedValueOnce(new ErrorSubida("R2 rechazó la subida (HTTP 403).", "put", 403));
-    await subirUnaGrabacion({ ...DATOS, respaldoEnTelefono: () => false });
+    await subirUnaGrabacion({ ...DATOS, respaldoEnTelefono: async () => false });
     expect(await screen.findByText(AUDIO_NO_GUARDADO_SIN_COPIA)).toBeTruthy();
     expect(screen.queryByText(AUDIO_NO_GUARDADO)).toBeNull();
     expect(screen.getByRole("button", { name: REINTENTAR })).toBeTruthy();

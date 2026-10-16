@@ -13,8 +13,9 @@ export interface DatosGrabacion {
   diagnostico: DiagnosticoGrabacion;
   /** Si los chunks quedaron en el teléfono (IndexedDB). Se pregunta al fallar
    *  la subida: con la cuota llena no hay copia, y la pantalla no la promete.
-   *  Sin el campo, se supone que sí. */
-  respaldoEnTelefono?: () => boolean;
+   *  Espera las escrituras pendientes (seguimientoDeCopia). Sin el campo, se
+   *  supone que sí. */
+  respaldoEnTelefono?: () => Promise<boolean>;
 }
 
 /**

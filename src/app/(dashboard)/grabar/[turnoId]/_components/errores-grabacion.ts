@@ -20,6 +20,7 @@ import {
   MIC_OCUPADO,
   MIC_SIN_PERMISO,
   NAVEGADOR_SIN_GRABACION,
+  RECHAZADA_SIN_COPIA,
 } from "@/lib/glosario";
 import { admiteAudio, leerSesionDelTurno } from "@/lib/grabacion-sesion";
 import { ErrorSubida } from "@/lib/subida-audio";
@@ -125,20 +126,26 @@ export async function desenlaceDelFallo(
   error: unknown,
   { turno, sesionId, copiaEnTelefono }: { turno: string | null; sesionId: string | null; copiaEnTelefono: boolean },
 ): Promise<DesenlaceDelFallo> {
-  const reintentar: DesenlaceDelFallo = {
+  const reintentar = (): DesenlaceDelFallo => ({
     fase: "no-guardado",
     mensaje: mensajeParaReintentar(error, copiaEnTelefono),
     volverAGrabando: sesionId !== null,
-  };
+  });
+  // El servidor puede decir "sigue guardada en el teléfono": sin copia, no.
+  const rechazada = (mensaje: string): DesenlaceDelFallo => ({
+    fase: "rechazada",
+    mensaje: copiaEnTelefono ? mensaje : `${mensaje} ${RECHAZADA_SIN_COPIA}`,
+    volverAGrabando: false,
+  });
   // Sin red no se le pregunta nada al servidor: se reintenta cuando vuelva la
   // señal. Si la sesión llegó a quedar en "subiendo", que vuelva a
   // "grabando" (sin red no va a poder; el próximo intento lo resuelve igual).
-  if (esSinConexion(error)) return reintentar;
+  if (esSinConexion(error)) return reintentar();
   // El servidor no aceptó el turno o la sesión (la sesión ya se cerró, el
   // turno no es de hoy, falta la autorización): reintentar fallaría igual. Se
   // dice lo que contestó, que está escrito para ella.
   if (!sesionId && esRechazoDefinitivo(error)) {
-    return { fase: "rechazada", mensaje: error.mensaje, volverAGrabando: false };
+    return rechazada(error.mensaje);
   }
   // Lo que decide es el estado de la sesión, no el código: un 409 de "no
   // llegó" deja la sesión en grabando a propósito para reintentar, y uno de
@@ -149,8 +156,8 @@ export async function desenlaceDelFallo(
   if (turno && esRechazoDelServidor(error)) {
     const sesion = await leerSesionDelTurno(turno).catch(() => undefined);
     if (sesion === null || (sesion !== undefined && !admiteAudio(sesion.estado))) {
-      return { fase: "rechazada", mensaje: error.message, volverAGrabando: false };
+      return rechazada(error.message);
     }
   }
-  return reintentar;
+  return reintentar();
 }
