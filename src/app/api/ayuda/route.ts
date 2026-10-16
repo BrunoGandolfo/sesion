@@ -5,7 +5,8 @@
 // Qué contestar y qué se registra (metadatos, nunca el texto) está en
 // ../_lib/casos-uso/responder-ayuda.ts.
 //
-// El cupo se reserva antes del proveedor; la auditoría no decide el límite.
+// El cupo se reserva antes del proveedor y vuelve con la misma regla que el
+// de Lux (cupoVuelveAnte); la auditoría no decide el límite.
 
 import { z } from "zod";
 import { limpiarMarkdown, type EstadoMarkdown } from "@/lib/ayuda-texto";
@@ -18,7 +19,7 @@ import {
   registrarPreguntaAyuda,
   responderAyudaStreaming,
 } from "../_lib/casos-uso/responder-ayuda";
-import { reservarCupo, devolverCupo } from "../_lib/casos-uso/ayuda/reservar-cupo";
+import { cupoVuelveAnte, devolverCupo, reservarCupo } from "../_lib/casos-uso/ayuda/reservar-cupo";
 import { consultarAgenda } from "../_lib/casos-uso/ayuda/agenda";
 import { errorResponse, leerJson, validationError } from "../_lib/responses";
 
@@ -59,18 +60,16 @@ export async function POST(request: Request) {
         consultarAgenda: (periodo) => consultarAgenda({ prisma: db, organizationId, periodo, ahora }),
       });
     } catch (error) {
-      await devolverCupo(db, reserva);
+      if (cupoVuelveAnte(error)) await devolverCupo(db, reserva);
       throw error;
     }
     const codificador = new TextEncoder();
-    let recibioFragmento = false;
     let cancelado = false;
     const cuerpo = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
           let estado: EstadoMarkdown = { pendiente: "", linea: "inicio" };
           for await (const fragmento of flujo.fragmentos) {
-            if (fragmento.length) recibioFragmento = true;
             if (cancelado) return;
             const limpio = limpiarMarkdown(fragmento, estado);
             estado = limpio.estado;
@@ -92,7 +91,7 @@ export async function POST(request: Request) {
           });
           controller.close();
         } catch (error) {
-          if (!recibioFragmento && !cancelado) await devolverCupo(db, reserva);
+          // Con el stream abierto el cupo se queda (cupoVuelveAnte).
           console.error("[ayuda] stream interrumpido");
           if (cancelado) return;
           controller.error(error);

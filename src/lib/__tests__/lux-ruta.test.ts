@@ -23,7 +23,11 @@ vi.mock("@/app/api/_lib/casos-uso/lux/conversar", async (original) => ({
   responder: vi.fn(),
   autorizarPaciente: vi.fn(),
 }));
-vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", () => ({ reservarCupo: vi.fn(), devolverCupo: vi.fn() }));
+vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", async (original) => ({
+  ...(await original<typeof import("@/app/api/_lib/casos-uso/ayuda/reservar-cupo")>()),
+  reservarCupo: vi.fn(),
+  devolverCupo: vi.fn(),
+}));
 
 const RESULTADO: ResultadoConversacion = {
   texto: "<citas>\n01/09: \"me voy\"\n</citas>\nTEXTO", tokensEntrada: 10, tokensSalida: 5, cacheLeido: 0, cacheEscrito: 0,

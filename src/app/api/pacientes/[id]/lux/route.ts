@@ -25,11 +25,10 @@ import { db } from "@/lib/db";
 import { peticionLuxSchema } from "@/lib/lux/contrato";
 
 import { getSessionActor } from "../../../_lib/auth";
-import { devolverCupo, reservarCupo } from "../../../_lib/casos-uso/ayuda/reservar-cupo";
+import { cupoVuelveAnte, devolverCupo, reservarCupo } from "../../../_lib/casos-uso/ayuda/reservar-cupo";
 import {
   abrirConversacion,
   autorizarPaciente,
-  ErrorProveedorLux,
   registrarConversacionLux,
   responder,
   type ConversacionLux,
@@ -65,7 +64,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // Vuelve si el proveedor no llegó a procesar: falló antes de llamarlo
       // (base, validación) o contestó un error HTTP. Un timeout o un corte
       // de conexión lo retienen.
-      if (!(error instanceof ErrorProveedorLux) || error.devuelveCupo) await devolverCupo(db, reserva);
+      if (cupoVuelveAnte(error)) await devolverCupo(db, reserva);
       throw error;
     }
 

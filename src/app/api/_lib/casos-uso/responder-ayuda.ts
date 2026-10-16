@@ -8,7 +8,8 @@
 // LO QUE NUNCA SALE DE ACÁ
 //
 // Un fallo del proveedor —clave inválida, 500 de Anthropic, timeout— se
-// loguea con detalle y se traduce a un ApiError con texto para la usuaria.
+// loguea con detalle y se traduce a un ErrorProveedorAsistente (502) con
+// texto para la usuaria y la regla del cupo (ayuda/reservar-cupo.ts).
 // El mensaje de ErrorAnthropic trae el cuerpo del proveedor y no se pasa
 // nunca a la respuesta HTTP.
 //
@@ -16,6 +17,7 @@
 
 import {
   crearMensajeStreaming,
+  esErrorHttpDelProveedor,
   MODELO_AYUDA,
   systemCacheado,
   type MensajeAnthropic,
@@ -27,6 +29,7 @@ import { systemPromptAyuda } from "@/lib/ayuda-corpus";
 
 import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
 import { ApiError } from "../responses";
+import { ErrorProveedorAsistente } from "./ayuda/reservar-cupo";
 import { HERRAMIENTAS_AYUDA, resolverHerramienta, type ConsultarAgenda } from "./ayuda/herramientas";
 
 
@@ -144,7 +147,7 @@ export async function responderAyudaStreaming(
     return input.consultarAgenda ? conConsultaAgenda(flujo, input.consultarAgenda) : flujo;
   } catch (error) {
     console.error("[ayuda] fallo del proveedor", error);
-    throw new ApiError(MENSAJE_PROVEEDOR_CAIDO, 502);
+    throw new ErrorProveedorAsistente(MENSAJE_PROVEEDOR_CAIDO, esErrorHttpDelProveedor(error));
   }
 }
 

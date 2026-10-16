@@ -6,7 +6,8 @@ import type {
   PedidoMensajes,
   ResultadoMensajes,
 } from "@/lib/anthropic-mensajes";
-import { MODELO_AYUDA } from "@/lib/anthropic-mensajes";
+import { ErrorAnthropic, MODELO_AYUDA } from "@/lib/anthropic-mensajes";
+import { ErrorProveedorAsistente } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
 
 import { ApiError } from "@/app/api/_lib/responses";
 import {
@@ -217,6 +218,25 @@ describe("responderAyudaStreaming — el proveedor falla", () => {
       "[ayuda] fallo del proveedor",
       expect.any(Error),
     );
+  });
+
+  it("E1: un error HTTP del proveedor devuelve el cupo; un timeout o un corte sin status, no", async () => {
+    const casos: Array<[ErrorAnthropic | Error, boolean]> = [
+      [new ErrorAnthropic("HTTP 529", 529, "overloaded_error"), true],
+      [new ErrorAnthropic("Timeout", undefined, "timeout"), false],
+      [new Error("socket hang up"), false],
+    ];
+    for (const [fallo, devuelve] of casos) {
+      const error = await atrapar<ErrorProveedorAsistente>(
+        responderAyudaStreaming({
+          pregunta: "¿cómo cobro?", apiKey: CLAVE, systemPrompt: SYSTEM,
+          crearStreaming: async () => { throw fallo; },
+        }),
+      );
+      expect(error).toBeInstanceOf(ErrorProveedorAsistente);
+      expect(error.status).toBe(502);
+      expect(error.devuelveCupo).toBe(devuelve);
+    }
   });
 });
 

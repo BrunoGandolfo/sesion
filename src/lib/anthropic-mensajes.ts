@@ -75,6 +75,12 @@ export class ErrorAnthropic extends Error {
   }
 }
 
+/** Un error HTTP del proveedor trae status; el timeout y la conexión
+ *  cortada, no. Es lo que decide si vuelve el cupo de un asistente. */
+export function esErrorHttpDelProveedor(error: unknown): boolean {
+  return error instanceof ErrorAnthropic && typeof error.status === "number";
+}
+
 /** Un identificador corto (el tipo de error de la API, el nombre de la clase
  *  del SDK) o "desconocido": lo que sea, nunca un mensaje. */
 function codigoDe(error: unknown): string {
