@@ -112,7 +112,7 @@ def test_una_orientacion_desconocida_falla_con_codigo_sin_llamar_al_modelo(mocke
     import processor
     llamar = mocker.patch("clinical_analyzer._llamar_validando")
     resultado = processor.generar_feedback({"transcripcionFormateada": "[00:00] Terapeuta: hola", **adjunto_extra})
-    assert resultado == {"ok": False, "error": "orientacion_desconocida"}
+    assert resultado == {"ok": False, "error": "orientacion_desconocida", "definitivo": True}
     llamar.assert_not_called()
 
 

@@ -508,7 +508,7 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
     """
     Ejecuta un trabajo entregado por GET /api/trabajos/pendientes y devuelve
     el payload para POST /api/trabajos/[id]/resultado ({ok: true, ...} o
-    {ok: false, error}), siempre con `uso`. Nunca lanza.
+    {ok: false, error, definitivo}), siempre con `uso`. Nunca lanza.
     """
     tipo = trabajo.get("tipo")
     uso = Uso()
@@ -521,10 +521,20 @@ def ejecutar_trabajo(trabajo: dict) -> dict:
             elif tipo == "integrar_contexto":
                 resultado = integrar_contexto(trabajo.get("adjunto"), trabajo.get("payload"), uso)
             else:
-                resultado = {"ok": False, "error": f"tipo no soportado: {tipo}"}
+                # Un worker viejo durante un deploy: lo toma otro que lo conozca.
+                resultado = _fallo_trabajo(f"tipo no soportado: {tipo}", definitivo=False)
     except Exception as e:
-        resultado = {"ok": False, "error": _describir(e)[:500]}
+        resultado = _fallo_trabajo(_describir(e), definitivo=isinstance(e, PipelineError) and e.definitivo)
     return {**resultado, "uso": uso.payload()}
+
+
+def _fallo_trabajo(error: str, *, definitivo: bool) -> dict:
+    """
+    {ok: false} de un trabajo. `definitivo`: repetirlo da lo mismo (y si hubo
+    modelo, lo paga de nuevo); la app deja de reintentar. Mismo criterio que
+    en las sesiones: errores.CODIGOS_DEFINITIVOS.
+    """
+    return {"ok": False, "error": error[:500], "definitivo": definitivo}
 
 
 # El trabajo borrar_transcript_asr nace cuando el worker dueno registra el id,
@@ -587,23 +597,23 @@ def borrar_transcript_asr(payload: dict, intentos: int | None = None) -> dict:
     """
     transcript_id = payload.get("transcriptId")
     if not transcript_id:
-        return {"ok": False, "error": "payload sin transcriptId"}
+        return _fallo_trabajo("payload sin transcriptId", definitivo=True)
     if not isinstance(intentos, int) or intentos < primer_intento_que_borra():
-        return {"ok": False, "error": "esperando_al_worker_del_transcript"}
+        return _fallo_trabajo("esperando_al_worker_del_transcript", definitivo=False)
     status = asr_assemblyai._borrar(transcript_id)
     if status in (200, 404):
         return {"ok": True}
-    return {"ok": False, "error": f"AssemblyAI respondio HTTP {status}" if status else "AssemblyAI no respondio"}
+    return _fallo_trabajo(f"AssemblyAI respondio HTTP {status}" if status else "AssemblyAI no respondio", definitivo=False)
 
 
 def generar_feedback(adjunto: dict, uso: Uso | None = None) -> dict:
     """Llamada C con lo que la app adjunta: transcripcion, metricas y orientacion."""
     transcripcion_fmt = adjunto.get("transcripcionFormateada")
     if not isinstance(transcripcion_fmt, str) or not transcripcion_fmt.strip():
-        return {"ok": False, "error": "adjunto sin transcripcionFormateada"}
+        return _fallo_trabajo("adjunto sin transcripcionFormateada", definitivo=True)
     orientacion = adjunto.get("orientacionTeorica")
     if orientacion not in clinical_analyzer._FEEDBACK_POR_ORIENTACION:
-        return {"ok": False, "error": clinical_analyzer.ORIENTACION_DESCONOCIDA}
+        return _fallo_trabajo(clinical_analyzer.ORIENTACION_DESCONOCIDA, definitivo=True)
     speech = adjunto.get("speechAnalytics")
     feedback, prompt_feedback, diag = clinical_analyzer.generar_feedback_terapeuta(
         transcripcion_fmt,
@@ -615,7 +625,7 @@ def generar_feedback(adjunto: dict, uso: Uso | None = None) -> dict:
         uso.advertencias.extend(diag.advertencias)
     if not feedback:
         motivo = "; ".join(diag.advertencias) or "feedback_no_generado"
-        return {"ok": False, "error": motivo[:500]}
+        return _fallo_trabajo(motivo, definitivo=diag.definitivo)
     return {
         "ok": True,
         "feedback": feedback,

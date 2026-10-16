@@ -64,10 +64,10 @@ def pasos(mocker):
     }
 
 
-def _diag(advertencias=None):
+def _diag(advertencias=None, definitivo=False):
     from clinical_analyzer import DiagnosticoLLM
 
-    return DiagnosticoLLM(advertencias=advertencias or [])
+    return DiagnosticoLLM(advertencias=advertencias or [], definitivo=definitivo)
 
 
 # Camino feliz ──────────────────────────────────────────────────────────────
@@ -482,7 +482,7 @@ def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
 @pytest.mark.parametrize("intentos", [None, "3", 1, 2])
 def test_borrar_transcript_asr_no_borra_mientras_el_worker_dueno_puede_estar_esperando(mocker, intentos):
     borrar = mocker.patch("processor.asr_assemblyai._borrar")
-    assert _borrar_trabajo(intentos) == {"ok": False, "error": "esperando_al_worker_del_transcript"}
+    assert _borrar_trabajo(intentos) == {"ok": False, "error": "esperando_al_worker_del_transcript", "definitivo": False}
     borrar.assert_not_called()
 
 
@@ -510,7 +510,7 @@ def test_con_un_polling_mas_largo_espera_mas_intentos(mocker):
 def test_borrar_transcript_asr_excepcion_solo_deja_el_tipo(mocker):
     mocker.patch("processor.asr_assemblyai._borrar", side_effect=RuntimeError("red caida"))
     res = _borrar_trabajo(processor.primer_intento_que_borra())
-    assert res == {"ok": False, "error": "RuntimeError"}
+    assert res == {"ok": False, "error": "RuntimeError", "definitivo": False}
 
 
 def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):
@@ -535,11 +535,11 @@ def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):
 def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
     mocker.patch(
         "processor.clinical_analyzer.generar_feedback_terapeuta",
-        return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"])),
+        return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"], definitivo=True)),
     )
     res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x", "orientacionTeorica": "gestalt"}})
     del res["uso"]
-    assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado"}
+    assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado", "definitivo": True}
 
     assert processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})["ok"] is False
 

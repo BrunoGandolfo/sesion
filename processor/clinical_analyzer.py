@@ -73,6 +73,9 @@ class DiagnosticoLLM:
     """
 
     advertencias: list[str] = field(default_factory=list)
+    # Sin resultado: si repetir la llamada daria lo mismo (el codigo del
+    # PipelineError esta en errores.CODIGOS_DEFINITIVOS).
+    definitivo: bool = False
 
 
 def _cargar_prompt(nombre: str) -> str:
@@ -578,7 +581,7 @@ def generar_feedback_terapeuta(
     except PipelineError as e:
         logger.warning(f"Feedback terapeuta fallo: {e.codigo}: {e.mensaje_publico}")
         return None, nombre_prompt, DiagnosticoLLM(
-            advertencias=[f"{ADVERTENCIA_FEEDBACK}: {e.codigo}"]
+            advertencias=[f"{ADVERTENCIA_FEEDBACK}: {e.codigo}"], definitivo=e.definitivo
         )
     except Exception as e:
         logger.warning(f"Feedback terapeuta fallo: {type(e).__name__}")

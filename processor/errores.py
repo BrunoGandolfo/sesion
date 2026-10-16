@@ -41,6 +41,9 @@ CODIGOS_DEFINITIVOS = frozenset(
         "llm_sin_texto",
         # La app entrego un checkpoint sin transcripcion.
         "checkpoint_invalido",
+        # El adjunto de integrar_contexto no sirve: la app lo arma de la base
+        # en cada entrega y va a volver igual.
+        "adjunto_invalido",
     }
 )
 

@@ -229,7 +229,7 @@ def trabajos_pendientes(tipos: list[str] | None = None) -> list[dict]:
 
 
 def resolver_trabajo(trabajo_id: str, ticket: str, payload: dict) -> RespuestaApp:
-    """`payload` con la forma de resultadoTrabajoSchema: {ok: true, ...} o {ok: false, error}."""
+    """`payload` con la forma de resultadoTrabajoSchema: {ok: true, ...} o {ok: false, error, definitivo}."""
     return _post(url_trabajo_resultado(trabajo_id), payload, ticket, f"Trabajo {trabajo_id}")
 
 
