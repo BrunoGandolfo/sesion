@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+import trabajos
+
 import schemas_llm
 from schemas_llm import (
     ALIANZAS,
@@ -109,9 +111,8 @@ def test_cada_orientacion_del_contrato_tiene_su_instrumento_y_ninguna_mas():
 
 @pytest.mark.parametrize("adjunto_extra", [{"orientacionTeorica": "freudiana"}, {"orientacionTeorica": None}, {}])
 def test_una_orientacion_desconocida_falla_con_codigo_sin_llamar_al_modelo(mocker, adjunto_extra):
-    import processor
     llamar = mocker.patch("clinical_analyzer._llamar_validando")
-    resultado = processor.generar_feedback({"transcripcionFormateada": "[00:00] Terapeuta: hola", **adjunto_extra})
+    resultado = trabajos.generar_feedback({"transcripcionFormateada": "[00:00] Terapeuta: hola", **adjunto_extra})
     assert resultado == {"ok": False, "error": "orientacion_desconocida", "definitivo": True}
     llamar.assert_not_called()
 

@@ -33,6 +33,10 @@ from schemas_llm import (
 
 logger = logging.getLogger(__name__)
 
+# modeloLlm que se reporta a la app. El prefijo "anthropic:" es contrato:
+# la app lo guarda y lo muestra tal cual.
+MODELO_LLM = f"anthropic:{config.LLM_MODEL_ID}"
+
 PROMPTS = {
     "nota": "clinical_note_v3.1.1.md",
     "contexto": "update_context_v2.1.md",

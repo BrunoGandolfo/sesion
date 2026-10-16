@@ -18,6 +18,7 @@ import pytest
 import clinical_analyzer
 import config
 import processor
+import trabajos
 from dobles import respuesta_sdk
 from app_client import RespuestaApp
 from processor import SesionReclamada
@@ -221,7 +222,7 @@ FEEDBACK_ADJUNTO = {"transcripcionFormateada": "[00:00] Terapeuta: hola", "orien
 def test_cada_trabajo_lleva_uso(mocker, anthropic_doble):
     anthropic_doble.side_effect = [respuesta_sdk("no es json"), respuesta_sdk("tampoco")]
 
-    res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": FEEDBACK_ADJUNTO})
+    res = trabajos.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": FEEDBACK_ADJUNTO})
 
     assert res["ok"] is False
     assert [l["nombre"] for l in res["uso"]["llamadas"]] == ["feedback#1", "feedback#2"]
@@ -229,11 +230,11 @@ def test_cada_trabajo_lleva_uso(mocker, anthropic_doble):
     assert set(res["uso"]["pasosMs"]) == {"generar_feedback"}
 
     # El borrado en si se prueba en test_processor; aca solo que lleva `uso`.
-    mocker.patch("processor.borrar_transcript_asr", return_value={"ok": True})
-    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
+    mocker.patch("trabajos.borrar_transcript_asr", return_value={"ok": True})
+    res = trabajos.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}})
     assert res["ok"] is True and res["uso"]["llamadas"] == [] and "borrar_transcript_asr" in res["uso"]["pasosMs"]
 
-    res = processor.ejecutar_trabajo({"tipo": "desconocido"})
+    res = trabajos.ejecutar_trabajo({"tipo": "desconocido"})
     assert res["ok"] is False and "uso" in res
 
 
@@ -253,7 +254,7 @@ def test_el_contexto_anota_sus_llamadas(anthropic_doble):
         },
     }
 
-    res = processor.ejecutar_trabajo(trabajo)
+    res = trabajos.ejecutar_trabajo(trabajo)
 
     assert res["ok"] is True
     [llamada] = res["uso"]["llamadas"]

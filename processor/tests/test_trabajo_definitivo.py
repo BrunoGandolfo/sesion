@@ -7,7 +7,7 @@ Lo decide el mismo criterio que en las sesiones: el código del PipelineError
 """
 import pytest
 
-import processor
+import trabajos
 from errores import PipelineError
 
 TRANSCRIPCION = "[00:00] Terapeuta: hola"
@@ -16,7 +16,7 @@ TRANSCRIPCION = "[00:00] Terapeuta: hola"
 def _feedback(mocker, error: PipelineError | Exception):
     mocker.patch("clinical_analyzer._cargar_prompt", return_value="prompt")
     mocker.patch("clinical_analyzer._llamar_validando", side_effect=error)
-    return processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {
+    return trabajos.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {
         "transcripcionFormateada": TRANSCRIPCION, "orientacionTeorica": "cbt_mi"}})
 
 
@@ -35,7 +35,7 @@ def test_un_feedback_que_puede_salir_mas_tarde_no_es_definitivo(mocker, error):
 @pytest.mark.parametrize("adjunto", [{}, {"transcripcionFormateada": TRANSCRIPCION, "orientacionTeorica": "freudiana"}])
 def test_un_adjunto_de_feedback_inservible_es_definitivo(mocker, adjunto):
     mocker.patch("clinical_analyzer._llamar_validando")
-    res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": adjunto})
+    res = trabajos.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": adjunto})
     assert (res["ok"], res["definitivo"]) == (False, True)
 
 
@@ -50,47 +50,47 @@ def _integrar(**cambios):
 
 
 def test_un_adjunto_de_recorrido_invalido_es_definitivo(mocker):
-    llamar = mocker.patch("processor.clinical_analyzer.actualizar_contexto_clinico")
-    res = processor.ejecutar_trabajo(_integrar(fechaSesion="2026-02-30"))
+    llamar = mocker.patch("trabajos.clinical_analyzer.actualizar_contexto_clinico")
+    res = trabajos.ejecutar_trabajo(_integrar(fechaSesion="2026-02-30"))
     assert (res["ok"], res["definitivo"]) == (False, True)
     llamar.assert_not_called()
 
 
 @pytest.mark.parametrize("codigo,definitivo", [("llm_estructura_invalida", True), ("llm_timeout", False)])
 def test_el_recorrido_hereda_la_clasificacion_del_fallo_del_modelo(mocker, codigo, definitivo):
-    mocker.patch("processor.clinical_analyzer.actualizar_contexto_clinico", side_effect=PipelineError(codigo, "x"))
-    res = processor.ejecutar_trabajo(_integrar())
+    mocker.patch("trabajos.clinical_analyzer.actualizar_contexto_clinico", side_effect=PipelineError(codigo, "x"))
+    res = trabajos.ejecutar_trabajo(_integrar())
     assert (res["ok"], res["definitivo"]) == (False, definitivo)
 
 
 def test_el_borrado_que_espera_al_worker_dueno_no_es_definitivo(mocker):
-    mocker.patch("processor.asr_assemblyai._borrar")
-    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}, "intentos": 1})
+    mocker.patch("trabajos.asr_assemblyai._borrar")
+    res = trabajos.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}, "intentos": 1})
     assert (res["error"], res["definitivo"]) == ("esperando_al_worker_del_transcript", False)
 
 
 @pytest.mark.parametrize("status", [None, 500])
 def test_un_borrado_que_assemblyai_no_contesta_no_es_definitivo(mocker, status):
-    mocker.patch("processor.asr_assemblyai._borrar", return_value=status)
-    intento = processor.primer_intento_que_borra()
-    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}, "intentos": intento})
+    mocker.patch("trabajos.asr_assemblyai._borrar", return_value=status)
+    intento = trabajos.primer_intento_que_borra()
+    res = trabajos.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}, "intentos": intento})
     assert (res["ok"], res["definitivo"]) == (False, False)
 
 
 def test_un_borrado_sin_transcript_id_es_definitivo():
-    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {}, "intentos": 9})
+    res = trabajos.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {}, "intentos": 9})
     assert (res["ok"], res["definitivo"]) == (False, True)
 
 
 def test_un_tipo_que_este_worker_no_conoce_no_es_definitivo():
     # Durante un deploy, un worker viejo puede recibir un tipo nuevo: el
     # siguiente intento lo toma uno que sí lo conoce.
-    res = processor.ejecutar_trabajo({"tipo": "inventado"})
+    res = trabajos.ejecutar_trabajo({"tipo": "inventado"})
     assert (res["ok"], res["definitivo"]) == (False, False)
 
 
 def test_el_exito_no_lleva_la_marca(mocker):
-    mocker.patch("processor.asr_assemblyai._borrar", return_value=200)
-    res = processor.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"},
-                                      "intentos": processor.primer_intento_que_borra()})
+    mocker.patch("trabajos.asr_assemblyai._borrar", return_value=200)
+    res = trabajos.ejecutar_trabajo({"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"},
+                                      "intentos": trabajos.primer_intento_que_borra()})
     assert res["ok"] is True and "definitivo" not in res

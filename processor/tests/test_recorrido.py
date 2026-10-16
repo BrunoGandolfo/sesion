@@ -6,6 +6,7 @@ import requests
 
 import app_client
 import processor
+import trabajos
 
 
 def contenido():
@@ -25,8 +26,8 @@ def trabajo():
 
 
 def test_integrar_contexto_produce_propuesta_sin_escribir_el_vigente(mocker):
-    llamar = mocker.patch("processor.clinical_analyzer.actualizar_contexto_clinico", return_value=(contenido(), "update_context_v2.1.md"))
-    resultado = processor.ejecutar_trabajo(trabajo())
+    llamar = mocker.patch("trabajos.clinical_analyzer.actualizar_contexto_clinico", return_value=(contenido(), "update_context_v2.1.md"))
+    resultado = trabajos.ejecutar_trabajo(trabajo())
     assert resultado["ok"] is True
     assert resultado["propuesta"] == contenido()
     assert resultado["promptVersion"] == "update_context_v2.1.md"
@@ -37,10 +38,10 @@ def test_integrar_contexto_produce_propuesta_sin_escribir_el_vigente(mocker):
 
 @pytest.mark.parametrize("campo,valor", [("tipo", "login"), ("sesionId", "otra"), ("pacienteId", "otra"), ("version", 2), ("contextoVigente", []), ("notaFinal", "html"), ("fechaSesion", "2026-02-30")])
 def test_adjunto_invalido_nunca_llega_al_proveedor(mocker, campo, valor):
-    llamar = mocker.patch("processor.clinical_analyzer.actualizar_contexto_clinico")
+    llamar = mocker.patch("trabajos.clinical_analyzer.actualizar_contexto_clinico")
     t = trabajo()
     t["adjunto"][campo] = valor
-    assert processor.ejecutar_trabajo(t)["ok"] is False
+    assert trabajos.ejecutar_trabajo(t)["ok"] is False
     llamar.assert_not_called()
 
 
@@ -68,4 +69,4 @@ def test_error_de_fecha_no_filtra_el_valor_clinico():
     secreto = "ANA-SECRETA"
     t = trabajo()
     t["adjunto"]["fechaSesion"] = secreto
-    assert secreto not in processor.ejecutar_trabajo(t)["error"]
+    assert secreto not in trabajos.ejecutar_trabajo(t)["error"]

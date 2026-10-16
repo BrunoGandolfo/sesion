@@ -15,7 +15,7 @@ import pytest
 
 import app_client
 import clinical_analyzer
-import processor
+import trabajos
 from schemas_llm import validar_recorrido
 
 RUTA_CASOS = Path(__file__).resolve().parent.parent / "contrato" / "recorridos-que-la-app-acepta.json"
@@ -38,13 +38,13 @@ def test_la_lectura_para_la_nota_lo_acepta(mocker, caso):
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
 def test_el_adjunto_de_integrar_contexto_lo_acepta(mocker, caso):
-    mocker.patch("processor.clinical_analyzer.actualizar_contexto_clinico", return_value=(caso["contenido"], "update_context_v2.1.md"))
+    mocker.patch("trabajos.clinical_analyzer.actualizar_contexto_clinico", return_value=(caso["contenido"], "update_context_v2.1.md"))
     trabajo = {"tipo": "integrar_contexto", "payload": {"sesionId": "s1", "pacienteId": "p1", "basadaEnVersion": 1}, "adjunto": {
         "tipo": "integrar_contexto", "sesionId": "s1", "pacienteId": "p1", "version": 1,
         "contextoVigente": caso["contenido"], "notaFinal": dict.fromkeys(["subjetivo", "objetivo", "analisis", "plan"], "nota"),
         "datos": {}, "fechaSesion": "2026-09-01",
     }}
-    assert processor.ejecutar_trabajo(trabajo)["ok"] is True
+    assert trabajos.ejecutar_trabajo(trabajo)["ok"] is True
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
