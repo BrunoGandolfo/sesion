@@ -26,6 +26,10 @@ CODIGOS_DEFINITIVOS = frozenset(
         # contra la request: payload, audio o credencial que no cambian solos.
         "asr_vacio",
         "asr_rechazado",
+        # AssemblyAI termino el transcript con status=error: el archivo no se
+        # puede transcribir (sin audio, formato). Repetir es otra descarga,
+        # otra normalizacion y otra subida para el mismo resultado.
+        "asr_transcripcion_fallida",
         # El modelo: estas salidas llegan despues de agotar el reintento de
         # forma de clinical_analyzer (JSON invalido o estructura invalida dos
         # veces, truncado aun con el techo del reintento), o son un rechazo o

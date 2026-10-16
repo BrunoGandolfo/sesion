@@ -244,6 +244,17 @@ def test_fallo_definitivo_en_el_archivo(pasos):
     assert payload["paso"] == "audio"
 
 
+def test_un_transcript_con_error_en_assemblyai_falla_la_sesion_como_definitivo(pasos):
+    error = pasos["mocker"].Mock(ok=True, status_code=200, **{"json.return_value": {"status": "error", "error": "no audio"}})
+    delete = _asr_real(pasos["mocker"], [error])
+
+    processor.procesar_sesion(sesion())
+
+    payload = pasos["resultado"].call_args.args[2]
+    assert (payload["codigo"], payload["definitivo"], payload["paso"]) == ("asr_transcripcion_fallida", True, "asr")
+    delete.assert_called_once()
+
+
 def test_excepcion_inesperada_es_error_interno_transitorio_sin_traza(pasos, caplog):
     pasos["mocker"].patch("processor.analizar", side_effect=KeyError("segments"))
 

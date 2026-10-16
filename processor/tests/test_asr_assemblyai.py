@@ -468,7 +468,10 @@ def test_espera_en_cola_y_procesando_hasta_completar(http):
     delete.assert_called_once()
 
 
-def test_status_error_corta_la_espera_sin_volver_a_preguntar(http, caplog):
+def test_status_error_es_un_fallo_definitivo_que_corta_la_espera(http, caplog):
+    # Decisión del dueño: el `error` de un transcript viene del archivo y se
+    # repite igual. Reintentarlo eran hasta 5 vueltas de descarga, ffmpeg y
+    # subida; la sesión falla de una con un código propio.
     mocker, _, get, delete = http
     get.side_effect = [
         _resp(mocker, 200, {"status": "processing"}),
@@ -478,7 +481,7 @@ def test_status_error_corta_la_espera_sin_volver_a_preguntar(http, caplog):
     with pytest.raises(PipelineError) as exc:
         asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
 
-    assert exc.value.codigo == "asr_error"
+    assert (exc.value.codigo, exc.value.definitivo) == ("asr_transcripcion_fallida", True)
     assert get.call_count == 2
     delete.assert_called_once()
     assert "Transcoding failed" in caplog.text
