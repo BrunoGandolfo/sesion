@@ -132,6 +132,13 @@ const INTEGRACION = [
 const E2E_A_MANO = process.env.CAPTURAS_URL ? [] : ['pruebas/e2e/**/*.spec.ts']
 const EXCLUIDOS_SIEMPRE = ['**/node_modules/**', '**/dist/**', '**/.next/**', ...E2E_A_MANO]
 
+// UTC también al correr un archivo suelto (`npx vitest run archivo`), no
+// sólo por los scripts de npm: con la hora de la máquina (-03 en
+// Montevideo) una fecha armada con hora local cae en otro instante. Los
+// procesos de los tests heredan la variable. La otra mitad, el reloj de la
+// base, la fija db-test.ts en la conexión.
+process.env.TZ = 'UTC'
+
 const suite = process.env.VITEST_SUITE
 
 export default defineConfig({

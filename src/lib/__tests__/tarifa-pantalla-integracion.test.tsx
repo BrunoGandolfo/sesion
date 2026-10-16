@@ -48,14 +48,21 @@ const DIA = 24 * 60 * 60 * 1000;
 beforeAll(() => { estado.base = conectarArea2(); });
 afterAll(async () => { await vaciarTablas(estado.base.prisma); await estado.base.prisma.$disconnect(); });
 
+// La hora fija: el turno "futuro" y el reloj de la ruta (new Date()) son el
+// mismo instante en cualquier día que corra. Sólo Date: findBy* y la base
+// usan los temporizadores reales.
+const AHORA = new Date("2026-10-01T15:00:00Z");
+
 beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AHORA);
   await vaciarTablas(estado.base.prisma);
   org = await crearOrg(estado.base.prisma);
   estado.actor = { organizationId: org.orgId, userId: org.userId };
   turnoFuturo = (await estado.base.prisma.turno.create({
     data: {
       organizationId: org.orgId, pacienteId: org.pacienteId, estado: "programado", pagoEstado: "pendiente",
-      tarifaCobrada: 1000, fecha: new Date(Date.now() + 3 * DIA),
+      tarifaCobrada: 1000, fecha: new Date(AHORA.getTime() + 3 * DIA),
     },
   })).id;
   window.history.replaceState(null, "", `/pacientes/${org.pacienteId}`);
@@ -79,6 +86,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   cleanup();
   vi.unstubAllGlobals();
 });
