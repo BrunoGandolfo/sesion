@@ -17,6 +17,7 @@ import { deudaDeTurnos, sePuedeCobrar } from "@/app/api/_lib/domain";
 import {
   cobrarCierraElTurno,
   estadoSinPago,
+  mensajeDeshacerCobro,
   pagoDelTurno,
   sePuedeDeshacerCobro,
 } from "@/components/turno/presentacion";
@@ -28,7 +29,6 @@ import {
   COBRO_DESHECHO,
   DESHACER_COBRO,
   DESHACER_COBRO_ACCION,
-  DESHACER_COBRO_MENSAJE,
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   METODO_PAGO_LABEL,
@@ -317,7 +317,7 @@ function TurnoRow({
         <div className="px-5 pb-[14px]">
           <Confirmar
             titulo={DESHACER_COBRO_TITULO}
-            mensaje={DESHACER_COBRO_MENSAJE}
+            mensaje={mensajeDeshacerCobro(turno.estado)}
             accion={DESHACER_COBRO_ACCION}
             cancelar={VOLVER}
             enviando={deshaciendo}

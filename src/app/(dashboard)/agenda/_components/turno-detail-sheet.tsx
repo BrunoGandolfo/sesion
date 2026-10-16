@@ -34,7 +34,6 @@ import {
   COBRADO,
   COBRO_DESHECHO,
   DESHACER_COBRO_ACCION,
-  DESHACER_COBRO_MENSAJE,
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   VOLVER,
@@ -46,7 +45,7 @@ import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-c
 import { SelectorMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
 import { turnoSigueProgramado } from "@/app/api/_lib/domain";
-import { estadoDelTurno, seGrabaEnEsteEstado } from "@/components/turno/presentacion";
+import { estadoDelTurno, mensajeDeshacerCobro, seGrabaEnEsteEstado } from "@/components/turno/presentacion";
 
 import {
   accionesDelDetalle,
@@ -360,7 +359,7 @@ export function TurnoDetailSheet({
         {modo === "confirmar-deshacer-cobro" ? (
           <Confirmar
             titulo={DESHACER_COBRO_TITULO}
-            mensaje={DESHACER_COBRO_MENSAJE}
+            mensaje={mensajeDeshacerCobro(turno.estado)}
             accion={DESHACER_COBRO_ACCION}
             cancelar={VOLVER}
             enviando={enviando}

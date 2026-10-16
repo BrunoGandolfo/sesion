@@ -2105,3 +2105,7 @@ export const LUX_SALIR =
 
 /** Chip de la ficha para una sesión que se está grabando en este momento. */
 export const GRABANDO = "Grabando…";
+/** Confirmación de deshacer el cobro de un turno que no vino o se canceló:
+ *  ahí el turno no vuelve a la deuda ni se ofrece cobrar de nuevo. */
+export const DESHACER_COBRO_MENSAJE_SIN_DEUDA =
+  "Se borra el cobro. El turno sigue como estaba y no suma a la deuda.";

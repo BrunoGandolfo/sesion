@@ -25,6 +25,8 @@ import { ESTADOS_QUE_OCUPAN } from "@/lib/constantes-turno";
 import {
   AGENDADO,
   CANCELADO,
+  DESHACER_COBRO_MENSAJE,
+  DESHACER_COBRO_MENSAJE_SIN_DEUDA,
   GRABACION_SIN_TERMINAR,
   GRABANDO,
   NO_VINO,
@@ -116,6 +118,12 @@ export function sePuedeDeshacerCobro(turno: { pagoEstado: string }): boolean {
   return turno.pagoEstado === "pagado";
 }
 
+/** Qué pasa al deshacer el cobro: un turno que ocupa su horario vuelve a la
+ *  deuda y se puede volver a cobrar; uno que no vino o se canceló, no. */
+export function mensajeDeshacerCobro(estado: string): string {
+  return ocupaElHorario(estado) ? DESHACER_COBRO_MENSAJE : DESHACER_COBRO_MENSAJE_SIN_DEUDA;
+}
+
 /** Cobrar este turno lo deja realizado (sólo un programado). */
 export function cobrarCierraElTurno(estado: string): boolean {
   return puedeTransicionTurno("cobrarCierra", estado);
@@ -181,7 +189,9 @@ export function rotuloDelProceso(
 /**
  * La firma de la autorización que falta. Si el turno se graba, va en lugar
  * de Grabar (la pantalla de grabar no deja sin ella); si no, se avisa igual,
- * al lado de lo que haya: la firma hace falta para la próxima.
+ * al lado de lo que haya: la firma hace falta para la próxima. Una grabación
+ * que quedó a medias se sigue pudiendo retomar: la copia del teléfono no se
+ * esconde detrás de la firma, que se avisa al lado.
  *
  * accionClinicaDe no la decide a propósito; ésta es la regla que comparten
  * la fila y la card de Ahora.
@@ -191,5 +201,5 @@ export function firmaDelTurno(
   sinAutorizacion: boolean,
 ): "en-lugar-de-grabar" | "aviso" | null {
   if (!sinAutorizacion) return null;
-  return clinica.tipo === "grabar" ? "en-lugar-de-grabar" : "aviso";
+  return clinica.tipo === "grabar" && !clinica.retomar ? "en-lugar-de-grabar" : "aviso";
 }

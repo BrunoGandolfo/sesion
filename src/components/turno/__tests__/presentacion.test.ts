@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   AGENDADO,
   CANCELADO,
+  DESHACER_COBRO_MENSAJE,
+  DESHACER_COBRO_MENSAJE_SIN_DEUDA,
   GRABACION_SIN_TERMINAR,
   NO_VINO,
   NOTA_FALLIDA,
@@ -20,6 +22,7 @@ import { ESTADOS_TURNO } from "@/lib/constantes-turno";
 
 import {
   cobrarCierraElTurno,
+  mensajeDeshacerCobro,
   empezoSinCobrar,
   estadoDelTurno,
   estadoSinPago,
@@ -95,6 +98,13 @@ describe("pago", () => {
     expect(sePuedeDeshacerCobro({ pagoEstado })).toBe(deshace);
   });
 
+  it("deshacer el cobro de un turno que no vino o se canceló no promete deuda", () => {
+    expect(mensajeDeshacerCobro("realizado")).toBe(DESHACER_COBRO_MENSAJE);
+    expect(mensajeDeshacerCobro("programado")).toBe(DESHACER_COBRO_MENSAJE);
+    expect(mensajeDeshacerCobro("ausente")).toBe(DESHACER_COBRO_MENSAJE_SIN_DEUDA);
+    expect(mensajeDeshacerCobro("cancelado")).toBe(DESHACER_COBRO_MENSAJE_SIN_DEUDA);
+  });
+
   it("cobrar cierra sólo un turno programado", () => {
     expect(ESTADOS_TURNO.filter(cobrarCierraElTurno)).toEqual(["programado"]);
   });
@@ -150,7 +160,8 @@ describe("la nota, con las mismas palabras en todas las pantallas", () => {
 describe("la firma que falta", () => {
   it.each([
     [{ tipo: "grabar", retomar: false }, true, "en-lugar-de-grabar"],
-    [{ tipo: "grabar", retomar: true }, true, "en-lugar-de-grabar"],
+    // La copia guardada en el teléfono no queda detrás de la firma.
+    [{ tipo: "grabar", retomar: true }, true, "aviso"],
     [{ tipo: "escribiendo" }, true, "aviso"],
     [{ tipo: "ninguna" }, true, "aviso"],
     [{ tipo: "grabar", retomar: false }, false, null],

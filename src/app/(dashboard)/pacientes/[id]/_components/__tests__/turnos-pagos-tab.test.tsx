@@ -3,12 +3,14 @@
 // Turnos y pagos de la ficha: la columna de pago y el aviso de arriba dicen lo
 // mismo que el botón Cobrar (sePuedeCobrar). Un turno agendado cuya hora ya
 // pasó se puede cobrar, así que figura "Sin cobrar" y se cuenta.
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import {
   COBRAR,
   DESHACER_COBRO,
+  DESHACER_COBRO_MENSAJE,
+  DESHACER_COBRO_MENSAJE_SIN_DEUDA,
   METODO_PAGO_LABEL,
   PAGADO,
   PENDIENTE,
@@ -71,3 +73,20 @@ it.each(["realizado", "ausente", "cancelado"] as const)(
     expect(screen.getByRole("button", { name: DESHACER_COBRO })).toBeTruthy();
   },
 );
+
+// Deshacer el cobro de un turno que no vino no lo devuelve a la deuda: la
+// confirmación no puede prometer que se vuelve a cobrar.
+it.each([
+  ["realizado", DESHACER_COBRO_MENSAJE],
+  ["ausente", DESHACER_COBRO_MENSAJE_SIN_DEUDA],
+  ["cancelado", DESHACER_COBRO_MENSAJE_SIN_DEUDA],
+] as const)("la confirmación de deshacer en un turno %s dice lo que pasa", (estado, mensaje) => {
+  const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  render(
+    <TurnosPagosTab
+      turnos={[turno("t", ayer, { estado, pagoEstado: "pagado", pagoMetodo: "efectivo", pagoFecha: ayer })]}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: DESHACER_COBRO }));
+  expect(screen.getByText(mensaje)).toBeTruthy();
+});
