@@ -229,7 +229,10 @@ function TurnoRow({
   // La regla del servidor: también un programado cuya hora ya llegó (cobrarlo
   // lo cierra); nunca uno que todavía no empezó.
   const mostrarCobrar = sePuedeCobrar(turno, new Date());
-  const mostrarPagado = turno.estado === "realizado" && turno.pagoEstado === "pagado";
+  // Cobrado es cobrado en cualquier estado: si después pasó a "No vino" o se
+  // canceló, la plata sigue registrada y se puede deshacer (como en la Agenda
+  // y en el servidor, que sólo miran el pago).
+  const mostrarPagado = turno.pagoEstado === "pagado";
 
   // La confirmación se abre debajo de la fila, no en un sheet: es una
   // reversión, no un cobro, y no hay nada que elegir.

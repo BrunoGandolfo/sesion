@@ -6,7 +6,14 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
-import { COBRAR, PENDIENTE, SESIONES_SIN_COBRAR_DETALLE } from "@/lib/glosario";
+import {
+  COBRAR,
+  DESHACER_COBRO,
+  METODO_PAGO_LABEL,
+  PAGADO,
+  PENDIENTE,
+  SESIONES_SIN_COBRAR_DETALLE,
+} from "@/lib/glosario";
 import type { Turno } from "@/types/domain";
 
 import { deudaDeTurnos } from "@/app/api/_lib/domain";
@@ -46,3 +53,21 @@ it("el aviso cuenta la deuda de la cabecera: un agendado que ya pasó se puede c
   expect(aviso.textContent).toContain(SESIONES_SIN_COBRAR_DETALLE);
   expect(aviso.textContent?.match(/\$ 1\.500/g)).toHaveLength(1);
 });
+
+// C2: un turno cobrado que después pasó a "No vino" o "Cancelado" sigue
+// cobrado. La ficha lo muestra y deja deshacerlo, como la Agenda y el servidor
+// (que sólo miran pagoEstado).
+it.each(["realizado", "ausente", "cancelado"] as const)(
+  "un turno %s cobrado figura Pagado, con su método, y se puede deshacer",
+  (estado) => {
+    const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    render(
+      <TurnosPagosTab
+        turnos={[turno("t", ayer, { estado, pagoEstado: "pagado", pagoMetodo: "efectivo", pagoFecha: ayer })]}
+      />,
+    );
+    expect(screen.getByText(PAGADO)).toBeTruthy();
+    expect(screen.getByText(METODO_PAGO_LABEL.efectivo)).toBeTruthy();
+    expect(screen.getByRole("button", { name: DESHACER_COBRO })).toBeTruthy();
+  },
+);
