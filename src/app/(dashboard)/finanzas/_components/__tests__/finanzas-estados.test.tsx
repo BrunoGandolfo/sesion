@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ALGO_FALLO,
+  DATOS_SIN_ACTUALIZAR,
   FINANZAS,
   REINTENTAR,
   SIN_SESIONES_REGISTRADAS,
@@ -123,4 +124,17 @@ describe("dos chips que piden lo mismo", () => {
     expect(apiGet).toHaveBeenLastCalledWith(QUERY_ENERO, expect.anything());
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
+});
+
+// C9: Finanzas resuelve carga y error con SegunLectura, como Hoy, Cobros y
+// la Agenda: si falla una recarga con números en pantalla, el aviso es el
+// mismo de las pantallas hermanas y los números quedan, marcados como viejos.
+it("si falla una recarga con datos en pantalla, avisa como las demás pantallas y los deja", async () => {
+  apiGet.mockResolvedValueOnce(RESPUESTA_EJEMPLO).mockRejectedValueOnce(new Error("red"));
+  render(<FinanzasView />);
+  await screen.findByRole("tablist");
+  fireEvent.click(screen.getByRole("tab", { name: "Este mes" }));
+  const aviso = await screen.findByRole("alert");
+  expect(aviso.textContent).toContain(DATOS_SIN_ACTUALIZAR);
+  expect(screen.getByRole("tablist")).toBeTruthy();
 });
