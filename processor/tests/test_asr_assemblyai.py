@@ -439,3 +439,75 @@ def test_una_credencial_rechazada_en_polling_es_transitoria(http, status):
     assert (exc.value.codigo, exc.value.definitivo) == ("asr_error", False)
     assert get.call_count == 1
     delete.assert_called_once()
+
+
+# La espera del transcript (_esperar) ───────────────────────────────────────
+#
+# El camino normal no completa al primer GET: pasa por queued y processing,
+# con una pausa de ASR_POLL_SECONDS entre consulta y consulta. Las caídas de
+# red se toleran mientras no sean MAX_FALLOS_POLLING_CONSECUTIVOS seguidas.
+
+def _corte():
+    return requests.ConnectionError("sin red")
+
+
+def test_espera_en_cola_y_procesando_hasta_completar(http):
+    mocker, _, get, delete = http
+    dormir = asr_assemblyai.time.sleep
+    get.side_effect = [
+        _resp(mocker, 200, {"status": "queued"}),
+        _resp(mocker, 200, {"status": "processing"}),
+        _resp(mocker, 200, COMPLETADO),
+    ]
+
+    out = asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
+
+    assert out["asr_id"] == "tr1"
+    assert get.call_count == 3
+    assert [c.args for c in dormir.call_args_list] == [(asr_assemblyai.config.ASR_POLL_SECONDS,)] * 2
+    delete.assert_called_once()
+
+
+def test_status_error_corta_la_espera_sin_volver_a_preguntar(http, caplog):
+    mocker, _, get, delete = http
+    get.side_effect = [
+        _resp(mocker, 200, {"status": "processing"}),
+        _resp(mocker, 200, {"status": "error", "error": "Transcoding failed. File does not appear to contain audio."}),
+    ]
+
+    with pytest.raises(PipelineError) as exc:
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
+
+    assert exc.value.codigo == "asr_error"
+    assert get.call_count == 2
+    delete.assert_called_once()
+    assert "Transcoding failed" in caplog.text
+
+
+def test_cortes_de_red_sueltos_no_cortan_y_el_contador_vuelve_a_cero(http):
+    mocker, _, get, delete = http
+    n = asr_assemblyai.MAX_FALLOS_POLLING_CONSECUTIVOS - 1
+    get.side_effect = [
+        *[_corte() for _ in range(n)],
+        _resp(mocker, 200, {"status": "processing"}),
+        *[_corte() for _ in range(n)],
+        _resp(mocker, 200, COMPLETADO),
+    ]
+
+    out = asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
+
+    assert out["asr_id"] == "tr1"
+    assert get.call_count == 2 * n + 2
+    delete.assert_called_once()
+
+
+def test_cortes_de_red_seguidos_agotan_la_espera(http):
+    mocker, _, get, delete = http
+    get.side_effect = [_corte() for _ in range(asr_assemblyai.MAX_FALLOS_POLLING_CONSECUTIVOS)]
+
+    with pytest.raises(PipelineError) as exc:
+        asr_assemblyai.transcribir(__import__("io").BytesIO(b"audio"))
+
+    assert (exc.value.codigo, exc.value.definitivo) == ("asr_error", False)
+    assert get.call_count == asr_assemblyai.MAX_FALLOS_POLLING_CONSECUTIVOS
+    delete.assert_called_once()
