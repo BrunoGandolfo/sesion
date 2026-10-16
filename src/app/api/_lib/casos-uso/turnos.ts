@@ -204,10 +204,15 @@ export async function actualizarTurno({
     });
 
     if (count === 0) {
-      // Bajo el lock la fila existía: si no se escribió es porque la cobraron
-      // en el medio.
-      if (cambiaEstado) throw new ApiError(MENSAJE_TURNO_PAGADO, 409);
-      throw new ApiError("Turno no encontrado", 404);
+      // No se escribió: se relee para contestar lo que pasó. Si la cobraron
+      // en el medio y el cobro ya la dejó en el estado pedido (marcar
+      // realizado al terminar de subir mientras se cobra desde Hoy), no hay
+      // nada que rechazar.
+      const releido = cambiaEstado ? await tx.turno.findFirst({ where: { id: turnoId, organizationId } }) : null;
+      if (!releido) throw new ApiError("Turno no encontrado", 404);
+      const soloEstado = Object.entries(cambios).every(([campo, valor]) => campo === "estado" || valor === undefined);
+      if (soloEstado && releido.estado === cambios.estado) return releido;
+      throw new ApiError(MENSAJE_TURNO_PAGADO, 409);
     }
 
     const updated = await tx.turno.findUniqueOrThrow({ where: { id: turnoId } });
