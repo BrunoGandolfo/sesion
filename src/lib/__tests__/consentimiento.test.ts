@@ -223,9 +223,8 @@ describe("cada frase tiene el hecho que la respalda", () => {
     const estados = codigo("src/lib/sesion-clinica/estados.ts");
     expect([...estados.matchAll(/desde: \[([^\]]*)\]/g)].filter((m) => m[1].includes('"aprobada"'))).toHaveLength(1);
     expect(estados).toMatch(/reintentar_feedback: \{\s+actor: "usuaria",\s+desde: \["revision", "aprobada"\],\s+hacia: "mismo"/);
-    const rutaConsentimiento = codigo("src/app/api/pacientes/[id]/consentimiento/route.ts");
-    const select = rutaConsentimiento.slice(rutaConsentimiento.indexOf("const consentimientoSelect"), rutaConsentimiento.indexOf("} as const;"));
-    expect(select).not.toMatch(/textoCompleto|firmaDigital/);
+    // Que la app no devuelve el texto firmado ni la firma lo prueba "la ruta
+    // de consentimiento" más abajo, con la consulta que hace el caso de uso.
     expect(texto).toContain("Desde la aplicación no se pueden borrar tus datos, corregir una nota ya aprobada ni ver esta autorización firmada.");
     expect(texto).not.toContain("Tenés derecho");
     expect(texto).not.toMatch(/que se eliminen|acceder a tus datos/);
@@ -258,7 +257,21 @@ const baseDeDatos = vi.hoisted(() => ({
   /** Lo que el GET encuentra firmado (findFirst), y con qué `where` preguntó. */
   firmado: null as null | { id: string; pacienteId: string; firmadoEn: Date; textoVersion: string; revocadoEn: Date | null },
   ultimoWhere: null as null | Record<string, unknown>,
+  /** Las columnas que cada consulta de consentimientos pidió. */
+  selects: [] as Array<Record<string, unknown>>,
 }));
+
+/** Como la base: la fila tiene el texto y la firma cifrados, y sale sólo lo
+ *  que el `select` pide. Sin `select`, sale todo. */
+const COLUMNAS_FIRMADAS = {
+  textoCompletoEncrypted: Buffer.from("ENC2-texto"),
+  firmaDigitalEncrypted: Buffer.from("ENC2-firma"),
+};
+const segunSelect = vi.hoisted(() => (fila: Record<string, unknown>, select?: Record<string, unknown>) => {
+  baseDeDatos.selects.push(select ?? {});
+  if (!select) return fila;
+  return Object.fromEntries(Object.entries(fila).filter(([k]) => select[k]));
+});
 
 vi.mock("@/app/api/_lib/auth", () => ({
   getOrganizationId: async () => sesionActual.organizationId,
@@ -287,9 +300,9 @@ vi.mock("@/lib/db", () => {
     configuracion: { findUnique: async () => ({ nombreProfesional: "Lic. Ana Pérez", direccion: "Av. 18 de Julio 1234, Montevideo" }) },
     consentimientoGrabacion: {
       updateMany: revocarVigentes,
-      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+      findFirst: async ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
         baseDeDatos.ultimoWhere = where;
-        return baseDeDatos.firmado;
+        return baseDeDatos.firmado && segunSelect({ ...COLUMNAS_FIRMADAS, ...baseDeDatos.firmado }, select);
       },
     },
     eventoAuditoria: {
@@ -302,9 +315,9 @@ vi.mock("@/lib/db", () => {
         eventoAuditoria: eventoAuditoriaEnLaTransaccion,
         consentimientoGrabacion: {
           updateMany: revocarVigentes,
-          create: async ({ data }: { data: Record<string, unknown> }) => {
+          create: async ({ data, select }: { data: Record<string, unknown>; select?: Record<string, unknown> }) => {
             baseDeDatos.creados.push(data);
-            return { id: data.id, pacienteId: "pac-1", firmadoEn: new Date("2026-03-01T12:00:00Z"), textoVersion: CONSENTIMIENTO_VERSION, revocadoEn: null };
+            return segunSelect({ ...data, firmadoEn: new Date("2026-03-01T12:00:00Z"), revocadoEn: null }, select);
           },
         },
       }),
@@ -335,6 +348,24 @@ describe("la ruta de consentimiento", () => {
     baseDeDatos.paciente = { id: "pac-1", nombre: "María", apellido: "González" };
     baseDeDatos.firmado = null;
     baseDeDatos.ultimoWhere = null;
+    baseDeDatos.selects = [];
+  });
+
+  it("ni el GET ni la firma traen el texto firmado ni la firma: la app no puede mostrarlos", async () => {
+    baseDeDatos.firmado = { id: "c-28", pacienteId: "pac-1", firmadoEn: new Date("2026-03-01T12:00:00Z"), textoVersion: CONSENTIMIENTO_VERSION, revocadoEn: null };
+    const leida = await GET(new Request("http://localhost/x"), params);
+    const firmada = await POST(pedidoFirma(), params);
+    expect([leida.status, firmada.status]).toEqual([200, 201]);
+
+    expect(baseDeDatos.selects).toHaveLength(2);
+    for (const select of baseDeDatos.selects) {
+      expect(Object.keys(select).length).toBeGreaterThan(0);
+      expect(Object.keys(select).join(" ")).not.toMatch(/textoCompleto|firmaDigital/);
+    }
+    for (const cuerpo of [await leida.text(), await firmada.text()]) {
+      expect(cuerpo).toContain('"consentimiento":{');
+      expect(cuerpo).not.toMatch(/textoCompleto|firmaDigital|ENC2/);
+    }
   });
 
   it("una firma de la versión 1.1 sigue vigente: el GET la devuelve vigente y solo sugiere re-firmar", async () => {
