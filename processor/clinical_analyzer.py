@@ -172,6 +172,20 @@ def _llamar_anthropic(
         llamada["error"] = codigo
         return PipelineError(codigo, mensaje)
 
+    inicio = time.monotonic()
+    try:
+        response = _pedir(system_prompt, user_content, schema, max_tokens, nombre)
+    except (anthropic.APITimeoutError, anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+        llamada["ms"] = ms_desde(inicio)
+        raise fallar(*_clasificar_error(e, llamada)) from e
+    llamada["ms"] = ms_desde(inicio)
+
+    pensamiento = _anotar_uso(llamada, response, nombre, max_tokens)
+    return _json_de(response, fallar, max_tokens, pensamiento)
+
+
+def _pedir(system_prompt: str, user_content: str, schema: dict, max_tokens: int, nombre: str):
+    """El messages.create, con structured output. Las excepciones del SDK suben tal cual."""
     output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
     # `effort` vive dentro de output_config en la API actual. Los niveles
     # aceptados dependen del modelo; vacio = no enviar y usar el default.
@@ -179,25 +193,28 @@ def _llamar_anthropic(
         output_config["effort"] = config.LLM_EFFORT
 
     logger.info(f"Llamando Anthropic ({config.LLM_MODEL_ID}, effort={config.LLM_EFFORT or 'default'}, {nombre})...")
-    inicio = time.monotonic()
-    try:
-        response = _cliente().messages.create(
-            model=config.LLM_MODEL_ID,
-            max_tokens=max_tokens,
-            # Sin cache_control: con este trafico la cache casi nunca se lee
-            # (TTL de 5 min, sesiones mas separadas que eso, un system prompt
-            # distinto por llamada) y cada escritura cuesta 1,25x la entrada.
-            # Forense 04-worker.md §8. uso.llamadas[].cacheLectura lo confirma.
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_content}],
-            output_config=output_config,
-        )
-    except anthropic.APITimeoutError as e:
-        llamada["ms"] = ms_desde(inicio)
-        logger.error(f"Anthropic timeout tras {llamada['ms']} ms (timeout {config.LLM_TIMEOUT_SECONDS}s)")
-        raise fallar("llm_timeout", "Anthropic no respondio a tiempo") from e
-    except anthropic.APIStatusError as e:
-        llamada["ms"] = ms_desde(inicio)
+    return _cliente().messages.create(
+        model=config.LLM_MODEL_ID,
+        max_tokens=max_tokens,
+        # Sin cache_control: con este trafico la cache casi nunca se lee
+        # (TTL de 5 min, sesiones mas separadas que eso, un system prompt
+        # distinto por llamada) y cada escritura cuesta 1,25x la entrada.
+        # Forense 04-worker.md §8. uso.llamadas[].cacheLectura lo confirma.
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_content}],
+        output_config=output_config,
+    )
+
+
+def _clasificar_error(e: Exception, llamada: dict) -> tuple[str, str]:
+    """
+    (codigo, mensaje publico) de un fallo de transporte del SDK. Los tres son
+    transitorios. APITimeoutError va primero: es subclase de APIConnectionError.
+    """
+    if isinstance(e, anthropic.APITimeoutError):
+        logger.error(f"Anthropic timeout tras {llamada.get('ms')} ms (timeout {config.LLM_TIMEOUT_SECONDS}s)")
+        return "llm_timeout", "Anthropic no respondio a tiempo"
+    if isinstance(e, anthropic.APIStatusError):
         request_id = getattr(e, "request_id", None)
         if isinstance(request_id, str):
             llamada["requestId"] = request_id
@@ -205,13 +222,16 @@ def _llamar_anthropic(
             f"Anthropic HTTP {e.status_code} (request_id={request_id}): "
             f"{mensaje_error_api(e) or 'sin mensaje en el cuerpo'}"
         )
-        raise fallar("llm_error", f"Anthropic respondio {e.status_code}") from e
-    except anthropic.APIConnectionError as e:
-        llamada["ms"] = ms_desde(inicio)
-        logger.error(f"Anthropic sin conexion ({type(e).__name__})")
-        raise fallar("llm_error", "Anthropic no responde") from e
-    llamada["ms"] = ms_desde(inicio)
+        return "llm_error", f"Anthropic respondio {e.status_code}"
+    logger.error(f"Anthropic sin conexion ({type(e).__name__})")
+    return "llm_error", "Anthropic no responde"
 
+
+def _anotar_uso(llamada: dict, response, nombre: str, max_tokens: int) -> int | None:
+    """
+    Copia a `llamada` lo que costo el pedido (uso.py) y lo deja en el log.
+    Devuelve los tokens de razonamiento, o None si no vinieron.
+    """
     usage = response.usage
     # `tope` es lo unico que distingue las tres llamadas en el log (la nota y
     # el feedback van con el suyo, el contexto con el comun). Sin el, todas las
@@ -245,9 +265,16 @@ def _llamar_anthropic(
         f"pensamiento={pensamiento} "
         f"cache_read={getattr(usage, 'cache_read_input_tokens', None)} "
         f"cache_write={getattr(usage, 'cache_creation_input_tokens', None)} "
-        f"stop={response.stop_reason} ms={llamada['ms']}"
+        f"stop={response.stop_reason} ms={llamada.get('ms')}"
     )
+    return pensamiento
 
+
+def _json_de(response, fallar: Callable[[str, str], PipelineError], max_tokens: int, pensamiento) -> dict:
+    """
+    El JSON de la respuesta, o el PipelineError de por que no se puede usar:
+    truncada, rechazada, sin texto o con un texto que no es JSON.
+    """
     if response.stop_reason == "max_tokens":
         # El detalle dice contra QUE techo se corto y cuantos de esos tokens se
         # fueron en razonar. Sin el segundo numero el diagnostico es imposible:
