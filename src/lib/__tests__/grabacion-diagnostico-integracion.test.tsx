@@ -19,6 +19,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vi
 import { TIPOS_EVENTO_GRABACION } from "@/lib/sesion-clinica/schema";
 
 import { conectarArea2, crearOrg, crearSesion, limpiarOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { RecorderFalso, recorders } from "@/components/grabacion/__tests__/recorder-falso";
 
 const estado = vi.hoisted(() => ({ base: null as unknown as BaseArea2, actor: { organizationId: "", userId: "" } }));
 
@@ -43,22 +44,7 @@ vi.mock("@/lib/grabacion-storage", () => ({
 }));
 
 let org: Org;
-let recorder: RecorderFalso;
 
-class RecorderFalso {
-  state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm;codecs=opus";
-  ondataavailable: ((evento: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  constructor() { RecorderFalso.registrar(this); }
-  static registrar(instancia: RecorderFalso) { recorder = instancia; }
-  static isTypeSupported() { return true; }
-  start() { this.state = "recording"; }
-  pause() { this.state = "paused"; }
-  resume() { this.state = "recording"; }
-  stop() { this.state = "inactive"; this.ondataavailable?.({ data: new Blob(["aa"]) }); this.onstop?.(); }
-}
 
 beforeAll(() => { estado.base = conectarArea2(); });
 afterAll(async () => { await estado.base.prisma.$disconnect(); });
@@ -66,6 +52,7 @@ afterAll(async () => { await estado.base.prisma.$disconnect(); });
 beforeEach(async () => {
   org = await crearOrg(estado.base.prisma);
   estado.actor = { organizationId: org.orgId, userId: org.userId };
+  recorders.length = 0;
   vi.stubGlobal("MediaRecorder", RecorderFalso);
   const pista = { stop() {}, onended: null, onmute: null, onunmute: null };
   vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: async () => ({ getAudioTracks: () => [pista], getTracks: () => [pista] }) } });
@@ -113,7 +100,7 @@ test("lo que pasó en el teléfono queda en eventos_auditoria.detalle, sin texto
   const esperar = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
   const grabar = async (chunks: number) => {
     for (let i = 0; i < chunks; i += 1) {
-      await act(async () => { vi.advanceTimersByTime(1000); recorder.ondataavailable?.({ data: new Blob(["audio"]) }); });
+      await act(async () => { vi.advanceTimersByTime(1000); recorders.at(-1)?.emitirChunk(); });
     }
   };
   await act(async () => { await result.current.iniciar(turnoId); });

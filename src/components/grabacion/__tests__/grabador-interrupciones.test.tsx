@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGrabador, type DatosGrabacion, type EstadoGrabador } from "@/components/grabacion/GrabadorSesion";
 import { EN_CURSO, enCurso } from "@/components/grabacion/grabador-tipos";
+import { RecorderFalso, recorders } from "./recorder-falso";
 import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { guardarChunk, limpiarGrabacion } from "@/lib/grabacion-storage";
 import { MENSAJE_ERROR_GRABADOR } from "@/app/(dashboard)/grabar/[turnoId]/_components/errores-grabacion";
@@ -31,25 +32,9 @@ vi.mock("@/lib/grabacion-storage", () => ({
 }));
 
 const TURNO = "turno-de-prueba";
-const recorders: RecorderFalso[] = [];
 let pista: PistaFalsa;
 let pedidosDeMicrofono = 0;
 
-class RecorderFalso {
-  state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm;codecs=opus";
-  ondataavailable: ((evento: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  pause = vi.fn(() => { this.state = "paused"; });
-  resume = vi.fn(() => { this.state = "recording"; });
-  stop = vi.fn(() => { this.state = "inactive"; this.emitirChunk(); this.onstop?.(); });
-  constructor() { RecorderFalso.registrar(this); }
-  static registrar(instancia: RecorderFalso) { recorders.push(instancia); }
-  static isTypeSupported() { return true; }
-  start() { this.state = "recording"; }
-  emitirChunk(bytes = 5) { this.ondataavailable?.({ data: new Blob(["a".repeat(bytes)]) }); }
-}
 
 class PistaFalsa {
   onended: (() => void) | null = null;

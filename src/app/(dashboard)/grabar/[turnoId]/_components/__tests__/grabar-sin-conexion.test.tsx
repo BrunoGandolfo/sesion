@@ -10,6 +10,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, GRABACION_SIN_CONEXION_SIN_COPIA, MIC_SIN_PERMISO, REINTENTAR } from "@/lib/glosario";
+import { RecorderFalso, recorders } from "@/components/grabacion/__tests__/recorder-falso";
 import { claveSinTurno } from "@/lib/grabacion-clave";
 
 import { GrabarView } from "../grabar-view";
@@ -56,21 +57,6 @@ vi.mock("@/lib/grabacion-storage", () => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 // ─── El navegador ───────────────────────────────────────────────────────────
-const recorders: RecorderFalso[] = [];
-class RecorderFalso {
-  state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm;codecs=opus";
-  ondataavailable: ((evento: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  constructor() { recorders.push(this); }
-  static isTypeSupported() { return true; }
-  start() { this.state = "recording"; }
-  pause() { this.state = "paused"; }
-  resume() { this.state = "recording"; }
-  stop() { this.state = "inactive"; this.emitirChunk(); this.onstop?.(); }
-  emitirChunk() { this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) }); }
-}
 const getUserMedia = vi.fn();
 
 // ─── La red ─────────────────────────────────────────────────────────────────
