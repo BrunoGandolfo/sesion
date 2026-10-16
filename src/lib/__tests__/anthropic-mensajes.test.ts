@@ -96,6 +96,30 @@ describe("crearMensajeStreaming", () => {
     await expect(flujo.fragmentos[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(ErrorAnthropic);
   }, 1000);
 
+  /** Un SSE de una ronda con este texto y este stop_reason. */
+  const sse = (texto: string, stopReason: string) => [
+    'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude-haiku-5-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":12,"output_tokens":1}}}\n\n',
+    'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"","citations":null}}\n\n',
+    `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":${JSON.stringify(texto)}}}\n\n`,
+    'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+    `event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"${stopReason}","stop_sequence":null},"usage":{"output_tokens":1024}}\n\n`,
+    'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+  ].join("");
+
+  it.each(["max_tokens", "refusal"])("E2: una respuesta cortada (%s) es un error, como en Lux, no una respuesta completa", async (stopReason) => {
+    const fetchImpl: FetchLike = async () =>
+      new Response(sse("Para cobrar, entrá a", stopReason), { headers: { "content-type": "text/event-stream" } });
+    const flujo = await crearMensajeStreaming(PEDIDO, { apiKey: API_KEY, fetchImpl });
+    const fragmentos: string[] = [];
+    const error = await atrapar<ErrorAnthropic>((async () => {
+      for await (const fragmento of flujo.fragmentos) fragmentos.push(fragmento);
+    })());
+    expect(fragmentos).toEqual(["Para cobrar, entrá a"]);
+    expect(error).toBeInstanceOf(ErrorAnthropic);
+    expect(error.codigo).toBe("incompleta");
+    await expect(flujo.resultado).rejects.toMatchObject({ codigo: "incompleta" });
+  });
+
   it("entrega los text_delta y resuelve las métricas al cerrar", async () => {
     const eventos = [
       'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude-haiku-5-5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":12,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":20000}}}\n\n',

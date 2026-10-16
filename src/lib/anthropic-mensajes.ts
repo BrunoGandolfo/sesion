@@ -123,6 +123,15 @@ function cliente(opciones: OpcionesMensajes): Anthropic {
   });
 }
 
+/** Una respuesta cortada por el techo de tokens o por un rechazo no
+ *  terminó: se dice como un corte, no como una respuesta completa que
+ *  después vuelve en el historial. Vale para Lupita y para Lux. */
+function exigirTerminada(motivo: Message["stop_reason"]): void {
+  if (motivo === "max_tokens" || motivo === "refusal") {
+    throw new ErrorAnthropic(`respuesta incompleta (stop_reason=${motivo})`, undefined, "incompleta");
+  }
+}
+
 function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMensajes {
   const usage = mensaje.usage;
   const texto = mensaje.content
@@ -143,6 +152,7 @@ function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMe
       `respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`, undefined, "sin_texto",
     );
   }
+  exigirTerminada(mensaje.stop_reason);
 
   return {
     texto,
@@ -401,12 +411,7 @@ export async function crearConversacionConHerramientas(
           if (textoRonda.trim() === "") {
             throw new ErrorAnthropic(`respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`, undefined, "sin_texto");
           }
-          // Una respuesta cortada por el techo de tokens o por un rechazo no
-          // terminó: se dice como un corte, no como una respuesta completa
-          // que después vuelve en el historial.
-          if (mensaje.stop_reason === "max_tokens" || mensaje.stop_reason === "refusal") {
-            throw new ErrorAnthropic(`respuesta incompleta (stop_reason=${mensaje.stop_reason})`, undefined, "incompleta");
-          }
+          exigirTerminada(mensaje.stop_reason);
           completar({
             texto: texto.trim(),
             ...uso,
