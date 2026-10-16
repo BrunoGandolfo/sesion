@@ -12,7 +12,7 @@ import {
   type SesionClinicaApiBase,
   type SesionClinicaEnsamblada,
 } from "@/hooks/useSesionClinicaPolling";
-import { apiGet } from "@/lib/api-client";
+import { leerSesionDelTurno } from "@/lib/grabacion-sesion";
 import type { Turno } from "@/types/domain";
 
 interface UseGrabacionSesionOptions {
@@ -57,9 +57,7 @@ export function useGrabacionSesion({
     (async () => {
       let sesion: SesionClinicaEnsamblada | null = null;
       try {
-        const fila = await apiGet<SesionClinicaApiBase | null>(
-          `/api/sesion-clinica?turnoId=${turnoId}`,
-        );
+        const fila = await leerSesionDelTurno<SesionClinicaApiBase>(turnoId);
         sesion = fila ? normalizarSesionClinica(fila) : null;
       } catch {
         sesion = null;

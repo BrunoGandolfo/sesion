@@ -29,11 +29,11 @@ import {
   type EstadoGrabador,
 } from "@/components/grabacion/GrabadorSesion";
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
-import { ApiClientError, apiGet, apiPost, mensajeParaElla } from "@/lib/api-client";
+import { ApiClientError, apiPost, mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { claveSinTurno, esClaveSinTurnoDe, inicioDeClaveSinTurno, turnoDeLaGrabacion } from "@/lib/grabacion-clave";
+import { admiteAudio, leerSesionDelTurno, type SesionDelTurno } from "@/lib/grabacion-sesion";
 import { asociarTurno, limpiarGrabacion } from "@/lib/grabacion-storage";
-import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import {
   marcarTurnoRealizado,
   subirAudio,
@@ -59,7 +59,6 @@ export type Fase =
   | "turno-sin-marcar";
 
 type TurnoApi = { id: string; fecha: string };
-type SesionApi = { id: string; estado: string };
 
 /** Qué pantalla toca. La precedencia: lo que está subiendo, después el
  *  resultado de la subida, después la grabación en curso, el error del
@@ -132,13 +131,11 @@ export function useFlujoGrabacion({
    * empezar a grabar.
    */
   const asegurarSesion = React.useCallback(async (turno: string): Promise<string> => {
-    let sesion = await apiGet<SesionApi | null>(
-      `/api/sesion-clinica?turnoId=${turno}`,
-    );
+    let sesion = await leerSesionDelTurno(turno);
 
     if (!sesion) {
       const inicio = inicioRef.current;
-      sesion = await apiPost<SesionApi>("/api/sesion-clinica", {
+      sesion = await apiPost<SesionDelTurno>("/api/sesion-clinica", {
         turnoId: turno,
         ...(inicio ? { iniciadaEn: inicio.toISOString() } : {}),
       });
@@ -249,14 +246,8 @@ export function useFlujoGrabacion({
         // reintentar fallaría igual cada vez. Si no se puede leer, se
         // reintenta como siempre.
         if (turno && esRechazoDelServidor(error)) {
-          const sesion = await apiGet<SesionApi | null>(
-            `/api/sesion-clinica?turnoId=${turno}`,
-          ).catch(() => undefined);
-          const admiteAudio =
-            sesion === undefined ||
-            (sesion !== null &&
-              (ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado));
-          if (!admiteAudio) {
+          const sesion = await leerSesionDelTurno(turno).catch(() => undefined);
+          if (sesion === null || (sesion !== undefined && !admiteAudio(sesion.estado))) {
             setErrorPantalla(error.message);
             setFase("rechazada");
             return;
@@ -323,9 +314,9 @@ export function useFlujoGrabacion({
   React.useEffect(() => {
     if (pendienteSeg === null || !turnoDeLaPendiente) return;
     let cancelado = false;
-    void apiGet<SesionApi | null>(`/api/sesion-clinica?turnoId=${turnoDeLaPendiente}`)
+    void leerSesionDelTurno(turnoDeLaPendiente)
       .then((sesion) => {
-        if (!cancelado && sesion && !(ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado)) descartarPendiente();
+        if (!cancelado && sesion && !admiteAudio(sesion.estado)) descartarPendiente();
       })
       .catch(() => {});
     return () => {

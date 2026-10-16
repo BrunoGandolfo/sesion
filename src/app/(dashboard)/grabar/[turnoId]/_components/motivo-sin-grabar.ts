@@ -4,7 +4,7 @@
 import { MENSAJE_GRABAR_OTRO_DIA } from "@/app/api/_lib/casos-uso/audio";
 import { sePuedeGrabar } from "@/app/api/_lib/domain";
 import { SESION_EN_CAMINO, TURNO_SIN_SESION_PARA_GRABAR } from "@/lib/glosario";
-import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
+import { admiteAudio } from "@/lib/grabacion-sesion";
 
 /**
  * Por qué este turno no se puede grabar, o null si se puede. La misma regla
@@ -20,7 +20,7 @@ export function motivoSinGrabar(
   ahora: Date,
 ): string | null {
   const sesion = turno.sesionClinica;
-  if (sesion && (ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado)) return null;
+  if (sesion && admiteAudio(sesion.estado)) return null;
   // Una sesión ya cerrada (se subió, se está escribiendo, se aprobó, falló)
   // no admite otro audio. Antes lo decía el servidor al tocar Grabar; desde
   // que grabar no espera a la red, se dice acá, antes de ofrecer el botón: si
