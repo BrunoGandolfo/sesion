@@ -29,6 +29,7 @@
 // ============================================
 
 import { TIMESLICE_MS } from "@/lib/grabacion-captura";
+import { abridorDeBase, esperarRequest, esperarTransaccion, hayIndexedDB } from "@/lib/indexeddb";
 
 const DB_NOMBRE = "sesion-grabaciones";
 const DB_VERSION = 1;
@@ -87,81 +88,14 @@ export interface GrabacionPendiente {
   pacienteId: string | null;
 }
 
-function indexedDBDisponible(): boolean {
-  try {
-    return typeof indexedDB !== "undefined" && indexedDB !== null;
-  } catch {
-    return false;
+const abrirDB = abridorDeBase(DB_NOMBRE, DB_VERSION, (db) => {
+  if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
+    db.createObjectStore(STORE_CHUNKS, { keyPath: ["sesionClinicaId", "indice"] });
   }
-}
-
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function abrirDB(): Promise<IDBDatabase> {
-  if (dbPromise) {
-    return dbPromise;
+  if (!db.objectStoreNames.contains(STORE_META)) {
+    db.createObjectStore(STORE_META, { keyPath: "sesionClinicaId" });
   }
-
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NOMBRE, DB_VERSION);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-
-      if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
-        db.createObjectStore(STORE_CHUNKS, {
-          keyPath: ["sesionClinicaId", "indice"],
-        });
-      }
-
-      if (!db.objectStoreNames.contains(STORE_META)) {
-        db.createObjectStore(STORE_META, { keyPath: "sesionClinicaId" });
-      }
-    };
-
-    request.onsuccess = () => {
-      const db = request.result;
-
-      // Si otra pestaña necesita actualizar la versión, soltamos la conexión.
-      db.onversionchange = () => {
-        db.close();
-        dbPromise = null;
-      };
-
-      resolve(db);
-    };
-
-    request.onerror = () => {
-      reject(request.error ?? new Error("No se pudo abrir IndexedDB"));
-    };
-
-    request.onblocked = () => {
-      reject(new Error("Apertura de IndexedDB bloqueada"));
-    };
-  });
-
-  // Si la apertura falla, permitir reintentos futuros.
-  dbPromise.catch(() => {
-    dbPromise = null;
-  });
-
-  return dbPromise;
-}
-
-function esperarRequest<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IDBRequest falló"));
-  });
-}
-
-function esperarTransaccion(tx: IDBTransaction): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Transacción falló"));
-    tx.onabort = () => reject(tx.error ?? new Error("Transacción abortada"));
-  });
-}
+});
 
 function rangoChunks(sesionClinicaId: string): IDBKeyRange {
   return IDBKeyRange.bound(
@@ -186,7 +120,7 @@ export async function iniciarSesionGrabacion(
   mimeType: string,
   pacienteId?: string,
 ): Promise<boolean> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return false;
   }
   pedirAlmacenamientoPersistente();
@@ -227,7 +161,7 @@ export async function guardarPausas(
   sesionClinicaId: string,
   pausas: readonly Pausa[],
 ): Promise<void> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return;
   }
 
@@ -263,7 +197,7 @@ export async function guardarChunk(
   indice: number,
   chunk: Blob,
 ): Promise<boolean> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return false;
   }
 
@@ -302,7 +236,7 @@ function pedirAlmacenamientoPersistente(): void {
  * el navegador cree otro turno.
  */
 export async function asociarTurno(sesionClinicaId: string, turnoId: string): Promise<void> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return;
   }
 
@@ -330,7 +264,7 @@ export async function asociarTurno(sesionClinicaId: string, turnoId: string): Pr
 export async function recuperarGrabacionPendiente(
   coincide: (sesionClinicaId: string, turnoId: string | null, pacienteId: string | null) => boolean = () => true,
 ): Promise<GrabacionPendiente | null> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return null;
   }
 
@@ -395,7 +329,7 @@ export async function recuperarGrabacionPendiente(
  * upload exitoso o un descarte explícito del usuario.
  */
 export async function limpiarGrabacion(sesionClinicaId: string): Promise<void> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return;
   }
 
