@@ -141,8 +141,10 @@ export default defineConfig({
     // Los tests de integración comparten UNA base y la vacían entre casos:
     // los archivos deben correr de a uno para no pisarse. Con base exclusiva
     // se podría dar un esquema por worker, pero es complejidad que hoy no
-    // compra nada.
-    fileParallelism: false,
+    // compra nada. Los unitarios no tocan la base y corren en paralelo: en
+    // serie se iban 10 minutos importando módulos de a uno (revisión G,
+    // 16-oct-2026). `npm test` sin suite incluye la integración: en serie.
+    fileParallelism: suite === 'unit',
     // Los casos de integración contra un Postgres real (migrar, restaurar un
     // respaldo) pasan de los 5 s del default.
     testTimeout: 30_000,
