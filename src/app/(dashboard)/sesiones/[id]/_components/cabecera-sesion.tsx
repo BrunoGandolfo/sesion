@@ -16,7 +16,7 @@ import { Chip } from "@/components/ui";
 import { formatearFechaLargaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
-import { NOTA_CLINICA, NOTA_GUARDADA, PARA_REVISAR } from "./textos";
+import { NOTA_CLINICA, NOTA_LISTA, PARA_REVISAR } from "./textos";
 
 interface CabeceraSesionProps {
   sesion: SesionClinicaResponse;
@@ -49,7 +49,7 @@ export function CabeceraSesion({ sesion, rotulo }: CabeceraSesionProps) {
           <time dateTime={inicio?.toISOString()} className="font-sans text-[14px] text-ink-500">{fecha}</time>
         ) : null}
         <Chip variant={aprobada ? "sage" : "gold"}>
-          {aprobada ? NOTA_GUARDADA : PARA_REVISAR}
+          {aprobada ? NOTA_LISTA : PARA_REVISAR}
         </Chip>
       </div>
     </header>

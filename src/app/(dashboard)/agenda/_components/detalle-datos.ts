@@ -6,9 +6,13 @@
 // y la acción clínica es accionClinicaDe, las mismas que usan el servidor,
 // la fila de la agenda y la card de Ahora.
 
-import { sePuedeCobrar } from "@/app/api/_lib/domain";
+import { sePuedeCobrar, turnoSigueProgramado } from "@/app/api/_lib/domain";
+import {
+  cobrarCierraElTurno,
+  seGrabaEnEsteEstado,
+  sePuedeDeshacerCobro,
+} from "@/components/turno/presentacion";
 import { apiGet } from "@/lib/api-client";
-import { AGENDADO, CANCELADO, NO_VINO, PAGADO, PENDIENTE } from "@/lib/glosario";
 import {
   accionClinicaDe,
   type AccionClinica,
@@ -42,21 +46,6 @@ export async function leerRecordatorio(
   return lista[0] ?? null;
 }
 
-// El mismo estado que muestra la fila de la agenda (session-row), con las
-// mismas palabras: acá decía "Cobrado"/"Sin cobrar" y allá "Pagado"/
-// "Pendiente". Es un turno solo y se llama de una sola manera.
-export function chipDe(turno: TurnoConPaciente) {
-  if (turno.estado === "cancelado")
-    return { variant: "neutral" as const, label: CANCELADO };
-  if (turno.estado === "ausente")
-    return { variant: "neutral" as const, label: NO_VINO };
-  if (turno.pagoEstado === "pagado")
-    return { variant: "sage" as const, label: PAGADO };
-  if (turno.estado === "realizado")
-    return { variant: "terracotta" as const, label: PENDIENTE };
-  return { variant: "gold" as const, label: AGENDADO };
-}
-
 export interface AccionesDelDetalle {
   /** La sesión con que se decide: la leída, o la que trae el turno de la
    *  agenda mientras la lectura no contestó. */
@@ -64,6 +53,8 @@ export interface AccionesDelDetalle {
   clinica: AccionClinica;
   puedeCobrar: boolean;
   puedeDeshacerCobro: boolean;
+  /** Cobrar lo deja realizado (un programado). */
+  cobrarCierra: boolean;
   /** Programado o realizado: el turno muestra el brief y las acciones. */
   puedeGrabarORevisar: boolean;
   /** Reprogramar, No vino y Cancelar. */
@@ -82,7 +73,7 @@ export function accionesDelDetalle(
   ahora: Date,
 ): AccionesDelDetalle {
   const sesionDatos = sesion !== "sin-dato" ? sesion : (turno.sesionClinica ?? null);
-  const esProgramado = turno.estado === "programado";
+  const esProgramado = turnoSigueProgramado(turno.estado);
   return {
     sesion: sesionDatos,
     // La acción clínica, la misma que la fila y la card de Ahora: una subida
@@ -91,10 +82,11 @@ export function accionesDelDetalle(
     clinica: accionClinicaDe(sesionDatos, turno, ahora),
     // No se ofrece Cobrar a un turno cuya hora no llegó.
     puedeCobrar: sePuedeCobrar(turno, ahora),
-    // Se puede deshacer mientras el turno siga cobrado. Es una reversión: el
-    // turno vuelve a quedar sin cobrar y se puede volver a cobrar.
-    puedeDeshacerCobro: turno.pagoEstado === "pagado",
-    puedeGrabarORevisar: esProgramado || turno.estado === "realizado",
+    // Se puede deshacer mientras el turno siga cobrado, en cualquier estado.
+    // Es una reversión: el turno vuelve a quedar sin cobrar.
+    puedeDeshacerCobro: sePuedeDeshacerCobro(turno),
+    cobrarCierra: cobrarCierraElTurno(turno.estado),
+    puedeGrabarORevisar: seGrabaEnEsteEstado(turno.estado),
     esProgramado,
   };
 }

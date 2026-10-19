@@ -7,7 +7,7 @@
 // resumen se cortaba a dos líneas sin decirlo.
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { GRABAR_SESION, PREPARAR_SESION, REVISAR_NOTA, SESION_DE_HOY } from "@/lib/glosario";
 import type { SesionClinicaEnsamblada } from "@/hooks/useSesionClinicaPolling";
@@ -104,6 +104,11 @@ describe("la lista de sesiones", () => {
   });
 
   it("el turno de hoy sin nota todavía también es una fila de la lista, la primera, y se cuenta", async () => {
+    // Grabar se ofrece sólo el día del turno (accionClinicaDe, sePuedeGrabar):
+    // el reloj es el de ese domingo.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-20T12:00:00.000Z"));
+    onTestFinished(() => { vi.useRealTimers(); });
     servir(DOCS.slice(1));
     montar({ turnoHoy: TURNO_HOY, sesionHoy: null });
     await screen.findByText("Resumen de tarde");

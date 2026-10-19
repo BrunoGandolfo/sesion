@@ -22,6 +22,8 @@ import {
 } from "@/lib/glosario";
 import type { TurnoCreado, TurnoConPaciente } from "@/types/domain";
 
+import { SegunLectura, type Carga } from "../../_components/segun-lectura";
+
 import { AgendaHeader } from "./agenda-header";
 import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
@@ -35,8 +37,6 @@ import {
   moverAncla,
   type AgendaViewMode,
 } from "./datos";
-
-type LoadState = "idle" | "loading" | "error";
 
 /** El respiro del check de D9 no cierra nada: el sheet ya se fue solo con
  *  onUpdated y la marca vive en la fila. Estable, para no reiniciar el
@@ -105,7 +105,7 @@ export function AgendaView() {
   // Solo los del rango que se está mirando; los de otro, como si no hubieran
   // llegado todavía.
   const turnos = lectura && lectura.clave === rangeKey ? lectura.turnos : null;
-  const [turnosStatus, setTurnosStatus] = React.useState<LoadState>("idle");
+  const [turnosStatus, setTurnosStatus] = React.useState<Carga>("listo");
   const [refreshKey, setRefreshKey] = React.useState(0);
 
   // El estado de carga se resuelve en los callbacks de la red; lo único
@@ -118,22 +118,26 @@ export function AgendaView() {
       // en un microtask para no encadenar renders desde el efecto.
       const id = window.setTimeout(() => {
         setLectura({ clave: rangeKey, turnos: cached });
-        setTurnosStatus("idle");
+        setTurnosStatus("listo");
       }, 0);
       return () => window.clearTimeout(id);
     }
 
     const controller = new AbortController();
-    const marcando = window.setTimeout(() => setTurnosStatus("loading"), 0);
+    const marcando = window.setTimeout(() => setTurnosStatus("cargando"), 0);
 
+    // Si la lectura termina antes que la marca de "cargando" (un fallo
+    // inmediato, sin red), la marca no puede pisar el resultado.
     leerTurnos(range, controller.signal)
       .then((parsed) => {
+        window.clearTimeout(marcando);
         cacheRef.current.set(rangeKey, parsed);
         setLectura({ clave: rangeKey, turnos: parsed });
-        setTurnosStatus("idle");
+        setTurnosStatus("listo");
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
+        window.clearTimeout(marcando);
         setTurnosStatus("error");
       });
 
@@ -207,8 +211,7 @@ export function AgendaView() {
   };
 
   const showFullError = turnos === null && turnosStatus === "error";
-  const showFullLoading = turnos === null && turnosStatus !== "error";
-  const showUpdateHint = turnos !== null && turnosStatus === "loading";
+  const showUpdateHint = turnos !== null && turnosStatus === "cargando";
 
   // Hasta tener `anchor`/`today` (post-mount) renderizamos un placeholder neutro
   // sin fechas: cualquier `fechaLarga(anchor)` con un `new Date()` recién creado
@@ -276,44 +279,60 @@ export function AgendaView() {
         </div>
 
         <div className="mt-3 lg:mt-4">
-          {!isReady || showFullLoading ? (
+          {!isReady ? (
             <Cargando />
-          ) : showFullError ? (
-            <EstadoVacio
-              icono={<CalendarX2 size={28} strokeWidth={1.6} aria-hidden="true" />}
-              titulo={ALGO_FALLO}
-              lineas={[
-                "No pudimos traer la agenda.",
-                "Puede ser la conexión.",
-                "Tus turnos no se perdieron.",
-              ]}
-              accion={{ label: REINTENTAR, onClick: retryTurnos }}
-            />
-          ) : turnos !== null ? (
-            view === "día" ? (
-              <DayView
-                date={anchor}
-                turnos={turnos}
-                turnoCobradoId={turnoCobradoId}
-                onOpenTurno={handleEventClick}
-                onNuevoTurno={openSheet}
-              />
-            ) : view === "semana" ? (
-              <WeekView
-                anchor={anchor}
-                turnos={turnos}
-                today={today}
-                onEventClick={handleEventClick}
-              />
-            ) : (
-              <MonthView
-                anchor={anchor}
-                today={today}
-                turnos={turnos}
-                onDayClick={handleDayClick}
-              />
-            )
-          ) : null}
+          ) : (
+            // Si falla la recarga que sigue a cobrar, cancelar o reprogramar,
+            // la grilla no se queda con los turnos viejos en silencio: avisa
+            // arriba y ofrece reintentar.
+            <SegunLectura
+              carga={turnosStatus}
+              datos={turnos}
+              esqueleto={<Cargando />}
+              error={
+                <EstadoVacio
+                  icono={<CalendarX2 size={28} strokeWidth={1.6} aria-hidden="true" />}
+                  titulo={ALGO_FALLO}
+                  lineas={[
+                    "No pudimos traer la agenda.",
+                    "Puede ser la conexión.",
+                    "Tus turnos no se perdieron.",
+                  ]}
+                  accion={{ label: REINTENTAR, onClick: retryTurnos }}
+                />
+              }
+              onReintentar={retryTurnos}
+            >
+              {(turnos, { aviso }) => (
+                <>
+                  {aviso ? <div className="mb-3">{aviso}</div> : null}
+                  {view === "día" ? (
+                    <DayView
+                      date={anchor}
+                      turnos={turnos}
+                      turnoCobradoId={turnoCobradoId}
+                      onOpenTurno={handleEventClick}
+                      onNuevoTurno={openSheet}
+                    />
+                  ) : view === "semana" ? (
+                    <WeekView
+                      anchor={anchor}
+                      turnos={turnos}
+                      today={today}
+                      onEventClick={handleEventClick}
+                    />
+                  ) : (
+                    <MonthView
+                      anchor={anchor}
+                      today={today}
+                      turnos={turnos}
+                      onDayClick={handleDayClick}
+                    />
+                  )}
+                </>
+              )}
+            </SegunLectura>
+          )}
         </div>
       </div>
 

@@ -48,8 +48,8 @@ import {
   type Periodo,
 } from "./periodo";
 import { SheetPeriodo } from "./sheet-periodo";
+import { SegunLectura, type Carga } from "../../_components/segun-lectura";
 
-type Carga = "cargando" | "listo" | "error";
 type TipoPeriodo = Periodo["tipo"];
 
 export function FinanzasView() {
@@ -95,68 +95,50 @@ export function FinanzasView() {
     setPeriodo(nuevo);
   };
 
-  if (carga === "cargando" && !datos) {
-    return (
-      <Marco>
-        <EsqueletoFinanzasCuerpo />
-      </Marco>
-    );
-  }
-
-  if (!datos) {
-    return (
-      <Marco>
-        <EstadoVacio
-          icono={<ChartColumn size={28} strokeWidth={1.6} aria-hidden="true" />}
-          titulo={ALGO_FALLO}
-          lineas={FINANZAS_NO_CARGARON}
-          accion={{ label: REINTENTAR, onClick: reintentar }}
-        />
-      </Marco>
-    );
-  }
-
-  // Sin un solo turno ni un solo pago no hay período que elegir.
-  if (datos.primerMesConDatos === null) {
-    return (
-      <Marco>
-        <EstadoVacio
-          lupita="saluda"
-          titulo={SIN_SESIONES_REGISTRADAS}
-          lineas={SIN_SESIONES_REGISTRADAS_LINEAS}
-          accion={{ label: IR_A_LA_AGENDA, onClick: () => router.push("/agenda") }}
-        />
-      </Marco>
-    );
-  }
-
-  const anioHoy = Number(datos.deudaHoy.alDia.slice(0, 4));
-
+  // Carga y error como Hoy, Cobros y la Agenda (SegunLectura): el esqueleto
+  // la primera vez, el error con Reintentar si no hay nada que mostrar, y
+  // si falla una recarga, el aviso arriba y los números de antes.
   return (
     <Marco>
-      <SelectorPeriodo
-        periodo={periodo}
-        anioHoy={anioHoy}
-        anios={aniosElegibles(datos.deudaHoy.alDia, datos.primerMesConDatos)}
-        onElegir={elegir}
-      />
-
-      {carga === "error" ? (
-        <p role="alert" className="text-[13px] text-ink-700">
-          {FINANZAS_NO_CARGARON[0]}{" "}
-          <button
-            type="button"
-            onClick={reintentar}
-            className="min-h-11 font-medium text-sage-600 underline underline-offset-2"
-          >
-            {REINTENTAR}
-          </button>
-        </p>
-      ) : null}
-
-      <div aria-busy={carga === "cargando"} className="flex flex-col gap-7 lg:gap-10">
-        <Tablero datos={datos} />
-      </div>
+      <SegunLectura
+        carga={carga}
+        datos={datos}
+        esqueleto={<EsqueletoFinanzasCuerpo />}
+        error={
+          <EstadoVacio
+            icono={<ChartColumn size={28} strokeWidth={1.6} aria-hidden="true" />}
+            titulo={ALGO_FALLO}
+            lineas={FINANZAS_NO_CARGARON}
+            accion={{ label: REINTENTAR, onClick: reintentar }}
+          />
+        }
+        onReintentar={reintentar}
+      >
+        {(datos, { aviso, ocupado }) =>
+          // Sin un solo turno ni un solo pago no hay período que elegir.
+          datos.primerMesConDatos === null ? (
+            <EstadoVacio
+              lupita="saluda"
+              titulo={SIN_SESIONES_REGISTRADAS}
+              lineas={SIN_SESIONES_REGISTRADAS_LINEAS}
+              accion={{ label: IR_A_LA_AGENDA, onClick: () => router.push("/agenda") }}
+            />
+          ) : (
+            <>
+              <SelectorPeriodo
+                periodo={periodo}
+                anioHoy={Number(datos.deudaHoy.alDia.slice(0, 4))}
+                anios={aniosElegibles(datos.deudaHoy.alDia, datos.primerMesConDatos)}
+                onElegir={elegir}
+              />
+              {aviso}
+              <div aria-busy={ocupado} className="flex flex-col gap-7 lg:gap-10">
+                <Tablero datos={datos} />
+              </div>
+            </>
+          )
+        }
+      </SegunLectura>
     </Marco>
   );
 }

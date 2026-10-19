@@ -21,6 +21,7 @@
 // hook de grabación en el padre).
 
 import * as React from "react";
+import { cobrarCierraElTurno } from "@/components/turno/presentacion";
 import type { VarianteToast } from "@/components/ui/toast";
 
 import { Button, Card } from "@/components/ui";
@@ -68,6 +69,10 @@ interface SesionesTabProps {
   /** Se tocó un enlace a la nota de esta sesión: el padre lo anota en la URL
    *  para que "volver" sepa a dónde. */
   onAbrirSesion?: (sesionClinicaId: string) => void;
+  /** La paciente no firmó la autorización para grabar. */
+  sinAutorizacion?: boolean;
+  /** Lleva a firmarla. */
+  onAutorizar?: () => void;
 }
 
 export function SesionesTab({
@@ -82,6 +87,8 @@ export function SesionesTab({
   volverA = null,
   onVolvio,
   onAbrirSesion,
+  sinAutorizacion = false,
+  onAutorizar,
 }: SesionesTabProps) {
   const [lista, setLista] = React.useState<ListaState>(() => listaInicial(pacienteId));
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -224,6 +231,8 @@ export function SesionesTab({
                   cargando: sesionHoyCargando,
                   paciente: pacienteNombre,
                   onCobrar: () => setCobroTarget(turnoHoy),
+                  sinAutorizacion,
+                  onAutorizar,
                 }}
               />
             ))}
@@ -247,7 +256,7 @@ export function SesionesTab({
         open={cobroTarget !== null}
         onClose={() => setCobroTarget(null)}
         monto={cobroTarget?.tarifaCobrada}
-        cierraElTurno={cobroTarget?.estado === "programado"}
+        cierraElTurno={cobroTarget ? cobrarCierraElTurno(cobroTarget.estado) : false}
         onElegir={async (metodo) => {
           if (!cobroTarget) return;
           await cobrarTurno(cobroTarget.id, metodo);

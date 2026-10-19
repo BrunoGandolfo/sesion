@@ -34,7 +34,6 @@ import {
   COBRADO,
   COBRO_DESHECHO,
   DESHACER_COBRO_ACCION,
-  DESHACER_COBRO_MENSAJE,
   DESHACER_COBRO_TITULO,
   DESHACIENDO_COBRO,
   VOLVER,
@@ -45,10 +44,11 @@ import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 import { SelectorMetodoPago } from "@/components/cobro/sheet-metodo-pago";
 import { cobrarTurno, deshacerCobro } from "@/lib/cobrar-cliente";
+import { turnoSigueProgramado } from "@/app/api/_lib/domain";
+import { estadoDelTurno, mensajeDeshacerCobro, seGrabaEnEsteEstado } from "@/components/turno/presentacion";
 
 import {
   accionesDelDetalle,
-  chipDe,
   leerRecordatorio,
   leerSesion,
   type RecordatorioJson,
@@ -118,7 +118,7 @@ export function TurnoDetailSheet({
 
   React.useEffect(() => {
     if (!turnoId) return;
-    if (turnoEstado !== "programado" && turnoEstado !== "realizado") return;
+    if (!turnoEstado || !seGrabaEnEsteEstado(turnoEstado)) return;
 
     const controller = new AbortController();
     leerSesion(turnoId, controller.signal)
@@ -134,7 +134,7 @@ export function TurnoDetailSheet({
   // Sólo tiene sentido en un turno programado: en uno cancelado, ausente o
   // ya realizado no se programa otro recordatorio.
   React.useEffect(() => {
-    if (!turnoId || turnoEstado !== "programado") return;
+    if (!turnoId || !turnoEstado || !turnoSigueProgramado(turnoEstado)) return;
 
     const controller = new AbortController();
     leerRecordatorio(turnoId, controller.signal)
@@ -169,7 +169,7 @@ export function TurnoDetailSheet({
     );
   }
 
-  const chip = chipDe(turno);
+  const chip = estadoDelTurno(turno);
   const acciones = accionesDelDetalle(turno, sesion, new Date());
   const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
 
@@ -304,7 +304,7 @@ export function TurnoDetailSheet({
           <div className="border-t border-[color:var(--border-subtle)] pt-5">
             <SelectorMetodoPago
               monto={turno.tarifaCobrada}
-              cierraElTurno={acciones.esProgramado}
+              cierraElTurno={acciones.cobrarCierra}
               onElegir={cobrar}
               onListo={() => {}}
               onVolver={() => setModo("ver")}
@@ -359,7 +359,7 @@ export function TurnoDetailSheet({
         {modo === "confirmar-deshacer-cobro" ? (
           <Confirmar
             titulo={DESHACER_COBRO_TITULO}
-            mensaje={DESHACER_COBRO_MENSAJE}
+            mensaje={mensajeDeshacerCobro(turno.estado)}
             accion={DESHACER_COBRO_ACCION}
             cancelar={VOLVER}
             enviando={enviando}

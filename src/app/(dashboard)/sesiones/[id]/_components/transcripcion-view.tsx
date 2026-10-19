@@ -26,13 +26,12 @@ import * as React from "react";
 import { AlertCircle, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { ApiClientError } from "@/lib/api-client";
+import { ApiClientError, mensajeParaElla } from "@/lib/api-client";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
 import { CabeceraSesion } from "./cabecera-sesion";
 import { leerTranscripcionDeSesion, type RespuestaTranscripcion } from "./datos";
 import {
-  ALGO_FALLO,
   BUSCAR_ANTERIOR,
   BUSCAR_BORRAR,
   BUSCAR_EN_TRANSCRIPCION,
@@ -107,7 +106,9 @@ export function TranscripcionView({ sesion, selector }: TranscripcionViewProps) 
         setLectura(
           error instanceof ApiClientError && error.status === 409
             ? { estado: "sin-texto" }
-            : { estado: "error", detalle: error instanceof Error && error.message ? error.message : ALGO_FALLO },
+            : // El motivo de la API, o "Algo falló": nunca el texto técnico de
+            // un error de red ("Failed to fetch").
+            { estado: "error", detalle: mensajeParaElla(error) },
         );
       },
     );

@@ -5,18 +5,12 @@
 import { formatearMesMvd, mesIsoMvd } from "@/lib/fechas-montevideo";
 import { apiGet } from "@/lib/api-client";
 import { formatearEtiqueta } from "@/lib/etiquetas";
-import {
-  ESCRIBIENDO_NOTA,
-  NOTA_GUARDADA,
-  NOTA_NO_ESCRITA,
-  PARA_REVISAR,
-} from "@/lib/glosario";
 import type {
   DatosEstructurados,
   EstadoSesion,
   NotaSoap,
 } from "@/lib/sesion-clinica/schema";
-import type { EstadoProcesamiento, Modalidad, Turno } from "@/types/domain";
+import type { Modalidad, Turno } from "@/types/domain";
 
 // Ítem de GET /api/pacientes/[id]/documentacion: la nota vigente (aprobada
 // o de la IA) y el tablero parseado en el servidor; el feedback tal cual.
@@ -131,27 +125,6 @@ export function conPaginaSiguiente(
     totalSesiones: data.totalSesiones,
     loading: false,
   };
-}
-
-export function chipDeEstado(estado: EstadoProcesamiento): {
-  variant: "sage" | "terracotta" | "gold" | "neutral";
-  label: string;
-} | null {
-  switch (estado) {
-    case "grabando":
-      return { variant: "terracotta", label: "Grabando…" };
-    case "subiendo":
-    case "procesando":
-      return { variant: "gold", label: ESCRIBIENDO_NOTA };
-    case "revision":
-      return { variant: "gold", label: PARA_REVISAR };
-    case "aprobada":
-      return { variant: "sage", label: NOTA_GUARDADA };
-    case "fallida":
-      return { variant: "terracotta", label: NOTA_NO_ESCRITA };
-    default:
-      return null;
-  }
 }
 
 export function resumenCorto(datos: DatosEstructurados | null): string {

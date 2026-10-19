@@ -7,6 +7,7 @@
 import { esGrabacionSinTerminar, ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import { esDeudaPendiente, ESTADOS_GRABABLES, sePuedeCobrar } from "@/app/api/_lib/domain";
 import { clavesDeRiesgo } from "@/components/grabacion/RiesgoDetectadoBanner";
+import { empezoSinCobrar, ocupaElHorario } from "@/components/turno/presentacion";
 import type { TurnoParaAgenda } from "@/lib/agenda-local";
 import { apiGet } from "@/lib/api-client";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
@@ -93,7 +94,7 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
   // La card es para quien viene: una paciente marcada "No vino" (o un turno
   // cancelado) no ocupa el lugar grande aunque sea su hora (forense 03,
   // P3-10). Sigue en la agenda del día, con su estado.
-  const quienViene = turnos.filter((t) => t.estado !== "ausente" && t.estado !== "cancelado");
+  const quienViene = turnos.filter((t) => ocupaElHorario(t.estado));
   const abierto = quienViene.find(
     (t) =>
       t.fecha.getTime() <= ahora.getTime() &&
@@ -116,18 +117,6 @@ export function repartirElDia(data: DashboardData, ahora: Date): DiaRepartido {
     enCurso: Boolean(abierto),
     ahoraSinCobrar: ahoraTurno !== null && sePuedeCobrar(ahoraTurno, ahora),
   };
-}
-
-/** Programado, impago y con la hora ya empezada: cobrarlo lo cierra. */
-function empezoSinCobrar(
-  turno: Pick<TurnoConPaciente, "estado" | "pagoEstado" | "fecha">,
-  ahora: Date,
-): boolean {
-  return (
-    turno.estado === "programado" &&
-    turno.pagoEstado === "pendiente" &&
-    turno.fecha.getTime() <= ahora.getTime()
-  );
 }
 
 /**

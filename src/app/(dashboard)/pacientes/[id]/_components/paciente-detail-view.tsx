@@ -38,7 +38,7 @@ import { useHoy } from "@/hooks/useHoy";
 import { anotarTurnosDePaciente, generacionAgenda, type TurnoParaAgenda } from "@/lib/agenda-local";
 import { apiGet, esAbort, mensajeParaElla } from "@/lib/api-client";
 import type { TurnoDeFicha } from "@/app/api/_lib/casos-uso/pacientes";
-import { ESTADOS_GRABABLES, sePuedeGrabar } from "@/app/api/_lib/domain";
+import { ESTADOS_GRABABLES, sePuedeGrabar, turnoSigueProgramado } from "@/app/api/_lib/domain";
 import { enProceso, seguirNota } from "@/lib/notas-en-proceso";
 import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import { DATOS, LUX, RECORRIDO, SESIONES } from "@/lib/glosario";
@@ -222,7 +222,7 @@ export function PacienteDetailView({ id }: { id: string }) {
     if (!hoy) return null;
     const desde = hoy.getTime();
     const futuros = turnos
-      .filter((t) => t.estado === "programado" && t.fecha.getTime() >= desde)
+      .filter((t) => turnoSigueProgramado(t.estado) && t.fecha.getTime() >= desde)
       .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
     return futuros[0] ?? null;
   }, [turnos, hoy]);
@@ -318,6 +318,10 @@ export function PacienteDetailView({ id }: { id: string }) {
                 pacienteId={paciente.id}
                 pacienteNombre={`${paciente.nombre} ${paciente.apellido}`.trim()}
                 turnoHoy={turnoHoy}
+                // La firma que falta se dice en la fila de hoy, como en Hoy;
+                // firmarla es en la pestaña Datos.
+                sinAutorizacion={estadoConsentimiento.tipo === "sin"}
+                onAutorizar={() => cambiarDePestana("datos")}
                 sesionHoy={sesionHoy}
                 sesionHoyCargando={sesionHoyCargando}
                 onTurnoActualizado={refetchData}

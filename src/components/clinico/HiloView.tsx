@@ -96,11 +96,27 @@ export function HiloView({ pacienteId, indicadores }: { pacienteId: string; indi
     return () => controller.abort();
   }, [url]);
   const esperando = datos?.trabajos.some(t => t.estado !== "fallido");
+  // Mientras hay un trabajo en curso se vuelve a leer cada 12 s, como el
+  // sondeo de la nota: con la pestaña oculta no, al volver enseguida, y
+  // nunca encima de una lectura que todavía no contestó.
   useEffect(() => {
     if (!esperando) return;
     const controller = new AbortController();
-    const id = setInterval(() => cargar(controller.signal).catch(e => { if (!esAbort(e)) setError(mensaje(e)); }), 12_000);
-    return () => { clearInterval(id); controller.abort(); };
+    let enVuelo = false;
+    const consultar = () => {
+      if (enVuelo || document.visibilityState !== "visible") return;
+      enVuelo = true;
+      cargar(controller.signal)
+        .catch(e => { if (!esAbort(e)) setError(mensaje(e)); })
+        .finally(() => { enVuelo = false; });
+    };
+    const id = setInterval(consultar, 12_000);
+    document.addEventListener("visibilitychange", consultar);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", consultar);
+      controller.abort();
+    };
   }, [esperando, cargar]);
 
   async function accion(ruta: string, cuerpo: unknown) {

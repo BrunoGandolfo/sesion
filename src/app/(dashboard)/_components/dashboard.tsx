@@ -6,6 +6,7 @@
 
 import * as React from "react";
 
+import { cobrarCierraElTurno } from "@/components/turno/presentacion";
 import { EsqueletoHoy } from "@/components/esqueletos";
 import { useSeguimientoNotas } from "@/components/layout/avisos-de-notas";
 import { IndicadorProcesando } from "@/components/ui/procesando";
@@ -249,7 +250,7 @@ export function Dashboard({ hora = relojDelSistema }: { hora?: Reloj } = {}) {
         open={cobrando !== null}
         onClose={() => setCobrando(null)}
         monto={turnoCobrando?.tarifaCobrada}
-        cierraElTurno={turnoCobrando?.estado === "programado"}
+        cierraElTurno={turnoCobrando ? cobrarCierraElTurno(turnoCobrando.estado) : false}
         onElegir={cobrar}
       />
 

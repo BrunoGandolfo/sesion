@@ -2103,3 +2103,15 @@ export const MENSAJE_TURNO_PAGADO =
 /** POST /api/turnos con alGrabar y sin iniciadaEn (crear-turno.ts). */
 export const MENSAJE_AL_GRABAR_SIN_INICIO =
   "Un turno que nace al grabar necesita la hora en que empezó la grabación.";
+
+// ────────────────────────────────────────────────────────────────────────────
+// rev-frontend · textos de la revisión C (src/components/turno/presentacion.ts
+// y las pantallas que la usan)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Chip de la ficha para una sesión que se está grabando en este momento. */
+export const GRABANDO = "Grabando…";
+/** Confirmación de deshacer el cobro de un turno que no vino o se canceló:
+ *  ahí el turno no vuelve a la deuda ni se ofrece cobrar de nuevo. */
+export const DESHACER_COBRO_MENSAJE_SIN_DEUDA =
+  "Se borra el cobro. El turno sigue como estaba y no suma a la deuda.";
