@@ -53,6 +53,9 @@ interface GrabarViewProps {
   /** Consultorio creado por invitación: cuántas grabaciones lleva. null en
    *  la cuenta de quien invita. */
   prueba?: EstadoPrueba | null;
+  /** Se entera de si la copia en el teléfono falló: la franja de la pantalla
+   *  sin conexión (sin-conexion.tsx) vive afuera del grabador. */
+  alCambiarCopia?: (copiaFallida: boolean) => void;
 }
 
 export function GrabarView({
@@ -64,6 +67,7 @@ export function GrabarView({
   pacienteNombre,
   autorizacionVigente,
   prueba = null,
+  alCambiarCopia,
 }: GrabarViewProps) {
   const router = useRouter();
   const [confirmarDescarte, setConfirmarDescarte] = React.useState(false);
@@ -89,6 +93,10 @@ export function GrabarView({
     pacienteId,
     avisar: toast.avisar,
   });
+
+  React.useEffect(() => {
+    alCambiarCopia?.(grabador.copiaFallida);
+  }, [alCambiarCopia, grabador.copiaFallida]);
 
   function descartar() {
     setConfirmarDescarte(false);
@@ -167,6 +175,7 @@ export function GrabarView({
                   pantallaApagada={pantalla.seApago}
                   avisoLimite={grabador.avisoLimite}
                   limiteAlcanzado={grabador.limiteAlcanzado}
+                  copiaFallida={grabador.copiaFallida}
                   conmutando={grabador.conmutando}
                   confirmando={confirmarDescarte}
                   onPausar={grabador.pausar}

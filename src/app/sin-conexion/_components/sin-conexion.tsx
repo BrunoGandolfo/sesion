@@ -26,6 +26,7 @@ import {
   GRABAR,
   SIN_CONEXION_AVISO,
   SIN_CONEXION_FRANJA,
+  SIN_CONEXION_FRANJA_SIN_COPIA,
   SIN_CONEXION_PROBAR,
   SIN_CONEXION_SIN_TURNOS,
   SIN_CONEXION_TITULO,
@@ -55,16 +56,19 @@ async function leerVista(ruta: string, ahora: Date): Promise<Vista> {
   return { tipo: "agenda", turnos: await turnosLocalesDeHoy(ahora), turnoNoGuardado: turnoId !== null };
 }
 
-function Franja() {
+/** Sin copia en el teléfono (cuota llena, modo privado) la franja no promete
+ *  que la grabación queda ahí. */
+function Franja({ copiaFallida }: { copiaFallida: boolean }) {
   return (
     <p role="status" className="border-b border-[color:var(--border-subtle)] bg-cream-100 px-4 py-2 text-center text-[13px] leading-[1.5] text-ink-700">
-      {SIN_CONEXION_FRANJA}
+      {copiaFallida ? SIN_CONEXION_FRANJA_SIN_COPIA : SIN_CONEXION_FRANJA}
     </p>
   );
 }
 
 export function SinConexion({ reloj = () => new Date() }: { reloj?: () => Date }) {
   const [vista, setVista] = React.useState<Vista>({ tipo: "cargando" });
+  const [copiaFallida, setCopiaFallida] = React.useState(false);
 
   React.useEffect(() => {
     let vigente = true;
@@ -84,7 +88,7 @@ export function SinConexion({ reloj = () => new Date() }: { reloj?: () => Date }
     const { turno, esDeHoy } = vista;
     return (
       <div className="min-h-dvh bg-cream-50">
-        <Franja />
+        <Franja copiaFallida={copiaFallida} />
         <GrabarView
           turnoId={turno.turnoId}
           turnoProgramado
@@ -94,6 +98,7 @@ export function SinConexion({ reloj = () => new Date() }: { reloj?: () => Date }
           pacienteNombre={turno.nombreParaMostrar}
           autorizacionVigente
           prueba={null}
+          alCambiarCopia={setCopiaFallida}
         />
       </div>
     );

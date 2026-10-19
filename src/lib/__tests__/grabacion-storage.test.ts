@@ -568,6 +568,18 @@ describe("seguimientoDeCopia", () => {
     }
   });
 
+  it("avisa la primera escritura que falla, una sola vez, mientras se graba", async () => {
+    const alFallar = vi.fn();
+    const copia = storage.seguimientoDeCopia(alFallar);
+    copia.anotar(Promise.resolve(true));
+    await Promise.resolve();
+    expect(alFallar).not.toHaveBeenCalled();
+    copia.anotar(Promise.resolve(false));
+    copia.anotar(Promise.resolve(false));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(alFallar).toHaveBeenCalledTimes(1);
+  });
+
   it("cada grabación lleva la suya: lo que falla de la anterior no toca a la nueva", async () => {
     const vieja = storage.seguimientoDeCopia();
     const nueva = storage.seguimientoDeCopia();

@@ -1,5 +1,5 @@
 // El micrófono: con qué formato se graba. Lo que se le dice cuando falla se
-// prueba con su catálogo (grabar/[turnoId]/_components/__tests__/errores-grabacion.test.ts).
+// prueba con su catálogo (src/lib/__tests__/errores-grabacion.test.ts).
 //
 // Nunca había tenido tests: estaba adentro de GrabadorSesion.tsx, que no se
 // puede renderizar sin jsdom. Con el módulo aparte alcanza un doble del

@@ -244,12 +244,22 @@ const ESPERA_COPIA_MS = 3000;
  * escritura (la promesa que devuelven guardarChunk e iniciarSesionGrabacion)
  * y la pantalla pregunta al fallar la subida, que puede ser antes de que la
  * última termine: hayCopia() las espera, hasta ESPERA_COPIA_MS.
+ *
+ * `alFallar` se llama una vez, con la primera escritura que no se pudo
+ * guardar: mientras graba, la pantalla deja de prometer que lo grabado está
+ * en el teléfono.
  */
-export function seguimientoDeCopia() {
+export function seguimientoDeCopia(alFallar?: () => void) {
   const escrituras: Promise<boolean>[] = [];
+  let avisado = false;
   return {
     anotar(escritura: Promise<boolean>) {
       escrituras.push(escritura);
+      void escritura.then((ok) => {
+        if (ok || avisado) return;
+        avisado = true;
+        alFallar?.();
+      });
     },
     hayCopia(): Promise<boolean> {
       const todas = Promise.all(escrituras).then((resultados) => resultados.every(Boolean));

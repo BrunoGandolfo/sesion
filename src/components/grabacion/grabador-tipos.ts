@@ -97,6 +97,10 @@ export interface Grabador {
   /** Se tocó Terminar con menos de MINIMO_SEGUNDOS grabados: no se guardó
    *  nada y se puede volver a grabar. Lo apaga el próximo Grabar. */
   muyCorta: boolean;
+  /** Alguna parte de esta grabación no se pudo guardar en el teléfono (cuota
+   *  llena, modo privado): lo grabado existe sólo mientras la pantalla siga
+   *  abierta, y la pantalla no lo promete a salvo ahí. */
+  copiaFallida: boolean;
   /** Minutos aproximados de una grabación de este turno que quedó guardada. */
   pendienteSeg: number | null;
   /** De esa grabación guardada: con qué clave, cuándo empezó y, si es una

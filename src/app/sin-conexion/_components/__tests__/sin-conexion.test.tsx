@@ -6,13 +6,14 @@
 //   - en cualquier otra ruta, o con un turno que no está guardado, muestra
 //     los turnos de hoy con su botón Grabar y el aviso de que no hay señal.
 import * as React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TurnoLocal } from "@/lib/agenda-local";
 import {
   SIN_CONEXION_AVISO,
   SIN_CONEXION_FRANJA,
+  SIN_CONEXION_FRANJA_SIN_COPIA,
   SIN_CONEXION_SIN_TURNOS,
   SIN_CONEXION_TURNO_NO_GUARDADO,
   SIN_CONEXION_TURNO_OTRO_DIA,
@@ -90,6 +91,16 @@ describe("/grabar/<turno> sin señal", () => {
       autorizacionVigente: true,
       prueba: null,
     });
+    expect(screen.getByRole("status").textContent).toBe(SIN_CONEXION_FRANJA);
+  });
+
+  it("si la copia en el teléfono falla mientras graba, la franja deja de prometerla", async () => {
+    abrir("/grabar/t1");
+    await screen.findByRole("heading", { name: "Ana Pérez" });
+    const alCambiarCopia = grabador.props?.alCambiarCopia as (fallida: boolean) => void;
+    act(() => alCambiarCopia(true));
+    expect(screen.getByRole("status").textContent).toBe(SIN_CONEXION_FRANJA_SIN_COPIA);
+    act(() => alCambiarCopia(false));
     expect(screen.getByRole("status").textContent).toBe(SIN_CONEXION_FRANJA);
   });
 

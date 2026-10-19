@@ -202,6 +202,20 @@ describe("sin red", () => {
     expect(screen.getByRole("button", { name: REINTENTAR })).toBeTruthy();
   });
 
+  test("con la cuota llena la pantalla se entera mientras graba: la franja sin señal no promete la copia", async () => {
+    disco.cuotaLlena = true;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const alCambiarCopia = vi.fn();
+    render(<GrabarView {...SIN_TURNO} alCambiarCopia={alCambiarCopia} />);
+    expect(alCambiarCopia).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
+    await waitFor(() => expect(recorders).toHaveLength(1));
+    await grabar(3);
+    // Todavía grabando: no hizo falta terminar ni que falle la subida.
+    expect(screen.getByRole("button", { name: "Terminar la sesión" })).toBeTruthy();
+    expect(alCambiarCopia).toHaveBeenLastCalledWith(true);
+  });
+
   test("al volver la red, Reintentar crea el turno con la hora en que empezó, la sesión, y sube", async () => {
     red.caida = true;
     render(<GrabarView {...SIN_TURNO} />);

@@ -21,7 +21,7 @@
 // La grabación misma (un solo MediaRecorder, chunks, pausa, IndexedDB,
 // recuperación) es de useGrabador; la subida, de lib/subida-audio.ts; la
 // sesión, de sesion-del-turno.ts; qué hacer cuando falla, de
-// errores-grabacion.ts (desenlaceDelFallo).
+// src/lib/errores-grabacion.ts (desenlaceDelFallo).
 
 import * as React from "react";
 
@@ -42,7 +42,7 @@ import {
   subirAudio,
   volverAGrabando,
 } from "@/lib/subida-audio";
-import { desenlaceDelFallo } from "./errores-grabacion";
+import { desenlaceDelFallo } from "@/lib/errores-grabacion";
 import { asegurarSesion } from "./sesion-del-turno";
 import { ALGO_FALLO, TURNO_NO_MARCADO } from "@/lib/glosario";
 

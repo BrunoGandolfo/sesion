@@ -12,7 +12,7 @@ import { EN_CURSO, enCurso } from "@/components/grabacion/grabador-tipos";
 import { RecorderFalso, recorders } from "./recorder-falso";
 import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { guardarChunk, limpiarGrabacion } from "@/lib/grabacion-storage";
-import { MENSAJE_ERROR_GRABADOR } from "@/app/(dashboard)/grabar/[turnoId]/_components/errores-grabacion";
+import { MENSAJE_ERROR_GRABADOR } from "@/lib/errores-grabacion";
 
 /** Lo que "quedó en el teléfono". null = no hay nada que recuperar. */
 let persistido: {

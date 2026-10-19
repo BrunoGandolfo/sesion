@@ -1,7 +1,7 @@
 // El micrófono: cómo se crea el MediaRecorder. Toca APIs del navegador pero
 // no tiene estado propio: se prueba con un doble del global y sin renderizar
 // nada. Qué se le dice a ella cuando el micrófono no arranca está en el
-// catálogo de errores (grabar/[turnoId]/_components/errores-grabacion.ts).
+// catálogo de errores (src/lib/errores-grabacion.ts).
 
 /**
  * Formatos que se le piden al MediaRecorder, en orden de preferencia. Opus en

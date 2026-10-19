@@ -3,7 +3,9 @@
 // los textos en el glosario), y cómo se lee un error al subir: sin red, un
 // rechazo del servidor que reintentar no arregla, o algo que se reintenta.
 // Ningún texto del navegador (en inglés, técnico) llega a la pantalla: va a
-// la consola. Lo usan flujo-grabacion.ts y el grabador (GrabadorSesion.tsx).
+// la consola. Lo usan el flujo de grabar (grabar/[turnoId]/_components/
+// flujo-grabacion.ts) y el grabador (components/grabacion/GrabadorSesion.tsx):
+// vive en src/lib para que el componente no dependa de la carpeta de la ruta.
 
 import { ApiClientError, esAbort, mensajeParaElla } from "@/lib/api-client";
 import {

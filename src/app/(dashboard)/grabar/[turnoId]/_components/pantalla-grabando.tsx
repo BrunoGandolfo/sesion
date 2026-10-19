@@ -19,6 +19,7 @@ import {
   AVISO_PANTALLA_APAGADA,
   AVISO_SIN_AUDIO_DESDE,
   CORTE_LIMITE,
+  CORTE_LIMITE_SIN_COPIA,
   EN_PAUSA,
   ENTENDIDO,
   GRABACION_TERMINO_MICROFONO,
@@ -42,6 +43,7 @@ export function PantallaGrabando({
   pantallaApagada,
   avisoLimite,
   limiteAlcanzado,
+  copiaFallida,
   conmutando,
   confirmando,
   onPausar,
@@ -62,6 +64,9 @@ export function PantallaGrabando({
   pantallaApagada: boolean;
   avisoLimite: boolean;
   limiteAlcanzado: boolean;
+  /** La copia en el teléfono falló (Grabador.copiaFallida): el tope no dice
+   *  que lo grabado está a salvo. */
+  copiaFallida: boolean;
   conmutando: boolean;
   confirmando: boolean;
   onPausar: () => void;
@@ -153,7 +158,7 @@ export function PantallaGrabando({
             ) : null}
             {limiteAlcanzado ? (
               <Aviso icono={<Square size={13} strokeWidth={2} aria-hidden="true" />}>
-                {CORTE_LIMITE}
+                {copiaFallida ? CORTE_LIMITE_SIN_COPIA : CORTE_LIMITE}
               </Aviso>
             ) : avisoLimite ? (
               <Aviso icono={<Square size={13} strokeWidth={2} aria-hidden="true" />}>

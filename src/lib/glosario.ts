@@ -2135,7 +2135,7 @@ export const GRABACION_SIN_CONEXION_SIN_COPIA =
   "Sin conexión, y la copia en el teléfono no se pudo guardar. No cierres esta pantalla: reintentá cuando vuelva la señal.";
 
 // Los errores del grabador. El catálogo que elige cuál va está en
-// grabar/[turnoId]/_components/errores-grabacion.ts (MENSAJE_ERROR_GRABADOR).
+// src/lib/errores-grabacion.ts (MENSAJE_ERROR_GRABADOR).
 export const MIC_SIN_PERMISO = "No diste permiso para usar el micrófono. Habilitalo y probá de nuevo.";
 export const MIC_NO_ENCONTRADO = "No encontramos un micrófono disponible en este dispositivo.";
 export const MIC_OCUPADO = "No pudimos acceder al micrófono. Cerrá otras apps que lo estén usando y probá de nuevo.";
@@ -2150,3 +2150,14 @@ export const GRABACION_NO_SE_DETUVO = "No se pudo detener la grabación.";
  *  en ese caso no es cierto. */
 export const RECHAZADA_SIN_COPIA =
   "Ojo: en este teléfono no quedó copia (no había lugar para guardarla), así que al salir de esta pantalla la grabación se pierde.";
+
+// ─── integracion ─────────────────────────────────────────────────────────────
+
+/** Como CORTE_LIMITE, cuando la copia en el teléfono no se pudo guardar
+ *  (Grabador.copiaFallida): lo grabado existe sólo en esta pantalla. */
+export const CORTE_LIMITE_SIN_COPIA =
+  "Llegaste a las 2 horas y media de grabación. En este teléfono no quedó copia: no cierres esta pantalla y tocá Terminar la sesión para enviarlo.";
+
+/** Como SIN_CONEXION_FRANJA, cuando la copia en el teléfono no se pudo guardar. */
+export const SIN_CONEXION_FRANJA_SIN_COPIA =
+  "Sin señal, y la copia en el teléfono no se pudo guardar. No cierres esta pantalla.";
