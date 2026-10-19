@@ -241,6 +241,31 @@ describe("POST /api/sms/entrante", () => {
     expect(await prismaRaw.bajaSms.count()).toBe(0);
   });
 
+  it("E3: el 403 deja una línea con el motivo, como el callback, sin el texto ni el teléfono", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const token = process.env.TWILIO_AUTH_TOKEN;
+    try {
+      const params = { MessageSid: "SM0123456789abcdef0123456789abcdef", SmsStatus: "received", From: TELEFONO, Body: "BAJA" };
+      expect((await entrante(pedido(URL_ENTRANTE, params, firmaTwilio("token-secundario", URL_ENTRANTE, params)))).status).toBe(403);
+      expect((await entrante(pedido(URL_ENTRANTE, params, null))).status).toBe(403);
+      delete process.env.TWILIO_AUTH_TOKEN;
+      expect((await entrante(pedido(URL_ENTRANTE, params))).status).toBe(403);
+
+      const lineas = aviso.mock.calls.map((c) => String(c[0]));
+      expect(lineas).toEqual([
+        '[sms-entrante] 403 {"motivo":"firma","sid":"SM0123456789abcdef0123456789abcdef","estado":"received"}',
+        '[sms-entrante] 403 {"motivo":"sin_firma","sid":"SM0123456789abcdef0123456789abcdef","estado":"received"}',
+        '[sms-entrante] 403 {"motivo":"sin_token"}',
+      ]);
+      for (const linea of lineas) {
+        for (const secreto of [TOKEN, TELEFONO, "BAJA"]) expect(linea).not.toContain(secreto);
+      }
+    } finally {
+      process.env.TWILIO_AUTH_TOKEN = token;
+      aviso.mockRestore();
+    }
+  });
+
   it("BAJA (y variantes con tildes, espacios, mayúsculas) → baja, apaga lo pendiente y contesta TwiML", async () => {
     const pendiente = await crearEnvio("pendiente", null);
     const enviando = await crearEnvio("enviando", null);

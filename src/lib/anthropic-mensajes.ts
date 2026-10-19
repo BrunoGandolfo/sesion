@@ -75,6 +75,19 @@ export class ErrorAnthropic extends Error {
   }
 }
 
+/** Un error HTTP del proveedor trae status; el timeout y la conexión
+ *  cortada, no. Es lo que decide si vuelve el cupo de un asistente. */
+export function esErrorHttpDelProveedor(error: unknown): boolean {
+  return error instanceof ErrorAnthropic && typeof error.status === "number";
+}
+
+/** Lo que se loguea de un fallo del proveedor: status y código, nunca el
+ *  mensaje (puede traer el cuerpo de la respuesta). */
+export function diagnosticoDe(error: unknown): { status: number | null; codigo: string } {
+  if (error instanceof ErrorAnthropic) return { status: error.status ?? null, codigo: error.codigo };
+  return { status: null, codigo: "desconocido" };
+}
+
 /** Un identificador corto (el tipo de error de la API, el nombre de la clase
  *  del SDK) o "desconocido": lo que sea, nunca un mensaje. */
 function codigoDe(error: unknown): string {
@@ -117,8 +130,29 @@ function cliente(opciones: OpcionesMensajes): Anthropic {
   });
 }
 
-function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMensajes {
+/** Una respuesta cortada por el techo de tokens o por un rechazo no
+ *  terminó: se dice como un corte, no como una respuesta completa que
+ *  después vuelve en el historial. Vale para Lupita y para Lux. */
+function exigirTerminada(motivo: Message["stop_reason"]): void {
+  if (motivo === "max_tokens" || motivo === "refusal") {
+    throw new ErrorAnthropic(`respuesta incompleta (stop_reason=${motivo})`, undefined, "incompleta");
+  }
+}
+
+type Uso = Pick<ResultadoMensajes, "tokensEntrada" | "tokensSalida" | "cacheLeido" | "cacheEscrito">;
+
+/** Lo que cobró una ronda. */
+function usoDe(mensaje: Message): Uso {
   const usage = mensaje.usage;
+  return {
+    tokensEntrada: usage?.input_tokens ?? 0,
+    tokensSalida: usage?.output_tokens ?? 0,
+    cacheLeido: usage?.cache_read_input_tokens ?? 0,
+    cacheEscrito: usage?.cache_creation_input_tokens ?? 0,
+  };
+}
+
+function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMensajes {
   const texto = mensaje.content
     .filter((bloque) => bloque.type === "text")
     .map((bloque) => bloque.text)
@@ -137,13 +171,11 @@ function resultadoDe(mensaje: Message, permiteHerramientas = false): ResultadoMe
       `respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`, undefined, "sin_texto",
     );
   }
+  exigirTerminada(mensaje.stop_reason);
 
   return {
     texto,
-    tokensEntrada: usage?.input_tokens ?? 0,
-    tokensSalida: usage?.output_tokens ?? 0,
-    cacheLeido: usage?.cache_read_input_tokens ?? 0,
-    cacheEscrito: usage?.cache_creation_input_tokens ?? 0,
+    ...usoDe(mensaje),
     motivoDeCorte: mensaje.stop_reason ?? null,
     ...(herramientas.length ? { herramientas } : {}),
   };
@@ -157,6 +189,29 @@ function envolverError(error: unknown): ErrorAnthropic {
 }
 
 /**
+ * El plazo propio de un flujo. El timeout del SDK termina al recibir las
+ * cabeceras; éste cubre también el body SSE, hasta el último evento o la
+ * cancelación. `errorDelFlujo` dice "timeout" si lo que cortó fue el plazo.
+ */
+function plazo(timeoutMs: number) {
+  const controller = new AbortController();
+  let vencido = false;
+  const temporizador = setTimeout(() => {
+    vencido = true;
+    controller.abort();
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    abortar: () => controller.abort(),
+    limpiar: () => clearTimeout(temporizador),
+    errorDelFlujo: (error: unknown) =>
+      vencido
+        ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`, undefined, "timeout")
+        : envolverError(error),
+  };
+}
+
+/**
  * Abre el SSE y espera el handshake. Los 4xx/5xx iniciales todavía pueden
  * convertirse en un status HTTP propio; luego fragmentos entrega text_delta.
  */
@@ -164,27 +219,14 @@ export async function crearMensajeStreaming(
   pedido: PedidoMensajes,
   opciones: OpcionesMensajes,
 ): Promise<FlujoMensajes> {
-  // El timeout del SDK termina al recibir las cabeceras. Este plazo cubre
-  // también el body SSE, hasta el último evento o la cancelación.
-  const controller = new AbortController();
-  const timeoutMs = opciones.timeoutMs ?? TIMEOUT_MS;
-  let vencido = false;
-  const temporizador = setTimeout(() => {
-    vencido = true;
-    controller.abort();
-  }, timeoutMs);
-  const limpiar = () => clearTimeout(temporizador);
-  const errorDelFlujo = (error: unknown) =>
-    vencido
-      ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`, undefined, "timeout")
-      : envolverError(error);
+  const { signal, abortar, limpiar, errorDelFlujo } = plazo(opciones.timeoutMs ?? TIMEOUT_MS);
 
   try {
     const stream = cliente(opciones).messages.stream({
       ...pedido,
       system: pedido.system,
       messages: pedido.messages as MessageParam[],
-    }, { signal: controller.signal });
+    }, { signal });
     stream.once("end", limpiar);
     // Registrar el iterador antes de que lleguen eventos, incluso si quien
     // llama demora en consumir los fragmentos o el timeout vence antes.
@@ -221,7 +263,7 @@ export async function crearMensajeStreaming(
       resultado,
       cancelar: () => {
         limpiar();
-        controller.abort();
+        abortar();
       },
     };
   } catch (error) {
@@ -287,6 +329,8 @@ export function sinControl(texto: string): string {
 /** Tope de llamadas a herramientas por pregunta. */
 export const MAX_LLAMADAS_HERRAMIENTA = 3;
 
+type BloqueToolUse = Extract<Message["content"][number], { type: "tool_use" }>;
+
 /**
  * Pregunta → (herramienta → resultado → modelo)* → respuesta, por fragmentos.
  *
@@ -310,18 +354,7 @@ export async function crearConversacionConHerramientas(
   opciones: OpcionesMensajes & { maxLlamadas?: number },
 ): Promise<FlujoConversacion> {
   const maxLlamadas = opciones.maxLlamadas ?? MAX_LLAMADAS_HERRAMIENTA;
-  const controller = new AbortController();
-  const timeoutMs = opciones.timeoutMs ?? TIMEOUT_MS;
-  let vencido = false;
-  const temporizador = setTimeout(() => {
-    vencido = true;
-    controller.abort();
-  }, timeoutMs);
-  const limpiar = () => clearTimeout(temporizador);
-  const errorDelFlujo = (error: unknown) =>
-    vencido
-      ? new ErrorAnthropic(`Timeout de Anthropic después de ${timeoutMs} ms`, undefined, "timeout")
-      : envolverError(error);
+  const { signal, abortar, limpiar, errorDelFlujo } = plazo(opciones.timeoutMs ?? TIMEOUT_MS);
 
   // Sin reintentos del SDK y con el plazo propio: el del SDK se pone igual
   // para que no corte antes que el nuestro.
@@ -335,7 +368,7 @@ export async function crearConversacionConHerramientas(
       tool_choice: conHerramientas
         ? { type: "auto", disable_parallel_tool_use: true }
         : { type: "none" },
-    }, { signal: controller.signal });
+    }, { signal });
     // Registrar el iterador antes de que lleguen eventos (ver arriba), y la
     // promesa final ya, para que un error con nadie escuchando no quede como
     // rejection huérfana del SDK.
@@ -364,82 +397,91 @@ export async function crearConversacionConHerramientas(
   let cancelado = false;
   let llamadas = 0;
   let rondas = 0;
-  const uso = { tokensEntrada: 0, tokensSalida: 0, cacheLeido: 0, cacheEscrito: 0 };
+  let texto = "";
+  const uso: Uso = { tokensEntrada: 0, tokensSalida: 0, cacheLeido: 0, cacheEscrito: 0 };
   const atendidas: ResultadoConversacion["llamadas"] = [];
 
+  /** Los text_delta de la ronda abierta, sin caracteres de control. Devuelve
+   *  el texto de esta ronda. */
+  async function* leerRonda(): AsyncGenerator<string, string> {
+    let textoRonda = "";
+    for await (const evento of { [Symbol.asyncIterator]: () => ronda.eventos }) {
+      if (evento.type !== "content_block_delta" || evento.delta.type !== "text_delta") continue;
+      const delta = sinControl(evento.delta.text);
+      if (delta === "") continue;
+      textoRonda += delta;
+      texto += delta;
+      yield delta;
+    }
+    return textoRonda;
+  }
+
+  /** La ronda que contesta. La respuesta es la de esta ronda: un aviso o un
+   *  preámbulo de una ronda anterior no cuentan como contestar. */
+  function respuestaFinal(mensaje: Message, textoRonda: string): ResultadoConversacion {
+    if (textoRonda.trim() === "") {
+      throw new ErrorAnthropic(`respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`, undefined, "sin_texto");
+    }
+    exigirTerminada(mensaje.stop_reason);
+    return { texto: texto.trim(), ...uso, motivoDeCorte: mensaje.stop_reason ?? null, llamadas: atendidas, rondas };
+  }
+
+  /** Ejecuta lo que pidió la ronda, con su aviso en el texto. Devuelve los
+   *  tool_result para la ronda siguiente, o null si ella canceló mientras se
+   *  ejecutaba una. */
+  async function* atenderLlamadas(pedidas: BloqueToolUse[]): AsyncGenerator<string, ToolResultBlockParam[] | null> {
+    const resultados: ToolResultBlockParam[] = [];
+    for (const pedida of pedidas) {
+      llamadas += 1;
+      const llamada = { nombre: pedida.name, entrada: pedida.input };
+      // Defensivo: con disable_parallel_tool_use y tool_choice "none" al
+      // llegar al tope, esto no debería pasar nunca.
+      if (llamadas > maxLlamadas) {
+        atendidas.push({ ...llamada, rechazada: true });
+        resultados.push({
+          type: "tool_result", tool_use_id: pedida.id, is_error: true,
+          content: "Llegaste al tope de lecturas para esta pregunta. Contestá con lo que ya tenés.",
+        });
+        continue;
+      }
+      const aviso = ejecutor.aviso(llamada);
+      if (aviso) {
+        const parte = `${texto && !texto.endsWith("\n") ? "\n\n" : ""}${aviso}\n\n`;
+        texto += parte;
+        yield parte;
+      }
+      const respuesta = await ejecutor.ejecutar(llamada);
+      if (cancelado) return null;
+      atendidas.push({ ...llamada, rechazada: Boolean(respuesta.esError) });
+      resultados.push({
+        type: "tool_result", tool_use_id: pedida.id, content: respuesta.contenido,
+        ...(respuesta.esError ? { is_error: true } : {}),
+      });
+    }
+    return resultados;
+  }
+
   async function* leer(): AsyncGenerator<string> {
-    let texto = "";
     try {
       while (true) {
-        let textoRonda = "";
-        for await (const evento of { [Symbol.asyncIterator]: () => ronda.eventos }) {
-          if (evento.type === "content_block_delta" && evento.delta.type === "text_delta") {
-            const delta = sinControl(evento.delta.text);
-            if (delta === "") continue;
-            textoRonda += delta;
-            texto += delta;
-            yield delta;
-          }
-        }
+        const textoRonda = yield* leerRonda();
         const mensaje: Message = await ronda.final;
         rondas += 1;
-        uso.tokensEntrada += mensaje.usage?.input_tokens ?? 0;
-        uso.tokensSalida += mensaje.usage?.output_tokens ?? 0;
-        uso.cacheLeido += mensaje.usage?.cache_read_input_tokens ?? 0;
-        uso.cacheEscrito += mensaje.usage?.cache_creation_input_tokens ?? 0;
+        const deRonda = usoDe(mensaje);
+        uso.tokensEntrada += deRonda.tokensEntrada;
+        uso.tokensSalida += deRonda.tokensSalida;
+        uso.cacheLeido += deRonda.cacheLeido;
+        uso.cacheEscrito += deRonda.cacheEscrito;
 
         const pedidas = mensaje.content.filter((bloque) => bloque.type === "tool_use");
         if (mensaje.stop_reason !== "tool_use" || pedidas.length === 0) {
-          // La respuesta es la de esta ronda: un aviso o un preámbulo de una
-          // ronda anterior no cuentan como contestar.
-          if (textoRonda.trim() === "") {
-            throw new ErrorAnthropic(`respuesta sin texto (stop_reason=${mensaje.stop_reason ?? "?"})`, undefined, "sin_texto");
-          }
-          // Una respuesta cortada por el techo de tokens o por un rechazo no
-          // terminó: se dice como un corte, no como una respuesta completa
-          // que después vuelve en el historial.
-          if (mensaje.stop_reason === "max_tokens" || mensaje.stop_reason === "refusal") {
-            throw new ErrorAnthropic(`respuesta incompleta (stop_reason=${mensaje.stop_reason})`, undefined, "incompleta");
-          }
-          completar({
-            texto: texto.trim(),
-            ...uso,
-            motivoDeCorte: mensaje.stop_reason ?? null,
-            llamadas: atendidas,
-            rondas,
-          });
+          completar(respuestaFinal(mensaje, textoRonda));
           return;
         }
 
         mensajes.push({ role: "assistant", content: mensaje.content });
-        const resultados: ToolResultBlockParam[] = [];
-        for (const pedida of pedidas) {
-          llamadas += 1;
-          const llamada = { nombre: pedida.name, entrada: pedida.input };
-          // Defensivo: con disable_parallel_tool_use y tool_choice "none" al
-          // llegar al tope, esto no debería pasar nunca.
-          if (llamadas > maxLlamadas) {
-            atendidas.push({ ...llamada, rechazada: true });
-            resultados.push({
-              type: "tool_result", tool_use_id: pedida.id, is_error: true,
-              content: "Llegaste al tope de lecturas para esta pregunta. Contestá con lo que ya tenés.",
-            });
-            continue;
-          }
-          const aviso = ejecutor.aviso(llamada);
-          if (aviso) {
-            const parte = `${texto && !texto.endsWith("\n") ? "\n\n" : ""}${aviso}\n\n`;
-            texto += parte;
-            yield parte;
-          }
-          const respuesta = await ejecutor.ejecutar(llamada);
-          if (cancelado) return;
-          atendidas.push({ ...llamada, rechazada: Boolean(respuesta.esError) });
-          resultados.push({
-            type: "tool_result", tool_use_id: pedida.id, content: respuesta.contenido,
-            ...(respuesta.esError ? { is_error: true } : {}),
-          });
-        }
+        const resultados = yield* atenderLlamadas(pedidas);
+        if (resultados === null) return;
         mensajes.push({ role: "user", content: resultados });
         ronda = abrirRonda(llamadas < maxLlamadas);
       }
@@ -458,7 +500,7 @@ export async function crearConversacionConHerramientas(
     cancelar: () => {
       cancelado = true;
       limpiar();
-      controller.abort();
+      abortar();
       fallar(new ErrorAnthropic("Conversación cancelada", undefined, "cancelada"));
     },
     progreso: () => ({ ...uso, llamadas: [...atendidas], rondas }),

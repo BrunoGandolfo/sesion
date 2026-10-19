@@ -38,10 +38,11 @@
 // que está pasando no es un recordatorio: no se crea.
 
 import { MOTIVO_SIN_TELEFONO, MOTIVO_TURNO_CERRADO, MOTIVO_REPROGRAMADO } from "@/lib/glosario";
-import type { EstadoEnvioSms, MotivoSms } from "@prisma/client";
+import type { EstadoEnvioSms, MotivoSms, Prisma } from "@prisma/client";
 
 import type { db } from "@/lib/db";
 import { fechaInputMvd } from "@/lib/fechas-montevideo";
+import { turnoSigueProgramado } from "../domain";
 import {
   calcularProgramadoEn,
   normalizarRecordatorioModo,
@@ -107,11 +108,25 @@ export async function cancelarPendientesDelDestino(
 
 /** True si el turno sigue esperando a la paciente. La regla vive con las
  *  demás del turno, en domain.ts; se re-exporta para despachar-sms. */
-export { turnoSigueProgramado } from "../domain";
+export { turnoSigueProgramado };
 
 /** ¿Corresponde un aviso para un turno con esta fecha? No, si ya empezó. */
 export function correspondeEnvio(fechaTurno: Date, ahora: Date): boolean {
   return fechaTurno.getTime() > ahora.getTime();
+}
+
+/**
+ * A qué turno todavía se le avisa: sigue programado y no empezó. Una sola
+ * regla para los dos canales, en dos formas: en memoria la usa el despacho
+ * de SMS (que separa los dos cortes para decir el motivo), y en la base la
+ * lista de WhatsApp y el paso que gasta el intento del SMS. Un test las ata.
+ */
+export function turnoAvisable(turno: { estado: string; fecha: Date }, ahora: Date): boolean {
+  return turnoSigueProgramado(turno.estado) && correspondeEnvio(turno.fecha, ahora);
+}
+
+export function whereTurnoAvisable(ahora: Date) {
+  return { estado: "programado", fecha: { gt: ahora } } satisfies Prisma.TurnoWhereInput;
 }
 
 export interface ProgramarEnvioParams {
@@ -327,20 +342,30 @@ export async function programarEnvioDeCobro(
   const existente = await tx.envioSms.findUnique({ where: { claveIdempotencia: clave }, select: { id: true } });
   if (existente) return { envioId: existente.id, creado: false };
 
-  const creado = await tx.envioSms.create({
-    data: {
-      organizationId,
-      claveIdempotencia: clave,
-      motivo: "recordatorio_cobro",
-      pacienteId,
-      turnoId: null,
-      destino,
-      programadoEn: ahora,
-      ...estadoInicialDelEnvio(destino, ahora, ahora),
-    },
-    select: { id: true },
-  });
-  return { envioId: creado.id, creado: true };
+  try {
+    const creado = await tx.envioSms.create({
+      data: {
+        organizationId,
+        claveIdempotencia: clave,
+        motivo: "recordatorio_cobro",
+        pacienteId,
+        turnoId: null,
+        destino,
+        programadoEn: ahora,
+        ...estadoInicialDelEnvio(destino, ahora, ahora),
+      },
+      select: { id: true },
+    });
+    return { envioId: creado.id, creado: true };
+  } catch (error) {
+    // Doble toque: los dos pedidos vieron "no hay" y el segundo choca con el
+    // UNIQUE. Es el mismo aviso, no un error (como en programarEnvioDelTurno).
+    // Fuera de una transacción: dentro, el P2002 ya la habría abortado.
+    if ((error as { code?: string } | null)?.code !== "P2002") throw error;
+    const ganador = await tx.envioSms.findUnique({ where: { claveIdempotencia: clave }, select: { id: true } });
+    if (!ganador) throw error;
+    return { envioId: ganador.id, creado: false };
+  }
 }
 
 // ─── LECTURA PARA LA PANTALLA ────────────────────────────────────────────────

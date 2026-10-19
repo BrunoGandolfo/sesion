@@ -14,31 +14,20 @@
 
 import { SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
 import { db } from "@/lib/db";
-import { firmaValida, parametrosDeFormulario, URL_ENTRANTE } from "@/lib/sms/firma";
+import { URL_ENTRANTE, validarWebhookTwilio } from "@/lib/sms/firma";
 
 import { esPedidoDeBaja, registrarBajaPorRespuesta } from "../../_lib/casos-uso/sms-webhooks";
-
-export { normalizarRespuesta, PALABRAS_DE_BAJA } from "../../_lib/casos-uso/sms-webhooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 15; // segundos; la convención está en scripts/ci/max-duration.mjs
 
-const MAX_BYTES = 16 * 1024;
-
 const TWIML_BAJA =
   '<?xml version="1.0" encoding="UTF-8"?><Response><Message>' + SMS_BAJA_CONFIRMADA + '</Message></Response>';
 
 export async function POST(request: Request) {
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const crudo = await request.text();
-  if (!token || crudo.length > MAX_BYTES) {
-    return new Response(null, { status: 403 });
-  }
-  const params = parametrosDeFormulario(crudo);
-  if (!firmaValida(token, URL_ENTRANTE, params, request.headers.get("x-twilio-signature"))) {
-    return new Response(null, { status: 403 });
-  }
+  const params = await validarWebhookTwilio(request, URL_ENTRANTE);
+  if (!params) return new Response(null, { status: 403 });
 
   const desde = params.From?.trim();
   if (!desde || !esPedidoDeBaja(params.Body ?? "")) {

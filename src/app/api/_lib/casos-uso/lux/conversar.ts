@@ -13,13 +13,15 @@
 
 import {
   crearConversacionConHerramientas,
-  ErrorAnthropic,
+  diagnosticoDe,
+  esErrorHttpDelProveedor,
   MODELO_LUX,
   type FlujoConversacion,
   type ProgresoConversacion,
 } from "@/lib/anthropic-mensajes";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import { MAX_TURNOS_HISTORIAL } from "@/lib/ayuda-contrato";
 import {
   LARGO_MAX_HISTORIAL_LUX, LARGO_MAX_PREGUNTA_LUX, sinMarcasLux, type TurnoHistorialLux,
 } from "@/lib/lux/contrato";
@@ -28,7 +30,7 @@ import { systemPromptLux } from "@/lib/lux/prompt";
 import { registrarAuditoria, type ClienteAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
-import { MAX_TURNOS_HISTORIAL } from "../responder-ayuda";
+import { ErrorProveedorAsistente } from "../ayuda/reservar-cupo";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
 import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
 
@@ -42,21 +44,12 @@ export const MENSAJE_SIN_CLAVE_LUX =
 export const MENSAJE_PROVEEDOR_CAIDO_LUX = "Lux no pudo contestarte ahora. Probá de nuevo en un ratito.";
 export const MENSAJE_PREGUNTA_LARGA_LUX = `La pregunta es muy larga: máximo ${LARGO_MAX_PREGUNTA_LUX} caracteres.`;
 
-/** Falló la llamada a Anthropic, antes de que empiece la respuesta.
- *  `devuelveCupo`: el proveedor contestó con un error HTTP (4xx/5xx del
- *  handshake), así que no procesó ni cobró el pedido y la ruta devuelve el
- *  cupo. Un timeout o una conexión cortada sin status no lo devuelven: no se
- *  puede saber si Anthropic llegó a procesarlo. */
-export class ErrorProveedorLux extends ApiError {
-  constructor(readonly devuelveCupo = false) {
-    super(MENSAJE_PROVEEDOR_CAIDO_LUX, 502);
+/** Falló la llamada a Anthropic, antes de que empiece la respuesta. Cuándo
+ *  vuelve el cupo: ErrorProveedorAsistente (ayuda/reservar-cupo.ts). */
+export class ErrorProveedorLux extends ErrorProveedorAsistente {
+  constructor(devuelveCupo = false) {
+    super(MENSAJE_PROVEEDOR_CAIDO_LUX, devuelveCupo);
   }
-}
-
-/** Un error HTTP del proveedor trae status; el timeout y la conexión
- *  cortada, no. */
-export function esErrorHttpDelProveedor(error: unknown): boolean {
-  return error instanceof ErrorAnthropic && typeof error.status === "number";
 }
 
 /** Lo que recibe el modelo cuando ella abre la conversación sin preguntar.
@@ -173,13 +166,6 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
     console.error("[lux] fallo del proveedor", diagnosticoDe(error));
     throw new ErrorProveedorLux(esErrorHttpDelProveedor(error));
   }
-}
-
-/** Lo que se loguea de un fallo del proveedor: status y código, nunca el
- *  mensaje. */
-export function diagnosticoDe(error: unknown): { status: number | null; codigo: string } {
-  if (error instanceof ErrorAnthropic) return { status: error.status ?? null, codigo: error.codigo };
-  return { status: null, codigo: "desconocido" };
 }
 
 export interface ConversacionRespondida {

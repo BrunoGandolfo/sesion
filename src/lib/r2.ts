@@ -47,6 +47,20 @@ function leerConfig(): R2Config | null {
   return { accountId, accessKeyId, secretAccessKey, bucketName };
 }
 
+/**
+ * Plazos y reintentos de cada llamada a R2, escritos. 3 s para conectar y
+ * 10 s para la respuesta; `throwOnRequestTimeout` hace que vencer el plazo
+ * corte el pedido (sin eso el SDK sólo lo avisa en el log y sigue
+ * esperando). Un solo intento: el SDK reintentaría 3 veces por su cuenta,
+ * y cada llamador ya tiene su reintento con nombre (el trabajo durable de
+ * borrado, el botón Reintentar de la subida, la corrida siguiente del
+ * mantenimiento).
+ */
+export const RED_R2 = {
+  maxAttempts: 1,
+  requestHandler: { connectionTimeout: 3_000, requestTimeout: 10_000, throwOnRequestTimeout: true },
+};
+
 let clienteSingleton: R2Cliente | null = null;
 
 function obtenerCliente(): R2Cliente {
@@ -60,6 +74,7 @@ function obtenerCliente(): R2Cliente {
   }
 
   const cliente = new S3Client({
+    ...RED_R2,
     region: "auto",
     // El cuerpo lo aporta después el navegador. El checksum automático del
     // SDK firmaría aquí el cuerpo vacío y R2 rechazaría el audio real.
@@ -197,8 +212,10 @@ export async function borrarAudio(key: string): Promise<void> {
   }
 }
 
-/** Presupuesto por llamada a R2 desde un cron: 3 s de conexión + 10 s de
- *  request. Sin él, un R2 colgado se lleva la función entera. */
+/** Presupuesto por llamada a R2: 3 s de conexión + 10 s de request
+ *  (RED_R2). El cliente ya corta el pedido; esta carrera es la red de
+ *  seguridad de quien espera, para que un R2 colgado no se lleve la función
+ *  entera aunque el SDK no cumpla su plazo. */
 export const TIMEOUT_R2_MS = 13_000;
 
 /** La promesa, o un error con la operación si R2 no contesta a tiempo. */
@@ -222,8 +239,9 @@ export const adaptadorBorradoR2: AdaptadorBorradoR2 = {
   borrar: (key) => conTimeout(borrarAudio(key), "delete"),
 };
 
-/** Lo que los casos de uso de la subida piden de R2. */
+/** Lo que los casos de uso de la subida piden de R2. Firmar es local (no
+ *  viaja); verificar sí, y lleva el mismo plazo que el cron. */
 export const almacenAudio: AlmacenAudio = {
   firmarSubida: generarUrlSubida,
-  existe: existeAudio,
+  existe: (key) => conTimeout(existeAudio(key), "head"),
 };

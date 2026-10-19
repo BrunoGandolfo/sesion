@@ -5,7 +5,6 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { z } from "zod";
 
 const navegacion = vi.hoisted(() => ({ pathname: "/" }));
 vi.mock("next/navigation", () => ({
@@ -13,6 +12,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { PanelAyuda } from "@/components/ayuda/panel-ayuda";
+import { MAX_TURNOS_ENVIADOS, preguntaAyudaSchema } from "@/lib/ayuda-contrato";
 import {
   ALGO_FALLO,
   AYUDA_ENVIAR,
@@ -26,22 +26,10 @@ import {
   AYUDA_PRIVACIDAD,
 } from "@/lib/glosario";
 
-// Copia literal de preguntaSchema (src/app/api/ayuda/route.ts). Está
-// duplicado y no importado porque esa ruta arrastra Prisma y el corpus: lo
-// que se verifica acá es que el cuerpo que arma el panel pase por el mismo
-// filtro que va a encontrar del otro lado.
-const LARGO_MAX_PREGUNTA = 600;
-const MAX_TURNOS_HISTORIAL = 6;
-
-const turnoSchema = z.object({
-  rol: z.enum(["usuaria", "asistente"]),
-  texto: z.string().trim().min(1).max(4000),
-});
-
-const preguntaSchema = z.object({
-  pregunta: z.string().trim().min(1).max(LARGO_MAX_PREGUNTA),
-  historial: z.array(turnoSchema).max(MAX_TURNOS_HISTORIAL * 2).optional(),
-});
+// El mismo esquema que valida la ruta (src/lib/ayuda-contrato.ts): lo que se
+// verifica acá es que el cuerpo que arma el panel pase por el filtro que va
+// a encontrar del otro lado.
+const preguntaSchema = preguntaAyudaSchema;
 
 /** Una respuesta 2xx de /api/ayuda, en la forma que devuelve `ok()`. */
 function respuestaOk(respuesta: string) {
@@ -241,7 +229,7 @@ describe("PanelAyuda — el historial", () => {
     const ultimo = cuerposEnviados(fetchMock).at(-1);
     const parseado = preguntaSchema.safeParse(ultimo);
     expect(parseado.success).toBe(true);
-    expect(parseado.data?.historial).toHaveLength(MAX_TURNOS_HISTORIAL * 2);
+    expect(parseado.data?.historial).toHaveLength(MAX_TURNOS_ENVIADOS);
     // Se recorta por el principio: los turnos que quedan son los últimos.
     expect(parseado.data?.historial?.[0]).toEqual({
       rol: "usuaria",

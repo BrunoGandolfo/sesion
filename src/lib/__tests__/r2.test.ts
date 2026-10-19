@@ -14,10 +14,12 @@ interface S3CommandInput {
 // para compartir el mock de send entre la factory y los tests. Las factories
 // son nombradas porque el describe del SDK real las vuelve a registrar al
 // terminar (vi.doMock).
-const { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3 } =
+const { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3, configsCliente } =
   vi.hoisted(() => {
     const sendMock = vi.fn();
     const getSignedUrlMock = vi.fn();
+    /** La configuración con que r2.ts construyó cada S3Client. */
+    const configsCliente: unknown[] = [];
 
     const fabricaPresigner = () => ({
       getSignedUrl: getSignedUrlMock,
@@ -26,6 +28,9 @@ const { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3 } =
     const fabricaClienteS3 = () => {
       class S3Client {
         send = sendMock;
+        constructor(config: unknown) {
+          configsCliente.push(config);
+        }
       }
       class PutObjectCommand {
         readonly __cmd = "Put" as const;
@@ -52,7 +57,7 @@ const { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3 } =
       };
     };
 
-    return { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3 };
+    return { sendMock, getSignedUrlMock, fabricaPresigner, fabricaClienteS3, configsCliente };
   });
 
 vi.mock("@aws-sdk/s3-request-presigner", fabricaPresigner);
@@ -150,6 +155,20 @@ describe("R2 client", () => {
       await expect(conTimeout(new Promise(() => {}), "list", 5)).rejects.toThrow("R2 no respondió en 5 ms (list)");
       await expect(conTimeout(Promise.resolve("ok"), "delete", 50)).resolves.toBe("ok");
       await expect(conTimeout(Promise.reject(new Error("AccessDenied")), "delete", 50)).rejects.toThrow("AccessDenied");
+    });
+
+    it("E7: la verificación de la subida (HeadObject) también tiene plazo", async () => {
+      setR2Env();
+      vi.useFakeTimers();
+      try {
+        sendMock.mockReturnValueOnce(new Promise(() => {}));
+        const { almacenAudio, TIMEOUT_R2_MS } = await import("@/lib/r2");
+        const verificando = expect(almacenAudio.existe("org/ses/0")).rejects.toThrow(`R2 no respondió en ${TIMEOUT_R2_MS} ms (head)`);
+        await vi.advanceTimersByTimeAsync(TIMEOUT_R2_MS);
+        await verificando;
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("el adaptador lista y borra contra el bucket", async () => {
@@ -257,6 +276,64 @@ describe("R2 client", () => {
       const { existeAudio } = await import("@/lib/r2");
 
       await expect(existeAudio("audio/x.enc")).rejects.toThrow(/audio\/x\.enc/);
+    });
+  });
+
+  describe("E7: timeouts y reintentos del cliente", () => {
+    it("el cliente se construye con los plazos del comentario y un solo intento", async () => {
+      setR2Env();
+      configsCliente.length = 0;
+      const { existeAudio, RED_R2 } = await import("@/lib/r2");
+      sendMock.mockResolvedValueOnce({ ContentLength: 1 });
+      await existeAudio("org/ses/0");
+      expect(RED_R2).toEqual({
+        maxAttempts: 1,
+        requestHandler: { connectionTimeout: 3_000, requestTimeout: 10_000, throwOnRequestTimeout: true },
+      });
+      expect(configsCliente).toHaveLength(1);
+      expect(configsCliente[0]).toMatchObject(RED_R2);
+    });
+  });
+
+  // Con el SDK real contra un servidor local que acepta la conexión y nunca
+  // contesta: con estas opciones el pedido se corta (sin throwOnRequestTimeout
+  // el SDK sólo avisa en el log y espera para siempre) y no se reintenta.
+  describe("E7: con el SDK real, un R2 mudo", () => {
+    beforeEach(() => {
+      vi.doUnmock("@aws-sdk/client-s3");
+    });
+
+    afterEach(() => {
+      vi.doMock("@aws-sdk/client-s3", fabricaClienteS3);
+    });
+
+    it("corta el pedido al vencer el plazo y no lo repite", async () => {
+      const { createServer } = await import("node:http");
+      const pedidos: string[] = [];
+      const servidor = createServer((req) => { pedidos.push(`${req.method} ${req.url}`); });
+      await new Promise<void>((listo) => servidor.listen(0, "127.0.0.1", listo));
+      try {
+        const { port } = servidor.address() as { port: number };
+        const { RED_R2 } = await import("@/lib/r2");
+        const { S3Client, HeadObjectCommand } = await import("@aws-sdk/client-s3");
+        const cliente = new S3Client({
+          ...RED_R2,
+          // Lo único que cambia es la duración, para que el test no tarde 10 s.
+          requestHandler: { ...RED_R2.requestHandler, requestTimeout: 200 },
+          region: "auto",
+          endpoint: `http://127.0.0.1:${port}`,
+          forcePathStyle: true,
+          credentials: { accessKeyId: "a", secretAccessKey: "b" },
+        });
+        const inicio = Date.now();
+        await expect(cliente.send(new HeadObjectCommand({ Bucket: "b", Key: "k" }))).rejects.toMatchObject({ name: "TimeoutError" });
+        expect(Date.now() - inicio).toBeLessThan(2_000);
+        expect(pedidos).toEqual(["HEAD /b/k"]);
+        cliente.destroy();
+      } finally {
+        servidor.closeAllConnections();
+        servidor.close();
+      }
     });
   });
 

@@ -8,7 +8,8 @@
 // LO QUE NUNCA SALE DE ACÁ
 //
 // Un fallo del proveedor —clave inválida, 500 de Anthropic, timeout— se
-// loguea con detalle y se traduce a un ApiError con texto para la usuaria.
+// loguea con detalle y se traduce a un ErrorProveedorAsistente (502) con
+// texto para la usuaria y la regla del cupo (ayuda/reservar-cupo.ts).
 // El mensaje de ErrorAnthropic trae el cuerpo del proveedor y no se pasa
 // nunca a la respuesta HTTP.
 //
@@ -16,6 +17,9 @@
 
 import {
   crearMensajeStreaming,
+  diagnosticoDe,
+  ErrorAnthropic,
+  esErrorHttpDelProveedor,
   MODELO_AYUDA,
   systemCacheado,
   type MensajeAnthropic,
@@ -23,28 +27,18 @@ import {
   type FlujoMensajes,
 } from "@/lib/anthropic-mensajes";
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import { LARGO_MAX_PREGUNTA, MAX_TURNOS_HISTORIAL } from "@/lib/ayuda-contrato";
 import { systemPromptAyuda } from "@/lib/ayuda-corpus";
 
 import { registrarAuditoria, type ClienteAuditoria } from "../auditoria";
 import { ApiError } from "../responses";
+import { ErrorProveedorAsistente } from "./ayuda/reservar-cupo";
 import { HERRAMIENTAS_AYUDA, resolverHerramienta, type ConsultarAgenda } from "./ayuda/herramientas";
 
-
-/** Largo máximo de una pregunta. Mide caracteres, no tokens: es un tope
- *  contra el pegado accidental de media pantalla, no un control de gasto. */
-export const LARGO_MAX_PREGUNTA = 600;
-
-/** Cuántos turnos previos entran. Un turno es un mensaje, de cualquiera de
- *  las dos. Con 6 alcanza para un "¿y si no me anduvo?" encadenado, y el
- *  historial nunca crece hasta pesar como el corpus. */
-export const MAX_TURNOS_HISTORIAL = 6;
 
 /** Techo de la respuesta. Los límites piden 3 a 8 líneas; 1024 tokens son
  *  varias veces eso, así que solo corta una respuesta ya descarrilada. */
 export const MAX_TOKENS_RESPUESTA = 1024;
-
-/** Cuántas preguntas por usuaria por día. */
-export const TOPE_PREGUNTAS_DIA = 40;
 
 /** La acción con la que se auditan las preguntas, independiente del cupo. */
 const ENTIDAD_AYUDA = "usuario";
@@ -58,8 +52,6 @@ export const MENSAJE_SIN_CLAVE =
 
 export const MENSAJE_PROVEEDOR_CAIDO =
   "No pude responderte ahora mismo. Probá de nuevo en un ratito.";
-
-export const MENSAJE_TOPE_DIARIO = `Por hoy llegaste a las ${TOPE_PREGUNTAS_DIA} preguntas. Mañana se renueva. Mientras tanto, la ayuda escrita está toda en la app.`;
 
 export const MENSAJE_PREGUNTA_VACIA = "Escribí una pregunta.";
 
@@ -143,8 +135,13 @@ export async function responderAyudaStreaming(
     );
     return input.consultarAgenda ? conConsultaAgenda(flujo, input.consultarAgenda) : flujo;
   } catch (error) {
-    console.error("[ayuda] fallo del proveedor", error);
-    throw new ApiError(MENSAJE_PROVEEDOR_CAIDO, 502);
+    // Todo lo que viene del proveedor es ErrorAnthropic: se loguea sólo su
+    // status y código (el mensaje puede traer el cuerpo de la respuesta).
+    // Otra cosa es nuestra (el corpus, el armado del pedido): el pedido no
+    // salió, se loguea con su causa y el cupo vuelve.
+    const delProveedor = error instanceof ErrorAnthropic;
+    console.error("[ayuda] fallo del proveedor", delProveedor ? diagnosticoDe(error) : error);
+    throw new ErrorProveedorAsistente(MENSAJE_PROVEEDOR_CAIDO, !delProveedor || esErrorHttpDelProveedor(error));
   }
 }
 

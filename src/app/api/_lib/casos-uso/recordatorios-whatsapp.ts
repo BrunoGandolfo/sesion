@@ -25,8 +25,9 @@
 // De esas filas cuenta sólo la de la FECHA VIGENTE del turno (su clave
 // turno:<id>:<fecha>): un turno movido deja su envío viejo cancelado con la
 // fecha anterior, y ese no es un aviso de hoy. El turno tiene que seguir
-// programado y no haber empezado, la paciente activa y sin baja: los mismos
-// cortes que haría el cron antes de mandar.
+// programado y no haber empezado (whereTurnoAvisable, la misma regla que el
+// cron), la paciente activa y sin baja: los mismos cortes que haría el cron
+// antes de mandar.
 //
 // ─── EL TEXTO ───────────────────────────────────────────────────────────────
 //
@@ -53,7 +54,7 @@ import type { AvisoWhatsappRegistrado, RecordatorioWhatsapp, RecordatoriosWhatsa
 
 import { auditar } from "../auditoria";
 import { ApiError } from "../responses";
-import { claveDelTurno, ESTADOS_CON_ENVIO_PENDIENTE, MOTIVO_CANAL_WHATSAPP } from "./envios-del-turno";
+import { claveDelTurno, ESTADOS_CON_ENVIO_PENDIENTE, MOTIVO_CANAL_WHATSAPP, whereTurnoAvisable } from "./envios-del-turno";
 import { tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
@@ -106,7 +107,10 @@ export async function listarRecordatoriosDeHoy({
         },
       ],
       paciente: { activo: true },
-      turno: { estado: "programado", fecha: { gt: ahora } },
+      // La misma regla que el despacho del SMS. La baja, en cambio, se mira
+      // contra el teléfono de la ficha (el enlace va a ese), no contra el
+      // congelado en el envío como hace el SMS.
+      turno: whereTurnoAvisable(ahora),
     },
     select: {
       claveIdempotencia: true,

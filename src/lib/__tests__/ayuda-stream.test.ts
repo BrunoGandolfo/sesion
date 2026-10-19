@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/ayuda/route";
 import { registrarAuditoria } from "@/app/api/_lib/auditoria";
 import { responderAyudaStreaming } from "@/app/api/_lib/casos-uso/responder-ayuda";
-import { reservarCupo, devolverCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
+import { reservarCupo, devolverCupo, ErrorProveedorAsistente } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
 import { ApiError } from "@/app/api/_lib/responses";
 import { db } from "@/lib/db";
 import { getSessionActor } from "@/app/api/_lib/auth";
@@ -18,7 +18,12 @@ vi.mock("@/app/api/_lib/casos-uso/responder-ayuda", async (original) => ({
   ...(await original<typeof import("@/app/api/_lib/casos-uso/responder-ayuda")>()),
   responderAyudaStreaming: vi.fn(),
 }));
-vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", () => ({ reservarCupo: vi.fn(), devolverCupo: vi.fn() }));
+// La regla de devolución (cupoVuelveAnte) es la de verdad: es lo que se prueba.
+vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", async (original) => ({
+  ...(await original<typeof import("@/app/api/_lib/casos-uso/ayuda/reservar-cupo")>()),
+  reservarCupo: vi.fn(),
+  devolverCupo: vi.fn(),
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -104,19 +109,37 @@ it("con el cupo agotado responde 429 sin llamar al proveedor", async () => {
   expect(db.turno.findMany).not.toHaveBeenCalled();
 });
 
-it("devuelve la reserva si el proveedor falla antes de abrir el stream", async () => {
-  vi.mocked(responderAyudaStreaming).mockRejectedValue(new ApiError("Proveedor caído", 502));
+// La regla del cupo es la de Lux (decisión del dueño, 2026-10-16): vuelve si
+// el pedido no llegó al proveedor o si el proveedor contestó un error HTTP;
+// se queda con un timeout, un corte o una cancelación.
+
+it("devuelve la reserva si falla antes de llamar al proveedor (validación, sin clave)", async () => {
+  for (const error of [new ApiError("Escribí una pregunta.", 400), new ApiError("Sin clave", 503)]) {
+    vi.mocked(responderAyudaStreaming).mockRejectedValueOnce(error);
+    expect((await pedir()).status).toBe(error.status);
+  }
+  expect(devolverCupo).toHaveBeenCalledTimes(2);
+});
+
+it("E1: con un error HTTP del proveedor (429, 529…) contesta 502 y devuelve la reserva", async () => {
+  vi.mocked(responderAyudaStreaming).mockRejectedValue(new ErrorProveedorAsistente("Proveedor caído", true));
   expect((await pedir()).status).toBe(502);
   expect(devolverCupo).toHaveBeenCalledTimes(1);
 });
 
-it.each([false, true])("fallo durante el stream (con fragmento=%s) devuelve solo si no hubo fragmentos", async conFragmento => {
+it("E1: con timeout o conexión cortada al llamar al proveedor contesta 502 y el cupo se queda", async () => {
+  vi.mocked(responderAyudaStreaming).mockRejectedValue(new ErrorProveedorAsistente("Proveedor caído", false));
+  expect((await pedir()).status).toBe(502);
+  expect(devolverCupo).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("E1: un corte del stream (con fragmento=%s) no devuelve el cupo, tampoco antes del primer texto", async conFragmento => {
   vi.mocked(responderAyudaStreaming).mockResolvedValue({
     fragmentos: (async function* () { if (conFragmento) yield "Hola"; throw new Error("corte"); })(),
     resultado: new Promise(() => {}), cancelar: vi.fn(),
   });
   await expect((await pedir()).text()).rejects.toThrow("corte");
-  expect(devolverCupo).toHaveBeenCalledTimes(conFragmento ? 0 : 1);
+  expect(devolverCupo).not.toHaveBeenCalled();
 });
 
 it("cancelar conserva la reserva aunque todavía no haya fragmentos", async () => {

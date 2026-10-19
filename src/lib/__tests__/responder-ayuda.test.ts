@@ -6,14 +6,14 @@ import type {
   PedidoMensajes,
   ResultadoMensajes,
 } from "@/lib/anthropic-mensajes";
-import { MODELO_AYUDA } from "@/lib/anthropic-mensajes";
+import { ErrorAnthropic, MODELO_AYUDA } from "@/lib/anthropic-mensajes";
+import { ErrorProveedorAsistente } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
 
 import { ApiError } from "@/app/api/_lib/responses";
+import { LARGO_MAX_PREGUNTA, MAX_TURNOS_HISTORIAL } from "@/lib/ayuda-contrato";
 import {
   historialAMensajes,
-  LARGO_MAX_PREGUNTA,
   MAX_TOKENS_RESPUESTA,
-  MAX_TURNOS_HISTORIAL,
   MENSAJE_PROVEEDOR_CAIDO,
   MENSAJE_SIN_CLAVE,
   responderAyudaStreaming,
@@ -58,9 +58,10 @@ async function consumir(flujo: FlujoMensajes) {
   return { respuesta: texto, tokensEntrada, tokensSalida, cacheLeido };
 }
 
-/** Doble de crearMensajeStreaming que se cae. */
+/** Doble de crearMensajeStreaming que se cae, como el real: con un
+ *  ErrorAnthropic cuyo mensaje trae el cuerpo del proveedor. */
 const proveedorCaido: typeof crearMensajeStreaming = async () => {
-  throw new Error("HTTP 529: overloaded — este texto NO puede salir a la app");
+  throw new ErrorAnthropic("HTTP 529: overloaded — este texto NO puede salir a la app", 529, "overloaded_error");
 };
 
 // console.warn/error se silencian: los caminos de error loguean a propósito
@@ -205,7 +206,7 @@ describe("responderAyudaStreaming — el proveedor falla", () => {
     expect(error.message).not.toContain("overloaded");
   });
 
-  it("el detalle sí va al log", async () => {
+  it("al log va el status y el código, nunca el cuerpo del proveedor", async () => {
     await responderAyudaStreaming({
       pregunta: "¿cómo cobro?",
       apiKey: CLAVE,
@@ -215,8 +216,29 @@ describe("responderAyudaStreaming — el proveedor falla", () => {
 
     expect(console.error).toHaveBeenCalledWith(
       "[ayuda] fallo del proveedor",
-      expect.any(Error),
+      { status: 529, codigo: "overloaded_error" },
     );
+  });
+
+  it("E1: un error HTTP del proveedor devuelve el cupo; un timeout o un corte sin status, no", async () => {
+    const casos: Array<[ErrorAnthropic | Error, boolean]> = [
+      [new ErrorAnthropic("HTTP 529", 529, "overloaded_error"), true],
+      [new ErrorAnthropic("Timeout", undefined, "timeout"), false],
+      [new ErrorAnthropic("socket hang up", undefined, "APIConnectionError"), false],
+      // No vino del proveedor (el armado del pedido): el pedido no salió.
+      [new Error("ENOENT: docs/ayuda/_indice.md"), true],
+    ];
+    for (const [fallo, devuelve] of casos) {
+      const error = await atrapar<ErrorProveedorAsistente>(
+        responderAyudaStreaming({
+          pregunta: "¿cómo cobro?", apiKey: CLAVE, systemPrompt: SYSTEM,
+          crearStreaming: async () => { throw fallo; },
+        }),
+      );
+      expect(error).toBeInstanceOf(ErrorProveedorAsistente);
+      expect(error.status).toBe(502);
+      expect(error.devuelveCupo).toBe(devuelve);
+    }
   });
 });
 

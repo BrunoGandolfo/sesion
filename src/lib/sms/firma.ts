@@ -1,4 +1,4 @@
-// Validación de `X-Twilio-Signature`. Puro (node:crypto): lo usan las rutas
+// Validación de `X-Twilio-Signature` (node:crypto): lo usan las rutas
 // Node /api/sms/callback y /api/sms/entrante, nunca el proxy.
 //
 // Cómo firma Twilio (https://www.twilio.com/docs/usage/webhooks/webhooks-security
@@ -70,7 +70,7 @@ export function parametrosDeFormulario(cuerpo: string): Record<string, string> {
 export type MotivoRechazo = "sin_token" | "cuerpo_grande" | "sin_firma" | "firma";
 
 /**
- * La línea que deja un 403 en el log de la ruta /api/sms/callback. Durante semanas los
+ * La línea que deja un 403 en el log de un webhook de Twilio. Durante semanas los
  * callbacks llegaron y se rechazaron sin dejar rastro (diagnóstico del
  * 7-oct, docs/operaciones.md §6): el 403 se veía en Vercel, el porqué no.
  *
@@ -78,12 +78,14 @@ export type MotivoRechazo = "sin_token" | "cuerpo_grande" | "sin_firma" | "firma
  * MessageSid, el estado que traía y si el AccountSid del callback es el de
  * nuestra cuenta. Con la URL exacta y el AccountSid nuestro, una firma que
  * no valida sólo puede ser un Auth Token que no es el que firma (el
- * secundario, o uno de otra cuenta). Nunca el cuerpo, la firma ni el token.
+ * secundario, o uno de otra cuenta). Nunca el cuerpo, la firma ni el token:
+ * en el entrante, el cuerpo es lo que escribió la paciente.
  */
 export function lineaRechazo(
   motivo: MotivoRechazo,
   params: Record<string, string>,
   cuentaPropia: string | undefined = process.env.TWILIO_ACCOUNT_SID,
+  etiqueta = "sms-callback",
 ): string {
   const sid = params.MessageSid ?? params.SmsSid;
   const estado = params.MessageStatus ?? params.SmsStatus;
@@ -94,5 +96,33 @@ export function lineaRechazo(
     ...(estado ? { estado: estado.slice(0, 20) } : {}),
     ...(cuenta ? { cuentaPropia: Boolean(cuentaPropia) && cuenta === cuentaPropia } : {}),
   };
-  return `[sms-callback] 403 ${JSON.stringify(datos)}`;
+  return `[${etiqueta}] 403 ${JSON.stringify(datos)}`;
+}
+
+/** Tope del cuerpo de un webhook de Twilio. */
+const MAX_BYTES_WEBHOOK = 16 * 1024;
+
+/**
+ * Las comprobaciones comunes de los dos webhooks de Twilio, en orden: token
+ * configurado, cuerpo dentro del tope, firma de la URL pública. Devuelve los
+ * parámetros, o null si hay que contestar 403; en ese caso ya dejó la línea
+ * de rechazo, con la etiqueta de la ruta (`[sms-callback]`, `[sms-entrante]`).
+ */
+export async function validarWebhookTwilio(
+  request: Request,
+  url: string,
+): Promise<Record<string, string> | null> {
+  const etiqueta = url === URL_CALLBACK ? "sms-callback" : "sms-entrante";
+  const rechazar = (motivo: MotivoRechazo, params: Record<string, string>) => {
+    console.warn(lineaRechazo(motivo, params, undefined, etiqueta));
+    return null;
+  };
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const crudo = await request.text();
+  if (!token) return rechazar("sin_token", {});
+  if (crudo.length > MAX_BYTES_WEBHOOK) return rechazar("cuerpo_grande", {});
+  const params = parametrosDeFormulario(crudo);
+  const firma = request.headers.get("x-twilio-signature");
+  if (!firmaValida(token, url, params, firma)) return rechazar(firma ? "firma" : "sin_firma", params);
+  return params;
 }

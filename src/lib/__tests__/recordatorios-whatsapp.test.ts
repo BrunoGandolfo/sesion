@@ -707,28 +707,52 @@ describe("registrarAviso", () => {
     });
   });
 
-  it("toma el lock de la agenda: espera a que termine un cambio de turno en curso", async () => {
+  it("G3: toma el lock de la agenda: abrir el enlace mientras se mueve el turno deja el aviso nuevo como cambio de horario", async () => {
+    // Orden fijo, sin esperas por reloj: (1) otra transacción toma el lock,
+    // mueve el turno y reprograma su envío (no hay apertura que ver); (2) ella
+    // abre el enlace de la fecha vieja; (3) la otra transacción recién
+    // confirma cuando la apertura está esperando el lock o ya terminó.
+    // Con el lock, la apertura lee la fecha nueva y corrige el aviso. Sin él,
+    // lee la vieja (el cambio no confirmó), no corrige nada, y el aviso nuevo
+    // queda como un "te recordamos" común: la paciente nunca se entera.
     const o = await crearOrg();
     const { turno } = await turnoConAvisoHoy(o);
+    const nueva = new Date(turno.fecha.getTime() + DIA);
     let soltar!: () => void;
     const suelto = new Promise<void>((r) => (soltar = r));
-    let tomado!: () => void;
-    const lockTomado = new Promise<void>((r) => (tomado = r));
-    const otra = prismaRaw.$transaction(async (tx) => {
+    let movido!: () => void;
+    const turnoMovido = new Promise<void>((r) => (movido = r));
+    const mover = db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${o.orgId}))`;
-      tomado();
+      await tx.turno.update({ where: { id: turno.id }, data: { fecha: nueva } });
+      await reprogramarEnvioDelTurno(tx, {
+        turnoId: turno.id, organizationId: o.orgId, pacienteId: turno.pacienteId,
+        fechaTurno: nueva, fechaTurnoPrevia: turno.fecha, ahora: AHORA,
+      });
+      movido();
       await suelto;
     });
-    await lockTomado;
-    let registrado = false;
-    const aviso = registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: AHORA }).then(() => {
-      registrado = true;
-    });
-    await new Promise((r) => setTimeout(r, 300));
-    expect(registrado).toBe(false);
+    await turnoMovido;
+
+    let terminado = false;
+    const aviso = registrarAviso({
+      prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: AHORA, fechaTurno: turno.fecha,
+    }).finally(() => { terminado = true; });
+    // El lock de ESTA agenda (pg_advisory_xact_lock(bigint) guarda la mitad
+    // baja de la clave en objid), no cualquier advisory de la base.
+    const esperandoLock = async () =>
+      (await prismaRaw.$queryRaw<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_locks
+        WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
+          AND objid::bigint = (hashtext(${o.orgId})::bigint & 4294967295)`)[0].n > 0;
+    while (!terminado && !(await esperandoLock())) await new Promise((r) => setImmediate(r));
     soltar();
-    await Promise.all([otra, aviso]);
-    expect(registrado).toBe(true);
+    await Promise.all([mover, aviso]);
+
+    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: claveDelTurno(turno.id, nueva) } })).toMatchObject({
+      motivo: "cambio_de_horario",
+      estado: "pendiente",
+    });
   });
 
   it("404 si el turno es de otra organización, sin escribir nada", async () => {

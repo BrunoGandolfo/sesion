@@ -20,6 +20,8 @@ import {
   programarEnvioDeCobro,
   programarEnvioDelTurno,
   reprogramarEnvioDelTurno,
+  turnoAvisable,
+  whereTurnoAvisable,
 } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { calcularProgramadoEn } from "@/lib/recordatorios-programacion";
@@ -268,6 +270,38 @@ describe("programarEnvioDeCobro", () => {
     const { envioId } = await programarEnvioDeCobro(db, { organizationId: f.organizationId, pacienteId: f.pacienteId, ahora: AHORA });
     expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envioId } })).toMatchObject({ estado: "fallido", motivoNoEnvio: MOTIVO_SIN_TELEFONO });
   });
+
+  it("B4: dos toques simultáneos (los dos leen antes de que alguno cree) dan el mismo envío, sin error", async () => {
+    const f = await fixture();
+    // Barrera: ningún pedido pasa de la lectura hasta que los dos leyeron.
+    // Es el orden que en producción da el doble toque: los dos ven "no hay"
+    // y los dos intentan crear.
+    let leyeron = 0;
+    let soltar!: () => void;
+    const ambosLeyeron = new Promise<void>(r => (soltar = r));
+    const envioSms = new Proxy(db.envioSms, {
+      get(objetivo, clave, receptor) {
+        if (clave !== "findUnique") return Reflect.get(objetivo, clave, receptor);
+        return async (...args: Parameters<typeof db.envioSms.findUnique>) => {
+          const fila = await objetivo.findUnique(...args);
+          leyeron += 1;
+          if (leyeron === 2) soltar();
+          await ambosLeyeron;
+          return fila;
+        };
+      },
+    });
+    const tx = new Proxy(db, {
+      get: (objetivo, clave, receptor) => (clave === "envioSms" ? envioSms : Reflect.get(objetivo, clave, receptor)),
+    });
+    const pedir = () => programarEnvioDeCobro(tx, { organizationId: f.organizationId, pacienteId: f.pacienteId, ahora: AHORA });
+
+    const [a, b] = await Promise.all([pedir(), pedir()]);
+
+    expect([a.creado, b.creado].sort()).toEqual([false, true]);
+    expect(a.envioId).toBe(b.envioId);
+    expect(await prismaRaw.envioSms.count({ where: { pacienteId: f.pacienteId } })).toBe(1);
+  });
 });
 
 describe("enviosDelTurno (lectura para la pantalla)", () => {
@@ -287,5 +321,30 @@ describe("enviosDelTurno (lectura para la pantalla)", () => {
 
     const otra = await fixture();
     expect(await enviosDelTurno(db, otra.organizationId, f.turnoId)).toEqual([]);
+  });
+});
+
+describe("E8: a qué turno se le avisa (SMS y WhatsApp)", () => {
+  it("la regla en memoria (despacho) y en la base (lista de WhatsApp, consumo del intento) dicen lo mismo", async () => {
+    const f = await fixture();
+    const fechas = [new Date(AHORA.getTime() - HORA), AHORA, new Date(AHORA.getTime() + 1), MANANA];
+    const estados = ["programado", "realizado", "cancelado", "ausente"] as const;
+    const turnos = [];
+    for (const estado of estados) {
+      for (const fecha of fechas) {
+        turnos.push(await prismaRaw.turno.create({
+          data: { fecha, estado, tarifaCobrada: 1000, pacienteId: f.pacienteId, organizationId: f.organizationId },
+          select: { id: true, estado: true, fecha: true },
+        }));
+      }
+    }
+    const enLaBase = new Set((await prismaRaw.turno.findMany({
+      where: { id: { in: turnos.map((t) => t.id) }, ...whereTurnoAvisable(AHORA) },
+      select: { id: true },
+    })).map((t) => t.id));
+    const enMemoria = new Set(turnos.filter((t) => turnoAvisable(t, AHORA)).map((t) => t.id));
+    expect(enLaBase).toEqual(enMemoria);
+    // Programado y todavía no empezado: los dos que quedan.
+    expect(enMemoria.size).toBe(2);
   });
 });
