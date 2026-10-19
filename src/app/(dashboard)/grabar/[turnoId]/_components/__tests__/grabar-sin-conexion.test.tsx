@@ -214,6 +214,11 @@ describe("sin red", () => {
     // Todavía grabando: no hizo falta terminar ni que falle la subida.
     expect(screen.getByRole("button", { name: "Terminar la sesión" })).toBeTruthy();
     expect(alCambiarCopia).toHaveBeenLastCalledWith(true);
+
+    // Descartada, ya no hay nada que proteger: la franja vuelve a la de siempre.
+    fireEvent.click(screen.getByRole("button", { name: "Descartar grabación" }));
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    await waitFor(() => expect(alCambiarCopia).toHaveBeenLastCalledWith(false));
   });
 
   test("al volver la red, Reintentar crea el turno con la hora en que empezó, la sesión, y sube", async () => {

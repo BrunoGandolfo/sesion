@@ -94,9 +94,11 @@ export function GrabarView({
     avisar: toast.avisar,
   });
 
+  // Con el audio ya en R2 no queda nada que proteger en esta pantalla.
+  const copiaEnRiesgo = grabador.copiaFallida && fase !== "guardado" && fase !== "turno-sin-marcar";
   React.useEffect(() => {
-    alCambiarCopia?.(grabador.copiaFallida);
-  }, [alCambiarCopia, grabador.copiaFallida]);
+    alCambiarCopia?.(copiaEnRiesgo);
+  }, [alCambiarCopia, copiaEnRiesgo]);
 
   function descartar() {
     setConfirmarDescarte(false);

@@ -57,7 +57,10 @@ async function aplicarFeedback(
 ): Promise<void> {
   if (!trabajo.sesionId) return;
   const generacion = generacionDe(trabajo.payload);
+  // Sin generación no hay qué feedback escribir; un fallo igual resuelve el
+  // trabajo (si no, quedaría reclamado hasta que venza el lease).
   if (generacion === null) {
+    if (!resultado.ok) return;
     throw new ApiError("generar_feedback: el payload no trae `generacion`", 400);
   }
   if (resultado.ok) {

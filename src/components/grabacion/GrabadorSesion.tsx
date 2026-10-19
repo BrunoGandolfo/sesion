@@ -433,7 +433,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     conmutando: guarda.conmutando,
     mensajeError,
     muyCorta,
-    copiaFallida,
+    copiaFallida: copiaFallida && estado !== "inactivo" && estado !== "error", // sin grabación, nada que proteger
     pendienteSeg: pendiente ? pendiente.duracionAproxSeg : null,
     pendiente: guardada,
     iniciar,

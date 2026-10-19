@@ -5,6 +5,8 @@
 import { describe, expect, it } from "vitest";
 
 import { decidirResolucion } from "@/app/api/_lib/casos-uso/trabajos/resolver";
+import { APLICADORES } from "@/app/api/_lib/casos-uso/trabajos/resultado-worker";
+import type { TrabajoAutorizado } from "@/app/api/_lib/tickets";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
 import { resultadoTrabajoSchema } from "@/lib/sesion-clinica/schema";
 
@@ -37,5 +39,24 @@ describe("resultadoTrabajoSchema", () => {
 
   it("definitivo es booleano", () => {
     expect(resultadoTrabajoSchema.safeParse({ ok: false, error: "x", definitivo: "si" }).success).toBe(false);
+  });
+});
+
+describe("generar_feedback con un payload sin generación", () => {
+  // Payloads de antes de la generación: el fallo igual resuelve el trabajo
+  // (la segunda transacción del rechazo de forma no vuelve a lanzar).
+  const trabajo = { trabajoId: "t", sesionId: "s", payload: {} } as unknown as TrabajoAutorizado;
+  const tx = {} as Parameters<NonNullable<typeof APLICADORES.generar_feedback>>[0];
+
+  it("un fallo no lanza: no hay feedback que marcar", async () => {
+    await expect(
+      APLICADORES.generar_feedback!(tx, trabajo, { ok: false, error: "x" }, { estado: "fallido" }, AHORA),
+    ).resolves.toBeUndefined();
+  });
+
+  it("un resultado ok sigue siendo un 400", async () => {
+    await expect(
+      APLICADORES.generar_feedback!(tx, trabajo, { ok: true, feedback: {} }, { estado: "hecho" }, AHORA),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });
