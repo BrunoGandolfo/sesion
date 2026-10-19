@@ -19,5 +19,6 @@
   ],
   "nivelRiesgo": ["ninguno", "bajo", "moderado", "alto"],
   "alianzaTerapeutica": ["fragil", "inestable", "estable", "fuerte"],
-  "confianzaModelo": ["alta", "media", "baja"]
+  "confianzaModelo": ["alta", "media", "baja"],
+  "orientacionTeorica": ["cbt_mi", "gestalt"]
 }

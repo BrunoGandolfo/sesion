@@ -8,6 +8,9 @@ Dobles y datos compartidos por los tests del worker. Sin red.
 - requiere(): salta un test que necesita una herramienta del sistema (node,
   ffmpeg) cuando falta, salvo en CI: ahi tiene que estar, y si falta el test
   falla en vez de desaparecer en silencio.
+- TICKET, sesion() y app_ok(): una sesion reclamada y la app simulada que
+  acepta todo lo que el pipeline le escribe. Una escritura nueva del pipeline
+  a la app se agrega en app_ok y en ningun otro lado.
 """
 import json
 import os
@@ -15,6 +18,9 @@ import shutil
 from types import SimpleNamespace
 
 import pytest
+
+from app_client import RespuestaApp
+from processor import SesionReclamada
 
 RIESGO_SIN_SEÑAL = {
     "nivel": "ninguno",
@@ -74,3 +80,38 @@ def requiere(*programas: str):
         bool(faltan) and not os.getenv("CI"),
         reason=f"falta {', '.join(faltan)} (en CI no se saltea)",
     )
+
+
+TICKET = "a" * 64
+
+
+def sesion(**extra) -> SesionReclamada:
+    """Una sesion reclamada con audio y sin checkpoint; `extra` pisa campos."""
+    base = dict(
+        sesion_clinica_id="s1",
+        intento=1,
+        ticket=TICKET,
+        paciente_id="p1",
+        terminos_asr=[],
+        audio={"key": "org/s1/0"},
+        checkpoint=None,
+    )
+    base.update(extra)
+    return SesionReclamada(**base)
+
+
+def app_ok(mocker) -> dict:
+    """
+    La app que acepta cada escritura del pipeline y no tiene Recorrido. El
+    lease no se renueva durante el test. Devuelve los dobles por nombre para
+    que cada test rompa o mire el que le interesa.
+    """
+    mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
+    ok = RespuestaApp(ok=True, status=200)
+    return {
+        "asr": mocker.patch("processor.app_client.registrar_asr", return_value=ok),
+        "checkpoint": mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok),
+        "resultado": mocker.patch("processor.app_client.enviar_resultado", return_value=ok),
+        "lease": mocker.patch("processor.app_client.renovar_lease", return_value=ok),
+        "contexto": mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None),
+    }

@@ -32,9 +32,20 @@ def test_cada_codigo_definitivo_tiene_quien_lo_emita():
     assert "llm_invalido" not in CODIGOS_DEFINITIVOS
 
 
-def test_la_bandera_explicita_gana_sobre_el_codigo():
-    assert PipelineError("r2_error", "x", definitivo=True).definitivo is True
-    assert PipelineError("asr_vacio", "x", definitivo=False).definitivo is False
+def test_el_codigo_es_lo_unico_que_decide_si_un_fallo_es_definitivo():
+    # Una sola fuente: CODIGOS_DEFINITIVOS. No hay bandera que la pise; un
+    # fallo nuevo que no se arregla solo se agrega a la lista.
+    import pytest
+    with pytest.raises(TypeError):
+        PipelineError("r2_error", "x", definitivo=True)
+
+
+def test_ningun_modulo_marca_a_mano_si_un_fallo_es_definitivo():
+    import pathlib
+    import re
+
+    fuentes = "".join(p.read_text(encoding="utf-8") for p in pathlib.Path(__file__).parent.parent.glob("*.py"))
+    assert not re.search(r"PipelineError\([^)]*definitivo=", fuentes)
 
 
 def test_el_mensaje_lleva_codigo_y_texto_publico():

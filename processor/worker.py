@@ -5,7 +5,8 @@ Modo loop (default):
     python worker.py
     Cada POLL_INTERVAL_SECONDS: reclama /api/sesion-clinica/pendientes y
     procesa cada sesion; despues reclama /api/trabajos/pendientes (borrar el
-    transcript en AssemblyAI, generar "Para vos") y los resuelve.
+    transcript en AssemblyAI, generar "Para vos", integrar el Recorrido;
+    trabajos.py) y los resuelve.
 
 Modo manual:
     python worker.py manual <item.json>
@@ -28,6 +29,7 @@ import requests
 import app_client
 import config
 import processor
+import trabajos
 from processor import SesionReclamada, procesar_sesion
 
 logging.basicConfig(
@@ -84,8 +86,8 @@ def _procesar_pendientes(items: list[dict]) -> None:
             logger.error(f"Error procesando {sesion.sesion_clinica_id}: {type(e).__name__}", exc_info=True)
 
 
-def _procesar_trabajos(trabajos: list[dict]) -> None:
-    for trabajo in trabajos:
+def _procesar_trabajos(lote: list[dict]) -> None:
+    for trabajo in lote:
         if not _running:
             return
         trabajo_id = trabajo.get("trabajoId") if isinstance(trabajo, dict) else None
@@ -94,7 +96,7 @@ def _procesar_trabajos(trabajos: list[dict]) -> None:
             logger.warning("Trabajo ignorado: sin trabajoId o ticket")
             continue
         logger.info(f"Trabajo {trabajo_id} ({trabajo.get('tipo')}, intento {trabajo.get('intentos')})")
-        resultado = processor.ejecutar_trabajo(trabajo)
+        resultado = trabajos.ejecutar_trabajo(trabajo)
         res = app_client.resolver_trabajo(trabajo_id, ticket, resultado)
         if not res.ok:
             logger.warning(f"Trabajo {trabajo_id}: la app respondio {res.status}")
@@ -115,13 +117,13 @@ def _ciclo() -> None:
     if not _running:
         return
     try:
-        trabajos = app_client.trabajos_pendientes(processor.TIPOS_TRABAJO)
+        lote = app_client.trabajos_pendientes(trabajos.TIPOS_TRABAJO)
     except requests.RequestException as e:
         logger.error(f"Error consultando trabajos ({type(e).__name__})")
         return
-    if trabajos:
-        logger.info(f"{len(trabajos)} trabajo(s)")
-        _procesar_trabajos(trabajos)
+    if lote:
+        logger.info(f"{len(lote)} trabajo(s)")
+        _procesar_trabajos(lote)
 
 
 def loop_principal() -> None:

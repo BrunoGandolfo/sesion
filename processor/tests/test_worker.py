@@ -7,6 +7,7 @@ import json
 import signal
 
 import pytest
+
 import requests
 
 import worker
@@ -56,7 +57,7 @@ def test_las_sesiones_llegan_a_procesar_sesion(mocker):
 
 
 def test_los_trabajos_se_ejecutan_y_se_resuelven_con_su_ticket(mocker):
-    ejecutar = mocker.patch("worker.processor.ejecutar_trabajo", return_value={"ok": True})
+    ejecutar = mocker.patch("worker.trabajos.ejecutar_trabajo", return_value={"ok": True})
     resolver = mocker.patch("worker.app_client.resolver_trabajo", return_value=RespuestaApp(ok=True, status=200))
 
     worker._procesar_trabajos([{"trabajoId": "t1", "ticket": "b" * 64, "tipo": "borrar_transcript_asr"}, {"trabajoId": "t2"}])
@@ -148,7 +149,7 @@ def test_dormir_cero_o_negativo_no_duerme(mocker):
 
 def test_con_la_senal_no_se_toman_mas_sesiones_ni_trabajos(mocker):
     procesar = mocker.patch("worker.procesar_sesion")
-    ejecutar = mocker.patch("worker.processor.ejecutar_trabajo")
+    ejecutar = mocker.patch("worker.trabajos.ejecutar_trabajo")
     worker._running = False
 
     worker._procesar_pendientes([ITEM])
@@ -169,7 +170,7 @@ def test_una_sesion_que_explota_no_corta_las_siguientes_ni_loguea_el_item(mocker
 
 
 def test_un_trabajo_que_la_app_no_acepta_solo_se_loguea(mocker, caplog):
-    mocker.patch("worker.processor.ejecutar_trabajo", return_value={"ok": True})
+    mocker.patch("worker.trabajos.ejecutar_trabajo", return_value={"ok": True})
     mocker.patch("worker.app_client.resolver_trabajo", return_value=RespuestaApp(ok=False, status=503))
 
     with caplog.at_level("WARNING"):

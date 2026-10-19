@@ -313,7 +313,9 @@ def _esperar(transcript_id: str) -> dict:
                 f"AssemblyAI {transcript_id}: status=error"
                 + (f" error={codigo}" if codigo else "")
             )
-            raise PipelineError("asr_error", "AssemblyAI devolvio status error")
+            # Definitivo (decision del dueno): el `error` de un transcript
+            # viene del archivo (sin audio, formato) y se repite igual.
+            raise PipelineError("asr_transcripcion_fallida", "AssemblyAI no pudo transcribir el audio")
 
         time.sleep(config.ASR_POLL_SECONDS)
 

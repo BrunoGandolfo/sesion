@@ -117,3 +117,48 @@ def test_un_rechazo_del_modelo_es_llm_rechazo(mocker):
         clinical_analyzer._llamar_anthropic("SYSTEM", "user", SCHEMA_NOTA, 100)
 
     assert exc.value.codigo == "llm_rechazo"
+
+
+# Las cuatro partes de _llamar_anthropic, por separado ─────────────────────
+#
+# Llamar (_pedir), clasificar el error de transporte (_clasificar_error),
+# anotar el consumo (_anotar_uso) y leer el JSON (_json_de). La firma de
+# _llamar_anthropic no cambia: los tests de arriba la siguen usando entera.
+
+@pytest.mark.parametrize(
+    "error, codigo",
+    [
+        (lambda: anthropic.APITimeoutError(request=SimpleNamespace()), "llm_timeout"),
+        (lambda: _estado_http(529), "llm_error"),
+        (lambda: anthropic.APIConnectionError(request=SimpleNamespace()), "llm_error"),
+    ],
+)
+def test_clasificar_error_da_el_codigo_y_guarda_el_request_id_si_lo_hay(error, codigo):
+    llamada: dict = {}
+    assert clinical_analyzer._clasificar_error(error(), llamada)[0] == codigo
+
+
+def test_anotar_uso_copia_los_contadores_del_sdk_sin_texto():
+    llamada: dict = {"nombre": "nota", "entrada": 0, "salida": 0, "techo": 16384}
+    pensamiento = clinical_analyzer._anotar_uso(llamada, respuesta_sdk({"a": 1}, entrada=10, salida=20, razonamiento=5), "nota", 16384)
+    assert pensamiento == 5
+    assert llamada == {"nombre": "nota", "entrada": 10, "salida": 20, "techo": 16384, "cacheLectura": 0,
+                       "cacheEscritura": 0, "razonamiento": 5, "stop": "end_turn", "requestId": "req_01"}
+
+
+@pytest.mark.parametrize(
+    "respuesta, codigo",
+    [
+        (respuesta_sdk({"a": 1}, stop="max_tokens"), "llm_truncado"),
+        (respuesta_sdk({"a": 1}, stop="refusal"), "llm_rechazo"),
+        (respuesta_sdk("{no es json"), "llm_json_invalido"),
+    ],
+)
+def test_json_de_clasifica_lo_que_no_se_puede_usar(respuesta, codigo):
+    with pytest.raises(PipelineError) as exc:
+        clinical_analyzer._json_de(respuesta, lambda c, m: PipelineError(c, m), 100, None)
+    assert exc.value.codigo == codigo
+
+
+def test_json_de_devuelve_el_objeto():
+    assert clinical_analyzer._json_de(respuesta_sdk({"a": 1}), lambda c, m: PipelineError(c, m), 100, None) == {"a": 1}

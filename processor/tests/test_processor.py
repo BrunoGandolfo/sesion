@@ -8,10 +8,11 @@ import logging
 import pytest
 
 import config
+import dobles
 import processor
+import trabajos
 from app_client import RespuestaApp
 from errores import LeasePerdido, PipelineError
-from processor import SesionReclamada
 
 TRANSCRIPCION = {
     "duration_seconds": 3,
@@ -23,51 +24,33 @@ TRANSCRIPCION = {
 
 NOTA = {"subjetivo": "s", "objetivo": "o", "analisis": "a", "plan": "p"}
 LLM = f"anthropic:{config.LLM_MODEL_ID}"
-TICKET = "a" * 64
+TICKET = dobles.TICKET
 
 
-def sesion(**extra) -> SesionReclamada:
-    base = dict(
-        sesion_clinica_id="s1",
-        intento=2,
-        ticket=TICKET,
-        paciente_id="p1",
-        terminos_asr=["GTFS"],
-        audio={"key": "org/s1/0"},
-        checkpoint=None,
-    )
-    base.update(extra)
-    return SesionReclamada(**base)
+def sesion(**extra):
+    return dobles.sesion(**{"intento": 2, "terminos_asr": ["GTFS"], **extra})
 
 
 @pytest.fixture
 def pasos(mocker):
     """Pasos exitosos por defecto; cada test rompe el que le interesa."""
-    mocker.patch("processor.LEASE_RENOVACION_SEG", 3600)
+    app = dobles.app_ok(mocker)
     mocker.patch("processor.descargar_audio", return_value=b"audio")
     mocker.patch("processor.preparar_para_asr", side_effect=lambda _etiqueta, audio: audio)
     mocker.patch("processor.transcribir", return_value=TRANSCRIPCION)
     mocker.patch("processor.speech_analytics.compute", return_value={"ratio": 1})
     mocker.patch("processor.formatear_para_llm", return_value="[00:00] Terapeuta: hola")
-    mocker.patch("processor.app_client.obtener_contexto_clinico_llm", return_value=None)
     mocker.patch(
         "processor.clinical_analyzer.analizar",
         return_value=({"nota": NOTA, "datosEstructurados": {"temas": ["x"]}}, "clinical_note_v4.md", _diag()),
     )
-    ok = RespuestaApp(ok=True, status=200)
-    return {
-        "mocker": mocker,
-        "asr": mocker.patch("processor.app_client.registrar_asr", return_value=ok),
-        "checkpoint": mocker.patch("processor.app_client.registrar_transcripcion", return_value=ok),
-        "resultado": mocker.patch("processor.app_client.enviar_resultado", return_value=ok),
-        "lease": mocker.patch("processor.app_client.renovar_lease", return_value=ok),
-    }
+    return {"mocker": mocker, **app}
 
 
-def _diag(advertencias=None):
+def _diag(advertencias=None, definitivo=False):
     from clinical_analyzer import DiagnosticoLLM
 
-    return DiagnosticoLLM(advertencias=advertencias or [])
+    return DiagnosticoLLM(advertencias=advertencias or [], definitivo=definitivo)
 
 
 # Camino feliz ──────────────────────────────────────────────────────────────
@@ -106,7 +89,7 @@ def test_registra_el_asr_y_el_checkpoint_antes_del_modelo_y_entrega_la_nota(paso
 
 
 def test_analizar_no_genera_feedback_y_suma_speech_analytics(pasos):
-    feedback = pasos["mocker"].patch("processor.clinical_analyzer.generar_feedback_terapeuta")
+    feedback = pasos["mocker"].patch("trabajos.clinical_analyzer.generar_feedback_terapeuta")
 
     processor.procesar_sesion(sesion())
 
@@ -242,6 +225,17 @@ def test_fallo_definitivo_en_el_archivo(pasos):
     assert payload["codigo"] == "audio_varias_cabeceras"
     assert payload["definitivo"] is True
     assert payload["paso"] == "audio"
+
+
+def test_un_transcript_con_error_en_assemblyai_falla_la_sesion_como_definitivo(pasos):
+    error = pasos["mocker"].Mock(ok=True, status_code=200, **{"json.return_value": {"status": "error", "error": "no audio"}})
+    delete = _asr_real(pasos["mocker"], [error])
+
+    processor.procesar_sesion(sesion())
+
+    payload = pasos["resultado"].call_args.args[2]
+    assert (payload["codigo"], payload["definitivo"], payload["paso"]) == ("asr_transcripcion_fallida", True, "asr")
+    delete.assert_called_once()
 
 
 def test_excepcion_inesperada_es_error_interno_transitorio_sin_traza(pasos, caplog):
@@ -445,7 +439,7 @@ def test_el_checkpoint_invalido_es_definitivo():
 # Trabajos durables ─────────────────────────────────────────────────────────
 
 def _borrar_trabajo(intentos):
-    res = processor.ejecutar_trabajo(
+    res = trabajos.ejecutar_trabajo(
         {"tipo": "borrar_transcript_asr", "payload": {"transcriptId": "tr1"}, "intentos": intentos}
     )
     res.pop("uso")
@@ -453,8 +447,8 @@ def _borrar_trabajo(intentos):
 
 
 def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
-    borrar = mocker.patch("processor.asr_assemblyai._borrar")
-    listo = processor.primer_intento_que_borra()
+    borrar = mocker.patch("trabajos.asr_assemblyai._borrar")
+    listo = trabajos.primer_intento_que_borra()
     for status in (200, 404):
         borrar.return_value = status
         assert _borrar_trabajo(listo) == {"ok": True}
@@ -470,44 +464,44 @@ def test_borrar_transcript_asr_200_y_404_son_hecho(mocker):
 
 @pytest.mark.parametrize("intentos", [None, "3", 1, 2])
 def test_borrar_transcript_asr_no_borra_mientras_el_worker_dueno_puede_estar_esperando(mocker, intentos):
-    borrar = mocker.patch("processor.asr_assemblyai._borrar")
-    assert _borrar_trabajo(intentos) == {"ok": False, "error": "esperando_al_worker_del_transcript"}
+    borrar = mocker.patch("trabajos.asr_assemblyai._borrar")
+    assert _borrar_trabajo(intentos) == {"ok": False, "error": "esperando_al_worker_del_transcript", "definitivo": False}
     borrar.assert_not_called()
 
 
 def test_el_primer_intento_que_borra_llega_despues_del_timeout_del_polling():
     necesario = config.ASR_TIMEOUT_SECONDS + config.ASR_POLL_SECONDS + processor.asr_assemblyai.TIMEOUT_HTTP_SEG
-    n = processor.primer_intento_que_borra()
-    assert processor.espera_minima_antes_del_intento(n) >= necesario
-    assert processor.espera_minima_antes_del_intento(n - 1) < necesario
+    n = trabajos.primer_intento_que_borra()
+    assert trabajos.espera_minima_antes_del_intento(n) >= necesario
+    assert trabajos.espera_minima_antes_del_intento(n - 1) < necesario
     # Con la politica de hoy y 30 min de polling: el quinto intento (36 min
     # como minimo, aun si dos workers murieron con el trabajo en la mano).
-    assert (n, processor.espera_minima_antes_del_intento(n)) == (5, 60 + 300 + 900 + 900)
+    assert (n, trabajos.espera_minima_antes_del_intento(n)) == (5, 60 + 300 + 900 + 900)
 
 
 def test_la_espera_minima_usa_el_lease_cuando_es_menor_que_el_backoff():
-    assert processor.espera_minima_antes_del_intento(1) == 0
-    assert processor.espera_minima_antes_del_intento(2) == 60
-    assert processor.espera_minima_antes_del_intento(4) == 60 + 300 + 900
+    assert trabajos.espera_minima_antes_del_intento(1) == 0
+    assert trabajos.espera_minima_antes_del_intento(2) == 60
+    assert trabajos.espera_minima_antes_del_intento(4) == 60 + 300 + 900
 
 
 def test_con_un_polling_mas_largo_espera_mas_intentos(mocker):
     mocker.patch.object(config, "ASR_TIMEOUT_SECONDS", 3600)
-    assert processor.primer_intento_que_borra() == 7
+    assert trabajos.primer_intento_que_borra() == 7
 
 
 def test_borrar_transcript_asr_excepcion_solo_deja_el_tipo(mocker):
-    mocker.patch("processor.asr_assemblyai._borrar", side_effect=RuntimeError("red caida"))
-    res = _borrar_trabajo(processor.primer_intento_que_borra())
-    assert res == {"ok": False, "error": "RuntimeError"}
+    mocker.patch("trabajos.asr_assemblyai._borrar", side_effect=RuntimeError("red caida"))
+    res = _borrar_trabajo(trabajos.primer_intento_que_borra())
+    assert res == {"ok": False, "error": "RuntimeError", "definitivo": False}
 
 
 def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):
     generar = mocker.patch(
-        "processor.clinical_analyzer.generar_feedback_terapeuta",
+        "trabajos.clinical_analyzer.generar_feedback_terapeuta",
         return_value=({"mitiCounts": {}}, "therapist_feedback_v1.1.md", _diag()),
     )
-    res = processor.ejecutar_trabajo(
+    res = trabajos.ejecutar_trabajo(
         {
             "tipo": "generar_feedback",
             "payload": {"sesionId": "s1", "pacienteId": "p1"},
@@ -523,18 +517,18 @@ def test_generar_feedback_usa_el_adjunto_y_devuelve_el_reporte(mocker):
 
 def test_generar_feedback_sin_reporte_devuelve_el_motivo(mocker):
     mocker.patch(
-        "processor.clinical_analyzer.generar_feedback_terapeuta",
-        return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"])),
+        "trabajos.clinical_analyzer.generar_feedback_terapeuta",
+        return_value=(None, "therapist_feedback_gestalt_v1.1.md", _diag(["feedback_no_generado: llm_truncado"], definitivo=True)),
     )
-    res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x"}})
+    res = trabajos.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {"transcripcionFormateada": "x", "orientacionTeorica": "gestalt"}})
     del res["uso"]
-    assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado"}
+    assert res == {"ok": False, "error": "feedback_no_generado: llm_truncado", "definitivo": True}
 
-    assert processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})["ok"] is False
+    assert trabajos.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})["ok"] is False
 
 
 def test_un_tipo_desconocido_no_lanza():
-    res = processor.ejecutar_trabajo({"tipo": "desconocido"})
+    res = trabajos.ejecutar_trabajo({"tipo": "desconocido"})
     assert res["ok"] is False and "desconocido" in res["error"]
 
 
@@ -548,9 +542,9 @@ SECRETO = "ANA-SECRETA dijo que no duerme"
 
 
 def test_una_excepcion_inesperada_en_un_trabajo_solo_deja_el_tipo(mocker, caplog):
-    mocker.patch("processor.generar_feedback", side_effect=KeyError(SECRETO))
+    mocker.patch("trabajos.generar_feedback", side_effect=KeyError(SECRETO))
     with caplog.at_level(logging.DEBUG):
-        res = processor.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})
+        res = trabajos.ejecutar_trabajo({"tipo": "generar_feedback", "adjunto": {}})
     assert res["error"] == "KeyError"
     assert all(SECRETO not in r.getMessage() for r in caplog.records)
 
@@ -567,6 +561,6 @@ def test_una_excepcion_inesperada_en_la_sesion_solo_loguea_el_tipo(pasos, caplog
 
 
 def test_un_adjunto_de_recorrido_invalido_dice_por_que(mocker):
-    res = processor.ejecutar_trabajo({"tipo": "integrar_contexto", "adjunto": {}, "payload": {}})
+    res = trabajos.ejecutar_trabajo({"tipo": "integrar_contexto", "adjunto": {}, "payload": {}})
     assert res["ok"] is False
     assert res["error"] == "adjunto_invalido: Adjunto de Recorrido inválido"

@@ -187,7 +187,7 @@ def test_contexto_rechaza_login_aunque_sea_200(mocker, mime):
         app_client.obtener_contexto_clinico_llm("p1", "s1", TICKET)
 
 
-@pytest.mark.parametrize("body", [[], {}, {"data": None}, {"data": {"tipo": "hilo_vigente", "pacienteId": "otra", "version": 0, "contenido": None}}, {"data": {"tipo": "hilo_vigente", "pacienteId": "p1", "version": 1, "contenido": {}}}])
+@pytest.mark.parametrize("body", [[], {}, {"data": None}, {"data": {"tipo": "hilo_vigente", "pacienteId": "otra", "version": 0, "contenido": None}}, {"data": {"tipo": "hilo_vigente", "pacienteId": "p1", "version": 1, "contenido": []}}])
 def test_contexto_valida_forma_e_identidad(mocker, body):
     mocker.patch("app_client.requests.get", return_value=_resp(mocker, 200, body))
     with pytest.raises(requests.RequestException):

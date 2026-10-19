@@ -8,13 +8,15 @@ transcripcion, nota clinica, claves ni cuerpos de respuesta de proveedores.
 Cada fallo es TRANSITORIO o DEFINITIVO, y lo decide el worker (la app solo
 aplica su politica: un transitorio vuelve a la cola con backoff y se agota a
 los MAX fallos seguidos; un definitivo deja la sesion en `fallida` hasta que
-la profesional reintente o elimine). Se puede fijar por excepcion
-(`definitivo=`) o dejar que lo decida el codigo.
+la profesional reintente o elimine). Lo decide el codigo y nada mas: un
+codigo de CODIGOS_DEFINITIVOS es definitivo, cualquier otro es transitorio.
 
 Los de CODIGOS_DEFINITIVOS no se arreglan solos con el tiempo: repetir la
 sesion repite el mismo resultado, y en el caso del modelo lo paga de nuevo.
-El resto si puede (red, timeouts, 429 y 5xx de un proveedor, la app que no
-guardo, error interno).
+El resto si puede: r2_error, asr_error, asr_timeout, llm_timeout,
+llm_error, app_error, contexto_invalido, contexto_no_disponible y
+error_interno (red, timeouts, 429 y 5xx de un proveedor, la app que no
+guardo o no entrego el Recorrido, un error del worker).
 """
 
 CODIGOS_DEFINITIVOS = frozenset(
@@ -26,6 +28,10 @@ CODIGOS_DEFINITIVOS = frozenset(
         # contra la request: payload, audio o credencial que no cambian solos.
         "asr_vacio",
         "asr_rechazado",
+        # AssemblyAI termino el transcript con status=error: el archivo no se
+        # puede transcribir (sin audio, formato). Repetir es otra descarga,
+        # otra normalizacion y otra subida para el mismo resultado.
+        "asr_transcripcion_fallida",
         # El modelo: estas salidas llegan despues de agotar el reintento de
         # forma de clinical_analyzer (JSON invalido o estructura invalida dos
         # veces, truncado aun con el techo del reintento), o son un rechazo o
@@ -37,15 +43,17 @@ CODIGOS_DEFINITIVOS = frozenset(
         "llm_sin_texto",
         # La app entrego un checkpoint sin transcripcion.
         "checkpoint_invalido",
+        # El adjunto de integrar_contexto no sirve: la app lo arma de la base
+        # en cada entrega y va a volver igual.
+        "adjunto_invalido",
     }
 )
 
 
 class PipelineError(Exception):
-    def __init__(self, codigo: str, mensaje_publico: str, definitivo: bool | None = None):
+    def __init__(self, codigo: str, mensaje_publico: str):
         self.codigo = codigo
         self.mensaje_publico = mensaje_publico
-        self._definitivo = definitivo
         super().__init__(f"{codigo}: {mensaje_publico}")
 
     def ampliar_detalle(self, extra: str) -> "PipelineError":
@@ -62,8 +70,6 @@ class PipelineError(Exception):
 
     @property
     def definitivo(self) -> bool:
-        if self._definitivo is not None:
-            return self._definitivo
         return self.codigo in CODIGOS_DEFINITIVOS
 
 
