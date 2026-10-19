@@ -188,9 +188,17 @@ interface RutaConId {
  *  tiempo de COLECCIÓN (para nombrar un caso por ruta y método) y ahí no se
  *  puede importar el módulo: importarlo levanta el cliente Prisma. */
 function metodosDe(archivo: string): Metodo[] {
-  const fuente = readFileSync(archivo, "utf8");
-  return METODOS.filter((m) =>
-    new RegExp(`export\\s+(async\\s+)?function\\s+${m}\\b`).test(fuente),
+  return metodosDeFuente(readFileSync(archivo, "utf8"));
+}
+
+/** `export (async) function GET`, `export const GET = …` y
+ *  `export { manejar as GET }`: las tres formas válidas de exportar un verbo. */
+function metodosDeFuente(fuente: string): Metodo[] {
+  return METODOS.filter(
+    (m) =>
+      new RegExp(`export\\s+(?:async\\s+)?function\\s+${m}\\b`).test(fuente) ||
+      new RegExp(`export\\s+(?:const|let|var)\\s+${m}\\b`).test(fuente) ||
+      new RegExp(`export\\s*\\{[^}]*\\b(?:as\\s+)?${m}\\s*(?:,|\\})`).test(fuente),
   );
 }
 
@@ -445,6 +453,15 @@ afterAll(async () => {
   if (ORIGINAL_KEY === undefined) delete process.env.CLAVES_CIFRADO;
   else process.env.CLAVES_CIFRADO = ORIGINAL_KEY;
   __resetLlaveroForTests();
+});
+
+describe("el lector de verbos, sobre fuentes de mentira", () => {
+  it("ve function, const y el export con alias; no ve un verbo sin exportar", () => {
+    expect(metodosDeFuente("export async function GET() {}\nexport function DELETE() {}")).toEqual(["GET", "DELETE"]);
+    expect(metodosDeFuente("export const POST = async () => {};")).toEqual(["POST"]);
+    expect(metodosDeFuente("const manejar = () => {};\nexport { manejar as PATCH, otro };")).toEqual(["PATCH"]);
+    expect(metodosDeFuente("async function GET() {}\nexport { GET as leer };")).toEqual([]);
+  });
 });
 
 describe("aislamiento entre organizaciones — barrido de todas las rutas con id", () => {

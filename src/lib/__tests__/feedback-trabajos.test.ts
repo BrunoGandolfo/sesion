@@ -3,7 +3,7 @@
  * (claim atómico, backoff, tope, borrado en R2 verificado) y la lectura de
  * la transcripción con auditoría.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { reintentarFeedback } from "@/app/api/_lib/casos-uso/sesion/reintentar-feedback";
 import { verTranscripcion } from "@/app/api/_lib/casos-uso/sesion/ver-transcripcion";
@@ -26,7 +26,6 @@ import {
   crearOrg,
   crearSesion,
   filaDe,
-  limpiarOrg,
   NOTA,
   pedidoConTicket,
   trabajosDe,
@@ -34,23 +33,29 @@ import {
   type BaseArea2,
   type Org,
 } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 let base!: BaseArea2;
 let org!: Org;
 let otra!: Org;
 // Un minuto en el futuro: los trabajos nacen con proximo_intento_en = now()
-// de la base, y el reclamo sólo entrega los que ya vencieron.
-const AHORA = new Date(Date.now() + 60_000);
+// de la base, y el reclamo sólo entrega los que ya vencieron. Por caso y no
+// al cargar el archivo: si el archivo durara más de un minuto, los trabajos
+// de los últimos casos todavía no estarían vencidos.
+let AHORA!: Date;
+beforeEach(() => {
+  AHORA = new Date(Date.now() + 60_000);
+});
 
 beforeAll(async () => {
   base = conectarArea2();
+  await vaciarTablas(base.prisma);
   org = await crearOrg(base.prisma, "cbt_mi");
   otra = await crearOrg(base.prisma);
 });
 
 afterAll(async () => {
-  await limpiarOrg(base.prisma, org.orgId);
-  await limpiarOrg(base.prisma, otra.orgId);
+  await vaciarTablas(base.prisma);
   await base.prisma.$disconnect();
 });
 

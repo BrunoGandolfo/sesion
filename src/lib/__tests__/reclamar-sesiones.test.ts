@@ -2,7 +2,7 @@
  * Integración — el reclamo del worker: claim atómico con intento monotónico,
  * ticket, lease corto, checkpoint (nunca se vuelve a pagar el ASR), agotar.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { reclamarSesiones } from "@/app/api/_lib/casos-uso/sesion/reclamar";
 import { hashDeTicket } from "@/app/api/_lib/tickets";
@@ -13,24 +13,31 @@ import {
   crearOrg,
   crearSesion,
   filaDe,
-  limpiarOrg,
   TRANSCRIPCION,
   type BaseArea2,
   type Org,
 } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 let base!: BaseArea2;
 let org!: Org;
 const AHORA = new Date("2026-09-14T12:00:00Z");
 const terminos = async () => ["GTFS", "MITI"];
 
-beforeAll(async () => {
+beforeAll(() => {
   base = conectarArea2();
+});
+
+// El reclamo no mira la organización y entrega las `limite` más viejas: con
+// sesiones de otros casos en la base, la de este caso podría quedar afuera y
+// los "no se entrega" darían verde sin mirarla. Cada caso empieza vacío.
+beforeEach(async () => {
+  await vaciarTablas(base.prisma);
   org = await crearOrg(base.prisma, "gestalt");
 });
 
 afterAll(async () => {
-  await limpiarOrg(base.prisma, org.orgId);
+  await vaciarTablas(base.prisma);
   await base.prisma.$disconnect();
 });
 

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 
 import { editarHilo, aceptarPropuesta, rechazarPropuesta } from "@/app/api/_lib/casos-uso/hilo/escribir";
 import { leerRecorrido, leerHiloParaWorker } from "@/app/api/_lib/casos-uso/hilo/leer";
@@ -12,18 +12,23 @@ import { reclamarTrabajos } from "@/app/api/_lib/casos-uso/trabajos/reclamar";
 import { aplicarResultadoTrabajo } from "@/app/api/_lib/casos-uso/trabajos/resultado-worker";
 import { autorizarTicketTrabajo } from "@/app/api/_lib/tickets";
 import { hiloVacio } from "@/lib/hilo/contenido";
-import { conectarArea2, crearOrg, crearSesion, limpiarOrg, NOTA, pedidoConTicket, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, crearSesion, NOTA, pedidoConTicket, type BaseArea2, type Org } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 let base: BaseArea2;
 let org: Org;
-const ahora = new Date(Date.now() + 60_000);
+// Un minuto en el futuro, por caso: los trabajos nacen vencidos para el reclamo.
+let ahora!: Date;
 const contenido = () => ({ ...hiloVacio(), resumenAcumulativo: "Historia que solo debe existir cifrada" });
 const identidad = () => ({ pacienteId: org.pacienteId, organizationId: org.orgId });
 const escritura = (basadaEnVersion = 0) => ({ ...identidad(), prisma: base.db, usuarioId: org.userId, basadaEnVersion });
 beforeAll(() => { base = conectarArea2(); });
-beforeEach(async () => { org = await crearOrg(base.prisma); });
-afterEach(async () => { await limpiarOrg(base.prisma, org.orgId); });
-afterAll(async () => { await base.prisma.$disconnect(); });
+beforeEach(async () => {
+  ahora = new Date(Date.now() + 60_000);
+  await vaciarTablas(base.prisma);
+  org = await crearOrg(base.prisma);
+});
+afterAll(async () => { await vaciarTablas(base.prisma); await base.prisma.$disconnect(); });
 
 async function aprobar() {
   const { sesionId } = await crearSesion(base.prisma, org, { estado: "revision", audio: false, notaIa: NOTA });
@@ -172,12 +177,10 @@ it("pacientes bloqueadas no esconden los trabajos detrás del primer lote", asyn
   const propuesta = await proponer();
   for (let i = 0; i < 30; i++) await crearTrabajo({ prisma: base.db, ...identidad(), tipo: "integrar_contexto", payload: { pacienteId: org.pacienteId, sesionId: propuesta.sesionOrigenId! }, proximoIntentoEn: new Date(0) });
   const otra = await crearOrg(base.prisma);
-  try {
-    const { sesionId } = await crearSesion(base.prisma, otra, { estado: "aprobada", audio: false });
-    const t = await crearTrabajo({ prisma: base.db, organizationId: otra.orgId, pacienteId: otra.pacienteId, tipo: "integrar_contexto", payload: { pacienteId: otra.pacienteId, sesionId }, proximoIntentoEn: new Date(0) });
-    const lista = await reclamarTrabajos({ prisma: base.db, ejecutor: "worker", ahora, limite: 1 });
-    expect(lista.map(x => x.id)).toEqual([t.id]);
-  } finally { await limpiarOrg(base.prisma, otra.orgId); }
+  const { sesionId } = await crearSesion(base.prisma, otra, { estado: "aprobada", audio: false });
+  const t = await crearTrabajo({ prisma: base.db, organizationId: otra.orgId, pacienteId: otra.pacienteId, tipo: "integrar_contexto", payload: { pacienteId: otra.pacienteId, sesionId }, proximoIntentoEn: new Date(0) });
+  const lista = await reclamarTrabajos({ prisma: base.db, ejecutor: "worker", ahora, limite: 1 });
+  expect(lista.map(x => x.id)).toEqual([t.id]);
 });
 
 it("aprobar fuera de orden conserva referencias estables a las sesiones", async () => {
@@ -214,11 +217,9 @@ it("una propuesta vieja no permite volver a incorporar una sesión ya aceptada",
 
 it("no permite guardar referencias clínicas de otra paciente", async () => {
   const otra = await crearOrg(base.prisma);
-  try {
-    const { sesionId } = await crearSesion(base.prisma, otra, { estado: "aprobada", audio: false });
-    await expect(editarHilo({ ...escritura(), contenido: { ...contenido(), intervencionesProbadas: [{ tecnica: "validacion", eficaciaPercibida: "media", sesiones: [sesionId] }] } })).rejects.toMatchObject({ status: 400 });
-    expect(await base.prisma.hiloVersion.count({ where: identidad() })).toBe(0);
-  } finally { await limpiarOrg(base.prisma, otra.orgId); }
+  const { sesionId } = await crearSesion(base.prisma, otra, { estado: "aprobada", audio: false });
+  await expect(editarHilo({ ...escritura(), contenido: { ...contenido(), intervencionesProbadas: [{ tecnica: "validacion", eficaciaPercibida: "media", sesiones: [sesionId] }] } })).rejects.toMatchObject({ status: 400 });
+  expect(await base.prisma.hiloVersion.count({ where: identidad() })).toBe(0);
 });
 
 it("exportar lleva completas la vigente y las que estuvieron vigentes, del resto solo el registro, y lo audita sin contenido", async () => {
@@ -263,9 +264,7 @@ it("exportar lleva completas la vigente y las que estuvieron vigentes, del resto
 
 it("exportar una paciente de otra organización es 404 y no deja registro", async () => {
   const otra = await crearOrg(base.prisma);
-  try {
-    await editarHilo({ ...escritura(), contenido: contenido() });
-    await expect(exportarRecorrido(base.db, { pacienteId: org.pacienteId, organizationId: otra.orgId }, otra.userId)).rejects.toMatchObject({ status: 404 });
-    expect(await base.prisma.eventoAuditoria.count({ where: { accion: "hilo.exportar_pdf" } })).toBe(0);
-  } finally { await limpiarOrg(base.prisma, otra.orgId); }
+  await editarHilo({ ...escritura(), contenido: contenido() });
+  await expect(exportarRecorrido(base.db, { pacienteId: org.pacienteId, organizationId: otra.orgId }, otra.userId)).rejects.toMatchObject({ status: 404 });
+  expect(await base.prisma.eventoAuditoria.count({ where: { accion: "hilo.exportar_pdf" } })).toBe(0);
 });

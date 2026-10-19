@@ -95,10 +95,17 @@ abrir.
 `intentos` (reemplazado por `intento` + `fallosSeguidos`), y la clave del audio
 escondida dentro de `datosEstructurados`.
 
-**Retención.** El esquema no lleva plazos de retención de nada clínico: no hay
-borrado por antigüedad. Las únicas purgas son operativas y las hace un cron:
-`intentos_acceso`, `sesiones_acceso` cerradas o vencidas, `password_resets` e
-`invitaciones` usados o vencidos, todas a los 30 días.
+**Retención.** Una sesión con audio, transcripción o nota no se borra por
+antigüedad. Las purgas las hace el mantenimiento diario
+(`src/app/api/_lib/casos-uso/mantenimiento.ts`), y son tres:
+
+- A los 30 días: `intentos_acceso`, `sesiones_acceso` cerradas o vencidas, y
+  `password_resets` e `invitaciones` usados o vencidos.
+- A la hora: las reservas de recuperación de clave (`password_resets`) cuyo
+  correo nunca salió, porque cuentan contra el cupo mientras existen.
+- A los 7 días: las `sesiones_clinicas` que quedaron sin terminar (`grabando`
+  o `subiendo`) y no tienen audio en R2. Si tienen audio no se borran: quedan
+  `fallida` para que ella se entere.
 
 ---
 
@@ -141,9 +148,9 @@ la Fase 1 que el esquema reconcilió; la historia completa está en Git.
    y no un enum, como los demás motivos, porque lo lee la pantalla tal cual.
 8. **Latido del worker.** `worker_estado` del 04. No hay tabla `latidos` ni
    ruta nueva; la ruta pública `/api/estado-worker` del 05 lee esta fila.
-9. **Cupo de Lupita.** `cupos_ayuda` del 04. Desde el 8 de octubre de 2026 la
-   clave es (usuaria, día, `ambito`): Lux tiene su propio cupo en la misma tabla
-   (`20261009120000_cupos_por_ambito`, `docs/contrato-lux.md`).
+9. **Cupo de Lupita.** `cupos_ayuda` del 04. Desde la migración
+   `20261009120000_cupos_por_ambito` la clave es (usuaria, día, `ambito`): Lux
+   tiene su propio cupo en la misma tabla (`docs/contrato-lux.md`).
 10. **Constantes.** Duraciones, modalidades y métodos de pago viven en
     `src/lib/constantes-turno.ts`; en la base, `modalidad`, `pago_metodo` y todos
     los estados son enums, y `duracion` es entero con CHECK. El 06 quería CHECK
@@ -212,7 +219,7 @@ que aparezca el lector, con una migración aditiva.
 | `Invitacion.usadaPor` | 03 | Sin lector. El evento `cuenta.invitacion_usada` registra quién la usó. |
 | `EnvioSms.plantillaVersion` | 05 ("para saber qué versión de plantilla se usó") | Sin lector. La plantilla vigente está en `configuraciones`. |
 | `HiloVersion.trabajoId` | 04 (trazabilidad) | Sin lector; el consumo del trabajo queda en `trabajos.uso` y la sesión origen ya está en la versión. |
-| Tabla `Latido` y ruta `POST /api/latido` | 05 | Resuelto por el dueño a favor de `worker_estado` (04). |
+| Tabla `Latido` y una ruta POST `/api/latido` (no se crearon) | 05 | Resuelto por el dueño a favor de `worker_estado` (04). |
 | `AudioGrabacion`, `AudioParte`, manifiesto y hash, `consentimientoId` en el audio, `verificadoWorkerEn`, `revision`, `cierreId` | 01 | El dueño descartó el formato propio y el manifiesto. El consentimiento vigente se exige al iniciar y se audita; no se guarda como referencia en la sesión. |
 | `SesionClinica.ticketTipo`, `ticketVenceEn` | 03 | Un solo mecanismo (§2, punto 4). |
 | `SerieTurno.duracion`, `modalidad`, `generadaHasta`, `activa`, extensión con aviso, tope de 30 por lote | 06 | Modelo mínimo por decisión del dueño (§2, punto 15). El tope por lote es una constante del código, no del esquema. |
@@ -253,7 +260,7 @@ que aparezca el lector, con una migración aditiva.
   transacción), nunca editar una migración ya aplicada. Lleva la marca
   `-- DESTRUCTIVA:` porque el guardián lee el `DROP CONSTRAINT` como
   destructivo, aunque ampliar la lista no toca filas.
-  `solapamiento-turnos.test.ts` compara el CHECK de la base con `DURACIONES`.
+  `src/lib/__tests__/solapamiento-turnos.test.ts` compara el CHECK de la base con `DURACIONES`.
 - **Índices de `turnos`:** `(organization_id, fecha)` para la agenda,
   `(organization_id, pago_estado)` para cobros y deudores,
   `(organization_id, pago_fecha)` —`turnos_organization_id_pago_fecha_idx`,

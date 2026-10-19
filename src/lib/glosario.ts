@@ -100,14 +100,6 @@ export const MAS_DE_ESTA_SESION = "Más de esta sesión";
  *  de la sesión": el feedback es para ella, no sobre la paciente. */
 export const PARA_VOS = "Para vos";
 
-/** Chip de la cabecera de la nota mientras no está aprobada. Es el mismo
- *  concepto que PARA_REVISAR: no se agrega un cuarto nombre para el estado
- *  que ya tenía tres en el código viejo. */
-export const BORRADOR = PARA_REVISAR;
-
-/** Chip de la cabecera de la nota una vez aprobada (= NOTA_GUARDADA). */
-export const APROBADA = NOTA_GUARDADA;
-
 // ────────────────────────────────────────────────────────────────────────────
 // Nota clínica SOAP — el formato NO cambia, solo se explica.
 // Cada sección conserva su nombre y su letra; `ayuda` es la línea de apoyo
@@ -1506,8 +1498,6 @@ export const NOTA_APROBADA_AVISO = "Nota aprobada. El audio se borra en segundo 
  * Las dos salidas se nombran por lo que hacen: ni "Sí/No" ni
  * "Aceptar/Cancelar".
  */
-export const CAMBIOS_SIN_APROBAR_TITULO =
-  "Tenés cambios sin aprobar en la nota.";
 export const CAMBIOS_SIN_APROBAR_MENSAJE =
   "Si salís de la nota ahora, se pierden.";
 export const QUEDARME = "Quedarme";

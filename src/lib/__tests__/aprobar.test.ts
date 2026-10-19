@@ -23,13 +23,13 @@ import {
   crearOrg,
   crearSesion,
   filaDe,
-  limpiarOrg,
   NOTA,
   trabajosDe,
   TRANSCRIPCION,
   type BaseArea2,
   type Org,
 } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 const actor = vi.hoisted(() => ({ organizationId: "", userId: "" }));
 vi.mock("@/app/api/_lib/auth", () => ({
@@ -57,6 +57,7 @@ let rutaAprobar!: typeof import("@/app/api/sesion-clinica/[id]/aprobar/route").P
 
 beforeAll(async () => {
   base = conectarArea2();
+  await vaciarTablas(base.prisma);
   org = await crearOrg(base.prisma);
   otra = await crearOrg(base.prisma);
   actor.organizationId = org.orgId;
@@ -89,8 +90,7 @@ const FLAGS = (activos: string[]) => ({
 });
 
 afterAll(async () => {
-  await limpiarOrg(base.prisma, org.orgId);
-  await limpiarOrg(base.prisma, otra.orgId);
+  await vaciarTablas(base.prisma);
   await base.prisma.$disconnect();
 });
 

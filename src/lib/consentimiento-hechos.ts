@@ -178,11 +178,10 @@ export const ANALISIS_DE_LA_PROFESIONAL_POR_IA = true;
  * La profesional puede imprimir el Recorrido o guardarlo como PDF para su
  * archivo: la hoja de impresión de /pacientes/[id]/recorrido/imprimir. Esa
  * copia sale de la aplicación sin cifrar. Cada exportación queda registrada
- * con esta acción (casos-uso/hilo/exportar.ts la escribe en la misma
+ * con la acción hilo.exportar_pdf (casos-uso/hilo/exportar.ts la escribe en la misma
  * transacción que lee el Recorrido: sin registro no hay datos).
  */
 export const RECORRIDO_EXPORTABLE = true;
-export const ACCION_EXPORTAR_RECORRIDO = ACCIONES.hilo.exportarPdf;
 
 /**
  * Lo que la paciente puede pedir y la app efectivamente ejecuta. El texto sólo

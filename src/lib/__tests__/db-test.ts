@@ -219,8 +219,11 @@ const autorizados = new WeakSet<object>();
  * cifrado valida la clave al construirse, y los tests la setean en ese mismo
  * hook.
  */
-export function conectarBaseDeTest(): BaseDeTest {
+export function conectarBaseDeTest(
+  opciones: Pick<Prisma.PrismaClientOptions, "transactionOptions"> = {},
+): BaseDeTest {
   const prisma = new PrismaClient({
+    ...opciones,
     datasources: { db: { url: enUtc(urlDeBaseDeTest()) } },
   });
   autorizados.add(prisma);
@@ -333,4 +336,49 @@ export async function limpiarDatosDeTest(
     await tx.$executeRawUnsafe("ALTER TABLE hilo_versiones ENABLE TRIGGER hilo_versiones_sin_borrado");
     await tx.$executeRawUnsafe("ALTER TABLE eventos_auditoria ENABLE TRIGGER eventos_auditoria_inmutable");
   });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Carreras en orden fijo
+// ────────────────────────────────────────────────────────────────────────────
+
+/** El pid de la conexión de una transacción abierta (`tx` de $transaction). */
+export async function pidDe(tx: Pick<Prisma.TransactionClient, "$queryRaw">): Promise<number> {
+  const [{ pid }] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+  return pid;
+}
+
+/**
+ * Espera a que Postgres muestre la espera por un lock, en vez de dormir un
+ * rato y suponer que la otra operación ya llegó:
+ *
+ *   - `{ detrasDe: pid }`: alguna conexión espera un lock que tiene `pid`.
+ *   - `{ esperando: pid }`: la conexión `pid` espera un lock de otra.
+ *
+ * Si `operacion` termina antes, devuelve "terminó": no hubo espera, o sea
+ * que no hay lock. Sin plazos: con un lock que falta, la carrera se pierde
+ * siempre y el test lo dice; con uno que está, se gana siempre.
+ */
+export async function esperarBloqueo(
+  prisma: PrismaClient,
+  quien: { detrasDe: number } | { esperando: number },
+  operacion: Promise<unknown>,
+): Promise<"bloqueada" | "terminó"> {
+  let termino = false;
+  operacion.then(
+    () => { termino = true; },
+    () => { termino = true; },
+  );
+  for (;;) {
+    const [{ n }] =
+      "detrasDe" in quien
+        ? await prisma.$queryRaw<Array<{ n: number }>>`
+            SELECT count(*)::int AS n FROM pg_stat_activity
+            WHERE ${quien.detrasDe}::int = ANY (pg_blocking_pids(pid))`
+        : await prisma.$queryRaw<Array<{ n: number }>>`
+            SELECT cardinality(pg_blocking_pids(${quien.esperando}::int))::int AS n`;
+    if (n > 0) return "bloqueada";
+    if (termino) return "terminó";
+    await new Promise((r) => setTimeout(r, 5));
+  }
 }

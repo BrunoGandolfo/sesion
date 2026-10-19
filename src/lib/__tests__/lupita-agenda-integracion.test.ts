@@ -4,7 +4,8 @@ import { consultarAgenda, type PeriodoAgenda } from "@/app/api/_lib/casos-uso/ay
 import { resolverHerramienta } from "@/app/api/_lib/casos-uso/ayuda/herramientas";
 import { AYUDA_FUERA_DE_ALCANCE } from "@/lib/glosario";
 import { LUPITA_CAMPOS_AGENDA } from "@/lib/consentimiento-hechos";
-import { conectarArea2, crearOrg, limpiarOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 let base: BaseArea2;
 let propia: Org;
@@ -18,6 +19,7 @@ const consulta = (periodo: PeriodoAgenda) => consultarAgenda({ prisma: base.db, 
 
 beforeAll(async () => {
   base = conectarArea2();
+  await vaciarTablas(base.prisma);
   propia = await crearOrg(base.prisma);
   ajena = await crearOrg(base.prisma);
   await base.prisma.paciente.update({ where: { id: propia.pacienteId }, data: {
@@ -47,8 +49,7 @@ beforeAll(async () => {
   await turno("2026-09-17T16:00:00Z", { pacienteId: ajena.pacienteId });
 });
 afterAll(async () => {
-  await limpiarOrg(base.prisma, propia.orgId);
-  await limpiarOrg(base.prisma, ajena.orgId);
+  await vaciarTablas(base.prisma);
   await base.prisma.$disconnect();
 });
 

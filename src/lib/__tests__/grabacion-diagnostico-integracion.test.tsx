@@ -18,7 +18,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vi
 
 import { TIPOS_EVENTO_GRABACION } from "@/lib/sesion-clinica/schema";
 
-import { conectarArea2, crearOrg, crearSesion, limpiarOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, crearSesion, type BaseArea2, type Org } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 
 const estado = vi.hoisted(() => ({ base: null as unknown as BaseArea2, actor: { organizationId: "", userId: "" } }));
 
@@ -61,9 +62,10 @@ class RecorderFalso {
 }
 
 beforeAll(() => { estado.base = conectarArea2(); });
-afterAll(async () => { await estado.base.prisma.$disconnect(); });
+afterAll(async () => { await vaciarTablas(estado.base.prisma); await estado.base.prisma.$disconnect(); });
 
 beforeEach(async () => {
+  await vaciarTablas(estado.base.prisma);
   org = await crearOrg(estado.base.prisma);
   estado.actor = { organizationId: org.orgId, userId: org.userId };
   vi.stubGlobal("MediaRecorder", RecorderFalso);
@@ -88,7 +90,6 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
-  await limpiarOrg(estado.base.prisma, org?.orgId);
 });
 
 const visibilidad = (valor: "hidden" | "visible") => {

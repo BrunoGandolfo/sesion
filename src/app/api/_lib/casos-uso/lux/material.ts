@@ -119,10 +119,6 @@ export function leidasEnHistorial(historial: readonly TurnoHistorialLux[]): stri
   return [...fechas];
 }
 
-export function estimarTokens(texto: string): number {
-  return Math.ceil(texto.length / CARACTERES_POR_TOKEN);
-}
-
 export function escapar(texto: string): string {
   return texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

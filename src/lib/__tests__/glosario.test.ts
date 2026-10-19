@@ -160,3 +160,13 @@ describe("horaCorta: la hora del consultorio, no la del proceso", () => {
   });
 });
 
+
+describe("glosario — un nombre por texto", () => {
+  // BORRADOR era PARA_REVISAR y APROBADA era NOTA_GUARDADA: dos nombres para
+  // el mismo concepto. El texto se nombra una vez y se importa por ese nombre.
+  it("ningún texto es otro nombre de otro texto (export const A = B)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync("src/lib/glosario.ts", "utf8");
+    expect(fuente.match(/^export const [A-Z][A-Z0-9_]* = [A-Z][A-Z0-9_]*;$/gm) ?? []).toEqual([]);
+  });
+});

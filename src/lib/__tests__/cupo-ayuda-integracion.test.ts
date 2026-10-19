@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { reservarCupo, devolverCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
-import { conectarArea2, crearOrg, limpiarOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { vaciarTablas } from "./db-test";
 let base: BaseArea2;
 let org: Org;
 beforeAll(async () => {
-  base = conectarArea2(); org = await crearOrg(base.prisma);
+  base = conectarArea2(); await vaciarTablas(base.prisma); org = await crearOrg(base.prisma);
   await base.prisma.user.create({ data: { id: org.userId, organizationId: org.orgId, email: `${org.orgId}@test.local`, nombre: "Prueba", hashedPassword: "no-login" } });
 });
-afterAll(async () => { await base.prisma.user.delete({ where: { id: org.userId } }); await limpiarOrg(base.prisma, org.orgId); await base.prisma.$disconnect(); });
+afterAll(async () => { await vaciarTablas(base.prisma); await base.prisma.$disconnect(); });
 
 it("60 reservas simultáneas aceptan exactamente 40, con día de Montevideo como texto", async () => {
   const ahora = new Date("2026-09-08T01:00:00Z");
