@@ -457,6 +457,9 @@ export const resultadoTrabajoSchema = z.discriminatedUnion("ok", [
   z.object({
     ok: z.literal(false),
     error: z.string().max(500),
+    /** El worker sabe que repetirlo da lo mismo (processor/trabajos.py,
+     *  _fallo_trabajo): el trabajo queda fallido sin esperar al tope. */
+    definitivo: z.boolean().optional(),
     uso: usoSchema.optional(),
   }),
 ]);

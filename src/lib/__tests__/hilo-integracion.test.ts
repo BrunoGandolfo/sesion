@@ -126,12 +126,34 @@ it("claims simultáneos con fechas iguales mantienen una sola propuesta y encade
   expect(siguiente.entrega.adjunto).toMatchObject({ version: 1, contextoVigente: contenido() });
 });
 
-it("un aplicador inválido revierte también la resolución del trabajo", async () => {
+it("una propuesta que la app rechaza deja el trabajo fallido y definitivo, sin versión", async () => {
   await aprobar();
   const { trabajo } = await reclamar();
-  await expect(aplicarResultadoTrabajo({ prisma: base.db, trabajo, resultado: { ok: true, propuesta: {}, promptVersion: "x", modeloLlm: "y" } })).rejects.toThrow();
+  const uso = { asrSegundos: 12 };
+  await expect(aplicarResultadoTrabajo({ prisma: base.db, trabajo, resultado: { ok: true, propuesta: {}, promptVersion: "x", modeloLlm: "y", uso } }))
+    .resolves.toEqual({ estado: "fallido" });
   expect(await base.prisma.hiloVersion.count({ where: identidad() })).toBe(0);
-  expect(await base.prisma.trabajo.findUnique({ where: { id: trabajo.trabajoId } })).toMatchObject({ estado: "en_curso" });
+  const fila = await base.prisma.trabajo.findUnique({ where: { id: trabajo.trabajoId } });
+  // En el primer intento: no queda reclamado hasta que venza el lease.
+  expect(fila).toMatchObject({ estado: "fallido", intentos: 1, leaseVenceEn: null, uso });
+  expect(fila?.ultimoError).toMatch(/^resultado_invalido: /);
+  expect(fila?.ultimoError).not.toContain("Historia");
+});
+
+it("una propuesta sin prompt ni modelo también es un rechazo definitivo", async () => {
+  await aprobar();
+  const { trabajo } = await reclamar();
+  await expect(aplicarResultadoTrabajo({ prisma: base.db, trabajo, resultado: { ok: true, propuesta: contenido() } }))
+    .resolves.toEqual({ estado: "fallido" });
+  expect(await base.prisma.hiloVersion.count({ where: identidad() })).toBe(0);
+});
+
+it("un fallo definitivo del worker deja el trabajo fallido en el primer intento", async () => {
+  await aprobar();
+  const { trabajo } = await reclamar();
+  await expect(aplicarResultadoTrabajo({ prisma: base.db, trabajo, resultado: { ok: false, error: "llm_rechazo", definitivo: true } }))
+    .resolves.toEqual({ estado: "fallido" });
+  expect(await base.prisma.trabajo.findUnique({ where: { id: trabajo.trabajoId } })).toMatchObject({ estado: "fallido", intentos: 1 });
 });
 
 it("el worker solo lee lo vigente y el ticket solo sirve para la paciente de su sesión", async () => {

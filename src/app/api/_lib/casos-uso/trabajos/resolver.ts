@@ -1,6 +1,6 @@
 // Resultado de un trabajo durable: éxito → `hecho`; fallo → `pendiente`
-// con backoff, o `fallido` al tope. Una sola implementación para los dos
-// consumidores.
+// con backoff, o `fallido` al tope o si el fallo es definitivo. Una sola
+// implementación para los dos consumidores.
 //
 // La escritura va condicionada a `estado = en_curso AND intentos = <los del
 // claim>`: un resultado que llega después de que el lease venció y otro
@@ -18,7 +18,7 @@ type ClienteTrabajos = Pick<typeof db, "trabajo">;
 
 export type ResultadoEjecucion =
   | { ok: true; uso?: unknown }
-  | { ok: false; error: unknown; uso?: unknown };
+  | { ok: false; error: unknown; uso?: unknown; definitivo?: boolean };
 
 export interface ResolverTrabajoInput {
   prisma: ClienteTrabajos;
@@ -39,7 +39,8 @@ export function decidirResolucion(
   ahora: Date,
 ): EstadoResuelto {
   if (resultado.ok) return { estado: "hecho" };
-  if (agotado(trabajo.tipo, trabajo.intentos)) return { estado: "fallido" };
+  // Definitivo: repetirlo da lo mismo, y cada intento puede pagar el modelo.
+  if (resultado.definitivo || agotado(trabajo.tipo, trabajo.intentos)) return { estado: "fallido" };
   return {
     estado: "pendiente",
     proximoIntentoEn: new Date(

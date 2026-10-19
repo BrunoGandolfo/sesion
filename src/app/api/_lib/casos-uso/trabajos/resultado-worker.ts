@@ -11,8 +11,15 @@
 //   borrar_transcript_asr → nada más que el trabajo.
 //   integrar_contexto → una propuesta cifrada, en la misma transacción que
 //                      resuelve el trabajo; nunca mueve el hilo vigente.
+//
+// Un resultado que la app rechaza por su forma (el Recorrido no pasa
+// contenidoHiloSchema, o el aplicador responde 400) deja el trabajo fallido
+// y definitivo, con el uso que se pagó. Antes la transacción se revertía, el
+// trabajo quedaba reclamado hasta que vencía el lease y se repetía la
+// llamada al modelo para recibir lo mismo.
 
 import type { Prisma, TipoTrabajo } from "@prisma/client";
+import { ZodError } from "zod";
 
 import type { db } from "@/lib/db";
 import type { ResultadoTrabajo } from "@/lib/sesion-clinica/schema";
@@ -90,6 +97,18 @@ export interface ResultadoTrabajoWorkerInput {
   ahora?: Date;
 }
 
+/** Por qué la app rechaza un resultado ok, si es por su forma: repetirlo da
+ *  lo mismo. Nombra los campos, nunca su contenido. Un 409 (otra propuesta
+ *  pendiente, la sesión ya no está) no es de forma: sigue como antes. */
+function rechazoDeForma(error: unknown): string | null {
+  if (error instanceof ZodError) {
+    const campos = [...new Set(error.issues.map((i) => i.path.join(".") || "(raíz)"))];
+    return `resultado_invalido: ${campos.slice(0, 5).join(", ")}`;
+  }
+  if (error instanceof ApiError && error.status === 400) return `resultado_invalido: ${error.message}`;
+  return null;
+}
+
 export async function aplicarResultadoTrabajo({
   prisma,
   trabajo,
@@ -104,19 +123,26 @@ export async function aplicarResultadoTrabajo({
       501,
     );
   }
-  return prisma.$transaction(async (tx) => {
+  const resolver = (r: ResultadoTrabajo) => prisma.$transaction(async (tx) => {
     if (trabajo.tipo === "integrar_contexto" && trabajo.pacienteId) {
       await bloquearHilo(tx, { pacienteId: trabajo.pacienteId, organizationId: trabajo.organizationId });
     }
     const resolucion = await resolverTrabajo({
       prisma: tx,
       trabajo: { id: trabajo.trabajoId, tipo: trabajo.tipo, intentos: trabajo.intentos },
-      resultado: resultado.ok
-        ? { ok: true, uso: resultado.uso as Prisma.InputJsonValue | undefined }
-        : { ok: false, error: resultado.error, uso: resultado.uso as Prisma.InputJsonValue | undefined },
+      resultado: r.ok
+        ? { ok: true, uso: r.uso as Prisma.InputJsonValue | undefined }
+        : { ok: false, error: r.error, definitivo: r.definitivo, uso: r.uso as Prisma.InputJsonValue | undefined },
       ahora,
     });
-    await aplicar(tx, trabajo, resultado, resolucion, ahora);
+    await aplicar(tx, trabajo, r, resolucion, ahora);
     return resolucion;
   });
+  try {
+    return await resolver(resultado);
+  } catch (error) {
+    const rechazo = resultado.ok ? rechazoDeForma(error) : null;
+    if (rechazo === null) throw error;
+    return resolver({ ok: false, error: rechazo, definitivo: true, uso: resultado.uso });
+  }
 }
