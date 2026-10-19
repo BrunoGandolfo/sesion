@@ -22,7 +22,7 @@
 // el código y el mensaje de Twilio con el estado HTTP, o el error de red.
 // No imprime teléfonos, textos ni credenciales.
 //
-// Carga el TypeScript con jiti (viene con eslint, que es devDependency).
+// Carga el TypeScript con jiti (devDependency declarada en package.json).
 
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

@@ -17,6 +17,7 @@ import {
   BUSCAR_MINIMO,
   BUSCAR_SIGUIENTE,
   NOTA_LISTA,
+  PARA_REVISAR,
   REINTENTAR,
   TRANSCRIPCION,
   TRANSCRIPCION_ERROR_TITULO,
@@ -79,6 +80,12 @@ describe("la cabecera", () => {
     expect(cuando.tagName).toBe("TIME");
     // El estado se llama igual que en Hoy, la Agenda y la ficha.
     expect(screen.getByText(NOTA_LISTA)).toBeTruthy();
+  });
+
+  it("Para revisar lleva el color de la ficha, no el dorado", () => {
+    render(<CabeceraSesion sesion={{ ...sesion(), estado: "revision" } as SesionClinicaResponse} rotulo={TRANSCRIPCION} />);
+    expect(screen.getByText(PARA_REVISAR).className).toContain("bg-sage-100");
+    expect(screen.getByText(PARA_REVISAR).className).not.toContain("gold");
   });
 });
 

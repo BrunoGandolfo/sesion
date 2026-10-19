@@ -1,10 +1,11 @@
 // Caso de uso: el mantenimiento diario. Tres cosas, y ninguna decide política:
 //
-//   1. PURGAS operativas a 30 días (las únicas purgas del sistema; nada
-//      clínico se borra por antigüedad): intentos_acceso; sesiones_acceso
+//   1. PURGAS operativas. A los 30 días: intentos_acceso; sesiones_acceso
 //      cerradas o vencidas; password_resets e invitaciones usados o
-//      vencidos. Y las reservas de recuperación huérfanas (correo nunca
-//      confirmado, más de una hora): cuentan contra el cupo mientras existen.
+//      vencidos. A la hora: las reservas de recuperación huérfanas (correo
+//      nunca confirmado), que cuentan contra el cupo mientras existen. Con
+//      la 3 son las únicas purgas del sistema: nada con audio, transcripción
+//      o nota se borra por antigüedad (docs/esquema.md, «Retención»).
 //   2. RE-CIFRADO incremental: filas cuyo blob se cifró con una clave que no
 //      es la activa del llavero se descifran y vuelven a cifrar, de a tandas.
 //      Es lo que hace posible rotar CLAVES_CIFRADO sin ventana: se agrega la

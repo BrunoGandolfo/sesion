@@ -13,6 +13,7 @@
 //   node --env-file=.env pruebas/grabador-ajustes/verificar.mjs --url=http://localhost:3137
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import http from "node:http";
 
 import { PrismaClient } from "@prisma/client";
@@ -23,6 +24,12 @@ const USUARIO = "profesional@sesion.test";
 const PASSWORD = "sesion-dev-1234";
 const PACIENTE_A = "aaaaaaaa-0001-4000-8000-000000000001";
 const PACIENTE_B = "aaaaaaaa-0002-4000-8000-000000000002";
+// La versión vigente del consentimiento: el servidor rechaza otra (409
+// consentimiento_version_vieja). Se lee del código, no se copia.
+const VERSION_CONSENTIMIENTO = /export const CONSENTIMIENTO_VERSION = "([^"]+)"/.exec(
+  readFileSync(new URL("../../src/lib/consentimiento.ts", import.meta.url), "utf8"),
+)?.[1];
+assert.ok(VERSION_CONSENTIMIENTO, "No se encontró CONSENTIMIENTO_VERSION en src/lib/consentimiento.ts");
 
 assert.match(new URL(process.env.DATABASE_URL).pathname, /^\/sesion_e2e_/, "Sólo contra una base sesion_e2e_*");
 assert.match(new URL(process.env.DATABASE_URL).hostname, /^(127\.0\.0\.1|localhost)$/, "Sólo contra una base local");
@@ -76,11 +83,11 @@ try {
 
   // La autorización de las dos pacientes, por la API real.
   for (const paciente of [PACIENTE_A, PACIENTE_B]) {
-    const r = await pagina.evaluate(async ([id]) => {
-      const res = await fetch(`/api/pacientes/${id}/consentimiento`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firmaDigital: "Paciente Sintética", textoVersion: "2.7" }) });
-      return res.status;
-    }, [paciente]);
-    assert.ok(r === 201 || r === 200 || r === 409, `consentimiento: HTTP ${r}`);
+    const r = await pagina.evaluate(async ([id, textoVersion]) => {
+      const res = await fetch(`/api/pacientes/${id}/consentimiento`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firmaDigital: "Paciente Sintética", textoVersion }) });
+      return { status: res.status, codigo: (await res.json().catch(() => ({}))).codigo ?? null };
+    }, [paciente, VERSION_CONSENTIMIENTO]);
+    assert.ok([200, 201].includes(r.status), `consentimiento: HTTP ${r.status} ${r.codigo ?? ""}`);
   }
 
   // ─── A. Grabación con pausa y cambio de pestaña ────────────────────────

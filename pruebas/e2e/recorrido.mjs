@@ -392,7 +392,8 @@ async function ficha(datos, prueba) {
   });
   await paso('Nota aprobada', async () => {
     await ir('/sesiones/' + datos.sesion.sesionClinicaId);
-    await visible(page.getByText('Nota guardada', { exact: true }).first());
+    // El chip de la cabecera: el mismo nombre del estado que en Hoy y la ficha.
+    await visible(page.getByText('Nota lista', { exact: true }).first());
     await visible(page.getByRole('tab', { name: 'Para vos', exact:true }));
   }, {alertasEsperadas:[/^Señal de riesgo\s/i]});
   await paso('Para vos', async () => {

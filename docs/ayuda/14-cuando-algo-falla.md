@@ -110,10 +110,8 @@ recupera.**
   micrófono. Habilitalo y probá de nuevo."*, *"No encontramos un micrófono
   disponible en este dispositivo."* o *"No pudimos acceder al micrófono. Cerrá
   otras apps que lo estén usando y probá de nuevo."*
-- Si negaste el permiso del micrófono o no hay micrófono, el navegador puede
-  mostrar su propio mensaje, a veces en inglés. Habilitá el permiso del
-  micrófono para Sesión en la configuración del navegador y volvé a tocar
-  **Grabar sesión**.
+- Si negaste el permiso del micrófono, habilitalo para Sesión en la
+  configuración del navegador y volvé a tocar **Grabar sesión**.
 
 ---
 

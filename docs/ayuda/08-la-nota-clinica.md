@@ -12,8 +12,9 @@ sola; al estar lista, el chip pasa a **Para revisar**.
 ## Qué contiene, en orden
 
 1. **Cabecera** — *Nota clínica (SOAP)*, el nombre, el día **y la hora** de la
-   sesión (para distinguir dos del mismo día) y un chip: **Para revisar**
-   (dorado) o **Nota guardada** (verde).
+   sesión (para distinguir dos del mismo día) y un chip verde: **Para
+   revisar** o **Nota lista**, los mismos nombres que en Hoy y en la ficha.
+   Al aprobar, el aviso de abajo confirma **Nota guardada**.
 2. Un selector **Nota clínica | Para vos | Transcripción**, que aparece siempre
    que la nota está para revisar o guardada. Debajo, un **índice** de una línea
    (**Resumen** si lo hay, las cuatro secciones SOAP siempre y **Más de esta

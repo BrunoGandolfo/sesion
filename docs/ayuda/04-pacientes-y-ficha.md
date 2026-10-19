@@ -42,16 +42,21 @@ reciente abierto, los anteriores plegados con su cuenta). Cada sesión aparece
 una sola vez y la cuenta coincide con lo que la lista muestra.
 
 - Cada fila: la **fecha y la hora** (dos sesiones del mismo día se distinguen),
-  duración, modalidad, un chip **Para revisar** o **Nota guardada**, el resumen
-  **entero** —no se corta— y **Ver nota** (o **Revisar nota**). Tocar la fila
+  duración, modalidad, un chip con el estado de la nota —**Grabando…** o
+  **Procesando** sin color, **Para revisar** o **Nota lista** en verde, **Nota
+  fallida** o **Grabación sin terminar** en terracota—, el resumen **entero**
+  —no se corta— y **Ver nota** (o **Revisar nota**). Tocar la fila
   abre la nota. Si la sesión tiene análisis, también está **Para vos**. Dentro
   de la sesión, el selector de arriba tiene **Nota clínica**, **Para vos** y
   **Transcripción**, que muestra lo que se dijo. Ver `08-la-nota-clinica.md`.
 - La sesión de **hoy** está en la misma lista, arriba, marcada **Hoy** y con su
   botón adentro según el momento: **Grabar sesión**, *Procesando la sesión de
   …*, **Revisar nota**, **Cobrar** o **Ver nota**. Si la grabación quedó sin
-  terminar, **Grabar sesión** sirve para retomarla. Si la sesión falló, el
-  enlace dice **Ver**.
+  terminar, el chip dice **Grabación sin terminar** y **Grabar sesión** sirve
+  para retomarla. Si la nota falló, el enlace dice **Nota fallida · Ver qué
+  pasó**. Si falta la autorización, en lugar de **Grabar sesión** está
+  **Firmar autorización**; si hay otra cosa para hacer (retomar una grabación,
+  revisar una nota), queda al lado el aviso **Falta la autorización →**.
 - **Preparar sesión** — el botón a la derecha del título de la lista (en el
   celular, debajo). Está cerrado; al tocarlo se abre el resumen para antes de la
   sesión: la señal de riesgo, la última nota aprobada, *Para la próxima* y *El

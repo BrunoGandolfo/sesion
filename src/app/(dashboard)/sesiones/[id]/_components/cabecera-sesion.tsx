@@ -12,11 +12,12 @@
 // El rótulo de arriba es lo único que cambia entre las dos: dice cuál de las
 // dos se está mirando.
 
+import { rotuloDelProceso } from "@/components/turno/presentacion";
 import { Chip } from "@/components/ui";
 import { formatearFechaLargaMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
 import type { SesionClinicaResponse } from "@/lib/sesion-clinica/schema";
 
-import { NOTA_CLINICA, NOTA_LISTA, PARA_REVISAR } from "./textos";
+import { NOTA_CLINICA } from "./textos";
 
 interface CabeceraSesionProps {
   sesion: SesionClinicaResponse;
@@ -34,7 +35,9 @@ export function CabeceraSesion({ sesion, rotulo }: CabeceraSesionProps) {
   const fecha = inicio
     ? `${formatearFechaLargaMvd(inicio)} · ${formatearHoraMvd(inicio)}`
     : null;
-  const aprobada = sesion.estado === "aprobada";
+  // El chip es el de la ficha (rotuloDelProceso): "Para revisar" o "Nota
+  // lista", con el mismo color en todas las pantallas.
+  const chip = rotuloDelProceso(sesion.estado === "aprobada" ? "aprobada" : "revision", { sinTerminar: false })!;
 
   return (
     <header className="flex flex-col gap-2">
@@ -48,9 +51,7 @@ export function CabeceraSesion({ sesion, rotulo }: CabeceraSesionProps) {
         {fecha ? (
           <time dateTime={inicio?.toISOString()} className="font-sans text-[14px] text-ink-500">{fecha}</time>
         ) : null}
-        <Chip variant={aprobada ? "sage" : "gold"}>
-          {aprobada ? NOTA_LISTA : PARA_REVISAR}
-        </Chip>
+        <Chip variant={chip.variant}>{chip.label}</Chip>
       </div>
     </header>
   );
