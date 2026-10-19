@@ -261,6 +261,11 @@ que aparezca el lector, con una migración aditiva.
   `-- DESTRUCTIVA:` porque el guardián lee el `DROP CONSTRAINT` como
   destructivo, aunque ampliar la lista no toca filas.
   `src/lib/__tests__/solapamiento-turnos.test.ts` compara el CHECK de la base con `DURACIONES`.
+- **El CHECK del pago de `turnos`** (`turnos_pago_coherente_check`,
+  `20261019120000_turnos_pago_coherente`): `pago_estado = 'pagado'` si y sólo
+  si hay `pago_fecha` y `pago_metodo`. Un pendiente con sólo uno de los dos lo
+  deja pasar. `src/lib/__tests__/solapamiento-turnos.test.ts` lo prueba contra
+  la base.
 - **Índices de `turnos`:** `(organization_id, fecha)` para la agenda,
   `(organization_id, pago_estado)` para cobros y deudores,
   `(organization_id, pago_fecha)` —`turnos_organization_id_pago_fecha_idx`,

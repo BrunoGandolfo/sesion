@@ -553,6 +553,51 @@ describe("turnos.duracion en la base: el CHECK es la lista de constantes-turno",
   });
 });
 
+describe("turnos.pago en la base: pagado si y sólo si tiene fecha y método", () => {
+  // B10: el CHECK turnos_pago_coherente_check (20261019120000). Hasta ahí
+  // lo garantizaba sólo cobrar-turno.ts; una escritura a mano podía dejar un
+  // turno "pagado" sin fecha, que no cuenta en ningún mes de cobro.
+
+  async function insertarConPago(
+    pagoEstado: "pagado" | "pendiente",
+    pagoFecha: Date | null,
+    pagoMetodo: "efectivo" | null,
+  ) {
+    const orgId = await crearOrgConPacientes();
+    return prismaRaw.$executeRaw`
+      INSERT INTO turnos (id, fecha, duracion, tarifa_cobrada, paciente_id, organization_id, actualizado_en,
+                          pago_estado, pago_fecha, pago_metodo)
+      VALUES (${randomUUID()}, ${enUnaSemana()}, 50, 1000, ${pacienteId}, ${orgId}, now(),
+              ${pagoEstado}::estado_pago, ${pagoFecha}, ${pagoMetodo}::metodo_pago)`;
+  }
+
+  const COBRO = new Date("2026-09-16T15:00:00.000Z");
+
+  it("pagado con fecha y método, o pendiente sin ninguno, pasan", async () => {
+    expect(await insertarConPago("pagado", COBRO, "efectivo")).toBe(1);
+    expect(await insertarConPago("pendiente", null, null)).toBe(1);
+  });
+
+  it.each([
+    ["pagado", "sin fecha", null, "efectivo"],
+    ["pagado", "sin método", COBRO, null],
+    ["pagado", "sin fecha ni método", null, null],
+    ["pendiente", "con fecha y método", COBRO, "efectivo"],
+    // Pendiente con sólo uno de los dos lo deja pasar: el CHECK es el que se
+    // verificó contra producción, "pagado ⇔ fecha y método".
+  ] as const)("%s %s lo rechaza la base", async (estado, _caso, fecha, metodo) => {
+    await expect(insertarConPago(estado, fecha, metodo)).rejects.toThrow(/turnos_pago_coherente_check/);
+    expect(await prismaRaw.turno.count()).toBe(0);
+  });
+
+  it("deshacer un cobro deja el turno pendiente sin fecha ni método, y el CHECK lo acepta", async () => {
+    await insertarConPago("pagado", COBRO, "efectivo");
+    const n = await prismaRaw.$executeRaw`
+      UPDATE turnos SET pago_estado = 'pendiente', pago_fecha = NULL, pago_metodo = NULL`;
+    expect(n).toBe(1);
+  });
+});
+
 describe("POST /api/turnos con alGrabar: el turno que nace al grabar", () => {
   function postAlGrabar(fecha: Date, extra: Record<string, unknown> = {}) {
     return crearTurno(

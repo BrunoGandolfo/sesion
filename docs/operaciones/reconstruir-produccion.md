@@ -416,8 +416,8 @@ SQL
 - Tres triggers: `eventos_auditoria_inmutable`,
   `hilo_versiones_contenido_inmutable`, `hilo_versiones_sin_borrado`.
 - Los dos índices pedidos.
-- Tres CHECK: `cupos_ayuda_usadas_check`, `hilo_versiones_version_check`,
-  `turnos_duracion_check`.
+- Cuatro CHECK: `cupos_ayuda_usadas_check`, `hilo_versiones_version_check`,
+  `turnos_duracion_check`, `turnos_pago_coherente_check`.
 
 Prisma no comprueba los triggers ni los índices parciales: por eso hay
 consultas separadas. Si no coincide, parar antes del audio y de Publicar.
