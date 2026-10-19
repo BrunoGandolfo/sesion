@@ -32,8 +32,12 @@ const SEGUROS = new Set(["GET", "HEAD", "OPTIONS"]);
  *  a getSessionActor (src/app/api/_lib/hilo-http.ts). */
 const SESION = ["getSessionActor", "getOrganizationId", "buscarActor", "autorizarEdicionHilo"];
 /** Máquinas: crons (CRON_SECRET), worker (PROCESSING_SECRET o ticket) y
- *  webhooks firmados de Twilio. */
-const MAQUINA = ["requireCron", "requireM2M", "autorizarTicketSesion", "autorizarTicketTrabajo", "firmaValida"];
+ *  webhooks firmados de Twilio (validarWebhookTwilio llama a firmaValida,
+ *  src/lib/sms/firma.ts). */
+const MAQUINA = [
+  "requireCron", "requireM2M", "autorizarTicketSesion", "autorizarTicketTrabajo",
+  "firmaValida", "validarWebhookTwilio",
+];
 const CONTROLA_ORIGEN = ["esOrigenPropio", "autorizarEdicionHilo"];
 
 /** Verbos sin identidad, a propósito. La clave es "<ruta> <VERBO>". */
