@@ -1,5 +1,5 @@
 {
-  "_comentario": "Recorridos que la app acepta (contenidoHiloSchema, src/lib/hilo/contenido.ts). El worker no valida forma ni límites del Recorrido: confía en la app. processor/tests/test_recorrido_contrato.py exige que el worker no rechace ninguno; del lado de la app, un test tiene que exigir que Zod los acepte (pendiente: fuera del territorio del worker).",
+  "_comentario": "Recorridos que la app acepta (contenidoHiloSchema, src/lib/hilo/contenido.ts). El worker no valida forma ni límites del Recorrido: confía en la app. processor/tests/test_recorrido_contrato.py exige que el worker no rechace ninguno; del lado de la app, src/lib/__tests__/contrato-worker.test.ts exige que contenidoHiloSchema los acepte.",
   "casos": [
     {
       "nombre": "Recorrido vacío, como lo crea la app (hiloVacio)",

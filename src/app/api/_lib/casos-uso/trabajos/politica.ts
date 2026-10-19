@@ -11,6 +11,12 @@ import {
   LIMPIEZA_AUDIO_MAX_INTENTOS,
 } from "@/lib/consentimiento-hechos";
 
+// El backoff del borrado del transcript y el lease del worker los necesita
+// también el worker (processor.trabajos.primer_intento_que_borra: no borrar
+// en AssemblyAI un transcript que su worker todavía espera). Viven en el
+// contrato con el worker, en segundos, y la política los toma de ahí.
+import contratoTrabajos from "../../../../../../processor/contrato/politica-trabajos.json";
+
 const MIN = 60 * 1000;
 const HORA = 60 * MIN;
 
@@ -30,7 +36,7 @@ export const POLITICA_POR_TIPO: Record<TipoTrabajo, Politica> = {
     tope: LIMPIEZA_AUDIO_MAX_INTENTOS,
   },
   borrar_transcript_asr: {
-    backoffMs: [1 * MIN, 5 * MIN, 30 * MIN, 2 * HORA, 6 * HORA, 24 * HORA],
+    backoffMs: contratoTrabajos.borrarTranscriptAsr.backoffSeg.map((seg) => seg * 1000),
     tope: ASR_BORRADO_MAX_INTENTOS,
   },
   // Una llamada al modelo; al tope, "Para vos" queda `fallido` con botón.
@@ -61,7 +67,7 @@ export function agotado(tipo: TipoTrabajo, intentos: number): boolean {
  */
 export const LEASE_TRABAJO_MS: Record<EjecutorTrabajo, number> = {
   app: 2 * MIN,
-  worker: 15 * MIN,
+  worker: contratoTrabajos.borrarTranscriptAsr.leaseWorkerSeg * 1000,
 };
 
 /** Tope del texto que se guarda en `ultimo_error` (VARCHAR(500)). */

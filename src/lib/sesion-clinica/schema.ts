@@ -11,6 +11,8 @@
 
 import { z } from "zod";
 
+import type { OrientacionTeorica as OrientacionDeLaBase } from "@prisma/client";
+
 import enumsClinicos from "../../../processor/contrato/enums-clinicos.json";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -82,9 +84,14 @@ export const rolesOrigenSchema = z.enum(["asr_role", "posicional"]);
 /** Orientación teórica de la profesional (enum `orientacion_teorica` de
  *  Postgres): decide el instrumento de "Para vos". Una sola lista para el
  *  PATCH de configuración, los tipos de la pantalla y lo que el worker recibe
- *  al reclamar; enums-clinicos.test.ts la compara con el enum de Prisma. */
-export const ORIENTACIONES_TEORICAS = ["cbt_mi", "gestalt"] as const;
-export const orientacionTeoricaSchema = z.enum(ORIENTACIONES_TEORICAS);
+ *  al reclamar. La lista es la del contrato con el worker (enums-clinicos.json,
+ *  que lee processor/schemas_llm.py); el tipo, el del enum de Prisma, porque
+ *  de un JSON no salen literales. enums-clinicos.test.ts compara las dos. */
+export const ORIENTACIONES_TEORICAS =
+  ENUMS_CLINICOS.orientacionTeorica as readonly OrientacionDeLaBase[];
+export const orientacionTeoricaSchema = z.enum(
+  ORIENTACIONES_TEORICAS as [OrientacionDeLaBase, ...OrientacionDeLaBase[]],
+);
 export type OrientacionTeorica = z.infer<typeof orientacionTeoricaSchema>;
 /** La que se usa si el consultorio no tiene configuración (el default de la
  *  columna en schema.prisma). */

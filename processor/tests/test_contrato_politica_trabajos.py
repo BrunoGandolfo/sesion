@@ -8,8 +8,9 @@ Ese cálculo depende del backoff y del lease que aplica la APP
 backoff y el worker no se entera, el trabajo puede borrar un transcript que
 otro worker está por leer: un 404 que se clasifica como definitivo.
 
-Este test lee politica.ts del disco y exige que el contrato diga lo mismo.
-CI hace checkout del repo entero, así que el archivo está.
+La app lee los tiempos de este contrato (politica.ts importa el JSON). Este
+test lee politica.ts del disco y exige que lo siga leyendo. CI hace checkout
+del repo entero, así que el archivo está.
 """
 import json
 import re
@@ -23,33 +24,24 @@ RAIZ = Path(__file__).resolve().parents[2]
 POLITICA_TS = RAIZ / "src" / "app" / "api" / "_lib" / "casos-uso" / "trabajos" / "politica.ts"
 CONTRATO = Path(__file__).resolve().parent.parent / "contrato" / "politica-trabajos.json"
 
-_UNIDADES_MS = {"MIN": 60_000, "HORA": 3_600_000}
 
-
-def _ms(expresion: str) -> int:
-    """'2 * HORA' → 7_200_000. Solo la forma que usa politica.ts."""
-    m = re.fullmatch(r"\s*(\d+)\s*\*\s*(MIN|HORA)\s*", expresion)
-    assert m, f"expresión que el test no sabe leer: {expresion!r}"
-    return int(m.group(1)) * _UNIDADES_MS[m.group(2)]
-
-
-def _politica_de_la_app() -> dict:
+def _app_lee_el_contrato() -> bool:
+    """politica.ts toma el backoff y el lease de este mismo archivo (F2): no
+    hay una segunda copia que comparar, sólo que siga leyéndolo."""
     fuente = POLITICA_TS.read_text(encoding="utf-8")
-    bloque = re.search(r"borrar_transcript_asr:\s*\{\s*backoffMs:\s*\[([^\]]*)\]", fuente)
-    lease = re.search(r"LEASE_TRABAJO_MS[^=]*=\s*\{[^}]*worker:\s*([^,}\n]+)", fuente)
-    assert bloque and lease, "politica.ts cambió de forma: actualizar este test"
-    return {
-        "backoffSeg": [_ms(x) // 1000 for x in bloque.group(1).split(",") if x.strip()],
-        "leaseWorkerSeg": _ms(lease.group(1)) // 1000,
-    }
+    return (
+        "processor/contrato/politica-trabajos.json" in fuente
+        and "contratoTrabajos.borrarTranscriptAsr.backoffSeg" in fuente
+        and "contratoTrabajos.borrarTranscriptAsr.leaseWorkerSeg" in fuente
+    )
 
 
 def _contrato() -> dict:
     return json.loads(CONTRATO.read_text(encoding="utf-8"))["borrarTranscriptAsr"]
 
 
-def test_el_contrato_dice_lo_mismo_que_la_politica_de_la_app():
-    assert _contrato() == _politica_de_la_app()
+def test_la_politica_de_la_app_lee_el_contrato():
+    assert _app_lee_el_contrato(), "politica.ts dejó de leer politica-trabajos.json"
 
 
 def test_el_worker_usa_los_tiempos_del_contrato():

@@ -81,7 +81,10 @@ describe("contrato de enums clínicos", () => {
 describe("orientación teórica", () => {
   it("la lista del contrato es la del enum orientacion_teorica de Postgres, y el default está en ella", async () => {
     const { OrientacionTeorica } = await import("@prisma/client");
-    const { ORIENTACIONES_TEORICAS, ORIENTACION_DEFAULT } = await import("@/lib/sesion-clinica/schema");
+    const { ENUMS_CLINICOS, ORIENTACIONES_TEORICAS, ORIENTACION_DEFAULT, orientacionTeoricaSchema } = await import("@/lib/sesion-clinica/schema");
+    // La misma lista que lee el worker, no una copia (F3 de la revisión del worker).
+    expect(ORIENTACIONES_TEORICAS).toBe(ENUMS_CLINICOS.orientacionTeorica);
+    expect(orientacionTeoricaSchema.options).toEqual(ENUMS_CLINICOS.orientacionTeorica);
     expect([...ORIENTACIONES_TEORICAS].sort()).toEqual(Object.values(OrientacionTeorica).sort());
     expect(ORIENTACIONES_TEORICAS).toContain(ORIENTACION_DEFAULT);
     const esquema = readFileSync(resolve(process.cwd(), "prisma", "schema.prisma"), "utf8");
