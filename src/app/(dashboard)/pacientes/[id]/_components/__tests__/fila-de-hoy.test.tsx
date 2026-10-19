@@ -20,6 +20,7 @@ import {
   VER_NOTA,
   VER_QUE_PASO,
 } from "@/lib/glosario";
+import { relojFijo } from "@/app/(dashboard)/_components/__tests__/reloj-fijo";
 import type { SesionClinicaEnsamblada } from "@/hooks/useSesionClinicaPolling";
 import type { Turno } from "@/types/domain";
 
@@ -30,7 +31,11 @@ vi.mock("framer-motion", async (original) => ({
   useReducedMotion: () => true,
 }));
 
-const HACE_UNA_HORA = new Date(Date.now() - 60 * 60 * 1000);
+// 15:00 en Montevideo: "hoy" no depende del día en que corre la suite.
+const AHORA = new Date("2026-09-16T18:00:00.000Z");
+relojFijo(AHORA);
+
+const HACE_UNA_HORA = new Date(AHORA.getTime() - 60 * 60 * 1000);
 
 function turno(extra: Partial<Turno> = {}): Turno {
   return {
@@ -41,7 +46,7 @@ function turno(extra: Partial<Turno> = {}): Turno {
   } as Turno;
 }
 
-function sesion(estado: string, actualizadaEn = new Date().toISOString()): SesionClinicaEnsamblada {
+function sesion(estado: string, actualizadaEn = AHORA.toISOString()): SesionClinicaEnsamblada {
   return {
     id: "s", turnoId: "t", estado, duracionAudioSeg: null, nota: null, datosEstructurados: null,
     feedback: null, modeloASR: null, modeloLLM: null, procesadoEn: null, aprobadoEn: null,
@@ -77,7 +82,9 @@ describe("la fila del turno de hoy", () => {
   });
 
   it("una grabación que quedó a medias se dice así y se retoma", () => {
-    montar(turno(), sesion("grabando", new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()));
+    // Pasado el tope de 2 h 30 más 30 min (umbralSinTerminarMs): con 3 h justas
+    // sólo pasaba por los milisegundos que tardaba el test con el reloj real.
+    montar(turno(), sesion("grabando", new Date(AHORA.getTime() - 4 * 60 * 60 * 1000).toISOString()));
     expect(screen.getByText(GRABACION_SIN_TERMINAR)).toBeTruthy();
     expect(enlace(new RegExp(GRABAR_SESION))?.getAttribute("href")).toBe("/grabar/t");
   });

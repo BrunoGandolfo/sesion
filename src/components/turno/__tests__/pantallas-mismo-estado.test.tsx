@@ -10,6 +10,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { relojFijo } from "@/app/(dashboard)/_components/__tests__/reloj-fijo";
 import { GrupoDeMes } from "@/app/(dashboard)/pacientes/[id]/_components/filas-sesion";
 import type { DocSesion } from "@/app/(dashboard)/pacientes/[id]/_components/sesiones-datos";
 import { TurnosPagosTab } from "@/app/(dashboard)/pacientes/[id]/_components/turnos-pagos-tab";
@@ -33,7 +34,10 @@ vi.mock("framer-motion", async (original) => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-const AYER = new Date(Date.now() - 24 * 60 * 60 * 1000);
+const AHORA = new Date("2026-09-16T18:00:00.000Z");
+relojFijo(AHORA);
+
+const AYER = new Date(AHORA.getTime() - 24 * 60 * 60 * 1000);
 
 function turno(extra: Partial<TurnoConPaciente> = {}): TurnoConPaciente {
   return {
@@ -52,7 +56,7 @@ const SALVIA = "bg-sage-100";
 
 describe("la palabra y el color del estado", () => {
   it("Agendado es neutro en la fila y en el detalle", () => {
-    render(<SessionRow turno={turno({ fecha: new Date(Date.now() + 3_600_000) })} />);
+    render(<SessionRow turno={turno({ fecha: new Date(AHORA.getTime() + 3_600_000) })} />);
     expect(screen.getByText(AGENDADO).className).toContain(NEUTRO);
   });
 
@@ -93,7 +97,7 @@ describe("el pago en el detalle del turno", () => {
       render(
         <AccionesDelTurno
           turno={t}
-          acciones={accionesDelDetalle(t, null, new Date())}
+          acciones={accionesDelDetalle(t, null, AHORA)}
           enviando={false}
           onModo={() => {}}
           onReprogramar={() => {}}
