@@ -13,10 +13,10 @@
 //                      resuelve el trabajo; nunca mueve el hilo vigente.
 //
 // Un resultado que la app rechaza por su forma (el Recorrido no pasa
-// contenidoHiloSchema, o el aplicador responde 400) deja el trabajo fallido
-// y definitivo, con el uso que se pagó. Antes la transacción se revertía, el
-// trabajo quedaba reclamado hasta que vencía el lease y se repetía la
-// llamada al modelo para recibir lo mismo.
+// contenidoHiloSchema, o el aplicador responde 400) es un fallo más, no
+// definitivo: el trabajo vuelve a pendiente con backoff y se reintenta hasta
+// el tope (otra llamada al modelo puede dar una propuesta válida), con el uso
+// que se pagó anotado. No queda reclamado hasta que venza el lease.
 
 import type { Prisma, TipoTrabajo } from "@prisma/client";
 import { ZodError } from "zod";
@@ -100,8 +100,8 @@ export interface ResultadoTrabajoWorkerInput {
   ahora?: Date;
 }
 
-/** Por qué la app rechaza un resultado ok, si es por su forma: repetirlo da
- *  lo mismo. Nombra los campos, nunca su contenido. Un 409 (otra propuesta
+/** Por qué la app rechaza un resultado ok, si es por su forma. Nombra los
+ *  campos, nunca su contenido. Un 409 (otra propuesta
  *  pendiente, la sesión ya no está) no es de forma: sigue como antes. */
 function rechazoDeForma(error: unknown): string | null {
   if (error instanceof ZodError) {
@@ -146,6 +146,6 @@ export async function aplicarResultadoTrabajo({
   } catch (error) {
     const rechazo = resultado.ok ? rechazoDeForma(error) : null;
     if (rechazo === null) throw error;
-    return resolver({ ok: false, error: rechazo, definitivo: true, uso: resultado.uso });
+    return resolver({ ok: false, error: rechazo, uso: resultado.uso });
   }
 }
