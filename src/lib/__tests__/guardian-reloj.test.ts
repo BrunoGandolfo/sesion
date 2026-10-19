@@ -25,8 +25,6 @@ const PENDIENTES = [
   "src/app/(dashboard)/pacientes/[id]/_components/__tests__/turnos-pagos-tab.test.tsx",
   "src/components/forms/__tests__/nuevo-turno-propuesta.test.tsx",
   "src/components/layout/__tests__/menus.test.tsx",
-  // Grabación: useFakeTimers sin setSystemTime (sólo un vencimiento relativo).
-  "src/lib/__tests__/grabacion-diagnostico-integracion.test.tsx",
 ];
 
 function tests(dir: string): string[] {

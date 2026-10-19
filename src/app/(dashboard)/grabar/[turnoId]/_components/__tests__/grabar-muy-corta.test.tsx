@@ -8,37 +8,25 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { GRABACION_MUY_CORTA } from "@/lib/glosario";
+import { RecorderFalso, recorders } from "@/components/grabacion/__tests__/recorder-falso";
 import { limpiarGrabacion } from "@/lib/grabacion-storage";
 
 import { GrabarView } from "../grabar-view";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
-vi.mock("@/lib/grabacion-storage", () => ({
-  guardarChunk: vi.fn(async () => {}),
+vi.mock("@/lib/grabacion-storage", async (original) => ({
+  // La de verdad: lleva la cuenta de lo que los dobles de abajo contestan.
+  seguimientoDeCopia: (await original<typeof import("@/lib/grabacion-storage")>()).seguimientoDeCopia,
+  guardarChunk: vi.fn(async () => true),
   guardarPausas: vi.fn(async () => {}),
-  iniciarSesionGrabacion: vi.fn(async () => {}),
+  iniciarSesionGrabacion: vi.fn(async () => true),
   limpiarGrabacion: vi.fn(async () => {}),
   recuperarGrabacionPendiente: vi.fn(async () => null),
 }));
 
-const recorders: RecorderFalso[] = [];
 const pedidos: string[] = [];
 const xhrAbiertos: string[] = [];
 
-class RecorderFalso {
-  state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm;codecs=opus";
-  ondataavailable: ((evento: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  constructor() { recorders.push(this); }
-  static isTypeSupported() { return true; }
-  start() { this.state = "recording"; }
-  pause() { this.state = "paused"; }
-  resume() { this.state = "recording"; }
-  stop() { this.state = "inactive"; this.emitirChunk(); this.onstop?.(); }
-  emitirChunk() { this.ondataavailable?.({ data: new Blob(["audio"]) }); }
-}
 
 async function grabar(segundos: number) {
   for (let t = 0; t < segundos; t += 1) {

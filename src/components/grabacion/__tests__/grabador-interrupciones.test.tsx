@@ -7,9 +7,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useGrabador, type DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
+import { useGrabador, type DatosGrabacion, type EstadoGrabador } from "@/components/grabacion/GrabadorSesion";
+import { EN_CURSO, enCurso } from "@/components/grabacion/grabador-tipos";
+import { RecorderFalso, recorders } from "./recorder-falso";
 import { AVISO_LIMITE_SEGUNDOS, LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { guardarChunk, limpiarGrabacion } from "@/lib/grabacion-storage";
+import { MENSAJE_ERROR_GRABADOR } from "@/app/(dashboard)/grabar/[turnoId]/_components/errores-grabacion";
 
 /** Lo que "quedó en el teléfono". null = no hay nada que recuperar. */
 let persistido: {
@@ -20,34 +23,20 @@ let persistido: {
   pausas: { inicio: number; fin: number | null }[];
 } | null = null;
 
-vi.mock("@/lib/grabacion-storage", () => ({
-  guardarChunk: vi.fn(async () => {}),
+vi.mock("@/lib/grabacion-storage", async (original) => ({
+  // La de verdad: lleva la cuenta de lo que los dobles de abajo contestan.
+  seguimientoDeCopia: (await original<typeof import("@/lib/grabacion-storage")>()).seguimientoDeCopia,
+  guardarChunk: vi.fn(async () => true),
   guardarPausas: vi.fn(async () => {}),
-  iniciarSesionGrabacion: vi.fn(async () => {}),
+  iniciarSesionGrabacion: vi.fn(async () => true),
   limpiarGrabacion: vi.fn(async () => {}),
   recuperarGrabacionPendiente: vi.fn(async () => persistido),
 }));
 
 const TURNO = "turno-de-prueba";
-const recorders: RecorderFalso[] = [];
 let pista: PistaFalsa;
 let pedidosDeMicrofono = 0;
 
-class RecorderFalso {
-  state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm;codecs=opus";
-  ondataavailable: ((evento: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  pause = vi.fn(() => { this.state = "paused"; });
-  resume = vi.fn(() => { this.state = "recording"; });
-  stop = vi.fn(() => { this.state = "inactive"; this.emitirChunk(); this.onstop?.(); });
-  constructor() { RecorderFalso.registrar(this); }
-  static registrar(instancia: RecorderFalso) { recorders.push(instancia); }
-  static isTypeSupported() { return true; }
-  start() { this.state = "recording"; }
-  emitirChunk(bytes = 5) { this.ondataavailable?.({ data: new Blob(["a".repeat(bytes)]) }); }
-}
 
 class PistaFalsa {
   onended: (() => void) | null = null;
@@ -292,7 +281,17 @@ describe("lo que se entrega", () => {
     expect(audioBlob.size).toBe(60);
     expect(await audioBlob.text()).toBe("a".repeat(60));
     expect(diagnostico).toMatchObject({ chunks: 12, bytes: 60 });
-    expect(Object.keys(onListo.mock.calls[0][0]).sort()).toEqual(["audioBlob", "diagnostico", "duracionSegundos", "pausas"]);
+    expect(Object.keys(onListo.mock.calls[0][0]).sort()).toEqual(["audioBlob", "diagnostico", "duracionSegundos", "pausas", "respaldoEnTelefono"]);
+    await expect(onListo.mock.calls[0][0].respaldoEnTelefono?.()).resolves.toBe(true);
+  });
+
+  it("si un chunk no se pudo guardar en el teléfono (cuota llena), la entrega lo dice", async () => {
+    vi.mocked(guardarChunk).mockResolvedValueOnce(false);
+    const { grabador, onListo } = montar();
+    await empezar(grabador, 11);
+    act(() => grabador.current.terminar());
+
+    await expect(onListo.mock.calls[0][0].respaldoEnTelefono?.()).resolves.toBe(false);
   });
 
   it("una grabación que quedó en el teléfono se envía sin pedir ninguna clave", async () => {
@@ -372,5 +371,127 @@ describe("un toque accidental no se sube", () => {
     expect(grabador.current.muyCorta).toBe(true);
     expect(grabador.current.pendienteSeg).toBeNull();
     expect(limpiarGrabacion).toHaveBeenCalledWith(TURNO);
+  });
+});
+
+describe("los errores del micrófono se dicen en castellano", () => {
+  it("un error del navegador con texto en inglés no llega a la pantalla: va el del catálogo", async () => {
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      mediaDevices: { getUserMedia: async () => { throw new TypeError("Permission denied by system"); } },
+    });
+    const consola = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { grabador, onError } = montar();
+    await act(async () => { await grabador.current.iniciar(TURNO); });
+
+    expect(grabador.current.estado).toBe("error");
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["no-inicio"]);
+    expect(onError).toHaveBeenCalledWith(MENSAJE_ERROR_GRABADOR["no-inicio"]);
+    // El original queda para el diagnóstico, no para ella.
+    expect(consola).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ message: "Permission denied by system" }));
+  });
+
+  it("un navegador sin grabación lo dice con el texto del catálogo", async () => {
+    vi.stubGlobal("navigator", { ...navigator, mediaDevices: undefined });
+    const { grabador } = montar();
+    await act(async () => { await grabador.current.iniciar(TURNO); });
+
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["sin-soporte"]);
+  });
+});
+
+describe("caminos de fallo del grabador", () => {
+  it("un archivo vacío no se entrega: lo dice y no sube nada", async () => {
+    // Llegó a contar diez minutos, pero los chunks no traen bytes.
+    persistido = { sesionClinicaId: TURNO, chunks: [new Blob([]), new Blob([])], mimeType: "audio/webm", duracionAproxSeg: 600, pausas: [] };
+    const { grabador, onListo, onError } = montar();
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => grabador.current.enviarPendiente());
+
+    expect(onListo).not.toHaveBeenCalled();
+    expect(grabador.current.estado).toBe("error");
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR.vacia);
+    expect(onError).toHaveBeenCalledWith(MENSAJE_ERROR_GRABADOR.vacia);
+  });
+
+  it("si stop() lanza al terminar, lo dice y suelta el micrófono", async () => {
+    const { grabador, onListo } = montar();
+    await empezar(grabador, 12);
+    recorders[0].stop.mockImplementationOnce(() => { throw new DOMException("x", "InvalidStateError"); });
+
+    act(() => grabador.current.terminar());
+
+    expect(onListo).not.toHaveBeenCalled();
+    expect(grabador.current.estado).toBe("error");
+    expect(grabador.current.mensajeError).toBe(MENSAJE_ERROR_GRABADOR["no-se-detuvo"]);
+    expect(pista.stop).toHaveBeenCalled();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Las transiciones del grabador, en una tabla: cada acción desde cada estado.
+// Fija las guardas que hoy están en cada función (iniciar, pausar, reanudar,
+// terminar, descartar, resetear) contra el diagrama de grabador-tipos.ts.
+// "preparando" no entra como origen: con un recorder que entrega al detenerse
+// dura lo que tarda onstop, y no hay acción que se pueda tocar en el medio.
+// ────────────────────────────────────────────────────────────────────────────
+
+type Accion = "iniciar" | "pausar" | "reanudar" | "terminar" | "descartar" | "resetear";
+type Origen = Exclude<EstadoGrabador, "preparando">;
+
+async function llevarA(estado: Origen) {
+  const montado = montar();
+  const { grabador } = montado;
+  if (estado === "inactivo") return montado;
+  if (estado === "error") {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const original = navigator.mediaDevices.getUserMedia;
+    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("x", "NotAllowedError"); };
+    await act(async () => { await grabador.current.iniciar(TURNO); });
+    navigator.mediaDevices.getUserMedia = original;
+    return montado;
+  }
+  await empezar(grabador, 12);
+  if (estado === "pausado") {
+    act(() => grabador.current.pausar());
+    await act(async () => { vi.advanceTimersByTime(1000); });
+  }
+  if (estado === "terminada") act(() => pista.onended?.());
+  if (estado === "entregada") act(() => grabador.current.terminar());
+  expect(grabador.current.estado).toBe(estado);
+  return montado;
+}
+
+const TRANSICIONES: Record<Origen, Record<Accion, EstadoGrabador>> = {
+  inactivo: { iniciar: "grabando", pausar: "inactivo", reanudar: "inactivo", terminar: "inactivo", descartar: "inactivo", resetear: "inactivo" },
+  grabando: { iniciar: "grabando", pausar: "pausado", reanudar: "grabando", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+  pausado: { iniciar: "pausado", pausar: "pausado", reanudar: "grabando", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+  terminada: { iniciar: "terminada", pausar: "terminada", reanudar: "terminada", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+  // Después de un error del micrófono se puede volver a intentar.
+  error: { iniciar: "grabando", pausar: "error", reanudar: "error", terminar: "error", descartar: "inactivo", resetear: "inactivo" },
+  // Lo entregado ya es de la pantalla: sólo se sale descartando o reseteando.
+  entregada: { iniciar: "entregada", pausar: "entregada", reanudar: "entregada", terminar: "entregada", descartar: "inactivo", resetear: "inactivo" },
+};
+
+describe("tabla de transiciones del grabador", () => {
+  const casos = Object.entries(TRANSICIONES).flatMap(([origen, acciones]) =>
+    Object.entries(acciones).map(([accion, destino]) => [origen as Origen, accion as Accion, destino] as const),
+  );
+
+  it.each(casos)("%s + %s → %s", async (origen, accion, destino) => {
+    const { grabador } = await llevarA(origen);
+    await act(async () => {
+      if (accion === "iniciar") await grabador.current.iniciar(TURNO);
+      else grabador.current[accion]();
+    });
+    expect(grabador.current.estado).toBe(destino);
+  });
+
+  it("EN_CURSO son los estados con una grabación abierta, y enCurso los reconoce", () => {
+    expect([...EN_CURSO].sort()).toEqual(["grabando", "pausado", "terminada"]);
+    for (const origen of Object.keys(TRANSICIONES) as Origen[]) {
+      expect(enCurso(origen)).toBe(EN_CURSO.has(origen));
+    }
   });
 });

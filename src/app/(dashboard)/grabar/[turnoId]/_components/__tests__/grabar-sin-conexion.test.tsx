@@ -9,7 +9,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, REINTENTAR } from "@/lib/glosario";
+import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, GRABACION_SIN_CONEXION_SIN_COPIA, MIC_SIN_PERMISO, REINTENTAR } from "@/lib/glosario";
+import { RecorderFalso, recorders } from "@/components/grabacion/__tests__/recorder-falso";
 import { claveSinTurno } from "@/lib/grabacion-clave";
 
 import { GrabarView } from "../grabar-view";
@@ -18,14 +19,21 @@ import { GrabarView } from "../grabar-view";
 const disco = vi.hoisted(() => ({
   metas: new Map<string, { iniciadaEn: number; mimeType: string; turnoId?: string; pacienteId?: string }>(),
   chunks: new Map<string, Blob[]>(),
+  // Con la cuota llena IndexedDB no escribe: guardarChunk devuelve false.
+  cuotaLlena: false,
 }));
-vi.mock("@/lib/grabacion-storage", () => ({
+vi.mock("@/lib/grabacion-storage", async (original) => ({
+  // La de verdad: lleva la cuenta de lo que los dobles de abajo contestan.
+  seguimientoDeCopia: (await original<typeof import("@/lib/grabacion-storage")>()).seguimientoDeCopia,
   iniciarSesionGrabacion: vi.fn(async (clave: string, mimeType: string, pacienteId?: string) => {
     disco.metas.set(clave, { iniciadaEn: Date.now(), mimeType, ...(pacienteId ? { pacienteId } : {}) });
     disco.chunks.set(clave, []);
+    return true;
   }),
   guardarChunk: vi.fn(async (clave: string, _indice: number, blob: Blob) => {
+    if (disco.cuotaLlena) return false;
     disco.chunks.get(clave)?.push(blob);
+    return true;
   }),
   guardarPausas: vi.fn(async () => {}),
   limpiarGrabacion: vi.fn(async (clave: string) => {
@@ -51,21 +59,6 @@ vi.mock("@/lib/grabacion-storage", () => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 
 // ─── El navegador ───────────────────────────────────────────────────────────
-const recorders: RecorderFalso[] = [];
-class RecorderFalso {
-  state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm;codecs=opus";
-  ondataavailable: ((evento: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  constructor() { recorders.push(this); }
-  static isTypeSupported() { return true; }
-  start() { this.state = "recording"; }
-  pause() { this.state = "paused"; }
-  resume() { this.state = "recording"; }
-  stop() { this.state = "inactive"; this.emitirChunk(); this.onstop?.(); }
-  emitirChunk() { this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) }); }
-}
 const getUserMedia = vi.fn();
 
 // ─── La red ─────────────────────────────────────────────────────────────────
@@ -147,6 +140,7 @@ beforeEach(() => {
   for (const k of Object.keys(cuerpos)) delete cuerpos[k];
   disco.metas.clear();
   disco.chunks.clear();
+  disco.cuotaLlena = false;
   red.caida = false;
   sesionDelTurno = null;
   vi.stubGlobal("MediaRecorder", RecorderFalso);
@@ -194,6 +188,18 @@ describe("sin red", () => {
     expect([...disco.metas.keys()]).toEqual([clave]);
     expect(disco.chunks.get(clave)!.length).toBeGreaterThanOrEqual(12);
     expect(pedidos).toEqual([]);
+  });
+
+  test("con la cuota llena no dice que la grabación quedó en el teléfono: pide no cerrar la pantalla", async () => {
+    red.caida = true;
+    disco.cuotaLlena = true;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<GrabarView {...SIN_TURNO} />);
+    await grabarYTerminar();
+
+    expect(await screen.findByText(GRABACION_SIN_CONEXION_SIN_COPIA)).toBeTruthy();
+    expect(screen.queryByText(GRABACION_SIN_CONEXION)).toBeNull();
+    expect(screen.getByRole("button", { name: REINTENTAR })).toBeTruthy();
   });
 
   test("al volver la red, Reintentar crea el turno con la hora en que empezó, la sesión, y sube", async () => {
@@ -412,5 +418,24 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
 
     expect(await screen.findByText(GRABACION_SIN_CONEXION)).toBeTruthy();
     expect(disco.metas.has(CLAVE)).toBe(true);
+  });
+});
+
+describe("el micrófono no arranca", () => {
+  test("sin permiso lo dice, y Probá de nuevo vuelve a la previa y deja grabar", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    getUserMedia.mockRejectedValueOnce(new DOMException("Permission denied", "NotAllowedError"));
+    render(<GrabarView {...CON_TURNO} />);
+    fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
+
+    // En la pantalla y en el aviso.
+    expect((await screen.findAllByText(MIC_SIN_PERMISO)).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Permission denied")).toBeNull();
+    expect(recorders).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Probá de nuevo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Grabar sesión" }));
+    await waitFor(() => expect(recorders).toHaveLength(1));
+    expect(recorders[0].state).toBe("recording");
   });
 });

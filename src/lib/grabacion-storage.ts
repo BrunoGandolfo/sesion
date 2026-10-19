@@ -14,9 +14,10 @@
 //
 // Filosofía de errores: este módulo es un SEGURO, no una dependencia.
 // Si IndexedDB no está disponible, la cuota se agota o cualquier
-// operación falla, se degrada silenciosamente a solo-RAM (el
-// comportamiento previo). Nunca lanza: una falla del backup jamás
-// debe romper la grabación en curso.
+// operación falla, la grabación sigue en RAM. Nunca lanza: una falla del
+// backup jamás debe romper la grabación en curso. Pero no es silenciosa:
+// iniciarSesionGrabacion y guardarChunk devuelven false, y la pantalla deja
+// de decir que el audio está a salvo en el teléfono.
 //
 // Nota de integración: el parámetro `sesionClinicaId` es el
 // identificador con el que el caller nombra la grabación: el turnoId si la
@@ -27,16 +28,19 @@
 // dos veces.
 // ============================================
 
+import { TIMESLICE_MS } from "@/lib/grabacion-captura";
+import { abridorDeBase, esperarRequest, esperarTransaccion, hayIndexedDB } from "@/lib/indexeddb";
+
 const DB_NOMBRE = "sesion-grabaciones";
 const DB_VERSION = 1;
 const STORE_CHUNKS = "chunks";
 const STORE_META = "meta";
 
-/** Duración del timeslice del MediaRecorder (ms). Cada chunk ≈ 1 segundo.
- *  Durante una pausa el MediaRecorder no emite chunks, así que contar chunks
+/** Segundos de audio que trae cada chunk: el timeslice con que se le pide
+ *  audio al MediaRecorder (grabacion-captura.ts). Durante una pausa el MediaRecorder no emite chunks, así que contar chunks
  *  ya descuenta las pausas: la duración aproximada de una grabación
  *  recuperada no necesita corregirse con `pausas`. */
-const SEGUNDOS_POR_CHUNK = 1;
+const SEGUNDOS_POR_CHUNK = TIMESLICE_MS / 1000;
 
 /**
  * Tramo en el que la grabación estuvo detenida sin cerrarse: la terapeuta
@@ -84,81 +88,14 @@ export interface GrabacionPendiente {
   pacienteId: string | null;
 }
 
-function indexedDBDisponible(): boolean {
-  try {
-    return typeof indexedDB !== "undefined" && indexedDB !== null;
-  } catch {
-    return false;
+const abrirDB = abridorDeBase(DB_NOMBRE, DB_VERSION, (db) => {
+  if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
+    db.createObjectStore(STORE_CHUNKS, { keyPath: ["sesionClinicaId", "indice"] });
   }
-}
-
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function abrirDB(): Promise<IDBDatabase> {
-  if (dbPromise) {
-    return dbPromise;
+  if (!db.objectStoreNames.contains(STORE_META)) {
+    db.createObjectStore(STORE_META, { keyPath: "sesionClinicaId" });
   }
-
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NOMBRE, DB_VERSION);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-
-      if (!db.objectStoreNames.contains(STORE_CHUNKS)) {
-        db.createObjectStore(STORE_CHUNKS, {
-          keyPath: ["sesionClinicaId", "indice"],
-        });
-      }
-
-      if (!db.objectStoreNames.contains(STORE_META)) {
-        db.createObjectStore(STORE_META, { keyPath: "sesionClinicaId" });
-      }
-    };
-
-    request.onsuccess = () => {
-      const db = request.result;
-
-      // Si otra pestaña necesita actualizar la versión, soltamos la conexión.
-      db.onversionchange = () => {
-        db.close();
-        dbPromise = null;
-      };
-
-      resolve(db);
-    };
-
-    request.onerror = () => {
-      reject(request.error ?? new Error("No se pudo abrir IndexedDB"));
-    };
-
-    request.onblocked = () => {
-      reject(new Error("Apertura de IndexedDB bloqueada"));
-    };
-  });
-
-  // Si la apertura falla, permitir reintentos futuros.
-  dbPromise.catch(() => {
-    dbPromise = null;
-  });
-
-  return dbPromise;
-}
-
-function esperarRequest<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IDBRequest falló"));
-  });
-}
-
-function esperarTransaccion(tx: IDBTransaction): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Transacción falló"));
-    tx.onabort = () => reject(tx.error ?? new Error("Transacción abortada"));
-  });
-}
+});
 
 function rangoChunks(sesionClinicaId: string): IDBKeyRange {
   return IDBKeyRange.bound(
@@ -168,23 +105,25 @@ function rangoChunks(sesionClinicaId: string): IDBKeyRange {
 }
 
 function avisar(operacion: string, error: unknown) {
-  // Solo diagnóstico: la degradación es silenciosa para el usuario.
   console.warn(`[grabacion-storage] ${operacion} falló, sigo en solo-RAM`, error);
 }
 
 /**
  * Registra el inicio de una grabación. Borra cualquier chunk previo
  * asociado al mismo id (una grabación nueva reemplaza a la anterior
- * del mismo turno/sesión) y guarda el timestamp de inicio.
+ * del mismo turno/sesión) y guarda el timestamp de inicio. Pide además
+ * almacenamiento persistente, para que el teléfono no desaloje la copia.
+ * Devuelve si la meta quedó escrita.
  */
 export async function iniciarSesionGrabacion(
   sesionClinicaId: string,
   mimeType: string,
   pacienteId?: string,
-): Promise<void> {
-  if (!indexedDBDisponible()) {
-    return;
+): Promise<boolean> {
+  if (!hayIndexedDB()) {
+    return false;
   }
+  pedirAlmacenamientoPersistente();
 
   try {
     const db = await abrirDB();
@@ -202,8 +141,10 @@ export async function iniciarSesionGrabacion(
     tx.objectStore(STORE_META).put(meta);
 
     await esperarTransaccion(tx);
+    return true;
   } catch (error) {
     avisar("iniciarSesionGrabacion", error);
+    return false;
   }
 }
 
@@ -220,7 +161,7 @@ export async function guardarPausas(
   sesionClinicaId: string,
   pausas: readonly Pausa[],
 ): Promise<void> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return;
   }
 
@@ -247,17 +188,17 @@ export async function guardarPausas(
 }
 
 /**
- * Persiste un chunk de audio. Pensado para llamarse fire-and-forget desde
- * `ondataavailable`: nunca lanza y no hay que await-earlo en el hot path de
- * la grabación.
+ * Persiste un chunk de audio. Pensado para llamarse sin esperarlo desde
+ * `ondataavailable`: nunca lanza y no bloquea la grabación. Devuelve si quedó
+ * escrito: false con la cuota llena, sin IndexedDB o con la base cerrada.
  */
 export async function guardarChunk(
   sesionClinicaId: string,
   indice: number,
   chunk: Blob,
-): Promise<void> {
-  if (!indexedDBDisponible()) {
-    return;
+): Promise<boolean> {
+  if (!hayIndexedDB()) {
+    return false;
   }
 
   try {
@@ -268,11 +209,57 @@ export async function guardarChunk(
     tx.objectStore(STORE_CHUNKS).put(registro);
 
     await esperarTransaccion(tx);
+    return true;
   } catch (error) {
-    // Cuota agotada, DB cerrada, etc.: degradar a solo-RAM.
+    // Cuota agotada, DB cerrada, etc.: la grabación sigue sólo en RAM.
     avisar(`guardarChunk(${indice})`, error);
+    return false;
   }
 }
+
+/**
+ * Pide que el navegador no desaloje lo guardado cuando le falta espacio
+ * (sin esto, el almacenamiento es "best-effort" y Android lo puede borrar).
+ * El navegador puede decir que no; no cambia nada de lo demás.
+ */
+function pedirAlmacenamientoPersistente(): void {
+  try {
+    const storage = navigator.storage;
+    if (!storage?.persist) return;
+    // Si ya lo es, no se vuelve a pedir: en Firefox el pedido abre un cartel.
+    void Promise.resolve(storage.persisted?.() ?? false)
+      .then((ya) => (ya ? true : storage.persist()))
+      .catch(() => {});
+  } catch {
+    // Sin la API: nada que pedir.
+  }
+}
+
+/** Lo más que se espera a que termine de escribirse un chunk antes de decir
+ *  si hay copia. Una escritura colgada no confirma nada: no se promete. */
+const ESPERA_COPIA_MS = 3000;
+
+/**
+ * Si todo lo de UNA grabación quedó en el teléfono. El grabador anota cada
+ * escritura (la promesa que devuelven guardarChunk e iniciarSesionGrabacion)
+ * y la pantalla pregunta al fallar la subida, que puede ser antes de que la
+ * última termine: hayCopia() las espera, hasta ESPERA_COPIA_MS.
+ */
+export function seguimientoDeCopia() {
+  const escrituras: Promise<boolean>[] = [];
+  return {
+    anotar(escritura: Promise<boolean>) {
+      escrituras.push(escritura);
+    },
+    hayCopia(): Promise<boolean> {
+      const todas = Promise.all(escrituras).then((resultados) => resultados.every(Boolean));
+      const plazo = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ESPERA_COPIA_MS));
+      return Promise.race([todas, plazo]);
+    },
+  };
+}
+
+export type SeguimientoDeCopia = ReturnType<typeof seguimientoDeCopia>;
 
 /**
  * Anota en la meta de una grabación el turno que se creó para ella. Nunca
@@ -280,7 +267,7 @@ export async function guardarChunk(
  * el navegador cree otro turno.
  */
 export async function asociarTurno(sesionClinicaId: string, turnoId: string): Promise<void> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return;
   }
 
@@ -308,7 +295,7 @@ export async function asociarTurno(sesionClinicaId: string, turnoId: string): Pr
 export async function recuperarGrabacionPendiente(
   coincide: (sesionClinicaId: string, turnoId: string | null, pacienteId: string | null) => boolean = () => true,
 ): Promise<GrabacionPendiente | null> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return null;
   }
 
@@ -373,7 +360,7 @@ export async function recuperarGrabacionPendiente(
  * upload exitoso o un descarte explícito del usuario.
  */
 export async function limpiarGrabacion(sesionClinicaId: string): Promise<void> {
-  if (!indexedDBDisponible()) {
+  if (!hayIndexedDB()) {
     return;
   }
 

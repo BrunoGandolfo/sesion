@@ -19,7 +19,9 @@
 // con su clave) y la pantalla lo dice: se reintenta cuando vuelve la señal.
 //
 // La grabación misma (un solo MediaRecorder, chunks, pausa, IndexedDB,
-// recuperación) es de useGrabador; la subida, de lib/subida-audio.ts.
+// recuperación) es de useGrabador; la subida, de lib/subida-audio.ts; la
+// sesión, de sesion-del-turno.ts; qué hacer cuando falla, de
+// errores-grabacion.ts (desenlaceDelFallo).
 
 import * as React from "react";
 
@@ -28,32 +30,32 @@ import {
   type DatosGrabacion,
   type EstadoGrabador,
 } from "@/components/grabacion/GrabadorSesion";
+import { enCurso } from "@/components/grabacion/grabador-tipos";
 import { usePantallaEncendida } from "@/hooks/usePantallaEncendida";
-import { ApiClientError, apiGet, apiPost, mensajeParaElla } from "@/lib/api-client";
+import { apiPost, mensajeParaElla } from "@/lib/api-client";
 import { hora } from "@/lib/format";
 import { claveSinTurno, esClaveSinTurnoDe, inicioDeClaveSinTurno, turnoDeLaGrabacion } from "@/lib/grabacion-clave";
+import { admiteAudio, leerSesionDelTurno } from "@/lib/grabacion-sesion";
 import { asociarTurno, limpiarGrabacion } from "@/lib/grabacion-storage";
-import { ESTADOS_SIN_TERMINAR } from "@/lib/sesion-clinica/estados";
 import {
   marcarTurnoRealizado,
   subirAudio,
   volverAGrabando,
 } from "@/lib/subida-audio";
-import { esRechazoDefinitivo, esRechazoDelServidor, esSinConexion } from "./errores-grabacion";
-import {
-  ALGO_FALLO,
-  AUDIO_NO_GUARDADO,
-  GRABACION_SIN_CONEXION,
-  SESION_EN_CAMINO,
-  TURNO_NO_MARCADO,
-} from "@/lib/glosario";
+import { desenlaceDelFallo } from "./errores-grabacion";
+import { asegurarSesion } from "./sesion-del-turno";
+import { ALGO_FALLO, TURNO_NO_MARCADO } from "@/lib/glosario";
 
 /** Duración por defecto del turno creado al vuelo. */
 const DURACION_SIN_TURNO = 50;
 
+type TurnoApi = { id: string; fecha: string };
+
 export type Fase =
   | "previo"
-  | "preparando"
+  // Tocó Grabar y se está abriendo el micrófono. (No confundir con el
+  // "preparando" del grabador, que es armar el archivo después de Terminar.)
+  | "abriendo-microfono"
   | "enviando"
   | "guardado"
   | "no-guardado"
@@ -64,8 +66,6 @@ export type Fase =
   // marcar el turno como realizado. No se vuelve a la ficha hasta resolverlo.
   | "turno-sin-marcar";
 
-type TurnoApi = { id: string; fecha: string };
-type SesionApi = { id: string; estado: string };
 
 /** Qué pantalla toca. La precedencia: lo que está subiendo, después el
  *  resultado de la subida, después la grabación en curso, el error del
@@ -87,9 +87,7 @@ export function pantallaDe(fase: Fase, estadoGrabador: EstadoGrabador): Pantalla
   if (fase === "no-guardado") return "reintentar-subida";
   if (fase === "turno-sin-marcar") return "reintentar-turno";
   if (fase === "rechazada") return "rechazada";
-  if (estadoGrabador === "grabando" || estadoGrabador === "pausado" || estadoGrabador === "terminada") {
-    return "grabando";
-  }
+  if (enCurso(estadoGrabador)) return "grabando";
   if (estadoGrabador === "error") return "error-mic";
   return "previa";
 }
@@ -131,37 +129,6 @@ export function useFlujoGrabacion({
   const sesionIdRef = React.useRef<string | null>(null);
   const turnoProgramadoRef = React.useRef(turnoProgramado);
 
-  /**
-   * Deja la sesión clínica del turno en estado "grabando" y devuelve su id.
-   * Tolera reentrar con una sesión ya empezada (volvió atrás, se le cerró el
-   * navegador) y una subida que quedó a medias. Se llama al subir, no al
-   * empezar a grabar.
-   */
-  const asegurarSesion = React.useCallback(async (turno: string): Promise<string> => {
-    let sesion = await apiGet<SesionApi | null>(
-      `/api/sesion-clinica?turnoId=${turno}`,
-    );
-
-    if (!sesion) {
-      const inicio = inicioRef.current;
-      sesion = await apiPost<SesionApi>("/api/sesion-clinica", {
-        turnoId: turno,
-        ...(inicio ? { iniciadaEn: inicio.toISOString() } : {}),
-      });
-    }
-
-    if (sesion.estado === "subiendo") {
-      await volverAGrabando(sesion.id);
-      return sesion.id;
-    }
-
-    if (sesion.estado !== "grabando") {
-      throw new ApiClientError(SESION_EN_CAMINO, 409);
-    }
-
-    return sesion.id;
-  }, []);
-
   /** El turno: el que había o uno nuevo con la hora de inicio, anotado en el
    *  teléfono para que un reintento no lo cree dos veces. */
   const asegurarTurno = React.useCallback(async (): Promise<string> => {
@@ -199,7 +166,7 @@ export function useFlujoGrabacion({
       let sesionId: string | null = null;
       try {
         turno = await asegurarTurno();
-        sesionId = await asegurarSesion(turno);
+        sesionId = await asegurarSesion(turno, inicioRef.current);
         sesionIdRef.current = sesionId;
 
         await subirAudio(sesionId, datos, (p: number) => setProgreso(p));
@@ -227,57 +194,16 @@ export function useFlujoGrabacion({
         setFase("guardado");
       } catch (error) {
         console.warn("[grabar] falló la subida", error);
-        // Sin red no se le pregunta nada al servidor: la grabación queda en
-        // el teléfono y se reintenta cuando vuelva la señal.
-        if (esSinConexion(error)) {
-          setErrorPantalla(GRABACION_SIN_CONEXION);
-          setFase("no-guardado");
-          // Si la sesión llegó a quedar en "subiendo", que vuelva a "grabando"
-          // (sin red no va a poder; el próximo intento lo resuelve igual).
-          if (sesionId) await volverAGrabando(sesionId);
-          return;
-        }
-        // El servidor no aceptó el turno o la sesión (la sesión ya se cerró,
-        // el turno no es de hoy, falta la autorización): reintentar fallaría
-        // igual. Se dice lo que contestó, que está escrito para ella. La
-        // grabación sigue en el teléfono.
-        if (!sesionId && esRechazoDefinitivo(error)) {
-          setErrorPantalla(error.mensaje);
-          setFase("rechazada");
-          return;
-        }
-        // Lo que decide es el estado de la sesión, no el código: un 409 de
-        // "no llegó" deja la sesión en grabando a propósito para reintentar,
-        // y uno de upload-url con la sesión en subiendo se arregla volviendo
-        // a grabando. Definitivo es que la sesión ya no admita audio (la
-        // cerró el mantenimiento, quedó fallida por corta, ya se procesa):
-        // reintentar fallaría igual cada vez. Si no se puede leer, se
-        // reintenta como siempre.
-        if (turno && esRechazoDelServidor(error)) {
-          const sesion = await apiGet<SesionApi | null>(
-            `/api/sesion-clinica?turnoId=${turno}`,
-          ).catch(() => undefined);
-          const admiteAudio =
-            sesion === undefined ||
-            (sesion !== null &&
-              (ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado));
-          if (!admiteAudio) {
-            setErrorPantalla(error.message);
-            setFase("rechazada");
-            return;
-          }
-        }
-        // Nada se borra: la grabación sigue en memoria y sus chunks en
-        // IndexedDB. La sesión vuelve a "grabando" para repetir desde
-        // upload-url con el mismo blob.
-        setErrorPantalla(error instanceof ApiClientError ? mensajeParaElla(error) : AUDIO_NO_GUARDADO);
-        setFase("no-guardado");
-        if (sesionId) await volverAGrabando(sesionId);
+        const copiaEnTelefono = (await datos.respaldoEnTelefono?.()) ?? true;
+        const desenlace = await desenlaceDelFallo(error, { turno, sesionId, copiaEnTelefono });
+        setErrorPantalla(desenlace.mensaje);
+        setFase(desenlace.fase);
+        if (desenlace.volverAGrabando && sesionId) await volverAGrabando(sesionId);
       } finally {
         setProgreso(null);
       }
     },
-    [avisar, asegurarTurno, asegurarSesion],
+    [avisar, asegurarTurno],
   );
 
   const onListo = React.useCallback(
@@ -311,8 +237,7 @@ export function useFlujoGrabacion({
     onError: onErrorGrabacion,
   });
 
-  const enCursoAhora =
-    grabador.estado === "grabando" || grabador.estado === "pausado" || grabador.estado === "terminada";
+  const enCursoAhora = enCurso(grabador.estado);
   const enviandoAhora = grabador.estado === "preparando" || fase === "enviando";
   // La pantalla encendida desde que entra hasta que la grabación llegó:
   // también mientras sube, que en dos horas de audio son varios minutos.
@@ -328,9 +253,9 @@ export function useFlujoGrabacion({
   React.useEffect(() => {
     if (pendienteSeg === null || !turnoDeLaPendiente) return;
     let cancelado = false;
-    void apiGet<SesionApi | null>(`/api/sesion-clinica?turnoId=${turnoDeLaPendiente}`)
+    void leerSesionDelTurno(turnoDeLaPendiente)
       .then((sesion) => {
-        if (!cancelado && sesion && !(ESTADOS_SIN_TERMINAR as ReadonlyArray<string>).includes(sesion.estado)) descartarPendiente();
+        if (!cancelado && sesion && !admiteAudio(sesion.estado)) descartarPendiente();
       })
       .catch(() => {});
     return () => {
@@ -343,7 +268,7 @@ export function useFlujoGrabacion({
   /** Grabar: el micrófono, ya. Nada de red: el turno y la sesión se piden
    *  al subir (ver arriba). */
   async function empezar() {
-    setFase("preparando");
+    setFase("abriendo-microfono");
     setErrorPantalla(null);
 
     try {

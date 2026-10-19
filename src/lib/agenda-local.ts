@@ -21,6 +21,7 @@
 // ============================================
 
 import { agregarDiasMvd, fechaInputMvd, formatearHoraMvd } from "@/lib/fechas-montevideo";
+import { abridorDeBase, esperarRequest, esperarTransaccion, hayIndexedDB } from "@/lib/indexeddb";
 
 const DB_NOMBRE = "sesion-agenda-local";
 const DB_VERSION = 1;
@@ -117,58 +118,11 @@ function fechaLimite(ahora: Date): string {
   return fechaInputMvd(agregarDiasMvd(ahora, -DIAS_DE_VIDA));
 }
 
-function indexedDBDisponible(): boolean {
-  try {
-    return typeof indexedDB !== "undefined" && indexedDB !== null;
-  } catch {
-    return false;
+const abrirDB = abridorDeBase(DB_NOMBRE, DB_VERSION, (db) => {
+  if (!db.objectStoreNames.contains(STORE)) {
+    db.createObjectStore(STORE, { keyPath: "turnoId" });
   }
-}
-
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function abrirDB(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NOMBRE, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: "turnoId" });
-      }
-    };
-    request.onsuccess = () => {
-      const db = request.result;
-      db.onversionchange = () => {
-        db.close();
-        dbPromise = null;
-      };
-      resolve(db);
-    };
-    request.onerror = () => reject(request.error ?? new Error("No se pudo abrir IndexedDB"));
-    request.onblocked = () => reject(new Error("Apertura de IndexedDB bloqueada"));
-  });
-  dbPromise.catch(() => {
-    dbPromise = null;
-  });
-  return dbPromise;
-}
-
-function esperarRequest<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IDBRequest falló"));
-  });
-}
-
-function esperarTransaccion(tx: IDBTransaction): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Transacción falló"));
-    tx.onabort = () => reject(tx.error ?? new Error("Transacción abortada"));
-  });
-}
+});
 
 function avisar(operacion: string, error: unknown) {
   console.warn(`[agenda-local] ${operacion} falló`, error);
@@ -185,7 +139,7 @@ async function reemplazar(
   ahora: Date,
   generacion: string | null,
 ): Promise<void> {
-  if (!indexedDBDisponible()) return;
+  if (!hayIndexedDB()) return;
   const limite = fechaLimite(ahora);
   try {
     const db = await abrirDB();
@@ -248,7 +202,7 @@ export function anotarTurnosDePaciente(
 
 /** Todos los registros vigentes, por fecha y hora. Purga lo viejo. */
 export async function leerAgendaLocal(ahora: Date): Promise<TurnoLocal[]> {
-  if (!indexedDBDisponible()) return [];
+  if (!hayIndexedDB()) return [];
   const limite = fechaLimite(ahora);
   try {
     const db = await abrirDB();

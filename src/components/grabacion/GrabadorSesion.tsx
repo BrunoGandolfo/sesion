@@ -28,7 +28,8 @@
 import * as React from "react";
 
 import { aRegistradas, formatearDuracion } from "@/lib/grabacion-cronometro";
-import { crearMediaRecorder, mensajeErrorGrabacion } from "@/lib/grabacion-microfono";
+import { causaDelErrorDeMicrofono, MENSAJE_ERROR_GRABADOR } from "@/app/(dashboard)/grabar/[turnoId]/_components/errores-grabacion";
+import { crearMediaRecorder } from "@/lib/grabacion-microfono";
 import {
   contarChunk,
   crearReloj,
@@ -47,19 +48,18 @@ import {
   guardarPausas,
   iniciarSesionGrabacion,
   limpiarGrabacion,
+  seguimientoDeCopia,
   type Pausa,
 } from "@/lib/grabacion-storage";
 import { MAX_EVENTOS_GRABACION, type EventoGrabacion } from "@/lib/sesion-clinica/schema";
 
 import { useGrabacionPendiente } from "./grabacion-pendiente";
 import { useMicrofono } from "./grabador-microfono";
-import type { AvisoHueco, EstadoGrabador, Grabador, UseGrabadorOpciones } from "./grabador-tipos";
+import { enCurso, type AvisoHueco, type EstadoGrabador, type Grabador, type UseGrabadorOpciones } from "./grabador-tipos";
 import { useGuardaDeToque } from "./guarda-de-toque";
 
 export { formatearDuracion };
-export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador, PendienteGuardada } from "./grabador-tipos";
-
-const GRABACION_VACIA = "No se pudo capturar audio de la sesión.";
+export type { AvisoHueco, DatosGrabacion, EstadoGrabador, Grabador } from "./grabador-tipos";
 
 // Cada cuánto se refresca el medidor y se mira si siguen llegando chunks.
 const LATIDO_MS = 250;
@@ -93,6 +93,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
   const ultimoLatidoRef = React.useRef(0);
   const estadoRef = React.useRef<EstadoGrabador>("inactivo");
   const claveRef = React.useRef<string | null>(claveGrabacion);
+  const copiaRef = React.useRef(seguimientoDeCopia()); // ¿lo de esta grabación quedó en el teléfono?
   const onErrorRef = React.useRef(onError);
   const onListoRef = React.useRef(onListo);
 
@@ -163,7 +164,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     const audioBlob = new Blob(chunks, { type: mimeType });
 
     if (audioBlob.size === 0) {
-      irAError(GRABACION_VACIA);
+      irAError(MENSAJE_ERROR_GRABADOR.vacia);
       return;
     }
 
@@ -175,6 +176,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       duracionSegundos: Math.min(LIMITE_SEGUNDOS, Math.max(1, Math.round(duracionSegundos))),
       pausas: aRegistradas(pausas),
       diagnostico: { eventos: eventosRef.current, chunks: chunks.length, bytes: audioBlob.size },
+      respaldoEnTelefono: copiaRef.current.hayCopia,
     });
   }
 
@@ -243,10 +245,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     const medida = contarChunk(antes, chunk.size, pausadoEnRef.current ?? relojRef.current());
     medidaRef.current = medida;
     chunksRef.current.push(chunk);
-    if (claveRef.current) {
-      // Fire-and-forget: el respaldo en disco nunca bloquea la grabación.
-      void guardarChunk(claveRef.current, medida.chunks - 1, chunk);
-    }
+    if (claveRef.current) copiaRef.current.anotar(guardarChunk(claveRef.current, medida.chunks - 1, chunk));
 
     if (medida.huecos.length > antes.huecos.length) {
       const nuevo = medida.huecos[medida.huecos.length - 1];
@@ -295,7 +294,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     claveRef.current = clave;
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      irAError("Tu navegador no soporta grabación de audio.");
+      irAError(MENSAJE_ERROR_GRABADOR["sin-soporte"]);
       return;
     }
 
@@ -312,7 +311,8 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       relojRef.current = crearReloj();
       medidaRef.current = medidaInicial(relojRef.current());
       // Registra el inicio y limpia chunks viejos del turno.
-      void iniciarSesionGrabacion(clave, mimeTypeRef.current, pacienteId);
+      copiaRef.current = seguimientoDeCopia();
+      copiaRef.current.anotar(iniciarSesionGrabacion(clave, mimeTypeRef.current, pacienteId));
 
       recorder.ondataavailable = (event: BlobEvent) => alLlegarChunk(event.data);
       recorder.onerror = () => terminarPorFalla("error-recorder");
@@ -328,7 +328,8 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       cambiarEstado("grabando");
       iniciarLatido();
     } catch (error) {
-      irAError(mensajeErrorGrabacion(error));
+      console.warn("[grabador] el micrófono no arrancó", error); // el texto del navegador, sólo acá
+      irAError(MENSAJE_ERROR_GRABADOR[causaDelErrorDeMicrofono(error)]);
     }
   }
 
@@ -367,7 +368,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
   function terminar() {
     const actual = estadoRef.current;
 
-    if ((actual === "grabando" || actual === "pausado" || actual === "terminada") && medidaRef.current.segundos < MINIMO_SEGUNDOS) {
+    if (enCurso(actual) && medidaRef.current.segundos < MINIMO_SEGUNDOS) {
       descartarPorCorta();
       return;
     }
@@ -386,7 +387,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
     try {
       recorderRef.current?.stop();
     } catch {
-      irAError("No se pudo detener la grabación.");
+      irAError(MENSAJE_ERROR_GRABADOR["no-se-detuvo"]);
     }
   }
 
@@ -412,6 +413,7 @@ export function useGrabador({ claveGrabacion, esPendiente, pacienteId, onListo, 
       return;
     }
     claveRef.current = pendiente.sesionClinicaId; // la suya, no la del prop
+    copiaRef.current = seguimientoDeCopia(); // se leyó del teléfono: la copia existe
     setPendiente(null);
     cambiarEstado("preparando");
     eventosRef.current = [];

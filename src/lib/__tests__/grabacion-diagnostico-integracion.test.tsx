@@ -20,6 +20,7 @@ import { TIPOS_EVENTO_GRABACION } from "@/lib/sesion-clinica/schema";
 
 import { conectarArea2, crearOrg, crearSesion, type BaseArea2, type Org } from "./estados-fixtures";
 import { vaciarTablas } from "./db-test";
+import { RecorderFalso, recorders } from "@/components/grabacion/__tests__/recorder-falso";
 
 const estado = vi.hoisted(() => ({ base: null as unknown as BaseArea2, actor: { organizationId: "", userId: "" } }));
 
@@ -35,31 +36,18 @@ vi.mock("@/lib/r2", () => ({
     existe: async () => ({ existe: true, bytes: 40 }),
   },
 }));
-vi.mock("@/lib/grabacion-storage", () => ({
-  guardarChunk: vi.fn(async () => {}),
+vi.mock("@/lib/grabacion-storage", async (original) => ({
+  // La de verdad: lleva la cuenta de lo que los dobles de abajo contestan.
+  seguimientoDeCopia: (await original<typeof import("@/lib/grabacion-storage")>()).seguimientoDeCopia,
+  guardarChunk: vi.fn(async () => true),
   guardarPausas: vi.fn(async () => {}),
-  iniciarSesionGrabacion: vi.fn(async () => {}),
+  iniciarSesionGrabacion: vi.fn(async () => true),
   limpiarGrabacion: vi.fn(async () => {}),
   recuperarGrabacionPendiente: vi.fn(async () => null),
 }));
 
 let org: Org;
-let recorder: RecorderFalso;
 
-class RecorderFalso {
-  state: "inactive" | "recording" | "paused" = "inactive";
-  mimeType = "audio/webm;codecs=opus";
-  ondataavailable: ((evento: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  constructor() { RecorderFalso.registrar(this); }
-  static registrar(instancia: RecorderFalso) { recorder = instancia; }
-  static isTypeSupported() { return true; }
-  start() { this.state = "recording"; }
-  pause() { this.state = "paused"; }
-  resume() { this.state = "recording"; }
-  stop() { this.state = "inactive"; this.ondataavailable?.({ data: new Blob(["aa"]) }); this.onstop?.(); }
-}
 
 beforeAll(() => { estado.base = conectarArea2(); });
 afterAll(async () => { await vaciarTablas(estado.base.prisma); await estado.base.prisma.$disconnect(); });
@@ -68,6 +56,7 @@ beforeEach(async () => {
   await vaciarTablas(estado.base.prisma);
   org = await crearOrg(estado.base.prisma);
   estado.actor = { organizationId: org.orgId, userId: org.userId };
+  recorders.length = 0;
   vi.stubGlobal("MediaRecorder", RecorderFalso);
   const pista = { stop() {}, onended: null, onmute: null, onunmute: null };
   vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: async () => ({ getAudioTracks: () => [pista], getTracks: () => [pista] }) } });
@@ -110,11 +99,14 @@ test("lo que pasó en el teléfono queda en eventos_auditoria.detalle, sin texto
   // Una grabación como la de cualquier sesión: graba, pausa, cambia de
   // pestaña y vuelve, sigue, termina. Sólo el calendario y el latido son falsos (un chunk
   // por segundo, para pasar el mínimo de 10 s); los timers y la base, reales.
+  // El calendario arranca en una hora fija: el veredicto no depende de cuándo
+  // corre la suite (guardian-reloj.test.ts).
   vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  vi.setSystemTime(new Date("2026-09-16T18:00:00.000Z"));
   const esperar = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
   const grabar = async (chunks: number) => {
     for (let i = 0; i < chunks; i += 1) {
-      await act(async () => { vi.advanceTimersByTime(1000); recorder.ondataavailable?.({ data: new Blob(["audio"]) }); });
+      await act(async () => { vi.advanceTimersByTime(1000); recorders.at(-1)?.emitirChunk(); });
     }
   };
   await act(async () => { await result.current.iniciar(turnoId); });

@@ -11,15 +11,27 @@ export interface DatosGrabacion {
   duracionSegundos: number;
   pausas: PausaRegistrada[];
   diagnostico: DiagnosticoGrabacion;
+  /** Si los chunks quedaron en el teléfono (IndexedDB). Se pregunta al fallar
+   *  la subida: con la cuota llena no hay copia, y la pantalla no la promete.
+   *  Espera las escrituras pendientes (seguimientoDeCopia). Sin el campo, se
+   *  supone que sí. */
+  respaldoEnTelefono?: () => Promise<boolean>;
 }
 
 /**
- *   inactivo   → grabando     (iniciar)
+ *   inactivo/error → grabando     (iniciar; después de un error se reintenta)
+ *   inactivo/error → error        (iniciar sin micrófono o sin permiso)
  *   grabando   ⇄ pausado      (pausar / reanudar; el tope pausa solo)
  *   grabando/pausado → terminada   (la pista terminó o el recorder falló)
  *   grabando/pausado/terminada → preparando → entregada   (terminar)
+ *   grabando/pausado/terminada → inactivo   (terminar con menos de MINIMO_SEGUNDOS)
+ *   grabando/pausado → error  (terminar y stop() lanza)
  *   inactivo   → preparando → entregada   (enviarPendiente)
- *   cualquiera → inactivo     (descartar / resetear)
+ *   preparando → error        (el archivo quedó vacío)
+ *   cualquiera → inactivo     (descartar / resetear; es la única salida de entregada)
+ *
+ * "preparando" es armar el archivo después de Terminar. La tabla de
+ * transiciones está fijada en __tests__/grabador-interrupciones.test.tsx.
  */
 export type EstadoGrabador =
   | "inactivo"
@@ -29,6 +41,13 @@ export type EstadoGrabador =
   | "preparando"
   | "entregada"
   | "error";
+
+/** Con una grabación abierta: hay audio que todavía no se entregó. */
+export const EN_CURSO: ReadonlySet<EstadoGrabador> = new Set<EstadoGrabador>(["grabando", "pausado", "terminada"]);
+
+export function enCurso(estado: EstadoGrabador): boolean {
+  return EN_CURSO.has(estado);
+}
 
 /** Un rato sin audio. `hasta` es null mientras todavía no volvió a llegar. */
 export interface AvisoHueco {
