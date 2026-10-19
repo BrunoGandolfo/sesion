@@ -48,6 +48,8 @@ async function fixture() {
     (await prismaRaw.turno.create({
       data: {
         organizationId: org.id, pacienteId: paciente.id, estado, pagoEstado, tarifaCobrada: 2600,
+        // Un cobro tiene fecha y método (turnos_pago_coherente_check).
+        ...(pagoEstado === "pagado" ? { pagoFecha: AHORA, pagoMetodo: "efectivo" as const } : {}),
         fecha: new Date(AHORA.getTime() + desdeAhoraHoras * HORA),
       },
     })).id;

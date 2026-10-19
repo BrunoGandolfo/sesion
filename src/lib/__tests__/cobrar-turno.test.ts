@@ -339,6 +339,8 @@ describe("descobrarTurno", () => {
     const { turnoId } = await crearTurno({
       estado: "realizado",
       pagoEstado: "pagado",
+      pagoMetodo: "efectivo",
+      pagoFecha: AHORA,
     });
 
     await esperarApiError(

@@ -100,6 +100,8 @@ async function crearTurno(opciones: {
       fecha: opciones.fecha,
       estado: opciones.estado ?? "programado",
       pagoEstado: opciones.pagoEstado ?? "pendiente",
+      // Un cobro tiene fecha y método (turnos_pago_coherente_check).
+      ...(opciones.pagoEstado === "pagado" ? { pagoFecha: opciones.fecha, pagoMetodo: "efectivo" as const } : {}),
       tarifaCobrada: opciones.tarifaCobrada ?? 2200,
       pacienteId: opciones.pacienteId,
       organizationId: opciones.orgId,

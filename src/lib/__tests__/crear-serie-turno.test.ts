@@ -332,7 +332,7 @@ describe("cancelarRestoDeSerie", () => {
 
     // Uno ya realizado (y cobrado), uno cancelado a mano, y uno posterior
     // al punto de corte pero realizado: ninguno se toca.
-    await prismaRaw.turno.update({ where: { id: turnos[1].id }, data: { estado: "realizado", pagoEstado: "pagado" } });
+    await prismaRaw.turno.update({ where: { id: turnos[1].id }, data: { estado: "realizado", pagoEstado: "pagado", pagoFecha: new Date(), pagoMetodo: "efectivo" } });
     await prismaRaw.turno.update({ where: { id: turnos[2].id }, data: { estado: "cancelado" } });
     await prismaRaw.turno.update({ where: { id: turnos[6].id }, data: { estado: "realizado" } });
 

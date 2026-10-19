@@ -123,6 +123,7 @@ export const CONTRATO_POR_MIGRACION = {
   "20261006120000_sin_audio_cifrado": "nuevo-sin-whatsapp", // DROP de las columnas de audio
   "20261008120000_whatsapp_asistido": "nuevo-sin-ambito", // canal_recordatorio y avisos_whatsapp
   "20261009120000_cupos_por_ambito": CONTRATO_ACTUAL, // cupos_ayuda.ambito (Lux)
+  "20261019120000_turnos_pago_coherente": CONTRATO_ACTUAL, // CHECK
 };
 
 /**

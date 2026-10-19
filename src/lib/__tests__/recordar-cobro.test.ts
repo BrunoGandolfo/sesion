@@ -180,6 +180,8 @@ describe("recordarCobro", () => {
         duracion: 50,
         estado: "realizado",
         pagoEstado: "pagado",
+        pagoFecha: new Date(AHORA.getTime() - 86_400_000),
+        pagoMetodo: "efectivo",
         tarifaCobrada: TARIFA,
         pacienteId: base.pacienteId,
         organizationId: base.orgId,

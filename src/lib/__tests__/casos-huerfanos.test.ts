@@ -46,7 +46,11 @@ async function termino(termino: string, alcance: AlcanceHotWord, o = org, activo
 
 async function turno(monto: number, o = org, estado: EstadoTurno = "realizado", pagoEstado: EstadoPago = "pendiente") {
   return base.prisma.turno.create({
-    data: { ...identidad(o), fecha: new Date("2026-08-01T15:00:00Z"), tarifaCobrada: monto, estado, pagoEstado },
+    data: {
+      ...identidad(o), fecha: new Date("2026-08-01T15:00:00Z"), tarifaCobrada: monto, estado, pagoEstado,
+      // Un cobro tiene fecha y método (turnos_pago_coherente_check).
+      ...(pagoEstado === "pagado" ? { pagoFecha: new Date("2026-08-02T15:00:00Z"), pagoMetodo: "efectivo" as const } : {}),
+    },
   });
 }
 
@@ -100,9 +104,9 @@ describe("textoDeCobro", () => {
     const primero = await turno(1200);
     const segundo = await turno(2300);
     expect(await cobrar()).toContain("2 sesiones pendientes de pago: $ 3.500");
-    await base.prisma.turno.update({ where: { id: primero.id }, data: { pagoEstado: "pagado" } });
+    await base.prisma.turno.update({ where: { id: primero.id }, data: { pagoEstado: "pagado", pagoFecha: new Date("2026-08-02T15:00:00Z"), pagoMetodo: "efectivo" } });
     expect(await cobrar()).toContain("1 sesión pendiente de pago: $ 2.300");
-    await base.prisma.turno.update({ where: { id: segundo.id }, data: { pagoEstado: "pagado" } });
+    await base.prisma.turno.update({ where: { id: segundo.id }, data: { pagoEstado: "pagado", pagoFecha: new Date("2026-08-02T15:00:00Z"), pagoMetodo: "efectivo" } });
     expect(await cobrar()).toBeNull();
   });
 
