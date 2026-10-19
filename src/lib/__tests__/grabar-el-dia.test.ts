@@ -119,10 +119,11 @@ it("un turno de hoy crea la grabación (201)", async () => {
 });
 
 it("alGrabar sigue funcionando: el turno que nace al grabar se graba enseguida", async () => {
+  const ahoraMismo = new Date();
   const { id: turnoId } = await crearTurno({
     prisma: estado.base.db, organizationId: org.orgId, pacienteId: org.pacienteId, usuarioId: "usuaria-de-prueba",
-    fecha: new Date(), duracion: 50, modalidad: "presencial", notas: null,
-    frecuencia: "unico", alGrabar: true, ahora: new Date(),
+    fecha: ahoraMismo, duracion: 50, modalidad: "presencial", notas: null,
+    frecuencia: "unico", alGrabar: true, iniciadaEn: ahoraMismo, ahora: ahoraMismo,
   });
   const respuesta = await postear(turnoId);
   expect(respuesta.status).toBe(201);
@@ -222,9 +223,23 @@ describe("con iniciadaEn", () => {
     const b = ((await segundo.json()) as { data: { id: string } }).data.id;
     expect(b).toBe(a);
     expect(await estado.base.prisma.turno.count({ where: { organizationId: org.orgId, fecha: inicio } })).toBe(1);
-    // Sin iniciadaEn no hay identidad que comparar: alGrabar crea como siempre.
-    const sinInicio = await crearTurnoAlGrabar(inicio, null);
-    expect(((await sinInicio.json()) as { data: { id: string } }).data.id).not.toBe(a);
+  });
+
+  it("alGrabar sin iniciadaEn: 400 y no crea nada (rev-dominio B7)", async () => {
+    // Antes creaba el turno sin plazo ni identidad, con cualquier fecha.
+    const lejos = new Date(Date.now() + 30 * DIA);
+    const antes = await estado.base.prisma.turno.count({ where: { organizationId: org.orgId } });
+    const sinInicio = await crearTurnoAlGrabar(lejos, null);
+    expect(sinInicio.status).toBe(400);
+    expect(await estado.base.prisma.turno.count({ where: { organizationId: org.orgId } })).toBe(antes);
+  });
+
+  it("el caso de uso tampoco acepta alGrabar sin iniciadaEn (rev-dominio B7)", async () => {
+    await expect(crearTurno({
+      prisma: estado.base.db, organizationId: org.orgId, pacienteId: org.pacienteId, usuarioId: "usuaria-de-prueba",
+      fecha: new Date(Date.now() + 30 * DIA), duracion: 50, modalidad: "presencial", notas: null,
+      frecuencia: "unico", alGrabar: true, ahora: new Date(),
+    })).rejects.toMatchObject({ status: 400 });
   });
 
   it("iniciadaEn sólo va con alGrabar al crear un turno", async () => {

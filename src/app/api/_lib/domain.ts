@@ -32,6 +32,7 @@ import {
   GRABACION_OTRO_DIA_QUE_EL_TURNO,
   GRABACION_VENCIDA,
   MENSAJE_NO_REABRIR,
+  MENSAJE_TURNO_PAGADO,
   MENSAJE_SOLO_PROGRAMADOS,
 } from "@/lib/glosario";
 import { HORAS_PARA_ENVIAR_GRABACION, MINUTOS_RELOJ_ADELANTADO } from "@/lib/plazo-grabacion";
@@ -293,7 +294,8 @@ export function cobradoEnMes(organizationId: string, enElMesDe: Date): Prisma.Tu
  *
  *   editarDatos    PATCH que mueve, cambia duración, modalidad o notas.
  *   cambiarEstado  PATCH con `estado`: a cualquiera, salvo desde cancelado
- *                  (un turno cancelado no se reabre).
+ *                  (un turno cancelado no se reabre) y salvo que esté
+ *                  cobrado (ver estadoFijadoPorElCobro).
  *   cobrarCierra   Cobrar un programado cuya hora llegó lo deja realizado
  *                  en la misma sentencia (un realizado se cobra sin cambiar
  *                  de estado; ver sePuedeCobrar).
@@ -364,7 +366,20 @@ export type EfectoEnvioTurno =
   | "revivir"
   | null;
 
-type TurnoEnEdicion = { estado: string; fecha: Date; duracion: number };
+type TurnoEnEdicion = { estado: string; fecha: Date; duracion: number; pagoEstado: string };
+
+/**
+ * Un turno cobrado no cambia de estado: el cobro se apoya en él (Finanzas
+ * cuenta lo cobrado de un realizado; un cancelado o un programado pagado no
+ * cierra con nada). Para cambiarlo, primero se deshace el cobro. Pedir el
+ * mismo estado que ya tiene no es un cambio.
+ */
+export function estadoFijadoPorElCobro(
+  actual: { estado: string; pagoEstado: string },
+  estadoPedido: string | undefined,
+): boolean {
+  return estadoPedido !== undefined && estadoPedido !== actual.estado && actual.pagoEstado === COBRADO.pagoEstado;
+}
 
 export type DecisionEdicionTurno =
   | { tipo: "rechazo"; mensaje: string }
@@ -410,6 +425,7 @@ export function efectoEnvioDeEdicion(
  * cancelado en el medio).
  *
  * - Cancelado y el PATCH trae `estado`: rechazo (no se reabre).
+ * - Cobrado y el PATCH cambia el estado: rechazo (primero deshacer el cobro).
  * - Cambia datos y el turno no está programado: rechazo.
  * - Nada que cambiar: sinCambios.
  * - Si no: aplicar. El solapamiento se comprueba sólo cuando la edición
@@ -429,6 +445,9 @@ export function decidirEdicionTurno(
 
   if (cambios.estado !== undefined && !puedeTransicionTurno("cambiarEstado", actual.estado)) {
     return { tipo: "rechazo", mensaje: MENSAJE_NO_REABRIR };
+  }
+  if (estadoFijadoPorElCobro(actual, cambios.estado)) {
+    return { tipo: "rechazo", mensaje: MENSAJE_TURNO_PAGADO };
   }
   if (cambiaDatos && !puedeTransicionTurno("editarDatos", actual.estado)) {
     return { tipo: "rechazo", mensaje: MENSAJE_SOLO_PROGRAMADOS };

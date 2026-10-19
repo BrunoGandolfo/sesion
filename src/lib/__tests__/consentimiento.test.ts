@@ -16,6 +16,8 @@ import {
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { POLITICA_POR_TIPO, backoffTrabajoMs } from "@/app/api/_lib/casos-uso/trabajos/politica";
 import { decidirResolucion } from "@/app/api/_lib/casos-uso/trabajos/resolver";
+import { CODIGO_CONSENTIMIENTO_VERSION_VIEJA } from "@/app/api/_lib/casos-uso/consentimiento";
+import { CONSENTIMIENTO_VERSION_VIEJA } from "@/lib/glosario";
 
 /** El código que hace verdadera una frase, leído del disco. */
 const codigo = (ruta: string) => readFileSync(join(process.cwd(), ruta), "utf8");
@@ -396,6 +398,25 @@ describe("la ruta de consentimiento", () => {
     expect(texto).toContain("Versión 2.8");
     const cuerpo = await respuesta.json();
     expect(cuerpo.data.consentimiento).toMatchObject({ vigente: true, sugiereRefirmar: false });
+  });
+
+  it("si la pantalla firmó otra versión del texto, 409 con código y nada se guarda", async () => {
+    const pedido = new Request("http://localhost/api/pacientes/pac-1/consentimiento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firmaDigital: "data:image/png;base64,FIRMA", textoVersion: "2.6" }),
+    });
+    const respuesta = await POST(pedido, params);
+    expect(respuesta.status).toBe(409);
+    const cuerpo = await respuesta.json();
+    expect(cuerpo).toEqual({ error: CONSENTIMIENTO_VERSION_VIEJA, codigo: CODIGO_CONSENTIMIENTO_VERSION_VIEJA });
+    expect(baseDeDatos.creados).toHaveLength(0);
+    expect(baseDeDatos.eventos).toHaveLength(0);
+  });
+
+  it("la versión que se guarda es la del texto que generó el servidor", async () => {
+    await POST(pedidoFirma(), params);
+    expect(baseDeDatos.creados[0]?.textoVersion).toBe(CONSENTIMIENTO_VERSION);
   });
 
   it("firmar registra consentimiento.firmar sin IP, sin texto y sin firma", async () => {

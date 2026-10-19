@@ -36,6 +36,7 @@ import { actualizarPaciente, crearPaciente } from "@/app/api/_lib/casos-uso/paci
 import { actualizarTurno } from "@/app/api/_lib/casos-uso/turnos";
 import { verTranscripcion } from "@/app/api/_lib/casos-uso/sesion/ver-transcripcion";
 import { salirDeLasDemas } from "@/app/api/_lib/casos-uso/salir-de-las-demas";
+import { CONSENTIMIENTO_VERSION } from "@/lib/consentimiento";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import { cifrarSesion } from "@/lib/prisma-encryption";
 import { crearSesion } from "@/lib/sesion-acceso";
@@ -66,7 +67,8 @@ let verNota!: Handler;
 const ORIGINAL_KEY = process.env.CLAVES_CIFRADO;
 const TEST_KEY_B64 = randomBytes(32).toString("base64");
 
-const TEXTO_VERSION = "2.6";
+/** Solo se firma la versión vigente: otra contesta 409 (rev-dominio B1). */
+const TEXTO_VERSION = CONSENTIMIENTO_VERSION;
 const FIRMA = "data:image/png;base64,AAAA";
 
 type Org = { orgId: string; userId: string; pacienteId: string };
@@ -204,7 +206,7 @@ describe("firmar la autorización de grabación", () => {
       pacienteId: org.pacienteId,
       usuarioId: org.userId,
       firmaDigital: FIRMA,
-      textoVersion: "2.5",
+      textoVersion: TEXTO_VERSION,
     });
     await romperAuditoria();
 

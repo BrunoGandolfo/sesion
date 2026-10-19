@@ -336,7 +336,7 @@ export async function resumenFinanzas({
   );
 
   const serie = claves.map((clave) => {
-    const suma = sumarMeses(mensual, mesesDeLaClave(clave, porMes));
+    const suma = sumarMeses(mensual, mesesDeLaClave(clave, porMes, desde, hasta));
     return armarPeriodo(
       clave.clave,
       clave.anio,
@@ -628,12 +628,16 @@ function clavesDelRango(desde: MesMvd, hasta: MesMvd, porMes: boolean): ClavePer
   return anios;
 }
 
-/** Los meses que caen dentro de una clave de la serie. Con granularidad año
- *  son los doce del año, pero sólo los que existen en el mapa suman: un año
- *  a medias en la punta del rango no inventa meses. */
-function mesesDeLaClave(clave: ClavePeriodo, porMes: boolean): MesMvd[] {
+/** Los meses del período pedido que caen dentro de una clave de la serie.
+ *  Con granularidad año son los del año que están entre `desde` y `hasta`:
+ *  la consulta trae además los meses de las ventanas de comparación, y un
+ *  año a medias en la punta del rango no puede sumarlos (la serie tiene que
+ *  cerrar con los totales). */
+function mesesDeLaClave(clave: ClavePeriodo, porMes: boolean, desde: MesMvd, hasta: MesMvd): MesMvd[] {
   if (porMes) return [{ anio: clave.anio, mes: clave.mes }];
-  return Array.from({ length: 12 }, (_, mes) => ({ anio: clave.anio, mes }));
+  return Array.from({ length: 12 }, (_, mes) => ({ anio: clave.anio, mes })).filter(
+    (m) => largoEnMeses(desde, m) >= 1 && largoEnMeses(m, hasta) >= 1,
+  );
 }
 
 /** Los totales son el mismo objeto que un período de la serie, menos lo que

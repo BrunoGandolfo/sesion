@@ -55,6 +55,7 @@ import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { emitirTicket } from "@/app/api/_lib/tickets";
+import { CONSENTIMIENTO_VERSION } from "@/lib/consentimiento";
 import { hashTermino } from "@/lib/hot-words";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import {
@@ -131,7 +132,7 @@ const CUERPOS: Record<string, Partial<Record<Metodo, unknown>>> = {
   "hot-words/[id]/route.ts": { PATCH: { activo: false } },
   "pacientes/[id]/route.ts": { PATCH: { nombre: "Intrusa" } },
   "pacientes/[id]/consentimiento/route.ts": {
-    POST: { firmaDigital: "data:image/png;base64,AAAA", textoVersion: "2.6" },
+    POST: { firmaDigital: "data:image/png;base64,AAAA", textoVersion: CONSENTIMIENTO_VERSION },
   },
   "pacientes/[id]/hilo/versiones/route.ts": { POST: { contenido: contenidoHilo(), basadaEnVersion: 1 } },
   // La apertura de Lux. Sin clave de Anthropic (abajo) la dueña recibe 503

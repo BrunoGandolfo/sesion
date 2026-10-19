@@ -8,7 +8,7 @@
 // Sin reintentos, sin cache, sin interceptores: si mañana hacen falta, se
 // agregan cuando haya tres consumidores que lo pidan.
 
-import { ALGO_FALLO } from "@/lib/glosario";
+import { ALGO_FALLO, SESION_VENCIDA } from "@/lib/glosario";
 
 interface OpcionesApi {
   signal?: AbortSignal;
@@ -69,9 +69,25 @@ async function leerJson(res: Response): Promise<unknown> {
   }
 }
 
+/**
+ * Sin cookie, el proxy contesta 307 → /login también a /api/**. fetch sigue
+ * la redirección y entrega el HTML del login con 200: sin esto, `res.ok`
+ * pasaba, `res.json()` reventaba y ella leía "Algo falló". Se reconoce por
+ * la URL final y se trata como lo que es, un 401.
+ */
+function fueAlLogin(res: Response): boolean {
+  if (!res.redirected || !res.url) return false;
+  try {
+    return new URL(res.url).pathname === "/login";
+  } catch {
+    return false;
+  }
+}
+
 /** El ApiClientError de una respuesta no-ok, para quien hace su propio
  *  fetch (la subida, que necesita el paso y el status). */
 export async function errorDeRespuesta(res: Response): Promise<ApiClientError> {
+  if (fueAlLogin(res)) return new ApiClientError(SESION_VENCIDA, 401);
   const body = await leerJson(res);
   const mensaje =
     esObjeto(body) && typeof body.error === "string"
@@ -82,7 +98,7 @@ export async function errorDeRespuesta(res: Response): Promise<ApiClientError> {
 }
 
 async function lanzarSiNoOk(res: Response): Promise<void> {
-  if (res.ok) return;
+  if (res.ok && !fueAlLogin(res)) return;
   throw await errorDeRespuesta(res);
 }
 

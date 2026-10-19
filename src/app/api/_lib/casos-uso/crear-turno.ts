@@ -46,7 +46,7 @@ import {
   rechazoPorSolapamiento,
   tomarLockDeAgenda,
 } from "./solapamiento-turnos";
-import { TURNO_SOLAPADO } from "@/lib/glosario";
+import { MENSAJE_AL_GRABAR_SIN_INICIO, TURNO_SOLAPADO } from "@/lib/glosario";
 
 type ClientePrisma = typeof db;
 
@@ -64,8 +64,8 @@ export interface CrearTurnoInput {
    *  este instante): la sesión ya está ocurriendo, así que no pasa por la
    *  regla de choques. Decisión del dueño. */
   alGrabar?: boolean;
-  /** Con alGrabar: cuándo empezó la grabación. La fecha del turno tiene que
-   *  caer en el plazo (motivoGrabacionNoAdmitida, domain.ts). */
+  /** Con alGrabar, obligatorio: cuándo empezó la grabación. La fecha del
+   *  turno tiene que caer en el plazo (motivoGrabacionNoAdmitida, domain.ts). */
   iniciadaEn?: Date;
   /** Momento del alta: decide si el turno lleva recordatorio. */
   ahora: Date;
@@ -91,7 +91,11 @@ export async function crearTurno({
   ahora,
   usuarioId,
 }: CrearTurnoInput): Promise<TurnoCreado> {
-  if (alGrabar && iniciadaEn) {
+  if (alGrabar) {
+    // Sin la hora de inicio no hay plazo: el turno saltearía los choques con
+    // cualquier fecha. El schema ya lo exige; esto cubre a quien llama al
+    // caso de uso sin pasar por la ruta.
+    if (!iniciadaEn) throw new ApiError(MENSAJE_AL_GRABAR_SIN_INICIO, 400);
     const motivo = motivoGrabacionNoAdmitida(fecha, iniciadaEn, ahora);
     if (motivo) throw new ApiError(motivo, 400);
   }
@@ -113,7 +117,7 @@ export async function crearTurno({
     // —la respuesta anterior se perdió, se cerró el navegador— encuentra el
     // que ya nació en vez de crear otro. Bajo el lock de agenda: dos intentos
     // a la vez se ordenan.
-    if (alGrabar && iniciadaEn && iniciadaEn.getTime() === fecha.getTime()) {
+    if (alGrabar && iniciadaEn?.getTime() === fecha.getTime()) {
       const existente = await tx.turno.findFirst({
         where: { organizationId, pacienteId: paciente.id, fecha, estado: { not: "cancelado" } },
       });

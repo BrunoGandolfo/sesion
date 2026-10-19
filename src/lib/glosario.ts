@@ -2085,3 +2085,21 @@ export const LUX_SIN_CONEXION = "No hay conexión. Probá de nuevo cuando vuelva
 export const LUX_CORTADO = "Se cortó la respuesta. Podés preguntar de nuevo.";
 export const LUX_SALIR =
   "Escribiste algo para Lux que todavía no mandaste. Si seguís, se pierde.";
+
+// ─── rev-dominio ─────────────────────────────────────────────────────────────
+
+/** El servidor guarda la versión del texto que él mismo genera. Si la
+ *  pantalla mostró otra (una app vieja en caché), no se firma: 409. */
+export const CONSENTIMIENTO_VERSION_VIEJA =
+  "El texto del consentimiento cambió. Recargá la página para firmar la versión vigente.";
+
+/** Un pedido a la API llegó sin sesión y el proxy lo mandó al login. */
+export const SESION_VENCIDA = "Tu sesión venció. Volvé a entrar para seguir.";
+
+/** PATCH de estado sobre un turno cobrado (domain.ts, decidirEdicionTurno). */
+export const MENSAJE_TURNO_PAGADO =
+  "Este turno ya está cobrado. Para cambiarle el estado, primero deshacé el cobro.";
+
+/** POST /api/turnos con alGrabar y sin iniciadaEn (crear-turno.ts). */
+export const MENSAJE_AL_GRABAR_SIN_INICIO =
+  "Un turno que nace al grabar necesita la hora en que empezó la grabación.";

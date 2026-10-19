@@ -10,13 +10,25 @@ import {
   esAbort,
   mensajeParaElla,
 } from "@/lib/api-client";
-import { ALGO_FALLO } from "@/lib/glosario";
+import { ALGO_FALLO, SESION_VENCIDA } from "@/lib/glosario";
 
 function respuestaJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/** Lo que entrega fetch cuando el proxy contestó 307 → /login a un pedido
+ *  sin cookie: siguió la redirección y trae el HTML del login con 200. */
+function respuestaDelLogin(): Response {
+  const res = new Response("<!doctype html><title>Entrar</title>", {
+    status: 200,
+    headers: { "Content-Type": "text/html" },
+  });
+  Object.defineProperty(res, "redirected", { value: true });
+  Object.defineProperty(res, "url", { value: "http://localhost:3000/login" });
+  return res;
 }
 
 describe("api-client", () => {
@@ -192,6 +204,41 @@ describe("api-client", () => {
       expect(error).toBeInstanceOf(ApiClientError);
       expect((error as ApiClientError).status).toBe(409);
       expect((error as ApiClientError).message).toBe("Hot word duplicado");
+    });
+  });
+
+  describe("sesión vencida (el proxy redirigió al login)", () => {
+    it("un GET redirigido al login lanza 401 con el texto de sesión vencida, no 'Algo falló'", async () => {
+      fetchMock.mockResolvedValue(respuestaDelLogin());
+
+      const error = await apiGet("/api/pacientes").catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ApiClientError);
+      expect((error as ApiClientError).esNoAutorizado).toBe(true);
+      expect(mensajeParaElla(error)).toBe(SESION_VENCIDA);
+    });
+
+    it("un POST redirigido al login tampoco desenvuelve el HTML", async () => {
+      fetchMock.mockResolvedValue(respuestaDelLogin());
+
+      const error = await apiPost("/api/turnos", { a: 1 }).catch((e: unknown) => e);
+
+      expect(mensajeParaElla(error)).toBe(SESION_VENCIDA);
+    });
+
+    it("errorDeRespuesta también lo reconoce, para quien hace su propio fetch", async () => {
+      const error = await errorDeRespuesta(respuestaDelLogin());
+      expect(error.status).toBe(401);
+      expect(error.mensaje).toBe(SESION_VENCIDA);
+    });
+
+    it("una redirección a otra ruta de la API no es sesión vencida", async () => {
+      const res = respuestaJson({ data: { ok: true } });
+      Object.defineProperty(res, "redirected", { value: true });
+      Object.defineProperty(res, "url", { value: "http://localhost:3000/api/otra" });
+      fetchMock.mockResolvedValue(res);
+
+      await expect(apiGet("/api/una")).resolves.toEqual({ ok: true });
     });
   });
 
