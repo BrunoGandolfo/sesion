@@ -28,7 +28,7 @@ import {
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import { cifrarConversacionLux } from "@/lib/prisma-encryption";
 
-import { registrarAuditoria } from "../../auditoria";
+import { auditar } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 
 export type ClienteMemoriaLux = typeof db;
@@ -145,7 +145,10 @@ export async function borrarConversacion(
   return prisma.$transaction(async (tx) => {
     await bloquearPaciente(tx, organizationId, pacienteId);
     const { count } = await tx.conversacionLux.deleteMany({ where: { organizationId, pacienteId } });
-    await registrarAuditoria(tx, {
+    // `auditar` y no `registrarAuditoria`: este evento es además la marca
+    // que guardarTurnos mira para no revivir una respuesta en vuelo. Si no
+    // se puede escribir, el borrado tampoco queda.
+    await auditar(tx, {
       organizationId, actorTipo: "usuario", actorId: userId,
       accion: ACCIONES.lux.borrarConversacion, entidad: "paciente", entidadId: pacienteId,
       detalle: { turnos: count },

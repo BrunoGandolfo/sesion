@@ -272,6 +272,31 @@ describe("empezar de cero", () => {
     expect(JSON.stringify(eventos)).not.toMatch(/PREGUNTA_|RESPUESTA_/);
   });
 
+  it("si el evento no se puede escribir, no borra nada y falla: sin marca no hay borrado", async () => {
+    const org = await consultorio();
+    await intercambio(org, 0);
+    const real = db();
+    // La transacción de verdad, con el INSERT del evento caído.
+    const sinAuditoria = new Proxy(real, {
+      get(t, p) {
+        if (p !== "$transaction") return Reflect.get(t, p, t);
+        return (fn: (tx: unknown) => Promise<unknown>) =>
+          t.$transaction((tx) =>
+            fn(new Proxy(tx, {
+              get(txReal, q) {
+                if (q === "eventoAuditoria") return { create: () => Promise.reject(new Error("auditoría caída")) };
+                const v = Reflect.get(txReal, q, txReal);
+                return typeof v === "function" ? v.bind(txReal) : v;
+              },
+            })) as never,
+          );
+      },
+    });
+    await expect(borrarConversacion(sinAuditoria, { ...identidad(org), userId: org.userId })).rejects.toThrow("auditoría caída");
+    expect(await cargarConversacion(db(), identidad(org))).toHaveLength(2);
+    expect(await eventosAuditoriaDe(base.prisma, org.orgId, org.pacienteId)).toEqual([]);
+  });
+
   it("desde otra organización: 404, no borra nada ni deja rastro", async () => {
     const a = await consultorio();
     const b = await consultorio();
