@@ -2075,7 +2075,6 @@ export const LUX_DIJO_ELLA = "Vos:";
 export const LUX_EN_QUE_ME_BASO = "Ver en qué me baso";
 export const LUX_PLACEHOLDER = "Preguntale a Lux";
 export const LUX_ENVIAR = "Enviar";
-export const LUX_NUEVA = "Nueva conversación";
 /** Sin los puntos suspensivos: los dibuja la pantalla, que los enciende de a
  *  uno mientras Lux trabaja (puntos-leyendo.tsx). */
 export const LUX_LEYENDO = "Lux está leyendo";
@@ -2174,3 +2173,13 @@ export const LUX_HISTORIAL_NO_CARGO = "No se pudo mostrar la conversación anter
 
 /** Debajo de una respuesta de Lux que se cortó: lo de arriba es lo que llegó. */
 export const LUX_RESPUESTA_CORTADA = "La respuesta se cortó acá.";
+
+/** El botón que borra la conversación guardada con Lux sobre esa paciente,
+ *  y su confirmación. */
+export const LUX_EMPEZAR_DE_CERO = "Empezar de cero";
+export const LUX_EMPEZAR_DE_CERO_TITULO = "¿Empezar de cero con Lux?";
+export const LUX_EMPEZAR_DE_CERO_MENSAJE =
+  "Se borra todo lo que hablaron con Lux sobre esta paciente y no se puede recuperar. Las notas y el Recorrido no se tocan.";
+export const LUX_EMPEZAR_DE_CERO_ACCION = "Borrar la conversación";
+export const LUX_BORRANDO = "Borrando…";
+export const LUX_NO_SE_BORRO = "No se pudo borrar la conversación. Probá de nuevo.";

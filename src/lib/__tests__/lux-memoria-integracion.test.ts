@@ -9,13 +9,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { abrirConversacion, PEDIDO_APERTURA, pedidoApertura } from "@/app/api/_lib/casos-uso/lux/conversar";
 import {
-  cargarConversacion, guardarTurnos, type ClienteMemoriaLux,
+  borrarConversacion, cargarConversacion, guardarTurnos, type ClienteMemoriaLux,
 } from "@/app/api/_lib/casos-uso/lux/memoria";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { crearConversacionConHerramientas, ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { aadDe, descifrar } from "@/lib/encryption";
 import { avisoMirandoTranscripcion, MAX_TURNOS_HISTORIAL_LUX } from "@/lib/lux/contrato";
 
-import { conectarArea2, crearOrg, type BaseArea2, type Org } from "./estados-fixtures";
+import { conectarArea2, crearOrg, eventosAuditoriaDe, type BaseArea2, type Org } from "./estados-fixtures";
 import { vaciarTablas } from "./db-test";
 
 let base: BaseArea2;
@@ -236,5 +237,36 @@ describe("al abrir, lo guardado viaja al modelo", () => {
     const { pedidos, crearConversacion } = doble();
     await abrir(org, crearConversacion);
     expect(JSON.stringify(pedidos[0].messages)).not.toContain("PREGUNTA_0");
+  });
+});
+
+describe("empezar de cero", () => {
+  it("borra la conversación de esa paciente, deja lux.borrar_conversacion sin texto y no toca la de otra", async () => {
+    const org = await consultorio();
+    const beto = await otraPaciente(org);
+    await intercambio(org, 0);
+    await intercambio(org, 1);
+    await intercambio(org, 2, beto);
+    const borrados = await borrarConversacion(db(), { ...identidad(org), userId: org.userId });
+    expect(borrados).toBe(4);
+    expect(await cargarConversacion(db(), identidad(org))).toEqual([]);
+    expect(await cargarConversacion(db(), identidad(org, beto))).toHaveLength(2);
+    const eventos = await eventosAuditoriaDe(base.prisma, org.orgId, org.pacienteId);
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]).toMatchObject({
+      accion: ACCIONES.lux.borrarConversacion, entidad: "paciente", actorTipo: "usuario", actorId: org.userId,
+      detalle: { turnos: 4 },
+    });
+    expect(JSON.stringify(eventos)).not.toMatch(/PREGUNTA_|RESPUESTA_/);
+  });
+
+  it("desde otra organización: 404, no borra nada ni deja rastro", async () => {
+    const a = await consultorio();
+    const b = await consultorio();
+    await intercambio(a, 0);
+    await expect(borrarConversacion(db(), { organizationId: b.orgId, pacienteId: a.pacienteId, userId: b.userId }))
+      .rejects.toMatchObject({ status: 404 });
+    expect(await cargarConversacion(db(), identidad(a))).toHaveLength(2);
+    expect(await eventosAuditoriaDe(base.prisma, b.orgId)).toEqual([]);
   });
 });

@@ -4,11 +4,11 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GET, POST } from "@/app/api/pacientes/[id]/lux/route";
+import { DELETE, GET, POST } from "@/app/api/pacientes/[id]/lux/route";
 import { registrarAuditoria } from "@/app/api/_lib/auditoria";
 import { abrirConversacion, autorizarPaciente, ErrorProveedorLux, responder } from "@/app/api/_lib/casos-uso/lux/conversar";
 import { devolverCupo, reservarCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
-import { conversacionGuardada, guardarTurnos } from "@/app/api/_lib/casos-uso/lux/memoria";
+import { borrarConversacion, conversacionGuardada, guardarTurnos } from "@/app/api/_lib/casos-uso/lux/memoria";
 import { ApiError } from "@/app/api/_lib/responses";
 import type { ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { db } from "@/lib/db";
@@ -28,6 +28,7 @@ vi.mock("@/app/api/_lib/casos-uso/lux/memoria", async (original) => ({
   ...(await original<typeof import("@/app/api/_lib/casos-uso/lux/memoria")>()),
   conversacionGuardada: vi.fn(),
   guardarTurnos: vi.fn(),
+  borrarConversacion: vi.fn(),
 }));
 vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", async (original) => ({
   ...(await original<typeof import("@/app/api/_lib/casos-uso/ayuda/reservar-cupo")>()),
@@ -295,5 +296,26 @@ describe("cada turno se guarda al cerrar la respuesta", () => {
     vi.mocked(guardarTurnos).mockRejectedValueOnce(new Error("base caída"));
     await expect(leer(await pedir({ pregunta: "¿y?" }))).rejects.toThrow();
     expect(registrarAuditoria).toHaveBeenCalledOnce();
+  });
+});
+
+describe("DELETE: empezar de cero", () => {
+  const borrar = (id = "pac-1") => DELETE(
+    new Request(`http://localhost/api/pacientes/${id}/lux`, { method: "DELETE" }),
+    { params: Promise.resolve({ id }) },
+  );
+
+  it("borra la conversación de la paciente de la sesión, como la usuaria", async () => {
+    vi.mocked(borrarConversacion).mockResolvedValue(4);
+    const respuesta = await borrar();
+    expect(respuesta.status).toBe(200);
+    expect(await respuesta.json()).toEqual({ data: { borrados: 4 } });
+    expect(borrarConversacion).toHaveBeenCalledWith(db, { organizationId: "org", pacienteId: "pac-1", userId: "user" });
+    expect(reservarCupo).not.toHaveBeenCalled();
+  });
+
+  it("paciente ajeno: 404", async () => {
+    vi.mocked(borrarConversacion).mockRejectedValue(new ApiError("Paciente no encontrado", 404));
+    expect((await borrar()).status).toBe(404);
   });
 });

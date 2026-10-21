@@ -13,7 +13,7 @@
 //
 // APERTURA
 //
-// Al montar, y con cada "Nueva conversación", se trae lo guardado y sale un
+// Al montar, y después de "Empezar de cero", se trae lo guardado y sale un
 // POST sin pregunta ni historial: Lux habla primero (el servidor le pasa lo
 // guardado). Al cambiar de paciente la conversación se tira entera en el
 // mismo render y vuelve a empezar para el nuevo: nada de una paciente queda
@@ -21,9 +21,11 @@
 
 import * as React from "react";
 
-import { ApiClientError, apiGet, esAbort } from "@/lib/api-client";
+import { ApiClientError, apiDelete, apiGet, esAbort } from "@/lib/api-client";
 
-import { LUX_CORTADO, LUX_HISTORIAL_NO_CARGO, LUX_NO_PUDO, LUX_SIN_CONEXION, LUX_TOPE } from "@/lib/glosario";
+import {
+  LUX_CORTADO, LUX_HISTORIAL_NO_CARGO, LUX_NO_PUDO, LUX_NO_SE_BORRO, LUX_SIN_CONEXION, LUX_TOPE,
+} from "@/lib/glosario";
 import {
   LARGO_MAX_PREGUNTA_LUX,
   LARGO_MAX_TURNO_LUX,
@@ -164,7 +166,7 @@ export function useConversacionLux(pacienteId: string) {
     [],
   );
 
-  // Apertura: al montar, al cambiar de paciente y con "Nueva conversación".
+  // Apertura: al montar, al cambiar de paciente y después de "Empezar de cero".
   // Primero lo guardado, para que la apertura quede abajo.
   React.useEffect(() => {
     const control = new AbortController();
@@ -208,6 +210,19 @@ export function useConversacionLux(pacienteId: string) {
     );
   }
 
+  /** "Empezar de cero": borra lo guardado en el servidor y, si salió,
+   *  vuelve a abrir de cero. true si se borró. */
+  async function empezarDeCero(): Promise<boolean> {
+    try {
+      await apiDelete<{ borrados: number }>(urlDe(pacienteId));
+    } catch {
+      setError(LUX_NO_SE_BORRO);
+      return false;
+    }
+    nueva();
+    return true;
+  }
+
   function nueva() {
     setTurnos([]);
     setGuardados(0);
@@ -217,5 +232,5 @@ export function useConversacionLux(pacienteId: string) {
     setConversacion((actual) => ({ ...actual, numero: actual.numero + 1 }));
   }
 
-  return { turnos, guardados, borrador, setBorrador, esperando, error, preguntar, nueva };
+  return { turnos, guardados, borrador, setBorrador, esperando, error, preguntar, empezarDeCero };
 }

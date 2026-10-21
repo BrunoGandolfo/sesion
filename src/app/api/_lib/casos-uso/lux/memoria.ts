@@ -11,7 +11,8 @@
 //
 // Quién escribe: sólo el servidor, cuando la respuesta terminó (la ruta, a
 // través de registrarConversacionLux). La pantalla no manda historial: lo
-// lee de acá (GET) y el modelo también.
+// lee de acá (GET) y el modelo también. "Empezar de cero" la borra entera,
+// con su rastro (lux.borrar_conversacion), en la misma transacción.
 //
 // Toda consulta va por organización Y paciente: la conversación de una
 // paciente no aparece con el id de otra ni desde otra organización. Ningún
@@ -24,8 +25,10 @@ import {
   LARGO_MAX_PREGUNTA_LUX, LARGO_MAX_TURNO_LUX, MAX_TURNOS_HISTORIAL_LUX, sinMarcasLux,
   type TurnoConversacionLux,
 } from "@/lib/lux/contrato";
+import { ACCIONES } from "@/lib/auditoria-acciones";
 import { cifrarConversacionLux } from "@/lib/prisma-encryption";
 
+import { registrarAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 
 export type ClienteMemoriaLux = typeof db;
@@ -104,5 +107,24 @@ export async function guardarTurnos(prisma: ClienteMemoriaLux, input: GuardarTur
         organizationId, pacienteId, userId, rol: t.rol, interrumpida: t.interrumpida, creadoEn: t.en,
       })),
     });
+  });
+}
+
+/** "Empezar de cero": borra toda la conversación guardada de la paciente y
+ *  deja lux.borrar_conversacion (cuántos turnos, sin texto) en la misma
+ *  transacción. 404 si la paciente no es de la organización. */
+export async function borrarConversacion(
+  prisma: ClienteMemoriaLux, input: IdentidadLux & { userId: string },
+): Promise<number> {
+  const { organizationId, pacienteId, userId } = input;
+  return prisma.$transaction(async (tx) => {
+    await requirePaciente(tx, pacienteId, organizationId);
+    const { count } = await tx.conversacionLux.deleteMany({ where: { organizationId, pacienteId } });
+    await registrarAuditoria(tx, {
+      organizationId, actorTipo: "usuario", actorId: userId,
+      accion: ACCIONES.lux.borrarConversacion, entidad: "paciente", entidadId: pacienteId,
+      detalle: { turnos: count },
+    });
+    return count;
   });
 }

@@ -16,6 +16,7 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Confirmar } from "@/components/ui/confirmar";
 import { Lux, TAMANOS_LUX } from "@/components/ui/lux";
 import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
 
@@ -31,7 +32,11 @@ import {
   LUX_DIJO_ELLA,
   LUX_EN_QUE_ME_BASO,
   LUX_ENVIAR,
-  LUX_NUEVA,
+  LUX_BORRANDO,
+  LUX_EMPEZAR_DE_CERO,
+  LUX_EMPEZAR_DE_CERO_ACCION,
+  LUX_EMPEZAR_DE_CERO_MENSAJE,
+  LUX_EMPEZAR_DE_CERO_TITULO,
   LUX_LEYENDO,
   LUX_PLACEHOLDER,
   LUX_RESPUESTA_CORTADA,
@@ -126,8 +131,10 @@ function Turno({ turno, respuesta }: { turno: TurnoLux; respuesta: RespuestaLux 
 }
 
 export function ConversacionLux({ pacienteId, paciente, profesional }: ConversacionLuxProps) {
-  const { turnos, guardados, borrador, setBorrador, esperando, error, preguntar, nueva } =
+  const { turnos, guardados, borrador, setBorrador, esperando, error, preguntar, empezarDeCero } =
     useConversacionLux(pacienteId);
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [borrando, setBorrando] = React.useState(false);
   const [abierta] = React.useState(() => new Date());
   const hilo = React.useRef<HTMLDivElement>(null);
   useProtegerTrabajo(borrador.trim() !== "", LUX_SALIR);
@@ -169,10 +176,34 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
         <p className="min-w-0 font-sans text-[12px] leading-[1.5] text-ink-500">
           {luxQueLee(paciente)}
         </p>
-        <Button variant="secondary" size="sm" onClick={nueva} className="self-start shrink-0">
-          {LUX_NUEVA}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setConfirmando(true)}
+          disabled={esperando || borrando || confirmando}
+          className="self-start shrink-0"
+        >
+          {LUX_EMPEZAR_DE_CERO}
         </Button>
       </div>
+
+      {confirmando ? (
+        <Confirmar
+          titulo={LUX_EMPEZAR_DE_CERO_TITULO}
+          mensaje={LUX_EMPEZAR_DE_CERO_MENSAJE}
+          accion={LUX_EMPEZAR_DE_CERO_ACCION}
+          variante="peligro"
+          enviando={borrando}
+          enviandoLabel={LUX_BORRANDO}
+          onCancelar={() => setConfirmando(false)}
+          onConfirmar={async () => {
+            setBorrando(true);
+            await empezarDeCero();
+            setBorrando(false);
+            setConfirmando(false);
+          }}
+        />
+      ) : null}
 
       <div
         ref={hilo}

@@ -17,7 +17,11 @@ import {
   LUX_EN_QUE_ME_BASO,
   LUX_HISTORIAL_NO_CARGO,
   LUX_RESPUESTA_CORTADA,
-  LUX_NUEVA,
+  LUX_EMPEZAR_DE_CERO,
+  LUX_EMPEZAR_DE_CERO_ACCION,
+  LUX_EMPEZAR_DE_CERO_MENSAJE,
+  LUX_EMPEZAR_DE_CERO_TITULO,
+  LUX_NO_SE_BORRO,
   LUX_LEYENDO,
   LUX_PLACEHOLDER,
   LUX_TOPE,
@@ -71,7 +75,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const cuerpos = () => fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string));
+/** Los cuerpos de los POST a Lux (apertura y preguntas). */
+const cuerpos = () => fetchMock.mock.calls
+  .filter(([, init]) => init?.method === "POST")
+  .map(([, init]) => JSON.parse((init as RequestInit).body as string));
 const hilo = () => screen.getByRole("log", { name: LUX_CONVERSACION });
 
 function montar(pacienteId = "p1", paciente = "Ana") {
@@ -342,24 +349,68 @@ describe("preguntar", () => {
   });
 });
 
-describe("la conversación no se guarda", () => {
-  it("'Nueva conversación' vacía el hilo y vuelve a abrir sin historial", async () => {
+describe("empezar de cero", () => {
+  /** Con una charla en pantalla: apertura, pregunta y respuesta. */
+  async function conCharla() {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Primera apertura."));
     montar();
-    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    await alAbrir();
     fetchMock.mockResolvedValueOnce(respuestaEntera("Respuesta vieja."));
     await act(async () => { escribirYEnviar("Pregunta vieja"); });
+  }
+  const boton = () => screen.getByRole("button", { name: LUX_EMPEZAR_DE_CERO });
+
+  it("pide confirmación; cancelar no borra nada", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    const dialogo = screen.getByRole("alertdialog");
+    expect(dialogo.textContent).toContain(LUX_EMPEZAR_DE_CERO_TITULO);
+    expect(dialogo.textContent).toContain(LUX_EMPEZAR_DE_CERO_MENSAJE);
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
     expect(hilo().textContent).toContain("Respuesta vieja.");
-
-    fetchMock.mockResolvedValueOnce(respuestaEntera("Segunda apertura."));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: LUX_NUEVA })); });
-
-    expect(hilo().textContent).not.toContain("Pregunta vieja");
-    expect(hilo().textContent).not.toContain("Respuesta vieja.");
-    expect(hilo().textContent).toContain("Segunda apertura.");
-    expect(cuerpos().at(-1)).toEqual({});
   });
 
+  it("al confirmar borra en el servidor, vacía el hilo y Lux vuelve a abrir", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: { borrados: 3 } }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Apertura de cero."));
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: LUX_EMPEZAR_DE_CERO_ACCION }));
+    });
+    await alAbrir();
+
+    const borrar = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
+    expect(borrar?.[0]).toBe("/api/pacientes/p1/lux");
+    expect(hilo().textContent).not.toContain("Pregunta vieja");
+    expect(hilo().textContent).not.toContain("Respuesta vieja.");
+    expect(hilo().textContent).toContain("Apertura de cero.");
+    expect(cuerpos().at(-1)).toEqual({});
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("si no se pudo borrar, lo dice y la charla queda como estaba", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: "x" }), { status: 500 }));
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: LUX_EMPEZAR_DE_CERO_ACCION }));
+    });
+    expect(screen.getByRole("alert").textContent).toBe(LUX_NO_SE_BORRO);
+    expect(hilo().textContent).toContain("Respuesta vieja.");
+  });
+
+  it("mientras Lux responde no se puede empezar de cero", async () => {
+    fetchMock.mockReturnValueOnce(new Promise<Response>(() => {}));
+    montar();
+    await alAbrir();
+    expect((boton() as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("al salir de la paciente", () => {
   it("al cambiar de paciente no queda nada de la anterior", async () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Ana viene bien."));
     const { rerender } = montar("p1", "Ana");

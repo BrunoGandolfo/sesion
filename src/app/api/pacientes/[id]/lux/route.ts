@@ -1,7 +1,8 @@
 // /api/pacientes/[id]/lux — conversar con Lux sobre un paciente.
 //
 // GET: la conversación guardada de esa paciente (los últimos turnos), para
-// que la pantalla la muestre al abrir.
+// que la pantalla la muestre al abrir. DELETE: "Empezar de cero", la borra
+// entera (auditado).
 //
 // POST sin `pregunta` y sin `historial`: apertura (Lux habla primero, con lo
 // guardado como historial). Con `pregunta`: respuesta, con el historial que
@@ -37,8 +38,8 @@ import {
   responder,
   type ConversacionLux,
 } from "../../../_lib/casos-uso/lux/conversar";
-import { conversacionGuardada } from "../../../_lib/casos-uso/lux/memoria";
-import { errorResponse, leerJson, okSinCache, validationError } from "../../../_lib/responses";
+import { borrarConversacion, conversacionGuardada } from "../../../_lib/casos-uso/lux/memoria";
+import { errorResponse, leerJson, ok, okSinCache, validationError } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,16 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { organizationId } = await getSessionActor();
     const { id: pacienteId } = await params;
     return okSinCache({ turnos: await conversacionGuardada(db, organizationId, pacienteId) });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function DELETE(_request: Request, { params }: RouteParams) {
+  try {
+    const { organizationId, userId } = await getSessionActor();
+    const { id: pacienteId } = await params;
+    return ok({ borrados: await borrarConversacion(db, { organizationId, pacienteId, userId }) });
   } catch (error) {
     return errorResponse(error);
   }
