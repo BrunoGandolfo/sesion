@@ -100,11 +100,12 @@ export function TurnoDetailSheet({
   const [sesion, setSesion] = React.useState<SesionDelTurno | "sin-dato">(
     "sin-dato",
   );
-  // El aviso por WhatsApp del turno. "sin-dato" mientras no contestó la API
-  // o cuando no corresponde pedirlo; null si no se pudo leer.
+  // El aviso por WhatsApp del turno, con el turno y la fecha a los que
+  // corresponde: una lectura vieja (de antes de reprogramar) no se muestra.
+  // null mientras no contestó la API, o si no se pudo leer.
   const [recordatorio, setRecordatorio] = React.useState<
-    AvisoDelTurno | null | "sin-dato"
-  >("sin-dato");
+    { clave: string; aviso: AvisoDelTurno | null } | null
+  >(null);
 
   const metodos = useForm<EditValues>({
     resolver: zodResolver(camposTurnoSchema),
@@ -135,21 +136,22 @@ export function TurnoDetailSheet({
   // ya realizado no hay recordatorio. Se vuelve a leer si cambia la fecha:
   // reprogramar desde acá deja el aviso pendiente otra vez.
   const turnoFecha = turno?.fecha.getTime();
+  const claveDelAviso =
+    turnoId && turnoEstado && turnoSigueProgramado(turnoEstado) ? `${turnoId}:${turnoFecha}` : null;
   React.useEffect(() => {
-    setRecordatorio("sin-dato");
-    if (!turnoId || !turnoEstado || !turnoSigueProgramado(turnoEstado)) return;
+    if (!turnoId || !claveDelAviso) return;
 
     const controller = new AbortController();
     leerRecordatorio(turnoId, controller.signal)
-      .then((data) => setRecordatorio(data))
+      .then((data) => setRecordatorio({ clave: claveDelAviso, aviso: data }))
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
         // Sin dato no se dibuja el bloque: el turno se sigue pudiendo
         // manejar igual.
-        setRecordatorio(null);
+        setRecordatorio({ clave: claveDelAviso, aviso: null });
       });
     return () => controller.abort();
-  }, [turnoId, turnoEstado, turnoFecha]);
+  }, [turnoId, claveDelAviso]);
 
   const abrirReprogramar = () => {
     if (!turno) return;
@@ -174,7 +176,7 @@ export function TurnoDetailSheet({
 
   const chip = estadoDelTurno(turno);
   const acciones = accionesDelDetalle(turno, sesion, new Date());
-  const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
+  const aviso = recordatorio && recordatorio.clave === claveDelAviso ? recordatorio.aviso : null;
 
   /**
    * Lo que rodea a las cuatro acciones del detalle: bloquear los botones,
