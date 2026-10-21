@@ -307,7 +307,7 @@ it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar 
   // cuentan estas páginas, y sólo mientras Hoy ofrezca el botón.
   // 05 cuenta Recordar cobro por WhatsApp, mientras la fila de Te deben elija
   // el botón por canal.
-  const conWhatsapp = ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
+  const conWhatsapp = ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "03-agenda-y-turnos.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
   expect(codigo("src/app/(dashboard)/_components/recordatorios-whatsapp.tsx")).toContain("{ABRIR_WHATSAPP}");
   expect(codigo("src/app/(dashboard)/cobros/_components/fila-deudor.tsx")).toContain("RECORDAR_COBRO_POR_CANAL[accion.canal]");
   const restoDelCorpus = corpus
@@ -547,8 +547,15 @@ it("la ayuda no ofrece elegir el canal: los recordatorios y el cobro son sólo p
   // CANAL_RECORDATORIO_VIGENTE, no la columna.
   expect(codigo("src/app/(dashboard)/config/_components/config-view.tsx")).not.toContain("SelectorCanal");
   expect(codigo("src/lib/recordatorios-programacion.ts")).toContain('CANAL_RECORDATORIO_VIGENTE: CanalRecordatorio = "whatsapp"');
-  for (const archivo of ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"]) {
+  for (const archivo of ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "03-agenda-y-turnos.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"]) {
     const texto = documento(archivo).replace(/\s+/g, " ");
     expect(texto, archivo).not.toMatch(/SMS automático|\*\*Ambos\*\*|Cómo recordás los turnos|según el canal|por los dos canales|WhatsApp desde mi teléfono/);
   }
+});
+
+it("la ayuda cita la confirmación de cancelar un turno como la dice la pantalla", () => {
+  const agenda = documento("03-agenda-y-turnos.md").replace(/\s+/g, " ");
+  expect(agenda).toContain(glosario.CANCELAR_TURNO_MENSAJE);
+  expect(codigo("src/app/(dashboard)/agenda/_components/turno-detail-sheet.tsx")).toContain("mensaje={CANCELAR_TURNO_MENSAJE}");
+  expect(agenda).not.toMatch(/recordatorio por SMS/);
 });

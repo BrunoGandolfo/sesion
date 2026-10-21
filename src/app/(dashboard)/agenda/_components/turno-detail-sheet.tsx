@@ -27,6 +27,7 @@ import {
 import { apiPatch, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { fechaLarga, hora } from "@/lib/format";
 import {
+  CANCELAR_TURNO_MENSAJE,
   CANCELAR_SERIE_TITULO,
   CANCELAR_SERIE_MENSAJE,
   CANCELAR_SERIE_ACCION,
@@ -329,7 +330,7 @@ export function TurnoDetailSheet({
         {modo === "confirmar-cancelar" ? (
           <Confirmar
             titulo="¿Cancelar este turno?"
-            mensaje="Se cancela el recordatorio por SMS. El turno queda en la ficha como cancelado y no se puede reabrir."
+            mensaje={CANCELAR_TURNO_MENSAJE}
             accion="Cancelar el turno"
             cancelar={VOLVER}
             variante="peligro"

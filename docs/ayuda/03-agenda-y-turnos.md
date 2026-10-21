@@ -96,17 +96,16 @@ paciente no vino a este turno."*
 - **Reprogramar** — cambiás fecha, hora, duración, modalidad y notas. Si
   cambiaste la fecha o la hora, **el recordatorio viejo se cancela y se programa
   uno nuevo** para el horario nuevo. Si solo cambiaste la duración o la
-  modalidad, el recordatorio queda como estaba. Si el aviso anterior ya había
-  salido, se programa en el acto un **cambio de horario** con la fecha nueva,
-  que sale en la siguiente revisión de envíos (se revisan cada 5 minutos). Si
-  los recordatorios los mandás vos desde tu teléfono, ese aviso no sale por
-  SMS: ver `06-recordatorios-sms.md`.
+  modalidad, el recordatorio queda como estaba. Si ya habías abierto el
+  WhatsApp del aviso anterior, el nuevo es un **cambio de horario** y aparece
+  en el acto en **Recordatorios para hoy**, en **Hoy**, como **Sin avisar**:
+  ver `06-recordatorios-sms.md`.
 - **No vino** — pregunta *"¿[Nombre] no vino?"* y avisa: *"El turno queda
   registrado como ausencia. No se cobra y no se puede grabar."*
   **El recordatorio se cancela.**
 - **Cancelar turno** — pregunta *"¿Cancelar este turno?"* y avisa: *"Se cancela
-  el recordatorio por SMS. El turno queda en la ficha como cancelado y no se
-  puede reabrir."* **El recordatorio se cancela.**
+  el recordatorio por WhatsApp: deja de aparecer en Hoy. El turno queda en la
+  ficha como cancelado y no se puede reabrir."* **El recordatorio se cancela.**
 
 Cuando la grabación llega completa al servidor, la app marca el turno como
 realizado, y con eso el recordatorio pendiente se cancela.

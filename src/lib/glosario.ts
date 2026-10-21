@@ -1709,6 +1709,11 @@ export const SERIE_OMITIDAS = (fechas: string[]) =>
     ? `No se agendó el ${fechas[0]}: ya había un turno a esa hora.`
     : `No se agendaron ${fechas.length} fechas por choque de horario: ${fechas.join(", ")}.`;
 export const CANCELAR_SERIE = "Cancelar el resto de la serie";
+/** La confirmación de cancelar un turno, en el detalle de Agenda. El
+ *  recordatorio es el de WhatsApp (CANAL_RECORDATORIO_VIGENTE): deja de
+ *  aparecer en Recordatorios para hoy. */
+export const CANCELAR_TURNO_MENSAJE =
+  "Se cancela el recordatorio por WhatsApp: deja de aparecer en Hoy. El turno queda en la ficha como cancelado y no se puede reabrir.";
 export const CANCELAR_SERIE_TITULO = "¿Cancelar este turno y los que siguen?";
 export const CANCELAR_SERIE_MENSAJE =
   "Se cancelan este turno y todos los siguientes de la serie que todavía estén programados, con sus recordatorios. Los ya realizados y los anteriores quedan como están.";
