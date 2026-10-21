@@ -114,6 +114,7 @@ describe("recordarCobro", () => {
         pacienteId: base.pacienteId,
         usuarioId: "user-1",
         ahora: AHORA,
+        canal: "whatsapp",
       });
 
       expect(resultado).toMatchObject({ canal: "whatsapp", avisadoEn: AHORA.toISOString(), sesiones: 2, monto: 2 * TARIFA });
@@ -327,7 +328,7 @@ describe("con WhatsApp desde mi teléfono", () => {
   const avisosDe = (organizationId: string) =>
     prismaRaw.avisoWhatsapp.findMany({ where: { organizationId }, orderBy: { abiertoEn: "asc" } });
   const pedir = (base: Base, ahora = AHORA) =>
-    recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "user-1", ahora });
+    recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "user-1", ahora, canal: "whatsapp" });
 
   it("no programa SMS: devuelve el enlace con el texto de la plantilla y anota el aviso de cobro", async () => {
     const base = await crearBase();
@@ -473,6 +474,17 @@ describe("listarDeudores dice quién pidió la baja", () => {
 describe("la pantalla y el servidor no pueden elegir canales distintos", () => {
   // Una pestaña abierta de antes de que el cobro fuera sólo por WhatsApp
   // todavía pide SMS: sea cual sea el guardado, 409 y nada.
+  it("la pantalla de antes de elegir canal manda {}: es el SMS de antes, 409 y nada anotado", async () => {
+    const base = await crearBase();
+    await crearImpago(base, 5);
+    await expect(
+      recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "u", ahora: AHORA }),
+    ).rejects.toMatchObject({ status: 409, message: COBRO_CANAL_CAMBIO });
+    expect(await prismaRaw.envioSms.count()).toBe(0);
+    expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
+    expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
+  });
+
   it.each(["whatsapp", "sms", "ambos"] as const)("con %s en la base y SMS en la pantalla: 409 y no se anota ni se programa nada", async (enLaBase) => {
     const base = await crearBase();
     await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: enLaBase } });

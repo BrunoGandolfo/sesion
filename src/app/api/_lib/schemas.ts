@@ -230,7 +230,8 @@ export const configUpdateSchema = z.object({
 });
 
 /** POST /api/pacientes/[id]/recordar-cobro: el canal que la pantalla usó
- *  (accionDeCobro). Opcional: un cliente viejo manda `{}`. */
+ *  (accionDeCobro). Opcional: un cliente viejo manda `{}`, y el caso de uso
+ *  lo toma como el SMS de antes (409). */
 export const recordarCobroSchema = z.object({ canal: z.enum(["sms", "whatsapp"]).optional() });
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -55,7 +55,8 @@ export interface RecordarCobroParams {
   ahora?: Date;
   /** El canal que usó la pantalla. Si no es el de la base, 409 sin efectos:
    *  si no, quedaría anotado un WhatsApp que no se abrió, o saldría un SMS
-   *  además del WhatsApp. Sin él (cliente viejo), manda la base. */
+   *  además del WhatsApp. Sin él es la pantalla de antes de elegir canal,
+   *  que pedía SMS: también 409. */
   canal?: "sms" | "whatsapp";
 }
 
@@ -125,9 +126,11 @@ export async function recordarCobro({
   }
 
   // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado en la columna no
-  // cuenta. Una pantalla vieja que pida SMS recibe el 409 de canal cambiado.
+  // cuenta. Una pantalla vieja que pida SMS recibe el 409 de canal cambiado,
+  // también la de antes de elegir canal, que manda `{}`: si no, se anotaría
+  // una apertura de WhatsApp que esa pantalla nunca hizo.
   const canalVigente = CANAL_RECORDATORIO_VIGENTE === "whatsapp" ? "whatsapp" : "sms";
-  if (canal && canal !== canalVigente) {
+  if ((canal ?? "sms") !== canalVigente) {
     throw new ApiError(COBRO_CANAL_CAMBIO, 409);
   }
   if (canalVigente === "whatsapp") {
