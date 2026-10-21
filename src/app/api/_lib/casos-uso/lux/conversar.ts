@@ -101,7 +101,9 @@ export async function autorizarPaciente(prisma: ClienteLux, organizationId: stri
 export function abrirConversacion(input: ConversarBase): Promise<ConversacionLux> {
   return conversar(input, async () => {
     const guardados = await cargarConversacion(input.prisma, input);
-    return { historial: paraElModelo(guardados), ultimo: pedidoApertura(guardados.at(-1)?.creadoEn ?? null) };
+    // "Cuándo hablaron": la última pregunta de ella, no el último saludo.
+    const ultimaPregunta = guardados.findLast((t) => t.rol === "profesional");
+    return { historial: paraElModelo(guardados), ultimo: pedidoApertura(ultimaPregunta?.creadoEn ?? null) };
   });
 }
 
@@ -233,6 +235,8 @@ export interface ConversacionRespondida {
    *  apertura) y lo que llegó a la pantalla. */
   pregunta?: { texto: string; en: Date };
   respuesta: { texto: string; en: Date };
+  /** Cuándo llegó el pedido (GuardarTurnosInput.pedidoEn). */
+  pedidoEn?: Date;
 }
 
 /**
@@ -249,7 +253,7 @@ export async function registrarConversacionLux(p: ConversacionRespondida): Promi
   try {
     await guardarTurnos(p.prisma, {
       organizationId: p.organizationId, pacienteId: p.pacienteId, userId: p.userId,
-      pregunta: p.pregunta, respuesta: { ...p.respuesta, interrumpida: p.interrumpida ?? false },
+      pregunta: p.pregunta, respuesta: { ...p.respuesta, interrumpida: p.interrumpida ?? false }, pedidoEn: p.pedidoEn,
     });
   } catch (error) {
     // Sin el error: no se arriesga a que lleve texto.

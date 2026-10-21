@@ -110,6 +110,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         interrumpida,
         ...(pregunta === undefined ? {} : { pregunta: { texto: pregunta, en: llego } }),
         respuesta: { texto: enviado, en: new Date() },
+        pedidoEn: llego,
       });
     };
     // Cancelada o cortada: el rastro igual queda, con lo que se sabe. Si

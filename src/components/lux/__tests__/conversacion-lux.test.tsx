@@ -18,6 +18,7 @@ import {
   LUX_HISTORIAL_NO_CARGO,
   LUX_RESPUESTA_CORTADA,
   LUX_EMPEZAR_DE_CERO,
+  LUX_ENVIAR,
   LUX_EMPEZAR_DE_CERO_ACCION,
   LUX_EMPEZAR_DE_CERO_MENSAJE,
   LUX_EMPEZAR_DE_CERO_TITULO,
@@ -392,6 +393,15 @@ describe("empezar de cero", () => {
     });
     expect(screen.getByRole("alert").textContent).toBe(LUX_NO_SE_BORRO);
     expect(hilo().textContent).toContain("Respuesta vieja.");
+  });
+
+  it("con la confirmación abierta no se envía nada: una respuesta en vuelo no se cruza con el borrado", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    const llamadas = fetchMock.mock.calls.length;
+    escribirYEnviar("Una pregunta en el medio");
+    expect(fetchMock.mock.calls.length).toBe(llamadas);
+    expect((screen.getByRole("button", { name: LUX_ENVIAR }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("mientras Lux responde no se puede empezar de cero", async () => {

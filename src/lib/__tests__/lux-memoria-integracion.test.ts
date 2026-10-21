@@ -282,3 +282,74 @@ describe("empezar de cero", () => {
     expect(await eventosAuditoriaDe(base.prisma, b.orgId)).toEqual([]);
   });
 });
+
+describe("revisión: carreras y aperturas", () => {
+  const apertura = (org: Org, texto: string, en: Date) => guardarTurnos(db(), {
+    ...identidad(org), userId: org.userId, respuesta: { texto, en, interrumpida: false },
+  });
+
+  it("una respuesta pedida antes de 'Empezar de cero' que cierra después no revive la conversación", async () => {
+    const org = await consultorio();
+    const pedidoEn = new Date(Date.now() - 5000);
+    await borrarConversacion(db(), { ...identidad(org), userId: org.userId });
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId, pedidoEn,
+      pregunta: { texto: "EN_VUELO", en: pedidoEn },
+      respuesta: { texto: "CORTADA", en: new Date(), interrumpida: true },
+    });
+    expect(await cargarConversacion(db(), identidad(org))).toEqual([]);
+    // Lo que se pide después del borrado sí se guarda.
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId, pedidoEn: new Date(),
+      respuesta: { texto: "NUEVA", en: new Date(), interrumpida: false },
+    });
+    expect((await cargarConversacion(db(), identidad(org))).map((t) => t.texto)).toEqual(["NUEVA"]);
+  });
+
+  it("las aperturas que nadie contestó no ocupan el historial; la última, sí", async () => {
+    const org = await consultorio();
+    const t = (h: number) => new Date(Date.UTC(2026, 9, 1, h));
+    await apertura(org, "APERTURA_CONTESTADA", t(1));
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId,
+      pregunta: { texto: "PREGUNTA", en: t(2) }, respuesta: { texto: "RESPUESTA", en: t(3), interrumpida: false },
+    });
+    for (let h = 4; h < 4 + MAX_TURNOS_HISTORIAL_LUX; h++) await apertura(org, `SALUDO_${h}`, t(h));
+    const ultima = `SALUDO_${3 + MAX_TURNOS_HISTORIAL_LUX}`;
+    expect((await cargarConversacion(db(), identidad(org))).map((x) => x.texto))
+      .toEqual(["APERTURA_CONTESTADA", "PREGUNTA", "RESPUESTA", ultima]);
+  });
+
+  it("'cuándo hablaron' es la última pregunta de ella, no el último saludo", async () => {
+    const org = await consultorio();
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId,
+      pregunta: { texto: "PREGUNTA", en: new Date(Date.UTC(2026, 8, 20, 15)) },
+      respuesta: { texto: "RESPUESTA", en: new Date(Date.UTC(2026, 8, 20, 15, 1)), interrumpida: false },
+    });
+    await apertura(org, "SALUDO", new Date(Date.UTC(2026, 9, 1, 15)));
+    const pedidos: Parameters<typeof crearConversacionConHerramientas>[0][] = [];
+    await abrirConversacion({
+      prisma: db(), organizationId: org.orgId, usuarioId: org.userId, pacienteId: org.pacienteId, apiKey: "k", systemPrompt: "p",
+      crearConversacion: async (pedido) => {
+        pedidos.push(pedido);
+        return { fragmentos: (async function* () { yield "x"; })(), resultado: Promise.resolve(RESULTADO), cancelar: () => {}, progreso: () => RESULTADO };
+      },
+    });
+    expect(pedidos[0].messages.at(-1)!.content).toContain("20/09/2026");
+  });
+
+  it("sólo saludos, sin ninguna pregunta: no hubo conversación", async () => {
+    const org = await consultorio();
+    await apertura(org, "SALUDO", new Date(Date.UTC(2026, 9, 1, 15)));
+    const pedidos: Parameters<typeof crearConversacionConHerramientas>[0][] = [];
+    await abrirConversacion({
+      prisma: db(), organizationId: org.orgId, usuarioId: org.userId, pacienteId: org.pacienteId, apiKey: "k", systemPrompt: "p",
+      crearConversacion: async (pedido) => {
+        pedidos.push(pedido);
+        return { fragmentos: (async function* () { yield "x"; })(), resultado: Promise.resolve(RESULTADO), cancelar: () => {}, progreso: () => RESULTADO };
+      },
+    });
+    expect(pedidos[0].messages.at(-1)!.content).toBe(PEDIDO_APERTURA);
+  });
+});

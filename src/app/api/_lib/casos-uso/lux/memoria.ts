@@ -45,7 +45,15 @@ export interface TurnoGuardadoLux {
   creadoEn: Date;
 }
 
-/** Los últimos `limite` turnos de la paciente, del más viejo al más nuevo. */
+/** Cuántas filas se leen por cada turno que se devuelve: deja lugar para
+ *  descartar aperturas sin contestar. */
+const VENTANA_POR_TURNO = 4;
+
+/** Los últimos `limite` turnos de la paciente, del más viejo al más nuevo.
+ *  Cada visita guarda una apertura: las que ella no contestó (la siguiente
+ *  no es una pregunta suya) se descartan, salvo la última, que es la que
+ *  tiene delante. Sin esto, abrir la pestaña seis veces dejaba al modelo un
+ *  historial de puros saludos. */
 export async function cargarConversacion(
   prisma: ClienteMemoriaLux,
   { organizationId, pacienteId }: IdentidadLux,
@@ -55,9 +63,13 @@ export async function cargarConversacion(
     where: { organizationId, pacienteId },
     select: { id: true, rol: true, contenido: true, interrumpida: true, creadoEn: true },
     orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
-    take: limite,
+    take: limite * VENTANA_POR_TURNO,
   });
-  return filas.reverse().map((f) => ({ rol: f.rol, texto: f.contenido, interrumpida: f.interrumpida, creadoEn: f.creadoEn }));
+  const turnos = filas.reverse().map((f) => ({ rol: f.rol, texto: f.contenido, interrumpida: f.interrumpida, creadoEn: f.creadoEn }));
+  return turnos.filter((t, i) => {
+    const esApertura = t.rol === "lux" && turnos[i - 1]?.rol !== "profesional";
+    return !esApertura || i === turnos.length - 1 || turnos[i + 1].rol === "profesional";
+  }).slice(-limite);
 }
 
 /** GET de la pantalla: 404 si la paciente no es de la organización; si no,
@@ -72,6 +84,10 @@ export async function conversacionGuardada(
 
 export interface GuardarTurnosInput extends IdentidadLux {
   userId: string;
+  /** Cuándo llegó el pedido. Si después hubo un "Empezar de cero", no se
+   *  guarda nada: la respuesta que estaba en vuelo no revive lo borrado.
+   *  Por defecto, la hora de la pregunta (o de la respuesta). */
+  pedidoEn?: Date;
   /** Ausente en la apertura. `en`: cuándo llegó el pedido. */
   pregunta?: { texto: string; en: Date };
   /** `en`: cuándo terminó (o se cortó) la respuesta. */
@@ -99,8 +115,17 @@ export async function guardarTurnos(prisma: ClienteMemoriaLux, input: GuardarTur
     interrumpida: input.respuesta.interrumpida,
   });
 
+  const pedidoEn = input.pedidoEn ?? input.pregunta?.en ?? input.respuesta.en;
   await prisma.$transaction(async (tx) => {
-    await requirePaciente(tx, pacienteId, organizationId);
+    await bloquearPaciente(tx, organizationId, pacienteId);
+    const borradaDespues = await tx.eventoAuditoria.findFirst({
+      where: {
+        organizationId, entidad: "paciente", entidadId: pacienteId,
+        accion: ACCIONES.lux.borrarConversacion, creadoEn: { gte: pedidoEn },
+      },
+      select: { id: true },
+    });
+    if (borradaDespues) return;
     await tx.conversacionLux.createMany({
       data: turnos.map((t) => ({
         ...cifrarConversacionLux(randomUUID(), { contenido: t.texto }),
@@ -118,7 +143,7 @@ export async function borrarConversacion(
 ): Promise<number> {
   const { organizationId, pacienteId, userId } = input;
   return prisma.$transaction(async (tx) => {
-    await requirePaciente(tx, pacienteId, organizationId);
+    await bloquearPaciente(tx, organizationId, pacienteId);
     const { count } = await tx.conversacionLux.deleteMany({ where: { organizationId, pacienteId } });
     await registrarAuditoria(tx, {
       organizationId, actorTipo: "usuario", actorId: userId,
@@ -127,4 +152,16 @@ export async function borrarConversacion(
     });
     return count;
   });
+}
+
+type TxMemoria = Parameters<Parameters<ClienteMemoriaLux["$transaction"]>[0]>[0];
+
+/** 404 si la paciente no es de la organización. Si es, bloquea su fila
+ *  (NO KEY: no frena altas de turnos ni el INSERT de la conversación) hasta
+ *  el fin de la transacción: guardar y "Empezar de cero" se serializan, y
+ *  guardar ve el borrado que terminó antes. */
+async function bloquearPaciente(tx: TxMemoria, organizationId: string, pacienteId: string): Promise<void> {
+  const filas = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM pacientes
+    WHERE id = ${pacienteId} AND organization_id = ${organizationId} FOR NO KEY UPDATE`;
+  if (filas.length === 0) await requirePaciente(tx, pacienteId, organizationId);
 }

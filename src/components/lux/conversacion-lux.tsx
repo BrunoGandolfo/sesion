@@ -157,15 +157,19 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
     if (nodo) nodo.scrollTop = nodo.scrollHeight;
   }, [turnos, esperando, error]);
 
+  // Con "Empezar de cero" abierto no sale ninguna pregunta: su respuesta
+  // podría cerrar (y guardarse) después del borrado.
+  const sinEnviar = confirmando || borrando;
+
   function alEnviar(evento: React.FormEvent) {
     evento.preventDefault();
-    preguntar(borrador);
+    if (!sinEnviar) preguntar(borrador);
   }
 
   function alTeclear(evento: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (evento.key !== "Enter" || evento.shiftKey || evento.nativeEvent.isComposing) return;
     evento.preventDefault();
-    preguntar(borrador);
+    if (!sinEnviar) preguntar(borrador);
   }
 
   return (
@@ -258,7 +262,7 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
           autoComplete="off"
           className="min-h-[44px] min-w-0 flex-1 resize-none rounded-sm border border-[color:var(--border-control)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] leading-[1.4] text-ink-900 outline-none transition-colors duration-[var(--duration-fast)] placeholder:text-ink-500 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
         />
-        <Button type="submit" disabled={esperando || borrador.trim() === ""} className="shrink-0">
+        <Button type="submit" disabled={esperando || sinEnviar || borrador.trim() === ""} className="shrink-0">
           {LUX_ENVIAR}
         </Button>
       </form>
