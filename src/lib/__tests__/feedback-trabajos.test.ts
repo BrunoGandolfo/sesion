@@ -351,6 +351,48 @@ describe("trabajo durable", () => {
     expect((await filaDe(base.prisma, sesionId))?.audioEstado).toBe("borrado");
   });
 
+  it("con el lease vencido y los intentos agotados no se vuelve a reclamar: queda fallido, y Para vos también", async () => {
+    // El worker se murió (o el resultado no llegó) en el último intento: nada
+    // informa el resultado y, sin esto, cada vez que vence el lease se vuelve
+    // a reclamar y a pagar el modelo, sin tope.
+    const { sesionId } = await crearSesion(base.prisma, org, {
+      estado: "aprobada",
+      transcripcion: TRANSCRIPCION,
+      notaIa: NOTA,
+      feedbackEstado: "no_pedido",
+    });
+    await reintentarFeedback(comun(sesionId));
+    const [feedback] = await trabajosDe(base.prisma, sesionId);
+    const borrado = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: `${org.orgId}/${sesionId}/` }, organizationId: org.orgId, sesionId });
+    const vencido = new Date(AHORA.getTime() - 60_000);
+    await base.prisma.trabajo.update({
+      where: { id: feedback.id },
+      data: { estado: "en_curso", intentos: POLITICA_POR_TIPO.generar_feedback.tope, leaseVenceEn: vencido, ticketHash: "viejo" },
+    });
+    // Uno viejo, de antes del tope al reclamar: pendiente con más intentos que el tope.
+    await base.prisma.trabajo.update({
+      where: { id: borrado.id },
+      data: { estado: "pendiente", intentos: POLITICA_POR_TIPO.borrar_audio_r2.tope + 3 },
+    });
+
+    const worker = await entregarTrabajos({ prisma: base.db, ahora: AHORA, limite: 50 });
+    const app = await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 });
+    expect(worker.some((t) => t.trabajoId === feedback.id)).toBe(false);
+    expect(app.some((t) => t.id === borrado.id)).toBe(false);
+
+    for (const id of [feedback.id, borrado.id]) {
+      expect(await base.prisma.trabajo.findUniqueOrThrow({ where: { id } })).toMatchObject({
+        estado: "fallido", ultimoError: "lease_vencido_al_tope", leaseVenceEn: null, ticketHash: null,
+      });
+    }
+    const fila = await filaDe(base.prisma, sesionId);
+    expect(fila?.feedbackEstado).toBe("fallido");
+    expect(fila?.feedbackError).toBe("lease_vencido_al_tope");
+    // Y después tampoco: fallido es terminal.
+    const despues = new Date(AHORA.getTime() + 24 * 60 * 60_000);
+    expect((await reclamarTrabajos({ prisma: base.db, ejecutor: "worker", ahora: despues, limite: 50 })).some((t) => t.id === feedback.id)).toBe(false);
+  });
+
   it("un resultado con intentos viejos no pisa un reclamo nuevo (409)", async () => {
     const trabajo = await crearTrabajo({ prisma: base.db, tipo: "borrar_audio_r2", payload: { prefijo: "x/" }, organizationId: org.orgId });
     const [primero] = (await reclamarTrabajos({ prisma: base.db, ejecutor: "app", ahora: AHORA, limite: 50 })).filter((t) => t.id === trabajo.id);
