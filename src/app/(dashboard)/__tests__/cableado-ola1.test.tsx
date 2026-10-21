@@ -55,3 +55,15 @@ it.each([
   expect(screen.queryByRole("button", {name:/reintentar/i})).toBeNull();
   expect(m.get).toHaveBeenCalledWith("/api/recordatorios/whatsapp/t1", expect.objectContaining({signal:expect.any(AbortSignal)}));
 });
+it("reprogramar desde el detalle vuelve a leer el aviso: el de la fecha nueva está pendiente", async () => {
+  m.get.mockImplementation(async (url:string) => {
+    if(url === "/api/sesion-clinica?turnoId=t1") return null;
+    if(url === "/api/recordatorios/whatsapp/t1") return { avisadoEn: m.get.mock.calls.filter(([u]) => u === url).length === 1 ? "2026-09-14T22:10:00.000Z" : null };
+    throw Error("Ruta vieja: " + url);
+  });
+  const { rerender } = render(<TurnoDetailSheet open turno={turno} onClose={vi.fn()} onUpdated={vi.fn()} />);
+  expect(await screen.findByText(recordatorioAvisado("14/09"))).toBeTruthy();
+  rerender(<TurnoDetailSheet open turno={{ ...turno, fecha: new Date("2026-09-22T15:00:00Z") }} onClose={vi.fn()} onUpdated={vi.fn()} />);
+  expect(await screen.findByText(RECORDATORIO_PENDIENTE)).toBeTruthy();
+  expect(screen.queryByText(recordatorioAvisado("14/09"))).toBeNull();
+});

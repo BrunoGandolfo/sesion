@@ -152,7 +152,7 @@ src/components/forms/buscador-paciente.tsx
 src/components/forms/resultado-serie.tsx
 src/app/api/_lib/casos-uso/crear-turno.ts
 src/app/api/_lib/casos-uso/turnos.ts
-src/app/api/_lib/casos-uso/envios-del-turno.ts
+src/app/api/_lib/casos-uso/recordatorios-whatsapp.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/lib/glosario.ts
 src/lib/constantes-turno.ts

@@ -22,6 +22,7 @@ import { deudaDePaciente } from "@/app/api/_lib/domain";
 import { TEMPLATE_COBRO_DEFAULT } from "@/lib/deudas";
 import { enlaceWhatsapp } from "@/lib/whatsapp";
 import { ApiError } from "@/app/api/_lib/responses";
+import { recordarCobroSchema } from "@/app/api/_lib/schemas";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
@@ -327,6 +328,16 @@ describe("la apertura por WhatsApp", () => {
       data: { organizationId: base.orgId, turnoId: turno.id, tipo: "recordatorio", fechaTurno: turno.fecha, abiertoEn: AHORA, usuarioId: "u" },
     });
     expect((await ultimoAvisoPorPaciente(db, base.orgId, [base.pacienteId])).size).toBe(0);
+  });
+});
+
+describe("el cuerpo del POST", () => {
+  it("vacío vale; el { canal: \"whatsapp\" } de una pestaña abierta antes del despliegue también (WhatsApp ya se abrió)", () => {
+    expect(recordarCobroSchema.safeParse({}).success).toBe(true);
+    expect(recordarCobroSchema.safeParse({ canal: "whatsapp" }).success).toBe(true);
+    // Un SMS ya no se puede pedir, ni campos de más.
+    expect(recordarCobroSchema.safeParse({ canal: "sms" }).success).toBe(false);
+    expect(recordarCobroSchema.safeParse({ otro: 1 }).success).toBe(false);
   });
 });
 

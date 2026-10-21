@@ -316,7 +316,8 @@ export function puedeTransicionTurno(op: TransicionTurno, estado: string): boole
 }
 
 /** Un turno programado es el único que avisa: sus recordatorios siguen
- *  vivos. Cualquier otro estado los apaga (casos-uso/envios-del-turno.ts). */
+ *  vivos. Cualquier otro estado lo saca de los recordatorios de Hoy
+ *  (casos-uso/recordatorios-whatsapp.ts). */
 export function turnoSigueProgramado(estado: string): boolean {
   return estado === "programado";
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Cancelar un turno desde el detalle: la confirmación habla del recordatorio
-// por WhatsApp (sólo WhatsApp, CANAL_RECORDATORIO_VIGENTE), con el texto del
+// por WhatsApp (el único que hay), con el texto del
 // glosario, y recién el segundo toque cancela.
 import * as React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";

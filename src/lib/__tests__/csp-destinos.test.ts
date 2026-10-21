@@ -45,7 +45,6 @@ const SRC = join(RAIZ, "src");
 /** Hosts a los que sólo habla el SERVIDOR. No van en la CSP. */
 const SERVIDOR_A_SERVIDOR: Record<string, string> = {
   "api.resend.com": "correo transaccional y alertas (src/lib/correo.ts)",
-  "api.twilio.com": "SMS (src/lib/sms/twilio.ts)",
   "api.anthropic.com": "ayuda y análisis clínico (src/lib/anthropic-mensajes.ts)",
 };
 
@@ -57,9 +56,7 @@ const PROPIOS_O_NAVEGACION: Record<string, string> = {
 
 /** Hosts que aparecen sólo como TEXTO (un enlace dentro de un correo de
  *  alerta): nadie les habla, ni el navegador ni el servidor. */
-const SOLO_TEXTO: Record<string, string> = {
-  "www.twilio.com": "enlace a la documentación del código de error de Twilio, va en el correo de alerta (src/lib/sms/clasificar.ts)",
-};
+const SOLO_TEXTO: Record<string, string> = {};
 
 /** Un host declarado en DESTINOS_EXTERNOS: comodín `*.` al principio, o exacto. */
 function coincideConDestino(host: string, patron: string): boolean {

@@ -169,7 +169,7 @@ src/components/grabacion/ConsentimientoForm.tsx
 src/lib/consentimiento.ts
 src/app/api/pacientes/route.ts
 src/app/api/_lib/casos-uso/pacientes.ts
-src/app/api/_lib/casos-uso/envios-del-turno.ts
+src/app/api/_lib/casos-uso/recordatorios-whatsapp.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx
