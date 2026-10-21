@@ -7,9 +7,11 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { abrirConversacion, PEDIDO_APERTURA } from "@/app/api/_lib/casos-uso/lux/conversar";
 import {
   cargarConversacion, guardarTurnos, type ClienteMemoriaLux,
 } from "@/app/api/_lib/casos-uso/lux/memoria";
+import type { crearConversacionConHerramientas, ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { aadDe, descifrar } from "@/lib/encryption";
 import { avisoMirandoTranscripcion, MAX_TURNOS_HISTORIAL_LUX } from "@/lib/lux/contrato";
 
@@ -34,6 +36,10 @@ async function otraPaciente(org: Org): Promise<string> {
   });
   return p.id;
 }
+
+const RESULTADO: ResultadoConversacion = {
+  texto: "Hola.", tokensEntrada: 1, tokensSalida: 1, cacheLeido: 0, cacheEscrito: 0, motivoDeCorte: "end_turn", rondas: 1, llamadas: [],
+};
 
 const identidad = (org: Org, pacienteId = org.pacienteId) => ({ organizationId: org.orgId, pacienteId });
 
@@ -155,5 +161,69 @@ describe("la vida de la paciente", () => {
     await base.prisma.paciente.delete({ where: { id: beto } });
     expect(await base.prisma.conversacionLux.count({ where: { pacienteId: beto } })).toBe(0);
     expect(await base.prisma.conversacionLux.count({ where: { pacienteId: org.pacienteId } })).toBe(2);
+  });
+});
+
+describe("al abrir, lo guardado viaja al modelo", () => {
+  function doble() {
+    const pedidos: Parameters<typeof crearConversacionConHerramientas>[0][] = [];
+    const crearConversacion: typeof crearConversacionConHerramientas = async (pedido) => {
+      pedidos.push(pedido);
+      return { fragmentos: (async function* () { yield "Hola."; })(), resultado: Promise.resolve(RESULTADO), cancelar: () => {}, progreso: () => RESULTADO };
+    };
+    return { pedidos, crearConversacion };
+  }
+  const abrir = (org: Org, crearConversacion: typeof crearConversacionConHerramientas) => abrirConversacion({
+    prisma: db(), organizationId: org.orgId, usuarioId: org.userId, pacienteId: org.pacienteId,
+    apiKey: "k", systemPrompt: "p", crearConversacion,
+  });
+
+  it("sin conversación previa, sólo el pedido de apertura", async () => {
+    const org = await consultorio();
+    const { pedidos, crearConversacion } = doble();
+    const conversacion = await abrir(org, crearConversacion);
+    expect(pedidos[0].messages.at(-1)).toEqual({ role: "user", content: expect.stringContaining("Hablá vos primero") });
+    expect(pedidos[0].messages).toHaveLength(1);
+    expect(conversacion.turnosHistorial).toBe(0);
+  });
+
+  it("con conversación previa, los turnos guardados van antes, sin la marca y sin los cortados", async () => {
+    const org = await consultorio();
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId,
+      respuesta: { texto: "APERTURA_VIEJA", en: new Date(Date.UTC(2026, 9, 1, 14)), interrumpida: false },
+    });
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId,
+      pregunta: { texto: "PREGUNTA_VIEJA", en: new Date(Date.UTC(2026, 9, 1, 15)) },
+      respuesta: { texto: `Miro.\n${avisoMirandoTranscripcion("04/08")}\nRESPUESTA_VIEJA`, en: new Date(Date.UTC(2026, 9, 1, 15, 1)), interrumpida: false },
+    });
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId,
+      pregunta: { texto: "PREGUNTA_CORTADA", en: new Date(Date.UTC(2026, 9, 2, 15)) },
+      respuesta: { texto: "RESPUESTA_CORTADA", en: new Date(Date.UTC(2026, 9, 2, 15, 1)), interrumpida: true },
+    });
+    const { pedidos, crearConversacion } = doble();
+    const conversacion = await abrir(org, crearConversacion);
+    const mensajes = pedidos[0].messages;
+    expect(mensajes.slice(0, -1)).toEqual([
+      { role: "user", content: PEDIDO_APERTURA },
+      { role: "assistant", content: "APERTURA_VIEJA" },
+      { role: "user", content: "PREGUNTA_VIEJA" },
+      { role: "assistant", content: "Miro.\n_(mirando la transcripción del 04/08)_\nRESPUESTA_VIEJA" },
+      { role: "user", content: "PREGUNTA_CORTADA" },
+    ]);
+    expect(mensajes.at(-1)!.role).toBe("user");
+    expect(JSON.stringify(mensajes)).not.toContain("RESPUESTA_CORTADA");
+    expect(conversacion.turnosHistorial).toBe(4);
+  });
+
+  it("lo de otra paciente no viaja", async () => {
+    const org = await consultorio();
+    const beto = await otraPaciente(org);
+    await intercambio(org, 0, beto);
+    const { pedidos, crearConversacion } = doble();
+    await abrir(org, crearConversacion);
+    expect(JSON.stringify(pedidos[0].messages)).not.toContain("PREGUNTA_0");
   });
 });

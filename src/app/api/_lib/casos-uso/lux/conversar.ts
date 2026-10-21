@@ -2,12 +2,13 @@
 // primero) y responder una pregunta con su historial.
 //
 // Los dos hacen lo mismo en el mismo orden: clave del proveedor (503 si
-// falta, antes de leer nada), material del paciente (404 si no es de la
-// organización; las transcripciones que entran quedan auditadas), llamada al
-// modelo con el bucle de herramientas, y devuelven el flujo. El rastro de la
-// conversación (lux.abrir / lux.pregunta) lo escribe registrarConversacionLux
-// cuando el stream terminó, porque recién ahí hay tokens: métricas y nada
-// más. El texto de la conversación no se escribe en ninguna tabla ni log.
+// falta, antes de leer nada), historial, material del paciente (404 si no es
+// de la organización; las transcripciones que entran quedan auditadas),
+// llamada al modelo con el bucle de herramientas, y devuelven el flujo. El
+// rastro de la conversación (lux.abrir / lux.pregunta) lo escribe
+// registrarConversacionLux cuando el stream terminó, porque recién ahí hay
+// tokens: métricas y nada más. El texto de la conversación no va a ningún
+// log ni a la auditoría: sólo a conversaciones_lux, cifrado (memoria.ts).
 //
 // Runtime nodejs: el prompt se lee del disco (src/lib/lux/prompt.ts).
 
@@ -33,6 +34,7 @@ import { ApiError } from "../../responses";
 import { ErrorProveedorAsistente } from "../ayuda/reservar-cupo";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
 import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
+import { cargarConversacion, type TurnoGuardadoLux } from "./memoria";
 
 /** Incluye el razonamiento del modelo (thinking adaptativo de Haiku 5.5). */
 export const MAX_TOKENS_LUX = 8000;
@@ -73,6 +75,8 @@ interface ConversarBase {
 
 export interface ConversacionLux {
   flujo: FlujoConversacion;
+  /** Cuántos turnos anteriores llegaron al modelo. */
+  turnosHistorial: number;
   material: Pick<MaterialLux, "notas" | "notasOmitidas" | "transcripciones" | "transcripcionesOmitidas" | "releidas" | "releidasOmitidas">;
   ejecutor: EjecutorLux;
 }
@@ -83,23 +87,38 @@ export async function autorizarPaciente(prisma: ClienteLux, organizationId: stri
   await requirePaciente(prisma, pacienteId, organizationId);
 }
 
+/** La apertura: lo guardado de esta paciente (conversaciones_lux) y, al
+ *  final, el pedido de que Lux hable primero. */
 export function abrirConversacion(input: ConversarBase): Promise<ConversacionLux> {
-  return conversar(input, [{ role: "user", content: PEDIDO_APERTURA }]);
+  return conversar(input, async () => paraElModelo(await cargarConversacion(input.prisma, input)), PEDIDO_APERTURA);
 }
 
 export function responder(input: ConversarBase & { pregunta: string; historial?: TurnoHistorialLux[] }): Promise<ConversacionLux> {
   const pregunta = input.pregunta.trim();
   if (pregunta === "") throw new ApiError("Escribí una pregunta.", 400);
   if (pregunta.length > LARGO_MAX_PREGUNTA_LUX) throw new ApiError(MENSAJE_PREGUNTA_LARGA_LUX, 400);
-  const vistos = historialQueViaja(input.historial ?? []);
-  // El modelo lee sus turnos sin la marca del servidor; el material, con ella.
-  const previos: MessageParam[] = vistos.map((t) => ({
-    role: t.rol === "usuaria" ? "user" : "assistant", content: sinMarcasLux(t.texto),
-  }));
-  if (previos[0]?.role === "assistant") previos.unshift({ role: "user", content: PEDIDO_APERTURA });
-  // Las transcripciones que Lux leyó en los turnos que el modelo va a ver
-  // vuelven al material.
-  return conversar(input, [...previos, { role: "user", content: pregunta }], leidasEnHistorial(vistos));
+  return conversar(input, async () => input.historial ?? [], pregunta);
+}
+
+/** Lo guardado, como lo lee el modelo: una respuesta cortada no viaja (la
+ *  pregunta que la pidió, sí). */
+export function paraElModelo(turnos: readonly TurnoGuardadoLux[]): TurnoHistorialLux[] {
+  return turnos
+    .filter((t) => !(t.rol === "lux" && t.interrumpida))
+    .map((t) => ({ rol: t.rol === "profesional" ? "usuaria" : "asistente", texto: t.texto }));
+}
+
+/** Los mensajes del historial. El modelo lee sus turnos sin la marca del
+ *  servidor (el material, con ella). Un turno de Lux que no responde a una
+ *  pregunta (una apertura) va precedido del pedido de apertura: la API
+ *  exige que el primer mensaje sea de la usuaria. */
+function mensajesDe(vistos: readonly TurnoHistorialLux[]): MessageParam[] {
+  const mensajes: MessageParam[] = [];
+  for (const t of vistos) {
+    if (t.rol === "asistente" && mensajes.at(-1)?.role !== "user") mensajes.push({ role: "user", content: PEDIDO_APERTURA });
+    mensajes.push({ role: t.rol === "usuaria" ? "user" : "assistant", content: sinMarcasLux(t.texto) });
+  }
+  return mensajes;
 }
 
 /** Los turnos que llegan al modelo: los últimos MAX_TURNOS_HISTORIAL no
@@ -115,17 +134,26 @@ export function historialQueViaja(historial: readonly TurnoHistorialLux[]): Turn
   return turnos;
 }
 
-async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasEnConversacion: string[] = []): Promise<ConversacionLux> {
+async function conversar(
+  input: ConversarBase,
+  historial: () => Promise<TurnoHistorialLux[]>,
+  ultimo: string,
+): Promise<ConversacionLux> {
   const apiKey = input.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.warn("[lux] ANTHROPIC_API_KEY no configurada");
     throw new ApiError(MENSAJE_SIN_CLAVE_LUX, 503);
   }
 
-  // 404 si el paciente no es de la organización. Errores de base: 500.
+  const vistos = historialQueViaja(await historial());
+  const mensajes: MessageParam[] = [...mensajesDe(vistos), { role: "user", content: ultimo }];
+
+  // 404 si el paciente no es de la organización. Errores de base: 500. Las
+  // transcripciones que Lux leyó en los turnos que el modelo va a ver
+  // vuelven al material.
   const material = await armarMaterial({
     prisma: input.prisma, organizationId: input.organizationId,
-    pacienteId: input.pacienteId, usuarioId: input.usuarioId, leidasEnConversacion,
+    pacienteId: input.pacienteId, usuarioId: input.usuarioId, leidasEnConversacion: leidasEnHistorial(vistos),
   });
   const ejecutor = ejecutorLux({
     prisma: input.prisma, organizationId: input.organizationId, pacienteId: input.pacienteId,
@@ -151,6 +179,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
     );
     return {
       flujo,
+      turnosHistorial: vistos.length,
       material: {
         notas: material.notas,
         notasOmitidas: material.notasOmitidas,

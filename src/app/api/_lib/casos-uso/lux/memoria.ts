@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import type { db } from "@/lib/db";
 import {
   LARGO_MAX_PREGUNTA_LUX, LARGO_MAX_TURNO_LUX, MAX_TURNOS_HISTORIAL_LUX, sinMarcasLux,
+  type TurnoConversacionLux,
 } from "@/lib/lux/contrato";
 import { cifrarConversacionLux } from "@/lib/prisma-encryption";
 
@@ -54,6 +55,16 @@ export async function cargarConversacion(
     take: limite,
   });
   return filas.reverse().map((f) => ({ rol: f.rol, texto: f.contenido, interrumpida: f.interrumpida, creadoEn: f.creadoEn }));
+}
+
+/** GET de la pantalla: 404 si la paciente no es de la organización; si no,
+ *  lo guardado, con la fecha como texto. */
+export async function conversacionGuardada(
+  prisma: ClienteMemoriaLux, organizationId: string, pacienteId: string,
+): Promise<TurnoConversacionLux[]> {
+  await requirePaciente(prisma, pacienteId, organizationId);
+  const turnos = await cargarConversacion(prisma, { organizationId, pacienteId });
+  return turnos.map((t) => ({ ...t, creadoEn: t.creadoEn.toISOString() }));
 }
 
 export interface GuardarTurnosInput extends IdentidadLux {

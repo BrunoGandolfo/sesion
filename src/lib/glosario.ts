@@ -2161,3 +2161,13 @@ export const CORTE_LIMITE_SIN_COPIA =
 /** Como SIN_CONEXION_FRANJA, cuando la copia en el teléfono no se pudo guardar. */
 export const SIN_CONEXION_FRANJA_SIN_COPIA =
   "Sin señal, y la copia en el teléfono no se pudo guardar. No cierres esta pantalla.";
+
+// ─── lux-memoria ─────────────────────────────────────────────────────────────
+
+/** El separador de la conversación con Lux: cada día de lo guardado, y hoy. */
+export function luxConversacionDel(fecha: string): string {
+  return `Conversación del ${fecha}`;
+}
+
+/** No se pudo traer lo guardado: Lux abre igual (el servidor sí lo lee). */
+export const LUX_HISTORIAL_NO_CARGO = "No se pudo mostrar la conversación anterior. Lux la tiene igual.";

@@ -5,18 +5,22 @@
 // hacia POST /api/pacientes/{id}/lux.
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import { avisoMirandoTranscripcion, MARCA_ESTADO_LUX, peticionLuxSchema } from "@/lib/lux/contrato";
+import {
+  avisoMirandoTranscripcion, MARCA_ESTADO_LUX, peticionLuxSchema, type TurnoConversacionLux,
+} from "@/lib/lux/contrato";
 
 import { ConversacionLux } from "../conversacion-lux";
 import {
   LUX_CONVERSACION,
   LUX_EN_QUE_ME_BASO,
+  LUX_HISTORIAL_NO_CARGO,
   LUX_NUEVA,
   LUX_LEYENDO,
   LUX_PLACEHOLDER,
   LUX_TOPE,
+  luxConversacionDel,
   luxMirando,
   luxQueLee,
   luxSaludo,
@@ -45,11 +49,22 @@ function streamManual() {
 const respuestaEntera = (texto: string) =>
   new Response(texto, { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
 
-let fetchMock: ReturnType<typeof vi.fn>;
+/** Los POST a Lux (apertura y preguntas): cada test les da su respuesta. */
+type Pedido = (url: string, init?: RequestInit) => Promise<Response>;
+let fetchMock: Mock<Pedido>;
+/** El GET de la conversación guardada: por defecto, vacía. */
+let getMock: Mock<Pedido>;
+const guardada = (turnos: TurnoConversacionLux[]) =>
+  new Response(JSON.stringify({ data: { turnos } }), { status: 200, headers: { "content-type": "application/json" } });
 beforeEach(() => {
-  fetchMock = vi.fn();
-  vi.stubGlobal("fetch", fetchMock);
+  fetchMock = vi.fn<Pedido>();
+  getMock = vi.fn<Pedido>(async () => guardada([]));
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+    init?.method === "GET" ? getMock(url, init) : fetchMock(url, init));
 });
+
+/** Deja correr el GET de lo guardado y el arranque de la apertura. */
+const alAbrir = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -79,6 +94,8 @@ describe("apertura", () => {
     expect(screen.getByText(luxQueLee("Ana")).textContent).toContain("No guarda esta conversación.");
     // La apertura también muestra "Lux está leyendo" con sus puntos.
     expect(screen.getByRole("status").textContent).toContain(LUX_LEYENDO);
+    await alAbrir();
+    expect(getMock).toHaveBeenCalledWith("/api/pacientes/p1/lux", expect.objectContaining({ method: "GET" }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/pacientes/p1/lux");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
@@ -97,6 +114,51 @@ describe("apertura", () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
     render(<ConversacionLux pacienteId="p1" paciente="Ana" profesional="" />);
     expect(screen.getByText("Hola, dame un momentito que repaso lo de Ana…")).toBeTruthy();
+  });
+});
+
+describe("la conversación guardada", () => {
+  const de = (rol: TurnoConversacionLux["rol"], texto: string, creadoEn: string, interrumpida = false): TurnoConversacionLux =>
+    ({ rol, texto, creadoEn, interrumpida });
+
+  it("se muestra antes del saludo, con un separador por día, y la apertura viene después", async () => {
+    getMock.mockResolvedValueOnce(guardada([
+      de("lux", "<citas>Nota del 03/09</citas>Apertura vieja.", "2025-09-30T14:00:00.000Z"),
+      de("profesional", "¿Y el sueño?", "2025-10-01T14:00:00.000Z"),
+      de("lux", `Miro.\n${avisoMirandoTranscripcion("03/09")}\nDuerme mal.`, "2025-10-01T14:01:00.000Z"),
+    ]));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Apertura de hoy."));
+    montar();
+    await alAbrir();
+
+    const texto = hilo().textContent!;
+    const orden = [luxConversacionDel("30/09"), "Apertura vieja.", luxConversacionDel("01/10"), "¿Y el sueño?", "Duerme mal.",
+      luxSaludo("Mariana", "Ana"), "Apertura de hoy."].map((t) => texto.indexOf(t));
+    expect(orden.every((p) => p >= 0)).toBe(true);
+    expect(orden).toEqual([...orden].sort((a, b) => a - b));
+    // Hoy también tiene su separador, antes del saludo.
+    expect(within(hilo()).getAllByRole("separator")).toHaveLength(3);
+    // Las marcas de lo guardado se leen igual que las del stream.
+    expect(screen.getAllByText(LUX_EN_QUE_ME_BASO)).toHaveLength(1);
+    expect(screen.getByText(luxMirando("03/09"))).toBeTruthy();
+    expect(texto).not.toMatch(/<\/?citas>|_\(/);
+    expect(cuerpos()).toEqual([{}]);
+  });
+
+  it("sin conversación guardada no hay separadores", async () => {
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
+    montar();
+    await alAbrir();
+    expect(within(hilo()).queryAllByRole("separator")).toHaveLength(0);
+  });
+
+  it("si no se pudo traer lo guardado, lo dice y Lux abre igual", async () => {
+    getMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: "x" }), { status: 500 }));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola igual."));
+    montar();
+    await alAbrir();
+    expect(screen.getByRole("alert").textContent).toBe(LUX_HISTORIAL_NO_CARGO);
+    expect(hilo().textContent).toContain("Hola igual.");
   });
 });
 

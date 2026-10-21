@@ -2,12 +2,13 @@
 // uso se dobla (su comportamiento está en lux-integracion.test.ts); el rastro
 // es el de verdad, escrito con un registrarAuditoria doblado.
 
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { POST } from "@/app/api/pacientes/[id]/lux/route";
+import { GET, POST } from "@/app/api/pacientes/[id]/lux/route";
 import { registrarAuditoria } from "@/app/api/_lib/auditoria";
 import { abrirConversacion, autorizarPaciente, ErrorProveedorLux, responder } from "@/app/api/_lib/casos-uso/lux/conversar";
 import { devolverCupo, reservarCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
+import { conversacionGuardada } from "@/app/api/_lib/casos-uso/lux/memoria";
 import { ApiError } from "@/app/api/_lib/responses";
 import type { ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { db } from "@/lib/db";
@@ -23,6 +24,10 @@ vi.mock("@/app/api/_lib/casos-uso/lux/conversar", async (original) => ({
   responder: vi.fn(),
   autorizarPaciente: vi.fn(),
 }));
+vi.mock("@/app/api/_lib/casos-uso/lux/memoria", async (original) => ({
+  ...(await original<typeof import("@/app/api/_lib/casos-uso/lux/memoria")>()),
+  conversacionGuardada: vi.fn(),
+}));
 vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", async (original) => ({
   ...(await original<typeof import("@/app/api/_lib/casos-uso/ayuda/reservar-cupo")>()),
   reservarCupo: vi.fn(),
@@ -36,6 +41,7 @@ const RESULTADO: ResultadoConversacion = {
 const PROGRESO = { tokensEntrada: 7, tokensSalida: 3, cacheLeido: 0, cacheEscrito: 0, rondas: 1, llamadas: [] };
 const conversacion = (fragmentos: string[] = ["<citas>\n01/09: \"me voy\"\n</citas>\n", "**TEXTO**"]) => ({
   flujo: { fragmentos: (async function* () { yield* fragmentos; })(), resultado: Promise.resolve(RESULTADO), cancelar: vi.fn(), progreso: () => PROGRESO },
+  turnosHistorial: 0,
   material: { notas: 3, notasOmitidas: 0, transcripciones: ["a", "b"], transcripcionesOmitidas: 0, releidas: [], releidasOmitidas: 0 },
   ejecutor: { leidas: [], aviso: () => null, ejecutar: vi.fn() },
 });
@@ -79,6 +85,7 @@ it("sin pregunta ni historial es la apertura: autoriza, reserva cupo de Lux y tr
 });
 
 it("con pregunta responde con el historial y audita lux.pregunta sin el texto", async () => {
+  vi.mocked(responder).mockResolvedValue({ ...conversacion(), turnosHistorial: 1 });
   const respuesta = await pedir({ pregunta: "PREGUNTA_SECRETA", historial: [{ rol: "asistente", texto: "hola" }] });
   await leer(respuesta);
   expect(responder).toHaveBeenCalledWith(expect.objectContaining({
@@ -210,4 +217,27 @@ it("cancelar a mitad deja lux.pregunta con interrumpida, una sola vez", async ()
   await new Promise((r) => setTimeout(r, 10));
   expect(registrarAuditoria).toHaveBeenCalledTimes(1);
   expect(devolverCupo).not.toHaveBeenCalled();
+});
+
+describe("GET: la conversación guardada", () => {
+  const leerGuardada = (id = "pac-1") => GET(
+    new Request(`http://localhost/api/pacientes/${id}/lux`),
+    { params: Promise.resolve({ id }) },
+  );
+
+  it("devuelve los turnos de la paciente de la sesión, sin caché", async () => {
+    const turnos = [{ rol: "lux", texto: "Hola.", interrumpida: false, creadoEn: "2026-10-01T14:00:00.000Z" }];
+    vi.mocked(conversacionGuardada).mockResolvedValue(turnos as never);
+    const respuesta = await leerGuardada();
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.headers.get("Cache-Control")).toContain("no-store");
+    expect(await respuesta.json()).toEqual({ data: { turnos } });
+    expect(conversacionGuardada).toHaveBeenCalledWith(db, "org", "pac-1");
+    expect(reservarCupo).not.toHaveBeenCalled();
+  });
+
+  it("paciente ajeno: 404", async () => {
+    vi.mocked(conversacionGuardada).mockRejectedValue(new ApiError("Paciente no encontrado", 404));
+    expect((await leerGuardada()).status).toBe(404);
+  });
 });

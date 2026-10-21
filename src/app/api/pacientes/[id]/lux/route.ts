@@ -1,9 +1,12 @@
-// POST /api/pacientes/[id]/lux — conversar con Lux sobre un paciente.
+// /api/pacientes/[id]/lux — conversar con Lux sobre un paciente.
 //
-// Sin `pregunta` y sin `historial`: apertura (Lux habla primero). Con
-// `pregunta`: respuesta, con el historial que manda la pantalla (las charlas
-// no se guardan en ningún lado). Mismo transporte que /api/ayuda: text/plain
-// en streaming. Contrato completo en docs/contrato-lux.md.
+// GET: la conversación guardada de esa paciente (los últimos turnos), para
+// que la pantalla la muestre al abrir.
+//
+// POST sin `pregunta` y sin `historial`: apertura (Lux habla primero, con lo
+// guardado como historial). Con `pregunta`: respuesta, con el historial que
+// manda la pantalla. Mismo transporte que /api/ayuda: text/plain en
+// streaming. Contrato completo en docs/contrato-lux.md.
 //
 // La ruta valida, autoriza, reserva el cupo de Lux, llama al caso de uso y,
 // cuando el stream terminó (entero, cancelado o cortado), le pide que deje el
@@ -33,13 +36,24 @@ import {
   responder,
   type ConversacionLux,
 } from "../../../_lib/casos-uso/lux/conversar";
-import { errorResponse, leerJson, validationError } from "../../../_lib/responses";
+import { conversacionGuardada } from "../../../_lib/casos-uso/lux/memoria";
+import { errorResponse, leerJson, okSinCache, validationError } from "../../../_lib/responses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // segundos; la convención está en scripts/ci/max-duration.mjs
 
 type RouteParams = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, { params }: RouteParams) {
+  try {
+    const { organizationId } = await getSessionActor();
+    const { id: pacienteId } = await params;
+    return okSinCache({ turnos: await conversacionGuardada(db, organizationId, pacienteId) });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
@@ -79,7 +93,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         prisma: db, organizationId, userId, pacienteId, tipo, conversacion, resultado,
         largoPregunta: pregunta?.length ?? 0,
         largoRespuesta,
-        turnosHistorial: historial?.length ?? 0,
+        turnosHistorial: conversacion.turnosHistorial,
         interrumpida,
       });
     };

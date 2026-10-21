@@ -46,6 +46,26 @@ export const peticionLuxSchema = z.object({
 export type TurnoHistorialLux = z.infer<typeof turnoHistorialLuxSchema>;
 export type PeticionLux = z.infer<typeof peticionLuxSchema>;
 
+// ─── La conversación guardada (GET) ─────────────────────────────────────────
+
+/** Un turno guardado en conversaciones_lux, como lo recibe la pantalla. El
+ *  texto de Lux viene tal como llegó: <citas> y líneas de estado con la
+ *  marca, que puso el servidor. */
+export interface TurnoConversacionLux {
+  rol: "profesional" | "lux";
+  texto: string;
+  /** La respuesta se cortó: es lo que llegó. */
+  interrumpida: boolean;
+  /** ISO 8601. */
+  creadoEn: string;
+}
+
+/** GET /api/pacientes/[id]/lux: los últimos MAX_TURNOS_HISTORIAL_LUX turnos,
+ *  del más viejo al más nuevo. */
+export interface ConversacionGuardadaLux {
+  turnos: TurnoConversacionLux[];
+}
+
 /** El status con que la ruta dice que se terminó el cupo del día. */
 export const STATUS_TOPE_LUX = 429;
 
