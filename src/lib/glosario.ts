@@ -2161,3 +2161,60 @@ export const CORTE_LIMITE_SIN_COPIA =
 /** Como SIN_CONEXION_FRANJA, cuando la copia en el teléfono no se pudo guardar. */
 export const SIN_CONEXION_FRANJA_SIN_COPIA =
   "Sin señal, y la copia en el teléfono no se pudo guardar. No cierres esta pantalla.";
+
+// ─── whatsapp-cobros ─────────────────────────────────────────────────────────
+
+/** La plantilla del aviso de cobro, en Tu consultorio. */
+export const COBRO_SECCION = "Aviso de cobro";
+export const COBRO_MENSAJE_EDITOR = "Mensaje del aviso de cobro";
+export const COBRO_VISTA_PREVIA = "Vista previa del aviso de cobro";
+export const COBRO_MENSAJE_VACIO = "El aviso de cobro no puede quedar vacío.";
+export const COBRO_MENSAJE_AYUDA =
+  "Es el mensaje que sale cuando tocás Recordar cobro en Cobros, por SMS o por WhatsApp según cómo recordás los turnos. Tocá una ficha para agregarla donde está el cursor.";
+
+/** Recordar cobro según el canal (accionDeCobro, src/lib/aviso-cobro.ts):
+ *  el botón, su nombre accesible, la confirmación y lo que se le dice
+ *  después. Con SMS, los textos de siempre. */
+export const RECORDAR_COBRO_WHATSAPP = "Recordar cobro por WhatsApp";
+export const AVISO_COBRO_PROGRAMADO = "Aviso programado. Sale en los próximos minutos.";
+export const AVISO_COBRO_YA_PEDIDO = "Ya pediste este aviso hoy. No se programó otro.";
+/** WhatsApp se abrió y la app anotó el aviso; el mensaje lo manda ella. */
+export const AVISO_COBRO_WHATSAPP_ANOTADO = "Quedó anotado. El mensaje lo mandás vos en WhatsApp.";
+export const RECORDAR_COBRO_POR_CANAL = {
+  sms: {
+    boton: RECORDAR_COBRO,
+    botonPara: (nombre: string) => `Recordar cobro a ${nombre} por SMS`,
+    accion: ENVIAR_SMS,
+    destino: SMS_DESTINO,
+  },
+  whatsapp: {
+    boton: RECORDAR_COBRO_WHATSAPP,
+    botonPara: (nombre: string) => `Recordar cobro a ${nombre} por WhatsApp`,
+    accion: ABRIR_WHATSAPP,
+    destino: "Se abre la conversación con",
+  },
+} as const;
+
+/** La plantilla del recordatorio de turno en Tu consultorio, según el canal.
+ *  Con Ambos también sale el SMS: valen los textos del SMS. */
+const RECORDATORIO_AYUDA_FICHAS =
+  "Tocá una ficha para agregarla donde está el cursor. El consultorio y tu nombre van al principio; al final se indica a qué teléfono llamar para cambios. Se agregan solos si los borrás.";
+const TEXTOS_RECORDATORIO_SMS = {
+  nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el SMS también se leería así.",
+  ayuda: `${RECORDATORIO_AYUDA_FICHAS} No pidas respuestas por SMS: no llegan.`,
+  vistaPrevia: "Vista previa del SMS",
+};
+export const RECORDATORIO_TEXTOS_POR_CANAL = {
+  sms: TEXTOS_RECORDATORIO_SMS,
+  ambos: TEXTOS_RECORDATORIO_SMS,
+  whatsapp: {
+    nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el mensaje también se leería así.",
+    ayuda: RECORDATORIO_AYUDA_FICHAS,
+    vistaPrevia: "Vista previa del mensaje",
+  },
+} as const;
+
+/** La pantalla pidió el aviso por un canal y en Tu consultorio ya hay otro
+ *  (lo cambió en otra pestaña o una colega): no se manda ni se anota nada. */
+export const COBRO_CANAL_CAMBIO =
+  "Cambió cómo recordás los turnos en Tu consultorio. Volvé a cargar Cobros y probá de nuevo.";

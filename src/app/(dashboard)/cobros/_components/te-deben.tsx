@@ -16,12 +16,14 @@ import {
   VER_COBROS_DEL_MES,
   pluralizar,
 } from "@/lib/glosario";
-import type { MetodoPago } from "@/types/domain";
+import type { ConfiguracionDelCobro } from "@/lib/deudas";
+import type { CanalRecordatorio, MetodoPago } from "@/types/domain";
 
 import {
   cobrarSesiones,
   desenlaceDelCobro,
   errorDelCobro,
+  type AvisoDeCobro,
   type DeudorItem,
   type ResultadoCobro,
 } from "./datos";
@@ -29,12 +31,13 @@ import { FilaDeudor } from "./fila-deudor";
 
 /** Qué tiene abierto debajo una fila. De a una por vez en toda la lista: dos
  *  paneles abiertos son dos lugares donde tocar sin querer. */
-type PanelAbierto = { pacienteId: string; modo: "pago" | "sms" } | null;
+type PanelAbierto = { pacienteId: string; modo: "pago" | "aviso" } | null;
 
 export function TeDeben({
   deudores,
   sesionesSinCobrar,
-  nombreProfesional,
+  configCobro,
+  canal,
   ahora,
   onCobrado,
   onCobroIncompleto,
@@ -44,13 +47,14 @@ export function TeDeben({
 }: {
   deudores: DeudorItem[];
   sesionesSinCobrar: number;
-  nombreProfesional: string;
+  configCobro: ConfiguracionDelCobro;
+  canal: CanalRecordatorio;
   ahora: Date;
   /** Todas las sesiones elegidas quedaron cobradas. */
   onCobrado: () => void;
   /** Alguna falló. `huboCobros` dice si antes de fallar entró alguna. */
   onCobroIncompleto: (mensaje: string, huboCobros: boolean) => void;
-  onAvisado: (creado: boolean) => void;
+  onAvisado: (aviso: AvisoDeCobro) => void;
   onError: (mensaje: string) => void;
   onVerCobros: () => void;
 }) {
@@ -120,7 +124,8 @@ export function TeDeben({
             <FilaDeudor
               key={d.pacienteId}
               deudor={d}
-              nombreProfesional={nombreProfesional}
+              configCobro={configCobro}
+              canal={canal}
               ahora={ahora}
               abierto={panel?.pacienteId === d.pacienteId ? panel.modo : null}
               onAbrir={(modo) =>

@@ -216,11 +216,21 @@ export const configUpdateSchema = z.object({
     .trim()
     .min(1, "Falta el template")
     .optional(),
+  /** Plantilla del aviso de cobro, la misma por SMS y por WhatsApp. */
+  templateCobro: z
+    .string()
+    .trim()
+    .min(1, "Falta el template")
+    .optional(),
   orientacionTeorica: orientacionTeoricaSchema.optional(),
   /** Por dónde sale el recordatorio. Lo lee el cron al despachar, así que
    *  cambiarlo alcanza a los turnos ya agendados. */
   canalRecordatorio: z.enum(CANALES_RECORDATORIO).optional(),
 });
+
+/** POST /api/pacientes/[id]/recordar-cobro: el canal que la pantalla usó
+ *  (accionDeCobro). Opcional: un cliente viejo manda `{}`. */
+export const recordarCobroSchema = z.object({ canal: z.enum(["sms", "whatsapp"]).optional() });
 
 // ────────────────────────────────────────────────────────────────────────────
 // WhatsApp asistido — el body (opcional) de

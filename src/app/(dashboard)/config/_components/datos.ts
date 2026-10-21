@@ -4,6 +4,7 @@
 // React.
 
 import { apiGet, apiPatch } from "@/lib/api-client";
+import { TEMPLATE_COBRO_DEFAULT } from "@/lib/deudas";
 import {
   RECORDATORIO_MODO_DEFAULT,
   type RecordatorioModo,
@@ -19,6 +20,7 @@ export type CampoConfig =
   | "recordatorioModo"
   | "canalRecordatorio"
   | "templateRecordatorio"
+  | "templateCobro"
   | "orientacionTeorica";
 
 export type FormConfig = {
@@ -29,6 +31,7 @@ export type FormConfig = {
   recordatorioModo: RecordatorioModo;
   canalRecordatorio: CanalRecordatorio;
   templateRecordatorio: string;
+  templateCobro: string;
   orientacionTeorica: OrientacionTeorica;
 };
 
@@ -40,6 +43,7 @@ type PatchConfig = Partial<{
   recordatorioModo: RecordatorioModo;
   canalRecordatorio: CanalRecordatorio;
   templateRecordatorio: string;
+  templateCobro: string;
   orientacionTeorica: OrientacionTeorica;
 }>;
 
@@ -56,6 +60,7 @@ export const FORM_VACIO: FormConfig = {
   recordatorioModo: RECORDATORIO_MODO_DEFAULT,
   canalRecordatorio: "sms",
   templateRecordatorio: TEMPLATE_SMS_SUGERIDO,
+  templateCobro: TEMPLATE_COBRO_DEFAULT,
   orientacionTeorica: "cbt_mi",
 };
 
@@ -73,6 +78,7 @@ export function formDesdeConfig(config: Configuracion): FormConfig {
     // y a cualquier otra se le agregan remitente y contacto). No se guarda al
     // abrir: queda en la base con el primer cambio que ella haga.
     templateRecordatorio: prepararPlantillaRecordatorio(config.templateRecordatorio),
+    templateCobro: config.templateCobro ?? TEMPLATE_COBRO_DEFAULT,
     orientacionTeorica: config.orientacionTeorica,
   };
 }
@@ -109,6 +115,16 @@ export function patchDesdeCampos(
         continue;
       }
       patch.templateRecordatorio = form.templateRecordatorio;
+      incluidos.push(campo);
+      continue;
+    }
+
+    if (campo === "templateCobro") {
+      if (!form.templateCobro.trim()) {
+        invalido = true;
+        continue;
+      }
+      patch.templateCobro = form.templateCobro;
       incluidos.push(campo);
       continue;
     }

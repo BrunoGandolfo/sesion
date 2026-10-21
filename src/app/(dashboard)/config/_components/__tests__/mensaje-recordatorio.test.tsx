@@ -58,3 +58,18 @@ describe("vista previa fiel del recordatorio", () => {
     expect(texto).toContain(datos.telefono);
   });
 });
+
+describe("los textos según el canal", () => {
+  it.each(["sms", "ambos"] as const)("con %s advierte que el SMS no recibe respuestas", (canal) => {
+    render(<MensajeRecordatorio {...datos} canal={canal} template={templatePegado} onChange={vi.fn()} />);
+    expect(screen.getByRole("region", { name: "Vista previa del SMS" })).toBeTruthy();
+    expect(screen.getByText(/No pidas respuestas por SMS: no llegan\./)).toBeTruthy();
+  });
+
+  it("con WhatsApp no habla de SMS: las respuestas le llegan a ella", () => {
+    const { container } = render(<MensajeRecordatorio {...datos} canal="whatsapp" template={templatePegado} onChange={vi.fn()} />);
+    expect(screen.getByRole("region", { name: "Vista previa del mensaje" })).toBeTruthy();
+    expect(screen.getByText(/En el mensaje también se leería así/)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/SMS/);
+  });
+});

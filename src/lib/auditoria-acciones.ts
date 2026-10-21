@@ -73,12 +73,22 @@ export const ACCIONES = {
   },
   cobro: {
     recordatorio: "cobro.recordatorio",
+    /** Con el canal WhatsApp, abrió el enlace del aviso de cobro
+     *  (casos-uso/recordar-cobro.ts). Abrió, no "mandó", como
+     *  recordatorio.whatsapp_abierto. */
+    whatsappAbierto: "cobro.whatsapp_abierto",
   },
   recordatorio: {
     /** La profesional abrió el enlace de WhatsApp del recordatorio de un
      *  turno (casos-uso/recordatorios-whatsapp.ts). Abrió, no "mandó": el
      *  mensaje sale de su teléfono y la app no lo ve. */
     whatsappAbierto: "recordatorio.whatsapp_abierto",
+  },
+  configuracion: {
+    /** Cambió algo de Tu consultorio (casos-uso/configuracion.ts). El
+     *  detalle dice qué campos; el canal y el modo, con su antes y después;
+     *  nunca el texto de las plantillas. */
+    editar: "configuracion.editar",
   },
   ayuda: {
     pregunta: "ayuda.pregunta",

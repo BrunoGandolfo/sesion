@@ -290,7 +290,7 @@ describe("Te deben: recordar el cobro por SMS", () => {
       fireEvent.click(await screen.findByRole("button", { name: ENVIAR_SMS }));
     });
 
-    expect(api.post.mock.calls).toEqual([["/api/pacientes/p1/recordar-cobro", {}]]);
+    expect(api.post.mock.calls).toEqual([["/api/pacientes/p1/recordar-cobro", { canal: "sms" }]]);
     expect(await screen.findByText(/Aviso programado/)).toBeTruthy();
   });
 

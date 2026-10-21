@@ -113,6 +113,9 @@ export interface Configuracion {
    *  En la base es el enum modo_recordatorio. */
   recordatorioModo: RecordatorioModo;
   templateRecordatorio: string;
+  /** Plantilla del aviso de cobro, la misma por SMS y por WhatsApp
+   *  (textoDelCobro, src/lib/deudas.ts). */
+  templateCobro: string;
   /** Orientación teórica de la profesional. Determina el instrumento de
    *  auto-supervisión (ver contrato multi-orientación). En la base es el
    *  enum orientacion_teorica. */

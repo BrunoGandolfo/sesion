@@ -20,6 +20,8 @@ export function zonaDeuda(diasAtraso: number): ZonaDeuda {
  *  de acá junto con zonaDeuda. */
 export { textoAtraso } from "@/lib/glosario";
 
+import { money } from "@/lib/format";
+
 /**
  * Template default del recordatorio de cobro. Es el texto que sale por SMS y
  * el que ella lee entero antes de confirmar el envío (ver cobros-view).
@@ -39,6 +41,10 @@ interface InterpolarTemplateCobroVars {
   sesiones: number;
   monto: string;
   profesional: string;
+  /** Las de la plantilla de turno que no dependen de un turno. */
+  apellido?: string;
+  direccion?: string;
+  telefonoConsultorio?: string;
 }
 
 /**
@@ -71,5 +77,41 @@ export function interpolarTemplateCobro(
     .replace(/\{\{nombre\}\}/g, literal(vars.nombre))
     .replace(/\{\{monto\}\}/g, literal(vars.monto))
     .replace(/\{\{profesional\}\}/g, literal(vars.profesional))
+    // Las opcionales sólo si vienen: sin valor quedan a la vista, como
+    // cualquier placeholder desconocido.
+    .replace(/\{\{apellido\}\}/g, (m) => vars.apellido ?? m)
+    .replace(/\{\{direccion\}\}/g, (m) => vars.direccion ?? m)
+    .replace(/\{\{telefonoConsultorio\}\}/g, (m) => vars.telefonoConsultorio ?? m)
     .trim();
+}
+
+/** Lo que hace falta de la configuración para armar el aviso de cobro. */
+export interface ConfiguracionDelCobro {
+  templateCobro: string;
+  nombreProfesional: string;
+  direccion: string;
+  /** El teléfono del consultorio (la columna conserva el nombre viejo). */
+  whatsappOrigen: string;
+}
+
+/**
+ * El texto del aviso de cobro con la plantilla de la organización. Es la
+ * ÚNICA puerta: la usan el cron que manda el SMS (texto-de-cobro.ts), el
+ * enlace de WhatsApp y la vista previa de Cobros, así lo que ella confirma
+ * es lo que le llega a la paciente por cualquiera de los dos canales.
+ */
+export function textoDelCobro(
+  configuracion: ConfiguracionDelCobro,
+  paciente: { nombre: string; apellido: string },
+  deuda: { sesiones: number; monto: number },
+): string {
+  return interpolarTemplateCobro(configuracion.templateCobro, {
+    nombre: paciente.nombre,
+    apellido: paciente.apellido,
+    sesiones: deuda.sesiones,
+    monto: money(deuda.monto),
+    profesional: configuracion.nombreProfesional,
+    direccion: configuracion.direccion,
+    telefonoConsultorio: configuracion.whatsappOrigen,
+  });
 }

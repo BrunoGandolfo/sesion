@@ -296,6 +296,11 @@ model Configuracion {
   templateRecordatorio String             @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
   orientacionTeorica   OrientacionTeorica @default(cbt_mi) @map("orientacion_teorica")
   canalRecordatorio    CanalRecordatorio  @default(sms) @map("canal_recordatorio")
+  /// Plantilla del aviso de cobro, la misma por SMS y por WhatsApp. El
+  /// default es TEMPLATE_COBRO_DEFAULT (src/lib/glosario.ts, reexportado por
+  /// src/lib/deudas.ts; lo vigila
+  /// plantilla-cobro.test.ts).
+  templateCobro         String             @default("Consultorio {{profesional}}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.") @map("template_cobro")
 
   organizationId String       @unique @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -553,6 +558,9 @@ model EnvioSms {
 /// Un solo valor hoy; el enum existe para el aviso de cobro que viene después.
 enum TipoAvisoWhatsapp {
   recordatorio
+  /// El aviso de cobro abierto desde Cobros (recordar-cobro.ts). Cuelga del
+  /// turno impago más viejo de la paciente: la deuda que se avisó.
+  cobro
 
   @@map("tipo_aviso_whatsapp")
 }
