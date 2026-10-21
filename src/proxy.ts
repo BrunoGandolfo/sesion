@@ -92,8 +92,7 @@ export const config = {
     //   api/trabajos/**                   worker
     //   api/pacientes/[id]/hilo           GET ?format=llm del worker (la ruta
     //                                     decide entre ticket y sesión)
-    //   api/sms/**                        webhooks firmados de Twilio
     //   api/seed                          SEED_SECRET (solo desarrollo)
-    "/((?!_next/static|_next/image|static|favicon.ico|icon/|apple-icon|manifest.webmanifest|api/seed|api/cron|api/health|api/estado-worker|api/csp-report|api/sesion-clinica/pendientes|api/sesion-clinica/[^/]+/(?:lease|asr|resultado|transcripcion)|api/trabajos|api/pacientes/[^/]+/hilo|api/sms|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+    "/((?!_next/static|_next/image|static|favicon.ico|icon/|apple-icon|manifest.webmanifest|api/seed|api/cron|api/health|api/estado-worker|api/csp-report|api/sesion-clinica/pendientes|api/sesion-clinica/[^/]+/(?:lease|asr|resultado|transcripcion)|api/trabajos|api/pacientes/[^/]+/hilo|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };

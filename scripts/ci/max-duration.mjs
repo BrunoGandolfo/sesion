@@ -18,7 +18,7 @@
 //
 //   15  Lecturas de UI (GET puro): una consulta y un mapper. dashboard,
 //       deudores, la ficha y el historial, el Recorrido y el brief, avisos,
-//       cobros, envíos de SMS, sesiones de acceso.
+//       cobros, sesiones de acceso.
 //   15  Transiciones con nombre, una transacción corta sobre filas propias y
 //       sin red externa: eliminar, reintentar, reprocesar,
 //       feedback/reintentar y volver-a-grabar de la sesión; aceptar,
@@ -27,7 +27,7 @@
 //   15  Worker, de a un ítem con su ticket: lease, asr, transcripcion,
 //       resultado, trabajos/[id]/resultado.
 //   15  Públicas sin sesión, que no esperan a nadie: health, estado-worker,
-//       version, csp-report, sms/callback, sms/entrante.
+//       version, csp-report.
 //   30  Altas y cambios con validación y transacción (a veces con lock):
 //       turnos, pacientes, config, hot-words, consentimiento,
 //       recordar-cobro, crear la sesión de grabación.

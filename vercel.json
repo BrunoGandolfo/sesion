@@ -6,10 +6,6 @@
   },
   "crons": [
     {
-      "path": "/api/cron/recordatorios",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/salud",
       "schedule": "0 * * * *"
     },

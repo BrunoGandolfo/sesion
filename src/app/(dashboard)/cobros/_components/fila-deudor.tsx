@@ -15,18 +15,17 @@ import {
 } from "@/lib/deudas";
 import { diasEnterosMvd } from "@/lib/fechas-montevideo";
 import { money } from "@/lib/format";
-import { accionDeCobro } from "@/lib/aviso-cobro";
 import {
   AVISADO,
-  ENVIANDO_SMS,
+  ENVIANDO,
   NO_SE_ANOTO_AVISO,
-  RECORDAR_COBRO_POR_CANAL,
+  RECORDAR_COBRO_TEXTOS as textos,
   RECORDAR_COBRO_TITULO,
   REGISTRAR_PAGO,
   pluralizar,
 } from "@/lib/glosario";
 import { formatPhoneDisplay } from "@/lib/phone";
-import type { CanalRecordatorio } from "@/types/domain";
+import { enlaceWhatsapp } from "@/lib/whatsapp";
 
 import { recordarCobro, type AvisoDeCobro, type DeudorItem } from "./datos";
 import { RegistrarPago } from "./registrar-pago";
@@ -34,15 +33,13 @@ import { RegistrarPago } from "./registrar-pago";
 // ============================================
 // La fila de una deudora: quién es, cuánto debe, cuándo se le avisó y dos
 // acciones. "Registrar pago" es la principal, con el peso de un botón lleno;
-// el recordatorio es un enlace de texto que dice por dónde sale: SMS o, con
-// el canal "WhatsApp desde mi teléfono", WhatsApp (accionDeCobro). Lo que
-// abre cada una se despliega debajo, a lo ancho: ni la lista de sesiones ni
+// el recordatorio es un enlace de texto que abre WhatsApp con el mensaje.
+// Lo que abre cada una se despliega debajo, a lo ancho: ni la lista de sesiones ni
 // el mensaje entero entran al lado del botón.
 // ============================================
 export function FilaDeudor({
   deudor,
   configCobro,
-  canal,
   ahora,
   abierto,
   onAbrir,
@@ -53,7 +50,6 @@ export function FilaDeudor({
   deudor: DeudorItem;
   /** null: no se leyó la configuración y no se ofrece el aviso. */
   configCobro: ConfiguracionDelCobro | null;
-  canal: CanalRecordatorio;
   ahora: Date;
   /** Qué panel de esta fila está desplegado; lo decide la lista. */
   abierto: "pago" | "aviso" | null;
@@ -79,9 +75,8 @@ export function FilaDeudor({
       })
     : "";
 
-  // Qué hace el botón lo decide la misma función que el servidor.
-  const accion = accionDeCobro(canal, telefono, mensaje);
-  const textos = RECORDAR_COBRO_POR_CANAL[accion.canal];
+  // El mismo enlace que arma el servidor.
+  const enlace = enlaceWhatsapp(telefono, mensaje);
 
   // Guarda síncrona: `enviando` deshabilita el botón recién en el render
   // siguiente, y un doble toque abriría dos WhatsApp.
@@ -91,22 +86,19 @@ export function FilaDeudor({
     if (enCurso.current) return;
     enCurso.current = true;
     // WhatsApp se abre dentro del toque, antes de esperar a la red: después
-    // de un await el navegador bloquea la ventana nueva. A quien pidió la
-    // baja no se le abre: el servidor lo rechaza y la pantalla dice por qué.
-    const enlace = accion.canal === "whatsapp" && !deudor.dadaDeBaja ? accion.enlace : null;
+    // de un await el navegador bloquea la ventana nueva.
     if (enlace) window.open(enlace, "_blank", "noopener");
     const abrioWhatsapp = enlace !== null;
     setEnviando(true);
     try {
-      const aviso = await recordarCobro(deudor.pacienteId, accion.canal);
+      const aviso = await recordarCobro(deudor.pacienteId);
       setConfirmando(false);
       onAvisado(aviso);
     } catch (error) {
-      // Por SMS (o sin abrir WhatsApp), el servidor rechazó el pedido y dice
-      // por qué. Si WhatsApp ya se abrió, lo que falló es anotarlo.
+      // Si WhatsApp ya se abrió, lo que falló es anotarlo.
       setConfirmando(false);
-      // Un 409 dice por qué no (ya no debe, pidió la baja, cambió el canal):
-      // eso pesa más que "no quedó anotado", aunque WhatsApp ya se abrió.
+      // Un 409 dice por qué no (ya no debe, no tiene teléfono): eso pesa más
+      // que "no quedó anotado", aunque WhatsApp ya se abrió.
       const rechazo = error instanceof ApiClientError && error.status === 409;
       onError(abrioWhatsapp && !rechazo ? NO_SE_ANOTO_AVISO : mensajeParaElla(error));
     } finally {
@@ -166,9 +158,6 @@ export function FilaDeudor({
             <button
               type="button"
               onClick={() => setConfirmando(true)}
-              // Con SMS, el nombre accesible es el de siempre ("Recordar cobro
-              // a … por SMS"): lo busca avisos-operaciones.test.tsx, que es de
-              // todas las pantallas.
               aria-label={textos.botonPara(nombreCompleto)}
               className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-700 lg:min-h-[36px] lg:w-auto"
             >
@@ -215,7 +204,7 @@ export function FilaDeudor({
           }
           accion={textos.accion}
           enviando={enviando}
-          enviandoLabel={ENVIANDO_SMS}
+          enviandoLabel={ENVIANDO}
           onConfirmar={() => void enviar()}
           onCancelar={() => setConfirmando(false)}
         />

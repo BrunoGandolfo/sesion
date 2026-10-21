@@ -55,7 +55,8 @@ const VALORES: NuevoTurnoData = {
 const PEDIDO = { pacienteId: "p1", fecha: "2026-09-10T15:00:00.000Z", duracion: 50, modalidad: "presencial", notas: "consulta", frecuencia: "unico" };
 beforeEach(() => {
   vi.clearAllMocks();
-  api.get.mockResolvedValue([]);
+  // Los recordatorios de WhatsApp contestan su forma; lo demás, una lista vacía.
+  api.get.mockImplementation(async (url: string) => (url === "/api/recordatorios/whatsapp" ? { turnos: [] } : []));
   api.post.mockResolvedValue({});
   vi.mocked(leerHoy).mockResolvedValue({
     nombre: null, ahora: new Date("2026-09-10T14:00:00Z"), riesgoEnElDia: false,

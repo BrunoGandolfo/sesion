@@ -19,7 +19,6 @@ import type { MetodoPago, Turno } from "@/types/domain";
 
 import { puedeTransicionTurno, sePuedeCobrar, toTurno, TRANSICIONES_TURNO } from "../domain";
 import { ApiError } from "../responses";
-import { cancelarEnviosDelTurno } from "./envios-del-turno";
 
 type ClientePrisma = typeof db;
 
@@ -123,14 +122,6 @@ export async function cobrarTurno({
 
     if (count === 0) {
       throw new ApiError(MENSAJE_CONFLICTO, 409);
-    }
-
-    // Cobrar un turno que estaba programado lo cierra, y un turno cerrado no
-    // avisa nada. El caso real: una sesión adelantada que se cobra antes de
-    // su hora dejaba el recordatorio vivo, y la paciente recibía el SMS de
-    // una sesión que ya había tenido.
-    if (cierraElTurno) {
-      await cancelarEnviosDelTurno(tx, turnoId);
     }
 
     const turno = await tx.turno.findFirstOrThrow({

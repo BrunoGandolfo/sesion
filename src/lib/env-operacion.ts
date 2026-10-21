@@ -1,9 +1,8 @@
 // Variables de entorno sin las cuales la operación no funciona.
 //
 // Antes, faltar una de éstas se descubría el día que hacía falta: sin
-// ALERTA_WEBHOOK_URL el cron de salud escribía en un log que nadie lee; sin
-// TWILIO_SMS_FROM el cron de recordatorios no tocaba ningún envío y no
-// avisaba. Ahora la lista está escrita, y la mira /api/health (que devuelve
+// ALERTA_WEBHOOK_URL el cron de salud escribía en un log que nadie lee.
+// Ahora la lista está escrita, y la mira /api/health (que devuelve
 // 503 si falta alguna en producción, así el monitor externo lo ve en el
 // primer deploy) y el cron de salud (que lo cuenta como métrica crítica).
 //
@@ -21,10 +20,6 @@ export const VARIABLES_OPERACION = [
   // Host exacto de R2 para la CSP (connect-src): sin él la subida del audio
   // queda fuera de la política.
   "R2_PUBLIC_HOST",
-  // SMS.
-  "TWILIO_ACCOUNT_SID",
-  "TWILIO_AUTH_TOKEN",
-  "TWILIO_SMS_FROM",
 ] as const;
 
 type VariableOperacion = (typeof VARIABLES_OPERACION)[number];

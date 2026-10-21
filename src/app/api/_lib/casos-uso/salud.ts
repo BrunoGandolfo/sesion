@@ -35,10 +35,8 @@ import {
   type MetricaSalud,
   type NivelAlerta,
 } from "@/lib/salud-metricas";
-import { metricasSms } from "@/lib/sms/metricas";
 
-/** Variables de operación que faltan. Crítica: sin ellas no hay alertas o
- *  no hay SMS. Cuenta también en desarrollo (informa), alerta en producción. */
+/** Variables de operación que faltan. Crítica: sin ellas no hay alertas. Cuenta también en desarrollo (informa), alerta en producción. */
 export const metricasEntorno: FuenteMetricas = async () => {
   const { faltantes, produccion } = validarEnvOperacion();
   return [
@@ -56,14 +54,13 @@ export const metricasEntorno: FuenteMetricas = async () => {
  * Las fuentes, una por área. Cada área agrega la suya acá (una línea) y
  * define la métrica en su propio módulo:
  *
- *   - operación (área 5): metricasSms, metricasWorker, metricasEntorno
+ *   - operación (área 5): metricasWorker, metricasEntorno
  *   - auditoría: rastros informativos perdidos → fuenteAuditoria
  *   - sesión clínica (área 2): tareas fallidas o atrasadas → fuenteTrabajos
  *   - hilo (área 4): propuestas sin resolver, integraciones atrasadas,
  *     minutos de audio del mes → `metricasHilo`
  */
 export const FUENTES: ReadonlyArray<{ nombre: string; fuente: FuenteMetricas }> = [
-  { nombre: "sms", fuente: metricasSms },
   { nombre: "worker", fuente: metricasWorker },
   { nombre: "entorno", fuente: metricasEntorno },
   { nombre: "trabajos", fuente: fuenteTrabajos },

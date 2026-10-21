@@ -23,14 +23,16 @@ describe("validarEnvOperacion", () => {
     const { faltantes } = validarEnvOperacion({
       ...COMPLETO,
       ALERTA_CORREO: "   ",
-      TWILIO_SMS_FROM: undefined,
+      CRON_SECRET: undefined,
     });
-    expect(faltantes).toEqual(["ALERTA_CORREO", "TWILIO_SMS_FROM"]);
+    expect(faltantes).toEqual(["ALERTA_CORREO", "CRON_SECRET"]);
   });
 
   it("la lista tiene lo que la operación necesita", () => {
-    for (const v of ["ALERTA_CORREO", "RESEND_API_KEY", "CRON_SECRET", "R2_PUBLIC_HOST", "TWILIO_SMS_FROM"]) {
+    for (const v of ["ALERTA_CORREO", "RESEND_API_KEY", "CRON_SECRET", "R2_PUBLIC_HOST"]) {
       expect(VARIABLES_OPERACION).toContain(v);
     }
+    // El SMS ya no existe: sus variables no son de la operación.
+    expect(VARIABLES_OPERACION.some((v) => v.startsWith("TWILIO_"))).toBe(false);
   });
 });

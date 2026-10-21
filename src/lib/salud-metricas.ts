@@ -39,7 +39,7 @@
 //     y con la ACCIÓN cuando la hay ("hay que avisarles"): es lo que lee una
 //     persona a las 3 de la mañana.
 //   - `nivel`: "critico" cuando hay que levantarse (la base no responde, el
-//     worker está muerto, nadie puede mandar SMS); "aviso" para lo demás.
+//     worker está muerto, no hay cómo mandar alertas); "aviso" para lo demás.
 //     Default: "aviso".
 //   - Nada de texto clínico, nombres ni teléfonos en `texto`: el correo sale
 //     del sistema y viaja por un proveedor.

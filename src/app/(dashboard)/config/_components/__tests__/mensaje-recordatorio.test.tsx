@@ -2,7 +2,7 @@
 import * as React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { prepararPlantillaRecordatorio, buildSmsMessage } from "@/lib/sms/texto";
+import { prepararPlantillaRecordatorio, armarMensaje } from "@/lib/recordatorio-texto";
 import { htmlATemplate } from "../editor-recordatorio";
 import { MensajeRecordatorio } from "../mensaje-recordatorio";
 import { LINEA_CONTACTO } from "@/lib/glosario";
@@ -10,7 +10,7 @@ import { LINEA_CONTACTO } from "@/lib/glosario";
 const datos = { profesional: "Mariana Roldán", direccion: "Calle 123", telefono: "+59899123456" };
 const templatePegado = "{{profesional}}Hola {{nombre}}, tu sesión es el {{fecha}} a las {{hora}}.";
 function ejemplo(template: string) {
-  return buildSmsMessage(prepararPlantillaRecordatorio(template), {
+  return armarMensaje(prepararPlantillaRecordatorio(template), {
     ...datos, telefonoConsultorio: datos.telefono, nombre: "Lucía", apellido: "Fernández",
     fecha: new Date("2026-04-21T10:00:00-03:00"),
   });

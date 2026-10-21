@@ -8,8 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30; // segundos; la convención está en scripts/ci/max-duration.mjs
 
-/** Los recordatorios de hoy con su enlace de WhatsApp. Con canal `sms`,
- *  `turnos: []`: la pantalla decide si muestra el bloque. */
+/** Los recordatorios de hoy con su enlace de WhatsApp. */
 export async function GET() {
   try {
     const organizationId = await getOrganizationId();

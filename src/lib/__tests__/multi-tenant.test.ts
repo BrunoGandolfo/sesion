@@ -26,7 +26,7 @@
  *
  * LAS RUTAS QUE RECIBEN EL ID POR QUERY O POR BODY no tienen `[id]` en el
  * path y el barrido del disco no las ve: `sesion-clinica?turnoId`,
- * `sms/envios?turnoId`, `hot-words` (`pacienteId`), `turnos` (`pacienteId`)
+ * `hot-words` (`pacienteId`), `turnos` (`pacienteId`)
  * y el `?format=llm&sesionId` del hilo. Van en IDS_EN_QUERY_O_BODY, más
  * abajo, con el mismo criterio: la dueña no recibe 404; la ajena recibe 404,
  * o una lista vacía cuando la ruta lista, y nunca un dato de la otra.
@@ -584,7 +584,6 @@ const HASTA = "2027-01-01T00:00:00.000Z";
 const IDS_EN_QUERY_O_BODY: IdEnQueryOBody[] = [
   { nombre: "GET sesion-clinica?turnoId", ruta: "sesion-clinica", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `sesion-clinica?turnoId=${a.turnoId}` }) },
   { nombre: "POST sesion-clinica {turnoId}", ruta: "sesion-clinica", metodo: "POST", ajena: "404", pedido: (a) => ({ url: "sesion-clinica", cuerpo: { turnoId: a.turnoId } }) },
-  { nombre: "GET sms/envios?turnoId", ruta: "sms/envios", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `sms/envios?turnoId=${a.turnoId}` }) },
   { nombre: "GET hot-words?pacienteId", ruta: "hot-words", metodo: "GET", ajena: "vacia", pedido: (a) => ({ url: `hot-words?scope=paciente&pacienteId=${a.pacienteId}` }) },
   { nombre: "POST hot-words {pacienteId}",
     ruta: "hot-words", metodo: "POST", ajena: "404",
@@ -630,17 +629,6 @@ async function prepararDuena(a: Org) {
       pacienteId: a.pacienteId,
       terminoHash: await hashTermino("término de la paciente"),
       ...cifrarHotWord(randomUUID(), { termino: "término de la paciente" }),
-    },
-  });
-  await prismaRaw.envioSms.create({
-    data: {
-      organizationId: a.orgId,
-      claveIdempotencia: `turno:${a.turnoId}:${MANANA.toISOString()}`,
-      motivo: "recordatorio_turno",
-      pacienteId: a.pacienteId,
-      turnoId: a.turnoId,
-      destino: "+59899000000",
-      programadoEn: new Date("2026-11-30T21:00:00.000Z"),
     },
   });
 }

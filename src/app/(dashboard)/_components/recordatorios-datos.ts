@@ -10,15 +10,9 @@
 import { apiGet, apiPost } from "@/lib/api-client";
 import type {
   AvisoWhatsappRegistrado,
-  CanalRecordatorio,
   RecordatorioWhatsapp,
   RecordatoriosWhatsappDeHoy,
 } from "@/types/domain";
-
-/** El bloque sólo existe si ella eligió avisar por WhatsApp. */
-export function muestraWhatsapp(canal: CanalRecordatorio): boolean {
-  return canal === "whatsapp" || canal === "ambos";
-}
 
 export function leerRecordatoriosWhatsapp(
   signal: AbortSignal,

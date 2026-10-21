@@ -216,23 +216,18 @@ export const configUpdateSchema = z.object({
     .trim()
     .min(1, "Falta el template")
     .optional(),
-  /** Plantilla del aviso de cobro, la misma por SMS y por WhatsApp. */
+  /** Plantilla del aviso de cobro por WhatsApp. */
   templateCobro: z
     .string()
     .trim()
     .min(1, "Falta el template")
     .optional(),
   orientacionTeorica: orientacionTeoricaSchema.optional(),
-  /** Por dónde sale el recordatorio: sólo WhatsApp
-   *  (CANAL_RECORDATORIO_VIGENTE). Se acepta para que un cliente viejo que
-   *  lo mande no reciba un 400; otro valor ya no se guarda. */
-  canalRecordatorio: z.literal("whatsapp").optional(),
 });
 
-/** POST /api/pacientes/[id]/recordar-cobro: el canal que la pantalla usó
- *  (accionDeCobro). Opcional: un cliente viejo manda `{}`, y el caso de uso
- *  lo toma como el SMS de antes (409). */
-export const recordarCobroSchema = z.object({ canal: z.enum(["sms", "whatsapp"]).optional() });
+/** POST /api/pacientes/[id]/recordar-cobro: sin campos. El aviso sale sólo
+ *  por WhatsApp; un campo de más (el `canal` de antes) es 400. */
+export const recordarCobroSchema = z.object({}).strict();
 
 // ────────────────────────────────────────────────────────────────────────────
 // WhatsApp asistido — el body (opcional) de

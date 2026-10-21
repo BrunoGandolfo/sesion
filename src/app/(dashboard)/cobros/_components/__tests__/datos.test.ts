@@ -88,10 +88,10 @@ describe("leerSesionesImpagas", () => {
 });
 
 describe("recordarCobro", () => {
-  it("devuelve lo que contestó el servidor según el canal (por SMS, si se programó un aviso nuevo)", async () => {
-    const respuesta = { canal: "sms", envioId: "e1", creado: false, programadoEn: "2026-10-06T12:00:00.000Z" };
+  it("anota la apertura de WhatsApp, sin canal, y devuelve lo que contestó el servidor", async () => {
+    const respuesta = { enlace: "https://wa.me/598", avisadoEn: "2026-10-06T12:00:00.000Z" };
     m.post.mockResolvedValue(respuesta);
-    await expect(recordarCobro("p1", "sms")).resolves.toEqual(respuesta);
-    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "sms" });
+    await expect(recordarCobro("p1")).resolves.toEqual(respuesta);
+    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", {});
   });
 });

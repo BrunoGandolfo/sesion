@@ -1,7 +1,7 @@
 # Operación de Sesión
 
-Manual de producción: publicar, variables, respaldos, incidentes, SMS, CSP y la
-app sin conexión.
+Manual de producción: publicar, variables, respaldos, incidentes,
+recordatorios por WhatsApp, CSP y la app sin conexión.
 Los archivos citados describen automatismos del repositorio; no demuestran que
 una corrida, entrega o ajuste de consola haya ocurrido. Cómo se trabaja y se
 entrega un cambio está en `docs/como-trabajamos.md`.
@@ -15,7 +15,7 @@ entrega un cambio está en `docs/como-trabajamos.md`.
 | R2 | Audio de las sesiones y backups. La app no cifra el audio: lo sube tal cual y R2 lo guarda cifrado en reposo (cifrado del proveedor). Los backups sí van cifrados con gpg. La app usa `src/lib/r2.ts`; el worker, `processor/r2_client.py`. |
 | Railway | Worker Python: `processor/Dockerfile` (el arranque es su CMD, el único), `processor/railway.json` (build, reinicio y `watchPatterns: /processor/**`) y `processor/worker.py`. Con Root Directory `/processor`, confirmar en Settings → Config-as-code que el path sea `/processor/railway.json`; si no, Railway ignora el archivo. |
 | AssemblyAI / Anthropic | Configuración del worker en `processor/config.py`. Lupita y Lux son llamadas aparte de la app, con `src/lib/anthropic-mensajes.ts` (Haiku 5.5; contrato de Lux en `docs/contrato-lux.md`). |
-| Twilio / Resend | `src/lib/sms/` y `src/lib/correo.ts`. Requieren configuración de cuenta, número y dominio fuera de Git. |
+| Resend | `src/lib/correo.ts`. Requiere configuración de cuenta y dominio fuera de Git. |
 
 `src/lib/consentimiento-hechos.ts` registra una verificación de retención
 cero de Anthropic fechada el 4 de septiembre. Ese dato no verifica por sí solo
@@ -62,13 +62,12 @@ sí pide deshabilitarlo en algunos tramos y volver a habilitarlo al final: eso
 es parte de ese procedimiento, no el estado normal.
 
 No hay que avanzar release a mano ni resolver una divergencia con force.
-El CI verde no sustituye la prueba de teléfono ni confirma entrega de SMS.
+El CI verde no sustituye la prueba de teléfono.
 
 ### Crons declarados
 
 | HTTP | Frecuencia de `vercel.json` |
 | --- | --- |
-| `GET /api/cron/recordatorios` | Cada cinco minutos: despacho de envíos pendientes. |
 | `GET /api/cron/trabajos` | Cada diez minutos: trabajos que ejecuta la app. |
 | `GET /api/cron/salud` | Cada hora: métricas y alertas. |
 | `GET /api/cron/mantenimiento` | 04:00 UTC: purgas operativas y recifrado. |
@@ -101,11 +100,10 @@ permanece en `processor/.env.example`.
 | `RESEND_API_KEY`, `ALERTA_CORREO` | Correo y alertas. |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Acceso a objetos de audio. |
 | `R2_PUBLIC_HOST` | Origen exacto de R2 usado por el navegador, para la CSP. |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` | Despacho y firma de webhooks SMS. |
 | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Reporte opcional de errores. |
 
 `src/lib/env-operacion.ts` exige en producción las variables de correo,
-cron, origen R2 y SMS que enumera. Su ausencia hace fallar health.
+cron y origen R2 que enumera. Su ausencia hace fallar health.
 Que exista una cadena no demuestra que el proveedor la acepte.
 
 | Tests / GitHub Actions | Uso |
@@ -409,134 +407,29 @@ la única clave de backups que deban conservarse antes de definir la recuperaci�
 al volver a primer plano y muestra un aviso para actualizar con un toque.
 No recarga sola y espera mientras la ruta sea de grabación.
 
-## 6. SMS
+## 6. Recordatorios y avisos de cobro por WhatsApp
 
-El código está en `src/app/api/_lib/casos-uso/despachar-sms.ts`,
-`src/lib/sms/` y `src/lib/recordatorios-programacion.ts`.
+Sesión no manda mensajes por su cuenta: no hay SMS ni proveedor de
+mensajería. La profesional manda cada recordatorio y cada aviso de cobro
+desde su propio WhatsApp; la app le prepara el mensaje y anota que lo abrió.
 
-En Twilio, configurar el webhook entrante para `POST /api/sms/entrante`
-en el dominio público y habilitar Uruguay. La app manda la URL de
-`POST /api/sms/callback` como StatusCallback. Ambos validan firma.
-El origen público usado para firmar está en `src/lib/sms/firma.ts`;
-un cambio de dominio debe coordinarse con esa configuración.
+- `GET /api/recordatorios/whatsapp` lista los turnos que corresponde avisar
+  hoy (Montevideo), con la regla `correspondeAvisarHoy`
+  (`src/app/api/_lib/casos-uso/recordatorios-whatsapp.ts`): el turno sigue
+  programado y no empezó, la paciente está activa, su momento de aviso
+  (`calcularProgramadoEn`, `src/lib/recordatorios-programacion.ts`, con el
+  modo de Tu consultorio) ya llegó, y no se avisó antes de hoy para su fecha
+  vigente. Si se avisó otra fecha (el turno se movió después), entra ya como
+  cambio de horario. Cada ítem trae el enlace `https://wa.me/…?text=…`.
+- `POST /api/recordatorios/whatsapp/[turnoId]/abierto` (cuerpo opcional
+  `{ fecha }`, la del enlace) registra la apertura en `avisos_whatsapp`.
+  `GET /api/recordatorios/whatsapp/[turnoId]` devuelve la última apertura
+  para la fecha vigente: lo que muestra el bloque Recordatorio del turno.
+- `POST /api/pacientes/[id]/recordar-cobro` anota la apertura del aviso de
+  cobro (`avisos_whatsapp` con tipo `cobro`) y devuelve el enlace.
 
-Los recordatorios se programan para la tarde anterior, dos tardes antes o la
-misma mañana, en hora de Montevideo, con dispersión de 0–14 minutos.
-Si la mañana no cae antes del turno, se usa la tarde anterior.
-No se describe un esquema antiguo de horas de anticipación.
-
-| Estado | Significado operativo |
-| --- | --- |
-| pendiente | Espera su hora o un reintento. |
-| enviando | Reservado por una corrida; el despachador recupera reservas vencidas. |
-| aceptado | El proveedor aceptó el SMS; todavía no prueba entrega. |
-| entregado | Llegó la confirmación de entrega. |
-| no_entregado | El proveedor informó que no llegó; consultar el código. |
-| cancelado | El envío dejó de corresponder. Si ya había sido aceptado, pudo haber salido. |
-| fallido | Rechazo definitivo o ventana de envío agotada. |
-| desconocido | Hubo una llamada con resultado incierto; no se reenvía automáticamente. |
-
-### Canal del recordatorio: SMS, WhatsApp o ambos
-
-`configuraciones.canal_recordatorio` (default `sms`, se cambia con
-`PATCH /api/config`) decide por dónde sale el recordatorio del turno. Se lee
-**al despachar**, no al crear el turno: cambiarlo alcanza a lo ya agendado.
-
-- `sms`: como siempre.
-- `whatsapp`: el cron no llama a Twilio para el recordatorio ni para el cambio
-  de horario; cuando vence su hora, el envío pasa a `cancelado` con el motivo
-  "el recordatorio va por WhatsApp, no por SMS". El aviso de cobro sigue
-  saliendo por SMS (lo pide ella desde Cobros).
-- `ambos`: sale el SMS y además se prepara el WhatsApp.
-
-Las pacientes cuyo teléfono está en `bajas_sms` (respondieron BAJA, o Twilio
-lo marcó con 21610) quedan fuera de la lista de WhatsApp: la baja se respeta
-también en el canal asistido.
-
-Con `whatsapp` o `ambos`, `GET /api/recordatorios/whatsapp` lista los turnos
-cuyo envío tiene `programado_en` hoy (Montevideo), más los vencidos que el
-cron trata hoy (agendado o reabierto hoy para esta tarde: el SMS saldría
-enseguida), con el
-enlace `https://wa.me/…?text=…` armado con el mismo texto del SMS. Ella lo
-abre y lo manda desde su teléfono;
-`POST /api/recordatorios/whatsapp/[turnoId]/abierto` (cuerpo opcional
-`{ fecha }`, la del enlace) registra la apertura en `avisos_whatsapp` con la
-fecha del turno avisada. La app no puede saber si el mensaje salió: un turno
-"avisado" es uno cuyo enlace se abrió para su fecha vigente. Si después se
-mueve, el aviso nuevo sale como cambio de horario, igual que tras un SMS
-aceptado; y si la apertura de la fecha vieja llega después de moverlo, el
-recordatorio vigente que no salió pasa a cambio de horario en ese momento.
-
-Ante desconocido, buscar el mensaje en los logs de Twilio por hora y destino
-antes de decidir una corrección. No hay pantalla de conciliación en main;
-no hacer una escritura manual que pueda duplicar el SMS sin verificar evidencia.
-El estado por turno se consulta por `GET /api/sms/envios`.
-
-### Las confirmaciones de entrega no llegaban (diagnóstico del 7-oct-2026)
-
-**Síntoma.** En producción, 43 envíos con `sid` en `aceptado`; ninguno pasó
-nunca a `entregado`, `no_entregado` ni `fallido` (`cerrado_en` y
-`codigo_proveedor` en NULL).
-
-**Evidencia.**
-
-- Logs de Vercel, producción, 30-sep a 7-oct
-  (`vercel logs --project sesion --environment production --no-branch --since 7d --query /api/sms/callback --json`):
-  6 POST a `/api/sms/callback`, los 6 con **403**, en pares a 3–6 s
-  (30-sep 18:55; 1-oct 23:05 y 23:10 UTC): Twilio manda el `sent` y el acuse
-  del operador, y la ruta rechaza los dos. Ningún 204, ningún 500.
-- Todos al dominio `sesionapp.app` y a la ruta exacta; ningún 307/308. Las
-  variantes sí redirigen (`www.` → 307, barra final y `http` → 308, medido
-  con curl), pero Twilio no las usó: **no es una redirección**
-  (`src/lib/__tests__/firma-url.test.ts`).
-- El `TWILIO_ACCOUNT_SID` de producción es una cuenta (`AC…`), no una API
-  Key: el envío arma `/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json` con esa
-  misma variable y Twilio aceptó los 43 mensajes; con un `SK…` en esa
-  posición contesta 404.
-- `TWILIO_ACCOUNT_SID` y `TWILIO_AUTH_TOKEN` están en Vercel como
-  **sensitive** (sin cambios desde el 23-abr-2026): ni `vercel env pull` ni
-  la API los devuelven, así que la comparación con el token de la cuenta no
-  se pudo hacer desde acá.
-
-**Causa (por descarte; falta la última confirmación).** La URL es la exacta,
-el cuerpo se valida con el algoritmo de los vectores oficiales
-(`src/lib/__tests__/firma.test.ts`) y la cuenta es la nuestra: lo único que queda es que el
-`TWILIO_AUTH_TOKEN` de Vercel no es el que Twilio usa para firmar. Twilio
-firma los webhooks con el **Auth Token primario** de la cuenta; el
-secundario (o uno de otra cuenta con acceso) autentica la API igual, por eso
-los envíos salían y las firmas no.
-
-**Qué hace el dueño (una vez).**
-
-1. Twilio Console → Account → *API keys & tokens* → **Auth Tokens**: copiar
-   el **Primary**.
-2. Vercel → proyecto `sesion` → Settings → Environment Variables →
-   `TWILIO_AUTH_TOKEN` (Production) → reemplazar por el primario.
-3. Volver a publicar la producción actual (un redeploy; sin cambio de
-   código).
-4. Verificar con el próximo SMS: `vercel logs --project sesion --environment production --no-branch --since 1h --query /api/sms/callback`
-   tiene que mostrar **204**. Si vuelve a aparecer un 403, el log de la
-   función trae la línea `[sms-callback] 403 {"motivo":…,"sid":…,"cuentaPropia":…}`:
-   `motivo: "firma"` con `cuentaPropia: true` es el token; `cuentaPropia: false`
-   es que el mensaje lo mandó otra cuenta; `sin_token` es la variable vacía.
-   La línea no lleva el cuerpo, la firma ni el token.
-
-**Los envíos viejos.** Twilio no reenvía callbacks pasados. Después del paso
-4, con autorización explícita, el dueño corre la reconciliación: primero
-simulando, después aplicando. Consulta cada envío `aceptado` con sid en
-Twilio y aplica su estado por el mismo caso de uso que el callback
-(`reconciliarEnvios` en `casos-uso/sms-webhooks.ts`): un `sent` sin acuse
-queda como está, un envío ya cerrado no se reabre, y no manda alertas.
-
-~~~bash
-# con DATABASE_URL, TWILIO_ACCOUNT_SID y TWILIO_AUTH_TOKEN de producción en el entorno
-node scripts/mantenimiento/reconciliar-sms.mjs            # simula: no escribe
-node scripts/mantenimiento/reconciliar-sms.mjs --aplicar  # escribe
-~~~
-
-Recordar cobro usa `POST /api/pacientes/[id]/recordar-cobro` y crea o
-reutiliza un envío SMS persistido. Confirmar la cola no significa que el SMS
-haya sido entregado. Las alertas se envían por correo con
+La app no puede saber si el mensaje salió: "avisado" quiere decir que abrió
+el enlace. Las alertas operativas se envían por correo con
 `src/lib/alertas.ts`; si se agotan sus intentos, quedan logs y Sentry si
 está configurado.
 

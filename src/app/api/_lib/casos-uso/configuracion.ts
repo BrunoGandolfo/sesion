@@ -55,7 +55,6 @@ export type CambiosConfiguracion = Pick<
   | "templateRecordatorio"
   | "templateCobro"
   | "orientacionTeorica"
-  | "canalRecordatorio"
 >;
 
 export interface ActualizarConfiguracionInput {
@@ -67,7 +66,7 @@ export interface ActualizarConfiguracionInput {
 }
 
 /** Los campos cuyo valor entra al evento: enums, sin texto de ella. */
-const CON_VALOR = ["canalRecordatorio", "recordatorioModo"] as const;
+const CON_VALOR = ["recordatorioModo"] as const;
 
 export async function actualizarConfiguracion({
   prisma,

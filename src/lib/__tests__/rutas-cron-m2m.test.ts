@@ -30,7 +30,6 @@ const M2M = "secreto-del-worker-de-prueba";
 const PROTEGIDAS = [
   { ruta: "cron/trabajos", secreto: CRON },
   { ruta: "cron/mantenimiento", secreto: CRON },
-  { ruta: "cron/recordatorios", secreto: CRON },
   { ruta: "cron/salud", secreto: CRON },
   { ruta: "trabajos/pendientes", secreto: M2M },
   { ruta: "sesion-clinica/pendientes", secreto: M2M },
@@ -62,12 +61,9 @@ beforeEach(async () => {
   await vaciarTablas(prismaRaw);
   vi.stubEnv("CRON_SECRET", CRON);
   vi.stubEnv("PROCESSING_SECRET", M2M);
-  // Nada sale de la máquina: sin correo de alertas, sin Twilio. R2 figura
+  // Nada sale de la máquina: sin correo de alertas. R2 figura
   // configurado para que cron/trabajos corra; sin trabajos, no lo llama.
   vi.stubEnv("ALERTA_CORREO", "");
-  vi.stubEnv("TWILIO_ACCOUNT_SID", "");
-  vi.stubEnv("TWILIO_AUTH_TOKEN", "");
-  vi.stubEnv("TWILIO_SMS_FROM", "");
   vi.stubEnv("R2_ACCOUNT_ID", "0123456789abcdef");
   vi.stubEnv("R2_ACCESS_KEY_ID", "falsa");
   vi.stubEnv("R2_SECRET_ACCESS_KEY", "falsa");
@@ -124,7 +120,7 @@ describe("GET /api/health", () => {
     expect(res.status).toBe(503);
     const texto = await res.text();
     expect(JSON.parse(texto)).toEqual({ status: "error" });
-    expect(texto).not.toMatch(/ALERTA_CORREO|TWILIO|RESEND/);
+    expect(texto).not.toMatch(/ALERTA_CORREO|RESEND/);
   });
 });
 

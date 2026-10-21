@@ -1,17 +1,12 @@
 /**
  * Integración — WhatsApp asistido contra la base real de test
- * (DATABASE_URL_TEST). Twilio no interviene: el enviador es un doble.
+ * (DATABASE_URL_TEST).
  *
  * Lo que protege:
- *   - "Qué turnos corresponde avisar hoy" sale de envios_sms.programado_en,
- *     no de recalcular la ventana: un envío programado hoy entra aunque la
- *     cuenta del modo dijera otro día, y al revés.
- *   - El texto del enlace es el mismo que el cron le manda a Twilio.
- *   - Con canal `whatsapp` el cron cancela el recordatorio con su motivo y no
- *     llama a Twilio; con `ambos` (y `sms`) manda como siempre. Lo decide al
- *     despachar: cambiar la configuración alcanza a lo ya agendado.
+ *   - "Qué turnos corresponde avisar hoy" sale de los turnos, con la regla
+ *     correspondeAvisarHoy (momento de aviso, aperturas, cambio de horario).
  *   - Registrar la apertura: fila + auditoría, repetible, 404 si es ajeno.
- *   - El contrato exacto de las dos rutas y el PATCH de /api/config.
+ *   - El contrato exacto de las rutas y la auditoría de /api/config.
  *
  * Ejecutar:
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
@@ -20,20 +15,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
-import type { CanalRecordatorio, PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
-import { despacharEnvios } from "@/app/api/_lib/casos-uso/despachar-sms";
-import {
-  claveDelTurno,
-  MOTIVO_CANAL_WHATSAPP,
-  programarEnvioDelTurno,
-} from "@/app/api/_lib/casos-uso/envios-del-turno";
 import { correspondeAvisarHoy, listarRecordatoriosDeHoy, registrarAviso } from "@/app/api/_lib/casos-uso/recordatorios-whatsapp";
-import { textoDelRecordatorio } from "@/lib/sms/texto";
+import { textoDelRecordatorio } from "@/lib/recordatorio-texto";
 import { ApiError } from "@/app/api/_lib/responses";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import { __resetLlaveroForTests } from "@/lib/llavero";
-import type { EnviadorSms } from "@/lib/sms/twilio";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 
@@ -73,7 +61,7 @@ const TEMPLATE = "Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{ho
 
 type Org = { orgId: string; userId: string };
 
-async function crearOrg(canal: CanalRecordatorio = "whatsapp"): Promise<Org> {
+async function crearOrg(): Promise<Org> {
   const org = await prismaRaw.organization.create({ data: { nombre: `Org ${randomUUID()}` } });
   const user = await prismaRaw.user.create({
     data: { email: `${randomUUID()}@test.uy`, hashedPassword: "x", nombre: "Mariana", organizationId: org.id },
@@ -86,7 +74,6 @@ async function crearOrg(canal: CanalRecordatorio = "whatsapp"): Promise<Org> {
       whatsappOrigen: "+598 99 876 543",
       tarifaDefault: 1000,
       templateRecordatorio: TEMPLATE,
-      canalRecordatorio: canal,
     },
   });
   return { orgId: org.id, userId: user.id };
@@ -104,54 +91,15 @@ async function crearTurno(o: Org, pacienteId: string, fecha: Date, estado: "prog
   });
 }
 
-/** El envío del turno, con el programadoEn que se le diga (como lo dejaría
- *  programarEnvioDelTurno, pero sin depender de su cuenta). */
-async function crearEnvio(
-  o: Org,
-  turno: { id: string; fecha: Date; pacienteId: string },
-  programadoEn: Date,
-  extra: { motivo?: "recordatorio_turno" | "cambio_de_horario"; destino?: string; estado?: "pendiente" | "fallido" } = {},
-) {
-  const estado = extra.estado ?? "pendiente";
-  return prismaRaw.envioSms.create({
-    data: {
-      organizationId: o.orgId,
-      claveIdempotencia: claveDelTurno(turno.id, turno.fecha),
-      motivo: extra.motivo ?? "recordatorio_turno",
-      estado,
-      pacienteId: turno.pacienteId,
-      turnoId: turno.id,
-      destino: extra.destino ?? TELEFONO,
-      programadoEn,
-      proximoIntentoEn: estado === "pendiente" ? programadoEn : null,
-      // Creado al agendar, días antes: lo creado HOY con la hora ya vencida
-      // es otro caso (ver "nació vencido").
-      creadoEn: new Date(Math.min(programadoEn.getTime(), INICIO_HOY.getTime()) - 2 * DIA),
-    },
-  });
-}
-
-/** Un turno mañana a las 15:00 de Montevideo con su envío programado hoy. */
-async function turnoConAvisoHoy(o: Org, opciones: { telefono?: string; nombre?: string; programadoEn?: Date } = {}) {
+/** Un turno mañana a las 15:00 de Montevideo: con el modo de siempre, su
+ *  aviso es hoy a las 20:00. */
+async function turnoConAvisoHoy(o: Org, opciones: { telefono?: string; nombre?: string } = {}) {
   const paciente = await crearPaciente(o, opciones.telefono ?? TELEFONO, opciones.nombre);
   const turno = await crearTurno(o, paciente.id, new Date("2026-09-04T18:00:00.000Z"));
-  const envio = await crearEnvio(o, turno, opciones.programadoEn ?? new Date("2026-09-03T23:05:00.000Z"), {
-    destino: paciente.telefono,
-    estado: paciente.telefono ? "pendiente" : "fallido",
-  });
-  return { paciente, turno, envio };
+  return { paciente, turno };
 }
 
 const textoDelEnlace = (enlace: string) => new URL(enlace).searchParams.get("text");
-
-function enviadorDoble() {
-  const textos: string[] = [];
-  const enviar: EnviadorSms = vi.fn(async ({ texto }) => {
-    textos.push(texto);
-    return { tipo: "aceptado", sid: `SM${randomUUID().replaceAll("-", "")}`, segmentos: 1, estadoTwilio: "queued" } as const;
-  });
-  return { enviar, textos };
-}
 
 beforeAll(async () => {
   process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
@@ -308,116 +256,6 @@ async function configDe(o: Org) {
   }));
 }
 
-// ─── El cron ────────────────────────────────────────────────────────────────
-
-describe("despacharEnvios según el canal", () => {
-  it("whatsapp: cancela el recordatorio con su motivo y no llama a Twilio", async () => {
-    const o = await crearOrg("whatsapp");
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    const { enviar } = enviadorDoble();
-
-    const r = await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
-
-    expect(enviar).not.toHaveBeenCalled();
-    expect(r.cancelados).toBe(1);
-    const fila = await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } });
-    expect(fila).toMatchObject({ estado: "cancelado", motivoNoEnvio: MOTIVO_CANAL_WHATSAPP, intentos: 0, sid: null });
-    expect(fila.cerradoEn).toEqual(AHORA);
-    expect(r.eventos.some((e) => e.startsWith("[sms][canal-whatsapp]"))).toBe(true);
-  });
-
-  it("whatsapp: lo que todavía no venció no se toca", async () => {
-    const o = await crearOrg("whatsapp");
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() + HORA) });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
-
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("pendiente");
-  });
-
-  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado no cuenta.
-  it.each(["ambos", "sms"] as const)("%s guardado: cancela igual, con el motivo del canal", async (canal) => {
-    const o = await crearOrg(canal);
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
-
-    expect(enviar).not.toHaveBeenCalled();
-    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).toMatchObject({
-      estado: "cancelado",
-      motivoNoEnvio: MOTIVO_CANAL_WHATSAPP,
-    });
-  });
-
-  it.each(["ambos", "sms"] as const)("%s con el canal guardado (el SMS hasta borrarlo): manda como siempre", async (canal) => {
-    const o = await crearOrg(canal);
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar, canalDe: (guardado) => guardado ?? "sms" });
-
-    expect(enviar).toHaveBeenCalledTimes(1);
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("aceptado");
-  });
-
-  it("whatsapp: el aviso de cobro (lo pidió ella) sigue saliendo por SMS", async () => {
-    const o = await crearOrg("whatsapp");
-    const paciente = await crearPaciente(o);
-    const envio = await prismaRaw.envioSms.create({
-      data: {
-        organizationId: o.orgId,
-        claveIdempotencia: `cobro:${paciente.id}:2026-09-03`,
-        motivo: "recordatorio_cobro",
-        pacienteId: paciente.id,
-        destino: TELEFONO,
-        programadoEn: AHORA,
-        proximoIntentoEn: AHORA,
-      },
-    });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar, textoDeCobro: async () => "Debés 1 sesión" });
-
-    expect(enviar).toHaveBeenCalledTimes(1);
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("aceptado");
-  });
-
-  it("decide al despachar: lo agendado con sms guardado se cancela igual", async () => {
-    const o = await crearOrg("sms");
-    const paciente = await crearPaciente(o);
-    const turno = await crearTurno(o, paciente.id, new Date("2026-09-04T18:00:00.000Z"));
-    await programarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: turno.fecha,
-      ahora: AHORA,
-    });
-    await prismaRaw.configuracion.update({ where: { organizationId: o.orgId }, data: { canalRecordatorio: "whatsapp" } });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: new Date(turno.fecha.getTime() - 3 * HORA), enviar });
-
-    expect(enviar).not.toHaveBeenCalled();
-    const [fila] = await prismaRaw.envioSms.findMany({ where: { turnoId: turno.id } });
-    expect(fila).toMatchObject({ estado: "cancelado", motivoNoEnvio: MOTIVO_CANAL_WHATSAPP });
-  });
-
-  it("whatsapp con el turno ya cerrado: el motivo es el del turno, no el del canal", async () => {
-    const o = await crearOrg("whatsapp");
-    const { envio, turno } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    await prismaRaw.turno.update({ where: { id: turno.id }, data: { estado: "cancelado" } });
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar: enviadorDoble().enviar });
-
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).motivoNoEnvio).not.toBe(
-      MOTIVO_CANAL_WHATSAPP,
-    );
-  });
-});
-
 // ─── Registrar la apertura ──────────────────────────────────────────────────
 
 describe("registrarAviso", () => {
@@ -510,8 +348,8 @@ describe("rutas", () => {
     vi.useRealTimers();
   });
 
-  async function entrar(canal: CanalRecordatorio = "whatsapp") {
-    const o = await crearOrg(canal);
+  async function entrar() {
+    const o = await crearOrg();
     sesionActual.organizationId = o.orgId;
     sesionActual.userId = o.userId;
     return o;
@@ -529,7 +367,6 @@ describe("rutas", () => {
     const cuerpo = await res.json();
     expect(cuerpo).toEqual({
       data: {
-        canal: "whatsapp",
         turnos: [
           {
             turnoId: turno.id,
@@ -550,16 +387,6 @@ describe("rutas", () => {
         ],
       },
     });
-  });
-
-  it("GET con sms guardado: canal whatsapp y la lista llena", async () => {
-    const o = await entrar("sms");
-    await turnoConAvisoHoy(o);
-    const { GET } = await import("@/app/api/recordatorios/whatsapp/route");
-
-    const { data } = await (await GET()).json();
-    expect(data.canal).toBe("whatsapp");
-    expect(data.turnos).toHaveLength(1);
   });
 
   it("POST …/[turnoId]/abierto: 201 con avisadoEn, y el GET lo refleja", async () => {
@@ -624,36 +451,11 @@ describe("rutas", () => {
     }
     expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
   });
-
-  it.each(["sms", "ambos"] as const)("/api/config: con %s guardado devuelve whatsapp, y por PATCH sólo acepta whatsapp", async (guardado) => {
-    const o = await entrar(guardado);
-    const { GET, PATCH } = await import("@/app/api/config/route");
-    const patch = (body: unknown) =>
-      PATCH(new Request("http://localhost/api/config", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
-    const guardadoEnLaBase = async () =>
-      (await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: o.orgId } })).canalRecordatorio;
-
-    expect((await (await GET()).json()).data.canalRecordatorio).toBe("whatsapp");
-    for (const canal of ["sms", "ambos", "paloma"]) expect((await patch({ canalRecordatorio: canal })).status).toBe(400);
-    expect(await guardadoEnLaBase()).toBe(guardado);
-    const res = await patch({ canalRecordatorio: "whatsapp" });
-    expect(res.status).toBe(200);
-    expect((await res.json()).data.canalRecordatorio).toBe("whatsapp");
-    expect(await guardadoEnLaBase()).toBe("whatsapp");
-  });
-
-  it("una configuración creada sin canal queda en sms", async () => {
-    const org = await prismaRaw.organization.create({ data: { nombre: `Org ${randomUUID()}` } });
-    const c = await prismaRaw.configuracion.create({
-      data: { organizationId: org.id, nombreProfesional: "X", tarifaDefault: 1 },
-    });
-    expect(c.canalRecordatorio).toBe("sms");
-  });
 });
 
 describe("auditoría de Tu consultorio (configuracion.editar)", () => {
-  async function entrar(canal: CanalRecordatorio) {
-    const o = await crearOrg(canal);
+  async function entrar() {
+    const o = await crearOrg();
     sesionActual.organizationId = o.orgId;
     sesionActual.userId = o.userId;
     return o;
@@ -665,10 +467,10 @@ describe("auditoría de Tu consultorio (configuracion.editar)", () => {
   const eventos = (organizationId: string) =>
     prismaRaw.eventoAuditoria.findMany({ where: { organizationId, accion: ACCIONES.configuracion.editar }, orderBy: { creadoEn: "asc" } });
 
-  it("deja quién cambió qué: el canal y el modo con su antes y después, las plantillas sólo por nombre", async () => {
-    const o = await entrar("sms");
+  it("deja quién cambió qué: el modo con su antes y después, las plantillas sólo por nombre", async () => {
+    const o = await entrar();
     const cobro = "Hola {{nombre}}, quedan {{monto}} sin pagar.";
-    const res = await patch({ canalRecordatorio: "whatsapp", recordatorioModo: "misma_manana", templateCobro: cobro, templateRecordatorio: TEMPLATE });
+    const res = await patch({ recordatorioModo: "misma_manana", templateCobro: cobro, templateRecordatorio: TEMPLATE });
     expect(res.status).toBe(200);
     const [evento, ...otros] = await eventos(o.orgId);
     expect(otros).toHaveLength(0);
@@ -680,9 +482,7 @@ describe("auditoría de Tu consultorio (configuracion.editar)", () => {
       entidadId: config.id,
       // templateRecordatorio llegó igual al guardado: no cambió.
       detalle: {
-        campos: ["canalRecordatorio", "recordatorioModo", "templateCobro"],
-        canalRecordatorioAntes: "sms",
-        canalRecordatorioDespues: "whatsapp",
+        campos: ["recordatorioModo", "templateCobro"],
         recordatorioModoAntes: "dia_anterior",
         recordatorioModoDespues: "misma_manana",
       },
@@ -691,17 +491,17 @@ describe("auditoría de Tu consultorio (configuracion.editar)", () => {
   });
 
   it("guardar lo mismo (el autoguardado lo hace) no deja evento", async () => {
-    const o = await entrar("whatsapp");
-    expect((await patch({ canalRecordatorio: "whatsapp", templateRecordatorio: TEMPLATE })).status).toBe(200);
+    const o = await entrar();
+    expect((await patch({ templateRecordatorio: TEMPLATE })).status).toBe(200);
     expect(await eventos(o.orgId)).toHaveLength(0);
   });
 
   it("cada organización ve sólo sus cambios", async () => {
-    const otra = await crearOrg("sms");
-    const o = await entrar("sms");
-    await patch({ canalRecordatorio: "whatsapp" });
+    const otra = await crearOrg();
+    const o = await entrar();
+    await patch({ recordatorioModo: "misma_manana" });
     expect(await eventos(o.orgId)).toHaveLength(1);
     expect(await eventos(otra.orgId)).toHaveLength(0);
-    expect((await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: otra.orgId } })).canalRecordatorio).toBe("sms");
+    expect((await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: otra.orgId } })).recordatorioModo).toBe("dia_anterior");
   });
 });

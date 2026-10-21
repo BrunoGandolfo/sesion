@@ -6,12 +6,10 @@
  *   DATABASE_URL_TEST="postgres://..." \
  *   npx vitest run src/lib/__tests__/crear-serie-turno.test.ts
  *
- * Un colaborador se reemplaza, y es a propósito: `envios-del-turno` (los SMS
- * del área 5) se cambia por un doble que anota las llamadas. Lo que se prueba
- * acá es la regla de la serie, y de paso que CADA turno generado pide su
- * aviso y que cancelar el resto apaga uno por turno cancelado; los envíos
- * tienen su propio test (envios-del-turno.test.ts). El cifrado de las notas
- * es el real.
+ * Lo que se prueba acá es la regla de la serie. El aviso por WhatsApp de
+ * cada turno sale de la lista de Hoy (recordatorios-whatsapp.test.ts), que
+ * se arma desde los turnos: no hay nada que programar al crearlos. El
+ * cifrado de las notas es el real.
  *
  * Cada caso empieza con la base vacía (vaciarTablas).
  */
@@ -22,7 +20,6 @@ import {
   describe,
   expect,
   it,
-  vi,
 } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
@@ -40,30 +37,6 @@ import { MENSAJE_SIN_SERIE, TURNO_SOLAPADO_CON } from "@/lib/glosario";
 import type { PrismaClient } from "@prisma/client";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
-
-const recordatorios = vi.hoisted(() => ({
-  programados: [] as string[],
-  reprogramados: [] as string[],
-  cerrados: [] as string[],
-}));
-
-vi.mock("@/app/api/_lib/casos-uso/envios-del-turno", async (original) => {
-  const real =
-    await original<typeof import("@/app/api/_lib/casos-uso/envios-del-turno")>();
-  return {
-    ...real,
-    programarEnvioDelTurno: async (_tx: unknown, { turnoId }: { turnoId: string }) => {
-      recordatorios.programados.push(turnoId);
-    },
-    reprogramarEnvioDelTurno: async (_tx: unknown, { turnoId }: { turnoId: string }) => {
-      recordatorios.reprogramados.push(turnoId);
-    },
-    cancelarEnviosDelTurno: async (_tx: unknown, turnoId: string) => {
-      recordatorios.cerrados.push(turnoId);
-      return 1;
-    },
-  };
-});
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
@@ -125,9 +98,6 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await vaciarTablas(prismaRaw);
-  recordatorios.programados.length = 0;
-  recordatorios.reprogramados.length = 0;
-  recordatorios.cerrados.length = 0;
 });
 
 afterAll(async () => {
@@ -147,7 +117,6 @@ describe("crearTurno con frecuencia", () => {
     expect(creado.serieId).toBeNull();
     expect(await prismaRaw.serieTurno.count({ where: { organizationId: orgId } })).toBe(0);
     expect(await prismaRaw.turno.count({ where: { organizationId: orgId } })).toBe(1);
-    expect(recordatorios.programados).toEqual([creado.id]);
   });
 
   it("semanal: tres meses de turnos, cada uno con su recordatorio", async () => {
@@ -168,7 +137,6 @@ describe("crearTurno con frecuencia", () => {
     const turnos = await turnosDeSerie(creado.serie!.id);
     expect(turnos.map((t) => t.fecha)).toEqual(fechasDeSerie(ANCLA, "semanal"));
     expect(turnos.every((t) => t.estado === "programado")).toBe(true);
-    expect(recordatorios.programados.sort()).toEqual(turnos.map((t) => t.id).sort());
   });
 
   it("quincenal: cada 14 días", async () => {
@@ -261,7 +229,6 @@ describe("crearTurno con frecuencia", () => {
 
     expect(await prismaRaw.serieTurno.count({ where: { organizationId: orgId } })).toBe(0);
     expect(await prismaRaw.turno.count({ where: { organizationId: orgId } })).toBe(1);
-    expect(recordatorios.programados).toEqual([]);
   });
 
   it("un paciente de otra organización no se puede agendar", async () => {
@@ -376,8 +343,6 @@ describe("cancelarRestoDeSerie", () => {
       "cancelado",
       "cancelado",
     ]);
-    const cancelados = propios.filter((t, i) => t.estado === "cancelado" && i >= 4);
-    expect(recordatorios.cerrados.sort()).toEqual(cancelados.map((t) => t.id).sort());
 
     const ajenoDespues = await prismaRaw.turno.findUniqueOrThrow({ where: { id: ajeno.id } });
     expect(ajenoDespues.estado).toBe("programado");

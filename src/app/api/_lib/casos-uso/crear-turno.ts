@@ -15,9 +15,9 @@
 //     sesión ya está ocurriendo (decisión del dueño).
 //   - Todo en una transacción y bajo el lock de agenda: o queda la serie
 //     completa o no queda nada.
-//   - Cada turno generado es independiente: mismos campos, mismo aviso por
-//     SMS (programarEnvioDelTurno, casos-uso/envios-del-turno.ts), y se
-//     mueve, cobra o cancela con los casos de uso de un turno suelto. Lo
+//   - Cada turno generado es independiente: mismos campos, y se mueve,
+//     cobra o cancela con los casos de uso de un turno suelto. Su aviso por
+//     WhatsApp sale de la lista de Hoy (recordatorios-whatsapp.ts). Lo
 //     único que los une es `serieId`, que solo lee "cancelar el resto".
 //
 // Las notas del turno van cifradas, atadas al id de la fila (por eso el id
@@ -39,7 +39,6 @@ import { auditar } from "../auditoria";
 import { motivoGrabacionNoAdmitida, toTurno } from "../domain";
 import { requirePaciente } from "../pacientes";
 import { ApiError } from "../responses";
-import { programarEnvioDelTurno } from "./envios-del-turno";
 import { fechasDeSerie } from "./serie-turnos";
 import {
   buscarTurnoSolapado,
@@ -185,17 +184,6 @@ export async function crearTurno({
         },
       });
       creados += 1;
-
-      // Un turno con fecha pasada no lleva aviso (el caso de /grabar/nuevo,
-      // que crea el turno con la hora de este instante). La regla vive en
-      // casos-uso/envios-del-turno.ts.
-      await programarEnvioDelTurno(tx, {
-        turnoId: fila.id,
-        organizationId,
-        pacienteId: paciente.id,
-        fechaTurno,
-        ahora,
-      });
 
       // Las notas recién escritas: no hace falta descifrar lo que se acaba
       // de cifrar.

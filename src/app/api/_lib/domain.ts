@@ -37,7 +37,6 @@ import {
 } from "@/lib/glosario";
 import { HORAS_PARA_ENVIAR_GRABACION, MINUTOS_RELOJ_ADELANTADO } from "@/lib/plazo-grabacion";
 import { porMontoYAntiguedad } from "@/lib/orden-deuda";
-import { CANAL_RECORDATORIO_VIGENTE } from "@/lib/recordatorios-programacion";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -172,8 +171,6 @@ export function toConfiguracion(
     templateRecordatorio: configuracion.templateRecordatorio,
     templateCobro: configuracion.templateCobro,
     orientacionTeorica: configuracion.orientacionTeorica,
-    // Sólo WhatsApp: lo guardado no cuenta (CANAL_RECORDATORIO_VIGENTE).
-    canalRecordatorio: CANAL_RECORDATORIO_VIGENTE,
     organizationId: configuracion.organizationId,
   };
 }
@@ -358,17 +355,6 @@ export interface CambiosTurno {
   estado?: EstadoTurno;
 }
 
-/** Qué pasa con el recordatorio por SMS después de editar. */
-export type EfectoEnvioTurno =
-  /** El turno quedó cerrado (realizado, ausente, cancelado): nada avisa. */
-  | "cancelar"
-  /** Sigue programado y cambió la fecha: se apaga el aviso viejo y se
-   *  programa el de la fecha nueva. */
-  | "reprogramar"
-  /** Venía cerrado y volvió a programado: el cierre apagó su aviso. */
-  | "revivir"
-  | null;
-
 type TurnoEnEdicion = { estado: string; fecha: Date; duracion: number; pagoEstado: string };
 
 /**
@@ -394,32 +380,10 @@ export type DecisionEdicionTurno =
       /** El intervalo a comprobar contra la agenda, o null si esta edición
        *  no puede CREAR un solapamiento. */
       verificarSolapamiento: { inicio: Date; duracionMin: number } | null;
-      efectoEnvio: EfectoEnvioTurno;
     };
 
 function ocupaHorario(estado: string): boolean {
   return (ESTADOS_QUE_OCUPAN as readonly string[]).includes(estado);
-}
-
-/**
- * El efecto de una edición sobre el recordatorio, mirando el turno antes y
- * después de escribir. `cambioFecha` dice si el PATCH mandó `fecha`: una
- * fecha igual a la que tenía no reprograma nada.
- *
- * Es aparte de decidirEdicionTurno porque el caso de uso la vuelve a llamar
- * con la fila YA ESCRITA: cobrar no toma el lock de agenda, así que el estado
- * pudo cambiar entre la lectura y la escritura, y el aviso tiene que seguir
- * lo que quedó en la base, no lo que se previó.
- */
-export function efectoEnvioDeEdicion(
-  antes: { estado: string; fecha: Date },
-  despues: { estado: string; fecha: Date },
-  cambioFecha: boolean,
-): EfectoEnvioTurno {
-  if (!turnoSigueProgramado(despues.estado)) return "cancelar";
-  if (cambioFecha && despues.fecha.getTime() !== antes.fecha.getTime()) return "reprogramar";
-  if (!turnoSigueProgramado(antes.estado)) return "revivir";
-  return null;
 }
 
 /**
@@ -474,7 +438,6 @@ export function decidirEdicionTurno(
       ocupaHorario(final.estado) && (movioElIntervalo || pasaAOcupar)
         ? { inicio: final.fecha, duracionMin: final.duracion }
         : null,
-    efectoEnvio: efectoEnvioDeEdicion(actual, final, cambios.fecha !== undefined),
   };
 }
 
@@ -679,20 +642,16 @@ export function deudaPorAntiguedad(
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Item de /api/deudores: DeudaPaciente más lo que la pantalla de Cobros
- *  necesita para el recordatorio (el teléfono al que sale el SMS, los
- *  minutos impagos y cuándo se avisó por última vez). */
+ *  necesita para el recordatorio (el teléfono del WhatsApp, los minutos
+ *  impagos y cuándo se avisó por última vez). */
 export type DeudoresApiItem = DeudaPaciente & {
   telefono: string;
   minutosTotales: number;
-  /** Cuándo salió el último aviso de cobro (SMS aceptado o WhatsApp
-   *  abierto), ISO; null si nunca se le avisó. Sale de
+  /** Cuándo abrió el último aviso de cobro por WhatsApp, ISO; null si
+   *  nunca se le avisó. Sale de
    *  ultimoAvisoPorPaciente (casos-uso/recordar-cobro.ts): es lo que la
    *  pantalla muestra como "Avisado hace N días" para no avisar dos veces. */
   ultimoAvisoEn: string | null;
-  /** Su teléfono pidió no recibir más mensajes (bajas_sms). Con WhatsApp la
-   *  pantalla abre el enlace antes de preguntarle al servidor: lo tiene que
-   *  saber antes. */
-  dadaDeBaja: boolean;
 };
 
 /** Turno con deuda pendiente tal como lo devuelve buscarTurnosConDeuda. */
@@ -705,7 +664,7 @@ export interface TurnoConDeuda extends TurnoParaDeuda {
 /**
  * La deuda de UNA paciente, o null si no debe nada. La misma consulta y la
  * misma cuenta que /api/deudores y Hoy, acotadas a ella: lo que se le avisa
- * por SMS (recordar-cobro, texto-de-cobro) es lo que se ve en pantalla.
+ * por WhatsApp (recordar-cobro, texto-de-cobro) es lo que se ve en pantalla.
  */
 export async function deudaDePaciente(
   prisma: typeof db,
@@ -726,7 +685,7 @@ export async function deudaDePaciente(
  * Con `pacienteId` acota a una sola paciente sin cambiar nada más: es lo que
  * necesita recordar-cobro para saber cuánto debe la persona a la que le va a
  * avisar, y tiene que ser esta misma consulta —si la deuda que se le cuenta
- * en el SMS no es la que ve en la pantalla, el problema es peor que el bug.
+ * en el aviso no es la que ve en la pantalla, el problema es peor que el bug.
  */
 export async function buscarTurnosConDeuda(
   prisma: typeof db,

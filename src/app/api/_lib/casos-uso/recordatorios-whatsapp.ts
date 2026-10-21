@@ -1,8 +1,7 @@
-// Caso de uso: el WhatsApp asistido. Con el canal en `whatsapp` (hoy siempre:
-// CANAL_RECORDATORIO_VIGENTE), la app no manda el recordatorio por su cuenta: le
-// prepara a la profesional el mensaje de cada turno que corresponde avisar
-// hoy, ella lo abre en WhatsApp y lo manda desde su teléfono, y la app
-// registra que lo abrió.
+// Caso de uso: el WhatsApp asistido. La app no manda el recordatorio por su
+// cuenta: le prepara a la profesional el mensaje de cada turno que
+// corresponde avisar hoy, ella lo abre en WhatsApp y lo manda desde su
+// teléfono, y la app registra que lo abrió.
 //
 // ─── QUÉ TURNOS CORRESPONDE AVISAR HOY ──────────────────────────────────────
 //
@@ -21,7 +20,7 @@
 //
 // ─── EL TEXTO ───────────────────────────────────────────────────────────────
 //
-// textoDelRecordatorio (src/lib/sms/texto.ts), con el motivo que decide la
+// textoDelRecordatorio (src/lib/recordatorio-texto.ts), con el motivo que decide la
 // regla (recordatorio o cambio de horario) y la plantilla vigente. El
 // teléfono es el de la ficha HOY.
 //
@@ -36,20 +35,26 @@
 
 import { agregarDiasMvd, finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
 import { ACCIONES } from "@/lib/auditoria-acciones";
+import type { Prisma } from "@prisma/client";
+
 import type { db } from "@/lib/db";
 import {
-  calcularProgramadoEn, CANAL_RECORDATORIO_VIGENTE, normalizarRecordatorioModo, type RecordatorioModo,
+  calcularProgramadoEn, normalizarRecordatorioModo, type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
-import { textoDelRecordatorio } from "@/lib/sms/texto";
+import { textoDelRecordatorio } from "@/lib/recordatorio-texto";
 import { enlaceWhatsapp } from "@/lib/whatsapp";
 import type { AvisoDelTurno, AvisoWhatsappRegistrado, RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
 
 import { auditar } from "../auditoria";
 import { ApiError } from "../responses";
-import { whereTurnoAvisable } from "./envios-del-turno";
 import { tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
+
+/** A qué turno todavía se le avisa: sigue programado y no empezó. */
+export function whereTurnoAvisable(ahora: Date) {
+  return { estado: "programado", fecha: { gt: ahora } } satisfies Prisma.TurnoWhereInput;
+}
 
 export interface ListarRecordatoriosParams {
   prisma: ClientePrisma;
@@ -59,8 +64,7 @@ export interface ListarRecordatoriosParams {
 
 /**
  * Los turnos cuyo recordatorio corresponde hoy, con el enlace de WhatsApp
- * listo, ordenados por la hora del turno. Con canal `sms` devuelve la lista
- * vacía (y el canal, para que la pantalla decida si muestra el bloque).
+ * listo, ordenados por la hora del turno.
  */
 export async function listarRecordatoriosDeHoy({
   prisma,
@@ -78,10 +82,6 @@ export async function listarRecordatoriosDeHoy({
     },
   });
   if (!configuracion) throw new ApiError("Configuración no encontrada", 404);
-
-  // Sólo WhatsApp: lo guardado no cuenta (CANAL_RECORDATORIO_VIGENTE).
-  const canal = CANAL_RECORDATORIO_VIGENTE;
-  if (canal === "sms") return { canal, turnos: [] };
 
   const finHoy = finDelDiaMvd(ahora);
   const modo = normalizarRecordatorioModo(configuracion.recordatorioModo);
@@ -125,7 +125,7 @@ export async function listarRecordatoriosDeHoy({
     })
     .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
-  return { canal, turnos };
+  return { turnos };
 }
 
 /**

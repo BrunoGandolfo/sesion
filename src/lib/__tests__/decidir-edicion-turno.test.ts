@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   decidirEdicionTurno,
-  efectoEnvioDeEdicion,
   puedeTransicionTurno,
   sePuedeCobrar,
   TRANSICIONES_TURNO,
@@ -94,27 +93,24 @@ describe("decidirEdicionTurno", () => {
     for (const estado of ESTADOS_TURNO) expect(decidirEdicionTurno(turno(estado), {})).toEqual({ tipo: "sinCambios" });
   });
 
-  it("mover un programado verifica el intervalo NUEVO y reprograma el aviso", () => {
+  it("mover un programado verifica el intervalo NUEVO", () => {
     expect(decidirEdicionTurno(turno("programado"), { fecha: ONCE, duracion: 90 })).toEqual({
       tipo: "aplicar",
       verificarSolapamiento: { inicio: ONCE, duracionMin: 90 },
-      efectoEnvio: "reprogramar",
     });
   });
 
-  it("solo la duración verifica con la fecha que ya tenía; el aviso no cambia", () => {
+  it("solo la duración verifica con la fecha que ya tenía", () => {
     expect(decidirEdicionTurno(turno("programado"), { duracion: 90 })).toEqual({
       tipo: "aplicar",
       verificarSolapamiento: { inicio: DIEZ, duracionMin: 90 },
-      efectoEnvio: null,
     });
   });
 
-  it("mandar la misma fecha no verifica ni reprograma", () => {
+  it("mandar la misma fecha no verifica", () => {
     expect(decidirEdicionTurno(turno("programado"), { fecha: new Date(DIEZ) })).toEqual({
       tipo: "aplicar",
       verificarSolapamiento: null,
-      efectoEnvio: null,
     });
   });
 
@@ -122,45 +118,29 @@ describe("decidirEdicionTurno", () => {
     expect(decidirEdicionTurno(turno("programado"), { notas: "x", modalidad: "online" })).toEqual({
       tipo: "aplicar",
       verificarSolapamiento: null,
-      efectoEnvio: null,
     });
   });
 
-  it("ausente → programado pasa a ocupar: verifica su intervalo y revive el aviso", () => {
+  it("ausente → programado pasa a ocupar: verifica su intervalo", () => {
     expect(decidirEdicionTurno(turno("ausente"), { estado: "programado" })).toEqual({
       tipo: "aplicar",
       verificarSolapamiento: { inicio: DIEZ, duracionMin: 50 },
-      efectoEnvio: "revivir",
     });
   });
 
-  it("realizado → programado ya ocupaba: no verifica, pero revive el aviso", () => {
+  it("realizado → programado ya ocupaba: no verifica", () => {
     expect(decidirEdicionTurno(turno("realizado"), { estado: "programado" })).toEqual({
       tipo: "aplicar",
       verificarSolapamiento: null,
-      efectoEnvio: "revivir",
     });
   });
 
-  it("cerrar un programado (realizado, ausente o cancelado) apaga el aviso y no verifica", () => {
+  it("cerrar un programado (realizado, ausente o cancelado) no verifica", () => {
     for (const estado of ["realizado", "ausente", "cancelado"] as const) {
       expect(decidirEdicionTurno(turno("programado"), { estado })).toEqual({
         tipo: "aplicar",
         verificarSolapamiento: null,
-        efectoEnvio: "cancelar",
       });
     }
-  });
-});
-
-describe("efectoEnvioDeEdicion (con la fila ya escrita)", () => {
-  it("si la fila escrita quedó cerrada, cancela aunque se haya pedido mover", () => {
-    // La carrera con cobrar: se decidió con un programado y se escribió un
-    // turno que cobrar cerró en el medio.
-    expect(efectoEnvioDeEdicion(turno("programado"), turno("realizado", ONCE), true)).toBe("cancelar");
-  });
-
-  it("reprogramar gana sobre revivir cuando cambian las dos cosas", () => {
-    expect(efectoEnvioDeEdicion(turno("ausente"), turno("programado", ONCE), true)).toBe("reprogramar");
   });
 });

@@ -1,8 +1,7 @@
 // El texto del aviso de cobro con la deuda de HOY: la misma plantilla de la
 // organización y la misma función (textoDelCobro) que la pantalla de Cobros,
 // así lo que ella confirmó es lo que sale. Null si la paciente ya no debe
-// nada (el despachador cancela el envío). Lo llama el cron de SMS a través del gancho `textoDeCobro` de
-// despachar-sms.ts.
+// nada. Lo llama recordar-cobro.ts para armar el enlace de WhatsApp.
 
 import type { db } from "@/lib/db";
 import { TEMPLATE_COBRO_DEFAULT, textoDelCobro } from "@/lib/deudas";

@@ -31,12 +31,9 @@ const SEGUROS = new Set(["GET", "HEAD", "OPTIONS"]);
  *  igual consulta quién es. autorizarEdicionHilo controla el origen y llama
  *  a getSessionActor (src/app/api/_lib/hilo-http.ts). */
 const SESION = ["getSessionActor", "getOrganizationId", "buscarActor", "autorizarEdicionHilo"];
-/** Máquinas: crons (CRON_SECRET), worker (PROCESSING_SECRET o ticket) y
- *  webhooks firmados de Twilio (validarWebhookTwilio llama a firmaValida,
- *  src/lib/sms/firma.ts). */
+/** Máquinas: crons (CRON_SECRET) y worker (PROCESSING_SECRET o ticket). */
 const MAQUINA = [
   "requireCron", "requireM2M", "autorizarTicketSesion", "autorizarTicketTrabajo",
-  "firmaValida", "validarWebhookTwilio",
 ];
 const CONTROLA_ORIGEN = ["esOrigenPropio", "autorizarEdicionHilo"];
 
@@ -153,7 +150,7 @@ describe("el lector, sobre fuentes de mentira", () => {
 
   it("el matcher del proxy excluye las rutas del worker y deja pasar las de la usuaria", () => {
     expect(pasaPorElProxy("sesion-clinica/[id]/lease/route.ts")).toBe(false);
-    expect(pasaPorElProxy("sms/envios/route.ts")).toBe(false);
+    expect(pasaPorElProxy("cron/salud/route.ts")).toBe(false);
     expect(pasaPorElProxy("sesion-clinica/[id]/aprobar/route.ts")).toBe(true);
   });
 });

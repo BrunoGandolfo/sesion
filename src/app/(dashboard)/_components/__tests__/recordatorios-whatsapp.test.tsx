@@ -54,18 +54,11 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe("el bloque según el canal", () => {
-  it("con SMS automático no aparece", async () => {
-    responder({ canal: "sms", turnos: [ana] });
+describe("el bloque", () => {
+  it("aparece con sus turnos: sólo hay WhatsApp", async () => {
+    responder({ turnos: [ana] });
     await abrir();
     expect(api.get).toHaveBeenCalledWith("/api/recordatorios/whatsapp", expect.anything());
-    expect(screen.queryByText("Recordatorios para hoy")).toBeNull();
-    expect(screen.queryByRole("link")).toBeNull();
-  });
-
-  it.each(["whatsapp", "ambos"] as const)("con %s aparece con sus turnos", async (canal) => {
-    responder({ canal, turnos: [ana] });
-    await abrir();
     const bloque = screen.getByRole("region", { name: "Recordatorios para hoy" });
     expect(within(bloque).getByText("Ana Pérez")).toBeTruthy();
     // Día y hora del turno, en Montevideo, y el estado.
@@ -74,7 +67,7 @@ describe("el bloque según el canal", () => {
   });
 
   it("sin turnos dice una sola línea", async () => {
-    responder({ canal: "whatsapp", turnos: [] });
+    responder({ turnos: [] });
     await abrir();
     const bloque = screen.getByRole("region", { name: "Recordatorios para hoy" });
     expect(within(bloque).getByText("No hay turnos para avisar hoy")).toBeTruthy();
@@ -84,7 +77,7 @@ describe("el bloque según el canal", () => {
 
 describe("Abrir WhatsApp", () => {
   it("es un enlace al mensaje que manda la API y, al tocarlo, registra el aviso", async () => {
-    responder({ canal: "whatsapp", turnos: [ana] });
+    responder({ turnos: [ana] });
     let resolver!: (v: { avisadoEn: string }) => void;
     api.post.mockReturnValue(new Promise((r) => (resolver = r)));
     await abrir();
@@ -121,7 +114,7 @@ describe("Abrir WhatsApp", () => {
   });
 
   it("si el turno se movió mientras volvía el registro, la fila nueva sigue sin avisar", async () => {
-    responder({ canal: "whatsapp", turnos: [ana] });
+    responder({ turnos: [ana] });
     let resolver!: (valor: { avisadoEn: string }) => void;
     api.post.mockReturnValue(new Promise((r) => (resolver = r)));
     let rerender!: (ui: React.ReactElement) => void;
@@ -130,7 +123,7 @@ describe("Abrir WhatsApp", () => {
     });
     fireEvent.click(screen.getByRole("link", { name: "Abrir WhatsApp" }));
     // La recarga (volver a la pestaña) trae el turno con otra hora.
-    responder({ canal: "whatsapp", turnos: [{ ...ana, fecha: "2026-10-09T17:00:00.000Z" }] });
+    responder({ turnos: [{ ...ana, fecha: "2026-10-09T17:00:00.000Z" }] });
     await act(async () => {
       rerender(<RecordatoriosWhatsapp reloadKey={1} />);
     });
@@ -141,7 +134,7 @@ describe("Abrir WhatsApp", () => {
   });
 
   it("si el registro falla, el enlace ya abrió y la fila lo dice", async () => {
-    responder({ canal: "whatsapp", turnos: [ana] });
+    responder({ turnos: [ana] });
     api.post.mockRejectedValue(new Error("Failed to fetch"));
     await abrir();
     await act(async () => {
@@ -153,7 +146,7 @@ describe("Abrir WhatsApp", () => {
   });
 
   it("muestra la hora del aviso que ya estaba hecho", async () => {
-    responder({ canal: "ambos", turnos: [{ ...ana, avisadoEn: "2026-10-08T12:05:00.000Z" }] });
+    responder({ turnos: [{ ...ana, avisadoEn: "2026-10-08T12:05:00.000Z" }] });
     await abrir();
     expect(screen.getByText("Avisado 09:05")).toBeTruthy();
   });
@@ -161,7 +154,7 @@ describe("Abrir WhatsApp", () => {
 
 describe("una recarga vieja no pisa un aviso confirmado", () => {
   it("la lectura que sale antes del registro y vuelve después no lo devuelve a «Sin avisar»", async () => {
-    responder({ canal: "whatsapp", turnos: [ana] });
+    responder({ turnos: [ana] });
     let resolverPost!: (valor: { avisadoEn: string }) => void;
     api.post.mockReturnValue(new Promise((r) => (resolverPost = r)));
     let rerender!: (ui: React.ReactElement) => void;
@@ -177,7 +170,7 @@ describe("una recarga vieja no pisa un aviso confirmado", () => {
     });
     await act(async () => resolverPost({ avisadoEn: "2026-10-08T13:32:00.000Z" }));
     expect(screen.getByText("Avisado 10:32")).toBeTruthy();
-    await act(async () => resolverGet({ canal: "whatsapp", turnos: [ana] }));
+    await act(async () => resolverGet({ turnos: [ana] }));
     expect(screen.getByText("Avisado 10:32")).toBeTruthy();
     expect(screen.queryByText("Sin avisar")).toBeNull();
   });
@@ -185,7 +178,7 @@ describe("una recarga vieja no pisa un aviso confirmado", () => {
 
 describe("el reloj de Hoy", () => {
   it("un turno que ya empezó deja de ofrecerse sin esperar una recarga", async () => {
-    responder({ canal: "whatsapp", turnos: [ana] });
+    responder({ turnos: [ana] });
     let rerender!: (ui: React.ReactElement) => void;
     await act(async () => {
       ({ rerender } = render(<RecordatoriosWhatsapp ahora={new Date("2026-10-09T12:59:00.000Z")} />));
@@ -202,7 +195,7 @@ describe("el reloj de Hoy", () => {
 
 describe("sin teléfono", () => {
   it("no hay botón: la fila se apaga y lleva a la ficha", async () => {
-    responder({ canal: "whatsapp", turnos: [ana, beto] });
+    responder({ turnos: [ana, beto] });
     await abrir();
     const filas = screen.getAllByRole("listitem");
     expect(filas).toHaveLength(2);
@@ -217,7 +210,7 @@ describe("sin teléfono", () => {
 
 describe("si la lectura falla", () => {
   it("una recarga que falla deja lo que había y lo dice", async () => {
-    responder({ canal: "whatsapp", turnos: [ana] });
+    responder({ turnos: [ana] });
     let vista!: ReturnType<typeof render>;
     await act(async () => {
       vista = render(<RecordatoriosWhatsapp reloadKey={0} />);
@@ -237,7 +230,7 @@ describe("si la lectura falla", () => {
 
   it("lo dice y deja reintentar", async () => {
     api.get.mockRejectedValueOnce(new Error("Failed to fetch"));
-    api.get.mockResolvedValueOnce({ canal: "whatsapp", turnos: [ana] });
+    api.get.mockResolvedValueOnce({ turnos: [ana] });
     await abrir();
     expect(screen.getByRole("alert").textContent).toBe("No se pudieron leer los recordatorios de hoy.");
     await act(async () => {
