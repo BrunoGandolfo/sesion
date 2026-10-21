@@ -687,6 +687,10 @@ export type DeudoresApiItem = DeudaPaciente & {
    *  ultimoAvisoPorPaciente (casos-uso/recordar-cobro.ts): es lo que la
    *  pantalla muestra como "Avisado hace N días" para no avisar dos veces. */
   ultimoAvisoEn: string | null;
+  /** Su teléfono pidió no recibir más mensajes (bajas_sms). Con WhatsApp la
+   *  pantalla abre el enlace antes de preguntarle al servidor: lo tiene que
+   *  saber antes. */
+  dadaDeBaja: boolean;
 };
 
 /** Turno con deuda pendiente tal como lo devuelve buscarTurnosConDeuda. */

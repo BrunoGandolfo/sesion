@@ -24,6 +24,7 @@ import {
   ultimoAvisoPorPaciente,
   type RecordarCobroResultado,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
+import { listarDeudores } from "@/app/api/_lib/casos-uso/deudores";
 import { textoDeCobro } from "@/app/api/_lib/casos-uso/texto-de-cobro";
 import { deudaDePaciente } from "@/app/api/_lib/domain";
 import { TEMPLATE_COBRO_DEFAULT } from "@/lib/deudas";
@@ -514,5 +515,24 @@ describe("con WhatsApp desde mi teléfono", () => {
       data: { organizationId: base.orgId, turnoId: turno.id, tipo: "recordatorio", fechaTurno: turno.fecha, abiertoEn: AHORA, usuarioId: "u" },
     });
     expect((await ultimoAvisoPorPaciente(db, base.orgId, [base.pacienteId])).size).toBe(0);
+  });
+});
+
+describe("listarDeudores dice quién pidió la baja", () => {
+  it("la pantalla lo sabe antes de abrir WhatsApp", async () => {
+    const base = await crearBase();
+    await crearImpago(base, 5);
+    const otra = await prismaRaw.paciente.create({
+      data: { nombre: "Ana", apellido: "Pérez", telefono: "+59899000002", tarifa: TARIFA, organizationId: base.orgId },
+    });
+    await prismaRaw.turno.create({
+      data: { fecha: AHORA, duracion: 50, estado: "realizado", pagoEstado: "pendiente", tarifaCobrada: TARIFA, pacienteId: otra.id, organizationId: base.orgId },
+    });
+    await prismaRaw.bajaSms.create({ data: { telefono: TELEFONO, motivo: "respuesta_baja" } });
+    const deudores = await listarDeudores({ prisma: db, organizationId: base.orgId, ahora: AHORA });
+    expect(Object.fromEntries(deudores.map((d) => [d.pacienteId, d.dadaDeBaja]))).toEqual({
+      [base.pacienteId]: true,
+      [otra.id]: false,
+    });
   });
 });

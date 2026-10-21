@@ -44,11 +44,19 @@ export async function listarDeudores({
   // Cuándo se le avisó por última vez a cada una. Va en la misma respuesta
   // porque es lo que evita mandar el mismo SMS dos veces: sin esto la
   // pantalla no tiene cómo saberlo y el botón invita a repetir.
-  const ultimoAviso = await ultimoAvisoPorPaciente(
-    prisma,
-    organizationId,
-    deudores.map((d) => d.pacienteId),
-  );
+  const [ultimoAviso, bajas] = await Promise.all([
+    ultimoAvisoPorPaciente(
+      prisma,
+      organizationId,
+      deudores.map((d) => d.pacienteId),
+    ),
+    // La misma regla que recordarCobro: el teléfono tal cual, sin espacios.
+    prisma.bajaSms.findMany({
+      where: { telefono: { in: [...new Set([...telefonos.values()].map((t) => t.trim()).filter(Boolean))] } },
+      select: { telefono: true },
+    }),
+  ]);
+  const deBaja = new Set(bajas.map((b) => b.telefono));
 
   return deudores.map((d) => ({
     pacienteId: d.pacienteId,
@@ -60,5 +68,6 @@ export async function listarDeudores({
     minutosTotales: d.minutosTotales,
     diasAtraso: d.diasAtraso ?? 0,
     ultimoAvisoEn: ultimoAviso.get(d.pacienteId) ?? null,
+    dadaDeBaja: deBaja.has((telefonos.get(d.pacienteId) ?? "").trim()),
   }));
 }

@@ -82,20 +82,21 @@ export function FilaDeudor({
 
   async function enviar() {
     // WhatsApp se abre dentro del toque, antes de esperar a la red: después
-    // de un await el navegador bloquea la ventana nueva.
-    if (accion.canal === "whatsapp" && accion.enlace) {
-      window.open(accion.enlace, "_blank", "noopener");
-    }
+    // de un await el navegador bloquea la ventana nueva. A quien pidió la
+    // baja no se le abre: el servidor lo rechaza y la pantalla dice por qué.
+    const enlace = accion.canal === "whatsapp" && !deudor.dadaDeBaja ? accion.enlace : null;
+    if (enlace) window.open(enlace, "_blank", "noopener");
+    const abrioWhatsapp = enlace !== null;
     setEnviando(true);
     try {
       const aviso = await recordarCobro(deudor.pacienteId);
       setConfirmando(false);
       onAvisado(aviso);
     } catch (error) {
-      // Por SMS, el servidor rechazó programarlo. Por WhatsApp el mensaje ya
-      // se abrió: lo que falló es anotarlo.
+      // Por SMS (o sin abrir WhatsApp), el servidor rechazó el pedido y dice
+      // por qué. Si WhatsApp ya se abrió, lo que falló es anotarlo.
       setConfirmando(false);
-      onError(accion.canal === "whatsapp" ? NO_SE_ANOTO_AVISO : mensajeParaElla(error));
+      onError(abrioWhatsapp ? NO_SE_ANOTO_AVISO : mensajeParaElla(error));
     } finally {
       setEnviando(false);
     }

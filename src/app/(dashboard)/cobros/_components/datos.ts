@@ -22,6 +22,8 @@ export type DeudorItem = DeudaPaciente & {
   telefono: string;
   /** ISO del último aviso que salió; null si nunca se le avisó. */
   ultimoAvisoEn: string | null;
+  /** Pidió no recibir más mensajes. Opcional: un servidor viejo no lo manda. */
+  dadaDeBaja?: boolean;
 };
 
 export type DatosCobros = {
