@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-import { getOrganizationId } from "../_lib/auth";
+import { getOrganizationId, getSessionActor } from "../_lib/auth";
 import {
   actualizarConfiguracion,
   obtenerConfiguracion,
@@ -25,7 +25,7 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const organizationId = await getOrganizationId();
+    const { organizationId, userId } = await getSessionActor();
     const body = await leerJson(request);
     const parsed = configUpdateSchema.safeParse(body);
 
@@ -36,6 +36,7 @@ export async function PATCH(request: Request) {
     const configuracion = await actualizarConfiguracion({
       prisma: db,
       organizationId,
+      usuarioId: userId,
       cambios: parsed.data,
     });
 

@@ -84,6 +84,12 @@ export const ACCIONES = {
      *  mensaje sale de su teléfono y la app no lo ve. */
     whatsappAbierto: "recordatorio.whatsapp_abierto",
   },
+  configuracion: {
+    /** Cambió algo de Tu consultorio (casos-uso/configuracion.ts). El
+     *  detalle dice qué campos; el canal y el modo, con su antes y después;
+     *  nunca el texto de las plantillas. */
+    editar: "configuracion.editar",
+  },
   ayuda: {
     pregunta: "ayuda.pregunta",
   },

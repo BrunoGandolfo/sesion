@@ -897,3 +897,58 @@ describe("rutas", () => {
     expect(c.canalRecordatorio).toBe("sms");
   });
 });
+
+describe("auditoría de Tu consultorio (configuracion.editar)", () => {
+  async function entrar(canal: CanalRecordatorio) {
+    const o = await crearOrg(canal);
+    sesionActual.organizationId = o.orgId;
+    sesionActual.userId = o.userId;
+    return o;
+  }
+  const patch = async (body: unknown) => {
+    const { PATCH } = await import("@/app/api/config/route");
+    return PATCH(new Request("http://localhost/api/config", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+  };
+  const eventos = (organizationId: string) =>
+    prismaRaw.eventoAuditoria.findMany({ where: { organizationId, accion: ACCIONES.configuracion.editar }, orderBy: { creadoEn: "asc" } });
+
+  it("deja quién cambió qué: el canal y el modo con su antes y después, las plantillas sólo por nombre", async () => {
+    const o = await entrar("sms");
+    const cobro = "Hola {{nombre}}, quedan {{monto}} sin pagar.";
+    const res = await patch({ canalRecordatorio: "whatsapp", recordatorioModo: "misma_manana", templateCobro: cobro, templateRecordatorio: TEMPLATE });
+    expect(res.status).toBe(200);
+    const [evento, ...otros] = await eventos(o.orgId);
+    expect(otros).toHaveLength(0);
+    const config = await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: o.orgId } });
+    expect(evento).toMatchObject({
+      actorTipo: "usuario",
+      actorId: o.userId,
+      entidad: "configuracion",
+      entidadId: config.id,
+      // templateRecordatorio llegó igual al guardado: no cambió.
+      detalle: {
+        campos: ["canalRecordatorio", "recordatorioModo", "templateCobro"],
+        canalRecordatorioAntes: "sms",
+        canalRecordatorioDespues: "whatsapp",
+        recordatorioModoAntes: "dia_anterior",
+        recordatorioModoDespues: "misma_manana",
+      },
+    });
+    expect(JSON.stringify(evento.detalle)).not.toContain("quedan");
+  });
+
+  it("guardar lo mismo (el autoguardado lo hace) no deja evento", async () => {
+    const o = await entrar("sms");
+    await patch({ canalRecordatorio: "sms", templateRecordatorio: TEMPLATE });
+    expect(await eventos(o.orgId)).toHaveLength(0);
+  });
+
+  it("cada organización ve sólo sus cambios", async () => {
+    const otra = await crearOrg("sms");
+    const o = await entrar("sms");
+    await patch({ canalRecordatorio: "ambos" });
+    expect(await eventos(o.orgId)).toHaveLength(1);
+    expect(await eventos(otra.orgId)).toHaveLength(0);
+    expect((await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: otra.orgId } })).canalRecordatorio).toBe("sms");
+  });
+});
