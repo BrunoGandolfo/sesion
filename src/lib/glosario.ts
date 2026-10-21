@@ -2234,3 +2234,9 @@ export const DESCARTAR_Y_GRABAR_ACCION = "Descartar y grabar";
 export const GRABAR_SALIDA_GRABANDO = "Se está grabando. Si salís, la grabación se corta.";
 /** Salir de /grabar con audio que no subió y sin copia en el teléfono. */
 export const GRABAR_SALIDA_SIN_COPIA = "En este teléfono no quedó copia de la grabación. Si salís, se pierde.";
+
+/** /grabar sin autorización vigente y con una grabación guardada en el
+ *  teléfono: se muestra (no se esconde detrás de la firma), y la firma se
+ *  pide antes de enviarla. */
+export const PENDIENTE_SIN_AUTORIZACION =
+  "Para enviarla hace falta la autorización firmada. La copia sigue en este teléfono.";

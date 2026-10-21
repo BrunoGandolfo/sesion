@@ -9,6 +9,13 @@ el borrador de la nota clínica.
   autorización, la pantalla muestra **Falta la autorización** y un botón
   **Firmar autorización** que lleva a la ficha. No hay forma de grabar sin eso.
   Ver `04-pacientes-y-ficha.md`.
+- **Una grabación que quedó en el teléfono no se esconde detrás de la firma.**
+  Si la autorización dejó de estar vigente y en el teléfono quedó una grabación
+  sin enviar, la pantalla de grabar la muestra igual: *"Quedó una grabación de
+  ~N min sin enviar"* y *"Para enviarla hace falta la autorización firmada. La
+  copia sigue en este teléfono."*, con **Firmar autorización** y
+  **Descartarla**. La firma va antes de enviarla: firmá en la ficha y volvé a
+  la pantalla de grabar de ese turno para enviarla.
 - **Con turno o sin turno.** Si hay turno hoy, se graba ese turno. Si tocás
   **Grabar** en la cabecera de la ficha y la paciente no tiene turno, la app
   **crea uno de 50 minutos, presencial, con la hora en que empezaste a
@@ -227,7 +234,7 @@ Mientras tanto la copia del teléfono todavía se puede enviar.
 
 - **No graba video.**
 - **No transcribe en vivo**: no ves texto mientras grabás.
-- **No graba sin autorización vigente.**
+- **No graba sin autorización vigente**, ni envía sin ella una grabación que quedó en el teléfono.
 - **No graba dos veces el mismo turno**: un turno tiene una sola sesión clínica.
 - **No sube nada mientras grabás**: el archivo sale entero al terminar.
 - **No cifra el audio en el teléfono.**

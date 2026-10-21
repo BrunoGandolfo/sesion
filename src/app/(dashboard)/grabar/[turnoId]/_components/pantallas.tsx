@@ -26,6 +26,7 @@ import {
   GRABACION_LLEGO,
   GRABACION_MUY_CORTA,
   GRABAR_SESION,
+  PENDIENTE_SIN_AUTORIZACION,
   PREPARANDO_GRABACION,
   REINTENTAR,
   VOLVER_A_LA_FICHA,
@@ -100,6 +101,34 @@ function EnviarODescartarYGrabar({
   );
 }
 
+/** Sin autorización vigente la copia se muestra igual, pero para enviarla
+ *  primero se firma (forense2 H1). */
+function OfertaSinAutorizacion({
+  minutos,
+  pacienteId,
+  onDescartar,
+}: {
+  minutos: number;
+  pacienteId: string;
+  onDescartar: () => void;
+}) {
+  return (
+    <OfertaPendiente minutos={minutos}>
+      <p className="mb-3 font-sans text-[13px] leading-[1.5] text-ink-700">
+        {PENDIENTE_SIN_AUTORIZACION}
+      </p>
+      <div className={FILA_DE_ACCIONES}>
+        <Button asChild className="flex-1">
+          <Link href={`/pacientes/${pacienteId}`}>{FIRMAR_AUTORIZACION}</Link>
+        </Button>
+        <Button variant="secondary" onClick={onDescartar}>
+          Descartarla
+        </Button>
+      </div>
+    </OfertaPendiente>
+  );
+}
+
 export function PantallaPrevia({
   autorizacionVigente,
   motivoSinGrabar,
@@ -140,11 +169,17 @@ export function PantallaPrevia({
     // y el servidor la acepta por su inicio (plazo-grabacion.ts).
     return (
       <div className="flex w-full flex-col items-center gap-4">
-        {pendienteMinutos !== null ? (
+        {pendienteMinutos === null ? null : autorizacionVigente ? (
           <OfertaPendiente minutos={pendienteMinutos}>
             <AccionesPendiente onEnviar={onEnviarPendiente} onDescartar={onDescartarPendiente} />
           </OfertaPendiente>
-        ) : null}
+        ) : (
+          <OfertaSinAutorizacion
+            minutos={pendienteMinutos}
+            pacienteId={pacienteId}
+            onDescartar={onDescartarPendiente}
+          />
+        )}
         <p className="max-w-[340px] font-sans text-[15px] leading-[1.55] text-ink-900">
           {motivoSinGrabar}
         </p>
@@ -156,14 +191,26 @@ export function PantallaPrevia({
   }
 
   if (!autorizacionVigente) {
+    // Una grabación que quedó a medias se retoma igual que desde la ficha:
+    // la copia del teléfono no se esconde detrás de la firma, pero no se
+    // envía sin ella (forense2 H1, decisión del dueño). Firmar va primero.
     return (
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex w-full flex-col items-center gap-4">
+        {pendienteMinutos !== null ? (
+          <OfertaSinAutorizacion
+            minutos={pendienteMinutos}
+            pacienteId={pacienteId}
+            onDescartar={onDescartarPendiente}
+          />
+        ) : null}
         <p className="font-display text-[20px] text-ink-900">
           {FALTA_AUTORIZACION}
         </p>
-        <Button asChild variant="secondary">
-          <Link href={`/pacientes/${pacienteId}`}>{FIRMAR_AUTORIZACION}</Link>
-        </Button>
+        {pendienteMinutos === null ? (
+          <Button asChild variant="secondary">
+            <Link href={`/pacientes/${pacienteId}`}>{FIRMAR_AUTORIZACION}</Link>
+          </Button>
+        ) : null}
       </div>
     );
   }

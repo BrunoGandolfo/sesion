@@ -16,9 +16,12 @@ import {
   DESCARTAR_Y_GRABAR_ACCION,
   DESCARTAR_Y_GRABAR_TITULO,
   ENVIAR_LA_QUE_QUEDO,
+  FALTA_AUTORIZACION,
+  FIRMAR_AUTORIZACION,
   GRABAR_SALIDA_GRABANDO,
   GRABAR_SALIDA_SIN_COPIA,
   IR_IGUAL,
+  PENDIENTE_SIN_AUTORIZACION,
   REINTENTAR,
   SALIDA_TRABAJO_TITULO,
   VOLVER,
@@ -253,5 +256,53 @@ describe("H4: no se sale de /grabar con audio que sólo está en memoria", () =>
     fireEvent.click(await screen.findByRole("button", { name: VOLVER_A_LA_FICHA }));
     expect(salidaPedida()).toBeTruthy();
     expect(m.router.push).not.toHaveBeenCalled();
+  });
+});
+
+describe("H1: una grabación a medias sin autorización vigente se retoma, y la firma se pide antes de subir", () => {
+  test("la copia se muestra, con la firma como paso antes de enviarla", () => {
+    grabadorEn(pendienteDe("t1"));
+    render(<GrabarView {...props} autorizacionVigente={false} />);
+    expect(screen.getByText("Quedó una grabación de ~25 min sin enviar")).toBeTruthy();
+    expect(screen.getByText(PENDIENTE_SIN_AUTORIZACION)).toBeTruthy();
+    expect(screen.getByText(FALTA_AUTORIZACION)).toBeTruthy();
+    const firmar = screen.getAllByRole("link", { name: FIRMAR_AUTORIZACION });
+    expect(firmar).toHaveLength(1);
+    expect(firmar[0].getAttribute("href")).toBe("/pacientes/p1");
+    // Sin firma no se envía ni se graba.
+    expect(screen.queryByRole("button", { name: "Guardarla ahora" })).toBeNull();
+    expect(screen.queryByRole("button", { name: ENVIAR_LA_QUE_QUEDO })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Grabar sesión" })).toBeNull();
+  });
+
+  test("también la de un turno de ayer, que ya no se puede grabar de nuevo", () => {
+    grabadorEn(pendienteDe("t1"));
+    render(<GrabarView {...props} autorizacionVigente={false} motivoSinGrabar="Este turno era de ayer." />);
+    expect(screen.getByText(PENDIENTE_SIN_AUTORIZACION)).toBeTruthy();
+    expect(screen.getByRole("link", { name: FIRMAR_AUTORIZACION })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Guardarla ahora" })).toBeNull();
+  });
+
+  test("se puede descartar igual", () => {
+    const grabador = grabadorEn(pendienteDe("t1"));
+    render(<GrabarView {...props} autorizacionVigente={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
+    expect(grabador.descartarPendiente).toHaveBeenCalledOnce();
+    expect(grabador.enviarPendiente).not.toHaveBeenCalled();
+  });
+
+  test("ya firmada, la misma copia se envía como siempre", async () => {
+    const grabador = grabadorEn(pendienteDe("t1"));
+    render(<GrabarView {...props} autorizacionVigente />);
+    fireEvent.click(screen.getByRole("button", { name: ENVIAR_LA_QUE_QUEDO }));
+    await waitFor(() => expect(grabador.enviarPendiente).toHaveBeenCalledOnce());
+  });
+
+  test("sin copia en el teléfono, sigue siendo sólo Falta la autorización", () => {
+    grabadorEn({});
+    render(<GrabarView {...props} autorizacionVigente={false} />);
+    expect(screen.getByText(FALTA_AUTORIZACION)).toBeTruthy();
+    expect(screen.getByRole("link", { name: FIRMAR_AUTORIZACION })).toBeTruthy();
+    expect(screen.queryByText(PENDIENTE_SIN_AUTORIZACION)).toBeNull();
   });
 });
