@@ -6,56 +6,47 @@
 //
 // ─── QUÉ TURNOS CORRESPONDE AVISAR HOY ──────────────────────────────────────
 //
-// Lo dice envios_sms, no una cuenta nueva: el envío del turno cuyo
-// `programado_en` cae en el día de hoy de Montevideo. Es la misma fila que el
-// cron despacha (o cancela, con canal `whatsapp`: casos-uso/despachar-sms.ts),
-// así que la lista de WhatsApp y el SMS hablan siempre del mismo día. Si
-// mañana cambia la regla de cuándo se avisa (recordatorios-programacion.ts),
-// cambia para los dos canales.
-//
-// Con una excepción, la misma que hace el cron: un envío que quedó VENCIDO
-// sin que el cron lo haya tratado. Un turno agendado hoy para esta tarde (con
-// `dia_anterior`, `programado_en` es ayer a las 20:00), o uno reabierto hoy
-// que revive su envío viejo: el SMS saldría en el próximo tick. Para WhatsApp
-// ese aviso es de hoy, el día en que el cron lo trata. Por eso entra también
-// lo programado ANTES de hoy que sigue pendiente, o que se cerró hoy (con
-// canal `whatsapp`, el cron lo cancela en ese tick). Lo programado ayer y
-// tratado ayer fue el aviso de ayer.
-//
-// De esas filas cuenta sólo la de la FECHA VIGENTE del turno (su clave
-// turno:<id>:<fecha>): un turno movido deja su envío viejo cancelado con la
-// fecha anterior, y ese no es un aviso de hoy. El turno tiene que seguir
-// programado y no haber empezado (whereTurnoAvisable, la misma regla que el
-// cron), la paciente activa y sin baja: los mismos cortes que haría el cron
-// antes de mandar.
+// Sale de los turnos, con una sola regla (correspondeAvisarHoy):
+//   - el turno sigue programado y no empezó (whereTurnoAvisable) y la
+//     paciente está activa;
+//   - su momento de aviso (calcularProgramadoEn, con el modo de Tu
+//     consultorio) ya llegó hoy o antes: un turno agendado hoy para esta
+//     tarde, cuyo momento fue ayer a las 20:00, entra hoy;
+//   - no se avisó antes de hoy para su fecha vigente. Lo avisado hoy sigue
+//     en la lista, marcado: es el aviso de hoy;
+//   - si se avisó otra fecha (lo movieron después), es un cambio de horario
+//     y entra ya, falte lo que falte para el turno.
+// Antes la lista salía de las filas de envios_sms que dejaba el cron del
+// SMS; el SMS ya no existe.
 //
 // ─── EL TEXTO ───────────────────────────────────────────────────────────────
 //
-// textoDelRecordatorio (src/lib/sms/texto.ts), la misma función que usa el
-// cron, con el motivo del envío (recordatorio o cambio de horario) y la
-// plantilla vigente. El teléfono es el de la ficha HOY, no el congelado en el
-// envío: si lo cargó después de agendar, el enlace aparece.
+// textoDelRecordatorio (src/lib/sms/texto.ts), con el motivo que decide la
+// regla (recordatorio o cambio de horario) y la plantilla vigente. El
+// teléfono es el de la ficha HOY.
 //
 // ─── "YA AVISADO" ───────────────────────────────────────────────────────────
 //
 // Una fila de avisos_whatsapp por cada vez que abrió el enlace, con la fecha
 // del turno que avisó. La app no sabe si el mensaje salió; sabe que lo
 // abrió. `avisadoEn` es la última apertura para la fecha VIGENTE: si después
-// movió el turno, el aviso nuevo vuelve a estar pendiente. Y esa apertura
-// vieja cuenta como "la paciente tenía el horario anterior" al reprogramar
-// (envios-del-turno.ts): el aviso nuevo es un cambio de horario y sale ya.
+// movió el turno, el aviso nuevo vuelve a estar pendiente, y la apertura
+// vieja cuenta como "la paciente tenía el horario anterior": el aviso nuevo
+// es un cambio de horario y sale ya.
 
-import { inicioDelDiaMvd, finDelDiaMvd } from "@/lib/fechas-montevideo";
+import { agregarDiasMvd, finDelDiaMvd, inicioDelDiaMvd } from "@/lib/fechas-montevideo";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
-import { CANAL_RECORDATORIO_VIGENTE } from "@/lib/recordatorios-programacion";
+import {
+  calcularProgramadoEn, CANAL_RECORDATORIO_VIGENTE, normalizarRecordatorioModo, type RecordatorioModo,
+} from "@/lib/recordatorios-programacion";
 import { textoDelRecordatorio } from "@/lib/sms/texto";
 import { enlaceWhatsapp } from "@/lib/whatsapp";
 import type { AvisoWhatsappRegistrado, RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
 
 import { auditar } from "../auditoria";
 import { ApiError } from "../responses";
-import { claveDelTurno, ESTADOS_CON_ENVIO_PENDIENTE, MOTIVO_CANAL_WHATSAPP, whereTurnoAvisable } from "./envios-del-turno";
+import { whereTurnoAvisable } from "./envios-del-turno";
 import { tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
@@ -83,6 +74,7 @@ export async function listarRecordatoriosDeHoy({
       direccion: true,
       nombreProfesional: true,
       whatsappOrigen: true,
+      recordatorioModo: true,
     },
   });
   if (!configuracion) throw new ApiError("Configuración no encontrada", 404);
@@ -91,108 +83,70 @@ export async function listarRecordatoriosDeHoy({
   const canal = CANAL_RECORDATORIO_VIGENTE;
   if (canal === "sms") return { canal, turnos: [] };
 
-  const inicioHoy = inicioDelDiaMvd(ahora);
-  const envios = await prisma.envioSms.findMany({
+  const finHoy = finDelDiaMvd(ahora);
+  const modo = normalizarRecordatorioModo(configuracion.recordatorioModo);
+  const candidatos = await prisma.turno.findMany({
     where: {
       organizationId,
-      motivo: { in: ["recordatorio_turno", "cambio_de_horario"] },
-      OR: [
-        { programadoEn: { gte: inicioHoy, lte: finDelDiaMvd(ahora) } },
-        {
-          programadoEn: { lt: inicioHoy },
-          OR: [
-            { estado: { in: [...ESTADOS_CON_ENVIO_PENDIENTE] } },
-            { cerradoEn: { gte: inicioHoy } },
-            { aceptadoEn: { gte: inicioHoy } },
-          ],
-        },
-      ],
+      ...whereTurnoAvisable(ahora),
       paciente: { activo: true },
-      // La misma regla que el despacho del SMS. La baja, en cambio, se mira
-      // contra el teléfono de la ficha (el enlace va a ese), no contra el
-      // congelado en el envío como hace el SMS.
-      turno: whereTurnoAvisable(ahora),
+      // El aviso más temprano es dos días antes (dos_dias_antes): un turno
+      // más lejano sólo entra si es un cambio de horario (tiene un aviso).
+      OR: [
+        { fecha: { lte: agregarDiasMvd(finHoy, 3) } },
+        { avisosWhatsapp: { some: { tipo: "recordatorio" } } },
+      ],
     },
     select: {
-      claveIdempotencia: true,
-      motivo: true,
-      turno: {
-        select: {
-          id: true,
-          fecha: true,
-          paciente: { select: { id: true, nombre: true, apellido: true, telefono: true } },
-        },
-      },
+      id: true,
+      fecha: true,
+      paciente: { select: { id: true, nombre: true, apellido: true, telefono: true } },
+      avisosWhatsapp: { where: { tipo: "recordatorio" }, select: { fechaTurno: true, abiertoEn: true } },
     },
-    orderBy: { programadoEn: "asc" },
   });
 
-  const vigentes = envios.flatMap((e) =>
-    e.turno && e.claveIdempotencia === claveDelTurno(e.turno.id, e.turno.fecha) ? [{ ...e, turno: e.turno }] : [],
-  );
-
-  const telefonos = [...new Set(vigentes.map((e) => e.turno.paciente.telefono.trim()).filter(Boolean))];
-  const bajas = new Set(
-    telefonos.length === 0
-      ? []
-      : (await prisma.bajaSms.findMany({ where: { telefono: { in: telefonos } }, select: { telefono: true } })).map(
-          (b) => b.telefono,
-        ),
-  );
-  const avisables = vigentes.filter((e) => !bajas.has(e.turno.paciente.telefono.trim()));
-
-  const ultimos = await ultimoAvisoPorTurno(
-    prisma,
-    organizationId,
-    avisables.map((e) => e.turno),
-  );
-
-  const turnos: RecordatorioWhatsapp[] = avisables
-    .map(({ motivo, turno }) => {
+  const turnos: RecordatorioWhatsapp[] = candidatos
+    .flatMap((turno) => {
+      const corresponde = correspondeAvisarHoy({ fecha: turno.fecha, avisos: turno.avisosWhatsapp }, modo, ahora);
+      if (!corresponde) return [];
       const { paciente } = turno;
       const telefono = paciente.telefono.trim();
       const enlace = telefono
-        ? enlaceWhatsapp(
-            telefono,
-            textoDelRecordatorio(motivo as "recordatorio_turno" | "cambio_de_horario", configuracion, paciente, turno.fecha),
-          )
+        ? enlaceWhatsapp(telefono, textoDelRecordatorio(corresponde.motivo, configuracion, paciente, turno.fecha))
         : null;
-      return {
+      return [{
         turnoId: turno.id,
         fecha: turno.fecha.toISOString(),
         paciente: { id: paciente.id, nombre: paciente.nombre, apellido: paciente.apellido, telefono },
         enlace,
         motivo: enlace ? null : ("sin_telefono" as const),
-        avisadoEn: ultimos.get(turno.id) ?? null,
-      };
+        avisadoEn: corresponde.avisadoEn?.toISOString() ?? null,
+      }];
     })
     .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   return { canal, turnos };
 }
 
-/** Última apertura del enlace de cada turno PARA SU FECHA VIGENTE, en una
- *  consulta: lo abierto antes de mover el turno avisó otro horario. */
-async function ultimoAvisoPorTurno(
-  prisma: ClientePrisma,
-  organizationId: string,
-  turnos: ReadonlyArray<{ id: string; fecha: Date }>,
-): Promise<Map<string, string>> {
-  if (turnos.length === 0) return new Map();
-  const filas = await prisma.avisoWhatsapp.groupBy({
-    by: ["turnoId"],
-    where: {
-      organizationId,
-      tipo: "recordatorio",
-      OR: turnos.map((t) => ({ turnoId: t.id, fechaTurno: t.fecha })),
-    },
-    _max: { abiertoEn: true },
-  });
-  const porTurno = new Map<string, string>();
-  for (const f of filas) {
-    if (f._max.abiertoEn) porTurno.set(f.turnoId, f._max.abiertoEn.toISOString());
-  }
-  return porTurno;
+/**
+ * La regla única de "a quién se avisa hoy", para un turno que ya sigue
+ * programado, no empezó y es de una paciente activa (eso lo filtra la
+ * consulta). Devuelve null si hoy no le corresponde; si le corresponde, con
+ * qué texto (recordatorio o cambio de horario) y la última apertura de hoy
+ * para su fecha vigente.
+ */
+export function correspondeAvisarHoy(
+  turno: { fecha: Date; avisos: ReadonlyArray<{ fechaTurno: Date; abiertoEn: Date }> },
+  modo: RecordatorioModo,
+  ahora: Date,
+): { motivo: "recordatorio_turno" | "cambio_de_horario"; avisadoEn: Date | null } | null {
+  const deEstaFecha = turno.avisos.filter((a) => a.fechaTurno.getTime() === turno.fecha.getTime());
+  const deOtraFecha = deEstaFecha.length < turno.avisos.length;
+  const motivo = deOtraFecha ? "cambio_de_horario" : "recordatorio_turno";
+  const ultimo = deEstaFecha.reduce<Date | null>((max, a) => (!max || a.abiertoEn > max ? a.abiertoEn : max), null);
+  if (ultimo) return ultimo >= inicioDelDiaMvd(ahora) ? { motivo, avisadoEn: ultimo } : null;
+  if (deOtraFecha) return { motivo, avisadoEn: null };
+  return calcularProgramadoEn(turno.fecha, modo) <= finDelDiaMvd(ahora) ? { motivo, avisadoEn: null } : null;
 }
 
 export interface RegistrarAvisoParams {
@@ -210,7 +164,8 @@ export interface RegistrarAvisoParams {
 /**
  * Registra que abrió el enlace de WhatsApp del turno: una fila más en
  * avisos_whatsapp y su evento de auditoría, en la misma transacción (y, si
- * el enlace era de otra fecha, el aviso vigente pasa a cambio de horario). Repetir
+ * el enlace era de otra fecha, la lista lo vuelve a pedir como cambio de
+ * horario). Repetir
  * crea otra fila (abrió dos veces) y no rompe nada. 404 si el turno no es de
  * la organización: no se revela si existe en otra.
  */
@@ -235,32 +190,10 @@ export async function registrarAviso({
       data: { organizationId, turnoId, tipo: "recordatorio", fechaTurno: avisada, abiertoEn: ahora, usuarioId },
       select: { id: true },
     });
-    // Abrió el mensaje de un horario que ya no es el del turno (lo movió
-    // entre la lista y el toque): la paciente tiene la hora vieja. Lo mismo
-    // que haría reprogramarEnvioDelTurno si esta apertura hubiera llegado
-    // antes: el recordatorio vigente, si todavía no salió, pasa a cambio de
-    // horario y sale ya.
-    if (avisada.getTime() !== turno.fecha.getTime()) {
-      // Candidatos: el que espera su hora, o el que el cron ya canceló por
-      // el canal (no salió nada). Nunca uno apagado por turno cerrado o baja.
-      await tx.envioSms.updateMany({
-        where: {
-          claveIdempotencia: claveDelTurno(turnoId, turno.fecha),
-          motivo: "recordatorio_turno",
-          sid: null,
-          aceptadoEn: null,
-          OR: [{ estado: "pendiente" }, { estado: "cancelado", motivoNoEnvio: MOTIVO_CANAL_WHATSAPP }],
-        },
-        data: {
-          motivo: "cambio_de_horario",
-          estado: "pendiente",
-          programadoEn: ahora,
-          proximoIntentoEn: ahora,
-          motivoNoEnvio: null,
-          cerradoEn: null,
-        },
-      });
-    }
+    // Si abrió el mensaje de un horario que ya no es el del turno (lo movió
+    // entre la lista y el toque), esta apertura queda con la fecha vieja: la
+    // regla de la lista (correspondeAvisarHoy) lo trae de vuelta como cambio
+    // de horario.
     await auditar(tx, {
       organizationId,
       actorTipo: "usuario",
