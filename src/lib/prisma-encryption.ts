@@ -11,7 +11,8 @@
 //     db.paciente.findFirst({ select: { id: true, notas: true } })
 //
 //   ESCRITURA, explícita y tipada: cifrarPaciente / cifrarTurno /
-//   cifrarConsentimiento / cifrarHotWord / cifrarSesion / cifrarHiloVersion.
+//   cifrarConsentimiento / cifrarHotWord / cifrarSesion / cifrarHiloVersion /
+//   cifrarConversacionLux.
 //   Reciben el id de la fila y los campos lógicos, y devuelven `{ id,
 //   ...columnas cifradas }` listo para `data`:
 //     data: { ...otros, ...cifrarTurno(id, { notas }) }
@@ -20,7 +21,7 @@
 //   son uuid generados por la app: `crypto.randomUUID()`), porque el AAD
 //   es "<tabla>:<columna>:<id>" y ata el blob a su celda.
 //
-//   GUARDAS, en la extensión `query`, para los seis modelos:
+//   GUARDAS, en la extensión `query`, para los siete modelos:
 //     1. Ningún `where` ni `orderBy` sobre un campo lógico o una columna
 //        cifrada: no son consultables.
 //     2. Toda escritura de una columna cifrada tiene que traer el id de la
@@ -98,6 +99,11 @@ interface CamposHiloVersion {
   contenido: unknown;
 }
 
+interface CamposConversacionLux {
+  /** El texto de un turno de la conversación con Lux. */
+  contenido: string;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // La tabla: modelo → tabla SQL → campo lógico → columna (Prisma y SQL)
 // ────────────────────────────────────────────────────────────────────────────
@@ -161,6 +167,10 @@ export const CAMPOS_CIFRADOS = {
   HiloVersion: {
     tabla: "hilo_versiones",
     campos: { contenido: campo("contenidoEncrypted", "contenido_encrypted", "json") },
+  },
+  ConversacionLux: {
+    tabla: "conversaciones_lux",
+    campos: { contenido: campo("contenidoEncrypted", "contenido_encrypted", "texto") },
   },
 } as const satisfies Record<string, DefModelo>;
 
@@ -321,6 +331,8 @@ type ColumnasCifradasSesion = ConId &
   >;
 type ColumnasCifradasHiloVersion = ConId &
   Required<Pick<Prisma.HiloVersionUncheckedCreateInput, "contenidoEncrypted">>;
+type ColumnasCifradasConversacionLux = ConId &
+  Required<Pick<Prisma.ConversacionLuxUncheckedCreateInput, "contenidoEncrypted">>;
 
 export function cifrarPaciente(
   id: string,
@@ -368,6 +380,13 @@ export function cifrarHiloVersion(
   campos: CamposHiloVersion,
 ): ColumnasCifradasHiloVersion {
   return cifrarCampos("HiloVersion", id, campos) as ColumnasCifradasHiloVersion;
+}
+
+export function cifrarConversacionLux(
+  id: string,
+  campos: CamposConversacionLux,
+): ColumnasCifradasConversacionLux {
+  return cifrarCampos("ConversacionLux", id, campos) as ColumnasCifradasConversacionLux;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -666,6 +685,12 @@ export function withEncryption<C extends PrismaClient>(client: C) {
         contenido: {
           needs: { id: true, contenidoEncrypted: true },
           compute: (f) => leer("HiloVersion", "contenido", f.id, f.contenidoEncrypted),
+        },
+      },
+      conversacionLux: {
+        contenido: {
+          needs: { id: true, contenidoEncrypted: true },
+          compute: (f) => leer("ConversacionLux", "contenido", f.id, f.contenidoEncrypted) as string,
         },
       },
     },

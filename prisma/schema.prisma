@@ -57,19 +57,20 @@ model Organization {
   /// eliminarla no devuelve el cupo.
   grabacionesIniciadas Int     @default(0) @map("grabaciones_iniciadas")
 
-  usuarios         User[]
-  configuracion    Configuracion?
-  pacientes        Paciente[]
-  seriesTurno      SerieTurno[]
-  turnos           Turno[]
-  enviosSms        EnvioSms[]
-  avisosWhatsapp   AvisoWhatsapp[]
-  consentimientos  ConsentimientoGrabacion[]
-  sesionesClinicas SesionClinica[]
-  trabajos         Trabajo[]
-  hotWords         HotWord[]
-  hilos            Hilo[]
-  hiloVersiones    HiloVersion[]
+  usuarios          User[]
+  configuracion     Configuracion?
+  pacientes         Paciente[]
+  seriesTurno       SerieTurno[]
+  turnos            Turno[]
+  enviosSms         EnvioSms[]
+  avisosWhatsapp    AvisoWhatsapp[]
+  consentimientos   ConsentimientoGrabacion[]
+  sesionesClinicas  SesionClinica[]
+  trabajos          Trabajo[]
+  hotWords          HotWord[]
+  hilos             Hilo[]
+  hiloVersiones     HiloVersion[]
+  conversacionesLux ConversacionLux[]
 
   @@map("organizaciones")
 }
@@ -98,11 +99,12 @@ model User {
   invitacionesGeneradas Int       @default(0) @map("invitaciones_generadas")
   ultimaInvitacionEn    DateTime? @map("ultima_invitacion_en")
 
-  organization        Organization    @relation(fields: [organizationId], references: [id])
+  organization        Organization      @relation(fields: [organizationId], references: [id])
   sesionesAcceso      SesionAcceso[]
   passwordResets      PasswordReset[]
   invitacionesCreadas Invitacion[]
   cuposAyuda          CupoAyuda[]
+  conversacionesLux   ConversacionLux[]
 
   @@map("usuarios")
 }
@@ -333,6 +335,7 @@ model Paciente {
   consentimientos ConsentimientoGrabacion[]
   hotWords        HotWord[]
   hilo            Hilo?
+  conversacionLux ConversacionLux[]
 
   // Lista de pacientes activos: WHERE organization_id = ? AND activo = true.
   @@index([organizationId, activo])
@@ -688,13 +691,13 @@ model SesionClinica {
   // Un solo archivo por sesión, subido entero a R2 al terminar de grabar
   // (key `<org>/<sesion>/0`, calculada en estados.ts). La app no lo cifra
   // desde 5c1bfe2 (18/9/2026); R2 lo cifra en reposo.
-  audioEstado         EstadoAudio @default(sin_audio) @map("audio_estado")
-  duracionAudioSeg    Int?        @map("duracion_audio_seg")
+  audioEstado      EstadoAudio @default(sin_audio) @map("audio_estado")
+  duracionAudioSeg Int?        @map("duracion_audio_seg")
   /// Tramos en pausa tal como los reporta el teléfono: [{ inicio, fin }].
   /// Sin cifrar: marcas de tiempo, no contenido.
-  pausas              Json?
+  pausas           Json?
   /// Lo escribe el trabajo borrar_audio_r2 al verificar que el objeto no está.
-  audioBorradoEn      DateTime?   @map("audio_borrado_en")
+  audioBorradoEn   DateTime?   @map("audio_borrado_en")
 
   // ── Procesamiento: identidad del intento y lease ───────────────────────
   /// Identidad del reclamo: monotónico, NUNCA se resetea. Todo lo que el
@@ -756,7 +759,6 @@ model SesionClinica {
 
   creadaEn      DateTime @default(now()) @map("creada_en")
   actualizadaEn DateTime @updatedAt @map("actualizada_en")
-
 
   // Ficha, "Ahora" y huérfanas: WHERE organization_id = ? AND estado IN (…).
   @@index([organizationId, estado])
@@ -995,6 +997,48 @@ model HiloVersion {
   // Propuesta abierta e historial por estado: WHERE paciente_id = ? AND estado = ?.
   @@index([pacienteId, estado])
   @@map("hilo_versiones")
+}
+
+// ============================================================================
+// Lux — la conversación sobre una paciente
+// ============================================================================
+
+/// Quién habla en un turno de la conversación con Lux.
+enum RolConversacionLux {
+  profesional
+  lux
+
+  @@map("rol_conversacion_lux")
+}
+
+/// La conversación con Lux sobre una paciente, un turno por fila: la
+/// pregunta de la profesional o la respuesta de Lux (una apertura es sólo la
+/// respuesta). La escribe el servidor cuando la respuesta termina
+/// (casos-uso/lux/memoria.ts); el historial que viaja al modelo sale de acá,
+/// no del navegador. Se borra en cascada con la paciente; archivarla la
+/// conserva. "Empezar de cero" la borra entera (lux.borrar_conversacion).
+model ConversacionLux {
+  id                 String             @id @default(uuid())
+  organizationId     String             @map("organization_id")
+  pacienteId         String             @map("paciente_id")
+  userId             String             @map("user_id")
+  rol                RolConversacionLux
+  /// Campo lógico `contenido` (el texto del turno, tal como lo vio ella:
+  /// citas y líneas de estado con su marca), cifrado.
+  contenidoEncrypted Bytes              @map("contenido_encrypted")
+  /// La respuesta se cortó (corte del stream o cancelación): se guardó lo
+  /// que llegó a la pantalla. No viaja al modelo.
+  interrumpida       Boolean            @default(false)
+  creadoEn           DateTime           @default(now()) @map("creado_en")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  paciente     Paciente     @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Los últimos turnos de una paciente: WHERE paciente_id = ? AND
+  // organization_id = ? ORDER BY creado_en DESC LIMIT n.
+  @@index([pacienteId, creadoEn])
+  @@map("conversaciones_lux")
 }
 
 // ============================================================================

@@ -241,7 +241,11 @@ busca en `scripts/ensayo/contratos.mjs`, que dice qué esquema le corresponde:
   `configuraciones.canal_recordatorio` ni `avisos_whatsapp`);
 - `20261008120000_whatsapp_asistido` → `nuevo-sin-ambito`, la instantánea
   `scripts/ensayo/esquema-sin-ambito.prisma` (`cupos_ayuda` sin `ambito`);
-- desde `20261009120000_cupos_por_ambito` hasta la última
+- `20261009120000_cupos_por_ambito` y `20261019120000_turnos_pago_coherente`
+  → `nuevo-sin-conversaciones-lux`, la instantánea
+  `scripts/ensayo/esquema-sin-conversaciones-lux.prisma` (sin
+  `conversaciones_lux`);
+- desde `20261021120000_conversaciones_lux` hasta la última
   publicada → el contrato `nuevo`, que se lee del `prisma/schema.prisma` de
   **release**. El workflow hace un segundo checkout, de `release`, sólo de
   `prisma/`, y se lo pasa al verificador; el código del ensayo es el del ref de
@@ -322,7 +326,7 @@ Ninguna se puede hacer desde el repositorio.
 
 ### Reversiones administrativas
 
-Seis SQL revierten una migración. No los ejecuta la app ni Publicar;
+Siete SQL revierten una migración. No los ejecuta la app ni Publicar;
 sólo se corren a mano, con la conexión directa y después de decidirlo.
 
 - `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
@@ -353,6 +357,12 @@ sólo se corren a mano, con la conexión directa y después de decidirlo.
   contadores), saca la columna `ambito` y su enum, y vuelve la clave a
   (usuaria, día). Sólo hace falta si se vuelve a publicar un código anterior a
   la migración: con el código de Lux publicado, Lupita y Lux dan 500.
+- `scripts/mantenimiento/revertir-conversaciones-lux.sql` revierte
+  `20261021120000_conversaciones_lux`: borra la tabla `conversaciones_lux`
+  (se pierden todas las conversaciones guardadas con Lux; no hay otra copia),
+  su enum y su registro en `_prisma_migrations`. Sólo hace falta si se vuelve
+  a publicar un código anterior a la migración: con el código de la memoria
+  de Lux publicado, Lux da 500.
 - `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de `20260917120000_limites_invitados` y su registro en `_prisma_migrations`. Obsoleto salvo reversión de código: hoy leen esas columnas `src/app/api/_lib/casos-uso/estado-prueba.ts`, `src/lib/cuenta-registro-db.ts` y `prepararAudio` (`src/app/api/_lib/casos-uso/audio.ts`). Correrlo con ese código publicado rompe el alta por invitación y la grabación.
 
 ## 5. Incidentes y límites conocidos

@@ -47,22 +47,26 @@ afterAll(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("la tabla de campos cifrados es la del anexo de docs/esquema.md", () => {
-  it("seis modelos, con las columnas exactas", () => {
+  it("siete modelos, con las columnas exactas", () => {
     expect(MODELOS_CIFRADOS.sort()).toEqual(
-      ["ConsentimientoGrabacion", "HiloVersion", "HotWord", "Paciente", "SesionClinica", "Turno"].sort(),
+      ["ConsentimientoGrabacion", "ConversacionLux", "HiloVersion", "HotWord", "Paciente", "SesionClinica", "Turno"].sort(),
     );
     expect(Object.keys(CAMPOS_CIFRADOS.SesionClinica.campos).sort()).toEqual(
       ["datos", "feedback", "notaFinal", "notaIa", "notasEdicion", "transcripcion"].sort(),
     );
     expect(CAMPOS_CIFRADOS.HotWord.campos.termino.columnaSql).toBe("termino_encrypted");
     expect(CAMPOS_CIFRADOS.HiloVersion.tabla).toBe("hilo_versiones");
+    expect(CAMPOS_CIFRADOS.ConversacionLux.campos.contenido.columnaSql).toBe("contenido_encrypted");
   });
 
-  // Doce: audio_clave_encrypted salió de la tabla de campos cifrados cuando
+  // Trece: conversaciones_lux.contenido_encrypted entró con la memoria de
+  // Lux, y la rotación del llavero la recifra como a las demás.
+  // audio_clave_encrypted salió de la tabla de campos cifrados cuando
   // la app dejó de cifrar el audio (5c1bfe2). La columna sigue en la base
   // hasta la migración que la borra, pero ya nadie la lee ni la recifra.
-  it("celdasCifradas (lo que recorre el re-cifrado) enumera las doce columnas vivas", () => {
-    expect(celdasCifradas()).toHaveLength(12);
+  it("celdasCifradas (lo que recorre el re-cifrado) enumera las trece columnas vivas", () => {
+    expect(celdasCifradas()).toHaveLength(13);
+    expect(celdasCifradas()).toContainEqual({ tabla: "conversaciones_lux", columna: "contenido_encrypted" });
     expect(celdasCifradas()).toContainEqual({ tabla: "hilo_versiones", columna: "contenido_encrypted" });
     expect(celdasCifradas()).not.toContainEqual({ tabla: "sesiones_clinicas", columna: "audio_clave_encrypted" });
   });
