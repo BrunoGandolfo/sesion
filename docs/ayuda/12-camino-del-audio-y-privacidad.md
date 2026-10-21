@@ -57,7 +57,8 @@ cifrado y se borra del teléfono.
    solo queda vigente cuando lo aceptás. Cuando conversás con **Lux**, en la
    ficha, Anthropic recibe además tus preguntas y lo que Lux lee de esa
    paciente: el Recorrido, las notas y las sesiones que mira, con sus
-   transcripciones; la conversación no se guarda (ver `16-lux.md`). Se da por
+   transcripciones. La conversación queda guardada en la app, cifrada, hasta
+   que la borres con **Empezar de cero** (ver `16-lux.md`). Se da por
    supuesto que la autorización vigente (2.8) cubre este uso: no hay una
    versión aparte para Lux.
 6. Al aprobar la nota, o al eliminar la sesión, la app intenta borrar el
