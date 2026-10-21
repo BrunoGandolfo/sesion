@@ -3,14 +3,21 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui";
-import { apiPost, mensajeParaElla } from "@/lib/api-client";
+import { ApiClientError, apiPost, mensajeParaElla } from "@/lib/api-client";
 import {
   CONSENTIMIENTO_VERSION,
   generarTextoConsentimiento,
 } from "@/lib/consentimiento";
-import { AUTORIZACION_GRABACION } from "@/lib/glosario";
+import { AUTORIZACION_GRABACION, RECARGAR } from "@/lib/glosario";
 
 import { FirmaCanvas } from "./FirmaCanvas";
+
+/** El `codigo` del 409 cuando la pantalla firmó otra versión del texto (lo
+ *  manda casos-uso/consentimiento.ts; el test los ata). Ahí la salida es
+ *  recargar: trae el texto vigente. */
+export const CODIGO_VERSION_VIEJA = "consentimiento_version_vieja";
+
+const recargarPagina = () => window.location.reload();
 
 interface ConsentimientoFormProps {
   pacienteId: string;
@@ -19,6 +26,8 @@ interface ConsentimientoFormProps {
   direccionConsultorio: string;
   onConsentimientoFirmado: () => void;
   onCancelar: () => void;
+  /** Lo que hace "Recargar"; los tests lo reemplazan. */
+  recargar?: () => void;
 }
 
 export function ConsentimientoForm({
@@ -28,11 +37,13 @@ export function ConsentimientoForm({
   direccionConsultorio,
   onConsentimientoFirmado,
   onCancelar,
+  recargar = recargarPagina,
 }: ConsentimientoFormProps) {
   const [acepta, setAcepta] = React.useState(false);
   const [firma, setFirma] = React.useState<string | null>(null);
   const [enviando, setEnviando] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [versionVieja, setVersionVieja] = React.useState(false);
 
   const checkboxId = React.useId();
   const textoId = React.useId();
@@ -54,6 +65,7 @@ export function ConsentimientoForm({
 
     setEnviando(true);
     setError(null);
+    setVersionVieja(false);
 
     try {
       // La ruta responde ok({ consentimiento }); el resultado no se usa,
@@ -65,6 +77,7 @@ export function ConsentimientoForm({
       onConsentimientoFirmado();
     } catch (err) {
       setError(mensajeParaElla(err));
+      setVersionVieja(err instanceof ApiClientError && err.codigo === CODIGO_VERSION_VIEJA);
     } finally {
       setEnviando(false);
     }
@@ -108,9 +121,14 @@ export function ConsentimientoForm({
       </div>
 
       {error && (
-        <p role="alert" className="font-sans text-[14px] text-[color:var(--color-error)]">
-          {error}
-        </p>
+        <div role="alert" className="flex flex-col items-start gap-2">
+          <p className="font-sans text-[14px] text-[color:var(--color-error)]">{error}</p>
+          {versionVieja && (
+            <Button type="button" variant="secondary" onClick={recargar}>
+              {RECARGAR}
+            </Button>
+          )}
+        </div>
       )}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
