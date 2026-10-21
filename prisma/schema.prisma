@@ -297,7 +297,8 @@ model Configuracion {
   orientacionTeorica   OrientacionTeorica @default(cbt_mi) @map("orientacion_teorica")
   canalRecordatorio    CanalRecordatorio  @default(sms) @map("canal_recordatorio")
   /// Plantilla del aviso de cobro, la misma por SMS y por WhatsApp. El
-  /// default es TEMPLATE_COBRO_DEFAULT de src/lib/glosario.ts (lo vigila
+  /// default es TEMPLATE_COBRO_DEFAULT (src/lib/glosario.ts, reexportado por
+  /// src/lib/deudas.ts; lo vigila
   /// plantilla-cobro.test.ts).
   templateCobro         String             @default("Consultorio {{profesional}}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.") @map("template_cobro")
 

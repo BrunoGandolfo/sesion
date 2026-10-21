@@ -33,7 +33,7 @@ import { ApiError } from "@/app/api/_lib/responses";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
-import { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
+import { COBRO_CANAL_CAMBIO, MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 
 /** Con canal `sms` (el default) el resultado es el del SMS. */
 function porSms(r: RecordarCobroResultado) {
@@ -534,5 +534,31 @@ describe("listarDeudores dice quién pidió la baja", () => {
       [base.pacienteId]: true,
       [otra.id]: false,
     });
+  });
+});
+
+describe("la pantalla y el servidor no pueden elegir canales distintos", () => {
+  it.each([
+    ["whatsapp", "sms"],
+    ["sms", "whatsapp"],
+    ["ambos", "whatsapp"],
+  ] as const)("con %s en la base y %s en la pantalla: 409 y no se anota ni se programa nada", async (enLaBase, enPantalla) => {
+    const base = await crearBase();
+    await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: enLaBase } });
+    await crearImpago(base, 5);
+    await expect(
+      recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "u", ahora: AHORA, canal: enPantalla }),
+    ).rejects.toMatchObject({ status: 409, message: COBRO_CANAL_CAMBIO });
+    expect(await prismaRaw.envioSms.count()).toBe(0);
+    expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
+    expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
+  });
+
+  it("con Ambos en la base, la pantalla que pide SMS sigue adelante", async () => {
+    const base = await crearBase();
+    await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: "ambos" } });
+    await crearImpago(base, 5);
+    const r = await recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "u", ahora: AHORA, canal: "sms" });
+    expect(r.canal).toBe("sms");
   });
 });

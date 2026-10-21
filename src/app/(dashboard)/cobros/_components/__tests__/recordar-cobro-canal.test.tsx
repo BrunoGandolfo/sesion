@@ -72,8 +72,12 @@ const TEXTO = textoDelCobro(
   { sesiones: 2, monto: 4500 },
 );
 const abrir = vi.fn();
+// "Avisado hoy" depende del día: la hora queda fija.
+const AHORA = new Date("2026-09-03T15:00:00.000Z");
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AHORA);
   api.get.mockReset();
   api.post.mockReset();
   estado.ultimoAvisoEn = null;
@@ -81,7 +85,10 @@ beforeEach(() => {
   abrir.mockReset();
   vi.spyOn(window, "open").mockImplementation(abrir);
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe("Te deben: la plantilla del aviso de cobro", () => {
   it("la vista previa usa la plantilla de Tu consultorio", async () => {
@@ -113,7 +120,7 @@ describe("Te deben: el botón según el canal", () => {
     fireEvent.click(boton);
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: ENVIAR_SMS }));
     await waitFor(() => expect(screen.getAllByRole("status").some((n) => n.textContent === AVISO_COBRO_PROGRAMADO)).toBe(true));
-    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", {});
+    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "sms" });
     expect(abrir).not.toHaveBeenCalled();
   });
 
@@ -124,7 +131,7 @@ describe("Te deben: el botón según el canal", () => {
       // WhatsApp se abre ANTES de esperar al servidor: el navegador sólo deja
       // abrir una ventana dentro del toque.
       expect(abrir).toHaveBeenCalledWith(enlace, "_blank", "noopener");
-      estado.ultimoAvisoEn = new Date().toISOString();
+      estado.ultimoAvisoEn = AHORA.toISOString();
       return { canal: "whatsapp", enlace, avisadoEn: estado.ultimoAvisoEn, sesiones: 2, monto: 4500 };
     });
     render(<CobrosView />);
@@ -136,7 +143,7 @@ describe("Te deben: el botón según el canal", () => {
     expect(document.body.textContent).not.toMatch(/SMS/);
     fireEvent.click(within(panel).getByRole("button", { name: ABRIR_WHATSAPP }));
     expect(abrir).toHaveBeenCalledTimes(1);
-    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", {});
+    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" });
     await waitFor(() => expect(screen.getAllByRole("status").some((n) => n.textContent === AVISO_COBRO_WHATSAPP_ANOTADO)).toBe(true));
     // Vuelve a leer la lista: "Avisado hoy" sale del servidor, como con el SMS.
     expect(await screen.findByText("Avisado hoy")).toBeTruthy();
@@ -149,6 +156,27 @@ describe("Te deben: el botón según el canal", () => {
     fireEvent.click(within(panel).getByRole("button", { name: ABRIR_WHATSAPP }));
     expect(abrir).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getAllByRole("status").some((n) => n.textContent === NO_SE_ANOTO_AVISO)).toBe(true));
+  });
+
+  it("con WhatsApp, si el servidor lo rechaza (ya no debe, canal cambiado) dice por qué, no 'no quedó anotado'", async () => {
+    servidor({ ...CONFIG, canalRecordatorio: "whatsapp" });
+    api.post.mockRejectedValue(new ApiClientError("Esta paciente no tiene sesiones sin cobrar", 409));
+    const panel = await abrirRecordatorio();
+    fireEvent.click(within(panel).getByRole("button", { name: ABRIR_WHATSAPP }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("status").some((n) => n.textContent === "Esta paciente no tiene sesiones sin cobrar")).toBe(true),
+    );
+  });
+
+  it("con WhatsApp, un doble toque abre una sola vez", async () => {
+    servidor({ ...CONFIG, canalRecordatorio: "whatsapp" });
+    api.post.mockReturnValue(new Promise(() => {}));
+    const panel = await abrirRecordatorio();
+    const boton = within(panel).getByRole("button", { name: ABRIR_WHATSAPP });
+    fireEvent.click(boton);
+    fireEvent.click(boton);
+    expect(abrir).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledTimes(1);
   });
 
   it("con WhatsApp, a quien pidió la baja no se le abre: lo dice el servidor", async () => {

@@ -11,7 +11,8 @@ import { db } from "@/lib/db";
 
 import { getSessionActor } from "../../../_lib/auth";
 import { recordarCobro } from "../../../_lib/casos-uso/recordar-cobro";
-import { errorResponse, ok } from "../../../_lib/responses";
+import { errorResponse, leerJson, ok, validationError } from "../../../_lib/responses";
+import { recordarCobroSchema } from "../../../_lib/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,16 +22,20 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-export async function POST(_request: Request, { params }: RouteParams) {
+export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id } = await params;
+    const conCuerpo = request.headers.get("content-type")?.includes("application/json") ?? false;
+    const parsed = recordarCobroSchema.safeParse(conCuerpo ? await leerJson(request) : {});
+    if (!parsed.success) return validationError(parsed.error);
 
     const resultado = await recordarCobro({
       prisma: db,
       organizationId,
       pacienteId: id,
       usuarioId: userId,
+      canal: parsed.data.canal,
     });
 
     return ok(resultado);

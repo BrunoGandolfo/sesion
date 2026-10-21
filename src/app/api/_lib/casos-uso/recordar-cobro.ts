@@ -27,7 +27,7 @@
 // dice: QUIÉN lo pidió. Ni el texto ni el teléfono entran al evento.
 
 import { accionDeCobro } from "@/lib/aviso-cobro";
-import { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
+import { COBRO_CANAL_CAMBIO, MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 import type { db } from "@/lib/db";
 
 import { auditar, registrarAuditoria } from "../auditoria";
@@ -52,6 +52,10 @@ export interface RecordarCobroParams {
   /** Quién apretó el botón: va al evento de auditoría. */
   usuarioId?: string | null;
   ahora?: Date;
+  /** El canal que usó la pantalla. Si no es el de la base, 409 sin efectos:
+   *  si no, quedaría anotado un WhatsApp que no se abrió, o saldría un SMS
+   *  además del WhatsApp. Sin él (cliente viejo), manda la base. */
+  canal?: "sms" | "whatsapp";
 }
 
 export type RecordarCobroResultado = RecordarCobroPorSms | RecordarCobroPorWhatsapp;
@@ -96,6 +100,7 @@ export async function recordarCobro({
   pacienteId,
   usuarioId,
   ahora = new Date(),
+  canal,
 }: RecordarCobroParams): Promise<RecordarCobroResultado> {
   const paciente = await requirePaciente(prisma, pacienteId, organizationId, { id: true, telefono: true });
 
@@ -122,7 +127,11 @@ export async function recordarCobro({
     where: { organizationId },
     select: { canalRecordatorio: true },
   });
-  if (configuracion?.canalRecordatorio === "whatsapp") {
+  const canalDeLaBase = configuracion?.canalRecordatorio === "whatsapp" ? "whatsapp" : "sms";
+  if (canal && canal !== canalDeLaBase) {
+    throw new ApiError(COBRO_CANAL_CAMBIO, 409);
+  }
+  if (canalDeLaBase === "whatsapp") {
     return abrirCobroPorWhatsapp({ prisma, organizationId, pacienteId, usuarioId, ahora, telefono, deuda });
   }
 

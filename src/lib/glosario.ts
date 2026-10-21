@@ -2213,3 +2213,8 @@ export const RECORDATORIO_TEXTOS_POR_CANAL = {
     vistaPrevia: "Vista previa del mensaje",
   },
 } as const;
+
+/** La pantalla pidió el aviso por un canal y en Tu consultorio ya hay otro
+ *  (lo cambió en otra pestaña o una colega): no se manda ni se anota nada. */
+export const COBRO_CANAL_CAMBIO =
+  "Cambió cómo recordás los turnos en Tu consultorio. Volvé a cargar Cobros y probá de nuevo.";

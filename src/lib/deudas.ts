@@ -77,9 +77,11 @@ export function interpolarTemplateCobro(
     .replace(/\{\{nombre\}\}/g, literal(vars.nombre))
     .replace(/\{\{monto\}\}/g, literal(vars.monto))
     .replace(/\{\{profesional\}\}/g, literal(vars.profesional))
-    .replace(/\{\{apellido\}\}/g, literal(vars.apellido ?? ""))
-    .replace(/\{\{direccion\}\}/g, literal(vars.direccion ?? ""))
-    .replace(/\{\{telefonoConsultorio\}\}/g, literal(vars.telefonoConsultorio ?? ""))
+    // Las opcionales sólo si vienen: sin valor quedan a la vista, como
+    // cualquier placeholder desconocido.
+    .replace(/\{\{apellido\}\}/g, (m) => vars.apellido ?? m)
+    .replace(/\{\{direccion\}\}/g, (m) => vars.direccion ?? m)
+    .replace(/\{\{telefonoConsultorio\}\}/g, (m) => vars.telefonoConsultorio ?? m)
     .trim();
 }
 

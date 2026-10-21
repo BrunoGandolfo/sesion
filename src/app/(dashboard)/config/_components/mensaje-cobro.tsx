@@ -17,7 +17,7 @@ import {
 
 import { EditorRecordatorio, type ClaveFicha } from "./editor-recordatorio";
 
-const FICHAS_COBRO: ClaveFicha[] = ["nombre", "sesionesPendientes", "monto"];
+const FICHAS_COBRO: ClaveFicha[] = ["nombre", "sesionesPendientes", "monto", "profesional"];
 const SESIONES_EN_PLANTILLA = "{{sesiones}} sesión/es pendiente/s";
 
 const aEditor = (template: string) =>

@@ -228,6 +228,10 @@ export const configUpdateSchema = z.object({
   canalRecordatorio: z.enum(CANALES_RECORDATORIO).optional(),
 });
 
+/** POST /api/pacientes/[id]/recordar-cobro: el canal que la pantalla usó
+ *  (accionDeCobro). Opcional: un cliente viejo manda `{}`. */
+export const recordarCobroSchema = z.object({ canal: z.enum(["sms", "whatsapp"]).optional() });
+
 // ────────────────────────────────────────────────────────────────────────────
 // WhatsApp asistido — el body (opcional) de
 // POST /api/recordatorios/whatsapp/[turnoId]/abierto: la `fecha` del turno

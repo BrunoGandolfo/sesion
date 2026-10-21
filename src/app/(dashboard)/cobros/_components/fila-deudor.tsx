@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronRight, Send } from "lucide-react";
 
 import { Button, Confirmar } from "@/components/ui";
-import { mensajeParaElla } from "@/lib/api-client";
+import { ApiClientError, mensajeParaElla } from "@/lib/api-client";
 import {
   textoAtraso,
   textoDelCobro,
@@ -80,7 +80,13 @@ export function FilaDeudor({
   const accion = accionDeCobro(canal, telefono, mensaje);
   const textos = RECORDAR_COBRO_POR_CANAL[accion.canal];
 
+  // Guarda síncrona: `enviando` deshabilita el botón recién en el render
+  // siguiente, y un doble toque abriría dos WhatsApp.
+  const enCurso = React.useRef(false);
+
   async function enviar() {
+    if (enCurso.current) return;
+    enCurso.current = true;
     // WhatsApp se abre dentro del toque, antes de esperar a la red: después
     // de un await el navegador bloquea la ventana nueva. A quien pidió la
     // baja no se le abre: el servidor lo rechaza y la pantalla dice por qué.
@@ -89,15 +95,19 @@ export function FilaDeudor({
     const abrioWhatsapp = enlace !== null;
     setEnviando(true);
     try {
-      const aviso = await recordarCobro(deudor.pacienteId);
+      const aviso = await recordarCobro(deudor.pacienteId, accion.canal);
       setConfirmando(false);
       onAvisado(aviso);
     } catch (error) {
       // Por SMS (o sin abrir WhatsApp), el servidor rechazó el pedido y dice
       // por qué. Si WhatsApp ya se abrió, lo que falló es anotarlo.
       setConfirmando(false);
-      onError(abrioWhatsapp ? NO_SE_ANOTO_AVISO : mensajeParaElla(error));
+      // Un 409 dice por qué no (ya no debe, pidió la baja, cambió el canal):
+      // eso pesa más que "no quedó anotado", aunque WhatsApp ya se abrió.
+      const rechazo = error instanceof ApiClientError && error.status === 409;
+      onError(abrioWhatsapp && !rechazo ? NO_SE_ANOTO_AVISO : mensajeParaElla(error));
     } finally {
+      enCurso.current = false;
       setEnviando(false);
     }
   }

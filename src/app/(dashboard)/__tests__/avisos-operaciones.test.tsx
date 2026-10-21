@@ -149,7 +149,7 @@ describe("los avisos distinguen un rechazo de una operación confirmada", () => 
     fireEvent.click(await screen.findByRole("button", { name: /Recordar cobro a/ }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar SMS" }));
     await verificarAviso(exito ? "Aviso programado. Sale en los próximos minutos." : FALLO, exito);
-    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", {});
+    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "sms" });
     expect(m.get.mock.calls.some(([url]) => url === "/api/sms/estado")).toBe(false);
     expect(screen.queryByText(/Avisado hace/)).toBeNull();
   });

@@ -102,8 +102,10 @@ export type AvisoDeCobro =
 
 /** Pide el recordatorio de cobro. Por SMS, `creado` es false si ya se había
  *  pedido hoy y no se programó otro; por WhatsApp, anota que lo abrió. */
-export async function recordarCobro(pacienteId: string): Promise<AvisoDeCobro> {
-  return apiPost<AvisoDeCobro>(`/api/pacientes/${pacienteId}/recordar-cobro`, {});
+export async function recordarCobro(pacienteId: string, canal: AccionDeCobro["canal"]): Promise<AvisoDeCobro> {
+  // El canal que usó la pantalla: si en Tu consultorio ya hay otro, el
+  // servidor no hace nada y lo dice.
+  return apiPost<AvisoDeCobro>(`/api/pacientes/${pacienteId}/recordar-cobro`, { canal });
 }
 
 export type CanalDelCobro = AccionDeCobro["canal"];
