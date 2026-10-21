@@ -1,7 +1,7 @@
 # La pantalla de Hoy
 
 **Para qué sirve.** Es la primera pantalla: la sesión que viene o está en
-curso, la agenda del día, los recordatorios por WhatsApp si los usás, lo que
+curso, la agenda del día, los recordatorios por WhatsApp, lo que
 espera una acción tuya, y dos números del día y del mes.
 
 ## Lo que ves, de arriba abajo
@@ -55,9 +55,7 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    la duración, la paciente, la modalidad y la tarifa, y a la derecha lo que
    corresponde hacer (ver abajo). Si no hay turnos: *"Hoy no hay nada
    agendado."* *"A veces eso también es parte del trabajo."*
-5. **Recordatorios para hoy** — solo si en **Tu consultorio** elegiste
-   **WhatsApp desde mi teléfono** o **Ambos**; con **SMS automático** no
-   aparece. Una fila por turno a avisar: la paciente, el día y la hora del
+5. **Recordatorios para hoy** — una fila por turno a avisar: la paciente, el día y la hora del
    turno, **Sin avisar** o **Avisado 10:32**, y el botón **Abrir WhatsApp**,
    que abre la conversación con el mensaje ya escrito para que lo mandes vos.
    Si la paciente no tiene teléfono, la fila se ve apagada, dice **Sin

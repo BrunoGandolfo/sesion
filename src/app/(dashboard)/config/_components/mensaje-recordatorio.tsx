@@ -2,25 +2,23 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui";
-import { RECORDATORIO_TEXTOS_POR_CANAL } from "@/lib/glosario";
+import { RECORDATORIO_TEXTOS } from "@/lib/glosario";
 import { prepararPlantillaRecordatorio, buildSmsMessage } from "@/lib/sms/texto";
-import type { CanalRecordatorio } from "@/types/domain";
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
 
 const FECHA_PREVIEW = new Date("2026-04-21T10:00:00-03:00");
 
 export function MensajeRecordatorio({
-  template, profesional, direccion, telefono, canal = "sms", onChange,
+  template, profesional, direccion, telefono, onChange,
 }: {
   template: string;
   profesional: string;
   direccion: string;
   telefono: string;
-  canal?: CanalRecordatorio;
   onChange: (template: string) => void;
 }) {
   const [revisionEditor, setRevisionEditor] = React.useState(0);
-  const textos = RECORDATORIO_TEXTOS_POR_CANAL[canal];
+  const textos = RECORDATORIO_TEXTOS;
   const templateSeparado = template.replace(/\{\{profesional\}\}(?=\p{L})/gu, "{{profesional}}\n");
   const nombrePegado = templateSeparado !== template;
   // La misma preparación que usa el envío, incluida su línea de contacto.

@@ -29,6 +29,7 @@
 import { accionDeCobro } from "@/lib/aviso-cobro";
 import { COBRO_CANAL_CAMBIO, MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
 import type { db } from "@/lib/db";
+import { CANAL_RECORDATORIO_VIGENTE } from "@/lib/recordatorios-programacion";
 
 import { auditar, registrarAuditoria } from "../auditoria";
 import { DEUDA_PENDIENTE, deudaDePaciente } from "../domain";
@@ -123,15 +124,13 @@ export async function recordarCobro({
     throw new ApiError(MOTIVO_PACIENTE_DADA_DE_BAJA, 409);
   }
 
-  const configuracion = await prisma.configuracion.findUnique({
-    where: { organizationId },
-    select: { canalRecordatorio: true },
-  });
-  const canalDeLaBase = configuracion?.canalRecordatorio === "whatsapp" ? "whatsapp" : "sms";
-  if (canal && canal !== canalDeLaBase) {
+  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado en la columna no
+  // cuenta. Una pantalla vieja que pida SMS recibe el 409 de canal cambiado.
+  const canalVigente = CANAL_RECORDATORIO_VIGENTE === "whatsapp" ? "whatsapp" : "sms";
+  if (canal && canal !== canalVigente) {
     throw new ApiError(COBRO_CANAL_CAMBIO, 409);
   }
-  if (canalDeLaBase === "whatsapp") {
+  if (canalVigente === "whatsapp") {
     return abrirCobroPorWhatsapp({ prisma, organizationId, pacienteId, usuarioId, ahora, telefono, deuda });
   }
 

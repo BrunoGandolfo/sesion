@@ -1,46 +1,25 @@
 # Recordatorios
 
-**Para qué sirve.** Cada turno agendado se le recuerda a la paciente. Acá está
-cómo: por SMS automático, por WhatsApp desde tu teléfono o de las dos formas;
-cuándo sale el SMS, cómo se escribe y qué hacer si no salió.
-
-## Los tres modos
-
-En **Tu consultorio → Recordatorio → Cómo recordás los turnos** elegís uno, y
-vale para todos los turnos:
-
-- **SMS automático** — *"La app manda el SMS sola. Las respuestas no te
-  llegan."* Es lo de siempre, y lo que tiene toda cuenta que no eligió otra
-  cosa. Todo el resto de esta página es sobre el SMS.
-- **WhatsApp desde mi teléfono** — *"La app te prepara el mensaje y lo mandás
-  vos; las respuestas te llegan a tu WhatsApp."* No sale ningún SMS de
-  recordatorio: cuando llega su hora, el SMS del turno queda **Cancelado** con
-  el motivo *"el recordatorio va por WhatsApp, no por SMS"*.
-- **Ambos** — sale el SMS automático y además tenés el WhatsApp preparado en
-  **Hoy**. La paciente puede recibir los dos.
-
-El modo se mira en el momento en que le toca salir a cada aviso: cambiarlo
-alcanza también a los turnos que ya estaban agendados. El modo también decide
-el aviso de cobro en **Cobros**: con **SMS automático** o **Ambos** es
-**Recordar cobro por SMS**; con **WhatsApp desde mi teléfono** es **Recordar
-cobro por WhatsApp**, que te abre el mensaje para mandarlo vos. El detalle está
-en `05-cobros.md`.
+**Para qué sirve.** Cada turno agendado se le recuerda a la paciente por
+WhatsApp: la app te prepara el mensaje en **Hoy** y lo mandás vos desde tu
+teléfono. Acá está qué turnos aparecen, cuándo, cómo se escribe el mensaje y
+qué ves en el turno.
 
 ## WhatsApp desde tu teléfono
 
-Con **WhatsApp desde mi teléfono** o **Ambos**, en **Hoy** aparece el bloque
-**Recordatorios para hoy**, después de la agenda del día. Si no hay a quién
-avisar, dice *"No hay turnos para avisar hoy"*.
+En **Hoy** aparece el bloque **Recordatorios para hoy**, después de la agenda
+del día. Si no hay a quién avisar, dice *"No hay turnos para avisar hoy"*. La
+app no manda el recordatorio por su cuenta: no sale ningún SMS.
 
 **Qué turnos aparecen.** Los que tienen el recordatorio para hoy según lo que
 elegiste en **Cuándo se avisa**: con **El día anterior**, hoy aparecen los
 turnos de mañana; con **Dos días antes**, los de pasado mañana; con **La misma
 mañana**, los de hoy. También los que agendaste hoy cuando la hora del aviso ya
-había pasado (por ejemplo, un turno de esta tarde agendado esta mañana): el SMS
-saldría enseguida, y el WhatsApp queda para hoy. No aparecen los turnos que ya
-empezaron, los cancelados ni las pacientes archivadas. Tampoco las pacientes
-que pidieron no recibir más SMS respondiendo **BAJA**: la app respeta ese
-pedido también en el WhatsApp.
+había pasado (por ejemplo, un turno de esta tarde agendado esta mañana): el
+aviso queda para hoy. No aparecen los turnos que ya empezaron, los cancelados
+ni las pacientes archivadas. Tampoco las pacientes que pidieron no recibir más
+mensajes respondiendo **BAJA** a un SMS: la app respeta ese pedido también en
+el WhatsApp.
 
 Cada fila tiene la paciente, el día y la hora del turno, y cómo está:
 
@@ -65,9 +44,11 @@ como cualquier conversación.
 
 Si movés un turno después de abrir su WhatsApp, la paciente tiene el horario
 viejo: el aviso nuevo es un **cambio de horario**, vuelve a aparecer en la
-lista como **Sin avisar** y su mensaje dice que el turno cambió.
+lista como **Sin avisar** y su mensaje dice que el turno cambió: *"Consultorio
+Tu nombre / Nombre, tu turno cambió al Fecha a las Hora. Cambios: llamar al Tu
+teléfono"*. Su texto es fijo.
 
-## Cuándo sale el SMS
+## Cuándo se avisa
 
 En **Tu consultorio → Recordatorio → Cuándo se avisa** elegís uno de tres
 momentos, y vale para todos los turnos:
@@ -76,23 +57,21 @@ momentos, y vale para todos los turnos:
 - **Dos días antes** — *"Entre las 20:00 y las 20:14 de dos días antes"*.
 - **La misma mañana** — *"Entre las 08:00 y las 08:14 del día del turno"*.
 
-**No salen todos a la hora en punto.** Para no mandar todos los avisos del día
-en el mismo instante, cada turno tiene su propio corrimiento, de **0 a 14
-minutos** después de esa hora, siempre el mismo para ese turno: por eso la
-pantalla dice "entre". Además el envío se revisa cada 5 minutos, así que un
-aviso de la tarde sale en la práctica entre las 20:00 y las 20:20,
-aproximadamente. En el turno, el recordatorio muestra la hora que le tocó, por
-ejemplo *20:07*.
+Lo que decide es el **día**: ese día el turno aparece en **Recordatorios para
+hoy** desde temprano, y lo mandás cuando te quede cómodo. La hora es la que
+figura en el turno: cada turno tiene su propio corrimiento, de **0 a 14
+minutos** después de esa hora, siempre el mismo para ese turno, y por eso la
+pantalla dice "entre". En el turno, el recordatorio muestra la hora que le
+tocó, por ejemplo *20:07*.
 
 Una excepción, y la app la dice cuando elegís **La misma mañana**: *"Si el turno
 es antes de las 08:15, el aviso puede salir la tarde anterior, entre las 20:00 y
-las 20:14: a la mañana no llegaría antes del turno."* Antes de las 8:00 pasa
+las 20:14: a la mañana no llegaría antes del turno."* Con WhatsApp quiere decir
+que ese turno aparece en la lista del día anterior. Antes de las 8:00 pasa
 siempre; entre las 8:00 y las 8:14 depende del corrimiento de ese turno.
 
 El momento se fija **cuando agendás o reprogramás** el turno. Cambiar la opción
-no mueve los avisos ya programados. Si agendás un turno cuando la hora del aviso
-ya pasó (por ejemplo, a las 21:00 para mañana con **El día anterior**), el aviso
-sale en los minutos siguientes.
+no mueve los avisos ya programados.
 
 Todo se calcula en **hora de Montevideo**.
 
@@ -112,65 +91,52 @@ ejemplo (Lucía, martes 21 de abril, 10:00) y tus datos reales.
 
 **El mensaje siempre empieza con *"Consultorio"* y tu nombre**, y **siempre
 termina con la línea de contacto** *"Cambios: llamar al"* y tu teléfono: si las
-borrás, la app las vuelve a agregar antes de enviar. El mensaje no puede quedar
-vacío.
+borrás, la app las vuelve a agregar. El mensaje no puede quedar vacío.
 
-El texto se arma **en el momento de enviar**: si cambiás el mensaje, también
-cambian los avisos que ya estaban programados y todavía no salieron.
+El texto se arma **cuando se carga la lista en Hoy**: si cambiás el mensaje,
+también cambia el de los turnos que ya estaban agendados.
 
-## Si la paciente responde
+## Ver el estado en el turno
 
-El SMS sale de un número de servicio. Las respuestas comunes no llegan a tu
-consulta: el mensaje indica tu teléfono para los cambios, y la pantalla lo
-advierte: *"No pidas respuestas por SMS: no llegan."*
-**BAJA**, **STOP** o **CANCELAR** sí se procesan, con o sin mayúsculas: dejan de
-mandarse mensajes a ese número y se responde: *"Consultorio: no vas a recibir más
-SMS"*.
+Abrí el turno en Agenda. Mientras el turno sigue agendado, el bloque
+**Recordatorio** muestra el aviso más reciente. Con WhatsApp, figura
+**Programado** con su hora hasta que llega esa hora, y después **Cancelado** con
+el motivo *"el recordatorio va por WhatsApp, no por SMS"*: es lo esperado, y no
+quiere decir que la paciente no fue avisada. Si la avisaste, lo dice
+**Recordatorios para hoy** en **Hoy**.
 
-## Ver el estado
-
-Abrí el turno en Agenda. Mientras el turno sigue agendado, el recordatorio más
-reciente puede mostrar:
+Los turnos agendados cuando todavía salían SMS pueden mostrar el estado de ese
+SMS:
 
 | Estado | Qué significa |
 | --- | --- |
-| **Programado** | Espera el momento de salir. |
+| **Programado** | Espera su momento. |
 | **Enviando** | Se está intentando enviar. |
 | **En camino** | El servicio lo aceptó; aceptado no es entregado. |
 | **Entregado** | El operador confirmó la entrega; no confirma lectura. |
 | **No llegó** | El operador informó que no lo entregó. |
 | **Cancelado** | El aviso pendiente se canceló. |
 | **No salió** | No se pudo enviar; mirá el motivo. |
-| **No sabemos si salió** | Se perdió la confirmación y no se puede asegurar el resultado. |
+| **No sabemos si salió** | Se perdió la confirmación y no se puede asegurar el resultado; no se reenvía solo, para evitar duplicados. |
 
-Puede aparecer el motivo: sin teléfono, teléfono inválido, línea fija o número
-que no es celular, número inexistente o bloqueado, falta de señal, baja
-solicitada o un problema del servicio. Si no queda tiempo para avisar,
-comunicate por tu cuenta con la paciente. No hay reintento manual de SMS.
+Cancelar, cobrar o marcar **No vino** saca el turno de la lista de
+recordatorios. Un mensaje que ya mandaste no puede retirarse del teléfono de la
+paciente. Un turno creado para una sesión que ya empezó no genera
+recordatorio.
 
-## Reintentos y cambios de horario
+## Si una paciente pidió la baja
 
-Los problemas transitorios se reintentan con esperas crecientes, de unos 2 a
-unos 30 minutos (cada espera varía un poco al azar, para que no se reintenten
-todos juntos), hasta dos horas antes del turno. No hay un límite fijo de tres
-intentos. Con **La misma mañana** y un turno temprano esa ventana es corta: un
-primer fallo puede dejarlo directamente en **No salió**. Un resultado
-**No sabemos si salió** requiere revisión de quien administra Sesión y **no se
-reenvía solo**, para evitar duplicados.
+Si una paciente respondió **BAJA**, **STOP** o **CANCELAR** a un SMS de los
+que salían antes, se le respondió *"Consultorio: no vas a recibir más SMS"* y
+ese pedido sigue valiendo: no aparece en **Recordatorios para hoy** ni se le
+abre el WhatsApp de cobro.
 
-Si movés un turno y un aviso anterior ya había salido, se manda **enseguida** un
-**cambio de horario**: *"Consultorio Tu nombre / Nombre, tu turno cambió al Fecha
-a las Hora. Cambios: llamar al Tu teléfono"*. Es intencional, aunque los dos
-mensajes sean del mismo día. Su texto es fijo.
+## El aviso de cobro
 
-Cancelar, cobrar o marcar **No vino** cancela los avisos pendientes. Un SMS que
-ya salió no puede retirarse del teléfono de la paciente. Un turno creado para
-una sesión que ya empezó no genera recordatorio.
-
-**Recordar cobro por SMS** sale solo cuando vos confirmás el envío en Cobros:
-primero se programa, después se intenta mandar. Con **WhatsApp desde mi
-teléfono**, **Recordar cobro por WhatsApp** no programa ningún SMS. Ninguno de
-los dos cambia el momento ni el texto de los recordatorios de turno.
+**Recordar cobro por WhatsApp**, en **Cobros**, te abre el mensaje para
+mandarlo vos, solo cuando confirmás el envío; no programa ningún SMS. No cambia
+el momento ni el texto de los recordatorios de turno. El detalle está en
+`05-cobros.md`.
 
 <!-- fuentes:
 src/lib/recordatorios-programacion.ts

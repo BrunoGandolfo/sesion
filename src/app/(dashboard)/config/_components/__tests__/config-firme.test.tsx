@@ -54,7 +54,7 @@ describe("A: editor y vista previa coinciden al abrir", () => {
     api.config.templateRecordatorio = guardada;
     await abrir();
     const enElEditor = htmlATemplate(screen.getByRole("textbox", { name: "Mensaje del recordatorio" }));
-    const vistaPrevia = screen.getByRole("region", { name: "Vista previa del SMS" }).textContent;
+    const vistaPrevia = screen.getByRole("region", { name: "Vista previa del mensaje" }).textContent;
     // La vista previa es la plantilla del editor con los datos del ejemplo:
     // lo que ella lee arriba es lo que la paciente recibe abajo.
     expect(vistaPrevia).toBe(

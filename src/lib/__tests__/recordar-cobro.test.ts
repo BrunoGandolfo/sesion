@@ -1,12 +1,11 @@
 /**
  * Integración — recordarCobro y ultimoAvisoPorPaciente contra la base real
- * de test. Twilio no interviene: acá no se manda nada, se CREA el envío en
- * envios_sms y lo manda el cron (despachar-sms.test.ts prueba esa parte).
+ * de test. El aviso de cobro va sólo por WhatsApp (CANAL_RECORDATORIO_VIGENTE):
+ * acá no se programa ningún SMS; se arma el enlace y se anota la apertura.
  *
- * Lo que se prueba: que el aviso quede en cola con la deuda real y el
- * teléfono congelado, que dos toques el mismo día sean un solo envío, que no
- * se le avise a quien no debe (ni a quien pidió la baja), y que la pantalla
- * pueda saber cuándo fue el último aviso que SALIÓ.
+ * Lo que se prueba: que con cualquier canal guardado salga por WhatsApp, que
+ * no se le avise a quien no debe (ni a quien pidió la baja), y que la
+ * pantalla pueda saber cuándo fue el último aviso.
  *
  * Ejecutar:
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
@@ -18,12 +17,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { claveDeCobro } from "@/app/api/_lib/casos-uso/envios-del-turno";
-import {
-  recordarCobro,
-  ultimoAvisoPorPaciente,
-  type RecordarCobroResultado,
-} from "@/app/api/_lib/casos-uso/recordar-cobro";
+import { recordarCobro, ultimoAvisoPorPaciente } from "@/app/api/_lib/casos-uso/recordar-cobro";
 import { listarDeudores } from "@/app/api/_lib/casos-uso/deudores";
 import { textoDeCobro } from "@/app/api/_lib/casos-uso/texto-de-cobro";
 import { deudaDePaciente } from "@/app/api/_lib/domain";
@@ -34,12 +28,6 @@ import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 import { COBRO_CANAL_CAMBIO, MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
-
-/** Con canal `sms` (el default) el resultado es el del SMS. */
-function porSms(r: RecordarCobroResultado) {
-  if (r.canal !== "sms") throw new Error("se esperaba el SMS");
-  return r;
-}
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
@@ -110,78 +98,35 @@ afterAll(async () => {
 });
 
 describe("recordarCobro", () => {
-  it("deja el aviso en cola con la deuda real, el teléfono congelado y quién lo pidió", async () => {
-    const base = await crearBase();
-    await crearImpago(base, 40);
-    await crearImpago(base, 12);
+  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado en la columna
+  // no cuenta, y el SMS de cobro ya no tiene camino de entrada.
+  it.each(["sms", "ambos", "whatsapp"] as const)(
+    "con %s guardado no programa ningún SMS: abre WhatsApp y lo anota",
+    async (guardado) => {
+      const base = await crearBase();
+      await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: guardado } });
+      await crearImpago(base, 40);
+      await crearImpago(base, 12);
 
-    const resultado = porSms(await recordarCobro({
-      prisma: db,
-      organizationId: base.orgId,
-      pacienteId: base.pacienteId,
-      usuarioId: "user-1",
-      ahora: AHORA,
-    }));
-
-    expect(resultado).toMatchObject({
-      creado: true,
-      programadoEn: AHORA.toISOString(),
-      sesiones: 2,
-      monto: 2 * TARIFA,
-    });
-
-    const envios = await enviosDe(base.pacienteId);
-    expect(envios).toHaveLength(1);
-    expect(envios[0]).toMatchObject({
-      id: resultado.envioId,
-      organizationId: base.orgId,
-      motivo: "recordatorio_cobro",
-      estado: "pendiente",
-      destino: TELEFONO,
-      turnoId: null,
-      claveIdempotencia: claveDeCobro(base.pacienteId, AHORA),
-      programadoEn: AHORA,
-      proximoIntentoEn: AHORA,
-      intentos: 0,
-    });
-
-    const eventos = await eventosDe(base.orgId);
-    expect(eventos).toHaveLength(1);
-    const evento = eventos[0];
-    expect(evento).toMatchObject({
-      accion: ACCIONES.cobro.recordatorio,
-      entidad: "paciente",
-      entidadId: base.pacienteId,
-      actorTipo: "usuario",
-      actorId: "user-1",
-      detalle: { sesiones: 2, monto: 2 * TARIFA, envioId: resultado.envioId },
-    });
-    // Ni el teléfono ni el nombre entran al registro.
-    const serializado = JSON.stringify(evento);
-    expect(serializado).not.toContain(TELEFONO);
-    expect(serializado).not.toContain("Lucía");
-  });
-
-  it("dos toques el mismo día son un solo envío y un solo evento", async () => {
-    const base = await crearBase();
-    await crearImpago(base, 5);
-    const pedir = () =>
-      recordarCobro({
+      const resultado = await recordarCobro({
         prisma: db,
         organizationId: base.orgId,
         pacienteId: base.pacienteId,
+        usuarioId: "user-1",
         ahora: AHORA,
-      }).then(porSms);
+      });
 
-    const primero = await pedir();
-    const segundo = await pedir();
-
-    expect(primero.creado).toBe(true);
-    expect(segundo.creado).toBe(false);
-    expect(segundo.envioId).toBe(primero.envioId);
-    expect(await enviosDe(base.pacienteId)).toHaveLength(1);
-    expect(await eventosDe(base.orgId)).toHaveLength(1);
-  });
+      expect(resultado).toMatchObject({ canal: "whatsapp", avisadoEn: AHORA.toISOString(), sesiones: 2, monto: 2 * TARIFA });
+      expect(await enviosDe(base.pacienteId)).toHaveLength(0);
+      expect(await prismaRaw.avisoWhatsapp.count({ where: { organizationId: base.orgId, tipo: "cobro" } })).toBe(1);
+      const eventos = await eventosDe(base.orgId);
+      expect(eventos.map((e) => e.accion)).toEqual([ACCIONES.cobro.whatsappAbierto]);
+      // Ni el teléfono ni el nombre entran al registro.
+      const serializado = JSON.stringify(eventos[0]);
+      expect(serializado).not.toContain(TELEFONO);
+      expect(serializado).not.toContain("Lucía");
+    },
+  );
 
   it("a quien no debe nada no se le avisa: 409 y no se crea nada", async () => {
     const base = await crearBase();
@@ -461,18 +406,6 @@ describe("con WhatsApp desde mi teléfono", () => {
     expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
   });
 
-  it("con SMS y con Ambos sale por SMS como siempre", async () => {
-    for (const canal of ["sms", "ambos"] as const) {
-      const base = await crearBase();
-      await conCanal(base, canal);
-      await crearImpago(base, 5);
-      const resultado = await pedir(base);
-      expect(resultado).toMatchObject({ canal: "sms", creado: true });
-      expect(await enviosDe(base.pacienteId)).toHaveLength(1);
-      expect(await avisosDe(base.orgId)).toHaveLength(0);
-    }
-  });
-
   it("Avisado hace N días: cuenta la última apertura de WhatsApp igual que un SMS que salió", async () => {
     const base = await crearBase();
     const otra = await crearBase();
@@ -538,27 +471,27 @@ describe("listarDeudores dice quién pidió la baja", () => {
 });
 
 describe("la pantalla y el servidor no pueden elegir canales distintos", () => {
-  it.each([
-    ["whatsapp", "sms"],
-    ["sms", "whatsapp"],
-    ["ambos", "whatsapp"],
-  ] as const)("con %s en la base y %s en la pantalla: 409 y no se anota ni se programa nada", async (enLaBase, enPantalla) => {
+  // Una pestaña abierta de antes de que el cobro fuera sólo por WhatsApp
+  // todavía pide SMS: sea cual sea el guardado, 409 y nada.
+  it.each(["whatsapp", "sms", "ambos"] as const)("con %s en la base y SMS en la pantalla: 409 y no se anota ni se programa nada", async (enLaBase) => {
     const base = await crearBase();
     await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: enLaBase } });
     await crearImpago(base, 5);
     await expect(
-      recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "u", ahora: AHORA, canal: enPantalla }),
+      recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "u", ahora: AHORA, canal: "sms" }),
     ).rejects.toMatchObject({ status: 409, message: COBRO_CANAL_CAMBIO });
     expect(await prismaRaw.envioSms.count()).toBe(0);
     expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
     expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
   });
 
-  it("con Ambos en la base, la pantalla que pide SMS sigue adelante", async () => {
+  it.each(["sms", "ambos"] as const)("con %s en la base, la pantalla que pide WhatsApp sigue adelante", async (enLaBase) => {
     const base = await crearBase();
-    await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: "ambos" } });
+    await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: enLaBase } });
     await crearImpago(base, 5);
-    const r = await recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "u", ahora: AHORA, canal: "sms" });
-    expect(r.canal).toBe("sms");
+    const r = await recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "u", ahora: AHORA, canal: "whatsapp" });
+    expect(r.canal).toBe("whatsapp");
+    expect(await prismaRaw.envioSms.count()).toBe(0);
   });
 });
+

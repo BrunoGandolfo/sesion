@@ -19,7 +19,7 @@ Arriba a la derecha aparece *Guardando…* y después *Guardado.* Si algo falla:
 
 | Campo | Qué hace |
 | --- | --- |
-| **Nombre** | *"Como querés que te nombren los pacientes"*. Va **al principio** de cada recordatorio y, con el texto de siempre, del aviso de **Recordar cobro por SMS** (o por WhatsApp), después de "Consultorio", y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
+| **Nombre** | *"Como querés que te nombren los pacientes"*. Va **al principio** de cada recordatorio y, con el texto de siempre, del aviso de **Recordar cobro por WhatsApp**, después de "Consultorio", y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
 | **Dirección del consultorio** | Aparece en la autorización que firma la paciente, y en el recordatorio si insertás la ficha **Dirección**. |
 | **Teléfono** | El número al que la paciente llama para cambios. Va al final de cada recordatorio: *"Cambios: llamar al …"*. |
 
@@ -53,35 +53,25 @@ escribe igual con los dos enfoques.
 
 ## Recordatorio
 
-- **Cómo recordás los turnos** — tres opciones, cada una con su línea:
-  - **SMS automático** — *"La app manda el SMS sola. Las respuestas no te
-    llegan."* Es la que tenés si nunca elegiste otra.
-  - **WhatsApp desde mi teléfono** — *"La app te prepara el mensaje y lo
-    mandás vos; las respuestas te llegan a tu WhatsApp."* En **Hoy** aparece
-    **Recordatorios para hoy**, con **Abrir WhatsApp** en cada turno.
-  - **Ambos** — *"Sale el SMS automático y además tenés el WhatsApp preparado
-    en Hoy."*
+Los recordatorios van por WhatsApp: la app te prepara el mensaje y lo mandás
+vos, y las respuestas te llegan a tu WhatsApp. En **Hoy** aparece
+**Recordatorios para hoy**, con **Abrir WhatsApp** en cada turno.
+
 - **Cuándo se avisa** — **El día anterior** (20:00), **Dos días antes** (20:00) o
   **La misma mañana** (8:00). Vale para todos los turnos, y afecta a los turnos
   que agendes o reprogrames de ahí en adelante.
 - **Mensaje** — el texto con fichas (**+ Nombre**, **+ Fecha**, **+ Hora**,
   **+ Dirección**). No puede quedar vacío. El consultorio y tu nombre van al
   principio y la línea para llamar al final; si los borrás, se agregan solos.
-  Con **SMS automático** o **Ambos**, la pantalla advierte: *"No pidas
-  respuestas por SMS: no llegan."* Con **WhatsApp desde mi teléfono** no lo
-  dice: las respuestas te llegan a vos.
 - **Así lo recibe la paciente** — la vista previa, con datos de ejemplo y tus
   datos reales.
 
-Los SMS no salen a la hora en punto sino con unos minutos de corrimiento. El
-detalle completo, y cómo es avisar por WhatsApp, está en
+Qué turnos aparecen cada día en **Hoy** y cómo es avisar por WhatsApp está en
 `06-recordatorios-sms.md`.
 
 ## Aviso de cobro
 
-El mensaje de **Recordar cobro por SMS** o **Recordar cobro por WhatsApp**, en
-**Cobros**. Es el mismo por los dos canales: cuál sale lo decide **Cómo
-recordás los turnos**.
+El mensaje de **Recordar cobro por WhatsApp**, en **Cobros**.
 
 - **Mensaje** — el texto con fichas (**+ Nombre**, **+ Sesiones pendientes**,
   **+ Monto**). **Sesiones pendientes** dice *"1 sesión pendiente"* o
@@ -92,7 +82,7 @@ recordás los turnos**.
 
 Lo que confirmás en **Cobros** es este texto con la deuda real de esa persona.
 
-Los cambios del canal, de **Cuándo se avisa** y de los dos mensajes quedan
+Los cambios de **Cuándo se avisa** y de los dos mensajes quedan
 registrado quién los hizo y cuándo; del texto de los mensajes queda registrado
 que cambió, no lo que dice.
 

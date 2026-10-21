@@ -43,7 +43,8 @@
 //   - El turno: cerrado o pasado → `cancelado`, sin gastar nada.
 //   - La paciente archivada: ni siquiera es candidata (leerCandidatos).
 //   - El canal: con `whatsapp`, el recordatorio del turno se cancela con
-//     MOTIVO_CANAL_WHATSAPP, sin llamar a Twilio.
+//     MOTIVO_CANAL_WHATSAPP, sin llamar a Twilio. Hoy es siempre `whatsapp`
+//     (CANAL_RECORDATORIO_VIGENTE), sea cual sea el guardado.
 //
 // ─── LOS CIERRES NO PISAN UNA CANCELACIÓN ───────────────────────────────────
 //
@@ -67,6 +68,7 @@
 
 import { SMS_MOTIVOS, MOTIVO_BAJA, MOTIVO_TURNO_PASADO, MOTIVO_RESERVA_HUERFANA, MOTIVO_SIN_TEXTO_DE_COBRO, MENSAJE_ENVIADO_TRAS_CANCELACION } from "@/lib/glosario";
 import type { db } from "@/lib/db";
+import { CANAL_RECORDATORIO_VIGENTE, type CanalRecordatorio } from "@/lib/recordatorios-programacion";
 import { decidirTrasFalloTransitorio, limiteUtilDelTurno } from "@/lib/sms/backoff";
 import { URL_CALLBACK } from "@/lib/sms/firma";
 import { contarLongitudSms, textoDelRecordatorio } from "@/lib/sms/texto";
@@ -123,6 +125,13 @@ export interface DespacharParams {
   reloj?: () => number;
   /** [0, 1) para el jitter del backoff. Inyectable. */
   aleatorio?: () => number;
+  /**
+   * El canal con que se decide, a partir del guardado. Por defecto
+   * CANAL_RECORDATORIO_VIGENTE (sólo WhatsApp, lo guardado no cuenta). Los
+   * tests del envío por SMS pasan el guardado tal cual, para seguir
+   * ejercitando ese código hasta que se borre.
+   */
+  canalDe?: (guardado: CanalRecordatorio | undefined) => CanalRecordatorio;
 }
 
 export interface ResumenDespacho {
@@ -200,6 +209,7 @@ interface Corrida {
   resumen: ResumenDespacho;
   aleatorio: () => number;
   textoDeCobro: DespacharParams["textoDeCobro"];
+  canalDe: NonNullable<DespacharParams["canalDe"]>;
   enviar: EnviadorSms;
   /** Una línea de bitácora del envío. */
   evento: (tipo: string, e: Candidato, resto?: string) => void;
@@ -221,10 +231,11 @@ const aCodigo = (codigo: number | null) => (codigo !== null ? String(codigo) : n
 //
 // En este orden. La baja primero: es una obligación legal y vale en TODO
 // envío. Después el turno, si lo hay: cerrado o pasado no se avisa. Y al
-// final el canal: si la profesional eligió WhatsApp, el recordatorio del
-// turno no sale por SMS (lo manda ella, casos-uso/recordatorios-whatsapp.ts).
-// Se mira ACÁ, al despachar, y no al crear el turno: cambiar la
-// configuración alcanza a lo ya agendado. El aviso de cobro no tiene turno y
+// final el canal: con WhatsApp (hoy siempre, CANAL_RECORDATORIO_VIGENTE), el
+// recordatorio del turno no sale por SMS (lo manda ella,
+// casos-uso/recordatorios-whatsapp.ts). Se mira ACÁ, al despachar, y no al
+// crear el turno: la fila del turno sigue naciendo, porque es la que dice qué
+// avisar hoy por WhatsApp, y lo agendado antes también se cancela. El aviso de cobro no tiene turno y
 // sigue saliendo por SMS: lo pidió ella con el botón de Cobros.
 
 interface CortePrevio {
@@ -232,7 +243,7 @@ interface CortePrevio {
   evento: string;
 }
 
-type ReglaDeCorte = (e: Candidato, ctx: { ahora: Date; baja: boolean }) => CortePrevio | null;
+type ReglaDeCorte = (e: Candidato, ctx: { ahora: Date; baja: boolean; canal: CanalRecordatorio }) => CortePrevio | null;
 
 const CORTES_PREVIOS: ReadonlyArray<ReglaDeCorte> = [
   (_e, { baja }) => (baja ? { motivo: MOTIVO_BAJA, evento: "baja" } : null),
@@ -244,16 +255,17 @@ const CORTES_PREVIOS: ReadonlyArray<ReglaDeCorte> = [
     e.turno && !correspondeEnvio(e.turno.fecha, ahora)
       ? { motivo: MOTIVO_TURNO_PASADO, evento: "turno-pasado" }
       : null,
-  (e) =>
-    e.turno && e.organization.configuracion?.canalRecordatorio === "whatsapp"
+  (e, { canal }) =>
+    e.turno && canal === "whatsapp"
       ? { motivo: MOTIVO_CANAL_WHATSAPP, evento: "canal-whatsapp" }
       : null,
 ];
 
 async function cortePrevio(c: Corrida, e: Candidato): Promise<CortePrevio | null> {
   const baja = (await c.prisma.bajaSms.findUnique({ where: { telefono: e.destino }, select: { telefono: true } })) !== null;
+  const canal = c.canalDe(e.organization.configuracion?.canalRecordatorio);
   for (const regla of CORTES_PREVIOS) {
-    const corte = regla(e, { ahora: c.ahora, baja });
+    const corte = regla(e, { ahora: c.ahora, baja, canal });
     if (corte) return corte;
   }
   return null;
@@ -551,6 +563,7 @@ export async function despacharEnvios({
   lote = LOTE,
   reloj = () => Date.now(),
   aleatorio = () => Math.random(),
+  canalDe = () => CANAL_RECORDATORIO_VIGENTE,
 }: DespacharParams): Promise<ResumenDespacho> {
   const ts = ahora.toISOString();
   const inicio = reloj();
@@ -579,6 +592,7 @@ export async function despacharEnvios({
     resumen,
     aleatorio,
     textoDeCobro,
+    canalDe,
     enviar,
     evento: (tipo, e, resto = "") => {
       resumen.eventos.push(

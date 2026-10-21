@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// "Cómo recordás los turnos": muestra el canal guardado (la API siempre lo
-// trae: la columna es NOT NULL con default sms) y elegir otro lo guarda con
-// el autoguardado de siempre.
+// Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): Tu consultorio ya no ofrece
+// elegir cómo se recuerdan los turnos, y con cualquier valor guardado el
+// recordatorio se lee y se edita como WhatsApp.
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -43,33 +43,21 @@ async function abrir() {
   });
 }
 
-function grupo() {
-  return screen.getByRole("group", { name: "Cómo recordás los turnos" });
-}
-
-it("ofrece los tres modos, cada uno con su línea, y marca el guardado (SMS por defecto)", async () => {
+it.each(["sms", "ambos", "whatsapp"])("con %s guardado no ofrece elegir el canal ni habla de SMS", async (guardado) => {
+  api.config.canalRecordatorio = guardado;
   await abrir();
-  const radios = Array.from(grupo().querySelectorAll<HTMLInputElement>("input[type=radio]"));
-  expect(radios.map((r) => r.value)).toEqual(["sms", "whatsapp", "ambos"]);
-  expect(screen.getByRole("radio", { name: /^SMS automático/ })).toHaveProperty("checked", true);
-  expect(
-    screen.getByText("La app te prepara el mensaje y lo mandás vos; las respuestas te llegan a tu WhatsApp."),
-  ).toBeTruthy();
+  expect(screen.queryByRole("group", { name: "Cómo recordás los turnos" })).toBeNull();
+  expect(screen.queryByRole("radio", { name: /SMS automático|^Ambos|WhatsApp desde mi teléfono/ })).toBeNull();
+  expect(screen.getByRole("region", { name: "Vista previa del mensaje" })).toBeTruthy();
+  expect(document.body.textContent).not.toMatch(/SMS/);
 });
 
-it("muestra el canal guardado", async () => {
-  api.config.canalRecordatorio = "ambos";
+it("guardar el recordatorio no manda el canal", async () => {
   await abrir();
-  expect(screen.getByRole("radio", { name: /^Ambos/ })).toHaveProperty("checked", true);
-});
-
-it("elegir WhatsApp lo guarda", async () => {
-  await abrir();
-  fireEvent.click(screen.getByRole("radio", { name: /WhatsApp desde mi teléfono/ }));
-  expect(screen.getByRole("radio", { name: /WhatsApp desde mi teléfono/ })).toHaveProperty("checked", true);
+  fireEvent.click(screen.getByRole("radio", { name: /La misma mañana/ }));
   await act(async () => {
     await vi.advanceTimersByTimeAsync(2000);
   });
   expect(api.patch).toHaveBeenCalledTimes(1);
-  expect(api.patch).toHaveBeenCalledWith("/api/config", { canalRecordatorio: "whatsapp" });
+  expect(api.patch).toHaveBeenCalledWith("/api/config", { recordatorioModo: "misma_manana" });
 });

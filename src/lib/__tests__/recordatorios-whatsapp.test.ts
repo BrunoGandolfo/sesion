@@ -422,17 +422,12 @@ describe("listarRecordatoriosDeHoy", () => {
     expect(t.motivo).toBe("sin_telefono");
   });
 
-  it("con canal sms la lista viene vacía aunque haya avisos hoy; con ambos, llena", async () => {
-    const sms = await crearOrg("sms");
-    await turnoConAvisoHoy(sms);
-    expect(await listarRecordatoriosDeHoy({ prisma: db, organizationId: sms.orgId, ahora: AHORA })).toEqual({
-      canal: "sms",
-      turnos: [],
-    });
-    const ambos = await crearOrg("ambos");
-    await turnoConAvisoHoy(ambos);
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: ambos.orgId, ahora: AHORA });
-    expect(r.canal).toBe("ambos");
+  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado no cuenta.
+  it.each(["sms", "ambos"] as const)("con %s guardado la lista se arma igual, como WhatsApp", async (guardado) => {
+    const o = await crearOrg(guardado);
+    await turnoConAvisoHoy(o);
+    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
+    expect(r.canal).toBe("whatsapp");
     expect(r.turnos).toHaveLength(1);
   });
 
@@ -467,7 +462,7 @@ describe("el texto del WhatsApp y el del SMS", () => {
 
     const [t] = (await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA })).turnos;
     const { enviar, textos } = enviadorDoble();
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
+    await despacharEnvios({ prisma: db, ahora: AHORA, enviar, canalDe: (guardado) => guardado ?? "sms" });
 
     expect(textos).toHaveLength(1);
     expect(textoDelEnlace(t.enlace!)).toBe(textos[0]);
@@ -502,12 +497,27 @@ describe("despacharEnvios según el canal", () => {
     expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("pendiente");
   });
 
-  it.each(["ambos", "sms"] as const)("%s: manda como siempre", async (canal) => {
+  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado no cuenta.
+  it.each(["ambos", "sms"] as const)("%s guardado: cancela igual, con el motivo del canal", async (canal) => {
     const o = await crearOrg(canal);
     const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
     const { enviar } = enviadorDoble();
 
     await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
+
+    expect(enviar).not.toHaveBeenCalled();
+    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).toMatchObject({
+      estado: "cancelado",
+      motivoNoEnvio: MOTIVO_CANAL_WHATSAPP,
+    });
+  });
+
+  it.each(["ambos", "sms"] as const)("%s con el canal guardado (el SMS hasta borrarlo): manda como siempre", async (canal) => {
+    const o = await crearOrg(canal);
+    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
+    const { enviar } = enviadorDoble();
+
+    await despacharEnvios({ prisma: db, ahora: AHORA, enviar, canalDe: (guardado) => guardado ?? "sms" });
 
     expect(enviar).toHaveBeenCalledTimes(1);
     expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("aceptado");
@@ -535,7 +545,7 @@ describe("despacharEnvios según el canal", () => {
     expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("aceptado");
   });
 
-  it("decide al despachar: pasar a whatsapp después de agendar cancela lo ya programado", async () => {
+  it("decide al despachar: lo agendado con sms guardado se cancela igual", async () => {
     const o = await crearOrg("sms");
     const paciente = await crearPaciente(o);
     const turno = await crearTurno(o, paciente.id, new Date("2026-09-04T18:00:00.000Z"));
@@ -823,12 +833,14 @@ describe("rutas", () => {
     });
   });
 
-  it("GET con canal sms: turnos vacío", async () => {
+  it("GET con sms guardado: canal whatsapp y la lista llena", async () => {
     const o = await entrar("sms");
     await turnoConAvisoHoy(o);
     const { GET } = await import("@/app/api/recordatorios/whatsapp/route");
 
-    expect(await (await GET()).json()).toEqual({ data: { canal: "sms", turnos: [] } });
+    const { data } = await (await GET()).json();
+    expect(data.canal).toBe("whatsapp");
+    expect(data.turnos).toHaveLength(1);
   });
 
   it("POST …/[turnoId]/abierto: 201 con avisadoEn, y el GET lo refleja", async () => {
@@ -875,18 +887,21 @@ describe("rutas", () => {
     expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
   });
 
-  it("/api/config: devuelve el canal, se cambia por PATCH y rechaza un canal que no existe", async () => {
-    const o = await entrar("sms");
+  it.each(["sms", "ambos"] as const)("/api/config: con %s guardado devuelve whatsapp, y por PATCH sólo acepta whatsapp", async (guardado) => {
+    const o = await entrar(guardado);
     const { GET, PATCH } = await import("@/app/api/config/route");
     const patch = (body: unknown) =>
       PATCH(new Request("http://localhost/api/config", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    const guardadoEnLaBase = async () =>
+      (await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: o.orgId } })).canalRecordatorio;
 
-    expect((await (await GET()).json()).data.canalRecordatorio).toBe("sms");
+    expect((await (await GET()).json()).data.canalRecordatorio).toBe("whatsapp");
+    for (const canal of ["sms", "ambos", "paloma"]) expect((await patch({ canalRecordatorio: canal })).status).toBe(400);
+    expect(await guardadoEnLaBase()).toBe(guardado);
     const res = await patch({ canalRecordatorio: "whatsapp" });
     expect(res.status).toBe(200);
     expect((await res.json()).data.canalRecordatorio).toBe("whatsapp");
-    expect((await patch({ canalRecordatorio: "paloma" })).status).toBe(400);
-    expect((await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: o.orgId } })).canalRecordatorio).toBe("whatsapp");
+    expect(await guardadoEnLaBase()).toBe("whatsapp");
   });
 
   it("una configuración creada sin canal queda en sms", async () => {
@@ -938,15 +953,15 @@ describe("auditoría de Tu consultorio (configuracion.editar)", () => {
   });
 
   it("guardar lo mismo (el autoguardado lo hace) no deja evento", async () => {
-    const o = await entrar("sms");
-    await patch({ canalRecordatorio: "sms", templateRecordatorio: TEMPLATE });
+    const o = await entrar("whatsapp");
+    expect((await patch({ canalRecordatorio: "whatsapp", templateRecordatorio: TEMPLATE })).status).toBe(200);
     expect(await eventos(o.orgId)).toHaveLength(0);
   });
 
   it("cada organización ve sólo sus cambios", async () => {
     const otra = await crearOrg("sms");
     const o = await entrar("sms");
-    await patch({ canalRecordatorio: "ambos" });
+    await patch({ canalRecordatorio: "whatsapp" });
     expect(await eventos(o.orgId)).toHaveLength(1);
     expect(await eventos(otra.orgId)).toHaveLength(0);
     expect((await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: otra.orgId } })).canalRecordatorio).toBe("sms");

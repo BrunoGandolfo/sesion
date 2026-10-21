@@ -314,25 +314,6 @@ export const RECORDATORIO_MOMENTOS = {
   },
 } as const;
 
-/** Cómo se recuerdan los turnos, en Configuración. SMS es lo de siempre:
- *  sale solo, desde un número de servicio. Con WhatsApp el mensaje lo manda
- *  ella desde su teléfono, y por eso las respuestas le llegan a ella. */
-export const RECORDATORIO_CANAL_LEYENDA = "Cómo recordás los turnos";
-export const RECORDATORIO_CANALES = {
-  sms: {
-    label: "SMS automático",
-    detalle: "La app manda el SMS sola. Las respuestas no te llegan.",
-  },
-  whatsapp: {
-    label: "WhatsApp desde mi teléfono",
-    detalle: "La app te prepara el mensaje y lo mandás vos; las respuestas te llegan a tu WhatsApp.",
-  },
-  ambos: {
-    label: "Ambos",
-    detalle: "Sale el SMS automático y además tenés el WhatsApp preparado en Hoy.",
-  },
-} as const;
-
 // ─── Recordatorios por WhatsApp, en Hoy ─────────────────────────────────────
 
 export const RECORDATORIOS_PARA_HOY = "Recordatorios para hoy";
@@ -1576,7 +1557,7 @@ export const ENTRADA_QUE_HACE =
  */
 export const ENTRADA_AFIRMACIONES = [
   "La IA prepara un borrador de nota clínica y la aprobás vos.",
-  "Agenda, recordatorios por SMS y cobros.",
+  "Agenda, recordatorios por WhatsApp y cobros.",
   "Un análisis de la sesión para reflexionar sobre tu práctica.",
 ] as const;
 
@@ -1594,7 +1575,7 @@ export const PORTADA_FUNCIONES = [
   {
     titulo: "Agenda, recordatorios y cobros",
     parrafos: [
-      "Organizá turnos únicos o recurrentes y activá recordatorios por SMS. Registrá los cobros y consultá las deudas de cada paciente.",
+      "Organizá turnos únicos o recurrentes y mandá los recordatorios por WhatsApp desde tu teléfono. Registrá los cobros y consultá las deudas de cada paciente.",
     ],
   },
   {
@@ -2169,7 +2150,7 @@ export const COBRO_MENSAJE_EDITOR = "Mensaje del aviso de cobro";
 export const COBRO_VISTA_PREVIA = "Vista previa del aviso de cobro";
 export const COBRO_MENSAJE_VACIO = "El aviso de cobro no puede quedar vacío.";
 export const COBRO_MENSAJE_AYUDA =
-  "Es el mensaje que sale cuando tocás Recordar cobro en Cobros, por SMS o por WhatsApp según cómo recordás los turnos. Tocá una ficha para agregarla donde está el cursor.";
+  "Es el mensaje que te prepara Recordar cobro por WhatsApp, en Cobros. Tocá una ficha para agregarla donde está el cursor.";
 
 /** Recordar cobro según el canal (accionDeCobro, src/lib/aviso-cobro.ts):
  *  el botón, su nombre accesible, la confirmación y lo que se le dice
@@ -2194,29 +2175,21 @@ export const RECORDAR_COBRO_POR_CANAL = {
   },
 } as const;
 
-/** La plantilla del recordatorio de turno en Tu consultorio, según el canal.
- *  Con Ambos también sale el SMS: valen los textos del SMS. */
-const RECORDATORIO_AYUDA_FICHAS =
-  "Tocá una ficha para agregarla donde está el cursor. El consultorio y tu nombre van al principio; al final se indica a qué teléfono llamar para cambios. Se agregan solos si los borrás.";
-const TEXTOS_RECORDATORIO_SMS = {
-  nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el SMS también se leería así.",
-  ayuda: `${RECORDATORIO_AYUDA_FICHAS} No pidas respuestas por SMS: no llegan.`,
-  vistaPrevia: "Vista previa del SMS",
-};
-export const RECORDATORIO_TEXTOS_POR_CANAL = {
-  sms: TEXTOS_RECORDATORIO_SMS,
-  ambos: TEXTOS_RECORDATORIO_SMS,
-  whatsapp: {
-    nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el mensaje también se leería así.",
-    ayuda: RECORDATORIO_AYUDA_FICHAS,
-    vistaPrevia: "Vista previa del mensaje",
-  },
+/** La plantilla del recordatorio de turno en Tu consultorio. Sólo WhatsApp
+ *  (CANAL_RECORDATORIO_VIGENTE): el mensaje lo manda ella y las respuestas
+ *  le llegan, así que no hay advertencia sobre respuestas. */
+export const RECORDATORIO_TEXTOS = {
+  nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el mensaje también se leería así.",
+  ayuda:
+    "Tocá una ficha para agregarla donde está el cursor. El consultorio y tu nombre van al principio; al final se indica a qué teléfono llamar para cambios. Se agregan solos si los borrás.",
+  vistaPrevia: "Vista previa del mensaje",
 } as const;
 
-/** La pantalla pidió el aviso por un canal y en Tu consultorio ya hay otro
- *  (lo cambió en otra pestaña o una colega): no se manda ni se anota nada. */
+/** La pantalla pidió el aviso por un canal que ya no es el de la app (una
+ *  pestaña abierta de antes de que el cobro pasara a ir sólo por WhatsApp):
+ *  no se manda ni se anota nada. */
 export const COBRO_CANAL_CAMBIO =
-  "Cambió cómo recordás los turnos en Tu consultorio. Volvé a cargar Cobros y probá de nuevo.";
+  "Cambió cómo se avisa el cobro. Volvé a cargar Cobros y probá de nuevo.";
 
 // ─── lux-memoria ─────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-// Te deben: el recordatorio de cobro con la plantilla de Tu consultorio y
-// por el canal elegido. Lo único simulado es la red (y window.open).
+// Te deben: el recordatorio de cobro con la plantilla de Tu consultorio, sólo
+// por WhatsApp. Lo único simulado es la red (y window.open).
 
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,11 +11,8 @@ import { textoDelCobro, TEMPLATE_COBRO_DEFAULT } from "@/lib/deudas";
 import {
   MOTIVO_PACIENTE_DADA_DE_BAJA,
   ABRIR_WHATSAPP,
-  AVISO_COBRO_PROGRAMADO,
   AVISO_COBRO_WHATSAPP_ANOTADO,
-  ENVIAR_SMS,
   NO_SE_ANOTO_AVISO,
-  RECORDAR_COBRO,
   RECORDAR_COBRO_TITULO,
   RECORDAR_COBRO_WHATSAPP,
 } from "@/lib/glosario";
@@ -111,17 +108,18 @@ describe("Te deben: la plantilla del aviso de cobro", () => {
 });
 
 describe("Te deben: el botón según el canal", () => {
-  it.each(["sms", "ambos"])("con %s, todo dice SMS y sale por SMS como siempre", async (canal) => {
+  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): aunque la configuración
+  // traiga otro canal, el botón es el de WhatsApp y nunca se pide un SMS.
+  it.each(["sms", "ambos", undefined])("con %s en la configuración, el botón es el de WhatsApp", async (canal) => {
     servidor({ ...CONFIG, canalRecordatorio: canal });
-    api.post.mockResolvedValue({ canal: "sms", envioId: "e1", creado: true, programadoEn: "2026-09-03T15:00:00.000Z", sesiones: 2, monto: 4500 });
+    api.post.mockResolvedValue({ canal: "whatsapp", enlace: "https://wa.me/59899123456", avisadoEn: AHORA.toISOString(), sesiones: 2, monto: 4500 });
     render(<CobrosView />);
-    const boton = await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por SMS` });
-    expect(boton.textContent).toBe(RECORDAR_COBRO);
+    const boton = await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por WhatsApp` });
+    expect(boton.textContent).toBe(RECORDAR_COBRO_WHATSAPP);
     fireEvent.click(boton);
-    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: ENVIAR_SMS }));
-    await waitFor(() => expect(screen.getAllByRole("status").some((n) => n.textContent === AVISO_COBRO_PROGRAMADO)).toBe(true));
-    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "sms" });
-    expect(abrir).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toMatch(/SMS/);
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: ABRIR_WHATSAPP }));
+    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" });
   });
 
   it("con WhatsApp, ningún texto dice SMS, abre WhatsApp con la plantilla y la fila queda Avisada", async () => {

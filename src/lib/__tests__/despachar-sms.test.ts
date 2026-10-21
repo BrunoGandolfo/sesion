@@ -130,8 +130,13 @@ const definitivo = (codigo: number, extra: Partial<ResultadoTwilio & { clasifica
 });
 const desconocido: ResultadoTwilio = { tipo: "desconocido", motivo: "Twilio no respondió en 10 s" };
 
+// El envío por SMS, como estaba: decide el canal guardado. La app es sólo
+// WhatsApp (CANAL_RECORDATORIO_VIGENTE), pero este código sigue hasta que se
+// borre y se sigue probando.
+const canalGuardado: DespacharParams["canalDe"] = (guardado) => guardado ?? "sms";
+
 function correr(enviar: EnviadorSms, extra: Partial<DespacharParams> = {}) {
-  return despacharEnvios({ prisma: db, ahora: AHORA, enviar, aleatorio: () => 0.5, ...extra });
+  return despacharEnvios({ prisma: db, ahora: AHORA, enviar, aleatorio: () => 0.5, canalDe: canalGuardado, ...extra });
 }
 
 beforeAll(() => {
@@ -231,7 +236,7 @@ describe("Twilio aceptó pero la base falló al cerrar (U4 / E.15)", () => {
       },
     }) as typeof db;
 
-    const primera = await despacharEnvios({ prisma: conFalloAlCerrar, ahora: AHORA, enviar: stub });
+    const primera = await despacharEnvios({ prisma: conFalloAlCerrar, ahora: AHORA, enviar: stub, canalDe: canalGuardado });
     expect(stub).toHaveBeenCalledTimes(1);
     expect(primera.fallosPersistencia).toHaveLength(1);
     let fila = await leer(envioId);

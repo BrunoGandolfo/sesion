@@ -37,6 +37,7 @@ import {
 } from "@/lib/glosario";
 import { HORAS_PARA_ENVIAR_GRABACION, MINUTOS_RELOJ_ADELANTADO } from "@/lib/plazo-grabacion";
 import { porMontoYAntiguedad } from "@/lib/orden-deuda";
+import { CANAL_RECORDATORIO_VIGENTE } from "@/lib/recordatorios-programacion";
 
 type TurnoStats = Pick<
   PrismaTurno,
@@ -171,7 +172,8 @@ export function toConfiguracion(
     templateRecordatorio: configuracion.templateRecordatorio,
     templateCobro: configuracion.templateCobro,
     orientacionTeorica: configuracion.orientacionTeorica,
-    canalRecordatorio: configuracion.canalRecordatorio,
+    // Sólo WhatsApp: lo guardado no cuenta (CANAL_RECORDATORIO_VIGENTE).
+    canalRecordatorio: CANAL_RECORDATORIO_VIGENTE,
     organizationId: configuracion.organizationId,
   };
 }

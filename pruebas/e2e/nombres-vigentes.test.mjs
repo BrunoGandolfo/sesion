@@ -17,7 +17,7 @@ import {
   COMO_VA,
   DATOS,
   PREPARAR_SESION,
-  RECORDAR_COBRO,
+  RECORDAR_COBRO_WHATSAPP,
 } from "../../src/lib/glosario";
 import { DURACIONES } from "../../src/lib/constantes-turno";
 import { ARCHIVOS_CORPUS } from "../../src/lib/ayuda-corpus";
@@ -102,7 +102,8 @@ describe("nombres vigentes en el recorrido y la ayuda", () => {
   it("la ayuda nombra los botones como se llaman hoy", () => {
     const leer = (n) => readFileSync(join(RAIZ, "docs/ayuda", n), "utf8");
     for (const pagina of ["00-que-es-sesion.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md", "_indice.md"]) {
-      expect(leer(pagina), pagina).toContain(RECORDAR_COBRO);
+      expect(leer(pagina), pagina).toContain(RECORDAR_COBRO_WHATSAPP);
+      expect(leer(pagina), pagina).not.toContain("Recordar cobro por SMS");
     }
     expect(leer("10-el-hilo-y-el-recorrido.md")).toContain(`**${PREPARAR_SESION}**, en la pestaña **Sesiones**`);
     expect(leer("09-para-vos-feedback.md")).toContain("selector de tres opciones");

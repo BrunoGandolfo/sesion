@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-// Te deben: registrar el pago sin salir de Cobros, y el recordatorio por SMS
-// como acción secundaria que no sale sin confirmar.
+// Te deben: registrar el pago sin salir de Cobros, y el recordatorio por
+// WhatsApp como acción secundaria que no se abre sin confirmar.
 //
 // El selector de método es el de verdad (sheet-metodo-pago.tsx, el mismo de
 // Hoy): lo único simulado es la red.
@@ -15,9 +15,9 @@ import {
   COBRO_INCOMPLETO,
   DATOS_SIN_ACTUALIZAR,
   ELEGIR_METODO_DE_PAGO,
-  ENVIAR_SMS,
+  ABRIR_WHATSAPP,
   MARCAR_TODAS,
-  RECORDAR_COBRO,
+  RECORDAR_COBRO_WHATSAPP,
   RECORDAR_COBRO_TITULO,
   REGISTRAR_PAGO,
   REINTENTAR,
@@ -257,15 +257,15 @@ describe("Te deben: registrar pago", () => {
   });
 });
 
-describe("Te deben: recordar el cobro por SMS", () => {
-  it("el botón dice que manda un SMS y tocarlo no envía nada: primero muestra el mensaje y el número", async () => {
+describe("Te deben: recordar el cobro por WhatsApp", () => {
+  it("el botón dice WhatsApp y tocarlo no abre nada: primero muestra el mensaje y el número", async () => {
     servidor();
+    const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<CobrosView />);
 
-    const boton = await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por SMS` });
+    const boton = await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por WhatsApp` });
     // Lo que se lee en el botón, no solo su nombre accesible, dice el canal.
-    expect(boton.textContent).toBe(RECORDAR_COBRO);
-    expect(RECORDAR_COBRO).toMatch(/SMS/);
+    expect(boton.textContent).toBe(RECORDAR_COBRO_WHATSAPP);
     fireEvent.click(boton);
 
     expect(await screen.findByText(RECORDAR_COBRO_TITULO)).toBeTruthy();
@@ -273,33 +273,38 @@ describe("Te deben: recordar el cobro por SMS", () => {
     expect(screen.getByText("+598 99 123 456")).toBeTruthy();
     expect(smsPedidos()).toEqual([]);
 
-    // Cancelar tampoco envía, y la fila vuelve a como estaba.
+    // Cancelar tampoco abre ni anota, y la fila vuelve a como estaba.
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     await waitFor(() => expect(screen.queryByText(RECORDAR_COBRO_TITULO)).toBeNull());
-    expect(smsPedidos()).toEqual([]);
+    expect(abrir).not.toHaveBeenCalled();
     expect(api.post).not.toHaveBeenCalled();
+    abrir.mockRestore();
   });
 
-  it("recién con 'Enviar SMS' se pide el aviso, una sola vez", async () => {
+  it("recién con 'Abrir WhatsApp' se abre y se anota, una sola vez", async () => {
     servidor();
-    api.post.mockResolvedValue({ envioId: "e1", creado: true, programadoEn: "2026-09-20T12:00:00.000Z" });
+    const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
+    api.post.mockResolvedValue({ canal: "whatsapp", enlace: "https://wa.me/59899123456", avisadoEn: "2026-09-20T12:00:00.000Z" });
     render(<CobrosView />);
 
-    fireEvent.click(await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por SMS` }));
+    fireEvent.click(await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por WhatsApp` }));
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: ENVIAR_SMS }));
+      fireEvent.click(await screen.findByRole("button", { name: ABRIR_WHATSAPP }));
     });
 
-    expect(api.post.mock.calls).toEqual([["/api/pacientes/p1/recordar-cobro", { canal: "sms" }]]);
-    expect(await screen.findByText(/Aviso programado/)).toBeTruthy();
+    expect(abrir).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls).toEqual([["/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" }]]);
+    expect(await screen.findByText(/Quedó anotado/)).toBeTruthy();
+    abrir.mockRestore();
   });
 
-  it("abrir Registrar pago cierra la confirmación del SMS: nunca quedan los dos a la vez", async () => {
+  it("abrir Registrar pago cierra la confirmación del aviso: nunca quedan los dos a la vez", async () => {
     servidor();
     render(<CobrosView />);
-    fireEvent.click(await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por SMS` }));
-    expect(await screen.findByRole("button", { name: ENVIAR_SMS })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por WhatsApp` }));
+    expect(await screen.findByRole("button", { name: ABRIR_WHATSAPP })).toBeTruthy();
     // Con un panel abierto la fila no ofrece la otra acción.
     expect(screen.queryByRole("button", { name: `${REGISTRAR_PAGO} de ${LUCIA}` })).toBeNull();
   });
 });
+

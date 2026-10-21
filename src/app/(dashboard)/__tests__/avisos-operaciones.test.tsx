@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import type { DatosGrabacion } from "@/components/grabacion/GrabadorSesion";
 import type { PacienteConDeuda, Turno } from "@/types/domain";
 import { ApiClientError } from "@/lib/api-client";
-import { COBRADO, COBRO_DESHECHO, GRABACION_LLEGO, METODO_DE_PAGO, NO_SE_PUDO_COBRAR, PRUEBA_TOPE } from "@/lib/glosario";
+import { ABRIR_WHATSAPP, AVISO_COBRO_WHATSAPP_ANOTADO, COBRADO, COBRO_DESHECHO, GRABACION_LLEGO, METODO_DE_PAGO, NO_SE_ANOTO_AVISO, NO_SE_PUDO_COBRAR, PRUEBA_TOPE } from "@/lib/glosario";
 
 import { CobrosView } from "../cobros/_components/cobros-view";
 import { GrabarView } from "../grabar/[turnoId]/_components/grabar-view";
@@ -142,26 +142,17 @@ async function cobrar() {
 }
 
 describe("los avisos distinguen un rechazo de una operación confirmada", () => {
-  it.each([false, true])("SMS de cobro: éxito=%s", async (exito) => {
-    if (exito) m.post.mockResolvedValue({ envioId: "sms1", creado: true, programadoEn: AHORA.toISOString() });
+  it.each([false, true])("aviso de cobro por WhatsApp: éxito=%s", async (exito) => {
+    vi.spyOn(window, "open").mockImplementation(() => null);
+    if (exito) m.post.mockResolvedValue({ canal: "whatsapp", enlace: "https://wa.me/59899111222", avisadoEn: AHORA.toISOString() });
     else m.post.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<CobrosView />);
     fireEvent.click(await screen.findByRole("button", { name: /Recordar cobro a/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Enviar SMS" }));
-    await verificarAviso(exito ? "Aviso programado. Sale en los próximos minutos." : FALLO, exito);
-    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "sms" });
+    fireEvent.click(screen.getByRole("button", { name: ABRIR_WHATSAPP }));
+    // Si falla, WhatsApp ya se abrió: lo que no se pudo es anotarlo.
+    await verificarAviso(exito ? AVISO_COBRO_WHATSAPP_ANOTADO : NO_SE_ANOTO_AVISO, exito);
+    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" });
     expect(m.get.mock.calls.some(([url]) => url === "/api/sms/estado")).toBe(false);
-    expect(screen.queryByText(/Avisado hace/)).toBeNull();
-  });
-
-  it("no promete un SMS nuevo cuando ya se pidió hoy", async () => {
-    m.post.mockResolvedValue({envioId:"sms1",creado:false,programadoEn:AHORA.toISOString()});
-    render(<CobrosView />);
-    fireEvent.click(await screen.findByRole("button", {name:/Recordar cobro a/}));
-    fireEvent.click(screen.getByRole("button", {name:"Enviar SMS"}));
-    await verificarAviso("Ya pediste este aviso hoy. No se programó otro.", true);
-    expect(screen.queryByText("Aviso programado. Sale en los próximos minutos.")).toBeNull();
-    expect(screen.queryByText(/Avisado hace/)).toBeNull();
   });
 
   it.each([false, true])("reactivar desde la lista: éxito=%s", async (exito) => {

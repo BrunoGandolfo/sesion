@@ -10,7 +10,7 @@ import {
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
 import { prepararPlantillaRecordatorio, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms/texto";
-import type { CanalRecordatorio, Configuracion, OrientacionTeorica } from "@/types/domain";
+import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 export type CampoConfig =
   | "nombreProfesional"
@@ -18,7 +18,6 @@ export type CampoConfig =
   | "whatsappOrigen"
   | "tarifaDefault"
   | "recordatorioModo"
-  | "canalRecordatorio"
   | "templateRecordatorio"
   | "templateCobro"
   | "orientacionTeorica";
@@ -29,7 +28,6 @@ export type FormConfig = {
   whatsappOrigen: string;
   tarifaDefault: string;
   recordatorioModo: RecordatorioModo;
-  canalRecordatorio: CanalRecordatorio;
   templateRecordatorio: string;
   templateCobro: string;
   orientacionTeorica: OrientacionTeorica;
@@ -41,7 +39,6 @@ type PatchConfig = Partial<{
   whatsappOrigen: string;
   tarifaDefault: number;
   recordatorioModo: RecordatorioModo;
-  canalRecordatorio: CanalRecordatorio;
   templateRecordatorio: string;
   templateCobro: string;
   orientacionTeorica: OrientacionTeorica;
@@ -58,7 +55,6 @@ export const FORM_VACIO: FormConfig = {
   whatsappOrigen: "",
   tarifaDefault: "",
   recordatorioModo: RECORDATORIO_MODO_DEFAULT,
-  canalRecordatorio: "sms",
   templateRecordatorio: TEMPLATE_SMS_SUGERIDO,
   templateCobro: TEMPLATE_COBRO_DEFAULT,
   orientacionTeorica: "cbt_mi",
@@ -71,7 +67,6 @@ export function formDesdeConfig(config: Configuracion): FormConfig {
     whatsappOrigen: config.whatsappOrigen,
     tarifaDefault: String(config.tarifaDefault),
     recordatorioModo: config.recordatorioModo,
-    canalRecordatorio: config.canalRecordatorio,
     // La plantilla que de verdad sale: la misma preparación que usan el envío
     // y la vista previa. Sin esto, el editor mostraba la guardada tal cual y
     // la vista previa otra (el default viejo de la base se reemplaza entero,
@@ -141,12 +136,6 @@ export function patchDesdeCampos(
 
     if (campo === "recordatorioModo") {
       patch.recordatorioModo = form.recordatorioModo;
-      incluidos.push(campo);
-      continue;
-    }
-
-    if (campo === "canalRecordatorio") {
-      patch.canalRecordatorio = form.canalRecordatorio;
       incluidos.push(campo);
       continue;
     }

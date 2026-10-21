@@ -408,7 +408,7 @@ async function configuracion() {
     await ir('/config');
     for (const texto of ['Vos', 'Vocabulario', 'Cuenta']) await visible(page.getByText(texto, { exact: true }).first());
     await visible(page.getByLabel('Nombre', { exact: true }));
-    await visible(page.getByRole('region', { name: 'Vista previa del SMS' }));
+    await visible(page.getByRole('region', { name: 'Vista previa del mensaje' }));
     await visible(page.getByText('Cambiar contraseña', {exact:true}).first());
   });
   await paso('Vocabulario: abrir las listas', async () => {

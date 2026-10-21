@@ -44,6 +44,15 @@ export const CANALES_RECORDATORIO = ["sms", "whatsapp", "ambos"] as const;
 
 export type CanalRecordatorio = (typeof CANALES_RECORDATORIO)[number];
 
+/** El canal con que trabaja la app, sea cual sea el guardado. Decisión del
+ *  dueño (21-oct-2026, a pedido de la profesional): los recordatorios y el
+ *  aviso de cobro van sólo por WhatsApp. La columna y el código del SMS
+ *  siguen hasta que se borren aparte; Tu consultorio ya no ofrece elegir, y
+ *  quien decide por el canal (la configuración que lee la pantalla, Hoy,
+ *  Cobros y el despacho del SMS) mira esto y no la columna. Tipado ancho a
+ *  propósito: las ramas del SMS compilan hasta que se borren. */
+export const CANAL_RECORDATORIO_VIGENTE: CanalRecordatorio = "whatsapp";
+
 /** Hora de la tarde en que sale el aviso del día anterior. */
 const HORA_TARDE = 20;
 

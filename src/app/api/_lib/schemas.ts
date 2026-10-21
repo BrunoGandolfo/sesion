@@ -10,7 +10,7 @@ import {
 import { excedeMaximoPalabras, TERMINO_MUY_LARGO } from "@/lib/hot-words";
 import { normalizePhone } from "@/lib/phone";
 import { MENSAJE_AL_GRABAR_SIN_INICIO } from "@/lib/glosario";
-import { CANALES_RECORDATORIO, RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
+import { RECORDATORIO_MODOS } from "@/lib/recordatorios-programacion";
 import {
   diagnosticoGrabacionSchema,
   orientacionTeoricaSchema,
@@ -223,9 +223,10 @@ export const configUpdateSchema = z.object({
     .min(1, "Falta el template")
     .optional(),
   orientacionTeorica: orientacionTeoricaSchema.optional(),
-  /** Por dónde sale el recordatorio. Lo lee el cron al despachar, así que
-   *  cambiarlo alcanza a los turnos ya agendados. */
-  canalRecordatorio: z.enum(CANALES_RECORDATORIO).optional(),
+  /** Por dónde sale el recordatorio: sólo WhatsApp
+   *  (CANAL_RECORDATORIO_VIGENTE). Se acepta para que un cliente viejo que
+   *  lo mande no reciba un 400; otro valor ya no se guarda. */
+  canalRecordatorio: z.literal("whatsapp").optional(),
 });
 
 /** POST /api/pacientes/[id]/recordar-cobro: el canal que la pantalla usó

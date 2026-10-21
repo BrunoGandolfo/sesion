@@ -1,7 +1,7 @@
 # Qué es Sesión
 
 **Para qué sirve.** Sesión es la app de tu consulta: agenda, pacientes, cobros,
-recordatorios por SMS, la nota clínica de cada sesión grabada y el Recorrido de
+recordatorios por WhatsApp, la nota clínica de cada sesión grabada y el Recorrido de
 cada paciente.
 
 ## Lo que hace, en orden
@@ -79,11 +79,10 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 
 ## Lo que NO hace
 
-- Los recordatorios de turno salen por SMS automático o los mandás vos desde tu
-  teléfono, según el canal que elijas en **Tu consultorio** (ver
-  `06-recordatorios-sms.md`).
-  **Recordar cobro por SMS** también manda un SMS, pero solo cuando vos confirmás
-  el envío desde Cobros.
+- **No manda los recordatorios por vos.** La app te prepara el WhatsApp de cada
+  turno en **Hoy** y lo mandás vos desde tu teléfono (ver
+  `06-recordatorios-sms.md`). **Recordar cobro por WhatsApp** también lo
+  prepara, solo cuando vos confirmás el envío desde Cobros.
 - **No graba video.** Solo audio.
 - **No diagnostica.** El borrador de nota no pone diagnósticos DSM/CIE: la
   hipótesis diagnóstica la escribís vos.

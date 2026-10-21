@@ -95,37 +95,21 @@ Un turno **Agendado** cuya hora ya pasó todavía no cuenta como deuda: empieza 
 contar cuando lo grabás. Si lo cobrás antes, queda realizado y cobrado a la vez,
 y nunca figura como deuda.
 
-## "Recordar cobro por SMS" y "Recordar cobro por WhatsApp"
+## "Recordar cobro por WhatsApp"
 
 En **Te deben**, debajo de **Registrar pago**, cada persona con teléfono cargado
-tiene una acción para recordarle lo que debe. Su nombre dice por dónde sale, y
-eso depende de **Cómo recordás los turnos**, en **Tu consultorio**. En los dos
-casos, tocarla **no envía nada**: se abre *"¿Mandarle este mensaje?"* con el
-texto y el número. Con **Cancelar** no sale nada.
+tiene **Recordar cobro por WhatsApp** para recordarle lo que debe. Tocarlo **no
+abre nada todavía**: se abre *"¿Mandarle este mensaje?"* con el texto y el
+número, que aparece como *"Se abre la conversación con"*. Con **Cancelar** no
+pasa nada.
 
-El texto es el de **Tu consultorio → Aviso de cobro**, igual por los dos
-canales, y lo podés cambiar ahí. El recordatorio de cobro **sale solo cuando vos
-confirmás el envío**; el del turno se programa automáticamente.
+El texto es el de **Tu consultorio → Aviso de cobro**, y lo podés cambiar ahí.
+El recordatorio de cobro **sale solo cuando vos confirmás el envío**; el del
+turno se prepara automáticamente en **Hoy**.
 
-### Con **SMS automático** o **Ambos**: "Recordar cobro por SMS"
-
-La acción es **Recordar cobro por SMS**. Revisá el mensaje y confirmá con
-**Enviar SMS**: recién ahí se programa un **SMS**. La confirmación indica que
-quedó programado, no que ya llegó: *"Aviso programado. Sale en los próximos
-minutos."* Se admite un pedido por paciente y por día: si ya lo pediste, dice
-*"Ya pediste este aviso hoy. No se programó otro."*
-
-El mensaje se arma **al salir**, con la deuda de ese momento. Si en el medio te
-pagó todo, el aviso se cancela solo.
-**Avisado** se cuenta desde que el servicio aceptó el mensaje; no significa
-que la paciente lo leyó. Si pidió la baja, la app no programa el cobro.
-
-### Con **WhatsApp desde mi teléfono**: "Recordar cobro por WhatsApp"
-
-La acción es **Recordar cobro por WhatsApp**, y no sale ningún SMS. En la
-confirmación el número aparece como *"Se abre la conversación con"*. Con
-**Abrir WhatsApp** se abre la conversación con la paciente y el mensaje ya
+Con **Abrir WhatsApp** se abre la conversación con la paciente y el mensaje ya
 escrito; lo mandás vos, en WhatsApp, y las respuestas te llegan a tu WhatsApp.
+No sale ningún SMS.
 
 La app anota que lo abriste: *"Quedó anotado. El mensaje lo mandás vos en
 WhatsApp."* y la fila pasa a **Avisado hoy**. Anota la apertura, no el envío:
@@ -133,11 +117,11 @@ si cerrás WhatsApp sin mandar, igual figura como avisado. Cada vez que lo
 abrís queda anotado de nuevo. Si anotarlo falla, WhatsApp se abre igual y la
 pantalla dice *"Se abrió WhatsApp, pero no quedó anotado."*
 
-A una persona que pidió no recibir más SMS respondiendo **BAJA** la app tampoco
-le abre el WhatsApp: lo dice en pantalla.
+A una persona que pidió no recibir más mensajes respondiendo **BAJA** a un SMS
+la app tampoco le abre el WhatsApp: lo dice en pantalla.
 
-**Avisado hace N días** cuenta el último aviso por cualquiera de los dos
-canales: si cambiaste de canal, la fila sigue sabiendo cuándo le avisaste.
+**Avisado hace N días** cuenta el último aviso, también los SMS de cobro que
+salían antes: la fila sigue sabiendo cuándo le avisaste.
 
 ## Qué hace la app por detrás
 

@@ -9,6 +9,7 @@ import type { AccionDeCobro } from "@/lib/aviso-cobro";
 import { TEMPLATE_COBRO_DEFAULT, type ConfiguracionDelCobro } from "@/lib/deudas";
 import { COBRO_INCOMPLETO, NO_SE_PUDO_COBRAR } from "@/lib/glosario";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
+import { CANAL_RECORDATORIO_VIGENTE } from "@/lib/recordatorios-programacion";
 import type {
   Configuracion,
   DeudaPaciente,
@@ -61,7 +62,8 @@ export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
       direccion: config?.direccion ?? "",
       whatsappOrigen: config?.whatsappOrigen ?? "",
     },
-    canal: config?.canalRecordatorio ?? "sms",
+    // Sólo WhatsApp: ni lo que traiga la configuración lo cambia.
+    canal: CANAL_RECORDATORIO_VIGENTE,
   };
 }
 

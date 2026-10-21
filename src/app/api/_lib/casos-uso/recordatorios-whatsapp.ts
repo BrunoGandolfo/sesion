@@ -1,5 +1,5 @@
-// Caso de uso: el WhatsApp asistido. Con Configuracion.canalRecordatorio en
-// `whatsapp` (o `ambos`), la app no manda el recordatorio por su cuenta: le
+// Caso de uso: el WhatsApp asistido. Con el canal en `whatsapp` (hoy siempre:
+// CANAL_RECORDATORIO_VIGENTE), la app no manda el recordatorio por su cuenta: le
 // prepara a la profesional el mensaje de cada turno que corresponde avisar
 // hoy, ella lo abre en WhatsApp y lo manda desde su teléfono, y la app
 // registra que lo abrió.
@@ -48,6 +48,7 @@
 import { inicioDelDiaMvd, finDelDiaMvd } from "@/lib/fechas-montevideo";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import type { db } from "@/lib/db";
+import { CANAL_RECORDATORIO_VIGENTE } from "@/lib/recordatorios-programacion";
 import { textoDelRecordatorio } from "@/lib/sms/texto";
 import { enlaceWhatsapp } from "@/lib/whatsapp";
 import type { AvisoWhatsappRegistrado, RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
@@ -78,7 +79,6 @@ export async function listarRecordatoriosDeHoy({
   const configuracion = await prisma.configuracion.findUnique({
     where: { organizationId },
     select: {
-      canalRecordatorio: true,
       templateRecordatorio: true,
       direccion: true,
       nombreProfesional: true,
@@ -87,7 +87,8 @@ export async function listarRecordatoriosDeHoy({
   });
   if (!configuracion) throw new ApiError("Configuración no encontrada", 404);
 
-  const canal = configuracion.canalRecordatorio;
+  // Sólo WhatsApp: lo guardado no cuenta (CANAL_RECORDATORIO_VIGENTE).
+  const canal = CANAL_RECORDATORIO_VIGENTE;
   if (canal === "sms") return { canal, turnos: [] };
 
   const inicioHoy = inicioDelDiaMvd(ahora);

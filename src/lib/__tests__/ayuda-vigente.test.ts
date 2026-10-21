@@ -47,12 +47,11 @@ describe("la ayuda describe las acciones disponibles", () => {
     "00-que-es-sesion.md",
     "05-cobros.md",
     "06-recordatorios-sms.md",
-  ])("%s explica el cobro por SMS con confirmación", (archivo) => {
-    const texto = documento(archivo);
-    expect(texto).toMatch(/Recordar\s+(?:\*\*)?cobro/i);
-    expect(texto).toContain("SMS");
+  ])("%s explica el aviso de cobro por WhatsApp con confirmación", (archivo) => {
+    const texto = documento(archivo).replace(/\s+/g, " ");
+    expect(texto).toContain(glosario.RECORDAR_COBRO_WHATSAPP);
     expect(texto).toMatch(/confirmás el envío/);
-    expect(texto).not.toMatch(/abre\s+\*?\*?WhatsApp|desde WhatsApp|lo mandás vos\)/i);
+    expect(texto).not.toContain(glosario.RECORDAR_COBRO);
   });
 });
 
@@ -308,7 +307,7 @@ it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar 
   // cuentan estas páginas, y sólo mientras Hoy ofrezca el botón.
   // 05 cuenta Recordar cobro por WhatsApp, mientras la fila de Te deben elija
   // el botón por canal.
-  const conWhatsapp = ["_indice.md", "02-pantalla-hoy.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
+  const conWhatsapp = ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
   expect(codigo("src/app/(dashboard)/_components/recordatorios-whatsapp.tsx")).toContain("{ABRIR_WHATSAPP}");
   expect(codigo("src/app/(dashboard)/cobros/_components/fila-deudor.tsx")).toContain("RECORDAR_COBRO_POR_CANAL[accion.canal]");
   const restoDelCorpus = corpus
@@ -512,25 +511,23 @@ describe("la ayuda de Finanzas nombra lo que la pantalla muestra", () => {
   });
 });
 
-it("la ayuda cuenta el aviso de cobro por los dos canales, con la plantilla de Tu consultorio", () => {
+it("la ayuda cuenta el aviso de cobro por WhatsApp, con la plantilla de Tu consultorio", () => {
   const plano = (t: string) => t.replace(/\s+/g, " ");
   const cobros = plano(documento("05-cobros.md"));
   for (const texto of [
-    glosario.RECORDAR_COBRO,
     glosario.RECORDAR_COBRO_WHATSAPP,
-    glosario.ENVIAR_SMS,
     glosario.ABRIR_WHATSAPP,
-    glosario.AVISO_COBRO_PROGRAMADO,
-    glosario.AVISO_COBRO_YA_PEDIDO,
     glosario.AVISO_COBRO_WHATSAPP_ANOTADO,
     glosario.NO_SE_ANOTO_AVISO,
     glosario.RECORDAR_COBRO_POR_CANAL.whatsapp.destino,
     `Tu consultorio → ${glosario.COBRO_SECCION}`,
   ]) expect(cobros, texto).toContain(texto);
   expect(cobros).not.toMatch(/no es configurable/);
-  // Ambos manda el cobro por SMS: lo decide accionDeCobro.
-  expect(codigo("src/lib/aviso-cobro.ts")).toContain('if (canal !== "whatsapp") return { canal: "sms" };');
-  expect(cobros).toContain("Con **SMS automático** o **Ambos**");
+  // Sólo WhatsApp: ni la pantalla ni el servidor leen el canal guardado.
+  expect(codigo("src/app/(dashboard)/cobros/_components/datos.ts")).toContain("canal: CANAL_RECORDATORIO_VIGENTE,");
+  expect(codigo("src/app/api/_lib/casos-uso/recordar-cobro.ts")).toContain("CANAL_RECORDATORIO_VIGENTE");
+  for (const t of [glosario.RECORDAR_COBRO, glosario.ENVIAR_SMS, glosario.AVISO_COBRO_PROGRAMADO, glosario.AVISO_COBRO_YA_PEDIDO])
+    expect(cobros, t).not.toContain(t);
 
   const recordatorios = plano(documento("06-recordatorios-sms.md"));
   expect(recordatorios).toContain(glosario.RECORDAR_COBRO_WHATSAPP);
@@ -543,4 +540,15 @@ it("la ayuda cuenta el aviso de cobro por los dos canales, con la plantilla de T
   expect(consultorio).not.toMatch(/No cambia el texto de "Recordar cobro/);
   expect(consultorio).toContain("queda registrado");
   expect(codigo("src/app/api/_lib/casos-uso/configuracion.ts")).toContain("ACCIONES.configuracion.editar");
+});
+
+it("la ayuda no ofrece elegir el canal: los recordatorios y el cobro son sólo por WhatsApp", () => {
+  // Tu consultorio ya no tiene el selector (config-view.tsx) y la app lee
+  // CANAL_RECORDATORIO_VIGENTE, no la columna.
+  expect(codigo("src/app/(dashboard)/config/_components/config-view.tsx")).not.toContain("SelectorCanal");
+  expect(codigo("src/lib/recordatorios-programacion.ts")).toContain('CANAL_RECORDATORIO_VIGENTE: CanalRecordatorio = "whatsapp"');
+  for (const archivo of ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"]) {
+    const texto = documento(archivo).replace(/\s+/g, " ");
+    expect(texto, archivo).not.toMatch(/SMS automático|\*\*Ambos\*\*|Cómo recordás los turnos|según el canal|por los dos canales|WhatsApp desde mi teléfono/);
+  }
 });
