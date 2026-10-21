@@ -155,7 +155,13 @@ continuar: sólo enviar o descartar.
 Si esa sesión ya había llegado al servidor (está procesándose o ya tiene nota),
 la app borra sola la copia del teléfono en vez de ofrecerla otra vez.
 
-Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
+Empezar una grabación nueva del mismo turno reemplaza la copia anterior. Por
+eso, si la copia que quedó es de **ese mismo turno**, la pantalla no muestra
+**Grabar sesión** suelto: ofrece **Enviar la que quedó** o borrarla para grabar
+de nuevo. Borrarla pide confirmación, y recién al confirmar se borra la copia y
+empieza la grabación nueva. Si la copia es de otro turno de la paciente, grabar
+no la toca: siguen **Guardarla ahora** y **Descartarla** al lado de **Grabar
+sesión**.
 
 ## Si quedó una grabación sin terminar
 

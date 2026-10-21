@@ -9,12 +9,17 @@ import * as React from "react";
 import Link from "next/link";
 import { Check, Loader2, Mic, MicOff, Sun } from "lucide-react";
 
-import { Button } from "@/components/ui";
+import { Button, Confirmar } from "@/components/ui";
 import { AnilloProgreso, Aparece } from "@/components/ui/movimiento";
 import {
   AVISO_PANTALLA_APAGADA,
   AVISO_SIN_PANTALLA_ENCENDIDA,
+  DESCARTAR_Y_GRABAR,
+  DESCARTAR_Y_GRABAR_ACCION,
+  DESCARTAR_Y_GRABAR_MENSAJE,
+  DESCARTAR_Y_GRABAR_TITULO,
   ENTENDIDO,
+  ENVIAR_LA_QUE_QUEDO,
   ENVIANDO_GRABACION,
   FALTA_AUTORIZACION,
   FIRMAR_AUTORIZACION,
@@ -26,21 +31,71 @@ import {
   VOLVER_A_LA_FICHA,
 } from "@/lib/glosario";
 
-/** Una grabación que quedó en el teléfono sin enviar. */
-function OfertaPendiente({ minutos, onEnviar, onDescartar }: { minutos: number; onEnviar: () => void; onDescartar: () => void }) {
+/** Una grabación que quedó en el teléfono sin enviar, con lo que se puede
+ *  hacer con ella. */
+function OfertaPendiente({ minutos, children }: { minutos: number; children: React.ReactNode }) {
   return (
     <div className="w-full rounded-md border border-[color:var(--border-subtle)] bg-cream-100 px-4 py-4 text-left">
       <p className="font-sans text-[14px] font-semibold text-ink-900">
         Quedó una grabación de ~{minutos} min sin enviar
       </p>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-        <Button className="flex-1" onClick={onEnviar}>
-          Guardarla ahora
-        </Button>
-        <Button variant="secondary" onClick={onDescartar}>
-          Descartarla
-        </Button>
-      </div>
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
+
+const FILA_DE_ACCIONES = "flex flex-col gap-2 sm:flex-row";
+
+/** Guardarla o descartarla, sin preguntar: grabar no la toca. */
+function AccionesPendiente({ onEnviar, onDescartar }: { onEnviar: () => void; onDescartar: () => void }) {
+  return (
+    <div className={FILA_DE_ACCIONES}>
+      <Button className="flex-1" onClick={onEnviar}>
+        Guardarla ahora
+      </Button>
+      <Button variant="secondary" onClick={onDescartar}>
+        Descartarla
+      </Button>
+    </div>
+  );
+}
+
+/** Es de este mismo turno: grabar de nuevo la borra. No hay un Grabar suelto
+ *  que la pise sin querer (forense2 H2): o se envía, o se descarta para
+ *  grabar de nuevo, con confirmación. */
+function EnviarODescartarYGrabar({
+  deshabilitarGrabar,
+  onEnviar,
+  onDescartarYGrabar,
+}: {
+  deshabilitarGrabar: boolean;
+  onEnviar: () => void;
+  onDescartarYGrabar: () => void;
+}) {
+  const [confirmando, setConfirmando] = React.useState(false);
+  if (confirmando) {
+    return (
+      <Confirmar
+        titulo={DESCARTAR_Y_GRABAR_TITULO}
+        mensaje={DESCARTAR_Y_GRABAR_MENSAJE}
+        accion={DESCARTAR_Y_GRABAR_ACCION}
+        variante="peligro"
+        onConfirmar={() => {
+          setConfirmando(false);
+          onDescartarYGrabar();
+        }}
+        onCancelar={() => setConfirmando(false)}
+      />
+    );
+  }
+  return (
+    <div className={FILA_DE_ACCIONES}>
+      <Button className="flex-1" onClick={onEnviar}>
+        {ENVIAR_LA_QUE_QUEDO}
+      </Button>
+      <Button variant="secondary" onClick={() => setConfirmando(true)} disabled={deshabilitarGrabar}>
+        {DESCARTAR_Y_GRABAR}
+      </Button>
     </div>
   );
 }
@@ -54,9 +109,11 @@ export function PantallaPrevia({
   sinPantallaEncendida,
   muyCorta,
   pendienteMinutos,
+  pendienteDelTurno,
   onEmpezar,
   onEnviarPendiente,
   onDescartarPendiente,
+  onDescartarYGrabar,
 }: {
   autorizacionVigente: boolean;
   motivoSinGrabar: string | null;
@@ -69,9 +126,12 @@ export function PantallaPrevia({
   /** Se acaba de descartar un toque accidental: se dice, y se puede grabar. */
   muyCorta: boolean;
   pendienteMinutos: number | null;
+  /** La pendiente es de este turno: grabar de nuevo la borraría. */
+  pendienteDelTurno: boolean;
   onEmpezar: () => void;
   onEnviarPendiente: () => void;
   onDescartarPendiente: () => void;
+  onDescartarYGrabar: () => void;
 }) {
   if (motivoSinGrabar) {
     // El motivo es para una grabación NUEVA. Una que ya quedó guardada en el
@@ -81,11 +141,9 @@ export function PantallaPrevia({
     return (
       <div className="flex w-full flex-col items-center gap-4">
         {pendienteMinutos !== null ? (
-          <OfertaPendiente
-            minutos={pendienteMinutos}
-            onEnviar={onEnviarPendiente}
-            onDescartar={onDescartarPendiente}
-          />
+          <OfertaPendiente minutos={pendienteMinutos}>
+            <AccionesPendiente onEnviar={onEnviarPendiente} onDescartar={onDescartarPendiente} />
+          </OfertaPendiente>
         ) : null}
         <p className="max-w-[340px] font-sans text-[15px] leading-[1.55] text-ink-900">
           {motivoSinGrabar}
@@ -118,33 +176,41 @@ export function PantallaPrevia({
         </p>
       ) : null}
       {pendienteMinutos !== null ? (
-        <OfertaPendiente
-          minutos={pendienteMinutos}
-          onEnviar={onEnviarPendiente}
-          onDescartar={onDescartarPendiente}
-        />
+        <OfertaPendiente minutos={pendienteMinutos}>
+          {pendienteDelTurno ? (
+            <EnviarODescartarYGrabar
+              deshabilitarGrabar={abriendoMicrofono || sinCupo}
+              onEnviar={onEnviarPendiente}
+              onDescartarYGrabar={onDescartarYGrabar}
+            />
+          ) : (
+            <AccionesPendiente onEnviar={onEnviarPendiente} onDescartar={onDescartarPendiente} />
+          )}
+        </OfertaPendiente>
       ) : null}
 
-      <button
-        type="button"
-        onClick={onEmpezar}
-        disabled={abriendoMicrofono || sinCupo}
-        className="inline-flex h-[132px] w-[132px] flex-col items-center justify-center gap-2 rounded-full bg-sage-500 text-white shadow-raised transition-colors duration-150 hover:bg-sage-600 active:bg-sage-700 disabled:opacity-60 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30"
-      >
-        {abriendoMicrofono ? (
-          <Loader2
-            size={32}
-            strokeWidth={1.8}
-            aria-hidden="true"
-            className="animate-spin"
-          />
-        ) : (
-          <Mic size={32} strokeWidth={1.8} aria-hidden="true" />
-        )}
-        <span className="font-sans text-[15px] font-semibold leading-tight">
-          {GRABAR_SESION}
-        </span>
-      </button>
+      {pendienteMinutos !== null && pendienteDelTurno ? null : (
+        <button
+          type="button"
+          onClick={onEmpezar}
+          disabled={abriendoMicrofono || sinCupo}
+          className="inline-flex h-[132px] w-[132px] flex-col items-center justify-center gap-2 rounded-full bg-sage-500 text-white shadow-raised transition-colors duration-150 hover:bg-sage-600 active:bg-sage-700 disabled:opacity-60 focus:outline-none focus:ring-[3px] focus:ring-sage-500/30"
+        >
+          {abriendoMicrofono ? (
+            <Loader2
+              size={32}
+              strokeWidth={1.8}
+              aria-hidden="true"
+              className="animate-spin"
+            />
+          ) : (
+            <Mic size={32} strokeWidth={1.8} aria-hidden="true" />
+          )}
+          <span className="font-sans text-[15px] font-semibold leading-tight">
+            {GRABAR_SESION}
+          </span>
+        </button>
+      )}
 
       {sinPantallaEncendida ? (
         <div role="status" className="w-full">

@@ -82,6 +82,8 @@ export function GrabarView({
     enCursoAhora,
     enviandoAhora,
     empezar,
+    pendienteDelTurno,
+    descartarYGrabar,
     enviarPendiente,
     reintentarSubida,
     reintentarMarcarRealizado,
@@ -212,7 +214,9 @@ export function GrabarView({
                       ? Math.max(1, Math.round(grabador.pendienteSeg / 60))
                       : null
                   }
+                  pendienteDelTurno={pendienteDelTurno}
                   onEmpezar={() => void empezar()}
+                  onDescartarYGrabar={() => void descartarYGrabar()}
                   onEnviarPendiente={() => void enviarPendiente()}
                   onDescartarPendiente={grabador.descartarPendiente}
                 />

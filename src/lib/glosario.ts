@@ -2218,3 +2218,14 @@ export const LUX_EMPEZAR_DE_CERO_MENSAJE =
 export const LUX_EMPEZAR_DE_CERO_ACCION = "Borrar la conversación";
 export const LUX_BORRANDO = "Borrando…";
 export const LUX_NO_SE_BORRO = "No se pudo borrar la conversación. Probá de nuevo.";
+
+// ─── grabar-forense ──────────────────────────────────────────────────────────
+
+/** Hay una grabación de este mismo turno guardada en el teléfono: grabar de
+ *  nuevo la borra, así que primero se elige (pantallas.tsx, OfertaPendiente). */
+export const ENVIAR_LA_QUE_QUEDO = "Enviar la que quedó";
+export const DESCARTAR_Y_GRABAR = "Descartar y grabar de nuevo";
+export const DESCARTAR_Y_GRABAR_TITULO = "¿Descartar la grabación que quedó?";
+export const DESCARTAR_Y_GRABAR_MENSAJE =
+  "Se borra de este teléfono y no se puede recuperar. Después empieza una grabación nueva.";
+export const DESCARTAR_Y_GRABAR_ACCION = "Descartar y grabar";
