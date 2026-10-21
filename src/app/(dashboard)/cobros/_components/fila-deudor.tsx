@@ -15,31 +15,34 @@ import {
 } from "@/lib/deudas";
 import { diasEnterosMvd } from "@/lib/fechas-montevideo";
 import { money } from "@/lib/format";
+import { accionDeCobro } from "@/lib/aviso-cobro";
 import {
   AVISADO,
   ENVIANDO_SMS,
-  ENVIAR_SMS,
-  RECORDAR_COBRO,
+  NO_SE_ANOTO_AVISO,
+  RECORDAR_COBRO_POR_CANAL,
   RECORDAR_COBRO_TITULO,
   REGISTRAR_PAGO,
-  SMS_DESTINO,
   pluralizar,
 } from "@/lib/glosario";
 import { formatPhoneDisplay } from "@/lib/phone";
+import type { CanalRecordatorio } from "@/types/domain";
 
-import { recordarCobro, type DeudorItem } from "./datos";
+import { recordarCobro, type AvisoDeCobro, type DeudorItem } from "./datos";
 import { RegistrarPago } from "./registrar-pago";
 
 // ============================================
 // La fila de una deudora: quién es, cuánto debe, cuándo se le avisó y dos
 // acciones. "Registrar pago" es la principal, con el peso de un botón lleno;
-// el recordatorio es un enlace de texto que dice que manda un SMS. Lo que
+// el recordatorio es un enlace de texto que dice por dónde sale: SMS o, con
+// el canal "WhatsApp desde mi teléfono", WhatsApp (accionDeCobro). Lo que
 // abre cada una se despliega debajo, a lo ancho: ni la lista de sesiones ni
 // el mensaje entero entran al lado del botón.
 // ============================================
 export function FilaDeudor({
   deudor,
   configCobro,
+  canal,
   ahora,
   abierto,
   onAbrir,
@@ -49,17 +52,18 @@ export function FilaDeudor({
 }: {
   deudor: DeudorItem;
   configCobro: ConfiguracionDelCobro;
+  canal: CanalRecordatorio;
   ahora: Date;
   /** Qué panel de esta fila está desplegado; lo decide la lista. */
-  abierto: "pago" | "sms" | null;
-  onAbrir: (modo: "pago" | "sms" | null) => void;
+  abierto: "pago" | "aviso" | null;
+  onAbrir: (modo: "pago" | "aviso" | null) => void;
   /** Las sesiones marcadas: abre el selector de método. */
   onElegirMetodo: (turnoIds: string[]) => void;
-  onAvisado: (creado: boolean) => void;
+  onAvisado: (aviso: AvisoDeCobro) => void;
   onError: (mensaje: string) => void;
 }) {
-  const confirmando = abierto === "sms";
-  const setConfirmando = (valor: boolean) => onAbrir(valor ? "sms" : null);
+  const confirmando = abierto === "aviso";
+  const setConfirmando = (valor: boolean) => onAbrir(valor ? "aviso" : null);
   const [enviando, setEnviando] = React.useState(false);
   const nombreCompleto = `${deudor.nombre} ${deudor.apellido}`;
   const telefono = deudor.telefono?.trim() ?? "";
@@ -72,16 +76,26 @@ export function FilaDeudor({
     monto: deudor.montoTotal,
   });
 
+  // Qué hace el botón lo decide la misma función que el servidor.
+  const accion = accionDeCobro(canal, telefono, mensaje);
+  const textos = RECORDAR_COBRO_POR_CANAL[accion.canal];
+
   async function enviar() {
+    // WhatsApp se abre dentro del toque, antes de esperar a la red: después
+    // de un await el navegador bloquea la ventana nueva.
+    if (accion.canal === "whatsapp" && accion.enlace) {
+      window.open(accion.enlace, "_blank", "noopener");
+    }
     setEnviando(true);
     try {
-      const creado = await recordarCobro(deudor.pacienteId);
+      const aviso = await recordarCobro(deudor.pacienteId);
       setConfirmando(false);
-      onAvisado(creado);
+      onAvisado(aviso);
     } catch (error) {
-      // El servidor rechazó programarlo. El envío lo resuelve el despachador.
+      // Por SMS, el servidor rechazó programarlo. Por WhatsApp el mensaje ya
+      // se abrió: lo que falló es anotarlo.
       setConfirmando(false);
-      onError(mensajeParaElla(error));
+      onError(accion.canal === "whatsapp" ? NO_SE_ANOTO_AVISO : mensajeParaElla(error));
     } finally {
       setEnviando(false);
     }
@@ -138,14 +152,14 @@ export function FilaDeudor({
             <button
               type="button"
               onClick={() => setConfirmando(true)}
-              // El nombre accesible es el de siempre ("Recordar cobro a … por
-              // SMS"): lo busca avisos-operaciones.test.tsx, que es de todas
-              // las pantallas.
-              aria-label={`Recordar cobro a ${nombreCompleto} por SMS`}
+              // Con SMS, el nombre accesible es el de siempre ("Recordar cobro
+              // a … por SMS"): lo busca avisos-operaciones.test.tsx, que es de
+              // todas las pantallas.
+              aria-label={textos.botonPara(nombreCompleto)}
               className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-ink-500 transition-colors duration-[var(--duration-fast)] hover:bg-cream-50 hover:text-ink-700 lg:min-h-[36px] lg:w-auto"
             >
               <Send size={14} strokeWidth={1.8} aria-hidden="true" />
-              {RECORDAR_COBRO}
+              {textos.boton}
             </button>
           ) : null}
         </div>
@@ -178,14 +192,14 @@ export function FilaDeudor({
                 {mensaje}
               </span>
               <span className="mt-2 block text-[12px] text-ink-500">
-                {SMS_DESTINO}{" "}
+                {textos.destino}{" "}
                 <span className="font-medium tabular-nums text-ink-700">
                   {formatPhoneDisplay(telefono)}
                 </span>
               </span>
             </>
           }
-          accion={ENVIAR_SMS}
+          accion={textos.accion}
           enviando={enviando}
           enviandoLabel={ENVIANDO_SMS}
           onConfirmar={() => void enviar()}

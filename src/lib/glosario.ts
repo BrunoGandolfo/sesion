@@ -2171,3 +2171,45 @@ export const COBRO_VISTA_PREVIA = "Vista previa del aviso de cobro";
 export const COBRO_MENSAJE_VACIO = "El aviso de cobro no puede quedar vacío.";
 export const COBRO_MENSAJE_AYUDA =
   "Es el mensaje que sale cuando tocás Recordar cobro en Cobros, por SMS o por WhatsApp según cómo recordás los turnos. Tocá una ficha para agregarla donde está el cursor.";
+
+/** Recordar cobro según el canal (accionDeCobro, src/lib/aviso-cobro.ts):
+ *  el botón, su nombre accesible, la confirmación y lo que se le dice
+ *  después. Con SMS, los textos de siempre. */
+export const RECORDAR_COBRO_WHATSAPP = "Recordar cobro por WhatsApp";
+export const AVISO_COBRO_PROGRAMADO = "Aviso programado. Sale en los próximos minutos.";
+export const AVISO_COBRO_YA_PEDIDO = "Ya pediste este aviso hoy. No se programó otro.";
+/** WhatsApp se abrió y la app anotó el aviso; el mensaje lo manda ella. */
+export const AVISO_COBRO_WHATSAPP_ANOTADO = "Quedó anotado. Mandalo desde WhatsApp.";
+export const RECORDAR_COBRO_POR_CANAL = {
+  sms: {
+    boton: RECORDAR_COBRO,
+    botonPara: (nombre: string) => `Recordar cobro a ${nombre} por SMS`,
+    accion: ENVIAR_SMS,
+    destino: SMS_DESTINO,
+  },
+  whatsapp: {
+    boton: RECORDAR_COBRO_WHATSAPP,
+    botonPara: (nombre: string) => `Recordar cobro a ${nombre} por WhatsApp`,
+    accion: ABRIR_WHATSAPP,
+    destino: "Se abre la conversación con",
+  },
+} as const;
+
+/** La plantilla del recordatorio de turno en Tu consultorio, según el canal.
+ *  Con Ambos también sale el SMS: valen los textos del SMS. */
+const RECORDATORIO_AYUDA_FICHAS =
+  "Tocá una ficha para agregarla donde está el cursor. El consultorio y tu nombre van al principio; al final se indica a qué teléfono llamar para cambios. Se agregan solos si los borrás.";
+const TEXTOS_RECORDATORIO_SMS = {
+  nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el SMS también se leería así.",
+  ayuda: `${RECORDATORIO_AYUDA_FICHAS} No pidas respuestas por SMS: no llegan.`,
+  vistaPrevia: "Vista previa del SMS",
+};
+export const RECORDATORIO_TEXTOS_POR_CANAL = {
+  sms: TEXTOS_RECORDATORIO_SMS,
+  ambos: TEXTOS_RECORDATORIO_SMS,
+  whatsapp: {
+    nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el mensaje también se leería así.",
+    ayuda: RECORDATORIO_AYUDA_FICHAS,
+    vistaPrevia: "Vista previa del mensaje",
+  },
+} as const;

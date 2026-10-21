@@ -15,7 +15,9 @@
 // sesiones le pagó. El método se elige con el mismo selector que usan Hoy,
 // la Agenda y la ficha.
 //
-// El recordatorio de cobro es la acción secundaria. Sale por SMS desde acá, y lo aprieta ella: antes
+// El recordatorio de cobro es la acción secundaria. Sale desde acá por el
+// canal de Tu consultorio (SMS, o WhatsApp abierto desde su teléfono, que
+// queda anotado), y lo aprieta ella: antes
 // abría el teléfono con el texto cargado y la app no se enteraba de nada
 // —ni si el mensaje había salido, ni cuándo—, así que no había forma de
 // saber si ya le había avisado a alguien. Ahora se manda desde el servidor
@@ -37,6 +39,9 @@ import { formatearMesMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaCorta, money } from "@/lib/format";
 import {
   ALGO_FALLO,
+  AVISO_COBRO_PROGRAMADO,
+  AVISO_COBRO_WHATSAPP_ANOTADO,
+  AVISO_COBRO_YA_PEDIDO,
   COBRADO,
   COBRASTE_ESTE_MES,
   COBROS_DEL_MES,
@@ -155,7 +160,7 @@ function Pantalla({
   toast: ReturnType<typeof useToast>;
 }) {
   const { ahora } = datos;
-  const { kpis, deudores, cobros, nombreProfesional, configCobro } = datos;
+  const { kpis, deudores, cobros, nombreProfesional, configCobro, canal } = datos;
 
   const sesionesSinCobrar = deudores.reduce(
     (sum, d) => sum + d.sesionesImpagas,
@@ -196,6 +201,7 @@ function Pantalla({
           deudores={deudores}
           sesionesSinCobrar={sesionesSinCobrar}
           configCobro={configCobro}
+          canal={canal}
           ahora={ahora}
           onCobrado={() => {
             // La deuda y los ingresos del mes salen del servidor: se vuelve a
@@ -207,8 +213,14 @@ function Pantalla({
             if (huboCobros) onRecargar();
             toast.avisar(mensaje);
           }}
-          onAvisado={(creado) => {
-            toast.confirmar(creado ? "Aviso programado. Sale en los próximos minutos." : "Ya pediste este aviso hoy. No se programó otro.");
+          onAvisado={(aviso) => {
+            if (aviso.canal === "whatsapp") {
+              // "Avisado hoy" sale del servidor, como con el SMS.
+              onRecargar();
+              toast.confirmar(AVISO_COBRO_WHATSAPP_ANOTADO);
+              return;
+            }
+            toast.confirmar(aviso.creado ? AVISO_COBRO_PROGRAMADO : AVISO_COBRO_YA_PEDIDO);
           }}
           onError={(mensaje) => toast.avisar(mensaje)}
           onVerCobros={() => onPestana("cobros")}

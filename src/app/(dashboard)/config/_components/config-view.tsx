@@ -218,6 +218,7 @@ export function ConfigView() {
                     profesional={form.nombreProfesional}
                     direccion={form.direccion}
                     telefono={form.whatsappOrigen}
+                    canal={form.canalRecordatorio}
                     onChange={(valor) =>
                       actualizarCampo("templateRecordatorio", valor)
                     }

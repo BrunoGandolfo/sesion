@@ -5,6 +5,7 @@
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { cobrarTurno } from "@/lib/cobrar-cliente";
+import type { AccionDeCobro } from "@/lib/aviso-cobro";
 import { TEMPLATE_COBRO_DEFAULT, type ConfiguracionDelCobro } from "@/lib/deudas";
 import { COBRO_INCOMPLETO, NO_SE_PUDO_COBRAR } from "@/lib/glosario";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
@@ -30,6 +31,8 @@ export type DatosCobros = {
   nombreProfesional: string;
   /** Lo que arma el texto del aviso de cobro (textoDelCobro). */
   configCobro: ConfiguracionDelCobro;
+  /** Por dónde sale el aviso de cobro: lo que decide accionDeCobro. */
+  canal: Configuracion["canalRecordatorio"];
 };
 
 export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
@@ -56,6 +59,7 @@ export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
       direccion: config?.direccion ?? "",
       whatsappOrigen: config?.whatsappOrigen ?? "",
     },
+    canal: config?.canalRecordatorio ?? "sms",
   };
 }
 
@@ -89,15 +93,18 @@ export async function cobrarSesiones(
   }
 }
 
-/** Pide el recordatorio de cobro por SMS. `creado` es false si ya se había
- *  pedido hoy y no se programó otro. */
-export async function recordarCobro(pacienteId: string): Promise<boolean> {
-  const { creado } = await apiPost<{ envioId: string; creado: boolean; programadoEn: string }>(
-    `/api/pacientes/${pacienteId}/recordar-cobro`,
-    {},
-  );
-  return creado;
+/** Lo que contesta POST /api/pacientes/[id]/recordar-cobro, por canal. */
+export type AvisoDeCobro =
+  | { canal: "sms"; envioId: string; creado: boolean; programadoEn: string }
+  | { canal: "whatsapp"; enlace: string; avisadoEn: string };
+
+/** Pide el recordatorio de cobro. Por SMS, `creado` es false si ya se había
+ *  pedido hoy y no se programó otro; por WhatsApp, anota que lo abrió. */
+export async function recordarCobro(pacienteId: string): Promise<AvisoDeCobro> {
+  return apiPost<AvisoDeCobro>(`/api/pacientes/${pacienteId}/recordar-cobro`, {});
 }
+
+export type CanalDelCobro = AccionDeCobro["canal"];
 
 /** Cuántas sesiones eligió y cuántas entraron, a lo largo de los reintentos. */
 export interface ResultadoCobro {
