@@ -240,7 +240,7 @@ describe("lo que llega dentro del texto", () => {
 });
 
 describe("preguntar", () => {
-  it("Enter envía con el historial, Shift+Enter no envía", async () => {
+  it("Enter envía sólo la pregunta (el historial lo tiene el servidor), Shift+Enter no envía", async () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("<citas>Nota del 03/10</citas>Hola, ¿qué querés repasar?"));
     montar();
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -253,15 +253,12 @@ describe("preguntar", () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Mejor que en septiembre."));
     await act(async () => { fireEvent.keyDown(campo, { key: "Enter" }); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(cuerpos()[1]).toEqual({
-      pregunta: "¿Cómo viene\ncon el sueño?",
-      historial: [{ rol: "asistente", texto: "<citas>Nota del 03/10</citas>Hola, ¿qué querés repasar?" }],
-    });
+    expect(cuerpos()[1]).toEqual({ pregunta: "¿Cómo viene\ncon el sueño?" });
     expect((campo as HTMLTextAreaElement).value).toBe("");
     expect(hilo().textContent).toContain("Mejor que en septiembre.");
   });
 
-  it("un turno de Lux vuelve entero en el historial: prosa, citas y estado, tal como ella lo vio", async () => {
+  it("un turno de Lux con citas y estado se ve plegado y en gris, y no vuelve desde el navegador", async () => {
     // Lo que contestó Haiku 5.5 en la prueba real, recortado: una frase, el
     // aviso de la transcripción, las citas y la prosa.
     const respuestaConLectura = [
@@ -277,28 +274,23 @@ describe("preguntar", () => {
     ].join("\n");
     fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
     montar();
-    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    await alAbrir();
     fetchMock.mockResolvedValueOnce(respuestaEntera(respuestaConLectura));
     await act(async () => { escribirYEnviar("¿Qué dijo de la canción?"); });
 
-    // Ella lo vio plegado y en gris…
     expect(screen.getByText(LUX_EN_QUE_ME_BASO)).toBeTruthy();
     expect(screen.getByText(luxMirando("04/08"))).toBeTruthy();
 
-    // …y viaja completo en la pregunta siguiente, sin perder nada.
+    // La pregunta siguiente lleva sólo la pregunta: el turno entero (con su
+    // marca) lo guardó el servidor, y de ahí lo lee. Un historial armado por
+    // el navegador no pasa el contrato.
     fetchMock.mockResolvedValueOnce(respuestaEntera("Sí, en la última también."));
     await act(async () => { escribirYEnviar("¿Volvió a aparecer?"); });
-    const cuerpo = cuerpos()[2];
-    expect(cuerpo.historial).toEqual([
-      { rol: "asistente", texto: "Hola." },
-      { rol: "usuaria", texto: "¿Qué dijo de la canción?" },
-      { rol: "asistente", texto: respuestaConLectura },
-    ]);
-    // Y el contrato lo acepta tal cual: no recorta ni rechaza esas partes.
-    expect(peticionLuxSchema.parse(cuerpo).historial?.[2].texto).toBe(respuestaConLectura);
+    expect(cuerpos()[2]).toEqual({ pregunta: "¿Volvió a aparecer?" });
+    expect(peticionLuxSchema.safeParse({ pregunta: "¿y?", historial: [{ rol: "asistente", texto: respuestaConLectura }] }).success).toBe(false);
   });
 
-  it("una respuesta cortada a la mitad se ve cortada y no viaja en el historial", async () => {
+  it("una respuesta cortada a la mitad se ve cortada", async () => {
     const stream = streamManual();
     fetchMock.mockResolvedValueOnce(stream.respuesta);
     montar();

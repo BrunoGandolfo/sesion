@@ -4,9 +4,9 @@
 // que la pantalla la muestre al abrir. DELETE: "Empezar de cero", la borra
 // entera (auditado).
 //
-// POST sin `pregunta` y sin `historial`: apertura (Lux habla primero, con lo
-// guardado como historial). Con `pregunta`: respuesta, con el historial que
-// manda la pantalla. Mismo transporte que /api/ayuda: text/plain en
+// POST sin `pregunta`: apertura (Lux habla primero). Con `pregunta`:
+// respuesta. En los dos, el historial lo lee el servidor de lo guardado; la
+// pantalla no lo manda. Mismo transporte que /api/ayuda: text/plain en
 // streaming. Contrato completo en docs/contrato-lux.md.
 //
 // La ruta valida, autoriza, reserva el cupo de Lux, llama al caso de uso y,
@@ -76,7 +76,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const body: unknown = await leerJson(request);
     const parsed = peticionLuxSchema.safeParse(body ?? {});
     if (!parsed.success) return validationError(parsed.error);
-    const { pregunta, historial } = parsed.data;
+    const { pregunta } = parsed.data;
     const tipo = pregunta === undefined ? "abrir" : "pregunta";
 
     await autorizarPaciente(db, organizationId, pacienteId);
@@ -86,7 +86,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       const base = { prisma: db, organizationId, usuarioId: userId, pacienteId };
       conversacion = pregunta === undefined
         ? await abrirConversacion(base)
-        : await responder({ ...base, pregunta, historial });
+        : await responder({ ...base, pregunta });
     } catch (error) {
       // Vuelve si el proveedor no llegó a procesar: falló antes de llamarlo
       // (base, validación) o contestó un error HTTP. Un timeout o un corte

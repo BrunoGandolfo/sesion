@@ -86,21 +86,20 @@ it("sin pregunta ni historial es la apertura: autoriza, reserva cupo de Lux y tr
   expect(devolverCupo).not.toHaveBeenCalled();
 });
 
-it("con pregunta responde con el historial y audita lux.pregunta sin el texto", async () => {
+it("con pregunta responde (el historial lo lee el servidor) y audita lux.pregunta sin el texto", async () => {
   vi.mocked(responder).mockResolvedValue({ ...conversacion(), turnosHistorial: 1 });
-  const respuesta = await pedir({ pregunta: "PREGUNTA_SECRETA", historial: [{ rol: "asistente", texto: "hola" }] });
+  const respuesta = await pedir({ pregunta: "PREGUNTA_SECRETA" });
   await leer(respuesta);
-  expect(responder).toHaveBeenCalledWith(expect.objectContaining({
-    pacienteId: "pac-1", pregunta: "PREGUNTA_SECRETA", historial: [{ rol: "asistente", texto: "hola" }],
-  }));
+  expect(responder).toHaveBeenCalledWith({ prisma: db, organizationId: "org", usuarioId: "user", pacienteId: "pac-1", pregunta: "PREGUNTA_SECRETA" });
   const evento = vi.mocked(registrarAuditoria).mock.calls[0][1];
   expect(evento).toMatchObject({ accion: "lux.pregunta", detalle: expect.objectContaining({ largoPregunta: 16, turnosHistorial: 1 }) });
   expect(JSON.stringify(evento)).not.toMatch(/PREGUNTA_SECRETA|TEXTO/);
 });
 
-it("valida el cuerpo: historial sin pregunta, pregunta larga, campos de más", async () => {
+it("valida el cuerpo: pregunta larga o vacía, campos de más, y el historial ya no se acepta", async () => {
   for (const cuerpo of [
     { historial: [{ rol: "asistente", texto: "hola" }] },
+    { pregunta: "¿y?", historial: [{ rol: "asistente", texto: "lo que diga el navegador" }] },
     { pregunta: "x".repeat(2001) },
     { pregunta: "hola", organizationId: "otra" },
     { pregunta: "   " },
@@ -109,14 +108,7 @@ it("valida el cuerpo: historial sin pregunta, pregunta larga, campos de más", a
     expect(respuesta.status).toBe(400);
   }
   expect(reservarCupo).not.toHaveBeenCalled();
-});
-
-it("una respuesta larga de Lux vuelve entera en el historial; una pregunta vieja larga, no", async () => {
-  const larga = "a".repeat(30_000);
-  expect((await pedir({ pregunta: "¿y?", historial: [{ rol: "asistente", texto: larga }] })).status).toBe(200);
-  expect(responder).toHaveBeenCalledWith(expect.objectContaining({ historial: [{ rol: "asistente", texto: larga }] }));
-  expect((await pedir({ pregunta: "¿y?", historial: [{ rol: "usuaria", texto: "b".repeat(2001) }] })).status).toBe(400);
-  expect((await pedir({ pregunta: "¿y?", historial: [{ rol: "asistente", texto: "c".repeat(100_001) }] })).status).toBe(400);
+  expect(responder).not.toHaveBeenCalled();
 });
 
 it("paciente ajeno: 404 sin gastar cupo", async () => {

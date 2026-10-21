@@ -105,11 +105,15 @@ export function abrirConversacion(input: ConversarBase): Promise<ConversacionLux
   });
 }
 
-export function responder(input: ConversarBase & { pregunta: string; historial?: TurnoHistorialLux[] }): Promise<ConversacionLux> {
+/** Una pregunta: el historial sale de lo guardado de esta paciente, no del
+ *  navegador. */
+export function responder(input: ConversarBase & { pregunta: string }): Promise<ConversacionLux> {
   const pregunta = input.pregunta.trim();
   if (pregunta === "") throw new ApiError("Escribí una pregunta.", 400);
   if (pregunta.length > LARGO_MAX_PREGUNTA_LUX) throw new ApiError(MENSAJE_PREGUNTA_LARGA_LUX, 400);
-  return conversar(input, async () => ({ historial: input.historial ?? [], ultimo: pregunta }));
+  return conversar(input, async () => ({
+    historial: paraElModelo(await cargarConversacion(input.prisma, input)), ultimo: pregunta,
+  }));
 }
 
 /** Lo guardado, como lo lee el modelo: una respuesta cortada no viaja (la
