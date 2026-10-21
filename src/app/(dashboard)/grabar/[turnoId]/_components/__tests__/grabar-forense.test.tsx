@@ -81,11 +81,17 @@ function pendienteDe(clave: string, turnoId: string | null = null): Partial<Grab
 }
 
 beforeEach(() => {
+  // "Hace una hora" de la pendiente: la hora queda fija.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-21T15:00:00.000Z"));
   vi.clearAllMocks();
   m.get.mockResolvedValue({ id: "s1", estado: "grabando" });
   grabadorEn({});
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("H2: una copia pendiente del mismo turno no se borra sin preguntar", () => {
   test("no hay un Grabar que la pise: se elige enviarla o descartarla y grabar de nuevo", () => {
