@@ -36,6 +36,8 @@ describe("system-prompt.md de Lux", () => {
       // Lo que leyó en la charla vuelve arriba: que no diga que lo inventó.
       "leída en esta conversación",
       "nunca digas que inventaste lo que leíste",
+      // La memoria: si ya hablaron, el saludo arranca por dónde quedaron.
+      "en qué quedaron y cuándo",
     ]) expect(prompt).toContain(frase);
   });
 

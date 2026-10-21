@@ -99,6 +99,9 @@ export const ACCIONES = {
   lux: {
     abrir: "lux.abrir",
     pregunta: "lux.pregunta",
+    /** "Empezar de cero": borró la conversación guardada con Lux sobre esa
+     *  paciente. El detalle lleva cuántos turnos, nunca el texto. */
+    borrarConversacion: "lux.borrar_conversacion",
   },
   salud: {
     /** El cron de salud mandó un correo; el detalle lleva la huella del

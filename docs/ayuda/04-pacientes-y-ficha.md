@@ -75,7 +75,8 @@ El Recorrido del proceso, los indicadores por sesión y **Exportar PDF**. Ver `1
 ### Pestaña **Lux**
 
 Una conversación sobre esta paciente con Lux, que leyó su Recorrido, sus notas
-y sus últimas sesiones. No se guarda. Ver `16-lux.md`.
+y sus últimas sesiones. La conversación queda guardada, cifrada, hasta que
+la borres con **Empezar de cero**. Ver `16-lux.md`.
 
 ### Pestaña **Datos**
 

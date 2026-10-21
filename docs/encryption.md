@@ -27,6 +27,7 @@ que es el contrato del anexo de `docs/esquema.md`.
 | | `notaFinal` | `nota_final_encrypted` | `NotaSoap \| null` |
 | | `notasEdicion` | `notas_edicion_encrypted` | `string \| null` |
 | `HiloVersion` (`hilo_versiones`) | `contenido` | `contenido_encrypted` | `unknown` (JSON parseado) |
+| `ConversacionLux` (`conversaciones_lux`) | `contenido` | `contenido_encrypted` | `string` |
 
 `NotaSoap` es `{ subjetivo, objetivo, analisis, plan }`, cada sección
 `string | null`; al escribir se normaliza a esas cuatro claves.
@@ -90,7 +91,8 @@ const p = await db.paciente.findUnique({ where: { id }, select: { id: true, nota
 ### Escritura: explícita y tipada
 
 `cifrarPaciente`, `cifrarTurno`, `cifrarConsentimiento`, `cifrarHotWord`,
-`cifrarSesion`, `cifrarHiloVersion` (`src/lib/prisma-encryption.ts`) reciben
+`cifrarSesion`, `cifrarHiloVersion`, `cifrarConversacionLux`
+(`src/lib/prisma-encryption.ts`) reciben
 el **id de la fila** y los campos lógicos, y devuelven `{ id, ...columnas }`
 listo para `data`. `null` deja la columna en NULL; `undefined` o ausente no
 la toca. Los campos `json` (`datos`, `feedback`, `contenido`) aceptan el
@@ -111,7 +113,7 @@ await db.sesionClinica.updateMany({
 Escribir un campo lógico directamente en `data` no compila (no existe en el
 tipo generado). Escribir una columna `*Encrypted` a mano pasa por la guarda 2.
 
-### Guardas (extensión `query`, seis modelos)
+### Guardas (extensión `query`, siete modelos)
 
 1. **Nada cifrado en `where` ni `orderBy`** (también dentro de `AND` / `OR` /
    `NOT`): error en runtime. `assertConsultaSinCifrados` está exportada para

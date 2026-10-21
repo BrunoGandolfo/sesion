@@ -2,12 +2,13 @@
 // uso se dobla (su comportamiento está en lux-integracion.test.ts); el rastro
 // es el de verdad, escrito con un registrarAuditoria doblado.
 
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { POST } from "@/app/api/pacientes/[id]/lux/route";
+import { DELETE, GET, POST } from "@/app/api/pacientes/[id]/lux/route";
 import { registrarAuditoria } from "@/app/api/_lib/auditoria";
 import { abrirConversacion, autorizarPaciente, ErrorProveedorLux, responder } from "@/app/api/_lib/casos-uso/lux/conversar";
 import { devolverCupo, reservarCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
+import { borrarConversacion, conversacionGuardada, guardarTurnos } from "@/app/api/_lib/casos-uso/lux/memoria";
 import { ApiError } from "@/app/api/_lib/responses";
 import type { ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { db } from "@/lib/db";
@@ -23,6 +24,12 @@ vi.mock("@/app/api/_lib/casos-uso/lux/conversar", async (original) => ({
   responder: vi.fn(),
   autorizarPaciente: vi.fn(),
 }));
+vi.mock("@/app/api/_lib/casos-uso/lux/memoria", async (original) => ({
+  ...(await original<typeof import("@/app/api/_lib/casos-uso/lux/memoria")>()),
+  conversacionGuardada: vi.fn(),
+  guardarTurnos: vi.fn(),
+  borrarConversacion: vi.fn(),
+}));
 vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", async (original) => ({
   ...(await original<typeof import("@/app/api/_lib/casos-uso/ayuda/reservar-cupo")>()),
   reservarCupo: vi.fn(),
@@ -36,6 +43,7 @@ const RESULTADO: ResultadoConversacion = {
 const PROGRESO = { tokensEntrada: 7, tokensSalida: 3, cacheLeido: 0, cacheEscrito: 0, rondas: 1, llamadas: [] };
 const conversacion = (fragmentos: string[] = ["<citas>\n01/09: \"me voy\"\n</citas>\n", "**TEXTO**"]) => ({
   flujo: { fragmentos: (async function* () { yield* fragmentos; })(), resultado: Promise.resolve(RESULTADO), cancelar: vi.fn(), progreso: () => PROGRESO },
+  turnosHistorial: 0,
   material: { notas: 3, notasOmitidas: 0, transcripciones: ["a", "b"], transcripcionesOmitidas: 0, releidas: [], releidasOmitidas: 0 },
   ejecutor: { leidas: [], aviso: () => null, ejecutar: vi.fn() },
 });
@@ -78,20 +86,20 @@ it("sin pregunta ni historial es la apertura: autoriza, reserva cupo de Lux y tr
   expect(devolverCupo).not.toHaveBeenCalled();
 });
 
-it("con pregunta responde con el historial y audita lux.pregunta sin el texto", async () => {
-  const respuesta = await pedir({ pregunta: "PREGUNTA_SECRETA", historial: [{ rol: "asistente", texto: "hola" }] });
+it("con pregunta responde (el historial lo lee el servidor) y audita lux.pregunta sin el texto", async () => {
+  vi.mocked(responder).mockResolvedValue({ ...conversacion(), turnosHistorial: 1 });
+  const respuesta = await pedir({ pregunta: "PREGUNTA_SECRETA" });
   await leer(respuesta);
-  expect(responder).toHaveBeenCalledWith(expect.objectContaining({
-    pacienteId: "pac-1", pregunta: "PREGUNTA_SECRETA", historial: [{ rol: "asistente", texto: "hola" }],
-  }));
+  expect(responder).toHaveBeenCalledWith({ prisma: db, organizationId: "org", usuarioId: "user", pacienteId: "pac-1", pregunta: "PREGUNTA_SECRETA" });
   const evento = vi.mocked(registrarAuditoria).mock.calls[0][1];
   expect(evento).toMatchObject({ accion: "lux.pregunta", detalle: expect.objectContaining({ largoPregunta: 16, turnosHistorial: 1 }) });
   expect(JSON.stringify(evento)).not.toMatch(/PREGUNTA_SECRETA|TEXTO/);
 });
 
-it("valida el cuerpo: historial sin pregunta, pregunta larga, campos de más", async () => {
+it("valida el cuerpo: pregunta larga o vacía, campos de más, y el historial ya no se acepta", async () => {
   for (const cuerpo of [
     { historial: [{ rol: "asistente", texto: "hola" }] },
+    { pregunta: "¿y?", historial: [{ rol: "asistente", texto: "lo que diga el navegador" }] },
     { pregunta: "x".repeat(2001) },
     { pregunta: "hola", organizationId: "otra" },
     { pregunta: "   " },
@@ -100,14 +108,7 @@ it("valida el cuerpo: historial sin pregunta, pregunta larga, campos de más", a
     expect(respuesta.status).toBe(400);
   }
   expect(reservarCupo).not.toHaveBeenCalled();
-});
-
-it("una respuesta larga de Lux vuelve entera en el historial; una pregunta vieja larga, no", async () => {
-  const larga = "a".repeat(30_000);
-  expect((await pedir({ pregunta: "¿y?", historial: [{ rol: "asistente", texto: larga }] })).status).toBe(200);
-  expect(responder).toHaveBeenCalledWith(expect.objectContaining({ historial: [{ rol: "asistente", texto: larga }] }));
-  expect((await pedir({ pregunta: "¿y?", historial: [{ rol: "usuaria", texto: "b".repeat(2001) }] })).status).toBe(400);
-  expect((await pedir({ pregunta: "¿y?", historial: [{ rol: "asistente", texto: "c".repeat(100_001) }] })).status).toBe(400);
+  expect(responder).not.toHaveBeenCalled();
 });
 
 it("paciente ajeno: 404 sin gastar cupo", async () => {
@@ -210,4 +211,106 @@ it("cancelar a mitad deja lux.pregunta con interrumpida, una sola vez", async ()
   await new Promise((r) => setTimeout(r, 10));
   expect(registrarAuditoria).toHaveBeenCalledTimes(1);
   expect(devolverCupo).not.toHaveBeenCalled();
+});
+
+describe("GET: la conversación guardada", () => {
+  const leerGuardada = (id = "pac-1") => GET(
+    new Request(`http://localhost/api/pacientes/${id}/lux`),
+    { params: Promise.resolve({ id }) },
+  );
+
+  it("devuelve los turnos de la paciente de la sesión, sin caché", async () => {
+    const turnos = [{ rol: "lux", texto: "Hola.", interrumpida: false, creadoEn: "2026-10-01T14:00:00.000Z" }];
+    vi.mocked(conversacionGuardada).mockResolvedValue(turnos as never);
+    const respuesta = await leerGuardada();
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.headers.get("Cache-Control")).toContain("no-store");
+    expect(await respuesta.json()).toEqual({ data: { turnos } });
+    expect(conversacionGuardada).toHaveBeenCalledWith(db, "org", "pac-1");
+    expect(reservarCupo).not.toHaveBeenCalled();
+  });
+
+  it("paciente ajeno: 404", async () => {
+    vi.mocked(conversacionGuardada).mockRejectedValue(new ApiError("Paciente no encontrado", 404));
+    expect((await leerGuardada()).status).toBe(404);
+  });
+});
+
+describe("cada turno se guarda al cerrar la respuesta", () => {
+  const guardado = () => vi.mocked(guardarTurnos).mock.calls[0][1];
+
+  it("pregunta y respuesta completas, tal como llegaron, sin interrumpida", async () => {
+    await leer(await pedir({ pregunta: "¿Y el cuerpo?" }));
+    expect(guardarTurnos).toHaveBeenCalledOnce();
+    expect(vi.mocked(guardarTurnos).mock.calls[0][0]).toBe(db);
+    expect(guardado()).toMatchObject({
+      organizationId: "org", pacienteId: "pac-1", userId: "user",
+      pregunta: { texto: "¿Y el cuerpo?", en: expect.any(Date) },
+      respuesta: { texto: "<citas>\n01/09: \"me voy\"\n</citas>\n**TEXTO**", en: expect.any(Date), interrumpida: false },
+    });
+    expect(guardado().respuesta.en.getTime()).toBeGreaterThanOrEqual(guardado().pregunta!.en.getTime());
+  });
+
+  it("la apertura guarda sólo el turno de Lux", async () => {
+    await leer(await pedir({}));
+    expect(guardado().pregunta).toBeUndefined();
+    expect(guardado().respuesta.interrumpida).toBe(false);
+  });
+
+  it("un corte a mitad guarda lo que llegó, con interrumpida", async () => {
+    vi.mocked(responder).mockResolvedValueOnce(fallida(["LO_QUE_LLEGO"]));
+    await expect(leer(await pedir({ pregunta: "¿y?" }))).rejects.toThrow();
+    expect(guardado()).toMatchObject({ pregunta: { texto: "¿y?" }, respuesta: { texto: "LO_QUE_LLEGO", interrumpida: true } });
+  });
+
+  it("cancelar a mitad guarda lo que llegó, con interrumpida, una sola vez", async () => {
+    let soltar!: () => void;
+    const esperando = new Promise<void>((resolve) => { soltar = resolve; });
+    const resultado = Promise.reject(new Error("Conversación cancelada"));
+    void resultado.catch(() => {});
+    vi.mocked(responder).mockResolvedValueOnce({
+      ...conversacion(),
+      flujo: {
+        fragmentos: (async function* () { yield "primera parte"; await esperando; yield "lo que ya no llega"; })(),
+        resultado, cancelar: vi.fn(() => soltar()), progreso: () => PROGRESO,
+      },
+    });
+    const lector = (await pedir({ pregunta: "¿y?" })).body!.getReader();
+    await lector.read();
+    await lector.cancel();
+    await vi.waitFor(() => expect(guardarTurnos).toHaveBeenCalledOnce());
+    expect(guardado().respuesta).toMatchObject({ texto: "primera parte", interrumpida: true });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(guardarTurnos).toHaveBeenCalledOnce();
+  });
+
+  it("si guardar falla, el rastro igual queda, la respuesta termina en error y el log no lleva texto", async () => {
+    const logs = [vi.spyOn(console, "error").mockImplementation(() => {}), vi.spyOn(console, "warn").mockImplementation(() => {})];
+    vi.mocked(guardarTurnos).mockRejectedValueOnce(new Error("no se pudo guardar PREGUNTA_SECRETA"));
+    await expect(leer(await pedir({ pregunta: "PREGUNTA_SECRETA" }))).rejects.toThrow();
+    expect(registrarAuditoria).toHaveBeenCalledOnce();
+    expect(logs[0]).toHaveBeenCalled();
+    for (const log of logs) expect(JSON.stringify(log.mock.calls)).not.toMatch(/PREGUNTA_SECRETA|TEXTO|me voy/);
+  });
+});
+
+describe("DELETE: empezar de cero", () => {
+  const borrar = (id = "pac-1") => DELETE(
+    new Request(`http://localhost/api/pacientes/${id}/lux`, { method: "DELETE" }),
+    { params: Promise.resolve({ id }) },
+  );
+
+  it("borra la conversación de la paciente de la sesión, como la usuaria", async () => {
+    vi.mocked(borrarConversacion).mockResolvedValue(4);
+    const respuesta = await borrar();
+    expect(respuesta.status).toBe(200);
+    expect(await respuesta.json()).toEqual({ data: { borrados: 4 } });
+    expect(borrarConversacion).toHaveBeenCalledWith(db, { organizationId: "org", pacienteId: "pac-1", userId: "user" });
+    expect(reservarCupo).not.toHaveBeenCalled();
+  });
+
+  it("paciente ajeno: 404", async () => {
+    vi.mocked(borrarConversacion).mockRejectedValue(new ApiError("Paciente no encontrado", 404));
+    expect((await borrar()).status).toBe(404);
+  });
 });

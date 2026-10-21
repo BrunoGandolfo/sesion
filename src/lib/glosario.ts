@@ -2061,7 +2061,7 @@ export function luxSaludo(profesional: string, paciente: string): string {
 
 /** La línea fija de arriba del chat. */
 export function luxQueLee(paciente: string): string {
-  return `Lux lee el Recorrido, las notas y las últimas sesiones de ${paciente}. No guarda esta conversación.`;
+  return `Lux lee el Recorrido, las notas y las últimas sesiones de ${paciente}, y recuerda lo que hablaron acá.`;
 }
 
 /** El estado que Lux manda mientras abre una transcripción. */
@@ -2075,7 +2075,6 @@ export const LUX_DIJO_ELLA = "Vos:";
 export const LUX_EN_QUE_ME_BASO = "Ver en qué me baso";
 export const LUX_PLACEHOLDER = "Preguntale a Lux";
 export const LUX_ENVIAR = "Enviar";
-export const LUX_NUEVA = "Nueva conversación";
 /** Sin los puntos suspensivos: los dibuja la pantalla, que los enciende de a
  *  uno mientras Lux trabaja (puntos-leyendo.tsx). */
 export const LUX_LEYENDO = "Lux está leyendo";
@@ -2218,3 +2217,26 @@ export const RECORDATORIO_TEXTOS_POR_CANAL = {
  *  (lo cambió en otra pestaña o una colega): no se manda ni se anota nada. */
 export const COBRO_CANAL_CAMBIO =
   "Cambió cómo recordás los turnos en Tu consultorio. Volvé a cargar Cobros y probá de nuevo.";
+
+// ─── lux-memoria ─────────────────────────────────────────────────────────────
+
+/** El separador de la conversación con Lux: cada día de lo guardado, y hoy. */
+export function luxConversacionDel(fecha: string): string {
+  return `Conversación del ${fecha}`;
+}
+
+/** No se pudo traer lo guardado: Lux abre igual (el servidor sí lo lee). */
+export const LUX_HISTORIAL_NO_CARGO = "No se pudo mostrar la conversación anterior. Lux la tiene igual.";
+
+/** Debajo de una respuesta de Lux que se cortó: lo de arriba es lo que llegó. */
+export const LUX_RESPUESTA_CORTADA = "La respuesta se cortó acá.";
+
+/** El botón que borra la conversación guardada con Lux sobre esa paciente,
+ *  y su confirmación. */
+export const LUX_EMPEZAR_DE_CERO = "Empezar de cero";
+export const LUX_EMPEZAR_DE_CERO_TITULO = "¿Empezar de cero con Lux?";
+export const LUX_EMPEZAR_DE_CERO_MENSAJE =
+  "Se borra todo lo que hablaron con Lux sobre esta paciente y no se puede recuperar. Las notas y el Recorrido no se tocan.";
+export const LUX_EMPEZAR_DE_CERO_ACCION = "Borrar la conversación";
+export const LUX_BORRANDO = "Borrando…";
+export const LUX_NO_SE_BORRO = "No se pudo borrar la conversación. Probá de nuevo.";

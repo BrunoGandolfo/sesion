@@ -1,39 +1,54 @@
 "use client";
 
-// La conversación con Lux: el estado y el único pedido a la red.
+// La conversación con Lux: el estado y los pedidos a la red.
 //
-// El historial vive acá, en estado de React, y en ningún otro lado: ni
-// localStorage, ni sessionStorage, ni la URL, ni el historial del navegador.
-// Al salir de la pestaña, recargar o cambiar de paciente, se va. Es lo que
-// promete la línea de arriba del chat ("No guarda esta conversación").
+// La conversación se guarda en el servidor (conversaciones_lux, cifrada),
+// no en el navegador: ni localStorage, ni sessionStorage, ni la URL, ni el
+// historial del navegador. Al abrir, la pantalla pide lo guardado (GET) y lo
+// muestra; después, Lux abre. Cada pedido lleva sólo la pregunta: el
+// historial que ve Lux lo lee el servidor.
 //
 // El stream se lee igual que en el panel de ayuda (panel-ayuda.tsx): fetch
 // a mano y res.body por fragmentos, porque api-client espera el JSON entero.
+// Lo guardado sí es JSON entero: apiGet.
 //
 // APERTURA
 //
-// Al montar, y con cada "Nueva conversación", sale un POST sin pregunta ni
-// historial: Lux habla primero. Al cambiar de paciente la conversación se
-// tira entera en el mismo render y la apertura vuelve a salir para el nuevo:
-// nada de una paciente queda a la vista de la otra.
+// Al montar, y después de "Empezar de cero", se trae lo guardado y sale un
+// POST sin pregunta: Lux habla primero (el servidor le pasa lo
+// guardado). Al cambiar de paciente la conversación se tira entera en el
+// mismo render y vuelve a empezar para el nuevo: nada de una paciente queda
+// a la vista de la otra.
 
 import * as React from "react";
 
-import { ApiClientError, esAbort } from "@/lib/api-client";
+import { ApiClientError, apiDelete, apiGet, esAbort } from "@/lib/api-client";
 
-import { LUX_CORTADO, LUX_NO_PUDO, LUX_SIN_CONEXION, LUX_TOPE } from "@/lib/glosario";
 import {
-  LARGO_MAX_PREGUNTA_LUX,
-  LARGO_MAX_TURNO_LUX,
-  MAX_TURNOS_HISTORIAL_LUX,
+  LUX_CORTADO, LUX_HISTORIAL_NO_CARGO, LUX_NO_PUDO, LUX_NO_SE_BORRO, LUX_SIN_CONEXION, LUX_TOPE,
+} from "@/lib/glosario";
+import {
   STATUS_TOPE_LUX,
+  type ConversacionGuardadaLux,
   type PeticionLux,
-  type TurnoHistorialLux,
+  type TurnoConversacionLux,
 } from "@/lib/lux/contrato";
 
+/** `en`: cuándo se dijo, para los separadores por día. */
 export type TurnoLux =
-  | { rol: "usuaria"; texto: string }
-  | { rol: "asistente"; crudo: string; completo: boolean };
+  | { rol: "usuaria"; texto: string; en: Date }
+  | { rol: "asistente"; crudo: string; completo: boolean; en: Date;
+      /** Se cortó (ahora, o cuando se guardó): es lo que llegó. */
+      interrumpida: boolean };
+
+const urlDe = (paciente: string) => `/api/pacientes/${encodeURIComponent(paciente)}/lux`;
+
+function deGuardado(turno: TurnoConversacionLux): TurnoLux {
+  const en = new Date(turno.creadoEn);
+  return turno.rol === "profesional"
+    ? { rol: "usuaria", texto: turno.texto, en }
+    : { rol: "asistente", crudo: turno.texto, completo: true, en, interrumpida: turno.interrumpida };
+}
 
 function textoDeError(error: unknown): string {
   if (error instanceof ApiClientError) {
@@ -42,29 +57,13 @@ function textoDeError(error: unknown): string {
   return LUX_SIN_CONEXION;
 }
 
-/** Lo que vuelve a viajar: exactamente lo que ella vio. De cada turno de Lux
- *  terminado va el texto completo, como llegó: la prosa, el bloque <citas> y
- *  las líneas "(mirando la transcripción del DD/MM)". Sin las citas ni los
- *  avisos, en la pregunta siguiente Lux veía frases literales sin fuente y
- *  negaba haber leído lo que había leído (prueba real del 9/10/2026). */
-function historialDe(turnos: TurnoLux[]): TurnoHistorialLux[] {
-  return turnos
-    .flatMap((t): TurnoHistorialLux[] => {
-      if (t.rol === "usuaria") return [{ rol: t.rol, texto: t.texto.slice(0, LARGO_MAX_PREGUNTA_LUX) }];
-      if (!t.completo) return [];
-      return [{ rol: t.rol, texto: t.crudo.trim().slice(0, LARGO_MAX_TURNO_LUX) }];
-    })
-    .filter((t) => t.texto.trim() !== "")
-    .slice(-MAX_TURNOS_HISTORIAL_LUX);
-}
-
 /** Reemplaza (o agrega) la respuesta que está llegando. */
 function conRespuesta(turnos: TurnoLux[], crudo: string, completo: boolean): TurnoLux[] {
   const ultimo = turnos.at(-1);
   if (ultimo?.rol === "asistente" && !ultimo.completo) {
     return [...turnos.slice(0, -1), { ...ultimo, crudo, completo }];
   }
-  return [...turnos, { rol: "asistente", crudo, completo }];
+  return [...turnos, { rol: "asistente", crudo, completo, en: new Date(), interrumpida: false }];
 }
 
 /** El POST y la lectura del stream. Avisa el texto acumulado con cada
@@ -76,7 +75,7 @@ async function leerLux(
   signal: AbortSignal,
   alLlegar: (crudo: string, completo: boolean) => void,
 ): Promise<void> {
-  const respuesta = await fetch(`/api/pacientes/${encodeURIComponent(paciente)}/lux`, {
+  const respuesta = await fetch(urlDe(paciente), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(cuerpo),
@@ -99,6 +98,8 @@ async function leerLux(
 export function useConversacionLux(pacienteId: string) {
   const [conversacion, setConversacion] = React.useState({ pacienteId, numero: 0 });
   const [turnos, setTurnos] = React.useState<TurnoLux[]>([]);
+  /** Cuántos de `turnos` vinieron guardados (los primeros). */
+  const [guardados, setGuardados] = React.useState(0);
   const [borrador, setBorrador] = React.useState("");
   const [esperando, setEsperando] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -107,6 +108,7 @@ export function useConversacionLux(pacienteId: string) {
   if (conversacion.pacienteId !== pacienteId) {
     setConversacion({ pacienteId, numero: 0 });
     setTurnos([]);
+    setGuardados(0);
     setBorrador("");
     setError(null);
     setEsperando(true);
@@ -129,7 +131,11 @@ export function useConversacionLux(pacienteId: string) {
       })
         .catch((e: unknown) => {
           if (esAbort(e) || !vigente()) return;
-          if (llego) setError(LUX_CORTADO);
+          if (llego) {
+            setTurnos((previos) => previos.map((t, i) =>
+              i === previos.length - 1 && t.rol === "asistente" ? { ...t, interrumpida: true } : t));
+            setError(LUX_CORTADO);
+          }
           else alFallar(textoDeError(e));
         })
         .finally(() => {
@@ -141,10 +147,24 @@ export function useConversacionLux(pacienteId: string) {
     [],
   );
 
-  // Apertura: al montar, al cambiar de paciente y con "Nueva conversación".
+  // Apertura: al montar, al cambiar de paciente y después de "Empezar de cero".
+  // Primero lo guardado, para que la apertura quede abajo.
   React.useEffect(() => {
-    pedir(conversacion.pacienteId, {}, setError);
+    const control = new AbortController();
+    const paciente = conversacion.pacienteId;
+    apiGet<ConversacionGuardadaLux>(urlDe(paciente), { signal: control.signal })
+      .then(({ turnos: previos }) => {
+        setTurnos(previos.map(deGuardado));
+        setGuardados(previos.length);
+      })
+      .catch((e: unknown) => {
+        if (!esAbort(e)) setError(LUX_HISTORIAL_NO_CARGO);
+      })
+      .finally(() => {
+        if (!control.signal.aborted) pedir(paciente, {}, setError);
+      });
     return () => {
+      control.abort();
       peticion.current?.abort();
       peticion.current = null;
     };
@@ -153,14 +173,13 @@ export function useConversacionLux(pacienteId: string) {
   function preguntar(pregunta: string) {
     const texto = pregunta.trim();
     if (texto === "" || esperando) return;
-    const historial = historialDe(turnos);
-    setTurnos((previos) => [...previos, { rol: "usuaria", texto }]);
+    setTurnos((previos) => [...previos, { rol: "usuaria", texto, en: new Date() }]);
     setBorrador("");
     setEsperando(true);
     setError(null);
     pedir(
       pacienteId,
-      { pregunta: texto, ...(historial.length > 0 ? { historial } : {}) },
+      { pregunta: texto },
       (mensaje) => {
         // No llegó nada: la pregunta vuelve al campo para mandarla de nuevo,
         // salvo que ella ya haya empezado a escribir otra: eso no se pisa.
@@ -171,13 +190,27 @@ export function useConversacionLux(pacienteId: string) {
     );
   }
 
+  /** "Empezar de cero": borra lo guardado en el servidor y, si salió,
+   *  vuelve a abrir de cero. true si se borró. */
+  async function empezarDeCero(): Promise<boolean> {
+    try {
+      await apiDelete<{ borrados: number }>(urlDe(pacienteId));
+    } catch {
+      setError(LUX_NO_SE_BORRO);
+      return false;
+    }
+    nueva();
+    return true;
+  }
+
   function nueva() {
     setTurnos([]);
+    setGuardados(0);
     setBorrador("");
     setError(null);
     setEsperando(true);
     setConversacion((actual) => ({ ...actual, numero: actual.numero + 1 }));
   }
 
-  return { turnos, borrador, setBorrador, esperando, error, preguntar, nueva };
+  return { turnos, guardados, borrador, setBorrador, esperando, error, preguntar, empezarDeCero };
 }

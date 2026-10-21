@@ -5,18 +5,28 @@
 // hacia POST /api/pacientes/{id}/lux.
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import { avisoMirandoTranscripcion, MARCA_ESTADO_LUX, peticionLuxSchema } from "@/lib/lux/contrato";
+import {
+  avisoMirandoTranscripcion, MARCA_ESTADO_LUX, peticionLuxSchema, type TurnoConversacionLux,
+} from "@/lib/lux/contrato";
 
 import { ConversacionLux } from "../conversacion-lux";
 import {
   LUX_CONVERSACION,
   LUX_EN_QUE_ME_BASO,
-  LUX_NUEVA,
+  LUX_HISTORIAL_NO_CARGO,
+  LUX_RESPUESTA_CORTADA,
+  LUX_EMPEZAR_DE_CERO,
+  LUX_ENVIAR,
+  LUX_EMPEZAR_DE_CERO_ACCION,
+  LUX_EMPEZAR_DE_CERO_MENSAJE,
+  LUX_EMPEZAR_DE_CERO_TITULO,
+  LUX_NO_SE_BORRO,
   LUX_LEYENDO,
   LUX_PLACEHOLDER,
   LUX_TOPE,
+  luxConversacionDel,
   luxMirando,
   luxQueLee,
   luxSaludo,
@@ -45,17 +55,31 @@ function streamManual() {
 const respuestaEntera = (texto: string) =>
   new Response(texto, { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
 
-let fetchMock: ReturnType<typeof vi.fn>;
+/** Los POST a Lux (apertura y preguntas): cada test les da su respuesta. */
+type Pedido = (url: string, init?: RequestInit) => Promise<Response>;
+let fetchMock: Mock<Pedido>;
+/** El GET de la conversación guardada: por defecto, vacía. */
+let getMock: Mock<Pedido>;
+const guardada = (turnos: TurnoConversacionLux[]) =>
+  new Response(JSON.stringify({ data: { turnos } }), { status: 200, headers: { "content-type": "application/json" } });
 beforeEach(() => {
-  fetchMock = vi.fn();
-  vi.stubGlobal("fetch", fetchMock);
+  fetchMock = vi.fn<Pedido>();
+  getMock = vi.fn<Pedido>(async () => guardada([]));
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+    init?.method === "GET" ? getMock(url, init) : fetchMock(url, init));
 });
+
+/** Deja correr el GET de lo guardado y el arranque de la apertura. */
+const alAbrir = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
-const cuerpos = () => fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string));
+/** Los cuerpos de los POST a Lux (apertura y preguntas). */
+const cuerpos = () => fetchMock.mock.calls
+  .filter(([, init]) => init?.method === "POST")
+  .map(([, init]) => JSON.parse((init as RequestInit).body as string));
 const hilo = () => screen.getByRole("log", { name: LUX_CONVERSACION });
 
 function montar(pacienteId = "p1", paciente = "Ana") {
@@ -76,9 +100,13 @@ describe("apertura", () => {
 
     expect(screen.getByText(luxSaludo("Mariana", "Ana"))).toBeTruthy();
     expect(screen.getByText(luxQueLee("Ana"))).toBeTruthy();
-    expect(screen.getByText(luxQueLee("Ana")).textContent).toContain("No guarda esta conversación.");
+    // La conversación se guarda: la línea de arriba no puede decir lo contrario.
+    expect(screen.getByText(luxQueLee("Ana")).textContent).not.toMatch(/No guarda/);
+    expect(luxQueLee("Ana")).toContain("recuerda");
     // La apertura también muestra "Lux está leyendo" con sus puntos.
     expect(screen.getByRole("status").textContent).toContain(LUX_LEYENDO);
+    await alAbrir();
+    expect(getMock).toHaveBeenCalledWith("/api/pacientes/p1/lux", expect.objectContaining({ method: "GET" }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/pacientes/p1/lux");
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
@@ -97,6 +125,68 @@ describe("apertura", () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
     render(<ConversacionLux pacienteId="p1" paciente="Ana" profesional="" />);
     expect(screen.getByText("Hola, dame un momentito que repaso lo de Ana…")).toBeTruthy();
+  });
+});
+
+describe("la conversación guardada", () => {
+  const de = (rol: TurnoConversacionLux["rol"], texto: string, creadoEn: string, interrumpida = false): TurnoConversacionLux =>
+    ({ rol, texto, creadoEn, interrumpida });
+
+  it("se muestra antes del saludo, con un separador por día, y la apertura viene después", async () => {
+    getMock.mockResolvedValueOnce(guardada([
+      de("lux", "<citas>Nota del 03/09</citas>Apertura vieja.", "2025-09-30T14:00:00.000Z"),
+      de("profesional", "¿Y el sueño?", "2025-10-01T14:00:00.000Z"),
+      de("lux", `Miro.\n${avisoMirandoTranscripcion("03/09")}\nDuerme mal.`, "2025-10-01T14:01:00.000Z"),
+    ]));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Apertura de hoy."));
+    montar();
+    await alAbrir();
+
+    const texto = hilo().textContent!;
+    const orden = [luxConversacionDel("30/09"), "Apertura vieja.", luxConversacionDel("01/10"), "¿Y el sueño?", "Duerme mal.",
+      luxSaludo("Mariana", "Ana"), "Apertura de hoy."].map((t) => texto.indexOf(t));
+    expect(orden.every((p) => p >= 0)).toBe(true);
+    expect(orden).toEqual([...orden].sort((a, b) => a - b));
+    // Hoy también tiene su separador, antes del saludo.
+    expect(within(hilo()).getAllByRole("separator")).toHaveLength(3);
+    // Las marcas de lo guardado se leen igual que las del stream.
+    expect(screen.getAllByText(LUX_EN_QUE_ME_BASO)).toHaveLength(1);
+    expect(screen.getByText(luxMirando("03/09"))).toBeTruthy();
+    expect(texto).not.toMatch(/<\/?citas>|_\(/);
+    expect(cuerpos()).toEqual([{}]);
+  });
+
+  it("una respuesta guardada cortada se ve cortada", async () => {
+    getMock.mockResolvedValueOnce(guardada([
+      de("profesional", "¿Y el sueño?", "2025-10-01T14:00:00.000Z"),
+      de("lux", "Duerme m", "2025-10-01T14:01:00.000Z", true),
+      de("profesional", "¿Seguimos?", "2025-10-01T14:02:00.000Z"),
+      de("lux", "Sí.", "2025-10-01T14:03:00.000Z"),
+    ]));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
+    montar();
+    await alAbrir();
+    const cortadas = screen.getAllByText(LUX_RESPUESTA_CORTADA);
+    expect(cortadas).toHaveLength(1);
+    const texto = hilo().textContent!;
+    expect(texto.indexOf("Duerme m")).toBeLessThan(texto.indexOf(LUX_RESPUESTA_CORTADA));
+    expect(texto.indexOf(LUX_RESPUESTA_CORTADA)).toBeLessThan(texto.indexOf("¿Seguimos?"));
+  });
+
+  it("sin conversación guardada no hay separadores", async () => {
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
+    montar();
+    await alAbrir();
+    expect(within(hilo()).queryAllByRole("separator")).toHaveLength(0);
+  });
+
+  it("si no se pudo traer lo guardado, lo dice y Lux abre igual", async () => {
+    getMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: "x" }), { status: 500 }));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola igual."));
+    montar();
+    await alAbrir();
+    expect(screen.getByRole("alert").textContent).toBe(LUX_HISTORIAL_NO_CARGO);
+    expect(hilo().textContent).toContain("Hola igual.");
   });
 });
 
@@ -151,7 +241,7 @@ describe("lo que llega dentro del texto", () => {
 });
 
 describe("preguntar", () => {
-  it("Enter envía con el historial, Shift+Enter no envía", async () => {
+  it("Enter envía sólo la pregunta (el historial lo tiene el servidor), Shift+Enter no envía", async () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("<citas>Nota del 03/10</citas>Hola, ¿qué querés repasar?"));
     montar();
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -164,15 +254,12 @@ describe("preguntar", () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Mejor que en septiembre."));
     await act(async () => { fireEvent.keyDown(campo, { key: "Enter" }); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(cuerpos()[1]).toEqual({
-      pregunta: "¿Cómo viene\ncon el sueño?",
-      historial: [{ rol: "asistente", texto: "<citas>Nota del 03/10</citas>Hola, ¿qué querés repasar?" }],
-    });
+    expect(cuerpos()[1]).toEqual({ pregunta: "¿Cómo viene\ncon el sueño?" });
     expect((campo as HTMLTextAreaElement).value).toBe("");
     expect(hilo().textContent).toContain("Mejor que en septiembre.");
   });
 
-  it("un turno de Lux vuelve entero en el historial: prosa, citas y estado, tal como ella lo vio", async () => {
+  it("un turno de Lux con citas y estado se ve plegado y en gris, y no vuelve desde el navegador", async () => {
     // Lo que contestó Haiku 5.5 en la prueba real, recortado: una frase, el
     // aviso de la transcripción, las citas y la prosa.
     const respuestaConLectura = [
@@ -188,33 +275,30 @@ describe("preguntar", () => {
     ].join("\n");
     fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
     montar();
-    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    await alAbrir();
     fetchMock.mockResolvedValueOnce(respuestaEntera(respuestaConLectura));
     await act(async () => { escribirYEnviar("¿Qué dijo de la canción?"); });
 
-    // Ella lo vio plegado y en gris…
     expect(screen.getByText(LUX_EN_QUE_ME_BASO)).toBeTruthy();
     expect(screen.getByText(luxMirando("04/08"))).toBeTruthy();
 
-    // …y viaja completo en la pregunta siguiente, sin perder nada.
+    // La pregunta siguiente lleva sólo la pregunta: el turno entero (con su
+    // marca) lo guardó el servidor, y de ahí lo lee. Un historial armado por
+    // el navegador no pasa el contrato.
     fetchMock.mockResolvedValueOnce(respuestaEntera("Sí, en la última también."));
     await act(async () => { escribirYEnviar("¿Volvió a aparecer?"); });
-    const cuerpo = cuerpos()[2];
-    expect(cuerpo.historial).toEqual([
-      { rol: "asistente", texto: "Hola." },
-      { rol: "usuaria", texto: "¿Qué dijo de la canción?" },
-      { rol: "asistente", texto: respuestaConLectura },
-    ]);
-    // Y el contrato lo acepta tal cual: no recorta ni rechaza esas partes.
-    expect(peticionLuxSchema.parse(cuerpo).historial?.[2].texto).toBe(respuestaConLectura);
+    expect(cuerpos()[2]).toEqual({ pregunta: "¿Volvió a aparecer?" });
+    expect(peticionLuxSchema.safeParse({ pregunta: "¿y?", historial: [{ rol: "asistente", texto: respuestaConLectura }] }).success).toBe(false);
   });
 
-  it("una respuesta cortada a la mitad no viaja en el historial", async () => {
+  it("una respuesta cortada a la mitad se ve cortada", async () => {
     const stream = streamManual();
     fetchMock.mockResolvedValueOnce(stream.respuesta);
     montar();
-    await stream.mandar("<citas>Nota del 0");
+    await alAbrir();
+    await stream.mandar("Empecemos por el ");
     await act(async () => { stream.cortar(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(screen.getByText(LUX_RESPUESTA_CORTADA)).toBeTruthy();
     fetchMock.mockResolvedValueOnce(respuestaEntera("Ok."));
     await act(async () => { escribirYEnviar("¿Seguimos?"); });
     expect(cuerpos().at(-1)).toEqual({ pregunta: "¿Seguimos?" });
@@ -258,24 +342,77 @@ describe("preguntar", () => {
   });
 });
 
-describe("la conversación no se guarda", () => {
-  it("'Nueva conversación' vacía el hilo y vuelve a abrir sin historial", async () => {
+describe("empezar de cero", () => {
+  /** Con una charla en pantalla: apertura, pregunta y respuesta. */
+  async function conCharla() {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Primera apertura."));
     montar();
-    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    await alAbrir();
     fetchMock.mockResolvedValueOnce(respuestaEntera("Respuesta vieja."));
     await act(async () => { escribirYEnviar("Pregunta vieja"); });
+  }
+  const boton = () => screen.getByRole("button", { name: LUX_EMPEZAR_DE_CERO });
+
+  it("pide confirmación; cancelar no borra nada", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    const dialogo = screen.getByRole("alertdialog");
+    expect(dialogo.textContent).toContain(LUX_EMPEZAR_DE_CERO_TITULO);
+    expect(dialogo.textContent).toContain(LUX_EMPEZAR_DE_CERO_MENSAJE);
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
     expect(hilo().textContent).toContain("Respuesta vieja.");
-
-    fetchMock.mockResolvedValueOnce(respuestaEntera("Segunda apertura."));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: LUX_NUEVA })); });
-
-    expect(hilo().textContent).not.toContain("Pregunta vieja");
-    expect(hilo().textContent).not.toContain("Respuesta vieja.");
-    expect(hilo().textContent).toContain("Segunda apertura.");
-    expect(cuerpos().at(-1)).toEqual({});
   });
 
+  it("al confirmar borra en el servidor, vacía el hilo y Lux vuelve a abrir", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: { borrados: 3 } }), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Apertura de cero."));
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: LUX_EMPEZAR_DE_CERO_ACCION }));
+    });
+    await alAbrir();
+
+    const borrar = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
+    expect(borrar?.[0]).toBe("/api/pacientes/p1/lux");
+    expect(hilo().textContent).not.toContain("Pregunta vieja");
+    expect(hilo().textContent).not.toContain("Respuesta vieja.");
+    expect(hilo().textContent).toContain("Apertura de cero.");
+    expect(cuerpos().at(-1)).toEqual({});
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("si no se pudo borrar, lo dice y la charla queda como estaba", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: "x" }), { status: 500 }));
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: LUX_EMPEZAR_DE_CERO_ACCION }));
+    });
+    expect(screen.getByRole("alert").textContent).toBe(LUX_NO_SE_BORRO);
+    expect(hilo().textContent).toContain("Respuesta vieja.");
+  });
+
+  it("con la confirmación abierta no se envía nada: una respuesta en vuelo no se cruza con el borrado", async () => {
+    await conCharla();
+    fireEvent.click(boton());
+    const llamadas = fetchMock.mock.calls.length;
+    escribirYEnviar("Una pregunta en el medio");
+    expect(fetchMock.mock.calls.length).toBe(llamadas);
+    expect((screen.getByRole("button", { name: LUX_ENVIAR }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("mientras Lux responde no se puede empezar de cero", async () => {
+    fetchMock.mockReturnValueOnce(new Promise<Response>(() => {}));
+    montar();
+    await alAbrir();
+    expect((boton() as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("al salir de la paciente", () => {
   it("al cambiar de paciente no queda nada de la anterior", async () => {
     fetchMock.mockResolvedValueOnce(respuestaEntera("Ana viene bien."));
     const { rerender } = montar("p1", "Ana");

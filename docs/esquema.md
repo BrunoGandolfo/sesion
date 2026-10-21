@@ -78,6 +78,12 @@ abrir.
 | `hilos` | Una fila por paciente: cuál es la versión vigente y el contador de versiones. | Es la fila que se bloquea para asignar números: no hay dos escritores que creen la misma versión. Mover el puntero es un solo `UPDATE`. | Editar, aceptar. | Recorrido, brief, la nota siguiente (solo la vigente). |
 | `hilo_versiones` | Cada escritura es una fila nueva, nunca se edita: número de versión, sobre qué versión se escribió, actor (`profesional` / `ia`), estado (`aplicada` / `propuesta` / `desactualizada` / `rechazada`), **todo el contenido en un solo blob cifrado** (hipótesis, resumen, objetivos, intervenciones, temas, riesgos y la lista de cambios de la IA), qué sesión la motivó, versión del prompt y modelo, quién la creó, quién y cuándo la resolvió, de qué propuesta nació si fue "editar y aceptar". Índice en la base: **a lo sumo una propuesta abierta por paciente**. | La IA solo propone; la profesional acepta, edita y acepta, o rechaza (y rechazar cierra el tema para esa sesión). Nada de lo que ella escribió se pierde. Reemplaza a `paciente_contexto_clinico` y sus tres columnas JSON en claro. | Editar, proponer (resultado de `integrar_contexto`), aceptar, rechazar, restaurar. | Recorrido, historial, brief, la Llamada A (solo la vigente). |
 
+### Lux (la conversación sobre una paciente)
+
+| Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
+|---|---|---|---|---|
+| `conversaciones_lux` | Un turno por fila: organización, paciente, usuaria, `rol` (`profesional` / `lux`), **el texto cifrado** (`contenido_encrypted`: la pregunta, o la respuesta tal como llegó a la pantalla, con citas y líneas de estado), `interrumpida` (la respuesta se cortó y se guardó lo que llegó) y fecha. Índice (`paciente_id`, `creado_en`). Cascada con la paciente; archivarla la conserva. | Que Lux recuerde la conversación entre visitas: la pantalla la muestra y el modelo la recibe como historial (los últimos turnos). Migración `20261021140000_conversaciones_lux` (`docs/contrato-lux.md`). | La ruta de Lux al cerrar cada respuesta; "Empezar de cero" la borra entera (`lux.borrar_conversacion`). | La pestaña Lux de la ficha y el caso de uso de Lux. |
+
 ### Auditoría
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
@@ -241,7 +247,8 @@ que aparezca el lector, con una migración aditiva.
   `transcripcion_encrypted` → `transcripcion`, `nota_ia_encrypted` → `notaIa`,
   `datos_encrypted` → `datos`, `feedback_encrypted` → `feedback`,
   `nota_final_encrypted` → `notaFinal`, `notas_edicion_encrypted` →
-  `notasEdicion`; `hilo_versiones.contenido_encrypted` → `contenido`. AAD de
+  `notasEdicion`; `hilo_versiones.contenido_encrypted` → `contenido`;
+  `conversaciones_lux.contenido_encrypted` → `contenido`. AAD de
   cada blob: `<tabla>:<columna>:<id de la fila>` (para `hilos` no hay
   columnas cifradas).
 - **Key del archivo en R2:** `<organization_id>/<sesion_id>/0`. El payload de

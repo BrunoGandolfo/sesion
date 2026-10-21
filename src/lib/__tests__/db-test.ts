@@ -297,6 +297,7 @@ export const TABLAS = [
   "hot_words",
   "hilos",
   "hilo_versiones",
+  "conversaciones_lux",
   "eventos_auditoria",
 ] as const;
 

@@ -2,12 +2,13 @@
 // primero) y responder una pregunta con su historial.
 //
 // Los dos hacen lo mismo en el mismo orden: clave del proveedor (503 si
-// falta, antes de leer nada), material del paciente (404 si no es de la
-// organización; las transcripciones que entran quedan auditadas), llamada al
-// modelo con el bucle de herramientas, y devuelven el flujo. El rastro de la
-// conversación (lux.abrir / lux.pregunta) lo escribe registrarConversacionLux
-// cuando el stream terminó, porque recién ahí hay tokens: métricas y nada
-// más. El texto de la conversación no se escribe en ninguna tabla ni log.
+// falta, antes de leer nada), historial, material del paciente (404 si no es
+// de la organización; las transcripciones que entran quedan auditadas),
+// llamada al modelo con el bucle de herramientas, y devuelven el flujo. El
+// rastro de la conversación (lux.abrir / lux.pregunta) lo escribe
+// registrarConversacionLux cuando el stream terminó, porque recién ahí hay
+// tokens: métricas y nada más. El texto de la conversación no va a ningún
+// log ni a la auditoría: sólo a conversaciones_lux, cifrado (memoria.ts).
 //
 // Runtime nodejs: el prompt se lee del disco (src/lib/lux/prompt.ts).
 
@@ -27,12 +28,13 @@ import {
 } from "@/lib/lux/contrato";
 import { systemPromptLux } from "@/lib/lux/prompt";
 
-import { registrarAuditoria, type ClienteAuditoria } from "../../auditoria";
+import { registrarAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
 import { ErrorProveedorAsistente } from "../ayuda/reservar-cupo";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
-import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
+import { armarMaterial, fechaLegible, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
+import { cargarConversacion, guardarTurnos, type TurnoGuardadoLux } from "./memoria";
 
 /** Incluye el razonamiento del modelo (thinking adaptativo de Haiku 5.5). */
 export const MAX_TOKENS_LUX = 8000;
@@ -58,6 +60,15 @@ export class ErrorProveedorLux extends ErrorProveedorAsistente {
 export const PEDIDO_APERTURA =
   "(La profesional abrió la conversación sobre este paciente, sin pregunta. Hablá vos primero, como dice <apertura>.)";
 
+/** El pedido de la apertura de hoy. Si ya hablaron (`ultimaVez`: el último
+ *  turno guardado), lleva cuándo, para que el saludo empiece por ahí (la
+ *  línea de <apertura> en system-prompt.md). La fecha va acá y no en el
+ *  prompt: el prompt es parte del prefijo cacheado y no lleva nada variable. */
+export function pedidoApertura(ultimaVez: Date | null): string {
+  if (!ultimaVez) return PEDIDO_APERTURA;
+  return `(La profesional volvió a abrir la conversación sobre este paciente, sin pregunta. La última vez que hablaron fue el ${fechaLegible(ultimaVez)}: arriba está esa conversación. Hablá vos primero, como dice <apertura>, empezando por en qué quedaron y cuándo.)`;
+}
+
 interface ConversarBase {
   prisma: ClienteLux;
   organizationId: string;
@@ -73,6 +84,8 @@ interface ConversarBase {
 
 export interface ConversacionLux {
   flujo: FlujoConversacion;
+  /** Cuántos turnos anteriores llegaron al modelo. */
+  turnosHistorial: number;
   material: Pick<MaterialLux, "notas" | "notasOmitidas" | "transcripciones" | "transcripcionesOmitidas" | "releidas" | "releidasOmitidas">;
   ejecutor: EjecutorLux;
 }
@@ -83,23 +96,47 @@ export async function autorizarPaciente(prisma: ClienteLux, organizationId: stri
   await requirePaciente(prisma, pacienteId, organizationId);
 }
 
+/** La apertura: lo guardado de esta paciente (conversaciones_lux) y, al
+ *  final, el pedido de que Lux hable primero. */
 export function abrirConversacion(input: ConversarBase): Promise<ConversacionLux> {
-  return conversar(input, [{ role: "user", content: PEDIDO_APERTURA }]);
+  return conversar(input, async () => {
+    const guardados = await cargarConversacion(input.prisma, input);
+    // "Cuándo hablaron": la última pregunta de ella, no el último saludo.
+    const ultimaPregunta = guardados.findLast((t) => t.rol === "profesional");
+    return { historial: paraElModelo(guardados), ultimo: pedidoApertura(ultimaPregunta?.creadoEn ?? null) };
+  });
 }
 
-export function responder(input: ConversarBase & { pregunta: string; historial?: TurnoHistorialLux[] }): Promise<ConversacionLux> {
+/** Una pregunta: el historial sale de lo guardado de esta paciente, no del
+ *  navegador. */
+export function responder(input: ConversarBase & { pregunta: string }): Promise<ConversacionLux> {
   const pregunta = input.pregunta.trim();
   if (pregunta === "") throw new ApiError("Escribí una pregunta.", 400);
   if (pregunta.length > LARGO_MAX_PREGUNTA_LUX) throw new ApiError(MENSAJE_PREGUNTA_LARGA_LUX, 400);
-  const vistos = historialQueViaja(input.historial ?? []);
-  // El modelo lee sus turnos sin la marca del servidor; el material, con ella.
-  const previos: MessageParam[] = vistos.map((t) => ({
-    role: t.rol === "usuaria" ? "user" : "assistant", content: sinMarcasLux(t.texto),
+  return conversar(input, async () => ({
+    historial: paraElModelo(await cargarConversacion(input.prisma, input)), ultimo: pregunta,
   }));
-  if (previos[0]?.role === "assistant") previos.unshift({ role: "user", content: PEDIDO_APERTURA });
-  // Las transcripciones que Lux leyó en los turnos que el modelo va a ver
-  // vuelven al material.
-  return conversar(input, [...previos, { role: "user", content: pregunta }], leidasEnHistorial(vistos));
+}
+
+/** Lo guardado, como lo lee el modelo: una respuesta cortada no viaja (la
+ *  pregunta que la pidió, sí). */
+export function paraElModelo(turnos: readonly TurnoGuardadoLux[]): TurnoHistorialLux[] {
+  return turnos
+    .filter((t) => !(t.rol === "lux" && t.interrumpida))
+    .map((t) => ({ rol: t.rol === "profesional" ? "usuaria" : "asistente", texto: t.texto }));
+}
+
+/** Los mensajes del historial. El modelo lee sus turnos sin la marca del
+ *  servidor (el material, con ella). Un turno de Lux que no responde a una
+ *  pregunta (una apertura) va precedido del pedido de apertura: la API
+ *  exige que el primer mensaje sea de la usuaria. */
+function mensajesDe(vistos: readonly TurnoHistorialLux[]): MessageParam[] {
+  const mensajes: MessageParam[] = [];
+  for (const t of vistos) {
+    if (t.rol === "asistente" && mensajes.at(-1)?.role !== "user") mensajes.push({ role: "user", content: PEDIDO_APERTURA });
+    mensajes.push({ role: t.rol === "usuaria" ? "user" : "assistant", content: sinMarcasLux(t.texto) });
+  }
+  return mensajes;
 }
 
 /** Los turnos que llegan al modelo: los últimos MAX_TURNOS_HISTORIAL no
@@ -115,17 +152,28 @@ export function historialQueViaja(historial: readonly TurnoHistorialLux[]): Turn
   return turnos;
 }
 
-async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasEnConversacion: string[] = []): Promise<ConversacionLux> {
+async function conversar(
+  input: ConversarBase,
+  /** El historial y el último mensaje de ella (la pregunta o el pedido de
+   *  apertura). Se lee después de verificar la clave. */
+  preparar: () => Promise<{ historial: TurnoHistorialLux[]; ultimo: string }>,
+): Promise<ConversacionLux> {
   const apiKey = input.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.warn("[lux] ANTHROPIC_API_KEY no configurada");
     throw new ApiError(MENSAJE_SIN_CLAVE_LUX, 503);
   }
 
-  // 404 si el paciente no es de la organización. Errores de base: 500.
+  const { historial, ultimo } = await preparar();
+  const vistos = historialQueViaja(historial);
+  const mensajes: MessageParam[] = [...mensajesDe(vistos), { role: "user", content: ultimo }];
+
+  // 404 si el paciente no es de la organización. Errores de base: 500. Las
+  // transcripciones que Lux leyó en los turnos que el modelo va a ver
+  // vuelven al material.
   const material = await armarMaterial({
     prisma: input.prisma, organizationId: input.organizationId,
-    pacienteId: input.pacienteId, usuarioId: input.usuarioId, leidasEnConversacion,
+    pacienteId: input.pacienteId, usuarioId: input.usuarioId, leidasEnConversacion: leidasEnHistorial(vistos),
   });
   const ejecutor = ejecutorLux({
     prisma: input.prisma, organizationId: input.organizationId, pacienteId: input.pacienteId,
@@ -151,6 +199,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
     );
     return {
       flujo,
+      turnosHistorial: vistos.length,
       material: {
         notas: material.notas,
         notasOmitidas: material.notasOmitidas,
@@ -169,7 +218,7 @@ async function conversar(input: ConversarBase, mensajes: MessageParam[], leidasE
 }
 
 export interface ConversacionRespondida {
-  prisma: ClienteAuditoria;
+  prisma: ClienteLux;
   organizationId: string;
   userId: string;
   pacienteId: string;
@@ -182,15 +231,40 @@ export interface ConversacionRespondida {
   /** true: se canceló o se cortó a mitad. Los tokens son los de las rondas
    *  que alcanzaron a cerrar, y el largo, el de lo que llegó a la pantalla. */
   interrumpida?: boolean;
+  /** Lo que se guarda en conversaciones_lux: la pregunta (ausente en la
+   *  apertura) y lo que llegó a la pantalla. */
+  pregunta?: { texto: string; en: Date };
+  respuesta: { texto: string; en: Date };
+  /** Cuándo llegó el pedido (GuardarTurnosInput.pedidoEn). */
+  pedidoEn?: Date;
 }
 
 /**
- * El rastro de una respuesta de Lux: qué paciente, cuánto material, cuántos
- * tokens, qué herramientas. NUNCA el texto de la pregunta ni el de la
+ * El cierre de una respuesta de Lux: guarda el intercambio en
+ * conversaciones_lux (memoria.ts; una respuesta cortada, con interrumpida) y
+ * deja el rastro: qué paciente, cuánto material, cuántos tokens, qué
+ * herramientas. El rastro NUNCA lleva el texto de la pregunta ni el de la
  * respuesta, ni los argumentos de las herramientas (las lecturas ya quedaron
- * como sesion.ver_transcripcion). Informativo, como el de Lupita.
+ * como sesion.ver_transcripcion). Informativo, como el de Lupita. Si guardar
+ * falla, el rastro igual queda y el error sigue (la ruta corta el stream).
  */
 export async function registrarConversacionLux(p: ConversacionRespondida): Promise<void> {
+  let falloAlGuardar: unknown = null;
+  try {
+    await guardarTurnos(p.prisma, {
+      organizationId: p.organizationId, pacienteId: p.pacienteId, userId: p.userId,
+      pregunta: p.pregunta, respuesta: { ...p.respuesta, interrumpida: p.interrumpida ?? false }, pedidoEn: p.pedidoEn,
+    });
+  } catch (error) {
+    // Sin el error: no se arriesga a que lleve texto.
+    console.error("[lux] no se pudo guardar la conversación");
+    falloAlGuardar = error;
+  }
+  await registrarRastro(p);
+  if (falloAlGuardar) throw falloAlGuardar;
+}
+
+async function registrarRastro(p: ConversacionRespondida): Promise<void> {
   const llamadas = p.resultado.llamadas;
   await registrarAuditoria(p.prisma, {
     organizationId: p.organizationId,

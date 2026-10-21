@@ -60,6 +60,7 @@ import { hashTermino } from "@/lib/hot-words";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 import {
   cifrarConsentimiento,
+  cifrarConversacionLux,
   cifrarHiloVersion,
   cifrarHotWord,
 } from "@/lib/prisma-encryption";
@@ -362,6 +363,15 @@ async function crearOrg(): Promise<Org> {
       actor: "ia",
       estado: "propuesta",
       ...cifrarHiloVersion(propuestaId, { contenido: contenidoHilo() }),
+    },
+  });
+
+  // La conversación guardada con Lux: GET la muestra, DELETE la borra, POST
+  // la lee. La ajena no la ve ni la toca (retrato).
+  await db.conversacionLux.create({
+    data: {
+      ...cifrarConversacionLux(randomUUID(), { contenido: "Lo que hablamos de Ana" }),
+      organizationId: org.id, pacienteId: paciente.id, userId: user.id, rol: "lux",
     },
   });
 
@@ -695,7 +705,7 @@ const EXTRA_VACIO: Extra = { ticketDuena: "", sesionAjena: "", ticketAjena: "" }
 
 /** Lo que una organización ajena no puede cambiar. */
 async function retrato(org: Org) {
-  const [paciente, turno, sesion, hotWord, versiones, consentimientos, turnosDeLaPaciente, vocabularioDeLaPaciente, sesionesDelTurno] = await Promise.all([
+  const [paciente, turno, sesion, hotWord, versiones, consentimientos, turnosDeLaPaciente, vocabularioDeLaPaciente, sesionesDelTurno, conversacionLux] = await Promise.all([
     prismaRaw.paciente.findUnique({ where: { id: org.pacienteId } }),
     prismaRaw.turno.findUnique({ where: { id: org.turnoId } }),
     prismaRaw.sesionClinica.findUnique({ where: { id: org.sesionId } }),
@@ -710,6 +720,10 @@ async function retrato(org: Org) {
     prismaRaw.turno.count({ where: { pacienteId: org.pacienteId } }),
     prismaRaw.hotWord.count({ where: { pacienteId: org.pacienteId } }),
     prismaRaw.sesionClinica.count({ where: { turnoId: org.turnoId } }),
+    // La conversación con Lux de la paciente: ni borrada ni agregada.
+    prismaRaw.conversacionLux.findMany({
+      where: { pacienteId: org.pacienteId }, select: { id: true, organizationId: true }, orderBy: { id: "asc" },
+    }),
   ]);
-  return { paciente, turno, sesion, hotWord, versiones, consentimientos, turnosDeLaPaciente, vocabularioDeLaPaciente, sesionesDelTurno };
+  return { paciente, turno, sesion, hotWord, versiones, consentimientos, turnosDeLaPaciente, vocabularioDeLaPaciente, sesionesDelTurno, conversacionLux };
 }

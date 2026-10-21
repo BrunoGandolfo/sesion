@@ -3,8 +3,10 @@
 // La pestaña Lux de la ficha: el chat con el personaje que leyó el Recorrido,
 // las notas y las últimas sesiones de esta paciente.
 //
-// Arriba, fija, la línea que dice qué lee Lux y que no guarda la charla.
-// Después el hilo: el saludo de la app (no viaja a Lux), las respuestas en
+// Arriba, fija, la línea que dice qué lee Lux y que recuerda la charla.
+// Después el hilo: lo que quedó
+// guardado de otras veces, con un separador por día ("Conversación del
+// DD/MM"); el saludo de la app (no viaja a Lux); las respuestas en
 // streaming, con sus citas plegadas y sus "mirando la transcripción…" en
 // gris. Abajo el campo: Enter envía, Shift+Enter baja de línea.
 //
@@ -14,9 +16,11 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Confirmar } from "@/components/ui/confirmar";
 import { Lux, TAMANOS_LUX } from "@/components/ui/lux";
 import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
 
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
 import { LARGO_MAX_PREGUNTA_LUX, type RespuestaLux } from "@/lib/lux/contrato";
 
 import { PuntosLeyendo } from "./puntos-leyendo";
@@ -28,15 +32,21 @@ import {
   LUX_DIJO_ELLA,
   LUX_EN_QUE_ME_BASO,
   LUX_ENVIAR,
-  LUX_NUEVA,
+  LUX_BORRANDO,
+  LUX_EMPEZAR_DE_CERO,
+  LUX_EMPEZAR_DE_CERO_ACCION,
+  LUX_EMPEZAR_DE_CERO_MENSAJE,
+  LUX_EMPEZAR_DE_CERO_TITULO,
   LUX_LEYENDO,
   LUX_PLACEHOLDER,
+  LUX_RESPUESTA_CORTADA,
   LUX_SALIR,
+  luxConversacionDel,
   luxMirando,
   luxQueLee,
   luxSaludo,
 } from "@/lib/glosario";
-import { useConversacionLux } from "./use-conversacion-lux";
+import { useConversacionLux, type TurnoLux } from "./use-conversacion-lux";
 
 interface ConversacionLuxProps {
   pacienteId: string;
@@ -57,7 +67,7 @@ function MensajeLux({ children }: { children: React.ReactNode }) {
   );
 }
 
-function RespuestaDeLux({ respuesta }: { respuesta: RespuestaLux }) {
+function RespuestaDeLux({ respuesta, cortada }: { respuesta: RespuestaLux; cortada: boolean }) {
   return (
     <>
       {respuesta.bloques.map((bloque, i) =>
@@ -84,13 +94,48 @@ function RespuestaDeLux({ respuesta }: { respuesta: RespuestaLux }) {
           </p>
         </details>
       ) : null}
+      {cortada ? (
+        <p className="ml-7 font-sans text-[12px] leading-[1.5] text-ink-500">{LUX_RESPUESTA_CORTADA}</p>
+      ) : null}
     </>
   );
 }
 
+/** "DD/MM" del día de Montevideo. */
+function diaDe(instante: Date): string {
+  const [, mes, dia] = fechaInputMvd(instante).split("-");
+  return `${dia}/${mes}`;
+}
+
+function Separador({ dia }: { dia: string }) {
+  const texto = luxConversacionDel(dia);
+  return (
+    <div role="separator" aria-label={texto} className="flex min-w-0 items-center gap-3">
+      <span aria-hidden="true" className="h-px flex-1 bg-[color:var(--border-subtle)]" />
+      <span className="shrink-0 font-sans text-[12px] leading-[1.5] text-ink-500">{texto}</span>
+      <span aria-hidden="true" className="h-px flex-1 bg-[color:var(--border-subtle)]" />
+    </div>
+  );
+}
+
+function Turno({ turno, respuesta }: { turno: TurnoLux; respuesta: RespuestaLux | null }) {
+  if (turno.rol === "asistente") {
+    return <RespuestaDeLux respuesta={respuesta as RespuestaLux} cortada={turno.interrumpida} />;
+  }
+  return (
+    <p className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-md bg-sage-50 px-3.5 py-2.5 font-sans text-[14px] leading-[1.5] text-ink-900">
+      <span className="sr-only">{LUX_DIJO_ELLA} </span>
+      {turno.texto}
+    </p>
+  );
+}
+
 export function ConversacionLux({ pacienteId, paciente, profesional }: ConversacionLuxProps) {
-  const { turnos, borrador, setBorrador, esperando, error, preguntar, nueva } =
+  const { turnos, guardados, borrador, setBorrador, esperando, error, preguntar, empezarDeCero } =
     useConversacionLux(pacienteId);
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [borrando, setBorrando] = React.useState(false);
+  const [abierta] = React.useState(() => new Date());
   const hilo = React.useRef<HTMLDivElement>(null);
   useProtegerTrabajo(borrador.trim() !== "", LUX_SALIR);
 
@@ -98,6 +143,13 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
     turno.rol === "asistente" ? leerRespuesta(turno.crudo, turno.completo) : null,
   );
   const ultima = respuestas.at(-1);
+  // Lo guardado, el saludo de hoy y lo nuevo, en ese orden. `i` es el índice
+  // en `turnos`; null, el saludo.
+  const items: { i: number | null; en: Date }[] = [
+    ...turnos.slice(0, guardados).map((t, i) => ({ i, en: t.en })),
+    { i: null, en: abierta },
+    ...turnos.slice(guardados).map((t, i) => ({ i: guardados + i, en: t.en })),
+  ];
   const leyendo = esperando && !(ultima && ultima.bloques.length > 0);
 
   React.useEffect(() => {
@@ -105,15 +157,19 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
     if (nodo) nodo.scrollTop = nodo.scrollHeight;
   }, [turnos, esperando, error]);
 
+  // Con "Empezar de cero" abierto no sale ninguna pregunta: su respuesta
+  // podría cerrar (y guardarse) después del borrado.
+  const sinEnviar = confirmando || borrando;
+
   function alEnviar(evento: React.FormEvent) {
     evento.preventDefault();
-    preguntar(borrador);
+    if (!sinEnviar) preguntar(borrador);
   }
 
   function alTeclear(evento: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (evento.key !== "Enter" || evento.shiftKey || evento.nativeEvent.isComposing) return;
     evento.preventDefault();
-    preguntar(borrador);
+    if (!sinEnviar) preguntar(borrador);
   }
 
   return (
@@ -124,10 +180,34 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
         <p className="min-w-0 font-sans text-[12px] leading-[1.5] text-ink-500">
           {luxQueLee(paciente)}
         </p>
-        <Button variant="secondary" size="sm" onClick={nueva} className="self-start shrink-0">
-          {LUX_NUEVA}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setConfirmando(true)}
+          disabled={esperando || borrando || confirmando}
+          className="self-start shrink-0"
+        >
+          {LUX_EMPEZAR_DE_CERO}
         </Button>
       </div>
+
+      {confirmando ? (
+        <Confirmar
+          titulo={LUX_EMPEZAR_DE_CERO_TITULO}
+          mensaje={LUX_EMPEZAR_DE_CERO_MENSAJE}
+          accion={LUX_EMPEZAR_DE_CERO_ACCION}
+          variante="peligro"
+          enviando={borrando}
+          enviandoLabel={LUX_BORRANDO}
+          onCancelar={() => setConfirmando(false)}
+          onConfirmar={async () => {
+            setBorrando(true);
+            await empezarDeCero();
+            setBorrando(false);
+            setConfirmando(false);
+          }}
+        />
+      ) : null}
 
       <div
         ref={hilo}
@@ -136,23 +216,22 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
         aria-live="polite"
         className="flex max-h-[60vh] min-h-[240px] min-w-0 flex-col gap-4 overflow-y-auto overflow-x-hidden rounded-lg border border-[color:var(--border-subtle)] bg-white p-4"
       >
-        <MensajeLux>
-          <p className={TEXTO_LUX}>{luxSaludo(profesional, paciente)}</p>
-        </MensajeLux>
-
-        {turnos.map((turno, i) =>
-          turno.rol === "usuaria" ? (
-            <p
-              key={i}
-              className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-md bg-sage-50 px-3.5 py-2.5 font-sans text-[14px] leading-[1.5] text-ink-900"
-            >
-              <span className="sr-only">{LUX_DIJO_ELLA} </span>
-              {turno.texto}
-            </p>
-          ) : (
-            <RespuestaDeLux key={i} respuesta={respuestas[i] as RespuestaLux} />
-          ),
-        )}
+        {items.map((item, n) => {
+          const dia = diaDe(item.en);
+          const separador = guardados > 0 && (n === 0 || diaDe(items[n - 1].en) !== dia);
+          return (
+            <React.Fragment key={item.i ?? "saludo"}>
+              {separador ? <Separador dia={dia} /> : null}
+              {item.i === null ? (
+                <MensajeLux>
+                  <p className={TEXTO_LUX}>{luxSaludo(profesional, paciente)}</p>
+                </MensajeLux>
+              ) : (
+                <Turno turno={turnos[item.i]} respuesta={respuestas[item.i]} />
+              )}
+            </React.Fragment>
+          );
+        })}
 
         {leyendo ? (
           <p role="status" className="font-sans text-[13px] leading-[1.5] text-ink-500">
@@ -183,7 +262,7 @@ export function ConversacionLux({ pacienteId, paciente, profesional }: Conversac
           autoComplete="off"
           className="min-h-[44px] min-w-0 flex-1 resize-none rounded-sm border border-[color:var(--border-control)] bg-cream-50 px-[14px] py-[10px] font-sans text-[15px] leading-[1.4] text-ink-900 outline-none transition-colors duration-[var(--duration-fast)] placeholder:text-ink-500 focus:border-sage-500 focus:bg-white focus:ring-[3px] focus:ring-sage-500/20"
         />
-        <Button type="submit" disabled={esperando || borrador.trim() === ""} className="shrink-0">
+        <Button type="submit" disabled={esperando || sinEnviar || borrador.trim() === ""} className="shrink-0">
           {LUX_ENVIAR}
         </Button>
       </form>

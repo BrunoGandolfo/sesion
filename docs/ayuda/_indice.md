@@ -19,7 +19,7 @@ también lo que la app **no** hace.
 - [13 · Preguntas frecuentes](13-preguntas-frecuentes.md) — 31 preguntas con respuesta corta y el documento donde está el detalle.
 - [14 · Cuando algo falla](14-cuando-algo-falla.md) — no puedo entrar, la grabación se cortó, la nota no llega, no puedo aprobar, el SMS no salió.
 - [15 · Finanzas](15-finanzas.md) — lo que entró y lo que trabajaste, los períodos, las barras, lo que te deben hoy y qué no calcula.
-- [16 · Lux](16-lux.md) — repasar a una paciente conversando: qué lee, "Ver en qué me baso", que no guarda la charla, a dónde viaja y el tope del día.
+- [16 · Lux](16-lux.md) — repasar a una paciente conversando: qué lee, "Ver en qué me baso", que recuerda la charla (cifrada) y "Empezar de cero", a dónde viaja y el tope del día.
 
 <!-- fuentes:
 docs/ayuda/00-que-es-sesion.md

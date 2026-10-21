@@ -1,7 +1,8 @@
 # Contrato de Lux
 
 **Estado:** integrado en la rama `lux` (servidor de `lux-api` y pantalla de
-`lux-ui`, 9 de octubre de 2026).
+`lux-ui`, 9 de octubre de 2026). La memoria por paciente, en la rama
+`lux-memoria` (21 de octubre de 2026).
 **El contrato en código:** [`src/lib/lux/contrato.ts`](../src/lib/lux/contrato.ts)
 —el esquema de la petición (de ahí sale su tipo), los máximos, el status del
 tope, las marcas del stream y los tipos de la respuesta—. Lo importan la ruta,
@@ -9,18 +10,21 @@ el caso de uso y la pantalla; si este documento y ese archivo dicen cosas
 distintas, manda el archivo.
 **Servidor:** `src/app/api/pacientes/[id]/lux/route.ts`,
 `src/app/api/_lib/casos-uso/lux/` (`conversar.ts`, `material.ts`,
-`herramientas.ts`, `topes.ts`), el bucle en `src/lib/anthropic-mensajes.ts`
+`herramientas.ts`, `memoria.ts`, `topes.ts`), el bucle en `src/lib/anthropic-mensajes.ts`
 (`crearConversacionConHerramientas`) y el prompt en
 [`src/lib/lux/system-prompt.md`](../src/lib/lux/system-prompt.md).
 **Pantalla:** la pestaña Lux de la ficha
 (`src/app/(dashboard)/pacientes/[id]/_components/lux-tab.tsx`),
 `src/components/lux/` (conversación, hook del stream y lectura de la
 respuesta) y el sol (`src/components/ui/lux.tsx`). Los textos, en
-`src/lib/glosario.ts` (sección Lux). La ayuda: `docs/ayuda/16-lux.md`.
+`src/lib/glosario.ts` (sección Lux y bloque `lux-memoria`). La ayuda:
+`docs/ayuda/16-lux.md`.
 
 **Consentimiento:** decisión del dueño (9 de octubre de 2026): la
 autorización vigente (2.8) cubre a Lux. No hay versión nueva ni guardia
-propia; lo dice `docs/ayuda/12-camino-del-audio-y-privacidad.md`.
+propia; lo dice `docs/ayuda/12-camino-del-audio-y-privacidad.md`. Esa
+decisión se tomó con Lux sin memoria; que también cubra guardar la
+conversación está abierto (ver el reporte de `lux-memoria`).
 
 ## Qué es
 
@@ -31,8 +35,11 @@ material clínico de ese paciente, habla primero al abrir (dice lo que ve),
 conversa en prosa, no diagnostica, no prescribe, ancla cada observación en el
 material y cita de dónde sale.
 
-Las charlas **no se guardan**: ni la pregunta ni la respuesta se escriben en
-ninguna tabla ni en ningún log. La pantalla manda el historial en cada pedido.
+Lux **recuerda la conversación por paciente** entre visitas (rama
+`lux-memoria`, 21 de octubre de 2026): cada pregunta y cada respuesta se
+guardan, cifradas, en `conversaciones_lux` (ver "La memoria"). El historial
+que lee el modelo sale de ahí; la pantalla no lo manda. Ningún log ni la
+auditoría llevan texto.
 
 Modelo: `MODELO_LUX = "claude-haiku-5-5"` (Lupita usa el mismo desde esta rama,
 `MODELO_AYUDA`). Thinking adaptativo por defecto del modelo (esfuerzo `medium`),
@@ -40,39 +47,42 @@ Modelo: `MODELO_LUX = "claude-haiku-5-5"` (Lupita usa el mismo desde esta rama,
 
 ## La ruta
 
-`POST /api/pacientes/[id]/lux` — sesión de usuaria (cookie), runtime nodejs,
-`maxDuration` 60 s.
+`/api/pacientes/[id]/lux` — sesión de usuaria (cookie), runtime nodejs,
+`maxDuration` 60 s. Tres verbos; en los tres, una paciente de otra
+organización (o inexistente) da 404 sin leer ni tocar nada.
 
-Cuerpo (JSON, estricto: un campo de más es 400):
+- `GET`: la conversación guardada, `{ data: { turnos } }` sin caché. Cada
+  turno: `{ rol: "profesional" | "lux", texto, interrumpida, creadoEn }`
+  (`TurnoConversacionLux`), los últimos `MAX_TURNOS_HISTORIAL_LUX` (12), del
+  más viejo al más nuevo. El texto de Lux viene como se guardó: `<citas>` y
+  líneas de estado con su marca.
+- `DELETE`: "Empezar de cero" (ver "La memoria"). `{ data: { borrados } }`.
+- `POST`: conversar. Cuerpo (JSON, estricto: un campo de más es 400):
 
 ```json
-{
-  "pregunta": "¿Qué ves en cómo cierra las sesiones?",
-  "historial": [
-    { "rol": "asistente", "texto": "<citas>…</citas>\nLo que veo…" },
-    { "rol": "usuaria", "texto": "…" }
-  ]
-}
+{ "pregunta": "¿Qué ves en cómo cierra las sesiones?" }
 ```
 
 - `pregunta`: opcional, 1 a 2000 caracteres (tras recortar espacios).
-- `historial`: opcional, hasta 12 turnos. Los de `usuaria`, 1 a 2000 caracteres
-  (el tope de una pregunta); los de `asistente`, 1 a 100.000
-  (`LARGO_MAX_TURNO_LUX`), para que una respuesta larga de Lux, con sus citas
-  y avisos, pueda volver entera. La pantalla manda cada turno de Lux tal como
-  ella lo vio: prosa, `<citas>` y líneas de estado (con su marca, ver abajo);
-  esas líneas son las que traen la transcripción de vuelta al
-  material (punto 5 de "El material"). El caso de uso
-  usa los últimos `MAX_TURNOS_HISTORIAL` (6, como Lupita) y, si entre todos
-  pasan `LARGO_MAX_HISTORIAL_LUX` (120.000 caracteres), descarta los más
-  viejos hasta que entren: cada pregunta reenvía el historial, y sin ese tope
-  seis respuestas largas pesan más que el material. Un turno que se cae no
-  trae de vuelta lo que leyó. El modelo lee sus turnos sin la marca. Si el
-  primero que queda es de Lux, se antepone el pedido de apertura (la API
+- **Apertura:** cuerpo `{}` (sin `pregunta`). Lux habla primero. Un cuerpo
+  vacío no es JSON y da 400.
+- `historial` ya no existe: un cuerpo con él es 400. El historial lo lee el
+  caso de uso de `conversaciones_lux` (los últimos 12 turnos de la paciente):
+  de esos usa los últimos `MAX_TURNOS_HISTORIAL` (6, como Lupita) y, si entre
+  todos pasan `LARGO_MAX_HISTORIAL_LUX` (120.000 caracteres), descarta los
+  más viejos hasta que entren: cada pregunta reenvía el historial, y sin ese
+  tope seis respuestas largas pesan más que el material. Una respuesta
+  cortada (`interrumpida`) no viaja; la pregunta que la pidió, sí. Las líneas
+  de estado de los turnos de Lux son las que escribió el servidor, con su
+  marca: son las que traen la transcripción de vuelta al material (punto 5 de
+  "El material"); un turno que se cae no trae de vuelta lo que leyó. El
+  modelo lee sus turnos sin la marca. Cada turno de Lux que no responde a una
+  pregunta (una apertura vieja) va precedido del pedido de apertura (la API
   exige que el primer mensaje sea de la usuaria).
-- **Apertura:** cuerpo `{}` (sin `pregunta` y sin `historial`). Lux habla
-  primero. Un cuerpo vacío no es JSON y da 400.
-- `historial` sin `pregunta`: 400.
+- En la apertura, si hay conversación guardada, el pedido de apertura lleva
+  la fecha del último turno (`pedidoApertura`) y el prompt pide que la
+  primera línea diga en qué quedaron y cuándo. La fecha va en el pedido y no
+  en el prompt, que es parte del prefijo cacheado.
 
 Orden: validar → autorizar (el paciente es de la organización de la sesión, si
 no 404) → reservar cupo de Lux (429 si no queda) → caso de uso → stream. El
@@ -110,6 +120,48 @@ diario (`MENSAJE_TOPE_LUX`), 502 el proveedor falló al empezar
 rastro de una transcripción). Un fallo del proveedor se loguea con su status
 y un código (`ErrorAnthropic.codigo`: el tipo de error de la API, `timeout`,
 `sin_texto`…), nunca con su mensaje, que puede traer el cuerpo del pedido.
+
+## La memoria
+
+Tabla `conversaciones_lux` (migración `20261021140000_conversaciones_lux`,
+aditiva; reversión `scripts/mantenimiento/revertir-conversaciones-lux.sql`,
+`docs/operaciones.md`). Un turno por fila: `organization_id`, `paciente_id`,
+`user_id`, `rol` (`profesional` | `lux`), `contenido_encrypted` (el texto,
+cifrado con el llavero de las notas, `CLAVES_CIFRADO`; AAD
+`conversaciones_lux:contenido_encrypted:<id>`; la rotación del llavero lo
+recifra como al resto), `interrumpida`, `creado_en`. Índice (`paciente_id`,
+`creado_en`). Código: `src/app/api/_lib/casos-uso/lux/memoria.ts`.
+
+- **Quién escribe:** sólo el servidor, cuando la respuesta terminó
+  (`registrarConversacionLux`, llamada por la ruta): la pregunta (con la
+  hora en que llegó el pedido; sin `pregunta` en la apertura) y lo que llegó
+  a la pantalla. Si se cortó o se canceló, lo que llegó con `interrumpida`;
+  si no llegó nada de Lux, no se guarda nada (la pregunta vuelve al campo).
+  Una marca de estado escrita por ella en su pregunta se borra al guardar: la
+  marca es del servidor. Si guardar falla, el rastro igual queda y el stream
+  termina en error.
+- **Empezar de cero gana a lo que estaba en vuelo:** guardar recibe la hora
+  en que llegó el pedido y no guarda nada si después hubo un
+  `lux.borrar_conversacion` de esa paciente. Guardar y borrar bloquean la
+  fila de la paciente y se serializan. La pantalla no envía preguntas con la
+  confirmación abierta.
+- **Aperturas sin contestar:** cada visita guarda la apertura de Lux. Al
+  cargar se descartan las que ella no contestó (la siguiente no es una
+  pregunta suya), salvo la última; si no, abrir la pestaña varias veces
+  llenaba el historial de saludos. "La última vez que hablaron" del pedido de
+  apertura es su última pregunta; sin ninguna pregunta, no hubo conversación.
+- **Quién lee:** la pantalla (GET, al abrir: lo muestra con un separador
+  "Conversación del DD/MM" por día, y marca la respuesta cortada) y el caso
+  de uso (el historial del modelo).
+- **Aislamiento:** toda consulta va por organización **y** paciente; guardar
+  exige que la paciente sea de la organización. El guardián
+  `multi-tenant.test.ts` siembra una conversación por organización y la
+  incluye en su retrato.
+- **Vida:** se borra en cascada con la paciente (y con la usuaria);
+  archivarla la conserva. **Empezar de cero** (`DELETE`) borra la de esa
+  paciente entera, con su rastro `lux.borrar_conversacion` en la misma
+  transacción.
+- Ningún log lleva texto de la conversación.
 
 ## El cupo
 
@@ -234,8 +286,10 @@ No hay escritura, SQL, ids libres ni organización elegible por el modelo.
   notas y transcripciones tenía el material (`notas` son las que entraron;
   `notasOmitidas`, las viejas que quedaron afuera), cuántas volvieron por haberse
   leído en la charla (`releidas`, `releidasOmitidas`), largos de pregunta y respuesta,
-  turnos de historial. **Nunca** el texto de la pregunta, de la respuesta ni
-  los argumentos de las herramientas.
+  turnos de historial que llegaron al modelo. **Nunca** el texto de la
+  pregunta, de la respuesta ni los argumentos de las herramientas.
+- `lux.borrar_conversacion` (entidad `paciente`): "Empezar de cero", con
+  `detalle: { turnos }` (cuántos se borraron). Sin texto.
 
 ## Límites
 
@@ -262,7 +316,11 @@ nada variable adentro. `next.config.ts` lo declara en
 | Lista cerrada: id fuera de lista, argumentos de más, herramienta inventada | `lux-bucle.test.ts` |
 | Material: orden, dos transcripciones, recorte por tamaño, propuesta marcada, escape | `lux-integracion.test.ts` |
 | Lo leído en la charla vuelve al material: auditado, fecha inexistente ignorada, sin duplicar, omitida por tamaño | `lux-integracion.test.ts`, `lux-leidas.test.ts` |
-| El historial lleva el turno entero de Lux (citas y estados) | `src/components/lux/__tests__/conversacion-lux.test.tsx` |
+| La memoria: guardar, cargar los últimos N, cifrado real (ENC2, AAD de la fila), cascada, archivar conserva, aislamiento entre organizaciones y pacientes, empezar de cero auditado | `lux-memoria-integracion.test.ts` |
+| La apertura manda lo guardado (sin marca, sin cortadas); el saludo con y sin conversación previa | `lux-memoria-integracion.test.ts`, `lux-saludo.test.ts`, `lux-prompt.test.ts` |
+| Cada turno se guarda al cerrar: entero, cortado (interrumpida), cancelado; el log sin texto; `historial` en el cuerpo es 400; GET y DELETE | `lux-ruta.test.ts` |
+| La pantalla: lo guardado con separadores por día, la respuesta cortada, sólo la pregunta en el POST, "Empezar de cero" con confirmación | `src/components/lux/__tests__/conversacion-lux.test.tsx` |
+| GET, POST y DELETE desde otra organización: 404 sin tocar la conversación | `multi-tenant.test.ts` |
 | Autorización (paciente ajeno 404 sin leer), 503 sin clave | `lux-integracion.test.ts` |
 | Auditoría: `sesion.ver_transcripcion` via lux, `lux.abrir`, `lux.pregunta`, sin texto | `lux-integracion.test.ts`, `lux-ruta.test.ts` |
 | Cupo por ámbito: 60 de Lux no consumen los 40 de Lupita | `cupo-ayuda-integracion.test.ts` |

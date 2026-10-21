@@ -9,12 +9,13 @@ import { z } from "zod";
 
 // ─── La petición ────────────────────────────────────────────────────────────
 
-/** Largo máximo de una pregunta (y de cada turno de ella en el historial). */
+/** Largo máximo de una pregunta (y de cada turno de ella guardado). */
 export const LARGO_MAX_PREGUNTA_LUX = 2000;
 
-/** Largo máximo de un turno de Lux que vuelve en el historial. Una respuesta
- *  puede ser larga (varias rondas con sus citas y avisos) y tiene que poder
- *  volver entera: es un tope contra un cuerpo enorme, no contra Lux. */
+/** Largo máximo de un turno de Lux guardado (memoria.ts recorta ahí). Una
+ *  respuesta puede ser larga (varias rondas con sus citas y avisos) y tiene
+ *  que poder volver entera: es un tope contra un texto enorme, no contra
+ *  Lux. */
 export const LARGO_MAX_TURNO_LUX = 100_000;
 
 /** Tope de todo el historial que viaja al modelo, sumando los turnos que
@@ -24,27 +25,46 @@ export const LARGO_MAX_TURNO_LUX = 100_000;
  *  material. Cabe al menos un turno de Lux del largo máximo. */
 export const LARGO_MAX_HISTORIAL_LUX = 120_000;
 
-/** Cuántos turnos de historial acepta la ruta. El caso de uso usa los
- *  últimos MAX_TURNOS_HISTORIAL (6, como Lupita). */
+/** Cuántos turnos guardados carga el servidor de conversaciones_lux: los
+ *  que ve la pantalla al abrir. Al modelo van los últimos
+ *  MAX_TURNOS_HISTORIAL (6, como Lupita) de esos. */
 export const MAX_TURNOS_HISTORIAL_LUX = 12;
 
-export const turnoHistorialLuxSchema = z.discriminatedUnion("rol", [
-  z.object({ rol: z.literal("usuaria"), texto: z.string().trim().min(1).max(LARGO_MAX_PREGUNTA_LUX) }),
-  z.object({ rol: z.literal("asistente"), texto: z.string().trim().min(1).max(LARGO_MAX_TURNO_LUX) }),
-]);
+/** Un turno del historial, como lo lee el caso de uso. Sale de
+ *  conversaciones_lux, nunca del navegador. */
+export interface TurnoHistorialLux {
+  rol: "usuaria" | "asistente";
+  texto: string;
+}
 
-/** Sin `pregunta` ni `historial` (`{}`): la apertura, Lux habla primero.
- *  Con historial hace falta una pregunta. */
+/** Sin `pregunta` (`{}`): la apertura, Lux habla primero. El historial no
+ *  viaja: lo lee el servidor de lo guardado; un `historial` en el cuerpo es
+ *  un campo de más (400). */
 export const peticionLuxSchema = z.object({
   pregunta: z.string().trim().min(1).max(LARGO_MAX_PREGUNTA_LUX).optional(),
-  historial: z.array(turnoHistorialLuxSchema).max(MAX_TURNOS_HISTORIAL_LUX).optional(),
-}).strict().refine(
-  (cuerpo) => cuerpo.pregunta !== undefined || !cuerpo.historial?.length,
-  { message: "Con historial hace falta una pregunta", path: ["pregunta"] },
-);
+}).strict();
 
-export type TurnoHistorialLux = z.infer<typeof turnoHistorialLuxSchema>;
 export type PeticionLux = z.infer<typeof peticionLuxSchema>;
+
+// ─── La conversación guardada (GET) ─────────────────────────────────────────
+
+/** Un turno guardado en conversaciones_lux, como lo recibe la pantalla. El
+ *  texto de Lux viene tal como llegó: <citas> y líneas de estado con la
+ *  marca, que puso el servidor. */
+export interface TurnoConversacionLux {
+  rol: "profesional" | "lux";
+  texto: string;
+  /** La respuesta se cortó: es lo que llegó. */
+  interrumpida: boolean;
+  /** ISO 8601. */
+  creadoEn: string;
+}
+
+/** GET /api/pacientes/[id]/lux: los últimos MAX_TURNOS_HISTORIAL_LUX turnos,
+ *  del más viejo al más nuevo. */
+export interface ConversacionGuardadaLux {
+  turnos: TurnoConversacionLux[];
+}
 
 /** El status con que la ruta dice que se terminó el cupo del día. */
 export const STATUS_TOPE_LUX = 429;
