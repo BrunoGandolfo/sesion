@@ -1,9 +1,11 @@
-// POST /api/pacientes/[id]/recordar-cobro — pide el aviso de cobro por SMS.
+// POST /api/pacientes/[id]/recordar-cobro — pide el aviso de cobro por el
+// canal de Tu consultorio.
 //
 // Lo aprieta ella desde Cobros, una paciente por vez. Acá sólo auth y la
-// respuesta: la regla (cuánto debe, si tiene teléfono, si pidió la baja) vive
-// en _lib/casos-uso/recordar-cobro.ts. No se habla con Twilio en esta
-// request: se crea el envío y lo manda el cron de despacho.
+// respuesta: la regla (cuánto debe, si tiene teléfono, si pidió la baja, qué
+// canal) vive en _lib/casos-uso/recordar-cobro.ts. No se habla con Twilio en
+// esta request: por SMS se crea el envío y lo manda el cron de despacho; por
+// WhatsApp se anota que ella abrió el enlace y se devuelve el enlace.
 
 import { db } from "@/lib/db";
 

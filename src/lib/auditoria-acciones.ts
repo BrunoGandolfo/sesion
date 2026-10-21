@@ -73,6 +73,10 @@ export const ACCIONES = {
   },
   cobro: {
     recordatorio: "cobro.recordatorio",
+    /** Con el canal WhatsApp, abrió el enlace del aviso de cobro
+     *  (casos-uso/recordar-cobro.ts). Abrió, no "mandó", como
+     *  recordatorio.whatsapp_abierto. */
+    whatsappAbierto: "cobro.whatsapp_abierto",
   },
   recordatorio: {
     /** La profesional abrió el enlace de WhatsApp del recordatorio de un

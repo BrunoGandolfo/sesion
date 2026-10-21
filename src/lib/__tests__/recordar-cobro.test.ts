@@ -22,15 +22,23 @@ import { claveDeCobro } from "@/app/api/_lib/casos-uso/envios-del-turno";
 import {
   recordarCobro,
   ultimoAvisoPorPaciente,
+  type RecordarCobroResultado,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
 import { textoDeCobro } from "@/app/api/_lib/casos-uso/texto-de-cobro";
 import { deudaDePaciente } from "@/app/api/_lib/domain";
 import { TEMPLATE_COBRO_DEFAULT } from "@/lib/deudas";
+import { enlaceWhatsapp } from "@/lib/whatsapp";
 import { ApiError } from "@/app/api/_lib/responses";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 import { MOTIVO_PACIENTE_DADA_DE_BAJA } from "@/lib/glosario";
+
+/** Con canal `sms` (el default) el resultado es el del SMS. */
+function porSms(r: RecordarCobroResultado) {
+  if (r.canal !== "sms") throw new Error("se esperaba el SMS");
+  return r;
+}
 
 let prismaRaw!: PrismaClient;
 let db!: ClienteCifrado;
@@ -106,13 +114,13 @@ describe("recordarCobro", () => {
     await crearImpago(base, 40);
     await crearImpago(base, 12);
 
-    const resultado = await recordarCobro({
+    const resultado = porSms(await recordarCobro({
       prisma: db,
       organizationId: base.orgId,
       pacienteId: base.pacienteId,
       usuarioId: "user-1",
       ahora: AHORA,
-    });
+    }));
 
     expect(resultado).toMatchObject({
       creado: true,
@@ -162,7 +170,7 @@ describe("recordarCobro", () => {
         organizationId: base.orgId,
         pacienteId: base.pacienteId,
         ahora: AHORA,
-      });
+      }).then(porSms);
 
     const primero = await pedir();
     const segundo = await pedir();
@@ -363,5 +371,148 @@ describe("textoDeCobro (el texto del SMS de cobro)", () => {
     expect(await textoDeCobro(db, { organizationId: base.orgId, pacienteId: base.pacienteId, ahora: AHORA })).toBe(
       "Lucía Fernández: $ 1.200",
     );
+  });
+});
+
+describe("con WhatsApp desde mi teléfono", () => {
+  async function conCanal(base: Base, canal: "sms" | "whatsapp" | "ambos") {
+    await prismaRaw.configuracion.update({ where: { organizationId: base.orgId }, data: { canalRecordatorio: canal } });
+  }
+  const avisosDe = (organizationId: string) =>
+    prismaRaw.avisoWhatsapp.findMany({ where: { organizationId }, orderBy: { abiertoEn: "asc" } });
+  const pedir = (base: Base, ahora = AHORA) =>
+    recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: base.pacienteId, usuarioId: "user-1", ahora });
+
+  it("no programa SMS: devuelve el enlace con el texto de la plantilla y anota el aviso de cobro", async () => {
+    const base = await crearBase();
+    await conCanal(base, "whatsapp");
+    await crearImpago(base, 40);
+    await crearImpago(base, 12);
+    const masViejo = await prismaRaw.turno.findFirstOrThrow({ where: { pacienteId: base.pacienteId }, orderBy: { fecha: "asc" } });
+
+    const resultado = await pedir(base);
+
+    const texto = await textoDeCobro(db, { organizationId: base.orgId, pacienteId: base.pacienteId, ahora: AHORA });
+    expect(resultado).toEqual({
+      canal: "whatsapp",
+      enlace: enlaceWhatsapp(TELEFONO, texto!),
+      avisadoEn: AHORA.toISOString(),
+      sesiones: 2,
+      monto: 2 * TARIFA,
+    });
+    expect(await enviosDe(base.pacienteId)).toHaveLength(0);
+    const avisos = await avisosDe(base.orgId);
+    expect(avisos).toHaveLength(1);
+    // El aviso cuelga del turno impago más viejo: la deuda que se avisó.
+    expect(avisos[0]).toMatchObject({ tipo: "cobro", turnoId: masViejo.id, fechaTurno: masViejo.fecha, abiertoEn: AHORA, usuarioId: "user-1" });
+
+    const eventos = await eventosDe(base.orgId);
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]).toMatchObject({
+      accion: ACCIONES.cobro.whatsappAbierto,
+      actorId: "user-1",
+      entidad: "paciente",
+      entidadId: base.pacienteId,
+      detalle: { canal: "whatsapp", avisoId: avisos[0].id, sesiones: 2, monto: 2 * TARIFA },
+    });
+    expect(JSON.stringify(eventos[0])).not.toContain(TELEFONO);
+    expect(JSON.stringify(eventos[0])).not.toContain("Lucía");
+  });
+
+  it("cada apertura es una fila más (abrió dos veces) y no rompe nada", async () => {
+    const base = await crearBase();
+    await conCanal(base, "whatsapp");
+    await crearImpago(base, 5);
+    await pedir(base);
+    await pedir(base, new Date(AHORA.getTime() + 60_000));
+    expect(await avisosDe(base.orgId)).toHaveLength(2);
+  });
+
+  it("los mismos cortes que el SMS: sin deuda, sin teléfono o dado de baja, 409 y nada anotado", async () => {
+    const sinDeuda = await crearBase();
+    await conCanal(sinDeuda, "whatsapp");
+    await expect(pedir(sinDeuda)).rejects.toMatchObject({ status: 409 });
+
+    const sinTelefono = await crearBase();
+    await conCanal(sinTelefono, "whatsapp");
+    await crearImpago(sinTelefono, 5);
+    await prismaRaw.paciente.update({ where: { id: sinTelefono.pacienteId }, data: { telefono: "" } });
+    await expect(pedir(sinTelefono)).rejects.toMatchObject({ status: 409 });
+
+    const deBaja = await crearBase();
+    await conCanal(deBaja, "whatsapp");
+    await crearImpago(deBaja, 5);
+    await prismaRaw.bajaSms.create({ data: { telefono: TELEFONO, motivo: "respuesta_baja" } });
+    await expect(pedir(deBaja)).rejects.toMatchObject({ status: 409, message: MOTIVO_PACIENTE_DADA_DE_BAJA });
+
+    expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
+    expect(await prismaRaw.eventoAuditoria.count()).toBe(0);
+  });
+
+  it("una paciente de otra organización no existe: 404 y nada anotado", async () => {
+    const base = await crearBase();
+    const otra = await crearBase();
+    await conCanal(base, "whatsapp");
+    await crearImpago(otra, 5);
+    await expect(
+      recordarCobro({ prisma: db, organizationId: base.orgId, pacienteId: otra.pacienteId, usuarioId: "u", ahora: AHORA }),
+    ).rejects.toBeInstanceOf(ApiError);
+    expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
+  });
+
+  it("con SMS y con Ambos sale por SMS como siempre", async () => {
+    for (const canal of ["sms", "ambos"] as const) {
+      const base = await crearBase();
+      await conCanal(base, canal);
+      await crearImpago(base, 5);
+      const resultado = await pedir(base);
+      expect(resultado).toMatchObject({ canal: "sms", creado: true });
+      expect(await enviosDe(base.pacienteId)).toHaveLength(1);
+      expect(await avisosDe(base.orgId)).toHaveLength(0);
+    }
+  });
+
+  it("Avisado hace N días: cuenta la última apertura de WhatsApp igual que un SMS que salió", async () => {
+    const base = await crearBase();
+    const otra = await crearBase();
+    await conCanal(base, "whatsapp");
+    await conCanal(otra, "whatsapp");
+    await crearImpago(base, 5);
+    await crearImpago(otra, 5);
+    const haceTres = new Date(AHORA.getTime() - 3 * 86_400_000);
+    await pedir(base, haceTres);
+    await pedir(otra, AHORA);
+    // Un SMS de cobro más viejo no tapa la apertura más nueva…
+    await prismaRaw.envioSms.create({
+      data: {
+        organizationId: base.orgId, claveIdempotencia: `k:${randomUUID()}`, motivo: "recordatorio_cobro", estado: "entregado",
+        pacienteId: base.pacienteId, destino: TELEFONO, programadoEn: AHORA, aceptadoEn: new Date(haceTres.getTime() - 86_400_000), sid: "SMx",
+      },
+    });
+    let mapa = await ultimoAvisoPorPaciente(db, base.orgId, [base.pacienteId, otra.pacienteId]);
+    expect(mapa.get(base.pacienteId)).toBe(haceTres.toISOString());
+    // …ni una apertura de otra organización cuenta.
+    expect(mapa.has(otra.pacienteId)).toBe(false);
+
+    // …y uno más nuevo sí manda.
+    const ayer = new Date(AHORA.getTime() - 86_400_000);
+    await prismaRaw.envioSms.create({
+      data: {
+        organizationId: base.orgId, claveIdempotencia: `k:${randomUUID()}`, motivo: "recordatorio_cobro", estado: "aceptado",
+        pacienteId: base.pacienteId, destino: TELEFONO, programadoEn: AHORA, aceptadoEn: ayer, sid: "SMy",
+      },
+    });
+    mapa = await ultimoAvisoPorPaciente(db, base.orgId, [base.pacienteId]);
+    expect(mapa.get(base.pacienteId)).toBe(ayer.toISOString());
+  });
+
+  it("el WhatsApp del recordatorio de turno no es un aviso de cobro", async () => {
+    const base = await crearBase();
+    await crearImpago(base, 5);
+    const turno = await prismaRaw.turno.findFirstOrThrow({ where: { pacienteId: base.pacienteId } });
+    await prismaRaw.avisoWhatsapp.create({
+      data: { organizationId: base.orgId, turnoId: turno.id, tipo: "recordatorio", fechaTurno: turno.fecha, abiertoEn: AHORA, usuarioId: "u" },
+    });
+    expect((await ultimoAvisoPorPaciente(db, base.orgId, [base.pacienteId])).size).toBe(0);
   });
 });

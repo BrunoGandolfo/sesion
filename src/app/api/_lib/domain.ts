@@ -682,10 +682,10 @@ export function deudaPorAntiguedad(
 export type DeudoresApiItem = DeudaPaciente & {
   telefono: string;
   minutosTotales: number;
-  /** Cuándo salió el último aviso de cobro que se envió, ISO; null si nunca
-   *  se le avisó. Sale de los eventos de auditoría (ver
-   *  casos-uso/recordar-cobro.ts): es lo que la pantalla muestra como
-   *  "Avisado hace N días" para no mandar el mismo SMS dos veces. */
+  /** Cuándo salió el último aviso de cobro (SMS aceptado o WhatsApp
+   *  abierto), ISO; null si nunca se le avisó. Sale de
+   *  ultimoAvisoPorPaciente (casos-uso/recordar-cobro.ts): es lo que la
+   *  pantalla muestra como "Avisado hace N días" para no avisar dos veces. */
   ultimoAvisoEn: string | null;
 };
 

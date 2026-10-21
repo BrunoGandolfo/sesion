@@ -557,6 +557,9 @@ model EnvioSms {
 /// Un solo valor hoy; el enum existe para el aviso de cobro que viene después.
 enum TipoAvisoWhatsapp {
   recordatorio
+  /// El aviso de cobro abierto desde Cobros (recordar-cobro.ts). Cuelga del
+  /// turno impago más viejo de la paciente: la deuda que se avisó.
+  cobro
 
   @@map("tipo_aviso_whatsapp")
 }

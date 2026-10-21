@@ -301,7 +301,9 @@ export async function reprogramarEnvioDelTurno(
     // Con el WhatsApp asistido el aviso pudo haber salido del teléfono de
     // ella: abrir el enlace de otra fecha cuenta igual que un SMS aceptado.
     (await tx.avisoWhatsapp.findFirst({
-      where: { turnoId, fechaTurno: { not: fechaTurno } },
+      // Sólo el recordatorio: un aviso de cobro cuelga de un turno, pero no
+      // le dijo a la paciente ningún horario.
+      where: { turnoId, tipo: "recordatorio", fechaTurno: { not: fechaTurno } },
       select: { id: true },
     }));
 

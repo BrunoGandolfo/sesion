@@ -134,6 +134,7 @@ export const CONTRATO_POR_MIGRACION = {
   "20261009120000_cupos_por_ambito": "nuevo-sin-cobro", // cupos_ayuda.ambito (Lux)
   "20261019120000_turnos_pago_coherente": "nuevo-sin-cobro", // CHECK
   "20261021120000_plantilla_cobro": CONTRATO_ACTUAL, // configuraciones.template_cobro
+  "20261021130000_aviso_whatsapp_cobro": CONTRATO_ACTUAL, // valor de enum
 };
 
 /**
