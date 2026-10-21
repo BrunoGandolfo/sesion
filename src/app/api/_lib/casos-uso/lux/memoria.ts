@@ -45,31 +45,47 @@ export interface TurnoGuardadoLux {
   creadoEn: Date;
 }
 
-/** Cuántas filas se leen por cada turno que se devuelve: deja lugar para
- *  descartar aperturas sin contestar. */
+/** Cuántas filas se leen por página, por cada turno que se devuelve: deja
+ *  lugar para descartar aperturas sin contestar. */
 const VENTANA_POR_TURNO = 4;
 
 /** Los últimos `limite` turnos de la paciente, del más viejo al más nuevo.
  *  Cada visita guarda una apertura: las que ella no contestó (la siguiente
  *  no es una pregunta suya) se descartan, salvo la última, que es la que
  *  tiene delante. Sin esto, abrir la pestaña seis veces dejaba al modelo un
- *  historial de puros saludos. */
+ *  historial de puros saludos. Se lee hacia atrás por páginas hasta juntar
+ *  `limite` turnos o llegar al principio: una ventana fija, después de
+ *  muchas visitas sin preguntar, traía sólo aperturas y perdía la charla. */
 export async function cargarConversacion(
   prisma: ClienteMemoriaLux,
   { organizationId, pacienteId }: IdentidadLux,
   limite: number = MAX_TURNOS_HISTORIAL_LUX,
 ): Promise<TurnoGuardadoLux[]> {
-  const filas = await prisma.conversacionLux.findMany({
-    where: { organizationId, pacienteId },
-    select: { id: true, rol: true, contenido: true, interrumpida: true, creadoEn: true },
-    orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
-    take: limite * VENTANA_POR_TURNO,
-  });
-  const turnos = filas.reverse().map((f) => ({ rol: f.rol, texto: f.contenido, interrumpida: f.interrumpida, creadoEn: f.creadoEn }));
+  const pagina = limite * VENTANA_POR_TURNO;
+  const leidas: TurnoGuardadoLux[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const filas = await prisma.conversacionLux.findMany({
+      where: { organizationId, pacienteId },
+      select: { id: true, rol: true, contenido: true, interrumpida: true, creadoEn: true },
+      orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
+      take: pagina,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    leidas.unshift(...filas.reverse().map((f) => ({ rol: f.rol, texto: f.contenido, interrumpida: f.interrumpida, creadoEn: f.creadoEn })));
+    const conservados = sinAperturasSueltas(leidas);
+    // Más de `limite`: el primero leído, que no ve a su anterior, queda
+    // fuera del corte; los que se devuelven tienen sus dos vecinos.
+    if (filas.length < pagina || conservados.length > limite) return conservados.slice(-limite);
+    cursor = filas[0].id;
+  }
+}
+
+function sinAperturasSueltas(turnos: TurnoGuardadoLux[]): TurnoGuardadoLux[] {
   return turnos.filter((t, i) => {
     const esApertura = t.rol === "lux" && turnos[i - 1]?.rol !== "profesional";
     return !esApertura || i === turnos.length - 1 || turnos[i + 1].rol === "profesional";
-  }).slice(-limite);
+  });
 }
 
 /** GET de la pantalla: 404 si la paciente no es de la organización; si no,

@@ -313,6 +313,15 @@ describe("revisión: carreras y aperturas", () => {
     ...identidad(org), userId: org.userId, respuesta: { texto, en, interrumpida: false },
   });
 
+  it("muchas visitas sin preguntar no tapan la charla: se lee hacia atrás hasta encontrarla", async () => {
+    const org = await consultorio();
+    await intercambio(org, 0);
+    // Con límite 3 la página es de 12 filas: 20 aperturas ocupan más de una.
+    for (let i = 0; i < 20; i++) await apertura(org, `SALUDO_${i}`, new Date(Date.UTC(2026, 9, 10, 9, i)));
+    const turnos = await cargarConversacion(db(), identidad(org), 3);
+    expect(turnos.map((t) => t.texto)).toEqual(["PREGUNTA_0", "RESPUESTA_0", "SALUDO_19"]);
+  });
+
   it("una respuesta pedida antes de 'Empezar de cero' que cierra después no revive la conversación", async () => {
     const org = await consultorio();
     const pedidoEn = new Date(Date.now() - 5000);
