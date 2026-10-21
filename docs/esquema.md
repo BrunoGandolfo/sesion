@@ -28,23 +28,21 @@ abrir.
 | `password_resets` | Enlaces de recuperación: hash del token, vencimiento, cuándo se usó y **cuándo salió el correo**. | Un enlace cuyo correo no salió no vale y no gasta el cupo. | Recuperar (crea y marca enviado), restablecer (marca usado), cron (purga). | Restablecer, el cupo de tres por hora. |
 | `invitaciones` | Hash del token, vencimiento, cuándo se usó, quién la creó. | Que una colega abra su propio consultorio. Tope de vigentes por creadora (constante en el código, marcada temporal). Crear y usar dejan evento de auditoría. | Crear invitación, registro. | Registro, el tope. |
 | `cupos_ayuda` | Por profesional, día y `ambito` (`ayuda` = Lupita, 40 por día; `lux` = Lux, 60 por día): cuántas llamadas hizo a cada asistente. Los dos topes no se comen entre sí. | Reservar el cupo **antes** de llamar al proveedor, en una sola operación atómica. Cortar una respuesta cuenta igual. | Las rutas de ayuda y de Lux (`/api/pacientes/[id]/lux`). | Las mismas. |
-| `configuraciones` | Nombre profesional, dirección, WhatsApp, tarifa por defecto, cuándo sale el recordatorio (`dia_anterior` / `dos_dias_antes` / `misma_manana`), plantilla del SMS, orientación teórica (`cbt_mi` / `gestalt`), por dónde sale el recordatorio (`canal_recordatorio`: `sms` / `whatsapp` / `ambos`, default `sms`). | Una fila por organización. Sale `horasAnticipacion` (nadie la leía). | Pantalla de configuración. | Recordatorios, SMS, el worker (orientación). |
+| `configuraciones` | Nombre profesional, dirección, WhatsApp, tarifa por defecto, cuándo sale el recordatorio (`dia_anterior` / `dos_dias_antes` / `misma_manana`), plantillas del recordatorio y del aviso de cobro, orientación teórica (`cbt_mi` / `gestalt`). | Una fila por organización. Sale `horasAnticipacion` (nadie la leía); sale `canal_recordatorio` (`20261021150000_borrar_sms`: sólo WhatsApp). | Pantalla de configuración. | Recordatorios por WhatsApp, Cobros, el worker (orientación). |
 
 ### Pacientes y agenda
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `pacientes` | Nombre, apellido, teléfono (E.164), tarifa, activa o no, y **notas privadas cifradas**. Sale `email` (nadie lo usaba). | La ficha. Nombre, apellido y teléfono quedan en claro a propósito: la búsqueda, el orden de la agenda y el envío de SMS en lote los necesitan en SQL. | Alta y edición de paciente. | Agenda, ficha, cobros, SMS, worker (id solamente). |
+| `pacientes` | Nombre, apellido, teléfono (E.164), tarifa, activa o no, y **notas privadas cifradas**. Sale `email` (nadie lo usaba). | La ficha. Nombre, apellido y teléfono quedan en claro a propósito: la búsqueda y el orden de la agenda los necesitan en SQL. | Alta y edición de paciente. | Agenda, ficha, cobros, avisos por WhatsApp, worker (id solamente). |
 | `series_turno` | Un turno recurrente: paciente, frecuencia (`semanal` / `quincenal`) y la hora ancla (el instante del primer turno). | Generar los turnos de la serie y "cancelar el resto". Nada más: no hay `generadaHasta`, `activa` ni avisos. | Crear turno con repetición. | Cancelar el resto de la serie. |
 | `turnos` | Fecha, duración (minutos: 30/45/50/60/90/120, restricción en la base), modalidad, estado (`programado` / `realizado` / `cancelado` / `ausente`), tarifa cobrada, estado y método de pago, fecha de pago, **nota privada cifrada**, y a qué serie pertenece (opcional). | La agenda y los cobros. Cada turno es independiente aunque venga de una serie. | Agenda, cobros, la generación de series, "cancelar el resto". | Agenda, Hoy, cobros, deudores, ficha, grabación. |
 
-### SMS
+### Avisos por WhatsApp
 
 | Tabla | Qué guarda | Para qué | Quién escribe | Quién lee |
 |---|---|---|---|---|
-| `envios_sms` | Cada SMS que la app decidió mandar: motivo (`recordatorio_turno` / `cambio_de_horario` / `recordatorio_cobro`), estado (ocho: `pendiente`, `enviando`, `aceptado`, `entregado`, `no_entregado`, `cancelado`, `fallido`, `desconocido`), paciente, turno, teléfono congelado, cuándo debía salir, próximo intento, intentos, el identificador que devuelve Twilio (`sid`), el código de error del proveedor, un motivo en palabras para la pantalla cuando no hay código, y cuántos segmentos cobró Twilio. Una **clave de idempotencia** única: dos pedidos con la misma clave son el mismo mensaje. **Nunca el texto** (decisión del dueño). | Reemplaza a `recordatorios`. "Aceptado" no es "llegó": la confirmación del operador escribe `entregado` o `no_entregado`. `desconocido` (se llamó a Twilio y no sabemos qué pasó) **nunca** se reenvía solo. Reprogramar un turno produce una clave nueva y un mensaje de cambio de horario. | Crear/mover/cancelar turno, el cron de despacho, el webhook de estado de Twilio, la conciliación. | Cron, pantallas de agenda y cobros, conteo mensual por consultorio. |
-| `avisos_whatsapp` | Una fila por cada vez que la profesional abrió el enlace de WhatsApp del recordatorio de un turno: organización, turno (FK `RESTRICT`), tipo (`recordatorio`; el enum `tipo_aviso_whatsapp` existe para el aviso de cobro que viene después), la fecha del turno que avisó (`fecha_turno`), cuándo lo abrió y quién (`usuario_id`, sin FK). Índice por (`turno_id`, `tipo`). **Ni texto ni teléfono.** | WhatsApp asistido: con `canal_recordatorio` en `whatsapp` o `ambos` la app prepara el mensaje y ella lo manda desde su teléfono. La app sabe que lo **abrió**, no que salió. "Ya avisado" = existe al menos una fila para la fecha vigente del turno; una de otra fecha hace que reprogramar mande un cambio de horario. | `POST /api/recordatorios/whatsapp/[turnoId]/abierto` (con su evento `recordatorio.whatsapp_abierto`). | `GET /api/recordatorios/whatsapp` (`avisadoEn`, la última). |
-| `bajas_sms` | Teléfonos que respondieron "BAJA" (o que Twilio marcó como dados de baja), con motivo. | Obligación legal: se consulta antes de **todo** envío. Es por número, no por consultorio: la baja es del teléfono. | El webhook de SMS entrantes; el código 21610 de Twilio; a mano. | Todo envío. |
+| `avisos_whatsapp` | Una fila por cada vez que la profesional abrió el enlace de WhatsApp del recordatorio de un turno: organización, turno (FK `RESTRICT`), tipo (`recordatorio` o `cobro`), la fecha del turno que avisó (`fecha_turno`), cuándo lo abrió y quién (`usuario_id`, sin FK). Índice por (`turno_id`, `tipo`). **Ni texto ni teléfono.** | WhatsApp asistido: la app prepara el mensaje y ella lo manda desde su teléfono. La app sabe que lo **abrió**, no que salió. "Ya avisado" = existe al menos una fila para la fecha vigente del turno; una de otra fecha hace que la lista de Hoy lo pida como cambio de horario. Desde `20261021150000_borrar_sms` es el único registro de avisos (`envios_sms` y `bajas_sms` se borraron). | `POST /api/recordatorios/whatsapp/[turnoId]/abierto` (con su evento `recordatorio.whatsapp_abierto`) y `POST /api/pacientes/[id]/recordar-cobro`. | `GET /api/recordatorios/whatsapp` y `GET /api/recordatorios/whatsapp/[turnoId]` (`avisadoEn`), Cobros (último aviso). |
 
 ### Consentimiento
 
@@ -92,7 +90,9 @@ abrir.
 
 ### Lo que ya no existe
 
-`recordatorios` (reemplazada por `envios_sms`), `paciente_contexto_clinico`
+`recordatorios` (reemplazada por `envios_sms`, que a su vez se borró con
+`bajas_sms` y `configuraciones.canal_recordatorio` en
+`20261021150000_borrar_sms`: Sesión sólo avisa por WhatsApp), `paciente_contexto_clinico`
 (por `hilos` + `hilo_versiones`), y estas columnas: `Configuracion.horasAnticipacion`,
 `Paciente.email`, `Paciente.notas` en claro, `Turno.notas` en claro,
 `Recordatorio.textoEnviado`, `Invitacion.email` y `organizationId`,
@@ -145,13 +145,11 @@ la Fase 1 que el esquema reconcilió; la historia completa está en Git.
 6. **Identidad y cifrado.** Sesiones en base, intentos aparte, columnas
    cifradas nuevas (notas de paciente y turno, texto y firma del consentimiento,
    término del vocabulario con su hash), y los borrados del 03.
-7. **SMS.** `envios_sms` con los ocho estados, clave de idempotencia, motivo,
-   `sid`, código del proveedor, segmentos, sin texto; más `bajas_sms`. Se borra
-   `recordatorios`. Desde `20261008120000_whatsapp_asistido`,
-   `configuraciones.canal_recordatorio` y `avisos_whatsapp`: con canal
-   `whatsapp` el cron cancela el recordatorio del turno al despacharlo, con
-   `motivo_no_envio` = "el recordatorio va por WhatsApp, no por SMS". Es texto
-   y no un enum, como los demás motivos, porque lo lee la pantalla tal cual.
+7. **Avisos.** Hubo SMS (`envios_sms`, `bajas_sms`) y un canal
+   (`configuraciones.canal_recordatorio`); desde `20261021150000_borrar_sms`
+   no: la app prepara el mensaje y ella lo manda por WhatsApp, y
+   `avisos_whatsapp` registra que lo abrió. Qué turnos se avisan hoy no se
+   guarda: se calcula desde los turnos (`correspondeAvisarHoy`).
 8. **Latido del worker.** `worker_estado` del 04. No hay tabla `latidos` ni
    ruta nueva; la ruta pública `/api/estado-worker` del 05 lee esta fila.
 9. **Cupo de Lupita.** `cupos_ayuda` del 04. Desde la migración
@@ -223,7 +221,6 @@ que aparezca el lector, con una migración aditiva.
 |---|---|---|
 | `User.passwordCambiadaEn` | 03 ("informativo") | Ninguna pantalla ni regla la lee. El evento de auditoría del cambio de contraseña ya deja la fecha. |
 | `Invitacion.usadaPor` | 03 | Sin lector. El evento `cuenta.invitacion_usada` registra quién la usó. |
-| `EnvioSms.plantillaVersion` | 05 ("para saber qué versión de plantilla se usó") | Sin lector. La plantilla vigente está en `configuraciones`. |
 | `HiloVersion.trabajoId` | 04 (trazabilidad) | Sin lector; el consumo del trabajo queda en `trabajos.uso` y la sesión origen ya está en la versión. |
 | Tabla `Latido` y una ruta POST `/api/latido` (no se crearon) | 05 | Resuelto por el dueño a favor de `worker_estado` (04). |
 | `AudioGrabacion`, `AudioParte`, manifiesto y hash, `consentimientoId` en el audio, `verificadoWorkerEn`, `revision`, `cierreId` | 01 | El dueño descartó el formato propio y el manifiesto. El consentimiento vigente se exige al iniciar y se audita; no se guarda como referencia en la sesión. |

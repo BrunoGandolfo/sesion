@@ -392,7 +392,7 @@ UNION ALL SELECT 'turnos', count(*) FROM turnos
 UNION ALL SELECT 'sesiones_clinicas', count(*) FROM sesiones_clinicas
 UNION ALL SELECT 'hilo_versiones', count(*) FROM hilo_versiones
 UNION ALL SELECT 'trabajos', count(*) FROM trabajos
-UNION ALL SELECT 'envios_sms', count(*) FROM envios_sms;
+UNION ALL SELECT 'avisos_whatsapp', count(*) FROM avisos_whatsapp;
 SELECT email, nombre, rol FROM usuarios;
 SELECT to_regclass('public.audio_segmentos') IS NULL AS sin_audio_segmentos;
 SELECT tgname FROM pg_trigger WHERE NOT tgisinternal
@@ -437,7 +437,7 @@ No cambiar todavía el secret `DATABASE_URL` de Backup: se cambia en §10.
 No rotar ni quitar llaveros. Antes de seguir, comprobar por **nombres**, en
 Vercel, las variables obligatorias de `.env.example` para el main que se va
 a publicar, en especial `CLAVES_CIFRADO`, `PROCESSING_SECRET`,
-`R2_PUBLIC_HOST`, correo, cron y Twilio. En Railway comprobar las de
+`R2_PUBLIC_HOST`, correo y cron. En Railway comprobar las de
 `processor/.env.example`; el worker usa la API, no una URL de Postgres.
 
 **Bien:** el próximo deploy de Vercel y Publicar apuntarán a la misma rama
@@ -615,7 +615,7 @@ conteos, resultado de limpieza R2, corrida Publicar, despliegues y verificacione
 sin URLs de base, contraseñas ni claves.
 
 **Límite de esta comprobación:** cuenta, esquema, configuración y latido no
-prueban micrófono, CORS, transcripción ni entrega de SMS. Las pruebas de teléfono
+prueban micrófono, CORS ni transcripción. Las pruebas de teléfono
 del SHA elegido son requisito previo (§0); cualquier comprobación posterior
 de esos proveedores se registra aparte, no se da por hecha.
 
@@ -743,4 +743,4 @@ de los bloques no se volvió a ejecutar. La prueba completa está en el historia
 (credenciales, listado paginado, permisos de borrado); cambio de variables y
 secretos, ejecución de Publicar, avance de release, despliegue y rollback de
 Vercel y Railway; el respaldo real de producción; teléfono y proveedores
-clínicos o de SMS. Esos pasos se documentan para ejecución del dueño.
+clínicos. Esos pasos se documentan para ejecución del dueño.

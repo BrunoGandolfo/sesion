@@ -1,7 +1,7 @@
 # Sesión
 
 Aplicación para una consulta de psicoterapia: agenda, pacientes, cobros por sesión,
-avisos por SMS, grabación de sesiones, documentación clínica asistida por
+recordatorios por WhatsApp, grabación de sesiones, documentación clínica asistida por
 IA y el Recorrido longitudinal de cada paciente.
 
 Este documento describe el código de main. No certifica lo que esté desplegado
@@ -13,7 +13,7 @@ en release ni la configuración de los proveedores.
 | --- | --- |
 | Hoy, Agenda y Cobros | Turnos, cobros, deudas y deshacer un cobro. Alta única, semanal o quincenal; la quincenal avanza 14 días y la serie cubre tres meses. La API informa fechas omitidas por choque. |
 | Pacientes | Ficha, notas privadas, vocabulario por paciente, turnos/pagos, sesiones, Recorrido y consentimiento. |
-| Configuración y cuenta | Perfil, tarifa, orientación, recordatorio SMS, vocabulario, invitaciones y sesiones revocables. Un campo inválido rechaza el lote de configuración completo. |
+| Configuración y cuenta | Perfil, tarifa, orientación, recordatorio por WhatsApp, vocabulario, invitaciones y sesiones revocables. Un campo inválido rechaza el lote de configuración completo. |
 | Lupita | Ayuda basada en los archivos de `docs/ayuda/`. El modelo declarado es claude-sonnet-5, en `src/lib/anthropic-mensajes.ts`. Consulta solo nombres, días, horas, duración y modalidad de los turnos de hoy, mañana o esta semana del propio consultorio. No consulta fichas, teléfonos, dinero ni historias clínicas, y no modifica datos. |
 | Grabación y subida | Un solo MediaRecorder con pausa y reanudación (`src/components/grabacion/GrabadorSesion.tsx`). Nunca se pega la salida de dos recorders. Lo grabado se mide por los chunks recibidos, no por el reloj (`src/lib/grabacion-captura.ts`). La app no cifra el audio: cada trozo se guarda como Blob en IndexedDB (`src/lib/grabacion-storage.ts`) y el archivo se sube tal cual con PUT prefirmado a R2 (`src/hooks/useGrabacionSesion.ts`: upload-url → PUT → upload-confirmar); viaja por TLS, R2 lo cifra en reposo y se borra al aprobar. El servidor cierra la sesión solo cuando R2 confirma el objeto y guarda en auditoría un diagnóstico del grabador sin contenido clínico. Lo que quedó en el teléfono tras un cierre se puede enviar, no continuar. Límite de 150 minutos de audio. |
 | Procesamiento clínico | API con estados explícitos, reclamos con ticket, checkpoint de transcripción y trabajos durables. El worker descarga el archivo, rechaza el que tenga más de una cabecera EBML (grabaciones pegadas), transcribe con AssemblyAI desde memoria, escribe nota y feedback, prepara propuestas del Recorrido y borra el transcript en AssemblyAI. |
@@ -46,7 +46,7 @@ en release ni la configuración de los proveedores.
 | Datos | Prisma 5.22, Postgres 17; esquema en `prisma/schema.prisma` y nueve migraciones en `prisma/migrations/`. |
 | Cifrado de columnas | AES-256-GCM, ENC2 y AAD por fila; extensión de `src/lib/prisma-encryption.ts`. |
 | Audio/proceso | Archivo sin cifrar por la app (R2 lo cifra en reposo), worker Python en Railway; AssemblyAI para transcripción y Anthropic para nota, feedback y propuestas del Recorrido. Contrato y límites en `docs/pipeline.md`. |
-| SMS/correo | Twilio y Resend. La persistencia del envío vive en envios_sms. Los recordatorios se dispersan de 0 a 14 minutos por turno (`src/lib/recordatorios-programacion.ts`). |
+| Avisos/correo | Los recordatorios y el aviso de cobro los manda ella por WhatsApp: la app arma el enlace y anota la apertura en `avisos_whatsapp` (`src/app/api/_lib/casos-uso/recordatorios-whatsapp.ts`). El correo sale por Resend. |
 | Crons | `vercel.json`: recordatorios cada 5 minutos, trabajos cada 10, salud cada hora y mantenimiento diario. |
 | Entrega y operación | GitHub Actions (CI, backup diario, ensayo mensual de restauración, latido varias veces por día, aviso de CI rojo y publicación manual), Vercel, Sentry y backups cifrados en R2; `docs/operaciones.md`. |
 
@@ -76,11 +76,11 @@ node --env-file=.env prisma/seed.ts
 npm run dev -- -p 3001
 ~~~
 
-El seed crea una organización, una cuenta, tres pacientes, ocho turnos, una serie
-y dos SMS pendientes. La cuenta y la contraseña de prueba están en
+El seed crea una organización, una cuenta, tres pacientes, ocho turnos y una
+serie. La cuenta y la contraseña de prueba están en
 `prisma/seed.ts`; el seed no crea contenido clínico. Sin credenciales de proveedores
 podés probar agenda y formularios. Para Lupita hace falta `ANTHROPIC_API_KEY`.
-Los tests locales no necesitan enviar SMS ni correos.
+Los tests locales no necesitan enviar correos.
 
 El catálogo es `.env.example`: distingue la app de los secretos de Actions
 y de la base de test. El worker tiene su propio `processor/.env.example`;
@@ -127,7 +127,7 @@ Para trabajar y entregar cambios, leé `docs/como-trabajamos.md` y `AGENTS.md`.
 - `docs/pipeline.md`: flujo clínico, del audio a la nota y el Recorrido.
 - `docs/esquema.md`: catálogo de tablas y columnas.
 - `docs/encryption.md`: columnas cifradas, formato y rotación.
-- `docs/operaciones.md`: publicación, variables, respaldos, incidentes, SMS y CSP.
+- `docs/operaciones.md`: publicación, variables, respaldos, incidentes, recordatorios por WhatsApp y CSP.
 - `docs/contrato-finanzas.md`: qué devuelve el tablero y qué significa cada número.
 - `docs/contrato-pendientes-historial-cobros.md`: los campos y parámetros
   nuevos de Pendientes, el historial de la ficha y los cobros del mes.
