@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { Grabador } from "@/components/grabacion/GrabadorSesion";
 import {
+  COPIA_NO_GUARDADA,
+  CORTE_LIMITE_SIN_COPIA,
   DESCARTAR_Y_GRABAR,
   DESCARTAR_Y_GRABAR_ACCION,
   DESCARTAR_Y_GRABAR_TITULO,
@@ -124,5 +126,28 @@ describe("H2: una copia pendiente del mismo turno no se borra sin preguntar", ()
     expect(screen.getByRole("button", { name: "Guardarla ahora" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Grabar sesión" }));
     await waitFor(() => expect(grabador.iniciar).toHaveBeenCalledWith("t1"));
+  });
+});
+
+describe("H3: si la copia en el teléfono falla mientras graba, se dice ahí mismo", () => {
+  test.each(["grabando", "pausado"] as const)("%s: queda un aviso fijo, sin botón para cerrarlo", (estado) => {
+    grabadorEn({ estado, copiaFallida: true });
+    render(<GrabarView {...props} />);
+    const aviso = screen.getByText(COPIA_NO_GUARDADA);
+    expect(aviso.closest('[role="status"]')).toBeTruthy();
+    expect(aviso.parentElement?.querySelector("button")).toBeNull();
+  });
+
+  test("con la copia en orden no dice nada", () => {
+    grabadorEn({ estado: "grabando", copiaFallida: false });
+    render(<GrabarView {...props} />);
+    expect(screen.queryByText(COPIA_NO_GUARDADA)).toBeNull();
+  });
+
+  test("en el tope lo dice una sola vez: el aviso del tope ya cuenta que no hay copia", () => {
+    grabadorEn({ estado: "pausado", copiaFallida: true, limiteAlcanzado: true });
+    render(<GrabarView {...props} />);
+    expect(screen.getByText(CORTE_LIMITE_SIN_COPIA)).toBeTruthy();
+    expect(screen.queryByText(COPIA_NO_GUARDADA)).toBeNull();
   });
 });

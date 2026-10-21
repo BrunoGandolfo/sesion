@@ -77,6 +77,13 @@ llegando audio desde las 10:12."* Ese rato no cuenta como tiempo grabado.
 micrófono mientras dura y la pantalla dice *"El teléfono silenció el micrófono
 (¿una llamada?). La grabación sigue abierta y vuelve sola cuando lo libere."*
 
+**Si el teléfono no puede guardar la copia, se dice mientras grabás.** Mientras
+grabás, la app va guardando una copia en el teléfono. Si no hay lugar o el
+navegador está en modo privado, aparece un aviso fijo: *"La copia en el teléfono
+no se pudo guardar: no cierres esta pantalla hasta que la grabación suba."* No
+tiene botón para cerrarlo: lo grabado existe sólo en esa pantalla hasta que se
+envíe.
+
 **Ninguna interrupción envía nada sola.**
 
 ### Pausar
