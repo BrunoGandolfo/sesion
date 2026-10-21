@@ -23,7 +23,9 @@ import {
   recordarCobro,
   ultimoAvisoPorPaciente,
 } from "@/app/api/_lib/casos-uso/recordar-cobro";
+import { textoDeCobro } from "@/app/api/_lib/casos-uso/texto-de-cobro";
 import { deudaDePaciente } from "@/app/api/_lib/domain";
+import { TEMPLATE_COBRO_DEFAULT } from "@/lib/deudas";
 import { ApiError } from "@/app/api/_lib/responses";
 import { __resetLlaveroForTests } from "@/lib/llavero";
 
@@ -337,5 +339,29 @@ describe("deudaDePaciente (la cuenta que usan recordarCobro y el texto del SMS)"
     const ajena = await crearBase();
     await crearImpago(base, 5);
     expect(await deudaDePaciente(db, ajena.orgId, base.pacienteId, AHORA)).toBeNull();
+  });
+});
+
+describe("textoDeCobro (el texto del SMS de cobro)", () => {
+  it("una configuración nueva trae la plantilla de siempre y sale el texto de siempre", async () => {
+    const base = await crearBase();
+    await crearImpago(base, 10);
+    const config = await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: base.orgId } });
+    expect(config.templateCobro).toBe(TEMPLATE_COBRO_DEFAULT);
+    expect(await textoDeCobro(db, { organizationId: base.orgId, pacienteId: base.pacienteId, ahora: AHORA })).toBe(
+      "Consultorio Mariana Roldán\nLucía, tenés 1 sesión pendiente de pago: $ 1.200.",
+    );
+  });
+
+  it("usa la plantilla que ella guardó", async () => {
+    const base = await crearBase();
+    await crearImpago(base, 10);
+    await prismaRaw.configuracion.update({
+      where: { organizationId: base.orgId },
+      data: { templateCobro: "{{nombre}} {{apellido}}: {{monto}}" },
+    });
+    expect(await textoDeCobro(db, { organizationId: base.orgId, pacienteId: base.pacienteId, ahora: AHORA })).toBe(
+      "Lucía Fernández: $ 1.200",
+    );
   });
 });

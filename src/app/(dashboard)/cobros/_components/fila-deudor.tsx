@@ -7,10 +7,10 @@ import { ChevronRight, Send } from "lucide-react";
 import { Button, Confirmar } from "@/components/ui";
 import { mensajeParaElla } from "@/lib/api-client";
 import {
-  TEMPLATE_COBRO_DEFAULT,
-  interpolarTemplateCobro,
   textoAtraso,
+  textoDelCobro,
   zonaDeuda,
+  type ConfiguracionDelCobro,
   type ZonaDeuda,
 } from "@/lib/deudas";
 import { diasEnterosMvd } from "@/lib/fechas-montevideo";
@@ -39,7 +39,7 @@ import { RegistrarPago } from "./registrar-pago";
 // ============================================
 export function FilaDeudor({
   deudor,
-  nombreProfesional,
+  configCobro,
   ahora,
   abierto,
   onAbrir,
@@ -48,7 +48,7 @@ export function FilaDeudor({
   onError,
 }: {
   deudor: DeudorItem;
-  nombreProfesional: string;
+  configCobro: ConfiguracionDelCobro;
   ahora: Date;
   /** Qué panel de esta fila está desplegado; lo decide la lista. */
   abierto: "pago" | "sms" | null;
@@ -64,14 +64,12 @@ export function FilaDeudor({
   const nombreCompleto = `${deudor.nombre} ${deudor.apellido}`;
   const telefono = deudor.telefono?.trim() ?? "";
 
-  // El mismo texto que arma el servidor: mismo template, misma interpolación
-  // y el mismo money(). Lo que ella lee acá es, carácter por carácter, lo que
-  // le va a llegar a la paciente.
-  const mensaje = interpolarTemplateCobro(TEMPLATE_COBRO_DEFAULT, {
-    nombre: deudor.nombre,
+  // El mismo texto que arma el servidor: la plantilla de Tu consultorio y la
+  // misma función (textoDelCobro). Lo que ella lee acá es, carácter por
+  // carácter, lo que le va a llegar a la paciente.
+  const mensaje = textoDelCobro(configCobro, deudor, {
     sesiones: deudor.sesionesImpagas,
-    monto: money(deudor.montoTotal),
-    profesional: nombreProfesional,
+    monto: deudor.montoTotal,
   });
 
   async function enviar() {

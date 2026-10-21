@@ -169,6 +169,7 @@ export function toConfiguracion(
     tarifaDefault: configuracion.tarifaDefault,
     recordatorioModo: configuracion.recordatorioModo,
     templateRecordatorio: configuracion.templateRecordatorio,
+    templateCobro: configuracion.templateCobro,
     orientacionTeorica: configuracion.orientacionTeorica,
     canalRecordatorio: configuracion.canalRecordatorio,
     organizationId: configuracion.organizationId,

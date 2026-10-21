@@ -155,7 +155,7 @@ function Pantalla({
   toast: ReturnType<typeof useToast>;
 }) {
   const { ahora } = datos;
-  const { kpis, deudores, cobros, nombreProfesional } = datos;
+  const { kpis, deudores, cobros, nombreProfesional, configCobro } = datos;
 
   const sesionesSinCobrar = deudores.reduce(
     (sum, d) => sum + d.sesionesImpagas,
@@ -195,7 +195,7 @@ function Pantalla({
           // P3-15). Acá se ordenaba de nuevo, por monto y sin desempate.
           deudores={deudores}
           sesionesSinCobrar={sesionesSinCobrar}
-          nombreProfesional={nombreProfesional}
+          configCobro={configCobro}
           ahora={ahora}
           onCobrado={() => {
             // La deuda y los ingresos del mes salen del servidor: se vuelve a

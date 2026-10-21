@@ -2,10 +2,10 @@
 
 // Tu consultorio: lo que la app necesita saber de ella y de cómo trabaja.
 //
-// Seis secciones, en el orden en que las piensa: quién es (Vos), cuánto
+// Siete secciones, en el orden en que las piensa: quién es (Vos), cuánto
 // cobra, con qué enfoque trabaja, qué palabras tiene que escuchar bien la
 // transcripción (Vocabulario, que vive en vocabulario-seccion.tsx), qué
-// recordatorio reciben los pacientes y la cuenta. Todo se guarda solo, con un
+// recordatorio reciben los pacientes, qué dice el aviso de cobro y la cuenta. Todo se guarda solo, con un
 // aviso discreto.
 //
 // El enfoque teórico es una decisión clínica y se dice completa: cada
@@ -16,11 +16,12 @@ import * as React from "react";
 import { AccesoConsultorio } from "@/components/layout/cabecera-usuario";
 import { GuardadoCampo } from "@/components/ui/guardado-campo";
 import { Button, Card, Input } from "@/components/ui";
-import { CARGANDO, REINTENTAR, TU_CONSULTORIO } from "@/lib/glosario";
+import { CARGANDO, COBRO_SECCION, REINTENTAR, TU_CONSULTORIO } from "@/lib/glosario";
 
 import { CuentaSeccion } from "./cuenta-seccion";
 import type { EstadoGuardado } from "./datos";
 import { InvitarColega } from "./invitar-colega";
+import { MensajeCobro } from "./mensaje-cobro";
 import { MensajeRecordatorio } from "./mensaje-recordatorio";
 import { CuandoAvisar, SelectorCanal, SelectorEnfoque } from "./opciones-radio";
 import { TituloSeccion } from "./titulo-seccion";
@@ -222,6 +223,25 @@ export function ConfigView() {
                     }
                 />
                 <GuardadoCampo estado={estadoDelCampo("templateRecordatorio")} />
+              </div>
+            </div>
+          </Card>
+        </section>
+
+        {/* ─── Aviso de cobro ──────────────────────────────────── */}
+        <section>
+          <TituloSeccion>{COBRO_SECCION}</TituloSeccion>
+          <Card>
+            <div className="flex flex-col gap-6">
+              <div>
+                <MensajeCobro
+                  template={form.templateCobro}
+                  profesional={form.nombreProfesional}
+                  direccion={form.direccion}
+                  telefono={form.whatsappOrigen}
+                  onChange={(valor) => actualizarCampo("templateCobro", valor)}
+                />
+                <GuardadoCampo estado={estadoDelCampo("templateCobro")} />
               </div>
             </div>
           </Card>

@@ -30,7 +30,10 @@ export type ClaveFicha =
   | "hora"
   | "direccion"
   | "profesional"
-  | "telefonoConsultorio";
+  | "telefonoConsultorio"
+  // Las del aviso de cobro (mensaje-cobro.tsx).
+  | "sesionesPendientes"
+  | "monto";
 
 /** Etiqueta visible de cada variable. */
 export const FICHAS: Record<ClaveFicha, string> = {
@@ -41,6 +44,8 @@ export const FICHAS: Record<ClaveFicha, string> = {
   direccion: "Dirección",
   profesional: "Tu nombre",
   telefonoConsultorio: "Tu teléfono",
+  sesionesPendientes: "Sesiones pendientes",
+  monto: "Monto",
 };
 
 /** Las que se ofrecen como botón para insertar. */
@@ -150,9 +155,11 @@ interface Props {
   template: string;
   onChange: (template: string) => void;
   fichas: ClaveFicha[];
+  /** Nombre accesible del área de texto. */
+  etiqueta?: string;
 }
 
-export function EditorRecordatorio({ template, onChange, fichas }: Props) {
+export function EditorRecordatorio({ template, onChange, fichas, etiqueta = "Mensaje del recordatorio" }: Props) {
   const editorRef = React.useRef<HTMLDivElement>(null);
   const editorId = React.useId();
   // Se calcula una sola vez: el DOM es la fuente de verdad después.
@@ -237,7 +244,7 @@ export function EditorRecordatorio({ template, onChange, fichas }: Props) {
           id={editorId}
           role="textbox"
           aria-multiline="true"
-          aria-label="Mensaje del recordatorio"
+          aria-label={etiqueta}
           contentEditable
           suppressContentEditableWarning
           spellCheck

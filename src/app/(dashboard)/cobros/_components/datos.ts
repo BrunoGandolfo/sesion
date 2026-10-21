@@ -5,6 +5,7 @@
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { cobrarTurno } from "@/lib/cobrar-cliente";
+import { TEMPLATE_COBRO_DEFAULT, type ConfiguracionDelCobro } from "@/lib/deudas";
 import { COBRO_INCOMPLETO, NO_SE_PUDO_COBRAR } from "@/lib/glosario";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
 import type {
@@ -27,6 +28,8 @@ export type DatosCobros = {
   deudores: DeudorItem[];
   cobros: TurnoConPaciente[];
   nombreProfesional: string;
+  /** Lo que arma el texto del aviso de cobro (textoDelCobro). */
+  configCobro: ConfiguracionDelCobro;
 };
 
 export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
@@ -47,6 +50,12 @@ export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
     deudores,
     cobros: cobros.map((t) => parseTurno(t)),
     nombreProfesional: config?.nombreProfesional ?? "",
+    configCobro: {
+      templateCobro: config?.templateCobro ?? TEMPLATE_COBRO_DEFAULT,
+      nombreProfesional: config?.nombreProfesional ?? "",
+      direccion: config?.direccion ?? "",
+      whatsappOrigen: config?.whatsappOrigen ?? "",
+    },
   };
 }
 

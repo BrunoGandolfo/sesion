@@ -96,6 +96,15 @@ export const CONTRATOS = {
     minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
     muestras: MUESTRAS_ENC2,
   },
+  // Desde cupos_por_ambito hasta antes de la plantilla de cobro:
+  // configuraciones sin `template_cobro` (la agregó
+  // 20261021120000_plantilla_cobro).
+  "nuevo-sin-cobro": {
+    archivo: "scripts/ensayo/esquema-sin-cobro.prisma",
+    formato: "ENC2",
+    minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
+    muestras: MUESTRAS_ENC2,
+  },
   [CONTRATO_ACTUAL]: {
     archivo: null,
     formato: "ENC2",
@@ -122,8 +131,9 @@ export const CONTRATO_POR_MIGRACION = {
   "20260928120000_hilo_versiones_recifrado": "nuevo-con-audio", // trigger
   "20261006120000_sin_audio_cifrado": "nuevo-sin-whatsapp", // DROP de las columnas de audio
   "20261008120000_whatsapp_asistido": "nuevo-sin-ambito", // canal_recordatorio y avisos_whatsapp
-  "20261009120000_cupos_por_ambito": CONTRATO_ACTUAL, // cupos_ayuda.ambito (Lux)
-  "20261019120000_turnos_pago_coherente": CONTRATO_ACTUAL, // CHECK
+  "20261009120000_cupos_por_ambito": "nuevo-sin-cobro", // cupos_ayuda.ambito (Lux)
+  "20261019120000_turnos_pago_coherente": "nuevo-sin-cobro", // CHECK
+  "20261021120000_plantilla_cobro": CONTRATO_ACTUAL, // configuraciones.template_cobro
 };
 
 /**

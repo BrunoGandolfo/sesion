@@ -2161,3 +2161,13 @@ export const CORTE_LIMITE_SIN_COPIA =
 /** Como SIN_CONEXION_FRANJA, cuando la copia en el teléfono no se pudo guardar. */
 export const SIN_CONEXION_FRANJA_SIN_COPIA =
   "Sin señal, y la copia en el teléfono no se pudo guardar. No cierres esta pantalla.";
+
+// ─── whatsapp-cobros ─────────────────────────────────────────────────────────
+
+/** La plantilla del aviso de cobro, en Tu consultorio. */
+export const COBRO_SECCION = "Aviso de cobro";
+export const COBRO_MENSAJE_EDITOR = "Mensaje del aviso de cobro";
+export const COBRO_VISTA_PREVIA = "Vista previa del aviso de cobro";
+export const COBRO_MENSAJE_VACIO = "El aviso de cobro no puede quedar vacío.";
+export const COBRO_MENSAJE_AYUDA =
+  "Es el mensaje que sale cuando tocás Recordar cobro en Cobros, por SMS o por WhatsApp según cómo recordás los turnos. Tocá una ficha para agregarla donde está el cursor.";

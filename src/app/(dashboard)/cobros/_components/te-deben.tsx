@@ -16,6 +16,7 @@ import {
   VER_COBROS_DEL_MES,
   pluralizar,
 } from "@/lib/glosario";
+import type { ConfiguracionDelCobro } from "@/lib/deudas";
 import type { MetodoPago } from "@/types/domain";
 
 import {
@@ -34,7 +35,7 @@ type PanelAbierto = { pacienteId: string; modo: "pago" | "sms" } | null;
 export function TeDeben({
   deudores,
   sesionesSinCobrar,
-  nombreProfesional,
+  configCobro,
   ahora,
   onCobrado,
   onCobroIncompleto,
@@ -44,7 +45,7 @@ export function TeDeben({
 }: {
   deudores: DeudorItem[];
   sesionesSinCobrar: number;
-  nombreProfesional: string;
+  configCobro: ConfiguracionDelCobro;
   ahora: Date;
   /** Todas las sesiones elegidas quedaron cobradas. */
   onCobrado: () => void;
@@ -120,7 +121,7 @@ export function TeDeben({
             <FilaDeudor
               key={d.pacienteId}
               deudor={d}
-              nombreProfesional={nombreProfesional}
+              configCobro={configCobro}
               ahora={ahora}
               abierto={panel?.pacienteId === d.pacienteId ? panel.modo : null}
               onAbrir={(modo) =>

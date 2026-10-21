@@ -45,6 +45,7 @@ export type CambiosConfiguracion = Pick<
   | "tarifaDefault"
   | "recordatorioModo"
   | "templateRecordatorio"
+  | "templateCobro"
   | "orientacionTeorica"
   | "canalRecordatorio"
 >;
