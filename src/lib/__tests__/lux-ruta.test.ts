@@ -8,7 +8,7 @@ import { GET, POST } from "@/app/api/pacientes/[id]/lux/route";
 import { registrarAuditoria } from "@/app/api/_lib/auditoria";
 import { abrirConversacion, autorizarPaciente, ErrorProveedorLux, responder } from "@/app/api/_lib/casos-uso/lux/conversar";
 import { devolverCupo, reservarCupo } from "@/app/api/_lib/casos-uso/ayuda/reservar-cupo";
-import { conversacionGuardada } from "@/app/api/_lib/casos-uso/lux/memoria";
+import { conversacionGuardada, guardarTurnos } from "@/app/api/_lib/casos-uso/lux/memoria";
 import { ApiError } from "@/app/api/_lib/responses";
 import type { ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { db } from "@/lib/db";
@@ -27,6 +27,7 @@ vi.mock("@/app/api/_lib/casos-uso/lux/conversar", async (original) => ({
 vi.mock("@/app/api/_lib/casos-uso/lux/memoria", async (original) => ({
   ...(await original<typeof import("@/app/api/_lib/casos-uso/lux/memoria")>()),
   conversacionGuardada: vi.fn(),
+  guardarTurnos: vi.fn(),
 }));
 vi.mock("@/app/api/_lib/casos-uso/ayuda/reservar-cupo", async (original) => ({
   ...(await original<typeof import("@/app/api/_lib/casos-uso/ayuda/reservar-cupo")>()),
@@ -239,5 +240,60 @@ describe("GET: la conversación guardada", () => {
   it("paciente ajeno: 404", async () => {
     vi.mocked(conversacionGuardada).mockRejectedValue(new ApiError("Paciente no encontrado", 404));
     expect((await leerGuardada()).status).toBe(404);
+  });
+});
+
+describe("cada turno se guarda al cerrar la respuesta", () => {
+  const guardado = () => vi.mocked(guardarTurnos).mock.calls[0][1];
+
+  it("pregunta y respuesta completas, tal como llegaron, sin interrumpida", async () => {
+    await leer(await pedir({ pregunta: "¿Y el cuerpo?" }));
+    expect(guardarTurnos).toHaveBeenCalledOnce();
+    expect(vi.mocked(guardarTurnos).mock.calls[0][0]).toBe(db);
+    expect(guardado()).toMatchObject({
+      organizationId: "org", pacienteId: "pac-1", userId: "user",
+      pregunta: { texto: "¿Y el cuerpo?", en: expect.any(Date) },
+      respuesta: { texto: "<citas>\n01/09: \"me voy\"\n</citas>\n**TEXTO**", en: expect.any(Date), interrumpida: false },
+    });
+    expect(guardado().respuesta.en.getTime()).toBeGreaterThanOrEqual(guardado().pregunta!.en.getTime());
+  });
+
+  it("la apertura guarda sólo el turno de Lux", async () => {
+    await leer(await pedir({}));
+    expect(guardado().pregunta).toBeUndefined();
+    expect(guardado().respuesta.interrumpida).toBe(false);
+  });
+
+  it("un corte a mitad guarda lo que llegó, con interrumpida", async () => {
+    vi.mocked(responder).mockResolvedValueOnce(fallida(["LO_QUE_LLEGO"]));
+    await expect(leer(await pedir({ pregunta: "¿y?" }))).rejects.toThrow();
+    expect(guardado()).toMatchObject({ pregunta: { texto: "¿y?" }, respuesta: { texto: "LO_QUE_LLEGO", interrumpida: true } });
+  });
+
+  it("cancelar a mitad guarda lo que llegó, con interrumpida, una sola vez", async () => {
+    let soltar!: () => void;
+    const esperando = new Promise<void>((resolve) => { soltar = resolve; });
+    const resultado = Promise.reject(new Error("Conversación cancelada"));
+    void resultado.catch(() => {});
+    vi.mocked(responder).mockResolvedValueOnce({
+      ...conversacion(),
+      flujo: {
+        fragmentos: (async function* () { yield "primera parte"; await esperando; yield "lo que ya no llega"; })(),
+        resultado, cancelar: vi.fn(() => soltar()), progreso: () => PROGRESO,
+      },
+    });
+    const lector = (await pedir({ pregunta: "¿y?" })).body!.getReader();
+    await lector.read();
+    await lector.cancel();
+    await vi.waitFor(() => expect(guardarTurnos).toHaveBeenCalledOnce());
+    expect(guardado().respuesta).toMatchObject({ texto: "primera parte", interrumpida: true });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(guardarTurnos).toHaveBeenCalledOnce();
+  });
+
+  it("si guardar falla, el rastro igual queda y la respuesta termina en error", async () => {
+    vi.mocked(guardarTurnos).mockRejectedValueOnce(new Error("base caída"));
+    await expect(leer(await pedir({ pregunta: "¿y?" }))).rejects.toThrow();
+    expect(registrarAuditoria).toHaveBeenCalledOnce();
   });
 });

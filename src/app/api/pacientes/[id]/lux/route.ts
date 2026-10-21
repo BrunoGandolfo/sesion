@@ -9,8 +9,9 @@
 // streaming. Contrato completo en docs/contrato-lux.md.
 //
 // La ruta valida, autoriza, reserva el cupo de Lux, llama al caso de uso y,
-// cuando el stream terminó (entero, cancelado o cortado), le pide que deje el
-// rastro.
+// cuando el stream terminó (entero, cancelado o cortado), le pide que guarde
+// el intercambio (lo que llegó a la pantalla; cortado, con interrumpida) y
+// deje el rastro.
 //
 // El cupo vuelve sólo si el proveedor no llegó a recibir el pedido: un error
 // de base o de validación en el caso de uso, antes de llamarlo. Desde que se
@@ -59,6 +60,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { organizationId, userId } = await getSessionActor();
     const { id: pacienteId } = await params;
+    const llego = new Date();
 
     const body: unknown = await leerJson(request);
     const parsed = peticionLuxSchema.safeParse(body ?? {});
@@ -86,7 +88,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const codificador = new TextEncoder();
     let cancelado = false;
     let registrado = false;
-    let largoEnviado = 0;
+    let enviado = "";
     const registrar = (resultado: Parameters<typeof registrarConversacionLux>[0]["resultado"], largoRespuesta: number, interrumpida: boolean) => {
       registrado = true;
       return registrarConversacionLux({
@@ -95,6 +97,8 @@ export async function POST(request: Request, { params }: RouteParams) {
         largoRespuesta,
         turnosHistorial: conversacion.turnosHistorial,
         interrumpida,
+        ...(pregunta === undefined ? {} : { pregunta: { texto: pregunta, en: llego } }),
+        respuesta: { texto: enviado, en: new Date() },
       });
     };
     // Cancelada o cortada: el rastro igual queda, con lo que se sabe. Si
@@ -102,7 +106,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const registrarInterrumpida = async () => {
       if (registrado) return;
       try {
-        await registrar(flujo.progreso(), largoEnviado, true);
+        await registrar(flujo.progreso(), enviado.length, true);
       } catch {
         console.error("[lux] no se pudo registrar la conversación interrumpida");
       }
@@ -112,7 +116,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         try {
           for await (const fragmento of flujo.fragmentos) {
             if (cancelado) return await registrarInterrumpida();
-            largoEnviado += fragmento.length;
+            enviado += fragmento;
             controller.enqueue(codificador.encode(fragmento));
           }
           const resultado = await flujo.resultado;

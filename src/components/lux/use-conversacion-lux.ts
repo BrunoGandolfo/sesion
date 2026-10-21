@@ -38,7 +38,9 @@ import {
 /** `en`: cuándo se dijo, para los separadores por día. */
 export type TurnoLux =
   | { rol: "usuaria"; texto: string; en: Date }
-  | { rol: "asistente"; crudo: string; completo: boolean; en: Date };
+  | { rol: "asistente"; crudo: string; completo: boolean; en: Date;
+      /** Se cortó (ahora, o cuando se guardó): es lo que llegó. */
+      interrumpida: boolean };
 
 const urlDe = (paciente: string) => `/api/pacientes/${encodeURIComponent(paciente)}/lux`;
 
@@ -46,7 +48,7 @@ function deGuardado(turno: TurnoConversacionLux): TurnoLux {
   const en = new Date(turno.creadoEn);
   return turno.rol === "profesional"
     ? { rol: "usuaria", texto: turno.texto, en }
-    : { rol: "asistente", crudo: turno.texto, completo: true, en };
+    : { rol: "asistente", crudo: turno.texto, completo: true, en, interrumpida: turno.interrumpida };
 }
 
 function textoDeError(error: unknown): string {
@@ -65,7 +67,7 @@ function historialDe(turnos: TurnoLux[]): TurnoHistorialLux[] {
   return turnos
     .flatMap((t): TurnoHistorialLux[] => {
       if (t.rol === "usuaria") return [{ rol: t.rol, texto: t.texto.slice(0, LARGO_MAX_PREGUNTA_LUX) }];
-      if (!t.completo) return [];
+      if (!t.completo || t.interrumpida) return [];
       return [{ rol: t.rol, texto: t.crudo.trim().slice(0, LARGO_MAX_TURNO_LUX) }];
     })
     .filter((t) => t.texto.trim() !== "")
@@ -78,7 +80,7 @@ function conRespuesta(turnos: TurnoLux[], crudo: string, completo: boolean): Tur
   if (ultimo?.rol === "asistente" && !ultimo.completo) {
     return [...turnos.slice(0, -1), { ...ultimo, crudo, completo }];
   }
-  return [...turnos, { rol: "asistente", crudo, completo, en: new Date() }];
+  return [...turnos, { rol: "asistente", crudo, completo, en: new Date(), interrumpida: false }];
 }
 
 /** El POST y la lectura del stream. Avisa el texto acumulado con cada
@@ -146,7 +148,11 @@ export function useConversacionLux(pacienteId: string) {
       })
         .catch((e: unknown) => {
           if (esAbort(e) || !vigente()) return;
-          if (llego) setError(LUX_CORTADO);
+          if (llego) {
+            setTurnos((previos) => previos.map((t, i) =>
+              i === previos.length - 1 && t.rol === "asistente" ? { ...t, interrumpida: true } : t));
+            setError(LUX_CORTADO);
+          }
           else alFallar(textoDeError(e));
         })
         .finally(() => {

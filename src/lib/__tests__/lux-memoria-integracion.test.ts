@@ -75,6 +75,16 @@ describe("guardar y cargar", () => {
     expect(turnos[0].creadoEn).toEqual(new Date(Date.UTC(2026, 9, 1, 14)));
   });
 
+  it("si no llegó nada de Lux, no se guarda nada (ni la pregunta)", async () => {
+    const org = await consultorio();
+    await guardarTurnos(db(), {
+      ...identidad(org), userId: org.userId,
+      pregunta: { texto: "¿Y?", en: new Date() },
+      respuesta: { texto: "  ", en: new Date(), interrumpida: true },
+    });
+    expect(await base.prisma.conversacionLux.count()).toBe(0);
+  });
+
   it("una apertura es sólo el turno de Lux", async () => {
     const org = await consultorio();
     await guardarTurnos(db(), {

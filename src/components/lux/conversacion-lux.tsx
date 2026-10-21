@@ -3,7 +3,8 @@
 // La pestaña Lux de la ficha: el chat con el personaje que leyó el Recorrido,
 // las notas y las últimas sesiones de esta paciente.
 //
-// Arriba, fija, la línea que dice qué lee Lux. Después el hilo: lo que quedó
+// Arriba, fija, la línea que dice qué lee Lux y que recuerda la charla.
+// Después el hilo: lo que quedó
 // guardado de otras veces, con un separador por día ("Conversación del
 // DD/MM"); el saludo de la app (no viaja a Lux); las respuestas en
 // streaming, con sus citas plegadas y sus "mirando la transcripción…" en
@@ -33,6 +34,7 @@ import {
   LUX_NUEVA,
   LUX_LEYENDO,
   LUX_PLACEHOLDER,
+  LUX_RESPUESTA_CORTADA,
   LUX_SALIR,
   luxConversacionDel,
   luxMirando,
@@ -60,7 +62,7 @@ function MensajeLux({ children }: { children: React.ReactNode }) {
   );
 }
 
-function RespuestaDeLux({ respuesta }: { respuesta: RespuestaLux }) {
+function RespuestaDeLux({ respuesta, cortada }: { respuesta: RespuestaLux; cortada: boolean }) {
   return (
     <>
       {respuesta.bloques.map((bloque, i) =>
@@ -87,6 +89,9 @@ function RespuestaDeLux({ respuesta }: { respuesta: RespuestaLux }) {
           </p>
         </details>
       ) : null}
+      {cortada ? (
+        <p className="ml-7 font-sans text-[12px] leading-[1.5] text-ink-500">{LUX_RESPUESTA_CORTADA}</p>
+      ) : null}
     </>
   );
 }
@@ -109,7 +114,9 @@ function Separador({ dia }: { dia: string }) {
 }
 
 function Turno({ turno, respuesta }: { turno: TurnoLux; respuesta: RespuestaLux | null }) {
-  if (turno.rol === "asistente") return <RespuestaDeLux respuesta={respuesta as RespuestaLux} />;
+  if (turno.rol === "asistente") {
+    return <RespuestaDeLux respuesta={respuesta as RespuestaLux} cortada={turno.interrumpida} />;
+  }
   return (
     <p className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-md bg-sage-50 px-3.5 py-2.5 font-sans text-[14px] leading-[1.5] text-ink-900">
       <span className="sr-only">{LUX_DIJO_ELLA} </span>

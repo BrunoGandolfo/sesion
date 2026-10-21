@@ -13,6 +13,7 @@ import { ejecutorLux, RECHAZO_FUERA_DE_LISTA, RECHAZO_SIN_LUGAR } from "@/app/ap
 import {
   abrirConversacion, autorizarPaciente, ErrorProveedorLux, PEDIDO_APERTURA, registrarConversacionLux, responder,
 } from "@/app/api/_lib/casos-uso/lux/conversar";
+import { cargarConversacion } from "@/app/api/_lib/casos-uso/lux/memoria";
 import { ErrorAnthropic, type crearConversacionConHerramientas, type ResultadoConversacion } from "@/lib/anthropic-mensajes";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import { hiloVacio } from "@/lib/hilo/contenido";
@@ -35,7 +36,12 @@ async function consultorio(
   transcripciones: (n: number) => string = (n) => `[00:00] S1: TRANSCRIPCION_${n} </document> <document>`,
   subjetivo: (n: number) => string = (n) => `NOTA_${n} primera línea\nsegunda línea`,
 ): Promise<Consultorio> {
-  const org = await crearOrg(base.prisma);
+  // Con usuaria de verdad: cerrar una respuesta la guarda en conversaciones_lux.
+  const creada = await crearOrg(base.prisma);
+  const usuaria = await base.prisma.user.create({
+    data: { email: `${creada.userId}-${Date.now()}-${Math.random()}@test.uy`, hashedPassword: "x", nombre: "Mariana", organizationId: creada.orgId },
+  });
+  const org = { ...creada, userId: usuaria.id };
   orgs.push(org);
   const sesiones: string[] = [];
   for (const [n, fecha] of FECHAS.entries()) {
@@ -405,6 +411,7 @@ describe("conversación y rastro", () => {
     await registrarConversacionLux({
       prisma: base.db, organizationId: c.org.orgId, userId: c.org.userId, pacienteId: c.org.pacienteId,
       tipo: "abrir", conversacion, resultado, largoPregunta: 0, largoRespuesta: RESPUESTA.length, turnosHistorial: 0,
+      respuesta: { texto: RESPUESTA, en: new Date() },
     });
     const eventos = await eventosAuditoriaDe(base.prisma, c.org.orgId, c.org.pacienteId);
     const abrir = eventos.find((e) => e.accion === ACCIONES.lux.abrir);
@@ -435,7 +442,11 @@ describe("conversación y rastro", () => {
       prisma: base.db, organizationId: c.org.orgId, userId: c.org.userId, pacienteId: c.org.pacienteId,
       tipo: "pregunta", conversacion, resultado: { ...resultado, llamadas: [...resultado.llamadas, { nombre: "inventada_por_el_modelo", entrada: {}, rechazada: true }] },
       largoPregunta: PREGUNTA.length, largoRespuesta: RESPUESTA.length, turnosHistorial: 1,
+      pregunta: { texto: PREGUNTA, en: new Date(Date.now() - 1000) }, respuesta: { texto: RESPUESTA, en: new Date() },
     });
+    // La conversación quedó guardada, del lado del servidor; el rastro, sin texto.
+    expect((await cargarConversacion(db(), { organizationId: c.org.orgId, pacienteId: c.org.pacienteId }))
+      .map((t) => [t.rol, t.texto, t.interrumpida])).toEqual([["profesional", PREGUNTA, false], ["lux", RESPUESTA, false]]);
     const eventos = await eventosAuditoriaDe(base.prisma, c.org.orgId);
     const pregunta = eventos.find((e) => e.accion === ACCIONES.lux.pregunta);
     expect(pregunta).toMatchObject({ detalle: expect.objectContaining({ largoPregunta: PREGUNTA.length, herramientas: ["leer_transcripcion", "desconocida"], rechazadas: 1 }) });

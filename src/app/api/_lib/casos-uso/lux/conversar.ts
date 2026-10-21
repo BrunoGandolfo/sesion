@@ -28,13 +28,13 @@ import {
 } from "@/lib/lux/contrato";
 import { systemPromptLux } from "@/lib/lux/prompt";
 
-import { registrarAuditoria, type ClienteAuditoria } from "../../auditoria";
+import { registrarAuditoria } from "../../auditoria";
 import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
 import { ErrorProveedorAsistente } from "../ayuda/reservar-cupo";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
 import { armarMaterial, fechaLegible, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
-import { cargarConversacion, type TurnoGuardadoLux } from "./memoria";
+import { cargarConversacion, guardarTurnos, type TurnoGuardadoLux } from "./memoria";
 
 /** Incluye el razonamiento del modelo (thinking adaptativo de Haiku 5.5). */
 export const MAX_TOKENS_LUX = 8000;
@@ -212,7 +212,7 @@ async function conversar(
 }
 
 export interface ConversacionRespondida {
-  prisma: ClienteAuditoria;
+  prisma: ClienteLux;
   organizationId: string;
   userId: string;
   pacienteId: string;
@@ -225,15 +225,38 @@ export interface ConversacionRespondida {
   /** true: se canceló o se cortó a mitad. Los tokens son los de las rondas
    *  que alcanzaron a cerrar, y el largo, el de lo que llegó a la pantalla. */
   interrumpida?: boolean;
+  /** Lo que se guarda en conversaciones_lux: la pregunta (ausente en la
+   *  apertura) y lo que llegó a la pantalla. */
+  pregunta?: { texto: string; en: Date };
+  respuesta: { texto: string; en: Date };
 }
 
 /**
- * El rastro de una respuesta de Lux: qué paciente, cuánto material, cuántos
- * tokens, qué herramientas. NUNCA el texto de la pregunta ni el de la
+ * El cierre de una respuesta de Lux: guarda el intercambio en
+ * conversaciones_lux (memoria.ts; una respuesta cortada, con interrumpida) y
+ * deja el rastro: qué paciente, cuánto material, cuántos tokens, qué
+ * herramientas. El rastro NUNCA lleva el texto de la pregunta ni el de la
  * respuesta, ni los argumentos de las herramientas (las lecturas ya quedaron
- * como sesion.ver_transcripcion). Informativo, como el de Lupita.
+ * como sesion.ver_transcripcion). Informativo, como el de Lupita. Si guardar
+ * falla, el rastro igual queda y el error sigue (la ruta corta el stream).
  */
 export async function registrarConversacionLux(p: ConversacionRespondida): Promise<void> {
+  let falloAlGuardar: unknown = null;
+  try {
+    await guardarTurnos(p.prisma, {
+      organizationId: p.organizationId, pacienteId: p.pacienteId, userId: p.userId,
+      pregunta: p.pregunta, respuesta: { ...p.respuesta, interrumpida: p.interrumpida ?? false },
+    });
+  } catch (error) {
+    // Sin el error: no se arriesga a que lleve texto.
+    console.error("[lux] no se pudo guardar la conversación");
+    falloAlGuardar = error;
+  }
+  await registrarRastro(p);
+  if (falloAlGuardar) throw falloAlGuardar;
+}
+
+async function registrarRastro(p: ConversacionRespondida): Promise<void> {
   const llamadas = p.resultado.llamadas;
   await registrarAuditoria(p.prisma, {
     organizationId: p.organizationId,

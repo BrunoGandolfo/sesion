@@ -16,6 +16,7 @@ import {
   LUX_CONVERSACION,
   LUX_EN_QUE_ME_BASO,
   LUX_HISTORIAL_NO_CARGO,
+  LUX_RESPUESTA_CORTADA,
   LUX_NUEVA,
   LUX_LEYENDO,
   LUX_PLACEHOLDER,
@@ -91,7 +92,9 @@ describe("apertura", () => {
 
     expect(screen.getByText(luxSaludo("Mariana", "Ana"))).toBeTruthy();
     expect(screen.getByText(luxQueLee("Ana"))).toBeTruthy();
-    expect(screen.getByText(luxQueLee("Ana")).textContent).toContain("No guarda esta conversación.");
+    // La conversación se guarda: la línea de arriba no puede decir lo contrario.
+    expect(screen.getByText(luxQueLee("Ana")).textContent).not.toMatch(/No guarda/);
+    expect(luxQueLee("Ana")).toContain("recuerda");
     // La apertura también muestra "Lux está leyendo" con sus puntos.
     expect(screen.getByRole("status").textContent).toContain(LUX_LEYENDO);
     await alAbrir();
@@ -143,6 +146,23 @@ describe("la conversación guardada", () => {
     expect(screen.getByText(luxMirando("03/09"))).toBeTruthy();
     expect(texto).not.toMatch(/<\/?citas>|_\(/);
     expect(cuerpos()).toEqual([{}]);
+  });
+
+  it("una respuesta guardada cortada se ve cortada", async () => {
+    getMock.mockResolvedValueOnce(guardada([
+      de("profesional", "¿Y el sueño?", "2025-10-01T14:00:00.000Z"),
+      de("lux", "Duerme m", "2025-10-01T14:01:00.000Z", true),
+      de("profesional", "¿Seguimos?", "2025-10-01T14:02:00.000Z"),
+      de("lux", "Sí.", "2025-10-01T14:03:00.000Z"),
+    ]));
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
+    montar();
+    await alAbrir();
+    const cortadas = screen.getAllByText(LUX_RESPUESTA_CORTADA);
+    expect(cortadas).toHaveLength(1);
+    const texto = hilo().textContent!;
+    expect(texto.indexOf("Duerme m")).toBeLessThan(texto.indexOf(LUX_RESPUESTA_CORTADA));
+    expect(texto.indexOf(LUX_RESPUESTA_CORTADA)).toBeLessThan(texto.indexOf("¿Seguimos?"));
   });
 
   it("sin conversación guardada no hay separadores", async () => {
@@ -271,12 +291,14 @@ describe("preguntar", () => {
     expect(peticionLuxSchema.parse(cuerpo).historial?.[2].texto).toBe(respuestaConLectura);
   });
 
-  it("una respuesta cortada a la mitad no viaja en el historial", async () => {
+  it("una respuesta cortada a la mitad se ve cortada y no viaja en el historial", async () => {
     const stream = streamManual();
     fetchMock.mockResolvedValueOnce(stream.respuesta);
     montar();
-    await stream.mandar("<citas>Nota del 0");
+    await alAbrir();
+    await stream.mandar("Empecemos por el ");
     await act(async () => { stream.cortar(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(screen.getByText(LUX_RESPUESTA_CORTADA)).toBeTruthy();
     fetchMock.mockResolvedValueOnce(respuestaEntera("Ok."));
     await act(async () => { escribirYEnviar("¿Seguimos?"); });
     expect(cuerpos().at(-1)).toEqual({ pregunta: "¿Seguimos?" });

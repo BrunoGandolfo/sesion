@@ -2061,7 +2061,7 @@ export function luxSaludo(profesional: string, paciente: string): string {
 
 /** La línea fija de arriba del chat. */
 export function luxQueLee(paciente: string): string {
-  return `Lux lee el Recorrido, las notas y las últimas sesiones de ${paciente}. No guarda esta conversación.`;
+  return `Lux lee el Recorrido, las notas y las últimas sesiones de ${paciente}, y recuerda lo que hablaron acá.`;
 }
 
 /** El estado que Lux manda mientras abre una transcripción. */
@@ -2171,3 +2171,6 @@ export function luxConversacionDel(fecha: string): string {
 
 /** No se pudo traer lo guardado: Lux abre igual (el servidor sí lo lee). */
 export const LUX_HISTORIAL_NO_CARGO = "No se pudo mostrar la conversación anterior. Lux la tiene igual.";
+
+/** Debajo de una respuesta de Lux que se cortó: lo de arriba es lo que llegó. */
+export const LUX_RESPUESTA_CORTADA = "La respuesta se cortó acá.";
