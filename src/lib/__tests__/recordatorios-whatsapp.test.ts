@@ -252,6 +252,16 @@ describe("correspondeAvisarHoy (la regla, en memoria)", () => {
     expect(correspondeAvisarHoy({ fecha: MANANA_15, avisos: [{ fechaTurno: MANANA_15, abiertoEn: ayer }, { fechaTurno: MANANA_15, abiertoEn: abierto }] }, "dia_anterior", hoy))
       .toEqual({ motivo: "recordatorio_turno", avisadoEn: abierto });
   });
+  it("lo movió, mandó el cambio, y lo volvió a la fecha original: hay que avisar de nuevo", () => {
+    // Avisó F el 1/9; lo movió a F2 y avisó el cambio el 2/9; hoy lo volvió a F.
+    const f2 = new Date(MANANA_15.getTime() + 7 * DIA);
+    const avisos = [
+      { fechaTurno: MANANA_15, abiertoEn: new Date("2026-09-01T23:00:00.000Z") },
+      { fechaTurno: f2, abiertoEn: new Date("2026-09-02T23:00:00.000Z") },
+    ];
+    expect(correspondeAvisarHoy({ fecha: MANANA_15, avisos }, "dia_anterior", hoy))
+      .toEqual({ motivo: "cambio_de_horario", avisadoEn: null });
+  });
   it("FIN_HOY es el borde: un aviso que cae justo después es de mañana", () => {
     // Turno pasado mañana a las 00:30 de Montevideo: su aviso es mañana a las 20:00.
     expect(correspondeAvisarHoy({ fecha: new Date(FIN_HOY.getTime() + DIA + 22 * MIN), avisos: [] }, "dia_anterior", hoy)).toBeNull();
@@ -445,6 +455,9 @@ describe("rutas", () => {
     await avisar(o, turno.id, MANANA_15, new Date("2026-09-02T12:00:00.000Z"));
     await avisar(o, turno.id, MANANA_15, new Date("2026-09-03T12:00:00.000Z"));
     expect(await (await pedir()).json()).toEqual({ data: { avisadoEn: "2026-09-03T12:00:00.000Z" } });
+    // Si el último aviso es de otra fecha (lo movió y volvió), vuelve a estar pendiente.
+    await avisar(o, turno.id, new Date(MANANA_15.getTime() + DIA), new Date("2026-09-03T13:00:00.000Z"));
+    expect(await (await pedir()).json()).toEqual({ data: { avisadoEn: null } });
     sesionActual.organizationId = ajena.orgId;
     expect((await pedir()).status).toBe(404);
   });

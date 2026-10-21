@@ -66,7 +66,6 @@ describe("Tu consultorio guarda la plantilla de cobro", () => {
       templateRecordatorio: "Hola {{nombre}}",
       templateCobro: "Hola {{nombre}}, debés {{monto}}.",
       orientacionTeorica: "gestalt",
-      canalRecordatorio: "sms",
     };
   });
 

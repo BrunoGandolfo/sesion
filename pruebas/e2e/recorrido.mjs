@@ -314,14 +314,14 @@ async function agenda(prueba) {
     await alcanzable(boton('Agendar', d));
     await escribir('POST', '/api/turnos', body => {
       assert.equal(body.pacienteId, prueba.id); assert.equal(body.notas, marca);
-      assert(Date.parse(body.fecha) < Date.now(), 'No crear turnos futuros: podrían generar SMS');
+      assert(Date.parse(body.fecha) < Date.now(), 'No crear turnos futuros: aparecerían en los recordatorios de Hoy');
     }, () => boton('Agendar', d).click(), (turno,json) => {
       prueba.turnoId = turno.id;
       assert.equal(json.data.serie, null, 'Se creó una serie inesperada');
     });
     await d.waitFor({state:'hidden'});
-    const envios = await get('/api/sms/envios?turnoId=' + prueba.turnoId);
-    assert.equal(envios.length, 0, 'Se programó un SMS para el turno pasado');
+    const hoy = await get('/api/recordatorios/whatsapp');
+    assert(!hoy.turnos.some(t => t.turnoId === prueba.turnoId), 'Un turno pasado apareció en los recordatorios de Hoy');
     const guardado = (await get('/api/pacientes/' + prueba.id)).turnos.find(t => t.id === prueba.turnoId);
     assert(guardado && guardado.notas === marca && guardado.estado === 'programado', 'El turno no quedó guardado');
     if (ancho === 390) await page.setViewportSize({ width: 390, height: 844 });
@@ -599,7 +599,7 @@ try {
     await page.setViewportSize({ width:ancho,height:ancho === 390 ? 844 : 900 });
     await ayuda();
   }
-  resultado.omitidos.push('Grabación, audio, SMS, correos y cambios de contraseña; no se ejecutan.', 'Registro y restablecimiento con token vigente; se revisan pantallas sin token.', 'Estados que la cuenta no tiene (fallido/vacíos/solapes), calidad clínica y respuestas de IA.', 'Teclado y dispositivos físicos, Safari/Firefox, contraste y recortes con ellipsis intencionales.', 'El archivo y la cancelación conservan registros de prueba e historial de auditoría; no hay borrado físico en esta versión.');
+  resultado.omitidos.push('Grabación, audio, WhatsApp, correos y cambios de contraseña; no se ejecutan.', 'Registro y restablecimiento con token vigente; se revisan pantallas sin token.', 'Estados que la cuenta no tiene (fallido/vacíos/solapes), calidad clínica y respuestas de IA.', 'Teclado y dispositivos físicos, Safari/Firefox, contraste y recortes con ellipsis intencionales.', 'El archivo y la cancelación conservan registros de prueba e historial de auditoría; no hay borrado físico en esta versión.');
   if (pendientesOla2) resultado.esperados.push({pantalla:'Grabación y subida',motivo:'No ejecutadas: upload-url/upload-confirmar retiradas para Ola 2'});
   await finalizar();
 } catch (error) { await finalizar(error); }

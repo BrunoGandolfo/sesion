@@ -140,18 +140,30 @@ export function correspondeAvisarHoy(
   modo: RecordatorioModo,
   ahora: Date,
 ): { motivo: "recordatorio_turno" | "cambio_de_horario"; avisadoEn: Date | null } | null {
-  const deEstaFecha = turno.avisos.filter((a) => a.fechaTurno.getTime() === turno.fecha.getTime());
-  const deOtraFecha = deEstaFecha.length < turno.avisos.length;
-  const motivo = deOtraFecha ? "cambio_de_horario" : "recordatorio_turno";
-  const ultimo = deEstaFecha.reduce<Date | null>((max, a) => (!max || a.abiertoEn > max ? a.abiertoEn : max), null);
-  if (ultimo) return ultimo >= inicioDelDiaMvd(ahora) ? { motivo, avisadoEn: ultimo } : null;
-  if (deOtraFecha) return { motivo, avisadoEn: null };
+  // Decide el último aviso: es lo que la paciente tiene en el teléfono. Si
+  // es de otra fecha (lo movieron después, aunque sea de vuelta a una fecha
+  // ya avisada), le falta el cambio de horario.
+  const ultimo = ultimoAviso(turno.avisos);
+  const motivo = turno.avisos.some((a) => !esDeLaFecha(a, turno.fecha)) ? "cambio_de_horario" : "recordatorio_turno";
+  if (ultimo && !esDeLaFecha(ultimo, turno.fecha)) return { motivo: "cambio_de_horario", avisadoEn: null };
+  if (ultimo) return ultimo.abiertoEn >= inicioDelDiaMvd(ahora) ? { motivo, avisadoEn: ultimo.abiertoEn } : null;
   return calcularProgramadoEn(turno.fecha, modo) <= finDelDiaMvd(ahora) ? { motivo, avisadoEn: null } : null;
 }
 
+type Aviso = { fechaTurno: Date; abiertoEn: Date };
+
+function esDeLaFecha(aviso: Aviso, fecha: Date): boolean {
+  return aviso.fechaTurno.getTime() === fecha.getTime();
+}
+
+/** La última apertura, o null. */
+function ultimoAviso<A extends Aviso>(avisos: ReadonlyArray<A>): A | null {
+  return avisos.reduce<A | null>((max, a) => (!max || a.abiertoEn > max.abiertoEn ? a : max), null);
+}
+
 /** El aviso de UN turno, para el bloque "Recordatorio" del detalle: la
- *  última apertura del enlace para su fecha vigente, o null si todavía no se
- *  avisó. 404 si el turno no es de la organización. */
+ *  última apertura del enlace si es de su fecha vigente, o null si falta
+ *  avisar (nunca se avisó, o lo último que se avisó es otra fecha). 404 si el turno no es de la organización. */
 export async function avisoDelTurno({
   prisma,
   organizationId,
@@ -162,10 +174,10 @@ export async function avisoDelTurno({
     select: { fecha: true, avisosWhatsapp: { where: { tipo: "recordatorio" }, select: { fechaTurno: true, abiertoEn: true } } },
   });
   if (!turno) throw new ApiError("Turno no encontrado", 404);
-  const ultimo = turno.avisosWhatsapp
-    .filter((a) => a.fechaTurno.getTime() === turno.fecha.getTime())
-    .reduce<Date | null>((max, a) => (!max || a.abiertoEn > max ? a.abiertoEn : max), null);
-  return { avisadoEn: ultimo?.toISOString() ?? null };
+  // Avisado sólo si la última apertura es de la fecha vigente
+  // (correspondeAvisarHoy decide igual).
+  const ultimo = ultimoAviso(turno.avisosWhatsapp);
+  return { avisadoEn: ultimo && esDeLaFecha(ultimo, turno.fecha) ? ultimo.abiertoEn.toISOString() : null };
 }
 
 export interface RegistrarAvisoParams {

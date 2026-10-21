@@ -132,8 +132,11 @@ export function TurnoDetailSheet({
   }, [turnoId, turnoEstado]);
 
   // Sólo tiene sentido en un turno programado: en uno cancelado, ausente o
-  // ya realizado no se programa otro recordatorio.
+  // ya realizado no hay recordatorio. Se vuelve a leer si cambia la fecha:
+  // reprogramar desde acá deja el aviso pendiente otra vez.
+  const turnoFecha = turno?.fecha.getTime();
   React.useEffect(() => {
+    setRecordatorio("sin-dato");
     if (!turnoId || !turnoEstado || !turnoSigueProgramado(turnoEstado)) return;
 
     const controller = new AbortController();
@@ -146,7 +149,7 @@ export function TurnoDetailSheet({
         setRecordatorio(null);
       });
     return () => controller.abort();
-  }, [turnoId, turnoEstado]);
+  }, [turnoId, turnoEstado, turnoFecha]);
 
   const abrirReprogramar = () => {
     if (!turno) return;

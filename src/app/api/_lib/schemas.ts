@@ -226,8 +226,11 @@ export const configUpdateSchema = z.object({
 });
 
 /** POST /api/pacientes/[id]/recordar-cobro: sin campos. El aviso sale sólo
- *  por WhatsApp; un campo de más (el `canal` de antes) es 400. */
-export const recordarCobroSchema = z.object({}).strict();
+ *  por WhatsApp. `canal: "whatsapp"` se acepta (y no se usa) porque una
+ *  pestaña abierta antes de borrar el SMS lo manda DESPUÉS de abrir
+ *  WhatsApp: un 400 dejaría el aviso sin anotar y la invitaría a repetirlo.
+ *  Cualquier otro campo, o `"sms"`, es 400. */
+export const recordarCobroSchema = z.object({ canal: z.literal("whatsapp").optional() }).strict();
 
 // ────────────────────────────────────────────────────────────────────────────
 // WhatsApp asistido — el body (opcional) de
