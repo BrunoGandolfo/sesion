@@ -19,7 +19,7 @@ Arriba a la derecha aparece *Guardando…* y después *Guardado.* Si algo falla:
 
 | Campo | Qué hace |
 | --- | --- |
-| **Nombre** | *"Como querés que te nombren los pacientes"*. Va **al principio** de cada recordatorio y del SMS de **Recordar cobro por SMS**, después de "Consultorio", y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
+| **Nombre** | *"Como querés que te nombren los pacientes"*. Va **al principio** de cada recordatorio y, con el texto de siempre, del aviso de **Recordar cobro por SMS** (o por WhatsApp), después de "Consultorio", y aparece en el texto de la autorización de grabación. Es obligatorio: sin él dice *"Falta tu nombre"*. |
 | **Dirección del consultorio** | Aparece en la autorización que firma la paciente, y en el recordatorio si insertás la ficha **Dirección**. |
 | **Teléfono** | El número al que la paciente llama para cambios. Va al final de cada recordatorio: *"Cambios: llamar al …"*. |
 
@@ -67,13 +67,34 @@ escribe igual con los dos enfoques.
 - **Mensaje** — el texto con fichas (**+ Nombre**, **+ Fecha**, **+ Hora**,
   **+ Dirección**). No puede quedar vacío. El consultorio y tu nombre van al
   principio y la línea para llamar al final; si los borrás, se agregan solos.
-  La pantalla advierte: *"No pidas respuestas por SMS: no llegan."*
+  Con **SMS automático** o **Ambos**, la pantalla advierte: *"No pidas
+  respuestas por SMS: no llegan."* Con **WhatsApp desde mi teléfono** no lo
+  dice: las respuestas te llegan a vos.
 - **Así lo recibe la paciente** — la vista previa, con datos de ejemplo y tus
   datos reales.
 
 Los SMS no salen a la hora en punto sino con unos minutos de corrimiento. El
 detalle completo, y cómo es avisar por WhatsApp, está en
 `06-recordatorios-sms.md`.
+
+## Aviso de cobro
+
+El mensaje de **Recordar cobro por SMS** o **Recordar cobro por WhatsApp**, en
+**Cobros**. Es el mismo por los dos canales: cuál sale lo decide **Cómo
+recordás los turnos**.
+
+- **Mensaje** — el texto con fichas (**+ Nombre**, **+ Sesiones pendientes**,
+  **+ Monto**). **Sesiones pendientes** dice *"1 sesión pendiente"* o
+  *"2 sesiones pendientes"* según el caso. Si no lo cambiaste, es el texto de
+  siempre: *"Consultorio Tu nombre / Nombre, tenés Sesiones pendientes de pago:
+  Monto."* No puede quedar vacío: *"El aviso de cobro no puede quedar vacío."*
+- **Así lo recibe la paciente** — la vista previa, con una deuda de ejemplo.
+
+Lo que confirmás en **Cobros** es este texto con la deuda real de esa persona.
+
+Los cambios del canal, de **Cuándo se avisa** y de los dos mensajes quedan
+registrado quién los hizo y cuándo; del texto de los mensajes queda registrado
+que cambió, no lo que dice.
 
 ## Vocabulario
 
@@ -114,7 +135,6 @@ se ven en la computadora.
 - **No hay horario de atención** ni días laborables configurables.
 - **No hay duración por defecto del turno**: se elige en cada turno (viene 50).
 - **No cambia el momento del recordatorio por paciente**: es uno para todos.
-- **No cambia el texto de "Recordar cobro por SMS"** de Cobros: ese no es configurable, salvo tu **Nombre**, que va al principio.
 - **No cambia el texto de la autorización** de grabación.
 - Cada cuenta tiene su propio consultorio; invitar no comparte el tuyo.
 

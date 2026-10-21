@@ -20,8 +20,11 @@ vale para todos los turnos:
   **Hoy**. La paciente puede recibir los dos.
 
 El modo se mira en el momento en que le toca salir a cada aviso: cambiarlo
-alcanza también a los turnos que ya estaban agendados. El aviso de **Recordar
-cobro por SMS** sale por SMS en cualquiera de los tres modos.
+alcanza también a los turnos que ya estaban agendados. El modo también decide
+el aviso de cobro en **Cobros**: con **SMS automático** o **Ambos** es
+**Recordar cobro por SMS**; con **WhatsApp desde mi teléfono** es **Recordar
+cobro por WhatsApp**, que te abre el mensaje para mandarlo vos. El detalle está
+en `05-cobros.md`.
 
 ## WhatsApp desde tu teléfono
 
@@ -165,8 +168,9 @@ ya salió no puede retirarse del teléfono de la paciente. Un turno creado para
 una sesión que ya empezó no genera recordatorio.
 
 **Recordar cobro por SMS** sale solo cuando vos confirmás el envío en Cobros:
-primero se programa, después se intenta mandar. No cambia el momento ni el
-texto de los recordatorios de turno.
+primero se programa, después se intenta mandar. Con **WhatsApp desde mi
+teléfono**, **Recordar cobro por WhatsApp** no programa ningún SMS. Ninguno de
+los dos cambia el momento ni el texto de los recordatorios de turno.
 
 <!-- fuentes:
 src/lib/recordatorios-programacion.ts

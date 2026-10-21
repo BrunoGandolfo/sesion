@@ -306,8 +306,11 @@ it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar 
   expect(corpus).not.toMatch(/Descartar|Descartarla|Volver a intentarlo/i);
   // WhatsApp volvió como recordatorio que ella manda desde su teléfono: lo
   // cuentan estas páginas, y sólo mientras Hoy ofrezca el botón.
-  const conWhatsapp = ["_indice.md", "02-pantalla-hoy.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
+  // 05 cuenta Recordar cobro por WhatsApp, mientras la fila de Te deben elija
+  // el botón por canal.
+  const conWhatsapp = ["_indice.md", "02-pantalla-hoy.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
   expect(codigo("src/app/(dashboard)/_components/recordatorios-whatsapp.tsx")).toContain("{ABRIR_WHATSAPP}");
+  expect(codigo("src/app/(dashboard)/cobros/_components/fila-deudor.tsx")).toContain("RECORDAR_COBRO_POR_CANAL[accion.canal]");
   const restoDelCorpus = corpus
     .split(/(?=----- \S+\.md -----)/)
     .filter((parte) => !conWhatsapp.some((nombre) => parte.startsWith(`----- ${nombre} -----`)));
@@ -507,4 +510,37 @@ describe("la ayuda de Finanzas nombra lo que la pantalla muestra", () => {
     expect(texto).toContain("3 de septiembre");
     expect(codigo("docs/contrato-finanzas.md")).toMatch(/20 de agosto y cobrada el 3 de\s+septiembre/);
   });
+});
+
+it("la ayuda cuenta el aviso de cobro por los dos canales, con la plantilla de Tu consultorio", () => {
+  const plano = (t: string) => t.replace(/\s+/g, " ");
+  const cobros = plano(documento("05-cobros.md"));
+  for (const texto of [
+    glosario.RECORDAR_COBRO,
+    glosario.RECORDAR_COBRO_WHATSAPP,
+    glosario.ENVIAR_SMS,
+    glosario.ABRIR_WHATSAPP,
+    glosario.AVISO_COBRO_PROGRAMADO,
+    glosario.AVISO_COBRO_YA_PEDIDO,
+    glosario.AVISO_COBRO_WHATSAPP_ANOTADO,
+    glosario.NO_SE_ANOTO_AVISO,
+    glosario.RECORDAR_COBRO_POR_CANAL.whatsapp.destino,
+    `Tu consultorio → ${glosario.COBRO_SECCION}`,
+  ]) expect(cobros, texto).toContain(texto);
+  expect(cobros).not.toMatch(/no es configurable/);
+  // Ambos manda el cobro por SMS: lo decide accionDeCobro.
+  expect(codigo("src/lib/aviso-cobro.ts")).toContain('if (canal !== "whatsapp") return { canal: "sms" };');
+  expect(cobros).toContain("Con **SMS automático** o **Ambos**");
+
+  const recordatorios = plano(documento("06-recordatorios-sms.md"));
+  expect(recordatorios).toContain(glosario.RECORDAR_COBRO_WHATSAPP);
+  expect(recordatorios).not.toMatch(/sale por SMS en cualquiera de los tres modos/);
+
+  const consultorio = plano(documento("11-tu-consultorio.md"));
+  expect(consultorio).toContain(`## ${glosario.COBRO_SECCION}`);
+  for (const ficha of ["**+ Nombre**", "**+ Sesiones pendientes**", "**+ Monto**"]) expect(consultorio).toContain(ficha);
+  expect(consultorio).toContain(glosario.COBRO_MENSAJE_VACIO);
+  expect(consultorio).not.toMatch(/No cambia el texto de "Recordar cobro/);
+  expect(consultorio).toContain("queda registrado");
+  expect(codigo("src/app/api/_lib/casos-uso/configuracion.ts")).toContain("ACCIONES.configuracion.editar");
 });

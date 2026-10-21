@@ -2179,7 +2179,7 @@ export const RECORDAR_COBRO_WHATSAPP = "Recordar cobro por WhatsApp";
 export const AVISO_COBRO_PROGRAMADO = "Aviso programado. Sale en los próximos minutos.";
 export const AVISO_COBRO_YA_PEDIDO = "Ya pediste este aviso hoy. No se programó otro.";
 /** WhatsApp se abrió y la app anotó el aviso; el mensaje lo manda ella. */
-export const AVISO_COBRO_WHATSAPP_ANOTADO = "Quedó anotado. Mandalo desde WhatsApp.";
+export const AVISO_COBRO_WHATSAPP_ANOTADO = "Quedó anotado. El mensaje lo mandás vos en WhatsApp.";
 export const RECORDAR_COBRO_POR_CANAL = {
   sms: {
     boton: RECORDAR_COBRO,

@@ -3,7 +3,8 @@
 // La pestaña de datos se llamó "Ficha", el brief de la ficha "Para retomar",
 // el botón de Cobros "Recordar cobro" a secas, el Recorrido "El hilo", y "Para
 // vos" abría con la "Adherencia global" arriba y un selector de dos opciones.
-// Hoy son "Datos", "Preparar sesión", "Recordar cobro por SMS", "Recorrido",
+// Hoy son "Datos", "Preparar sesión", "Recordar cobro por SMS" (o "por
+// WhatsApp", según el canal), "Recorrido",
 // el instrumento plegado al final y un selector de tres.
 //
 // Cada aparición que queda está acá con su motivo: si alguien agrega otra, o
@@ -34,7 +35,7 @@ const ARCHIVOS = [
 // Los espacios valen como cualquier blanco: en la ayuda un nombre puede
 // quedar partido entre dos líneas.
 const VIEJOS = new RegExp(
-  ["Ficha", "Para retomar", "Recordar cobro(?!\\s+por\\s+SMS)", "Cómo va", "El hilo", "Adherencia global",
+  ["Ficha", "Para retomar", "Recordar cobro(?!\\s+por\\s+(?:SMS|WhatsApp))", "Cómo va", "El hilo", "Adherencia global",
     "selector de dos opciones", "\\*\\*Terapeuta\\*\\*", "\\*\\*Paciente\\*\\*"]
     .map((v) => v.replaceAll(" ", "\\s+"))
     .join("|"),
