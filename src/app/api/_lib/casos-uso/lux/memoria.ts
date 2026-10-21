@@ -124,8 +124,12 @@ export async function guardarTurnos(prisma: ClienteMemoriaLux, input: GuardarTur
       en: input.pregunta.en, interrumpida: false,
     });
   }
-  // La respuesta va siempre después de su pregunta, aunque el reloj diga lo mismo.
-  const despues = Math.max(input.respuesta.en.getTime(), (input.pregunta?.en.getTime() ?? -Infinity) + 1);
+  // La respuesta va pegada a su pregunta (un milisegundo después), no a la
+  // hora en que terminó: con dos pestañas preguntando a la vez, la hora de
+  // cierre entreveraba los intercambios (pregunta A, pregunta B, respuesta B,
+  // respuesta A) y la respuesta A pasaba por apertura sin contestar. Una
+  // apertura no tiene pregunta: va a su hora de cierre.
+  const despues = input.pregunta ? input.pregunta.en.getTime() + 1 : input.respuesta.en.getTime();
   turnos.push({
     rol: "lux", texto: respuesta.slice(0, LARGO_MAX_TURNO_LUX), en: new Date(despues),
     interrumpida: input.respuesta.interrumpida,

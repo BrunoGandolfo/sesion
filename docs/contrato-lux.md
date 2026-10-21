@@ -135,7 +135,10 @@ recifra como al resto), `interrumpida`, `creado_en`. Índice (`paciente_id`,
 - **Quién escribe:** sólo el servidor, cuando la respuesta terminó
   (`registrarConversacionLux`, llamada por la ruta): la pregunta (con la
   hora en que llegó el pedido; sin `pregunta` en la apertura) y lo que llegó
-  a la pantalla. Si se cortó o se canceló, lo que llegó con `interrumpida`;
+  a la pantalla, un milisegundo después de su pregunta (la apertura, a su
+  hora de cierre): dos pestañas que preguntan a la vez no entreveran sus
+  intercambios. El historial se lee hacia atrás por páginas hasta juntar el
+  límite de turnos o llegar al principio. Si se cortó o se canceló, lo que llegó con `interrumpida`;
   si no llegó nada de Lux, no se guarda nada (la pregunta vuelve al campo).
   Una marca de estado escrita por ella en su pregunta se borra al guardar: la
   marca es del servidor. Si guardar falla, el rastro igual queda y el stream

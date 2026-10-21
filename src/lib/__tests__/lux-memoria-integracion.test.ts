@@ -313,6 +313,19 @@ describe("revisión: carreras y aperturas", () => {
     ...identidad(org), userId: org.userId, respuesta: { texto, en, interrumpida: false },
   });
 
+  it("dos pestañas a la vez: cada respuesta queda junto a su pregunta, aunque cierren al revés", async () => {
+    const org = await consultorio();
+    const t0 = new Date(Date.UTC(2026, 9, 5, 14));
+    const t = (s: number) => new Date(t0.getTime() + s * 1000);
+    // A pregunta primero y termina último; B pregunta después y termina antes.
+    await guardarTurnos(db(), { ...identidad(org), userId: org.userId, pregunta: { texto: "PREGUNTA_B", en: t(1) }, respuesta: { texto: "RESPUESTA_B", en: t(2), interrumpida: false } });
+    await guardarTurnos(db(), { ...identidad(org), userId: org.userId, pregunta: { texto: "PREGUNTA_A", en: t(0) }, respuesta: { texto: "RESPUESTA_A", en: t(3), interrumpida: false } });
+    await apertura(org, "SALUDO", t(60));
+    expect((await cargarConversacion(db(), identidad(org))).map((x) => x.texto)).toEqual([
+      "PREGUNTA_A", "RESPUESTA_A", "PREGUNTA_B", "RESPUESTA_B", "SALUDO",
+    ]);
+  });
+
   it("muchas visitas sin preguntar no tapan la charla: se lee hacia atrás hasta encontrarla", async () => {
     const org = await consultorio();
     await intercambio(org, 0);
