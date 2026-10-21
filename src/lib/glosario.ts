@@ -2229,3 +2229,8 @@ export const DESCARTAR_Y_GRABAR_TITULO = "¿Descartar la grabación que quedó?"
 export const DESCARTAR_Y_GRABAR_MENSAJE =
   "Se borra de este teléfono y no se puede recuperar. Después empieza una grabación nueva.";
 export const DESCARTAR_Y_GRABAR_ACCION = "Descartar y grabar";
+
+/** Salir de /grabar mientras graba (useProtegerTrabajo): la grabación se corta. */
+export const GRABAR_SALIDA_GRABANDO = "Se está grabando. Si salís, la grabación se corta.";
+/** Salir de /grabar con audio que no subió y sin copia en el teléfono. */
+export const GRABAR_SALIDA_SIN_COPIA = "En este teléfono no quedó copia de la grabación. Si salís, se pierde.";

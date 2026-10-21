@@ -86,6 +86,11 @@ envíe.
 
 **Ninguna interrupción envía nada sola.**
 
+**No se sale sin querer.** Mientras grabás no está **Volver**. Si tocás el
+menú de abajo o Atrás, la app pregunta antes, con **Quedarme** e **Ir igual**:
+*"Se está grabando. Si salís, la grabación se corta."* Cerrar la pestaña también
+pide confirmación al navegador.
+
 ### Pausar
 
 **Pausar** detiene la captura y aparece **En pausa**. El cronómetro se detiene
@@ -146,6 +151,11 @@ audio. Está a salvo en tu teléfono. Probá de nuevo."* con un botón
 guardada en el teléfono. Poné el teléfono en una conexión buena y tocá
 **Reintentar** las veces que haga falta. No des por guardada una sesión hasta
 ver *"La grabación llegó bien."*
+
+Mientras la grabación no subió, **Volver** no está arriba. Si la copia quedó en
+el teléfono, salir no pierde nada: la grabación se ofrece cuando volvés a la
+pantalla de grabar. Si no quedó copia, salir pregunta antes: *"En este teléfono
+no quedó copia de la grabación. Si salís, se pierde."*
 
 Si el audio ya subió pero el turno no quedó marcado, dice *"La sesión se guardó,
 pero el turno quedó como agendado. Probá de nuevo."*: **Reintentar** repite solo

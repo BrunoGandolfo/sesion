@@ -4,10 +4,11 @@
 // 1-camino-critico.md H1-H4), por lo que ve y toca la profesional. El
 // grabador va doblado, como en grabar-view.test.tsx.
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { Grabador } from "@/components/grabacion/GrabadorSesion";
+import type { DatosGrabacion, Grabador } from "@/components/grabacion/GrabadorSesion";
+import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
 import {
   COPIA_NO_GUARDADA,
   CORTE_LIMITE_SIN_COPIA,
@@ -15,7 +16,15 @@ import {
   DESCARTAR_Y_GRABAR_ACCION,
   DESCARTAR_Y_GRABAR_TITULO,
   ENVIAR_LA_QUE_QUEDO,
+  GRABAR_SALIDA_GRABANDO,
+  GRABAR_SALIDA_SIN_COPIA,
+  IR_IGUAL,
+  REINTENTAR,
+  SALIDA_TRABAJO_TITULO,
+  VOLVER,
+  VOLVER_A_LA_FICHA,
 } from "@/lib/glosario";
+import { ApiClientError } from "@/lib/api-client";
 
 import { GrabarView } from "../grabar-view";
 
@@ -23,7 +32,9 @@ const m = vi.hoisted(() => ({
   router: { push: vi.fn(), refresh: vi.fn() },
   get: vi.fn(),
   post: vi.fn(),
+  subir: vi.fn(),
   grabador: {} as Record<string, unknown>,
+  opciones: null as null | { onListo: (d: DatosGrabacion) => void },
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => m.router }));
@@ -35,13 +46,16 @@ vi.mock("@/lib/api-client", async (original) => ({
 vi.mock("@/lib/grabacion-storage", () => ({ limpiarGrabacion: vi.fn(), asociarTurno: vi.fn(async () => {}) }));
 vi.mock("@/lib/subida-audio", async (original) => ({
   ...(await original<typeof import("@/lib/subida-audio")>()),
-  subirAudio: vi.fn(),
+  subirAudio: m.subir,
   volverAGrabando: vi.fn(),
   marcarTurnoRealizado: vi.fn(),
 }));
 vi.mock("@/components/grabacion/GrabadorSesion", () => ({
   formatearDuracion: () => "00:10",
-  useGrabador: () => m.grabador,
+  useGrabador: (opciones: { onListo: (d: DatosGrabacion) => void }) => {
+    m.opciones = opciones;
+    return m.grabador;
+  },
 }));
 
 const props = { turnoId: "t1", turnoProgramado: true, horaTexto: "12:00", pacienteId: "p1", pacienteNombre: "Paciente Sintética", autorizacionVigente: true };
@@ -149,5 +163,95 @@ describe("H3: si la copia en el teléfono falla mientras graba, se dice ahí mis
     render(<GrabarView {...props} />);
     expect(screen.getByText(CORTE_LIMITE_SIN_COPIA)).toBeTruthy();
     expect(screen.queryByText(COPIA_NO_GUARDADA)).toBeNull();
+  });
+});
+
+describe("H4: no se sale de /grabar con audio que sólo está en memoria", () => {
+  /** La pantalla dentro del dashboard, con el menú de abajo como un enlace. */
+  function enElDashboard(extra: Partial<typeof props> = {}) {
+    return render(
+      <ProteccionTrabajo>
+        <GrabarView {...props} {...extra} />
+        <a href="/hoy">Hoy</a>
+      </ProteccionTrabajo>,
+    );
+  }
+  const salidaPedida = () => screen.queryByText(SALIDA_TRABAJO_TITULO);
+  function cierreDePestanaFrenado() {
+    const evento = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(evento);
+    return evento.defaultPrevented;
+  }
+
+  /** Terminó y la subida falló por red: la pantalla de Reintentar. */
+  async function subidaFallida(copiaEnTelefono: boolean) {
+    m.subir.mockRejectedValue(new TypeError("Failed to fetch"));
+    grabadorEn({ estado: "entregada", copiaFallida: !copiaEnTelefono });
+    const vista = enElDashboard();
+    const datos: DatosGrabacion = {
+      audioBlob: new Blob(["audio"]), duracionSegundos: 600, pausas: [],
+      diagnostico: { eventos: [], chunks: 600, bytes: 5 }, respaldoEnTelefono: async () => copiaEnTelefono,
+    };
+    await act(async () => { m.opciones?.onListo(datos); });
+    await screen.findByRole("button", { name: REINTENTAR });
+    return vista;
+  }
+
+  test("antes de grabar se puede volver, y el menú no pregunta", () => {
+    enElDashboard();
+    expect(screen.getByRole("link", { name: VOLVER })).toBeTruthy();
+    fireEvent.click(screen.getByRole("link", { name: "Hoy" }));
+    expect(salidaPedida()).toBeNull();
+    expect(cierreDePestanaFrenado()).toBe(false);
+  });
+
+  test("grabando no está Volver; el menú y cerrar la pestaña preguntan", () => {
+    grabadorEn({ estado: "grabando" });
+    enElDashboard();
+    expect(screen.queryByRole("link", { name: VOLVER })).toBeNull();
+    fireEvent.click(screen.getByRole("link", { name: "Hoy" }));
+    expect(salidaPedida()).toBeTruthy();
+    expect(screen.getByText(GRABAR_SALIDA_GRABANDO)).toBeTruthy();
+    expect(m.router.push).not.toHaveBeenCalled();
+    expect(cierreDePestanaFrenado()).toBe(true);
+  });
+
+  test("grabando sin copia en el teléfono, avisa que se pierde", () => {
+    grabadorEn({ estado: "pausado", copiaFallida: true });
+    enElDashboard();
+    fireEvent.click(screen.getByRole("link", { name: "Hoy" }));
+    expect(screen.getAllByText(GRABAR_SALIDA_SIN_COPIA).length).toBeGreaterThan(0);
+  });
+
+  test("subida fallida sin copia: no está Volver, el menú pregunta y, si ella insiste, se va", async () => {
+    await subidaFallida(false);
+    expect(screen.queryByRole("link", { name: VOLVER })).toBeNull();
+    expect(cierreDePestanaFrenado()).toBe(true);
+    fireEvent.click(screen.getByRole("link", { name: "Hoy" }));
+    expect(screen.getAllByText(GRABAR_SALIDA_SIN_COPIA).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: IR_IGUAL }));
+    expect(m.router.push).toHaveBeenCalledWith("/hoy");
+  });
+
+  test("subida fallida con la copia en el teléfono: Volver tampoco está, pero salir no pierde nada", async () => {
+    await subidaFallida(true);
+    expect(screen.queryByRole("link", { name: VOLVER })).toBeNull();
+    fireEvent.click(screen.getByRole("link", { name: "Hoy" }));
+    expect(salidaPedida()).toBeNull();
+  });
+
+  test("un rechazo sin copia: Volver a la ficha también pregunta", async () => {
+    m.subir.mockRejectedValue(new ApiClientError("La grabación no se puede guardar", 422));
+    m.get.mockResolvedValue({ id: "s1", estado: "fallida" });
+    grabadorEn({ estado: "entregada", copiaFallida: true });
+    enElDashboard();
+    const datos: DatosGrabacion = {
+      audioBlob: new Blob(["audio"]), duracionSegundos: 600, pausas: [],
+      diagnostico: { eventos: [], chunks: 600, bytes: 5 }, respaldoEnTelefono: async () => false,
+    };
+    await act(async () => { m.opciones?.onListo(datos); });
+    fireEvent.click(await screen.findByRole("button", { name: VOLVER_A_LA_FICHA }));
+    expect(salidaPedida()).toBeTruthy();
+    expect(m.router.push).not.toHaveBeenCalled();
   });
 });
