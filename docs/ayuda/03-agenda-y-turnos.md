@@ -99,7 +99,7 @@ paciente no vino a este turno."*
   modalidad, el recordatorio queda como estaba. Si ya habías abierto el
   WhatsApp del aviso anterior, el nuevo es un **cambio de horario** y aparece
   en el acto en **Recordatorios para hoy**, en **Hoy**, como **Sin avisar**:
-  ver `06-recordatorios-sms.md`.
+  ver `06-recordatorios-whatsapp.md`.
 - **No vino** — pregunta *"¿[Nombre] no vino?"* y avisa: *"El turno queda
   registrado como ausencia. No se cobra y no se puede grabar."*
   **El recordatorio se cancela.**

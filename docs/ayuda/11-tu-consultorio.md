@@ -67,7 +67,7 @@ vos, y las respuestas te llegan a tu WhatsApp. En **Hoy** aparece
   datos reales.
 
 Qué turnos aparecen cada día en **Hoy** y cómo es avisar por WhatsApp está en
-`06-recordatorios-sms.md`.
+`06-recordatorios-whatsapp.md`.
 
 ## Aviso de cobro
 
@@ -209,6 +209,6 @@ src/lib/limites-prueba.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/components/layout/aviso-prueba.tsx
 src/app/api/cuenta/registro/route.ts
-src/lib/sms/texto.ts
+src/lib/recordatorio-texto.ts
 src/lib/glosario.ts
 -->

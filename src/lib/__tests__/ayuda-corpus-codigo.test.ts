@@ -90,11 +90,15 @@ describe("los ejemplos de voz de Lupita", () => {
     expect(tarifa).toContain("conservan la tarifa que tenían");
   });
 
-  it("el recordatorio: el momento se calcula al programar el aviso del turno", () => {
+  it("el recordatorio: lo manda ella por WhatsApp desde Hoy, y el momento vale para todos", () => {
     const recordatorio = ejemplosBuenos().find((e) => e.includes("¿Cómo mando un recordatorio?"))!;
     expect(codigo("src/app/(dashboard)/config/_components/config-view.tsx")).toContain("<TituloSeccion>Recordatorio</TituloSeccion>");
-    // Que el momento se calcula al programar el envío lo prueba envios-del-turno.test.ts.
-    expect(recordatorio).toContain("vale para los turnos que agendes o reprogrames");
+    expect(recordatorio).toContain(`"${glosario.RECORDATORIOS_PARA_HOY}"`);
+    expect(recordatorio).toContain(`"${glosario.ABRIR_WHATSAPP}"`);
+    expect(recordatorio).not.toMatch(/SMS/);
+    // La lista se calcula cada vez con el modo vigente (correspondeAvisarHoy,
+    // recordatorios-whatsapp.test.ts): cambiarlo alcanza a lo ya agendado.
+    expect(recordatorio).toContain("vale también para los turnos ya agendados");
   });
 
   it("la grabación cortada: lo guardado queda en el teléfono y los botones son los del grabador", () => {

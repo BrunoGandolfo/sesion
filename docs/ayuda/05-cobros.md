@@ -109,7 +109,6 @@ turno se prepara automáticamente en **Hoy**.
 
 Con **Abrir WhatsApp** se abre la conversación con la paciente y el mensaje ya
 escrito; lo mandás vos, en WhatsApp, y las respuestas te llegan a tu WhatsApp.
-No sale ningún SMS.
 
 La app anota que lo abriste: *"Quedó anotado. El mensaje lo mandás vos en
 WhatsApp."* y la fila pasa a **Avisado hoy**. Anota la apertura, no el envío:
@@ -117,11 +116,8 @@ si cerrás WhatsApp sin mandar, igual figura como avisado. Cada vez que lo
 abrís queda anotado de nuevo. Si anotarlo falla, WhatsApp se abre igual y la
 pantalla dice *"Se abrió WhatsApp, pero no quedó anotado."*
 
-A una persona que pidió no recibir más mensajes respondiendo **BAJA** a un SMS
-la app tampoco le abre el WhatsApp: lo dice en pantalla.
-
-**Avisado hace N días** cuenta el último aviso, también los SMS de cobro que
-salían antes: la fila sigue sabiendo cuándo le avisaste.
+**Avisado hace N días** cuenta la última vez que abriste su WhatsApp de
+cobro.
 
 ## Qué hace la app por detrás
 
@@ -164,7 +160,6 @@ src/app/api/turnos/[id]/cobrar/route.ts
 src/app/api/deudores/route.ts
 src/lib/deudas.ts
 src/app/api/_lib/casos-uso/recordar-cobro.ts
-src/app/api/_lib/casos-uso/despachar-sms.ts
 src/app/(dashboard)/pacientes/[id]/_components/sesiones-tab.tsx
 src/app/(dashboard)/pacientes/[id]/_components/sesiones-datos.ts
 src/app/(dashboard)/pacientes/[id]/_components/filas-sesion.tsx

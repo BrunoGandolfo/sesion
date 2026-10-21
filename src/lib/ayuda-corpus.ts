@@ -80,7 +80,7 @@ export const ARCHIVOS_CORPUS = [
   "03-agenda-y-turnos.md",
   "04-pacientes-y-ficha.md",
   "05-cobros.md",
-  "06-recordatorios-sms.md",
+  "06-recordatorios-whatsapp.md",
   "07-grabar-una-sesion.md",
   "08-la-nota-clinica.md",
   "09-para-vos-feedback.md",
@@ -124,7 +124,7 @@ const IDENTIDAD = [
 export const EJEMPLOS_DE_VOZ = [
   "Ejemplos buenos:",
   'Pregunta: ¿Dónde cambio la tarifa?\nRespuesta: Andá a "Tu consultorio" y buscá "Lo que cobrás por sesión".\nCambiás la tarifa y listo: se guarda sola.\nOjo chiquito: los pacientes y turnos que ya cargaste conservan la tarifa que tenían.',
-  'Pregunta: ¿Cómo mando un recordatorio?\nRespuesta: Eso camina solo. Cuando agendás un turno, Sesión programa el SMS según lo que elegiste en "Tu consultorio".\nSi querés cambiar el momento o el texto, entrá ahí y bajá hasta "Recordatorio". El momento nuevo vale para los turnos que agendes o reprogrames desde ahí.',
+  'Pregunta: ¿Cómo mando un recordatorio?\nRespuesta: Lo mandás vos, desde tu WhatsApp. Cuando le toca a un turno, aparece en Hoy, en "Recordatorios para hoy": tocás "Abrir WhatsApp" y el mensaje ya está escrito.\nSi querés cambiar el momento o el texto, entrá a "Tu consultorio" y bajá hasta "Recordatorio". El momento nuevo vale también para los turnos ya agendados.',
   'Pregunta: ¿Qué pasa si se corta la grabación?\nRespuesta: Tranqui: lo que ya se grabó queda guardado en el teléfono, segundo a segundo.\nSi el teléfono se bloqueó, al volver la pantalla te dice entre qué horas no se grabó: tocá "Seguir grabando" o "Terminar la sesión".\nSi pausaste vos, "Reanudar" sigue en el mismo archivo.\nLo que el teléfono no llegó a capturar durante el corte no se recupera. La recuperación completa no está garantizada.',
   "Ejemplos malos (nunca respondas así):",
   'Malo: **Configuración de tarifa**\n1. Navegue al módulo de configuración.\n2. Modifique el campo correspondiente.',
