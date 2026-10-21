@@ -284,10 +284,13 @@ describe("cada turno se guarda al cerrar la respuesta", () => {
     expect(guardarTurnos).toHaveBeenCalledOnce();
   });
 
-  it("si guardar falla, el rastro igual queda y la respuesta termina en error", async () => {
-    vi.mocked(guardarTurnos).mockRejectedValueOnce(new Error("base caída"));
-    await expect(leer(await pedir({ pregunta: "¿y?" }))).rejects.toThrow();
+  it("si guardar falla, el rastro igual queda, la respuesta termina en error y el log no lleva texto", async () => {
+    const logs = [vi.spyOn(console, "error").mockImplementation(() => {}), vi.spyOn(console, "warn").mockImplementation(() => {})];
+    vi.mocked(guardarTurnos).mockRejectedValueOnce(new Error("no se pudo guardar PREGUNTA_SECRETA"));
+    await expect(leer(await pedir({ pregunta: "PREGUNTA_SECRETA" }))).rejects.toThrow();
     expect(registrarAuditoria).toHaveBeenCalledOnce();
+    expect(logs[0]).toHaveBeenCalled();
+    for (const log of logs) expect(JSON.stringify(log.mock.calls)).not.toMatch(/PREGUNTA_SECRETA|TEXTO|me voy/);
   });
 });
 

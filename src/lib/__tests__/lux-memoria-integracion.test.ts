@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { actualizarPaciente } from "@/app/api/_lib/casos-uso/pacientes";
 import { abrirConversacion, PEDIDO_APERTURA, pedidoApertura } from "@/app/api/_lib/casos-uso/lux/conversar";
 import {
   borrarConversacion, cargarConversacion, guardarTurnos, type ClienteMemoriaLux,
@@ -164,6 +165,17 @@ describe("aislamiento", () => {
 });
 
 describe("la vida de la paciente", () => {
+  it("al archivarla, su conversación se conserva", async () => {
+    const org = await consultorio();
+    await intercambio(org, 0);
+    await actualizarPaciente({
+      prisma: base.db as never, organizationId: org.orgId, pacienteId: org.pacienteId,
+      cambios: { activo: false }, usuarioId: org.userId,
+    });
+    expect((await base.prisma.paciente.findUnique({ where: { id: org.pacienteId } }))?.activo).toBe(false);
+    expect((await cargarConversacion(db(), identidad(org))).map((t) => t.texto)).toEqual(["PREGUNTA_0", "RESPUESTA_0"]);
+  });
+
   it("al eliminarla, su conversación se borra en cascada; la de otra queda", async () => {
     const org = await consultorio();
     const beto = await otraPaciente(org);
