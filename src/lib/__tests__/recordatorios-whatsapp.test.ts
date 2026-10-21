@@ -594,6 +594,25 @@ describe("rutas", () => {
     expect(filas.map((f) => f.fechaTurno)).toEqual([vieja, turno.fecha]);
   });
 
+  it("GET …/[turnoId]: el aviso del turno para su fecha vigente (pendiente o avisado), 404 si es ajeno", async () => {
+    const o = await crearOrg();
+    const ajena = await crearOrg();
+    const p = await crearPaciente(o);
+    const turno = await crearTurno(o, p.id, MANANA_15);
+    const { GET } = await import("@/app/api/recordatorios/whatsapp/[turnoId]/route");
+    const pedir = () => GET(new Request("http://localhost/x"), { params: Promise.resolve({ turnoId: turno.id }) });
+    sesionActual.organizationId = o.orgId;
+    sesionActual.userId = o.userId;
+    expect(await (await pedir()).json()).toEqual({ data: { avisadoEn: null } });
+    // Lo avisado para otra fecha no cuenta: el turno se movió después.
+    await avisar(o, turno.id, new Date(MANANA_15.getTime() - DIA), new Date("2026-09-01T12:00:00.000Z"));
+    await avisar(o, turno.id, MANANA_15, new Date("2026-09-02T12:00:00.000Z"));
+    await avisar(o, turno.id, MANANA_15, new Date("2026-09-03T12:00:00.000Z"));
+    expect(await (await pedir()).json()).toEqual({ data: { avisadoEn: "2026-09-03T12:00:00.000Z" } });
+    sesionActual.organizationId = ajena.orgId;
+    expect((await pedir()).status).toBe(404);
+  });
+
   it("POST con un turno ajeno o inexistente: 404", async () => {
     await entrar();
     const { turno } = await turnoConAvisoHoy(await crearOrg());

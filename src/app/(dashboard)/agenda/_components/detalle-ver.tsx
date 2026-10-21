@@ -24,11 +24,19 @@ import {
   PAGADO,
   PENDIENTE,
   RECORDATORIO,
-  RECORDATORIO_ESTADO,
+  RECORDATORIO_PENDIENTE,
+  recordatorioAvisado,
 } from "@/lib/glosario";
-import type { TurnoConPaciente } from "@/types/domain";
+import { fechaInputMvd } from "@/lib/fechas-montevideo";
+import type { AvisoDelTurno, TurnoConPaciente } from "@/types/domain";
 
-import type { AccionesDelDetalle, RecordatorioJson } from "./detalle-datos";
+/** "DD/MM" del día de Montevideo. */
+function diaMes(instante: Date): string {
+  const [, mes, dia] = fechaInputMvd(instante).split("-");
+  return `${dia}/${mes}`;
+}
+
+import type { AccionesDelDetalle } from "./detalle-datos";
 
 /** Los modos del detalle a los que se entra desde un botón de "ver". */
 export type ModoDesdeVer =
@@ -43,7 +51,7 @@ export function DatosDelTurno({
   aviso,
 }: {
   turno: TurnoConPaciente;
-  aviso: RecordatorioJson | null;
+  aviso: AvisoDelTurno | null;
 }) {
   return (
     <>
@@ -76,27 +84,12 @@ export function DatosDelTurno({
 
       {aviso ? (
         <div className="border-t border-[color:var(--border-subtle)] pt-4">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+          <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-500">
             {RECORDATORIO}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span
-              className={`text-[14px] ${
-                aviso.estado === "fallido"
-                  ? "text-terracotta-600"
-                  : "text-ink-900"
-              }`}
-            >
-              {RECORDATORIO_ESTADO[aviso.estado] ?? aviso.estado}
-            </span>
-            <span className="text-[13px] tabular-nums text-ink-500">
-              ·{" "}
-              {aviso.aceptadoEn
-                ? `${fechaCorta(new Date(aviso.aceptadoEn))} ${hora(new Date(aviso.aceptadoEn))}`
-                : `${fechaCorta(new Date(aviso.programadoEn))} ${hora(new Date(aviso.programadoEn))}`}
-            </span>
-          </div>
-          {aviso.motivoNoEnvio ? <p className="mt-2 text-[13px] text-ink-700">{aviso.motivoNoEnvio}</p> : null}
+          <p className="mt-1 text-[14px] text-ink-900">
+            {aviso.avisadoEn ? recordatorioAvisado(diaMes(new Date(aviso.avisadoEn))) : RECORDATORIO_PENDIENTE}
+          </p>
         </div>
       ) : null}
 

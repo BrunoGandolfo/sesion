@@ -2218,3 +2218,11 @@ export const LUX_EMPEZAR_DE_CERO_MENSAJE =
 export const LUX_EMPEZAR_DE_CERO_ACCION = "Borrar la conversación";
 export const LUX_BORRANDO = "Borrando…";
 export const LUX_NO_SE_BORRO = "No se pudo borrar la conversación. Probá de nuevo.";
+
+// ─── borrar-sms ──────────────────────────────────────────────────────────────
+
+/** El bloque "Recordatorio" del detalle del turno: el aviso por WhatsApp. */
+export const RECORDATORIO_PENDIENTE = "Pendiente de avisar por WhatsApp";
+export function recordatorioAvisado(fecha: string): string {
+  return `Avisado por WhatsApp el ${fecha}`;
+}

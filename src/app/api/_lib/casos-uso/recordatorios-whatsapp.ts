@@ -42,7 +42,7 @@ import {
 } from "@/lib/recordatorios-programacion";
 import { textoDelRecordatorio } from "@/lib/sms/texto";
 import { enlaceWhatsapp } from "@/lib/whatsapp";
-import type { AvisoWhatsappRegistrado, RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
+import type { AvisoDelTurno, AvisoWhatsappRegistrado, RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
 
 import { auditar } from "../auditoria";
 import { ApiError } from "../responses";
@@ -147,6 +147,25 @@ export function correspondeAvisarHoy(
   if (ultimo) return ultimo >= inicioDelDiaMvd(ahora) ? { motivo, avisadoEn: ultimo } : null;
   if (deOtraFecha) return { motivo, avisadoEn: null };
   return calcularProgramadoEn(turno.fecha, modo) <= finDelDiaMvd(ahora) ? { motivo, avisadoEn: null } : null;
+}
+
+/** El aviso de UN turno, para el bloque "Recordatorio" del detalle: la
+ *  última apertura del enlace para su fecha vigente, o null si todavía no se
+ *  avisó. 404 si el turno no es de la organización. */
+export async function avisoDelTurno({
+  prisma,
+  organizationId,
+  turnoId,
+}: { prisma: ClientePrisma; organizationId: string; turnoId: string }): Promise<AvisoDelTurno> {
+  const turno = await prisma.turno.findFirst({
+    where: { id: turnoId, organizationId },
+    select: { fecha: true, avisosWhatsapp: { where: { tipo: "recordatorio" }, select: { fechaTurno: true, abiertoEn: true } } },
+  });
+  if (!turno) throw new ApiError("Turno no encontrado", 404);
+  const ultimo = turno.avisosWhatsapp
+    .filter((a) => a.fechaTurno.getTime() === turno.fecha.getTime())
+    .reduce<Date | null>((max, a) => (!max || a.abiertoEn > max ? a.abiertoEn : max), null);
+  return { avisadoEn: ultimo?.toISOString() ?? null };
 }
 
 export interface RegistrarAvisoParams {

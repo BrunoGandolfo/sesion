@@ -40,7 +40,7 @@ import {
   VOLVER,
   CARGANDO,
 } from "@/lib/glosario";
-import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
+import type { AvisoDelTurno, MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 import { SelectorMetodoPago } from "@/components/cobro/sheet-metodo-pago";
@@ -52,7 +52,6 @@ import {
   accionesDelDetalle,
   leerRecordatorio,
   leerSesion,
-  type RecordatorioJson,
   type SesionDelTurno,
 } from "./detalle-datos";
 import { AccionesDelTurno, DatosDelTurno } from "./detalle-ver";
@@ -101,10 +100,10 @@ export function TurnoDetailSheet({
   const [sesion, setSesion] = React.useState<SesionDelTurno | "sin-dato">(
     "sin-dato",
   );
-  // El recordatorio del turno. "sin-dato" mientras no contestó la API o
-  // cuando no corresponde pedirlo; null si el turno no tiene ninguno.
+  // El aviso por WhatsApp del turno. "sin-dato" mientras no contestó la API
+  // o cuando no corresponde pedirlo; null si no se pudo leer.
   const [recordatorio, setRecordatorio] = React.useState<
-    RecordatorioJson | null | "sin-dato"
+    AvisoDelTurno | null | "sin-dato"
   >("sin-dato");
 
   const metodos = useForm<EditValues>({

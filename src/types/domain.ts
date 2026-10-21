@@ -154,6 +154,13 @@ export interface RecordatoriosWhatsappDeHoy {
   turnos: RecordatorioWhatsapp[];
 }
 
+/** `data` de GET /api/recordatorios/whatsapp/[turnoId]: el aviso del turno
+ *  para su fecha vigente. */
+export interface AvisoDelTurno {
+  /** ISO de la última vez que abrió el enlace para esta fecha, o null. */
+  avisadoEn: string | null;
+}
+
 /** `data` (201) de POST /api/recordatorios/whatsapp/[turnoId]/abierto. */
 export interface AvisoWhatsappRegistrado {
   /** ISO del aviso recién registrado. */

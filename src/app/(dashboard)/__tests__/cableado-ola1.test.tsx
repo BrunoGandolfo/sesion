@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type { TurnoConPaciente } from "@/types/domain";
 import { NuevoPacienteForm } from "../pacientes/_components/nuevo-paciente-form";
 import { TurnoDetailSheet } from "../agenda/_components/turno-detail-sheet";
+import { RECORDATORIO_PENDIENTE, recordatorioAvisado } from "@/lib/glosario";
 const m = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api-client", async (original) => ({
   ...await original<typeof import("@/lib/api-client")>(), apiGet: m.get, apiPost: m.post,
@@ -40,19 +41,17 @@ const turno = {
   paciente:{id:"p1",nombre:"Ana",apellido:"Prueba",telefono:"+59899111222"},
 } satisfies TurnoConPaciente;
 it.each([
-  ["pendiente","Programado"],["enviando","Enviando"],["aceptado","En camino"],
-  ["entregado","Entregado"],["no_entregado","No llegó"],["cancelado","Cancelado"],
-  ["fallido","No salió"],["desconocido","No sabemos si salió"],
-])("el detalle lee el envío durable y muestra %s sin ofrecer reintento manual", async (estado, texto) => {
+  [null, RECORDATORIO_PENDIENTE],
+  ["2026-09-14T22:10:00.000Z", recordatorioAvisado("14/09")],
+])("el detalle muestra el aviso por WhatsApp del turno (%s), nunca un estado de SMS", async (avisadoEn, texto) => {
   m.get.mockImplementation(async (url:string) => {
     if(url === "/api/sesion-clinica?turnoId=t1") return null;
-    if(url === "/api/sms/envios?turnoId=t1") return [{id:"sms1",estado,programadoEn:fecha.toISOString(),
-      aceptadoEn:null,intentos:1,motivoNoEnvio:"Motivo informado por el proveedor"}];
+    if(url === "/api/recordatorios/whatsapp/t1") return { avisadoEn };
     throw Error("Ruta vieja: " + url);
   });
   render(<TurnoDetailSheet open turno={turno} onClose={vi.fn()} onUpdated={vi.fn()} />);
   expect(await screen.findByText(texto)).toBeTruthy();
-  expect(screen.getByText("Motivo informado por el proveedor")).toBeTruthy();
+  expect(screen.queryByText(/Cancelado|SMS|va por WhatsApp/)).toBeNull();
   expect(screen.queryByRole("button", {name:/reintentar/i})).toBeNull();
-  expect(m.get).toHaveBeenCalledWith("/api/sms/envios?turnoId=t1", expect.objectContaining({signal:expect.any(AbortSignal)}));
+  expect(m.get).toHaveBeenCalledWith("/api/recordatorios/whatsapp/t1", expect.objectContaining({signal:expect.any(AbortSignal)}));
 });
