@@ -33,7 +33,7 @@ import { requirePaciente } from "../../pacientes";
 import { ApiError } from "../../responses";
 import { ErrorProveedorAsistente } from "../ayuda/reservar-cupo";
 import { ejecutorLux, HERRAMIENTAS_LUX, type EjecutorLux } from "./herramientas";
-import { armarMaterial, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
+import { armarMaterial, fechaLegible, leidasEnHistorial, type ClienteLux, type MaterialLux } from "./material";
 import { cargarConversacion, type TurnoGuardadoLux } from "./memoria";
 
 /** Incluye el razonamiento del modelo (thinking adaptativo de Haiku 5.5). */
@@ -59,6 +59,15 @@ export class ErrorProveedorLux extends ErrorProveedorAsistente {
  *  exige que el primer mensaje sea de la usuaria. */
 export const PEDIDO_APERTURA =
   "(La profesional abrió la conversación sobre este paciente, sin pregunta. Hablá vos primero, como dice <apertura>.)";
+
+/** El pedido de la apertura de hoy. Si ya hablaron (`ultimaVez`: el último
+ *  turno guardado), lleva cuándo, para que el saludo empiece por ahí (la
+ *  línea de <apertura> en system-prompt.md). La fecha va acá y no en el
+ *  prompt: el prompt es parte del prefijo cacheado y no lleva nada variable. */
+export function pedidoApertura(ultimaVez: Date | null): string {
+  if (!ultimaVez) return PEDIDO_APERTURA;
+  return `(La profesional volvió a abrir la conversación sobre este paciente, sin pregunta. La última vez que hablaron fue el ${fechaLegible(ultimaVez)}: arriba está esa conversación. Hablá vos primero, como dice <apertura>, empezando por en qué quedaron y cuándo.)`;
+}
 
 interface ConversarBase {
   prisma: ClienteLux;
@@ -90,14 +99,17 @@ export async function autorizarPaciente(prisma: ClienteLux, organizationId: stri
 /** La apertura: lo guardado de esta paciente (conversaciones_lux) y, al
  *  final, el pedido de que Lux hable primero. */
 export function abrirConversacion(input: ConversarBase): Promise<ConversacionLux> {
-  return conversar(input, async () => paraElModelo(await cargarConversacion(input.prisma, input)), PEDIDO_APERTURA);
+  return conversar(input, async () => {
+    const guardados = await cargarConversacion(input.prisma, input);
+    return { historial: paraElModelo(guardados), ultimo: pedidoApertura(guardados.at(-1)?.creadoEn ?? null) };
+  });
 }
 
 export function responder(input: ConversarBase & { pregunta: string; historial?: TurnoHistorialLux[] }): Promise<ConversacionLux> {
   const pregunta = input.pregunta.trim();
   if (pregunta === "") throw new ApiError("Escribí una pregunta.", 400);
   if (pregunta.length > LARGO_MAX_PREGUNTA_LUX) throw new ApiError(MENSAJE_PREGUNTA_LARGA_LUX, 400);
-  return conversar(input, async () => input.historial ?? [], pregunta);
+  return conversar(input, async () => ({ historial: input.historial ?? [], ultimo: pregunta }));
 }
 
 /** Lo guardado, como lo lee el modelo: una respuesta cortada no viaja (la
@@ -136,8 +148,9 @@ export function historialQueViaja(historial: readonly TurnoHistorialLux[]): Turn
 
 async function conversar(
   input: ConversarBase,
-  historial: () => Promise<TurnoHistorialLux[]>,
-  ultimo: string,
+  /** El historial y el último mensaje de ella (la pregunta o el pedido de
+   *  apertura). Se lee después de verificar la clave. */
+  preparar: () => Promise<{ historial: TurnoHistorialLux[]; ultimo: string }>,
 ): Promise<ConversacionLux> {
   const apiKey = input.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -145,7 +158,8 @@ async function conversar(
     throw new ApiError(MENSAJE_SIN_CLAVE_LUX, 503);
   }
 
-  const vistos = historialQueViaja(await historial());
+  const { historial, ultimo } = await preparar();
+  const vistos = historialQueViaja(historial);
   const mensajes: MessageParam[] = [...mensajesDe(vistos), { role: "user", content: ultimo }];
 
   // 404 si el paciente no es de la organización. Errores de base: 500. Las

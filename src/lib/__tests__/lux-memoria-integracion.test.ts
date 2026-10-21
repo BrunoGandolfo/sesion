@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { abrirConversacion, PEDIDO_APERTURA } from "@/app/api/_lib/casos-uso/lux/conversar";
+import { abrirConversacion, PEDIDO_APERTURA, pedidoApertura } from "@/app/api/_lib/casos-uso/lux/conversar";
 import {
   cargarConversacion, guardarTurnos, type ClienteMemoriaLux,
 } from "@/app/api/_lib/casos-uso/lux/memoria";
@@ -182,8 +182,7 @@ describe("al abrir, lo guardado viaja al modelo", () => {
     const org = await consultorio();
     const { pedidos, crearConversacion } = doble();
     const conversacion = await abrir(org, crearConversacion);
-    expect(pedidos[0].messages.at(-1)).toEqual({ role: "user", content: expect.stringContaining("Hablá vos primero") });
-    expect(pedidos[0].messages).toHaveLength(1);
+    expect(pedidos[0].messages).toEqual([{ role: "user", content: PEDIDO_APERTURA }]);
     expect(conversacion.turnosHistorial).toBe(0);
   });
 
@@ -213,7 +212,9 @@ describe("al abrir, lo guardado viaja al modelo", () => {
       { role: "assistant", content: "Miro.\n_(mirando la transcripción del 04/08)_\nRESPUESTA_VIEJA" },
       { role: "user", content: "PREGUNTA_CORTADA" },
     ]);
-    expect(mensajes.at(-1)!.role).toBe("user");
+    // El saludo arranca por dónde quedaron, y cuándo: la fecha del último turno.
+    expect(mensajes.at(-1)).toEqual({ role: "user", content: pedidoApertura(new Date(Date.UTC(2026, 9, 2, 15, 1))) });
+    expect(mensajes.at(-1)!.content).toContain("02/10/2026");
     expect(JSON.stringify(mensajes)).not.toContain("RESPUESTA_CORTADA");
     expect(conversacion.turnosHistorial).toBe(4);
   });
