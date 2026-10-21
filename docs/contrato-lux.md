@@ -140,6 +140,16 @@ recifra como al resto), `interrumpida`, `creado_en`. Índice (`paciente_id`,
   Una marca de estado escrita por ella en su pregunta se borra al guardar: la
   marca es del servidor. Si guardar falla, el rastro igual queda y el stream
   termina en error.
+- **Empezar de cero gana a lo que estaba en vuelo:** guardar recibe la hora
+  en que llegó el pedido y no guarda nada si después hubo un
+  `lux.borrar_conversacion` de esa paciente. Guardar y borrar bloquean la
+  fila de la paciente y se serializan. La pantalla no envía preguntas con la
+  confirmación abierta.
+- **Aperturas sin contestar:** cada visita guarda la apertura de Lux. Al
+  cargar se descartan las que ella no contestó (la siguiente no es una
+  pregunta suya), salvo la última; si no, abrir la pestaña varias veces
+  llenaba el historial de saludos. "La última vez que hablaron" del pedido de
+  apertura es su última pregunta; sin ninguna pregunta, no hubo conversación.
 - **Quién lee:** la pantalla (GET, al abrir: lo muestra con un separador
   "Conversación del DD/MM" por día, y marca la respuesta cortada) y el caso
   de uso (el historial del modelo).
