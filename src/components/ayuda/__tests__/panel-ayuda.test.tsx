@@ -24,6 +24,7 @@ import {
   AYUDA_TOPE_DIARIO,
   AYUDA_BIENVENIDA,
   AYUDA_PRIVACIDAD,
+  SESION_VENCIDA,
 } from "@/lib/glosario";
 
 // El mismo esquema que valida la ruta (src/lib/ayuda-contrato.ts): lo que se
@@ -46,6 +47,18 @@ function respuestaError(status: number) {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/** Sin cookie, el proxy contesta 307 → /login y fetch sigue la redirección:
+ *  llega el HTML del login con 200. */
+function paginaDelLogin() {
+  const respuesta = new Response("<!DOCTYPE html><html><body><h1>Entrar a tu cuenta</h1></body></html>", {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+  Object.defineProperty(respuesta, "redirected", { value: true });
+  Object.defineProperty(respuesta, "url", { value: "http://localhost/login" });
+  return respuesta;
 }
 
 function montar() {
@@ -279,6 +292,16 @@ describe("PanelAyuda — los tres errores", () => {
       respuesta: () => Promise.resolve(respuestaError(502)),
       texto: ALGO_FALLO,
     },
+    {
+      nombre: "la sesión vencida (el pedido terminó en el login)",
+      respuesta: () => Promise.resolve(paginaDelLogin()),
+      texto: SESION_VENCIDA,
+    },
+    {
+      nombre: "la sesión vencida (401)",
+      respuesta: () => Promise.resolve(respuestaError(401)),
+      texto: SESION_VENCIDA,
+    },
   ];
 
   for (const caso of casos) {
@@ -291,8 +314,9 @@ describe("PanelAyuda — los tres errores", () => {
       const aviso = await panel.findByRole("alert");
       expect(aviso.textContent).toBe(caso.texto);
 
-      // Nunca el detalle técnico.
+      // Nunca el detalle técnico, ni el HTML del login.
       expect(panel.queryByText(/detalle técnico/)).toBeNull();
+      expect(document.body.textContent).not.toMatch(/Entrar a tu cuenta|<html|DOCTYPE/);
 
       // La pregunta que no se contestó vuelve al campo, así se puede mandar
       // de nuevo sin volver a escribirla.

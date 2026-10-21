@@ -97,7 +97,11 @@ export async function errorDeRespuesta(res: Response): Promise<ApiClientError> {
   return new ApiClientError(mensaje, res.status, details);
 }
 
-async function lanzarSiNoOk(res: Response): Promise<void> {
+/** Tira el ApiClientError si la respuesta no sirve: no-ok, o redirigida al
+ *  login (sesión vencida, 401). Para quien lee el body a mano (los streams
+ *  de Lux y del panel de ayuda): sin esto, el HTML del login se pintaba
+ *  como respuesta. */
+export async function lanzarSiNoOk(res: Response): Promise<void> {
   if (res.ok && !fueAlLogin(res)) return;
   throw await errorDeRespuesta(res);
 }

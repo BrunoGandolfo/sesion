@@ -4,7 +4,7 @@ import * as React from "react";
 import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-import { ApiClientError, esAbort } from "@/lib/api-client";
+import { ApiClientError, esAbort, lanzarSiNoOk } from "@/lib/api-client";
 import {
   LARGO_MAX_PREGUNTA,
   LARGO_MAX_TURNO,
@@ -29,6 +29,7 @@ import {
   AYUDA_STREAM_CORTADO,
   AYUDA_TOPE_DIARIO,
   LUPITA,
+  SESION_VENCIDA,
 } from "@/lib/glosario";
 import {
   Lupita, TAMANOS_LUPITA, DURACION_BROTA, DURACION_CELEBRA,
@@ -58,6 +59,7 @@ function esRutaClinica(pathname: string): boolean {
 
 function textoDeError(error: unknown): string {
   if (error instanceof ApiClientError) {
+    if (error.esNoAutorizado) return SESION_VENCIDA;
     return error.status === STATUS_TOPE_DIARIO ? AYUDA_TOPE_DIARIO : ALGO_FALLO;
   }
   return AYUDA_SIN_CONEXION;
@@ -139,9 +141,9 @@ export function PanelAyuda({ abierto, alCerrar }: PanelAyudaProps) {
         }),
         signal: control.signal,
       });
-      if (!respuesta.ok) {
-        throw new ApiClientError("No se pudo responder", respuesta.status);
-      }
+      // La misma regla que api-client: un pedido que terminó en el login es
+      // una sesión vencida, no una respuesta de Lupita.
+      await lanzarSiNoOk(respuesta);
       if (!respuesta.body) throw new TypeError("respuesta sin stream");
 
       const lector = respuesta.body.getReader();

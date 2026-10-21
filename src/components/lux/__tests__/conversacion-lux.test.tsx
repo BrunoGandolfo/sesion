@@ -30,6 +30,7 @@ import {
   luxMirando,
   luxQueLee,
   luxSaludo,
+  SESION_VENCIDA,
 } from "@/lib/glosario";
 
 /** Un stream que el test alimenta de a un fragmento. */
@@ -50,6 +51,18 @@ function streamManual() {
       control.error(new TypeError("conexión cortada"));
     },
   };
+}
+
+/** Sin cookie, el proxy contesta 307 → /login y fetch sigue la redirección:
+ *  llega el HTML del login con 200. */
+function paginaDelLogin() {
+  const respuesta = new Response("<!DOCTYPE html><html><body><h1>Entrar a tu cuenta</h1></body></html>", {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+  Object.defineProperty(respuesta, "redirected", { value: true });
+  Object.defineProperty(respuesta, "url", { value: "http://localhost/login" });
+  return respuesta;
 }
 
 const respuestaEntera = (texto: string) =>
@@ -332,6 +345,28 @@ describe("preguntar", () => {
 
     expect(campo.value).toBe("Otra a medio escribir");
     expect(screen.getByRole("alert")).toBeTruthy();
+  });
+
+  it("con la sesión vencida dice que venció y nunca pinta el HTML del login", async () => {
+    fetchMock.mockResolvedValueOnce(respuestaEntera("Hola."));
+    montar();
+    await alAbrir();
+    fetchMock.mockResolvedValueOnce(paginaDelLogin());
+    await act(async () => { escribirYEnviar("¿Y la medicación?"); });
+    expect(screen.getByRole("alert").textContent).toBe(SESION_VENCIDA);
+    expect(document.body.textContent).not.toMatch(/Entrar a tu cuenta|<html|DOCTYPE/);
+    expect((screen.getByPlaceholderText(LUX_PLACEHOLDER) as HTMLTextAreaElement).value).toBe("¿Y la medicación?");
+  });
+
+  it("con la sesión vencida en la apertura (redirigida o 401) también lo dice", async () => {
+    for (const respuesta of [paginaDelLogin(), new Response(JSON.stringify({ error: "No autenticado" }), { status: 401 })]) {
+      fetchMock.mockResolvedValueOnce(respuesta);
+      const { unmount } = montar();
+      await alAbrir();
+      expect(screen.getByRole("alert").textContent).toBe(SESION_VENCIDA);
+      expect(document.body.textContent).not.toMatch(/Entrar a tu cuenta|<html|DOCTYPE/);
+      unmount();
+    }
   });
 
   it("si el tope llega en la apertura también lo dice", async () => {

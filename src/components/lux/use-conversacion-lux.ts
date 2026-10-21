@@ -22,10 +22,10 @@
 
 import * as React from "react";
 
-import { ApiClientError, apiDelete, apiGet, esAbort } from "@/lib/api-client";
+import { ApiClientError, apiDelete, apiGet, esAbort, lanzarSiNoOk } from "@/lib/api-client";
 
 import {
-  LUX_CORTADO, LUX_HISTORIAL_NO_CARGO, LUX_NO_PUDO, LUX_NO_SE_BORRO, LUX_SIN_CONEXION, LUX_TOPE,
+  LUX_CORTADO, LUX_HISTORIAL_NO_CARGO, LUX_NO_PUDO, LUX_NO_SE_BORRO, LUX_SIN_CONEXION, LUX_TOPE, SESION_VENCIDA,
 } from "@/lib/glosario";
 import {
   STATUS_TOPE_LUX,
@@ -52,6 +52,7 @@ function deGuardado(turno: TurnoConversacionLux): TurnoLux {
 
 function textoDeError(error: unknown): string {
   if (error instanceof ApiClientError) {
+    if (error.esNoAutorizado) return SESION_VENCIDA;
     return error.status === STATUS_TOPE_LUX ? LUX_TOPE : LUX_NO_PUDO;
   }
   return LUX_SIN_CONEXION;
@@ -81,7 +82,9 @@ async function leerLux(
     body: JSON.stringify(cuerpo),
     signal,
   });
-  if (!respuesta.ok) throw new ApiClientError("Lux no respondió", respuesta.status);
+  // La misma regla que api-client: un pedido que terminó en el login es una
+  // sesión vencida, no una respuesta de Lux.
+  await lanzarSiNoOk(respuesta);
   if (!respuesta.body) throw new TypeError("respuesta sin stream");
 
   const lector = respuesta.body.getReader();
