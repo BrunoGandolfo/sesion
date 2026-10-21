@@ -111,7 +111,7 @@ para adivinarla a fuerza de probar.
 - **No te dice cuál de los dos datos está mal**, ni si ese email existe.
 - Cambiar o restablecer la contraseña también invalida los enlaces anteriores
   de recuperación.
-- **No hay segundo factor** ni código por SMS para entrar.
+- **No hay segundo factor** ni código por mensaje para entrar.
 
 <!-- fuentes:
 src/app/(auth)/login/page.tsx

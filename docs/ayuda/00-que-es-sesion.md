@@ -81,7 +81,7 @@ cuenta igual que pedir ayuda. Cerrar el panel borra la conversación de la panta
 
 - **No manda los recordatorios por vos.** La app te prepara el WhatsApp de cada
   turno en **Hoy** y lo mandás vos desde tu teléfono (ver
-  `06-recordatorios-sms.md`). **Recordar cobro por WhatsApp** también lo
+  `06-recordatorios-whatsapp.md`). **Recordar cobro por WhatsApp** también lo
   prepara, solo cuando vos confirmás el envío desde Cobros.
 - **No graba video.** Solo audio.
 - **No diagnostica.** El borrador de nota no pone diagnósticos DSM/CIE: la

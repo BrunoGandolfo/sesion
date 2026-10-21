@@ -104,21 +104,21 @@ Si volvés a pedir **Para vos** de una sesión, el análisis nuevo usa el enfoqu
 actual.
 → `11-tu-consultorio.md`
 
-**18. ¿A qué hora sale el recordatorio?**
-Según lo que elijas: la noche anterior, dos días antes o la misma mañana. No sale a
-las 20:00 o a las 8:00 en punto: cada turno tiene un corrimiento de 0 a 14
-minutos, y se envía en los 5 minutos siguientes. Si el turno es antes de las 8:00
-(o poco después), sale la tarde anterior. → `06-recordatorios-sms.md`
+**18. ¿Cuándo aparece el recordatorio para mandar?**
+Según lo que elijas: desde las 20:00 del día anterior, desde las 20:00 de dos
+días antes, o desde las 8:00 de la misma mañana. Aparece en **Recordatorios
+para hoy** y lo mandás vos por WhatsApp cuando te quede cómodo. Con la misma
+mañana, un turno a las 8:00 o antes aparece la tarde anterior.
+→ `06-recordatorios-whatsapp.md`
 
-**19. Mi paciente contestó el SMS y no me llegó nada.**
-Las respuestas comunes no llegan a tu consulta. **BAJA**, **STOP** o
-**CANCELAR** sí se procesan para dejar de enviar al número. El mensaje indica
-tu teléfono para comunicarse con vos.
-→ `06-recordatorios-sms.md`
+**19. Mi paciente contestó el recordatorio. ¿Dónde lo veo?**
+En tu WhatsApp: el mensaje salió de tu número, así que la respuesta te llega
+como cualquier conversación. La app no la ve.
+→ `06-recordatorios-whatsapp.md`
 
 **20. Cancelé un turno. ¿Le llega el recordatorio igual?**
-Se cancelan los avisos pendientes. Uno que ya salió no se puede retirar. Si
-reprogramás después de un aviso enviado, se programa un cambio de horario.
+Sale de **Recordatorios para hoy**. Uno que ya mandaste no se puede retirar.
+Si reprogramás después de avisar, vuelve a aparecer como cambio de horario.
 → `03-agenda-y-turnos.md`
 
 **21. Cobré un turno por error. ¿Cómo lo deshago?**
