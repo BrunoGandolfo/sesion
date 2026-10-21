@@ -51,7 +51,8 @@ export function FilaDeudor({
   onError,
 }: {
   deudor: DeudorItem;
-  configCobro: ConfiguracionDelCobro;
+  /** null: no se leyó la configuración y no se ofrece el aviso. */
+  configCobro: ConfiguracionDelCobro | null;
   canal: CanalRecordatorio;
   ahora: Date;
   /** Qué panel de esta fila está desplegado; lo decide la lista. */
@@ -71,10 +72,12 @@ export function FilaDeudor({
   // El mismo texto que arma el servidor: la plantilla de Tu consultorio y la
   // misma función (textoDelCobro). Lo que ella lee acá es, carácter por
   // carácter, lo que le va a llegar a la paciente.
-  const mensaje = textoDelCobro(configCobro, deudor, {
-    sesiones: deudor.sesionesImpagas,
-    monto: deudor.montoTotal,
-  });
+  const mensaje = configCobro
+    ? textoDelCobro(configCobro, deudor, {
+        sesiones: deudor.sesionesImpagas,
+        monto: deudor.montoTotal,
+      })
+    : "";
 
   // Qué hace el botón lo decide la misma función que el servidor.
   const accion = accionDeCobro(canal, telefono, mensaje);
@@ -159,7 +162,7 @@ export function FilaDeudor({
               {REGISTRAR_PAGO}
             </Button>
           ) : null}
-          {telefono && abierto === null ? (
+          {telefono && configCobro && abierto === null ? (
             <button
               type="button"
               onClick={() => setConfirmando(true)}

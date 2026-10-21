@@ -47,7 +47,7 @@ export function TeDeben({
 }: {
   deudores: DeudorItem[];
   sesionesSinCobrar: number;
-  configCobro: ConfiguracionDelCobro;
+  configCobro: ConfiguracionDelCobro | null;
   canal: CanalRecordatorio;
   ahora: Date;
   /** Todas las sesiones elegidas quedaron cobradas. */

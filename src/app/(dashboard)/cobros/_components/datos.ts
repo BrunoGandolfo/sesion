@@ -32,8 +32,11 @@ export type DatosCobros = {
   deudores: DeudorItem[];
   cobros: TurnoConPaciente[];
   nombreProfesional: string;
-  /** Lo que arma el texto del aviso de cobro (textoDelCobro). */
-  configCobro: ConfiguracionDelCobro;
+  /** Lo que arma el texto del aviso de cobro (textoDelCobro). null si no se
+   *  pudo leer la configuración: el texto saldría sin su plantilla ni sus
+   *  datos, y WhatsApp se abre con él antes de que conteste el servidor, así
+   *  que sin esto no se ofrece el aviso. */
+  configCobro: ConfiguracionDelCobro | null;
   /** Por dónde sale el aviso de cobro: lo que decide accionDeCobro. */
   canal: Configuracion["canalRecordatorio"];
 };
@@ -43,8 +46,8 @@ export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
     apiGet<{ kpis: KPIsDashboard }>("/api/dashboard", { signal }),
     apiGet<DeudorItem[]>("/api/deudores", { signal }),
     apiGet<TurnoJson<TurnoConPaciente>[]>("/api/turnos/cobros", { signal }),
-    // La configuración puede no existir todavía: el recordatorio sale sin
-    // firma y la pantalla igual se muestra.
+    // Si la configuración no se puede leer, la pantalla igual se muestra,
+    // sin Recordar cobro (configCobro null).
     apiGet<Configuracion>("/api/config", { signal }).catch((err: unknown) => {
       if (esAbort(err)) throw err;
       return null;
@@ -56,12 +59,14 @@ export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
     deudores,
     cobros: cobros.map((t) => parseTurno(t)),
     nombreProfesional: config?.nombreProfesional ?? "",
-    configCobro: {
-      templateCobro: config?.templateCobro ?? TEMPLATE_COBRO_DEFAULT,
-      nombreProfesional: config?.nombreProfesional ?? "",
-      direccion: config?.direccion ?? "",
-      whatsappOrigen: config?.whatsappOrigen ?? "",
-    },
+    configCobro: config
+      ? {
+          templateCobro: config.templateCobro ?? TEMPLATE_COBRO_DEFAULT,
+          nombreProfesional: config.nombreProfesional ?? "",
+          direccion: config.direccion ?? "",
+          whatsappOrigen: config.whatsappOrigen ?? "",
+        }
+      : null,
     // Sólo WhatsApp: ni lo que traiga la configuración lo cambia.
     canal: CANAL_RECORDATORIO_VIGENTE,
   };

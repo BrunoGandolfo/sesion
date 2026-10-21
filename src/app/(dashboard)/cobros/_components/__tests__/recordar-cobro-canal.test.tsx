@@ -107,6 +107,21 @@ describe("Te deben: la plantilla del aviso de cobro", () => {
   });
 });
 
+describe("Te deben: sin la configuración no se ofrece el aviso", () => {
+  it("si /api/config falla, la fila tiene Registrar pago pero no Recordar cobro", async () => {
+    servidor(CONFIG);
+    const leer = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (url: string) => {
+      if (url === "/api/config") throw new ApiClientError("Error del servidor", 500);
+      return leer(url);
+    });
+    render(<CobrosView />);
+    expect(await screen.findByRole("button", { name: `Registrar pago de ${LUCIA}` })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Recordar cobro a/ })).toBeNull();
+    expect(abrir).not.toHaveBeenCalled();
+  });
+});
+
 describe("Te deben: el botón según el canal", () => {
   // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): aunque la configuración
   // traiga otro canal, el botón es el de WhatsApp y nunca se pide un SMS.
