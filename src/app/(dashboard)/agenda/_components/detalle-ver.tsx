@@ -11,7 +11,7 @@ import { ArrowRight, Mic } from "lucide-react";
 
 import { Button } from "@/components/ui";
 import { rotuloDeNota, sePuedeDeshacerCobro } from "@/components/turno/presentacion";
-import { fechaCorta, hora, money } from "@/lib/format";
+import { fechaCorta, money } from "@/lib/format";
 import {
   CANCELAR_SERIE,
   COBRAR,
