@@ -297,7 +297,10 @@ model Configuracion {
   /// se guarda; sí la plantilla vigente.
   templateRecordatorio String             @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
   orientacionTeorica   OrientacionTeorica @default(cbt_mi) @map("orientacion_teorica")
-  canalRecordatorio    CanalRecordatorio  @default(sms) @map("canal_recordatorio")
+  /// Sin uso desde 676f076 y fuera del cliente (@ignore): Prisma no la lee
+  /// ni la escribe, así este código sigue andando cuando
+  /// 20261021150000_borrar_sms la borre. Se va del schema con esa migración.
+  canalRecordatorio    CanalRecordatorio  @default(sms) @map("canal_recordatorio") @ignore
   /// Plantilla del aviso de cobro, la misma por SMS y por WhatsApp. El
   /// default es TEMPLATE_COBRO_DEFAULT (src/lib/glosario.ts, reexportado por
   /// src/lib/deudas.ts; lo vigila

@@ -56,6 +56,8 @@ const INTEGRACION = [
   'src/lib/__tests__/salud-trabajos.test.ts',
   'src/lib/__tests__/revision-carreras.test.ts',
   'src/lib/__tests__/registro-atomico.test.ts',
+  // El PASO 1 de borrar-sms contra la base sin canal_recordatorio; se va con la migración.
+  'src/lib/__tests__/paso1-sin-canal-integracion.test.ts',
   'src/lib/__tests__/limites-prueba-integracion.test.ts',
   // Solo se graba un turno de hoy: POST /api/sesion-clinica contra la base.
   'src/lib/__tests__/grabar-el-dia.test.ts',
