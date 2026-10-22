@@ -2225,3 +2225,25 @@ export const LUX_NO_SE_BORRO = "No se pudo borrar la conversación. Probá de nu
  *  el texto vigente. En la app instalada no hay botón de recarga del
  *  navegador. */
 export const RECARGAR = "Recargar";
+
+// ─── grabar-forense ──────────────────────────────────────────────────────────
+
+/** Hay una grabación de este mismo turno guardada en el teléfono: grabar de
+ *  nuevo la borra, así que primero se elige (pantallas.tsx, OfertaPendiente). */
+export const ENVIAR_LA_QUE_QUEDO = "Enviar la que quedó";
+export const DESCARTAR_Y_GRABAR = "Descartar y grabar de nuevo";
+export const DESCARTAR_Y_GRABAR_TITULO = "¿Descartar la grabación que quedó?";
+export const DESCARTAR_Y_GRABAR_MENSAJE =
+  "Se borra de este teléfono y no se puede recuperar. Después empieza una grabación nueva.";
+export const DESCARTAR_Y_GRABAR_ACCION = "Descartar y grabar";
+
+/** Salir de /grabar mientras graba (useProtegerTrabajo): la grabación se corta. */
+export const GRABAR_SALIDA_GRABANDO = "Se está grabando. Si salís, la grabación se corta.";
+/** Salir de /grabar con audio que no subió y sin copia en el teléfono. */
+export const GRABAR_SALIDA_SIN_COPIA = "En este teléfono no quedó copia de la grabación. Si salís, se pierde.";
+
+/** /grabar sin autorización vigente y con una grabación guardada en el
+ *  teléfono: se muestra (no se esconde detrás de la firma), y la firma se
+ *  pide antes de enviarla. */
+export const PENDIENTE_SIN_AUTORIZACION =
+  "Para enviarla hace falta la autorización firmada. La copia sigue en este teléfono.";

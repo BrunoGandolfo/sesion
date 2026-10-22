@@ -3,7 +3,7 @@
 // La pantalla mientras graba: el reloj, el medidor, los avisos de lo que pasa
 // con el micrófono y la pantalla, y Pausar / Terminar / Descartar.
 
-import { MicOff, Pause, Play, Square, Sun } from "lucide-react";
+import { AlertTriangle, MicOff, Pause, Play, Square, Sun } from "lucide-react";
 
 import {
   formatearDuracion,
@@ -18,6 +18,7 @@ import {
   AVISO_MICROFONO_SILENCIADO,
   AVISO_PANTALLA_APAGADA,
   AVISO_SIN_AUDIO_DESDE,
+  COPIA_NO_GUARDADA,
   CORTE_LIMITE,
   CORTE_LIMITE_SIN_COPIA,
   EN_PAUSA,
@@ -64,8 +65,9 @@ export function PantallaGrabando({
   pantallaApagada: boolean;
   avisoLimite: boolean;
   limiteAlcanzado: boolean;
-  /** La copia en el teléfono falló (Grabador.copiaFallida): el tope no dice
-   *  que lo grabado está a salvo. */
+  /** La copia en el teléfono falló (Grabador.copiaFallida): se dice con un
+   *  aviso fijo mientras dure la grabación, y el tope no dice que lo grabado
+   *  está a salvo. */
   copiaFallida: boolean;
   conmutando: boolean;
   confirmando: boolean;
@@ -168,6 +170,17 @@ export function PantallaGrabando({
           </div>
         </>
       )}
+
+      {/* Modo privado o cuota llena: lo grabado existe sólo en esta pantalla
+          (forense2 H3). Fijo: no se cierra, porque no deja de ser cierto. En
+          el tope ya lo dice CORTE_LIMITE_SIN_COPIA. */}
+      {copiaFallida && !limiteAlcanzado ? (
+        <div role="status" className="w-full">
+          <Aviso icono={<AlertTriangle size={15} strokeWidth={1.8} aria-hidden="true" />}>
+            {COPIA_NO_GUARDADA}
+          </Aviso>
+        </div>
+      ) : null}
 
       {confirmando ? (
         <Confirmar

@@ -295,6 +295,19 @@ export function useFlujoGrabacion({
     }
   }
 
+  /** La guardada es de este mismo turno: grabar de nuevo la pisaría (con la
+   *  misma clave la borra iniciarSesionGrabacion) o dejaría dos grabaciones
+   *  para un turno. Antes de grabar, ella elige (pantallas.tsx). */
+  const pendienteDelTurno = guardada !== null && turnoIdInicial !== null && turnoDeLaPendiente === turnoIdInicial;
+
+  /** "Descartar y grabar de nuevo", ya confirmado. Con la misma clave no se
+   *  borra aparte: lo hace iniciarSesionGrabacion junto con la meta nueva, y
+   *  un borrado suelto que llegara después se llevaría la grabación nueva. */
+  async function descartarYGrabar() {
+    if (guardada && guardada.clave !== turnoIdInicial) descartarPendiente();
+    await empezar();
+  }
+
   /** Una grabación que quedó en este teléfono: se envía tal cual. El turno
    *  (si era sin turno, con la hora en que empezó) y la sesión se piden al
    *  subir, como al terminar. */
@@ -367,6 +380,8 @@ export function useFlujoGrabacion({
     enCursoAhora,
     enviandoAhora,
     empezar,
+    pendienteDelTurno,
+    descartarYGrabar,
     enviarPendiente,
     reintentarSubida,
     reintentarMarcarRealizado,

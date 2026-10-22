@@ -9,6 +9,13 @@ el borrador de la nota clínica.
   autorización, la pantalla muestra **Falta la autorización** y un botón
   **Firmar autorización** que lleva a la ficha. No hay forma de grabar sin eso.
   Ver `04-pacientes-y-ficha.md`.
+- **Una grabación que quedó en el teléfono no se esconde detrás de la firma.**
+  Si la autorización dejó de estar vigente y en el teléfono quedó una grabación
+  sin enviar, la pantalla de grabar la muestra igual: *"Quedó una grabación de
+  ~N min sin enviar"* y *"Para enviarla hace falta la autorización firmada. La
+  copia sigue en este teléfono."*, con **Firmar autorización** y
+  **Descartarla**. La firma va antes de enviarla: firmá en la ficha y volvé a
+  la pantalla de grabar de ese turno para enviarla.
 - **Con turno o sin turno.** Si hay turno hoy, se graba ese turno. Si tocás
   **Grabar** en la cabecera de la ficha y la paciente no tiene turno, la app
   **crea uno de 50 minutos, presencial, con la hora en que empezaste a
@@ -77,7 +84,19 @@ llegando audio desde las 10:12."* Ese rato no cuenta como tiempo grabado.
 micrófono mientras dura y la pantalla dice *"El teléfono silenció el micrófono
 (¿una llamada?). La grabación sigue abierta y vuelve sola cuando lo libere."*
 
+**Si el teléfono no puede guardar la copia, se dice mientras grabás.** Mientras
+grabás, la app va guardando una copia en el teléfono. Si no hay lugar o el
+navegador está en modo privado, aparece un aviso fijo: *"La copia en el teléfono
+no se pudo guardar: no cierres esta pantalla hasta que la grabación suba."* No
+tiene botón para cerrarlo: lo grabado existe sólo en esa pantalla hasta que se
+envíe.
+
 **Ninguna interrupción envía nada sola.**
+
+**No se sale sin querer.** Mientras grabás no está **Volver**. Si tocás el
+menú de abajo o Atrás, la app pregunta antes, con **Quedarme** e **Ir igual**:
+*"Se está grabando. Si salís, la grabación se corta."* Cerrar la pestaña también
+pide confirmación al navegador.
 
 ### Pausar
 
@@ -140,6 +159,11 @@ guardada en el teléfono. Poné el teléfono en una conexión buena y tocá
 **Reintentar** las veces que haga falta. No des por guardada una sesión hasta
 ver *"La grabación llegó bien."*
 
+Mientras la grabación no subió, **Volver** no está arriba. Si la copia quedó en
+el teléfono, salir no pierde nada: la grabación se ofrece cuando volvés a la
+pantalla de grabar. Si no quedó copia, salir pregunta antes: *"En este teléfono
+no quedó copia de la grabación. Si salís, se pierde."*
+
 Si el audio ya subió pero el turno no quedó marcado, dice *"La sesión se guardó,
 pero el turno quedó como agendado. Probá de nuevo."*: **Reintentar** repite solo
 ese paso.
@@ -155,7 +179,13 @@ continuar: sólo enviar o descartar.
 Si esa sesión ya había llegado al servidor (está procesándose o ya tiene nota),
 la app borra sola la copia del teléfono en vez de ofrecerla otra vez.
 
-Empezar una grabación nueva del mismo turno reemplaza la copia anterior.
+Empezar una grabación nueva del mismo turno reemplaza la copia anterior. Por
+eso, si la copia que quedó es de **ese mismo turno**, la pantalla no muestra
+**Grabar sesión** suelto: ofrece **Enviar la que quedó** o borrarla para grabar
+de nuevo. Borrarla pide confirmación, y recién al confirmar se borra la copia y
+empieza la grabación nueva. Si la copia es de otro turno de la paciente, grabar
+no la toca: siguen **Guardarla ahora** y **Descartarla** al lado de **Grabar
+sesión**.
 
 ## Si quedó una grabación sin terminar
 
@@ -204,7 +234,7 @@ Mientras tanto la copia del teléfono todavía se puede enviar.
 
 - **No graba video.**
 - **No transcribe en vivo**: no ves texto mientras grabás.
-- **No graba sin autorización vigente.**
+- **No graba sin autorización vigente**, ni envía sin ella una grabación que quedó en el teléfono.
 - **No graba dos veces el mismo turno**: un turno tiene una sola sesión clínica.
 - **No sube nada mientras grabás**: el archivo sale entero al terminar.
 - **No cifra el audio en el teléfono.**

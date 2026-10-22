@@ -9,7 +9,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ALGO_FALLO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, GRABACION_SIN_CONEXION_SIN_COPIA, MIC_SIN_PERMISO, REINTENTAR } from "@/lib/glosario";
+import { ALGO_FALLO, ENVIAR_LA_QUE_QUEDO, GRABACION_LLEGO, GRABACION_SIN_CONEXION, GRABACION_SIN_CONEXION_SIN_COPIA, MIC_SIN_PERMISO, REINTENTAR } from "@/lib/glosario";
 import { RecorderFalso, recorders } from "@/components/grabacion/__tests__/recorder-falso";
 import { claveSinTurno } from "@/lib/grabacion-clave";
 
@@ -321,7 +321,7 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     guardada("t-anterior");
     sesionDelTurno = { id: "s1", estado: "grabando" };
     render(<GrabarView {...CON_TURNO} turnoId="t-anterior" />);
-    const guardarla = await screen.findByRole("button", { name: "Guardarla ahora" });
+    const guardarla = await screen.findByRole("button", { name: ENVIAR_LA_QUE_QUEDO });
     await act(async () => {
       fireEvent.click(guardarla);
     });

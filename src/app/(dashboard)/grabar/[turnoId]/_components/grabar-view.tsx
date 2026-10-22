@@ -16,11 +16,14 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { AvisoPrueba } from "@/components/layout/aviso-prueba";
+import { useProtegerTrabajo, useSalidaProtegida } from "@/components/layout/proteccion-trabajo";
 import { Toast } from "@/components/ui";
 import type { EstadoPrueba } from "@/lib/limites-prueba";
 import {
   ALGO_FALLO,
   AUDIO_NO_GUARDADO,
+  GRABAR_SALIDA_GRABANDO,
+  GRABAR_SALIDA_SIN_COPIA,
   TURNO_NO_MARCADO,
   VOLVER,
 } from "@/lib/glosario";
@@ -82,6 +85,8 @@ export function GrabarView({
     enCursoAhora,
     enviandoAhora,
     empezar,
+    pendienteDelTurno,
+    descartarYGrabar,
     enviarPendiente,
     reintentarSubida,
     reintentarMarcarRealizado,
@@ -100,6 +105,19 @@ export function GrabarView({
     alCambiarCopia?.(copiaEnRiesgo);
   }, [alCambiarCopia, copiaEnRiesgo]);
 
+  // Salir grabando corta la grabación; salir con audio que no subió y sin
+  // copia en el teléfono lo pierde (forense2 H4). El menú, Atrás y cerrar la
+  // pestaña preguntan, como en la nota. Con la copia a salvo, salir no
+  // pierde nada: se ofrece al volver.
+  useProtegerTrabajo(
+    enCursoAhora || copiaEnRiesgo,
+    copiaEnRiesgo ? GRABAR_SALIDA_SIN_COPIA : GRABAR_SALIDA_GRABANDO,
+  );
+  const salir = useSalidaProtegida();
+  // "Volver" arriba sólo cuando no hay audio sin guardar ni sin subir.
+  const puedeVolver =
+    !enCursoAhora && !enviandoAhora && !copiaEnRiesgo && fase !== "guardado" && fase !== "no-guardado";
+
   function descartar() {
     setConfirmarDescarte(false);
     grabador.descartar();
@@ -109,11 +127,11 @@ export function GrabarView({
   // En el tope de la prueba no se inicia una grabación nueva; el servidor lo
   // rechaza igual (403). Una pendiente sí se puede enviar: ya está contada.
   const sinCupo = prueba?.restantes === 0;
-  const volver = () => router.push(`/pacientes/${pacienteId}`);
+  const volver = () => salir(() => router.push(`/pacientes/${pacienteId}`));
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-80px)] w-full max-w-[560px] flex-col px-5 py-6 lg:py-10">
-      {!enCursoAhora && !enviandoAhora && fase !== "guardado" ? (
+      {puedeVolver ? (
         <Link
           href={`/pacientes/${pacienteId}`}
           className="mb-6 inline-flex items-center gap-1 self-start text-[13px] text-ink-500 transition-colors duration-150 hover:text-ink-700"
@@ -212,7 +230,9 @@ export function GrabarView({
                       ? Math.max(1, Math.round(grabador.pendienteSeg / 60))
                       : null
                   }
+                  pendienteDelTurno={pendienteDelTurno}
                   onEmpezar={() => void empezar()}
+                  onDescartarYGrabar={() => void descartarYGrabar()}
                   onEnviarPendiente={() => void enviarPendiente()}
                   onDescartarPendiente={grabador.descartarPendiente}
                 />
