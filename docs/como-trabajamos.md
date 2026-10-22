@@ -84,7 +84,7 @@ deja podrir: no hay CI que avise.
 
 - Sin sobreingeniería: lo mínimo que cumpla el criterio de salida. Nada de frameworks
   encima de las herramientas que ya hay.
-- Nada se borra ni se toca afuera (R2, AssemblyAI, Twilio) antes de que la base lo
+- Nada se borra ni se toca afuera (R2, AssemblyAI) antes de que la base lo
   confirmó; los efectos externos son trabajos durables con reintentos.
 - Los agentes no corren migraciones contra producción: se escalan al dueño.
 - Cuando algo falla, la app lo dice; nunca un "quedó en el celular" silencioso.
