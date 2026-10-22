@@ -294,4 +294,21 @@ describe("errorDeRespuesta", () => {
     expect(err.status).toBe(500);
     expect(err.mensaje).not.toMatch(/HTTP/);
   });
+
+  describe("el código del error", () => {
+    it("conserva el `codigo` del body: el cliente distingue un 409 de otro", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(respuestaJson({ error: "El texto cambió", codigo: "consentimiento_version_vieja" }, 409)));
+      const error = await apiPost("/api/pacientes/p1/consentimiento", {}).catch((e: unknown) => e);
+      vi.unstubAllGlobals();
+      expect(error).toBeInstanceOf(ApiClientError);
+      expect(error).toMatchObject({ status: 409, mensaje: "El texto cambió", codigo: "consentimiento_version_vieja" });
+    });
+
+    it("sin código, o con uno que no es texto, queda undefined", async () => {
+      for (const body of [{ error: "x" }, { error: "x", codigo: 7 }]) {
+        expect((await errorDeRespuesta(respuestaJson(body, 409))).codigo).toBeUndefined();
+      }
+      expect((await errorDeRespuesta(respuestaDelLogin())).codigo).toBeUndefined();
+    });
+  });
 });

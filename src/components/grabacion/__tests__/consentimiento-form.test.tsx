@@ -7,9 +7,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiClientError } from "@/lib/api-client";
+import { CODIGO_CONSENTIMIENTO_VERSION_VIEJA } from "@/app/api/_lib/casos-uso/consentimiento";
 import { CONSENTIMIENTO_VERSION } from "@/lib/consentimiento";
+import { CONSENTIMIENTO_VERSION_VIEJA, RECARGAR } from "@/lib/glosario";
 
-import { ConsentimientoForm } from "../ConsentimientoForm";
+import { CODIGO_VERSION_VIEJA, ConsentimientoForm } from "../ConsentimientoForm";
 import { FirmaCanvas } from "../FirmaCanvas";
 
 const m = vi.hoisted(() => ({ post: vi.fn(), ctx: null as null | Record<string, unknown>, resize: null as null | (() => void) }));
@@ -104,6 +106,31 @@ describe("ConsentimientoForm", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(props.onConsentimientoFirmado).not.toHaveBeenCalled();
     expect((screen.getByRole("button", { name: "Firmar" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("el 409 por versión vieja dice que el texto cambió y ofrece Recargar", async () => {
+    // El mismo código que manda el servidor (casos-uso/consentimiento.ts).
+    expect(CODIGO_VERSION_VIEJA).toBe(CODIGO_CONSENTIMIENTO_VERSION_VIEJA);
+    m.post.mockRejectedValue(new ApiClientError(CONSENTIMIENTO_VERSION_VIEJA, 409, undefined, CODIGO_VERSION_VIEJA));
+    const recargar = vi.fn();
+    const props = montarForm({ recargar });
+    fireEvent.click(screen.getByRole("checkbox"));
+    firmarConMouse();
+    fireEvent.click(screen.getByRole("button", { name: "Firmar" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(CONSENTIMIENTO_VERSION_VIEJA);
+    fireEvent.click(screen.getByRole("button", { name: RECARGAR }));
+    expect(recargar).toHaveBeenCalledOnce();
+    expect(props.onConsentimientoFirmado).not.toHaveBeenCalled();
+  });
+
+  it("otro 409 no ofrece Recargar", async () => {
+    m.post.mockRejectedValue(new ApiClientError("La paciente está archivada", 409));
+    montarForm();
+    fireEvent.click(screen.getByRole("checkbox"));
+    firmarConMouse();
+    fireEvent.click(screen.getByRole("button", { name: "Firmar" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("La paciente está archivada");
+    expect(screen.queryByRole("button", { name: RECARGAR })).toBeNull();
   });
 
   it("Borrar firma vuelve a deshabilitar Firmar; Cancelar avisa", () => {

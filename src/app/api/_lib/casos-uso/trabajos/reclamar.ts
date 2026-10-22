@@ -11,13 +11,23 @@
 //
 // Para el worker cada trabajo entregado lleva un ticket (credencial para
 // informar el resultado). Para la app no: el cron corre en el mismo proceso.
+//
+// Un candidato que ya gastó todos sus intentos no se reclama: queda
+// `fallido` (con su aplicador, para que "Para vos" muestre el botón). El
+// tope lo mira también resolver.ts, pero sólo cuando llega un resultado: si
+// el consumidor se murió en el último intento, sin esto el trabajo volvía a
+// reclamarse cada vez que vencía el lease, pagando el modelo sin tope.
 
 import type { EjecutorTrabajo, Prisma, TipoTrabajo } from "@prisma/client";
 
 import { emitirTicket } from "../../tickets";
 
-import { LEASE_TRABAJO_MS } from "./politica";
+import { agotado, LEASE_TRABAJO_MS } from "./politica";
+import { APLICADORES } from "./resultado-worker";
 import { bloquearHilo, type BaseHilo, type ClienteHilo } from "../hilo/base";
+
+/** `ultimo_error` del trabajo que se abandona al tope sin resultado. */
+export const LEASE_VENCIDO_AL_TOPE = "lease_vencido_al_tope";
 
 type ClienteTrabajos = BaseHilo;
 
@@ -125,6 +135,10 @@ export async function reclamarTrabajos({
 
     for (const c of candidatos) {
       if (reclamados.length >= limite) break;
+      if (agotado(c.tipo, c.intentos)) {
+        await abandonarAlTope(prisma, c, ahora);
+        continue;
+      }
       const ticket = ejecutor === "worker" ? emitirTicket() : null;
       const reclamar = async (tx: Pick<ClienteHilo, "trabajo">, payload: Prisma.JsonValue) => {
         const { count } = await tx.trabajo.updateMany({
@@ -162,4 +176,29 @@ export async function reclamarTrabajos({
     cursor = candidatos[candidatos.length - 1].id;
   }
   return reclamados;
+}
+
+/** El trabajo gastó todos sus intentos sin resultado: `fallido`, con lo que
+ *  su tipo deja en la base al fallar (el mismo aplicador que un resultado
+ *  fallido del worker). Condicionado como el claim: si otro consumidor lo
+ *  tocó en el medio, no hace nada. */
+async function abandonarAlTope(
+  prisma: ClienteTrabajos,
+  c: { id: string; tipo: TipoTrabajo; organizationId: string; sesionId: string | null; pacienteId: string | null; payload: Prisma.JsonValue; intentos: number },
+  ahora: Date,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.trabajo.updateMany({
+      where: { ...reclamable(ahora), id: c.id, intentos: c.intentos },
+      data: { estado: "fallido", leaseVenceEn: null, ticketHash: null, ultimoError: LEASE_VENCIDO_AL_TOPE },
+    });
+    if (count === 0) return;
+    await APLICADORES[c.tipo]?.(
+      tx,
+      { trabajoId: c.id, organizationId: c.organizationId, tipo: c.tipo, sesionId: c.sesionId, pacienteId: c.pacienteId, intentos: c.intentos, payload: c.payload },
+      { ok: false, error: LEASE_VENCIDO_AL_TOPE },
+      { estado: "fallido" },
+      ahora,
+    );
+  });
 }

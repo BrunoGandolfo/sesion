@@ -2218,3 +2218,10 @@ export const LUX_EMPEZAR_DE_CERO_MENSAJE =
 export const LUX_EMPEZAR_DE_CERO_ACCION = "Borrar la conversación";
 export const LUX_BORRANDO = "Borrando…";
 export const LUX_NO_SE_BORRO = "No se pudo borrar la conversación. Probá de nuevo.";
+
+// ─── robustez ────────────────────────────────────────────────────────────────
+
+/** El botón que acompaña al 409 del consentimiento por versión vieja: trae
+ *  el texto vigente. En la app instalada no hay botón de recarga del
+ *  navegador. */
+export const RECARGAR = "Recargar";

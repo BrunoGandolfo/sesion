@@ -21,16 +21,19 @@ const MENSAJE_GENERICO = "No pudimos completar la operación. Intentá de nuevo.
 
 /** Respuesta no-ok de la API. `message` (y su alias `mensaje`) trae el
  *  `error` del body cuando existe; `details` es el `details` de un 400 de
- *  validación, o undefined. */
+ *  validación, o undefined; `codigo`, el `codigo` del body
+ *  (responses.ts), que distingue un error de otro con el mismo status. */
 export class ApiClientError extends Error {
   readonly status: number;
   readonly details?: unknown;
+  readonly codigo?: string;
 
-  constructor(mensaje: string, status: number, details?: unknown) {
+  constructor(mensaje: string, status: number, details?: unknown, codigo?: string) {
     super(mensaje);
     this.name = "ApiClientError";
     this.status = status;
     this.details = details;
+    this.codigo = codigo;
   }
 
   get mensaje(): string {
@@ -94,10 +97,15 @@ export async function errorDeRespuesta(res: Response): Promise<ApiClientError> {
       ? body.error
       : MENSAJE_GENERICO;
   const details = esObjeto(body) && "details" in body ? body.details : undefined;
-  return new ApiClientError(mensaje, res.status, details);
+  const codigo = esObjeto(body) && typeof body.codigo === "string" ? body.codigo : undefined;
+  return new ApiClientError(mensaje, res.status, details, codigo);
 }
 
-async function lanzarSiNoOk(res: Response): Promise<void> {
+/** Tira el ApiClientError si la respuesta no sirve: no-ok, o redirigida al
+ *  login (sesión vencida, 401). Para quien lee el body a mano (los streams
+ *  de Lux y del panel de ayuda): sin esto, el HTML del login se pintaba
+ *  como respuesta. */
+export async function lanzarSiNoOk(res: Response): Promise<void> {
   if (res.ok && !fueAlLogin(res)) return;
   throw await errorDeRespuesta(res);
 }
