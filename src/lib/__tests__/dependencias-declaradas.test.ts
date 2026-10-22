@@ -41,3 +41,14 @@ it("los scripts sólo importan paquetes declarados en package.json", () => {
   expect(usados.size).toBeGreaterThan(0);
   expect([...usados].filter(([nombre]) => !declarados.has(nombre)).map(([nombre, rel]) => `${nombre} (${rel})`)).toEqual([]);
 });
+
+// jiti se declaró por reconciliar-sms.mjs, que se borró con el SMS. Lo
+// siguen usando eslint, tailwind y vite, que lo traen como dependencia
+// propia: declararlo de más es una versión que nadie de acá elige.
+it("jiti no se declara: ningún archivo del repo lo importa", () => {
+  expect(declarados.has("jiti")).toBe(false);
+  const importan = ["scripts", "src", "pruebas"]
+    .flatMap((dir) => archivos(dir))
+    .filter((rel) => /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*)["']jiti["'/]/.test(readFileSync(join(RAIZ, rel), "utf8")));
+  expect(importan).toEqual([]);
+});
