@@ -17,7 +17,7 @@ import {
   pluralizar,
 } from "@/lib/glosario";
 import type { ConfiguracionDelCobro } from "@/lib/deudas";
-import type { CanalRecordatorio, MetodoPago } from "@/types/domain";
+import type { MetodoPago } from "@/types/domain";
 
 import {
   cobrarSesiones,
@@ -37,7 +37,6 @@ export function TeDeben({
   deudores,
   sesionesSinCobrar,
   configCobro,
-  canal,
   ahora,
   onCobrado,
   onCobroIncompleto,
@@ -48,7 +47,6 @@ export function TeDeben({
   deudores: DeudorItem[];
   sesionesSinCobrar: number;
   configCobro: ConfiguracionDelCobro | null;
-  canal: CanalRecordatorio;
   ahora: Date;
   /** Todas las sesiones elegidas quedaron cobradas. */
   onCobrado: () => void;
@@ -125,7 +123,6 @@ export function TeDeben({
               key={d.pacienteId}
               deudor={d}
               configCobro={configCobro}
-              canal={canal}
               ahora={ahora}
               abierto={panel?.pacienteId === d.pacienteId ? panel.modo : null}
               onAbrir={(modo) =>

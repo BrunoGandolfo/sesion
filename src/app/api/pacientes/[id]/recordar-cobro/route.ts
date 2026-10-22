@@ -1,11 +1,10 @@
-// POST /api/pacientes/[id]/recordar-cobro — pide el aviso de cobro por el
-// canal de Tu consultorio.
+// POST /api/pacientes/[id]/recordar-cobro — anota que abrió el aviso de
+// cobro por WhatsApp.
 //
 // Lo aprieta ella desde Cobros, una paciente por vez. Acá sólo auth y la
-// respuesta: la regla (cuánto debe, si tiene teléfono, si pidió la baja, qué
-// canal) vive en _lib/casos-uso/recordar-cobro.ts. No se habla con Twilio en
-// esta request: por SMS se crea el envío y lo manda el cron de despacho; por
-// WhatsApp se anota que ella abrió el enlace y se devuelve el enlace.
+// respuesta: la regla (cuánto debe, si tiene teléfono) vive en
+// _lib/casos-uso/recordar-cobro.ts, que anota la apertura y devuelve el
+// enlace. Sin cuerpo, o `{}`.
 
 import { db } from "@/lib/db";
 
@@ -35,7 +34,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       organizationId,
       pacienteId: id,
       usuarioId: userId,
-      canal: parsed.data.canal,
     });
 
     return ok(resultado);

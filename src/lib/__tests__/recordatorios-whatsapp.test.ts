@@ -1,17 +1,12 @@
 /**
  * Integración — WhatsApp asistido contra la base real de test
- * (DATABASE_URL_TEST). Twilio no interviene: el enviador es un doble.
+ * (DATABASE_URL_TEST).
  *
  * Lo que protege:
- *   - "Qué turnos corresponde avisar hoy" sale de envios_sms.programado_en,
- *     no de recalcular la ventana: un envío programado hoy entra aunque la
- *     cuenta del modo dijera otro día, y al revés.
- *   - El texto del enlace es el mismo que el cron le manda a Twilio.
- *   - Con canal `whatsapp` el cron cancela el recordatorio con su motivo y no
- *     llama a Twilio; con `ambos` (y `sms`) manda como siempre. Lo decide al
- *     despachar: cambiar la configuración alcanza a lo ya agendado.
+ *   - "Qué turnos corresponde avisar hoy" sale de los turnos, con la regla
+ *     correspondeAvisarHoy (momento de aviso, aperturas, cambio de horario).
  *   - Registrar la apertura: fila + auditoría, repetible, 404 si es ajeno.
- *   - El contrato exacto de las dos rutas y el PATCH de /api/config.
+ *   - El contrato exacto de las rutas y la auditoría de /api/config.
  *
  * Ejecutar:
  *   DATABASE_URL_TEST="postgresql://postgres:postgres@127.0.0.1:25433/sesion_test" \
@@ -20,20 +15,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 
-import type { CanalRecordatorio, PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
-import { despacharEnvios, MOTIVO_BAJA } from "@/app/api/_lib/casos-uso/despachar-sms";
-import {
-  claveDelTurno,
-  MOTIVO_CANAL_WHATSAPP,
-  programarEnvioDelTurno,
-  reprogramarEnvioDelTurno,
-} from "@/app/api/_lib/casos-uso/envios-del-turno";
-import { listarRecordatoriosDeHoy, registrarAviso } from "@/app/api/_lib/casos-uso/recordatorios-whatsapp";
+import { correspondeAvisarHoy, listarRecordatoriosDeHoy, registrarAviso } from "@/app/api/_lib/casos-uso/recordatorios-whatsapp";
+import { textoDelRecordatorio } from "@/lib/recordatorio-texto";
 import { ApiError } from "@/app/api/_lib/responses";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 import { __resetLlaveroForTests } from "@/lib/llavero";
-import type { EnviadorSms } from "@/lib/sms/twilio";
 
 import { conectarBaseDeTest, vaciarTablas, type ClienteCifrado } from "./db-test";
 
@@ -73,7 +61,7 @@ const TEMPLATE = "Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{ho
 
 type Org = { orgId: string; userId: string };
 
-async function crearOrg(canal: CanalRecordatorio = "whatsapp"): Promise<Org> {
+async function crearOrg(): Promise<Org> {
   const org = await prismaRaw.organization.create({ data: { nombre: `Org ${randomUUID()}` } });
   const user = await prismaRaw.user.create({
     data: { email: `${randomUUID()}@test.uy`, hashedPassword: "x", nombre: "Mariana", organizationId: org.id },
@@ -86,7 +74,6 @@ async function crearOrg(canal: CanalRecordatorio = "whatsapp"): Promise<Org> {
       whatsappOrigen: "+598 99 876 543",
       tarifaDefault: 1000,
       templateRecordatorio: TEMPLATE,
-      canalRecordatorio: canal,
     },
   });
   return { orgId: org.id, userId: user.id };
@@ -104,54 +91,15 @@ async function crearTurno(o: Org, pacienteId: string, fecha: Date, estado: "prog
   });
 }
 
-/** El envío del turno, con el programadoEn que se le diga (como lo dejaría
- *  programarEnvioDelTurno, pero sin depender de su cuenta). */
-async function crearEnvio(
-  o: Org,
-  turno: { id: string; fecha: Date; pacienteId: string },
-  programadoEn: Date,
-  extra: { motivo?: "recordatorio_turno" | "cambio_de_horario"; destino?: string; estado?: "pendiente" | "fallido" } = {},
-) {
-  const estado = extra.estado ?? "pendiente";
-  return prismaRaw.envioSms.create({
-    data: {
-      organizationId: o.orgId,
-      claveIdempotencia: claveDelTurno(turno.id, turno.fecha),
-      motivo: extra.motivo ?? "recordatorio_turno",
-      estado,
-      pacienteId: turno.pacienteId,
-      turnoId: turno.id,
-      destino: extra.destino ?? TELEFONO,
-      programadoEn,
-      proximoIntentoEn: estado === "pendiente" ? programadoEn : null,
-      // Creado al agendar, días antes: lo creado HOY con la hora ya vencida
-      // es otro caso (ver "nació vencido").
-      creadoEn: new Date(Math.min(programadoEn.getTime(), INICIO_HOY.getTime()) - 2 * DIA),
-    },
-  });
-}
-
-/** Un turno mañana a las 15:00 de Montevideo con su envío programado hoy. */
-async function turnoConAvisoHoy(o: Org, opciones: { telefono?: string; nombre?: string; programadoEn?: Date } = {}) {
+/** Un turno mañana a las 15:00 de Montevideo: con el modo de siempre, su
+ *  aviso es hoy a las 20:00. */
+async function turnoConAvisoHoy(o: Org, opciones: { telefono?: string; nombre?: string } = {}) {
   const paciente = await crearPaciente(o, opciones.telefono ?? TELEFONO, opciones.nombre);
   const turno = await crearTurno(o, paciente.id, new Date("2026-09-04T18:00:00.000Z"));
-  const envio = await crearEnvio(o, turno, opciones.programadoEn ?? new Date("2026-09-03T23:05:00.000Z"), {
-    destino: paciente.telefono,
-    estado: paciente.telefono ? "pendiente" : "fallido",
-  });
-  return { paciente, turno, envio };
+  return { paciente, turno };
 }
 
 const textoDelEnlace = (enlace: string) => new URL(enlace).searchParams.get("text");
-
-function enviadorDoble() {
-  const textos: string[] = [];
-  const enviar: EnviadorSms = vi.fn(async ({ texto }) => {
-    textos.push(texto);
-    return { tipo: "aceptado", sid: `SM${randomUUID().replaceAll("-", "")}`, segmentos: 1, estadoTwilio: "queued" } as const;
-  });
-  return { enviar, textos };
-}
 
 beforeAll(async () => {
   process.env.CLAVES_CIFRADO = `1=${TEST_KEY_B64}`;
@@ -178,406 +126,145 @@ afterAll(async () => {
 
 // ─── Listar ─────────────────────────────────────────────────────────────────
 
-describe("listarRecordatoriosDeHoy", () => {
-  it("devuelve el turno con su enlace al teléfono y el texto de la plantilla", async () => {
-    const o = await crearOrg();
-    const { turno, paciente } = await turnoConAvisoHoy(o);
-
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-
-    expect(r.canal).toBe("whatsapp");
-    expect(r.turnos).toEqual([
-      {
-        turnoId: turno.id,
-        fecha: turno.fecha.toISOString(),
-        paciente: { id: paciente.id, nombre: "Lucía", apellido: "Gómez", telefono: TELEFONO },
-        enlace: expect.stringMatching(/^https:\/\/wa\.me\/59899123456\?text=/),
-        motivo: null,
-        avisadoEn: null,
-      },
-    ]);
-    const texto = textoDelEnlace(r.turnos[0].enlace!);
-    expect(texto).toContain("Hola Lucía.");
-    expect(texto).toContain("Rivera 2540");
+/** Que abrió el enlace del turno, avisando `fechaTurno`, en `abiertoEn`. */
+async function avisar(o: Org, turnoId: string, fechaTurno: Date, abiertoEn: Date) {
+  return prismaRaw.avisoWhatsapp.create({
+    data: { organizationId: o.orgId, turnoId, tipo: "recordatorio", fechaTurno, abiertoEn, usuarioId: o.userId },
   });
+}
 
-  it("la fuente es programado_en: entra lo programado hoy, sea cual sea la fecha del turno, y nada más", async () => {
-    const o = await crearOrg();
-    // Turno dentro de 3 días con el envío programado HOY: recalcular con
-    // dia_anterior diría "pasado mañana"; programado_en manda.
-    const pLejos = await crearPaciente(o, TELEFONO, "Lejos");
-    const lejos = await crearTurno(o, pLejos.id, new Date(AHORA.getTime() + 3 * DIA));
-    await crearEnvio(o, lejos, INICIO_HOY);
-    // Turno mañana con el envío programado MAÑANA (misma_manana): recalcular
-    // con dia_anterior diría "hoy"; no entra.
-    const pManana = await crearPaciente(o, TELEFONO, "Mañana");
-    const manana = await crearTurno(o, pManana.id, new Date("2026-09-04T18:00:00.000Z"));
-    await crearEnvio(o, manana, new Date("2026-09-04T11:00:00.000Z"));
-    // Programado ayer y tratado ayer por el cron (con canal whatsapp, lo
-    // canceló): fue el aviso de ayer.
-    const pAyer = await crearPaciente(o, TELEFONO, "Ayer");
-    const ayer = await crearTurno(o, pAyer.id, new Date(AHORA.getTime() + 5 * HORA));
-    const envioAyer = await crearEnvio(o, ayer, new Date(INICIO_HOY.getTime() - HORA));
-    await prismaRaw.envioSms.update({
-      where: { id: envioAyer.id },
-      data: { estado: "cancelado", motivoNoEnvio: MOTIVO_CANAL_WHATSAPP, cerradoEn: new Date(INICIO_HOY.getTime() - 50 * MIN), proximoIntentoEn: null },
-    });
-    // El último milisegundo de hoy en Montevideo sí cuenta.
-    const pBorde = await crearPaciente(o, TELEFONO, "Borde");
-    const borde = await crearTurno(o, pBorde.id, new Date(AHORA.getTime() + 2 * DIA));
-    await crearEnvio(o, borde, FIN_HOY);
+const listar = (o: Org, ahora = AHORA) => listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora });
+const MANANA_15 = new Date("2026-09-04T18:00:00.000Z");
 
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-
-    expect(r.turnos.map((t) => t.paciente.nombre).sort()).toEqual(["Borde", "Lejos"]);
-  });
-
-  it("cuenta lo que programarEnvioDelTurno deja para mañana con el modo de siempre", async () => {
+describe("listarRecordatoriosDeHoy: sale de los turnos, no de envios_sms", () => {
+  it("el turno de mañana (modo de siempre: la tarde anterior) entra con su enlace, sin ninguna fila de envios_sms", async () => {
     const o = await crearOrg();
     const paciente = await crearPaciente(o);
-    const turno = await crearTurno(o, paciente.id, new Date("2026-09-04T18:00:00.000Z"));
-    await programarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: turno.fecha,
-      ahora: AHORA,
-    });
+    const turno = await crearTurno(o, paciente.id, MANANA_15);
+    expect(await prismaRaw.envioSms.count()).toBe(0);
 
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-    expect(r.turnos.map((t) => t.turnoId)).toEqual([turno.id]);
+    const { turnos } = await listar(o);
+    expect(turnos).toHaveLength(1);
+    expect(turnos[0]).toMatchObject({ turnoId: turno.id, fecha: MANANA_15.toISOString(), motivo: null, avisadoEn: null });
+    expect(turnos[0].enlace).toMatch(/^https:\/\/wa\.me\/59899123456\?text=/);
+    expect(textoDelEnlace(turnos[0].enlace!)).toContain("Hola Lucía. Te recordamos tu sesión:");
   });
 
-  it("nació vencido: agendado hoy para esta tarde entra hoy, aunque su programado_en sea de ayer", async () => {
+  it("la regla: entra si su momento de aviso ya llegó hoy o antes; pasado mañana todavía no", async () => {
     const o = await crearOrg();
-    const paciente = await crearPaciente(o);
-    const turno = await crearTurno(o, paciente.id, new Date(AHORA.getTime() + 6 * HORA));
-    await programarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: turno.fecha,
-      ahora: AHORA,
-    });
-    // La base pone creado_en con su reloj: se fija en "hoy" del test.
-    await prismaRaw.envioSms.updateMany({ where: { turnoId: turno.id }, data: { creadoEn: AHORA } });
-    const envio = await prismaRaw.envioSms.findFirstOrThrow({ where: { turnoId: turno.id } });
-    expect(envio.programadoEn.getTime()).toBeLessThan(INICIO_HOY.getTime());
-
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-    expect(r.turnos.map((t) => t.turnoId)).toEqual([turno.id]);
-    // El cron lo trata en el tick siguiente (lo cancela: canal whatsapp) y
-    // sigue en la lista de hoy.
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar: enviadorDoble().enviar });
-    expect((await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA })).turnos).toHaveLength(1);
-    // Mañana ya no: fue el aviso de hoy.
-    const manana = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: new Date(AHORA.getTime() + DIA) });
-    expect(manana.turnos).toEqual([]);
+    const p = await crearPaciente(o);
+    // Hoy a las 18:00: su aviso era ayer a las 20:00 y no se mandó.
+    const hoyTarde = await crearTurno(o, p.id, new Date("2026-09-03T21:00:00.000Z"));
+    const manana = await crearTurno(o, p.id, MANANA_15);
+    await crearTurno(o, p.id, new Date("2026-09-05T18:00:00.000Z"));
+    expect((await listar(o)).turnos.map((t) => t.turnoId)).toEqual([hoyTarde.id, manana.id]);
   });
 
-  it("reabierto hoy: el envío que revive con su hora vencida entra hoy", async () => {
+  it("sigue el modo de Tu consultorio", async () => {
     const o = await crearOrg();
-    const paciente = await crearPaciente(o);
-    const turno = await crearTurno(o, paciente.id, new Date(AHORA.getTime() + 6 * HORA));
-    // Su aviso era de ayer y se apagó al marcarlo ausente.
-    const envio = await crearEnvio(o, turno, new Date(INICIO_HOY.getTime() - 4 * HORA));
-    await prismaRaw.envioSms.update({
-      where: { id: envio.id },
-      data: { estado: "cancelado", cerradoEn: new Date(INICIO_HOY.getTime() - 5 * HORA), proximoIntentoEn: null },
-    });
-    expect((await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA })).turnos).toEqual([]);
-
-    // Lo vuelve a programado hoy: programarEnvioDelTurno revive la fila.
-    await programarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: turno.fecha,
-      ahora: AHORA,
-    });
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("pendiente");
-
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-    expect(r.turnos.map((t) => t.turnoId)).toEqual([turno.id]);
+    await prismaRaw.configuracion.update({ where: { organizationId: o.orgId }, data: { recordatorioModo: "dos_dias_antes" } });
+    const p = await crearPaciente(o);
+    const pasado = await crearTurno(o, p.id, new Date("2026-09-05T18:00:00.000Z"));
+    await crearTurno(o, p.id, new Date("2026-09-06T18:00:00.000Z"));
+    expect((await listar(o)).turnos.map((t) => t.turnoId)).toContain(pasado.id);
+    expect((await listar(o)).turnos).toHaveLength(1);
   });
 
-  it("un turno movido no aparece por su envío viejo, y sí con el cambio de horario de hoy", async () => {
+  it("avisado hoy sigue en la lista, marcado; avisado otro día para su fecha, ya no", async () => {
     const o = await crearOrg();
-    const { turno, paciente } = await turnoConAvisoHoy(o);
-    // Se mueve a la semana que viene: el envío de hoy queda cancelado con la
-    // fecha vieja y el nuevo se programa para otro día.
-    const nueva = new Date(turno.fecha.getTime() + 7 * DIA);
-    await prismaRaw.turno.update({ where: { id: turno.id }, data: { fecha: nueva } });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: nueva,
-      fechaTurnoPrevia: turno.fecha,
-      ahora: AHORA,
-    });
-    expect((await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA })).turnos).toEqual([]);
-
-    // Si el aviso viejo ya había salido, el nuevo es un cambio de horario que
-    // sale hoy: ese sí se prepara, con su propio texto.
-    await prismaRaw.envioSms.updateMany({
-      where: { claveIdempotencia: claveDelTurno(turno.id, turno.fecha) },
-      data: { estado: "aceptado", aceptadoEn: AHORA },
-    });
-    const otra = new Date(nueva.getTime() + DIA);
-    await prismaRaw.turno.update({ where: { id: turno.id }, data: { fecha: otra } });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: otra,
-      fechaTurnoPrevia: nueva,
-      ahora: AHORA,
-    });
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-    expect(r.turnos).toHaveLength(1);
-    expect(r.turnos[0].fecha).toBe(otra.toISOString());
-    expect(textoDelEnlace(r.turnos[0].enlace!)).not.toContain("Te recordamos");
+    const p = await crearPaciente(o);
+    const hoy = await crearTurno(o, p.id, MANANA_15);
+    const ayer = await crearTurno(o, p.id, new Date("2026-09-04T20:00:00.000Z"));
+    await avisar(o, hoy.id, hoy.fecha, new Date("2026-09-03T13:00:00.000Z"));
+    await avisar(o, ayer.id, ayer.fecha, new Date("2026-09-02T23:00:00.000Z"));
+    const { turnos } = await listar(o);
+    expect(turnos.map((t) => [t.turnoId, t.avisadoEn])).toEqual([[hoy.id, "2026-09-03T13:00:00.000Z"]]);
   });
 
-  it("abrió el WhatsApp y después movió el turno: sale ya un cambio de horario, pendiente de avisar, sin que haya salido ningún SMS", async () => {
+  it("movido después de avisar: entra ya con el texto de cambio de horario, aunque falten días", async () => {
     const o = await crearOrg();
-    const { turno, paciente } = await turnoConAvisoHoy(o);
-    await registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: AHORA });
-    expect(await prismaRaw.envioSms.count({ where: { aceptadoEn: { not: null } } })).toBe(0);
-
-    const nueva = new Date(turno.fecha.getTime() + 7 * DIA);
-    const despues = new Date(AHORA.getTime() + 10 * MIN);
-    await prismaRaw.turno.update({ where: { id: turno.id }, data: { fecha: nueva } });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: nueva,
-      fechaTurnoPrevia: turno.fecha,
-      ahora: despues,
-    });
-
-    const nuevo = await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: claveDelTurno(turno.id, nueva) } });
-    expect(nuevo).toMatchObject({ motivo: "cambio_de_horario", programadoEn: despues });
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: despues });
-    expect(r.turnos).toHaveLength(1);
-    expect(r.turnos[0]).toMatchObject({ fecha: nueva.toISOString(), avisadoEn: null });
-    expect(textoDelEnlace(r.turnos[0].enlace!)).not.toContain("Te recordamos");
+    const p = await crearPaciente(o);
+    const lejos = new Date("2026-09-10T18:00:00.000Z");
+    const turno = await crearTurno(o, p.id, lejos);
+    await avisar(o, turno.id, new Date("2026-09-04T18:00:00.000Z"), new Date("2026-09-02T23:00:00.000Z"));
+    const { turnos } = await listar(o);
+    expect(turnos.map((t) => t.turnoId)).toEqual([turno.id]);
+    expect(textoDelEnlace(turnos[0].enlace!)).toBe(
+      textoDelRecordatorio("cambio_de_horario", await configDe(o), p, lejos),
+    );
   });
 
-  it("abrir de nuevo con la misma fecha no lo convierte en cambio de horario", async () => {
+  it("deja afuera el turno cerrado, el que ya empezó, la paciente archivada y otra organización", async () => {
     const o = await crearOrg();
-    const { turno, paciente } = await turnoConAvisoHoy(o);
-    // Un turno sin abrir, movido: el de siempre, a su hora.
-    const nueva = new Date(turno.fecha.getTime() + 7 * DIA);
-    await prismaRaw.turno.update({ where: { id: turno.id }, data: { fecha: nueva } });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: nueva,
-      fechaTurnoPrevia: turno.fecha,
-      ahora: AHORA,
+    const otra = await crearOrg();
+    const p = await crearPaciente(o);
+    const archivada = await prismaRaw.paciente.create({
+      data: { nombre: "Archi", apellido: "Vada", telefono: TELEFONO, tarifa: 1000, organizationId: o.orgId, activo: false },
     });
-    // Abre el de la fecha nueva y lo vuelve a mover a esa misma fecha (no-op).
-    await registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: AHORA });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: nueva,
-      fechaTurnoPrevia: nueva,
-      ahora: AHORA,
-    });
-
-    const nuevo = await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: claveDelTurno(turno.id, nueva) } });
-    expect(nuevo.motivo).toBe("recordatorio_turno");
-  });
-
-  it("deja afuera el turno cerrado, el que ya empezó, la paciente archivada, la baja y otra organización", async () => {
-    const o = await crearOrg();
-    const cerrado = await turnoConAvisoHoy(o, { nombre: "Cerrado" });
-    await prismaRaw.turno.update({ where: { id: cerrado.turno.id }, data: { estado: "cancelado" } });
-    const empezado = await crearPaciente(o, TELEFONO, "Empezado");
-    const tEmpezado = await crearTurno(o, empezado.id, new Date(AHORA.getTime() - MIN));
-    await crearEnvio(o, tEmpezado, INICIO_HOY);
-    const archivada = await turnoConAvisoHoy(o, { nombre: "Archivada" });
-    await prismaRaw.paciente.update({ where: { id: archivada.paciente.id }, data: { activo: false } });
-    await turnoConAvisoHoy(o, { nombre: "Baja", telefono: "+59899000111" });
-    await prismaRaw.bajaSms.create({ data: { telefono: "+59899000111", motivo: "respuesta_baja" } });
-    await turnoConAvisoHoy(await crearOrg(), { nombre: "Ajena" });
-    await turnoConAvisoHoy(o, { nombre: "Queda" });
-
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-    expect(r.turnos.map((t) => t.paciente.nombre)).toEqual(["Queda"]);
+    const queda = await crearTurno(o, p.id, MANANA_15);
+    await crearTurno(o, p.id, new Date("2026-09-04T19:00:00.000Z"), "cancelado");
+    await crearTurno(o, p.id, new Date("2026-09-03T14:00:00.000Z"));
+    await crearTurno(o, archivada.id, MANANA_15);
+    await crearTurno(otra, (await crearPaciente(otra)).id, MANANA_15);
+    expect((await listar(o)).turnos.map((t) => t.turnoId)).toEqual([queda.id]);
   });
 
   it("sin teléfono: enlace null y motivo sin_telefono", async () => {
     const o = await crearOrg();
-    await turnoConAvisoHoy(o, { telefono: "" });
-
-    const [t] = (await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA })).turnos;
-    expect(t.enlace).toBeNull();
-    expect(t.motivo).toBe("sin_telefono");
+    const p = await crearPaciente(o, "");
+    await crearTurno(o, p.id, MANANA_15);
+    expect((await listar(o)).turnos[0]).toMatchObject({ enlace: null, motivo: "sin_telefono" });
   });
 
-  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado no cuenta.
-  it.each(["sms", "ambos"] as const)("con %s guardado la lista se arma igual, como WhatsApp", async (guardado) => {
-    const o = await crearOrg(guardado);
-    await turnoConAvisoHoy(o);
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-    expect(r.canal).toBe("whatsapp");
-    expect(r.turnos).toHaveLength(1);
-  });
-
-  it("ordena por la hora del turno y trae la última apertura", async () => {
+  it("ordena por la hora del turno", async () => {
     const o = await crearOrg();
-    const tarde = await turnoConAvisoHoy(o, { nombre: "Tarde" });
-    await prismaRaw.turno.update({ where: { id: tarde.turno.id }, data: { fecha: new Date("2026-09-04T21:00:00.000Z") } });
-    await prismaRaw.envioSms.update({
-      where: { id: tarde.envio.id },
-      data: { claveIdempotencia: claveDelTurno(tarde.turno.id, new Date("2026-09-04T21:00:00.000Z")), programadoEn: INICIO_HOY },
-    });
-    const temprano = await turnoConAvisoHoy(o, { nombre: "Temprano" });
-    await registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: temprano.turno.id, usuarioId: o.userId, ahora: new Date(AHORA.getTime() - HORA) });
-    await registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: temprano.turno.id, usuarioId: o.userId, ahora: AHORA });
-
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA });
-    expect(r.turnos.map((t) => [t.paciente.nombre, t.avisadoEn])).toEqual([
-      ["Temprano", AHORA.toISOString()],
-      ["Tarde", null],
-    ]);
+    const p = await crearPaciente(o);
+    const tarde = await crearTurno(o, p.id, new Date("2026-09-04T21:00:00.000Z"));
+    const temprano = await crearTurno(o, p.id, new Date("2026-09-04T12:00:00.000Z"));
+    expect((await listar(o)).turnos.map((t) => t.turnoId)).toEqual([temprano.id, tarde.id]);
   });
 });
 
-// ─── El mismo texto que el SMS ──────────────────────────────────────────────
-
-describe("el texto del WhatsApp y el del SMS", () => {
-  it.each(["recordatorio_turno", "cambio_de_horario"] as const)("son el mismo (%s)", async (motivo) => {
-    const o = await crearOrg("ambos");
-    const paciente = await crearPaciente(o);
-    const turno = await crearTurno(o, paciente.id, new Date("2026-09-04T18:00:00.000Z"));
-    await crearEnvio(o, turno, new Date(AHORA.getTime() - MIN), { motivo });
-
-    const [t] = (await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA })).turnos;
-    const { enviar, textos } = enviadorDoble();
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar, canalDe: (guardado) => guardado ?? "sms" });
-
-    expect(textos).toHaveLength(1);
-    expect(textoDelEnlace(t.enlace!)).toBe(textos[0]);
+describe("correspondeAvisarHoy (la regla, en memoria)", () => {
+  const hoy = AHORA;
+  it("momento llegado y sin aviso: sí; momento futuro: no", () => {
+    expect(correspondeAvisarHoy({ fecha: MANANA_15, avisos: [] }, "dia_anterior", hoy)).toEqual({ motivo: "recordatorio_turno", avisadoEn: null });
+    expect(correspondeAvisarHoy({ fecha: new Date("2026-09-05T18:00:00.000Z"), avisos: [] }, "dia_anterior", hoy)).toBeNull();
+  });
+  it("con un aviso de otra fecha es cambio de horario, sea cuando sea el turno", () => {
+    const fecha = new Date("2026-10-01T18:00:00.000Z");
+    expect(correspondeAvisarHoy({ fecha, avisos: [{ fechaTurno: MANANA_15, abiertoEn: INICIO_HOY }] }, "dia_anterior", hoy))
+      .toEqual({ motivo: "cambio_de_horario", avisadoEn: null });
+  });
+  it("avisado para su fecha antes de hoy: no; hoy: sí, con la última apertura", () => {
+    const ayer = new Date(INICIO_HOY.getTime() - HORA);
+    expect(correspondeAvisarHoy({ fecha: MANANA_15, avisos: [{ fechaTurno: MANANA_15, abiertoEn: ayer }] }, "dia_anterior", hoy)).toBeNull();
+    const abierto = new Date(INICIO_HOY.getTime() + HORA);
+    expect(correspondeAvisarHoy({ fecha: MANANA_15, avisos: [{ fechaTurno: MANANA_15, abiertoEn: ayer }, { fechaTurno: MANANA_15, abiertoEn: abierto }] }, "dia_anterior", hoy))
+      .toEqual({ motivo: "recordatorio_turno", avisadoEn: abierto });
+  });
+  it("lo movió, mandó el cambio, y lo volvió a la fecha original: hay que avisar de nuevo", () => {
+    // Avisó F el 1/9; lo movió a F2 y avisó el cambio el 2/9; hoy lo volvió a F.
+    const f2 = new Date(MANANA_15.getTime() + 7 * DIA);
+    const avisos = [
+      { fechaTurno: MANANA_15, abiertoEn: new Date("2026-09-01T23:00:00.000Z") },
+      { fechaTurno: f2, abiertoEn: new Date("2026-09-02T23:00:00.000Z") },
+    ];
+    expect(correspondeAvisarHoy({ fecha: MANANA_15, avisos }, "dia_anterior", hoy))
+      .toEqual({ motivo: "cambio_de_horario", avisadoEn: null });
+  });
+  it("FIN_HOY es el borde: un aviso que cae justo después es de mañana", () => {
+    // Turno pasado mañana a las 00:30 de Montevideo: su aviso es mañana a las 20:00.
+    expect(correspondeAvisarHoy({ fecha: new Date(FIN_HOY.getTime() + DIA + 22 * MIN), avisos: [] }, "dia_anterior", hoy)).toBeNull();
   });
 });
 
-// ─── El cron ────────────────────────────────────────────────────────────────
-
-describe("despacharEnvios según el canal", () => {
-  it("whatsapp: cancela el recordatorio con su motivo y no llama a Twilio", async () => {
-    const o = await crearOrg("whatsapp");
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    const { enviar } = enviadorDoble();
-
-    const r = await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
-
-    expect(enviar).not.toHaveBeenCalled();
-    expect(r.cancelados).toBe(1);
-    const fila = await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } });
-    expect(fila).toMatchObject({ estado: "cancelado", motivoNoEnvio: MOTIVO_CANAL_WHATSAPP, intentos: 0, sid: null });
-    expect(fila.cerradoEn).toEqual(AHORA);
-    expect(r.eventos.some((e) => e.startsWith("[sms][canal-whatsapp]"))).toBe(true);
-  });
-
-  it("whatsapp: lo que todavía no venció no se toca", async () => {
-    const o = await crearOrg("whatsapp");
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() + HORA) });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
-
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("pendiente");
-  });
-
-  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): lo guardado no cuenta.
-  it.each(["ambos", "sms"] as const)("%s guardado: cancela igual, con el motivo del canal", async (canal) => {
-    const o = await crearOrg(canal);
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar });
-
-    expect(enviar).not.toHaveBeenCalled();
-    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).toMatchObject({
-      estado: "cancelado",
-      motivoNoEnvio: MOTIVO_CANAL_WHATSAPP,
-    });
-  });
-
-  it.each(["ambos", "sms"] as const)("%s con el canal guardado (el SMS hasta borrarlo): manda como siempre", async (canal) => {
-    const o = await crearOrg(canal);
-    const { envio } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar, canalDe: (guardado) => guardado ?? "sms" });
-
-    expect(enviar).toHaveBeenCalledTimes(1);
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("aceptado");
-  });
-
-  it("whatsapp: el aviso de cobro (lo pidió ella) sigue saliendo por SMS", async () => {
-    const o = await crearOrg("whatsapp");
-    const paciente = await crearPaciente(o);
-    const envio = await prismaRaw.envioSms.create({
-      data: {
-        organizationId: o.orgId,
-        claveIdempotencia: `cobro:${paciente.id}:2026-09-03`,
-        motivo: "recordatorio_cobro",
-        pacienteId: paciente.id,
-        destino: TELEFONO,
-        programadoEn: AHORA,
-        proximoIntentoEn: AHORA,
-      },
-    });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar, textoDeCobro: async () => "Debés 1 sesión" });
-
-    expect(enviar).toHaveBeenCalledTimes(1);
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).estado).toBe("aceptado");
-  });
-
-  it("decide al despachar: lo agendado con sms guardado se cancela igual", async () => {
-    const o = await crearOrg("sms");
-    const paciente = await crearPaciente(o);
-    const turno = await crearTurno(o, paciente.id, new Date("2026-09-04T18:00:00.000Z"));
-    await programarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: turno.fecha,
-      ahora: AHORA,
-    });
-    await prismaRaw.configuracion.update({ where: { organizationId: o.orgId }, data: { canalRecordatorio: "whatsapp" } });
-    const { enviar } = enviadorDoble();
-
-    await despacharEnvios({ prisma: db, ahora: new Date(turno.fecha.getTime() - 3 * HORA), enviar });
-
-    expect(enviar).not.toHaveBeenCalled();
-    const [fila] = await prismaRaw.envioSms.findMany({ where: { turnoId: turno.id } });
-    expect(fila).toMatchObject({ estado: "cancelado", motivoNoEnvio: MOTIVO_CANAL_WHATSAPP });
-  });
-
-  it("whatsapp con el turno ya cerrado: el motivo es el del turno, no el del canal", async () => {
-    const o = await crearOrg("whatsapp");
-    const { envio, turno } = await turnoConAvisoHoy(o, { programadoEn: new Date(AHORA.getTime() - MIN) });
-    await prismaRaw.turno.update({ where: { id: turno.id }, data: { estado: "cancelado" } });
-
-    await despacharEnvios({ prisma: db, ahora: AHORA, enviar: enviadorDoble().enviar });
-
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { id: envio.id } })).motivoNoEnvio).not.toBe(
-      MOTIVO_CANAL_WHATSAPP,
-    );
-  });
-});
+async function configDe(o: Org) {
+  return (await prismaRaw.configuracion.findUniqueOrThrow({
+    where: { organizationId: o.orgId },
+    select: { templateRecordatorio: true, direccion: true, nombreProfesional: true, whatsappOrigen: true },
+  }));
+}
 
 // ─── Registrar la apertura ──────────────────────────────────────────────────
 
@@ -628,141 +315,21 @@ describe("registrarAviso", () => {
     expect(fila.fechaTurno).toEqual(turno.fecha);
   });
 
-  it("abrió un enlace viejo después de que el turno se movió: el recordatorio vigente pasa a cambio de horario y sale ya", async () => {
+  it("abrió un enlace viejo después de que el turno se movió: la lista lo vuelve a pedir, como cambio de horario", async () => {
     const o = await crearOrg();
-    const { turno, paciente } = await turnoConAvisoHoy(o);
-    const [delGet] = (await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: AHORA })).turnos;
-    // Lo mueve ANTES de que llegue la apertura: reprogramar no ve aviso y
-    // deja un recordatorio común para la fecha nueva.
+    const paciente = await crearPaciente(o);
+    const turno = await crearTurno(o, paciente.id, MANANA_15);
+    const [delGet] = (await listar(o)).turnos;
+    // Lo mueve una semana antes de que llegue la apertura.
     const nueva = new Date(turno.fecha.getTime() + 7 * DIA);
     await prismaRaw.turno.update({ where: { id: turno.id }, data: { fecha: nueva } });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: nueva,
-      fechaTurnoPrevia: turno.fecha,
-      ahora: AHORA,
-    });
-    const clave = claveDelTurno(turno.id, nueva);
-    expect((await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: clave } })).motivo).toBe("recordatorio_turno");
-
     const despues = new Date(AHORA.getTime() + MIN);
     await registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: despues, fechaTurno: new Date(delGet.fecha) });
 
-    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: clave } })).toMatchObject({
-      motivo: "cambio_de_horario",
-      estado: "pendiente",
-      programadoEn: despues,
-      proximoIntentoEn: despues,
-    });
-    const r = await listarRecordatoriosDeHoy({ prisma: db, organizationId: o.orgId, ahora: despues });
+    const r = await listar(o, despues);
     expect(r.turnos).toHaveLength(1);
     expect(r.turnos[0]).toMatchObject({ fecha: nueva.toISOString(), avisadoEn: null });
-  });
-
-  it("enlace viejo con el recordatorio vigente ya cancelado por el canal: se corrige igual; uno apagado por otra causa, no", async () => {
-    const o = await crearOrg("whatsapp");
-    const { turno, paciente } = await turnoConAvisoHoy(o);
-    const vieja = turno.fecha;
-    const nueva = new Date(vieja.getTime() + DIA);
-    await prismaRaw.turno.update({ where: { id: turno.id }, data: { fecha: nueva } });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: turno.id,
-      organizationId: o.orgId,
-      pacienteId: paciente.id,
-      fechaTurno: nueva,
-      fechaTurnoPrevia: vieja,
-      ahora: AHORA,
-    });
-    const clave = claveDelTurno(turno.id, nueva);
-    // El cron ya lo trató: con canal whatsapp, cancelado sin mandar.
-    await prismaRaw.envioSms.update({
-      where: { claveIdempotencia: clave },
-      data: { estado: "cancelado", motivoNoEnvio: MOTIVO_CANAL_WHATSAPP, cerradoEn: AHORA, proximoIntentoEn: null },
-    });
-
-    const despues = new Date(AHORA.getTime() + MIN);
-    await registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: despues, fechaTurno: vieja });
-
-    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: clave } })).toMatchObject({
-      motivo: "cambio_de_horario",
-      estado: "pendiente",
-      programadoEn: despues,
-      motivoNoEnvio: null,
-      cerradoEn: null,
-    });
-
-    // Un recordatorio apagado por baja no revive.
-    const otro = await turnoConAvisoHoy(o, { nombre: "Baja" });
-    const otraNueva = new Date(otro.turno.fecha.getTime() + DIA);
-    await prismaRaw.turno.update({ where: { id: otro.turno.id }, data: { fecha: otraNueva } });
-    await reprogramarEnvioDelTurno(db, {
-      turnoId: otro.turno.id,
-      organizationId: o.orgId,
-      pacienteId: otro.paciente.id,
-      fechaTurno: otraNueva,
-      fechaTurnoPrevia: otro.turno.fecha,
-      ahora: AHORA,
-    });
-    const otraClave = claveDelTurno(otro.turno.id, otraNueva);
-    await prismaRaw.envioSms.update({
-      where: { claveIdempotencia: otraClave },
-      data: { estado: "cancelado", motivoNoEnvio: MOTIVO_BAJA, cerradoEn: AHORA, proximoIntentoEn: null },
-    });
-    await registrarAviso({ prisma: db, organizationId: o.orgId, turnoId: otro.turno.id, usuarioId: o.userId, ahora: despues, fechaTurno: otro.turno.fecha });
-    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: otraClave } })).toMatchObject({
-      motivo: "recordatorio_turno",
-      estado: "cancelado",
-    });
-  });
-
-  it("G3: toma el lock de la agenda: abrir el enlace mientras se mueve el turno deja el aviso nuevo como cambio de horario", async () => {
-    // Orden fijo, sin esperas por reloj: (1) otra transacción toma el lock,
-    // mueve el turno y reprograma su envío (no hay apertura que ver); (2) ella
-    // abre el enlace de la fecha vieja; (3) la otra transacción recién
-    // confirma cuando la apertura está esperando el lock o ya terminó.
-    // Con el lock, la apertura lee la fecha nueva y corrige el aviso. Sin él,
-    // lee la vieja (el cambio no confirmó), no corrige nada, y el aviso nuevo
-    // queda como un "te recordamos" común: la paciente nunca se entera.
-    const o = await crearOrg();
-    const { turno } = await turnoConAvisoHoy(o);
-    const nueva = new Date(turno.fecha.getTime() + DIA);
-    let soltar!: () => void;
-    const suelto = new Promise<void>((r) => (soltar = r));
-    let movido!: () => void;
-    const turnoMovido = new Promise<void>((r) => (movido = r));
-    const mover = db.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${o.orgId}))`;
-      await tx.turno.update({ where: { id: turno.id }, data: { fecha: nueva } });
-      await reprogramarEnvioDelTurno(tx, {
-        turnoId: turno.id, organizationId: o.orgId, pacienteId: turno.pacienteId,
-        fechaTurno: nueva, fechaTurnoPrevia: turno.fecha, ahora: AHORA,
-      });
-      movido();
-      await suelto;
-    });
-    await turnoMovido;
-
-    let terminado = false;
-    const aviso = registrarAviso({
-      prisma: db, organizationId: o.orgId, turnoId: turno.id, usuarioId: o.userId, ahora: AHORA, fechaTurno: turno.fecha,
-    }).finally(() => { terminado = true; });
-    // El lock de ESTA agenda (pg_advisory_xact_lock(bigint) guarda la mitad
-    // baja de la clave en objid), no cualquier advisory de la base.
-    const esperandoLock = async () =>
-      (await prismaRaw.$queryRaw<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM pg_locks
-        WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
-          AND objid::bigint = (hashtext(${o.orgId})::bigint & 4294967295)`)[0].n > 0;
-    while (!terminado && !(await esperandoLock())) await new Promise((r) => setImmediate(r));
-    soltar();
-    await Promise.all([mover, aviso]);
-
-    expect(await prismaRaw.envioSms.findUniqueOrThrow({ where: { claveIdempotencia: claveDelTurno(turno.id, nueva) } })).toMatchObject({
-      motivo: "cambio_de_horario",
-      estado: "pendiente",
-    });
+    expect(textoDelEnlace(r.turnos[0].enlace!)).toBe(textoDelRecordatorio("cambio_de_horario", await configDe(o), paciente, nueva));
   });
 
   it("404 si el turno es de otra organización, sin escribir nada", async () => {
@@ -791,8 +358,8 @@ describe("rutas", () => {
     vi.useRealTimers();
   });
 
-  async function entrar(canal: CanalRecordatorio = "whatsapp") {
-    const o = await crearOrg(canal);
+  async function entrar() {
+    const o = await crearOrg();
     sesionActual.organizationId = o.orgId;
     sesionActual.userId = o.userId;
     return o;
@@ -810,7 +377,6 @@ describe("rutas", () => {
     const cuerpo = await res.json();
     expect(cuerpo).toEqual({
       data: {
-        canal: "whatsapp",
         turnos: [
           {
             turnoId: turno.id,
@@ -831,16 +397,6 @@ describe("rutas", () => {
         ],
       },
     });
-  });
-
-  it("GET con sms guardado: canal whatsapp y la lista llena", async () => {
-    const o = await entrar("sms");
-    await turnoConAvisoHoy(o);
-    const { GET } = await import("@/app/api/recordatorios/whatsapp/route");
-
-    const { data } = await (await GET()).json();
-    expect(data.canal).toBe("whatsapp");
-    expect(data.turnos).toHaveLength(1);
   });
 
   it("POST …/[turnoId]/abierto: 201 con avisadoEn, y el GET lo refleja", async () => {
@@ -875,6 +431,28 @@ describe("rutas", () => {
     expect(filas.map((f) => f.fechaTurno)).toEqual([vieja, turno.fecha]);
   });
 
+  it("GET …/[turnoId]: el aviso del turno para su fecha vigente (pendiente o avisado), 404 si es ajeno", async () => {
+    const o = await crearOrg();
+    const ajena = await crearOrg();
+    const p = await crearPaciente(o);
+    const turno = await crearTurno(o, p.id, MANANA_15);
+    const { GET } = await import("@/app/api/recordatorios/whatsapp/[turnoId]/route");
+    const pedir = () => GET(new Request("http://localhost/x"), { params: Promise.resolve({ turnoId: turno.id }) });
+    sesionActual.organizationId = o.orgId;
+    sesionActual.userId = o.userId;
+    expect(await (await pedir()).json()).toEqual({ data: { avisadoEn: null } });
+    // Lo avisado para otra fecha no cuenta: el turno se movió después.
+    await avisar(o, turno.id, new Date(MANANA_15.getTime() - DIA), new Date("2026-09-01T12:00:00.000Z"));
+    await avisar(o, turno.id, MANANA_15, new Date("2026-09-02T12:00:00.000Z"));
+    await avisar(o, turno.id, MANANA_15, new Date("2026-09-03T12:00:00.000Z"));
+    expect(await (await pedir()).json()).toEqual({ data: { avisadoEn: "2026-09-03T12:00:00.000Z" } });
+    // Si el último aviso es de otra fecha (lo movió y volvió), vuelve a estar pendiente.
+    await avisar(o, turno.id, new Date(MANANA_15.getTime() + DIA), new Date("2026-09-03T13:00:00.000Z"));
+    expect(await (await pedir()).json()).toEqual({ data: { avisadoEn: null } });
+    sesionActual.organizationId = ajena.orgId;
+    expect((await pedir()).status).toBe(404);
+  });
+
   it("POST con un turno ajeno o inexistente: 404", async () => {
     await entrar();
     const { turno } = await turnoConAvisoHoy(await crearOrg());
@@ -886,36 +464,11 @@ describe("rutas", () => {
     }
     expect(await prismaRaw.avisoWhatsapp.count()).toBe(0);
   });
-
-  it.each(["sms", "ambos"] as const)("/api/config: con %s guardado devuelve whatsapp, y por PATCH sólo acepta whatsapp", async (guardado) => {
-    const o = await entrar(guardado);
-    const { GET, PATCH } = await import("@/app/api/config/route");
-    const patch = (body: unknown) =>
-      PATCH(new Request("http://localhost/api/config", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
-    const guardadoEnLaBase = async () =>
-      (await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: o.orgId } })).canalRecordatorio;
-
-    expect((await (await GET()).json()).data.canalRecordatorio).toBe("whatsapp");
-    for (const canal of ["sms", "ambos", "paloma"]) expect((await patch({ canalRecordatorio: canal })).status).toBe(400);
-    expect(await guardadoEnLaBase()).toBe(guardado);
-    const res = await patch({ canalRecordatorio: "whatsapp" });
-    expect(res.status).toBe(200);
-    expect((await res.json()).data.canalRecordatorio).toBe("whatsapp");
-    expect(await guardadoEnLaBase()).toBe("whatsapp");
-  });
-
-  it("una configuración creada sin canal queda en sms", async () => {
-    const org = await prismaRaw.organization.create({ data: { nombre: `Org ${randomUUID()}` } });
-    const c = await prismaRaw.configuracion.create({
-      data: { organizationId: org.id, nombreProfesional: "X", tarifaDefault: 1 },
-    });
-    expect(c.canalRecordatorio).toBe("sms");
-  });
 });
 
 describe("auditoría de Tu consultorio (configuracion.editar)", () => {
-  async function entrar(canal: CanalRecordatorio) {
-    const o = await crearOrg(canal);
+  async function entrar() {
+    const o = await crearOrg();
     sesionActual.organizationId = o.orgId;
     sesionActual.userId = o.userId;
     return o;
@@ -927,10 +480,10 @@ describe("auditoría de Tu consultorio (configuracion.editar)", () => {
   const eventos = (organizationId: string) =>
     prismaRaw.eventoAuditoria.findMany({ where: { organizationId, accion: ACCIONES.configuracion.editar }, orderBy: { creadoEn: "asc" } });
 
-  it("deja quién cambió qué: el canal y el modo con su antes y después, las plantillas sólo por nombre", async () => {
-    const o = await entrar("sms");
+  it("deja quién cambió qué: el modo con su antes y después, las plantillas sólo por nombre", async () => {
+    const o = await entrar();
     const cobro = "Hola {{nombre}}, quedan {{monto}} sin pagar.";
-    const res = await patch({ canalRecordatorio: "whatsapp", recordatorioModo: "misma_manana", templateCobro: cobro, templateRecordatorio: TEMPLATE });
+    const res = await patch({ recordatorioModo: "misma_manana", templateCobro: cobro, templateRecordatorio: TEMPLATE });
     expect(res.status).toBe(200);
     const [evento, ...otros] = await eventos(o.orgId);
     expect(otros).toHaveLength(0);
@@ -942,9 +495,7 @@ describe("auditoría de Tu consultorio (configuracion.editar)", () => {
       entidadId: config.id,
       // templateRecordatorio llegó igual al guardado: no cambió.
       detalle: {
-        campos: ["canalRecordatorio", "recordatorioModo", "templateCobro"],
-        canalRecordatorioAntes: "sms",
-        canalRecordatorioDespues: "whatsapp",
+        campos: ["recordatorioModo", "templateCobro"],
         recordatorioModoAntes: "dia_anterior",
         recordatorioModoDespues: "misma_manana",
       },
@@ -953,17 +504,17 @@ describe("auditoría de Tu consultorio (configuracion.editar)", () => {
   });
 
   it("guardar lo mismo (el autoguardado lo hace) no deja evento", async () => {
-    const o = await entrar("whatsapp");
-    expect((await patch({ canalRecordatorio: "whatsapp", templateRecordatorio: TEMPLATE })).status).toBe(200);
+    const o = await entrar();
+    expect((await patch({ templateRecordatorio: TEMPLATE })).status).toBe(200);
     expect(await eventos(o.orgId)).toHaveLength(0);
   });
 
   it("cada organización ve sólo sus cambios", async () => {
-    const otra = await crearOrg("sms");
-    const o = await entrar("sms");
-    await patch({ canalRecordatorio: "whatsapp" });
+    const otra = await crearOrg();
+    const o = await entrar();
+    await patch({ recordatorioModo: "misma_manana" });
     expect(await eventos(o.orgId)).toHaveLength(1);
     expect(await eventos(otra.orgId)).toHaveLength(0);
-    expect((await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: otra.orgId } })).canalRecordatorio).toBe("sms");
+    expect((await prismaRaw.configuracion.findUniqueOrThrow({ where: { organizationId: otra.orgId } })).recordatorioModo).toBe("dia_anterior");
   });
 });

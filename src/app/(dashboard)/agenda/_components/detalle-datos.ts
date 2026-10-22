@@ -1,5 +1,5 @@
 // Lecturas y reglas del detalle del turno: qué se le pide a la API (la sesión
-// clínica y el recordatorio) y qué acciones se ofrecen según el estado.
+// clínica y el aviso por WhatsApp) y qué acciones se ofrecen según el estado.
 //
 // Vive fuera de turno-detail-sheet.tsx porque no es pantalla. Sin estado, sin
 // efectos, sin React. Las reglas no se escriben acá: Cobrar es sePuedeCobrar
@@ -18,32 +18,19 @@ import {
   type AccionClinica,
   type SesionDelTurno as SesionConQueSeDecide,
 } from "@/lib/sesion-clinica/accion-clinica";
-import type { TurnoConPaciente } from "@/types/domain";
+import type { AvisoDelTurno, TurnoConPaciente } from "@/types/domain";
 
 /** La sesión clínica del turno tal como la devuelve la API. */
 export type SesionDelTurno = { id: string; estado?: string; actualizadaEn?: string } | null;
-
-/** El recordatorio tal como viaja por la red: las fechas son ISO. */
-export type RecordatorioJson = {
-  id: string;
-  estado: string;
-  programadoEn: string;
-  aceptadoEn: string | null;
-  intentos: number;
-  motivoNoEnvio: string | null;
-};
 
 export function leerSesion(turnoId: string, signal?: AbortSignal): Promise<SesionDelTurno> {
   return apiGet<SesionDelTurno>(`/api/sesion-clinica?turnoId=${turnoId}`, { signal });
 }
 
-/** El recordatorio del turno, o null si no tiene ninguno. */
-export async function leerRecordatorio(
-  turnoId: string,
-  signal?: AbortSignal,
-): Promise<RecordatorioJson | null> {
-  const lista = await apiGet<RecordatorioJson[]>(`/api/sms/envios?turnoId=${turnoId}`, { signal });
-  return lista[0] ?? null;
+/** El aviso por WhatsApp del turno: cuándo lo avisó para su fecha vigente,
+ *  o null si todavía no. */
+export function leerRecordatorio(turnoId: string, signal?: AbortSignal): Promise<AvisoDelTurno> {
+  return apiGet<AvisoDelTurno>(`/api/recordatorios/whatsapp/${turnoId}`, { signal });
 }
 
 export interface AccionesDelDetalle {

@@ -288,29 +288,29 @@ export const DESHACIENDO_COBRO = "Deshaciendo…";
 export const COBRO_DESHECHO = "Cobro deshecho";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Recordatorio de la sesión (el SMS)
+// Recordatorio de la sesión (por WhatsApp, lo manda ella)
 // Se llama igual que en "Tu consultorio": Recordatorio. No "aviso", no
-// "notificación", no "SMS" — la profesional configura un recordatorio y en el
-// turno ve ese mismo recordatorio.
+// "notificación" — la profesional configura un recordatorio y en el turno ve
+// ese mismo recordatorio.
 // ────────────────────────────────────────────────────────────────────────────
 
 export const RECORDATORIO = "Recordatorio";
 
 /** Cuándo se avisa, en Configuración. La hora la pone la pantalla, sacada de
- *  calcularProgramadoEn (recordatorios-programacion.ts): el aviso sale entre
- *  `desde` y `hasta` porque los del día se reparten unos minutos. */
+ *  calcularProgramadoEn (recordatorios-programacion.ts): desde esa hora el
+ *  turno aparece en "Recordatorios para hoy", para mandarlo por WhatsApp. */
 export const RECORDATORIO_MOMENTOS = {
   dia_anterior: {
     label: "El día anterior",
-    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} del día antes`,
+    detalle: (hora: string) => `Desde las ${hora} del día antes`,
   },
   dos_dias_antes: {
     label: "Dos días antes",
-    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} de dos días antes`,
+    detalle: (hora: string) => `Desde las ${hora} de dos días antes`,
   },
   misma_manana: {
     label: "La misma mañana",
-    detalle: (desde: string, hasta: string) => `Entre las ${desde} y las ${hasta} del día del turno`,
+    detalle: (hora: string) => `Desde las ${hora} del día del turno`,
   },
 } as const;
 
@@ -331,23 +331,12 @@ export function avisadoA(hora: string): string {
 }
 
 /** La excepción de "La misma mañana": si el aviso de la mañana no llegaría
- *  antes del turno, sale la tarde anterior. `limite` es el primer minuto en
- *  que eso ya no puede pasar. */
-export function RECORDATORIO_MISMA_MANANA_EXCEPCION(
-  limite: string,
-  tardeDesde: string,
-  tardeHasta: string,
-): string {
-  return `Si el turno es antes de las ${limite}, el aviso puede salir la tarde anterior, entre las ${tardeDesde} y las ${tardeHasta}: a la mañana no llegaría antes del turno.`;
+ *  antes del turno, va la tarde anterior. `manana` es la hora del aviso de la
+ *  mañana: un turno a esa hora o antes se avisa la tarde anterior. */
+export function RECORDATORIO_MISMA_MANANA_EXCEPCION(manana: string, tarde: string): string {
+  return `Si el turno es a las ${manana} o antes, se avisa la tarde anterior, desde las ${tarde}: a la mañana no llegaría antes del turno.`;
 }
 
-/** Cómo se dice cada estado del recordatorio en la pantalla del turno.
- *  "enviando" es la reserva interna del cron: para ella es "saliendo". */
-export const RECORDATORIO_ESTADO: Readonly<Record<string, string>> = {
-  pendiente: "Programado", enviando: "Enviando", aceptado: "En camino",
-  entregado: "Entregado", no_entregado: "No llegó", cancelado: "Cancelado",
-  fallido: "No salió", desconocido: "No sabemos si salió",
-};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Grabación
@@ -534,7 +523,7 @@ export const MODALIDAD_LABEL: Readonly<Record<"presencial" | "online", string>> 
   online: "Online",
 };
 /** El aviso de deuda de la ficha: cuenta lo mismo que la cabecera, Cobros y
- *  el SMS de cobro (deudaDeTurnos / deudaDePaciente). */
+ *  el aviso de cobro (deudaDeTurnos / deudaDePaciente). */
 export const SESIONES_SIN_COBRAR_DETALLE = "Deuda acumulada por sesiones realizadas sin cobrar.";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -763,26 +752,18 @@ export const SIN_SENALES_ANTERIORES = "Sin señales anteriores.";
 // ────────────────────────────────────────────────────────────────────────────
 // Recordatorio de cobro
 //
-// El aviso lo manda ella, apretando, una persona por vez. Por eso los textos
-// dicen "Enviar SMS" y no "Notificar": se nombra el acto concreto, con el
-// canal a la vista, para que sepa exactamente qué va a pasar cuando toque.
+// El aviso lo manda ella, apretando, una persona por vez, desde su WhatsApp.
+// Los textos nombran el acto concreto, con el canal a la vista, para que sepa
+// exactamente qué va a pasar cuando toque.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** La acción secundaria de la fila del deudor. Dice el canal en el propio
- *  botón: tocarlo es empezar a mandar un mensaje, y eso se tiene que saber
- *  antes de tocar, no recién en la confirmación. */
-export const RECORDAR_COBRO = "Recordar cobro por SMS";
 
 /** La pregunta de la confirmación, con el mensaje y el número a la vista. */
 export const RECORDAR_COBRO_TITULO = "¿Mandarle este mensaje?";
 
-/** El botón que confirma. Dice el canal: sale un SMS, no una notificación. */
-export const ENVIAR_SMS = "Enviar SMS";
 
-export const ENVIANDO_SMS = "Enviando…";
+export const ENVIANDO = "Enviando…";
 
-/** Rótulo del número destino en la confirmación. */
-export const SMS_DESTINO = "Sale a";
 
 /** Lo que muestra la fila cuando ya se le avisó. Se completa con
  *  textoAtraso(): "Avisado hace 3 días". */
@@ -1672,13 +1653,13 @@ export const INVITAR_WHATSAPP = "Compartir por WhatsApp";
 export const INVITAR_MENSAJE = "Te invito a probar Sesión. Con este enlace creás un consultorio de prueba, que puede grabar hasta " + TOPE_GRABACIONES_PRUEBA + " sesiones. Vence en 7 días:";
 export const INVITAR_ERROR_COPIA = "No pude copiarlo. Seleccioná el enlace y copialo desde tu navegador.";
 export const TERMINOS_TITULO = "Términos y política de privacidad";
-export const TERMINOS_FECHA = "Borrador del 9 de septiembre de 2026";
-export const TERMINOS_VERSION = "borrador-2026-09-09";
+export const TERMINOS_FECHA = "Borrador del 21 de octubre de 2026";
+export const TERMINOS_VERSION = "borrador-2026-10-21";
 export const TERMINOS_BORRADOR = "BORRADOR PENDIENTE DE REVISIÓN LEGAL";
 export const TERMINOS_SECCIONES = [
   { titulo: "Qué hace Sesión", texto: "Sesión ayuda a organizar el consultorio: agenda, pacientes, cobros y recordatorios. Puede transcribir una grabación y preparar un borrador de nota clínica que la profesional revisa y aprueba. La aplicación no reemplaza su criterio profesional." },
   { titulo: "Qué información guarda", texto: "La app guarda los datos de la cuenta y del consultorio, los datos de pacientes que cargás, turnos, cobros, consentimientos y registros de actividad. Si grabás una sesión, procesa audio, transcripción y notas. El audio viaja por una conexión cifrada, el proveedor de almacenamiento lo guarda cifrado en reposo y se borra después de aprobar la nota; las notas y transcripciones se guardan cifradas en la base." },
-  { titulo: "Dónde se procesa y se guarda", texto: "Vercel ejecuta la aplicación; Neon aloja la base de datos; Cloudflare R2 guarda el audio, cifrado en reposo por el proveedor, y las copias de respaldo cifradas. Railway ejecuta el proceso que coordina el trabajo con los audios. AssemblyAI transcribe el audio; Anthropic genera borradores y respuestas de ayuda; Twilio envía recordatorios por SMS; Resend envía los correos para recuperar el acceso. Cada servicio recibe la información necesaria para su tarea. Este borrador no establece países de alojamiento ni plazos contractuales: deben revisarse antes de publicar el texto definitivo." },
+  { titulo: "Dónde se procesa y se guarda", texto: "Vercel ejecuta la aplicación; Neon aloja la base de datos; Cloudflare R2 guarda el audio, cifrado en reposo por el proveedor, y las copias de respaldo cifradas. Railway ejecuta el proceso que coordina el trabajo con los audios. AssemblyAI transcribe el audio; Anthropic genera borradores y respuestas de ayuda; Resend envía los correos para recuperar el acceso. Los recordatorios y avisos a tus pacientes los mandás vos desde tu WhatsApp: Sesión arma el mensaje, no lo envía. Cada servicio recibe la información necesaria para su tarea. Este borrador no establece países de alojamiento ni plazos contractuales: deben revisarse antes de publicar el texto definitivo." },
   { titulo: "El consentimiento de tus pacientes", texto: "La profesional es responsable de obtener el consentimiento de sus pacientes para cargar y procesar sus datos y para grabar las sesiones, y de explicarles cómo se usa la aplicación. Revisar y aprobar cada nota también queda a su cargo." },
   { titulo: "Cómo pedir la baja", texto: "Para pedir la baja de tu cuenta, contactá a quien administra Sesión por el canal con el que recibiste acceso. Hoy no hay una baja automática en la app. Quedan pendientes de definir y publicar el canal de contacto definitivo, los pasos para entregar o eliminar la información y el tratamiento de las copias de respaldo." },
   { titulo: "Texto pendiente", texto: "Este contenido es un borrador de trabajo para que el responsable de Sesión lo reescriba y lo revise con asesoramiento legal. No presenta condiciones jurídicas definitivas ni certifica cumplimiento de una norma." },
@@ -1709,8 +1690,7 @@ export const SERIE_OMITIDAS = (fechas: string[]) =>
     ? `No se agendó el ${fechas[0]}: ya había un turno a esa hora.`
     : `No se agendaron ${fechas.length} fechas por choque de horario: ${fechas.join(", ")}.`;
 export const CANCELAR_SERIE = "Cancelar el resto de la serie";
-/** La confirmación de cancelar un turno, en el detalle de Agenda. El
- *  recordatorio es el de WhatsApp (CANAL_RECORDATORIO_VIGENTE): deja de
+/** La confirmación de cancelar un turno, en el detalle de Agenda: deja de
  *  aparecer en Recordatorios para hoy. */
 export const CANCELAR_TURNO_MENSAJE =
   "Se cancela el recordatorio por WhatsApp: deja de aparecer en Hoy. El turno queda en la ficha como cancelado y no se puede reabrir.";
@@ -1740,71 +1720,33 @@ export const FRECUENCIA_LABEL: Readonly<Record<FrecuenciaTurno, string>> = {unic
 export const SESION_FALLO_LABEL: Readonly<Record<string, string>> = {intentos_agotados:"Se intentó cinco veces seguidas y no salió.",grabacion_abandonada:"La grabación quedó a medias."};
 export const FEEDBACK_ESTADO_LABEL = {no_pedido:"Todavía no se pidió.",pendiente:"Se está generando…",listo:"Listo",fallido:"No se pudo generar."} as const;
 
-export const SMS_MOTIVOS = {
-  "CREDENCIALES": "el servicio de SMS rechazó las credenciales",
-  "TELEFONO_INVALIDO": "el teléfono no es válido",
-  "EMISOR_INVALIDO": "el número emisor no está bien configurado",
-  "INALCANZABLE": "el teléfono no se puede alcanzar",
-  "PAIS_NO_HABILITADO": "el servicio de SMS no tiene habilitado el país de destino",
-  "EMISOR_SIN_SMS": "el número emisor no puede mandar SMS",
-  "BAJA": "la paciente pidió no recibir más mensajes",
-  "NO_CELULAR": "el teléfono no es un celular",
-  "SIN_SENAL": "el teléfono estaba apagado o sin señal",
-  "INEXISTENTE": "el número no existe o ya no está en servicio",
-  "LINEA_FIJA": "el número es una línea fija o el operador no lo recibe",
-  "BLOQUEADO": "el operador bloqueó el mensaje",
-  "RECHAZADO": "el servicio de SMS rechazó el envío",
-  "NO_ENTREGADO": "el operador no lo entregó"
-} as const;
-// La baja abarca todas las cuentas que envían a ese teléfono: no tiene una
-// única profesional a la cual atribuir este acuse.
-export const SMS_BAJA_CONFIRMADA = "Consultorio: no vas a recibir más SMS";
-export const SMS_CON_CODIGO = (texto: string, codigo: number | null) => codigo === null ? texto : texto + " (" + codigo + ")";
 
 export const ENTRADA_REINGRESO =
   "Cambiaste la contraseña: entrá de nuevo en todos tus dispositivos.";
 
-export const MOTIVO_SIN_TELEFONO = "la paciente no tiene teléfono cargado";
 
-export const MOTIVO_TURNO_CERRADO = "el turno dejó de estar programado";
 
-/** El SMS del recordatorio que el cron cancela porque ella eligió avisar
- *  por WhatsApp (Configuracion.canalRecordatorio). */
-export const MOTIVO_CANAL_WHATSAPP = "el recordatorio va por WhatsApp, no por SMS";
 
-export const MOTIVO_REPROGRAMADO = "el turno se reprogramó: sale un aviso nuevo";
 
-export const MOTIVO_BAJA = "la paciente pidió no recibir más mensajes";
 
-export const MOTIVO_TURNO_PASADO = "el turno ya pasó";
 
-export const MOTIVO_RESERVA_HUERFANA =
-  "una corrida se cortó después de llamar al servicio de SMS: no se sabe si el mensaje salió";
 
-export const MOTIVO_SIN_TEXTO_DE_COBRO = "no hay deuda vigente para avisar";
 
-export const MENSAJE_ENVIADO_TRAS_CANCELACION =
-  "El SMS salió, pero el turno se cerró mientras se enviaba: la paciente recibió un aviso de una sesión que ya no está programada";
 
-export const MOTIVO_PACIENTE_DADA_DE_BAJA = "La paciente pidió no recibir más mensajes";
 
-export const MOTIVO_VENTANA_AGOTADA =
-  "no se pudo enviar antes de la sesión: el servicio de SMS no respondió a tiempo";
 
-export const MOTIVO_VENTANA_AGOTADA_SIN_TURNO =
-  "no se pudo enviar en el día: el servicio de SMS no respondió a tiempo";
 
-export const REMITENTE_SMS = "Consultorio {{profesional}}";
+export const REMITENTE_AVISO = "Consultorio {{profesional}}";
 
 export const LINEA_CONTACTO = "Cambios: llamar al {{telefonoConsultorio}}";
 
-export const TEMPLATE_SMS_SUGERIDO = `${REMITENTE_SMS}\n{{nombre}}, tu turno es el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+export const TEMPLATE_RECORDATORIO_SUGERIDO = `${REMITENTE_AVISO}\n{{nombre}}, tu turno es el {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
 
-export const TEMPLATE_SMS_CON_DIRECCION = `${REMITENTE_SMS}\n{{nombre}}, tu turno es el {{fecha}} a las {{hora}}.\n{{direccion}}\n${LINEA_CONTACTO}`;
+export const TEMPLATE_RECORDATORIO_CON_DIRECCION = `${REMITENTE_AVISO}\n{{nombre}}, tu turno es el {{fecha}} a las {{hora}}.\n{{direccion}}\n${LINEA_CONTACTO}`;
 
-export const PLANTILLA_CAMBIO_DE_HORARIO = `${REMITENTE_SMS}\n{{nombre}}, tu turno cambió al {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
+export const PLANTILLA_CAMBIO_DE_HORARIO = `${REMITENTE_AVISO}\n{{nombre}}, tu turno cambió al {{fecha}} a las {{hora}}. ${LINEA_CONTACTO}`;
 
-export const TEMPLATE_COBRO_DEFAULT = `${REMITENTE_SMS}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.`;
+export const TEMPLATE_COBRO_DEFAULT = `${REMITENTE_AVISO}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.`;
 
 export const FEEDBACK_ESPERA = "El análisis está en preparación. Podés seguir trabajando; lo vas a encontrar acá cuando esté listo.";
 export const FEEDBACK_NO_DISPONIBLE = "El análisis figura listo, pero no pudimos mostrar su contenido. Volvé a abrir la sesión para comprobarlo.";
@@ -2157,32 +2099,21 @@ export const COBRO_MENSAJE_VACIO = "El aviso de cobro no puede quedar vacío.";
 export const COBRO_MENSAJE_AYUDA =
   "Es el mensaje que te prepara Recordar cobro por WhatsApp, en Cobros. Tocá una ficha para agregarla donde está el cursor.";
 
-/** Recordar cobro según el canal (accionDeCobro, src/lib/aviso-cobro.ts):
- *  el botón, su nombre accesible, la confirmación y lo que se le dice
- *  después. Con SMS, los textos de siempre. */
+/** Recordar cobro: el botón, su nombre accesible, la confirmación y lo que
+ *  se le dice después. Sale por WhatsApp desde su teléfono. */
 export const RECORDAR_COBRO_WHATSAPP = "Recordar cobro por WhatsApp";
-export const AVISO_COBRO_PROGRAMADO = "Aviso programado. Sale en los próximos minutos.";
-export const AVISO_COBRO_YA_PEDIDO = "Ya pediste este aviso hoy. No se programó otro.";
 /** WhatsApp se abrió y la app anotó el aviso; el mensaje lo manda ella. */
 export const AVISO_COBRO_WHATSAPP_ANOTADO = "Quedó anotado. El mensaje lo mandás vos en WhatsApp.";
-export const RECORDAR_COBRO_POR_CANAL = {
-  sms: {
-    boton: RECORDAR_COBRO,
-    botonPara: (nombre: string) => `Recordar cobro a ${nombre} por SMS`,
-    accion: ENVIAR_SMS,
-    destino: SMS_DESTINO,
-  },
-  whatsapp: {
-    boton: RECORDAR_COBRO_WHATSAPP,
-    botonPara: (nombre: string) => `Recordar cobro a ${nombre} por WhatsApp`,
-    accion: ABRIR_WHATSAPP,
-    destino: "Se abre la conversación con",
-  },
+export const RECORDAR_COBRO_TEXTOS = {
+  boton: RECORDAR_COBRO_WHATSAPP,
+  botonPara: (nombre: string) => `Recordar cobro a ${nombre} por WhatsApp`,
+  accion: ABRIR_WHATSAPP,
+  destino: "Se abre la conversación con",
 } as const;
 
-/** La plantilla del recordatorio de turno en Tu consultorio. Sólo WhatsApp
- *  (CANAL_RECORDATORIO_VIGENTE): el mensaje lo manda ella y las respuestas
- *  le llegan, así que no hay advertencia sobre respuestas. */
+/** La plantilla del recordatorio de turno en Tu consultorio. El mensaje lo
+ *  manda ella por WhatsApp y las respuestas le llegan, así que no hay
+ *  advertencia sobre respuestas. */
 export const RECORDATORIO_TEXTOS = {
   nombrePegado: "Tu nombre quedó pegado al texto siguiente. En el mensaje también se leería así.",
   ayuda:
@@ -2190,11 +2121,6 @@ export const RECORDATORIO_TEXTOS = {
   vistaPrevia: "Vista previa del mensaje",
 } as const;
 
-/** La pantalla pidió el aviso por un canal que ya no es el de la app (una
- *  pestaña abierta de antes de que el cobro pasara a ir sólo por WhatsApp):
- *  no se manda ni se anota nada. */
-export const COBRO_CANAL_CAMBIO =
-  "Cambió cómo se avisa el cobro. Volvé a cargar Cobros y probá de nuevo.";
 
 // ─── lux-memoria ─────────────────────────────────────────────────────────────
 
@@ -2247,3 +2173,11 @@ export const GRABAR_SALIDA_SIN_COPIA = "En este teléfono no quedó copia de la 
  *  pide antes de enviarla. */
 export const PENDIENTE_SIN_AUTORIZACION =
   "Para enviarla hace falta la autorización firmada. La copia sigue en este teléfono.";
+
+// ─── borrar-sms ──────────────────────────────────────────────────────────────
+
+/** El bloque "Recordatorio" del detalle del turno: el aviso por WhatsApp. */
+export const RECORDATORIO_PENDIENTE = "Pendiente de avisar por WhatsApp";
+export function recordatorioAvisado(fecha: string): string {
+  return `Avisado por WhatsApp el ${fecha}`;
+}

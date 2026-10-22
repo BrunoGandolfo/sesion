@@ -7,8 +7,7 @@
 //   - los programados anteriores a este turno (cancelar "desde acá" no
 //     borra la semana pasada);
 //   - turnos de otra organización, aunque compartan serieId por error.
-// Cada turno cancelado apaga sus avisos por SMS, igual que si se cancelara
-// solo (casos-uso/envios-del-turno.ts).
+// Un turno cancelado ya no sale en la lista de avisos de Hoy.
 //
 // Cancelar UN turno de la serie sigue siendo el PATCH de siempre; esto es
 // una acción aparte, no una variante.
@@ -20,7 +19,6 @@ import type { db } from "@/lib/db";
 import { auditar } from "../auditoria";
 import { TRANSICIONES_TURNO } from "../domain";
 import { ApiError } from "../responses";
-import { cancelarEnviosDelTurno } from "./envios-del-turno";
 import { tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
@@ -91,15 +89,12 @@ export async function cancelarRestoDeSerie({
       data: { estado: TRANSICIONES_TURNO.cancelarSerie.hacia },
     });
 
-    // Avisos sólo de los que efectivamente se cancelaron. Cancelar es
-    // idempotente: si uno lo canceló un PATCH en el medio, ya lo apagó.
+    // Los que efectivamente se cancelaron (si uno lo canceló un PATCH en el
+    // medio, no cuenta acá), para el rastro.
     const cancelados = await tx.turno.findMany({
       where: { id: { in: ids }, estado: TRANSICIONES_TURNO.cancelarSerie.hacia },
       select: { id: true },
     });
-    for (const { id } of cancelados) {
-      await cancelarEnviosDelTurno(tx, id);
-    }
 
     // Un evento para el acto entero, desde el turno en que se pidió.
     if (count > 0) {

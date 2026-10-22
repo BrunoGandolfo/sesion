@@ -30,7 +30,7 @@ Requiere una cuenta exclusiva de prueba, con una nota aprobada que tenga Para vo
 
 Cada tamaño crea desde la interfaz un paciente propio con apellido E2E-<ejecución>-<ancho> y la marca también en Notas. Usa un teléfono ficticio del rango 555. Guarda, relee, edita y vuelve a releer el paciente real.
 
-Agenda desde la interfaz un turno tres días atrás, en un hueco libre, con la misma marca. Verifica que quedó guardado y que la lista real de /api/sms/envios del turno está vacía. No crea turnos futuros ni envía SMS. Marca ese turno propio como realizado por API para preparar el cobro; luego cobra y deshace mediante los botones reales. No modifica pagos de pacientes preexistentes.
+Agenda desde la interfaz un turno tres días atrás, en un hueco libre, con la misma marca. Verifica que quedó guardado y que no aparece en la lista real de /api/recordatorios/whatsapp. No crea turnos futuros. Marca ese turno propio como realizado por API para preparar el cobro; luego cobra y deshace mediante los botones reales. No modifica pagos de pacientes preexistentes.
 
 El editor de recordatorio guarda una plantilla temporal real. Se relee desde el servidor, se repone el texto original por API y se verifica la restauración exacta. Si el contenido cambió por fuera del recorrido, falla sin pisar ese cambio.
 
@@ -54,7 +54,7 @@ El recorrido dispone de 240 segundos y reserva hasta el límite total de 290 seg
 
 Esta rama parte de origin/main e247d8b. El recorrido usa el ingreso POST /api/cuenta/entrar y los contratos de esa base.
 
-Para prepararla, usá un Postgres propio con dos bases distintas: sesion_e2e_main para la app y sesion_test para integración. En .env, DATABASE_URL debe apuntar a la primera, con host loopback. Usá la clave de cifrado local documentada por prisma/seed.ts; nunca una clave de producción. Cargá ANTHROPIC_API_KEY en el entorno local del servidor para las tres consultas reales a Lupita. No hacen falta credenciales de SMS, correo, R2 ni worker.
+Para prepararla, usá un Postgres propio con dos bases distintas: sesion_e2e_main para la app y sesion_test para integración. En .env, DATABASE_URL debe apuntar a la primera, con host loopback. Usá la clave de cifrado local documentada por prisma/seed.ts; nunca una clave de producción. Cargá ANTHROPIC_API_KEY en el entorno local del servidor para las tres consultas reales a Lupita. No hacen falta credenciales de correo, R2 ni worker.
 
     npx prisma migrate deploy
     node --env-file=.env prisma/seed.ts
@@ -90,7 +90,7 @@ Ese test usa HTML mínimo para probar las aserciones de desborde y alertas; no i
 ## Qué NO cubre
 
 - Grabación, micrófono, audio, cifrado, R2, worker, transcripción, aprobación/edición de notas, recuperación y funcionamiento sin conexión.
-- SMS, correos, invitaciones o restablecimientos con token vigente y cambios de contraseña.
+- WhatsApp, correos, invitaciones o restablecimientos con token vigente y cambios de contraseña.
 - Alta de series recurrentes, reprogramación, edición de Recorrido, archivo/reactivación mediante sus botones y eliminación de sesiones. Archivo/cancelación por API sí se verifican como limpieza.
 - Estados ausentes en la cuenta: sesiones fallidas, listas totalmente vacías, solapes y otros casos que este recorrido no prepara. La búsqueda sin resultados sí se prueba.
 - Safari, Firefox, teléfonos físicos, teclado nativo, instalación PWA, pantalla bloqueada y gestos del sistema. 390 × 500 no equivale a un teclado real.

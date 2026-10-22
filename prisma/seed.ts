@@ -1,6 +1,6 @@
 // Datos de prueba mínimos y reproducibles: una organización, una profesional,
-// tres pacientes, turnos (pasados cobrados, futuros, una serie semanal) y dos
-// envíos de SMS programados. Sin contenido clínico: ninguna columna cifrada se
+// tres pacientes y turnos (pasados cobrados, futuros, una serie semanal).
+// Sin contenido clínico: ninguna columna cifrada se
 // escribe (el cifrado lo hace la extensión de src/lib, que este archivo no
 // importa a propósito; el seed tiene que correr con el cliente de Prisma pelado).
 //
@@ -172,34 +172,12 @@ async function main() {
     });
   }
 
-  // Recordatorios programados para el turno de mañana y el primero de la serie.
-  for (const turnoId of [idTurno(10), idTurno(20)]) {
-    const turno = await db.turno.findUniqueOrThrow({ where: { id: turnoId } });
-    const programadoEn = new Date(turno.fecha.getTime() - 24 * 60 * 60 * 1000);
-    await db.envioSms.upsert({
-      where: { claveIdempotencia: `turno:${turnoId}:${turno.fecha.toISOString()}` },
-      update: {},
-      create: {
-        organizationId: ID.org,
-        claveIdempotencia: `turno:${turnoId}:${turno.fecha.toISOString()}`,
-        motivo: "recordatorio_turno",
-        estado: "pendiente",
-        pacienteId: turno.pacienteId,
-        turnoId,
-        destino: pacientes.find((p) => p.id === turno.pacienteId)!.telefono,
-        programadoEn,
-        proximoIntentoEn: programadoEn,
-      },
-    });
-  }
-
   const resumen = {
     organizaciones: await db.organization.count(),
     usuarios: await db.user.count(),
     pacientes: await db.paciente.count(),
     seriesTurno: await db.serieTurno.count(),
     turnos: await db.turno.count(),
-    enviosSms: await db.envioSms.count(),
   };
   console.log("Seed listo:", resumen);
 }

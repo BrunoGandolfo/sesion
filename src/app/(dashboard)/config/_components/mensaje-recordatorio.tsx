@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui";
 import { RECORDATORIO_TEXTOS } from "@/lib/glosario";
-import { prepararPlantillaRecordatorio, buildSmsMessage } from "@/lib/sms/texto";
+import { prepararPlantillaRecordatorio, armarMensaje } from "@/lib/recordatorio-texto";
 import { EditorRecordatorio, FICHAS_INSERTABLES } from "./editor-recordatorio";
 
 const FECHA_PREVIEW = new Date("2026-04-21T10:00:00-03:00");
@@ -22,7 +22,7 @@ export function MensajeRecordatorio({
   const templateSeparado = template.replace(/\{\{profesional\}\}(?=\p{L})/gu, "{{profesional}}\n");
   const nombrePegado = templateSeparado !== template;
   // La misma preparación que usa el envío, incluida su línea de contacto.
-  const vistaPrevia = buildSmsMessage(prepararPlantillaRecordatorio(template), {
+  const vistaPrevia = armarMensaje(prepararPlantillaRecordatorio(template), {
     nombre: "Lucía", apellido: "Fernández", fecha: FECHA_PREVIEW,
     direccion, profesional, telefonoConsultorio: telefono,
   });

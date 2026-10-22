@@ -87,7 +87,7 @@ async function elegirMetodo(nombre: string) {
 }
 
 const cobros = () => api.post.mock.calls.filter(([ruta]) => /\/cobrar$/.test(ruta));
-const smsPedidos = () => api.post.mock.calls.filter(([ruta]) => /recordar-cobro$/.test(ruta));
+const avisosPedidos = () => api.post.mock.calls.filter(([ruta]) => /recordar-cobro$/.test(ruta));
 
 beforeEach(() => {
   api.get.mockReset();
@@ -131,7 +131,7 @@ describe("Te deben: registrar pago", () => {
     // El panel se cerró y la fila vuelve a ofrecer la acción.
     expect(screen.queryByRole("region", { name: "¿Qué sesiones te pagó?" })).toBeNull();
     expect(screen.getByRole("button", { name: `${REGISTRAR_PAGO} de ${LUCIA}` })).toBeTruthy();
-    expect(smsPedidos()).toEqual([]);
+    expect(avisosPedidos()).toEqual([]);
   });
 
   it("con 'Marcar todas' cobra cada sesión con el mismo método y la paciente sale de la lista", async () => {
@@ -271,7 +271,7 @@ describe("Te deben: recordar el cobro por WhatsApp", () => {
     expect(await screen.findByText(RECORDAR_COBRO_TITULO)).toBeTruthy();
     // El número, como se lee (D5), no en E.164.
     expect(screen.getByText("+598 99 123 456")).toBeTruthy();
-    expect(smsPedidos()).toEqual([]);
+    expect(avisosPedidos()).toEqual([]);
 
     // Cancelar tampoco abre ni anota, y la fila vuelve a como estaba.
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
@@ -284,7 +284,7 @@ describe("Te deben: recordar el cobro por WhatsApp", () => {
   it("recién con 'Abrir WhatsApp' se abre y se anota, una sola vez", async () => {
     servidor();
     const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
-    api.post.mockResolvedValue({ canal: "whatsapp", enlace: "https://wa.me/59899123456", avisadoEn: "2026-09-20T12:00:00.000Z" });
+    api.post.mockResolvedValue({ enlace: "https://wa.me/59899123456", avisadoEn: "2026-09-20T12:00:00.000Z" });
     render(<CobrosView />);
 
     fireEvent.click(await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por WhatsApp` }));
@@ -293,7 +293,7 @@ describe("Te deben: recordar el cobro por WhatsApp", () => {
     });
 
     expect(abrir).toHaveBeenCalledTimes(1);
-    expect(api.post.mock.calls).toEqual([["/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" }]]);
+    expect(api.post.mock.calls).toEqual([["/api/pacientes/p1/recordar-cobro", {}]]);
     expect(await screen.findByText(/Quedó anotado/)).toBeTruthy();
     abrir.mockRestore();
   });

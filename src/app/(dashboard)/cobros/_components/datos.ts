@@ -5,11 +5,9 @@
 import { esDeudaPendiente } from "@/app/api/_lib/domain";
 import { apiGet, apiPost, esAbort, mensajeParaElla } from "@/lib/api-client";
 import { cobrarTurno } from "@/lib/cobrar-cliente";
-import type { AccionDeCobro } from "@/lib/aviso-cobro";
 import { TEMPLATE_COBRO_DEFAULT, type ConfiguracionDelCobro } from "@/lib/deudas";
 import { COBRO_INCOMPLETO, NO_SE_PUDO_COBRAR } from "@/lib/glosario";
 import { parseTurno, type TurnoJson } from "@/lib/json-turno";
-import { CANAL_RECORDATORIO_VIGENTE } from "@/lib/recordatorios-programacion";
 import type {
   Configuracion,
   DeudaPaciente,
@@ -21,10 +19,8 @@ import type {
 
 export type DeudorItem = DeudaPaciente & {
   telefono: string;
-  /** ISO del último aviso que salió; null si nunca se le avisó. */
+  /** ISO del último aviso que abrió por WhatsApp; null si nunca se le avisó. */
   ultimoAvisoEn: string | null;
-  /** Pidió no recibir más mensajes. Opcional: un servidor viejo no lo manda. */
-  dadaDeBaja?: boolean;
 };
 
 export type DatosCobros = {
@@ -37,8 +33,6 @@ export type DatosCobros = {
    *  datos, y WhatsApp se abre con él antes de que conteste el servidor, así
    *  que sin esto no se ofrece el aviso. */
   configCobro: ConfiguracionDelCobro | null;
-  /** Por dónde sale el aviso de cobro: lo que decide accionDeCobro. */
-  canal: Configuracion["canalRecordatorio"];
 };
 
 export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
@@ -67,8 +61,6 @@ export async function cargarCobros(signal: AbortSignal): Promise<DatosCobros> {
           whatsappOrigen: config.whatsappOrigen ?? "",
         }
       : null,
-    // Sólo WhatsApp: ni lo que traiga la configuración lo cambia.
-    canal: CANAL_RECORDATORIO_VIGENTE,
   };
 }
 
@@ -102,20 +94,13 @@ export async function cobrarSesiones(
   }
 }
 
-/** Lo que contesta POST /api/pacientes/[id]/recordar-cobro, por canal. */
-export type AvisoDeCobro =
-  | { canal: "sms"; envioId: string; creado: boolean; programadoEn: string }
-  | { canal: "whatsapp"; enlace: string; avisadoEn: string };
+/** Lo que contesta POST /api/pacientes/[id]/recordar-cobro. */
+export type AvisoDeCobro = { enlace: string; avisadoEn: string };
 
-/** Pide el recordatorio de cobro. Por SMS, `creado` es false si ya se había
- *  pedido hoy y no se programó otro; por WhatsApp, anota que lo abrió. */
-export async function recordarCobro(pacienteId: string, canal: AccionDeCobro["canal"]): Promise<AvisoDeCobro> {
-  // El canal que usó la pantalla: si en Tu consultorio ya hay otro, el
-  // servidor no hace nada y lo dice.
-  return apiPost<AvisoDeCobro>(`/api/pacientes/${pacienteId}/recordar-cobro`, { canal });
+/** Anota que abrió el aviso de cobro por WhatsApp. */
+export async function recordarCobro(pacienteId: string): Promise<AvisoDeCobro> {
+  return apiPost<AvisoDeCobro>(`/api/pacientes/${pacienteId}/recordar-cobro`, {});
 }
-
-export type CanalDelCobro = AccionDeCobro["canal"];
 
 /** Cuántas sesiones eligió y cuántas entraron, a lo largo de los reintentos. */
 export interface ResultadoCobro {

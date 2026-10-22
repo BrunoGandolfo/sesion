@@ -38,14 +38,9 @@ describe("leerSesion y leerRecordatorio", () => {
     expect(await leerSesion("t1", control.signal)).toEqual({ id: "s1", estado: "revision" });
     expect(m.get).toHaveBeenLastCalledWith("/api/sesion-clinica?turnoId=t1", { signal: control.signal });
 
-    m.get.mockResolvedValueOnce([{ id: "r1" }, { id: "r0" }]);
-    expect(await leerRecordatorio("t1", control.signal)).toEqual({ id: "r1" });
-    expect(m.get).toHaveBeenLastCalledWith("/api/sms/envios?turnoId=t1", { signal: control.signal });
-  });
-
-  it("sin recordatorios devuelve null", async () => {
-    m.get.mockResolvedValueOnce([]);
-    expect(await leerRecordatorio("t1")).toBeNull();
+    m.get.mockResolvedValueOnce({ avisadoEn: "2026-09-15T23:00:00.000Z" });
+    expect(await leerRecordatorio("t1", control.signal)).toEqual({ avisadoEn: "2026-09-15T23:00:00.000Z" });
+    expect(m.get).toHaveBeenLastCalledWith("/api/recordatorios/whatsapp/t1", { signal: control.signal });
   });
 });
 

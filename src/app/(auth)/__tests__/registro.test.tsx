@@ -85,5 +85,8 @@ it("si hay que esperar dice desde cuándo y no deja generar; sin cupo tampoco", 
 });
 it("los términos son un borrador explícito y nombran los proveedores reales", () => {
   render(<TerminosPage />); expect(screen.getByText(TERMINOS_BORRADOR)).toBeTruthy();
-  for (const nombre of ["Vercel", "Neon", "R2", "AssemblyAI", "Anthropic", "Twilio", "Resend"]) expect(document.body.textContent).toContain(nombre);
+  for (const nombre of ["Vercel", "Neon", "R2", "AssemblyAI", "Anthropic", "Resend"]) expect(document.body.textContent).toContain(nombre);
+  // El SMS ya no existe: Twilio no procesa nada, y los avisos los manda ella.
+  expect(document.body.textContent).not.toMatch(/Twilio|SMS/);
+  expect(document.body.textContent).toContain("desde tu WhatsApp");
 });

@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "@/lib/api-client";
 import { textoDelCobro, TEMPLATE_COBRO_DEFAULT } from "@/lib/deudas";
 import {
-  MOTIVO_PACIENTE_DADA_DE_BAJA,
   ABRIR_WHATSAPP,
   AVISO_COBRO_WHATSAPP_ANOTADO,
   NO_SE_ANOTO_AVISO,
@@ -33,7 +32,7 @@ vi.mock("@/lib/api-client", async (original) => ({
 
 const LUCIA = "Lucía Fernández";
 
-const estado = { ultimoAvisoEn: null as string | null, dadaDeBaja: false };
+const estado = { ultimoAvisoEn: null as string | null };
 
 function servidor(config: Record<string, unknown>) {
   api.get.mockImplementation(async (url: string) => {
@@ -41,7 +40,7 @@ function servidor(config: Record<string, unknown>) {
     if (url === "/api/deudores") {
       return [{
         pacienteId: "p1", nombre: "Lucía", apellido: "Fernández", telefono: "+59899123456",
-        sesionesImpagas: 2, montoTotal: 4500, minutosTotales: 100, diasAtraso: 11, ultimoAvisoEn: estado.ultimoAvisoEn, dadaDeBaja: estado.dadaDeBaja,
+        sesionesImpagas: 2, montoTotal: 4500, minutosTotales: 100, diasAtraso: 11, ultimoAvisoEn: estado.ultimoAvisoEn,
       }];
     }
     if (url === "/api/turnos/cobros") return [];
@@ -78,7 +77,6 @@ beforeEach(() => {
   api.get.mockReset();
   api.post.mockReset();
   estado.ultimoAvisoEn = null;
-  estado.dadaDeBaja = false;
   abrir.mockReset();
   vi.spyOn(window, "open").mockImplementation(abrir);
 });
@@ -94,7 +92,6 @@ describe("Te deben: la plantilla del aviso de cobro", () => {
       templateCobro: "Hola {{nombre}} {{apellido}}, quedan {{sesiones}} sesiones por {{monto}}. {{profesional}}",
       direccion: "",
       whatsappOrigen: "",
-      canalRecordatorio: "sms",
     });
     await abrirRecordatorio();
     expect(screen.getByText("Hola Lucía Fernández, quedan 2 sesiones por $ 4.500. Mariana")).toBeTruthy();
@@ -122,30 +119,16 @@ describe("Te deben: sin la configuración no se ofrece el aviso", () => {
   });
 });
 
-describe("Te deben: el botón según el canal", () => {
-  // Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): aunque la configuración
-  // traiga otro canal, el botón es el de WhatsApp y nunca se pide un SMS.
-  it.each(["sms", "ambos", undefined])("con %s en la configuración, el botón es el de WhatsApp", async (canal) => {
-    servidor({ ...CONFIG, canalRecordatorio: canal });
-    api.post.mockResolvedValue({ canal: "whatsapp", enlace: "https://wa.me/59899123456", avisadoEn: AHORA.toISOString(), sesiones: 2, monto: 4500 });
-    render(<CobrosView />);
-    const boton = await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por WhatsApp` });
-    expect(boton.textContent).toBe(RECORDAR_COBRO_WHATSAPP);
-    fireEvent.click(boton);
-    expect(document.body.textContent).not.toMatch(/SMS/);
-    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: ABRIR_WHATSAPP }));
-    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" });
-  });
-
+describe("Te deben: el aviso de cobro por WhatsApp", () => {
   it("con WhatsApp, ningún texto dice SMS, abre WhatsApp con la plantilla y la fila queda Avisada", async () => {
-    servidor({ ...CONFIG, canalRecordatorio: "whatsapp" });
+    servidor(CONFIG);
     const enlace = `https://wa.me/59899123456?text=${encodeURIComponent(TEXTO)}`;
     api.post.mockImplementation(async () => {
       // WhatsApp se abre ANTES de esperar al servidor: el navegador sólo deja
       // abrir una ventana dentro del toque.
       expect(abrir).toHaveBeenCalledWith(enlace, "_blank", "noopener");
       estado.ultimoAvisoEn = AHORA.toISOString();
-      return { canal: "whatsapp", enlace, avisadoEn: estado.ultimoAvisoEn, sesiones: 2, monto: 4500 };
+      return { enlace, avisadoEn: estado.ultimoAvisoEn, sesiones: 2, monto: 4500 };
     });
     render(<CobrosView />);
     const boton = await screen.findByRole("button", { name: `Recordar cobro a ${LUCIA} por WhatsApp` });
@@ -156,14 +139,14 @@ describe("Te deben: el botón según el canal", () => {
     expect(document.body.textContent).not.toMatch(/SMS/);
     fireEvent.click(within(panel).getByRole("button", { name: ABRIR_WHATSAPP }));
     expect(abrir).toHaveBeenCalledTimes(1);
-    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" });
+    expect(api.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", {});
     await waitFor(() => expect(screen.getAllByRole("status").some((n) => n.textContent === AVISO_COBRO_WHATSAPP_ANOTADO)).toBe(true));
-    // Vuelve a leer la lista: "Avisado hoy" sale del servidor, como con el SMS.
+    // Vuelve a leer la lista: "Avisado hoy" sale del servidor.
     expect(await screen.findByText("Avisado hoy")).toBeTruthy();
   });
 
   it("con WhatsApp, si anotarlo falla, WhatsApp se abrió igual y lo dice", async () => {
-    servidor({ ...CONFIG, canalRecordatorio: "whatsapp" });
+    servidor(CONFIG);
     api.post.mockRejectedValue(new ApiClientError("Error del servidor", 500));
     const panel = await abrirRecordatorio();
     fireEvent.click(within(panel).getByRole("button", { name: ABRIR_WHATSAPP }));
@@ -171,8 +154,8 @@ describe("Te deben: el botón según el canal", () => {
     await waitFor(() => expect(screen.getAllByRole("status").some((n) => n.textContent === NO_SE_ANOTO_AVISO)).toBe(true));
   });
 
-  it("con WhatsApp, si el servidor lo rechaza (ya no debe, canal cambiado) dice por qué, no 'no quedó anotado'", async () => {
-    servidor({ ...CONFIG, canalRecordatorio: "whatsapp" });
+  it("con WhatsApp, si el servidor lo rechaza (ya no debe) dice por qué, no 'no quedó anotado'", async () => {
+    servidor(CONFIG);
     api.post.mockRejectedValue(new ApiClientError("Esta paciente no tiene sesiones sin cobrar", 409));
     const panel = await abrirRecordatorio();
     fireEvent.click(within(panel).getByRole("button", { name: ABRIR_WHATSAPP }));
@@ -182,7 +165,7 @@ describe("Te deben: el botón según el canal", () => {
   });
 
   it("con WhatsApp, un doble toque abre una sola vez", async () => {
-    servidor({ ...CONFIG, canalRecordatorio: "whatsapp" });
+    servidor(CONFIG);
     api.post.mockReturnValue(new Promise(() => {}));
     const panel = await abrirRecordatorio();
     const boton = within(panel).getByRole("button", { name: ABRIR_WHATSAPP });
@@ -190,15 +173,5 @@ describe("Te deben: el botón según el canal", () => {
     fireEvent.click(boton);
     expect(abrir).toHaveBeenCalledTimes(1);
     expect(api.post).toHaveBeenCalledTimes(1);
-  });
-
-  it("con WhatsApp, a quien pidió la baja no se le abre: lo dice el servidor", async () => {
-    servidor({ ...CONFIG, canalRecordatorio: "whatsapp" });
-    estado.dadaDeBaja = true;
-    api.post.mockRejectedValue(new ApiClientError(MOTIVO_PACIENTE_DADA_DE_BAJA, 409));
-    const panel = await abrirRecordatorio();
-    fireEvent.click(within(panel).getByRole("button", { name: ABRIR_WHATSAPP }));
-    await waitFor(() => expect(screen.getAllByRole("status").some((n) => n.textContent === MOTIVO_PACIENTE_DADA_DE_BAJA)).toBe(true));
-    expect(abrir).not.toHaveBeenCalled();
   });
 });

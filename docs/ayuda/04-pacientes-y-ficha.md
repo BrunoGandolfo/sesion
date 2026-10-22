@@ -20,7 +20,8 @@ teléfono, una fila por persona con la deuda en un chip terracotta.
 4. Opcional: **Notas (opcional)**.
 5. Tocá **Crear paciente**. Aparece **"Paciente creado"**.
 
-El teléfono se guarda normalizado para que el SMS salga bien.
+El teléfono se guarda normalizado para que el WhatsApp se abra con el número
+correcto.
 
 ## La ficha
 
@@ -140,10 +141,9 @@ no deja crear la sesión.
 lista. Las sesiones, las notas y los pagos se conservan; podés reactivarlo cuando
 quieras."* Después aparece en la solapa **Archivados**, con **Reactivar**.
 
-Archivar también **apaga los SMS que tenía pendientes**, recordatorios de turno
-y avisos de cobro; en el detalle del turno el aviso figura con el motivo *"la
-paciente está archivada"*. Mientras esté archivada no le sale ningún SMS.
-**Reactivarla no los vuelve a encender**: los que se apagaron quedan apagados.
+Mientras esté archivada, sus turnos **no aparecen en Recordatorios para hoy**.
+Si la reactivás, los turnos que sigan agendados vuelven a aparecer cuando les
+toque.
 
 ## Lo que NO hace
 
@@ -169,7 +169,7 @@ src/components/grabacion/ConsentimientoForm.tsx
 src/lib/consentimiento.ts
 src/app/api/pacientes/route.ts
 src/app/api/_lib/casos-uso/pacientes.ts
-src/app/api/_lib/casos-uso/envios-del-turno.ts
+src/app/api/_lib/casos-uso/recordatorios-whatsapp.ts
 src/app/api/_lib/casos-uso/audio.ts
 src/app/(dashboard)/grabar/[turnoId]/page.tsx
 src/app/(dashboard)/grabar/[turnoId]/_components/grabar-view.tsx

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// Sólo WhatsApp (CANAL_RECORDATORIO_VIGENTE): Tu consultorio ya no ofrece
-// elegir cómo se recuerdan los turnos, y con cualquier valor guardado el
-// recordatorio se lee y se edita como WhatsApp.
+// Sólo WhatsApp: el SMS ya no existe, Tu consultorio no ofrece elegir cómo
+// se recuerdan los turnos y no habla de SMS.
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -29,7 +28,6 @@ beforeEach(() => {
     recordatorioModo: "dia_anterior",
     templateRecordatorio: "Hola {{nombre}}",
     orientacionTeorica: "gestalt",
-    canalRecordatorio: "sms",
   };
 });
 afterEach(() => {
@@ -43,8 +41,7 @@ async function abrir() {
   });
 }
 
-it.each(["sms", "ambos", "whatsapp"])("con %s guardado no ofrece elegir el canal ni habla de SMS", async (guardado) => {
-  api.config.canalRecordatorio = guardado;
+it("no ofrece elegir el canal ni habla de SMS", async () => {
   await abrir();
   expect(screen.queryByRole("group", { name: "Cómo recordás los turnos" })).toBeNull();
   expect(screen.queryByRole("radio", { name: /SMS automático|^Ambos|WhatsApp desde mi teléfono/ })).toBeNull();

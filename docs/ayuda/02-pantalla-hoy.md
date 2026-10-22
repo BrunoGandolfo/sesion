@@ -60,7 +60,7 @@ son 3 o menos, y cuando llegaste al tope. Ver `11-tu-consultorio.md`.
    que abre la conversación con el mensaje ya escrito para que lo mandes vos.
    Si la paciente no tiene teléfono, la fila se ve apagada, dice **Sin
    teléfono** y en lugar del botón está **Ver ficha →**. Si no hay a quién
-   avisar: *"No hay turnos para avisar hoy"*. Ver `06-recordatorios-sms.md`.
+   avisar: *"No hay turnos para avisar hoy"*. Ver `06-recordatorios-whatsapp.md`.
 6. **Pendientes** — una tarjeta con borde dorado a la izquierda. Aparece solo si
    hay algo:
    - **Los primeros pasos**, en una cuenta nueva: *"Cargá tu tarifa"*, *"Cargá

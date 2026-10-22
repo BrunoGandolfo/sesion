@@ -15,7 +15,6 @@ import {
 } from "@/lib/glosario";
 import { formatearHoraMvd, instanteDesdeFechaHoraMvd } from "@/lib/fechas-montevideo";
 import {
-  DISPERSION_MINUTOS,
   RECORDATORIO_MODOS,
   calcularProgramadoEn,
   type RecordatorioModo,
@@ -136,22 +135,10 @@ export function SelectorEnfoque({
 // calcularProgramadoEn, una sola vez para toda la app.
 //
 // La hora que se muestra sale de esa misma cuenta, con un turno de ejemplo
-// al mediodía, y el margen de DISPERSION_MINUTOS: los avisos del día se
-// reparten unos minutos. Antes decía "A las 20:00" escrito a mano (forense
-// 03, P3-14).
+// al mediodía. Antes decía "A las 20:00" escrito a mano (forense 03, P3-14).
 
-function ventanaDe(modo: RecordatorioModo): { desde: string; hasta: string; limite: string } {
-  const mediodia = instanteDesdeFechaHoraMvd("2026-01-15", "12:00");
-  const desde = calcularProgramadoEn(mediodia, modo);
-  const minuto = 60_000;
-  const hasta = new Date(desde.getTime() + (DISPERSION_MINUTOS - 1) * minuto);
-  // El primer minuto en que un turno ya siempre llega a su aviso del día.
-  const limite = new Date(desde.getTime() + DISPERSION_MINUTOS * minuto);
-  return {
-    desde: formatearHoraMvd(desde),
-    hasta: formatearHoraMvd(hasta),
-    limite: formatearHoraMvd(limite),
-  };
+function horaDe(modo: RecordatorioModo): string {
+  return formatearHoraMvd(calcularProgramadoEn(instanteDesdeFechaHoraMvd("2026-01-15", "12:00"), modo));
 }
 
 export function CuandoAvisar({
@@ -162,9 +149,8 @@ export function CuandoAvisar({
   onChange: (modo: RecordatorioModo) => void;
 }) {
   const opciones = RECORDATORIO_MODOS.map((modo) => {
-    const { desde, hasta } = ventanaDe(modo);
     const momento = RECORDATORIO_MOMENTOS[modo];
-    return { valor: modo, titulo: momento.label, detalle: momento.detalle(desde, hasta) };
+    return { valor: modo, titulo: momento.label, detalle: momento.detalle(horaDe(modo)) };
   });
 
   return (
@@ -178,11 +164,7 @@ export function CuandoAvisar({
     >
       {value === "misma_manana" ? (
         <p className="mt-2 text-[12px] leading-[1.5] text-ink-500">
-          {RECORDATORIO_MISMA_MANANA_EXCEPCION(
-            ventanaDe("misma_manana").limite,
-            ventanaDe("dia_anterior").desde,
-            ventanaDe("dia_anterior").hasta,
-          )}
+          {RECORDATORIO_MISMA_MANANA_EXCEPCION(horaDe("misma_manana"), horaDe("dia_anterior"))}
         </p>
       ) : null}
     </OpcionesRadio>

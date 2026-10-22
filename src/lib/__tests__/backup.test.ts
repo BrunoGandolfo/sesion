@@ -64,13 +64,13 @@ describe("índice del respaldo", () => {
     writeFileSync(join(carpeta, "prueba.dump"), tablas.map((t) => `1; 0 0 TABLE DATA public ${t} postgres`).join("\n"));
   }
   const validar = (env: Record<string, string> = {}) => ejecutar("Verificar que el dump se puede leer (pg_restore --list)", env);
-  it.each([["recordatorios"], ["envios_sms"], ["recordatorios", "envios_sms"]])("acepta el esquema con %j", (...tablas) => {
+  it.each([["recordatorios"], ["envios_sms"], ["avisos_whatsapp"], ["recordatorios", "envios_sms"]])("acepta el esquema con %j", (...tablas) => {
     indice([...comunes, ...tablas]);
     expect(validar().status).toBe(0);
   });
   it("rechaza cuando faltan ambas tablas", () => {
     indice(comunes);
-    expect(validar().stderr).toContain("no contiene recordatorios ni envios_sms");
+    expect(validar().stderr).toContain("no contiene recordatorios, envios_sms ni avisos_whatsapp");
   });
   it("conserva el control de las tablas comunes", () => {
     indice(["envios_sms", ...comunes.filter((t) => t !== "pacientes")]);

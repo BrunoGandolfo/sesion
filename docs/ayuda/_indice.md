@@ -9,7 +9,7 @@ también lo que la app **no** hace.
 - [03 · Agenda y turnos](03-agenda-y-turnos.md) — crear, reprogramar, cancelar, "No vino", y qué pasa con el recordatorio en cada caso.
 - [04 · Pacientes y la ficha](04-pacientes-y-ficha.md) — alta, las cuatro pestañas, la autorización de grabación y archivar.
 - [05 · Cobros](05-cobros.md) — cobrar, métodos de pago, "Te deben", zonas de atraso, "Recordar cobro por WhatsApp" y deshacer un cobro.
-- [06 · Recordatorios](06-recordatorios-sms.md) — por WhatsApp desde tu teléfono: qué turnos aparecen en Hoy y cuándo, el mensaje y sus fichas, y qué muestra el turno.
+- [06 · Recordatorios](06-recordatorios-whatsapp.md) — por WhatsApp desde tu teléfono: qué turnos aparecen en Hoy y cuándo, el mensaje y sus fichas, y qué muestra el turno.
 - [07 · Grabar una sesión](07-grabar-una-sesion.md) — la autorización primero, con turno o sin turno, pausar, terminar y guardar, y recuperar una grabación cortada.
 - [08 · La nota clínica](08-la-nota-clinica.md) — S/O/A/P, "Frases para revisar" y "Leí las menciones", la señal de riesgo, aprobar, volver a escribirla y el borrador original.
 - [09 · "Para vos": la auto-supervisión](09-para-vos-feedback.md) — GTFS, MITI 4.2.1 y CTS-R: qué son, cómo leerlos, cómo pedirlo de nuevo y qué no son.
@@ -17,7 +17,7 @@ también lo que la app **no** hace.
 - [11 · Tu consultorio](11-tu-consultorio.md) — cada ajuste y su efecto real.
 - [12 · El camino del audio y la privacidad](12-camino-del-audio-y-privacidad.md) — qué protege el audio (la app no lo cifra), quién procesa qué, cuándo se borra el audio, qué queda guardado y registrado, y los respaldos.
 - [13 · Preguntas frecuentes](13-preguntas-frecuentes.md) — 31 preguntas con respuesta corta y el documento donde está el detalle.
-- [14 · Cuando algo falla](14-cuando-algo-falla.md) — no puedo entrar, la grabación se cortó, la nota no llega, no puedo aprobar, el SMS no salió.
+- [14 · Cuando algo falla](14-cuando-algo-falla.md) — no puedo entrar, la grabación se cortó, la nota no llega, no puedo aprobar, un recordatorio no aparece en Hoy.
 - [15 · Finanzas](15-finanzas.md) — lo que entró y lo que trabajaste, los períodos, las barras, lo que te deben hoy y qué no calcula.
 - [16 · Lux](16-lux.md) — repasar a una paciente conversando: qué lee, "Ver en qué me baso", que recuerda la charla (cifrada) y "Empezar de cero", a dónde viaja y el tope del día.
 
@@ -28,7 +28,7 @@ docs/ayuda/02-pantalla-hoy.md
 docs/ayuda/03-agenda-y-turnos.md
 docs/ayuda/04-pacientes-y-ficha.md
 docs/ayuda/05-cobros.md
-docs/ayuda/06-recordatorios-sms.md
+docs/ayuda/06-recordatorios-whatsapp.md
 docs/ayuda/07-grabar-una-sesion.md
 docs/ayuda/08-la-nota-clinica.md
 docs/ayuda/09-para-vos-feedback.md

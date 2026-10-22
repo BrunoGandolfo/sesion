@@ -101,7 +101,7 @@ describe("nombres vigentes en el recorrido y la ayuda", () => {
 
   it("la ayuda nombra los botones como se llaman hoy", () => {
     const leer = (n) => readFileSync(join(RAIZ, "docs/ayuda", n), "utf8");
-    for (const pagina of ["00-que-es-sesion.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md", "_indice.md"]) {
+    for (const pagina of ["00-que-es-sesion.md", "05-cobros.md", "06-recordatorios-whatsapp.md", "11-tu-consultorio.md", "_indice.md"]) {
       expect(leer(pagina), pagina).toContain(RECORDAR_COBRO_WHATSAPP);
       expect(leer(pagina), pagina).not.toContain("Recordar cobro por SMS");
     }

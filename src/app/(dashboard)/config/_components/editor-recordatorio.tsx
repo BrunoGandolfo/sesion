@@ -4,7 +4,7 @@
 //
 // Ella escribe el mensaje como texto y agrega "Nombre", "Fecha", "Hora" o
 // "Dirección" como fichas resaltadas, sin ver llaves. Lo que se guarda es el
-// template con {{variables}} que ya entiende buildSmsMessage; lo que se
+// template con {{variables}} que ya entiende armarMensaje; lo que se
 // muestra es el mismo template traducido a fichas.
 //
 // Traducción:
@@ -69,7 +69,7 @@ const CLASE_FICHA =
   "inline-flex select-none items-center rounded-full bg-sage-100 px-2 py-[1px] mx-1 align-baseline font-sans text-[12px] font-semibold not-italic text-sage-700";
 
 // Espacio duro (U+00A0) que los navegadores insertan al escribir dos
-// espacios seguidos en un contentEditable. El SMS quiere espacios comunes.
+// espacios seguidos en un contentEditable. El mensaje quiere espacios comunes.
 const ESPACIO_DURO = " ";
 
 function escaparHtml(texto: string): string {

@@ -40,7 +40,7 @@ import {
   VOLVER,
   CARGANDO,
 } from "@/lib/glosario";
-import type { MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
+import type { AvisoDelTurno, MetodoPago, Turno, TurnoConPaciente } from "@/types/domain";
 
 import { BriefCortoDePaciente as BriefCorto } from "@/components/clinico/brief-corto";
 import { SelectorMetodoPago } from "@/components/cobro/sheet-metodo-pago";
@@ -52,7 +52,6 @@ import {
   accionesDelDetalle,
   leerRecordatorio,
   leerSesion,
-  type RecordatorioJson,
   type SesionDelTurno,
 } from "./detalle-datos";
 import { AccionesDelTurno, DatosDelTurno } from "./detalle-ver";
@@ -101,11 +100,12 @@ export function TurnoDetailSheet({
   const [sesion, setSesion] = React.useState<SesionDelTurno | "sin-dato">(
     "sin-dato",
   );
-  // El recordatorio del turno. "sin-dato" mientras no contestó la API o
-  // cuando no corresponde pedirlo; null si el turno no tiene ninguno.
+  // El aviso por WhatsApp del turno, con el turno y la fecha a los que
+  // corresponde: una lectura vieja (de antes de reprogramar) no se muestra.
+  // null mientras no contestó la API, o si no se pudo leer.
   const [recordatorio, setRecordatorio] = React.useState<
-    RecordatorioJson | null | "sin-dato"
-  >("sin-dato");
+    { clave: string; aviso: AvisoDelTurno | null } | null
+  >(null);
 
   const metodos = useForm<EditValues>({
     resolver: zodResolver(camposTurnoSchema),
@@ -133,21 +133,25 @@ export function TurnoDetailSheet({
   }, [turnoId, turnoEstado]);
 
   // Sólo tiene sentido en un turno programado: en uno cancelado, ausente o
-  // ya realizado no se programa otro recordatorio.
+  // ya realizado no hay recordatorio. Se vuelve a leer si cambia la fecha:
+  // reprogramar desde acá deja el aviso pendiente otra vez.
+  const turnoFecha = turno?.fecha.getTime();
+  const claveDelAviso =
+    turnoId && turnoEstado && turnoSigueProgramado(turnoEstado) ? `${turnoId}:${turnoFecha}` : null;
   React.useEffect(() => {
-    if (!turnoId || !turnoEstado || !turnoSigueProgramado(turnoEstado)) return;
+    if (!turnoId || !claveDelAviso) return;
 
     const controller = new AbortController();
     leerRecordatorio(turnoId, controller.signal)
-      .then((data) => setRecordatorio(data))
+      .then((data) => setRecordatorio({ clave: claveDelAviso, aviso: data }))
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
         // Sin dato no se dibuja el bloque: el turno se sigue pudiendo
         // manejar igual.
-        setRecordatorio(null);
+        setRecordatorio({ clave: claveDelAviso, aviso: null });
       });
     return () => controller.abort();
-  }, [turnoId, turnoEstado]);
+  }, [turnoId, claveDelAviso]);
 
   const abrirReprogramar = () => {
     if (!turno) return;
@@ -172,7 +176,7 @@ export function TurnoDetailSheet({
 
   const chip = estadoDelTurno(turno);
   const acciones = accionesDelDetalle(turno, sesion, new Date());
-  const aviso = recordatorio !== "sin-dato" ? recordatorio : null;
+  const aviso = recordatorio && recordatorio.clave === claveDelAviso ? recordatorio.aviso : null;
 
   /**
    * Lo que rodea a las cuatro acciones del detalle: bloquear los botones,

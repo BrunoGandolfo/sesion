@@ -15,14 +15,10 @@
 // sesiones le pagó. El método se elige con el mismo selector que usan Hoy,
 // la Agenda y la ficha.
 //
-// El recordatorio de cobro es la acción secundaria. Sale desde acá por el
-// canal de Tu consultorio (SMS, o WhatsApp abierto desde su teléfono, que
-// queda anotado), y lo aprieta ella: antes
-// abría el teléfono con el texto cargado y la app no se enteraba de nada
-// —ni si el mensaje había salido, ni cuándo—, así que no había forma de
-// saber si ya le había avisado a alguien. Ahora se manda desde el servidor
-// (POST /api/pacientes/[id]/recordar-cobro), queda en la auditoría y la fila
-// muestra "Avisado hace N días". Nunca es automático: el mensaje se ve
+// El recordatorio de cobro es la acción secundaria. Abre WhatsApp desde su
+// teléfono con el mensaje cargado, y lo aprieta ella. La app anota que lo
+// abrió (POST /api/pacientes/[id]/recordar-cobro), queda en la auditoría y
+// la fila muestra "Avisado hace N días". Nunca es automático: el mensaje se ve
 // entero, con el número al que sale, antes de confirmar.
 
 import * as React from "react";
@@ -39,9 +35,7 @@ import { formatearMesMvd, partesMvd } from "@/lib/fechas-montevideo";
 import { fechaCorta, money } from "@/lib/format";
 import {
   ALGO_FALLO,
-  AVISO_COBRO_PROGRAMADO,
   AVISO_COBRO_WHATSAPP_ANOTADO,
-  AVISO_COBRO_YA_PEDIDO,
   COBRADO,
   COBRASTE_ESTE_MES,
   COBROS_DEL_MES,
@@ -160,7 +154,7 @@ function Pantalla({
   toast: ReturnType<typeof useToast>;
 }) {
   const { ahora } = datos;
-  const { kpis, deudores, cobros, nombreProfesional, configCobro, canal } = datos;
+  const { kpis, deudores, cobros, nombreProfesional, configCobro } = datos;
 
   const sesionesSinCobrar = deudores.reduce(
     (sum, d) => sum + d.sesionesImpagas,
@@ -201,7 +195,6 @@ function Pantalla({
           deudores={deudores}
           sesionesSinCobrar={sesionesSinCobrar}
           configCobro={configCobro}
-          canal={canal}
           ahora={ahora}
           onCobrado={() => {
             // La deuda y los ingresos del mes salen del servidor: se vuelve a
@@ -213,14 +206,10 @@ function Pantalla({
             if (huboCobros) onRecargar();
             toast.avisar(mensaje);
           }}
-          onAvisado={(aviso) => {
-            if (aviso.canal === "whatsapp") {
-              // "Avisado hoy" sale del servidor, como con el SMS.
-              onRecargar();
-              toast.confirmar(AVISO_COBRO_WHATSAPP_ANOTADO);
-              return;
-            }
-            toast.confirmar(aviso.creado ? AVISO_COBRO_PROGRAMADO : AVISO_COBRO_YA_PEDIDO);
+          onAvisado={() => {
+            // "Avisado hoy" sale del servidor.
+            onRecargar();
+            toast.confirmar(AVISO_COBRO_WHATSAPP_ANOTADO);
           }}
           onError={(mensaje) => toast.avisar(mensaje)}
           onVerCobros={() => onPestana("cobros")}

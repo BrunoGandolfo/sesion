@@ -1,6 +1,6 @@
 // El enlace de WhatsApp asistido: https://wa.me/<número>?text=<mensaje>.
-// Módulo PURO (sin base ni process.env), como src/lib/sms/texto.ts: el texto
-// lo arma textoDelEnvio, el mismo que manda el SMS; acá sólo se empaqueta.
+// Módulo PURO (sin base ni process.env), como src/lib/recordatorio-texto.ts: el texto
+// lo arma textoDelEnvio; acá sólo se empaqueta.
 //
 // wa.me quiere el número internacional en dígitos, sin "+", espacios ni
 // guiones. El teléfono de la paciente ya es E.164 (se valida al escribirla),

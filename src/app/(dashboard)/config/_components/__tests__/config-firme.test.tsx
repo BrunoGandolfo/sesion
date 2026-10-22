@@ -5,7 +5,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildSmsMessage, prepararPlantillaRecordatorio } from "@/lib/sms/texto";
+import { armarMensaje, prepararPlantillaRecordatorio } from "@/lib/recordatorio-texto";
 
 import { htmlATemplate } from "../editor-recordatorio";
 import { ConfigView } from "../config-view";
@@ -58,7 +58,7 @@ describe("A: editor y vista previa coinciden al abrir", () => {
     // La vista previa es la plantilla del editor con los datos del ejemplo:
     // lo que ella lee arriba es lo que la paciente recibe abajo.
     expect(vistaPrevia).toBe(
-      buildSmsMessage(enElEditor, {
+      armarMensaje(enElEditor, {
         nombre: "Lucía", apellido: "Fernández", fecha: new Date("2026-04-21T10:00:00-03:00"),
         direccion: datos.direccion, profesional: datos.nombreProfesional, telefonoConsultorio: datos.whatsappOrigen,
       }),
@@ -128,15 +128,15 @@ describe("B: los cambios no se pierden", () => {
 });
 
 describe("Cuándo se avisa", () => {
-  it("dice la ventana real de envío, la misma que calcula calcularProgramadoEn", async () => {
+  it("dice la hora real del aviso, la misma que calcula calcularProgramadoEn", async () => {
     await abrir();
-    expect(screen.getByText("Entre las 20:00 y las 20:14 del día antes")).toBeTruthy();
-    expect(screen.getByText("Entre las 20:00 y las 20:14 de dos días antes")).toBeTruthy();
-    expect(screen.getByText("Entre las 08:00 y las 08:14 del día del turno")).toBeTruthy();
+    expect(screen.getByText("Desde las 20:00 del día antes")).toBeTruthy();
+    expect(screen.getByText("Desde las 20:00 de dos días antes")).toBeTruthy();
+    expect(screen.getByText("Desde las 08:00 del día del turno")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: /La misma mañana/ }));
     expect(
-      screen.getByText(/Si el turno es antes de las 08:15, el aviso puede salir la tarde anterior, entre las 20:00 y las 20:14/),
+      screen.getByText(/Si el turno es a las 08:00 o antes, se avisa la tarde anterior, desde las 20:00/),
     ).toBeTruthy();
   });
 });

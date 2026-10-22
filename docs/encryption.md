@@ -33,7 +33,7 @@ que es el contrato del anexo de `docs/esquema.md`.
 `string | null`; al escribir se normaliza a esas cuatro claves.
 
 Quedan en claro, a propósito: nombre, apellido y teléfono de la paciente (la
-búsqueda, el orden de la agenda y el envío de SMS los necesitan en SQL),
+búsqueda y el orden de la agenda los necesitan en SQL),
 fechas y montos, `speech_analytics` (números), IP y navegador en
 `sesiones_acceso` e `intentos_acceso` (purgas según fecha y estado; no son treinta días desde la creación en todos los casos). La lista completa está en
 `docs/esquema.md`.

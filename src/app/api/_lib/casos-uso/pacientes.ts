@@ -2,10 +2,9 @@
 //
 // Crear y editar dejan su evento de auditoría (paciente.crear,
 // paciente.editar) en la MISMA transacción que el acto. Archivar
-// (`activo: false`) no es sólo esconderla de la lista: apaga sus SMS
-// pendientes y deja paciente.archivar, los tres juntos. Si el evento no se
-// puede escribir, el acto no queda hecho. Volver a activarla no revive los
-// SMS apagados (`cancelado` es terminal).
+// (`activo: false`) la esconde de la lista y de los avisos de Hoy, y deja
+// paciente.archivar, juntos. Si el evento no se puede escribir, el acto no
+// queda hecho.
 //
 // Vivían dentro de GET/POST /api/pacientes y GET/PATCH /api/pacientes/[id].
 // Las rutas ahora solo validan y llaman. Sin request ni Response.
@@ -26,7 +25,6 @@ import { auditar } from "../auditoria";
 import { toPaciente, toPacienteConDeuda, toTurno } from "../domain";
 import { MENSAJE_PACIENTE_NO_ENCONTRADO } from "../pacientes";
 import { ApiError } from "../responses";
-import { cancelarEnviosDeLaPaciente, MOTIVO_PACIENTE_ARCHIVADA } from "./envios-del-turno";
 import { ACCIONES } from "@/lib/auditoria-acciones";
 
 type ClientePrisma = typeof db;
@@ -191,9 +189,8 @@ const CAMPOS_COMPARABLES = ["nombre", "apellido", "telefono", "tarifa", "activo"
 /**
  * Edita la ficha, en UNA transacción con su rastro:
  *
- *   - archivar (`activo: false` sobre una activa) apaga sus SMS pendientes y
- *     deja paciente.archivar. Si ya estaba archivada igual barre lo que haya
- *     quedado pendiente, y sólo audita si apagó algo.
+ *   - archivar (`activo: false` sobre una activa) deja paciente.archivar;
+ *     archivar una ya archivada no deja nada.
  *   - cualquier otro campo que cambie deja paciente.editar con los NOMBRES de
  *     los campos (nunca los valores: nombre, teléfono y notas son datos de la
  *     paciente).
@@ -276,17 +273,8 @@ export async function actualizarPaciente({
 
     const archiva = cambios.activo === false;
     if (archiva) {
-      // Se apaga aunque ya estuviera archivada: limpia lo que haya quedado
-      // pendiente de antes de que archivar cancelara los SMS.
-      const enviosCancelados = await cancelarEnviosDeLaPaciente(
-        tx,
-        { organizationId, pacienteId },
-        MOTIVO_PACIENTE_ARCHIVADA,
-        ahora,
-      );
-      if (actual.activo || enviosCancelados > 0) {
-        await auditarComo(ACCIONES.paciente.archivar, { enviosCancelados, yaEstabaArchivada: !actual.activo });
-      }
+      // Archivada, sale de la lista de avisos de Hoy (sólo paciente activa).
+      if (actual.activo) await auditarComo(ACCIONES.paciente.archivar, {});
     }
 
     const campos = [

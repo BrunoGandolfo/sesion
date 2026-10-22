@@ -5,8 +5,7 @@ import { TRANSCRIPCION_VISIBLE_EN_PANTALLA, BORRADO_DE_DATOS_A_PEDIDO, NOTA_APRO
 import { CONSENTIMIENTO_VERSION, generarTextoConsentimiento } from "@/lib/consentimiento";
 import { LIMITE_SEGUNDOS, AVISO_LIMITE_SEGUNDOS } from "@/lib/grabacion-captura";
 import { POLITICA_POR_TIPO } from "@/app/api/_lib/casos-uso/trabajos/politica";
-import { DISPERSION_MINUTOS } from "@/lib/recordatorios-programacion";
-import { DESCARTAR_GRABACION, DESCARTAR_GRABACION_ACCION, DESCARTAR_GRABACION_TITULO, ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_AGOTADAS, INVITAR_ESPERA, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE, REMITENTE_SMS, SMS_BAJA_CONFIRMADA } from "@/lib/glosario";
+import { DESCARTAR_GRABACION, DESCARTAR_GRABACION_ACCION, DESCARTAR_GRABACION_TITULO, ENTRADA_CONFIDENCIALIDAD, FEEDBACK_PEDIR, FEEDBACK_REINTENTAR, INVITAR_AGOTADAS, INVITAR_ESPERA, INVITAR_WHATSAPP, LEI_LAS_MENCIONES, LINEA_CONTACTO, PRUEBA_AVISO, PRUEBA_CERCA, PRUEBA_TOPE, REMITENTE_AVISO } from "@/lib/glosario";
 import * as glosario from "@/lib/glosario";
 import { AVISO_GRABACIONES_RESTANTES, ESPERA_ENTRE_INVITACIONES_DIAS, TOPE_GRABACIONES_PRUEBA, TOPE_INVITACIONES_TOTAL } from "@/lib/limites-prueba";
 
@@ -46,12 +45,12 @@ describe("la ayuda describe las acciones disponibles", () => {
   it.each([
     "00-que-es-sesion.md",
     "05-cobros.md",
-    "06-recordatorios-sms.md",
+    "06-recordatorios-whatsapp.md",
   ])("%s explica el aviso de cobro por WhatsApp con confirmación", (archivo) => {
     const texto = documento(archivo).replace(/\s+/g, " ");
     expect(texto).toContain(glosario.RECORDAR_COBRO_WHATSAPP);
     expect(texto).toMatch(/confirmás el envío/);
-    expect(texto).not.toContain(glosario.RECORDAR_COBRO);
+    expect(texto).not.toContain("Recordar cobro por SMS");
   });
 });
 
@@ -272,12 +271,10 @@ it("la pantalla de Hoy tiene dos números y ningún bloque Te deben", () => {
   expect(texto).not.toMatch(/Por cobrar|Día prolijo|Hoy tu agenda está libre|Tocarla te lleva/);
 });
 
-it("los recordatorios se dispersan y el mensaje dice lo que arma el código", () => {
-  const texto = documento("06-recordatorios-sms.md");
-  expect(texto).toContain(`**0 a ${DISPERSION_MINUTOS - 1} minutos**`);
+it("el mensaje del recordatorio dice lo que arma el código", () => {
+  const texto = documento("06-recordatorios-whatsapp.md");
   expect(texto).toContain(LINEA_CONTACTO.replace(" {{telefonoConsultorio}}", ""));
-  expect(REMITENTE_SMS.startsWith("Consultorio")).toBe(true);
-  expect(texto).toContain(SMS_BAJA_CONFIRMADA);
+  expect(REMITENTE_AVISO.startsWith("Consultorio")).toBe(true);
   expect(texto).not.toMatch(/te recordamos tu sesión|cambió el horario de tu sesión|Listo: no vas a recibir/);
 });
 
@@ -303,13 +300,13 @@ it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar 
   let corpus = leerCorpus();
   for (const texto of vigentes) corpus = corpus.replaceAll(texto, "");
   expect(corpus).not.toMatch(/Descartar|Descartarla|Volver a intentarlo/i);
-  // WhatsApp volvió como recordatorio que ella manda desde su teléfono: lo
-  // cuentan estas páginas, y sólo mientras Hoy ofrezca el botón.
-  // 05 cuenta Recordar cobro por WhatsApp, mientras la fila de Te deben elija
-  // el botón por canal.
-  const conWhatsapp = ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "03-agenda-y-turnos.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"];
+  // WhatsApp es el único canal de los avisos, que ella manda desde su
+  // teléfono: lo cuentan estas páginas, y sólo mientras Hoy ofrezca el botón.
+  // 05 cuenta Recordar cobro por WhatsApp; 04, 13 y 14, cómo se ve en la
+  // ficha, las preguntas y qué mirar si un aviso no aparece.
+  const conWhatsapp = ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "03-agenda-y-turnos.md", "04-pacientes-y-ficha.md", "05-cobros.md", "06-recordatorios-whatsapp.md", "11-tu-consultorio.md", "13-preguntas-frecuentes.md", "14-cuando-algo-falla.md"];
   expect(codigo("src/app/(dashboard)/_components/recordatorios-whatsapp.tsx")).toContain("{ABRIR_WHATSAPP}");
-  expect(codigo("src/app/(dashboard)/cobros/_components/fila-deudor.tsx")).toContain("RECORDAR_COBRO_POR_CANAL[accion.canal]");
+  expect(codigo("src/app/(dashboard)/cobros/_components/fila-deudor.tsx")).toContain("RECORDAR_COBRO_TEXTOS");
   const restoDelCorpus = corpus
     .split(/(?=----- \S+\.md -----)/)
     .filter((parte) => !conWhatsapp.some((nombre) => parte.startsWith(`----- ${nombre} -----`)));
@@ -327,10 +324,25 @@ it("explica las series y sus límites sin prometer renovarlas solas", () => {
   expect(texto).toContain("Si choca la primera fecha, no se crea la serie");
   expect(texto).toContain("Cancelar el resto de la serie");
 });
-it("distingue la aceptación, la entrega, la baja y el resultado desconocido del SMS", () => {
-  const texto = documento("06-recordatorios-sms.md");
-  for (const frase of ["aceptado no es entregado", "BAJA", "STOP", "CANCELAR", "no se reenvía solo", "cambio de horario"])
-    expect(texto.toLowerCase().replace(/\*\*/g, "")).toContain(frase.toLowerCase());
+it("la ayuda no habla de SMS ni de Twilio: Sesión sólo avisa por WhatsApp", () => {
+  expect(leerCorpus()).not.toMatch(/\bSMS\b|Twilio|\bBAJA\b|No sabemos si salió|En camino/);
+});
+it("la 06 explica el WhatsApp como lo hace el código", () => {
+  const texto = documento("06-recordatorios-whatsapp.md").replace(/\s+/g, " ");
+  // Qué dice el turno: los mismos textos del bloque Recordatorio.
+  expect(texto).toContain(glosario.RECORDATORIO_PENDIENTE);
+  expect(texto).toContain(glosario.recordatorioAvisado("14/10"));
+  expect(codigo("src/app/(dashboard)/agenda/_components/detalle-ver.tsx")).toContain("RECORDATORIO_PENDIENTE");
+  // Cuándo: las mismas frases que Tu consultorio, con la hora que calcula
+  // calcularProgramadoEn.
+  expect(texto).toContain(glosario.RECORDATORIO_MOMENTOS.dia_anterior.detalle("20:00"));
+  expect(texto).toContain(glosario.RECORDATORIO_MOMENTOS.misma_manana.detalle("08:00"));
+  expect(texto).toContain(glosario.RECORDATORIO_MISMA_MANANA_EXCEPCION("08:00", "20:00"));
+  // La regla de la lista (correspondeAvisarHoy): lo no avisado sigue, el
+  // cambio de horario entra ya, y el modo nuevo alcanza a lo ya agendado.
+  for (const frase of ["sigue en la lista hasta que lo avises", "cambio de horario", "falte lo que falte", "también para los turnos ya agendados"])
+    expect(texto).toContain(frase);
+  expect(codigo("src/app/api/_lib/casos-uso/recordatorios-whatsapp.ts")).toContain("export function correspondeAvisarHoy");
 });
 it("la ayuda distingue rehacer la nota, reintentar y pedir Para vos", () => {
   const nota = documento("08-la-nota-clinica.md");
@@ -519,17 +531,17 @@ it("la ayuda cuenta el aviso de cobro por WhatsApp, con la plantilla de Tu consu
     glosario.ABRIR_WHATSAPP,
     glosario.AVISO_COBRO_WHATSAPP_ANOTADO,
     glosario.NO_SE_ANOTO_AVISO,
-    glosario.RECORDAR_COBRO_POR_CANAL.whatsapp.destino,
+    glosario.RECORDAR_COBRO_TEXTOS.destino,
     `Tu consultorio → ${glosario.COBRO_SECCION}`,
   ]) expect(cobros, texto).toContain(texto);
   expect(cobros).not.toMatch(/no es configurable/);
-  // Sólo WhatsApp: ni la pantalla ni el servidor leen el canal guardado.
-  expect(codigo("src/app/(dashboard)/cobros/_components/datos.ts")).toContain("canal: CANAL_RECORDATORIO_VIGENTE,");
-  expect(codigo("src/app/api/_lib/casos-uso/recordar-cobro.ts")).toContain("CANAL_RECORDATORIO_VIGENTE");
-  for (const t of [glosario.RECORDAR_COBRO, glosario.ENVIAR_SMS, glosario.AVISO_COBRO_PROGRAMADO, glosario.AVISO_COBRO_YA_PEDIDO])
+  // Sólo WhatsApp: no hay canal que leer, ni en la pantalla ni en el servidor.
+  expect(codigo("src/app/(dashboard)/cobros/_components/datos.ts")).not.toMatch(/canal/i);
+  expect(codigo("src/app/api/_lib/casos-uso/recordar-cobro.ts")).not.toMatch(/sms|CANAL_RECORDATORIO/i);
+  for (const t of ["Recordar cobro por SMS", "Enviar SMS", "Aviso programado", "Ya pediste este aviso hoy"])
     expect(cobros, t).not.toContain(t);
 
-  const recordatorios = plano(documento("06-recordatorios-sms.md"));
+  const recordatorios = plano(documento("06-recordatorios-whatsapp.md"));
   expect(recordatorios).toContain(glosario.RECORDAR_COBRO_WHATSAPP);
   expect(recordatorios).not.toMatch(/sale por SMS en cualquiera de los tres modos/);
 
@@ -543,11 +555,11 @@ it("la ayuda cuenta el aviso de cobro por WhatsApp, con la plantilla de Tu consu
 });
 
 it("la ayuda no ofrece elegir el canal: los recordatorios y el cobro son sólo por WhatsApp", () => {
-  // Tu consultorio ya no tiene el selector (config-view.tsx) y la app lee
-  // CANAL_RECORDATORIO_VIGENTE, no la columna.
+  // Tu consultorio no tiene selector (config-view.tsx) y la app no tiene
+  // canal: el SMS ya no existe.
   expect(codigo("src/app/(dashboard)/config/_components/config-view.tsx")).not.toContain("SelectorCanal");
-  expect(codigo("src/lib/recordatorios-programacion.ts")).toContain('CANAL_RECORDATORIO_VIGENTE: CanalRecordatorio = "whatsapp"');
-  for (const archivo of ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "03-agenda-y-turnos.md", "05-cobros.md", "06-recordatorios-sms.md", "11-tu-consultorio.md"]) {
+  expect(codigo("src/lib/recordatorios-programacion.ts")).not.toMatch(/canal/i);
+  for (const archivo of ["_indice.md", "00-que-es-sesion.md", "02-pantalla-hoy.md", "03-agenda-y-turnos.md", "05-cobros.md", "06-recordatorios-whatsapp.md", "11-tu-consultorio.md"]) {
     const texto = documento(archivo).replace(/\s+/g, " ");
     expect(texto, archivo).not.toMatch(/SMS automático|\*\*Ambos\*\*|Cómo recordás los turnos|según el canal|por los dos canales|WhatsApp desde mi teléfono/);
   }

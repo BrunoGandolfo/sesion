@@ -144,15 +144,14 @@ async function cobrar() {
 describe("los avisos distinguen un rechazo de una operación confirmada", () => {
   it.each([false, true])("aviso de cobro por WhatsApp: éxito=%s", async (exito) => {
     vi.spyOn(window, "open").mockImplementation(() => null);
-    if (exito) m.post.mockResolvedValue({ canal: "whatsapp", enlace: "https://wa.me/59899111222", avisadoEn: AHORA.toISOString() });
+    if (exito) m.post.mockResolvedValue({ enlace: "https://wa.me/59899111222", avisadoEn: AHORA.toISOString() });
     else m.post.mockRejectedValue(new ApiClientError(FALLO, 502));
     render(<CobrosView />);
     fireEvent.click(await screen.findByRole("button", { name: /Recordar cobro a/ }));
     fireEvent.click(screen.getByRole("button", { name: ABRIR_WHATSAPP }));
     // Si falla, WhatsApp ya se abrió: lo que no se pudo es anotarlo.
     await verificarAviso(exito ? AVISO_COBRO_WHATSAPP_ANOTADO : NO_SE_ANOTO_AVISO, exito);
-    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", { canal: "whatsapp" });
-    expect(m.get.mock.calls.some(([url]) => url === "/api/sms/estado")).toBe(false);
+    expect(m.post).toHaveBeenCalledWith("/api/pacientes/p1/recordar-cobro", {});
   });
 
   it.each([false, true])("reactivar desde la lista: éxito=%s", async (exito) => {

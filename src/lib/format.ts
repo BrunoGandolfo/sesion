@@ -27,7 +27,7 @@ export function money(n: number): string {
 // Estas funciones corren en el servidor (UTC en Vercel, que no deja fijar
 // TZ) y en el navegador (la zona de quien mire). Antes usaban date-fns
 // sobre la hora del proceso, así que el mismo turno se leía "15:15" en el
-// teléfono de la profesional y "18:15" en el SMS que salió del servidor.
+// teléfono de la profesional y "18:15" en el mensaje que armó el servidor.
 //
 // Ahora todo pasa por fechas-montevideo: la app es de un consultorio en
 // Montevideo y la hora que se muestra es la del consultorio, esté quien
@@ -37,7 +37,7 @@ export function money(n: number): string {
 // nombres cortos (fechaLarga, fechaCorta, hora, fechaCompleta, diaSemana),
 // que son los que ya usaban casi todos. Los `formatear*Mvd` de
 // fechas-montevideo quedan para quien no puede importar este módulo, que
-// trae el glosario: el servidor, los SMS y el propio glosario.
+// trae el glosario: el servidor, los textos de los avisos y el propio glosario.
 // src/lib/__tests__/formato-una-capa.test.ts lo vigila en src/components.
 // ============================================
 

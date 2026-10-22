@@ -1,8 +1,7 @@
 "use client";
 
 // Recordatorios para hoy: los turnos que ella avisa por WhatsApp desde su
-// propio teléfono. Sólo existe si en Tu consultorio eligió WhatsApp o Ambos;
-// con SMS automático no se dibuja nada.
+// propio teléfono.
 //
 // Lee lo suyo aparte de /api/dashboard: si esta lectura falla, el resto de
 // Hoy sigue en pie.
@@ -34,7 +33,7 @@ import {
 } from "@/lib/glosario";
 import type { RecordatorioWhatsapp, RecordatoriosWhatsappDeHoy } from "@/types/domain";
 
-import { leerRecordatoriosWhatsapp, muestraWhatsapp, registrarAbierto } from "./recordatorios-datos";
+import { leerRecordatoriosWhatsapp, registrarAbierto } from "./recordatorios-datos";
 import { Titulo } from "./titulo";
 
 export function RecordatoriosWhatsapp({
@@ -85,10 +84,10 @@ export function RecordatoriosWhatsapp({
       .catch(() => setSinAnotar((previo) => new Set(previo).add(turnoId)));
   }, []);
 
-  // Sin lectura buena todavía, un fallo se muestra igual: no se sabe el
-  // canal. Con una lectura, manda su canal; si una recarga falla, queda lo
-  // que había y además se dice que no está al día.
-  const visible = lectura ? muestraWhatsapp(lectura.canal) : error;
+  // Sin lectura buena todavía, un fallo se muestra igual. Con una lectura,
+  // si una recarga falla, queda lo que había y además se dice que no está
+  // al día.
+  const visible = lectura !== null || error;
   if (!visible) return null;
   const turnos = lectura
     ? lectura.turnos

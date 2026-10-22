@@ -16,18 +16,12 @@ import type { Turno, TurnoConPaciente } from "@/types/domain";
 import {
   cobradoEnMes,
   decidirEdicionTurno,
-  efectoEnvioDeEdicion,
   toTurno,
   toTurnoConPaciente,
   type CambiosTurno,
 } from "../domain";
 import { auditar } from "../auditoria";
 import { ApiError } from "../responses";
-import {
-  cancelarEnviosDelTurno,
-  programarEnvioDelTurno,
-  reprogramarEnvioDelTurno,
-} from "./envios-del-turno";
 import { assertSinSolapamiento, tomarLockDeAgenda } from "./solapamiento-turnos";
 
 type ClientePrisma = typeof db;
@@ -216,32 +210,6 @@ export async function actualizarTurno({
     }
 
     const updated = await tx.turno.findUniqueOrThrow({ where: { id: turnoId } });
-
-    // El aviso sigue lo que quedó ESCRITO, no lo que se previó: cobrar no
-    // toma el lock de agenda y pudo cerrar el turno en el medio. Con la
-    // fila de la base, la misma regla (efectoEnvioDeEdicion) da lo mismo
-    // que la decisión salvo en esa carrera.
-    const efecto = efectoEnvioDeEdicion(actual, updated, cambios.fecha !== undefined);
-    const turnoDelAviso = {
-      turnoId: updated.id,
-      organizationId,
-      pacienteId: updated.pacienteId,
-      fechaTurno: updated.fecha,
-      ahora,
-    };
-    if (efecto === "cancelar") {
-      // Un turno que dejó de estar programado —realizado, ausente o
-      // cancelado— no avisa nada.
-      await cancelarEnviosDelTurno(tx, turnoId);
-    } else if (efecto === "reprogramar") {
-      // Se apaga lo pendiente de la fecha vieja y se programa el aviso de la
-      // nueva (o un cambio de horario, si el de la fecha vieja ya salió).
-      await reprogramarEnvioDelTurno(tx, { ...turnoDelAviso, fechaTurnoPrevia: actual.fecha });
-    } else if (efecto === "revivir") {
-      // Venía cerrado (realizado o ausente) y vuelve a "programado": el
-      // cierre apagó sus recordatorios y sin esto no volvería a avisar.
-      await programarEnvioDelTurno(tx, turnoDelAviso);
-    }
 
     // Pasar a cancelado es turno.cancelar; lo demás, turno.editar. Los
     // nombres de los campos que vinieron, nunca la nota.

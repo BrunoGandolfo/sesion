@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { textoDelEnvio, textoDelRecordatorio } from "@/lib/sms/texto";
+import { textoDelEnvio, textoDelRecordatorio } from "@/lib/recordatorio-texto";
 import { enlaceWhatsapp } from "@/lib/whatsapp";
 
 const TEXTO = "Hola Lucía. Te recordamos tu sesión:\njueves 4 de septiembre  |  15:15\nRivera 2540 & Br. España #3";

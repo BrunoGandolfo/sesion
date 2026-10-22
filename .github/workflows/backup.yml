@@ -154,9 +154,11 @@ jobs:
               exit 1
             fi
           done
-          # Producción anterior y esquema nuevo: debe existir al menos una.
-          if ! grep -Eq 'TABLE DATA public (recordatorios|envios_sms) ' toc.txt; then
-            echo "ERROR: el dump no contiene recordatorios ni envios_sms." >&2
+          # Una tabla propia de cada época del esquema: recordatorios
+          # (producción anterior), envios_sms (hasta que se borró el SMS) o
+          # avisos_whatsapp (desde el WhatsApp asistido). Debe existir una.
+          if ! grep -Eq 'TABLE DATA public (recordatorios|envios_sms|avisos_whatsapp) ' toc.txt; then
+            echo "ERROR: el dump no contiene recordatorios, envios_sms ni avisos_whatsapp." >&2
             exit 1
           fi
           echo "OK: índice legible, tablas del esquema presentes."

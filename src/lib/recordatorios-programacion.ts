@@ -37,22 +37,6 @@ export type RecordatorioModo = (typeof RECORDATORIO_MODOS)[number];
 /** El de siempre: la tarde anterior. Igual que el default de la columna. */
 export const RECORDATORIO_MODO_DEFAULT: RecordatorioModo = "dia_anterior";
 
-/** Por dónde sale el recordatorio. Espejo de Configuracion.canalRecordatorio:
- *  con `whatsapp` el cron no manda el SMS y la app le prepara el mensaje a
- *  la profesional; con `ambos`, las dos cosas. */
-export const CANALES_RECORDATORIO = ["sms", "whatsapp", "ambos"] as const;
-
-export type CanalRecordatorio = (typeof CANALES_RECORDATORIO)[number];
-
-/** El canal con que trabaja la app, sea cual sea el guardado. Decisión del
- *  dueño (21-oct-2026, a pedido de la profesional): los recordatorios y el
- *  aviso de cobro van sólo por WhatsApp. La columna y el código del SMS
- *  siguen hasta que se borren aparte; Tu consultorio ya no ofrece elegir, y
- *  quien decide por el canal (la configuración que lee la pantalla, Hoy,
- *  Cobros y el despacho del SMS) mira esto y no la columna. Tipado ancho a
- *  propósito: las ramas del SMS compilan hasta que se borren. */
-export const CANAL_RECORDATORIO_VIGENTE: CanalRecordatorio = "whatsapp";
-
 /** Hora de la tarde en que sale el aviso del día anterior. */
 const HORA_TARDE = 20;
 
@@ -74,58 +58,29 @@ export function normalizarRecordatorioModo(valor: unknown): RecordatorioModo {
 }
 
 /**
- * Ventana de dispersión: los avisos del día no salen todos a las 20:00 en
- * punto sino repartidos en estos minutos, según el turno. Antes caían todos
- * en el mismo tick del cron (la "estampida"), y con Twilio lento eso
- * consumía el presupuesto entero de la función.
- */
-export const DISPERSION_MINUTOS = 15;
-
-/**
- * Minutos de corrimiento para un turno: hash(turnoId) % 15. Determinística
- * (el mismo turno siempre cae en el mismo minuto, así reprogramar y volver a
- * calcular da lo mismo) y sin dependencias (FNV-1a de 32 bits).
- */
-export function dispersionMinutos(turnoId: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < turnoId.length; i += 1) {
-    h ^= turnoId.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h % DISPERSION_MINUTOS;
-}
-
-/**
- * Cuándo mandar el recordatorio de un turno.
+ * Cuándo se avisa el turno: desde ese momento aparece en "Recordatorios
+ * para hoy" para que ella lo mande por WhatsApp.
  *
  * No mira si el resultado ya pasó: un turno agendado para mañana a la mañana
- * con modo "dos_dias_antes" da una fecha vieja, y eso es correcto acá — el
- * despachador decide qué hace con un recordatorio que nació tarde.
- *
- * Con `turnoId` se suma la dispersión (0 a 14 minutos); sin él, la hora en
- * punto.
+ * con modo "dos_dias_antes" da una fecha vieja, y eso es correcto acá — la
+ * lista de Hoy lo toma igual (correspondeAvisarHoy).
  */
 export function calcularProgramadoEn(
   fechaTurno: Date,
   modo: RecordatorioModo = RECORDATORIO_MODO_DEFAULT,
-  turnoId?: string,
 ): Date {
   const { anio, mes, dia, hora } = partesMvd(fechaTurno);
-  const minutos = turnoId ? dispersionMinutos(turnoId) : 0;
 
   if (modo === "misma_manana") {
-    // Un turno antes de las 8 no tiene mañana propia útil: se avisa la
-    // tarde anterior, como en dia_anterior. Y la dispersión no puede pasar
-    // la hora del turno: uno de las 8:05 con corrimiento de 10 min caía a
-    // las 8:10, ya empezado, y el despachador lo cancelaba por "turno
-    // pasado". Si el aviso de la mañana no cae ANTES del turno, también va
-    // la tarde anterior.
-    const manana = instanteMvd(anio, mes, dia, HORA_MANANA, minutos);
+    // Un turno antes de las 8 no tiene mañana propia útil, y uno a las 8 en
+    // punto tampoco (el aviso no caería antes): se avisa la tarde anterior,
+    // como en dia_anterior.
+    const manana = instanteMvd(anio, mes, dia, HORA_MANANA, 0);
     return hora < HORA_MANANA || manana.getTime() >= fechaTurno.getTime()
-      ? instanteMvd(anio, mes, dia - 1, HORA_TARDE, minutos)
+      ? instanteMvd(anio, mes, dia - 1, HORA_TARDE, 0)
       : manana;
   }
 
   const diasAntes = modo === "dos_dias_antes" ? 2 : 1;
-  return instanteMvd(anio, mes, dia - diasAntes, HORA_TARDE, minutos);
+  return instanteMvd(anio, mes, dia - diasAntes, HORA_TARDE, 0);
 }

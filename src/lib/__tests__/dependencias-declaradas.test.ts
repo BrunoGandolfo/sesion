@@ -35,6 +35,9 @@ it("los scripts sólo importan paquetes declarados en package.json", () => {
       usados.set(nombreDelPaquete(especificador), rel);
     }
   }
-  expect(usados.size).toBeGreaterThan(1);
+  // Que el lector encuentre algo: si no, el test pasaría sin mirar nada.
+  // (Desde que se borró reconciliar-sms.mjs, los scripts importan un solo
+  // paquete.)
+  expect(usados.size).toBeGreaterThan(0);
   expect([...usados].filter(([nombre]) => !declarados.has(nombre)).map(([nombre, rel]) => `${nombre} (${rel})`)).toEqual([]);
 });

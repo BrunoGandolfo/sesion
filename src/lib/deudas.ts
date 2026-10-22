@@ -23,8 +23,8 @@ export { textoAtraso } from "@/lib/glosario";
 import { money } from "@/lib/format";
 
 /**
- * Template default del recordatorio de cobro. Es el texto que sale por SMS y
- * el que ella lee entero antes de confirmar el envío (ver cobros-view).
+ * Template default del recordatorio de cobro. Es el texto que sale por
+ * WhatsApp y el que ella lee entero antes de confirmar (ver cobros-view).
  * Placeholders soportados por interpolarTemplateCobro:
  *   {{nombre}}        — nombre del paciente
  *   {{sesiones}}      — texto inteligente "1 sesión pendiente" / "N sesiones pendientes"
@@ -96,9 +96,9 @@ export interface ConfiguracionDelCobro {
 
 /**
  * El texto del aviso de cobro con la plantilla de la organización. Es la
- * ÚNICA puerta: la usan el cron que manda el SMS (texto-de-cobro.ts), el
- * enlace de WhatsApp y la vista previa de Cobros, así lo que ella confirma
- * es lo que le llega a la paciente por cualquiera de los dos canales.
+ * ÚNICA puerta: la usan el servidor (texto-de-cobro.ts), el enlace de
+ * WhatsApp y la vista previa de Cobros, así lo que ella confirma es lo que
+ * le llega a la paciente.
  */
 export function textoDelCobro(
   configuracion: ConfiguracionDelCobro,

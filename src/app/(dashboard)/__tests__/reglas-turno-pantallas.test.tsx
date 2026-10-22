@@ -103,7 +103,7 @@ it("la matriz tiene de los dos lados: turnos que se cobran y turnos que no", () 
 
 describe("detalle del turno en Agenda", () => {
   async function montar(t: TurnoConPaciente) {
-    api.get.mockImplementation(async (ruta: string) => (ruta.startsWith("/api/sms") ? [] : null));
+    api.get.mockImplementation(async (ruta: string) => (ruta.startsWith("/api/recordatorios/whatsapp/") ? { avisadoEn: null } : null));
     await act(async () => {
       render(<TurnoDetailSheet open turno={t} onClose={vi.fn()} onUpdated={vi.fn()} />);
     });

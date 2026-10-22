@@ -70,9 +70,7 @@ const INTEGRACION = [
   // El diagnóstico del grabador, del hook a la fila de auditoría.
   'src/lib/__tests__/grabacion-diagnostico-integracion.test.tsx',
   'src/lib/__tests__/feedback-trabajos.test.ts',
-  'src/lib/__tests__/despachar-sms.test.ts',
-  'src/lib/__tests__/envios-del-turno.test.ts',
-  // Archivar a la paciente apaga sus SMS, con auditoría, en una transacción.
+  // Archivar a la paciente, con auditoría, en una transacción.
   'src/lib/__tests__/archivar-paciente.test.ts',
   // La tarifa nueva alcanza a los turnos futuros sin cobrar, y a ningún otro.
   'src/lib/__tests__/tarifa-turnos.test.ts',
@@ -80,7 +78,6 @@ const INTEGRACION = [
   'src/lib/__tests__/tarifa-pantalla-integracion.test.tsx',
   // La ficha trae el estado de la sesión de cada turno (agenda sin señal).
   'src/lib/__tests__/ficha-sesion-del-turno.test.ts',
-  'src/lib/__tests__/sms-callback.test.ts',
   'src/lib/__tests__/recordar-cobro.test.ts',
   // WhatsApp asistido: qué se avisa hoy, el cron según el canal y las rutas.
   'src/lib/__tests__/recordatorios-whatsapp.test.ts',

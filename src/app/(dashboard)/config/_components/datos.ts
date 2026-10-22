@@ -9,7 +9,7 @@ import {
   RECORDATORIO_MODO_DEFAULT,
   type RecordatorioModo,
 } from "@/lib/recordatorios-programacion";
-import { prepararPlantillaRecordatorio, TEMPLATE_SMS_SUGERIDO } from "@/lib/sms/texto";
+import { prepararPlantillaRecordatorio, TEMPLATE_RECORDATORIO_SUGERIDO } from "@/lib/recordatorio-texto";
 import type { Configuracion, OrientacionTeorica } from "@/types/domain";
 
 export type CampoConfig =
@@ -55,7 +55,7 @@ export const FORM_VACIO: FormConfig = {
   whatsappOrigen: "",
   tarifaDefault: "",
   recordatorioModo: RECORDATORIO_MODO_DEFAULT,
-  templateRecordatorio: TEMPLATE_SMS_SUGERIDO,
+  templateRecordatorio: TEMPLATE_RECORDATORIO_SUGERIDO,
   templateCobro: TEMPLATE_COBRO_DEFAULT,
   orientacionTeorica: "cbt_mi",
 };

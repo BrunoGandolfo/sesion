@@ -214,25 +214,21 @@ envío.
 
 ---
 
-## El SMS no salió
+## Un recordatorio no aparece en Hoy
 
 **Dónde mirar:** abrí el turno en la agenda. En un turno agendado aparece el
-bloque **Recordatorio** con su estado. En un turno que ya no está agendado ese
-bloque no aparece.
+bloque **Recordatorio**: *"Pendiente de avisar por WhatsApp"* o *"Avisado por
+WhatsApp el DD/MM"*. En un turno que ya no está agendado ese bloque no aparece.
 
-**Programado** espera su hora; **Enviando** está intentando salir. **En camino**
-indica aceptación del servicio, no entrega. **Entregado** confirma entrega del
-operador, no lectura; **No llegó** informa un rechazo posterior.
+Si dice pendiente y no está en **Recordatorios para hoy**, todavía no llegó su
+momento (**Tu consultorio → Recordatorio → Cuándo se avisa**). Si dice avisado
+otro día, ya lo abriste antes y no vuelve a aparecer. Tampoco aparecen los
+turnos de pacientes archivadas ni los que ya empezaron. Si la fila dice **Sin
+teléfono**, cargalo en la ficha.
 
-Con **No salió**, mirá el motivo. Los problemas transitorios ya se reintentan
-con esperas mientras el aviso sea útil; no hay botón de reintento manual.
-**No sabemos si salió** necesita revisión de quien administra Sesión: no se
-reenvía solo. Si el turno está por empezar, comunicate con la paciente por tu
-cuenta.
-
-**Cancelado** indica que el aviso pendiente se apagó. Si moviste un turno cuyo
-aviso ya salió, se manda un cambio de horario. Un turno creado con fecha ya
-pasada no genera recordatorio. Detalle en `06-recordatorios-sms.md`.
+La app no manda nada por su cuenta: si el turno está por empezar y no lo
+avisaste, comunicate con la paciente por tu cuenta. Detalle en
+`06-recordatorios-whatsapp.md`.
 
 ---
 

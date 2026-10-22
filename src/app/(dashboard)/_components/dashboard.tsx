@@ -306,9 +306,8 @@ function DiaDeHoy({
 
       {aviso}
 
-      {/* Un bloque que decide no dibujarse (los recordatorios con SMS
-          automático) deja vacía su envoltura de la cascada: se oculta para
-          que no sume un hueco más entre bloques. */}
+      {/* Un bloque que decide no dibujarse deja vacía su envoltura de la
+          cascada: se oculta para que no sume un hueco más entre bloques. */}
       <ListaEnCascada className="flex flex-col gap-7 lg:gap-10 [&>:empty]:hidden">
         {/* Primero quién viene ahora o después: es lo que se busca entre
             pacientes, con el teléfono en la mano. La agenda del día y los

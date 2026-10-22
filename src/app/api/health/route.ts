@@ -9,7 +9,7 @@
 // Dos cosas hacen 503:
 //   - la base no responde (SELECT 1 falla);
 //   - en producción falta alguna variable de operación (env-operacion.ts):
-//     sin alertas o sin SMS el sistema no está sano aunque responda, y así
+//     sin alertas el sistema no está sano aunque responda, y así
 //     el monitor lo ve en el primer deploy y no el día que hacía falta.
 //
 // `commit` es el sha corto que Vercel inyecta: sirve para que el monitor (o

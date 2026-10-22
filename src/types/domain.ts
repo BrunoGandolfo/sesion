@@ -20,7 +20,7 @@ import type {
   MetodoPago,
   Modalidad,
 } from "@/lib/constantes-turno";
-import type { CanalRecordatorio, RecordatorioModo } from "@/lib/recordatorios-programacion";
+import type { RecordatorioModo } from "@/lib/recordatorios-programacion";
 import type {
   AlianzaTerapeutica,
   DatosEstructurados as DatosEstructuradosSchema,
@@ -113,20 +113,15 @@ export interface Configuracion {
    *  En la base es el enum modo_recordatorio. */
   recordatorioModo: RecordatorioModo;
   templateRecordatorio: string;
-  /** Plantilla del aviso de cobro, la misma por SMS y por WhatsApp
-   *  (textoDelCobro, src/lib/deudas.ts). */
+  /** Plantilla del aviso de cobro por WhatsApp (textoDelCobro,
+   *  src/lib/deudas.ts). */
   templateCobro: string;
   /** Orientación teórica de la profesional. Determina el instrumento de
    *  auto-supervisión (ver contrato multi-orientación). En la base es el
    *  enum orientacion_teorica. */
   orientacionTeorica: OrientacionTeorica;
-  /** Por dónde sale el recordatorio: sms (default), whatsapp o ambos. En la
-   *  base es el enum canal_recordatorio. */
-  canalRecordatorio: CanalRecordatorio;
   organizationId: string;
 }
-
-export type { CanalRecordatorio };
 
 // ============================================
 // WhatsApp asistido (casos-uso/recordatorios-whatsapp.ts)
@@ -147,11 +142,16 @@ export interface RecordatorioWhatsapp {
   avisadoEn: string | null;
 }
 
-/** `data` de GET /api/recordatorios/whatsapp. Con canal `sms`, `turnos` es
- *  [] y la pantalla decide si muestra el bloque. */
+/** `data` de GET /api/recordatorios/whatsapp. */
 export interface RecordatoriosWhatsappDeHoy {
-  canal: CanalRecordatorio;
   turnos: RecordatorioWhatsapp[];
+}
+
+/** `data` de GET /api/recordatorios/whatsapp/[turnoId]: el aviso del turno
+ *  para su fecha vigente. */
+export interface AvisoDelTurno {
+  /** ISO de la última vez que abrió el enlace para esta fecha, o null. */
+  avisadoEn: string | null;
 }
 
 /** `data` (201) de POST /api/recordatorios/whatsapp/[turnoId]/abierto. */
