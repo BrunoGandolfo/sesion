@@ -189,7 +189,7 @@ it("la ayuda describe los botones del grabador que existen", () => {
   const vista = pantallaDeGrabar();
   const texto = documento("07-grabar-una-sesion.md");
   // Los botones salen del glosario; la vista los usa por su constante.
-  for (const [constante, boton] of [["GRABAR_SESION", "Grabar sesión"], ["PAUSAR", "Pausar"], ["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["GUARDAR_LO_GRABADO", "Guardar lo grabado"], ["SEGUIR_GRABANDO", "Seguir grabando"], ["VOLVER_A_LA_FICHA", "Volver a la ficha"], ["ENTENDIDO", "Entendido"]]) {
+  for (const [constante, boton] of [["GRABAR_SESION", "Grabar sesión"], ["PAUSAR", "Pausar"], ["REANUDAR", "Reanudar"], ["TERMINAR_SESION", "Terminar la sesión"], ["GUARDAR_LO_GRABADO", "Guardar lo grabado"], ["SEGUIR_GRABANDO", "Seguir grabando"], ["VOLVER_A_LA_FICHA", "Volver a la ficha"], ["ENTENDIDO", "Entendido"], ["ENVIAR_LA_QUE_QUEDO", "Enviar la que quedó"], ["DESCARTAR_Y_GRABAR", "Descartar y grabar de nuevo"]]) {
     expect((glosario as Record<string, unknown>)[constante]).toBe(boton);
     expect(vista).toContain(constante);
     expect(texto).toContain(boton);
@@ -287,7 +287,7 @@ it("la ayuda describe dos importes de Cobros y sus cantidades debajo", () => {
 
 it("el corpus no enseña acciones retiradas ni deja sesiones vivas tras cambiar la contraseña", () => {
   // Los únicos usos vigentes de esas palabras son botones que existen hoy.
-  const vigentes = [INVITAR_WHATSAPP, glosario.DESCARTAR_PROPUESTA_ACCION, "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta", `**${DESCARTAR_GRABACION_ACCION}**`, DESCARTAR_GRABACION_TITULO];
+  const vigentes = [INVITAR_WHATSAPP, glosario.DESCARTAR_PROPUESTA_ACCION, "**Descartar**", "**Descartarla**", "Descartar grabación", "enviar o descartar", "se envía\no se descarta", `**${DESCARTAR_GRABACION_ACCION}**`, DESCARTAR_GRABACION_TITULO, `**${glosario.DESCARTAR_Y_GRABAR}**`];
   // La grabación sin terminar, en Pendientes de Hoy: el botón y su confirmación.
   const pendientes = codigo("src/app/(dashboard)/_components/pendientes.tsx");
   expect(DESCARTAR_GRABACION).toBe("Descartar");
