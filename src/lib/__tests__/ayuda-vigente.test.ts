@@ -18,7 +18,7 @@ const codigo = (ruta: string) => readFileSync(join(process.cwd(), ruta), "utf8")
 
 /** La pantalla de grabar, cortada en la vista, su flujo y sus pantallas. */
 const pantallaDeGrabar = () =>
-  ["grabar-view.tsx", "flujo-grabacion.ts", "pantallas.tsx", "pantalla-grabando.tsx"]
+  ["grabar-view.tsx", "flujo-grabacion.ts", "pantallas.tsx", "oferta-pendiente.tsx", "pantalla-grabando.tsx"]
     .map((archivo) => codigo(`src/app/(dashboard)/grabar/[turnoId]/_components/${archivo}`))
     .join("\n");
 

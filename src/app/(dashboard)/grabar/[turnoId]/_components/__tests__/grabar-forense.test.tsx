@@ -12,6 +12,7 @@ import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
 import {
   COPIA_NO_GUARDADA,
   CORTE_LIMITE_SIN_COPIA,
+  DESCARTAR_PENDIENTE_MENSAJE,
   DESCARTAR_Y_GRABAR,
   DESCARTAR_Y_GRABAR_ACCION,
   DESCARTAR_Y_GRABAR_TITULO,
@@ -289,9 +290,10 @@ describe("H1: una grabación a medias sin autorización vigente se retoma, y la 
     expect(screen.queryByRole("button", { name: "Guardarla ahora" })).toBeNull();
   });
 
-  test("se puede descartar igual", () => {
+  test("se puede descartar igual, confirmando", () => {
     const grabador = grabadorEn(pendienteDe("t1"));
     render(<GrabarView {...props} autorizacionVigente={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
     fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
     expect(grabador.descartarPendiente).toHaveBeenCalledOnce();
     expect(grabador.enviarPendiente).not.toHaveBeenCalled();
@@ -310,5 +312,30 @@ describe("H1: una grabación a medias sin autorización vigente se retoma, y la 
     expect(screen.getByText(FALTA_AUTORIZACION)).toBeTruthy();
     expect(screen.getByRole("link", { name: FIRMAR_AUTORIZACION })).toBeTruthy();
     expect(screen.queryByText(PENDIENTE_SIN_AUTORIZACION)).toBeNull();
+  });
+});
+
+describe("Descartarla pregunta siempre, no sólo la del mismo turno", () => {
+  const casos: [string, Partial<Grabador>, Partial<typeof props> & { motivoSinGrabar?: string }][] = [
+    ["la copia de otro turno de la paciente", pendienteDe("t2"), {}],
+    ["la que espera la autorización", pendienteDe("t1"), { autorizacionVigente: false }],
+    ["la de un turno que ya no se graba", pendienteDe("t1"), { motivoSinGrabar: "Este turno era de ayer." }],
+    ["la de un turno que ya no se graba, sin autorización", pendienteDe("t1"), { autorizacionVigente: false, motivoSinGrabar: "Este turno era de ayer." }],
+  ];
+
+  test.each(casos)("%s: Cancelar no la toca, confirmar la descarta", (_caso, pendiente, extra) => {
+    const grabador = grabadorEn(pendiente);
+    render(<GrabarView {...props} {...extra} />);
+    fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
+    expect(screen.getByText(DESCARTAR_PENDIENTE_MENSAJE)).toBeTruthy();
+    expect(grabador.descartarPendiente).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByText(DESCARTAR_PENDIENTE_MENSAJE)).toBeNull();
+    expect(grabador.descartarPendiente).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
+    fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
+    expect(grabador.descartarPendiente).toHaveBeenCalledOnce();
   });
 });

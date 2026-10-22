@@ -67,7 +67,7 @@ puede reanudar. Tocá **Terminar la sesión**.
 **Qué hacer:** volvé a la pantalla de grabar de **ese mismo turno**, en el
 **mismo teléfono**. Si la app encuentra la copia dice *"Quedó una grabación de
 ~N min sin enviar"*: **Guardarla ahora** la envía tal cual y **Descartarla** la
-borra. Esa grabación no se puede continuar. Empezar una grabación nueva del
+borra, después de preguntar. Esa grabación no se puede continuar. Empezar una grabación nueva del
 mismo turno reemplaza la copia anterior.
 
 ### No se pudo guardar el audio

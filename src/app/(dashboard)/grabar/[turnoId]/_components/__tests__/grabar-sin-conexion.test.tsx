@@ -416,8 +416,9 @@ describe("al volver a entrar con una grabación sin turno guardada", () => {
     render(<GrabarView {...SIN_TURNO} />);
     await screen.findByRole("button", { name: "Guardarla ahora" });
     expect(screen.getByText(/~1 min/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Descartarla" }));
+      fireEvent.click(screen.getByRole("button", { name: "Descartarla" })); // confirmar
     });
 
     // Aparece la otra (dos minutos), sin recargar.

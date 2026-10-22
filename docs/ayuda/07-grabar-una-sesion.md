@@ -173,7 +173,8 @@ ese paso.
 Volvé a la pantalla de grabar de **ese mismo turno**, en el mismo teléfono. La
 app encuentra la copia y dice *"Quedó una grabación de ~N min sin enviar"*, con
 **Guardarla ahora** y **Descartarla**. **Guardarla ahora** la envía tal cual,
-como si hubieras tocado **Terminar la sesión**. Esa grabación no se puede
+como si hubieras tocado **Terminar la sesión**. **Descartarla** pregunta antes
+de borrarla, porque no se puede recuperar. Esa grabación no se puede
 continuar: sólo enviar o descartar.
 
 Si esa sesión ya había llegado al servidor (está procesándose o ya tiene nota),

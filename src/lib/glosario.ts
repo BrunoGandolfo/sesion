@@ -2181,3 +2181,11 @@ export const RECORDATORIO_PENDIENTE = "Pendiente de avisar por WhatsApp";
 export function recordatorioAvisado(fecha: string): string {
   return `Avisado por WhatsApp el ${fecha}`;
 }
+
+// ─── integracion ─────────────────────────────────────────────────────────────
+
+/** "Descartarla" en /grabar (pantallas.tsx) pregunta siempre: la copia de
+ *  otro turno o la que espera la firma también se pierden para siempre. */
+export const DESCARTAR_PENDIENTE_TITULO = "¿Descartar la grabación que quedó?";
+export const DESCARTAR_PENDIENTE_MENSAJE = "Se borra de este teléfono y no se puede recuperar.";
+export const DESCARTAR_PENDIENTE_ACCION = "Descartarla";
