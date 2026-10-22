@@ -4,7 +4,9 @@
 //     grabador de siempre con ese turno (nombre y hora), dejando grabar;
 //   - un turno de mañana se muestra pero no se graba (mismo día);
 //   - en cualquier otra ruta, o con un turno que no está guardado, muestra
-//     los turnos de hoy con su botón Grabar y el aviso de que no hay señal.
+//     los turnos de hoy con su botón Grabar y el aviso de que no hay señal;
+//   - el grabador queda dentro de ProteccionTrabajo: con audio a medias,
+//     cerrar la pestaña se frena igual que en /grabar con señal.
 import * as React from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,9 +21,12 @@ import {
   SIN_CONEXION_TURNO_OTRO_DIA,
 } from "@/lib/glosario";
 import { instanteMvd } from "@/lib/fechas-montevideo";
+import { useProtegerTrabajo } from "@/components/layout/proteccion-trabajo";
 
 const agenda = vi.hoisted(() => ({ turnos: [] as TurnoLocal[] }));
-const grabador = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
+const grabador = vi.hoisted(() => ({ props: null as Record<string, unknown> | null, protegido: false }));
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 
 vi.mock("@/lib/agenda-local", async (original) => {
   const real = await original<typeof import("@/lib/agenda-local")>();
@@ -35,6 +40,8 @@ vi.mock("@/lib/agenda-local", async (original) => {
 vi.mock("@/app/(dashboard)/grabar/[turnoId]/_components/grabar-view", () => ({
   GrabarView: (props: Record<string, unknown>) => {
     grabador.props = props;
+    // Como el grabador de verdad mientras graba (grabar-view.tsx).
+    useProtegerTrabajo(grabador.protegido, "Se está grabando.");
     return <h1>{String(props.pacienteNombre)}</h1>;
   },
 }));
@@ -56,6 +63,7 @@ function abrir(ruta: string) {
 beforeEach(() => {
   agenda.turnos = [BETO, ANA, MANANA];
   grabador.props = null;
+  grabador.protegido = false;
 });
 afterEach(cleanup);
 
@@ -102,6 +110,15 @@ describe("/grabar/<turno> sin señal", () => {
     expect(screen.getByRole("status").textContent).toBe(SIN_CONEXION_FRANJA_SIN_COPIA);
     act(() => alCambiarCopia(false));
     expect(screen.getByRole("status").textContent).toBe(SIN_CONEXION_FRANJA);
+  });
+
+  it("grabando, cerrar la pestaña se frena: el grabador está dentro de ProteccionTrabajo", async () => {
+    grabador.protegido = true;
+    abrir("/grabar/t1");
+    await screen.findByRole("heading", { name: "Ana Pérez" });
+    const evento = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(evento);
+    expect(evento.defaultPrevented).toBe(true);
   });
 
   it("un turno de mañana no se graba hoy", async () => {

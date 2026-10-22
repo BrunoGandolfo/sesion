@@ -15,11 +15,16 @@
 // turno, paciente, nombre, fecha y hora): sin señal se deja grabar, y al
 // subir el servidor la exige como siempre (POST /api/sesion-clinica). Si
 // falta, la pantalla lo dice y la grabación sigue en el teléfono.
+//
+// Esta pantalla no está dentro del dashboard (providers.tsx), así que trae
+// su propia ProteccionTrabajo: sin ella, el aviso de salida del grabador
+// (useProtegerTrabajo) no tiene a quién registrarse.
 
 import * as React from "react";
 import { Mic } from "lucide-react";
 
 import { GrabarView } from "@/app/(dashboard)/grabar/[turnoId]/_components/grabar-view";
+import { ProteccionTrabajo } from "@/components/layout/proteccion-trabajo";
 import { Button } from "@/components/ui";
 import { buscarTurnoLocal, diasQueSeGuardan, turnosLocalesDeHoy, type TurnoLocal } from "@/lib/agenda-local";
 import {
@@ -89,17 +94,19 @@ export function SinConexion({ reloj = () => new Date() }: { reloj?: () => Date }
     return (
       <div className="min-h-dvh bg-cream-50">
         <Franja copiaFallida={copiaFallida} />
-        <GrabarView
-          turnoId={turno.turnoId}
-          turnoProgramado
-          motivoSinGrabar={esDeHoy ? null : SIN_CONEXION_TURNO_OTRO_DIA}
-          horaTexto={turno.hora}
-          pacienteId={turno.pacienteId}
-          pacienteNombre={turno.nombreParaMostrar}
-          autorizacionVigente
-          prueba={null}
-          alCambiarCopia={setCopiaFallida}
-        />
+        <ProteccionTrabajo>
+          <GrabarView
+            turnoId={turno.turnoId}
+            turnoProgramado
+            motivoSinGrabar={esDeHoy ? null : SIN_CONEXION_TURNO_OTRO_DIA}
+            horaTexto={turno.hora}
+            pacienteId={turno.pacienteId}
+            pacienteNombre={turno.nombreParaMostrar}
+            autorizacionVigente
+            prueba={null}
+            alCambiarCopia={setCopiaFallida}
+          />
+        </ProteccionTrabajo>
       </div>
     );
   }
