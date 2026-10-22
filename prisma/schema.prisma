@@ -62,7 +62,6 @@ model Organization {
   pacientes         Paciente[]
   seriesTurno       SerieTurno[]
   turnos            Turno[]
-  enviosSms         EnvioSms[]
   avisosWhatsapp    AvisoWhatsapp[]
   consentimientos   ConsentimientoGrabacion[]
   sesionesClinicas  SesionClinica[]
@@ -254,27 +253,14 @@ model CupoAyuda {
 // Configuración — singleton por organización
 // ============================================================================
 
-/// Cuándo sale el recordatorio de SMS, dicho como lo piensa la profesional.
+/// Cuándo se avisa el turno (aparece en "Recordatorios para hoy" para
+/// mandarlo por WhatsApp), dicho como lo piensa la profesional.
 enum ModoRecordatorio {
   dia_anterior
   dos_dias_antes
   misma_manana
 
   @@map("modo_recordatorio")
-}
-
-/// Por dónde sale el recordatorio del turno. Con `whatsapp` la app no manda
-/// SMS: le prepara el mensaje para que lo mande ella desde su teléfono
-/// (casos-uso/recordatorios-whatsapp.ts) y el cron cancela el SMS al
-/// despacharlo. Con `ambos`, sale el SMS como siempre y además se lo prepara.
-/// Se decide AL DESPACHAR, no al crear el turno: cambiar la configuración
-/// alcanza a lo ya agendado.
-enum CanalRecordatorio {
-  sms
-  whatsapp
-  ambos
-
-  @@map("canal_recordatorio")
 }
 
 /// Orientación teórica de la profesional: decide el instrumento de
@@ -293,19 +279,15 @@ model Configuracion {
   whatsappOrigen       String             @default("") @map("whatsapp_origen")
   tarifaDefault        Int                @map("tarifa_default")
   recordatorioModo     ModoRecordatorio   @default(dia_anterior) @map("recordatorio_modo")
-  /// Plantilla del recordatorio de turno. El texto de cada SMS enviado NO
-  /// se guarda; sí la plantilla vigente.
+  /// Plantilla del recordatorio de turno. El texto de cada aviso NO se
+  /// guarda; sí la plantilla vigente.
   templateRecordatorio String             @default("Hola {{nombre}}. Te recordamos tu sesión:\n{{fecha}}  |  {{hora}}\n{{direccion}}\n\nCualquier cambio, avisame con anticipación. Gracias.") @map("template_recordatorio")
   orientacionTeorica   OrientacionTeorica @default(cbt_mi) @map("orientacion_teorica")
-  /// Sin uso desde 676f076 y fuera del cliente (@ignore): Prisma no la lee
-  /// ni la escribe, así este código sigue andando cuando
-  /// 20261021150000_borrar_sms la borre. Se va del schema con esa migración.
-  canalRecordatorio    CanalRecordatorio  @default(sms) @map("canal_recordatorio") @ignore
-  /// Plantilla del aviso de cobro, la misma por SMS y por WhatsApp. El
+  /// Plantilla del aviso de cobro por WhatsApp. El
   /// default es TEMPLATE_COBRO_DEFAULT (src/lib/glosario.ts, reexportado por
   /// src/lib/deudas.ts; lo vigila
   /// plantilla-cobro.test.ts).
-  templateCobro         String             @default("Consultorio {{profesional}}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.") @map("template_cobro")
+  templateCobro        String             @default("Consultorio {{profesional}}\n{{nombre}}, tenés {{sesiones}} sesión/es pendiente/s de pago: {{monto}}.") @map("template_cobro")
 
   organizationId String       @unique @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -318,14 +300,13 @@ model Configuracion {
 // ============================================================================
 
 /// Nombre, apellido y teléfono quedan en claro a propósito: la búsqueda y el
-/// orden de la agenda los necesitan en SQL y el cron de SMS lee el teléfono
-/// en lote. Todo lo demás con contenido personal va cifrado. Sin `email`:
+/// orden de la agenda los necesitan en SQL. Todo lo demás con contenido personal va cifrado. Sin `email`:
 /// nadie lo usaba.
 model Paciente {
   id             String   @id @default(uuid())
   nombre         String
   apellido       String
-  /// E.164 o vacío, validado al escribir (no al enviar el SMS).
+  /// E.164 o vacío, validado al escribir.
   telefono       String
   tarifa         Int
   /// Campo lógico `notas` (texto libre de la ficha), cifrado.
@@ -339,7 +320,6 @@ model Paciente {
 
   turnos          Turno[]
   seriesTurno     SerieTurno[]
-  enviosSms       EnvioSms[]
   consentimientos ConsentimientoGrabacion[]
   hotWords        HotWord[]
   hilo            Hilo?
@@ -455,7 +435,6 @@ model Turno {
   serie          SerieTurno?  @relation(fields: [serieId], references: [id], onDelete: SetNull)
 
   sesionClinica  SesionClinica?
-  enviosSms      EnvioSms[]
   avisosWhatsapp AvisoWhatsapp[]
 
   // Agenda (día, semana, mes) y "Ahora": WHERE organization_id = ? AND fecha BETWEEN …
@@ -469,92 +448,6 @@ model Turno {
   // Cancelar el resto de la serie: WHERE serie_id = ? AND fecha > ? AND estado = 'programado'.
   @@index([serieId])
   @@map("turnos")
-}
-
-// ============================================================================
-// SMS como sistema de entrega durable (reemplaza a Recordatorio)
-// ============================================================================
-
-enum MotivoSms {
-  recordatorio_turno
-  cambio_de_horario
-  recordatorio_cobro
-
-  @@map("motivo_sms")
-}
-
-/// `aceptado` = Twilio devolvió 2xx (queued/accepted); NO es "llegó".
-/// `entregado` / `no_entregado` los escribe el StatusCallback del operador.
-/// `desconocido` = se llamó a Twilio y no sabemos si aceptó: NUNCA se
-/// reenvía solo; lo resuelve la conciliación contra la API o una persona.
-/// Terminales: entregado, no_entregado, cancelado, fallido.
-enum EstadoEnvioSms {
-  pendiente
-  enviando
-  aceptado
-  entregado
-  no_entregado
-  cancelado
-  fallido
-  desconocido
-
-  @@map("estado_envio_sms")
-}
-
-/// Un SMS que la app decidió mandar. Nunca guarda el texto (decisión del
-/// dueño): sí lo que hace falta para no duplicar, contar y explicar.
-model EnvioSms {
-  id             String       @id @default(uuid())
-  organizationId String       @map("organization_id")
-  organization   Organization @relation(fields: [organizationId], references: [id])
-
-  /// Dos pedidos con la misma clave son el MISMO mensaje: impide el duplicado
-  /// tanto por reintento como por reprogramación repetida.
-  ///   turno:<turnoId>:<fechaTurnoISO>   (recordatorio_turno, cambio_de_horario)
-  ///   cobro:<pacienteId>:<fechaMvd>     (recordatorio_cobro)
-  /// Reprogramar el turno cambia la fecha y por lo tanto la clave: es un
-  /// mensaje distinto (cambio_de_horario), y eso es correcto.
-  claveIdempotencia String @unique @map("clave_idempotencia")
-
-  motivo MotivoSms
-  estado EstadoEnvioSms @default(pendiente)
-
-  pacienteId String   @map("paciente_id")
-  paciente   Paciente @relation(fields: [pacienteId], references: [id])
-  turnoId    String?  @map("turno_id")
-  turno      Turno?   @relation(fields: [turnoId], references: [id], onDelete: SetNull)
-  /// Teléfono E.164 congelado al crear el envío.
-  destino    String
-
-  programadoEn     DateTime  @map("programado_en")
-  proximoIntentoEn DateTime? @map("proximo_intento_en")
-  intentos         Int       @default(0)
-
-  /// MessageSid de Twilio; llega con el 2xx y lo usa el StatusCallback.
-  sid             String? @unique
-  /// ErrorCode de Twilio (del 4xx o del callback).
-  codigoProveedor String? @map("codigo_proveedor")
-  /// Por qué no salió, para la pantalla, en los casos sin código de Twilio
-  /// (teléfono vacío, ventana útil agotada, paciente dada de baja).
-  motivoNoEnvio   String? @map("motivo_no_envio") @db.VarChar(500)
-  /// Segmentos que cobró Twilio: es lo que se suma para el conteo mensual.
-  segmentos       Int?
-
-  creadoEn      DateTime  @default(now()) @map("creado_en")
-  aceptadoEn    DateTime? @map("aceptado_en")
-  cerradoEn     DateTime? @map("cerrado_en")
-  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
-
-  // Cron de despacho y conciliación: WHERE estado IN (…) AND proximo_intento_en <= now().
-  @@index([estado, proximoIntentoEn])
-  // Pensado para el conteo mensual por consultorio. La consulta real
-  // (src/lib/sms/metricas.ts) filtra sólo por aceptado_en en el mes y agrupa
-  // por organization_id, así que este orden de columnas no la sirve;
-  // reordenarlo es una migración aparte.
-  @@index([organizationId, aceptadoEn])
-  // Cancelar / reprogramar los envíos de un turno.
-  @@index([turnoId])
-  @@map("envios_sms")
 }
 
 // ============================================================================
@@ -574,7 +467,7 @@ enum TipoAvisoWhatsapp {
 /// Una fila por cada vez que la profesional abrió el enlace de WhatsApp de un
 /// turno. La app no sabe si el mensaje salió (lo manda el teléfono de ella):
 /// registra que lo abrió. "Ya avisado" = existe al menos una para la fecha
-/// vigente del turno. Sin texto ni teléfono, igual que envios_sms.
+/// vigente del turno. Sin texto ni teléfono.
 model AvisoWhatsapp {
   id             String            @id @default(uuid())
   organizationId String            @map("organization_id")
@@ -584,8 +477,8 @@ model AvisoWhatsapp {
   tipo           TipoAvisoWhatsapp
   /// La fecha del turno que se avisó. Mover el turno deja estas filas con la
   /// fecha vieja: no cuentan como "avisado" para la nueva, y sí como prueba
-  /// de que la paciente tenía el horario anterior (reprogramarEnvioDelTurno
-  /// manda entonces un cambio de horario).
+  /// de que la paciente tenía el horario anterior (la lista de Hoy lo pide
+  /// entonces como cambio de horario: correspondeAvisarHoy).
   fechaTurno     DateTime          @map("fecha_turno")
   abiertoEn      DateTime          @map("abierto_en")
   /// Quién lo abrió. Sin FK, como hilo_versiones.resuelta_por_user_id.
@@ -594,26 +487,6 @@ model AvisoWhatsapp {
   // "Ya avisado" y el último aviso de cada turno de hoy.
   @@index([turnoId, tipo])
   @@map("avisos_whatsapp")
-}
-
-enum MotivoBajaSms {
-  respuesta_baja
-  twilio_21610
-  manual
-
-  @@map("motivo_baja_sms")
-}
-
-/// Teléfonos que pidieron no recibir más SMS ("BAJA"). Obligación legal: se
-/// consulta antes de TODO envío, en el nivel más bajo. Es por teléfono y no
-/// por organización porque la baja es del número, no del consultorio.
-model BajaSms {
-  /// E.164
-  telefono String        @id
-  motivo   MotivoBajaSms
-  creadoEn DateTime      @default(now()) @map("creado_en")
-
-  @@map("bajas_sms")
 }
 
 // ============================================================================

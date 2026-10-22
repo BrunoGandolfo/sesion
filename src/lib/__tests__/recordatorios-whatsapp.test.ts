@@ -137,11 +137,10 @@ const listar = (o: Org, ahora = AHORA) => listarRecordatoriosDeHoy({ prisma: db,
 const MANANA_15 = new Date("2026-09-04T18:00:00.000Z");
 
 describe("listarRecordatoriosDeHoy: sale de los turnos, no de envios_sms", () => {
-  it("el turno de mañana (modo de siempre: la tarde anterior) entra con su enlace, sin ninguna fila de envios_sms", async () => {
+  it("el turno de mañana (modo de siempre: la tarde anterior) entra con su enlace, sólo con el turno", async () => {
     const o = await crearOrg();
     const paciente = await crearPaciente(o);
     const turno = await crearTurno(o, paciente.id, MANANA_15);
-    expect(await prismaRaw.envioSms.count()).toBe(0);
 
     const { turnos } = await listar(o);
     expect(turnos).toHaveLength(1);
@@ -222,6 +221,16 @@ describe("listarRecordatoriosDeHoy: sale de los turnos, no de envios_sms", () =>
     const tarde = await crearTurno(o, p.id, new Date("2026-09-04T21:00:00.000Z"));
     const temprano = await crearTurno(o, p.id, new Date("2026-09-04T12:00:00.000Z"));
     expect((await listar(o)).turnos.map((t) => t.turnoId)).toEqual([temprano.id, tarde.id]);
+  });
+});
+
+describe("la base ya no tiene SMS (20261021150000_borrar_sms)", () => {
+  it("no existen envios_sms, bajas_sms, la columna del canal ni sus enums", async () => {
+    const [fila] = await prismaRaw.$queryRaw<{ envios: string | null; bajas: string | null; columna: number; enums: number }[]>`
+      SELECT to_regclass('envios_sms')::text AS envios, to_regclass('bajas_sms')::text AS bajas,
+        (SELECT count(*)::int FROM information_schema.columns WHERE table_name = 'configuraciones' AND column_name = 'canal_recordatorio') AS columna,
+        (SELECT count(*)::int FROM pg_type WHERE typname IN ('canal_recordatorio', 'motivo_sms', 'estado_envio_sms', 'motivo_baja_sms')) AS enums`;
+    expect(fila).toEqual({ envios: null, bajas: null, columna: 0, enums: 0 });
   });
 });
 
