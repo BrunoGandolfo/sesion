@@ -224,6 +224,31 @@ uno leído con un llavero al que se le retiró la clave.
 `scripts/ensayo/__tests__/contratos.test.ts` prueba la elección del contrato y
 las claves históricas.
 
+### Los datos del SMS, después de borrarlo
+
+La migración `20261021150000_borrar_sms` borra `envios_sms` (cada SMS que
+salió o se programó: destino, estado, fechas, sin texto), `bajas_sms` (los
+teléfonos que respondieron BAJA) y `configuraciones.canal_recordatorio`. La
+app ya no los usa. **El respaldo diario los conserva**: todo dump anterior a
+la migración trae esas tablas, y la retención es la de siempre (diarios 30
+días, mensuales 366). Pasado ese plazo, ya no hay copia.
+
+Para consultarlos (por ejemplo, si una paciente pregunta si se le mandó un
+aviso), restaurar un respaldo **anterior a la migración** en una base aislada,
+nunca en producción, con el mismo procedimiento de arriba, y leer de ahí:
+
+```
+# Con la copia descifrada (gpg, como en el paso 2) y un Postgres vacío local:
+pg_restore --no-owner --no-acl --exit-on-error -d "$BASE_AISLADA" ./sesion-backup-….dump
+psql "$BASE_AISLADA" -c "SELECT motivo, estado, programado_en, aceptado_en FROM envios_sms WHERE turno_id = '…'"
+```
+
+Se restaura el dump entero: las tablas usan enums propios (`motivo_sms`,
+`estado_envio_sms`, `motivo_baja_sms`) que con `-t` no vienen.
+No hay camino para devolverlos a producción:
+`scripts/mantenimiento/revertir-borrar-sms.sql` recrea las tablas y la columna
+**vacías**, sólo para volver a publicar un código anterior.
+
 ### Cómo se juzga una copia
 
 **El contrato de esquema lo elige la copia, no el checkout.** El verificador
@@ -246,7 +271,10 @@ busca en `scripts/ensayo/contratos.mjs`, que dice qué esquema le corresponde:
   → `nuevo-sin-conversaciones-lux`, la instantánea
   `scripts/ensayo/esquema-sin-conversaciones-lux.prisma` (sin
   `conversaciones_lux`);
-- desde `20261021140000_conversaciones_lux` hasta la última
+- `20261021140000_conversaciones_lux` → `nuevo-con-sms`, la instantánea
+  `scripts/ensayo/esquema-con-sms.prisma` (con `envios_sms`, `bajas_sms` y
+  `configuraciones.canal_recordatorio`);
+- desde `20261021150000_borrar_sms` hasta la última
   publicada → el contrato `nuevo`, que se lee del `prisma/schema.prisma` de
   **release**. El workflow hace un segundo checkout, de `release`, sólo de
   `prisma/`, y se lo pasa al verificador; el código del ensayo es el del ref de
@@ -327,7 +355,7 @@ Ninguna se puede hacer desde el repositorio.
 
 ### Reversiones administrativas
 
-Siete SQL revierten una migración. No los ejecuta la app ni Publicar;
+Ocho SQL revierten una migración. No los ejecuta la app ni Publicar;
 sólo se corren a mano, con la conexión directa y después de decidirlo.
 
 - `scripts/mantenimiento/revertir-inmutabilidad.sql` retira los triggers de
@@ -352,7 +380,8 @@ sólo se corren a mano, con la conexión directa y después de decidirlo.
   `configuraciones.canal_recordatorio` (todas vuelven a SMS), sus dos enums y
   su registro en `_prisma_migrations`. Antes, publicar un código anterior: el
   cron de SMS lee la columna en cada despacho. Los envíos ya cancelados por
-  canal quedan cancelados.
+  canal quedan cancelados. Con `20261021150000_borrar_sms` aplicada, primero
+  hay que correr `revertir-borrar-sms.sql` (la columna ya no existe).
 - `scripts/mantenimiento/revertir-cupos-por-ambito.sql` revierte
   `20261009120000_cupos_por_ambito`: borra los cupos de Lux del día (son
   contadores), saca la columna `ambito` y su enum, y vuelve la clave a
@@ -364,6 +393,12 @@ sólo se corren a mano, con la conexión directa y después de decidirlo.
   su enum y su registro en `_prisma_migrations`. Sólo hace falta si se vuelve
   a publicar un código anterior a la migración: con el código de la memoria
   de Lux publicado, Lux da 500.
+- `scripts/mantenimiento/revertir-borrar-sms.sql` revierte
+  `20261021150000_borrar_sms`: recrea `envios_sms`, `bajas_sms`,
+  `configuraciones.canal_recordatorio` (todas en `whatsapp`) y sus enums,
+  **vacíos**: los datos sólo están en los respaldos anteriores (ver "Los datos
+  del SMS, después de borrarlo"). Sólo hace falta si se vuelve a publicar un
+  código anterior a `676f076`.
 - `scripts/mantenimiento/revertir-limites-invitados.sql` saca las columnas de `20260917120000_limites_invitados` y su registro en `_prisma_migrations`. Obsoleto salvo reversión de código: hoy leen esas columnas `src/app/api/_lib/casos-uso/estado-prueba.ts`, `src/lib/cuenta-registro-db.ts` y `prepararAudio` (`src/app/api/_lib/casos-uso/audio.ts`). Correrlo con ese código publicado rompe el alta por invitación y la grabación.
 
 ## 5. Incidentes y límites conocidos

@@ -113,6 +113,15 @@ export const CONTRATOS = {
     minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
     muestras: MUESTRAS_ENC2,
   },
+  // Desde conversaciones_lux hasta antes de borrar el SMS: con envios_sms,
+  // bajas_sms y configuraciones.canal_recordatorio (los borró
+  // 20261021150000_borrar_sms).
+  "nuevo-con-sms": {
+    archivo: "scripts/ensayo/esquema-con-sms.prisma",
+    formato: "ENC2",
+    minimos: { ...MINIMOS_COMUNES, hilos: 1, hilo_versiones: 1 },
+    muestras: MUESTRAS_ENC2,
+  },
   [CONTRATO_ACTUAL]: {
     archivo: null,
     formato: "ENC2",
@@ -143,7 +152,8 @@ export const CONTRATO_POR_MIGRACION = {
   "20261019120000_turnos_pago_coherente": "nuevo-sin-cobro", // CHECK
   "20261021120000_plantilla_cobro": "nuevo-sin-conversaciones-lux", // configuraciones.template_cobro
   "20261021130000_aviso_whatsapp_cobro": "nuevo-sin-conversaciones-lux", // valor de enum
-  "20261021140000_conversaciones_lux": CONTRATO_ACTUAL, // conversaciones_lux (memoria de Lux)
+  "20261021140000_conversaciones_lux": "nuevo-con-sms", // conversaciones_lux (memoria de Lux)
+  "20261021150000_borrar_sms": CONTRATO_ACTUAL, // DROP de envios_sms, bajas_sms y canal_recordatorio
 };
 
 /**
