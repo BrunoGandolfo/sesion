@@ -37,7 +37,7 @@ import {
   type EstadoHoy,
 } from "./datos";
 import { FalloDeCarga } from "./estados-carga";
-import { SegunLectura, type Carga } from "./segun-lectura";
+import { cargaDelError, SegunLectura, type Carga } from "./segun-lectura";
 import { Kpis } from "./kpis";
 import { Pendientes } from "./pendientes";
 import { RecordatoriosWhatsapp } from "./recordatorios-whatsapp";
@@ -96,8 +96,8 @@ export function Dashboard({ hora = relojDelSistema }: { hora?: Reloj } = {}) {
         // Para grabar si la app se abre sin señal (/sin-conexion).
         void anotarAgendaDelDia(turnosParaAgendaLocal(siguiente.data), siguiente.ahora, generacion);
       })
-      .catch(() => {
-        if (!cancelado) setCarga("error");
+      .catch((err: unknown) => {
+        if (!cancelado) setCarga(cargaDelError(err));
       });
     return () => {
       cancelado = true;

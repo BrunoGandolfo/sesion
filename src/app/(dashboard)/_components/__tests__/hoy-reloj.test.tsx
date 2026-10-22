@@ -6,7 +6,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { DATOS_SIN_ACTUALIZAR, REINTENTAR } from "@/lib/glosario";
+import { lanzarSiNoOk } from "@/lib/api-client";
+import { ALGO_FALLO, DATOS_SIN_ACTUALIZAR, ENTRAR, REINTENTAR, SESION_VENCIDA } from "@/lib/glosario";
 import type { TurnoConPaciente } from "@/types/domain";
 
 import { Dashboard } from "../dashboard";
@@ -53,6 +54,15 @@ function hoy(sesionesHoy: TurnoConPaciente[]): EstadoHoy {
       pendientes: SIN_PENDIENTES,
     },
   };
+}
+
+/** Lo que devuelve fetch con la sesión vencida: el proxy redirige al login
+ *  y fetch entrega su HTML con 200. lanzarSiNoOk lo convierte en el 401. */
+async function errorDeSesionVencida(): Promise<unknown> {
+  const res = new Response("<html>login</html>", { status: 200, headers: { "content-type": "text/html" } });
+  Object.defineProperty(res, "redirected", { value: true });
+  Object.defineProperty(res, "url", { value: "http://localhost/login" });
+  return lanzarSiNoOk(res).then(() => null, (err: unknown) => err);
 }
 
 const botonesCobrar = () => screen.queryAllByRole("button", { name: /^Cobrar/ });
@@ -132,4 +142,32 @@ it("si una recarga falla, lo dice arriba y deja lo que estaba; Reintentar vuelve
   await esperar(0);
   expect(screen.queryByRole("alert")).toBeNull();
   expect(leerHoy).toHaveBeenCalledTimes(3);
+});
+
+it("si la recarga vuelve con la sesión vencida, dice eso y no \"No se pudo actualizar\"", async () => {
+  vi.mocked(leerHoy).mockImplementationOnce(async () => hoy([turno()]));
+  render(<Dashboard />);
+  await esperar(0);
+
+  vi.mocked(leerHoy).mockRejectedValueOnce(await errorDeSesionVencida());
+  Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  await act(async () => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await esperar(0);
+
+  const aviso = screen.getByRole("alert");
+  expect(aviso.textContent).toContain(SESION_VENCIDA);
+  expect(aviso.textContent).not.toContain(DATOS_SIN_ACTUALIZAR);
+  expect(screen.getByRole("link", { name: ENTRAR }).getAttribute("href")).toBe("/login?sesion=vencida");
+  expect(screen.queryByRole("button", { name: REINTENTAR })).toBeNull();
+});
+
+it("si la primera lectura vuelve con la sesión vencida, dice eso y no \"Algo falló\"", async () => {
+  vi.mocked(leerHoy).mockRejectedValueOnce(await errorDeSesionVencida());
+  render(<Dashboard />);
+  await esperar(0);
+  expect(screen.getByRole("alert").textContent).toContain(SESION_VENCIDA);
+  expect(screen.queryByText(ALGO_FALLO)).toBeNull();
+  expect(screen.getByRole("link", { name: ENTRAR })).toBeTruthy();
 });

@@ -11,12 +11,24 @@
 //   error      | sí    | un aviso con Reintentar, y los datos
 //   cargando   | sí    | los datos, con aria-busy
 //   listo      | sí    | los datos
+//   vencida    | no/sí | "Tu sesión venció", con Entrar (y los datos, si hay)
+//
+// `vencida` es el 401 que arma api-client (lanzarSiNoOk/fueAlLogin) cuando
+// la lectura vuelve redirigida al login: Reintentar no sirve, hay que entrar
+// de nuevo. Lux y la ayuda dicen lo mismo (SESION_VENCIDA).
 
 import * as React from "react";
 
-import { DATOS_SIN_ACTUALIZAR, REINTENTAR } from "@/lib/glosario";
+import { ApiClientError } from "@/lib/api-client";
+import { DATOS_SIN_ACTUALIZAR, ENTRAR, REINTENTAR, SESION_VENCIDA } from "@/lib/glosario";
+import { PARAM_SESION_VENCIDA } from "@/lib/sesion-cookie";
 
-export type Carga = "cargando" | "listo" | "error";
+export type Carga = "cargando" | "listo" | "error" | "vencida";
+
+/** La carga que corresponde a una lectura que falló. */
+export function cargaDelError(err: unknown): Carga {
+  return err instanceof ApiClientError && err.esNoAutorizado ? "vencida" : "error";
+}
 
 /**
  * `children` recibe los datos, el aviso (null si no hace falta) para que la
@@ -42,8 +54,11 @@ export function SegunLectura<T>({
     estado: { aviso: React.ReactNode; ocupado: boolean },
   ) => React.ReactNode;
 }) {
+  if (carga === "vencida" && datos === null) return <AvisoSesionVencida />;
   if (datos === null) return <>{carga === "error" ? error : esqueleto}</>;
-  const aviso = carga === "error" ? <AvisoSinActualizar onReintentar={onReintentar} /> : null;
+  const aviso =
+    carga === "vencida" ? <AvisoSesionVencida /> :
+    carga === "error" ? <AvisoSinActualizar onReintentar={onReintentar} /> : null;
   return <>{children(datos, { aviso, ocupado: carga === "cargando" })}</>;
 }
 
@@ -58,6 +73,23 @@ export function AvisoSinActualizar({ onReintentar }: { onReintentar: () => void 
       >
         {REINTENTAR}
       </button>
+    </p>
+  );
+}
+
+/** Un enlace de verdad y no <Link>: se entra de cero, sin el estado de la
+ *  sesión que venció. Con el parámetro, el proxy deja ver el login aunque
+ *  quede la cookie vieja. */
+export function AvisoSesionVencida() {
+  return (
+    <p role="alert" className="text-[13px] text-ink-700">
+      {SESION_VENCIDA}{" "}
+      <a
+        href={`/login?${PARAM_SESION_VENCIDA}=vencida`}
+        className="inline-flex min-h-11 items-center font-medium text-sage-600 underline underline-offset-2"
+      >
+        {ENTRAR}
+      </a>
     </p>
   );
 }

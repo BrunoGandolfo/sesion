@@ -22,7 +22,7 @@ import {
 } from "@/lib/glosario";
 import type { TurnoCreado, TurnoConPaciente } from "@/types/domain";
 
-import { SegunLectura, type Carga } from "../../_components/segun-lectura";
+import { cargaDelError, SegunLectura, type Carga } from "../../_components/segun-lectura";
 
 import { AgendaHeader } from "./agenda-header";
 import { DayView } from "./day-view";
@@ -138,7 +138,7 @@ export function AgendaView() {
       .catch((err: unknown) => {
         if (controller.signal.aborted || esAbort(err)) return;
         window.clearTimeout(marcando);
-        setTurnosStatus("error");
+        setTurnosStatus(cargaDelError(err));
       });
 
     return () => {
