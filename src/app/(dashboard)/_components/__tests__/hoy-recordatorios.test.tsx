@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// Hoy dibuja "Recordatorios para hoy" después de la agenda del día, y con SMS
-// automático no queda ni el bloque ni su hueco en la cascada.
+// Hoy dibuja "Recordatorios para hoy" después de la agenda del día, y mientras
+// la lectura no vuelve no queda ni el bloque ni su hueco en la cascada.
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -41,9 +41,9 @@ function hoyVacio() {
   });
 }
 
-it("con WhatsApp, el bloque va después de la agenda del día", async () => {
+it("el bloque va después de la agenda del día", async () => {
   hoyVacio();
-  api.get.mockResolvedValue({ canal: "whatsapp", turnos: [] });
+  api.get.mockResolvedValue({ turnos: [] });
   render(<Dashboard />);
   const agenda = await screen.findByText("Agenda del día");
   const bloque = await screen.findByRole("region", { name: "Recordatorios para hoy" });
@@ -51,9 +51,10 @@ it("con WhatsApp, el bloque va después de la agenda del día", async () => {
   expect(screen.getByText("No hay turnos para avisar hoy")).toBeTruthy();
 });
 
-it("con SMS no hay bloque ni envoltura visible", async () => {
+it("mientras lee no hay bloque ni envoltura visible", async () => {
   hoyVacio();
-  api.get.mockResolvedValue({ canal: "sms", turnos: [] });
+  // La lectura no vuelve: el bloque no se dibuja hasta tener respuesta.
+  api.get.mockReturnValue(new Promise(() => {}));
   render(<Dashboard />);
   await screen.findByText("Agenda del día");
   await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/recordatorios/whatsapp", expect.anything()));
